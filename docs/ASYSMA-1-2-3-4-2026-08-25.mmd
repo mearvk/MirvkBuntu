@@ -1,0 +1,150 @@
+# ASYSMA 1-2-3-4 Design Record — 2026-08-26
+
+```mermaid
+flowchart TD
+    A[1 — Native Foundation] --> B[2 — Host and Integrity]
+    B --> C[3 — Execution Bridge]
+    C --> D[4 — Java / Application]
+    A --> N[Native OS representation]
+    N --> B
+    B --> P{Explicit Entry Type}
+    P -->|JAVA| J[SecureJDK 28]
+    P -->|NATIVE| X[Native Application]
+    P -->|NATIVE_THEN_JAVA| T[Native Bootstrap] --> J
+    J --> APP[Java Application]
+    B --> S[Filesystem Size Observation]
+    B --> C2[CTRMS Filesystem Observation]
+    S --> I[Evidence / Provenance]
+    C2 --> I
+    I --> AUTH[Integrity + Authorization Policy]
+    AUTH --> DEC{Execution Decision}
+    DEC -->|allow| P
+    DEC -->|deny| R[Controlled Refusal]
+```
+
+## Normative 1-2-3-4 contract
+
+1. **Native Foundation** establishes the platform handoff; it does not replace ELF, PE/COFF, or Mach-O.
+2. **Host and Integrity** validates bounded package structures and records host/evidence observations. Observation is not authorization.
+3. **Execution Bridge** permits only explicitly declared entry modes: `JAVA`, `NATIVE`, or `NATIVE_THEN_JAVA`.
+4. **Java / Application** performs the ordinary managed-runtime contract; ASYSMA packaging is subsequent composition rather than a claim that `javac` is replaced.
+
+Every stage must consume validated output from the preceding stage. A failed earlier stage cannot be converted into success by a later stage.
+
+## XMC quality norms
+
+The XMC compiler is governed by the following implementation order:
+
+```text
+source correctness
+    ↓
+parser integrity
+    ↓
+validated deterministic .xclass
+    ↓
+metadata separation
+    ↓
+digest / provenance
+    ↓
+ASYSMA packaging
+    ↓
+execution policy
+    ↓
+OS registration
+```
+
+Compiler correctness has priority over packaging and desktop integration.
+
+### Correctness boundary
+
+- One authoritative version definition.
+- Numeric options use validated parsing rather than unchecked `atoi()`-style conversion.
+- String and path operations detect truncation.
+- Resource limits produce explicit diagnostics and controlled failure.
+- Invalid indexes, offsets, sizes, and enum values are rejected before use.
+- Malformed source cannot be reported as successful compilation.
+
+### Output boundary
+
+- `.xclass` serialization is deterministic for a fixed toolchain/input profile.
+- Serialized text is escaped according to its format.
+- Output is validated before being exposed as a successful artifact.
+- Writes use temporary output followed by atomic rename where supported.
+
+### Security boundary
+
+- SHA-256 is a **digest**, not a signature.
+- A signature, provenance record, integrity digest, and authorization decision are distinct evidence classes.
+- Trusted compiler/registration paths do not construct shell commands from untrusted paths.
+- Native execution capability is explicit.
+- User-scoped registration does not silently escalate privileges.
+
+## Evidence relationship
+
+```text
+filesystem
+    ↓
+normalized observation
+    ↓
+index / query
+    ↓
+provenance-tagged evidence
+    ↓
+integrity verification
+    ↓
+authorization policy
+    ↓
+execution decision
+```
+
+`size` provides logical filesystem extent. `ctrmsctl` provides metadata and bounded event observations. `limit` provides executable identity/metadata. These utilities do not, by observation alone, authorize execution.
+
+## ASYSMA execution modes
+
+### JAVA
+
+```text
+.asysma → bounds/integrity/policy → SecureJDK 28 → Java application
+```
+
+### NATIVE
+
+```text
+.asysma → native bootstrap → host profile → integrity/policy → native application
+```
+
+### NATIVE_THEN_JAVA
+
+```text
+.asysma → native bootstrap → host profile → integrity/policy → SecureJDK 28 → Java
+```
+
+A Java class or filename does not silently create native capability.
+
+## Testing and release gate
+
+The implementation must maintain tests for:
+
+- version consistency;
+- strict C compilation;
+- Java/Python/Rust parser behavior;
+- malformed source;
+- resource limits;
+- hostile paths;
+- deterministic output;
+- output serialization;
+- SHA-256 known-answer behavior;
+- ASYSMA packaging and bootstrap;
+- ASan/UBSan behavior.
+
+A release is not considered production-ready until the applicable gates pass on the target platforms.
+
+## Current implementation status
+
+The XMC driver, native SHA-256 module, security regression test, sanitizer build target, and quality workflow establish the first hardening layer. The next implementation pass is the XMC core correctness/parser pass, followed by deterministic output and ASYSMA packer/bootstrap verification.
+
+This record does not claim that every future runtime feature described here is already implemented.
+
+## Normative companion
+
+`ASYSMA-NORMS.md` is the companion engineering norm and ordered proceed document. If implementation behavior changes, this Mermaid record and the applicable numbered specification must be updated in the same change or the discrepancy must be recorded explicitly.
