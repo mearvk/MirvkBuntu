@@ -32,6 +32,10 @@ The second documentation batch is now also present:
 - `docs/CERTIFICATES.md` — preserved reference certificate document; reference SHA-1 `2db1a682f8b7b76ed6a98f8d2f5466fd87704d6e`
 - `docs/CHANGESTYLE3.md` — Software Change, Authorship & Attribution Method; reference SHA-1 `cdd2f7ab8ed68c843c40e3c24573e0e33c2c2405`
 
+The third documentation pass is now present:
+
+- `docs/CTRMSCTL-1-2-3-4.mmd` — CTRMSCTL 1-2-3-4 Design Record; reference SHA-1 `2f0f9d58ee39c902a5d57057d191907be439d725`
+
 These documents were copied from the reference repository's `markdown/` directory as source-preserving records. Certificate language is preserved as a project document and is not independently presented here as external certification or institutional endorsement.
 
 ## Held for later import
