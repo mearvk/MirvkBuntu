@@ -36,6 +36,10 @@ The third documentation pass is now present:
 
 - `docs/CTRMSCTL-1-2-3-4.mmd` — CTRMSCTL 1-2-3-4 Design Record; reference SHA-1 `2f0f9d58ee39c902a5d57057d191907be439d725`
 
+The fourth documentation pass is now present:
+
+- `docs/ASYSMA-NORMS.md` — ASYSMA Norms and Proceed — 1-2-3-4; reference SHA-1 `8c109a92e5794cb74b6deaf2db6c129e7e37194e`
+
 These documents were copied from the reference repository's `markdown/` directory as source-preserving records. Certificate language is preserved as a project document and is not independently presented here as external certification or institutional endorsement.
 
 ## Held for later import
