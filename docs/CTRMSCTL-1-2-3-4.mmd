@@ -1,0 +1,85 @@
+# CTRMSCTL 1-2-3-4 Design Record
+
+```mermaid
+flowchart TD
+    A[1 — Native Foundation] --> B[2 — Host / Disk Observation]
+    B --> C[3 — Query / Evidence Bridge]
+    C --> D[4 — Application / Policy]
+    B --> S[Light Index]
+    B --> M[Medium Index]
+    S --> Q[find / search / locate]
+    M --> Q
+    Q --> E[Evidence]
+    E --> P[Policy / Human Review]
+```
+
+## 1 — Native Foundation
+
+`ctrmsctl` is a Linux C service intended to run under systemd. It observes filesystem metadata and selected filesystem change events. The service is not a replacement for the kernel filesystem, package manager, audit subsystem, or authorization layer.
+
+The initial implementation is deliberately small and metadata-only. It does not read file contents, execute commands discovered on disk, follow symbolic links, or infer trust from names.
+
+## 2 — Host / Disk Observation
+
+The initial light index records:
+
+- regular-file count
+- directory count
+- logical file bytes
+- path/name
+- file mode
+- modification time
+- selected create, move, delete, and close-write event names
+
+The filesystem surface is configurable. Whole-disk observation is available for the Ubuntu White Edition default profile, while narrower roots are recommended for deployments that do not need a whole-host view.
+
+The phrase **procedurally careful slant of IQ** is interpreted as careful systems reasoning rather than a numerical intelligence score. CTRMS makes no intelligence, intent, ownership, authorship, or moral judgment about users or files.
+
+## 3 — Query / Evidence Bridge
+
+The query surface is:
+
+```text
+ctrmsctl status
+ctrmsctl find NAME
+ctrmsctl search TEXT
+ctrmsctl locate PATH
+```
+
+A light index supports fast name/path queries. A future medium index may add normalized file type, executable-format classification, package provenance, owner/group, stable file identity, digest, and bounded event history.
+
+"New commands" and "idioms" are treated as observations or declared relationships only. A discovered command-like string is never executed by CTRMS merely because it was found on disk.
+
+The evidence flow is:
+
+```text
+filesystem → observation → normalization → index → query → evidence
+```
+
+Observation is not authorization. A filename is not proof of legitimacy. A command string is not permission to execute.
+
+## 4 — Application / Policy
+
+Applications may consume CTRMS observations for host-health displays, package diagnostics, provenance records, installation checks, or controlled administrative workflows.
+
+The service should preserve a separation between:
+
+```text
+observe → interpret → authorize → act
+```
+
+CTRMS owns the observation layer. Policy and application layers decide what an observation means and whether any action is permitted.
+
+## Ubuntu White Edition
+
+The default profile declares `ctrmsctl.service` as an installed and enabled component. The declaration is in:
+
+```text
+tools/ctrmsctl/ubuntu-white-edition.install
+```
+
+Installation is performed explicitly by the provisioning system or `tools/ctrmsctl/install.sh`; the manifest itself is declarative and does not execute code.
+
+## Status
+
+CTRMSCTL 1.00 is an initial Linux implementation. The light metadata index and systemd service are implemented. The medium index remains a planned extension and should be added only with explicit resource and privacy policy.
