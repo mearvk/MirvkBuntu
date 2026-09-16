@@ -1,0 +1,46 @@
+# MirvkBuntu basic runtime/build package set
+#
+# Package names are intentionally distribution-facing rather than pinned here.
+# The installer/build layer resolves versions from the selected Ubuntu base.
+
+apt
+bash
+build-essential
+ca-certificates
+coreutils
+curl
+dbus
+file
+git
+grep
+gzip
+hostname
+initramfs-tools
+iproute2
+iputils-ping
+kmod
+less
+libc6
+login
+mount
+openssh-client
+pciutils
+procps
+sed
+sudo
+tar
+systemd
+udev
+util-linux
+vim-tiny
+wget
+xz-utils
+
+# Desktop foundation
+cairo
+fonts-dejavu
+gdk-pixbuf2.0
+glib2.0
+libgtk-3-0
+mutter
+gnome-shell
