@@ -40,6 +40,10 @@ The fourth documentation pass is now present:
 
 - `docs/ASYSMA-NORMS.md` — ASYSMA Norms and Proceed — 1-2-3-4; reference SHA-1 `8c109a92e5794cb74b6deaf2db6c129e7e37194e`
 
+The fifth documentation pass is now present:
+
+- `docs/ASYSMA-1-2-3-4-2026-08-25.mmd` — ASYSMA 1-2-3-4 Design Record; reference SHA-1 `5e3f38c1ae851f61d5339533fb534eba6b26464f`
+
 These documents were copied from the reference repository's `markdown/` directory as source-preserving records. Certificate language is preserved as a project document and is not independently presented here as external certification or institutional endorsement.
 
 ## Held for later import
