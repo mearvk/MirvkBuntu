@@ -1,0 +1,9 @@
+{
+  "uuid": "white-edition@mearvk",
+  "name": "Ubuntu White Edition Panel",
+  "description": "White Edition Start button that stays fixed at the left of the panel. The Start menu popup opens left, center, or right per the start-menu-alignment GSettings key, and the Start button glyph is selectable from three Ubuntu-themed logos via start-button-logo.",
+  "shell-version": ["46", "47"],
+  "settings-schema": "org.gnome.shell.extensions.white-edition",
+  "url": "https://github.com/mearvk/udbr",
+  "version": 1
+}

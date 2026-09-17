@@ -1,0 +1,77 @@
+#!/bin/bash
+
+set -x
+set +e
+
+srcdir=$( pwd )
+builddir=$1
+setup=$2
+suite=$3
+nosuite="$4,failing,${setup}_failing,flaky,headless,gsk-compare-broadway"
+multiplier=${MESON_TEST_TIMEOUT_MULTIPLIER:-1}
+n_processes=${MESON_TEST_MAX_PROCESSES:-$(nproc)}
+
+case "${setup}" in
+  x11*)
+    dbus-run-session -- \
+       xvfb-run -a -s "-screen 0 1024x768x24 -noreset" \
+          meson test -C ${builddir} \
+                --quiet \
+                --timeout-multiplier "${multiplier}" \
+                --num-processes "${n_processes}" \
+                --print-errorlogs \
+                --setup=${setup} \
+                --suite=${suite//,/ --suite=} \
+                --no-suite=${nosuite//,/ --no-suite=}
+
+    # Store the exit code for the CI run, but always
+    # generate the reports
+    exit_code=$?
+    ;;
+
+  wayland*)
+    export XDG_RUNTIME_DIR="$(mktemp -p $(pwd) -d xdg-runtime-XXXXXX)"
+
+    dbus-run-session -- \
+      mutter --headless --wayland --no-x11 --virtual-monitor 1024x768 -- \
+          meson test -C ${builddir} \
+                --quiet \
+                --timeout-multiplier "${multiplier}" \
+                --num-processes "${n_processes}" \
+                --print-errorlogs \
+                --setup=${setup} \
+                --suite=${suite//,/ --suite=} \
+                --no-suite=${nosuite//,/ --no-suite=}
+    exit_code=$?
+    ;;
+
+  broadway*)
+    export XDG_RUNTIME_DIR="$(mktemp -p $(pwd) -d xdg-runtime-XXXXXX)"
+
+    ${builddir}/gdk/broadway/gtk4-broadwayd :5 &
+    server=$!
+    export BROADWAY_DISPLAY=:5
+
+    dbus-run-session -- \
+          meson test -C ${builddir} \
+                --quiet \
+                --timeout-multiplier "${multiplier}" \
+                --num-processes "${n_processes}" \
+                --print-errorlogs \
+                --setup=${setup} \
+                --suite=${suite//,/ --suite=} \
+                --no-suite=${nosuite//,/ --no-suite=}
+
+    kill ${server}
+    ;;
+
+  *)
+    echo "Failed to add ${setup} to .gitlab-ci/run-tests.sh"
+    exit 1
+    ;;
+
+esac
+
+cd ${builddir}
+
+exit $exit_code

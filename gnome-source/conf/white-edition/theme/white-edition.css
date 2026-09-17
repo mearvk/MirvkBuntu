@@ -1,0 +1,46 @@
+/* Ubuntu White Edition — precision desktop theme
+ *
+ * Visual rule: white surfaces, dark-gray typography, restrained gray depth,
+ * and Ubuntu-red accents. Shadow direction is coordinated with lighting.conf.
+ */
+
+:root {
+  --we-surface: #ffffff;
+  --we-surface-raised: #fafafa;
+  --we-surface-soft: #f3f3f3;
+  --we-text: #303030;
+  --we-text-muted: #666666;
+  --we-edge: #dddddd;
+  --we-shadow: rgba(45, 45, 45, 0.22);
+  --we-shadow-soft: rgba(45, 45, 45, 0.12);
+  --we-red: #e95420;
+}
+
+/* These variables are consumed by White Edition theme/extension layers.
+ * GNOME Shell's supported CSS selectors remain responsible for actual UI. */
+
+#panel {
+  background-color: var(--we-surface);
+  color: var(--we-text);
+  box-shadow: 0 -1px 0 var(--we-edge), 0 -5px 16px var(--we-shadow-soft);
+}
+
+.we-raised {
+  background-color: var(--we-surface-raised);
+  border: 1px solid var(--we-edge);
+  box-shadow: 0 2px 5px var(--we-shadow-soft),
+              0 9px 22px var(--we-shadow-soft);
+}
+
+.we-focus {
+  box-shadow: 0 2px 6px var(--we-shadow-soft),
+              0 0 0 1px var(--we-red);
+}
+
+.we-contact-shadow {
+  box-shadow: 0 3px 5px var(--we-shadow-soft);
+}
+
+.we-accent {
+  color: var(--we-red);
+}

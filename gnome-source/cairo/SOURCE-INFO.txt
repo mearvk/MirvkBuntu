@@ -1,0 +1,11 @@
+Cairo upstream source baseline
+Project: Cairo
+Version: 1.18.4
+Archive: https://cairographics.org/releases/cairo-1.18.4.tar.xz
+SHA256: 445ed8208a6e4823de1226a74ca319d3600e83f6369f99b14265006599c32ccb
+Source repository: https://gitlab.freedesktop.org/cairo/cairo
+Official release page: https://cairographics.org/news/cairo-1.18.4/
+
+The pristine source is stored in upstream/.
+Determinant modifications belong outside upstream/ as offsets or patches.
+No GitHub/GitLab username or password is required for this release download.
