@@ -16,7 +16,7 @@ SCRIPTS=(
 )
 
 echo "MirvkBuntu source loader"
-echo "Source: mearkvk/Ubuntu.Determinant.Beta.Restricted (main)"
+echo "Source: mearvk/Ubuntu.Determinant.Beta.Restricted (main)"
 echo
 
 for script in "${SCRIPTS[@]}"; do
