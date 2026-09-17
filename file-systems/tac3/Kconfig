@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config TAC3
+	tristate "TAC3 — Tripartite Addressable Cache filesystem (3-Table Edition)"
+	default n
+	select PROC_FS
+	help
+	  TAC3 is an N-way redundant filesystem whose reads and writes are
+	  serviced ONLY through its own kernel-call handles (its VFS operation
+	  tables). Once registered, every standard read()/write()/mmap()/fsync()
+	  that lands on a TAC3 mount is dispatched through tac3_file_operations,
+	  tac3_*_inode_operations, tac3_aops and tac3_super_operations. Each
+	  serviced I/O feeds a wear/pressure/health engine.
+
+	  TAC3 maintains three coordinated tables over an N-layer ("multitude")
+	  redundant file table (default 10; common values 1, 3, 5, 10):
+
+	    Table 1 (FILE)   - file entries replicated across N layers.
+	    Table 2 (HEALTH) - per-layer/per-region read/write/pressure/wear and
+	                       derived disk health.
+	    Table 3 (ADMIN)  - administrative/state facts plus opaque
+	                       operator-supplied reference values.
+
+	  Per read, the engine derives a QUALITY (how well the read met the
+	  backing device's throughput spec) and a PRESSURE (instantaneous load).
+	  Re-reads raise a region's read-heat; heavy/jarring access records extra
+	  impact spread across all N layers. Layer and file-table health use a
+	  green/white/yellow model (no red-alarm), consistent with the project's
+	  aptitude/health convention.
+
+	  Runtime knobs:
+	    mount -t tac3 -o multitude=<1..16>,device_class=<n> none <mnt>
+	    /proc/tac3/{status,health,admin}   (read-only observability)
+	    /dev/tac3                          (ioctl: config + Table 3 admin)
+
+	  ETHICS NOTE: Table 3 stores administrative FACTS and OPERATOR-SUPPLIED
+	  OPAQUE reference values only. The kernel does NOT compute, infer, or
+	  judge any person's intelligence, worth, feelings, learning,
+	  friendships, or standing. The operator_ref[] slots are stored verbatim
+	  and carry no kernel-assigned meaning. This boundary is intentional and
+	  reflects the repository's stated ethic that a mechanism proves a
+	  measurement; it does not decide a person's worth.
+
+	  If unsure, say N. To build as a module, choose M; the module is called
+	  tac3.
