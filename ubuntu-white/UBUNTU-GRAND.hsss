@@ -1,0 +1,88 @@
+# Ubuntu Grand — Main Program Definition (.hsss)
+
+## Identity
+
+**Program:** Ubuntu Grand
+**System family:** Ubuntu.Determinant.Beta.Restricted
+**Release character:** Green · Cool · Timber
+**Work style:** Moral and guided by Law and Morals
+**Primary objective:** Build useful, durable, measurable software across Linux, Windows, and Apple-oriented ecosystems while preserving provenance, authorization, interoperability, and evidence.
+
+## Program definition
+
+Ubuntu Grand is a systems-development program. It joins a friendly human-facing Ubuntu White environment to controlled software installation, lifecycle management, cross-platform compatibility, native/runtime services, provenance, evidence, and economic-systems modeling.
+
+The program treats every major component as a lifecycle object:
+
+```text
+identify → install → configure → run → measure → update → verify → remove
+```
+
+No module is intended to be a lifecycle orphan. Installation, update, verification, and removal should be explicit capabilities wherever the underlying platform permits them.
+
+## .hsss work-style declaration
+
+`.hsss` is the project's **Human/System/Software Specification** document style. An `.hsss` document describes the intended relationship between the human experience, system behavior, software modules, evidence, and operating constraints. It is a design/provenance artifact, not an executable format or a claim of external legal authority.
+
+## Platform scope
+
+Ubuntu Grand should support, where technically and legally appropriate:
+
+- Linux and Ubuntu-native software;
+- Windows software through native Windows environments or Wine interoperability;
+- Microsoft ecosystem installation/update/removal conventions;
+- Apple/macOS ecosystem conventions where a native Apple environment is available;
+- C/C++, Java, SecureJDK/Graal, shell, PowerShell, HTML/CSS, and other repository-supported technologies.
+
+Cross-platform support means measurable compatibility, not merely renaming binaries. A `.so` and `.dll` remain different binary formats unless a real bridge, rebuild, compatibility layer, or equivalent mechanism establishes execution.
+
+## Systems model
+
+The program is organized around four user viewpoints:
+
+1. **Your desktop** — Ubuntu White, accessibility, ergonomics, icons, typography, and friendly presentation.
+2. **Your software** — installation, packages, dependencies, provenance, updates, and controlled removal.
+3. **Your compatibility** — Linux/Windows/Wine interoperability, executable and library identity, rebuilding, bridging, and verification.
+4. **Your systems** — US Software Systems 3: Green, Cool, Timber; measurable engineering, durability, evidence, and production reality.
+
+## Economic and institutional context
+
+Ubuntu Grand describes itself as a constructive software seed participating in the U.S. economy and the project's vocabulary of U.S. Economy 2 or greater. Capitalism is treated as a productive context for creating, financing, exchanging, competing over, and improving useful technology. Project authorship and leadership remain distinct from government authority or endorsement.
+
+U.S. Systems and U.S. SCOTUS may be used as institutional/legal reference points for questions of market conditions, rights, ownership, custody, and lawful participation. Such references do not establish a government relationship, grant, adjudication, or endorsement.
+
+## INT / IQ vocabulary
+
+Within this project's vocabulary, **High INT is IQ**: a shorthand for systems reasoning, abstraction, computational understanding, and problem-solving capacity. It is not a medical, legal, or scientific finding about a person and is not a measure of human worth.
+
+## Tech 2
+
+**Tech 2 Exists** is release vocabulary for continued technological development: systems that compose multiple runtimes, platforms, evidence layers, compatibility mechanisms, and human-facing conveniences into one coherent production surface.
+
+## Safety and authority boundaries
+
+The program must distinguish:
+
+- project assertion from established fact;
+- modeled economic risk from actual liability;
+- software provenance from legal title;
+- institutional reference from government endorsement;
+- custody records from ownership determinations;
+- compatibility claims from demonstrated execution;
+- configuration convenience from authorization to make a persistent change.
+
+Material persistent operations should be inspectable and, where practical, reversible. Destructive operations require explicit authorization and should remove installed artifacts rather than silently destroying source or repository history.
+
+## Quality standard
+
+**Green** means constructive and observable.
+**Cool** means clear, ergonomic, technically elegant, and approachable.
+**Timber** means durable foundation: a system that can be built upon.
+
+The principal quality loop is:
+
+```text
+propose → inspect → authorize → execute → observe → verify → preserve evidence
+```
+
+Ubuntu Grand is successful when the same principles remain recognizable from the desktop to the native runtime, from a package operation to a Windows compatibility test, and from a user convenience to the evidence retained behind it.

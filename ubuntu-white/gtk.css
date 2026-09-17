@@ -1,0 +1,73 @@
+/* Ubuntu White — GTK-oriented baseline
+ * Independent project styling inspired by open-source Ubuntu/GNOME ergonomics.
+ * Do not treat this as official Ubuntu artwork or branding.
+ */
+
+* {
+  -GtkWidget-focus-line-width: 2;
+  -GtkWidget-focus-padding: 2;
+  -GtkFontName: "Noto Sans 11";
+}
+
+window,
+.background {
+  background: #ffffff;
+  color: #303030;
+}
+
+headerbar,
+.titlebar,
+toolbar {
+  background: #f7f7f7;
+  color: #303030;
+  border-color: #d6d6d6;
+  box-shadow: none;
+}
+
+button,
+entry,
+spinbutton,
+combobox,
+searchbar,
+view,
+list,
+notebook,
+menu,
+popover {
+  background: #ffffff;
+  color: #303030;
+  border-color: #d6d6d6;
+}
+
+button {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+button:hover,
+entry:focus,
+button:focus {
+  background: #f2f2f2;
+  border-color: #4a4a4a;
+}
+
+button:checked,
+row:selected,
+view:selected {
+  background: #e9e9e9;
+  color: #202020;
+}
+
+label {
+  color: #303030;
+}
+
+.dim-label {
+  color: #626262;
+}
+
+scrollbar slider {
+  background: #8a8a8a;
+  min-width: 10px;
+  min-height: 10px;
+}

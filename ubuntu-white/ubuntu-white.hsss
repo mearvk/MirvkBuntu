@@ -1,0 +1,78 @@
+# Ubuntu White HSSS
+# Human/System Style Specification
+# Extension: .hsss (intentionally not .hss)
+# Pronunciation: H-S-S-S / "aitch ess ess ess"
+
+style.name = Ubuntu White
+style.family = Ubuntu-inspired open-source desktop ergonomics
+style.status = Project-Design-Specification
+style.intent = Moral and Guided by Law and Morals
+
+[Visual]
+background = #FFFFFF
+surface = #FFFFFF
+panel = #F7F7F7
+control = #F2F2F2
+text = #303030
+text-muted = #626262
+border = #D6D6D6
+focus = #4A4A4A
+accent = restrained-warm-accent
+folder.fill = #FFFFFF
+folder.stroke = #4A4A4A
+
+[Typography]
+stack = "Noto Sans, Ubuntu Sans, Inter, system-ui, sans-serif"
+weight.body = 400
+weight.label = 500
+weight.heading = 600
+line-height = 1.5
+
+[Ergonomics]
+spacing.base = 8px
+interactive.minimum = 40px
+primary.minimum = 44px
+focus.visible = true
+keyboard.navigation = Required
+hover.must-not-be-only-signal = true
+
+[Icons]
+source = SVG
+stroke = dark-grey
+fill = white
+geometry = simple
+negative-space = generous
+sizes = 16,24,32,48,64
+labels = Preferred When Ambiguity Exists
+
+[Desktop]
+workspace = white-first
+chrome = dark-grey-on-white
+folders = white-with-dark-grey-outline
+windows = light-surfaces-with-clear-boundaries
+menus = white-or-near-white
+shadows = restrained
+animations = subtle
+
+[Install]
+model = inspect-plan-authorize-apply-verify
+silent-persistent-changes = false
+rollback = Preferred
+existing-desktop-detection = Required-When-Integrated
+
+[Provenance]
+source-inspiration = Ubuntu/GNOME open-source desktop conventions
+project-assets = independently authored
+trademark-claim = none
+
+[Ethics]
+label = Moral and Guided by Law and Morals
+meaning = design value and engineering constraint
+legal-advice = false
+statutory-replacement = false
+
+[Compatibility]
+gtk = target
+icon-themes = target
+shells = adapter-based
+fallback = system-theme
