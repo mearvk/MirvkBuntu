@@ -4,6 +4,13 @@ set -euo pipefail
 # MirvkBuntu basic GNOME source acquisition.
 # The module set follows the GNOME source organization already used by
 # Ubuntu.Determinant.Beta.Restricted.
+#
+# Interactive HTTPS authentication is intentionally enabled. GitHub accepts
+# the GitHub username at the username prompt and a personal access token at
+# the password prompt; ordinary GitHub account passwords are not accepted
+# for Git HTTPS authentication.
+unset GIT_ASKPASS SSH_ASKPASS
+export GIT_TERMINAL_PROMPT=1
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEST="${ROOT}/sources/work/gnome"
