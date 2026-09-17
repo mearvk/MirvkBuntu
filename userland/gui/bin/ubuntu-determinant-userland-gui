@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "$ROOT/userland/gui"
+exec mvn -q javafx:run -Dubuntu.determinant.root="$ROOT"
