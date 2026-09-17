@@ -1,0 +1,6 @@
+Chromium source snapshot
+Fetched: 2026-07-30T21:21:08-04:00
+Origin: https://github.com/chromium/chromium
+Commit: 5006852cd6 (Revert "[UnboundedElement] Coordinate macOS Z-order...")
+License: BSD-3-Clause
+Depth: 10 commits (shallow clone, .git removed for distribution)

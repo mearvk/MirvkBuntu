@@ -1,0 +1,8 @@
+AXWebArea
+++AXGroup
+++++AXList AXDescription='selection_list'
+++++++AXGroup AXSubrole=AXApplicationGroup AXDescription='Enabled'
+++++++++AXStaticText AXValue='One'
+++++++++AXStaticText AXValue='Two'
+++++++++AXStaticText AXValue='Three'
+++++++++AXStaticText AXValue='Four'

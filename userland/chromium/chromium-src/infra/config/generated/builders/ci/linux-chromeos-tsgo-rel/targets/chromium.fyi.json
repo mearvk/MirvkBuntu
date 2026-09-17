@@ -1,0 +1,10 @@
+{
+  "linux-chromeos-tsgo-rel": {
+    "additional_compile_targets": [
+      "browser_tests",
+      "chrome",
+      "interactive_ui_tests",
+      "unit_tests"
+    ]
+  }
+}
