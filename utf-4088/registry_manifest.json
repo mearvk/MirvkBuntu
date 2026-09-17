@@ -1,0 +1,37 @@
+{
+  "format": "utf-4088-registry-manifest-1",
+  "status": "experimental",
+  "published_symbol_count": 16606,
+  "integer_id_range": [0, 16605],
+  "stages": ["start", "intermediate", "final"],
+  "language_tuple": ["american-english", "korean", "germanic"],
+  "allocation": {
+    "front_end": "exactly 16606 deterministic records",
+    "remainder": "derived 4D symbol space; not predeclared as human-language characters"
+  },
+  "record_schema": {
+    "integer_id": "uint32",
+    "stage": "enum(start, intermediate, final)",
+    "language": "enum(american-english, korean, germanic)",
+    "codepoint": "uint64",
+    "shape_id": "uint64",
+    "meaning_id": "uint64"
+  },
+  "generation": {
+    "algorithm": "UTF4088-RG-1",
+    "id": "0..16605 inclusive",
+    "stage": "id modulo 3",
+    "language": "floor(id / 3) modulo 3",
+    "codepoint": "0x110000 + id",
+    "shape_id": "SplitMix64(id xor 0x5348415045)",
+    "meaning_id": "SplitMix64(id xor 0x4D45414E494E47)"
+  },
+  "validation": {
+    "count": 16606,
+    "unique_integer_ids": true,
+    "unique_codepoints": true,
+    "deterministic": true,
+    "final_records_immutable_per_registry_version": true
+  },
+  "note": "This manifest defines an experimental deterministic registry. The generated entries are identifiers and rendering/semantic slots, not assertions that newly generated code points are established Unicode characters."
+}

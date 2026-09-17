@@ -1,0 +1,18 @@
+{
+  "status": "experimental-source-seed",
+  "languages": {
+    "american-english": {
+      "reference": "modern English Latin alphabet",
+      "characters": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    },
+    "korean": {
+      "reference": "Hangul jamo identity seed; historical 1888 layer requires source-specific expansion",
+      "characters": "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ"
+    },
+    "germanic": {
+      "reference": "1872 German orthographic reference layer",
+      "characters": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß"
+    }
+  },
+  "note": "These are seed inventories, not complete reproductions of historical publications. Historical spelling and glyph variants must be stored with provenance before being used as canonical training material."
+}

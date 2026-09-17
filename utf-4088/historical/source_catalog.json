@@ -1,0 +1,37 @@
+{
+  "status": "provenance_catalog",
+  "sources": [
+    {
+      "language": "korean",
+      "anchor": "Hunminjeongeum",
+      "date_context": "15th-century origin; historical 1888 specimen requires separate archival source",
+      "authority": "National Hangeul Museum",
+      "url": "https://www.hangeul.go.kr/en/exhi/dailyExhibition.do",
+      "use": "graphic principles and letter inventory; not an 1888 glyph facsimile"
+    },
+    {
+      "language": "korean",
+      "anchor": "A Guide to Hunminjeongeum",
+      "date_context": "modern scholarly guide to historical system",
+      "authority": "National Hangeul Museum",
+      "url": "https://www.hangeul.go.kr/published-data/academicArchives/598",
+      "use": "letter order, names, and graphic principles"
+    },
+    {
+      "language": "german",
+      "anchor": "Die deutsche Rechtschreibung",
+      "date_context": "1872",
+      "authority": "Duden",
+      "url": "https://www.duden.de/ueber_duden/geschichte-der-rechtschreibung",
+      "use": "dated orthographic reference"
+    },
+    {
+      "language": "german",
+      "anchor": "Konrad Duden",
+      "date_context": "1872 and 1880 milestones",
+      "authority": "Duden",
+      "url": "https://www.duden.de/ueber_duden/konrad-duden",
+      "use": "historical provenance and orthographic context"
+    }
+  ]
+}

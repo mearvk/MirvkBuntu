@@ -1,0 +1,71 @@
+{
+  "schema": "utf4088-character-semantics-2",
+  "purpose": "Versioned semantic and distribution metadata for the UTF-4088 neural/graph process.",
+  "status": "experimental",
+  "primary_mathematical_consideration": "polygraph_5_falloff",
+  "polygraph_5": {
+    "coefficient": 5.0,
+    "formula": "F5(d)=exp(-5*d/r0)",
+    "radius": "r0",
+    "interpretation": "Normalized semantic/graph evidence decays with distance from the selected character's interpretive center.",
+    "at_one_radius": 0.006737946999085467,
+    "standard_id": "The baseline reference point is a model identifier, not an inference about a real person's identity, worth, intelligence, or moral status.",
+    "insufficient_meaning_rule": "If F5(d) < epsilon, the associated evidence is insufficient by the configured model threshold and must not independently establish character meaning."
+  },
+  "units": {
+    "falloff": "normalized distribution weight",
+    "meaning_weight": "relative semantic association",
+    "time_weight": "historical-context association",
+    "cause_weight": "graph-causal association"
+  },
+  "selection_model": {
+    "primary_formula": "score(c|x,t,l)=normalise(shape_weight*meaning_weight*time_weight*cause_weight*F5(distance))",
+    "falloff_model": "exp(-5*distance/r0)",
+    "radius_parameter": "versioned; not a hard capacity limit",
+    "epsilon": 0.001,
+    "standard_reference": "r0"
+  },
+  "characters": [
+    {
+      "id": 0,
+      "symbol": "A",
+      "meaning": "alphabetic identity; initial English/American Latin letter",
+      "language": ["english"],
+      "historical_range": [1888, 2026],
+      "meaning_weight": 1.0,
+      "time_weight": 1.0,
+      "cause_weight": 1.0,
+      "falloff": 1.0,
+      "status": "seed"
+    },
+    {
+      "id": 1,
+      "symbol": "한",
+      "meaning": "Korean syllabic block exemplar; semantic value is context-dependent",
+      "language": ["korean"],
+      "historical_range": [1888, 2026],
+      "meaning_weight": 1.0,
+      "time_weight": 1.0,
+      "cause_weight": 1.0,
+      "falloff": 1.0,
+      "status": "seed"
+    },
+    {
+      "id": 2,
+      "symbol": "Ä",
+      "meaning": "Latin-derived Germanic orthographic vowel form; language-specific meaning",
+      "language": ["germanic"],
+      "historical_range": [1872, 2026],
+      "meaning_weight": 1.0,
+      "time_weight": 1.0,
+      "cause_weight": 1.0,
+      "falloff": 1.0,
+      "status": "seed"
+    }
+  ],
+  "expansion_rule": {
+    "principle": "Generated symbols inherit no semantic meaning merely from their bitmap.",
+    "requirement": "A generated symbol must acquire meaning through an explicit graph, corpus, historical, or application annotation before being treated as interpreted language.",
+    "neural_use": "Weights may be used as training/selection features, not as assertions of objective meaning."
+  }
+}

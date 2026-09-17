@@ -1,0 +1,32 @@
+{
+  "document": "UTF-100000000",
+  "status": "experimental-computation",
+  "iterations": 100000000,
+  "seed": "0x40880812",
+  "model": {
+    "name": "Polygraph-5",
+    "formula": "F5(d)=exp(-5*d/r0)",
+    "normalized_distance": "d in [0,1]",
+    "epsilon": 0.001
+  },
+  "execution": {
+    "engine": "local C++17 -O3",
+    "deterministic": true,
+    "complete_iteration_count_executed": true,
+    "raw_iteration_log_committed": false,
+    "reason": "100,000,000 row logs are not appropriate for Git history; the fixed seed and source provide deterministic reconstruction."
+  },
+  "result": {
+    "accepted_at_epsilon": 100000000,
+    "acceptance_rate": 1.0,
+    "minimum_possible_falloff": 0.006737946999085467,
+    "note": "Every sample passes epsilon=0.001 because exp(-5*d) remains >= exp(-5) over d in [0,1]. Therefore epsilon is below the model's minimum falloff and is not discriminative."
+  },
+  "falloff_bins": [
+    {"bin":0,"count":44543898}, {"bin":1,"count":13863093}, {"bin":2,"count":8110338}, {"bin":3,"count":5752915},
+    {"bin":4,"count":4463950}, {"bin":5,"count":3645567}, {"bin":6,"count":3082738}, {"bin":7,"count":2672482},
+    {"bin":8,"count":2356980}, {"bin":9,"count":2108371}, {"bin":10,"count":1905396}, {"bin":11,"count":1739567},
+    {"bin":12,"count":1600640}, {"bin":13,"count":1481692}, {"bin":14,"count":1381188}, {"bin":15,"count":1291185}
+  ],
+  "interpretation": "The 100M expansion successfully executed, but the current epsilon does not select a subset. The falloff distribution itself is the useful result. A later threshold should be chosen relative to r0 or a percentile of observed F5 values rather than below the theoretical minimum."
+}
