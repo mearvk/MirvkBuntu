@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  jvm-config.xml - SecureJVM (JDK 28) Configuration
+  Ubuntu Determinant Alpha RS - Galactic Cherry Marvell Edition 98
+
+  This is the DEFAULT configuration for the Galactic Cherry SecureJVM.
+  The SecureJVM uses .xclass (XML class files) as its primary input format.
+  Legacy .class (0xCAFEBABE) files are supported as fallback.
+
+  Location: $JAVA_HOME/conf/jvm-config.xml or /etc/jvm-config.xml
+  Security: Must be owned by root or launching user, not world-writable.
+  Optional: Add signature="sha256:<hex>" to jvm-config element for integrity.
+
+  Last updated: 2026-08-14
+  Copyright (C) 2026 MEARVK LLC
+-->
+<jvm-config version="2" edition="SecureJVM" product="Galactic Cherry Marvell 98">
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- SecureJVM Identity                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <identity>
+    <name>SecureJVM</name>
+    <version>28</version>
+    <edition>Galactic Cherry Marvell Edition 98</edition>
+    <vendor>MEARVK LLC</vendor>
+    <primary-format>.xclass</primary-format>
+    <fallback-format>.class</fallback-format>
+  </identity>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- .xclass Configuration — Primary Class Format                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <xclass enabled="true" primary="true">
+    <!-- Search order: .xclass FIRST, then .class as fallback -->
+    <search-order>
+      <format extension=".xclass" priority="1"/>
+      <format extension=".class"  priority="2"/>
+    </search-order>
+
+    <!-- Directory watcher: hot-reload .xclass files on detection -->
+    <watcher enabled="true">
+      <directory path="/opt/jvm/xclasses/"   trust-grade="3"/>
+      <directory path="/etc/jvm/xclasses/"   trust-grade="3"/>
+      <directory path="~/.jvm/xclasses/"     trust-grade="0"/>
+    </watcher>
+
+    <!-- Metadata extraction: feed rich XML metadata to SecureJVM modules -->
+    <metadata-integration>
+      <feed module="ClassLoadGuard"      enabled="true"/>
+      <feed module="IntegrityGuardian"   enabled="true"/>
+      <feed module="ObserverCircuit"     enabled="true"/>
+      <feed module="MemoryProxy"         enabled="true"/>
+      <feed module="SystemCodex"         enabled="true"/>
+      <feed module="INTLoader"           enabled="true"/>
+    </metadata-integration>
+  </xclass>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- JVM Flags (equivalent to -XX:Name=Value on command line)               -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <flags>
+    <!-- Memory -->
+    <flag name="MaxHeapSize" value="4g"/>
+    <flag name="InitialHeapSize" value="512m"/>
+    <flag name="MaxMetaspaceSize" value="512m"/>
+    <flag name="UseCompressedOops" value="true"/>
+
+    <!-- Garbage Collection -->
+    <flag name="UseG1GC" value="true"/>
+    <flag name="MaxGCPauseMillis" value="200"/>
+    <flag name="G1HeapRegionSize" value="4m"/>
+    <flag name="GCTimeRatio" value="12"/>
+    <flag name="ParallelGCThreads" value="4"/>
+    <flag name="ConcGCThreads" value="2"/>
+
+    <!-- JIT Compilation -->
+    <flag name="TieredCompilation" value="true"/>
+    <flag name="CompileThreshold" value="5000"/>
+
+    <!-- Diagnostics -->
+    <flag name="NativeMemoryTracking" value="summary"/>
+    <flag name="HeapDumpOnOutOfMemoryError" value="true"/>
+    <flag name="HeapDumpPath" value="/var/log/jvm"/>
+
+    <!-- Security -->
+    <flag name="UseSecureRandom" value="true"/>
+  </flags>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- System Properties (equivalent to -Dname=value)                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <system-properties>
+    <property name="java.io.tmpdir" value="/var/tmp/jvm"/>
+    <property name="file.encoding" value="UTF-8"/>
+    <property name="java.net.preferIPv4Stack" value="false"/>
+    <property name="jdk.tls.ephemeralDHKeySize" value="2048"/>
+    <property name="jvm.secure" value="true"/>
+    <property name="jvm.edition" value="Galactic Cherry Marvell 98"/>
+    <property name="jvm.primary.format" value="xclass"/>
+  </system-properties>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- Classpath Entries (appended to system classpath)                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <classpath>
+    <!-- .xclass directories are automatically included via watcher -->
+    <entry path="/opt/jvm/xclasses/"/>
+    <entry path="/etc/jvm/xclasses/"/>
+    <!-- <entry path="/opt/app/lib/*"/> -->
+  </classpath>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- SecureJVM Modules — ALL ENABLED BY DEFAULT                             -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Class Load Guard: quantity and quality controls -->
+  <class-load-guard enabled="true" policy="warn">
+    <global-max value="5000"/>
+    <threshold value="3"/>
+    <grade name="Main" max="unlimited"/>
+    <grade name="Manager" max="100"/>
+    <grade name="Archetype" max="200"/>
+    <grade name="Builder" max="150"/>
+    <grade name="Inheritor" max="500"/>
+    <grade name="Gainer" max="300"/>
+    <grade name="Substitute" max="200"/>
+    <grade name="Ungraded" max="2000"/>
+  </class-load-guard>
+
+  <!-- Integrity Guardian: anti-hook, allocation discipline -->
+  <integrity-guardian enabled="true">
+    <ld-preload-check enabled="true"/>
+    <dlopen-whitelist enabled="true"/>
+    <jvmti-late-attach-lock enabled="true"/>
+    <ptrace-monitor enabled="true"/>
+    <maps-scan-interval seconds="60"/>
+    <allocation-discipline enabled="true" ratios="1:1,1:2"/>
+    <canary magic-a="0x47414C41" magic-b="0x43484552"/>
+  </integrity-guardian>
+
+  <!-- Pause-Frame Inspector -->
+  <pause-inspector enabled="true">
+    <default-grade value="1"/>
+  </pause-inspector>
+
+  <!-- Observer Grade Circuit: SSH/telnet/socket -->
+  <jvm-circuit enabled="true">
+    <ssh port="2222" enabled="true"/>
+    <telnet port="2223" enabled="false" localhost-only="true"/>
+    <socket enabled="true"/>
+  </jvm-circuit>
+
+  <!-- Resource Loader: permission-gated file loading -->
+  <resource-loader enabled="true">
+    <default-grade value="1"/>
+    <content-validation enabled="true"/>
+  </resource-loader>
+
+  <!-- System Codex: static module registry -->
+  <system-codex enabled="true"/>
+
+  <!-- MySQL Bridge: operand awareness -->
+  <mysql-bridge enabled="true">
+    <connection host="localhost" port="3306" database="jvm_operand"
+               user="jvm" socket="/var/run/mysqld/mysqld.sock" tls="true"/>
+  </mysql-bridge>
+
+  <!-- Memory Proxy: resource governance for native code -->
+  <memory-proxy enabled="true">
+    <default-budget>
+      <ram soft="512m" hard="2g"/>
+      <disk-write-rate soft="100m" hard="500m"/>
+      <disk-read-rate soft="200m" hard="1g"/>
+      <file-descriptors soft="256" hard="1024"/>
+      <cpu-window seconds="10" soft="8" hard="10"/>
+      <threads soft="64" hard="256"/>
+      <children soft="8" hard="32"/>
+    </default-budget>
+    <alerts>
+      <notify method="observer-circuit" level="2"/>
+      <notify method="chat" target="ops-team"/>
+      <notify method="mysql" database="dave_knowledge"/>
+    </alerts>
+  </memory-proxy>
+
+  <!-- INT Loading Structure: 4-tier inferrer & orderer -->
+  <int-loader enabled="true">
+    <default-tier value="1"/>
+    <execution-order>tier4,tier3,tier2,tier1</execution-order>
+    <recycling enabled="true"/>
+  </int-loader>
+
+  <!-- XML Config Reader: self-referential (this file) -->
+  <xml-config-reader enabled="true">
+    <security>
+      <require-ownership value="true"/>
+      <reject-world-writable value="true"/>
+      <reject-symlinks value="true"/>
+      <max-file-size value="65536"/>
+      <reject-dtd value="true"/>
+    </security>
+  </xml-config-reader>
+
+</jvm-config>

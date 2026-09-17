@@ -1,0 +1,30 @@
+OpenJDK 28 Native Source (C/C++) — x86_64/Linux
+=================================================
+Repository: https://github.com/openjdk/jdk
+Branch: master (JDK 28 development trunk)
+Commit: 5b2d6991a (2026-08-02)
+License: GPL-2.0-only WITH Classpath-exception-2.0
+Scope: Native source only (.c, .cpp, .h, .hpp, .S) — x86_64 Linux
+
+Trimmed for Ubuntu Determinant Alpha RS:
+  ✓ src/hotspot/         - HotSpot JVM (GC, JIT/C1/C2, runtime, interpreter)
+  ✓ src/java.base/      - Core native libraries (libjava, libnet, libnio, libzip)
+  ✓ src/jdk.*/          - Module native code (JDWP, management, SCTP, networking)
+  ✗ src/java.desktop/   - Removed (AWT/Swing/X11 — 18MB, not needed)
+  ✗ cpu/aarch64,arm,ppc,riscv,s390 - Removed (non-x86 architectures)
+  ✗ os/bsd,windows,aix  - Removed (non-Linux)
+  ✗ share/jfr           - Removed (Flight Recorder instrumentation)
+  ✗ share/cds           - Removed (Class Data Sharing)
+
+Key source areas for modification:
+  src/hotspot/share/gc/         - Garbage collectors (G1, ZGC, Serial, Shenandoah)
+  src/hotspot/share/opto/       - C2 JIT compiler (server compiler)
+  src/hotspot/share/c1/         - C1 JIT compiler (client compiler)
+  src/hotspot/share/runtime/    - VM runtime (threads, synchronization, safepoints)
+  src/hotspot/share/oops/       - Object model (ordinary object pointers)
+  src/hotspot/share/memory/     - Memory management
+  src/hotspot/share/interpreter/- Bytecode interpreter
+  src/hotspot/cpu/x86/          - x86_64-specific code generation
+  src/java.base/share/native/   - Core JNI implementations
+
+Stats: 2960 files, 49MB

@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xclass version="1.0"?>
+<!--
+  XML Class File Format — Example
+  Galactic Cherry Marvell Edition 98
+  Copyright (C) 2026 MEARVK LLC
+
+  This file is equivalent to a compiled .class file but richer.
+  The JVM reads this directly — no javac binary compilation needed for the
+  structural metadata. Bytecode sections are Base64-encoded.
+-->
+<class xmlns="urn:galactic-cherry:xclass:1.0"
+       signature="sha256:0000000000000000000000000000000000000000000000000000000000000000">
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- IDENTITY                                                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <identity>
+    <name>com.example.app.UserService</name>
+    <super>java.lang.Object</super>
+    <interfaces>
+      <interface>java.io.Serializable</interface>
+      <interface>com.example.app.Service</interface>
+    </interfaces>
+    <version major="67" minor="0"/>  <!-- Java 28 = class file version 67.0 -->
+    <access>public</access>
+  </identity>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- PROVENANCE — Who wrote this, when, why                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <provenance>
+    <author>mearvk</author>
+    <organization>MEARVK LLC</organization>
+    <created>2026-08-12T02:00:00Z</created>
+    <modified>2026-08-12T02:00:00Z</modified>
+    <license>GPL-2.0</license>
+    <origin>
+      <source-file>UserService.java</source-file>
+      <repository>github.com/mearvk/project</repository>
+      <commit>abc123def456</commit>
+    </origin>
+  </provenance>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- DOCUMENTATION — Inline class-level docs                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <documentation>
+    <summary>Manages user lifecycle operations including creation, auth, and profile.</summary>
+    <details>
+      This service is the primary entry point for all user-related operations.
+      It enforces business rules around registration, validates identity,
+      and coordinates with the persistence layer.
+    </details>
+    <since>1.0</since>
+    <see>com.example.app.AuthService</see>
+    <see>com.example.app.ProfileService</see>
+  </documentation>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- DESIGN INTENT — What this class promises                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <design>
+    <intent>Encapsulate user lifecycle behind a clean service boundary.</intent>
+    <contract>
+      <precondition>Database connection pool is initialized before first call.</precondition>
+      <postcondition>All public methods either succeed or throw ServiceException.</postcondition>
+      <invariant>User state transitions are always logged to audit trail.</invariant>
+    </contract>
+    <pattern>Service Layer (Fowler)</pattern>
+    <thread-safety>thread-safe</thread-safety>
+    <nullability>no-null-returns</nullability>
+  </design>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- SECURITY — Trust level, permissions, resource requirements             -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <security>
+    <trust-grade>3</trust-grade>  <!-- System admin level -->
+    <permissions>
+      <permission>java.net.SocketPermission("*:3306", "connect")</permission>
+      <permission>java.io.FilePermission("/var/log/app/*", "write")</permission>
+    </permissions>
+    <resource-budget>
+      <max-memory>64m</max-memory>
+      <max-threads>8</max-threads>
+      <max-file-descriptors>16</max-file-descriptors>
+    </resource-budget>
+    <classload-grade>6</classload-grade>  <!-- Manager grade per ClassLoadGuard -->
+  </security>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- DEPENDENCIES — Explicit declaration of what this class needs           -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <dependencies>
+    <dependency name="java.sql" version="28" type="module" required="true"/>
+    <dependency name="com.example.persistence" version="2.1" type="package" required="true"/>
+    <dependency name="org.slf4j" version="2.0" type="library" required="false"/>
+  </dependencies>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- CONSTANT POOL — All constants (same data as binary, XML form)          -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <constant-pool>
+    <entry index="1" tag="Class" name="com/example/app/UserService"/>
+    <entry index="2" tag="Class" name="java/lang/Object"/>
+    <entry index="3" tag="Class" name="java/io/Serializable"/>
+    <entry index="4" tag="Class" name="com/example/app/Service"/>
+    <entry index="5" tag="Utf8" value="&lt;init&gt;"/>
+    <entry index="6" tag="Utf8" value="()V"/>
+    <entry index="7" tag="Utf8" value="createUser"/>
+    <entry index="8" tag="Utf8" value="(Ljava/lang/String;Ljava/lang/String;)Lcom/example/app/User;"/>
+    <entry index="9" tag="Utf8" value="findUser"/>
+    <entry index="10" tag="Utf8" value="(J)Lcom/example/app/User;"/>
+    <entry index="11" tag="Utf8" value="deleteUser"/>
+    <entry index="12" tag="Utf8" value="(J)Z"/>
+    <entry index="13" tag="NameAndType" name-index="5" descriptor-index="6"/>
+    <entry index="14" tag="Methodref" class-index="2" name-and-type-index="13"/>
+    <entry index="15" tag="Utf8" value="Code"/>
+    <entry index="16" tag="Utf8" value="maxConnections"/>
+    <entry index="17" tag="Utf8" value="I"/>
+    <entry index="18" tag="Integer" value="10"/>
+    <entry index="19" tag="Utf8" value="serviceName"/>
+    <entry index="20" tag="Utf8" value="Ljava/lang/String;"/>
+    <entry index="21" tag="String" string-index="22"/>
+    <entry index="22" tag="Utf8" value="UserService"/>
+  </constant-pool>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- FIELDS                                                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <fields>
+    <field>
+      <name>maxConnections</name>
+      <descriptor>I</descriptor>
+      <access>private final</access>
+      <value>10</value>
+      <doc>Maximum concurrent database connections for this service instance.</doc>
+    </field>
+    <field>
+      <name>serviceName</name>
+      <descriptor>Ljava/lang/String;</descriptor>
+      <access>private static final</access>
+      <value>"UserService"</value>
+      <doc>Canonical name for logging and metrics.</doc>
+    </field>
+  </fields>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- METHODS                                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <methods>
+    <method>
+      <name>&lt;init&gt;</name>
+      <descriptor>()V</descriptor>
+      <access>public</access>
+      <doc>Default constructor. Initializes connection pool.</doc>
+      <code max-stack="1" max-locals="1">
+        <!-- Bytecode as Base64-encoded bytes -->
+        <bytecode encoding="base64">KrcADrE=</bytecode>
+        <!-- Human-readable disassembly (informational, not parsed) -->
+        <disassembly>
+          0: aload_0
+          1: invokespecial #14  // java/lang/Object.&lt;init&gt;:()V
+          4: return
+        </disassembly>
+      </code>
+      <exceptions/>
+    </method>
+
+    <method>
+      <name>createUser</name>
+      <descriptor>(Ljava/lang/String;Ljava/lang/String;)Lcom/example/app/User;</descriptor>
+      <access>public</access>
+      <doc>
+        Creates a new user with the given username and email.
+        Validates uniqueness, hashes credentials, persists, and returns the new User.
+      </doc>
+      <contract>
+        <precondition>username != null &amp;&amp; username.length() &gt;= 3</precondition>
+        <precondition>email != null &amp;&amp; email.contains("@")</precondition>
+        <postcondition>result.getId() &gt; 0</postcondition>
+        <throws>ServiceException if username already exists</throws>
+      </contract>
+      <code max-stack="3" max-locals="4">
+        <bytecode encoding="base64">KrcADiq3AA6xAA==</bytecode>
+        <disassembly>
+          0: aload_0
+          1: invokespecial #14
+          4: aload_0
+          5: invokespecial #14
+          8: return
+        </disassembly>
+        <stack-map-table>
+          <frame type="same" offset="4"/>
+        </stack-map-table>
+      </code>
+      <exceptions>
+        <exception>com.example.app.ServiceException</exception>
+      </exceptions>
+    </method>
+
+    <method>
+      <name>findUser</name>
+      <descriptor>(J)Lcom/example/app/User;</descriptor>
+      <access>public</access>
+      <doc>Finds a user by their numeric ID. Returns null if not found.</doc>
+      <code max-stack="2" max-locals="3">
+        <bytecode encoding="base64">AQAB</bytecode>
+        <disassembly>
+          0: aconst_null
+          1: areturn
+        </disassembly>
+      </code>
+      <exceptions/>
+    </method>
+
+    <method>
+      <name>deleteUser</name>
+      <descriptor>(J)Z</descriptor>
+      <access>public</access>
+      <doc>Soft-deletes a user. Returns true if user existed and was deleted.</doc>
+      <contract>
+        <precondition>id &gt; 0</precondition>
+        <postcondition>findUser(id) == null || findUser(id).isDeleted()</postcondition>
+      </contract>
+      <code max-stack="2" max-locals="3">
+        <bytecode encoding="base64">BAAB</bytecode>
+        <disassembly>
+          0: iconst_1
+          1: ireturn
+        </disassembly>
+      </code>
+      <exceptions/>
+    </method>
+  </methods>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- OPTIMIZATION HINTS — Guidance for JIT/AOT                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <hints>
+    <hot-method>createUser</hot-method>
+    <hot-method>findUser</hot-method>
+    <inline-candidate>findUser</inline-candidate>
+    <escape-analysis method="createUser" parameter="0">no-escape</escape-analysis>
+    <allocation-site method="createUser" bci="12" expected-type="com.example.app.User"/>
+  </hints>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- TEST SPECIFICATIONS — Inline test contracts                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <tests>
+    <test method="createUser" name="creates_valid_user">
+      <given>username="alice", email="alice@example.com"</given>
+      <expect>result != null</expect>
+      <expect>result.getUsername().equals("alice")</expect>
+    </test>
+    <test method="createUser" name="rejects_duplicate_username">
+      <given>username="existing", email="new@example.com"</given>
+      <expect-throws>ServiceException</expect-throws>
+    </test>
+    <test method="deleteUser" name="returns_false_for_nonexistent">
+      <given>id=999999</given>
+      <expect>result == false</expect>
+    </test>
+  </tests>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- HISTORY — Version changelog (optional, for living classes)             -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <history>
+    <revision version="1.0" date="2026-08-01" author="mearvk">
+      Initial implementation with CRUD operations.
+    </revision>
+    <revision version="1.1" date="2026-08-12" author="mearvk">
+      Added soft-delete support and audit logging.
+    </revision>
+  </history>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- ANNOTATIONS (standard Java annotations, preserved)                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <annotations>
+    <annotation type="java.lang.Deprecated" visible="true">
+      <element name="since" value="never"/>
+    </annotation>
+  </annotations>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- INNER CLASSES (if any)                                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <inner-classes/>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- SOURCE DEBUG EXTENSION                                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <source-debug>
+    <source-file>UserService.java</source-file>
+    <line-number-table method="createUser">
+      <line bci="0" line="45"/>
+      <line bci="4" line="46"/>
+      <line bci="8" line="47"/>
+    </line-number-table>
+  </source-debug>
+
+</class>
