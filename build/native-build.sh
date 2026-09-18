@@ -28,6 +28,8 @@ build_kernels(){
   # Accept either a complete Linux source tree directly under kernels/ or an
   # archive supplied with a version directory. Do not download or substitute a
   # distribution kernel here: the source must be supplied by MirvkBuntu.
+  # -L is intentional: kernel source may be exposed through a repository
+  # symlink. Without it, find silently skips the linked source tree.
   while IFS= read -r -d "" candidate; do
     src="$(dirname "$candidate")"
     [ -f "$src/Makefile" ] || continue
@@ -49,7 +51,7 @@ build_kernels(){
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(find "$REPO_ROOT/kernels" -type f -name Makefile -print0)
+  done < <(find -L "$REPO_ROOT/kernels" -type f -name Makefile -print0)
 
   # Also support the common repository layout where a kernel source archive is
   # stored inside kernels/<version>/. Extract it and locate its real top-level
