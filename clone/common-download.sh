@@ -6,6 +6,7 @@ SOURCE_REF="${SOURCE_REF:-main}"
 API_ROOT="https://api.github.com/repos/${SOURCE_REPO}"
 RAW_ROOT="https://raw.githubusercontent.com/${SOURCE_REPO}/${SOURCE_REF}"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 die() {
   printf 'clone: ERROR: %s\n' "$*" >&2
@@ -26,6 +27,8 @@ clone_tree() {
   local destination="$2"
   local marker="${destination}/.clone-complete"
 
+  # Destinations are rooted at the existing MirvkBuntu checkout.
+  # Existing files are never overwritten.
   mkdir -p "$destination" || return 1
 
   if [[ -f "$marker" ]]; then
@@ -53,13 +56,18 @@ clone_tree() {
     return 1
   fi
 
+  # A recursive repository tree can exceed GitHub's size limit. Do not abort:
+  # use the entries GitHub returned and download only missing files. Existing
+  # files remain untouched. A completion marker is intentionally not written
+  # for a truncated tree because the result may be incomplete.
+  local truncated=0
   if jq -e '.truncated == true' <<<"$tree_json" >/dev/null 2>&1; then
-    die "GitHub returned a truncated recursive tree; refusing a partial clone"
-    return 1
+    truncated=1
+    printf 'clone: warning: GitHub returned a truncated tree; downloading available entries only: %s\n' "$source_path" >&2
   fi
 
   if ! jq -e --arg p "$source_path"     '.tree | any(.[]; .path == $p or (.path | startswith($p + "/")))'     <<<"$tree_json" >/dev/null; then
-    printf 'clone: source path not present, skipping: %s\n' "$source_path"
+    printf 'clone: source path not present in returned tree, skipping: %s\n' "$source_path"
     return 0
   fi
 
@@ -83,12 +91,15 @@ clone_tree() {
       failed=$((failed + 1))
       continue
     }
+
     mkdir -p "$(dirname "$target")" || {
       failed=$((failed + 1))
       continue
     }
 
-    if [[ -s "$target" ]]; then
+    # Never overwrite an existing file. This is deliberately checked before
+    # wget so an existing repository file cannot be truncated or replaced.
+    if [[ -e "$target" ]]; then
       skipped=$((skipped + 1))
       continue
     fi
@@ -105,6 +116,11 @@ clone_tree() {
   if (( failed != 0 )); then
     printf 'clone: %s failed downloads in %s\n' "$failed" "$source_path" >&2
     return 1
+  fi
+
+  if (( truncated == 1 )); then
+    printf 'clone: incomplete tree; no completion marker written: %s\n' "$source_path" >&2
+    return 0
   fi
 
   touch "$marker" || return 1
