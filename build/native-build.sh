@@ -21,13 +21,15 @@ mkdir -p "$ARTIFACT_ROOT/packages" "$ARTIFACT_ROOT/chunks" "$ROOTFS_STAGE"
 log(){ printf "native-build: %s\n" "$*"; }
 
 build_kernels(){
-  local found=0 candidate src work deb name
+  local found=0 candidate src work deb name archive extract_root
   log "Compiling every MirvkBuntu kernel source tree that is actually present."
   [ -d "$REPO_ROOT/kernels" ] || die "kernel source directory is missing: $REPO_ROOT/kernels"
+
+  # Accept either a complete Linux source tree directly under kernels/ or an
+  # archive supplied with a version directory. Do not download or substitute a
+  # distribution kernel here: the source must be supplied by MirvkBuntu.
   while IFS= read -r -d "" candidate; do
     src="$(dirname "$candidate")"
-    # A directory named linux-* is not sufficient. Require the Linux top-level
-    # build markers so version/reference directories cannot be mistaken for source.
     [ -f "$src/Makefile" ] || continue
     [ -f "$src/Kconfig" ] || continue
     [ -d "$src/arch" ] || continue
@@ -44,11 +46,44 @@ build_kernels(){
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
   done < <(find "$REPO_ROOT/kernels" -type f -name Makefile -print0)
+
+  # Also support the common repository layout where a kernel source archive is
+  # stored inside kernels/<version>/. Extract it and locate its real top-level
+  # source directory before compiling.
+  while IFS= read -r -d "" archive; do
+    extract_root="$NATIVE_ROOT/kernel-archives/$(basename "$archive")"
+    rm -rf "$extract_root"
+    mkdir -p "$extract_root"
+    case "$archive" in
+      *.tar.gz|*.tgz) tar -xzf "$archive" -C "$extract_root" ;;
+      *.tar.xz) tar -xJf "$archive" -C "$extract_root" ;;
+      *.tar.zst) tar --zstd -xf "$archive" -C "$extract_root" ;;
+      *.tar.bz2) tar -xjf "$archive" -C "$extract_root" ;;
+      *) continue ;;
+    esac
+    candidate="$(find "$extract_root" -type f -name Makefile -print -quit)"
+    [ -n "$candidate" ] || continue
+    src="$(dirname "$candidate")"
+    [ -f "$src/Kconfig" ] || continue
+    [ -d "$src/arch" ] || continue
+    found=1
+    name="$(basename "$src")"
+    work="$NATIVE_ROOT/kernels/$name"
+    rm -rf "$work"
+    cp -a "$src" "$work"
+    log "kernel: compiling archived source tree $name"
+    make -C "$work" olddefconfig
+    make -C "$work" -j"$JOBS" bindeb-pkg
+    for deb in "$NATIVE_ROOT/kernels/"*.deb "$work/../"*.deb; do
+      [ -f "$deb" ] || continue
+      cp -f "$deb" "$ARTIFACT_ROOT/packages/"
+    done
+  done < <(find "$REPO_ROOT/kernels" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.tar.xz" -o -name "*.tar.zst" -o -name "*.tar.bz2" \) -print0)
+
   if [ "$found" -eq 0 ]; then
-    log "No complete Linux kernel source tree is present under kernels/."
-    log "Expected each compilable tree to contain Makefile, Kconfig, and arch/."
-    log "Version/reference directories such as kernels/linux-* are not treated as source."
-    die "no compilable kernel source tree found under kernels; refusing a distribution-kernel fallback"
+    log "No complete Linux kernel source tree or supplied kernel source archive is present under kernels/."
+    log "A version directory alone is metadata; it cannot be compiled."
+    die "no MirvkBuntu-supplied kernel source found; refusing a distribution-kernel fallback"
   fi
 }
 
