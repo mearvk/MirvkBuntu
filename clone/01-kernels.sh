@@ -2,24 +2,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common-download.sh"
-
 KERNEL_ROOT="$SCRIPT_DIR/../kernels"
-KERNEL_SOURCE_REPO="${KERNEL_SOURCE_REPO:-mearvk/MirvkBuntu}"
-KERNEL_SOURCE_REF="${KERNEL_SOURCE_REF:-main}"
 
-# Kernels are authoritative in MirvkBuntu. Do not inherit an old global
-# SOURCE_REPO value that could point the kernel clone at a reference project.
-SOURCE_REPO="$KERNEL_SOURCE_REPO"
-SOURCE_REF="$KERNEL_SOURCE_REF"
-export SOURCE_REPO SOURCE_REF
-
+# Kernel source acquisition is deliberately independent of the recursive
+# repository clone. The kernels directory can contain large source trees and
+# must not be blocked by unrelated helper files (for example git.sh).
 KERNEL_BASE_URL="${KERNEL_BASE_URL:-https://www.kernel.org/pub/linux/kernel}"
 KERNEL_DOWNLOAD_DIR="$KERNEL_ROOT/.downloads"
 
-clone_tree "kernels" "$KERNEL_ROOT"
-
-mkdir -p "$KERNEL_DOWNLOAD_DIR"
+mkdir -p "$KERNEL_ROOT" "$KERNEL_DOWNLOAD_DIR"
 
 download_kernel_source() {
   local version="$1"
@@ -60,3 +51,4 @@ download_kernel_source "6.19.14"
 download_kernel_source "7.0.4"
 
 rm -rf "$KERNEL_DOWNLOAD_DIR"
+printf 'kernel: all declared MirvkBuntu kernel source trees are complete.\n'
