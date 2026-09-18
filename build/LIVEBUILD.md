@@ -295,3 +295,175 @@ Verified MirvkBuntu ISO
 ```
 
 This document should be updated whenever the boundary between MirvkBuntu-native build work and standard live-build assembly changes.
+
+## 12. Mandatory Native Compilation Gate
+
+The build boundary has now been tightened: **native MirvkBuntu compilation occurs before live-build is allowed to assemble the ISO.** A live-build work tree containing `auto/`, `.build/`, `cache/`, `chroot/`, `config/`, or `local/` is only intermediate state. It is never the release product.
+
+The required sequence is:
+
+```text
+MirvkBuntu source
+        |
+        v
+Source validation
+        |
+        v
+Native compilation gate
+        |
+        +--> Linux kernels
+        |      -> Debian kernel packages
+        |
+        +--> Chromium/Chrome source
+        |      -> release browser binary and runtime assets
+        |
+        +--> GNOME platform modules
+        |      -> release libraries, services and desktop components
+        |
+        +--> remaining native MirvkBuntu projects
+        |
+        v
+Native output verification + SHA-256 manifest
+        |
+        v
+Native package/rootfs staging
+        |
+        v
+live-build Debian/Ubuntu assembly
+        |
+        v
+SquashFS + bootloader + ISO generation
+        |
+        v
+MirvkBuntu-desktop-amd64.iso
+```
+
+### 12.1 Compilation is a hard prerequisite
+
+`build/native-build.sh` is now a mandatory gate. The desktop and minimal ISO scripts invoke it before the live-build configuration is accepted as complete.
+
+The gate requires, where the corresponding source is part of the MirvkBuntu tree:
+
+- every compilable kernel source tree under `kernels/` to produce a kernel package;
+- a real Chromium/Chrome source tree containing the Chromium `chrome/BUILD.gn` target to produce a release browser binary;
+- the required GNOME source modules to compile and install into the native staging root;
+- recognized native projects under `sources/`, `userland/`, and `user-interface/` to use their explicit build systems rather than silently being skipped.
+
+If a required source tree is absent, incomplete, ambiguous, or not compilable, the build **fails**. It does not silently substitute a Debian/Ubuntu binary for the missing MirvkBuntu component.
+
+### 12.2 Release-oriented compilation
+
+The native build is intended to produce a releasable build where the upstream project permits it.
+
+For Chromium, the release configuration uses `is_debug = false`, `symbol_level = 0`, `blink_symbol_level = 0`, and `is_official_build = false`. This deliberately means a release Chromium build rather than claiming an official Google Chrome build; official Chrome branding/build requirements are a separate upstream matter.
+
+For GNOME modules, the common builder uses Meson `--buildtype=release` where Meson is the upstream build system. GNOME projects commonly use Meson, and GNOME/GTK documentation describes the corresponding configure/compile/install flow.
+
+For Linux kernels, the native gate uses the kernel build system and `bindeb-pkg` so the resulting kernel can enter the live-build system as a Debian package. live-build documents custom kernels as requiring Debian packages and supports disabling its automatic kernel installation with `--linux-packages none`.
+
+### 12.3 The ISO must contain our native outputs
+
+The ISO scripts now configure live-build with:
+
+```text
+--linux-packages none
+```
+
+This prevents live-build from automatically selecting a distribution kernel. The native kernel packages produced by MirvkBuntu are staged through `config/packages.chroot/` instead.
+
+Native compiled files are staged into `config/includes.chroot/` before `lb build`. live-build installs package content and then processes chroot includes, so the explicitly staged MirvkBuntu files can replace corresponding standard filesystem content where the project intentionally owns that path.
+
+Custom Debian packages are also placed in `config/packages.chroot/`. This is the live-build mechanism for installing locally built `.deb` files into the live system.
+
+The result is therefore not:
+
+```text
+Debian/Ubuntu binaries -> ISO
+```
+
+but:
+
+```text
+Debian/Ubuntu foundation
+        +
+MirvkBuntu-compiled kernel/packages
+        +
+MirvkBuntu-compiled Chromium
+        +
+MirvkBuntu-compiled GNOME components
+        +
+MirvkBuntu native userland/interface binaries
+        |
+        v
+live-build assembly
+        |
+        v
+MirvkBuntu ISO
+```
+
+### 12.4 Successful native binaries are preserved
+
+Native output is retained under:
+
+```text
+build/work/native/
+├── artifacts/
+│   ├── packages/
+│   ├── chunks/
+│   ├── artifacts.sha256
+│   ├── release.env
+│   ├── rootfs.sha256
+│   └── rootfs.sha256.digest
+└── rootfs/
+```
+
+The build records SHA-256 values for the staged native filesystem and packages before ISO assembly. This gives the release process a verifiable handoff between compilation and image construction.
+
+### 12.5 Splitting native binaries for GitHub transfer
+
+`build/native-build.sh` also creates a compressed native artifact bundle and uses Linux `split` with a default 90 MiB chunk size.
+
+The chunk directory contains:
+
+```text
+mirvkbuntu-native-amd64.part-0000
+mirvkbuntu-native-amd64.part-0001
+...
+SHA256SUMS
+```
+
+The chunk size intentionally stays below GitHub’s 100 MB hard limit for ordinary repository objects. Large generated binaries should still be treated as release artifacts or Git LFS material rather than as normal source files when appropriate.
+
+`build/reassemble-native.sh` verifies `SHA256SUMS`, concatenates the chunks in order, verifies the resulting compressed archive, and extracts the native artifact set. Reassembly is therefore deterministic and checksum-protected.
+
+### 12.6 LFS is later, not the current source boundary
+
+Large File Storage and a more complete long-term source/binary distribution system can be introduced later. The immediate requirement is simpler and stricter:
+
+```text
+compile first
+verify second
+preserve successful binaries
+transfer/reassemble when necessary
+assemble ISO last
+```
+
+The ISO builder must never treat a live-build work directory as the finished product, and it must never use the existence of a standard Debian/Ubuntu binary as proof that the corresponding MirvkBuntu-native component was successfully built.
+
+## 13. Final ISO Release Gate
+
+An ISO release is considered build-complete only when all of the following are true:
+
+- Native compilation completed successfully.
+- Required native binaries/packages passed verification.
+- Native SHA-256 manifests were generated.
+- Native outputs were staged into the live-build configuration.
+- Automatic distribution-kernel selection was disabled for the MirvkBuntu build.
+- live-build completed its filesystem and binary stages without error.
+- A real `.iso` file exists in `build/output/`.
+- The ISO was copied to the configured Desktop destination.
+- The ISO can be identified as the requested MirvkBuntu profile and architecture.
+
+**A live-build folder structure is not an acceptable substitute for the ISO.** The release artifact is the completed bootable ISO.
+
+The implementation remains deliberately strict: if the current MirvkBuntu repository does not yet contain a complete Chromium source tree or compilable kernel source tree, the new gate will expose that gap by failing before ISO assembly. That is preferable to producing an ISO that silently contains the standard distribution component.
