@@ -1,0 +1,15 @@
+[Unit]
+Description=Ubuntu White disk health monitor
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/ubuntu-white/disk-health-monitor
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,43 @@
+# Ubuntu White Disk Health Model
+
+```mermaid
+flowchart TD
+    D[Physical Storage Device] --> S[SMART / NVMe / SCSI / Driver Health]
+    S --> N[Normalized Device Health]
+    N --> C1[Sense Copy 1]
+    N --> C2[Sense Copy 2]
+    N --> C3[Sense Copy 3]
+    C1 --> F1[File Verification]
+    C2 --> F2[File Verification]
+    C3 --> F3[File Verification]
+    F1 --> R[COMB Report]
+    F2 --> R
+    F3 --> R
+```
+
+```mermaid
+classDiagram
+    class DiskHealth {
+      state
+      temperature
+      power_on_hours
+      read_errors
+      write_errors
+      wear
+      read_latency
+      write_latency
+      flush_latency
+      sampled_at
+    }
+    class FileSenseHealth {
+      file_identity
+      copy_1_to_3
+      content_ok
+      metadata_ok
+      blocks_checked
+      read_errors_observed
+      checksum_failures
+      sampled_at
+    }
+    DiskHealth "1" <-- "0..*" FileSenseHealth
+```

@@ -1,0 +1,35 @@
+// Ubuntu White Desktop Synthesizer build.
+// Requires a modern Gradle runtime. JDK 25 is supported by Gradle 9.1+.
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+group = 'ubuntu.white'
+version = '0.1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+javafx {
+    version = '25.0.1'
+    modules = [ 'javafx.controls', 'javafx.graphics' ]
+}
+
+application {
+    mainClass = 'org.ubuntu.white.desktop.DesktopSynthesizer'
+}
+
+// Gradle's native-platform dependency uses restricted native access on JDK 25.
+// Keep the project runnable from Gradle while avoiding the warning/blocking path.
+run {
+    standardInput = System.in
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}

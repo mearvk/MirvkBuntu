@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ubuntuWhiteGenericTypes schema="ubuntu-white-generic-types" version="1" scope="filesystem-metadata">
+  <fields>
+    <field name="name" type="string" id="file.name"><definition>Human-readable file name or logical object name.</definition></field>
+    <field name="type" type="enum" id="file.type"><definition>Declared file/object type; implementations validate it against the actual object.</definition></field>
+    <field name="id" type="string" id="file.id"><definition>Stable implementation-defined identifier for the file or copy set.</definition></field>
+    <field name="definition" type="string" id="file.definition"><definition>Optional concise description of the file's intended function.</definition></field>
+    <field name="author" type="string" id="file.author"><definition>Declared author or provenance label; not an inferred identity.</definition></field>
+    <field name="os_spawn" type="string" id="file.os_spawn"><definition>Operating-system installation or process context that created the file record.</definition></field>
+    <field name="education_id" type="string" id="file.education_id"><definition>Optional reference to educational documentation or provenance; not a measure of a person.</definition></field>
+    <field name="probable_scout_level" type="ordinal" id="file.probable_scout_level"><definition>Optional declared project score for alignment with documented conduct and educational objectives. Authorized declaration only; otherwise unknown.</definition></field>
+    <field name="hold_type" type="string" id="file.hold_type"><definition>Extensible generic hold classification with no executable authority.</definition></field>
+    <field name="overall_health" type="enum" id="file.overall_health"><definition>unknown, healthy, warning, degraded, or failed.</definition></field>
+    <field name="content_identity" type="string" id="file.content_identity"><definition>Content digest or equivalent identity for physical-copy comparison.</definition></field>
+    <field name="created_at" type="datetime" id="file.created_at"><definition>Recorded creation time when available.</definition></field>
+    <field name="modified_at" type="datetime" id="file.modified_at"><definition>Recorded modification time when available.</definition></field>
+    <field name="sense_ordinal" type="uint8" id="sense.ordinal"><definition>Physical copy/Sense number constrained to 1, 2, or 3.</definition></field>
+    <field name="source_device_id" type="string" id="health.device_id"><definition>Opaque identifier for the device supplying health evidence.</definition></field>
+    <field name="health_evidence_source" type="enum" id="health.source"><definition>smart, nvme, scsi, filesystem-check, or unknown.</definition></field>
+  </fields>
+  <ratingContract perSense="18" overallHealthPerSense="1" ratingsAreExecutable="false" />
+  <privacy>Person-related fields are optional provenance declarations and must never be automatically inferred from file content, filenames, ratings, or device data.</privacy>
+</ubuntuWhiteGenericTypes>

@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+VERSION="9.7.1"
+DIST_DIR="$ROOT/.gradle-dist"
+INSTALL_DIR="$DIST_DIR/gradle-$VERSION"
+ZIP="$DIST_DIR/gradle-$VERSION-bin.zip"
+URL="https://services.gradle.org/distributions/gradle-$VERSION-bin.zip"
+SHA256="acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a"
+
+if [ -x "$INSTALL_DIR/bin/gradle" ]; then
+    exit 0
+fi
+
+mkdir -p "$DIST_DIR"
+
+echo "Ubuntu White Desktop: provisioning Gradle $VERSION"
+
+if [ ! -f "$ZIP" ]; then
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --retry 3 --connect-timeout 15 -o "$ZIP" "$URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "$ZIP" "$URL"
+    else
+        echo "Neither curl nor wget is available to download Gradle." >&2
+        exit 4
+    fi
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL=$(sha256sum "$ZIP" | awk '{print $1}')
+elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL=$(shasum -a 256 "$ZIP" | awk '{print $1}')
+else
+    echo "A SHA-256 utility is required to verify the Gradle distribution." >&2
+    exit 5
+fi
+
+if [ "$ACTUAL" != "$SHA256" ]; then
+    echo "Gradle distribution checksum verification failed." >&2
+    echo "Expected: $SHA256" >&2
+    echo "Actual:   $ACTUAL" >&2
+    rm -f "$ZIP"
+    exit 6
+fi
+
+rm -rf "$INSTALL_DIR"
+if command -v unzip >/dev/null 2>&1; then
+    unzip -q "$ZIP" -d "$DIST_DIR"
+else
+    echo "unzip is required to provision Gradle." >&2
+    exit 7
+fi
+
+if [ ! -x "$INSTALL_DIR/bin/gradle" ]; then
+    echo "Gradle installation did not produce the expected executable." >&2
+    exit 8
+fi
+
+echo "Gradle $VERSION is ready."

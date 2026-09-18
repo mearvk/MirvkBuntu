@@ -1,0 +1,18 @@
+# Negamane Cross-Platform Model
+
+```mermaid
+flowchart TD
+    N[Negamane Integrity Boundary] --> L[Linux / Ubuntu White]
+    N --> W[Windows-derived implementation]
+    L --> E[EXT4 / Linux storage evidence]
+    W --> NT[NTFS or ReFS / Windows storage evidence]
+    N --> S[Shared logical schema]
+    S --> G[18 generic ratings]
+    S --> H[Per-copy overall health]
+    S --> A[Alteration history]
+    S --> C[Three-copy relationship]
+    N --> B[Base Filesystem Mode]
+    B --> O[One ordinary file copy]
+```
+
+Base Filesystem Mode is an explicit space-saving installation choice. It is not represented as a three-copy configuration.

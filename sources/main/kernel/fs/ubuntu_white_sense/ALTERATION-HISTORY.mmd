@@ -1,0 +1,32 @@
+# Ubuntu White Alteration History
+
+```mermaid
+flowchart LR
+    C0[Creation depth 0] --> C1[Alteration depth 1]
+    C1 --> C2[Alteration depth 2]
+    C2 --> CN[Alteration depth N]
+    C1 -. previous_id .-> C0
+    C2 -. previous_id .-> C1
+    CN -. previous_id .-> C2
+```
+
+Each physical Sense copy maintains its own append-oriented history. The history is provenance, not a ranking of a person or an authorization mechanism.
+
+```mermaid
+classDiagram
+    class AlterationRecord {
+      sequence
+      id
+      previous_id
+      timestamp
+      copy_id
+      alteration_type
+      actor_id
+      authorization_id
+      before_identity
+      after_identity
+      alteration_depth
+      schema_version
+    }
+    AlterationRecord --> AlterationRecord : previous_id
+```

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Declarative preview model; does not modify the host filesystem. -->
+<ubuntuWhiteDesktop version="1.1">
+  <wallpaper path="images/mediate-ubuntu-white-edition-001.jpeg"/>
+  <desktop fullscreen="true" exitKeys="ESC,CTRL+TAB">
+    <!-- Normalized coordinates preserve relative icon spacing at any screen size. -->
+    <folder name="Desktop" path="/home/user/Desktop" icon="folder-desktop" x="0.06" y="0.08"/>
+    <folder name="Documents" path="/home/user/Documents" icon="folder-documents" x="0.06" y="0.25"/>
+    <folder name="Downloads" path="/home/user/Downloads" icon="folder-downloads" x="0.06" y="0.42"/>
+    <folder name="Music" path="/home/user/Music" icon="folder-music" x="0.06" y="0.59"/>
+    <folder name="Pictures" path="/home/user/Pictures" icon="folder-pictures" x="0.20" y="0.08"/>
+    <folder name="Public" path="/home/user/Public" icon="folder-public" x="0.20" y="0.25"/>
+    <folder name="Templates" path="/home/user/Templates" icon="folder-templates" x="0.20" y="0.42"/>
+    <folder name="Videos" path="/home/user/Videos" icon="folder-videos" x="0.20" y="0.59"/>
+    <folder name="Trash" path="trash:///" icon="folder-trash" x="0.94" y="0.88"/>
+  </desktop>
+  <assets source="../ubuntu-white/icons"/>
+</ubuntuWhiteDesktop>

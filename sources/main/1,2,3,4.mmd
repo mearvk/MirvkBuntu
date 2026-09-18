@@ -1,0 +1,28 @@
+# 1,2,3,4 Documentation Style
+
+**Status:** Active documentation convention  
+**Format:** `.mmd`  
+**Scope:** Ubuntu White Edition and related system development
+
+## 1 — Purpose
+
+The name **1,2,3,4** identifies a documentation style and evidence sequence. It is not a separate file format. The underlying document format is `.mmd`, used for Markdown-compatible project documentation and, where applicable, Mermaid notation.
+
+## 2 — Specification
+
+The convention organizes a technical change into four related concerns:
+
+1. **Purpose** — what is being established and why.
+2. **Specification** — the intended behavior, structure, and constraints.
+3. **Implementation** — the source code, configuration, assets, and build mechanisms that realize the specification.
+4. **Result / Evidence** — the observable or testable result demonstrating the implementation.
+
+## 3 — Desktop Preview Improvement
+
+The Ubuntu White Edition desktop preview treats the JavaFX **Desktop Frame** as the principal visual container. The original Ubuntu White wallpaper is rendered proportionally within that frame, preserving its source aspect ratio and avoiding independent horizontal or vertical stretching. On frame resize, the wallpaper is recalculated against the available desktop dimensions so that the visual remains coherent while excess image area may be cropped rather than distorted. The preview enters fullscreen mode at startup so the development representation corresponds to the intended desktop viewing environment.
+
+Desktop folders and their associated Ubuntu White iconography exist as an explicit foreground layer within the Desktop Frame, above the wallpaper and below applicable desktop or panel controls. Icons are sourced from the Ubuntu White implementation where available, retain their names and defined relative positions, and remain visible as the desktop frame changes size. The XML desktop manifest provides the declarative representation of these desktop objects, while the JavaFX implementation renders that model for development.
+
+## 4 — Result / Evidence
+
+The intended result is a repeatable development preview that can be launched locally without building or booting an ISO. The preview provides a visible desktop frame, proportional wallpaper, named desktop folders, Ubuntu White icon assets, and fullscreen startup. Changes can therefore be evaluated visually and traced through the 1,2,3,4 sequence from documentation to specification, source implementation, and observable result.

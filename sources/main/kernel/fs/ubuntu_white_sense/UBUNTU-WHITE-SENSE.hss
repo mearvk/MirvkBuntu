@@ -1,0 +1,28 @@
+# Ubuntu White Sense HSS Specification
+
+Version: 1.0
+Status: Prototype
+
+## Object
+
+The filesystem metadata object is attached to a file identity and contains generic metadata, a Hold type, and between one and three Sense records.
+
+## Sense cardinality
+
+`1 <= sense_count <= 3` for a managed record. A record with zero Sense entries is incomplete and must be reported by validation; it must not be repaired by guessing.
+
+## Ratings
+
+The schema preserves the requested vocabulary, including the duplicated `use` as `use_2`. Values are generic, bounded metadata values and have no executable semantics.
+
+## COMB
+
+COMB collects records, validates structure, identifies duplicate or malformed records, and emits a deterministic report. Collection must be read-only unless an explicit write operation is selected.
+
+## EXT4
+
+The prototype uses a sidecar/index representation so stock EXT4 remains mountable. Native inode/xattr integration is reserved for a later kernel-specific design.
+
+## Compatibility
+
+Unknown fields and unknown Hold types are preserved. Version negotiation is required before interpreting new fields.

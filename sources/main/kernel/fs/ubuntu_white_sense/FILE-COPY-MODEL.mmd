@@ -1,0 +1,17 @@
+# Ubuntu White Three-Copy Model
+
+```mermaid
+flowchart LR
+    L[Logical File] --> C1[Physical Copy 1]
+    L --> C2[Physical Copy 2]
+    L --> C3[Physical Copy 3]
+    C1 --> R1[18 ratings + health]
+    C2 --> R2[18 ratings + health]
+    C3 --> R3[18 ratings + health]
+    C1 --> H[Independent content identity]
+    C2 --> H
+    C3 --> H
+    H --> C[COMB comparison]
+```
+
+The three Sense layers are therefore **copies of the file**, rather than metadata-only layers.

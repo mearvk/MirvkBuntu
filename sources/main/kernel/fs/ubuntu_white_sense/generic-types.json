@@ -1,0 +1,29 @@
+{
+  "schema": "ubuntu-white-generic-types",
+  "version": 1,
+  "scope": "filesystem-metadata",
+  "fields": [
+    {"name":"name","type":"string","id":"file.name","definition":"Human-readable file name or logical object name."},
+    {"name":"type","type":"enum","id":"file.type","definition":"Declared file/object type; implementations must validate it against the actual object."},
+    {"name":"id","type":"string","id":"file.id","definition":"Stable implementation-defined identifier for the file or copy set."},
+    {"name":"definition","type":"string","id":"file.definition","definition":"Optional concise description of the file's intended function."},
+    {"name":"author","type":"string","id":"file.author","definition":"Declared author or provenance label; not an inferred identity."},
+    {"name":"os_spawn","type":"string","id":"file.os_spawn","definition":"Operating-system installation or process context that created the file record."},
+    {"name":"education_id","type":"string","id":"file.education_id","definition":"Optional project-defined reference to educational documentation or provenance; not a measure of a person."},
+    {"name":"probable_scout_level","type":"ordinal","id":"file.probable_scout_level","definition":"Optional declared project score describing expected alignment with documented conduct and educational objectives. It must be supplied by an authorized source or left unknown; it must not be inferred from sensitive personal data."},
+    {"name":"hold_type","type":"string","id":"file.hold_type","definition":"Extensible generic hold classification with no executable authority by itself."},
+    {"name":"overall_health","type":"enum","id":"file.overall_health","definition":"Normalized file/copy integrity state: unknown, healthy, warning, degraded, or failed."},
+    {"name":"content_identity","type":"string","id":"file.content_identity","definition":"Content digest or equivalent identity used to compare physical copies."},
+    {"name":"created_at","type":"datetime","id":"file.created_at","definition":"Recorded creation time when available."},
+    {"name":"modified_at","type":"datetime","id":"file.modified_at","definition":"Recorded modification time when available."},
+    {"name":"sense_ordinal","type":"uint8","id":"sense.ordinal","definition":"Physical copy/Sense number, constrained to 1, 2, or 3."},
+    {"name":"source_device_id","type":"string","id":"health.device_id","definition":"Opaque identifier for the device supplying health evidence."},
+    {"name":"health_evidence_source","type":"enum","id":"health.source","definition":"Evidence source such as smart, nvme, scsi, filesystem-check, or unknown."}
+  ],
+  "rating_contract": {
+    "per_sense": 18,
+    "overall_health_per_sense": 1,
+    "ratings_are_executable": false
+  },
+  "privacy": "Person-related fields are optional provenance declarations and must never be automatically inferred from file content, filenames, ratings, or device data."
+}

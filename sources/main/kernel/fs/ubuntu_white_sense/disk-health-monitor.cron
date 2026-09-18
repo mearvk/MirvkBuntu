@@ -1,0 +1,7 @@
+# Ubuntu White disk health monitor compatibility schedule.
+# Install through the OS package/installer; do not run both cron and systemd
+# schedules unless duplicate sampling is intentionally configured.
+SHELL=/bin/sh
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+17 * * * * root /usr/libexec/ubuntu-white/disk-health-monitor --once

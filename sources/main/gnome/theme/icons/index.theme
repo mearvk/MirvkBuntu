@@ -1,0 +1,7 @@
+[Icon Theme]
+Name=Ubuntu White
+Comment=Ubuntu Determinant Professional Ubuntu White Edition icon theme
+Inherits=hicolor
+
+# Curated artwork is maintained under main/ubuntu-white/icons.
+# Additional standard-size directories will be populated from the approved icon set.

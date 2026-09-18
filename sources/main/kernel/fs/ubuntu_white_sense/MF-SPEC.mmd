@@ -1,0 +1,15 @@
+# `mf` Metadata Write Path
+
+```mermaid
+flowchart LR
+    U[User] --> MF[mf]
+    MF --> P[Permission Check]
+    P --> V[Validate Fields]
+    V --> S[Select Sense 1..3]
+    S --> A[Atomic Metadata Transaction]
+    A --> DB[Metadata Backend]
+    DB --> F[File Payload Unchanged]
+    A --> R[Result / Audit]
+```
+
+`mf` is the metadata counterpart to `lf`: `lf` observes; `mf` requests controlled metadata changes.

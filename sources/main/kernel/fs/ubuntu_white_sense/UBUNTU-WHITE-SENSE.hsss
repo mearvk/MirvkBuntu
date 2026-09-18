@@ -1,0 +1,41 @@
+# Ubuntu White Sense HSSS Contract
+
+**Purpose:** formal implementation contract for COMB and file Sense metadata.
+
+**Scope:** Ubuntu White filesystem level; prototype compatible with existing EXT4 without changing the EXT4 superblock, inode, or journal formats.
+
+## Required record
+
+Each managed file record contains:
+
+- stable file identity/reference;
+- file type;
+- content identity where available;
+- Hold type;
+- generic rating vector;
+- one through three Sense records;
+- schema version.
+
+## Required Sense fields
+
+Each Sense contains an ordinal (1–3), deliberate flag, timestamp, and opaque reference/copy identifier.
+
+## Required generic slots
+
+`use`, `age`, `homo`, `homotype`, `use_2`, `useage`, `manage`, `action`, `lists`, `calls`, `actionsagainst`, `same`, `came`, `come`, `hold`, `research`, `archer-class`, `master-manager-class`, `imperial-calls`.
+
+## COMB requirements
+
+COMB MUST:
+
+1. enumerate only within its requested filesystem scope;
+2. validate record versions and Sense cardinality;
+3. preserve unknown fields;
+4. report malformed metadata;
+5. avoid changing file contents during collection;
+6. avoid granting or assuming privilege;
+7. provide deterministic output for the same metadata state.
+
+## Installation contract
+
+The base installer may create initial metadata for newly installed files. Metadata creation must not modify the file payload or convert an ordinary file into a special filesystem object.

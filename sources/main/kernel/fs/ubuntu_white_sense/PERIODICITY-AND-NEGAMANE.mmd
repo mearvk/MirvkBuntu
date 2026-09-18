@@ -1,0 +1,45 @@
+# Ubuntu White Periodicity / Negamane
+
+```mermaid
+flowchart TD
+    F[Managed Physical Copy] --> A[Alteration Chain]
+    A --> D1[Depth 1-8: Holistic Periodicity]
+    A --> D2[Depth 9-24: Epoch Periodicity]
+    D1 --> H[Holistic Checkpoint]
+    D2 --> E[Epoch Summary]
+    H --> AR[Archive Tier]
+    E --> AR
+    M[Monitor Binary] --> N[Negamane Integrity Anchor]
+    N --> V[Verify Binary + Config + Policy]
+    V --> A
+```
+
+```mermaid
+classDiagram
+    class PeriodPolicy {
+      policy_id
+      relative_period
+      epoch_length
+      retention_target
+      version
+    }
+    class Checkpoint {
+      depth_band
+      timestamp
+      first_record
+      last_record
+      policy_id
+    }
+    class Epoch {
+      number
+      start
+      end
+      first_record
+      last_record
+      policy_id
+    }
+    PeriodPolicy --> Checkpoint
+    PeriodPolicy --> Epoch
+```
+
+Negamane protects the monitor's executable, configuration, schema, and policy inputs through independently verifiable integrity controls. It does not make modification physically impossible.

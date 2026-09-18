@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+VERSION="9.7.1"
+cd "$ROOT"
+
+# Use the same project-local, pinned Gradle distribution as compilation.
+./bootstrap-gradle
+GRADLE="$ROOT/.gradle-dist/gradle-$VERSION/bin/gradle"
+
+if [ ! -x "$GRADLE" ]; then
+    echo "Pinned Gradle $VERSION was not provisioned." >&2
+    exit 3
+fi
+
+exec "$GRADLE" run

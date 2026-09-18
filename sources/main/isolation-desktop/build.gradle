@@ -1,0 +1,28 @@
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+group = 'ubuntu.white'
+version = '0.1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+javafx {
+    version = '21.0.8'
+    modules = [ 'javafx.controls', 'javafx.graphics', 'javafx.web' ]
+}
+
+application {
+    mainClass = 'org.ubuntu.white.desktop.IsolationDesktop'
+}
+
+run { standardInput = System.in }

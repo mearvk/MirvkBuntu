@@ -1,0 +1,23 @@
+{
+  "desktop": {
+    "name": "Ubuntu White Desktop Preview",
+    "iconDirectory": "ubuntu-white/icons/set-002",
+    "imageFormatPolicy": ["png", "jpeg"],
+    "allowSvg": false,
+    "icons": [
+      {"id":"desktop-001","label":"Desktop","source":"ubuntu-white/icons/set-002/icon-001.png"},
+      {"id":"desktop-002","label":"Documents","source":"ubuntu-white/icons/set-002/icon-002.png"},
+      {"id":"desktop-003","label":"Downloads","source":"ubuntu-white/icons/set-002/icon-003.png"},
+      {"id":"desktop-004","label":"Music","source":"ubuntu-white/icons/set-002/icon-004.png"},
+      {"id":"desktop-005","label":"Pictures","source":"ubuntu-white/icons/set-002/icon-005.png"},
+      {"id":"desktop-006","label":"Public","source":"ubuntu-white/icons/set-002/icon-006.png"},
+      {"id":"desktop-007","label":"Templates","source":"ubuntu-white/icons/set-002/icon-007.png"},
+      {"id":"desktop-008","label":"Videos","source":"ubuntu-white/icons/set-002/icon-008.png"},
+      {"id":"desktop-009","label":"Trash","source":"ubuntu-white/icons/set-002/icon-009.png"},
+      {"id":"desktop-010","label":"Applications","source":"ubuntu-white/icons/set-002/icon-010.png"},
+      {"id":"desktop-011","label":"Computer","source":"ubuntu-white/icons/set-002/icon-011.png"},
+      {"id":"desktop-012","label":"Settings","source":"ubuntu-white/icons/set-002/icon-012.png"},
+      {"id":"smaug","label":"Smaug","source":"ubuntu-white/icons/smaug/smaug-icon-001.jpeg"}
+    ]
+  }
+}
