@@ -32,8 +32,7 @@ should_skip_path() {
       return 0 ;;
     userland/chromium/chromium-src/agents|userland/chromium/chromium-src/agents/*)
       return 0 ;;
-    esac
-  done
+  esac
   return 1
 }
 
