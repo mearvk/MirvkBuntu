@@ -8,7 +8,9 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 die(){ printf 'clone: ERROR: %s\n' "$*" >&2; return 1; }
 url_encode_path(){ printf '%s' "$1" | jq -sRr '@uri' | sed 's#%2F#/#g'; }
 clone_tree(){
-  local source_path="$1" destination="$2" marker="${destination}/.clone-complete"
+  local source_path="$1"
+  local destination="$2"
+  local marker="${destination}/.clone-complete"
   mkdir -p "$destination"
   [[ -f "$marker" ]] && { printf 'clone: already complete: %s -> %s\n' "$source_path" "$destination"; return 0; }
   command -v wget >/dev/null 2>&1 || die "wget is required"
