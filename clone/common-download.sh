@@ -76,6 +76,21 @@ git_blob_sha() {
   { printf 'blob %s\0' "$size"; cat "$file"; } | sha1sum | awk '{print $1}'
 }
 
+ensure_directory() {
+  local directory="$1"
+  if [[ -d "$directory" ]]; then
+    return 0
+  fi
+  if ! mkdir -p -- "$directory"; then
+    die "cannot create directory: $directory"
+    return 1
+  fi
+  if [[ ! -d "$directory" ]]; then
+    die "directory was not created: $directory"
+    return 1
+  fi
+}
+
 clone_tree() {
   [[ $# -eq 2 ]] || { die "clone_tree requires <source-path> <destination>"; return 1; }
 
@@ -88,10 +103,7 @@ clone_tree() {
   command -v wget >/dev/null 2>&1 || { die "wget is required"; return 1; }
   command -v jq >/dev/null 2>&1 || { die "jq is required"; return 1; }
   command -v sha1sum >/dev/null 2>&1 || { die "sha1sum is required"; return 1; }
-  mkdir -p "$destination" || {
-    die "cannot create destination directory: $destination"
-    return 1
-  }
+  ensure_directory "$destination"
 
   # Verify the authoritative source path before creating/repairing a partial
   # destination. This produces a clear error instead of a generic recursion
@@ -129,7 +141,7 @@ clone_tree() {
       return 0
     fi
 
-    mkdir -p "$local_directory"
+    ensure_directory "$local_directory" || return 1
     page=1
     while :; do
       api_tmp="$(mktemp)"
@@ -166,7 +178,7 @@ clone_tree() {
             clone_directory "$entry_path" "$target" || return 1
             ;;
           file)
-            mkdir -p "$(dirname "$target")"
+            ensure_directory "$(dirname "$target")" || return 1
             if [[ -f "$target" ]] && [[ "$(git_blob_sha "$target")" == "$expected_sha" ]]; then
               skipped=$((skipped + 1))
               continue
