@@ -29,6 +29,7 @@ if [ -e "$SRC/meson.build" ]; then
   rm -rf "$BUILD"
   meson setup "$BUILD" "$SRC" --buildtype=release --prefix="$PREFIX" "$@"
   meson compile -C "$BUILD"
+  if [ "${RUN_TESTS:-1}" = "1" ]; then meson test -C "$BUILD" --print-errorlogs; fi
   if [ "${INSTALL:-0}" = "1" ]; then
     if [ -n "$DESTDIR" ]; then mkdir -p "$DESTDIR"; DESTDIR="$DESTDIR" meson install -C "$BUILD"; else meson install -C "$BUILD"; fi
   fi
@@ -47,6 +48,7 @@ elif [ -e "$SRC/CMakeLists.txt" ]; then
   rm -rf "$BUILD"
   cmake -S "$SRC" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" "$@"
   cmake --build "$BUILD" --parallel "$JOBS"
+  if [ "${RUN_TESTS:-1}" = "1" ] && command -v ctest >/dev/null 2>&1 && [ -f "$BUILD/CTestTestfile.cmake" ]; then ctest --test-dir "$BUILD" --output-on-failure; fi
   if [ "${INSTALL:-0}" = "1" ]; then
     if [ -n "$DESTDIR" ]; then DESTDIR="$DESTDIR" cmake --install "$BUILD" --prefix "$PREFIX" --strip; else cmake --install "$BUILD"; fi
   fi
