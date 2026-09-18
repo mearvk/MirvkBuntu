@@ -14,8 +14,9 @@ lb config --distribution "$UBUNTU_SUITE" --architectures "$ARCH" --binary-images
 write_package_list "$WORK_DIR" mirvkbuntu-desktop
 stage_mirvkbuntu_source "$WORK_DIR"
 write_mirvkbuntu_manifest "$WORK_DIR"
-lb build
+ISO_SOURCE="$(run_live_build "$WORK_DIR")"
+ISO_SOURCE="$(find_iso "$WORK_DIR")"
 mkdir -p "$OUTPUT_ROOT"
-mv -f ./*.iso "$OUTPUT_ROOT/MirvkBuntu-desktop-${ARCH}.iso"
+mv -f "$ISO_SOURCE" "$OUTPUT_ROOT/MirvkBuntu-desktop-${ARCH}.iso"
 printf 'build: created %s\n' "$OUTPUT_ROOT/MirvkBuntu-desktop-${ARCH}.iso"
 publish_iso "$OUTPUT_ROOT/MirvkBuntu-desktop-${ARCH}.iso"
