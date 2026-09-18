@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -u
 
-SOURCE_REPO="${SOURCE_REPO:-mearvk/Ubuntu.Determinant.Beta.Restricted}"
+# MirvkBuntu is authoritative for the native source tree. Ubuntu.Determinant
+# remains a reference project, but clone/bootstrap must not silently replace
+# MirvkBuntu source with that repository.
+SOURCE_REPO="${SOURCE_REPO:-mearvk/MirvkBuntu}"
 SOURCE_REF="${SOURCE_REF:-main}"
 API_ROOT="https://api.github.com/repos/${SOURCE_REPO}"
 RAW_ROOT="https://raw.githubusercontent.com/${SOURCE_REPO}/${SOURCE_REF}"
@@ -31,12 +34,10 @@ should_skip_path() {
   return 1
 }
 
-# GitHub's API is rate-limited for anonymous clients. Support either
-# GITHUB_TOKEN or GH_TOKEN without requiring credentials for public repos.
 github_api_wget() {
   local output="$1"
   local url="$2"
-  local user_agent="MirvkBuntu-clone/1.0"
+  local user_agent="MirvkBuntu-clone/1.1"
   local -a args=(
     --timeout=30
     --tries=3
@@ -66,6 +67,9 @@ clone_tree() {
   local source_path="$1"
   local destination="$2"
   local marker="${destination}/.clone-complete"
+
+  printf 'clone: source repository = %s\n' "$SOURCE_REPO"
+  printf 'clone: source ref        = %s\n' "$SOURCE_REF"
 
   mkdir -p "$destination" || return 1
 
@@ -161,6 +165,7 @@ clone_tree() {
           fi
           ;;
         *)
+          printf 'clone: skipping unsupported GitHub entry type %s: %s\n' "$entry_type" "$entry_path"
           ;;
       esac
     done < <(jq -r '.[] | [.type,.name] | @tsv' <<<"$listing")
