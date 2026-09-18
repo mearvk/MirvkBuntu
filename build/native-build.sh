@@ -75,7 +75,11 @@ build_other_native_projects(){
   for base in "$REPO_ROOT/sources" "$REPO_ROOT/userland" "$REPO_ROOT/user-interface"; do
     [ -d "$base" ] || continue
     while IFS= read -r -d "" dir; do
-      [ -f "$dir/build.sh" ] && continue
+      if [ -x "$dir/build.sh" ]; then
+        log "native project wrapper: $dir/build.sh"
+        DESTDIR="$ROOTFS_STAGE" JOBS="$JOBS" MIRVKBUNTU_RELEASE=true "$dir/build.sh"
+        continue
+      fi
       count=0
       for buildfile in Makefile meson.build CMakeLists.txt configure; do [ -e "$dir/$buildfile" ] && count=$((count+1)); done
       [ "$count" -eq 0 ] && continue
