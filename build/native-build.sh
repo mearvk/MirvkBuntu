@@ -21,23 +21,35 @@ mkdir -p "$ARTIFACT_ROOT/packages" "$ARTIFACT_ROOT/chunks" "$ROOTFS_STAGE"
 log(){ printf "native-build: %s\n" "$*"; }
 
 build_kernels(){
-  local found=0 src work deb name
+  local found=0 candidate src work deb name
   log "Compiling every MirvkBuntu kernel source tree that is actually present."
-  while IFS= read -r -d "" src; do
+  [ -d "$REPO_ROOT/kernels" ] || die "kernel source directory is missing: $REPO_ROOT/kernels"
+  while IFS= read -r -d "" candidate; do
+    src="$(dirname "$candidate")"
+    # A directory named linux-* is not sufficient. Require the Linux top-level
+    # build markers so version/reference directories cannot be mistaken for source.
+    [ -f "$src/Makefile" ] || continue
+    [ -f "$src/Kconfig" ] || continue
+    [ -d "$src/arch" ] || continue
     found=1
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
     mkdir -p "$(dirname "$work")"
     cp -a "$src" "$work"
-    [ -f "$work/Makefile" ] || die "kernel source $name has no Makefile"
+    log "kernel: compiling source tree $name"
     make -C "$work" olddefconfig
     make -C "$work" -j"$JOBS" bindeb-pkg
     for deb in "$NATIVE_ROOT/kernels/"*.deb "$work/../"*.deb; do
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(find "$REPO_ROOT/kernels" -mindepth 2 -maxdepth 2 -type f -name Makefile -print0 | sed -z "s#/Makefile##")
-  [ "$found" -eq 1 ] || die "no compilable kernel source tree found under kernels"
+  done < <(find "$REPO_ROOT/kernels" -type f -name Makefile -print0)
+  if [ "$found" -eq 0 ]; then
+    log "No complete Linux kernel source tree is present under kernels/."
+    log "Expected each compilable tree to contain Makefile, Kconfig, and arch/."
+    log "Version/reference directories such as kernels/linux-* are not treated as source."
+    die "no compilable kernel source tree found under kernels; refusing a distribution-kernel fallback"
+  fi
 }
 
 build_chromium(){
