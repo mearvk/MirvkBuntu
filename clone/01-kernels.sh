@@ -10,7 +10,23 @@ KERNEL_ROOT="$SCRIPT_DIR/../kernels"
 KERNEL_BASE_URL="${KERNEL_BASE_URL:-https://www.kernel.org/pub/linux/kernel}"
 KERNEL_DOWNLOAD_DIR="$KERNEL_ROOT/.downloads"
 
-mkdir -p "$KERNEL_ROOT" "$KERNEL_DOWNLOAD_DIR"
+ensure_kernel_directory() {
+  local directory="$1"
+  if [[ -d "$directory" ]]; then
+    return 0
+  fi
+  if ! mkdir -p -- "$directory"; then
+    printf 'kernel: ERROR: cannot create directory: %s\n' "$directory" >&2
+    return 1
+  fi
+  [[ -d "$directory" ]] || {
+    printf 'kernel: ERROR: directory was not created: %s\n' "$directory" >&2
+    return 1
+  }
+}
+
+ensure_kernel_directory "$KERNEL_ROOT"
+ensure_kernel_directory "$KERNEL_DOWNLOAD_DIR"
 
 download_kernel_source() {
   local version="$1"
@@ -28,14 +44,17 @@ download_kernel_source() {
 
   printf 'kernel: complete source missing for Linux %s; downloading %s\n' "$version" "$url"
   rm -rf "$destination"
-  mkdir -p "$destination"
+  ensure_kernel_directory "$destination"
 
   if [ ! -s "$archive_path" ]; then
     wget --https-only --retry-connrefused --tries=5 --timeout=30 \
       -O "$archive_path" "$url"
   fi
 
-  tar -xJf "$archive_path" -C "$destination"
+  if ! tar -xJf "$archive_path" -C "$destination"; then
+    printf 'kernel: ERROR: failed to extract Linux %s: %s\n' "$version" "$archive_path" >&2
+    exit 1
+  fi
 
   if [ ! -f "$source_tree/Makefile" ] || [ ! -f "$source_tree/Kconfig" ] || [ ! -d "$source_tree/arch" ]; then
     printf 'kernel: ERROR: downloaded Linux %s source is incomplete: %s\n' "$version" "$source_tree" >&2
