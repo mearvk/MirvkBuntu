@@ -36,9 +36,13 @@ build_kernels(){
     found=1
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
-    mkdir -p "$(dirname "$work")"
-    cp -a "$src" "$work"
-    log "kernel: compiling source tree $name"
+    mkdir -p "$work"
+    # Copy the contents of the source root, not the source directory itself.
+    # MirvkBuntu stores Linux 5.15.204 as:
+    #   kernels/linux-5.15.204/linux-5.15.204/
+    # so make runs from the actual kernel top-level directory.
+    cp -a "$src/." "$work/"
+    log "kernel: compiling source tree $name from $src"
     make -C "$work" olddefconfig
     make -C "$work" -j"$JOBS" bindeb-pkg
     for deb in "$NATIVE_ROOT/kernels/"*.deb "$work/../"*.deb; do
@@ -70,8 +74,9 @@ build_kernels(){
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
     rm -rf "$work"
-    cp -a "$src" "$work"
-    log "kernel: compiling archived source tree $name"
+    mkdir -p "$work"
+    cp -a "$src/." "$work/"
+    log "kernel: compiling archived source tree $name from $src"
     make -C "$work" olddefconfig
     make -C "$work" -j"$JOBS" bindeb-pkg
     for deb in "$NATIVE_ROOT/kernels/"*.deb "$work/../"*.deb; do
