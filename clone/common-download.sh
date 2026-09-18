@@ -17,6 +17,22 @@ url_encode_path() {
   printf '%s' "$1" | jq -sRr '@uri' | sed 's#%2F#/#g'
 }
 
+# Generated/cache content is intentionally excluded from source clones.
+# Match path components rather than arbitrary substrings.
+should_skip_path() {
+  local path="$1"
+  local component
+  IFS='/' read -r -a components <<< "$path"
+  for component in "${components[@]}"; do
+    case "$component" in
+      .gradle|.gradle-dist|build|out|target|dist|node_modules|__pycache__|.idea)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 clone_tree() {
   if [[ $# -ne 2 ]]; then
     die "clone_tree requires <source-path> <destination>"
@@ -31,8 +47,6 @@ clone_tree() {
 
   if [[ -f "$marker" ]]; then
     printf 'clone: already complete: %s -> %s\n' "$source_path" "$destination"
-    # Even completed trees get a permissions pass so existing shell scripts
-    # are executable after an older/incomplete clone.
     find "$destination" -type f -name '*.sh' -exec chmod +x -- {} + 2>/dev/null || true
     return 0
   fi
@@ -49,11 +63,18 @@ clone_tree() {
   local failed=0
   local count=0
   local skipped=0
+  local filtered=0
 
   clone_directory() {
     local remote_path="$1"
     local local_directory="$2"
     local listing entry_type entry_name entry_path target encoded
+
+    if should_skip_path "$remote_path"; then
+      printf 'clone: skipping generated/cache path: %s\n' "$remote_path"
+      filtered=$((filtered + 1))
+      return 0
+    fi
 
     encoded="$(url_encode_path "$remote_path")" || return 1
     listing="$(wget -qO- "${API_ROOT}/contents/${encoded}?ref=${SOURCE_REF}")" || {
@@ -71,6 +92,12 @@ clone_tree() {
       entry_path="${remote_path}/${entry_name}"
       target="${local_directory}/${entry_name}"
 
+      if should_skip_path "$entry_path"; then
+        printf 'clone: skipping generated/cache path: %s\n' "$entry_path"
+        filtered=$((filtered + 1))
+        continue
+      fi
+
       case "$entry_type" in
         dir)
           mkdir -p "$target" || return 1
@@ -79,7 +106,6 @@ clone_tree() {
         file)
           mkdir -p "$(dirname "$target")" || return 1
 
-          # Never overwrite an existing file.
           if [[ -e "$target" ]]; then
             skipped=$((skipped + 1))
             continue
@@ -96,7 +122,6 @@ clone_tree() {
           fi
           ;;
         *)
-          # Ignore symlinks/submodules and other GitHub content types.
           ;;
       esac
     done < <(jq -r '.[] | [.type,.name] | @tsv' <<<"$listing")
@@ -111,14 +136,12 @@ clone_tree() {
     return 1
   fi
 
-  # Apply executable permission to every shell script in the entire cloned
-  # destination, including files that were already present and not overwritten.
   if ! find "$destination" -type f -name '*.sh' -exec chmod +x -- {} +; then
     printf 'clone: ERROR: cannot chmod +x shell scripts under %s\n' "$destination" >&2
     return 1
   fi
 
   touch "$marker" || return 1
-  printf 'clone: %s downloaded, %s already present: %s\n' \
-    "$count" "$skipped" "$source_path"
+  printf 'clone: %s downloaded, %s already present, %s generated/cache paths skipped: %s\n' \
+    "$count" "$skipped" "$filtered" "$source_path"
 }
