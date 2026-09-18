@@ -133,7 +133,7 @@ clone_tree() {
   clone_directory() {
     local remote_path="$1" local_directory="$2"
     local api_tmp listing page page_count
-    local entry_type entry_name entry_path target encoded expected_sha temp actual_sha
+    local entry_type entry_name entry_path target encoded expected_sha remote_size local_size temp actual_sha
 
     if should_skip_path "$remote_path"; then
       printf 'clone: skipping generated/cache path: %s\n' "$remote_path"
@@ -162,7 +162,77 @@ clone_tree() {
       fi
 
       page_count="$(jq 'length' <<<"$listing")"
-      while IFS=$'\t' read -r entry_type entry_name expected_sha; do
+      while IFS=
+        [[ -n "$entry_name" ]] || continue
+        entry_path="$remote_path/$entry_name"
+        target="$local_directory/$entry_name"
+
+        if should_skip_path "$entry_path"; then
+          printf 'clone: skipping generated/cache path: %s\n' "$entry_path"
+          filtered=$((filtered + 1))
+          continue
+        fi
+
+        case "$entry_type" in
+          dir)
+            clone_directory "$entry_path" "$target" || return 1
+            ;;
+          file)
+            ensure_directory "$(dirname "$target")" || return 1
+            if [[ -f "$target" ]]; then
+              # Fast path: existing files with a different size must be refreshed;
+              # same-size files are verified by Git's blob SHA before reuse.
+              local_size="$(wc -c < "$target")"
+              if [[ "$local_size" == "$remote_size" ]] && [[ "$(git_blob_sha "$target")" == "$expected_sha" ]]; then
+                skipped=$((skipped + 1))
+                continue
+              fi
+            fi
+            [[ -f "$target" ]] && printf 'clone: refreshing changed file %s\n' "$entry_path"
+            [[ -f "$target" ]] && updated=$((updated + 1)) || count=$((count + 1))
+            temp="$target.clone-part"
+            rm -f "$temp"
+            encoded="$(url_encode_path "$entry_path")"
+            github_raw_download "$temp" "$RAW_ROOT/$encoded" || {
+              rm -f "$temp"
+              printf 'clone: ERROR: failed download: %s\n' "$entry_path" >&2
+              return 1
+            }
+            actual_sha="$(git_blob_sha "$temp")"
+            if [[ "$actual_sha" != "$expected_sha" ]]; then
+              rm -f "$temp"
+              printf 'clone: ERROR: SHA-1 mismatch for %s (expected %s, got %s)\n' "$entry_path" "$expected_sha" "$actual_sha" >&2
+              return 1
+            fi
+            chmod --reference="$target" "$temp" 2>/dev/null || true
+            mv -f "$temp" "$target"
+            ;;
+          symlink|submodule)
+            printf 'clone: ERROR: unsupported non-file GitHub entry %s: %s\n' "$entry_type" "$entry_path" >&2
+            return 1
+            ;;
+          *)
+            printf 'clone: ERROR: unsupported GitHub entry type %s: %s\n' "$entry_type" "$entry_path" >&2
+            return 1
+            ;;
+        esac
+      done < <(jq -r '.[] | [.type,.name,.sha,(.size // 0)] | @tsv' <<<"$listing")
+
+      (( page_count < 100 )) && break
+      page=$((page + 1))
+    done
+  }
+
+  if ! clone_directory "$source_path" "$destination"; then
+    printf 'clone: incomplete clone: %s -> %s\n' "$source_path" "$destination" >&2
+    rm -f "$marker"
+    return 1
+  fi
+
+  find "$destination" -type f -name '*.sh' -exec chmod +x -- {} +
+  touch "$marker"
+  printf 'clone: reconciled %s new, %s updated, %s unchanged, %s filtered: %s\n'     "$count" "$updated" "$skipped" "$filtered" "$source_path"
+}\t' read -r entry_type entry_name expected_sha remote_size; do
         [[ -n "$entry_name" ]] || continue
         entry_path="$remote_path/$entry_name"
         target="$local_directory/$entry_name"
@@ -211,7 +281,7 @@ clone_tree() {
             return 1
             ;;
         esac
-      done < <(jq -r '.[] | [.type,.name,.sha] | @tsv' <<<"$listing")
+      done < <(jq -r '.[] | [.type,.name,.sha,(.size // 0)] | @tsv' <<<"$listing")
 
       (( page_count < 100 )) && break
       page=$((page + 1))
