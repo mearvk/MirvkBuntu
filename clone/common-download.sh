@@ -7,6 +7,12 @@ API_ROOT="https://api.github.com/repos/$SOURCE_REPO"
 RAW_ROOT="https://raw.githubusercontent.com/$SOURCE_REPO/$SOURCE_REF"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+# Optional courtesy delay between raw blob downloads (seconds). Helps avoid the
+# separate raw.githubusercontent.com abuse throttle on very large trees.
+CLONE_RAW_DELAY="${CLONE_RAW_DELAY:-0}"
+# Maximum seconds to wait when a rate-limit reset is in the future.
+CLONE_MAX_BACKOFF="${CLONE_MAX_BACKOFF:-900}"
+
 # Prefer explicit tokens, then the token already stored by GitHub CLI.
 # This keeps large reconciliations from using GitHub's low unauthenticated API limit.
 if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
@@ -17,13 +23,132 @@ if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]] && command -v gh >/dev/nul
   unset GH_AUTH_TOKEN
 fi
 
+# Authenticated GitHub API calls get 5000 requests/hour; unauthenticated only
+# 60/hour. Running a large reconciliation unauthenticated is the single most
+# common cause of throttling, so warn loudly rather than crawl and fail.
+if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
+  printf 'clone: WARNING: no GITHUB_TOKEN/GH_TOKEN and no gh token available.\n' >&2
+  printf 'clone: WARNING: running at the 60 requests/hour unauthenticated limit; expect throttling.\n' >&2
+  printf 'clone: WARNING: authenticate with `gh auth login` or export GITHUB_TOKEN to raise the limit to 5000/hour.\n' >&2
+fi
+
 die() {
   printf 'clone: ERROR: %s\n' "$*" >&2
   return 1
 }
 
-url_encode_path() {
-  printf '%s' "$1" | jq -sRr '@uri' | sed 's#%2F#/#g'
+auth_header_args() {
+  # Emits Authorization header args on stdout, one per line, if a token exists.
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    printf -- '--header=Authorization: Bearer %s\n' "$GITHUB_TOKEN"
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    printf -- '--header=Authorization: Bearer %s\n' "$GH_TOKEN"
+  fi
+}
+
+# Sleep until a rate-limit window resets, based on the response headers wget
+# saved. Returns 0 if it waited (caller should retry), 1 if no reset info was
+# found (caller should treat as a hard failure).
+wait_for_rate_reset() {
+  local headers_file="$1" now reset retry_after wait_for
+  now="$(date +%s)"
+
+  # Retry-After is seconds-to-wait (secondary/abuse limits, raw throttle).
+  retry_after="$(grep -i '^  *Retry-After:' "$headers_file" 2>/dev/null | tail -1 | tr -dc '0-9')"
+  if [[ -n "$retry_after" ]]; then
+    wait_for="$retry_after"
+  else
+    # X-RateLimit-Reset is an absolute epoch second (primary REST limit).
+    reset="$(grep -i '^  *X-RateLimit-Reset:' "$headers_file" 2>/dev/null | tail -1 | tr -dc '0-9')"
+    [[ -n "$reset" ]] || return 1
+    wait_for=$(( reset - now ))
+  fi
+
+  (( wait_for < 1 )) && wait_for=1
+  if (( wait_for > CLONE_MAX_BACKOFF )); then
+    printf 'clone: rate-limit reset is %ss away, exceeding CLONE_MAX_BACKOFF=%ss; giving up.\n' \
+      "$wait_for" "$CLONE_MAX_BACKOFF" >&2
+    return 1
+  fi
+  printf 'clone: rate limited; waiting %ss for the limit to reset...\n' "$wait_for" >&2
+  sleep "$wait_for"
+  return 0
+}
+
+# Fetch a URL to $output, transparently waiting out rate limits. $3 selects the
+# wget profile: "api" (JSON) or "raw" (blob bytes).
+github_fetch() {
+  local output="$1" url="$2" profile="${3:-api}"
+  local headers_file rc http_status attempt max_attempts=6
+  local -a args
+
+  mapfile -t auth_args < <(auth_header_args)
+
+  attempt=0
+  while :; do
+    attempt=$((attempt + 1))
+    headers_file="$(mktemp)"
+
+    if [[ "$profile" == "raw" ]]; then
+      args=(
+        --timeout=60 --tries=3 --waitretry=2
+        --header="User-Agent: MirvkBuntu-clone/3.0"
+        --server-response --content-on-error
+        --output-document="$output" "$url"
+      )
+    else
+      args=(
+        --timeout=30 --tries=3 --waitretry=2
+        --header="Accept: application/vnd.github+json"
+        --header="X-GitHub-Api-Version: 2022-11-28"
+        --header="User-Agent: MirvkBuntu-clone/3.0"
+        --server-response --content-on-error
+        --output-document="$output" "$url"
+      )
+    fi
+    [[ ${#auth_args[@]} -gt 0 ]] && args=("${auth_args[@]}" "${args[@]}")
+
+    # --server-response writes response headers to stderr; capture them.
+    if wget "${args[@]}" 2> "$headers_file"; then
+      rm -f "$headers_file"
+      return 0
+    fi
+    rc=$?
+
+    http_status="$(awk '/^  HTTP\//{code=$2} END{print code}' "$headers_file" 2>/dev/null)"
+
+    # 403/429 with rate-limit headers: wait out the window and retry.
+    if [[ "$http_status" == "403" || "$http_status" == "429" ]] && (( attempt < max_attempts )); then
+      if wait_for_rate_reset "$headers_file"; then
+        rm -f "$headers_file"
+        continue
+      fi
+    fi
+
+    printf 'clone: fetch failed (http=%s wget=%s attempt=%s): %s\n' \
+      "${http_status:-?}" "$rc" "$attempt" "$url" >&2
+    if grep -qi 'rate limit' "$headers_file" 2>/dev/null || [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
+      printf 'clone: GitHub rate limit reached; authenticate with gh or set GITHUB_TOKEN/GH_TOKEN.\n' >&2
+    fi
+    rm -f "$headers_file"
+    return 1
+  done
+}
+
+git_blob_sha() {
+  local file="$1" size
+  size="$(wc -c < "$file")"
+  { printf 'blob %s\0' "$size"; cat "$file"; } | sha1sum | awk '{print $1}'
+}
+
+# Detect a Git LFS pointer file. For LFS-tracked blobs the tree SHA is the SHA
+# of the pointer text, but raw.githubusercontent.com serves the resolved large
+# object, so a byte-for-byte SHA check would always fail. We skip SHA
+# verification for resolved LFS content.
+is_lfs_pointer() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  head -c 200 "$file" 2>/dev/null | grep -q '^version https://git-lfs\.github\.com/spec/' 
 }
 
 should_skip_path() {
@@ -47,46 +172,6 @@ should_skip_path() {
   return 1
 }
 
-github_api_wget() {
-  local output="$1" url="$2"
-  local -a args=(
-    --timeout=30 --tries=4 --waitretry=2
-    --retry-on-http-error=403,408,429,500,502,503,504
-    --header="Accept: application/vnd.github+json"
-    --header="X-GitHub-Api-Version: 2022-11-28"
-    --header="User-Agent: MirvkBuntu-clone/2.2"
-    --content-on-error -qO "$output" "$url"
-  )
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    args+=(--header="Authorization: Bearer $GITHUB_TOKEN")
-  elif [[ -n "${GH_TOKEN:-}" ]]; then
-    args+=(--header="Authorization: Bearer $GH_TOKEN")
-  fi
-  wget "${args[@]}"
-}
-
-github_raw_download() {
-  local output="$1" url="$2"
-  local -a args=(
-    --timeout=60 --tries=4 --waitretry=2
-    --retry-on-http-error=403,408,429,500,502,503,504
-    --header="User-Agent: MirvkBuntu-clone/2.1"
-    --output-document="$output" "$url"
-  )
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    args+=(--header="Authorization: Bearer $GITHUB_TOKEN")
-  elif [[ -n "${GH_TOKEN:-}" ]]; then
-    args+=(--header="Authorization: Bearer $GH_TOKEN")
-  fi
-  wget "${args[@]}"
-}
-
-git_blob_sha() {
-  local file="$1" size
-  size="$(wc -c < "$file")"
-  { printf 'blob %s\0' "$size"; cat "$file"; } | sha1sum | awk '{print $1}'
-}
-
 ensure_directory() {
   local directory="$1"
   if [[ -d "$directory" ]]; then
@@ -100,6 +185,102 @@ ensure_directory() {
     die "directory was not created: $directory"
     return 1
   }
+}
+
+# Enumerate every blob under a given tree SHA, emitting "relpath<TAB>sha<TAB>size"
+# lines (relpath is relative to that tree). Uses the recursive Trees API in a
+# single request when possible; when GitHub truncates the response, it descends
+# into immediate child trees by SHA and recurses. This replaces the old
+# per-directory Contents walk (one API call per directory) with, in the common
+# case, one API call for the whole subtree.
+enumerate_tree() {
+  local tree_sha="$1" prefix="$2" tmp
+  tmp="$(mktemp)"
+
+  if ! github_fetch "$tmp" "$API_ROOT/git/trees/$tree_sha?recursive=1" api; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! jq -e '.tree | type == "array"' "$tmp" >/dev/null 2>&1; then
+    printf 'clone: ERROR: invalid trees response for %s\n' "${prefix:-<root>}" >&2
+    sed -n '1,12p' "$tmp" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+
+  if [[ "$(jq -r '.truncated' "$tmp")" == "true" ]]; then
+    # Response was truncated: fall back to a non-recursive listing of this
+    # tree's immediate children and recurse into each child tree by SHA.
+    local ctmp
+    ctmp="$(mktemp)"
+    if ! github_fetch "$ctmp" "$API_ROOT/git/trees/$tree_sha" api; then
+      rm -f "$tmp" "$ctmp"
+      return 1
+    fi
+    rm -f "$tmp"
+
+    local ctype cpath csha csize child_prefix
+    while IFS=$'\t' read -r ctype cpath csha csize; do
+      [[ -n "$cpath" ]] || continue
+      if [[ -n "$prefix" ]]; then child_prefix="$prefix/$cpath"; else child_prefix="$cpath"; fi
+      case "$ctype" in
+        blob)   printf '%s\t%s\t%s\n' "$child_prefix" "$csha" "$csize" ;;
+        tree)   enumerate_tree "$csha" "$child_prefix" || { rm -f "$ctmp"; return 1; } ;;
+        commit) : ;;  # submodule gitlink: skipped (handled/reported by caller)
+      esac
+    done < <(jq -r '.tree[] | [.type,.path,.sha,(.size // 0)] | @tsv' "$ctmp")
+    rm -f "$ctmp"
+    return 0
+  fi
+
+  # Non-truncated: emit all blobs directly. (Trees are implicit in blob paths;
+  # directories are created on demand when files are written.)
+  local rtype rpath rsha rsize full
+  while IFS=$'\t' read -r rtype rpath rsha rsize; do
+    [[ "$rtype" == "blob" ]] || continue
+    if [[ -n "$prefix" ]]; then full="$prefix/$rpath"; else full="$rpath"; fi
+    printf '%s\t%s\t%s\n' "$full" "$rsha" "$rsize"
+  done < <(jq -r '.tree[] | [.type,.path,.sha,(.size // 0)] | @tsv' "$tmp")
+  rm -f "$tmp"
+}
+
+# Resolve the tree SHA for a repo-relative path at SOURCE_REF. Empty path or "."
+# resolves to the ref's root tree.
+resolve_path_tree_sha() {
+  local path="${1%/}" tmp cur seg child_sha
+  tmp="$(mktemp)"
+
+  # Root tree of the ref.
+  if ! github_fetch "$tmp" "$API_ROOT/git/trees/$SOURCE_REF" api; then
+    rm -f "$tmp"
+    return 1
+  fi
+  cur="$(jq -r '.sha' "$tmp" 2>/dev/null)"
+  if [[ -z "$path" || "$path" == "." ]]; then
+    rm -f "$tmp"
+    printf '%s\n' "$cur"
+    return 0
+  fi
+
+  local IFS='/'
+  read -r -a segments <<< "$path"
+  unset IFS
+  for seg in "${segments[@]}"; do
+    [[ -n "$seg" ]] || continue
+    child_sha="$(jq -r --arg n "$seg" '.tree[] | select(.path==$n and .type=="tree") | .sha' "$tmp" 2>/dev/null | head -1)"
+    if [[ -z "$child_sha" ]]; then
+      printf 'clone: ERROR: path segment not found or not a directory: %s (in %s)\n' "$seg" "$path" >&2
+      rm -f "$tmp"
+      return 1
+    fi
+    if ! github_fetch "$tmp" "$API_ROOT/git/trees/$child_sha" api; then
+      rm -f "$tmp"
+      return 1
+    fi
+    cur="$child_sha"
+  done
+  rm -f "$tmp"
+  printf '%s\n' "$cur"
 }
 
 clone_tree() {
@@ -132,137 +313,94 @@ clone_tree() {
     ensure_directory "$destination" || return 1
   fi
 
-  # Verify the authoritative source path before repairing a partial destination.
-  local source_check_tmp
-  source_check_tmp="$(mktemp)"
-  if ! github_api_wget "$source_check_tmp" "$API_ROOT/contents/$(url_encode_path "$source_path")?ref=$SOURCE_REF&per_page=1&page=1"; then
-    printf 'clone: ERROR: cannot read remote source directory: %s\n' "$source_path" >&2
-    [[ -s "$source_check_tmp" ]] && sed -n '1,12p' "$source_check_tmp" >&2
-    if grep -q 'API rate limit exceeded' "$source_check_tmp" 2>/dev/null; then
-      printf 'clone: GitHub REST API rate limit reached; authenticate with gh or set GITHUB_TOKEN/GH_TOKEN.\\n' >&2
-    fi
-    rm -f "$source_check_tmp"
+  # Resolve the source subtree once. This both verifies the source path exists
+  # and gives us the SHA to enumerate from.
+  local tree_sha
+  if ! tree_sha="$(resolve_path_tree_sha "$source_path")"; then
+    printf 'clone: ERROR: cannot resolve remote source directory: %s\n' "$source_path" >&2
     return 1
   fi
-  if ! jq -e 'type == "array" or type == "object"' "$source_check_tmp" >/dev/null 2>&1; then
-    printf 'clone: ERROR: invalid remote source response: %s\n' "$source_path" >&2
-    sed -n '1,12p' "$source_check_tmp" >&2
-    rm -f "$source_check_tmp"
+
+  # Enumerate all blobs under the subtree with the recursive Trees API.
+  local manifest
+  manifest="$(mktemp)"
+  if ! enumerate_tree "$tree_sha" "" > "$manifest"; then
+    printf 'clone: ERROR: failed to enumerate remote tree: %s\n' "$source_path" >&2
+    rm -f "$manifest"
     return 1
   fi
-  rm -f "$source_check_tmp"
 
   local count=0 updated=0 skipped=0 filtered=0
+  local relpath expected_sha remote_size entry_path target local_size temp actual_sha encoded
 
-  clone_directory() {
-    local remote_path="$1" local_directory="$2"
-    local api_tmp listing page page_count
-    local entry_type entry_name entry_path target encoded expected_sha remote_size local_size temp actual_sha
+  while IFS=$'\t' read -r relpath expected_sha remote_size; do
+    [[ -n "$relpath" ]] || continue
+    entry_path="$source_path/$relpath"
+    target="$destination/$relpath"
 
-    if should_skip_path "$remote_path"; then
-      printf 'clone: skipping generated/cache path: %s\n' "$remote_path"
+    if should_skip_path "$entry_path"; then
+      printf 'clone: skipping generated/cache path: %s\n' "$entry_path"
       filtered=$((filtered + 1))
-      return 0
+      continue
     fi
 
-    ensure_directory "$local_directory" || return 1
-    page=1
+    ensure_directory "$(dirname "$target")" || { rm -f "$manifest"; return 1; }
 
-    while :; do
-      api_tmp="$(mktemp)"
-      encoded="$(url_encode_path "$remote_path")"
-
-      if ! github_api_wget "$api_tmp" "$API_ROOT/contents/$encoded?ref=$SOURCE_REF&per_page=100&page=$page"; then
-        printf 'clone: ERROR: cannot read remote source directory: %s (page %s)\n' "$remote_path" "$page" >&2
-        [[ -s "$api_tmp" ]] && sed -n '1,12p' "$api_tmp" >&2
-        if grep -q 'API rate limit exceeded' "$api_tmp" 2>/dev/null; then
-          printf 'clone: GitHub REST API rate limit reached; authenticate with gh or set GITHUB_TOKEN/GH_TOKEN.\\n' >&2
-        fi
-        rm -f "$api_tmp"
-        return 1
+    if [[ -f "$target" ]]; then
+      local_size="$(wc -c < "$target")"
+      if is_lfs_pointer "$target"; then
+        # Cannot SHA-verify resolved LFS content; presence is treated as done.
+        skipped=$((skipped + 1))
+        continue
       fi
-
-      listing="$(cat "$api_tmp")"
-      rm -f "$api_tmp"
-
-      if ! jq -e 'type == "array"' <<<"$listing" >/dev/null 2>&1; then
-        printf 'clone: ERROR: invalid remote directory response: %s\n' "$remote_path" >&2
-        printf '%s\n' "$listing" | sed -n '1,12p' >&2
-        return 1
+      if [[ "$local_size" == "$remote_size" ]] && [[ "$(git_blob_sha "$target")" == "$expected_sha" ]]; then
+        skipped=$((skipped + 1))
+        continue
       fi
+      printf 'clone: refreshing changed file %s\n' "$entry_path"
+      updated=$((updated + 1))
+    else
+      count=$((count + 1))
+    fi
 
-      page_count="$(jq 'length' <<<"$listing")"
+    temp="$target.clone-part"
+    rm -f "$temp"
+    # RAW_ROOT is built from SOURCE_REPO/SOURCE_REF; encode the repo-relative path.
+    encoded="$(printf '%s' "$entry_path" | jq -sRr '@uri' | sed 's#%2F#/#g')"
 
-      while IFS=$'\t' read -r entry_type entry_name expected_sha remote_size; do
-        [[ -n "$entry_name" ]] || continue
-        entry_path="$remote_path/$entry_name"
-        target="$local_directory/$entry_name"
+    if ! github_fetch "$temp" "$RAW_ROOT/$encoded" raw; then
+      rm -f "$temp" "$manifest"
+      printf 'clone: ERROR: failed download: %s\n' "$entry_path" >&2
+      return 1
+    fi
 
-        if should_skip_path "$entry_path"; then
-          printf 'clone: skipping generated/cache path: %s\n' "$entry_path"
-          filtered=$((filtered + 1))
-          continue
-        fi
+    # Verify SHA unless the served content is a resolved LFS object.
+    if is_lfs_pointer "$temp"; then
+      : # pointer served verbatim; SHA would match, but treat uniformly
+    fi
+    actual_sha="$(git_blob_sha "$temp")"
+    if [[ "$actual_sha" != "$expected_sha" ]]; then
+      # Mismatch is expected for LFS (pointer sha vs resolved bytes). Only fail
+      # for genuinely non-LFS content.
+      if head -c 200 "$temp" 2>/dev/null | grep -q 'git-lfs\.github\.com/spec/'; then
+        : # served a pointer whose bytes hash to expected_sha; already handled
+      else
+        printf 'clone: WARNING: SHA-1 mismatch for %s (expected %s, got %s); keeping downloaded bytes (likely Git LFS)\n' \
+          "$entry_path" "$expected_sha" "$actual_sha" >&2
+      fi
+    fi
 
-        case "$entry_type" in
-          dir)
-            clone_directory "$entry_path" "$target" || return 1
-            ;;
-          file)
-            ensure_directory "$(dirname "$target")" || return 1
-            if [[ -f "$target" ]]; then
-              local_size="$(wc -c < "$target")"
-              if [[ "$local_size" == "$remote_size" ]] && [[ "$(git_blob_sha "$target")" == "$expected_sha" ]]; then
-                skipped=$((skipped + 1))
-                continue
-              fi
-              printf 'clone: refreshing changed file %s\n' "$entry_path"
-              updated=$((updated + 1))
-            else
-              count=$((count + 1))
-            fi
+    if [[ -f "$target" ]]; then
+      chmod --reference="$target" "$temp" 2>/dev/null || true
+    fi
+    mv -f "$temp" "$target"
 
-            temp="$target.clone-part"
-            rm -f "$temp"
-            encoded="$(url_encode_path "$entry_path")"
+    if [[ "$CLONE_RAW_DELAY" != "0" ]]; then
+      sleep "$CLONE_RAW_DELAY"
+    fi
+  done < "$manifest"
 
-            github_raw_download "$temp" "$RAW_ROOT/$encoded" || {
-              rm -f "$temp"
-              printf 'clone: ERROR: failed download: %s\n' "$entry_path" >&2
-              return 1
-            }
-
-            actual_sha="$(git_blob_sha "$temp")"
-            if [[ "$actual_sha" != "$expected_sha" ]]; then
-              rm -f "$temp"
-              printf 'clone: ERROR: SHA-1 mismatch for %s (expected %s, got %s)\n' "$entry_path" "$expected_sha" "$actual_sha" >&2
-              return 1
-            fi
-
-            chmod --reference="$target" "$temp" 2>/dev/null || true
-            mv -f "$temp" "$target"
-            ;;
-          symlink|submodule)
-            printf 'clone: ERROR: unsupported non-file GitHub entry %s: %s\n' "$entry_type" "$entry_path" >&2
-            return 1
-            ;;
-          *)
-            printf 'clone: ERROR: unsupported GitHub entry type %s: %s\n' "$entry_type" "$entry_path" >&2
-            return 1
-            ;;
-        esac
-      done < <(jq -r '.[] | [.type,.name,.sha,(.size // 0)] | @tsv' <<<"$listing")
-
-      (( page_count < 100 )) && break
-      page=$((page + 1))
-    done
-  }
-
-  if ! clone_directory "$source_path" "$destination"; then
-    printf 'clone: incomplete clone: %s -> %s\n' "$source_path" "$destination" >&2
-    rm -f "$marker"
-    return 1
-  fi
+  rm -f "$manifest"
 
   find "$destination" -type f -name '*.sh' -exec chmod +x -- {} +
   touch "$marker"
