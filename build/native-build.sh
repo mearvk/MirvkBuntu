@@ -21,28 +21,39 @@ mkdir -p "$ARTIFACT_ROOT/packages" "$ARTIFACT_ROOT/chunks" "$ROOTFS_STAGE"
 log(){ printf "native-build: %s\n" "$*"; }
 
 build_kernels(){
-  local found=0 candidate src work deb name archive extract_root
+  local found=0 candidate src work deb name archive extract_root kernel_root makefile_count
+  kernel_root="$REPO_ROOT/kernels"
   log "Compiling every MirvkBuntu kernel source tree that is actually present."
-  [ -d "$REPO_ROOT/kernels" ] || die "kernel source directory is missing: $REPO_ROOT/kernels"
+  log "native-build script directory: $SCRIPT_DIR"
+  log "native-build repository root: $REPO_ROOT"
+  log "native-build kernel source root: $kernel_root"
 
-  # Accept either a complete Linux source tree directly under kernels/ or an
-  # archive supplied with a version directory. Do not download or substitute a
-  # distribution kernel here: the source must be supplied by MirvkBuntu.
-  # -L is intentional: kernel source may be exposed through a repository
-  # symlink. Without it, find silently skips the linked source tree.
+  [ -d "$kernel_root" ] || die "kernel source directory is missing: expected $kernel_root (script is in $SCRIPT_DIR; repository root is one directory above build/)"
+
+  if [ ! -r "$kernel_root" ]; then
+    die "kernel source directory is not readable: $kernel_root"
+  fi
+
+  log "kernel discovery: searching recursively under $kernel_root for top-level Makefile files"
+  makefile_count="$(find -L "$kernel_root" -type f -name Makefile -print 2>/dev/null | wc -l)"
+  log "kernel discovery: found $makefile_count Makefile file(s) under $kernel_root"
+
   while IFS= read -r -d "" candidate; do
     src="$(dirname "$candidate")"
-    [ -f "$src/Makefile" ] || continue
-    [ -f "$src/Kconfig" ] || continue
-    [ -d "$src/arch" ] || continue
+    log "kernel discovery: candidate Makefile: $candidate"
+    if [ ! -f "$src/Kconfig" ]; then
+      log "kernel discovery: rejected candidate (missing Kconfig): $src"
+      continue
+    fi
+    if [ ! -d "$src/arch" ]; then
+      log "kernel discovery: rejected candidate (missing arch/): $src"
+      continue
+    fi
     found=1
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
+    rm -rf "$work"
     mkdir -p "$work"
-    # Copy the contents of the source root, not the source directory itself.
-    # MirvkBuntu stores Linux 5.15.204 as:
-    #   kernels/linux-5.15.204/linux-5.15.204/
-    # so make runs from the actual kernel top-level directory.
     cp -a "$src/." "$work/"
     log "kernel: compiling source tree $name from $src"
     make -C "$work" olddefconfig
@@ -51,11 +62,8 @@ build_kernels(){
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(find -L "$REPO_ROOT/kernels" -type f -name Makefile -print0)
+  done < <(find -L "$kernel_root" -type f -name Makefile -print0)
 
-  # Also support the common repository layout where a kernel source archive is
-  # stored inside kernels/<version>/. Extract it and locate its real top-level
-  # source directory before compiling.
   while IFS= read -r -d "" archive; do
     extract_root="$NATIVE_ROOT/kernel-archives/$(basename "$archive")"
     rm -rf "$extract_root"
@@ -67,7 +75,7 @@ build_kernels(){
       *.tar.bz2) tar -xjf "$archive" -C "$extract_root" ;;
       *) continue ;;
     esac
-    candidate="$(find "$extract_root" -type f -name Makefile -print -quit)"
+    candidate="$(find -L "$extract_root" -type f -name Makefile -print -quit)"
     [ -n "$candidate" ] || continue
     src="$(dirname "$candidate")"
     [ -f "$src/Kconfig" ] || continue
@@ -85,15 +93,26 @@ build_kernels(){
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(find "$REPO_ROOT/kernels" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.tar.xz" -o -name "*.tar.zst" -o -name "*.tar.bz2" \) -print0)
+  done < <(find -L "$kernel_root" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.tar.xz" -o -name "*.tar.zst" -o -name "*.tar.bz2" \) -print0)
 
   if [ "$found" -eq 0 ]; then
-    log "No complete Linux kernel source tree or supplied kernel source archive is present under kernels/."
-    log "A version directory alone is metadata; it cannot be compiled."
-    die "no MirvkBuntu-supplied kernel source found; refusing a distribution-kernel fallback"
+    log "kernel discovery diagnostics:"
+    log "  script directory = $SCRIPT_DIR"
+    log "  repository root  = $REPO_ROOT"
+    log "  expected kernels  = $kernel_root"
+    if [ -d "$REPO_ROOT" ]; then
+      log "  repository root entries:"
+      find "$REPO_ROOT" -maxdepth 1 -mindepth 1 -printf "    %p\n" 2>/dev/null || true
+    fi
+    if [ -d "$kernel_root" ]; then
+      log "  kernels directory entries:"
+      find -L "$kernel_root" -maxdepth 3 -mindepth 1 -printf "    %p\n" 2>/dev/null | head -100 || true
+      log "  Makefiles actually discovered:"
+      find -L "$kernel_root" -type f -name Makefile -print 2>/dev/null | head -100 || true
+    fi
+    die "no complete MirvkBuntu-supplied kernel source found under $kernel_root; build/native-build.sh resolves the repository root as the parent of build/ and refuses a distribution-kernel fallback"
   fi
 }
-
 build_chromium(){
   local marker src out
   marker="$(find "$REPO_ROOT/sources" "$REPO_ROOT/userland" "$REPO_ROOT/user-interface" "$REPO_ROOT/gnome-source" -type f -path "*/chrome/BUILD.gn" -print -quit 2>/dev/null || true)"
