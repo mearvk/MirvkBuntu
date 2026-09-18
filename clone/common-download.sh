@@ -24,6 +24,10 @@ CLONE_MAX_BACKOFF="${CLONE_MAX_BACKOFF:-900}"
 #   4. the GitHub CLI hosts config (~/.config/gh/hosts.yml), even if the `gh`
 #      binary is not installed -- common on build machines that only ran
 #      `gh auth login` once elsewhere or seeded the file directly
+#   5. an interactive prompt, ONLY when running attached to a terminal and not
+#      disabled via CLONE_NO_PROMPT=1. The entry is read silently so the PAT is
+#      never echoed. Non-interactive/CI runs skip this and fall through to the
+#      unauthenticated warning below, preserving existing automated behavior.
 if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
   _clone_tok=""
 
@@ -43,6 +47,16 @@ if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
       _clone_tok="$(sed -n 's/^[[:space:]]*\(oauth_token\|token\):[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\2/p' "$_gh_hosts" 2>/dev/null | head -1)"
     fi
     unset _gh_hosts
+  fi
+
+  if [[ -z "$_clone_tok" && "${CLONE_NO_PROMPT:-0}" != "1" && -t 0 && -t 2 ]]; then
+    printf 'clone: no GitHub token found. Enter a Personal Access Token to authenticate\n' >&2
+    printf 'clone: (raises the API limit from 60/hr to 5000/hr). Leave blank to continue\n' >&2
+    printf 'clone: unauthenticated. Create one at https://github.com/settings/tokens\n' >&2
+    printf 'clone: GitHub PAT: ' >&2
+    IFS= read -rs _clone_tok < /dev/tty || _clone_tok=""
+    printf '\n' >&2
+    _clone_tok="$(printf '%s' "$_clone_tok" | tr -d ' \t\r\n')"
   fi
 
   if [[ -n "$_clone_tok" ]]; then
