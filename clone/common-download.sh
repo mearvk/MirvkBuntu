@@ -31,6 +31,9 @@ clone_tree() {
 
   if [[ -f "$marker" ]]; then
     printf 'clone: already complete: %s -> %s\n' "$source_path" "$destination"
+    # Even completed trees get a permissions pass so existing shell scripts
+    # are executable after an older/incomplete clone.
+    find "$destination" -type f -name '*.sh' -exec chmod +x -- {} + 2>/dev/null || true
     return 0
   fi
 
@@ -86,19 +89,6 @@ clone_tree() {
           printf 'clone: downloading %s\n' "$entry_path"
           if wget -q --show-progress -O "$target" "${RAW_ROOT}/${encoded}"; then
             count=$((count + 1))
-
-            # GitHub's Contents API does not preserve executable mode when
-            # downloading raw file content. Restore the conventional mode for
-            # shell scripts so cloned scripts can be executed directly.
-            case "$entry_name" in
-              *.sh)
-                chmod 0755 "$target" || {
-                  rm -f "$target"
-                  printf 'clone: ERROR: cannot make executable: %s\n' "$entry_path" >&2
-                  return 1
-                }
-                ;;
-            esac
           else
             rm -f "$target"
             printf 'clone: ERROR: failed download: %s\n' "$entry_path" >&2
@@ -118,6 +108,13 @@ clone_tree() {
 
   if (( failed != 0 )); then
     printf 'clone: incomplete clone: %s -> %s\n' "$source_path" "$destination" >&2
+    return 1
+  fi
+
+  # Apply executable permission to every shell script in the entire cloned
+  # destination, including files that were already present and not overwritten.
+  if ! find "$destination" -type f -name '*.sh' -exec chmod +x -- {} +; then
+    printf 'clone: ERROR: cannot chmod +x shell scripts under %s\n' "$destination" >&2
     return 1
   fi
 
