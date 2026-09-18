@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"${SCRIPT_DIR}/common-download.sh" gnome-source
+set -u
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common-download.sh"
+clone_tree "gnome-source" "$SCRIPT_DIR/../gnome-source"
