@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -u
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+set -euo pipefail
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$BASH_SOURCE")" && pwd)"
 source "$SCRIPT_DIR/common-download.sh"
-for path in markdown wiki; do clone_tree "$path" "$SCRIPT_DIR/../docs/$path" || exit 1; done
+# MirvkBuntu currently uses docs/ as the tracked documentation root.
+clone_tree "docs" "$SCRIPT_DIR/../docs"
