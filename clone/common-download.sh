@@ -7,6 +7,16 @@ API_ROOT="https://api.github.com/repos/$SOURCE_REPO"
 RAW_ROOT="https://raw.githubusercontent.com/$SOURCE_REPO/$SOURCE_REF"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+# Prefer explicit tokens, then the token already stored by GitHub CLI.
+# This keeps large reconciliations from using GitHub's low unauthenticated API limit.
+if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
+  GH_AUTH_TOKEN="$(gh auth token 2>/dev/null || true)"
+  if [[ -n "$GH_AUTH_TOKEN" ]]; then
+    export GITHUB_TOKEN="$GH_AUTH_TOKEN"
+  fi
+  unset GH_AUTH_TOKEN
+fi
+
 die() {
   printf 'clone: ERROR: %s\n' "$*" >&2
   return 1
@@ -44,7 +54,7 @@ github_api_wget() {
     --retry-on-http-error=403,408,429,500,502,503,504
     --header="Accept: application/vnd.github+json"
     --header="X-GitHub-Api-Version: 2022-11-28"
-    --header="User-Agent: MirvkBuntu-clone/2.1"
+    --header="User-Agent: MirvkBuntu-clone/2.2"
     --content-on-error -qO "$output" "$url"
   )
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
@@ -128,6 +138,9 @@ clone_tree() {
   if ! github_api_wget "$source_check_tmp" "$API_ROOT/contents/$(url_encode_path "$source_path")?ref=$SOURCE_REF&per_page=1&page=1"; then
     printf 'clone: ERROR: cannot read remote source directory: %s\n' "$source_path" >&2
     [[ -s "$source_check_tmp" ]] && sed -n '1,12p' "$source_check_tmp" >&2
+    if grep -q 'API rate limit exceeded' "$source_check_tmp" 2>/dev/null; then
+      printf 'clone: GitHub REST API rate limit reached; authenticate with gh or set GITHUB_TOKEN/GH_TOKEN.\\n' >&2
+    fi
     rm -f "$source_check_tmp"
     return 1
   fi
@@ -162,6 +175,9 @@ clone_tree() {
       if ! github_api_wget "$api_tmp" "$API_ROOT/contents/$encoded?ref=$SOURCE_REF&per_page=100&page=$page"; then
         printf 'clone: ERROR: cannot read remote source directory: %s (page %s)\n' "$remote_path" "$page" >&2
         [[ -s "$api_tmp" ]] && sed -n '1,12p' "$api_tmp" >&2
+        if grep -q 'API rate limit exceeded' "$api_tmp" 2>/dev/null; then
+          printf 'clone: GitHub REST API rate limit reached; authenticate with gh or set GITHUB_TOKEN/GH_TOKEN.\\n' >&2
+        fi
         rm -f "$api_tmp"
         return 1
       fi
