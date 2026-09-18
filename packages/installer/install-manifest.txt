@@ -1,0 +1,27 @@
+# Ubuntu.Determinant.Beta.Restricted native install manifest
+# Format: component|source|install-name|default
+xmc|tools/xmc|xmc|1
+limit|tools/limit|limit|1
+size|tools/size|size|1
+ctrmsctl|tools/ctrmsctl|ctrmsctl|1
+gcc-helper|tools/gcc|download-gcc.sh|1
+gcc-helper|tools/gcc|extract-gcc.sh|1
+tac3ctl|tools/tac3|tac3ctl|1
+tac3-usb-dump|tools/tac3|tac3-usb-dump|1
+tac3healthctl|tools/tac3health|tac3healthctl|1
+tac3-partition-installer|tools/tac3|tac3-partition-installer.sh|1
+# ctrmsctl.service is installed by the ctrmsctl component on systemd hosts.
+# XMC ASYSMA support is installed with the xmc component.
+# tac3ctl is the userspace diagnostic for the in-kernel TAC3 filesystem
+# (CONFIG_TAC3=m, fs/tac3). Build it first with tools/tac3/build.sh. The TAC3
+# kernel module itself ships in the ISO via the kernel build, not this manifest.
+# tac3-usb-dump creates a safety-gated, source-read-only backup bundle on an
+# already-mounted USB directory. It preserves the complete TAC3 image plus
+# FILE/HEALTH/ADMIN/RECOVERY tables and selected logical-layer metadata.
+# tac3healthctl is the userspace health monitor for the same filesystem; it
+# reads /proc/tac3/{status,health,admin} and watches for health, errors, and
+# alterations. Build it with tools/tac3health/build.sh. Its optional systemd
+# unit (tac3health.service) is installed via 'make -C tools/tac3health install-service'.
+# tac3-partition-installer is a safety-gated partition adapter. It defaults to
+# read-only planning and requires --execute, root, an unmounted target disk,
+# unallocated space, and mkfs.tac3 before it will write anything.

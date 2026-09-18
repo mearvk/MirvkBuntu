@@ -1,0 +1,15 @@
+# 3 — Installation & Integrity
+
+```mermaid
+flowchart LR
+  Artifact[Verified Artifact] --> Host[Host Discovery]
+  Host --> Plan[Installation Plan]
+  Plan --> Authorization[Authorization]
+  Authorization --> Install[Installation]
+  Install --> Hash[SHA-256 Verification]
+  Hash --> Record[Installation Evidence]
+```
+
+Record host identity as appropriate, architecture, installation target, permissions, services/timers selected, configuration changes, artifact hash, installed-file manifest, and verification result.
+
+An integrity match establishes equality with the trusted reference. It does not independently establish the legality, morality, or provenance of the reference.

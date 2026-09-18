@@ -1,0 +1,17 @@
+# 4 — Operation & Observation
+
+```mermaid
+flowchart LR
+  Installed[Installed State] --> Observe[Observe]
+  Observe --> Integrity[Integrity Check]
+  Integrity --> Change{Changed?}
+  Change -->|No| Evidence[Evidence Record]
+  Change -->|Yes| Quarantine[Preserve / Quarantine]
+  Quarantine --> Restore[Verified Restoration]
+  Restore --> Recheck[Re-hash]
+  Recheck --> Evidence
+```
+
+Record service state, selected runtime configuration, periodic integrity observations, detected changes, repair actions, restoration source, replacement hash, and rollback evidence.
+
+Monitoring is bounded and resource-aware. A repair must preserve the previous state before replacement and must verify the replacement against a trusted reference.

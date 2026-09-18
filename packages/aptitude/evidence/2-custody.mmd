@@ -1,0 +1,14 @@
+# 2 — Custody & Supply Chain
+
+```mermaid
+flowchart LR
+  Origin[Origin Record] --> Package[Packaged Artifact]
+  Package --> Transfer[Transfer Event]
+  Transfer --> Repository[Repository / Distributor]
+  Repository --> Recipient[Recipient]
+  Recipient --> Custody[Custody Evidence]
+```
+
+Record each transfer with artifact identity, SHA-256, signature where available, timestamp, actor, declared location, and transaction/reference identifier.
+
+Aptitude uses **U.S. custody** as a factual evidence category: a record may establish that a particular actor, facility, transaction, or repository was located in or governed by a U.S.-related commercial context when evidence supports it. It does not by itself establish government ownership, federal certification, or exclusive U.S. origin.

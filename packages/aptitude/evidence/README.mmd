@@ -1,0 +1,66 @@
+# Aptitude Evidence Chain
+
+```mermaid
+flowchart TD
+    D[1 — Origin & Production] --> C[2 — Custody & Transfer]
+    C --> I[3 — Installation & Integrity]
+    I --> O[4 — Operation & Observation]
+
+    D --> D1[Producer / Supplier]
+    D --> D2[Build ID / Version]
+    D --> D3[SBOM / Component hashes]
+
+    C --> C1[Package / Artifact identity]
+    C --> C2[Timestamp / Actor / Location]
+    C --> C3[SHA-256 / Signature]
+
+    I --> I1[Host / Architecture]
+    I --> I2[Permissions / Services]
+    I --> I3[Manifest verification]
+
+    O --> O1[Runtime observations]
+    O --> O2[Integrity checks]
+    O --> O3[Repair / rollback evidence]
+```
+
+This document is a **Mermaid source file** and is intentionally named with the `.mmd` extension. It defines the four-stage evidence model used by Aptitude.
+
+## 1 — Production / Origin
+
+Establish what was produced, by whom, from which source, at what version, and with which declared components. The record should include build identifiers, source references, SBOM data, component hashes, licenses, and generation timestamps where available.
+
+## 2 — United States custody / supply chain
+
+Record the movement of the artifact through its declared supply chain as **economic and factual evidence**, not as an unsupported claim of government custody or legal certification. A custody record can identify supplier, distributor, repository, transfer event, timestamp, actor, location, artifact hash, and signature.
+
+## 3 — Installation / integrity
+
+Record the host, architecture, installation target, permissions, services, configuration, SHA-256 manifest, and verification results. Aptitude should preserve the evidence needed to reconstruct what was actually installed.
+
+## 4 — Operation / observation
+
+Record runtime and integrity observations, relevant service state, periodic checks, changes, repairs, and rollback events. Every repair should preserve the prior state and verify the replacement source before installation.
+
+## United States / morals / programs
+
+The evidence chain may contain separate descriptive dimensions:
+
+- **United States** — jurisdiction, procurement, commercial, geographic, or supply-chain facts actually established by the record.
+- **Morals** — declared organizational/product principles. This is normative metadata, not a claim that morality itself is a cryptographic fact.
+- **Programs** — software identity, dependencies, source/build information, configuration, and runtime facts.
+
+These dimensions must not be conflated. A statement that a product is U.S.-produced, U.S.-held, morally preferred, or legally compliant requires the corresponding evidence; the `.mmd` chain itself does not create that fact.
+
+## Evidence rule
+
+Aptitude should distinguish:
+
+```text
+FACT       = directly observed or cryptographically verified
+CLAIM      = supplied by an actor and awaiting verification
+ATTESTATION = signed statement by an identified party
+POLICY     = desired rule or organizational requirement
+MORAL      = declared value/principle, not automatically a fact
+```
+
+This separation is especially important for software supply-chain records. U.S. government SBOM guidance treats provenance, component identity, hashes, timestamps, supplier information, dependency relationships, and machine-readable evidence as important supply-chain information. citeturn0search0turn0search13

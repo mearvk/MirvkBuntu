@@ -1,0 +1,36 @@
+# DESKTOP_INSTALL_PROBE.hss
+
+## Program
+Linux Desktop Install Probe
+
+## Purpose
+Small native helper that discovers the repository clone, locates the primed installation set, exposes the Step 1 desktop-preview document, and optionally hands control to the native installer.
+
+## Order
+1. Locate an existing Git clone.
+2. Clone to `$HOME/src/Ubuntu.Determinant.Beta.Restricted` when absent.
+3. Locate `installer/install-manifest.txt` or `installer/install-native.sh`.
+4. Report `installer/DESKTOP_PREVIEW_STEP_1.md`.
+5. Stop safely in dry-run mode.
+6. With `--install`, execute the native Linux installer.
+
+## Build
+`make`
+
+## Install
+`make install`
+
+## Run
+`desktop_install_probe`
+
+## Install Mode
+`desktop_install_probe --install`
+
+## Safety
+Discovery is non-destructive. Installation is explicit. The helper must never claim that installation succeeded when the installer returned failure.
+
+## Files
+- `desktop_install_probe.c` — implementation
+- `desktop_install_probe.h` — constants/interface definitions
+- `Makefile` — build/install rules
+- `DESKTOP_INSTALL_PROBE.md` — quick reference

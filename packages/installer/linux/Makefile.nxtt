@@ -1,0 +1,30 @@
+.PHONY: all clean install uninstall test
+
+CC ?= cc
+CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic
+TARGET := nxtt
+SRC := nxtt-uninstaller.c
+PREFIX ?= /user
+BINDIR := $(PREFIX)/bin
+RUNNABLES := $(PREFIX)/runnables
+
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(CC) $(CFLAGS) -o $@ $<
+
+install: $(TARGET)
+	install -d $(BINDIR) $(RUNNABLES)
+	install -m 0755 $(TARGET) $(BINDIR)/$(TARGET)
+	install -m 0755 $(TARGET) $(RUNNABLES)/$(TARGET)
+	@echo "Installed $(TARGET) to $(BINDIR) and $(RUNNABLES)"
+
+uninstall:
+	rm -f $(BINDIR)/$(TARGET) $(RUNNABLES)/$(TARGET)
+
+# Preview binary is non-destructive; this test only verifies it starts.
+test: $(TARGET)
+	./$(TARGET) >/dev/null
+
+clean:
+	rm -f $(TARGET)

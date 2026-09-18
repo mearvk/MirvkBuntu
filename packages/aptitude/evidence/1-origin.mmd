@@ -1,0 +1,13 @@
+# 1 — Origin & Production
+
+```mermaid
+flowchart LR
+  Source[Source / Supplier] --> Build[Build / Compilation]
+  Build --> Artifact[Release Artifact]
+  Artifact --> SBOM[SBOM + Component Hashes]
+  SBOM --> Record[Origin Evidence Record]
+```
+
+Record: supplier, source revision, build identifier, version, artifact digest, component inventory, licenses/notices, build timestamp, signing identity, and generation context where available.
+
+**FACT** means directly observed or cryptographically verified. **CLAIM** means supplied but not independently verified. **ATTESTATION** means an identified party has signed the statement.

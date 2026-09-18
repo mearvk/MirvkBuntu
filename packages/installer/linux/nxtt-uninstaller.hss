@@ -1,0 +1,22 @@
+# nxtt-uninstaller.hss
+
+## Purpose
+Native Ubuntu White Edition uninstall-review helper.
+
+## Categories
+- main: core usability/dependency components
+- installed: explicitly installed software
+- sibling: related or optional companion software
+
+## Interaction
+- Arrow keys select/deselect.
+- Space proceeds with the designated action.
+- Double Space acknowledges the innate risk and stops for a deliberate review.
+- Ctrl+Enter presents a dependency and relationship breakdown.
+- Q stops and leaves the next decision to the user.
+
+## Safety
+The preview implementation is non-destructive. A production implementation must require explicit confirmation and must preserve system-critical dependencies.
+
+## Logging
+The production design records actions, selections, relationship explanations, and outcomes in a local audit database. SQLite is the default local implementation; MySQL-compatible storage may be used for managed deployments.
