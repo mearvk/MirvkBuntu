@@ -21,6 +21,7 @@ done
 BUILD="$ROOT_DIR/$MODULE/build-local"
 DESTDIR="${DESTDIR:-}"
 PREFIX="${PREFIX:-/usr}"
+JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"
 mkdir -p "$BUILD"
 
 if [ -e "$SRC/meson.build" ]; then
@@ -45,9 +46,9 @@ elif [ -e "$SRC/CMakeLists.txt" ]; then
   command -v cmake >/dev/null || { echo "ERROR: cmake is required" >&2; exit 1; }
   rm -rf "$BUILD"
   cmake -S "$SRC" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" "$@"
-  cmake --build "$BUILD" --parallel "${JOBS:-}"
+  cmake --build "$BUILD" --parallel "$JOBS"
   if [ "${INSTALL:-0}" = "1" ]; then
-    if [ -n "$DESTDIR" ]; then cmake --install "$BUILD" --prefix "$PREFIX" --strip --component Unspecified -- DESTDIR="$DESTDIR"; else cmake --install "$BUILD"; fi
+    if [ -n "$DESTDIR" ]; then DESTDIR="$DESTDIR" cmake --install "$BUILD" --prefix "$PREFIX" --strip; else cmake --install "$BUILD"; fi
   fi
 else
   echo "ERROR: recognized Python project requires module-specific packaging/build handling" >&2
