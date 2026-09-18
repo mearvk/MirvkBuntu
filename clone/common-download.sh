@@ -27,8 +27,6 @@ clone_tree() {
   local destination="$2"
   local marker="${destination}/.clone-complete"
 
-  # Destinations are rooted at the existing MirvkBuntu checkout.
-  # Existing files are never overwritten.
   mkdir -p "$destination" || return 1
 
   if [[ -f "$marker" ]]; then
@@ -73,14 +71,12 @@ clone_tree() {
       case "$entry_type" in
         dir)
           mkdir -p "$target" || return 1
-          if ! clone_directory "$entry_path" "$target"; then
-            return 1
-          fi
+          clone_directory "$entry_path" "$target" || return 1
           ;;
         file)
           mkdir -p "$(dirname "$target")" || return 1
 
-          # Never overwrite an existing file. This check happens before wget.
+          # Never overwrite an existing file.
           if [[ -e "$target" ]]; then
             skipped=$((skipped + 1))
             continue
@@ -90,6 +86,19 @@ clone_tree() {
           printf 'clone: downloading %s\n' "$entry_path"
           if wget -q --show-progress -O "$target" "${RAW_ROOT}/${encoded}"; then
             count=$((count + 1))
+
+            # GitHub's Contents API does not preserve executable mode when
+            # downloading raw file content. Restore the conventional mode for
+            # shell scripts so cloned scripts can be executed directly.
+            case "$entry_name" in
+              *.sh)
+                chmod 0755 "$target" || {
+                  rm -f "$target"
+                  printf 'clone: ERROR: cannot make executable: %s\n' "$entry_path" >&2
+                  return 1
+                }
+                ;;
+            esac
           else
             rm -f "$target"
             printf 'clone: ERROR: failed download: %s\n' "$entry_path" >&2
@@ -113,5 +122,6 @@ clone_tree() {
   fi
 
   touch "$marker" || return 1
-  printf 'clone: %s downloaded, %s already present: %s\n'     "$count" "$skipped" "$source_path"
+  printf 'clone: %s downloaded, %s already present: %s\n' \
+    "$count" "$skipped" "$source_path"
 }
