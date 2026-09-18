@@ -54,6 +54,8 @@ build_chromium(){
   (cd "$src" && gn gen "$out" --args="$(tr "\n" " " < "$out.args.gn")")
   (cd "$src" && autoninja -C "$out" chrome)
   [ -x "$out/chrome" ] || die "Chromium release build produced no chrome executable"
+  file "$out/chrome"
+  if command -v ldd >/dev/null 2>&1; then ! ldd "$out/chrome" 2>&1 | grep -q "not found"; fi
   mkdir -p "$ROOTFS_STAGE/opt/mirvkbuntu/chromium" "$ROOTFS_STAGE/usr/bin"
   cp -a "$out/." "$ROOTFS_STAGE/opt/mirvkbuntu/chromium/"
   printf "%s\n" "#!/usr/bin/env bash" "exec /opt/mirvkbuntu/chromium/chrome \"$@\"" > "$ROOTFS_STAGE/usr/bin/mirvkbuntu-chrome"
@@ -111,6 +113,7 @@ verify_native_output(){
   package_count="$(find "$ARTIFACT_ROOT/packages" -type f -name "*.deb" | wc -l)"
   [ "$executable_count" -gt 0 ] || die "native build produced no executable files"
   [ "$package_count" -gt 0 ] || die "native build produced no Debian packages"
+  for deb in "$ARTIFACT_ROOT/packages/"*.deb; do dpkg-deb --info "$deb" >/dev/null || die "invalid native Debian package: $deb"; done
   (cd "$ROOTFS_STAGE" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$ARTIFACT_ROOT/rootfs.sha256"
   sha256sum "$ARTIFACT_ROOT/rootfs.sha256" > "$ARTIFACT_ROOT/rootfs.sha256.digest"
 }
