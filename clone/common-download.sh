@@ -13,14 +13,42 @@ CLONE_RAW_DELAY="${CLONE_RAW_DELAY:-0}"
 # Maximum seconds to wait when a rate-limit reset is in the future.
 CLONE_MAX_BACKOFF="${CLONE_MAX_BACKOFF:-900}"
 
-# Prefer explicit tokens, then the token already stored by GitHub CLI.
-# This keeps large reconciliations from using GitHub's low unauthenticated API limit.
-if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
-  GH_AUTH_TOKEN="$(gh auth token 2>/dev/null || true)"
-  if [[ -n "$GH_AUTH_TOKEN" ]]; then
-    export GITHUB_TOKEN="$GH_AUTH_TOKEN"
+# Prefer explicit tokens, then any token already stored on the machine.
+# This keeps large reconciliations from using GitHub's low unauthenticated API
+# limit (60/hr by IP) instead of the authenticated 5000/hr.
+#
+# Discovery order (first hit wins):
+#   1. GITHUB_TOKEN / GH_TOKEN environment variables (left untouched if set)
+#   2. GITHUB_TOKEN_FILE -> a file containing just the token
+#   3. `gh auth token` (GitHub CLI, if installed and logged in)
+#   4. the GitHub CLI hosts config (~/.config/gh/hosts.yml), even if the `gh`
+#      binary is not installed -- common on build machines that only ran
+#      `gh auth login` once elsewhere or seeded the file directly
+if [[ -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
+  _clone_tok=""
+
+  if [[ -z "$_clone_tok" && -n "${GITHUB_TOKEN_FILE:-}" && -r "${GITHUB_TOKEN_FILE:-}" ]]; then
+    _clone_tok="$(tr -d ' \t\r\n' < "$GITHUB_TOKEN_FILE" 2>/dev/null || true)"
   fi
-  unset GH_AUTH_TOKEN
+
+  if [[ -z "$_clone_tok" ]] && command -v gh >/dev/null 2>&1; then
+    _clone_tok="$(gh auth token 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$_clone_tok" ]]; then
+    _gh_hosts="${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml"
+    if [[ -r "$_gh_hosts" ]]; then
+      # Extract "oauth_token:" (or "token:") under github.com without needing a
+      # YAML parser. Handles optional quotes and leading whitespace.
+      _clone_tok="$(sed -n 's/^[[:space:]]*\(oauth_token\|token\):[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\2/p' "$_gh_hosts" 2>/dev/null | head -1)"
+    fi
+    unset _gh_hosts
+  fi
+
+  if [[ -n "$_clone_tok" ]]; then
+    export GITHUB_TOKEN="$_clone_tok"
+  fi
+  unset _clone_tok
 fi
 
 # Authenticated GitHub API calls get 5000 requests/hour; unauthenticated only
