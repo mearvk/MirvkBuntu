@@ -65,6 +65,32 @@ write_package_list(){
   awk '!/^[[:space:]]*#/ && NF {print $1}' "${REPO_ROOT}/packages/basic-packages.txt" |
     sort -u > "${work_dir}/config/package-lists/${list_name}.list.chroot"
 }
+run_native_build(){
+  local native_script="$SCRIPT_DIR/native-build.sh"
+  [ -x "$native_script" ] || die "MirvkBuntu native compilation script missing or not executable: $native_script"
+  printf "build: compiling MirvkBuntu native components before live-build\n"
+  BUILD_ROOT="$BUILD_ROOT" ARCH="$ARCH" "$native_script"
+  [ -d "$BUILD_ROOT/native/rootfs" ] || die "native build completed without a rootfs staging tree"
+  [ -d "$BUILD_ROOT/native/artifacts/packages" ] || die "native build completed without native packages"
+}
+
+stage_native_outputs(){
+  local work_dir="$1"
+  local native_root="$BUILD_ROOT/native"
+  local include_root="$work_dir/config/includes.chroot"
+  local package_root="$work_dir/config/packages.chroot"
+  local deb
+  mkdir -p "$include_root" "$package_root"
+  [ -d "$native_root/rootfs" ] || die "native rootfs staging tree missing"
+  cp -a "$native_root/rootfs/." "$include_root/"
+  shopt -s nullglob
+  for deb in "$native_root/artifacts/packages/"*.deb; do cp -f "$deb" "$package_root/"; done
+  shopt -u nullglob
+  find "$package_root" -type f -name "*.deb" -print -quit | grep -q . || die "no native Debian packages staged for live-build"
+  mkdir -p "$work_dir/config/includes.chroot/etc/mirvkbuntu"
+  cp -f "$native_root/artifacts/release.env" "$work_dir/config/includes.chroot/etc/mirvkbuntu/native-release.env"
+  cp -f "$native_root/artifacts/rootfs.sha256" "$work_dir/config/includes.chroot/etc/mirvkbuntu/native-rootfs.sha256"
+}
 run_live_build(){
   local work_dir="$1"
   local log_file="${work_dir}/live-build.log"
