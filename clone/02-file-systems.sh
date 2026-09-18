@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+set -euo pipefail
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$BASH_SOURCE")" && pwd)"
 source "$SCRIPT_DIR/common-download.sh"
 clone_tree "file-systems" "$SCRIPT_DIR/../file-systems"
