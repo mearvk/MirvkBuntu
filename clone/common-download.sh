@@ -45,82 +45,71 @@ clone_tree() {
     return 1
   }
 
-  local tree_json
-  tree_json="$(wget -qO- "${API_ROOT}/git/trees/${SOURCE_REF}?recursive=1")" || {
-    die "cannot read source tree: ${SOURCE_REPO}@${SOURCE_REF}"
-    return 1
-  }
-
-  if ! jq -e 'type == "object" and (.tree | type == "array")' <<<"$tree_json" >/dev/null 2>&1; then
-    die "GitHub returned an invalid tree response for ${SOURCE_REPO}@${SOURCE_REF}"
-    return 1
-  fi
-
-  # A recursive repository tree can exceed GitHub's size limit. Do not abort:
-  # use the entries GitHub returned and download only missing files. Existing
-  # files remain untouched. A completion marker is intentionally not written
-  # for a truncated tree because the result may be incomplete.
-  local truncated=0
-  if jq -e '.truncated == true' <<<"$tree_json" >/dev/null 2>&1; then
-    truncated=1
-    printf 'clone: warning: GitHub returned a truncated tree; downloading available entries only: %s\n' "$source_path" >&2
-  fi
-
-  if ! jq -e --arg p "$source_path"     '.tree | any(.[]; .path == $p or (.path | startswith($p + "/")))'     <<<"$tree_json" >/dev/null; then
-    printf 'clone: source path not present in returned tree, skipping: %s\n' "$source_path"
-    return 0
-  fi
-
+  local failed=0
   local count=0
   local skipped=0
-  local failed=0
-  local path type relative target encoded
 
-  while IFS=$'\t' read -r path type; do
-    [[ "$type" == "blob" ]] || continue
-    [[ "$path" == "$source_path" || "$path" == "$source_path/"* ]] || continue
+  clone_directory() {
+    local remote_path="$1"
+    local local_directory="$2"
+    local listing entry_type entry_name entry_path target encoded
 
-    relative="${path#"$source_path"/}"
-    target="${destination}/${relative}"
-    if [[ "$path" == "$source_path" ]]; then
-      relative="$(basename "$path")"
-      target="${destination}/${relative}"
-    fi
-
-    encoded="$(url_encode_path "$path")" || {
-      failed=$((failed + 1))
-      continue
+    encoded="$(url_encode_path "$remote_path")" || return 1
+    listing="$(wget -qO- "${API_ROOT}/contents/${encoded}?ref=${SOURCE_REF}")" || {
+      printf 'clone: ERROR: cannot read source directory: %s\n' "$remote_path" >&2
+      return 1
     }
 
-    mkdir -p "$(dirname "$target")" || {
-      failed=$((failed + 1))
-      continue
-    }
-
-    # Never overwrite an existing file. This is deliberately checked before
-    # wget so an existing repository file cannot be truncated or replaced.
-    if [[ -e "$target" ]]; then
-      skipped=$((skipped + 1))
-      continue
+    if ! jq -e 'type == "array"' <<<"$listing" >/dev/null 2>&1; then
+      printf 'clone: ERROR: invalid directory response: %s\n' "$remote_path" >&2
+      return 1
     fi
 
-    printf 'clone: downloading %s\n' "$path"
-    if wget -q --show-progress -O "$target" "${RAW_ROOT}/${encoded}"; then
-      count=$((count + 1))
-    else
-      rm -f "$target"
-      failed=$((failed + 1))
-    fi
-  done < <(jq -r '.tree[] | [.path,.type] | @tsv' <<<"$tree_json")
+    while IFS=$'\t' read -r entry_type entry_name; do
+      [[ -n "$entry_name" ]] || continue
+      entry_path="${remote_path}/${entry_name}"
+      target="${local_directory}/${entry_name}"
 
-  if (( failed != 0 )); then
-    printf 'clone: %s failed downloads in %s\n' "$failed" "$source_path" >&2
-    return 1
+      case "$entry_type" in
+        dir)
+          mkdir -p "$target" || return 1
+          if ! clone_directory "$entry_path" "$target"; then
+            return 1
+          fi
+          ;;
+        file)
+          mkdir -p "$(dirname "$target")" || return 1
+
+          # Never overwrite an existing file. This check happens before wget.
+          if [[ -e "$target" ]]; then
+            skipped=$((skipped + 1))
+            continue
+          fi
+
+          encoded="$(url_encode_path "$entry_path")" || return 1
+          printf 'clone: downloading %s\n' "$entry_path"
+          if wget -q --show-progress -O "$target" "${RAW_ROOT}/${encoded}"; then
+            count=$((count + 1))
+          else
+            rm -f "$target"
+            printf 'clone: ERROR: failed download: %s\n' "$entry_path" >&2
+            return 1
+          fi
+          ;;
+        *)
+          # Ignore symlinks/submodules and other GitHub content types.
+          ;;
+      esac
+    done < <(jq -r '.[] | [.type,.name] | @tsv' <<<"$listing")
+  }
+
+  if ! clone_directory "$source_path" "$destination"; then
+    failed=1
   fi
 
-  if (( truncated == 1 )); then
-    printf 'clone: incomplete tree; no completion marker written: %s\n' "$source_path" >&2
-    return 0
+  if (( failed != 0 )); then
+    printf 'clone: incomplete clone: %s -> %s\n' "$source_path" "$destination" >&2
+    return 1
   fi
 
   touch "$marker" || return 1
