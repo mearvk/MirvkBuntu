@@ -14,7 +14,7 @@ lb config --distribution "$UBUNTU_SUITE" --architectures "$ARCH" --binary-images
 write_package_list "$WORK_DIR" mirvkbuntu-minimal
 stage_mirvkbuntu_source "$WORK_DIR"
 write_mirvkbuntu_manifest "$WORK_DIR"
-ISO_SOURCE="$(run_live_build "$WORK_DIR")"
+run_live_build "$WORK_DIR"
 ISO_SOURCE="$(find_iso "$WORK_DIR")"
 mkdir -p "$OUTPUT_ROOT"
 mv -f "$ISO_SOURCE" "$OUTPUT_ROOT/MirvkBuntu-minimal-${ARCH}.iso"
