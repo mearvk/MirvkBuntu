@@ -24,6 +24,16 @@ should_skip_path() {
       .gradle|.gradle-dist|node_modules|__pycache__|.idea|.git|.svn|.hg) return 0 ;;
     esac
   done
+
+  # Chromium carries repository-local agent/IDE metadata that is not required
+  # to build Chromium and can contain transient/generated directories.
+  case "$path" in
+    userland/chromium/chromium-src/.gemini|userland/chromium/chromium-src/.gemini/*)
+      return 0 ;;
+    userland/chromium/chromium-src/agents|userland/chromium/chromium-src/agents/*)
+      return 0 ;;
+    esac
+  done
   return 1
 }
 
@@ -79,7 +89,28 @@ clone_tree() {
   command -v wget >/dev/null 2>&1 || { die "wget is required"; return 1; }
   command -v jq >/dev/null 2>&1 || { die "jq is required"; return 1; }
   command -v sha1sum >/dev/null 2>&1 || { die "sha1sum is required"; return 1; }
-  mkdir -p "$destination"
+  mkdir -p "$destination" || {
+    die "cannot create destination directory: $destination"
+    return 1
+  }
+
+  # Verify the authoritative source path before creating/repairing a partial
+  # destination. This produces a clear error instead of a generic recursion
+  # failure when a path was renamed or removed upstream.
+  local source_check_tmp
+  source_check_tmp="$(mktemp)"
+  if ! github_api_wget "$source_check_tmp" "$API_ROOT/contents/$(url_encode_path "$source_path")?ref=$SOURCE_REF&per_page=1&page=1"; then
+    printf 'clone: ERROR: source path is unavailable: %s\n' "$source_path" >&2
+    [[ -s "$source_check_tmp" ]] && sed -n '1,12p' "$source_check_tmp" >&2
+    rm -f "$source_check_tmp"
+    return 1
+  fi
+  if ! jq -e 'type == "array" or type == "object"' "$source_check_tmp" >/dev/null 2>&1; then
+    printf 'clone: ERROR: invalid source response: %s\n' "$source_path" >&2
+    rm -f "$source_check_tmp"
+    return 1
+  fi
+  rm -f "$source_check_tmp"
 
   if [[ -f "$marker" ]]; then
     printf 'clone: already complete: %s -> %s\n' "$source_path" "$destination"
