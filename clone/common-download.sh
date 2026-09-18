@@ -17,8 +17,6 @@ url_encode_path() {
   printf '%s' "$1" | jq -sRr '@uri' | sed 's#%2F#/#g'
 }
 
-# Generated/cache content is intentionally excluded from source clones.
-# Match path components rather than arbitrary substrings.
 should_skip_path() {
   local path="$1"
   local component
@@ -31,6 +29,32 @@ should_skip_path() {
     esac
   done
   return 1
+}
+
+# GitHub's API is rate-limited for anonymous clients. Support either
+# GITHUB_TOKEN or GH_TOKEN without requiring credentials for public repos.
+github_api_wget() {
+  local output="$1"
+  local url="$2"
+  local user_agent="MirvkBuntu-clone/1.0"
+  local -a args=(
+    --timeout=30
+    --tries=3
+    --waitretry=2
+    --header="Accept: application/vnd.github+json"
+    --header="X-GitHub-Api-Version: 2022-11-28"
+    --header="User-Agent: ${user_agent}"
+    -qO "${output}"
+    "${url}"
+  )
+
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    args+=(--header="Authorization: Bearer ${GITHUB_TOKEN}")
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    args+=(--header="Authorization: Bearer ${GH_TOKEN}")
+  fi
+
+  wget "${args[@]}"
 }
 
 clone_tree() {
@@ -69,6 +93,7 @@ clone_tree() {
     local remote_path="$1"
     local local_directory="$2"
     local listing entry_type entry_name entry_path target encoded
+    local api_tmp
 
     if should_skip_path "$remote_path"; then
       printf 'clone: skipping generated/cache path: %s\n' "$remote_path"
@@ -76,14 +101,28 @@ clone_tree() {
       return 0
     fi
 
-    encoded="$(url_encode_path "$remote_path")" || return 1
-    listing="$(wget -qO- "${API_ROOT}/contents/${encoded}?ref=${SOURCE_REF}")" || {
-      printf 'clone: ERROR: cannot read source directory: %s\n' "$remote_path" >&2
+    api_tmp="$(mktemp)" || return 1
+    encoded="$(url_encode_path "$remote_path")" || {
+      rm -f "$api_tmp"
       return 1
     }
 
+    if ! github_api_wget "$api_tmp" "${API_ROOT}/contents/${encoded}?ref=${SOURCE_REF}"; then
+      printf 'clone: ERROR: cannot read source directory: %s\n' "$remote_path" >&2
+      if [[ -s "$api_tmp" ]]; then
+        printf 'clone: GitHub API response:\n' >&2
+        sed -n '1,8p' "$api_tmp" >&2
+      fi
+      rm -f "$api_tmp"
+      return 1
+    fi
+
+    listing="$(cat "$api_tmp")"
+    rm -f "$api_tmp"
+
     if ! jq -e 'type == "array"' <<<"$listing" >/dev/null 2>&1; then
       printf 'clone: ERROR: invalid directory response: %s\n' "$remote_path" >&2
+      printf '%s\n' "$listing" | sed -n '1,8p' >&2
       return 1
     fi
 
@@ -113,7 +152,7 @@ clone_tree() {
 
           encoded="$(url_encode_path "$entry_path")" || return 1
           printf 'clone: downloading %s\n' "$entry_path"
-          if wget -q --show-progress -O "$target" "${RAW_ROOT}/${encoded}"; then
+          if wget -q --show-progress --tries=3 --waitretry=2 -O "$target" "${RAW_ROOT}/${encoded}"; then
             count=$((count + 1))
           else
             rm -f "$target"
