@@ -13,6 +13,14 @@ ROOTFS_STAGE="${ROOTFS_STAGE:-$NATIVE_ROOT/rootfs}"
 JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"
 ARCH="${ARCH:-amd64}"
 
+# Live kernel selection. By default MirvkBuntu builds a SINGLE kernel series so a
+# build does not compile every source tree present. The default live series is
+# 5.15; override to pick another series/version or to build all trees:
+#   MIRVKBUNTU_KERNEL=5.15      -> build the newest 5.15.x tree present (default)
+#   MIRVKBUNTU_KERNEL=6.12.110  -> build exactly that version
+#   MIRVKBUNTU_KERNEL=all       -> build every kernel source tree found
+MIRVKBUNTU_KERNEL="${MIRVKBUNTU_KERNEL:-5.15}"
+
 die(){ printf "native-build: ERROR: %s\n" "$*" >&2; exit 1; }
 require(){ command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"; }
 for c in find sha256sum tar split make dpkg-deb; do require "$c"; done
@@ -54,6 +62,43 @@ is_kernel_root(){
   head -8 "$d/Makefile" 2>/dev/null | grep -qE '^PATCHLEVEL[[:space:]]*=' || return 1
   head -8 "$d/Makefile" 2>/dev/null | grep -qE '^SUBLEVEL[[:space:]]*=' || return 1
   return 0
+}
+
+# Select which of the discovered kernel roots to build, honoring
+# MIRVKBUNTU_KERNEL. Input: list of root dirs (…/linux-<version>/…). Output:
+# the selected root dir(s), one per line.
+#   all               -> every root
+#   <major.minor>      -> the newest linux-<major.minor>.* root present (series)
+#   <major.minor.patch>-> exactly that version if present
+# If the selection matches nothing, fall back to the newest root overall so a
+# build never silently produces zero kernels.
+select_kernel_roots(){
+  local sel="$MIRVKBUNTU_KERNEL" r ver
+  local -a all_roots=( "$@" )
+
+  if [ "$sel" = "all" ]; then
+    printf '%s\n' "${all_roots[@]}"
+    return 0
+  fi
+
+  # Map each root to its version (basename after "linux-"), pick matches.
+  local -a matches=()
+  for r in "${all_roots[@]}"; do
+    ver="$(basename "$r")"; ver="${ver#linux-}"
+    case "$ver" in
+      "$sel") matches+=( "$r" ) ;;                 # exact version
+      "$sel".*) matches+=( "$r" ) ;;               # series prefix (5.15 -> 5.15.204)
+    esac
+  done
+
+  if [ "${#matches[@]}" -eq 0 ]; then
+    log "kernel select: no root matches MIRVKBUNTU_KERNEL='$sel'; falling back to newest available" >&2
+    printf '%s\n' "${all_roots[@]}" | sort -t- -k2 -V | tail -1
+    return 0
+  fi
+
+  # If several match a series, pick the newest by version.
+  printf '%s\n' "${matches[@]}" | sort -t- -k2 -V | tail -1
 }
 
 # Find genuine kernel roots under a tree. Bounded depth + timeout watchdog like
@@ -148,7 +193,7 @@ scripts_config_set_str(){
 build_kernels(){
   local found=0 candidate src work deb name archive extract_root kernel_root makefile_count
   kernel_root="$REPO_ROOT/kernels"
-  log "Compiling every MirvkBuntu kernel source tree that is actually present."
+  log "Selecting MirvkBuntu kernel to build: MIRVKBUNTU_KERNEL=$MIRVKBUNTU_KERNEL (default 5.15; 'all' builds every tree)."
   log "native-build script directory: $SCRIPT_DIR"
   log "native-build repository root: $REPO_ROOT"
   log "native-build kernel source root: $kernel_root"
@@ -165,16 +210,27 @@ build_kernels(){
   # every Makefile and testing Kconfig+arch is unreliable: subtrees such as
   # Documentation/ also contain a Makefile + Kconfig + an "arch" entry and were
   # wrongly accepted. is_kernel_root() below is exact.
-  local candidate_count=0
+  # Collect every genuine kernel root, then SELECT which to build based on
+  # MIRVKBUNTU_KERNEL (default 5.15). This avoids compiling every tree present.
+  local -a roots=()
   while IFS= read -r src; do
     [ -n "$src" ] || continue
-    candidate_count=$((candidate_count + 1))
-    log "kernel discovery: candidate root: $src"
-    if ! is_kernel_root "$src"; then
+    if is_kernel_root "$src"; then
+      log "kernel discovery: accepted kernel root: $src"
+      roots+=( "$src" )
+    else
       log "kernel discovery: rejected (not a top-level kernel tree): $src"
-      continue
     fi
-    log "kernel discovery: accepted kernel root: $src"
+  done < <(kernel_find_roots "$kernel_root")
+
+  local -a selected=()
+  if [ "${#roots[@]}" -gt 0 ]; then
+    selected=( $(select_kernel_roots "${roots[@]}") )
+  fi
+
+  local src work name deb
+  for src in "${selected[@]}"; do
+    [ -n "$src" ] || continue
     found=1
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
@@ -189,9 +245,11 @@ build_kernels(){
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(kernel_find_roots "$kernel_root")
+  done
 
-  while IFS= read -r archive; do
+  # Archive fallback: only if no on-disk kernel source tree was already built.
+  # (Extracted source trees are preferred and honor MIRVKBUNTU_KERNEL above.)
+  while [ "$found" -eq 0 ] && IFS= read -r archive; do
     [ -n "$archive" ] || continue
     extract_root="$NATIVE_ROOT/kernel-archives/$(basename "$archive")"
     rm -rf "$extract_root"
