@@ -164,6 +164,25 @@ bash gnome-source/pull-all-source.sh
 sudo bash build/build-slim.sh            # -> build/output/MirvkBuntu-slim-amd64.iso
 ```
 
+## Using `make`
+
+A top-level `Makefile` wraps the build scripts with ordered, discoverable
+targets (run `make help` for the full list). The scripts remain authoritative;
+`make` is just convenience. Common flow:
+
+```bash
+sudo make prereqs      # install host build tooling (native path)
+make sources           # fetch kernel + GNOME source (kernels + gnome-source)
+sudo make slim         # build the slim ISO   (or: sudo make desktop / minimal)
+```
+
+Other targets: `make kernels`, `make gnome-source`, `make native`,
+`make chromium`, `make bootstrap`, `make remaster ISO=/path/to/ubuntu.iso`,
+`make clean`, `make distclean`. Build flags pass straight through
+(see [`build/BUILD.FLAGS.md`](build/BUILD.FLAGS.md)), e.g.
+`sudo make slim JOBS=8 BUILD_SKIP_CHROMIUM=1`. Module directories (`build/`,
+`gnome-source/`, `kernels/`) each have their own `Makefile` too.
+
 ## Build Order
 
 Both the main OS ISO and the Slim OS ISO are built from MirvkBuntu's own source.
