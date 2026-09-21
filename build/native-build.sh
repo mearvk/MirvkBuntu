@@ -163,6 +163,15 @@ kernel_find_archives(){
 configure_kernel(){
   local work="$1" cfgtool="$work/scripts/config"
   log "kernel: using kernel ARCH=$KARCH (from Debian ARCH=$ARCH)"
+  # Establish a base .config FROM THIS TREE'S OWN defconfig. This is critical:
+  # if no .config exists, the kernel's kconfig will fall back to
+  # /boot/config-$(uname -r) -- the HOST's running kernel config (e.g. 6.8) --
+  # and applying that to a 5.15 tree produces the "symbol value 'm' invalid" and
+  # "override: SQUASHFS_DECOMP_MULTI" warnings from mismatched options. Starting
+  # from the tree's defconfig keeps the config version-correct.
+  rm -f "$work/.config"
+  # KCONFIG_ALLCONFIG= (empty) prevents any external all.config from leaking in.
+  make -C "$work" ARCH="$KARCH" KCONFIG_ALLCONFIG= defconfig
   make -C "$work" ARCH="$KARCH" olddefconfig
   if [ -x "$cfgtool" ]; then
     log "kernel: applying MirvkBuntu live-ISO config options"
