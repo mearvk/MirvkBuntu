@@ -26,6 +26,7 @@ MirvkBuntu/
 │   └── README.md
 ├── sources/                # Source working area (main, modules, libraries, scripts)
 ├── scripts/                # Helper scripts
+├── synchro/                # Synchro: measured low-latency packet dispatch layer
 ├── build/                  # Build outputs and manifests
 ├── docs/                   # Documentation
 ├── model/                  # Model/reference material
@@ -238,6 +239,30 @@ with a 400 MB writable overlay:
 
 The only difference between the two ISOs is step 4's script
 (`build-desktop.sh` vs `build-slim.sh`); steps 1–3 are identical.
+
+## Synchro — measured low-latency packet dispatch
+
+The [`synchro/`](synchro/) package is a self-contained networking layer for
+timestamped packet dispatch and **measurement** of real per-destination latency.
+It sends probes, matches replies, and reports the observed distribution
+(min / p50 / p95 / p99, jitter, loss), plus an SLA-style report of the *measured*
+fraction of destinations and samples that met a latency threshold.
+
+- **`UdpDispatcher`** — timestamped UDP send/ack RTT measurement (`monotonic_ns`).
+- **`LatencyStats`** — streaming per-destination percentiles, jitter, and loss.
+- **`SlaReporter`** — measured `% of hosts/samples ≤ T ms` at a chosen percentile.
+- **`@synchro` annotation + `load_backend`** — a networking backend that is
+  imported and constructed lazily, on the first call (dynamic backend loading).
+- **`MeteredHttp2Client` + `RateMeter`** — token-bucket-paced ("metered")
+  HTTP/2 egress, suited to large or cross-region ("international") dataset
+  transfers.
+
+Synchro reports **measured** latency, not delivery-time guarantees: the
+speed of light (~200 km/ms in fiber) and the best-effort nature of the Internet
+make a fixed sub-10 ms guarantee to arbitrary destinations physically
+impossible, so precision is expressed as an empirical, per-run figure. See
+[`synchro/README.md`](synchro/README.md) for the API, the CLI
+(`python -m synchro.cli`), and a measured loopback example.
 
 ## Relationship to Ubuntu.Determinant.Beta.Restricted
 
