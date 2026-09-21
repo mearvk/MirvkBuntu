@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synchro"
+version = "0.1.0"
+description = "Honest low-latency packet dispatch and measurement layer for MirvkBuntu"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+http2 = ["httpx[http2]>=0.27"]
+test = ["pytest>=7"]
+
+[project.scripts]
+synchro = "synchro.cli:main"
+
+[tool.setuptools]
+packages = ["synchro"]
