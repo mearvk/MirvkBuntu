@@ -109,9 +109,13 @@ prereqs-remaster:
 # ---- setup: sources (stamped so they run once) ------------------------------
 sources: kernels gnome-source
 
+# 'kernels' ensures kernel source is present. kernels/git.sh already skips the
+# download when a complete tree exists on disk (build what we have), and only
+# fetches when nothing is present or KERNEL_VERSIONS is given explicitly. Force
+# a (re)download with:  make kernels KERNEL_FORCE_FETCH=1
 kernels: $(KERNELS_STAMP)
 $(KERNELS_STAMP):
-	bash "$(ROOT)/kernels/git.sh" $(KERNEL_VERSIONS)
+	KERNEL_FORCE_FETCH="$(KERNEL_FORCE_FETCH)" bash "$(ROOT)/kernels/git.sh" $(KERNEL_VERSIONS)
 	@mkdir -p "$(STAMP_DIR)" && touch "$@"
 
 gnome-source: $(GNOME_STAMP)

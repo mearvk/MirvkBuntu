@@ -58,6 +58,7 @@ Consumed by `build/bootstrap-native.sh` (fetches kernel source, then runs
 | Flag | Default | Purpose |
 |------|---------|---------|
 | `MIRVKBUNTU_KERNEL_VERSIONS` | `6.12.110` | Kernel version(s) to fetch if none present. |
+| `KERNEL_FORCE_FETCH` | `0` | Set `1` to download kernel source even when complete source already exists on disk. By default, if kernel source is present it is built, not re-downloaded. |
 | `BUILD_SKIP_KERNELS` | `0` | Skip fetching + compiling the kernel. |
 
 ## 4. Slim edition

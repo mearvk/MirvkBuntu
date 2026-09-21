@@ -60,8 +60,32 @@ download_kernel() {
 # downloadable versions; pass explicit versions on the command line to override.
 # (Previous defaults 6.18.27 / 6.19.14 / 7.0.4 were not published on kernel.org
 # and caused every download to 404, leaving the native build with no source.)
+# Detect whether at least one COMPLETE kernel source tree is already on disk
+# (top-level Makefile + Kconfig + arch/). If so, we do not need to download.
+have_complete_kernel_source() {
+  local d
+  for d in "$KERNEL_ROOT"/linux-*/linux-*/ "$KERNEL_ROOT"/linux-*/; do
+    [ -d "$d" ] || continue
+    if [ -f "$d/Makefile" ] && [ -f "$d/Kconfig" ] && [ -d "$d/arch" ] && [ -d "$d/init" ]; then
+      printf '%s\n' "${d%/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 versions=( "$@" )
 if [ "${#versions[@]}" -eq 0 ]; then
+  # No explicit versions requested. If real kernel source is already present,
+  # BUILD what we have -- do not download anything. Set KERNEL_FORCE_FETCH=1 to
+  # fetch the default set anyway.
+  if [ "${KERNEL_FORCE_FETCH:-0}" != "1" ] && have_complete_kernel_source >/dev/null; then
+    printf 'kernel-git: complete kernel source already present; skipping download.\n'
+    printf 'kernel-git: existing complete source tree(s):\n'
+    have_complete_kernel_source
+    rm -rf "$DOWNLOAD_DIR"
+    exit 0
+  fi
   versions=(6.12.110 6.6.157 5.15.204)
 fi
 
