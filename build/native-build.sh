@@ -113,26 +113,29 @@ build_kernels(){
     die "no complete MirvkBuntu-supplied kernel source found under $kernel_root; build/native-build.sh resolves the repository root as the parent of build/ and refuses a distribution-kernel fallback"
   fi
 }
+# Canonical Chromium source root and its authoritative build script. Pinning to
+# userland/chromium/chromium-src avoids matching nested chrome/BUILD.gn fixtures
+# (e.g. base/tracing/stdlib/chrome/BUILD.gn) that are not the real source tree.
+CHROMIUM_SRC_ROOT="$REPO_ROOT/userland/chromium/chromium-src"
+CHROMIUM_BUILD_SCRIPT="$REPO_ROOT/build/chromium/build-chromium.sh"
+
 build_chromium(){
-  local marker src out
-  marker="$(find "$REPO_ROOT/sources" "$REPO_ROOT/userland" "$REPO_ROOT/user-interface" "$REPO_ROOT/gnome-source" -type f -path "*/chrome/BUILD.gn" -print -quit 2>/dev/null || true)"
-  [ -n "$marker" ] || die "Chromium/Chrome source not found; refusing a distro-browser fallback"
-  src="$(dirname "$(dirname "$marker")")"
-  require gn
-  require autoninja
-  if command -v gclient >/dev/null 2>&1 && [ -f "$src/../.gclient" ]; then (cd "$src/.." && gclient runhooks); fi
-  out="$NATIVE_ROOT/chromium/out/MirvkBuntuRelease"
-  mkdir -p "$(dirname "$out")"
-  printf "%s\n" "is_debug = false" "symbol_level = 0" "blink_symbol_level = 0" "use_siso = true" "is_official_build = false" > "$out.args.gn"
-  (cd "$src" && gn gen "$out" --args="$(tr "\n" " " < "$out.args.gn")")
-  (cd "$src" && autoninja -C "$out" chrome)
-  [ -x "$out/chrome" ] || die "Chromium release build produced no chrome executable"
-  file "$out/chrome"
-  if command -v ldd >/dev/null 2>&1; then ! ldd "$out/chrome" 2>&1 | grep -q "not found"; fi
-  mkdir -p "$ROOTFS_STAGE/opt/mirvkbuntu/chromium" "$ROOTFS_STAGE/usr/bin"
-  cp -a "$out/." "$ROOTFS_STAGE/opt/mirvkbuntu/chromium/"
-  printf "%s\n" "#!/usr/bin/env bash" "exec /opt/mirvkbuntu/chromium/chrome \"$@\"" > "$ROOTFS_STAGE/usr/bin/mirvkbuntu-chrome"
-  chmod 0755 "$ROOTFS_STAGE/usr/bin/mirvkbuntu-chrome"
+  # Validate the pinned source root is the real Chromium tree (not a fixture).
+  [ -f "$CHROMIUM_SRC_ROOT/DEPS" ] && [ -f "$CHROMIUM_SRC_ROOT/BUILD.gn" ] && [ -f "$CHROMIUM_SRC_ROOT/chrome/BUILD.gn" ] \
+    || die "Chromium source not found at $CHROMIUM_SRC_ROOT (expected DEPS + BUILD.gn + chrome/BUILD.gn); refusing a distro-browser fallback"
+  [ -x "$CHROMIUM_BUILD_SCRIPT" ] || die "authoritative Chromium build script missing or not executable: $CHROMIUM_BUILD_SCRIPT"
+
+  # Delegate to the single authoritative build. It bootstraps depot_tools,
+  # syncs, does a release build, and installs into DESTDIR (the rootfs staging
+  # tree) as /opt/mirvkbuntu/chromium + a /usr/bin launcher.
+  log "chromium: delegating to $CHROMIUM_BUILD_SCRIPT"
+  DESTDIR="$ROOTFS_STAGE" PREFIX=/usr JOBS="$JOBS" \
+    CHROMIUM_SRC="$CHROMIUM_SRC_ROOT" \
+    CHROMIUM_OUT="$NATIVE_ROOT/chromium/out/MirvkBuntuRelease" \
+    "$CHROMIUM_BUILD_SCRIPT"
+
+  [ -x "$ROOTFS_STAGE/opt/mirvkbuntu/chromium/chrome" ] \
+    || die "Chromium build did not stage a chrome executable into the rootfs"
 }
 
 build_gnome(){
@@ -150,6 +153,12 @@ build_other_native_projects(){
   for base in "$REPO_ROOT/sources" "$REPO_ROOT/userland" "$REPO_ROOT/user-interface"; do
     [ -d "$base" ] || continue
     while IFS= read -r -d "" dir; do
+      # Chromium is owned by the dedicated build_chromium stage; skip it here so
+      # it is never built twice (its build.sh delegates to the same script).
+      case "$dir" in
+        "$REPO_ROOT/userland/chromium"|"$REPO_ROOT/userland/chromium"/*)
+          continue ;;
+      esac
       if [ -x "$dir/build.sh" ]; then
         log "native project wrapper: $dir/build.sh"
         DESTDIR="$ROOTFS_STAGE" JOBS="$JOBS" MIRVKBUNTU_RELEASE=true "$dir/build.sh"

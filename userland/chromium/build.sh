@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
-# Chromium White Edition top-level build entry point.
 set -euo pipefail
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-DEPOT_TOOLS=${DEPOT_TOOLS:-"$SCRIPT_DIR/depot_tools"}
-export DEPOT_TOOLS
-export PATH="$DEPOT_TOOLS:$PATH"
+# Chromium native build wrapper (MirvkBuntu).
+#
+# This is a thin wrapper that delegates to the authoritative release build at
+# build/chromium/build-chromium.sh. The MirvkBuntu native gate
+# (build/native-build.sh -> build_other_native_projects) invokes this script
+# with DESTDIR / JOBS / MIRVKBUNTU_RELEASE set, and expects a release build
+# staged into DESTDIR. Keeping the logic in one place avoids a second,
+# conflicting (debug) build pass.
+#
+# Legacy "White Edition" developer build:
+#   The previous debug build wrapper is still available for interactive
+#   development via:  ./build.sh white-edition [check|gen|build|test]
+#
+# Usage:
+#   ./build.sh                       # release build (honors DESTDIR/JOBS)
+#   DESTDIR=/rootfs JOBS=8 ./build.sh
+#   ./build.sh white-edition build   # legacy debug developer build
 
-# The depot_tools checkout may contain the GN resolver before its managed
-# bootstrap has completed. Initialize it before invoking the build wrapper.
-if [ ! -f "$DEPOT_TOOLS/python3_bin_reldir.txt" ]; then
-    [ -d "$DEPOT_TOOLS/.git" ] || "$SCRIPT_DIR/install-gn.sh"
-    [ -x "$DEPOT_TOOLS/gclient" ] || "$SCRIPT_DIR/install-gn.sh"
-    (cd "$DEPOT_TOOLS" && ./gclient --version >/dev/null 2>&1 || true)
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/../.." && pwd)"
+AUTHORITATIVE="${REPO_ROOT}/build/chromium/build-chromium.sh"
+
+if [ "${1:-}" = "white-edition" ]; then
+  shift
+  exec "${SCRIPT_DIR}/http-3.0/build-white-edition.sh" "$@"
 fi
 
-# Refresh depot_tools when its updater is available. Do not require an exact
-# number of GN entries: standalone GN installations are valid too.
-if [ -x "$DEPOT_TOOLS/update_depot_tools" ]; then
-    (cd "$DEPOT_TOOLS" && ./update_depot_tools) || true
-fi
+[ -x "$AUTHORITATIVE" ] || { printf 'chromium build.sh: ERROR: missing %s\n' "$AUTHORITATIVE" >&2; exit 1; }
 
-# Resolve GN after bootstrap. Running gn --version is the authoritative test.
-if ! command -v gn >/dev/null 2>&1 || ! gn --version >/dev/null 2>&1; then
-    "$SCRIPT_DIR/install-gn.sh"
-    export PATH="$DEPOT_TOOLS:$PATH"
-fi
-
-exec "$SCRIPT_DIR/http-3.0/build-white-edition.sh" "$@"
+# Delegate. DESTDIR/JOBS/PREFIX/etc. pass through the environment unchanged.
+exec "$AUTHORITATIVE" "$@"

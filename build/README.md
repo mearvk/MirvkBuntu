@@ -135,6 +135,7 @@ is still being populated, use the `BUILD_SKIP_*` flags for a partial build.
 - `bootstrap-native.sh`: path B — fetch kernel source, then run the native build.
 - `build-slim.sh`: slim edition — full OS to RAM, boots to GNOME (native path).
 - `native-build.sh`: the native compilation gate (kernel/GNOME/Chromium).
+- `chromium/build-chromium.sh`: authoritative Chromium release build (see below).
 - `build-minimal.sh`: minimum bootable development image (native path).
 - `build-desktop.sh`: desktop development image (native path).
 - `build-iso.sh`: convenience entry point for the desktop ISO.
@@ -150,6 +151,31 @@ module. Run it once (needs network) before a native/slim build:
 bash gnome-source/pull-all-source.sh            # all desktop-required modules
 bash gnome-source/pull-all-source.sh glib gtk   # a subset
 ```
+
+## Building Chromium
+
+Chromium is built from the vendored source at `userland/chromium/chromium-src/`
+by the single authoritative script `build/chromium/build-chromium.sh` (see
+[`build/chromium/README.md`](chromium/README.md)). It bootstraps `depot_tools`,
+runs `gclient sync`/`runhooks`, does a release build of the `chrome` target, and
+installs `/opt/mirvkbuntu/chromium/` plus a `mirvkbuntu-chrome` launcher into
+`DESTDIR`.
+
+Both the native gate (`native-build.sh` → `build_chromium`) and the wrapper
+`userland/chromium/build.sh` delegate to this one script, so there is exactly
+one release build. `build_chromium` pins the source to `chromium-src` (so nested
+`chrome/BUILD.gn` fixtures are never mistaken for the real root) and the gate
+skips `userland/chromium` in its generic project pass to avoid a double build.
+
+Standalone:
+
+```bash
+sudo bash build/chromium/build-chromium.sh                 # install to system
+DESTDIR=/path/to/rootfs JOBS=8 bash build/chromium/build-chromium.sh
+```
+
+Chromium needs ~16 GB RAM, ~100 GB disk, and a multi-hour build; skip it with
+`BUILD_SKIP_CHROMIUM=1` for a faster partial build.
 
 ## Output
 
