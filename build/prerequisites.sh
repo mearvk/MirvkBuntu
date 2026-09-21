@@ -60,22 +60,103 @@ NATIVE_PACKAGES=(
   debootstrap
   squashfs-tools
   xorriso
-  # native compilation gate toolchain
+
+  # --- generic build toolchain -------------------------------------------
   build-essential
+  dpkg-dev
+  fakeroot
+  pkg-config
+  meson
+  ninja-build
+  cmake
+  git
+  python3
+  python3-pip
+  python3-setuptools
+
+  # --- Linux kernel build (bindeb-pkg) -----------------------------------
   bc
   bison
   flex
   libelf-dev
   libssl-dev
-  dpkg-dev
-  fakeroot
   kmod
   cpio
   zstd
-  meson
-  ninja-build
-  cmake
-  pkg-config
+  dwarves            # pahole, required by modern kernels for BTF
+  rsync
+  libncurses-dev     # menuconfig / config tooling
+
+  # --- GObject introspection + docs tooling used across GNOME ------------
+  gobject-introspection
+  libgirepository1.0-dev
+  gettext
+  libxml2-utils
+  python3-gi
+  sassc
+
+  # --- GLib -------------------------------------------------------------
+  libpcre2-dev
+  libffi-dev
+  zlib1g-dev
+  libmount-dev
+  libselinux1-dev
+
+  # --- cairo / pango / gdk-pixbuf ---------------------------------------
+  libfontconfig1-dev
+  libfreetype-dev
+  libharfbuzz-dev
+  libpng-dev
+  libjpeg-dev
+  libtiff-dev
+  libpixman-1-dev
+  libfribidi-dev
+
+  # --- GTK --------------------------------------------------------------
+  libepoxy-dev
+  libxkbcommon-dev
+  libwayland-dev
+  wayland-protocols
+  libgraphene-1.0-dev
+  libgstreamer-plugins-base1.0-dev
+  libcups2-dev
+  libcolord-dev
+
+  # --- X / GL used by GTK, mutter --------------------------------------
+  libx11-dev
+  libxext-dev
+  libxi-dev
+  libxrandr-dev
+  libxcursor-dev
+  libxdamage-dev
+  libxfixes-dev
+  libxcomposite-dev
+  libxkbfile-dev
+  libgl1-mesa-dev
+  libegl1-mesa-dev
+  libgbm-dev
+  libdrm-dev
+
+  # --- mutter / gnome-shell --------------------------------------------
+  libwayland-egl-backend-dev
+  libinput-dev
+  libudev-dev
+  libsystemd-dev
+  libgnome-desktop-3-dev
+  libgudev-1.0-dev
+  libpolkit-gobject-1-dev
+  gjs
+  libgjs-dev
+  libstartup-notification0-dev
+  libxcb1-dev
+  libxcb-randr0-dev
+
+  # --- glib-networking / gvfs ------------------------------------------
+  libgnutls28-dev
+  libproxy-dev
+  libgcr-4-dev
+  libsecret-1-dev
+  libsoup-3.0-dev
 )
 
 packages=( "${COMMON_PACKAGES[@]}" )

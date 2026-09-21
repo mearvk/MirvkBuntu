@@ -38,6 +38,8 @@ build). Skips are logged and recorded in `/etc/mirvkbuntu/native-release.env`;
 | `BUILD_SKIP_GNOME` | `0` | Set `1` to skip the GNOME stack. |
 | `BUILD_SKIP_OTHER` | `0` | Set `1` to skip other native project wrappers. |
 | `JOBS` | CPU count | Build parallelism (`make`/`ninja`/`meson`). |
+| `KERNEL_FIND_MAXDEPTH` | `8` | Max depth for kernel-source discovery under `kernels/`. |
+| `KERNEL_FIND_TIMEOUT` | `120` | Watchdog (seconds) for kernel discovery; fails cleanly instead of hanging. |
 | `BUILD_ROOT` | `build/work` | Working directory. |
 | `NATIVE_ROOT` | `$BUILD_ROOT/native` | Native build root. |
 | `ARTIFACT_ROOT` | `$NATIVE_ROOT/artifacts` | Native artifact output (.deb, manifests). |
