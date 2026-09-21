@@ -21,7 +21,8 @@ ROOT  := $(CURDIR)
 KERNEL_VERSIONS ?=
 
 .PHONY: all help prereqs prereqs-remaster kernels gnome-source chromium \
-        sources native desktop slim minimal iso remaster bootstrap clean distclean
+        sources native desktop slim minimal iso remaster bootstrap \
+        packages packages-clean clean distclean
 
 all: help
 
@@ -46,6 +47,7 @@ help:
 	@echo "  Components:"
 	@echo "    make native            Run the native compilation gate only"
 	@echo "    make chromium          Build Chromium only (DESTDIR=... to install)"
+	@echo "    make packages          Build the compilable packages (installer)"
 	@echo ""
 	@echo "  Housekeeping:"
 	@echo "    make clean             Remove build/work and build/output"
@@ -75,6 +77,13 @@ native:
 
 chromium:
 	bash "$(ROOT)/build/chromium/build-chromium.sh"
+
+# Build the compilable subprojects under packages/ (installer, etc.).
+packages:
+	$(MAKE) -C "$(ROOT)/packages" all
+
+packages-clean:
+	$(MAKE) -C "$(ROOT)/packages" clean
 
 # ---- ISO builds -------------------------------------------------------------
 desktop:
