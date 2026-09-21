@@ -1,0 +1,772 @@
+# Orca
+#
+# Copyright 2005-2009 Sun Microsystems Inc.
+# Copyright 2011-2023 Igalia, S.L.
+# Copyright 2023 GNOME Foundation Inc.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-lines
+
+"""Provides Orca-controlled navigation for tabular content."""
+
+from __future__ import annotations
+
+import functools
+from typing import TYPE_CHECKING
+
+from . import (
+    command_manager,
+    dbus_service,
+    debug,
+    focus_manager,
+    gsettings_registry,
+    guilabels,
+    input_event,
+    input_event_manager,
+    messages,
+    presentation_manager,
+    speech_presenter,
+    table_navigator_command_definitions,
+)
+from .ax_object import AXObject
+from .ax_table import AXTable
+from .ax_utilities import AXUtilities
+from .ax_utilities_text import CaretSetReason
+from .extension import Extension
+
+if TYPE_CHECKING:
+    import gi
+
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+
+    from .command import Command
+    from .input_event import InputEvent
+    from .scripts import default
+
+
+@gsettings_registry.get_registry().gsettings_schema(
+    "org.gnome.Orca.TableNavigation",
+    name="table-navigation",
+)
+class TableNavigator(Extension):
+    """Provides Orca-controlled navigation for tabular content."""
+
+    _SCHEMA = "table-navigation"
+    KEY_ENABLED = "enabled"
+    KEY_SKIP_BLANK_CELLS = "skip-blank-cells"
+
+    def _get_setting(self, key: str, default: bool) -> bool:
+        """Returns the dconf value for key, or default if not in dconf."""
+
+        return gsettings_registry.get_registry().layered_lookup(
+            self._SCHEMA,
+            key,
+            "b",
+            default=default,
+        )
+
+    GROUP_LABEL = guilabels.KB_GROUP_TABLE_NAVIGATION
+
+    def __init__(self) -> None:
+        self._previous_reported_row: int | None = None
+        self._previous_reported_col: int | None = None
+        self._last_input_event: InputEvent | None = None
+        super().__init__()
+
+    @staticmethod
+    def navigation_command(func):
+        """Decorator that logs the command, records the input event, and returns True."""
+
+        @functools.wraps(func)
+        def wrapper(self, script, event=None, notify_user=True) -> bool:
+            tokens = [
+                "TABLE NAVIGATOR:",
+                func,
+                "\nScript:",
+                script,
+                "\nEvent:",
+                event,
+                "\nnotify_user:",
+                notify_user,
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            self.set_last_input_event(event)
+            func(self, script, notify_user)
+            return True
+
+        return wrapper
+
+    def set_last_input_event(self, event: InputEvent | None) -> None:
+        """Records the input event associated with the most recent navigation command."""
+
+        self._last_input_event = event
+
+    def last_input_event_was_navigation_command(self) -> bool:
+        """Returns true if the last input event was a navigation command."""
+
+        if self._last_input_event is None:
+            return False
+
+        manager = input_event_manager.get_manager()
+        result = manager.last_event_equals_or_is_release_for_event(self._last_input_event)
+        if self._last_input_event is not None:
+            string = self._last_input_event.as_single_line_string()
+        else:
+            string = "None"
+
+        tokens = [
+            "TABLE NAVIGATOR: Last navigation event (",
+            string,
+            ") is last input event:",
+            result,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    def _get_commands(self) -> list[Command]:
+        return table_navigator_command_definitions.get_commands(self)
+
+    @dbus_service.command
+    def toggle_enabled(
+        self,
+        script: default.Script,
+        event: input_event.InputEvent | None = None,
+        notify_user: bool = True,
+    ) -> bool:
+        """Toggles table navigation."""
+
+        tokens = [
+            "TABLE NAVIGATOR: toggle_enabled. Script:",
+            script,
+            "Event:",
+            event,
+            "notify_user:",
+            notify_user,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        enabled = not command_manager.get_manager().is_group_enabled(
+            guilabels.KB_GROUP_TABLE_NAVIGATION,
+        )
+
+        if notify_user:
+            if enabled:
+                presentation_manager.get_manager().present_message(
+                    messages.TABLE_NAVIGATION_ENABLED,
+                )
+            else:
+                presentation_manager.get_manager().present_message(
+                    messages.TABLE_NAVIGATION_DISABLED,
+                )
+
+        self.set_is_enabled(enabled)
+        return True
+
+    def _is_blank(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is empty or consists of only whitespace."""
+
+        if AXUtilities.is_focusable(obj):
+            tokens = ["TABLE NAVIGATOR:", obj, "is not blank: it is focusable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        if AXObject.get_name(obj):
+            tokens = ["TABLE NAVIGATOR:", obj, "is not blank: it has a name"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        if AXObject.get_child_count(obj):
+            for child in AXObject.iter_children(obj):
+                if not self._is_blank(child):
+                    tokens = ["TABLE NAVIGATOR:", obj, "is not blank:", child, "is not blank"]
+                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                    return False
+            return True
+
+        if not AXUtilities.is_whitespace_or_empty(obj):
+            tokens = ["TABLE NAVIGATOR:", obj, "is not blank: it has text"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = ["TABLE NAVIGATOR: Treating", obj, "as blank"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return True
+
+    def _get_current_cell(self) -> Atspi.Accessible:
+        """Returns the current cell."""
+
+        cell = focus_manager.get_manager().get_locus_of_focus()
+
+        # We might have nested cells. So far this has only been seen in Gtk, where the
+        # parent of a table cell is also a table cell. From the user's perspective, we
+        # are on the parent. This check also covers Writer documents in which the caret
+        # is likely in a paragraph child of the cell.
+        parent = AXObject.get_parent(cell)
+        if AXUtilities.is_table_cell_or_header(parent):
+            cell = parent
+
+        # And we might instead be in some deeply-nested elements which display text in
+        # a web table, so we do one more check.
+        if not AXUtilities.is_table_cell_or_header(cell):
+            cell = AXUtilities.find_ancestor(cell, AXUtilities.is_table_cell_or_header)
+
+        tokens = ["TABLE NAVIGATOR: Current cell is", cell]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return cell
+
+    def _get_cell_coordinates(self, cell: Atspi.Accessible) -> tuple:
+        """Returns the coordinates of cell, possibly adjusted for linear movement."""
+
+        row, col = AXTable.get_cell_coordinates(cell, prefer_attribute=False)
+        if self._previous_reported_row is None or self._previous_reported_col is None:
+            return row, col
+
+        # If we're in a cell that spans multiple rows and/or columns, the coordinates will refer to
+        # the upper left cell in the spanned range(s). We're storing the last row and column that
+        # we presented in order to facilitate more linear movement. Therefore, if the cell at the
+        # stored coordinates is the same as cell, we prefer the stored coordinates.
+        last_cell = AXTable.get_cell_at(
+            AXUtilities.get_table(cell),
+            self._previous_reported_row,
+            self._previous_reported_col,
+        )
+        if last_cell == cell:
+            return self._previous_reported_row, self._previous_reported_col
+
+        return row, col
+
+    def _vertical_cell_skipping_holes(
+        self, current: Atspi.Accessible, descending: bool
+    ) -> Atspi.Accessible | None:
+        """Returns the nearest real cell above or below current, skipping holes in the column."""
+
+        table = AXUtilities.get_table(current)
+        if table is None:
+            return None
+
+        row, col = AXTable.get_cell_coordinates(current, prefer_attribute=False)
+        if descending:
+            row += AXTable.get_cell_spans(current, prefer_attribute=False)[0]
+            stop, step = AXTable.get_row_count(table, prefer_attribute=False), 1
+        else:
+            row -= 1
+            stop, step = -1, -1
+
+        while row != stop:
+            if (cell := AXTable.get_cell_at(table, row, col)) is not None:
+                return cell
+            row += step
+
+        return None
+
+    def _horizontal_cell_skipping_holes(
+        self, current: Atspi.Accessible, rightward: bool
+    ) -> Atspi.Accessible | None:
+        """Returns the nearest real cell beside current, skipping holes in its own row."""
+
+        table = AXUtilities.get_table(current)
+        if table is None:
+            return None
+
+        row, col = AXTable.get_cell_coordinates(current, prefer_attribute=False)
+        row_span, col_span = AXTable.get_cell_spans(current, prefer_attribute=False)
+        col = col + col_span if rightward else col - 1
+        last_row = row + row_span
+
+        # A cell that spans rows but sits alone in its own row has only holes beside it; its real
+        # neighbors live in the lower rows its rowspan covers.
+        while row < last_row:
+            if (cell := AXTable.get_cell_at(table, row, col)) is not None:
+                return cell
+            row += 1
+
+        return None
+
+    @dbus_service.command
+    @navigation_command
+    def move_left(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the cell on the left."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_start_of_row(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_ROW_BEGINNING)
+            return
+
+        row, col = self._get_cell_coordinates(current)
+        cell = AXTable.get_cell_on_left(current)
+
+        if self.get_skip_blank_cells():
+            while cell and self._is_blank(cell) and not AXTable.is_start_of_row(cell):
+                cell = AXTable.get_cell_on_left(cell)
+
+        if cell is None:
+            cell = self._horizontal_cell_skipping_holes(current, rightward=False)
+
+        if cell is not None:
+            row, col = AXTable.get_cell_coordinates(cell, prefer_attribute=False)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_right(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the cell on the right."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_end_of_row(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_ROW_END)
+            return
+
+        row, col = self._get_cell_coordinates(current)
+        cell = AXTable.get_cell_on_right(current)
+
+        if self.get_skip_blank_cells():
+            while cell and self._is_blank(cell) and not AXTable.is_end_of_row(cell):
+                cell = AXTable.get_cell_on_right(cell)
+
+        if cell is None:
+            cell = self._horizontal_cell_skipping_holes(current, rightward=True)
+
+        if cell is not None:
+            row, col = AXTable.get_cell_coordinates(cell, prefer_attribute=False)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_up(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the cell above."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_top_of_column(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_COLUMN_TOP)
+            return
+
+        row, col = self._get_cell_coordinates(current)
+        cell = AXTable.get_cell_above(current)
+
+        if self.get_skip_blank_cells():
+            while cell and self._is_blank(cell) and not AXTable.is_top_of_column(cell):
+                cell = AXTable.get_cell_above(cell)
+
+        if cell is None:
+            cell = self._vertical_cell_skipping_holes(current, descending=False)
+
+        if cell is not None:
+            row, col = AXTable.get_cell_coordinates(cell, prefer_attribute=False)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_down(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the cell below."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_bottom_of_column(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_COLUMN_BOTTOM)
+            return
+
+        row, col = self._get_cell_coordinates(current)
+        cell = AXTable.get_cell_below(current)
+
+        if self.get_skip_blank_cells():
+            while cell and self._is_blank(cell) and not AXTable.is_bottom_of_column(cell):
+                cell = AXTable.get_cell_below(cell)
+
+        if cell is None:
+            cell = self._vertical_cell_skipping_holes(current, descending=True)
+
+        if cell is not None:
+            row, col = AXTable.get_cell_coordinates(cell, prefer_attribute=False)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_to_first_cell(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the first cell."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        table = AXUtilities.get_table(current)
+        cell = AXTable.get_first_cell(table)
+        self._present_cell(script, cell, 0, 0, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_to_last_cell(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the last cell."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        table = AXUtilities.get_table(current)
+        cell = AXTable.get_last_cell(table)
+        self._present_cell(
+            script,
+            cell,
+            AXTable.get_row_count(table),
+            AXTable.get_column_count(table),
+            current,
+            notify_user,
+        )
+
+    @dbus_service.command
+    @navigation_command
+    def move_to_beginning_of_row(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the beginning of the row."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_start_of_row(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_ROW_BEGINNING)
+            return
+
+        cell = AXTable.get_start_of_row(current)
+        row, col = self._get_cell_coordinates(cell)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_to_end_of_row(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the end of the row."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_end_of_row(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_ROW_END)
+            return
+
+        cell = AXTable.get_end_of_row(current)
+        row, col = self._get_cell_coordinates(cell)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_to_top_of_column(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the top of the column."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_top_of_column(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_COLUMN_TOP)
+            return
+
+        cell = AXTable.get_top_of_column(current)
+        row, col = self._get_cell_coordinates(cell)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def move_to_bottom_of_column(self, script: default.Script, notify_user: bool = True) -> None:
+        """Moves to the bottom of the column."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        if AXTable.is_bottom_of_column(current):
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_COLUMN_BOTTOM)
+            return
+
+        cell = AXTable.get_bottom_of_column(current)
+        row, col = self._get_cell_coordinates(cell)
+        self._present_cell(script, cell, row, col, current, notify_user)
+
+    @dbus_service.command
+    @navigation_command
+    def set_dynamic_column_headers_row(
+        self, _script: default.Script, notify_user: bool = True
+    ) -> None:
+        """Sets the row for the dynamic header columns to the current row."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        table = AXUtilities.get_table(current)
+        if table:
+            row = AXTable.get_cell_coordinates(current)[0]
+            AXUtilities.set_dynamic_column_headers_row(table, row)
+            if notify_user:
+                presentation_manager.get_manager().present_message(
+                    messages.DYNAMIC_COLUMN_HEADER_SET % (row + 1),
+                )
+
+    @dbus_service.command
+    @navigation_command
+    def clear_dynamic_column_headers_row(
+        self, _script: default.Script, notify_user: bool = True
+    ) -> None:
+        """Clears the row for the dynamic column headers."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        table = AXUtilities.get_table(focus_manager.get_manager().get_locus_of_focus())
+        if table:
+            AXUtilities.clear_dynamic_column_headers_row(table)
+            if notify_user:
+                presentation_manager.get_manager().interrupt_presentation()
+                presentation_manager.get_manager().present_message(
+                    messages.DYNAMIC_COLUMN_HEADER_CLEARED,
+                )
+
+    @dbus_service.command
+    @navigation_command
+    def set_dynamic_row_headers_column(
+        self, _script: default.Script, notify_user: bool = True
+    ) -> None:
+        """Sets the column for the dynamic row headers to the current column."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        table = AXUtilities.get_table(current)
+        if table:
+            column = AXTable.get_cell_coordinates(current)[1]
+            AXUtilities.set_dynamic_row_headers_column(table, column)
+            if notify_user:
+                presentation_manager.get_manager().present_message(
+                    messages.DYNAMIC_ROW_HEADER_SET % AXUtilities.get_column_label(table, column),
+                )
+
+    @dbus_service.command
+    @navigation_command
+    def clear_dynamic_row_headers_column(
+        self, _script: default.Script, notify_user: bool = True
+    ) -> None:
+        """Clears the column for the dynamic row headers."""
+
+        current = self._get_current_cell()
+        if current is None:
+            if notify_user:
+                presentation_manager.get_manager().present_message(messages.TABLE_NOT_IN_A)
+            return
+
+        table = AXUtilities.get_table(focus_manager.get_manager().get_locus_of_focus())
+        if table:
+            AXUtilities.clear_dynamic_row_headers_column(table)
+            if notify_user:
+                presentation_manager.get_manager().interrupt_presentation()
+                presentation_manager.get_manager().present_message(
+                    messages.DYNAMIC_ROW_HEADER_CLEARED,
+                )
+
+    def _present_cell(
+        self,
+        script: default.Script,
+        cell: Atspi.Accessible,
+        row: int,
+        col: int,
+        previous_cell: Atspi.Accessible,
+        notify_user: bool = True,
+    ) -> None:
+        """Presents cell to the user."""
+
+        if not AXUtilities.is_table_cell_or_header(cell):
+            tokens = [
+                "TABLE NAVIGATOR: ",
+                cell,
+                "(row",
+                row,
+                ", column",
+                col,
+                ") is not cell or header",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return
+
+        self._previous_reported_row = row
+        self._previous_reported_col = col
+
+        if script.utilities.grab_focus_when_setting_caret(cell):
+            AXObject.grab_focus(cell)
+
+        obj = AXUtilities.get_descendant_supporting_text(cell) or cell
+        focus_mgr = focus_manager.get_manager()
+        focus_mgr.set_locus_of_focus(None, obj, False)
+        focus_mgr.emit_region_changed(obj, mode=focus_manager.TABLE_NAVIGATOR)
+
+        if AXObject.supports_text(obj) and not AXUtilities.is_gui_cell(cell):
+            script.utilities.set_caret_position(obj, 0, reason=CaretSetReason.TABLE_NAVIGATION)
+
+        if not notify_user:
+            msg = "TABLE NAVIGATOR: _present_cell called with notify_user=False"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        presentation_manager.get_manager().interrupt_if_needed_for_object_presentation()
+        script.present_object(cell, offset=0, prior_obj=previous_cell)
+
+        manager = speech_presenter.get_presenter()
+        # TODO - JD: This should be part of the normal table cell presentation.
+        if manager.get_announce_cell_coordinates():
+            presentation_manager.get_manager().present_message(
+                messages.TABLE_CELL_COORDINATES % {"row": row + 1, "column": col + 1},
+            )
+
+        # TODO - JD: Ditto.
+        if manager.get_announce_cell_span():
+            rowspan, colspan = AXTable.get_cell_spans(cell)
+            if rowspan > 1 or colspan > 1:
+                presentation_manager.get_manager().present_message(
+                    messages.cell_span(rowspan, colspan),
+                )
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_ENABLED,
+        schema="table-navigation",
+        gtype="b",
+        default=True,
+        summary="Enable table navigation",
+        migration_key="tableNavigationEnabled",
+    )
+    @dbus_service.getter
+    def get_is_enabled(self) -> bool:
+        """Returns whether table navigation is enabled."""
+
+        return self._get_setting(self.KEY_ENABLED, True)
+
+    @dbus_service.setter
+    def set_is_enabled(self, value: bool) -> bool:
+        """Sets whether table navigation is enabled."""
+
+        if self.get_is_enabled() == value:
+            tokens = ["TABLE NAVIGATOR: Enabled already", value, ". Refreshing command group."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            command_manager.get_manager().set_group_enabled(
+                guilabels.KB_GROUP_TABLE_NAVIGATION,
+                value,
+            )
+            return True
+
+        tokens = ["TABLE NAVIGATOR: Setting enabled to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_ENABLED, value)
+
+        self._last_input_event = None
+        command_manager.get_manager().set_group_enabled(guilabels.KB_GROUP_TABLE_NAVIGATION, value)
+
+        return True
+
+    def refresh_enabled_state(self) -> None:
+        """Re-applies the enabled state for the currently active app."""
+
+        enabled = self.get_is_enabled()
+        tokens = ["TABLE NAVIGATOR: Refreshing enabled state for active app:", enabled, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        command_manager.get_manager().set_group_enabled(
+            guilabels.KB_GROUP_TABLE_NAVIGATION,
+            enabled,
+        )
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_SKIP_BLANK_CELLS,
+        schema="table-navigation",
+        gtype="b",
+        default=False,
+        summary="Skip blank cells during navigation",
+        migration_key="skipBlankCells",
+    )
+    @dbus_service.getter
+    def get_skip_blank_cells(self) -> bool:
+        """Returns whether blank cells should be skipped during navigation."""
+
+        return self._get_setting(self.KEY_SKIP_BLANK_CELLS, False)
+
+    @dbus_service.setter
+    def set_skip_blank_cells(self, value: bool) -> bool:
+        """Sets whether blank cells should be skipped during navigation."""
+
+        if self.get_skip_blank_cells() == value:
+            return True
+
+        tokens = ["TABLE NAVIGATOR: Setting skip blank cells to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_SKIP_BLANK_CELLS, value
+        )
+        return True
+
+
+_navigator: TableNavigator = TableNavigator()
+
+
+def get_navigator() -> TableNavigator:
+    """Returns the Table Navigator"""
+
+    return _navigator

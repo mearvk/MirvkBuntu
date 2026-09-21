@@ -1,0 +1,7 @@
+rounded-clip {
+  clip: 64 64 128 128 / 64;
+  child: color {
+    bounds: 64 64 128 128;
+    color: rgb(0,0,0);
+  }
+}

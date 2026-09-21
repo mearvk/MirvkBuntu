@@ -1,0 +1,2635 @@
+# Orca
+#
+# Copyright 2004-2009 Sun Microsystems Inc.
+# Copyright 2010-2013 The Orca Team
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-lines
+
+"""Labels for Orca's GUIs. These have been put in their own module so that we
+can present them in the correct language when users change the language on the
+fly without having to reload a bunch of modules."""
+
+from .orca_i18n import C_, _, ngettext  # pylint: disable=import-error
+
+# Translators: This string appears on a button in a dialog. "Activating" the
+# selected item will perform the action that one would expect to occur if the
+# object were clicked on with the mouse. If the object is a link, activating
+# it will bring you to a new page. If the object is a button, activating it
+# will press the button. If the object is a combobox, activating it will expand
+# it to show all of its contents. And so on.
+ACTIVATE = _("_Activate")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that an article has been entered before speaking the contents. At the end of
+# the article, Orca will announce that the article is being exited.
+ANNOUNCE_ARTICLES = C_("Context", "Articles")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that a blockquote has been entered before speaking the text. At the end of
+# the text, Orca will announce that the blockquote is being exited.
+ANNOUNCE_BLOCKQUOTES = C_("Context", "Blockquotes")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that a code block has been entered before speaking the contents of that code
+# block. At the end of the code block, Orca will announce that it is being exited.
+ANNOUNCE_CODE_BLOCKS = C_("Context", "Code blocks")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. When enabled, Orca will announce when a document
+# embedded within an application (such as the rendered preview of a document)
+# has been entered, and when it is being exited.
+ANNOUNCE_EMBEDDED_DOCUMENTS = C_("Context", "Embedded documents")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that a form has been entered before speaking the contents of that form. At
+# the end of the form, Orca will announce that the form is being exited.
+ANNOUNCE_FORMS = C_("Context", "Forms")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# when an ARIA landmark has been entered or exited. ARIA landmarks are the W3C
+# defined HTML tag attribute 'role' used to identify important part of webpage
+# like banners, main context, search, etc.
+ANNOUNCE_LANDMARKS = C_("Context", "Landmarks")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that a list with x items has been entered before speaking the content of that
+# list. At the end of the list content, Orca will announce that the list is
+# being exited.
+ANNOUNCE_LISTS = C_("Context", "Lists")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that a panel has been entered before speaking the new location. At the end of
+# the panel contents, Orca will announce that the panel is being exited. A
+# panel is a generic container of objects, such as a group of related form
+# fields.
+ANNOUNCE_PANELS = C_("Context", "Panels")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# that a table with x rows and y columns has been entered before speaking the
+# content of that table. At the end of the table content, Orca will announce
+# that the table is being exited.
+ANNOUNCE_TABLES = C_("Context", "Tables")
+
+# Translators: Some users want to hear additional information when entering
+# different types of content. If this checkbox is checked, Orca will announce
+# tracked changes (insertions, deletions, highlights, suggestions) when navigating
+# through document content containing revision markup.
+ANNOUNCE_TRACKED_CHANGES = C_("Context", "Tracked changes")
+
+# Translators: This is a shorter version of "Automatic focus mode during caret/structural
+# navigation" used on sub-pages where the navigation type context is already clear.
+AUTOMATIC_FOCUS_MODE = _("Automatic focus mode")
+
+AUTOMATIC_FOCUS_MODE_INFO = _(
+    # Translators: This explains what the "Automatic focus mode" setting does. It appears
+    # in info boxes on the Caret Navigation and Structural Navigation preferences pages.
+    # Please translate "Automatic focus mode" consistently with the AUTOMATIC_FOCUS_MODE
+    # string above.
+    "Automatic focus mode causes Orca to switch to focus mode when you navigate "
+    "into a form field or other interactive widget.",
+)
+
+NATIVE_NAVIGATION_INFO = _(
+    # Translators: This is an informational message on the Native Navigation
+    # preferences page explaining what native navigation means.
+    "Native navigation refers to keyboard commands handled by the application, "
+    "such as Tab, Page Up, Page Down, and Enter.",
+)
+
+# Translators: This setting controls whether Orca automatically enables sticky
+# focus mode for web applications (such as Facebook Messenger) and Electron apps
+# (such as Visual Studio Code). When enabled, Orca will detect these applications
+# and use focus mode by default. Please translate this string using language
+# consistent with `MODE_FOCUS_IS_STICKY = _("Focus mode is sticky.")` in
+# messages.py.
+AUTO_STICKY_FOCUS_MODE = _("Automatic sticky focus mode for web applications")
+
+AUTO_STICKY_FOCUS_MODE_INFO = _(
+    # Translators: This explains what the "Automatic sticky focus mode for web
+    # applications" setting does.
+    "Automatic sticky focus mode causes Orca to detect web applications and "
+    "Electron apps and stay in focus mode until toggled off by command.",
+)
+
+# Translators: A single braille cell on a refreshable braille display consists
+# of 8 dots. Dot 7 is the dot in the bottom left corner. If the user selects
+# this option, Dot 7 will be used to 'underline' text of interest, e.g. when
+# "marking"/indicating that a given word is bold.
+BRAILLE_DOT_7 = _("Dot 7")
+
+# Translators: A single braille cell on a refreshable braille display consists
+# of 8 dots. Dot 8 is the dot in the bottom right corner. If the user selects
+# this option, Dot 8 will be used to 'underline' text of interest,  e.g. when
+# "marking"/indicating that a given word is bold.
+BRAILLE_DOT_8 = _("Dot 8")
+
+# Translators: A single braille cell on a refreshable braille display consists
+# of 8 dots. Dots 7-8 are the dots at the bottom. If the user selects this
+# option, Dots 7-8 will be used to 'underline' text of interest,  e.g. when
+# "marking"/indicating that a given word is bold.
+BRAILLE_DOT_7_8 = _("Dots 7 and 8")
+
+# Translators: This option refers to the dot or dots in braille which will be
+# used to underline certain characters.
+BRAILLE_DOT_NONE = C_("braille dots", "None")
+
+# Translators: This is the label for a button in a dialog.
+BTN_CANCEL = _("_Cancel")
+
+# Translators: This is the label for a button in a dialog.
+BTN_CLOSE = _("_Close")
+
+# Translators: This is the label for a button in a dialog.
+BTN_CLEAR = _("_Clear")
+
+# Translators: This is the label for a button in a dialog.
+BTN_JUMP_TO = _("_Jump to")
+
+# Translators: This is the label for a button in a dialog.
+BTN_OK = _("_OK")
+
+# Translators: This is the label for a button in a dialog.
+BTN_SAVE = _("Save")
+
+# Translators: This is the label for a button in a dialog.
+BTN_CLOSE_WITHOUT_SAVING = _("Close without saving")
+
+# Translators: This is the format for a menu item that applies settings to the
+# specified profile. The %s will be replaced with the profile name.
+MENU_APPLY_PROFILE = _("Apply to %s")
+
+# Translators: This is the format for a menu item that saves settings to the
+# specified profile and closes the dialog. The %s will be replaced with the
+# profile name.
+MENU_SAVE_PROFILE = _("Save to %s and close")
+
+# Translators: This is the label for a menu item to remove a profile.
+MENU_REMOVE_PROFILE = _("Remove Profile...")
+
+# Translators: This is the label for a menu item to rename a profile.
+MENU_RENAME = _("Rename...")
+
+# Translators: This is the accessible name for the main menu button in the
+# preferences dialog. The menu contains actions like Help, Apply, Save, and Cancel.
+MENU_BUTTON_OPTIONS = _("Options")
+
+# Translators: This is the primary message in a dialog asking the user to confirm
+# closing the preferences window without saving changes.
+PREFERENCES_CLOSE_WITHOUT_SAVE = _("Save Changes?")
+
+# Translators: This is the secondary message in a dialog asking the user to confirm
+# closing the preferences window without saving changes.
+PREFERENCES_CHANGES_WILL_BE_LOST = _("Your changes will be lost if you don't save them.")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text.
+# This message appears in a dialog when the user closes the preferences
+# after switching to a different profile.
+PREFERENCES_PROFILE_SWITCHED = _("You switched profiles.")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text.
+# This is a button label in the profile switch dialog. %s is the profile name.
+PROFILE_USE = C_("profile", "Use %s")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text.
+# This is a button label in the profile switch dialog. %s is the profile name.
+PROFILE_SWITCH_BACK_TO = _("Switch back to %s")
+
+# Translators: Orca uses Speech Dispatcher to present content to users via
+# text-to-speech. Speech Dispatcher has a feature to control how capital
+# letters are presented: Do nothing at all, say the word 'capital' prior to
+# presenting a capital letter (which Speech Dispatcher refers to as 'spell'),
+# or play a tone (which Speech Dispatcher refers to as a sound 'icon'.) This
+# string to be translated appears as a combo box item in Orca's Preferences.
+CAPITALIZATION_STYLE_ICON = C_("capitalization style", "Icon")
+
+# Translators: Orca uses Speech Dispatcher to present content to users via
+# text-to-speech. Speech Dispatcher has a feature to control how capital
+# letters are presented: Do nothing at all, say the word 'capital' prior to
+# presenting a capital letter (which Speech Dispatcher refers to as 'spell'),
+# or play a tone (which Speech Dispatcher refers to as a sound 'icon'.) Regardless
+# of the choice, Orca will always apply the user-configurable 'Uppercase' voice.
+# This string describes the do-nothing-at-all case where only the voice will
+# be applied when presenting capital letters.
+CAPITALIZATION_STYLE_VOICE_ONLY = C_("capitalization style", "Voice only")
+
+# Translators: Orca uses Speech Dispatcher to present content to users via
+# text-to-speech. Speech Dispatcher has a feature to control how capital
+# letters are presented: Do nothing at all, say the word 'capital' prior to
+# presenting a capital letter (which Speech Dispatcher refers to as 'spell'),
+# or play a tone (which Speech Dispatcher refers to as a sound 'icon'.) This
+# string to be translated appears as a combo box item in Orca's Preferences.
+CAPITALIZATION_STYLE_SPELL = C_("capitalization style", "Spell")
+
+# Translators: If this widget is enabled, then Orca will tell you when one of
+# your buddies is typing a message.
+CHAT_ANNOUNCE_BUDDY_TYPING = _("Announce when your _buddies are typing")
+
+# Translators: If this widget is enabled, then Orca will provide the user with
+# chat room specific message histories rather than just a single history which
+# contains the latest messages from all the chat rooms that they are in.
+CHAT_SEPARATE_MESSAGE_HISTORIES = _("Provide chat room specific _message histories")
+
+# Translators: This is the label of a panel holding options for how messages in
+# this application's chat rooms should be spoken. The options are: Speak messages
+# from all channels (i.e. even if the chat application doesn't have focus); speak
+# messages from the active channel regardless of application focus; speak messages
+# from all channels but only if the chat application has focus; speak messages from
+# the active channel only if the chat application has focus.
+CHAT_SPEAK_MESSAGES_FROM = _("Speak messages from")
+
+# Translators: This is the label of a widget in the preferences dialog. If it is
+# selected, Orca will speak all new chat messages as they appear irrespective of
+# whether or not the chat application currently has focus. This is the default
+# behavior.
+CHAT_SPEAK_MESSAGES_ALL = _("All channels when using any application")
+
+# Translators: This is the label of a widget in the preferences dialog. If it is
+# selected, Orca will only speak new chat messages for the currently active channel
+# (the selected tab or focused chat window), regardless of whether or not the chat
+# application currently has focus.
+CHAT_SPEAK_MESSAGES_ACTIVE_CHANNEL = _("The active channel when using any application")
+
+# Translators: This is the label of a widget in the preferences dialog. If it is
+# selected, Orca will speak all new chat messages as they appear if and only if the
+# chat application has focus.
+CHAT_SPEAK_MESSAGES_ALL_IF_FOCUSED = _("All channels when using the application")
+
+# Translators: This is the label of a widget in the preferences dialog. If it is
+# selected, Orca will only speak new chat messages for the currently active channel
+# (the selected tab or focused chat window) when the chat application has focus.
+CHAT_SPEAK_MESSAGES_ACTIVE = _("The active channel when using the application")
+
+# Translators: If this widget is enabled, then Orca will speak the name of the
+# chat room prior to presenting an incoming message.
+CHAT_SPEAK_ROOM_NAME = _("_Speak room name")
+
+# Translators: This setting controls when the chat room name is spoken relative
+# to the message content. When enabled, the room name is spoken after the message.
+# When disabled, the room name is spoken before the message.
+CHAT_SPEAK_ROOM_NAME_LAST = _("Speak room name last")
+
+# Translators: When presenting the content of a line on a web page, Orca by
+# default presents the full line, including any links or form fields on that
+# line, in order to reflect the on-screen layout as seen by sighted users.
+# Not all users like this presentation, however, and prefer to have objects
+# treated as if they were on individual lines, such as is done by Windows
+# screen readers, so that unrelated objects (e.g. links in a navbar) are not
+# all jumbled together. As a result, this is now configurable. If layout mode
+# is enabled, Orca will present the full line as it appears on the screen; if
+# it is disabled, Orca will treat each object as if it were on a separate line,
+# both for presentation and navigation.
+CONTENT_LAYOUT_MODE = _("Layout mode")
+
+LAYOUT_MODE_INFO = _(
+    # Translators: This is an informational message on the Caret Navigation preferences
+    # page explaining what layout mode is. When translating "layout mode", please use
+    # terminology consistent with that of `CONTENT_LAYOUT_MODE = _("Layout mode")`
+    # above.
+    "If layout mode is enabled, Orca will present the full line as it "
+    "appears on the screen. Otherwise, Orca will treat each object as if "
+    "it were on a separate line.",
+)
+
+# Translators: This is a label which will appear in the list of available speech
+# engines as a special item. It refers to the default engine configured within
+# the speech subsystem. Apart from this item, the user will have a chance to
+# select a particular speech engine by its real name (Festival, IBMTTS, etc.)
+DEFAULT_SYNTHESIZER = _("Default Synthesizer")
+
+# Translators: The pronunciation dictionary allows the user to correct words
+# which the speech synthesizer mispronounces (e.g. a person's name, a technical
+# word) or doesn't pronounce as the user desires (e.g. an acronym) by providing
+# an alternative string. For instance "idk" can be sent to the speech server
+# as "I don't know" or "I D K" or "eye dee kay" or whatever causes the user's
+# speech synthesizer to say what the user finds most helpful.
+PRONUNCIATION_DICTIONARY = _("Pronunciation Dictionary")
+
+PRONUNCIATION_DICTIONARY_INFO = _(
+    # Translators: This is an informational message on the Pronunciation Dictionary
+    # preferences page explaining what the dictionary does.
+    "Customize how words are spoken by adding words and replacement text to "
+    "the pronunciation dictionary.",
+)
+
+# Translators: This is a label for a column header in Orca's pronunciation
+# dictionary. The pronunciation dictionary allows the user to correct words
+# which the speech synthesizer mispronounces (e.g. a person's name, a technical
+# word) or doesn't pronounce as the user desires (e.g. an acronym) by providing
+# an alternative string. The "Actual String" here refers to the word to be
+# corrected as it would actually appear in text being read. Example: "LOL".
+DICTIONARY_ACTUAL_STRING = _("Actual String")
+
+# Translators: This is a label for a column header in Orca's pronunciation
+# dictionary. The pronunciation dictionary allows the user to correct words
+# which the speech synthesizer mispronounces (e.g. a person's name, a technical
+# word) or doesn't pronounce as the user desires (e.g. an acronym) by providing
+# an alternative string. The "Replacement String" here refers to how the user
+# would like the "Actual String" to be pronounced by the speech synthesizer.
+# Example: "L O L" or "Laughing Out Loud" (for Actual String "LOL").
+DICTIONARY_REPLACEMENT_STRING = _("Replacement String")
+
+# Translators: The pronunciation dictionary allows the user to correct words
+# which the speech synthesizer mispronounces (e.g. a person's name, a technical
+# word) or doesn't pronounce as the user desires (e.g. an acronym) by providing
+# an alternative string. For instance "idk" can be sent to the speech server
+# as "I don't know" or "I D K" or "eye dee kay" or whatever causes the user's
+# speech synthesizer to say what the user finds most helpful. This string is
+# the label for the widget to add a new entry.
+DICTIONARY_NEW_ENTRY = _("New entry")
+
+# Translators: The pronunciation dictionary allows the user to correct words
+# which the speech synthesizer mispronounces (e.g. a person's name, a technical
+# word) or doesn't pronounce as the user desires (e.g. an acronym) by providing
+# an alternative string. For instance "idk" can be sent to the speech server
+# as "I don't know" or "I D K" or "eye dee kay" or whatever causes the user's
+# speech synthesizer to say what the user finds most helpful. This string is
+# the label for the widget to delete the selected entry.
+DICTIONARY_DELETE = _("Delete")
+
+# Translators: The pronunciation dictionary allows the user to correct words
+# which the speech synthesizer mispronounces (e.g. a person's name, a technical
+# word) or doesn't pronounce as the user desires (e.g. an acronym) by providing
+# an alternative string. This message is displayed when the pronunciation
+# dictionary is empty.
+DICTIONARY_EMPTY = _("No pronunciation entries")
+
+# Translators: Title for the dialog to add a new pronunciation entry.
+ADD_NEW_PRONUNCIATION = _("Add New Pronunciation")
+
+# Translators: Title for the dialog to edit an existing pronunciation entry.
+EDIT_PRONUNCIATION = _("Edit Pronunciation")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This string is the title
+# of the dialog box.
+FIND_DIALOG_TITLE = _("Find")
+KB_GROUP_FIND = FIND_DIALOG_TITLE
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the text entry where the user types the term to search for.
+FIND_SEARCH_FOR = _("_Search for:")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with a group of options related to where the search should begin. The options
+# are to begin the search from the current location or from the top of the window.
+FIND_START_FROM = _("Start from:")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the radio button to begin the search from the current location rather
+# than from the top of the window.
+FIND_START_AT_CURRENT_LOCATION = _("C_urrent location")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the radio button to begin the search from the top of the window rather
+# than the current location.
+FIND_START_AT_TOP_OF_WINDOW = _("_Top of window")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with a group of options related to the direction of the search. The options
+# are to search backwards and to wrap.
+FIND_SEARCH_DIRECTION = _("Search direction:")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the widget to perform the search in the reverse direction.
+FIND_SEARCH_BACKWARDS = _("Search _backwards")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the widget to wrap around when the top/bottom of the window has been
+# reached.
+FIND_WRAP_AROUND = _("_Wrap around")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with a group of options related to what constitutes a match. The options are
+# to match case and to match the entire word only.
+FIND_MATCH_OPTIONS = _("Match options:")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the widget to make the search case-sensitive.
+FIND_MATCH_CASE = _("_Match case")
+
+# Translators: Orca has a "find" feature which allows the user to search the
+# active application for on screen text and widgets. This label is associated
+# with the widget to only match if the full word consists of the search term.
+FIND_MATCH_ENTIRE_WORD = _("Match _entire word only")
+
+# Translators: This is the label for a spinbutton. This option allows the user
+# to specify the number of matched characters that must be present before Orca
+# speaks the line that contains the results from an application's Find toolbar.
+FIND_MINIMUM_MATCH_LENGTH = _("Minimum length of matched text:")
+
+# Translators: This is the label of a panel containing options for what Orca
+# presents when the user is in the Find toolbar of an application, e.g. Firefox.
+FIND_OPTIONS = _("Find Options")
+
+# Translators: This is the label for a widget. This option controls whether
+# the line that contains the match from an application's Find toolbar should
+# always be spoken, or only spoken if it is a different line than the line
+# which contained the last match.
+FIND_ONLY_SPEAK_CHANGED_LINES = _("Onl_y speak changed lines during find")
+
+# Translators: This is the label for a widget. This option controls whether or
+# not Orca will automatically speak the line that contains the match while the
+# user is performing a search from the Find toolbar of an application, e.g.
+# Firefox.
+FIND_SPEAK_RESULTS = _("Speak results during _find")
+
+# Translators: Command is a table column header where the cells in the column
+# are a sentence that briefly describes what action Orca will take if and when
+# the user invokes that keyboard command.
+KB_HEADER_FUNCTION = _("Command")
+
+# Translators: Key Binding is a table column header where the cells in the
+# column represent keyboard combinations the user can press to invoke Orca
+# commands.
+KB_HEADER_KEY_BINDING = _("Key Binding")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to managing the screen reader, such as opening preferences or
+# quitting Orca.
+KB_GROUP_SCREEN_READER_MANAGEMENT = _("Screen Reader Management")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to bypass mode. Bypass mode causes Orca to pass subsequent
+# command keys to the current application instead of handling them itself.
+KB_GROUP_BYPASS_MODE = _("Bypass mode")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to debugging.
+KB_GROUP_DEBUGGING_TOOLS = C_("keybindings", "Debugging Tools")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to its "learn mode". Please use the same translation as done
+# in cmdnames.py
+KB_GROUP_LEARN_MODE = C_("keybindings", "Learn mode")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to presenting and performing the accessible actions associated
+# with the current object.
+KB_GROUP_ACTIONS = _("Actions")
+ACTIONS_LIST = KB_GROUP_ACTIONS
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to documents.
+KB_GROUP_DOCUMENTS = _("Documents")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to caret navigation, such as moving by character, word, and line.
+# These commands are enabled by default for web content and can be optionally
+# toggled on in other applications.
+KB_GROUP_CARET_NAVIGATION = _("Caret navigation")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to math navigation via MathCAT.
+KB_GROUP_MATH_NAVIGATION = _("Math navigation")
+
+CARET_NAVIGATION_INFO = _(
+    # Translators: This is an informational message on the Caret Navigation
+    # preferences page explaining what caret navigation does.
+    "When enabled, Orca handles the arrow keys, Home, and End to move through "
+    "content by character, word, or line.",
+)
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to chat applications such as instant messaging.
+KB_GROUP_CHAT = _("Chat")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to the clipboard.
+KB_GROUP_CLIPBOARD = _("Clipboard")
+
+# Translators: A live region is an area of a web page that is periodically
+# updated, e.g. stock ticker. https://w3c.github.io/aria/#dfn-live-region
+KB_GROUP_LIVE_REGIONS = _("Live regions")
+
+# Translators: Orca has a sleep mode which causes Orca to essentially behave as
+# if it were not running for a given application. Some use cases include self-
+# voicing apps with associated commands (e.g. ChromeVox) and VMs. In the former
+# case, the self-voicing app is expected to provide all needed commands as well
+# as speech and braille. In the latter case, we want to ensure that Orca's
+# commands and speech/braille do not interfere with that of the VM and any
+# screen reader being used in that VM. Thus when an application is being used
+# in sleep mode, nearly all Orca commands become unbound/free, and nothing is
+# spoken or brailled. But if the user toggles sleep mode off or switches to
+# another application window, Orca commands, speech, and braille immediately
+# resume working. This string is a label for the group of Orca commands which
+# are related to sleep mode.
+KB_GROUP_SLEEP_MODE = _("Sleep mode")
+
+SLEEP_MODE_INFO = _(
+    # Translators: This is an informational message on the Sleep Mode preferences page
+    # explaining what sleep mode does. When translating "Commands", please use
+    # terminology consistent with that of `COMMANDS = _("Commands")` above.
+    "Sleep mode causes Orca to behave as if it were not running for a given "
+    "application. The default keybinding to toggle sleep mode on or off is "
+    "Shift+Alt+Ctrl+Q. This can be changed in Commands. An application must "
+    "be running to add it to the sleep mode applications list.",
+)
+
+# Translators: This label appears above a list of applications on the Sleep Mode
+# preferences page. The user can select which applications should automatically
+# have sleep mode enabled.
+SLEEP_MODE_APPS = _("Always use sleep mode with these applications")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to mouse interaction, such as routing the pointer, clicking
+# the current item, and toggling mouse review.
+KB_GROUP_MOUSE = _("Mouse")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to object navigation.
+KB_GROUP_OBJECT_NAVIGATION = _("Object navigation")
+
+# Translators: This string is a label for a group of Orca commands which are
+# related to presenting information about the system, such as date, time,
+# battery status, CPU status, etc.
+KB_GROUP_SYSTEM_INFORMATION = _("System information")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to structural navigation, such as moving to the next heading,
+# paragraph, form field, etc. in a given direction.
+KB_GROUP_STRUCTURAL_NAVIGATION = _("Structural navigation")
+
+STRUCTURAL_NAVIGATION_INFO = _(
+    # Translators: This is an informational message on the Structural Navigation
+    # preferences page explaining what structural navigation does.
+    "When enabled, alphanumeric keys can be used to quickly jump between "
+    "elements. For example, H moves to the next heading, K to the next link. "
+    "Add Shift to move backwards.",
+)
+
+# Translators: This is a label for a switch that controls whether structural
+# navigation wraps around when reaching the top or bottom of a document.
+STRUCTURAL_NAVIGATION_WRAP_AROUND = _("Wrap around")
+
+# Translators: This is a label for a spin button that sets the minimum number
+# of characters for an object to be considered "large" during structural
+# navigation to large objects.
+STRUCTURAL_NAVIGATION_LARGE_OBJECT_LENGTH = _("Large object length")
+
+LARGE_OBJECT_INFO = _(
+    # Translators: This is an informational message on the Structural Navigation
+    # preferences page explaining what the "Large object length" setting does.
+    # When translating "large object", please use terminology consistent with that of
+    # `STRUCTURAL_NAVIGATION_LARGE_OBJECT_LENGTH = _("Large object length")` above.
+    # See also cmdnames.py's `LARGE_OBJECT_NEXT = _("Go to next large object")`
+    # and `LARGE_OBJECT_PREVIOUS = _("Go to previous large object")`.
+    "Large object length defines the minimum number of characters an element "
+    "must have to be included when using the large object navigation shortcuts.",
+)
+
+# Translators: This is a label for a switch that controls whether images
+# without accessible names or descriptions are skipped during image
+# navigation (e.g. pressing G to jump to next image).
+STRUCTURAL_NAVIGATION_SKIP_UNLABELED_IMAGES = _("Skip unlabeled images")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to table navigation, such as moving to the next cell in a
+# given direction.
+KB_GROUP_TABLE_NAVIGATION = _("Table navigation")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to presenting information about the current location, such as
+# the title, status bar, and default button of the current window; the
+# name, role, and location of the currently-focused object; the selected
+# text in the currently-focused object; etc.
+KB_GROUP_WHERE_AM_I = _("Object details")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to Orca's "flat review" feature. This feature allows the blind
+# user to explore the text in a window in a 2D fashion. That is, Orca treats
+# all the text from all objects in a window (e.g., buttons, labels, etc.) as
+# a sequence of words in a sequence of lines.  The flat review feature allows
+# the user to explore this text by the {previous,next} {line,word,character}.
+# Those commands are all listed under this group label.
+KB_GROUP_FLAT_REVIEW = _("Flat review")
+
+# Translators: This string is a label for the group of Orca commands which
+# are related to Orca's speech and verbosity settings. This group of commands
+# allows on-the-fly configuration of how much (or little) Orca says about a
+# particular object, as well certain aspects of the voice with which things
+# are spoken.
+KB_GROUP_SPEECH_VERBOSITY = _("Speech and verbosity")
+
+# Translators: the 'flat review' feature of Orca allows the blind user to
+# explore the text in a window in a 2D fashion.  That is, Orca treats all
+# the text from all objects in a window (e.g., buttons, labels, etc.) as a
+# sequence of words in a sequence of lines.  The flat review feature allows
+# the user to explore this text by the {previous,next} {line,word,character}.
+# Normally the contents are navigated without leaving the application being
+# reviewed. There is a command which will place the entire contents of the
+# flat review representation into a text view to make it easy to review
+# and copy the text. This string is the title of the window with the text view.
+FLAT_REVIEW_CONTENTS = _("Flat review contents")
+
+# Translators: This is the title of the preferences page for Orca's "flat
+# review" feature, which lets the user explore the contents of a window in a
+# spatial fashion, line by line and word by word.
+FLAT_REVIEW = _("Flat Review")
+
+# Translators: This is a label for the setting which determines when flat
+# review should move to follow the location of the keyboard focus and text
+# caret as the user navigates the application normally.
+FLAT_REVIEW_FOLLOW_FOCUS = _("Follow the focus and caret location")
+
+# Translators: This is one of the choices for when flat review should follow
+# the focus and caret location. "Always" means flat review moves whenever the
+# focus or caret moves.
+FLAT_REVIEW_FOLLOW_ALWAYS = C_("flat review focus tracking", "Always")
+
+# Translators: This is one of the choices for when flat review should follow
+# the focus and caret location. "Automatically" means flat review decides on
+# its own when following the focus or caret makes sense.
+FLAT_REVIEW_FOLLOW_AUTOMATICALLY = C_("flat review focus tracking", "Automatically")
+
+# Translators: This is one of the choices for when flat review should follow
+# the focus and caret location. "Never" means flat review stays where the user
+# left it until the user explicitly moves it.
+FLAT_REVIEW_FOLLOW_NEVER = C_("flat review focus tracking", "Never")
+
+# Translators: This is a label for the setting which determines if Orca will
+# speak the content at the flat review location when that content changes.
+FLAT_REVIEW_SPEAK_UPDATES = _("Speak changes at review location")
+
+# Translators: This is a label for the setting which determines if Orca will
+# refresh the braille display with the content at the flat review location
+# when that content changes.
+FLAT_REVIEW_DISPLAY_UPDATES = _("Display changes at review location")
+
+# Translators: This is a label for the setting which determines if Orca will
+# restrict flat review to the current object rather than the whole window.
+FLAT_REVIEW_RESTRICT = _("Restrict flat review to the current object")
+
+# Translators: This is a label for the setting which determines if Orca will
+# use the "desktop" or "laptop" keyboard layout. The desktop layout is
+# intended for use with a full-size keyboard, while the laptop layout is
+# intended for use with a laptop-style keyboard.
+KEYBOARD_LAYOUT = _("Keyboard Layout")
+
+# Translators: This label refers to the keyboard layout (desktop or laptop).
+# The desktop layout is intended for use with a full-size keyboard, while the
+# laptop layout is intended for use with a laptop-style keyboard.
+KEYBOARD_LAYOUT_DESKTOP = _("Desktop")
+
+# Translators: This label refers to the keyboard layout (desktop or laptop).
+# The desktop layout is intended for use with a full-size keyboard, while the
+# laptop layout is intended for use with a laptop-style keyboard.
+KEYBOARD_LAYOUT_LAPTOP = _("Laptop")
+
+# Translators: Orca has a feature to list all of the notification messages
+# received, similar to the functionality gnome-shell provides when you press
+# Super+M, but it works in all desktop environments. Orca's list is a table
+# with two columns, one column for the text of the notification and one
+# column for the time of the notification. This string is a column header
+# for the text of the notifications.
+NOTIFICATIONS_COLUMN_HEADER = C_("notification presenter", "Notifications")
+
+# Translators: Orca has a feature to list all of the notification messages
+# received, similar to the functionality gnome-shell provides when you press
+# Super+M, but it works in all desktop environments. Orca's list is a table
+# with two columns, one column for the text of the notification and one
+# column for the time of the notification. This string is a column header
+# for the time, which will be relative (e.g. "10 minutes ago") or absolute.
+NOTIFICATIONS_RECEIVED_TIME = C_("notification presenter", "Received")
+
+# Translators: This string is a label for the group of Orca commands which
+# are associated with presenting notifications.
+KB_GROUP_NOTIFICATIONS = _("Notification presenter")
+
+# Translators: Orca's preferences can be configured on a per-application basis,
+# allowing users to customize Orca's behavior, keybindings, etc. to work one
+# way in LibreOffice and another way in a chat application. This string is the
+# title of Orca's application-specific preferences dialog for an application.
+# The string substituted in is the accessible name of the application (e.g.
+# "Gedit", "Firefox", etc.
+PREFERENCES_APPLICATION_TITLE = _("Screen Reader Preferences for %s")
+
+# Translators: This is the accessible name for the list of settings categories
+# on the left side of the preferences dialog (e.g. "General", "Speech", "Braille").
+PREFERENCES_CATEGORIES = _("Categories")
+
+# Translators: This is a table column header. This column consists of a single
+# widget. If the widget is enabled, Orca will indicate the associated item
+# or attribute by "marking" it in braille. "Marking" is not the same as writing
+# out the word; instead marking refers to adding some other indicator, e.g.
+# "underlining" with braille dots 7-8 a word that is bold.
+PRESENTATION_MARK_IN_BRAILLE = _("Mark in braille")
+
+# Translators: This is a table column header. The "Speak" column consists of a
+# single widget. If the widget is enabled, Orca will speak the associated
+# item or attribute (e.g. saying "Bold" as part of the information presented
+# when the user gives the Orca command to obtain the format and font details of
+# the current text).
+PRESENTATION_SPEAK = _("Speak")
+
+# Translators: This is an option in a combo box for how a text attribute should
+# be presented. If selected, the attribute will be both spoken and marked in braille.
+PRESENTATION_SPEAK_AND_MARK = _("Speak and mark")
+
+# Translators: This is the title of a window which displays formatting
+# information associated with the current text character.
+CHARACTER_FORMATTING = _("Character Formatting")
+
+# Translators: This is the title of a window which displays formatting
+# information associated with the current text character. The string is the
+# current character.
+CHARACTER_FORMATTING_FOR = _("Character Formatting for: '%s'")
+
+# Translators: This is an option in a combo box for how a text attribute should
+# be presented. If selected, the attribute will not be presented.
+TEXT_ATTRIBUTES_PRESENTATION_NONE = C_("text attributes", "None")
+
+PROFILE_CONFLICT_MESSAGE = _(
+    # Translators: This is the message in a dialog informing the user that he/she
+    # attempted to save a new user profile under a name which already exists.
+    # A "user profile" is a collection of settings which apply to a given task, such
+    # as a "Spanish" profile which would use Spanish text-to-speech and Spanish
+    # braille and selected when reading Spanish content.
+    "Profile %s already exists.\nContinue updating the existing profile with these new changes?",
+)
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text.
+# The following string is the name of the default profile which is created
+# when Orca is installed.
+PROFILE_DEFAULT = C_("Profile", "Default")
+
+# Translators: This is an error message displayed when the user tries to remove
+# the default profile.
+PROFILE_CANNOT_REMOVE_DEFAULT = _("The default profile cannot be removed.")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text. The
+# following string is the title of a dialog in which users can save a newly-
+# defined profile.
+PROFILE_SAVE_AS_TITLE = _("Save Profile As")
+
+# Translators: This is the label for a button that allows users to create a new
+# profile. A "profile" is a named collection of Orca settings that users can
+# switch between. Creating a new profile copies the current settings.
+PROFILE_CREATE_NEW = _("New Profile")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text. The
+# following string is the label for a text entry in which the user enters the
+# name of a new settings profile being saved via the 'Save Profile As' dialog.
+PROFILE_NAME_LABEL = _("_Profile Name:")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text.
+# The following is a label in a dialog informing the user that he/she
+# is about to remove a user profile, and action that cannot be undone.
+PROFILE_REMOVE_LABEL = _("Remove user profile")
+
+PROFILE_REMOVE_MESSAGE = _(
+    # Translators: Profiles in Orca make it possible for users to quickly switch
+    # amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+    # text written in English using an English-language speech synthesizer and
+    # braille rules, and a similar 'Spanish' profile for reading Spanish text.
+    # The following is a message in a dialog informing the user that he/she
+    # is about to remove a user profile, an action that cannot be undone.
+    "You are about to remove profile %s. "
+    "All unsaved settings and settings saved in this "
+    "profile will be lost. Do you want to continue "
+    "and remove this profile and all related settings?",
+)
+
+PROFILE_CREATE_UNSAVED_WARNING = _(
+    # Translators: This is a message in a dialog shown when the user tries to create
+    # a new profile while there are unsaved changes in the preferences dialog.
+    # Creating a new profile copies the saved settings, not the unsaved changes.
+    "You have unsaved changes. Creating a new profile will copy your "
+    "current saved settings, not your unsaved changes. Your unsaved "
+    "changes will be lost.\n\nDo you want to continue?",
+)
+
+# Translators: Orca has a setting which determines which progress bar updates
+# should be announced. Choosing "All" means that Orca will present progress bar
+# updates regardless of what application and window they happen to be in.
+PROGRESS_BAR_ALL = C_("ProgressBar", "All")
+
+# Translators: Orca has a setting which determines which progress bar updates
+# should be announced. Choosing "Application" means that Orca will present
+# progress bar updates as long as the progress bar is in the active application
+# (but not necessarily in the current window).
+PROGRESS_BAR_APPLICATION = C_("ProgressBar", "Application")
+
+# Translators: Orca has a setting which determines which progress bar updates
+# should be announced. Choosing "Window" means that Orca will present progress
+# bar updates as long as the progress bar is in the active window.
+PROGRESS_BAR_WINDOW = C_("ProgressBar", "Window")
+
+# Translators: Orca has a setting which determines how much punctuation should
+# be spoken as a user reads a document. The choices are None, Some, Most, and All.
+PUNCTUATION_STYLE = _("Punctuation Level")
+
+# Translators: If this setting is chosen, no punctuation symbols will be spoken
+# as a user reads a document.
+PUNCTUATION_STYLE_NONE = C_("punctuation level", "None")
+
+# Translators: If this setting is chosen, common punctuation symbols (like
+# comma, period, question mark) will not be spoken as a user reads a document,
+# but less common symbols (such as #, @, $) will.
+PUNCTUATION_STYLE_SOME = C_("punctuation level", "Some")
+
+# Translators: If this setting is chosen, the majority of punctuation symbols
+# will be spoken as a user reads a document.
+PUNCTUATION_STYLE_MOST = C_("punctuation level", "Most")
+
+# Translators: If this setting is chosen, all punctuation symbols will be spoken
+# as a user reads a document.
+PUNCTUATION_STYLE_ALL = C_("punctuation level", "All")
+
+# Translators: If this setting is chosen and the user is reading over an entire
+# document, Orca will pause at the end of each line.
+SAY_ALL_STYLE_LINE = _("Line")
+
+# Translators: If this setting is chosen and the user is reading over an entire
+# document, Orca will pause at the end of each sentence.
+SAY_ALL_STYLE_SENTENCE = _("Sentence")
+
+# Translators: This is the label for a group of settings in the Say All
+# preferences page. It describes different methods for rewinding and fast
+# forwarding during Say All (e.g., using arrow keys or structural navigation).
+SAY_ALL_REWIND_AND_FAST_FORWARD_BY = _("Rewind and Fast Forward By")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Normally, pressing any key will interrupt Say All presentation. However, if
+# this option is enabled, Up Arrow and Down Arrow can be used to quickly move
+# within the document to re-hear something which was just read or skip past
+# something of no interest.
+SAY_ALL_UP_AND_DOWN_ARROW = _("Up and down arrow")
+
+# Translators: This is a label for a setting on the Say All preferences page. Orca
+# provides a Say All command that reads content from the current location to the
+# end. If this setting is enabled, users can use Orca's structural navigation
+# commands (like H/Shift+H to jump to headings, P/Shift+P to jump to paragraphs)
+# to jump forward or backward during Say All.
+SAY_ALL_STRUCTURAL_NAVIGATION = _("Structural navigation")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. Annotations include content insertions,
+# content deletions, suggestions, and highlights. This is the title for a column
+# which contains the text of an annotation.
+SN_HEADER_ANNOTATION = C_("structural navigation", "Annotation")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a blockquote.
+SN_HEADER_BLOCKQUOTE = C_("structural navigation", "Blockquote")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a button.
+SN_HEADER_BUTTON = C_("structural navigation", "Button")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the caption of a table.
+SN_HEADER_CAPTION = C_("structural navigation", "Caption")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the label of a check box.
+SN_HEADER_CHECK_BOX = C_("structural navigation", "Check Box")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text displayed for a web element with an "onClick" handler.
+SN_HEADER_CLICKABLE = C_("structural navigation", "Clickable")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the selected item in a combo box.
+SN_HEADER_COMBO_BOX = C_("structural navigation", "Combo Box")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the description of an element.
+SN_HEADER_DESCRIPTION = C_("structural navigation", "Description")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a heading.
+SN_HEADER_HEADING = C_("structural navigation", "Heading")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the title associated with an iframe.
+SN_HEADER_IFRAME = C_("structural navigation", "Internal Frame")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text (alt text, title, etc.) associated with an image.
+SN_HEADER_IMAGE = C_("structural navigation", "Image")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the label of a form field.
+SN_HEADER_LABEL = C_("structural navigation", "Label")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a landmark. ARIA role landmarks are the W3C defined HTML
+# tag attribute 'role' used to identify important part of webpage like banners,
+# main context, search etc.
+SN_HEADER_LANDMARK = C_("structural navigation", "Landmark")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of a column which
+# contains the level of a heading. Level will be a "1" for <h1>, a "2" for <h2>,
+# and so on.
+SN_HEADER_LEVEL = C_("structural navigation", "Level")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a link.
+SN_HEADER_LINK = C_("structural navigation", "Link")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a list.
+SN_HEADER_LIST = C_("structural navigation", "List")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a list item.
+SN_HEADER_LIST_ITEM = C_("structural navigation", "List Item")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a math expression.
+SN_HEADER_MATH = C_("structural navigation", "Math Expression")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of an object.
+SN_HEADER_OBJECT = C_("structural navigation", "Object")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the text of a paragraph.
+SN_HEADER_PARAGRAPH = C_("structural navigation", "Paragraph")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the label of a radio button.
+SN_HEADER_RADIO_BUTTON = C_("structural navigation", "Radio Button")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the role of a widget. Examples include "heading", "paragraph",
+# "table", "combo box", etc.
+SN_HEADER_ROLE = C_("structural navigation", "Role")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the state of a widget. Examples include "checked"/"not checked",
+# "selected"/"not selected", "visited/not visited", etc.
+SN_HEADER_STATE = C_("structural navigation", "State")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the URI of a link.
+SN_HEADER_URI = C_("structural navigation", "URI")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title for a column which
+# contains the value of a form field.
+SN_HEADER_VALUE = C_("structural navigation", "Value")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. Annotations include content insertions,
+# content deletions, suggestions, and highlights. This is the title of such a dialog box.
+SN_TITLE_ANNOTATION = C_("structural navigation", "Annotations")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_BLOCKQUOTE = C_("structural navigation", "Blockquotes")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_BUTTON = C_("structural navigation", "Buttons")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_CHECK_BOX = C_("structural navigation", "Check Boxes")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+# "Clickables" are web elements which have an "onClick" handler.
+SN_TITLE_CLICKABLE = C_("structural navigation", "Clickables")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_COMBO_BOX = C_("structural navigation", "Combo Boxes")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_ENTRY = C_("structural navigation", "Entries")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_FORM_FIELD = C_("structural navigation", "Form Fields")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_HEADING = C_("structural navigation", "Headings")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_IFRAME = C_("structural navigation", "Internal Frames")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_IMAGE = C_("structural navigation", "Images")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+# Level will be a "1" for <h1>, a "2" for <h2>, and so on.
+SN_TITLE_HEADING_AT_LEVEL = C_("structural navigation", "Headings at Level %d")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+# ARIA role landmarks are the W3C defined HTML tag attribute 'role' used to
+# identify important part of webpage like banners, main context, search etc.
+SN_TITLE_LANDMARK = C_("structural navigation", "Landmarks")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+# A 'large object' is a logical chunk of text, such as a paragraph, a list,
+# a table, etc.
+SN_TITLE_LARGE_OBJECT = C_("structural navigation", "Large Objects")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_LINK = C_("structural navigation", "Links")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_LIST = C_("structural navigation", "Lists")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_LIST_ITEM = C_("structural navigation", "List Items")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_MATH = C_("structural navigation", "Math Expressions")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_PARAGRAPH = C_("structural navigation", "Paragraphs")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_RADIO_BUTTON = C_("structural navigation", "Radio Buttons")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_TABLE = C_("structural navigation", "Tables")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_UNVISITED_LINK = C_("structural navigation", "Unvisited Links")
+
+# Translators: Orca has a command that presents a list of structural navigation
+# objects in a dialog box so that users can navigate more quickly than they
+# could with native keyboard navigation. This is the title of such a dialog box.
+SN_TITLE_VISITED_LINK = C_("structural navigation", "Visited Links")
+
+# Translators: When the user loads a new web page, they can optionally have Orca
+# automatically start reading the page from beginning to end. This is the label
+# of a widget in which users can indicate their preference.
+READ_PAGE_UPON_LOAD = _("Automatically start speaking a page when it is first _loaded")
+
+# Translators: When the user loads a new web page, they can optionally have Orca
+# automatically summarize details about the page, such as the number of elements
+# (landmarks, forms, links, tables, etc.).
+PAGE_SUMMARY_UPON_LOAD = _("_Present summary of a page when it is first loaded")
+
+# Translators: Orca generates speech in pieces, such as an object's name, role,
+# state, keyboard shortcut, position in a list, or table size. This setting
+# controls whether Orca inserts brief pauses between those pieces so they are
+# spoken as separate chunks rather than run together.
+SPEECH_BREAK_INTO_CHUNKS = _("Insert pauses to break up speech")
+
+# Translators: This string will appear in the list of available voices for the
+# current speech engine. "%s" will be replaced by the name of the current speech
+# engine, such as "Festival default voice" or "IBMTTS default voice". It refers
+# to the default voice configured for given speech engine within the speech
+# subsystem. Apart from this item, the list will contain the names of all
+# available "real" voices provided by the speech engine.
+SPEECH_DEFAULT_VOICE = _("%s default voice")
+
+# Translators: This refers to the voice used by Orca when presenting the content
+# of the screen and other messages.
+SPEECH_VOICE_TYPE_DEFAULT = C_("VoiceType", "Default")
+
+# Translators: This refers to the voice used by Orca when presenting one or more
+# characters which is part of a hyperlink.
+SPEECH_VOICE_TYPE_HYPERLINK = C_("VoiceType", "Hyperlink")
+
+# Translators: This refers to the voice used by Orca when presenting information
+# which is not displayed on the screen as text, but is still being communicated
+# by the system in some visual fashion. For instance, Orca says "misspelled" to
+# indicate the presence of the red squiggly line found under a spelling error;
+# Orca might say "3 of 6" when a user Tabs into a list of six items and the
+# third item is selected. And so on.
+SPEECH_VOICE_TYPE_SYSTEM = C_("VoiceType", "System")
+
+# Translators: This refers to the voice used by Orca when presenting one or more
+# characters which is written in uppercase.
+SPEECH_VOICE_TYPE_UPPERCASE = C_("VoiceType", "Uppercase")
+
+# Maps voice type names to their translatable labels. Used to build voice type
+# UIs dynamically. Keys match speechserver.VoiceType values.
+VOICE_TYPE_LABELS: dict[str, str] = {
+    "default": SPEECH_VOICE_TYPE_DEFAULT,
+    "uppercase": SPEECH_VOICE_TYPE_UPPERCASE,
+    "hyperlink": SPEECH_VOICE_TYPE_HYPERLINK,
+    "system": SPEECH_VOICE_TYPE_SYSTEM,
+}
+
+# Translators this label refers to the name of particular speech synthesis
+# system. (http://devel.freebsoft.org/speechd)
+SPEECH_DISPATCHER = _("Speech Dispatcher")
+
+# Translators this label refers to the name of particular speech synthesis
+# system. (https://github.com/eeejay/spiel)
+SPIEL = _("Spiel")
+
+# Translators: This is a label for a group of options related to Orca's behavior
+# when presenting an application's spell check dialog.
+SPELL_CHECK = C_("OptionGroup", "Spell Check")
+
+SPELL_CHECK_DESCRIPTION = _(
+    # Translators: This is a description that appears at the top of the Spell Check
+    # preferences page. It explains that these settings only work when the screen
+    # reader can identify the components of an application's spell checker (e.g., the
+    # misspelled word, suggestions list, etc.).
+    "These settings apply when the screen reader can identify the "
+    "elements of the application's spell check dialog.",
+)
+
+# Translators: This is a label for a widget associated with an Orca setting.
+# When this option is enabled, Orca will spell out the current error in addition
+# to speaking it. For example, if the misspelled word is "foo," enabling this
+# setting would cause Orca to speak "f o o" after speaking "foo".
+SPELL_CHECK_SPELL_ERROR = _("Spell _error")
+
+# Translators: This is a label for a widget associated with an Orca setting.
+# When this option is enabled, Orca will spell out the current suggestion in
+# addition to speaking it. For example, if the misspelled word is "foo," and
+# the first suggestion is "for" enabling this setting would cause Orca to speak
+# "f o r" after speaking "for".
+SPELL_CHECK_SPELL_SUGGESTION = _("Spell _suggestion")
+
+# Translators: This is a label for a widget associated with an Orca setting.
+# When this option is enabled, Orca will present the context (surrounding text,
+# typically the sentence or line) in which the mistake occurred.
+SPELL_CHECK_PRESENT_CONTEXT = _("Present _context of error")
+
+# Translators: This is a label for an option to tell Orca whether or not it
+# should speak the coordinates of the current spreadsheet cell. Coordinates are
+# the row and column position within the spreadsheet (i.e. A1, B1, C2 ...)
+SPREADSHEET_SPEAK_CELL_COORDINATES = _("Speak spreadsheet cell coordinates")
+
+# Translators: This is a label for an option which controls what Orca speaks when
+# presenting selection changes in a spreadsheet. By default, Orca will speak just
+# what changed. For instance, if cells A1 through A8 are already selected, and the
+# user adds A9 to the selection, Orca by default would just say "A9 selected."
+# Some users, however, prefer to have Orca always announce the entire selected range,
+# i.e. in the same scenario say "A1 through A9 selected." Those users should enable
+# this option.
+SPREADSHEET_SPEAK_SELECTED_RANGE = _("Always speak selected spreadsheet range")
+
+# Translators: This is a label for an option for whether or not to speak the
+# header of a table cell in document content.
+TABLE_SPEAK_CELL_HEADER = _("Speak cell header")
+
+# Translators: This is a label for a group of settings in the Tables tab of the
+# Orca Preferences dialog. These settings control whether Orca speaks the entire
+# row when the user moves from row to row in different types of tables.
+TABLE_ROW_NAVIGATION = _("Row Navigation")
+
+# Translators: This is a label for a group of settings in the Tables tab of the
+# Orca Preferences dialog. These settings control what information about table
+# cells Orca announces, such as cell coordinates, headers, and spans.
+TABLE_CELL_NAVIGATION = _("Cell Navigation")
+
+# Translators: This is a label for an option to tell Orca to skip over empty/
+# blank cells when navigating tables in document content.
+TABLE_SKIP_BLANK_CELLS = _("Skip _blank cells")
+
+# Translators: This is a label for an option to tell Orca whether or not it
+# should speak table cell coordinates in document content.
+TABLE_SPEAK_CELL_COORDINATES = _("Speak _cell coordinates")
+
+# Translators: This is a label for an option to tell Orca whether or not it
+# should speak the span size of a table cell (e.g., how many rows and columns
+# a particular table cell spans in a table).
+TABLE_SPEAK_CELL_SPANS = _("Speak _multiple cell spans")
+
+# Translators: This string is associated with a combo box which allows the user
+# to select the set of symbols to be used when Orca presents print strings on a
+# refreshable braille display. Braille symbols vary from language to language
+# due in part to what print letters exist for that language. The other reason
+# braille symbols vary is due to which braille contractions get used.
+# Contractions are shorter forms of commonly-used letter combinations and
+# words. For instance in English there is a single braille symbol for ing (dots
+# 3-4-6), and the letter e (dots 1-5) all by itself represents the word every.
+# The list of rules which dictate what contractions should be used and whether
+# or not they can be used in a particular context are stored in tables provided
+# by liblouis.
+BRAILLE_CONTRACTION_TABLE = _("Contraction _Table:")
+
+# Translators: Braille flash messages are similar in nature to notifications or
+# announcements. They are most commonly used for Orca to communicate
+# Orca-specific information to the user via braille, such as confirming the
+# toggling of an Orca setting via command. The reason they are called flash
+# messages by screen readers is that they are shown on the refreshable braille
+# display for only a brief time, after which the original contents of the
+# display are restored. This label is for the spin button through which a user
+# can customize how long (in seconds) these temporary messages should be
+# displayed.
+BRAILLE_DURATION_SECS = _("D_uration (secs):")
+
+# Translators: This is the label for a setting which controls whether Orca
+# displays the braille indicator symbol at the end of each line of text.
+BRAILLE_ENABLE_END_OF_LINE_SYMBOL = _("_End of line symbol")
+
+# Translators: This is a label for a group of settings related to a refreshable
+# braille display.
+BRAILLE_DISPLAY_SETTINGS = _("Display Settings")
+
+# Translators: This is the label for a setting in the preferences dialog which
+# turns braille support on or off.
+BRAILLE_ENABLE_BRAILLE_SUPPORT = _("Braille support")
+
+# Translators: If this option is enabled, Orca will adjust the text shown on
+# the braille display so that only full words are shown. If it is not enabled,
+# Orca uses all of the cells on the display, but some words might not be fully
+# shown requiring the user to scroll to see the remainder.
+BRAILLE_ENABLE_WORD_WRAP = _("Word wrap")
+
+# Translators: Braille flash messages are similar in nature to notifications or
+# announcements in that they are temporarily shown on the refreshable braille
+# display. Upon removal of the message, the original contents of the braille
+# display are restored. This widget allows the user to toggle this feature.
+BRAILLE_ENABLE_FLASH_MESSAGES = _("Flash messages")
+
+# Translators: Braille flash messages are similar in nature to notifications or
+# announcements. They are most commonly used for Orca to communicate
+# Orca-specific information to the user via braille, such as confirming the
+# toggling of an Orca setting via command. The reason they are called flash
+# messages by screen readers is that they are shown on the refreshable braille
+# display for only a brief time, after which the original contents of the
+# display are restored.
+BRAILLE_FLASH_MESSAGE_SETTINGS = _("Flash Message Settings")
+
+# Translators: This label is for a frame containing braille indicator settings.
+# Within this frame, users can configure which dots (7, 8, or both) are used to
+# indicate selections, hyperlinks, and text attributes.
+BRAILLE_INDICATORS = _("Indicators")
+
+# Translators: This label for a widget from which the user can select which
+# braille dot or dots should be used to indicate that character(s) being
+# shown on the braille display are part of a link. The "indicator" can be chosen
+# from among: None, Dot 7, Dot 8, Dots 7 and 8.
+BRAILLE_HYPERLINK_INDICATOR = C_("Braille indicator", "Hyperlink:")
+
+# Translators: This label for a widget from which the user can select which
+# braille dot or dots should be used to indicate that character(s) being
+# shown on the braille display are selected. The "indicator" can be chosen
+# from among: None, Dot 7, Dot 8, Dots 7 and 8.
+BRAILLE_SELECTION_INDICATOR = C_("Braille indicator", "Selection:")
+
+# Translators: This label for a widget from which the user can select which
+# braille dot or dots should be used to indicate that character(s) being
+# shown on the braille display have a particular attribute (e.g. bold). The
+# "indicator" can be chosen from among: None, Dot 7, Dot 8, Dots 7 and 8.
+BRAILLE_TEXT_ATTRIBUTES_INDICATOR = C_("Braille indicator", "Text Attributes:")
+
+# Translators: Braille flash messages are similar in nature to notifications or
+# announcements. They are most commonly used for Orca to communicate
+# Orca-specific information to the user via braille, such as confirming the
+# toggling of an Orca setting via command. The reason they are called flash
+# messages by screen readers is that they are shown on the refreshable braille
+# display for only a brief time, after which the original contents of the
+# display are restored. In instances where the message to be displayed is
+# long/detailed, Orca provides a brief alternative. Users who prefer the brief
+# alternative can uncheck this widget.
+BRAILLE_MESSAGES_ARE_DETAILED = _("Messages are _detailed")
+
+# Translators: Braille flash messages are similar in nature to notifications or
+# announcements. They are most commonly used for Orca to communicate
+# Orca-specific information to the user via braille, such as confirming the
+# toggling of an Orca setting via command. The reason they are called flash
+# messages by screen readers is that they are shown on the refreshable braille
+# display for only a brief time, after which the original contents of the
+# display are restored. Some users, however, would prefer to have the message
+# remain displayed until they explicitly dismiss it. This can be accomplished
+# by making flash messages persistent by checking this widget.
+BRAILLE_MESSAGES_ARE_PERSISTENT = _("Messages are _persistent")
+
+# Translators: This is the title of a section in the braille settings where the user
+# can configure how Orca presents flash messages on a refreshable braille display.
+BRAILLE_FLASH_MESSAGES = _("Flash Messages")
+
+# Translators: This is the label for a setting for whether or not Orca should
+# use abbreviated role names when presenting the role of an object on a
+# refreshable braille display. For instance, if this option is enabled, Orca
+# would present "btn" instead of "button".
+BRAILLE_ABBREVIATED_ROLE_NAMES = _("_Abbreviated role names")
+
+# Translators: This is the label for a setting for whether or not Orca should
+# present contextual information about an object (e.g. the panel it is inside of)
+# on a refreshable braille display.
+BRAILLE_SHOW_CONTEXT = _("Show context (ancestors)")
+
+# Translators: This is the label for a setting which turns on contracted braille.
+# Contractions are shorter forms of commonly-used letter combinations and words.
+# For instance in English there is a single braille symbol for "ing" in English
+# braille.
+BRAILLE_ENABLE_CONTRACTED_BRAILLE = _("Contracted Braille")
+
+# Translators: This is the label for a setting which controls whether computer
+# braille (uncontracted) is used for the word at the cursor location when
+# contracted braille is enabled. If disabled, the word at the cursor remains
+# contracted like the rest of the text.
+BRAILLE_COMPUTER_BRAILLE_AT_CURSOR = _("Expand word at cursor")
+
+# Translators: This is the title of the Orca Preferences dialog box.
+DIALOG_SCREEN_READER_PREFERENCES = _("Screen Reader")
+
+# Translators: This is the accessible name for the Orca Preferences dialog box.
+DIALOG_SCREEN_READER_PREFERENCES_ACCESSIBLE = _("Screen Reader Preferences")
+
+# Translators: This is the label for a widget in the preferences dialog.
+DIALOG_ADD = _("Add")
+
+# Translators: This is the label for a widget in the preferences dialog.
+DIALOG_APPLY = _("Apply")
+
+# Translators: This is the label for a widget in the preferences dialog.
+DIALOG_CANCEL = _("Cancel")
+
+# Translators: This is the label for a widget in the preferences dialog.
+DIALOG_EDIT = _("Edit")
+
+# Translators: This is the label for a widget in the preferences dialog.
+DIALOG_HELP = _("Help")
+
+# Translators: This is the title of the preferences page where users manage
+# Orca extensions they have installed in their home directory. These extensions
+# are Python code written by end users, not built-in Orca features.
+USER_EXTENSIONS = _("User Extensions")
+
+EXTENSIONS_INFO = _(
+    # Translators: This is an informational message on the User Extensions
+    # preferences page. User extensions are Python code files or Python package
+    # directories placed in the user's Orca data directory. "Approve" refers to the
+    # user explicitly allowing Orca to load and run that code.
+    "User extensions are Python files or packages in ~/.local/share/orca/extensions. "
+    "Only approve extensions that you trust."
+)
+
+# Translators: This message is shown in the User Extensions preferences page
+# when Orca does not find any user extension files or packages in
+# ~/.local/share/orca/extensions.
+EXTENSIONS_NO_EXTENSIONS = _("No user extensions found.")
+
+# Translators: This is a button label in the User Extensions preferences page.
+# Pressing this button approves the selected user extension so Orca can load and
+# run it the next time extensions are loaded.
+EXTENSIONS_APPROVE = C_("user extensions", "Approve")
+
+# Translators: This is a button label in the User Extensions preferences page.
+# It is shown when a previously-approved extension has changed on disk and must
+# be approved again before Orca will load and run it.
+EXTENSIONS_REAPPROVE = C_("user extensions", "Re-approve")
+
+# Translators: This is a button label in the User Extensions preferences page.
+# Pressing this button removes Orca's approval for the selected user extension.
+EXTENSIONS_REVOKE = C_("user extensions", "Revoke")
+
+# Translators: This is a button label in the User Extensions preferences page.
+# Pressing this button asks the user to confirm deleting the selected extension
+# file or package directory from ~/.local/share/orca/extensions.
+EXTENSIONS_DELETE = C_("user extensions", "Delete")
+
+# Translators: This is the title of a confirmation dialog shown before deleting
+# a user extension file or package directory from ~/.local/share/orca/extensions.
+EXTENSIONS_DELETE_CONFIRMATION_TITLE = C_("user extensions", "Delete user extension?")
+
+EXTENSIONS_DELETE_CONFIRMATION_MESSAGE = C_(
+    "user extensions",
+    # Translators: This is the message in a confirmation dialog shown before deleting
+    # a user extension file or package directory from ~/.local/share/orca/extensions.
+    # The string substitution is the display name of the extension.
+    "The following extension will be permanently deleted from your user "
+    "extensions folder: %s. Do you want to continue?",
+)
+
+# Translators: This message is presented when Orca fails to delete a user
+# extension file or package directory from ~/.local/share/orca/extensions. The
+# string substitution is the display name of the extension.
+EXTENSIONS_DELETE_ERROR_MESSAGE = C_("user extensions", "Could not delete: %s.")
+
+# Translators: This is a button label in the User Extensions preferences page.
+# Pressing this button opens a dialog with metadata about the selected extension,
+# such as its author, version, and web page.
+EXTENSIONS_INFO_BUTTON = C_("user extensions", "Info")
+
+# Translators: This is a button label in the User Extensions preferences page.
+# Pressing this button opens a dialog with settings provided by the selected
+# user extension.
+EXTENSIONS_SETTINGS_BUTTON = C_("user extensions", "Settings")
+
+# Translators: This is a button label in the generated settings dialog for a
+# user extension. The button adds one item to a list setting exposed by the
+# extension, for instance a list of application names.
+EXTENSIONS_SETTINGS_NEW_ITEM = C_("user extensions", "New item")
+
+# Translators: This is a button label in the generated settings dialog for a
+# user extension. The button opens a file chooser so the user can choose a file
+# or folder path for a setting exposed by the extension.
+EXTENSIONS_SETTINGS_BROWSE = C_("user extensions", "Browse...")
+
+# Translators: This is a button label in the generated settings dialog for a
+# user extension. The button removes one item from a list setting exposed by the
+# extension, for instance a list of application names.
+EXTENSIONS_SETTINGS_DELETE_ITEM = C_("user extensions", "Delete")
+
+# Translators: This error message appears in the generated settings dialog for a
+# user extension when the user enters an invalid item in a list setting. The
+# exact list setting depends on the extension.
+EXTENSIONS_SETTINGS_INVALID_ITEM = C_("user extensions", "Invalid item.")
+
+# Translators: This error message appears in the generated settings dialog for a
+# user extension when the user enters an item that is already present in the same
+# list setting.
+EXTENSIONS_SETTINGS_DUPLICATE_ITEM = C_("user extensions", "Item already exists.")
+
+# Translators: This is a fallback label in the generated settings dialog for a
+# user extension. It is used for the first field in a dictionary entry editor
+# when the extension does not provide a more specific label.
+EXTENSIONS_SETTINGS_DICTIONARY_NAME = C_("user extensions", "Name")
+
+# Translators: This is a fallback label in the generated settings dialog for a
+# user extension. It is used for the second field in a dictionary entry editor
+# when the extension does not provide a more specific label.
+EXTENSIONS_SETTINGS_DICTIONARY_VALUE = C_("user extensions", "Value")
+
+# Translators: This error message appears in the generated settings dialog for a
+# user extension when the user enters an invalid value in a dictionary setting.
+# The exact dictionary setting depends on the extension.
+EXTENSIONS_SETTINGS_INVALID_VALUE = C_("user extensions", "Invalid value.")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by the name of the person or people who wrote the extension.
+EXTENSIONS_INFO_AUTHOR = C_("user extensions", "Author")
+
+# Translators: This is a label in the user extension information dialog. It
+# refers to the company, project, or similar entity associated with the
+# extension.
+EXTENSIONS_INFO_ORGANIZATION = C_("user extensions", "Organization")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by a copyright holder or copyright notice supplied by the extension
+# author.
+EXTENSIONS_INFO_COPYRIGHT = C_("user extensions", "Copyright")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by a short explanation of what the extension does.
+EXTENSIONS_INFO_DESCRIPTION = C_("user extensions", "Description")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by the filesystem path to the extension file or package directory.
+EXTENSIONS_INFO_LOCATION = C_("user extensions", "Location")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by the user-visible name of the extension.
+EXTENSIONS_INFO_NAME = C_("user extensions", "Name")
+
+EXTENSIONS_INFO_KEYBINDING_CONFLICT = C_(
+    "user extensions",
+    # Translators: This note is shown for an enabled user extension when one or more
+    # of its commands could not use their requested keyboard shortcuts because those
+    # shortcuts are already used by other Orca commands.
+    "Some commands were unbound due to conflicts.",
+)
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by whether the extension is approved, not approved, disabled, invalid,
+# or needs to be approved again.
+EXTENSIONS_INFO_STATUS = C_("user extensions", "Status")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by the extension version supplied by the extension author.
+EXTENSIONS_INFO_VERSION = C_("user extensions", "Version")
+
+# Translators: This is a label in the user extension information dialog. It is
+# followed by a URL for the extension or its author.
+EXTENSIONS_INFO_WEBSITE = C_("user extensions", "Website")
+
+# Translators: This is a status label in the User Extensions preferences page and
+# in the user extension information dialog. It means Orca found a Python file or
+# package, but it does not contain a valid Orca extension.
+EXTENSIONS_STATUS_INVALID = C_("user extensions", "Invalid")
+
+# Translators: This is a status label in the User Extensions preferences page and
+# in the user extension information dialog. It means the user has approved this
+# extension and Orca is allowed to load and run it.
+EXTENSIONS_STATUS_APPROVED = C_("user extensions", "Approved")
+
+# Translators: This is a status label in the User Extensions preferences page and
+# in the user extension information dialog. It means the extension has been
+# approved, but the user has currently turned it off.
+EXTENSIONS_STATUS_DISABLED = C_("user extensions", "Disabled")
+
+# Translators: This is a status label in the User Extensions preferences page and
+# in the user extension information dialog. It means the user has not yet
+# approved this extension, so Orca will not load or run it.
+EXTENSIONS_STATUS_UNAPPROVED = C_("user extensions", "Not approved")
+
+# Translators: This is a status label in the User Extensions preferences page and
+# in the user extension information dialog. It means the extension was approved
+# previously, but its file or package contents have changed and must be approved
+# again before Orca will load and run it.
+EXTENSIONS_STATUS_MODIFIED = C_("user extensions", "Modified; re-approval required")
+
+# Translators: This is the label for a widget in the preferences dialog.
+DIALOG_SAVE_AS = _("Save _As")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which determines whether or not key echo is enabled.
+# If it is enabled, the user can then choose which types of keys they want to
+# hear. See the strings which follow this one.
+ECHO_ENABLE_KEY_ECHO = _("Key echo")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not alphabetic keys will
+# be spoken when pressed.
+ECHO_ALPHABETIC_KEYS = _("Alphabetic keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not numeric keys will
+# be spoken when pressed.
+ECHO_NUMERIC_KEYS = _("Numeric keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not punctuation keys will
+# be spoken when pressed.
+ECHO_PUNCTUATION_KEYS = _("Punctuation keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not function keys (F1, F2,
+# etc.) will be spoken when pressed.
+ECHO_FUNCTION_KEYS = _("Function keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not diacritical keys will
+# be spoken when pressed.
+ECHO_DIACRITICAL_KEYS = _("Diacritical keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not modifier keys (Shift,
+# Control, Alt, etc.) will be spoken when pressed.
+ECHO_MODIFIER_KEYS = _("Modifier keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not navigation keys (Arrows,
+# Home, End, etc.) will be spoken when pressed.
+ECHO_NAVIGATION_KEYS = _("Navigation keys")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not the space bar will
+# be spoken when pressed.
+ECHO_SPACE = _("Space")
+
+# Translators: Orca has a feature to "echo" keys as they are pressed. This is
+# the label for the setting which controls whether or not action keys such as
+# Enter, Escape, Tab, Backspace, etc. will be spoken when pressed.
+ECHO_ACTION_KEYS = _("Action keys")
+
+# Translators: This is the label for a group of settings on the Echo preferences
+# page. It groups the types of keys that will be spoken when pressed.
+ECHO_KEYS_TO_ECHO = _("Keys to Echo")
+
+# Translators: This is the label for a group of settings on the Echo preferences
+# page. It groups the text echo options (character, word, sentence).
+ECHO_TYPING_ECHO = _("Typing Echo")
+
+# Translators: Orca has an "echo" feature to present text as it is being written
+# by the user. While Orca's "key echo" options present the actual keyboard keys
+# being pressed, "character echo" presents the character/string of length 1 that
+# is inserted as a result of the keypress.
+ECHO_CHARACTER = C_("Typing echo", "Character")
+
+# Translators: Orca has an "echo" feature to present text as it is being written
+# by the user. While Orca's "key echo" options present the actual keyboard keys
+# being pressed, "sentence echo" presents the sentence that was just completed.
+ECHO_SENTENCE = C_("Typing echo", "Sentence")
+
+# Translators: Orca has an "echo" feature to present text as it is being written
+# by the user. While Orca's "key echo" options present the actual keyboard keys
+# being pressed, "word echo" presents the word that was just completed.
+ECHO_WORD = C_("Typing echo", "Word")
+
+# Translators: This is a label for a widget that allows the user to select which
+# settings profile should be active. A profile is a collection of settings which
+# can be saved and later loaded.
+GENERAL_ACTIVE_PROFILE = _("Active _Profile:")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Some users want to hear additional information about what is being spoken. If
+# this widget is enabled, Orca will announce that a form has been entered
+# before speaking the contents of that form. At the end of the form, Orca will
+# announce that the form is being exited.
+GENERAL_ANNOUNCE_FORMS_IN_SAY_ALL = _("Announce _forms in Say All")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Some users want to hear additional information about what is being spoken. If
+# this widget is enabled, Orca will announce that a panel has been entered
+# before speaking the new location. At the end of the panel contents, Orca will
+# announce that the panel is being exited. A panel is a generic container of
+# objects, such as a group of related form fields.
+GENERAL_ANNOUNCE_PANELS_IN_SAY_ALL = _("Announce _panels in Say All")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Some users want to hear additional information about what is being spoken. If
+# this widget is enabled, Orca will announce that a table with x rows and y
+# columns has been entered before speaking the content of that table. At the
+# end of the table content, Orca will announce that the table is being exited.
+GENERAL_ANNOUNCE_TABLES_IN_SAY_ALL = _("Announce _tables in Say All")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Some users want to hear additional information about what is being spoken. If
+# this widget is enabled, Orca will announce that a blockquote has been
+# entered before speaking the text. At the end of the text, Orca will announce
+# that the blockquote is being exited.
+GENERAL_ANNOUNCE_BLOCKQUOTES_IN_SAY_ALL = _("Announce block_quotes in Say All")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Some users want to hear additional information about what is being spoken. If
+# this widget is enabled, Orca will announce when an ARIA landmark has been
+# entered or exited. ARIA landmarks are the W3C defined HTML tag attribute
+# 'role' used to identify important part of webpage like banners, main context,
+# search, etc.
+GENERAL_ANNOUNCE_LANDMARKS_IN_SAY_ALL = _("Announce land_marks in Say All")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# Some users want to hear additional information about what is being spoken. If
+# this widget is enabled, Orca will announce that a list with x items has
+# been entered before speaking the content of that list. At the end of the list
+# content, Orca will announce that the list is being exited.
+GENERAL_ANNOUNCE_LISTS_IN_SAY_ALL = _("Announce li_sts in Say All")
+
+# Translators: Orca has a setting which determines which progress bar updates
+# should be announced. The options are all progress bars, only progress bars in
+# the active application, or only progress bars in the current window.
+GENERAL_APPLIES_TO = _("Applies to:")
+
+# Translators: Orca has a setting which determines which progress bar updates
+# should be announced. The options are all progress bars, only progress bars in
+# the active application, or only progress bars in the current window. This
+# label is for the second option.
+GENERAL_APPLICATION = _("Application")
+
+# Translators: Orca has a setting which determines which progress bar updates
+# should be announced. The options are all progress bars, only progress bars in
+# the active application, or only progress bars in the current window. This
+# label is for the third option.
+GENERAL_WINDOW = _("Window")
+
+# Translators: This is an option in the Preferences dialog box related to the
+# presentation of progress bar updates. If this widget is enabled, Orca will
+# periodically emit beeps which increase in pitch as the value of the progress
+# bar increases.
+GENERAL_BEEP_UPDATES = _("Bee_p updates")
+
+# Translators: This is a label for the setting which controls how Orca will
+# present the date.
+GENERAL_DATE_FORMAT = _("Dat_e format:")
+
+# Translators: This is a label for the setting which controls how Orca will
+# present the time.
+GENERAL_TIME_FORMAT = _("_Time format:")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text. The
+# following string is the label for the profiles sidebar item.
+GENERAL_PROFILES = _("Profiles")
+
+# Translators: This is the heading shown at the top of the profiles preferences
+# page, indicating which profile is currently selected and being edited.
+CURRENT_PROFILE = _("Current Profile")
+
+PROFILES_INFO = (
+    _(
+        # Translators: This is an informational message shown at the top of the Profiles
+        # preferences page. It explains to the user what profiles are and how they work.
+        # The quoted profile name is `PROFILE_DEFAULT = C_("Profile", "Default")` defined
+        # earlier in this file.
+        'Profiles are collections of settings. The "%s" profile is '
+        "loaded at startup. To edit an existing profile, select it below and then "
+        "adjust settings on the other pages. To rename or delete the selected profile, "
+        "use the Tab key to navigate to its associated buttons.",
+    )
+    % PROFILE_DEFAULT
+)
+
+# Translators: This is a label in the Preferences dialog box. It applies to
+# several options related to which progress bars Orca should speak and how
+# often Orca should speak them.
+PROGRESS_BARS = _("Progress Bars")
+
+# Translators: Orca has a Say All feature which speaks the entire document.
+# This is the label for the group of settings related to Say All.
+GENERAL_SAY_ALL = _("Say All")
+
+# Translators: Say all by refers to the way that Orca will say (speak) an
+# amount of text -- in particular, where Orca where insert pauses. There are
+# currently two choices (supplied by a combo box to the right of this label):
+# say all by sentence and say all by line.  If Orca were speaking a work of
+# fiction, it would probably be best to do say all by sentence so it sounds
+# more natural. If Orca were speaking something like a page of computer
+# commands, doing a say all by line would work better.
+SAY_ALL_BY = _("Say All By")
+
+SAY_ALL_INFO = _(
+    # Translators: This is an informational message on the Say All preferences page
+    # explaining what Say All does. Please translate this message consistent with the
+    # strings in `GENERAL_SAY_ALL = _("Say All")` and SAY_ALL_BY = _("Say All By")`
+    "Say All reads from the current location to the end of the document, "
+    'pausing after each sentence or line based on the "Say All By" value.',
+)
+
+SAY_ALL_NAVIGATION_INFO = _(
+    # Translators: This is an informational message on the Say All preferences page
+    # explaining the options found under the section with the following label:
+    # `SAY_ALL_REWIND_AND_FAST_FORWARD_BY = _("Rewind and Fast Forward By")`
+    # Please translate "structural navigation" using terminology consistent with
+    # `KB_GROUP_STRUCTURAL_NAVIGATION = _("Structural navigation")`
+    "If enabled, you can use the arrow keys and/or structural navigation commands "
+    "to move within the document while Say All is active.",
+)
+
+SAY_ALL_ANNOUNCEMENTS_INFO = _(
+    # Translators: This is an informational message on the Say All preferences page.
+    # It explains that the settings under Change Announcements and Container
+    # Announcements control which additional details are spoken during Say All.
+    "The announcement settings determine which document changes, text formatting "
+    "changes, and container boundaries will be announced as Say All moves through "
+    "the document.",
+)
+
+GENERAL_SPEAK_OBJECT_UNDER_MOUSE = _("Speak object under mo_use")
+
+# Translators: Profiles in Orca make it possible for users to quickly switch
+# amongst a group of pre-defined settings (e.g. an 'English' profile for reading
+# text written in English using an English-language speech synthesizer and
+# braille rules, and a similar 'Spanish' profile for reading Spanish text. The
+# following string is the label for the widget from which the user can select
+# which profile should be loaded when Orca starts up.
+GENERAL_START_UP_PROFILE = _("Start-up Profile:")
+
+# Translators: This is an option in the Preferences dialog box related to the
+# presentation of progress bar updates. If this widget is enabled, Orca will
+# periodically display the current percentage in braille.
+GENERAL_BRAILLE_UPDATES = _("_Braille updates")
+
+
+# This button will load the selected settings profile in the application.
+GENERAL_LOAD = _("_Load")
+
+GENERAL_PRESENT_TOOLTIPS = _("_Present tooltips")
+
+# Translators: This is the label for a button in a dialog.
+GENERAL_REMOVE = _("_Remove")
+
+# Translators: This is an option in the Preferences dialog box related to the
+# presentation of progress bar updates. If this widget is enabled, Orca will
+# periodically speak the current percentage.
+GENERAL_SPEAK_UPDATES = _("_Speak updates")
+
+# Translators: Here this is a label for a spin button through which a user can
+# customize the frequency in seconds an announcement should be made regarding
+# the current value of a progress bar.
+GENERAL_FREQUENCY_SECS = C_("ProgressBar", "Frequency (secs):")
+
+# Translators: The "Orca modifier" is a key that Orca uses for its own commands.
+# The default Orca modifier is KP_Insert for the "desktop" keyboard layout and
+# Caps Lock for the "laptop" keyboard layout. This string is a label for choosing
+# which key(s) should be used as the Orca modifier.
+MODIFIER_KEYS = _("Screen Reader Modifier Keys")
+
+# Translators: This refers to the Insert key being used as the Orca modifier.
+MODIFIER_INSERT = _("Insert")
+
+# Translators: This refers to the keypad Insert key being used as the Orca modifier.
+# It is important that the translation be different from the one for "Insert" so
+# that users can distinguish between the two keys.
+MODIFIER_KP_INSERT = _("Keypad Insert")
+
+# Translators: This refers to the Caps Lock key being used as the Orca modifier.
+MODIFIER_CAPS_LOCK = _("Caps Lock")
+
+# Translators: This refers to the Shift Lock key being used as the Orca modifier.
+MODIFIER_SHIFT_LOCK = _("Shift Lock")
+
+# Translators: Orca can optionally speak additional details as the user
+# navigates (e.g. via the arrow keys) within document content. If this widget
+# is enabled, Orca will announce that a form has been entered as the user
+# arrows into it and before speaking the new location. Upon navigating out of
+# the form, Orca will announce that the form has been exited prior to speaking
+# the new location.
+SPEECH_ANNOUNCE_FORMS_DURING_NAVIGATION = _("Announce _forms during navigation")
+
+# Translators: Orca can optionally speak additional details as the user
+# navigates (e.g. via the arrow keys) within document content.  If this
+# widget is enabled, Orca will announce that a list with x items has been
+# entered as the user arrows into it and before speaking the list content. Upon
+# navigating out of the list, Orca will announce that the list has been exited
+# prior to speaking the new location.
+SPEECH_ANNOUNCE_LISTS_DURING_NAVIGATION = _("Announce _lists during navigation")
+
+# Translators: Orca can optionally speak additional details as the user
+# navigates (e.g. via the arrow keys) within document content.  If this
+# widget is enabled, Orca will announce that a panel has been entered as the
+# user arrows into it and before speaking the new location. Upon navigating out
+# of the panel, Orca will announce that the panel has been exited prior to
+# speaking the new location. A panel is a generic container of objects, such as
+# a group of related form fields.
+SPEECH_ANNOUNCE_PANELS_DURING_NAVIGATION = _("Announce _panels during navigation")
+
+# Translators: Orca can optionally speak additional details as the user
+# navigates (e.g. via the arrow keys) within document content.  If this
+# widget is enabled, Orca will announce that a table with x rows and y
+# columns has been entered as the user arrows into it and before speaking the
+# table content. Upon navigating out of the table, Orca will announce that the
+# table has been exited prior to speaking the new location.
+SPEECH_ANNOUNCE_TABLES_DURING_NAVIGATION = _("Announce _tables during navigation")
+
+# Translators: Orca can optionally speak additional details as the user
+# navigates (e.g. via the arrow keys) within document content.  If this
+# widget is enabled, Orca will announce that a blockquote has been entered as
+# the user arrows into it and before speaking the text. Upon navigating out of
+# the blockquote, Orca will announce that the blockquote has been exited prior
+# to speaking the new location.
+SPEECH_ANNOUNCE_BLOCKQUOTES_DURING_NAVIGATION = _("Announce block_quotes during navigation")
+
+# Translators: Orca can optionally speak additional details as the user
+# navigates (e.g. via the arrow keys) within document content.  If this
+# widget is enabled, Orca will announce the ARIA landmark that has been
+# entered as the user arrows into it and before speaking the text. Upon
+# navigating out of the landmark, Orca will announce that the landmark has been
+# exited prior to speaking the new location. ARIA landmarks are the W3C defined
+# HTML tag attribute 'role' used to identify important part of webpage like
+# banners, main context, search, etc.
+SPEECH_ANNOUNCE_LANDMARKS_DURING_NAVIGATION = _("Announce land_marks during navigation")
+
+# Translators: If this setting is enabled, Orca will only speak text which is
+# actually displayed on the screen. It will NOT speak things like the role of
+# an item (e.g. widget) or its state (e.g. not checked) or say misspelled to
+# indicate the presence of red squiggly spelling error lines -- things which
+# Orca normally speaks. This setting is primarily intended for low vision users
+# and sighted users with a learning disability.
+SPEECH_ONLY_SPEAK_DISPLAYED_TEXT = _("Only speak displayed text")
+
+# Translators: Orca has a command to present font and formatting information,
+# including foreground and background color. The setting associated with this
+# widget determines how Orca will speak colors: As rgb values or as names
+# (e.g. light blue).
+SPEECH_SPEAK_COLORS_AS_NAMES = _("S_peak colors as names")
+
+# Translators: This is a label for a widget associated with whether Orca will
+# present the mnemonic (underlined character) of an object, such as a button or
+# menu item, when it becomes focused/selected.
+PRESENT_OBJECT_MNEMONICS = _("Mnemonics")
+
+# Translators: If this widget is enabled, Orca will speak the accessible
+# description of an object. Whereas the accessible name of an object tends to
+# be short and typically corresponds to what is displayed on screen, the
+# contents of the accessible description tend to be longer, e.g. matching the
+# text of the tooltip, and are sometimes redundant to the accessible name.
+# Therefore, we allow the user to opt out of this additional information.
+SPEECH_SPEAK_DESCRIPTION = _("Description")
+
+# Translators: This is a label for a widget associated with whether Orca will
+# speak indentation information for text content.
+SPEECH_SPEAK_INDENTATION = _("Indentation")
+
+# Translators: This is the label for a widget on the Speech preferences page.
+# When checked, indentation will only be announced when it has changed from
+# the previous line.
+SPEECH_INDENTATION_ONLY_IF_CHANGED = _("Only speak indentation if changed")
+
+# Translators: The misspelled-word indicator is the red squiggly line that
+# appears underneath misspelled words in editable text fields. If this setting
+# is enabled, when a user first moves into a word with this indicator, or types
+# a misspelled word causing this indicator to appear, Orca will announce that
+# the word is misspelled.
+SPEECH_SPEAK_MISSPELLED_WORD_INDICATOR = _("Misspelled-word indicator")
+
+# Translators: This is a label for a widget associated with when Orca will
+# announce text formatting changes (e.g. bold, italic) when navigating.
+TEXT_ATTRIBUTE_CHANGES = _("Text attribute changes")
+
+# Translators: This is an option for the text attribute changes setting.
+TEXT_ATTRIBUTE_CHANGES_OFF = C_("text attribute changes", "Off")
+
+# Translators: This is an option for the text attribute changes setting.
+# When selected, formatting changes are only announced in editable content.
+TEXT_ATTRIBUTE_CHANGES_EDITABLE = C_("text attribute changes", "Editable text only")
+
+# Translators: This is an option for the text attribute changes setting.
+# When selected, formatting changes are always announced.
+TEXT_ATTRIBUTE_CHANGES_ALWAYS = C_("text attribute changes", "Always")
+
+# Translators: This is a label for a widget associated with whether Orca will
+# speak blank lines when navigating in document content.
+SPEECH_SPEAK_BLANK_LINES = _("Blank lines")
+
+# Translators: This widget toggles whether or not Orca says the child
+# position (e.g., item 6 of 7).
+SPEECH_SPEAK_CHILD_POSITION = _("Position in set")
+
+# Translators: This widget is associated with the setting that determines
+# what happens if a user presses Up or Down arrow to move row by row in a GUI
+# table, such as a GtkTreeView. Document tables, such as those found in Writer
+# and web content, and spreadsheet tables such as those found in Calc are not
+# considered GUI tables. If this setting is enabled, Orca will speak the entire
+# row; if it is disabled, Orca will only speak the cell with focus.
+SPEECH_SPEAK_FULL_ROW_IN_GUI_TABLES = _("Speak full row in _GUI tables")
+
+# Translators: This widget is associated with the setting that determines
+# what happens if a user presses Up or Down arrow to move row by row in a
+# document table. In this context, document tables include tables such as those
+# found in Writer documents as well as HTML table elements, but exclude
+# spreadsheet tables such as found in Calc. If this setting is enabled, Orca
+# will speak the entire row; if it is disabled, Orca will only speak the cell
+# with focus.
+SPEECH_SPEAK_FULL_ROW_IN_DOCUMENT_TABLES = _("Speak full row in _document tables")
+
+# Translators: This widget is associated with the setting that determines
+# what happens if a user presses Up or Down arrow to move row by row in a
+# spreadsheet. If this setting is enabled, Orca will speak the entire row; if
+# it is disabled, Orca will only speak the cell with focus.
+SPEECH_SPEAK_FULL_ROW_IN_SPREADSHEETS = _("Speak full row in sp_readsheets")
+
+# Translators: This is a label for a widget associated with whether Orca speaks
+# tutorial messages / "help text".
+SPEECH_SPEAK_TUTORIAL_MESSAGES = _("Tutorial messages")
+
+# Translators: This is the label for a group of settings on the Speech
+# preferences page. It groups settings related to how objects are presented
+# via speech (descriptions, mnemonics, child position).
+SPEECH_OBJECT_DETAILS = _("Spoken Object Details")
+
+# Translators: This is a setting in the Speech and Braille preferences pages.
+# When enabled, Orca will provide detailed/verbose object descriptions.
+OBJECT_PRESENTATION_IS_DETAILED = _("Object presentation is detailed")
+
+# Translators: This is the label for a checkbox on the Speech preferences page.
+# When checked, Orca will apply the user's pronunciation dictionary when speaking.
+# The pronunciation dictionary allows users to customize how specific words or
+# character sequences are spoken by the speech synthesizer.
+SPEECH_USE_PRONUNCIATION_DICTIONARY = _("Use pronunciation dictionary")
+
+# Translators: This is a label for a group of widgets from which the user can
+# chose what is and is not spoken by Orca during navigation or Say All. For
+# instance, when the user first navigates into a table, should Orca speak the
+# table details or just the newly focused/selected cell?
+SPEECH_SPOKEN_CONTEXT = _("Spoken Context")
+
+# Translators: This is the label for a widget in the preferences dialog.
+# If selected speech support will be enabled.
+SPEECH_ENABLE_SPEECH = _("Speech support")
+
+# Translators: Orca has system messages which are similar in nature to
+# notifications or announcements. They are most commonly used for Orca to
+# communicate Orca-specific information to the user via speech, such as
+# confirming the toggling of an Orca setting via command.  In instances where
+# the message to be displayed is long/detailed, Orca provides a brief
+# alternative. Users who prefer that brief alternative can uncheck this
+# widget.
+SPEECH_SYSTEM_MESSAGES_ARE_DETAILED = _("_System messages are detailed")
+
+# Translators: The on-screen braille display is a graphical window that displays a
+# visual representation of what would be shown on a connected braille display,
+# including the braille dots and the text characters they correspond to. It is
+# primarily used by developers and testers who may not have a physical braille
+# display.
+BRAILLE_MONITOR = _("On-screen braille")
+
+# Translators: The on-screen speech display is a graphical window that displays a
+# scrolling log of all text spoken by the screen reader. It is primarily used by
+# developers and testers to verify what is being spoken without having to listen
+# to the audio.
+SPEECH_MONITOR = _("On-screen speech")
+
+# Translators: This is the title of the on-screen display settings category in the
+# Orca Preferences dialog. These settings control the appearance of the on-screen
+# braille and speech monitor windows.
+ON_SCREEN_DISPLAY = _("On-Screen Display")
+
+# Translators: This is the label of a spin button that controls the number of braille
+# cells displayed in the on-screen braille monitor.
+BRAILLE_MONITOR_CELL_COUNT = _("Cell count")
+
+# Translators: This is the label of a checkbox that controls whether the on-screen
+# braille monitor shows Unicode braille dot patterns instead of text characters.
+BRAILLE_MONITOR_SHOW_DOTS = _("Show braille dot patterns")
+
+# Translators: This is the label of a color button that controls the text color
+# in the on-screen braille monitor.
+BRAILLE_MONITOR_FOREGROUND = _("Text color")
+
+# Translators: This is the label of a color button that controls the background color
+# in the on-screen braille monitor.
+BRAILLE_MONITOR_BACKGROUND = _("Background color")
+
+# Translators: This is the label of a spin button that controls the font size of
+# text in the on-screen speech monitor.
+SPEECH_MONITOR_FONT_SIZE = _("Font size")
+
+# Translators: This is the label of a color button that controls the text color
+# in the on-screen speech monitor.
+SPEECH_MONITOR_FOREGROUND = _("Text color")
+
+# Translators: This is the label of a color button that controls the background color
+# in the on-screen speech monitor.
+SPEECH_MONITOR_BACKGROUND = _("Background color")
+
+SPEECH_MONITOR_INFO = _(
+    # Translators: This is an informational message displayed at the top of the on-screen
+    # speech display preferences page, briefly explaining the feature and how to toggle it.
+    "The on-screen speech display is a window that shows what the screen reader "
+    "is speaking. The default keybinding to show or hide it is Orca+Shift+d. "
+    "This can be changed in Commands.",
+)
+
+BRAILLE_MONITOR_INFO = _(
+    # Translators: This is an informational message displayed at the top of the on-screen
+    # braille display preferences page, briefly explaining the feature and how to toggle it.
+    "The on-screen braille display is a window intended for developers that shows "
+    "what would be presented on a braille display. To show or hide it, assign a "
+    "keybinding in Commands.",
+)
+
+# Translators: This is the label of the Braille page in the Orca Preferences dialog.
+BRAILLE = _("Braille")
+
+# Translators: This is the label of the Documents page in the Orca Preferences
+# dialog. On that page there are settings related to navigating and reading documents,
+# including web pages, word processor documents, and PDFs.
+DOCUMENTS = _("Documents")
+
+# Translators: This string is a label for a preferences page containing settings
+# that apply when the user is navigating using the application's native navigation
+# (e.g., arrow keys handled by the app) rather than the screen reader's browse mode.
+NATIVE_NAVIGATION = _("Native navigation")
+
+# Translators: This string is a label for a group of settings related to what
+# happens when a document or web page finishes loading.
+PAGE_LOAD = _("Page load")
+
+# Translators: This is the label for a group of settings related to what Orca
+# announces when entering/exiting different types of containers/ancestors.
+ANNOUNCEMENTS = _("Container Announcements")
+
+# Translators: This is the label for a group of settings which control
+# announcements of document revision markup and text formatting changes.
+CHANGE_ANNOUNCEMENTS = _("Change Announcements")
+
+# Translators: This is a heading for a group of toggleable widgets. Each one controls
+# whether Orca announces entering a type of container (e.g. blockquotes, forms,
+# landmarks, lists, panels, tables). The full meaning is "Announce when entering
+# [container type]" where the container types are listed below this heading.
+ANNOUNCE_WHEN_ENTERING = _("Announce when entering")
+
+# Translators: This is the label of the Echo page in the Orca Preferences dialog.
+# On that page there are a variety of settings related to what Orca will echo
+# as the user types on the keyboard.
+ECHO = _("Echo")
+
+ECHO_INFO = _(
+    # Translators: This text appears at the top of the Echo preferences page. It explains
+    # the difference between key echo (speaking the key pressed) and typing echo (speaking
+    # what was inserted as a result of typing).
+    "Key echo speaks the key you pressed. Typing echo speaks what was inserted "
+    "into the document as a result of your typing.",
+)
+
+# Translators: This is the label of the General page in the Orca Preferences
+# dialog. On that page there are a variety of general Orca settings which do
+# not fit well into any of the other pages.
+GENERAL = _("General")
+
+# Translators: This is the label of the Key Bindings page in the Orca Preferences
+# dialog. On that page there is a list of all Orca commands and the keystrokes
+# associated with them. The user can customize the keystrokes for any command.
+KEY_BINDINGS = _("Key Bindings")
+
+# Translators: This is the label of the Commands page in the Orca Preferences
+# dialog. On that page there is a list of all Orca commands and the keystrokes
+# associated with them. The user can customize the keystrokes for any command.
+COMMANDS = _("Commands")
+
+# Translators: This is the label of the Mouse page in the Orca Preferences dialog.
+# On that page there are settings related to what information Orca presents when
+# the mouse pointer moves.
+MOUSE = _("Mouse")
+
+# Translators: This is an informational message displayed on Orca's Mouse
+# preferences page. Mouse review features may not work properly on
+# Wayland because Wayland restricts applications from monitoring the
+# mouse pointer.
+MOUSE_WAYLAND_WARNING = _("These settings may not work on Wayland.")
+
+# Translators: This is the label of the Pronunciation page in the Orca Preferences
+# dialog. On that page there is UI for customizing how a given word will be sent
+# to the speech synthesizer. For instance "idk" can be sent to the speech server
+# as "I don't know" or "I D K" or "eye dee kay" or whatever causes the user's
+# speech synthesizer to say what the user finds most helpful.
+PRONUNCIATION = _("Pronunciation")
+
+# Translators: This is the title of the math presentation settings. Math here refers
+# to mathematical expressions such as equations, fractions, and formulas encountered
+# in documents and web pages. Presentation refers to how they are spoken and brailled.
+MATH_PRESENTATION = _("Math presentation")
+
+# Translators: This refers to a human language such as English, Spanish, or German.
+LANGUAGE = _("Language:")
+
+# Translators: This is the style used when speaking mathematical expressions.
+# "ClearSpeak" produces natural-sounding speech (e.g. "x squared") while
+# "SimpleSpeak" is more literal and structured (e.g. "x superscript 2 end superscript").
+MATH_SPEECH_STYLE = _("Speech style:")
+
+# Translators: This is a verbosity level for speaking mathematical expressions.
+# "Terse" provides minimal information, for example "square root x" instead of
+# "the square root of x".
+MATH_VERBOSITY_TERSE = _("Terse")
+
+# Translators: This is a verbosity level for speaking mathematical expressions.
+# "Medium" is the default and provides a moderate amount of detail.
+MATH_VERBOSITY_MEDIUM = _("Medium")
+
+# Translators: This is a verbosity level for speaking mathematical expressions.
+# "Verbose" provides the most detail, for example "the square root of x" instead
+# of "square root x".
+MATH_VERBOSITY_VERBOSE = _("Verbose")
+
+# Translators: This is the braille code used to represent mathematical expressions.
+# Examples include "Nemeth" (common in the US) and "UEB" (Unified English Braille).
+MATH_BRAILLE_CODE = _("Braille code:")
+
+# Translators: This is the format used when copying math content to the clipboard.
+# Options include MathML, LaTeX, ASCIIMath, and Speech.
+MATH_COPY_FORMAT = _("Copy format:")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# the label for a setting that controls navigation granularity. In Enhanced
+# mode, MathCAT groups related items (e.g. treating "x+1" as one unit). In
+# Simple mode, each element is visited individually. In Character mode,
+# individual symbols are visited one at a time.
+MATH_NAV_MODE = _("Navigation mode:")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# the label for a setting that controls how the current position is indicated
+# on a braille display during math navigation. Dots 7 and 8 are used to mark
+# the position. The options control which cells get those dots: none, only the
+# first character, the first and last characters, or all characters.
+MATH_BRAILLE_NAV_HIGHLIGHT = _("Braille navigation highlight:")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. When this
+# setting is enabled, navigating past the edge of a 2D structure like a matrix
+# or table automatically moves back to the containing expression rather than
+# staying inside the structure.
+MATH_AUTO_ZOOM_OUT = _("Automatically exit 2D math structures")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the navigation granularity options. In Enhanced mode, MathCAT groups
+# related items together for faster navigation.
+MATH_NAV_MODE_ENHANCED = _("Enhanced")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the navigation granularity options. In Simple mode, each math
+# element is visited individually.
+MATH_NAV_MODE_SIMPLE = _("Simple")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the navigation granularity options. In Character mode, individual
+# symbols are visited one at a time.
+MATH_NAV_MODE_CHARACTER = _("Character")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the braille highlight options. When set to None, the current position
+# during math navigation is not highlighted on the braille display.
+MATH_BRAILLE_HIGHLIGHT_NONE = C_("braille nav highlight", "None")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the braille highlight options. When set to First character, only the
+# first cell of the current math item is highlighted with dots 7 and 8.
+MATH_BRAILLE_HIGHLIGHT_FIRST_CHAR = _("First character")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the braille highlight options. When set to End points, the first and
+# last cells of the current math item are highlighted with dots 7 and 8.
+MATH_BRAILLE_HIGHLIGHT_END_POINTS = _("End points")
+
+# Translators: Orca has a math navigation mode powered by MathCAT. This is
+# one of the braille highlight options. When set to All cells, every cell of
+# the current math item is highlighted with dots 7 and 8.
+MATH_BRAILLE_HIGHLIGHT_ALL = _("All cells")
+
+# Translators: This is the label of the Sound page in the Orca Preferences dialog.
+# On that page there are settings related to sound output, including volume
+# and progress bar beep notifications.
+SOUND = _("Sound")
+
+# Translators: This is the label for a widget in the preferences dialog which
+# turns sound support on or off.
+SOUND_ENABLE_SOUND_SUPPORT = _("Sound support")
+
+# Translators: This is the label for the volume control in the Sound preferences.
+SOUND_VOLUME = _("Volume")
+
+# Translators: This is the label of the Tables page in the Orca Preferences
+# dialog. On that page there are settings related to table navigation, such as
+# whether to speak table cell coordinates, row and column headers, and whether
+# to read tables cell by cell or by full rows.
+TABLES = _("Tables")
+
+# Translators: This is the label of the Time and Date page in the Orca Preferences
+# dialog.
+TIME_AND_DATE = _("Time and Date")
+
+# Translators: This is the label of the Speech page in the Orca Preferences dialog.
+SPEECH = _("Speech")
+
+# Translators: This is the label of the Text Attributes page in the Orca Preferences
+# dialog.
+TEXT_ATTRIBUTES = _("Text Attributes")
+
+TEXT_ATTRIBUTES_INFO = _(
+    # Translators: This text appears at the top of the Text Attributes preferences
+    # page. It explains that users can configure which text formatting attributes
+    # (such as bold, italic, underline) should be announced via speech and/or braille,
+    # and that the order of the attributes controls the order in which they are presented.
+    "Configure which text attributes are spoken and/or marked in braille, "
+    "and the order in which they are presented.",
+)
+
+# Translators: This is the label of the Voice page in the Orca Preferences
+# dialog.
+VOICE = _("Voice")
+
+# Translators: This is the label for a section in the Voice Sets preferences
+# page where users can select and manage voice sets for different languages.
+LANGUAGE_VOICE_SETTINGS = _("Voice Sets")
+
+# Translators: This is a label for a combo box that selects which voice set
+# to configure. A voice set is a named collection of voice settings, such as
+# the primary set or a language-specific set (e.g. Italian).
+VOICE_SET = _("Voice set:")
+
+# Translators: This is the title of a confirmation dialog shown when the user
+# is about to delete a voice set. The %s is replaced with the voice set name.
+VOICE_SET_DELETE_CONFIRMATION = _("Delete voice set '%s'?")
+
+# Translators: This is the label for the global (default) voice set in the
+# voice set selector combo box. It represents the main voice configuration
+# for the current profile.
+VOICE_SET_GLOBAL = C_("VoiceSet", "Global")
+
+# Translators: This is the accessible name for a button that creates a new
+# voice set for a specific language.
+VOICE_SET_CREATE_NEW = _("New Voice Set")
+
+VOICE_SET_INFO = (
+    _(
+        # Translators: This is an informational message shown at the top of the Voice
+        # Sets page explaining what voice sets are. The "%s" is replaced with the
+        # name of the global voice set, which comes from this localized string above:
+        # `VOICE_SET_GLOBAL = C_("VoiceSet", "Global")`
+        "Voice sets are collections of voice types (such as default, uppercase, "
+        'hyperlink, and system). The "%s" voice set contains the voice types '
+        "for the current profile. Additional voice sets can be created for "
+        "specific languages.",
+    )
+    % VOICE_SET_GLOBAL
+)
+
+# Translators: This is an informational message shown at the top of the Voice
+# Sets page. A voice set is a named collection of voice settings, such as
+# the primary set or a language-specific set (e.g. Italian). When translating
+# "Commands", please use terminology consistent with that of this localized
+# string above: `COMMANDS = _("Commands")`
+VOICE_SET_INFO_COMMANDS = "You can assign keybindings to any configured voice set in Commands."
+
+# Translators: This is the label of the Voice Types page in the Orca
+# Preferences dialog, where users configure voices for different contexts
+# (e.g. default, uppercase, hyperlink, system).
+VOICE_TYPES = _("Voice Types")
+
+# Translators: This is the label for a group of settings on the Voice preferences
+# page. It contains widgets that control whether speech is enabled and how
+# certain content (numbers, colors) is spoken.
+VOICE_SPEECH_SETTINGS = _("Speech Settings")
+
+# Translators: This is the accessible label for a button in the Voice preferences
+# that opens a dialog to configure settings for a specific voice type (such as
+# default, hyperlink, uppercase, or system). The button displays only an icon
+# (a cog/gear), so this label is for screen reader users. The %s is replaced
+# with the voice type name (e.g., "Default", "Uppercase", "Hyperlink", "System").
+VOICE_TYPE_SETTINGS = C_("VoiceType", "%s Settings")
+
+# Translators: This is the heading for a group of language switching settings
+# in the Voice preferences dialog.
+LANGUAGE_SWITCHING = _("Language Switching")
+
+# Translators: This is a label for a setting that controls whether Orca will
+# automatically switch the speech synthesizer's language based on the language
+# of document content being spoken (e.g. text in a web page or word processor).
+# It appears under a "Language Switching" group heading.
+AUTO_LANGUAGE_SWITCHING = _("Document content")
+
+# Translators: This is a label for a setting that controls whether Orca will
+# automatically switch the speech synthesizer's language based on the language
+# of UI elements being spoken (e.g. buttons, labels, and menus).
+# It appears under a "Language Switching" group heading.
+AUTO_LANGUAGE_SWITCHING_UI = _("UI elements")
+
+# Translators: This is a label for a setting that controls whether Orca will
+# only switch to languages that the user has explicitly configured a voice for.
+# When enabled, encountering text in an unconfigured language will not trigger
+# a voice change. It appears under a "Language Switching" group heading.
+ONLY_SWITCH_CONFIGURED_LANGUAGES = _("Limit switching to configured voices")
+
+# Translators: This label is for a group of buttons on the Text Attributes
+# pane of the Orca Preferences dialog. On that pane there is a long list of
+# possible text attributes. The user can select one and then, by using the
+# Move buttons in this group, adjust when that attribute is spoken by Orca.
+TEXT_ATTRIBUTES_ADJUST_SELECTED_ATTRIBUTE = _("Adjust selected attribute")
+
+# Translators: This label for a widget from which the user can select which
+# braille dot or dots should be used to indicate that character(s) being
+# shown on the braille display have a particular attribute (e.g. bold). The
+# "indicator" can be chosen from among: None, Dot 7, Dot 8, Dots 7 and 8.
+TEXT_ATTRIBUTES_BRAILLE_INDICATOR = _("Braille Indicator")
+
+# Translators: This label is on a button on the Text Attributes pane of the
+# Orca Preferences dialog. On that pane there is a long list of possible text
+# attributes. The user can select one and then, by using the Move _down one
+# button, move that attribute down one line in the list. The ordering in the
+# list is important as Orca will speak the selected text attributes in the
+# given order.
+TEXT_ATTRIBUTES_MOVE_DOWN_ONE = _("Move down one")
+
+# Translators: This label is on a button on the Text Attributes pane of the
+# Orca Preferences dialog. On that pane there is a long list of possible text
+# attributes. The user can select one and then, by using the Move _up one
+# button, move that attribute up one line in the list. The ordering in the list
+# is important as Orca will speak the selected text attributes in the given
+# order.
+TEXT_ATTRIBUTES_MOVE_UP_ONE = _("Move up one")
+
+# Translators: This label is on a button on the Text Attributes pane of the
+# Orca Preferences dialog. On that pane there is a long list of possible text
+# attributes. The user can select one and then, by using the Move to _bottom
+# button, move that attribute to the bottom of the list. The ordering in the
+# list is important as Orca will speak the selected text attributes in the
+# given order.
+TEXT_ATTRIBUTES_MOVE_TO_BOTTOM = _("Move to bottom")
+
+# Translators:  This label is on a button on the Text Attributes pane of the
+# Orca Preferences dialog. On that pane there is a long list of possible text
+# attributes. The user can select one and then, by using the Move to _top
+# button, move that attribute to the top of the list. The ordering in the list
+# is important as Orca will speak the selected text attributes in the given
+# order.
+TEXT_ATTRIBUTES_MOVE_TO_TOP = _("Move to top")
+
+# Translators: This is a label for a group of widgets associated with how Orca
+# will present text attributes such as bold, underline, italic, font size,
+TEXT_ATTRIBUTES_TEXT_ATTRIBUTES = _("Text attributes")
+
+# Translators: This is the accessible name for a widget in the preferences dialog
+# that allows the user to reorder text attributes in the list.
+TEXT_ATTRIBUTES_REORDER = _("Reorder")
+
+# Translators: This refers to the amount of information Orca provides about a
+# particular object that receives focus. The choices are Brief and Verbose.
+VERBOSITY = _("Verbosity")
+
+# Translators: This refers to the amount of information Orca provides about a
+# particular object that receives focus.
+VERBOSITY_LEVEL_VERBOSE = _("Ver_bose")
+
+# Translators: This is a label for a group of widgets associated with how Orca
+# will speak regardless of which voice (Default, Hyperlink, System, Uppercase)
+# is being used. For instance, Orca can speak numbers as individual digits
+# (e.g. 123 as 1 2 3) or as a whole (e.g. 123 as one hundred and twenty three).
+VOICE_GLOBAL_VOICE_SETTINGS = _("Global Voice Settings")
+
+# Translators: If this setting is enabled, 123 will be spoken as the individual
+# digits 1 2 3; otherwise, it will be sent to the synthesizer and (likely)
+# spoken as one hundred and twenty three.
+VOICE_SPEAK_NUMBERS_AS_DIGITS = _("Speak _numbers as digits")
+
+# Translators: Having multiple voice types in Orca makes it possible for the
+# user to more quickly identify properties of text non-visually, such as the
+# fact that text is written in capital letters or is a link; or that text is
+# actually visible on the screen as opposed to an Orca-specific message. The
+# available voice types in Orca include: default, uppercase, hyperlink, and
+# system -- each of which can be configured by the user to sound the way he/she
+# finds most helpful. This string is displayed in the label for the group of
+# all of the controls associated with configuring a particular voice type.
+VOICE_VOICE_TYPE_SETTINGS = _("Voice Type Settings")
+
+# Translators: This is the label for a widget from which the user can select
+# which speech synthesis system Orca should use. Examples of speech synthesis
+# systems include Speech Dispatcher and Spiel.
+VOICE_SPEECH_SYSTEM = _("Speech _system:")
+
+# Translators: This is the label for a widget from which the user can select
+# which speech synthesizer Orca should use. Examples of speech synthesizers
+# include eSpeak, Festival, and Pico.
+VOICE_SPEECH_SYNTHESIZER = _("Speech synthesi_zer:")
+
+# Translators: Orca uses Speech Dispatcher to present content to users via
+# text-to-speech. Speech Dispatcher has a feature to control how capital
+# letters are presented: Do nothing at all; say the word 'capital' prior to
+# presenting a capital letter (which Speech Dispatcher refers to as 'spell'),
+# or play a tone (which Speech Dispatcher refers to as a sound 'icon'). Orca
+# refers to these things as 'capitalization style'. This string is the text of
+# the label through which users can choose which of style they would prefer.
+VOICE_CAPITALIZATION_STYLE = _("Capitalization style")
+
+# Translators: This is the label for a widget from which the user can select
+# the language of the speech synthesizer.
+VOICE_LANGUAGE = _("_Language:")
+
+# Translators: This is the label for a widget from which the user can select
+# which voice from the current speech synthesizer should be used. Often voices
+# have human names such as "Allison". Hence the use of the term person.
+VOICE_PERSON = _("_Person:")
+
+# Translators: This is the label for a widget from which the user can set the
+# speaking rate of the current voice.
+VOICE_RATE = _("_Rate:")
+
+# Translators: This is the label for a widget from which the user can set the
+# pitch of the current voice.
+VOICE_PITCH = _("Pi_tch:")
+
+# Translators: This is the label for a widget from which the user can set the
+# volume of the current voice.
+VOICE_VOLUME = _("Vo_lume:")
+
+# Translators: This is the label for a widget from which the user can set the
+# inflection (pitch range) of the current voice. More inflection means the voice
+# varies its pitch more when speaking; less inflection means it sounds more monotone.
+VOICE_INFLECTION = _("_Inflection:")
+
+# Translators: Having multiple voice types in Orca makes it possible for the
+# user to more quickly identify properties of text non-visually, such as the
+# fact that text is written in capital letters or is a link; or that text is
+# actually visible on the screen as opposed to an Orca-specific message. The
+# available voice types in Orca include: default, uppercase, hyperlink, and
+# system -- each of which can be configured by the user to sound the way he/she
+# finds most helpful. This string is displayed in the label for the combo box
+# in which the user selects a voice type to configure.
+VOICE_VOICE_TYPE = _("_Voice type:")
+
+# Translators: This refers to the voice used by Orca by default.
+VOICE_TYPE_DEFAULT = _("Default")
+
+# Translators: This refers to the voice used by Orca when presenting one or more
+# characters which are part of a hyperlink.
+VOICE_TYPE_HYPERLINK = _("Hyperlink")
+
+# Translators: This refers to the voice used by Orca when presenting information
+# which is not displayed on the screen as text, but is still being communicated
+# by the system in some visual fashion. For instance, Orca says "misspelled" to
+# indicate the presence of the red squiggly line found under a spelling error;
+# Orca might say "3 of 6" when a user Tabs into a list of six items and the
+# third item is selected. And so on.
+VOICE_TYPE_SYSTEM = _("System")
+
+# Translators: This refers to the voice used by Orca when presenting one or more
+# characters which is written in uppercase.
+VOICE_TYPE_UPPERCASE = _("Uppercase")
+
+
+def notifications_count(count):
+    """Returns the gui label representing the notifications count."""
+
+    # Translators: Orca has a feature to list all of the notification messages
+    # received, similar to the functionality gnome-shell provides when you press
+    # Super+M, but it works in all desktop environments. This string is the title
+    # of the dialog that contains the list of notification messages. The string
+    # substitution is for the number of messages in the list.
+    return ngettext("%d notification", "%d notifications", count) % count

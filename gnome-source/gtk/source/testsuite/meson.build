@@ -1,0 +1,114 @@
+testutils_lib = static_library('testutils', 'testutils.c', 'diff/diffreg.c',
+  c_args: common_cflags + ['-DGDK_STATIC_COMPILATION'],
+  include_directories: include_directories('..'),
+  dependencies: [
+    glib_dep,
+    gio_dep,
+    graphene_dep,
+    cairo_dep,
+    pango_dep,
+    pixbuf_dep,
+    libgsk_dep,
+  ],
+  install: false
+)
+
+gtk_libexecdir = join_paths(gtk_prefix, get_option('libexecdir'))
+installed_test_bindir = join_paths(gtk_libexecdir, 'installed-tests', 'gtk-4.0')
+installed_test_datadir = join_paths(gtk_datadir, 'installed-tests', 'gtk-4.0')
+
+common_env = [
+  'GIO_USE_VFS=local',
+  'GSETTINGS_BACKEND=memory',
+  'GTK_CSD=1',
+  'G_ENABLE_DIAGNOSTIC=0',
+  'GSETTINGS_SCHEMA_DIR=@0@'.format(gtk_schema_build_dir),
+  'GDK_DEBUG=default-settings,no-portals',
+  'GTK_DEBUG=css',
+  'LSAN_OPTIONS=suppressions=@0@/lsan.supp:print_suppressions=0:detect_leaks=0:allocator_may_return_null=1'.format(meson.project_source_root()),
+  'ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer',
+]
+exclude_unstable = ['flaky', 'failing']
+
+if os_win32
+  common_env += [ 'GIO_USE_VOLUME_MONITOR=win32' ]
+else
+  common_env += [ 'GIO_USE_VOLUME_MONITOR=unix' ]
+endif
+
+
+setups = [
+  { 'backend': 'x11', 'if': x11_enabled, },
+  { 'backend': 'wayland', 'if': wayland_enabled, 'is_default': true, },
+  { 'name': 'wayland_gl',
+    'backend': 'wayland', 'if': wayland_enabled,
+    'env': [ 'GDK_DISABLE=gles-api'
+    ],
+  },
+  { 'name': 'wayland_minimal',
+    'backend': 'wayland', 'if': wayland_enabled,
+    'env': [ 'GDK_GL_DISABLE=all:blend-func-extended',
+             'GDK_VULKAN_DISABLE=all:dual-source-blend'
+    ],
+  },
+  { 'backend': 'win32', 'if': os_win32 },
+  { 'backend': 'broadway', 'if': broadway_enabled, },
+]
+
+foreach setup : setups
+  if setup.get('if')
+    backend = setup.get('backend')
+    name = setup.get('name', backend)
+    exclude = []
+
+    if backend != 'broadway'
+      exclude += 'gsk-compare-broadway'
+    endif
+
+    env = common_env + [
+      'GDK_BACKEND=@0@'.format(backend),
+    ] + setup.get('env', [])
+
+    add_test_setup(
+      name,
+      env: env + ['TEST_OUTPUT_SUBDIR=@0@'.format(name)],
+      exclude_suites: exclude_unstable + exclude,
+      is_default: setup.get('is_default', false) and not meson.is_subproject(),
+    )
+
+    add_test_setup(
+      '@0@_unstable'.format(name),
+      env: env + ['TEST_OUTPUT_SUBDIR=@0@_unstable'.format(name)],
+      exclude_suites: exclude,
+    )
+  endif
+endforeach
+
+if get_option('build-demos') and not os_android
+  test('general info', gtk4_demo,
+       args: [ '--autoquit' ],
+       protocol: 'exitcode',
+       env: common_env + [
+         'GTK_DEBUG=general-info',
+         'GTK_INSPECTOR_GENERAL_INFO_FILE=@0@'.format(join_paths(meson.current_build_dir(), 'general-info.md')),
+          ] + setup.get('env', []),
+       suite: [ 'info' ],
+  )
+endif
+
+subdir('gdk')
+subdir('gsk')
+subdir('gtk')
+subdir('css')
+subdir('a11y')
+subdir('tools')
+subdir('reftests')
+if build_gir
+  subdir('introspection')
+
+  if wayland_enabled
+    subdir('headless')
+  endif
+endif
+
+subdir('svg')

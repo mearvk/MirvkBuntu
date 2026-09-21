@@ -1,0 +1,338 @@
+#include "config.h"
+
+#include "gskgpucachedstrokeprivate.h"
+
+#include "gskgpucacheprivate.h"
+#include "gskgpucachedprivate.h"
+#include "gskgpudeviceprivate.h"
+#include "gskgpuuploadopprivate.h"
+#include "gskgpuutilsprivate.h"
+#include "gskgpuprintprivate.h"
+#include "gskgpuimageprivate.h"
+#include "gskenumtypes.h"
+#include "gskrectprivate.h"
+#include "gskstrokeprivate.h"
+#include "gskpathprivate.h"
+#include "gsktransformprivate.h"
+
+#include "gdk/gdkcolorstateprivate.h"
+#include "gdk/gdkcolorprivate.h"
+#include "gdk/gdkcairoprivate.h"
+
+#include "gsk/gskprivate.h"
+
+typedef struct _GskGpuCachedStroke GskGpuCachedStroke;
+
+struct _GskGpuCachedStroke
+{
+  GskGpuCached parent;
+
+  GskPath *path;
+  GskStroke stroke;
+  float sx, sy;
+
+  /* Subpixel position of the stroke bounds wrt to device grid */
+  guint fx, fy;
+
+  GskGpuImage *image;
+  graphene_point_t image_offset;
+};
+
+static void
+gsk_gpu_cached_stroke_finalize (GskGpuCached *cached)
+{
+  GskGpuCachedStroke *self = (GskGpuCachedStroke *) cached;
+  GskGpuCachePrivate *priv = gsk_gpu_cache_get_private (cached->cache);
+
+  g_hash_table_remove (priv->stroke_cache, self);
+
+  gsk_path_unref (self->path);
+  gsk_stroke_clear (&self->stroke);
+  g_object_unref (self->image);
+}
+
+static gboolean
+gsk_gpu_cached_stroke_should_collect (GskGpuCached *cached,
+                                      gint64        cache_timeout,
+                                      gint64        timestamp)
+{
+  if (gsk_gpu_cached_is_old (cached, cache_timeout, timestamp))
+    {
+      if (cached->atlas)
+        gsk_gpu_cached_set_stale (cached, TRUE);
+      else
+        return TRUE;
+    }
+
+  /* Strokes are only collected when their atlas is freed */
+  return FALSE;
+}
+
+static guint
+gsk_gpu_cached_stroke_hash (gconstpointer data)
+{
+  const GskGpuCachedStroke *self = data;
+
+  /* We ignore dashes here */
+  return GPOINTER_TO_UINT (self->path) ^
+         ((guint) (self->stroke.line_width * 10)) ^
+         (((guint) (self->stroke.miter_limit * 10)) << 4) ^
+         (self->stroke.line_cap << 6) ^
+         (self->stroke.line_join << 8) ^
+         (((guint) (self->sx * 16)) << 16) ^
+         ((guint) (self->sy * 16) << 8) ^
+         (self->fx << 4) ^
+         self->fy;
+}
+
+static gboolean
+gsk_gpu_cached_stroke_equal (gconstpointer v1,
+                             gconstpointer v2)
+{
+  const GskGpuCachedStroke *stroke1 = v1;
+  const GskGpuCachedStroke *stroke2 = v2;
+
+  return stroke1->fx == stroke2->fx &&
+         stroke1->fy == stroke2->fy &&
+         stroke1->path == stroke2->path &&
+         stroke1->sx == stroke2->sx &&
+         stroke1->sy == stroke2->sy &&
+         gsk_stroke_equal (&stroke1->stroke, &stroke2->stroke);
+}
+
+static const GskGpuCachedClass GSK_GPU_CACHED_STROKE_CLASS =
+{
+  sizeof (GskGpuCachedStroke),
+  "Stroke",
+  FALSE,
+  gsk_gpu_cached_print_no_stats,
+  gsk_gpu_cached_stroke_finalize,
+  gsk_gpu_cached_stroke_should_collect
+};
+
+typedef struct _StrokeData StrokeData;
+struct _StrokeData
+{
+  GskPath *path;
+  GskStroke stroke;
+};
+
+static void
+stroke_data_free (gpointer data)
+{
+  StrokeData *stroke = data;
+
+  gsk_path_unref (stroke->path);
+  gsk_stroke_clear (&stroke->stroke);
+  g_free (stroke);
+}
+
+static void
+stroke_path (gpointer  data,
+             cairo_t  *cr)
+{
+  StrokeData *stroke = data;
+
+  cairo_set_source_rgba (cr, 1, 1, 1, 1);
+  gsk_cairo_stroke_path (cr, stroke->path, &stroke->stroke);
+}
+
+static void
+stroke_path_print (gpointer  data,
+                   GString  *string)
+{
+  StrokeData *stroke = data;
+  char *str;
+
+  g_string_append_printf (string, "stroke %g ",
+                          gsk_stroke_get_line_width (&stroke->stroke));
+  gsk_gpu_print_enum (string, GSK_TYPE_LINE_CAP, gsk_stroke_get_line_cap (&stroke->stroke));
+  gsk_gpu_print_enum (string, GSK_TYPE_LINE_JOIN, gsk_stroke_get_line_join (&stroke->stroke));
+  g_string_append_printf (string, "%g ", gsk_stroke_get_miter_limit (&stroke->stroke));
+
+  str = gsk_path_to_string (stroke->path);
+  g_string_append_printf (string, "%.*s%s",
+                          20, str, strlen (str) > 20 ? "…" : "");
+  g_free (str);
+}
+
+static gsize
+mod_subpixel (float  pos,
+              float  scale,
+              gsize  subpixel_scale,
+              float *delta)
+{
+  scale *= subpixel_scale;
+  pos = fmod (scale * pos, subpixel_scale);
+  *delta = (ceil (pos) - pos) / scale;
+  if (pos > 0.0)
+    return subpixel_scale - (gsize) ceil (pos);
+  else
+    return (gsize) - ceil (pos);
+}
+
+static void
+determine_scale_and_subpixel_grid (const graphene_size_t *scale,
+                                   GskTransform           *modelview,
+                                   float                  *sx,
+                                   float                  *sy,
+                                   size_t                 *subpixel_scale)
+{
+  if (gsk_transform_get_fine_category (modelview) <= GSK_FINE_TRANSFORM_CATEGORY_2D)
+    {
+      *sx = exp2f (ceilf (log2f (scale->width)));
+      *sy = exp2f (ceilf (log2f (scale->height)));
+      *subpixel_scale = 1;
+    }
+  else
+    {
+      *sx = scale->width;
+      *sy = scale->height;
+      *subpixel_scale = 32;
+    }
+}
+
+GskGpuImage *
+gsk_gpu_cached_stroke_lookup (GskGpuCache           *self,
+                              GskGpuFrame           *frame,
+                              const graphene_size_t *scale,
+                              const graphene_rect_t *bounds,
+                              GskTransform          *modelview,
+                              GskPath               *path,
+                              const GskStroke       *stroke,
+                              graphene_rect_t       *out_rect)
+{
+  GskGpuCachePrivate *priv = gsk_gpu_cache_get_private (self);
+  float sx, sy, dx, dy;
+  GskGpuCachedStroke *cached;
+  gsize fx, fy, padding;
+  cairo_rectangle_int_t area;
+  GskGpuImage *image = NULL;
+  graphene_rect_t viewport;
+  size_t subpixel_scale;
+
+  determine_scale_and_subpixel_grid (scale, modelview, &sx, &sy, &subpixel_scale);
+
+  fx = mod_subpixel (bounds->origin.x, sx, subpixel_scale, &dx);
+  fy = mod_subpixel (bounds->origin.y, sy, subpixel_scale, &dy);
+
+  cached = g_hash_table_lookup (priv->stroke_cache,
+                                &(GskGpuCachedStroke) {
+                                  .path = path,
+                                  .stroke = *stroke,
+                                  .sx = sx,
+                                  .sy = sy,
+                                  .fx = fx,
+                                  .fy = fy,
+                                });
+  if (cached)
+    {
+      gsk_gpu_cached_use ((GskGpuCached *) cached);
+
+      graphene_rect_init (out_rect,
+                          cached->image_offset.x - dx,
+                          cached->image_offset.y - dy,
+                          gsk_gpu_image_get_width (cached->image) / sx,
+                          gsk_gpu_image_get_height (cached->image) / sy);
+
+      return g_object_ref (cached->image);
+    }
+
+  if (!gsk_path_get_stroke_bounds (path, stroke, &viewport) ||
+      !gsk_rect_snap_to_grid_grow (&viewport,
+                                   scale,
+                                   &GRAPHENE_POINT_INIT ((float) fx / (sx * subpixel_scale),
+                                                         (float) fy / (sy * subpixel_scale)),
+                                   &viewport))
+    return NULL;
+
+  padding = 1;
+
+  /* Should already be integers because of snap_to_grid() above, but round just to be sure */
+  cached = gsk_gpu_cached_new_from_atlas (self,
+                                          &GSK_GPU_CACHED_STROKE_CLASS,
+                                          round (sx * viewport.size.width) + 2 * padding,
+                                          round (sy * viewport.size.height) + 2 * padding);
+
+  if (cached)
+    {
+      image = gsk_gpu_cached_get_atlas_image ((GskGpuCached *) cached);
+      area = *gsk_gpu_cached_get_atlas_area ((GskGpuCached *) cached);
+      g_object_ref (image);
+      cached->path = gsk_path_ref (path);
+      cached->stroke = GSK_STROKE_INIT_COPY (stroke);
+      cached->sx = sx;
+      cached->sy = sy;
+      cached->fx = fx;
+      cached->fy = fy;
+      cached->image = g_object_ref (image);
+      graphene_rect_inset (&viewport, padding / -sx, padding / -sy);
+      cached->image_offset = GRAPHENE_POINT_INIT (viewport.origin.x - area.x / sx,
+                                                  viewport.origin.y - area.y / sy);
+
+      ((GskGpuCached *) cached)->pixels = area.width * area.height;
+
+      g_hash_table_insert (priv->stroke_cache, cached, cached);
+      gsk_gpu_cached_use ((GskGpuCached *) cached);
+
+    }
+  else
+    {
+      /* If the unclipped path is too large to fit in the atlas,
+       * we give up on caching. We still need to return a mask,
+       * but we'll use the clipped bounds that we were given.
+       * We'll also assume those are grid aligned.
+       */
+      viewport = *bounds;
+      area.x = 0;
+      area.y = 0;
+      area.width = ceil (sx * viewport.size.width);
+      area.height = ceil (sy * viewport.size.height);
+
+      image = gsk_gpu_device_create_upload_image (gsk_gpu_cache_get_device (self),
+                                                  FALSE,
+                                                  GDK_MEMORY_DEFAULT,
+                                                  gsk_gpu_color_state_get_conversion (GDK_COLOR_STATE_SRGB),
+                                                  area.width,
+                                                  area.height);
+      if (image == NULL)
+        return NULL;
+    }
+
+  gsk_gpu_upload_cairo_into_op (frame,
+                                image,
+                                &area,
+                                &viewport,
+                                stroke_path,
+                                stroke_path_print,
+                                g_memdup2 (&(StrokeData) {
+                                  .path = gsk_path_ref (path),
+                                  .stroke = GSK_STROKE_INIT_COPY (stroke),
+                                }, sizeof (StrokeData)),
+                                (GDestroyNotify) stroke_data_free);
+
+  graphene_rect_init (out_rect,
+                      viewport.origin.x - area.x / sx - dx,
+                      viewport.origin.y - area.y / sy - dy,
+                      gsk_gpu_image_get_width (image) / sx,
+                      gsk_gpu_image_get_height (image) / sy);
+
+  return image;
+}
+
+void
+gsk_gpu_cached_stroke_init_cache (GskGpuCache *cache)
+{
+  GskGpuCachePrivate *priv = gsk_gpu_cache_get_private (cache);
+
+  priv->stroke_cache = g_hash_table_new (gsk_gpu_cached_stroke_hash,
+                                         gsk_gpu_cached_stroke_equal);
+}
+
+void
+gsk_gpu_cached_stroke_finish_cache (GskGpuCache *cache)
+{
+  GskGpuCachePrivate *priv = gsk_gpu_cache_get_private (cache);
+
+  g_hash_table_unref (priv->stroke_cache);
+}

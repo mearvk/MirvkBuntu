@@ -1,0 +1,12 @@
+blend {
+  mode: multiply;
+  bottom: color {
+    bounds: 14 14 72 72;
+    color: rgb(255,0,0);
+  }
+  top: color {
+    bounds: 20 20 60 60;
+    color: rgb(0,0,255);
+  }
+  color-state: srgb-linear;
+}

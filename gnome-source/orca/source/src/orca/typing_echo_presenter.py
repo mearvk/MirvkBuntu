@@ -1,0 +1,863 @@
+# Orca
+#
+# Copyright 2005-2008 Sun Microsystems Inc.
+# Copyright 2011-2025 Igalia, S.L.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-lines
+
+"""Provides typing echo support."""
+
+from __future__ import annotations
+
+import string
+from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING, Any
+
+from . import (
+    dbus_service,
+    debug,
+    gsettings_registry,
+    guilabels,
+    input_event,
+    messages,
+    presentation_manager,
+    speech_presenter,
+    typing_echo_presenter_command_definitions,
+)
+from .ax_text import AXText
+from .ax_utilities import AXUtilities
+from .extension import Extension
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
+    from gi.repository import Atspi
+
+    from .command import Command
+    from .scripts import default
+    from .typing_echo_presenter_preferences_grid import TypingEchoPreferencesGrid
+
+
+class PreferenceCategory(Enum):
+    """Categories of typing echo preferences for UI grouping."""
+
+    PRIMARY = "primary"
+    KEY = "key"
+    TEXT = "text"
+
+
+@dataclass(frozen=True)
+class TypingEchoPreference:
+    """Descriptor for a single typing echo preference."""
+
+    prefs_key: str
+    label: str
+    category: PreferenceCategory
+    getter: Callable[[], bool]
+    setter: Callable[[bool], bool]
+
+
+@gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.TypingEcho", name="typing-echo")
+class TypingEchoPresenter(Extension):
+    """Provides typing echo support."""
+
+    GROUP_LABEL = guilabels.ECHO
+
+    _SCHEMA = "typing-echo"
+    KEY_KEY_ECHO = "key-echo"
+    KEY_CHARACTER_ECHO = "character-echo"
+    KEY_WORD_ECHO = "word-echo"
+    KEY_SENTENCE_ECHO = "sentence-echo"
+    KEY_ALPHABETIC_KEYS = "alphabetic-keys"
+    KEY_NUMERIC_KEYS = "numeric-keys"
+    KEY_PUNCTUATION_KEYS = "punctuation-keys"
+    KEY_SPACE = "space"
+    KEY_MODIFIER_KEYS = "modifier-keys"
+    KEY_FUNCTION_KEYS = "function-keys"
+    KEY_ACTION_KEYS = "action-keys"
+    KEY_NAVIGATION_KEYS = "navigation-keys"
+    KEY_DIACRITICAL_KEYS = "diacritical-keys"
+
+    def _get_setting(self, key: str, default: bool) -> bool:
+        """Returns the dconf value for key, or default if not in dconf."""
+
+        return gsettings_registry.get_registry().layered_lookup(
+            self._SCHEMA,
+            key,
+            "b",
+            default=default,
+        )
+
+    def __init__(self) -> None:
+        self._delayed_terminal_press: input_event.KeyboardEvent | None = None
+        self._present_locking_keys: bool | None = None
+        super().__init__()
+
+    def _get_commands(self) -> list[Command]:
+        """Returns commands for registration."""
+
+        return typing_echo_presenter_command_definitions.get_commands(self)
+
+    def create_preferences_grid(self) -> TypingEchoPreferencesGrid:
+        """Returns the GtkGrid containing the Typing Echo preferences UI."""
+
+        # pylint: disable-next=import-outside-toplevel
+        from .typing_echo_presenter_preferences_grid import TypingEchoPreferencesGrid
+
+        return TypingEchoPreferencesGrid(self)
+
+    def get_typing_echo_preferences(self) -> tuple[TypingEchoPreference, ...]:
+        """Return descriptors for all typing echo preferences."""
+
+        return (
+            TypingEchoPreference(
+                "enableKeyEcho",
+                guilabels.ECHO_ENABLE_KEY_ECHO,
+                PreferenceCategory.PRIMARY,
+                self.get_key_echo_enabled,
+                self.set_key_echo_enabled,
+            ),
+            TypingEchoPreference(
+                "enableAlphabeticKeys",
+                guilabels.ECHO_ALPHABETIC_KEYS,
+                PreferenceCategory.KEY,
+                self.get_alphabetic_keys_enabled,
+                self.set_alphabetic_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableNumericKeys",
+                guilabels.ECHO_NUMERIC_KEYS,
+                PreferenceCategory.KEY,
+                self.get_numeric_keys_enabled,
+                self.set_numeric_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enablePunctuationKeys",
+                guilabels.ECHO_PUNCTUATION_KEYS,
+                PreferenceCategory.KEY,
+                self.get_punctuation_keys_enabled,
+                self.set_punctuation_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableSpace",
+                guilabels.ECHO_SPACE,
+                PreferenceCategory.KEY,
+                self.get_space_enabled,
+                self.set_space_enabled,
+            ),
+            TypingEchoPreference(
+                "enableModifierKeys",
+                guilabels.ECHO_MODIFIER_KEYS,
+                PreferenceCategory.KEY,
+                self.get_modifier_keys_enabled,
+                self.set_modifier_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableFunctionKeys",
+                guilabels.ECHO_FUNCTION_KEYS,
+                PreferenceCategory.KEY,
+                self.get_function_keys_enabled,
+                self.set_function_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableActionKeys",
+                guilabels.ECHO_ACTION_KEYS,
+                PreferenceCategory.KEY,
+                self.get_action_keys_enabled,
+                self.set_action_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableNavigationKeys",
+                guilabels.ECHO_NAVIGATION_KEYS,
+                PreferenceCategory.KEY,
+                self.get_navigation_keys_enabled,
+                self.set_navigation_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableDiacriticalKeys",
+                guilabels.ECHO_DIACRITICAL_KEYS,
+                PreferenceCategory.KEY,
+                self.get_diacritical_keys_enabled,
+                self.set_diacritical_keys_enabled,
+            ),
+            TypingEchoPreference(
+                "enableEchoByCharacter",
+                guilabels.ECHO_CHARACTER,
+                PreferenceCategory.TEXT,
+                self.get_character_echo_enabled,
+                self.set_character_echo_enabled,
+            ),
+            TypingEchoPreference(
+                "enableEchoByWord",
+                guilabels.ECHO_WORD,
+                PreferenceCategory.TEXT,
+                self.get_word_echo_enabled,
+                self.set_word_echo_enabled,
+            ),
+            TypingEchoPreference(
+                "enableEchoBySentence",
+                guilabels.ECHO_SENTENCE,
+                PreferenceCategory.TEXT,
+                self.get_sentence_echo_enabled,
+                self.set_sentence_echo_enabled,
+            ),
+        )
+
+    def apply_typing_echo_preferences(
+        self,
+        updates: Iterable[tuple[TypingEchoPreference, bool]],
+    ) -> dict[str, bool]:
+        """Apply the provided preference values and return the saved mapping."""
+
+        result: dict[str, bool] = {}
+        for descriptor, value in updates:
+            descriptor.setter(value)
+            result[descriptor.prefs_key] = value
+        return result
+
+    @dbus_service.command
+    def cycle_key_echo(
+        self,
+        script: default.Script | None = None,
+        event: input_event.InputEvent | None = None,
+        notify_user: bool = True,
+    ) -> bool:
+        """Cycle through the key echo levels."""
+
+        tokens = [
+            "TYPING ECHO PRESENTER: cycle_key_echo. Script:",
+            script,
+            "Event:",
+            event,
+            "notify_user:",
+            notify_user,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        (new_key, new_word, new_sentence) = (False, False, False)
+        key = self.get_key_echo_enabled()
+        word = self.get_word_echo_enabled()
+        sentence = self.get_sentence_echo_enabled()
+
+        if (key, word, sentence) == (False, False, False):
+            (new_key, new_word, new_sentence) = (True, False, False)
+            full = messages.KEY_ECHO_KEY_FULL
+            brief = messages.KEY_ECHO_KEY_BRIEF
+        elif (key, word, sentence) == (True, False, False):
+            (new_key, new_word, new_sentence) = (False, True, False)
+            full = messages.KEY_ECHO_WORD_FULL
+            brief = messages.KEY_ECHO_WORD_BRIEF
+        elif (key, word, sentence) == (False, True, False):
+            (new_key, new_word, new_sentence) = (False, False, True)
+            full = messages.KEY_ECHO_SENTENCE_FULL
+            brief = messages.KEY_ECHO_SENTENCE_BRIEF
+        elif (key, word, sentence) == (False, False, True):
+            (new_key, new_word, new_sentence) = (True, True, False)
+            full = messages.KEY_ECHO_KEY_AND_WORD_FULL
+            brief = messages.KEY_ECHO_KEY_AND_WORD_BRIEF
+        elif (key, word, sentence) == (True, True, False):
+            (new_key, new_word, new_sentence) = (False, True, True)
+            full = messages.KEY_ECHO_WORD_AND_SENTENCE_FULL
+            brief = messages.KEY_ECHO_WORD_AND_SENTENCE_BRIEF
+        else:
+            (new_key, new_word, new_sentence) = (False, False, False)
+            full = messages.KEY_ECHO_NONE_FULL
+            brief = messages.KEY_ECHO_NONE_BRIEF
+
+        self.set_key_echo_enabled(new_key)
+        self.set_word_echo_enabled(new_word)
+        self.set_sentence_echo_enabled(new_sentence)
+        if script is not None and notify_user:
+            presentation_manager.get_manager().present_message(full, brief)
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_KEY_ECHO,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Enable key echo",
+        migration_key="enableKeyEcho",
+    )
+    @dbus_service.getter
+    def get_key_echo_enabled(self) -> bool:
+        """Returns whether echo of key presses is enabled. See also get_character_echo_enabled."""
+
+        return self._get_setting(self.KEY_KEY_ECHO, True)
+
+    @dbus_service.setter
+    def set_key_echo_enabled(self, value: bool) -> bool:
+        """Sets whether echo of key presses is enabled. See also set_character_echo_enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable key echo to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_KEY_ECHO, value)
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_CHARACTER_ECHO,
+        schema="typing-echo",
+        gtype="b",
+        default=False,
+        summary="Echo inserted characters",
+        migration_key="enableEchoByCharacter",
+    )
+    @dbus_service.getter
+    def get_character_echo_enabled(self) -> bool:
+        """Returns whether echo of inserted characters is enabled."""
+
+        return self._get_setting(self.KEY_CHARACTER_ECHO, False)
+
+    @dbus_service.setter
+    def set_character_echo_enabled(self, value: bool) -> bool:
+        """Sets whether echo of inserted characters is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable character echo to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_CHARACTER_ECHO, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_WORD_ECHO,
+        schema="typing-echo",
+        gtype="b",
+        default=False,
+        summary="Echo completed words",
+        migration_key="enableEchoByWord",
+    )
+    @dbus_service.getter
+    def get_word_echo_enabled(self) -> bool:
+        """Returns whether word echo is enabled."""
+
+        return self._get_setting(self.KEY_WORD_ECHO, False)
+
+    @dbus_service.setter
+    def set_word_echo_enabled(self, value: bool) -> bool:
+        """Sets whether word echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable word echo to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_WORD_ECHO, value)
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_SENTENCE_ECHO,
+        schema="typing-echo",
+        gtype="b",
+        default=False,
+        summary="Echo completed sentences",
+        migration_key="enableEchoBySentence",
+    )
+    @dbus_service.getter
+    def get_sentence_echo_enabled(self) -> bool:
+        """Returns whether sentence echo is enabled."""
+
+        return self._get_setting(self.KEY_SENTENCE_ECHO, False)
+
+    @dbus_service.setter
+    def set_sentence_echo_enabled(self, value: bool) -> bool:
+        """Sets whether sentence echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable sentence echo to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_SENTENCE_ECHO, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_ALPHABETIC_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo alphabetic keys",
+        migration_key="enableAlphabeticKeys",
+    )
+    @dbus_service.getter
+    def get_alphabetic_keys_enabled(self) -> bool:
+        """Returns whether alphabetic keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_ALPHABETIC_KEYS, True)
+
+    @dbus_service.setter
+    def set_alphabetic_keys_enabled(self, value: bool) -> bool:
+        """Sets whether alphabetic keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable alphabetic keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_ALPHABETIC_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_NUMERIC_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo numeric keys",
+        migration_key="enableNumericKeys",
+    )
+    @dbus_service.getter
+    def get_numeric_keys_enabled(self) -> bool:
+        """Returns whether numeric keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_NUMERIC_KEYS, True)
+
+    @dbus_service.setter
+    def set_numeric_keys_enabled(self, value: bool) -> bool:
+        """Sets whether numeric keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable numeric keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_NUMERIC_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_PUNCTUATION_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo punctuation keys",
+        migration_key="enablePunctuationKeys",
+    )
+    @dbus_service.getter
+    def get_punctuation_keys_enabled(self) -> bool:
+        """Returns whether punctuation keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_PUNCTUATION_KEYS, True)
+
+    @dbus_service.setter
+    def set_punctuation_keys_enabled(self, value: bool) -> bool:
+        """Sets whether punctuation keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable punctuation keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_PUNCTUATION_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_SPACE,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo space key",
+        migration_key="enableSpace",
+    )
+    @dbus_service.getter
+    def get_space_enabled(self) -> bool:
+        """Returns whether space key will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_SPACE, True)
+
+    @dbus_service.setter
+    def set_space_enabled(self, value: bool) -> bool:
+        """Sets whether space key will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable space to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_SPACE, value)
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_MODIFIER_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo modifier keys",
+        migration_key="enableModifierKeys",
+    )
+    @dbus_service.getter
+    def get_modifier_keys_enabled(self) -> bool:
+        """Returns whether modifier keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_MODIFIER_KEYS, True)
+
+    @dbus_service.setter
+    def set_modifier_keys_enabled(self, value: bool) -> bool:
+        """Sets whether modifier keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable modifier keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_MODIFIER_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_FUNCTION_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo function keys",
+        migration_key="enableFunctionKeys",
+    )
+    @dbus_service.getter
+    def get_function_keys_enabled(self) -> bool:
+        """Returns whether function keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_FUNCTION_KEYS, True)
+
+    @dbus_service.setter
+    def set_function_keys_enabled(self, value: bool) -> bool:
+        """Sets whether function keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable function keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_FUNCTION_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_ACTION_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=True,
+        summary="Echo action keys",
+        migration_key="enableActionKeys",
+    )
+    @dbus_service.getter
+    def get_action_keys_enabled(self) -> bool:
+        """Returns whether action keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_ACTION_KEYS, True)
+
+    @dbus_service.setter
+    def set_action_keys_enabled(self, value: bool) -> bool:
+        """Sets whether action keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable action keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_ACTION_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_NAVIGATION_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=False,
+        summary="Echo navigation keys",
+        migration_key="enableNavigationKeys",
+    )
+    @dbus_service.getter
+    def get_navigation_keys_enabled(self) -> bool:
+        """Returns whether navigation keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_NAVIGATION_KEYS, False)
+
+    @dbus_service.setter
+    def set_navigation_keys_enabled(self, value: bool) -> bool:
+        """Sets whether navigation keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable navigation keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_NAVIGATION_KEYS, value
+        )
+        return True
+
+    @gsettings_registry.get_registry().gsetting(
+        key=KEY_DIACRITICAL_KEYS,
+        schema="typing-echo",
+        gtype="b",
+        default=False,
+        summary="Echo diacritical keys",
+        migration_key="enableDiacriticalKeys",
+    )
+    @dbus_service.getter
+    def get_diacritical_keys_enabled(self) -> bool:
+        """Returns whether diacritical keys will be echoed when key echo is enabled."""
+
+        return self._get_setting(self.KEY_DIACRITICAL_KEYS, False)
+
+    @dbus_service.setter
+    def set_diacritical_keys_enabled(self, value: bool) -> bool:
+        """Sets whether diacritical keys will be echoed when key echo is enabled."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting enable diacritical keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        gsettings_registry.get_registry().set_runtime_value(
+            self._SCHEMA, self.KEY_DIACRITICAL_KEYS, value
+        )
+        return True
+
+    @dbus_service.getter
+    def get_locking_keys_presented(self) -> bool:
+        """Returns whether locking keys are presented."""
+
+        # TODO - JD: It turns out there's no UI for this setting, so it defaults to None.
+
+        if self._present_locking_keys is not None:
+            return self._present_locking_keys
+
+        return not speech_presenter.get_presenter().get_only_speak_displayed_text()
+
+    @dbus_service.setter
+    def set_locking_keys_presented(self, value: bool | None) -> bool:
+        """Sets whether locking keys are presented."""
+
+        tokens = ["TYPING ECHO PRESENTER: Setting present locking keys to", value, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        self._present_locking_keys = value
+        return True
+
+    def echo_previous_sentence(self, obj: Atspi.Accessible) -> bool:
+        """Speaks the sentence prior to the caret if at a sentence boundary."""
+
+        if not self.get_sentence_echo_enabled():
+            return False
+
+        offset = AXText.get_caret_offset(obj)
+        char, start = AXText.get_character_at_offset(obj, offset - 1)[0:-1]
+        previous_char, previous_start = AXText.get_character_at_offset(obj, start - 1)[0:-1]
+        if not (char in string.whitespace + "\u00a0" and previous_char in "!.?:;"):
+            return False
+
+        sentence = AXText.get_sentence_at_offset(obj, previous_start)[0]
+        if not sentence:
+            msg = "TYPING ECHO PRESENTER: At a sentence boundary, but no sentence found."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        presentation_manager.get_manager().speak_accessible_text(obj, sentence)
+        return True
+
+    def echo_previous_word(self, obj: Atspi.Accessible) -> bool:
+        """Speaks the word prior to the caret if at a word boundary."""
+
+        if not self.get_word_echo_enabled():
+            return False
+
+        offset = AXText.get_caret_offset(obj)
+        if offset == -1:
+            offset = AXText.get_character_count(obj)
+
+        if offset <= 0:
+            return False
+
+        # If the previous character is not a word delimiter, there's nothing to echo.
+        prev_char, prev_start = AXText.get_character_at_offset(obj, offset - 1)[0:-1]
+        if prev_char not in string.punctuation + string.whitespace + "\u00a0":
+            return False
+
+        # Two back-to-back delimiters should not result in a re-echo.
+        prev_char, prev_start = AXText.get_character_at_offset(obj, prev_start - 1)[0:-1]
+        if prev_char in string.punctuation + string.whitespace + "\u00a0":
+            return False
+
+        word = AXText.get_word_at_offset(obj, prev_start)[0]
+        if not word:
+            return False
+
+        presentation_manager.get_manager().speak_accessible_text(obj, word)
+        return True
+
+    def _should_echo_orca_modifier(self, event: input_event.KeyboardEvent) -> bool:
+        """Returns whether an Orca modifier event should be echoed."""
+
+        click_count = event.get_click_count()
+        if click_count == 2:
+            msg = "TYPING ECHO PRESENTER: Echoing Orca modifier double-click."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        result = (
+            click_count == 1 and self.get_key_echo_enabled() and self.get_modifier_keys_enabled()
+        )
+        tokens = ["TYPING ECHO PRESENTER: Echoing modifier Orca modifier event:", result, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    def _get_echo_for_key_type(self, event: input_event.KeyboardEvent) -> tuple[bool, str] | None:
+        """Returns (result, key_type) for the event's key type, or None if unrecognized."""
+
+        checks = [
+            (event.is_navigation_key, self.get_navigation_keys_enabled, "navigation"),
+            (event.is_action_key, self.get_action_keys_enabled, "action"),
+            (event.is_modifier_key, self.get_modifier_keys_enabled, "modifier"),
+            (event.is_function_key, self.get_function_keys_enabled, "function"),
+        ]
+        for type_check, enabled_check, label in checks:
+            if type_check():
+                return enabled_check(), label
+
+        if AXUtilities.is_password_text(event.get_object()) and event.should_obscure():
+            return False, "password text"
+
+        character_checks = [
+            (event.is_diacritical_key, self.get_diacritical_keys_enabled, "diacritical"),
+            (event.is_alphabetic_key, self.get_alphabetic_keys_enabled, "alphabetic"),
+            (event.is_numeric_key, self.get_numeric_keys_enabled, "numeric"),
+            (event.is_punctuation_key, self.get_punctuation_keys_enabled, "punctuation"),
+        ]
+        for type_check, enabled_check, label in character_checks:
+            if type_check():
+                return enabled_check(), label
+
+        if event.is_space():
+            return self.get_space_enabled() or self.get_character_echo_enabled(), "space"
+
+        return None
+
+    def should_echo_keyboard_event(self, event: input_event.KeyboardEvent) -> bool:
+        """Returns whether the given keyboard event should be echoed."""
+
+        should_obscure = event.should_obscure()
+        name = event.get_key_name() if not should_obscure else "(obscured)"
+        tokens: list[Any] = ["TYPING ECHO PRESENTER: should_echo_keyboard_event: '", name, "'?"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if not event.is_pressed_key():
+            msg = "TYPING ECHO PRESENTER: Not echoing keyboard event: key is not pressed."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if event.is_orca_modifier():
+            return self._should_echo_orca_modifier(event)
+
+        # Treat all command modifiers the same and suppress echo.
+        if event.is_alt_control_or_orca_modified() or self.is_character_echoable(event):
+            reason = "modifier" if event.is_alt_control_or_orca_modified() else "character echoable"
+            tokens = ["TYPING ECHO PRESENTER: Not echoing keyboard event:", reason, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        if event.is_locking_key():
+            result = self.get_locking_keys_presented()
+            tokens = ["TYPING ECHO PRESENTER: Echoing locking keyboard event:", result, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return result
+
+        if not self.get_key_echo_enabled():
+            msg = "TYPING ECHO PRESENTER: Not echoing keyboard event: key echo is not enabled."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        key_type_result = self._get_echo_for_key_type(event)
+        result, label = key_type_result if key_type_result is not None else (False, "unknown")
+        tokens = [
+            "TYPING ECHO PRESENTER: Echoing",
+            label,
+            "keyboard event:",
+            result,
+            ".",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    def is_character_echoable(self, event: input_event.KeyboardEvent) -> bool:
+        """Returns True if the script will echo this event as part of character echo."""
+
+        if not self.get_character_echo_enabled():
+            return False
+
+        if event.is_alt_control_or_orca_modified():
+            msg = "TYPING ECHO PRESENTER: Not character echoable due to modifier."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if not event.is_printable_key():
+            msg = "TYPING ECHO PRESENTER: Not character echoable, is not printable key."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        obj = event.get_object()
+        if AXUtilities.is_password_text(obj):
+            msg = "TYPING ECHO PRESENTER: Not character echoable, is password text."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if AXUtilities.is_editable(obj) or AXUtilities.is_terminal(obj):
+            msg = "TYPING ECHO PRESENTER: Character echoable, is editable or terminal."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        msg = "TYPING ECHO PRESENTER: Not character echoable, no reason to echo."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return False
+
+    def echo_delayed_terminal_press(self, _script: default.Script, event: Atspi.Event) -> None:
+        """Echoes a previously delayed terminal key press if it matches the inserted text."""
+
+        if self._delayed_terminal_press is None:
+            msg = "TYPING ECHO PRESENTER: No rejected terminal press to echo."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        if self._delayed_terminal_press.get_object() != event.source:
+            msg = "TYPING ECHO PRESENTER: Delayed terminal press does not match event source."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        # A full-screen app such as Vim redraws from the cursor on each keystroke, so the
+        # inserted text starts with the typed character rather than being only that character.
+        character = self._delayed_terminal_press.get_key_name().lower()
+        if event.any_data.lower().startswith(character):
+            msg = "TYPING ECHO PRESENTER: Echoing delayed terminal press."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            presentation_manager.get_manager().present_key_event(self._delayed_terminal_press)
+            self._delayed_terminal_press = None
+
+    def echo_keyboard_event(self, event: input_event.KeyboardEvent) -> None:
+        """Presents the KeyboardEvent event."""
+
+        if not event.is_pressed_key():
+            presentation_manager.get_manager().clear_command_announcement()
+            return
+
+        self._delayed_terminal_press = None
+        if not self.should_echo_keyboard_event(event):
+            return
+
+        obj = event.get_object()
+        if AXUtilities.is_terminal(obj) and event.is_printable_key():
+            # We have no reliable way of knowing a password is being entered into a terminal --
+            # other than the fact that the text typed isn't there. Before we waited for the
+            # release event and echoed that. But that is laggy. So delay presentation until we
+            # see the text appear. If it doesn't appear, we never echo it.
+            msg = "TYPING ECHO PRESENTER: Delaying terminal key press echo."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self._delayed_terminal_press = event
+            return
+
+        if locking_state_string := event.get_locking_state_string():
+            keyname = event.get_key_name()
+            msg = f"{keyname} {locking_state_string}"
+            presentation_manager.get_manager().present_braille_message(msg)
+
+        presentation_manager.get_manager().present_key_event(event)
+
+
+_presenter: TypingEchoPresenter = TypingEchoPresenter()
+
+
+def get_presenter() -> TypingEchoPresenter:
+    """Returns the Typing Echo Presenter"""
+
+    return _presenter

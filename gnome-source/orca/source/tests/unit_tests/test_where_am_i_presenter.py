@@ -1,0 +1,981 @@
+# Unit tests for where_am_i_presenter.py methods.
+#
+# Copyright 2025 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program; if not, write to the Free Software Foundation,
+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+# pylint: disable=wrong-import-position
+# pylint: disable=import-outside-toplevel
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-statements
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-lines
+
+"""Unit tests for where_am_i_presenter.py methods."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+
+if TYPE_CHECKING:
+    from .orca_test_context import OrcaTestContext
+
+PRESENT_CHARACTER_FORMATTING_CMD = "presentCharacterFormattingCommand"
+SHOW_CHARACTER_FORMATTING_CMD = "showCharacterFormattingCommand"
+PRESENT_SIZE_AND_POSITION_CMD = "presentSizeAndPositionCommand"
+PRESENT_TITLE_CMD = "presentTitleCommand"
+PRESENT_STATUS_BAR_CMD = "presentStatusBarCommand"
+PRESENT_DEFAULT_BUTTON_CMD = "presentDefaultButtonCommand"
+WHERE_AM_I_BASIC_CMD = "whereAmIBasicCommand"
+WHERE_AM_I_DETAILED_CMD = "whereAmIDetailedCommand"
+WHERE_AM_I_LINK_CMD = "whereAmILinkCommand"
+WHERE_AM_I_SELECTION_CMD = "whereAmISelectionCommand"
+LOCATION_NOT_FOUND_MSG = "Location not found"
+DEFAULT_BUTTON_NOT_FOUND_MSG = "Default button not found"
+STATUS_BAR_NOT_FOUND_FULL_MSG = "Status bar not found"
+STATUS_BAR_NOT_FOUND_BRIEF_MSG = "No status bar"
+
+
+@pytest.mark.unit
+class TestWhereAmIPresenter:
+    """Test WhereAmIPresenter class methods."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext):
+        """Returns all dependencies needed for WhereAmIPresenter testing."""
+
+        additional_modules = [
+            "orca.flat_review_presenter",
+            "orca.spellcheck_presenter",
+            "orca.text_attribute_manager",
+            "orca.text_selection_presenter",
+            "orca.ax_component",
+            "orca.ax_text",
+            "orca.ax_utilities",
+            "orca.braille_presenter",
+            "orca.presentation_manager",
+        ]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        cmdnames_mock = essential_modules["orca.cmdnames"]
+        cmdnames_mock.PRESENT_CHARACTER_FORMATTING = PRESENT_CHARACTER_FORMATTING_CMD
+        cmdnames_mock.SHOW_CHARACTER_FORMATTING = SHOW_CHARACTER_FORMATTING_CMD
+        cmdnames_mock.PRESENT_SIZE_AND_POSITION = PRESENT_SIZE_AND_POSITION_CMD
+        cmdnames_mock.PRESENT_TITLE = PRESENT_TITLE_CMD
+        cmdnames_mock.PRESENT_STATUS_BAR = PRESENT_STATUS_BAR_CMD
+        cmdnames_mock.PRESENT_DEFAULT_BUTTON = PRESENT_DEFAULT_BUTTON_CMD
+        cmdnames_mock.WHERE_AM_I_BASIC = WHERE_AM_I_BASIC_CMD
+        cmdnames_mock.WHERE_AM_I_DETAILED = WHERE_AM_I_DETAILED_CMD
+        cmdnames_mock.WHERE_AM_I_LINK = WHERE_AM_I_LINK_CMD
+        cmdnames_mock.WHERE_AM_I_SELECTION = WHERE_AM_I_SELECTION_CMD
+        essential_modules["orca.guilabels"].CHARACTER_FORMATTING = "Character Formatting"
+        essential_modules[
+            "orca.guilabels"
+        ].CHARACTER_FORMATTING_FOR = "Character Formatting for: '%s'"
+
+        keybindings_mock = essential_modules["orca.keybindings"]
+        keybindings_mock.ORCA_MODIFIER_MASK = 2
+        keybindings_mock.NO_MODIFIER_MASK = 0
+
+        messages_mock = essential_modules["orca.messages"]
+        messages_mock.BOLD = "bold"
+        messages_mock.MISSPELLED = "misspelled"
+        messages_mock.CHARACTER_FORMATTING_NOT_AVAILABLE = "Character format unknown."
+        messages_mock.CHARACTER_FORMATTING_DEFAULT = "Default character format."
+        messages_mock.LOCATION_NOT_FOUND_FULL = LOCATION_NOT_FOUND_MSG
+        messages_mock.LOCATION_NOT_FOUND_BRIEF = LOCATION_NOT_FOUND_MSG
+        messages_mock.SIZE_AND_POSITION_FULL = "Size: %d by %d pixels, at %d, %d"
+        messages_mock.SIZE_AND_POSITION_BRIEF = "%dx%d at %d,%d"
+        messages_mock.DIALOG_NOT_IN_A = "Not in a dialog"
+        messages_mock.DEFAULT_BUTTON_NOT_FOUND = DEFAULT_BUTTON_NOT_FOUND_MSG
+        messages_mock.DEFAULT_BUTTON_IS_GRAYED = "Default button %s is grayed"
+        messages_mock.DEFAULT_BUTTON_IS = "Default button is %s"
+        messages_mock.STATUS_BAR_NOT_FOUND_FULL = STATUS_BAR_NOT_FOUND_FULL_MSG
+        messages_mock.STATUS_BAR_NOT_FOUND_BRIEF = STATUS_BAR_NOT_FOUND_BRIEF_MSG
+        messages_mock.NOT_ON_A_LINK = "Not on a link"
+        messages_mock.selected_items_count = test_context.Mock(return_value="2 of 5 items selected")
+
+        handler_mock = test_context.Mock()
+        essential_modules["orca.input_event"].InputEventHandler = test_context.Mock(
+            return_value=handler_mock,
+        )
+        essential_modules["orca.input_event"].InputEvent = test_context.Mock()
+
+        text_attr_mgr = essential_modules["orca.text_attribute_manager"]
+        text_attr_mgr.get_manager.return_value.get_attributes_to_speak.return_value = [
+            "weight",
+            "style",
+            "underline",
+        ]
+        text_attr_mgr.get_manager.return_value.get_resolved_attributes_to_speak.return_value = []
+
+        ax_component_mock = essential_modules["orca.ax_component"]
+        rect_mock = test_context.Mock()
+        rect_mock.width = 100
+        rect_mock.height = 50
+        rect_mock.x = 200
+        rect_mock.y = 150
+        ax_component_mock.AXComponent = test_context.Mock()
+        ax_component_mock.AXComponent.get_rect = test_context.Mock(return_value=rect_mock)
+
+        ax_utilities_mock = essential_modules["orca.ax_utilities"]
+        ax_utilities_mock.AXUtilities.is_empty_rect = test_context.Mock(return_value=False)
+
+        ax_text_mock = essential_modules["orca.ax_text"]
+        ax_text_mock.AXText = test_context.Mock()
+        ax_text_mock.AXText.get_text_attributes_at_offset = test_context.Mock(
+            return_value=({"weight": "bold"}, 0, 5),
+        )
+        ax_text_mock.AXText.get_character_at_offset = test_context.Mock(return_value=("a", 0, 1))
+
+        ax_text_attribute_instance = test_context.Mock()
+        ax_text_attribute_instance.get_localized_name = test_context.Mock(return_value="Weight")
+        ax_text_attribute_instance.get_localized_value = test_context.Mock(return_value="Bold")
+        ax_text_attribute_instance.value_is_default = test_context.Mock(return_value=False)
+        ax_text_attribute_instance.get_attribute_name = test_context.Mock(return_value="weight")
+        ax_text_attribute_instance.get_value_from_attrs = test_context.Mock(return_value="bold")
+        ax_text_mock.AXTextAttribute = test_context.Mock()
+        ax_text_mock.AXTextAttribute.from_string = test_context.Mock(
+            return_value=ax_text_attribute_instance,
+        )
+
+        ax_utilities_mock = essential_modules["orca.ax_utilities"]
+        ax_utilities_mock.AXUtilities = test_context.Mock()
+        ax_utilities_mock.AXUtilities.get_default_button = test_context.Mock()
+        ax_utilities_mock.AXUtilities.is_sensitive = test_context.Mock(return_value=True)
+        ax_utilities_mock.AXUtilities.get_status_bar = test_context.Mock()
+        ax_utilities_mock.AXUtilities.get_info_bar = test_context.Mock()
+        ax_utilities_mock.AXUtilities.is_showing = test_context.Mock(return_value=True)
+        ax_utilities_mock.AXUtilities.is_visible = test_context.Mock(return_value=True)
+        ax_utilities_mock.AXUtilities.is_focused = test_context.Mock(return_value=True)
+        ax_utilities_mock.AXUtilities.is_table_cell = test_context.Mock(return_value=False)
+        ax_utilities_mock.AXUtilities.is_table_cell_or_header = test_context.Mock(
+            return_value=False,
+        )
+        ax_utilities_mock.AXUtilities.save_object_info_for_events = test_context.Mock()
+        ax_utilities_mock.AXUtilities.is_list_item = test_context.Mock(return_value=False)
+        ax_utilities_mock.AXUtilities.get_selected_text = test_context.Mock(
+            return_value=("selected text", 0, 5),
+        )
+        ax_utilities_mock.AXUtilities.get_all_supported_text_attributes = test_context.Mock()
+        ax_utilities_mock.AXUtilities.is_layout_only = test_context.Mock(return_value=False)
+
+        return essential_modules
+
+    def test_init(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.__init__ using OrcaTestContext for simpler mocking."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca import command_manager
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        presenter = WhereAmIPresenter()
+        presenter.set_up_commands()
+
+        # Verify commands are registered in CommandManager
+        cmd_manager = command_manager.get_manager()
+        assert cmd_manager.get_keyboard_command("whereAmIBasicHandler") is not None
+        assert cmd_manager.get_keyboard_command("whereAmIDetailedHandler") is not None
+        assert cmd_manager.get_keyboard_command("readCharAttributesHandler") is not None
+        assert cmd_manager.get_keyboard_command("show_character_attributes") is not None
+
+        dbus_mock = deps["orca.dbus_service"]
+        assert dbus_mock.get_remote_controller.call_count >= 1
+        controller = dbus_mock.get_remote_controller.return_value
+        controller.register_decorated_module.assert_called_with("WhereAmIPresenter", presenter)
+
+    @pytest.mark.parametrize(
+        "_refresh",
+        [
+            pytest.param(True, id="with_refresh"),
+            pytest.param(False, id="without_refresh"),
+        ],
+    )
+    def test_get_handlers(
+        self,
+        test_context: OrcaTestContext,
+        _refresh: bool,
+    ) -> None:
+        """Test WhereAmIPresenter commands are registered in CommandManager."""
+
+        self._setup_dependencies(test_context)
+        from orca import command_manager
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        presenter = WhereAmIPresenter()
+        presenter.set_up_commands()
+
+        cmd_manager = command_manager.get_manager()
+        expected_commands = [
+            "readCharAttributesHandler",
+            "show_character_attributes",
+            "presentSizeAndPositionHandler",
+            "getTitleHandler",
+            "getStatusBarHandler",
+            "present_default_button",
+            "present_cell_formula",
+            "whereAmIBasicHandler",
+            "whereAmIDetailedHandler",
+            "whereAmILinkHandler",
+            "whereAmISelectionHandler",
+        ]
+        for cmd_name in expected_commands:
+            assert cmd_manager.get_keyboard_command(cmd_name) is not None
+
+    @pytest.mark.parametrize(
+        "attribute, value, expected",
+        [
+            pytest.param("weight", None, "", id="none_value"),
+            pytest.param("weight", "bold", "bold", id="bold_weight"),
+            pytest.param("weight", "700", "bold", id="numeric_weight"),
+            pytest.param("spelling", "spelling", "misspelled", id="spelling"),
+            pytest.param("style", "italic", "Weight: Bold", id="general"),
+        ],
+    )
+    def test_localize_text_attribute_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        attribute: str,
+        value: str | None,
+        expected: str,
+    ) -> None:
+        """Test WhereAmIPresenter._localize_text_attribute with various attribute scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        presenter = WhereAmIPresenter()
+        result = presenter._localize_text_attribute(attribute, value)
+        assert result == expected
+
+    def test_present_character_attributes(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_character_attributes."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        mock_focus = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = mock_focus
+
+        deps["orca.ax_text"].AXText.get_text_attributes_at_offset.return_value = (
+            {"weight": "bold", "style": "italic"},
+            0,
+            5,
+        )
+
+        mock_attr = test_context.Mock()
+        mock_attr.get_attribute_name.return_value = "weight"
+        mock_attr.get_value_from_attrs.return_value = "bold"
+        mock_attr.value_is_default.return_value = False
+        deps[
+            "orca.text_attribute_manager"
+        ].get_manager.return_value.get_resolved_attributes_to_speak.return_value = [mock_attr]
+
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_character_attributes(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called()
+        assert pres_manager.present_message.call_count >= 1
+
+    def test_present_character_attributes_no_custom_attributes(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test WhereAmIPresenter.present_character_attributes with no custom attributes."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        default_attr = test_context.Mock()
+        default_attr.get_attribute_name.return_value = "weight"
+        default_attr.get_value_from_attrs.return_value = "bold"
+        default_attr.value_is_default.return_value = False
+        deps[
+            "orca.text_attribute_manager"
+        ].get_manager.return_value.get_resolved_attributes_to_speak.return_value = [default_attr]
+
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_character_attributes(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called()
+
+    def test_present_character_attributes_default_formatting(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test WhereAmIPresenter.present_character_attributes with default formatting."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        attr = test_context.Mock()
+        attr.get_attribute_name.return_value = "weight"
+        attr.get_value_from_attrs.return_value = None
+        attr.value_is_default.return_value = True
+        deps[
+            "orca.text_attribute_manager"
+        ].get_manager.return_value.get_resolved_attributes_to_speak.return_value = [attr]
+
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_character_attributes(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_once_with(
+            "Default character format.",
+        )
+
+    def test_present_character_attributes_no_formatting_information(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test WhereAmIPresenter.present_character_attributes with no formatting info."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        deps["orca.ax_text"].AXText.get_text_attributes_at_offset.return_value = ({}, 0, 5)
+
+        attr = test_context.Mock()
+        attr.get_attribute_name.return_value = "weight"
+        attr.get_value_from_attrs.return_value = None
+        attr.value_is_default.return_value = True
+        deps[
+            "orca.text_attribute_manager"
+        ].get_manager.return_value.get_resolved_attributes_to_speak.return_value = [attr]
+
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_character_attributes(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_once_with(
+            "Character format unknown.",
+        )
+
+    def test_show_character_attributes(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test WhereAmIPresenter.show_character_attributes."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        deps["orca.ax_text"].AXText.get_text_attributes_at_offset.return_value = (
+            {
+                "weight": "bold",
+                "style": "normal",
+                "family-name": "Sans",
+            },
+            0,
+            5,
+        )
+
+        def _attr(name: str, localized_name: str):
+            attr = test_context.Mock()
+            attr.get_attribute_name.return_value = name
+            attr.get_localized_name.return_value = localized_name
+            attr.get_localized_value.side_effect = lambda value: value
+            return attr
+
+        attr_map = {
+            "weight": _attr("weight", "Weight"),
+            "style": _attr("style", "Style"),
+            "family-name": _attr("family-name", "Family Name"),
+        }
+        deps["orca.ax_text"].AXTextAttribute.from_string.side_effect = attr_map.get
+
+        presenter = WhereAmIPresenter()
+        mock_gui = test_context.patch("orca.where_am_i_presenter.CharacterAttributesGUI")
+        result = presenter.show_character_attributes(test_context.Mock())
+        assert result is True
+        mock_gui.assert_called_once_with(
+            "Character Formatting for: 'a'",
+            "Family Name: Sans\nStyle: normal\nWeight: bold",
+        )
+        mock_gui.return_value.show_gui.assert_called_once()
+
+    def test_show_character_attributes_no_font_information(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test WhereAmIPresenter.show_character_attributes with no font info."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        deps["orca.ax_text"].AXText.get_text_attributes_at_offset.return_value = ({}, 0, 5)
+
+        presenter = WhereAmIPresenter()
+        mock_gui = test_context.patch("orca.where_am_i_presenter.CharacterAttributesGUI")
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        result = presenter.show_character_attributes(test_context.Mock())
+        assert result is True
+        mock_gui.assert_not_called()
+        pres_manager.present_message.assert_called_once_with(
+            "Character format unknown.",
+        )
+
+    def test_present_size_and_position_flat_review(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_size_and_position in flat review mode."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        mock_script = test_context.Mock()
+        flat_review_presenter_mock = test_context.Mock()
+        flat_review_presenter_mock.is_active.return_value = True
+        current_obj = test_context.Mock()
+        flat_review_presenter_mock.get_current_object.return_value = current_obj
+        deps["orca.flat_review_presenter"].get_presenter.return_value = flat_review_presenter_mock
+
+        rect = test_context.Mock()
+        rect.width = 200
+        rect.height = 100
+        rect.x = 50
+        rect.y = 75
+        deps["orca.ax_component"].AXComponent.get_rect.return_value = rect
+        deps["orca.ax_utilities"].AXUtilities.is_empty_rect.return_value = False
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_size_and_position(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called()
+
+    def test_present_size_and_position_empty_rect(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_size_and_position with empty rectangle."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        mock_script = test_context.Mock()
+        flat_review_presenter_mock = test_context.Mock()
+        flat_review_presenter_mock.is_active.return_value = False
+        deps["orca.flat_review_presenter"].get_presenter.return_value = flat_review_presenter_mock
+
+        focus_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_utilities"].AXUtilities.is_empty_rect.return_value = True
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_size_and_position(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with(
+            LOCATION_NOT_FOUND_MSG,
+            LOCATION_NOT_FOUND_MSG,
+        )
+
+    def test_present_title_valid_focus(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_title with valid focus object."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_object"].AXObject.is_dead.return_value = False
+
+        mock_script = test_context.Mock()
+        speech_gen = test_context.Mock()
+        speech_gen.generate_window_title.return_value = [("Test Window", None)]
+        mock_script.get_speech_generator = test_context.Mock(return_value=speech_gen)
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_title(mock_script)
+        assert result is True
+        pres_manager.present_window_title.assert_called_once_with(mock_script, focus_obj)
+
+    def test_present_title_dead_focus(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_title with dead focus object."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        dead_obj = test_context.Mock()
+        active_window = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = dead_obj
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_active_window.return_value = active_window
+
+        deps["orca.ax_object"].AXObject.is_dead.side_effect = [True, False]
+
+        mock_script = test_context.Mock()
+        speech_gen = test_context.Mock()
+        speech_gen.generate_window_title.return_value = [("Active Window", None)]
+        mock_script.get_speech_generator = test_context.Mock(return_value=speech_gen)
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_title(mock_script)
+        assert result is True
+        pres_manager.present_window_title.assert_called_once_with(mock_script, active_window)
+
+    def test_present_title_no_valid_object(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_title with no valid object."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        deps["orca.focus_manager"].get_manager.return_value.get_locus_of_focus.return_value = None
+        deps["orca.focus_manager"].get_manager.return_value.get_active_window.return_value = None
+
+        deps["orca.ax_object"].AXObject.is_dead.return_value = True
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_title(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with(LOCATION_NOT_FOUND_MSG)
+
+    @pytest.mark.parametrize(
+        "has_dialog, has_button, is_sensitive, button_name, expected_message",
+        [
+            pytest.param(True, True, True, "OK", "Default button is OK", id="button_success"),
+            pytest.param(
+                True,
+                True,
+                False,
+                "OK",
+                "Default button OK is grayed",
+                id="button_grayed",
+            ),
+            pytest.param(False, False, False, None, "Not in a dialog", id="no_dialog"),
+            pytest.param(True, False, False, None, DEFAULT_BUTTON_NOT_FOUND_MSG, id="no_button"),
+        ],
+    )
+    def test_present_default_button_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        has_dialog: bool,
+        has_button: bool,
+        is_sensitive: bool,
+        button_name: str | None,
+        expected_message: str,
+    ) -> None:
+        """Test WhereAmIPresenter.present_default_button for various scenarios."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = focus_obj
+
+        mock_script = test_context.Mock()
+        dialog = test_context.Mock() if has_dialog else None
+        mock_script.utilities.frame_and_dialog.return_value = (None, dialog)
+
+        if has_button:
+            button = test_context.Mock()
+            deps["orca.ax_utilities"].AXUtilities.get_default_button.return_value = button
+            deps["orca.ax_utilities"].AXUtilities.is_sensitive.return_value = is_sensitive
+            deps["orca.ax_object"].AXObject.get_name.return_value = button_name
+        else:
+            deps["orca.ax_utilities"].AXUtilities.get_default_button.return_value = None
+
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_default_button(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with(expected_message)
+
+    def test_present_status_bar_with_info(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_status_bar with both status bar and info bar."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = focus_obj
+        mock_script = test_context.Mock()
+        frame = test_context.Mock()
+        mock_script.utilities.frame_and_dialog.return_value = (frame, None)
+        mock_script.present_object = test_context.Mock()
+
+        statusbar = test_context.Mock()
+        infobar = test_context.Mock()
+        deps["orca.ax_utilities"].AXUtilities.get_status_bar.return_value = statusbar
+        deps["orca.ax_utilities"].AXUtilities.get_info_bar.return_value = infobar
+        deps["orca.ax_utilities"].AXUtilities.is_showing.return_value = True
+        deps["orca.ax_utilities"].AXUtilities.is_visible.return_value = True
+        presenter = WhereAmIPresenter()
+        result = presenter.present_status_bar(mock_script)
+        assert result is True
+        assert mock_script.present_object.call_count == 2
+
+    def test_present_status_bar_no_status_bar(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_status_bar with no status bar."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = focus_obj
+        mock_script = test_context.Mock()
+        frame = test_context.Mock()
+        mock_script.utilities.frame_and_dialog.return_value = (frame, None)
+        mock_script.present_object = test_context.Mock()
+        deps["orca.ax_utilities"].AXUtilities.get_status_bar.return_value = None
+        deps["orca.ax_utilities"].AXUtilities.get_info_bar.return_value = None
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_status_bar(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with(
+            STATUS_BAR_NOT_FOUND_FULL_MSG,
+            STATUS_BAR_NOT_FOUND_BRIEF_MSG,
+        )
+
+    def test_present_link_valid_link(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_link with valid link."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        link_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = link_obj
+        mock_script = test_context.Mock()
+        mock_script.utilities.is_link.return_value = True
+        presenter = WhereAmIPresenter()
+        mock_do_where_am_i = test_context.patch_object(
+            presenter,
+            "_do_where_am_i",
+            return_value=True,
+        )
+        result = presenter.present_link(mock_script)
+        assert result is True
+        mock_do_where_am_i.assert_called_with(mock_script, True, link_obj)
+
+    def test_present_link_not_link(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_link with non-link object."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        non_link_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = non_link_obj
+        mock_script = test_context.Mock()
+        mock_script.utilities.is_link.return_value = False
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_link(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with("Not on a link")
+
+    def test_present_selected_text_no_focus(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_selected_text with no focus."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        deps["orca.focus_manager"].get_manager.return_value.get_locus_of_focus.return_value = None
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.speak_message.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_selected_text(mock_script)
+        assert result is True
+        pres_manager.speak_message.assert_called_with(LOCATION_NOT_FOUND_MSG)
+
+    def test_present_selected_text_with_text(self, test_context: OrcaTestContext) -> None:
+        """Test the selected-text command delegates to the text-selection presenter."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps["focus_manager_instance"].get_locus_of_focus.return_value = focus_obj
+        mock_script = test_context.Mock()
+
+        presenter = WhereAmIPresenter()
+        selection_presenter = deps["orca.text_selection_presenter"].get_presenter.return_value
+        selection_presenter.present_selected_text.return_value = True
+
+        result = presenter.present_selected_text(mock_script)
+
+        assert result is True
+        selection_presenter.present_selected_text.assert_called_once_with(mock_script, focus_obj)
+
+    def test_present_selection_spreadsheet_handling(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_selection with spreadsheet cell range."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = focus_obj
+
+        spreadsheet = test_context.Mock()
+        deps["orca.ax_utilities"].AXUtilities.find_ancestor.return_value = spreadsheet
+        mock_script = test_context.Mock()
+        mock_script.utilities.speak_selected_cell_range.return_value = True
+        presenter = WhereAmIPresenter()
+        result = presenter.present_selection(mock_script)
+        assert result is True
+        mock_script.utilities.speak_selected_cell_range.assert_called_with(spreadsheet)
+
+    def test_present_selection_container_selection(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_selection with selection container."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps["focus_manager_instance"].get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_utilities"].AXUtilities.find_ancestor.return_value = None
+        deps["orca.ax_object"].AXObject.get_name.side_effect = ["Item 1", "Item 2"]
+
+        container = test_context.Mock()
+        selected_items = [test_context.Mock(), test_context.Mock()]
+        mock_script = test_context.Mock()
+        deps["orca.ax_utilities"].AXUtilities.get_selection_container.return_value = container
+        deps["orca.ax_utilities"].AXUtilities.selected_child_count.return_value = 2
+        deps["orca.ax_utilities"].AXUtilities.selectable_child_count.return_value = 5
+        deps["orca.ax_utilities"].AXUtilities.selected_children.return_value = selected_items
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        pres_manager.speak_message.reset_mock()
+        presenter = WhereAmIPresenter()
+        result = presenter.present_selection(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with("2 of 5 items selected")
+        pres_manager.speak_message.assert_called_with("Item 1,Item 2")
+
+    def test_present_selection_no_container(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.present_selection with no selection container."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps["focus_manager_instance"].get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_utilities"].AXUtilities.find_ancestor.return_value = None
+        mock_script = test_context.Mock()
+        deps["orca.ax_utilities"].AXUtilities.get_selection_container.return_value = None
+        selection_presenter = deps["orca.text_selection_presenter"].get_presenter.return_value
+        selection_presenter.present_selected_text.return_value = True
+        presenter = WhereAmIPresenter()
+        result = presenter.present_selection(mock_script)
+        assert result is True
+        selection_presenter.present_selected_text.assert_called_once_with(mock_script, focus_obj)
+
+    def test_do_where_am_i_basic(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter._do_where_am_i with basic mode."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps["focus_manager_instance"].get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_object"].AXObject.is_dead.return_value = False
+
+        deps["orca.ax_utilities"].AXUtilities.is_focused.return_value = True
+        deps["orca.ax_utilities"].AXUtilities.is_table_cell_or_header.return_value = False
+        deps["orca.ax_utilities"].AXUtilities.is_list_item.return_value = False
+        deps["orca.ax_utilities"].AXUtilities.is_layout_only.return_value = False
+        mock_script = test_context.Mock()
+        mock_script.spellcheck = None
+        mock_script.present_object = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter._do_where_am_i(mock_script, basic_only=True)
+        assert result is True
+        mock_script.present_object.assert_called_once()
+
+    def test_do_where_am_i_detailed(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter._do_where_am_i with detailed mode."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps["focus_manager_instance"].get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_object"].AXObject.is_dead.return_value = False
+
+        deps["orca.ax_utilities"].AXUtilities.is_focused.return_value = True
+        mock_script = test_context.Mock()
+        mock_script.spellcheck = None
+        mock_script.present_object = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter._do_where_am_i(mock_script, basic_only=False)
+        assert result is True
+        call_args = mock_script.present_object.call_args
+        from orca.generator import PresentationReason
+
+        assert call_args[1]["reason"] == PresentationReason.WHERE_AM_I_DETAILED
+
+    def test_do_where_am_i_dead_object(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter._do_where_am_i with dead focus object."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        dead_obj = test_context.Mock()
+        active_window = test_context.Mock()
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_locus_of_focus.return_value = dead_obj
+        deps[
+            "orca.focus_manager"
+        ].get_manager.return_value.get_active_window.return_value = active_window
+
+        deps["orca.ax_object"].AXObject.is_dead.side_effect = [True, False]
+
+        deps["orca.ax_utilities"].AXUtilities.is_focused.return_value = True
+        mock_script = test_context.Mock()
+        mock_script.spellcheck = None
+        mock_script.present_object = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter._do_where_am_i(mock_script)
+        assert result is True
+
+    def test_do_where_am_i_no_object(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter._do_where_am_i with no valid object."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        deps["orca.focus_manager"].get_manager.return_value.get_locus_of_focus.return_value = None
+        deps["orca.focus_manager"].get_manager.return_value.get_active_window.return_value = None
+
+        deps["orca.ax_object"].AXObject.is_dead.return_value = True
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+        mock_script = test_context.Mock()
+        mock_script.spellcheck = None
+        presenter = WhereAmIPresenter()
+        result = presenter._do_where_am_i(mock_script)
+        assert result is True
+        pres_manager.present_message.assert_called_with(LOCATION_NOT_FOUND_MSG)
+
+    def test_do_where_am_i_with_spellcheck(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter._do_where_am_i with active spellcheck."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        focus_obj = test_context.Mock()
+        deps["focus_manager_instance"].get_locus_of_focus.return_value = focus_obj
+
+        deps["orca.ax_object"].AXObject.is_dead.return_value = False
+
+        deps["orca.ax_utilities"].AXUtilities.is_focused.return_value = True
+
+        spellcheck_mock = test_context.Mock()
+        spellcheck_mock.is_active.return_value = True
+        spellcheck_mock.present_error_details = test_context.Mock()
+        deps["orca.spellcheck_presenter"].get_presenter.return_value = spellcheck_mock
+
+        mock_script = test_context.Mock()
+        mock_script.present_object = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        result = presenter._do_where_am_i(mock_script, basic_only=False)
+        assert result is True
+        spellcheck_mock.present_error_details.assert_called_with(True, mock_script)
+
+    def test_where_am_i_basic(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.where_am_i_basic."""
+
+        self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        mock_do_where_am_i = test_context.patch_object(
+            presenter,
+            "_do_where_am_i",
+            return_value=True,
+        )
+        result = presenter.where_am_i_basic(mock_script)
+        assert result is True
+        mock_do_where_am_i.assert_called_with(mock_script, notify_user=True)
+
+    def test_where_am_i_detailed(self, test_context: OrcaTestContext) -> None:
+        """Test WhereAmIPresenter.where_am_i_detailed."""
+
+        deps = self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import WhereAmIPresenter
+
+        pres_manager = deps["orca.presentation_manager"].get_manager()
+        pres_manager.interrupt_presentation.reset_mock()
+        mock_script = test_context.Mock()
+        presenter = WhereAmIPresenter()
+        mock_do_where_am_i = test_context.patch_object(
+            presenter,
+            "_do_where_am_i",
+            return_value=True,
+        )
+        result = presenter.where_am_i_detailed(mock_script)
+        assert result is True
+        pres_manager.interrupt_presentation.assert_called_once()
+        mock_do_where_am_i.assert_called_with(mock_script, False, notify_user=True)
+
+    def test_get_presenter(self, test_context: OrcaTestContext) -> None:
+        """Test get_presenter function."""
+
+        self._setup_dependencies(test_context)
+        from orca.where_am_i_presenter import get_presenter
+
+        presenter = get_presenter()
+        assert presenter is not None
+        presenter2 = get_presenter()
+        assert presenter is presenter2

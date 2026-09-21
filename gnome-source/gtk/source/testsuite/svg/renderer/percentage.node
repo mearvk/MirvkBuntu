@@ -1,0 +1,39 @@
+clip {
+  clip: 0 0 160 160;
+  child: container {
+    rounded-clip {
+      clip: 32 32 96 96 / 48;
+      child: color {
+        bounds: 32 32 96 96;
+        color: rgb(255,0,0);
+      }
+    }
+    stroke {
+      child: color {
+        bounds: 31.5 31.5 97 97;
+        color: rgba(0,0,0,0.75);
+      }
+      path: circle {
+        center: 80 80;
+        radius: 48;
+      }
+      line-width: 1;
+      line-cap: butt;
+      line-join: miter;
+    }
+    color {
+      bounds: 0 16 32 32;
+      color: rgb(255,0,0);
+    }
+    stroke {
+      child: color {
+        bounds: -0.5 15.5 33 33;
+        color: rgba(0,0,0,0.75);
+      }
+      path: 0 16 32 32;
+      line-width: 1;
+      line-cap: butt;
+      line-join: miter;
+    }
+  }
+}

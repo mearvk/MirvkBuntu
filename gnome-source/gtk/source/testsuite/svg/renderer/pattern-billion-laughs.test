@@ -1,0 +1,3 @@
+[test]
+input=pattern-billion-laughs.svg
+reference=pattern-billion-laughs.node.gz

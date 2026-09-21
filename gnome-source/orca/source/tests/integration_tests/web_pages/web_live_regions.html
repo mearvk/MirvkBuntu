@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orca Web Live Regions ready</title>
+<script>
+function announce(id, text) {
+  document.getElementById(id).textContent = text;
+}
+function removeChildNode(parentId, childId) {
+  var parent = document.getElementById(parentId);
+  var child = document.getElementById(childId);
+  parent.removeChild(child);
+}
+function showIcon(id) {
+  document.getElementById(id).innerHTML =
+    '<svg width="20" height="20"><path d="M5 4 L15 10 L5 16 Z"></path></svg>';
+}
+function rewriteWhileBusy(id) {
+  var region = document.getElementById(id);
+  region.setAttribute('aria-busy', 'true');
+  region.textContent = 'First';
+  setTimeout(function () { region.textContent = 'First second'; }, 100);
+  setTimeout(function () { region.textContent = 'First second third'; }, 200);
+  setTimeout(function () { region.setAttribute('aria-busy', 'false'); }, 300);
+}
+function appendWhileBusy(id) {
+  var region = document.getElementById(id);
+  var lines = ['Alpha item', 'Beta item', 'Gamma item'];
+  var step = 0;
+  region.setAttribute('aria-busy', 'true');
+  function addNext() {
+    if (step === lines.length) {
+      region.setAttribute('aria-busy', 'false');
+      return;
+    }
+    var paragraph = document.createElement('p');
+    paragraph.textContent = lines[step];
+    region.appendChild(paragraph);
+    step += 1;
+    setTimeout(addNext, 100);
+  }
+  addNext();
+}
+function insertEmptyRegionThenFill(containerId) {
+  var container = document.getElementById(containerId);
+  container.textContent = '';
+  var region = document.createElement('span');
+  region.setAttribute('aria-live', 'polite');
+  var wrapper = document.createElement('div');
+  wrapper.appendChild(region);
+  container.appendChild(wrapper);
+  setTimeout(function () { region.textContent = 'Message read'; }, 100);
+}
+function finalizeWhileBusy(id) {
+  var region = document.getElementById(id);
+  region.setAttribute('aria-busy', 'true');
+  region.textContent = 'Partial';
+  setTimeout(function () { region.textContent = 'Partial draft'; }, 100);
+  setTimeout(function () {
+    region.setAttribute('aria-busy', 'false');
+    region.textContent = 'Complete rewritten answer';
+  }, 200);
+}
+</script>
+</head>
+<body>
+<h1>Live regions</h1>
+
+<p><button type="button" onclick="announce('polite', 'Changes saved')">Save</button></p>
+<div id="polite" aria-live="polite"></div>
+
+<p><button type="button" onclick="announce('assertive', 'Connection lost')">Break</button></p>
+<div id="assertive" aria-live="assertive"></div>
+
+<p><button type="button" onclick="announce('off', 'Nothing to hear')">Quiet</button></p>
+<div id="off" aria-live="off"></div>
+
+<p><button type="button" onclick="announce('status', 'Status updated')">Status</button></p>
+<div id="status" role="status"></div>
+
+<p><button type="button" onclick="removeChildNode('removal', 'removal-child')">Remove</button></p>
+<div id="removal" aria-live="polite"><span id="removal-child">Removable</span></div>
+
+<p><button type="button" onclick="showIcon('bezel')">Bezel</button></p>
+<div id="bezel" aria-live="polite" aria-atomic="true" aria-label="Play"></div>
+
+<p><button type="button" onclick="rewriteWhileBusy('rewrite-busy')">Rewrite</button></p>
+<div id="rewrite-busy" aria-live="polite"></div>
+
+<p><button type="button" onclick="appendWhileBusy('append-busy')">Append</button></p>
+<div id="append-busy" aria-live="polite"></div>
+
+<p><button type="button" onclick="finalizeWhileBusy('finalize-busy')">Finalize</button></p>
+<div id="finalize-busy" aria-live="polite"></div>
+
+<p><button type="button" onclick="insertEmptyRegionThenFill('filled')">Fill</button></p>
+<div id="filled"></div>
+</body>
+</html>

@@ -1,0 +1,17 @@
+repeat {
+  bounds: 50 50 100 100;
+  child-bounds: 50 50 20 20;
+  child: container {
+    color {
+      bounds: 50 50 10 10;
+      color: rgb(0,128,0);
+    }
+    rounded-clip {
+      clip: 60 60 10 10 / 5;
+      child: color {
+        bounds: 60 60 10 10;
+        color: rgb(255,255,0);
+      }
+    }
+  }
+}

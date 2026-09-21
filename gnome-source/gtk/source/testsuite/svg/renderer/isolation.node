@@ -1,0 +1,71 @@
+isolation {
+  child: container {
+    color {
+      bounds: 0 0 260 200;
+      color: rgb(211,211,211);
+    }
+    copy {
+      child: blend {
+        mode: multiply;
+        bottom: paste {
+          bounds: 20 20 80 80;
+        }
+        top: color {
+          bounds: 20 20 80 80;
+          color: rgb(255,0,0);
+        }
+      }
+    }
+    copy {
+      child: blend {
+        mode: screen;
+        bottom: paste {
+          bounds: 30 30 100 100;
+        }
+        top: rounded-clip {
+          clip: 30 30 100 100 / 50;
+          child: color {
+            bounds: 30 30 100 100;
+            color: rgb(0,0,255);
+          }
+        }
+      }
+    }
+    isolation {
+      child: transform {
+        transform: translate(130, 0);
+        child: container {
+          copy {
+            child: blend {
+              mode: multiply;
+              bottom: paste {
+                bounds: 20 20 80 80;
+              }
+              top: color {
+                bounds: 20 20 80 80;
+                color: rgb(255,0,0);
+              }
+            }
+          }
+          copy {
+            child: blend {
+              mode: screen;
+              bottom: paste {
+                bounds: 30 30 100 100;
+              }
+              top: rounded-clip {
+                clip: 30 30 100 100 / 50;
+                child: color {
+                  bounds: 30 30 100 100;
+                  color: rgb(0,0,255);
+                }
+              }
+            }
+          }
+        }
+      }
+      isolations: background;
+    }
+  }
+  isolations: background;
+}

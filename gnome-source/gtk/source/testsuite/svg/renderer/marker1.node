@@ -1,0 +1,57 @@
+rounded-clip {
+  clip: 145 95 10 10 / 5;
+  child: color {
+    bounds: 145 95 10 10;
+    color: rgb(0,0,255);
+  }
+}
+transform {
+  transform: translate(275, 100) rotate(45);
+  child: rounded-clip {
+    clip: -5 -5 10 10 / 5;
+    child: color {
+      bounds: -5 -5 10 10;
+      color: rgb(0,0,255);
+    }
+  }
+}
+transform {
+  transform: translate(275, 175) rotate(135);
+  child: rounded-clip {
+    clip: -5 -5 10 10 / 5;
+    child: color {
+      bounds: -5 -5 10 10;
+      color: rgb(0,0,255);
+    }
+  }
+}
+transform {
+  transform: translate(150, 175) rotate(45);
+  child: rounded-clip {
+    clip: -5 -5 10 10 / 5;
+    child: color {
+      bounds: -5 -5 10 10;
+      color: rgb(0,0,255);
+    }
+  }
+}
+transform {
+  transform: translate(150, 100) rotate(270);
+  child: rounded-clip {
+    clip: -5 -5 10 10 / 5;
+    child: color {
+      bounds: -5 -5 10 10;
+      color: rgb(0,0,255);
+    }
+  }
+}
+stroke {
+  child: color {
+    bounds: 149.5 99.5 126 76;
+    color: rgb(0,0,255);
+  }
+  path: 150 100 125 75;
+  line-width: 1;
+  line-cap: butt;
+  line-join: miter;
+}

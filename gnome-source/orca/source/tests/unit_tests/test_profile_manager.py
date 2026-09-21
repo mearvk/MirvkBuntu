@@ -1,0 +1,516 @@
+# Unit tests for profile_manager.py methods.
+#
+# Copyright 2025-2026 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=wrong-import-position
+# pylint: disable=import-outside-toplevel
+# pylint: disable=protected-access
+
+"""Unit tests for profile_manager.py methods."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+
+import pytest
+
+if TYPE_CHECKING:
+    from unittest.mock import MagicMock
+
+    from .orca_test_context import OrcaTestContext
+
+
+@pytest.mark.unit
+class TestProfileManager:
+    """Test ProfileManager methods."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for profile_manager dependencies."""
+
+        additional_modules = [
+            "orca.braille",
+            "orca.orca",
+            "orca.orca_modifier_manager",
+            "orca.speech_manager",
+            "orca.braille_presenter",
+            "orca.presentation_manager",
+        ]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        from orca import gsettings_registry
+
+        registry = gsettings_registry.get_registry()
+        registry.set_active_profile("default")
+
+        test_context.patch(
+            "orca.profile_manager.ProfileManager._get_stored_profiles",
+            return_value=[
+                ["Default", "default"],
+                ["Spanish", "spanish"],
+                ["Work", "work"],
+            ],
+        )
+
+        speech_manager_mock = essential_modules["orca.speech_manager"]
+        speech_manager_mock.get_manager.return_value.refresh_speech.return_value = None
+
+        braille_mock = essential_modules["orca.braille"]
+        braille_mock.check_braille_setting.return_value = None
+
+        orca_mock = essential_modules["orca.orca"]
+        orca_mock.load_user_settings.return_value = None
+
+        messages_mock = essential_modules["orca.messages"]
+        messages_mock.PROFILE_NOT_FOUND = "No profiles found."
+        messages_mock.PROFILE_CHANGED = "Profile set to %s."
+        messages_mock.PROFILE_CURRENT = "Current profile is %s."
+
+        guilabels_mock = essential_modules["orca.guilabels"]
+        guilabels_mock.PROFILE_DEFAULT = "Default"
+
+        return essential_modules
+
+    def test_get_active_profile(self, test_context: OrcaTestContext) -> None:
+        """Test getting active profile."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        profile = manager.get_active_profile()
+
+        assert profile == "default"
+
+    def test_set_active_profile(self, test_context: OrcaTestContext) -> None:
+        """Test setting active profile."""
+
+        self._setup_dependencies(test_context)
+        from orca import gsettings_registry
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        manager.set_active_profile("spanish")
+
+        assert gsettings_registry.get_registry().get_active_profile() == "spanish"
+
+    def test_load_profile(self, test_context: OrcaTestContext) -> None:
+        """Test loading a profile calls set_active_profile and load_user_settings."""
+
+        essential_modules = self._setup_dependencies(test_context)
+        from orca import gsettings_registry
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        manager.load_profile("spanish")
+
+        assert gsettings_registry.get_registry().get_active_profile() == "spanish"
+        essential_modules["orca.orca"].load_user_settings.assert_called_once_with(
+            skip_reload_message=True,
+        )
+
+    def test_remove_profile(self, test_context: OrcaTestContext) -> None:
+        """Test removing a profile."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+
+        mock_run = test_context.patch("subprocess.run")
+        manager = ProfileManager()
+        manager.remove_profile("spanish")
+
+        mock_run.assert_called_once_with(
+            ["dconf", "reset", "-f", "/org/gnome/orca/spanish/"],
+            check=True,
+        )
+
+    def test_remove_profile_dconf_failure(self, test_context: OrcaTestContext) -> None:
+        """Test removing a profile when dconf reset fails."""
+
+        import subprocess
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+
+        mock_run = test_context.patch("subprocess.run")
+        mock_run.side_effect = subprocess.CalledProcessError(1, "dconf")
+        manager = ProfileManager()
+        manager.remove_profile("spanish")
+
+        mock_run.assert_called_once()
+
+    def test_remove_profile_dconf_not_found(self, test_context: OrcaTestContext) -> None:
+        """Test removing a profile when dconf is not installed."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+
+        mock_run = test_context.patch("subprocess.run")
+        mock_run.side_effect = FileNotFoundError("dconf not found")
+        manager = ProfileManager()
+        manager.remove_profile("spanish")
+
+        mock_run.assert_called_once()
+
+    def test_remove_profile_sanitizes_name(self, test_context: OrcaTestContext) -> None:
+        """Test removing a profile sanitizes the name for the dconf path."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+
+        mock_run = test_context.patch("subprocess.run")
+        manager = ProfileManager()
+        manager.remove_profile("My Profile")
+
+        mock_run.assert_called_once_with(
+            ["dconf", "reset", "-f", "/org/gnome/orca/my-profile/"],
+            check=True,
+        )
+
+    def test_rename_profile(self, test_context: OrcaTestContext) -> None:
+        """Test renaming a profile."""
+
+        self._setup_dependencies(test_context)
+        from orca import gsettings_registry
+        from orca.profile_manager import ProfileManager
+
+        registry = gsettings_registry.get_registry()
+        mock_rename = test_context.patch_object(registry, "rename_profile")
+
+        manager = ProfileManager()
+        manager.rename_profile("spanish", ["Espanol", "espanol"])
+
+        mock_rename.assert_called_once_with("spanish", "Espanol", "espanol")
+
+    def test_commands_registered(self, test_context: OrcaTestContext) -> None:
+        """Test that profile manager commands are registered with CommandManager."""
+
+        self._setup_dependencies(test_context)
+        from orca import command_manager
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        manager.set_up_commands()
+        cmd_manager = command_manager.get_manager()
+
+        assert cmd_manager.get_keyboard_command("cycleSettingsProfileHandler") is not None
+        assert cmd_manager.get_keyboard_command("presentCurrentProfileHandler") is not None
+
+    def test_cycle_settings_profile_cycles_to_next(self, test_context: OrcaTestContext) -> None:
+        """Test cycle_settings_profile cycles to next profile."""
+
+        essential_modules = self._setup_dependencies(test_context)
+        from unittest.mock import MagicMock
+
+        from orca import gsettings_registry
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        mock_script = MagicMock()
+        pres_manager = essential_modules["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+
+        result = manager.cycle_settings_profile(script=mock_script)
+
+        assert result is True
+        assert gsettings_registry.get_registry().get_active_profile() == "spanish"
+        pres_manager.present_message.assert_called()
+
+    def test_cycle_settings_profile_wraps_around(self, test_context: OrcaTestContext) -> None:
+        """Test cycle_settings_profile wraps to first profile at end."""
+
+        self._setup_dependencies(test_context)
+        from unittest.mock import MagicMock
+
+        from orca import gsettings_registry
+        from orca.profile_manager import ProfileManager
+
+        gsettings_registry.get_registry().set_active_profile("work")
+
+        manager = ProfileManager()
+        mock_script = MagicMock()
+
+        result = manager.cycle_settings_profile(script=mock_script)
+
+        assert result is True
+        assert gsettings_registry.get_registry().get_active_profile() == "default"
+
+    def test_cycle_settings_profile_no_profiles(self, test_context: OrcaTestContext) -> None:
+        """Test cycle_settings_profile handles no profiles."""
+
+        essential_modules = self._setup_dependencies(test_context)
+        from unittest.mock import MagicMock
+
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        mock_script = MagicMock()
+        pres_manager = essential_modules["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+
+        result = manager.cycle_settings_profile(script=mock_script)
+
+        assert result is True
+        pres_manager.present_message.assert_called()
+
+    def test_present_current_profile(self, test_context: OrcaTestContext) -> None:
+        """Test present_current_profile presents the current profile name."""
+
+        essential_modules = self._setup_dependencies(test_context)
+        from unittest.mock import MagicMock
+
+        from orca.profile_manager import ProfileManager
+
+        manager = ProfileManager()
+        mock_script = MagicMock()
+        pres_manager = essential_modules["orca.presentation_manager"].get_manager()
+        pres_manager.present_message.reset_mock()
+
+        result = manager.present_current_profile(script=mock_script)
+
+        assert result is True
+        pres_manager.present_message.assert_called()
+        call_args = pres_manager.present_message.call_args
+        assert "Default" in call_args[0][0]
+
+
+@pytest.mark.unit
+class TestProfilePreferencesGridUI:
+    """Test ProfilePreferencesGrid UI creation."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for ProfilePreferencesGrid dependencies."""
+
+        from gi.repository import Gtk  # pylint: disable=no-name-in-module
+
+        initialized, _argv = Gtk.init_check()  # pylint: disable=no-value-for-parameter
+        if not initialized:
+            pytest.skip("GTK display is not available")
+
+        additional_modules = [
+            "orca.braille",
+            "orca.orca",
+            "orca.speech_manager",
+            "orca.braille_presenter",
+            "orca.presentation_manager",
+        ]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        from orca import gsettings_registry
+
+        registry = gsettings_registry.get_registry()
+        registry.set_active_profile("default")
+
+        test_context.patch(
+            "orca.profile_manager.ProfileManager._get_stored_profiles",
+            return_value=[
+                ["Default", "default"],
+                ["Spanish", "spanish"],
+            ],
+        )
+
+        guilabels_mock = essential_modules["orca.guilabels"]
+        guilabels_mock.GENERAL_PROFILES = "Profiles"
+        guilabels_mock.GENERAL_START_UP_PROFILE = "Start-up profile"
+        guilabels_mock.PROFILE_DEFAULT = "Default"
+        guilabels_mock.PROFILE_CONFLICT_MESSAGE = "Profile %s already exists"
+        guilabels_mock.PROFILE_REMOVE_LABEL = "Remove Profile"
+        guilabels_mock.PROFILE_REMOVE_MESSAGE = "Remove profile %s?"
+        guilabels_mock.MENU_REMOVE_PROFILE = "Remove"
+        guilabels_mock.MENU_RENAME = "Rename"
+        guilabels_mock.PROFILE_SAVE_AS_TITLE = "Save Profile As"
+        guilabels_mock.PROFILE_NAME_LABEL = "Profile name:"
+        guilabels_mock.DIALOG_CANCEL = "Cancel"
+        guilabels_mock.DIALOG_APPLY = "Apply"
+        guilabels_mock.DIALOG_ADD = "Add"
+        guilabels_mock.PROFILES_INFO = "Select a profile to edit or create a new one."
+        guilabels_mock.CURRENT_PROFILE = "Current Profile"
+        guilabels_mock.PROFILE_CREATE_NEW = "_Create New Profile"
+
+        return essential_modules
+
+    def test_grid_creates_successfully(self, test_context: OrcaTestContext) -> None:
+        """Test ProfilePreferencesGrid creates without error."""
+
+        from gi.repository import Gtk  # pylint: disable=no-name-in-module
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        assert isinstance(grid, Gtk.Grid)
+
+    def test_grid_has_auto_grid(self, test_context: OrcaTestContext) -> None:
+        """Test ProfilePreferencesGrid has auto_grid with controls."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        assert grid._auto_grid is not None
+
+    def test_grid_save_settings_returns_dict(self, test_context: OrcaTestContext) -> None:
+        """Test save_settings returns a dictionary."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        result = grid.save_settings()
+
+        assert isinstance(result, dict)
+
+    def test_grid_has_changes_initially_false(self, test_context: OrcaTestContext) -> None:
+        """Test has_changes returns False initially."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        assert grid.has_changes() is False
+
+    def test_grid_reload_clears_pending_renames(self, test_context: OrcaTestContext) -> None:
+        """Test reload clears pending renames."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        grid._pending_renames["old"] = ["New", "new"]
+        assert len(grid._pending_renames) == 1
+
+        grid.reload()
+
+        assert len(grid._pending_renames) == 0
+
+    def test_grid_app_specific_disables_startup_setter(self, test_context: OrcaTestContext) -> None:
+        """Test app-specific grid disables startup profile setter."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback, is_app_specific=True)
+
+        assert grid._is_app_specific is True
+
+    def test_validate_profile_name_detects_conflict(self, test_context: OrcaTestContext) -> None:
+        """Test _validate_profile_name detects existing profile names."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        is_valid, error_msg = grid._validate_profile_name("Default")
+
+        assert is_valid is False
+        assert "Default" in error_msg
+
+    def test_validate_profile_name_allows_unique(self, test_context: OrcaTestContext) -> None:
+        """Test _validate_profile_name allows unique names."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        is_valid, error_msg = grid._validate_profile_name("NewProfile")
+
+        assert is_valid is True
+        assert error_msg == ""
+
+    def test_get_available_profiles_includes_pending_renames(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test _get_available_profiles includes pending renames."""
+
+        self._setup_dependencies(test_context)
+        from orca.profile_manager import ProfileManager
+        from orca.profile_manager_preferences_grid import ProfilePreferencesGrid
+
+        manager = ProfileManager()
+
+        def callback(_profile):
+            return None
+
+        grid = ProfilePreferencesGrid(manager, callback)
+
+        grid._pending_renames["spanish"] = ["Espanol", "spanish"]
+        profiles = grid._get_available_profiles()
+
+        profile_names = [p[0] for p in profiles]
+        assert "Espanol" in profile_names
+        assert "Spanish" not in profile_names

@@ -1,0 +1,1822 @@
+# Orca
+#
+# Copyright 2005-2009 Sun Microsystems Inc.
+# Copyright 2010 Orca Team.
+# Copyright 2014-2025 Igalia, S.L.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-boolean-expressions
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-lines
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-return-statements
+# pylint: disable=too-many-statements
+
+"""Provides support for accessing user-agent-agnostic web-content."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from orca import (
+    braille_presenter,
+    caret_navigator,
+    debug,
+    document_presenter,
+    focus_manager,
+    input_event_manager,
+    label_inference,
+    live_region_presenter,
+    messages,
+    presentation_manager,
+    say_all_presenter,
+    speech_manager,
+    speech_presenter,
+    structural_navigator,
+    table_navigator,
+    text_selection_manager,
+    text_selection_presenter,
+)
+from orca.ax_event_synthesizer import AXEventSynthesizer
+from orca.ax_object import AXObject
+from orca.ax_text import AXText
+from orca.ax_utilities import AXUtilities
+from orca.ax_utilities_event import TextEventReason
+from orca.ax_utilities_text import CaretSetReason, TextUnit
+from orca.generator import PresentationReason
+from orca.scripts import default
+from orca.structural_navigator import NavigationMode
+
+from .braille_generator import BrailleGenerator
+from .script_utilities import Utilities
+from .speech_generator import SpeechGenerator
+
+if TYPE_CHECKING:
+    from gi.repository import Atspi
+
+
+class Script(default.Script):
+    """Provides support for accessing user-agent-agnostic web-content."""
+
+    # Type annotations to override the base class types
+    utilities: Utilities
+    caret_navigator: caret_navigator.CaretNavigator
+
+    def __init__(self, app: Atspi.Accessible) -> None:
+        super().__init__(app)
+
+        self.present_if_inactive: bool = False
+        self._default_sn_mode = NavigationMode.DOCUMENT
+        self._default_caret_navigation_enabled: bool = True
+
+        self._loading_content = False
+        self._last_mouse_button_context = None, -1
+
+    def deactivate(self) -> None:
+        """Called when this script is deactivated."""
+
+        self._loading_content = False
+        document_presenter.get_presenter().reset_find_announcement_state()
+        self._last_mouse_button_context = None, -1
+        self.utilities.clear_cached_objects()
+        super().deactivate()
+
+    def _create_braille_generator(self) -> BrailleGenerator:
+        """Creates and returns the braille generator for this script."""
+
+        return BrailleGenerator(self)
+
+    def get_label_inference(self) -> label_inference.LabelInference | None:
+        """Returns the label inference functionality for this script."""
+
+        return label_inference.LabelInference(self)
+
+    def _create_speech_generator(self) -> SpeechGenerator:
+        """Creates and returns the speech generator for this script."""
+
+        return SpeechGenerator(self)
+
+    def get_utilities(self) -> Utilities:
+        """Returns the utilities for this script."""
+
+        return Utilities(self)
+
+    def is_loading_content(self) -> bool:
+        """Returns True if we're currently loading content."""
+
+        return self._loading_content
+
+    def say_character(self, obj: Atspi.Accessible, offset: int) -> None:
+        """Speaks the character at the specified offset."""
+
+        tokens = ["WEB: Say character for", obj, "offset", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if not self.utilities.in_document_content(obj):
+            msg = "WEB: Object is not in document content."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            super().say_character(obj, offset)
+            return
+
+        contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None
+        if self.utilities.treat_as_end_of_line(obj, offset) and AXObject.supports_text(obj):
+            char = AXText.get_character_at_offset(obj, offset, ensure_whole_characters=True)[0]
+            if char == "\ufffc":
+                char = ""
+            contents = [(obj, offset, offset + 1, char)]
+        else:
+            contents = self.utilities.get_character_contents_at_offset(obj, offset)
+
+        if not contents:
+            return
+
+        speech_pres = speech_presenter.get_presenter()
+        obj, start, _end, string = contents[0]
+        if start > 0 and string == "\n":
+            if speech_pres.get_speak_blank_lines():
+                presentation_manager.get_manager().speak_message(messages.BLANK)
+                return
+
+        presenter = presentation_manager.get_manager()
+        if string:
+            speech_pres.present_text_attribute_state(obj, start)
+            language, dialect = self.utilities.get_language_and_dialect_for_substring(
+                obj, start, start + 1
+            )
+            presenter.speak_character(string, obj=obj, language=language, dialect=dialect)
+        else:
+            presenter.speak_contents(contents)
+
+        AXUtilities.set_last_text_unit_spoken(TextUnit.CHAR)
+
+    def say_word(self, obj: Atspi.Accessible, offset: int) -> None:
+        """Speaks the word at the specified offset."""
+
+        tokens = ["WEB: Say word for", obj, "offset", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if not self.utilities.in_document_content(obj):
+            msg = "WEB: Object is not in document content."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            super().say_word(obj, offset)
+            return
+
+        if input_event_manager.get_manager().last_event_was_right():
+            offset -= 1
+
+        word_contents = self.utilities.get_word_contents_at_offset(obj, offset, use_cache=True)
+        text_obj, start_offset, _end_offset, _word = word_contents[0]
+
+        speech_pres = speech_presenter.get_presenter()
+        speech_pres.present_text_attribute_state(text_obj, start_offset)
+        speech_pres.speak_word(self, obj, offset)
+        AXUtilities.set_last_text_unit_spoken(TextUnit.WORD)
+
+    def present_object(
+        self,
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+        prior_obj: Atspi.Accessible | None = None,
+        generate_speech: bool = True,
+        generate_braille: bool = True,
+        reason: PresentationReason | None = None,
+    ) -> None:
+        if obj is None:
+            return
+
+        if not self.utilities.in_document_content(obj) or AXUtilities.is_document(obj):
+            super().present_object(
+                obj,
+                offset=offset,
+                prior_obj=prior_obj,
+                generate_speech=generate_speech,
+                generate_braille=generate_braille,
+                reason=reason,
+            )
+            return
+
+        mode, _obj = focus_manager.get_manager().get_active_mode_and_object_of_interest()
+        if mode in [focus_manager.OBJECT_NAVIGATOR, focus_manager.MOUSE_REVIEW]:
+            super().present_object(
+                obj,
+                offset=offset,
+                prior_obj=prior_obj,
+                generate_speech=generate_speech,
+                generate_braille=generate_braille,
+                reason=reason,
+            )
+            return
+
+        if AXUtilities.is_status_bar(obj) or AXUtilities.is_alert(obj):
+            if not document_presenter.get_presenter().in_focus_mode(self.app):
+                self.utilities.set_caret_position(obj, 0, reason=CaretSetReason.OBJECT_PRESENTATION)
+            super().present_object(
+                obj,
+                offset=offset,
+                prior_obj=prior_obj,
+                generate_speech=generate_speech,
+                generate_braille=generate_braille,
+                reason=reason,
+            )
+            return
+
+        prior_reason = None
+        if caret_navigator.get_navigator().last_input_event_was_navigation_command():
+            prior_reason = "caret navigation command"
+        elif structural_navigator.get_navigator().last_input_event_was_navigation_command():
+            prior_reason = "structural navigation command"
+        elif table_navigator.get_navigator().last_input_event_was_navigation_command():
+            prior_reason = "table navigation command"
+        elif AXUtilities.get_table(obj):
+            prior_reason = "object in table"
+
+        if prior_reason:
+            prior_context = self.utilities.get_prior_context()
+            tokens: list[Any] = [
+                "WEB: Using prior context for presentation:",
+                prior_reason,
+                ". Prior context:",
+                prior_context,
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            if prior_context is not None:
+                prior_obj, _prior_offset = prior_context
+            if prior_obj is None:
+                prior_obj, prior_offset = self.utilities.get_caret_context(
+                    search_if_needed=False,
+                )
+                tokens = ["WEB: Using:", prior_obj, prior_offset, "as prior context."]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        document = self.utilities.get_document_for_object(obj)
+        obj = AXEventSynthesizer.scroll_to_center(obj, start_offset=0, root=document)
+        if obj is None:
+            msg = "WEB: Scroll target was destroyed and could not be relocated. Skipping."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        # Editors like VSCode use the entry role for the code editor.
+        if AXUtilities.is_entry(obj):
+            if not document_presenter.get_presenter().in_focus_mode(self.app):
+                self.utilities.set_caret_position(obj, 0, reason=CaretSetReason.OBJECT_PRESENTATION)
+            super().present_object(
+                obj,
+                offset=offset,
+                prior_obj=prior_obj,
+                generate_speech=generate_speech,
+                generate_braille=generate_braille,
+                reason=reason,
+            )
+            return
+
+        tokens = ["WEB: Presenting object", obj]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        # We shouldn't use cache in this method, because if the last thing we presented
+        # included this object and offset (e.g. a Say All or Mouse Review), we're in
+        # danger of presented irrelevant context.
+        effective_offset = offset if offset is not None else 0
+        contents = self.utilities.get_object_contents_at_offset(
+            obj, effective_offset, use_cache=False
+        )
+        if (
+            contents
+            and contents[0]
+            and not document_presenter.get_presenter().in_focus_mode(self.app)
+        ):
+            self.utilities.set_caret_position(
+                contents[0][0], contents[0][1], reason=CaretSetReason.OBJECT_PRESENTATION
+            )
+            if text_selection_manager.get_manager().has_known_selection(contents[0][0]):
+                text_selection_presenter.get_presenter().present_text_selection_change(
+                    self,
+                    contents[0][0],
+                )
+        presenter = presentation_manager.get_manager()
+        if generate_braille:
+            if reason == PresentationReason.STATE_CHANGE:
+                braille_presenter.get_presenter().present_generated_braille(
+                    self, obj, prior_obj=prior_obj, reason=reason
+                )
+            else:
+                presenter.display_contents(contents)
+        if generate_speech:
+            presenter.speak_contents(
+                contents,
+                prior_obj=prior_obj,
+                reason=reason,
+            )
+
+    def _update_braille_caret_position(self, obj: Atspi.Accessible) -> None:
+        """Try to reposition the cursor without having to do a full update."""
+
+        if "\ufffc" in AXText.get_all_text(obj):
+            self.update_braille(obj)
+            return
+
+        super()._update_braille_caret_position(obj)
+
+    def update_braille(
+        self,
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> None:
+        """Updates the braille display to show the given object."""
+
+        tokens = ["WEB: updating braille for", obj, "offset:", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True, True)
+
+        if not braille_presenter.get_presenter().use_braille():
+            return
+
+        if document_presenter.get_presenter().in_focus_mode(
+            self.app,
+        ) and "\ufffc" not in AXText.get_all_text(obj):
+            tokens = ["WEB: updating braille in focus mode", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            super().update_braille(obj, offset=offset)
+            return
+
+        document = self.utilities.get_top_level_document_for_object(obj)
+        if not document:
+            tokens = ["WEB: updating braille for non-document object", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            super().update_braille(obj, offset=offset)
+            return
+
+        is_content_editable = self.utilities.is_content_editable_with_embedded_objects(obj)
+
+        handled_reason = None
+        if caret_navigator.get_navigator().last_input_event_was_navigation_command():
+            handled_reason = "caret navigation command"
+        elif structural_navigator.get_navigator().last_input_event_was_navigation_command():
+            handled_reason = "structural navigation command"
+        elif table_navigator.get_navigator().last_input_event_was_navigation_command():
+            handled_reason = "table navigation command"
+        elif is_content_editable:
+            handled_reason = "content editable"
+        elif AXUtilities.is_plain_text(document):
+            handled_reason = "plain text document"
+        elif input_event_manager.get_manager().last_event_was_caret_selection():
+            handled_reason = "caret selection"
+        elif (
+            last_caret_set := AXUtilities.get_last_caret_set()
+        ) is not None and last_caret_set.reason == CaretSetReason.BRAILLE_PANNING:
+            handled_reason = "braille panning"
+
+        if not handled_reason:
+            tokens = ["WEB: updating braille for unhandled navigation type", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            super().update_braille(obj, offset=offset)
+            return
+
+        tokens = ["WEB: updating braille via line contents:", handled_reason, obj]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        # TODO - JD: Getting the caret context can, by side effect, update it. This in turn
+        # can prevent us from presenting table column headers when braille is enabled because
+        # we think they are not "new." Commit bd877203f0 addressed that, but we need to stop
+        # such side effects from happening in the first place.
+        if offset is None:
+            obj, offset = self.utilities.get_caret_context(document)
+        if offset > 0 and is_content_editable and self.utilities.treat_as_text_object(obj):
+            offset = min(offset, AXText.get_character_count(obj))
+
+        contents = self.utilities.get_line_contents_at_offset(obj, offset)
+        presentation_manager.get_manager().display_contents(contents)
+
+    def handle_braille_pan_at_edge(
+        self,
+        direction: braille_presenter.PanDirection,
+    ) -> bool | None:
+        """Handles braille panning when the presenter reaches the edge of a line."""
+
+        if not self.utilities.in_document_content():
+            return super().handle_braille_pan_at_edge(direction)
+
+        if direction == braille_presenter.PanDirection.LEFT:
+            contents = self.utilities.get_previous_line_contents()
+        else:
+            contents = self.utilities.get_next_line_contents()
+        if not contents:
+            return False
+
+        obj, start, _end, _string = contents[0]
+        self.utilities.set_caret_position(obj, start, reason=CaretSetReason.BRAILLE_PANNING)
+        self.update_braille(obj, offset=start)
+        presenter = braille_presenter.get_presenter()
+        if direction == braille_presenter.PanDirection.LEFT:
+            presenter.pan_to_end()
+        else:
+            presenter.pan_to_beginning()
+        return True
+
+    def locus_of_focus_changed(
+        self,
+        event: Atspi.Event | None,
+        old_focus: Atspi.Accessible | None,
+        new_focus: Atspi.Accessible | None,
+    ) -> bool:
+        """Handles changes of focus of interest. Returns True if this script did all needed work."""
+
+        tokens = ["WEB: Focus changing from", old_focus, "to", new_focus]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if new_focus and not AXObject.is_valid(new_focus):
+            return True
+
+        if new_focus and AXObject.is_dead(new_focus):
+            return True
+
+        document = self.utilities.get_top_level_document_for_object(new_focus)
+        if not document and self.utilities.is_document(new_focus):
+            document = new_focus
+
+        sn_navigator = structural_navigator.get_navigator()
+        last_command_was_struct_nav = sn_navigator.last_input_event_was_navigation_command()
+
+        if not document:
+            msg = "WEB: Locus of focus changed to non-document obj"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            document_presenter.get_presenter().reset_find_announcement_state()
+
+            old_document = self.utilities.get_top_level_document_for_object(old_focus)
+            if not document and self.utilities.is_document(old_focus):
+                old_document = old_focus
+
+            if old_focus and not old_document:
+                msg = "WEB: Not refreshing grabs because we weren't in a document before"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return False
+
+            if last_command_was_struct_nav and sn_navigator.get_mode(self) == NavigationMode.GUI:
+                msg = "WEB: Not refreshing grabs: Last command was GUI structural navigation"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return False
+
+            reason = "locus of focus no longer in document"
+            document_presenter.get_presenter().suspend_navigators(self, True, reason)
+            return False
+
+        caret_offset = 0
+        if self.utilities.in_find_container(old_focus) or (
+            self.utilities.is_document(new_focus)
+            and old_focus == focus_manager.get_manager().get_active_window()
+        ):
+            context_obj, context_offset = self.utilities.get_caret_context(document)
+            if context_obj and AXObject.is_valid(context_obj):
+                new_focus, caret_offset = context_obj, context_offset
+
+        if AXUtilities.is_unknown_or_redundant(new_focus):
+            msg = "WEB: Event source has bogus role. Likely browser bug."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            new_focus, _offset = self.utilities.first_context(new_focus, 0)
+
+        if self.utilities.treat_as_text_object(new_focus):
+            text_offset = AXText.get_caret_offset(new_focus)
+            if 0 <= text_offset <= AXText.get_character_count(new_focus):
+                caret_offset = text_offset
+
+        self.utilities.set_caret_context(new_focus, caret_offset, document)
+        self.update_braille(new_focus)
+
+        contents = None
+        last_command_was_caret_nav = (
+            caret_navigator.get_navigator().last_input_event_was_navigation_command()
+        )
+        last_command_was_struct_nav = (
+            last_command_was_struct_nav
+            or table_navigator.get_navigator().last_input_event_was_navigation_command()
+        )
+        manager = input_event_manager.get_manager()
+        last_command_was_line_nav = (
+            manager.last_event_was_line_navigation() and not last_command_was_caret_nav
+        )
+
+        if (
+            manager.last_event_was_mouse_button()
+            and event
+            and event.type.startswith("object:text-caret-moved")
+        ):
+            msg = "WEB: Last input event was mouse button. Generating line."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, caret_offset)
+        elif (
+            self.utilities.is_content_editable_with_embedded_objects(new_focus)
+            and (
+                last_command_was_caret_nav
+                or last_command_was_struct_nav
+                or last_command_was_line_nav
+            )
+            and not (AXUtilities.is_table_cell(new_focus) and AXObject.get_name(new_focus))
+        ):
+            tokens = ["WEB: New focus", new_focus, "content editable. Generating line."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, caret_offset)
+        elif AXUtilities.is_anchor(new_focus):
+            tokens = ["WEB: New focus", new_focus, "is anchor. Generating line."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, 0)
+        elif (
+            input_event_manager.get_manager().last_event_was_page_navigation()
+            and not AXUtilities.get_table(new_focus)
+            and not AXUtilities.is_feed_article(new_focus)
+        ):
+            tokens = ["WEB: New focus", new_focus, "was scrolled to. Generating line."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, caret_offset)
+        elif AXUtilities.is_heading(new_focus):
+            tokens = ["WEB: New focus", new_focus, "is heading. Generating object."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            contents = self.utilities.get_object_contents_at_offset(new_focus, 0)
+        elif self.utilities.caret_moved_to_same_page_fragment(event, old_focus):
+            assert event is not None
+            tokens = ["WEB: Source", event.source, "is same page fragment. Generating line."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, 0)
+        elif (
+            event
+            and event.type.startswith("object:children-changed:remove")
+            and document_presenter.get_presenter().is_focus_mode_widget(self, new_focus)
+        ):
+            tokens = [
+                "WEB: New focus",
+                new_focus,
+                "is recovery from removed child. Generating speech.",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        elif last_command_was_line_nav and not AXObject.is_valid(old_focus):
+            msg = "WEB: Last input event was line nav; old_focus is invalid. Generating line."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, caret_offset)
+        elif (
+            last_command_was_line_nav and event and event.type.startswith("object:children-changed")
+        ):
+            msg = "WEB: Last input event was line nav and children changed. Generating line."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            contents = self.utilities.get_line_contents_at_offset(new_focus, caret_offset)
+        else:
+            tokens = ["WEB: New focus", new_focus, "is not a special case. Generating speech."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if new_focus and AXObject.is_dead(new_focus):
+            msg = "WEB: New focus has since died"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            if self._get_queued_event("object:state-changed:focused", True):
+                msg = "WEB: Have matching focused event. Not speaking contents"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+        presentation_manager.get_manager().interrupt_if_needed_for_focus_change(
+            old_focus, new_focus, event
+        )
+
+        if contents:
+            presentation_manager.get_manager().speak_contents(contents, prior_obj=old_focus)
+        else:
+            presentation_manager.get_manager().present_object(
+                self,
+                new_focus,
+                generate_braille=False,
+                prior_obj=old_focus,
+            )
+
+        document_presenter.get_presenter().update_mode_if_needed(self, old_focus, new_focus)
+        return True
+
+    def _on_active_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:active accessibility events."""
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if not event.detail1:
+            msg = "WEB: Ignoring because event source is now inactive"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if AXUtilities.is_dialog_or_alert(event.source):
+            msg = "WEB: Event handled: Setting locusOfFocus to event source"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            focus_manager.get_manager().set_locus_of_focus(event, event.source)
+            return True
+
+        return False
+
+    def _on_busy_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:busy accessibility events."""
+
+        live_region_presenter.get_presenter().handle_busy_changed(self, event)
+
+        if AXUtilities.has_no_size(event.source):
+            msg = "WEB: Ignoring event from page with no size."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not AXUtilities.get_uri(event.source):
+            msg = "WEB: Ignoring event from page with no URI."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        AXUtilities.clear_all_cache_now(event.source, "busy-changed event.")
+
+        if event.detail1 and self._loading_content:
+            msg = "WEB: Ignoring: Already loading document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        active_document = self.utilities.active_document()
+        if active_document and active_document != event.source:
+            msg = "WEB: Ignoring: Event source is not active document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if not AXUtilities.is_document_web(event.source) and not AXUtilities.is_ancestor(
+            focus,
+            event.source,
+            True,
+        ):
+            msg = "WEB: Ignoring: Not document and not something we're in"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.get_document_for_object(AXObject.get_parent(event.source)):
+            msg = "WEB: Ignoring: Event source is nested document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        obj, offset = self.utilities.get_caret_context()
+        if not AXObject.is_valid(obj):
+            self.utilities.clear_caret_context()
+
+        should_present = True
+        mgr = speech_presenter.get_presenter()
+        if mgr.get_only_speak_displayed_text():
+            should_present = False
+            msg = "WEB: Not presenting due to settings"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+        elif not (AXUtilities.is_showing(event.source) or AXUtilities.is_visible(event.source)):
+            should_present = False
+            msg = "WEB: Not presenting because source is not showing or visible"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+        elif not AXUtilities.get_uri(event.source):
+            should_present = False
+            msg = "WEB: Not presenting because source lacks URI"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+        elif (
+            not event.detail1
+            and document_presenter.get_presenter().in_focus_mode(self.app)
+            and AXObject.is_valid(obj)
+        ):
+            should_present = False
+            tokens = ["WEB: Not presenting due to focus mode for", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        elif not mgr.use_verbose_speech():
+            should_present = not event.detail1
+            tokens = ["WEB: Brief verbosity set. Should present", obj, ":", should_present]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if event.detail1 and AXUtilities.is_ancestor(focus, event.source, True):
+            presentation_manager.get_manager().interrupt_presentation()
+
+        if should_present and AXUtilities.get_uri(event.source).startswith("http"):
+            if event.detail1:
+                presentation_manager.get_manager().present_message(messages.PAGE_LOADING_START)
+            elif AXObject.get_name(event.source):
+                if not mgr.use_verbose_speech():
+                    text = AXObject.get_name(event.source)
+                else:
+                    text = messages.PAGE_LOADING_END_NAMED % AXObject.get_name(event.source)
+                presentation_manager.get_manager().present_message(text)
+            else:
+                presentation_manager.get_manager().present_message(messages.PAGE_LOADING_END)
+
+        self._loading_content = event.detail1
+        if event.detail1:
+            return True
+
+        self.utilities.clear_cached_objects()
+        if AXObject.is_dead(obj):
+            obj = None
+
+        if (
+            not focus_manager.get_manager().focus_is_dead()
+            and not self.utilities.in_document_content(focus)
+            and AXUtilities.is_focused(focus)
+        ):
+            msg = "WEB: Not presenting content, focus is outside of document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if document_presenter.get_presenter().get_page_summary_on_load() and should_present:
+            tokens = ["WEB: Getting page summary for", event.source]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            summary = AXUtilities.get_document_summary(event.source)
+            if summary:
+                presentation_manager.get_manager().present_message(summary)
+
+        obj, offset = self.utilities.get_caret_context()
+        if not AXUtilities.is_busy(event.source):
+            document_presenter.get_presenter().update_mode_if_needed(self, focus, obj)
+
+        if not obj:
+            msg = "WEB: Could not get caret context"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if document_presenter.get_presenter().is_focus_mode_widget(self, obj):
+            tokens = ["WEB: Setting locus of focus to focusModeWidget", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            focus_manager.get_manager().set_locus_of_focus(event, obj)
+            return True
+
+        if self.utilities.is_link(obj) and AXUtilities.is_focused(obj):
+            tokens = ["WEB: Setting locus of focus to focused link", obj, ". No SayAll."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            focus_manager.get_manager().set_locus_of_focus(event, obj)
+            return True
+
+        if offset > 0:
+            tokens = ["WEB: Setting locus of focus to context obj", obj, ". No SayAll"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            focus_manager.get_manager().set_locus_of_focus(event, obj)
+            return True
+
+        if not AXUtilities.is_focused(focus_manager.get_manager().get_locus_of_focus()):
+            tokens = ["WEB: Setting locus of focus to context obj", obj, "(no notification)"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            focus_manager.get_manager().set_locus_of_focus(event, obj, False)
+
+        self.update_braille(obj)
+        if AXUtilities.get_document_uri_fragment(event.source):
+            msg = "WEB: Not doing SayAll due to page fragment"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+        elif not document_presenter.get_presenter().get_say_all_on_load():
+            msg = "WEB: Not doing SayAll due to sayAllOnLoad being False"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            presentation_manager.get_manager().speak_contents(
+                self.utilities.get_line_contents_at_offset(obj, offset),
+            )
+        elif speech_manager.get_manager().get_speech_is_enabled_and_not_muted():
+            msg = "WEB: Doing SayAll"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            say_all_presenter.get_presenter().say_all(self, None, interrupt=False)
+        else:
+            msg = "WEB: Not doing SayAll due to speech being disabled or muted"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        return True
+
+    def _on_caret_moved(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-caret-moved accessibility events."""
+
+        reason = AXUtilities.get_text_event_reason(event)
+        if reason == TextEventReason.BRAILLE_PANNING:
+            msg = "WEB: Ignoring caret-moved event that is a side effect of braille panning"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        document = self.utilities.get_top_level_document_for_object(event.source)
+        if not document:
+            if self.utilities.event_is_browser_ui_noise_deprecated(event):
+                msg = "WEB: Ignoring event believed to be browser UI noise"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            if self.utilities.event_is_browser_ui_autocomplete_noise_deprecated(event):
+                msg = "WEB: Ignoring event believed to be browser UI autocomplete noise"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            if self.utilities.in_find_container() and reason not in (
+                TextEventReason.NAVIGATION_BY_CHARACTER,
+                TextEventReason.NAVIGATION_BY_WORD,
+                TextEventReason.NAVIGATION_TO_LINE_BOUNDARY,
+            ):
+                msg = "WEB: Event handled: Presenting find results"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                document_presenter.get_presenter().present_find_results(event.source, event.detail1)
+                return True
+
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        selection_reasons = {
+            TextEventReason.SELECTION_BY_CHARACTER,
+            TextEventReason.SELECTION_BY_LINE,
+            TextEventReason.SELECTION_BY_PARAGRAPH,
+            TextEventReason.SELECTION_BY_PAGE,
+            TextEventReason.SELECTION_BY_WORD,
+            TextEventReason.SELECTION_TO_FILE_BOUNDARY,
+            TextEventReason.SELECTION_TO_LINE_BOUNDARY,
+        }
+        if (
+            reason in selection_reasons
+            and text_selection_manager.get_manager().get_current_selection_command(document)
+            is not None
+        ):
+            msg = "WEB: Ignoring caret-moved event caused by Orca's text selection"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        obj, offset = self.utilities.get_caret_context(document, search_if_needed=False)
+        tokens = ["WEB: Context: ", obj, ", ", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        # TODO - JD: Make this a TextEventReason.
+        if caret_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Event ignored: Last command was caret nav"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        # TODO - JD: Make this a TextEventReason.
+        if structural_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Event ignored: Last command was struct nav"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        # TODO - JD: Make this a TextEventReason.
+        if table_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Event ignored: Last command was table nav"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.SAY_ALL:
+            msg = "WEB: Event handled: SayAll triggered"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.MOUSE_PRIMARY_BUTTON:
+            if (event.source, event.detail1) == (obj, offset):
+                msg = "WEB: Event is for current caret context."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            if (event.source, event.detail1) == self._last_mouse_button_context:
+                msg = "WEB: Event is for last mouse button context."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            self._last_mouse_button_context = event.source, event.detail1
+
+            msg = "WEB: Event handled: Last command was mouse button"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.utilities.set_caret_context(event.source, event.detail1)
+            notify = not AXUtilities.is_entry_descendant(obj, inclusive=True)
+            focus_manager.get_manager().set_locus_of_focus(event, event.source, notify, True)
+            return True
+
+        if reason == TextEventReason.FOCUS_CHANGE:
+            msg = "WEB: Event ignored: Caret moved due to focus change."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.event_is_from_locus_of_focus_document(event):
+            msg = "WEB: Event ignored: Not from locus of focus document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.UI_UPDATE:
+            msg = "WEB: Event ignored: Caret moved due to UI update."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason in [TextEventReason.TYPING, TextEventReason.TYPING_ECHOABLE]:
+            msg = "WEB: Event handled: Updating position due to insertion"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            focus_manager.get_manager().set_last_cursor_position(event.source, event.detail1)
+            return True
+
+        if reason in (TextEventReason.DELETE, TextEventReason.BACKSPACE):
+            msg = "WEB: Event handled: Updating position due to deletion"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            focus_manager.get_manager().set_last_cursor_position(event.source, event.detail1)
+            return True
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        i_e_manager = input_event_manager.get_manager()
+        if (
+            self.utilities.is_item_for_editable_combo_box(focus, event.source)
+            and not i_e_manager.last_event_was_character_navigation()
+            and not i_e_manager.last_event_was_line_boundary_navigation()
+        ):
+            msg = "WEB: Event ignored: Editable combobox noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.event_is_autocomplete_noise_deprecated(event, document):
+            msg = "WEB: Event ignored: Autocomplete noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if document_presenter.get_presenter().in_focus_mode(
+            self.app,
+        ) and self.utilities.caret_moved_outside_active_grid(event):
+            msg = "WEB: Event ignored: Caret moved outside active grid during focus mode"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.treat_event_as_spinner_value_change_deprecated(event):
+            msg = "WEB: Event handled as the value-change event we wish we'd get"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.update_braille(event.source)
+            self._present_caret_moved_event(event)
+            return True
+
+        if not self.utilities.treat_as_text_object(event.source) and not AXUtilities.is_editable(
+            event.source,
+        ):
+            msg = "WEB: Event ignored: Was for non-editable object we're treating as textless"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        notify = force = handled = False
+
+        in_focus_mode = document_presenter.get_presenter().in_focus_mode(self.app)
+        if in_focus_mode:
+            obj, offset = event.source, event.detail1
+        else:
+            obj, offset = self.utilities.first_context(event.source, event.detail1)
+
+        if reason == TextEventReason.NAVIGATION_BY_PAGE:
+            msg = "WEB: Caret moved due to scrolling."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            notify = force = handled = True
+
+        elif self.utilities.caret_moved_to_same_page_fragment(event):
+            msg = "WEB: Caret moved to fragment."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            notify = force = handled = True
+
+        elif (
+            event.source != focus
+            and AXUtilities.is_editable(event.source)
+            and (AXUtilities.is_focused(event.source) or not AXUtilities.is_focusable(event.source))
+        ):
+            msg = "WEB: Editable object is not (yet) the locus of focus."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            notify = force = handled = (
+                i_e_manager.last_event_was_line_navigation()
+                or i_e_manager.last_event_was_return()
+                or i_e_manager.last_event_was_command()
+            )
+
+        elif reason in (
+            TextEventReason.NAVIGATION_BY_CHARACTER,
+            TextEventReason.NAVIGATION_BY_WORD,
+        ):
+            tokens = ["WEB: Caret moved due to", reason]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            if (
+                in_focus_mode
+                and not AXUtilities.is_editable(event.source)
+                and (obj, offset) == focus_manager.get_manager().get_last_cursor_position()
+            ):
+                msg = "WEB: Event ignored. In focus mode and caret hasn't moved."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                handled = True
+
+        tokens = ["WEB: Setting context and focus to: ", obj, ", ", offset, ", notify:", notify]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        self.utilities.set_caret_context(obj, offset, document)
+        focus_manager.get_manager().set_locus_of_focus(event, obj, notify, force)
+        return handled
+
+    def _on_checked_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:checked accessibility events."""
+
+        msg = "WEB: This event is is handled by the toolkit or default script."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return False
+
+    def _on_children_added(self, event: Atspi.Event) -> bool:
+        """Callback for object:children-changed:add accessibility events."""
+
+        AXUtilities.clear_all_cache_now(event.source, "children-changed event.")
+
+        if self.utilities.event_is_browser_ui_noise_deprecated(event):
+            msg = "WEB: Ignoring event believed to be browser UI noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        is_live_region = AXUtilities.is_live_region(event.source)
+        document = self.utilities.get_top_level_document_for_object(event.source)
+        if document and not is_live_region:
+            focus = focus_manager.get_manager().get_locus_of_focus()
+            if event.source == focus:
+                msg = "WEB: Dumping cache: source is focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.dump_cache(document, preserve_context=True)
+            elif focus_manager.get_manager().focus_is_dead():
+                msg = "WEB: Dumping cache: dead focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.dump_cache(document, preserve_context=True)
+            elif AXUtilities.find_ancestor(focus, lambda x: x == event.source):
+                msg = "WEB: Dumping cache: source is ancestor of focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.dump_cache(document, preserve_context=True)
+            else:
+                msg = "WEB: Not dumping full cache"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.clear_cached_objects()
+        elif is_live_region:
+            msg = "WEB: Ignoring event from live region."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+        else:
+            msg = "WEB: Could not get document for event source"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if self._loading_content:
+            msg = "WEB: Ignoring because document content is being loaded."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not AXObject.is_valid(document):
+            tokens = ["WEB: Ignoring because", document, "is not valid."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        if AXUtilities.is_busy(document):
+            tokens = ["WEB: Ignoring because", document, "is busy."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        if AXUtilities.is_alert(event.any_data):
+            msg = "WEB: Presenting event.any_data"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            presentation_manager.get_manager().interrupt_if_needed_for_object_presentation()
+            self.present_object(event.any_data)
+
+            focused = AXUtilities.get_focused_object(event.any_data)
+            if focused:
+                notify = not self.utilities.treat_as_text_object(focused)
+                tokens = ["WEB: Setting locusOfFocus and caret context to", focused]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                focus_manager.get_manager().set_locus_of_focus(event, focused, notify)
+                self.utilities.set_caret_context(focused, 0)
+            return True
+
+        return False
+
+    def _on_children_removed(self, event: Atspi.Event) -> bool:
+        """Callback for object:children-changed:removed accessibility events."""
+
+        AXUtilities.clear_all_cache_now(event.source, "children-changed event.")
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if self._loading_content:
+            msg = "WEB: Ignoring because document content is being loaded."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if AXUtilities.is_live_region(event.source):
+            if self.utilities.handle_event_for_removed_child(event):
+                msg = "WEB: Event handled for removed live-region child."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+            else:
+                msg = "WEB: Ignoring removal from live region."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        document = self.utilities.get_top_level_document_for_object(event.source)
+        if document:
+            focus = focus_manager.get_manager().get_locus_of_focus()
+            if event.source == focus:
+                msg = "WEB: Dumping cache: source is focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.dump_cache(document, preserve_context=True)
+            elif focus_manager.get_manager().focus_is_dead():
+                msg = "WEB: Dumping cache: dead focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.dump_cache(document, preserve_context=True)
+            elif AXUtilities.find_ancestor(focus, lambda x: x == event.source):
+                msg = "WEB: Dumping cache: source is ancestor of focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.dump_cache(document, preserve_context=True)
+            else:
+                msg = "WEB: Not dumping full cache"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.utilities.clear_cached_objects()
+
+        if self.utilities.handle_event_for_removed_child(event):
+            msg = "WEB: Event handled for removed child."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_column_reordered(self, event: Atspi.Event) -> bool:
+        """Callback for object:column-reordered accessibility events."""
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if event.source != AXUtilities.get_table(focus):
+            msg = "WEB: focus is not in this table"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        presentation_manager.get_manager().present_message(messages.TABLE_REORDERED_COLUMNS)
+        header = AXUtilities.find_ancestor_inclusive(focus, AXUtilities.is_table_header)
+        msg = AXUtilities.get_presentable_sort_order_from_header(header, True)
+        if msg:
+            presentation_manager.get_manager().present_message(msg)
+        return True
+
+    def _on_document_load_complete(self, event: Atspi.Event) -> bool:
+        """Callback for document:load-complete accessibility events."""
+
+        if AXUtilities.has_no_size(event.source):
+            msg = "WEB: Ignoring event from page with no size."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        uri = AXUtilities.get_uri(event.source)
+        if not uri:
+            msg = "WEB: Ignoring event from page with no URI."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if uri.startswith("moz-extension"):
+            tokens = ["WEB: Ignoring event from page with URI:", uri]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        AXUtilities.clear_all_cache_now(event.source, "load-complete event.")
+        if self.utilities.get_document_for_object(AXObject.get_parent(event.source)):
+            msg = "WEB: Ignoring: Event source is nested document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        msg = "WEB: Updating loading state and resetting live regions"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self._loading_content = False
+        live_region_presenter.get_presenter().reset()
+        return True
+
+    def _on_document_load_stopped(self, event: Atspi.Event) -> bool:
+        """Callback for document:load-stopped accessibility events."""
+
+        if not AXUtilities.get_uri(event.source):
+            msg = "WEB: Ignoring event from page with no URI."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.get_document_for_object(AXObject.get_parent(event.source)):
+            msg = "WEB: Ignoring: Event source is nested document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        msg = "WEB: Updating loading state"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self._loading_content = False
+        return True
+
+    def _on_document_reload(self, event: Atspi.Event) -> bool:
+        """Callback for document:reload accessibility events."""
+
+        if not AXUtilities.get_uri(event.source):
+            msg = "WEB: Ignoring event from page with no URI."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.get_document_for_object(AXObject.get_parent(event.source)):
+            msg = "WEB: Ignoring: Event source is nested document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        msg = "WEB: Updating loading state"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self._loading_content = True
+        return True
+
+    def _on_expanded_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:expanded accessibility events."""
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        obj, offset = self.utilities.get_caret_context(search_if_needed=False)
+        tokens = ["WEB: Caret context is", obj, ", ", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if not AXObject.is_valid(obj) and event.source == focus:
+            msg = "WEB: Setting caret context to event source"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.utilities.set_caret_context(event.source, 0)
+
+        return False
+
+    def _on_focused_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:focused accessibility events."""
+
+        if not event.detail1:
+            msg = "WEB: Ignoring because event source lost focus"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        document = self.utilities.get_top_level_document_for_object(event.source)
+        if not document:
+            msg = "WEB: Could not get document for event source"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if focus_manager.get_manager().in_say_all():
+            msg = "WEB: Ignoring focus change during say all"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        prev_document = self.utilities.get_top_level_document_for_object(focus)
+        if prev_document != document:
+            tokens = ["WEB: document changed from", prev_document, "to", document]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        elif document == event.source:
+            msg = "WEB: Ignoring focus change to document ancestor of focus"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if AXUtilities.is_link(event.source) and AXUtilities.is_ancestor(focus, event.source):
+            msg = "WEB: Ignoring focus change on link ancestor of focus"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if caret_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Event ignored: Last command was caret nav"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if structural_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Event ignored: Last command was struct nav"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if table_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Event ignored: Last command was table nav"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if (
+            document_presenter.get_presenter().browse_mode_is_sticky(self.app)
+            and not input_event_manager.get_manager().last_event_was_tab_navigation()
+        ):
+            msg = "WEB: Element claimed focus, but browse mode is sticky"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if AXUtilities.is_embedded_descendant(event.source):
+            if AXUtilities.is_tool_tip(event.source) and AXUtilities.is_ancestor(
+                focus, event.source
+            ):
+                msg = "WEB: Event believed to be side effect of tooltip navigation."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            msg = "WEB: Event handled: Setting locusOfFocus to embedded descendant"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            presentation_manager.get_manager().interrupt_if_needed_for_focus_change(
+                focus, event.source, event
+            )
+
+            focus_manager.get_manager().set_locus_of_focus(event, event.source)
+            return True
+
+        if AXUtilities.is_editable(event.source):
+            msg = "WEB: Event source is editable"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if AXUtilities.is_dialog_or_alert(event.source):
+            if AXUtilities.is_ancestor(focus, event.source, True):
+                msg = "WEB: Ignoring event from ancestor of focus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+            else:
+                msg = "WEB: Event handled: Setting locusOfFocus to event source"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                focus_manager.get_manager().set_locus_of_focus(event, event.source)
+            return True
+
+        obj, offset = self.utilities.get_caret_context()
+        tokens = ["WEB: Caret context is", obj, ", ", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if not AXObject.is_valid(obj) or prev_document != document:
+            tokens = ["WEB: Clearing context - obj", obj, "is not valid or document changed"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            self.utilities.clear_caret_context()
+
+            obj, offset = AXUtilities.search_for_caret_context(
+                event.source, self.utilities.caret_policy, self.utilities.is_document
+            )
+            if obj:
+                tokens = ["WEB: Updating focus and context to", obj, ", ", offset]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                focus_manager.get_manager().set_locus_of_focus(event, obj)
+                self.utilities.set_caret_context(obj, offset)
+            else:
+                msg = "WEB: Search for caret context failed"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        if not (AXUtilities.is_focusable(event.source) and AXUtilities.is_focused(event.source)):
+            msg = "WEB: Event ignored: Source is not focusable or focused"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not AXUtilities.is_document(event.source):
+            msg = "WEB: Deferring to other scripts for handling non-document source"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if not obj:
+            msg = "WEB: Unable to get valid context object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if input_event_manager.get_manager().last_event_was_page_navigation():
+            msg = "WEB: Event handled: Focus changed due to scrolling"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            focus_manager.get_manager().set_locus_of_focus(event, obj)
+            self.utilities.set_caret_context(obj, offset)
+            return True
+
+        if AXUtilities.is_anchor(obj):
+            cause = "Context is anchor"
+        elif not (self.utilities.is_link(obj) and not AXUtilities.is_focused(obj)):
+            cause = "Context is not a non-focused link"
+        elif self.utilities.is_child_of_current_fragment(obj):
+            cause = "Context is child of current fragment"
+        elif document == event.source and AXUtilities.get_document_uri_fragment(event.source):
+            cause = "Document URI is fragment"
+        else:
+            return False
+
+        tokens = ["WEB: Event handled: Setting locusOfFocus to", obj, "(", cause, ")"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        focus_manager.get_manager().set_locus_of_focus(event, obj)
+        return True
+
+    def _on_mouse_button(self, event: Atspi.Event) -> bool:
+        """Callback for mouse:button accessibility events."""
+
+        return False
+
+    def _on_name_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:property-change:accessible-name events."""
+
+        if self.utilities.event_is_browser_ui_noise_deprecated(event):
+            msg = "WEB: Ignoring event believed to be browser UI noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_row_reordered(self, event: Atspi.Event) -> bool:
+        """Callback for object:row-reordered accessibility events."""
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if event.source != AXUtilities.get_table(focus):
+            msg = "WEB: focus is not in this table"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        presentation_manager.get_manager().present_message(messages.TABLE_REORDERED_ROWS)
+        header = AXUtilities.find_ancestor_inclusive(focus, AXUtilities.is_table_header)
+        msg = AXUtilities.get_presentable_sort_order_from_header(header, True)
+        if msg:
+            presentation_manager.get_manager().present_message(msg)
+        return True
+
+    def _on_selected_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:selected accessibility events."""
+
+        if self.utilities.event_is_browser_ui_autocomplete_noise_deprecated(event):
+            msg = "WEB: Ignoring event believed to be browser UI autocomplete noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if self.utilities.event_is_browser_ui_page_switch(event):
+            msg = "WEB: Event believed to be browser UI page switch"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            if event.detail1:
+                # https://bugzilla.mozilla.org/show_bug.cgi?id=1867044
+                AXObject.clear_cache(event.source, False, "Work around Gecko bug.")
+                AXUtilities.clear_all_cache_now(reason=msg)
+                presentation_manager.get_manager().interrupt_if_needed_for_object_presentation()
+                self.present_object(event.source, prior_obj=focus)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if focus != event.source:
+            msg = "WEB: Ignoring because event source is not locusOfFocus"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_selection_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:selection-changed accessibility events."""
+
+        if self.utilities.event_is_browser_ui_autocomplete_noise_deprecated(event):
+            msg = "WEB: Ignoring event believed to be browser UI autocomplete noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.event_is_browser_ui_page_switch(event):
+            msg = "WEB: Ignoring event believed to be browser UI page switch"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if not self.utilities.in_document_content(focus_manager.get_manager().get_locus_of_focus()):
+            msg = "WEB: Event ignored: locusOfFocus is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.event_is_from_locus_of_focus_document(event):
+            msg = "WEB: Event ignored: Not from locus of focus document"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if AXUtilities.is_embedded_descendant(event.source):
+            if document_presenter.get_presenter().in_focus_mode(self.app):
+                # Because we cannot count on the app firing the right state-changed events
+                # for descendants.
+                AXObject.clear_cache(
+                    event.source,
+                    True,
+                    "Workaround for missing events on descendants.",
+                )
+                msg = "WEB: Event source is embedded descendant and we're in focus mode"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return False
+
+            msg = "WEB: Event source is embedded descendant and we're in browse mode"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.event_is_irrelevant_selection_changed_event(event):
+            msg = "WEB: Event ignored: Irrelevant"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        obj, _offset = self.utilities.get_caret_context()
+        ancestor = AXUtilities.get_common_ancestor(obj, event.source)
+        if ancestor and self.utilities.is_text_block_element(ancestor):
+            msg = "WEB: Ignoring: Common ancestor of context and event source is text block"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_showing_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:showing accessibility events."""
+
+        if event.detail1 and self.utilities.is_browser_ui_alert(event.source):
+            msg = "WEB: Event handled: Presenting event source"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            presentation_manager.get_manager().interrupt_if_needed_for_object_presentation()
+            self.present_object(event.source)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        return True
+
+    def _on_text_attributes_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-attributes-changed accessibility events."""
+
+        msg = "WEB: This event is is handled by the toolkit or default script."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return False
+
+    def _on_text_deleted(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-changed:delete accessibility events."""
+
+        reason = AXUtilities.get_text_event_reason(event)
+        if reason == TextEventReason.PAGE_SWITCH:
+            msg = "WEB: Deletion is believed to be due to page switch"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.LIVE_REGION_UPDATE:
+            msg = "WEB: Ignoring deletion from live region"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+
+            if reason == TextEventReason.UI_UPDATE:
+                msg = "WEB: Ignoring event believed to be browser UI update"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            return False
+
+        if reason == TextEventReason.SPIN_BUTTON_VALUE_CHANGE:
+            msg = "WEB: Ignoring: Event believed to be spin button value change"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.AUTO_DELETION_UNPRESENTABLE:
+            msg = "WEB: Ignoring event believed to be irrelevant auto deletion"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        msg = "WEB: Clearing content cache due to text deletion"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self.utilities.clear_content_cache()
+
+        if reason in (TextEventReason.DELETE, TextEventReason.BACKSPACE):
+            msg = "WEB: Event believed to be due to editable text deletion"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if reason in [TextEventReason.TYPING, TextEventReason.TYPING_ECHOABLE]:
+            msg = "WEB: Ignoring event believed to be due to text insertion"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        obj, _offset = self.utilities.get_caret_context()
+        if (
+            obj
+            and obj != event.source
+            and not AXUtilities.find_ancestor(obj, lambda x: x == event.source)
+        ):
+            tokens = ["WEB: Ignoring event because it isn't", obj, "or its ancestor"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        if not AXObject.is_valid(obj):
+            if self.utilities.is_link(obj):
+                msg = "WEB: Focused link deleted. Taking no further action."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            obj, _offset = self.utilities.get_caret_context()
+            if obj:
+                focus_manager.get_manager().set_locus_of_focus(event, obj, notify_script=False)
+
+        if not AXObject.is_valid(obj):
+            msg = "WEB: Unable to get valid context object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        if not AXUtilities.is_editable(
+            event.source,
+        ) and not self.utilities.is_content_editable_with_embedded_objects(event.source):
+            focus = focus_manager.get_manager().get_locus_of_focus()
+            if focus in (event.source, AXObject.get_parent(event.source)):
+                msg = "WEB: Non-editable source is locus of focus. Updating braille."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                self.update_braille(event.source)
+            else:
+                msg = "WEB: Done processing non-editable source"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_text_inserted(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-changed:insert accessibility events."""
+
+        reason = AXUtilities.get_text_event_reason(event)
+        if reason == TextEventReason.PAGE_SWITCH:
+            msg = "WEB: Insertion is believed to be due to page switch"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.LIVE_REGION_UPDATE:
+            msg = "WEB: Event is from live region"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            live_region_presenter.get_presenter().handle_event(self, event)
+            return True
+
+        if reason == TextEventReason.CHILDREN_CHANGE:
+            msg = "WEB: Ignoring: Event believed to be due to children change"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+
+            if reason == TextEventReason.UI_UPDATE:
+                msg = "WEB: Ignoring event believed to be browser UI update"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            return False
+
+        if reason == TextEventReason.SPIN_BUTTON_VALUE_CHANGE:
+            msg = "WEB: Ignoring: Event believed to be spin button value change"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if reason == TextEventReason.AUTO_INSERTION_PRESENTABLE:
+            msg = "WEB: Ignoring: Event believed to be auto insertion"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        msg = "WEB: Clearing content cache due to text insertion"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self.utilities.clear_content_cache()
+
+        document = self.utilities.get_top_level_document_for_object(event.source)
+        if focus_manager.get_manager().focus_is_dead():
+            msg = "WEB: Dumping cache: dead focus"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.utilities.dump_cache(document, preserve_context=True)
+
+            if AXUtilities.is_focused(event.source):
+                msg = "WEB: Event handled: Setting locusOfFocus to event source"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                focus_manager.get_manager().set_locus_of_focus(None, event.source, force=True)
+                return True
+
+        if not self.utilities.treat_as_text_object(event.source):
+            msg = "WEB: Ignoring: Event source is not a text object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        source_is_focus = event.source == focus_manager.get_manager().get_locus_of_focus()
+        if not AXUtilities.is_editable(event.source):
+            if not source_is_focus:
+                msg = "WEB: Done processing non-editable, non-locusOfFocus source"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+
+            if self.utilities.is_clickable_element(event.source):
+                msg = "WEB: Event handled: Re-setting locusOfFocus to changed clickable"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                focus_manager.get_manager().set_locus_of_focus(None, event.source, force=True)
+                return True
+
+            msg = "WEB: Non-editable source is locus of focus. Updating braille."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.update_braille(event.source)
+            return True
+
+        if (
+            not source_is_focus
+            and AXUtilities.is_text_input(event.source)
+            and AXUtilities.is_focused(event.source)
+        ):
+            msg = "WEB: Focused entry is not the locus of focus. Waiting for focus event."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_text_selection_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-selection-changed accessibility events."""
+
+        _reason = AXUtilities.get_text_event_reason(event)
+        if self.utilities.event_is_browser_ui_noise_deprecated(event):
+            msg = "WEB: Ignoring event believed to be browser UI noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.in_find_container():
+            msg = "WEB: Event handled: Presenting find results"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            document_presenter.get_presenter().present_find_results(event.source, 0)
+            return True
+
+        if not self.utilities.in_document_content(event.source):
+            msg = "WEB: Event source is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if not self.utilities.in_document_content(focus):
+            msg = "WEB: Locus of focus is not in document content"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.event_is_autocomplete_noise_deprecated(event):
+            msg = "WEB: Ignoring: Event believed to be autocomplete noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.event_is_spinner_noise_deprecated(event):
+            msg = "WEB: Ignoring: Event believed to be spinner noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.event_is_for_non_navigable_text_object(event):
+            msg = "WEB: Ignoring event for non-navigable text object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if not self.utilities.treat_as_text_object(event.source):
+            msg = "WEB: Ignoring: Event source is not a text object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if (
+            event.source != focus
+            and AXUtilities.is_text_input(event.source)
+            and AXUtilities.is_focused(event.source)
+        ):
+            msg = "WEB: Focused entry is not the locus of focus. Waiting for focus event."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if self.utilities.is_content_editable_with_embedded_objects(event.source):
+            msg = "WEB: In content editable with embedded objects"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if structural_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Deferring selection change caused by structural navigation."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        if table_navigator.get_navigator().last_input_event_was_navigation_command():
+            msg = "WEB: Deferring selection change caused by table navigation."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        char = AXText.get_character_at_offset(event.source)[0]
+        manager = input_event_manager.get_manager()
+        event_is_for_managed_selection = (
+            text_selection_manager.get_manager().get_current_selection_command(event.source)
+            is not None
+        )
+        if (
+            char == "\ufffc"
+            and not manager.last_event_was_caret_selection()
+            and not manager.last_event_was_command()
+            and not event_is_for_managed_selection
+        ):
+            msg = "WEB: Ignoring: Not selecting and event offset is at embedded object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return False
+
+    def _on_window_activated(self, event: Atspi.Event) -> bool:
+        """Callback for window:activate accessibility events."""
+
+        msg = "WEB: Deferring to app/toolkit script"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return False
+
+    def _on_window_deactivated(self, event: Atspi.Event) -> bool:
+        """Callback for window:deactivate accessibility events."""
+
+        msg = "WEB: Clearing command state"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self._last_mouse_button_context = None, -1
+        return False

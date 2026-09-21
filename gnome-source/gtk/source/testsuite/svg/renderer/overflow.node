@@ -1,0 +1,26 @@
+clip {
+  clip: 0 0 100 100;
+  child: container {
+    rounded-clip {
+      clip: -91.2788 8.97698 80 80 / 40;
+      child: color {
+        bounds: -91.2788 8.97698 80 80;
+        color: rgb(255,0,0);
+      }
+    }
+    rounded-clip {
+      clip: 9.0829 8.61529 80 80 / 40;
+      child: color {
+        bounds: 9.0829 8.61529 80 80;
+        color: rgb(0,128,0);
+      }
+    }
+    rounded-clip {
+      clip: 108.721 8.97698 80 80 / 40;
+      child: color {
+        bounds: 108.721 8.97698 80 80;
+        color: rgb(0,0,255);
+      }
+    }
+  }
+}

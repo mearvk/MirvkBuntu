@@ -1,0 +1,32 @@
+color {
+  bounds: 0 0 80 80;
+  color: rgb(255,0,0);
+}
+color {
+  bounds: 100 0 80 80;
+  color: rgb(0,0,255);
+}
+color {
+  bounds: 200 0 80 80;
+  color: rgb(0,128,0);
+}
+clip {
+  clip: 0 100 120 60;
+  child: rounded-clip {
+    clip: 0 100 120 60 / 60;
+    child: color {
+      bounds: 0 100 120 60;
+      color: rgb(255,255,0);
+    }
+  }
+}
+clip {
+  clip: 150 100 60 120;
+  child: clip {
+    clip: 120 100 120 120;
+    child: color {
+      bounds: 120 100 120 120;
+      color: rgb(128,0,128);
+    }
+  }
+}

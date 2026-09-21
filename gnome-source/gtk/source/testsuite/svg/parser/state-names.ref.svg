@@ -1,0 +1,36 @@
+<svg
+        xmlns='http://www.w3.org/2000/svg'
+        xmlns:svg='http://www.w3.org/2000/svg'
+        xmlns:gpa='https://www.gtk.org/grappa'
+        gpa:version='1'
+        gpa:state='0'
+        width='16'
+        height='16'>
+  <circle>
+  </circle>
+  <circle
+          visibility='hidden'
+          gpa:states='none'>
+  </circle>
+  <circle>
+  </circle>
+  <circle>
+  </circle>
+  <circle
+          gpa:states='0'>
+  </circle>
+  <circle>
+  </circle>
+  <circle>
+  </circle>
+  <circle>
+  </circle>
+  <circle>
+  </circle>
+  <circle
+          gpa:states='not 1'>
+  </circle>
+  <circle
+          gpa:states='not 1 2 3'>
+  </circle>
+</svg>

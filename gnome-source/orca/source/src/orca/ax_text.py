@@ -1,0 +1,1126 @@
+# Orca
+#
+# Copyright 2024 Igalia, S.L.
+# Copyright 2024 GNOME Foundation Inc.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-lines
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-return-statements
+
+"""Wrapper for the Atspi.Text interface."""
+
+from __future__ import annotations
+
+import contextlib
+import enum
+import locale
+import re
+
+import gi
+
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi, GLib
+
+from . import (
+    ax_cache_manager,
+    colornames,
+    debug,
+    language_utilities,
+    messages,
+    object_properties,
+    text_attribute_names,
+)
+from .ax_object import AXObject
+from .ax_utilities_role import AXUtilitiesRole
+from .ax_utilities_state import AXUtilitiesState
+
+_TEXT_ATTRIBUTE_ALIASES: dict[str, str] = {
+    "font-style": "style",
+    "font-weight": "weight",
+    "font-size": "size",
+    "font-family": "family-name",
+    "text-decoration-line": "text-decoration",
+}
+
+
+class AXTextAttribute(enum.Enum):
+    """Enum representing an accessible text attribute."""
+
+    # Note: Anything added here should also have an entry in text_attribute_names.py.
+    # The tuple is (non-localized name, enable by default).
+    BG_COLOR = ("bg-color", True)
+    BG_FULL_HEIGHT = ("bg-full-height", False)
+    BG_STIPPLE = ("bg-stipple", False)
+    DIRECTION = ("direction", False)
+    EDITABLE = ("editable", False)
+    FAMILY_NAME = ("family-name", True)
+    FG_COLOR = ("fg-color", True)
+    FG_STIPPLE = ("fg-stipple", False)
+    FONT_EFFECT = ("font-effect", True)
+    INDENT = ("indent", True)
+    INVALID = ("invalid", True)
+    INVISIBLE = ("invisible", False)
+    JUSTIFICATION = ("justification", True)
+    LANGUAGE = ("language", False)
+    LEFT_MARGIN = ("left-margin", False)
+    LINE_HEIGHT = ("line-height", False)
+    MARK = ("mark", True)
+    PARAGRAPH_STYLE = ("paragraph-style", True)
+    PIXELS_ABOVE_LINES = ("pixels-above-lines", False)
+    PIXELS_BELOW_LINES = ("pixels-below-lines", False)
+    PIXELS_INSIDE_WRAP = ("pixels-inside-wrap", False)
+    RIGHT_MARGIN = ("right-margin", False)
+    RISE = ("rise", False)
+    SCALE = ("scale", False)
+    SIZE = ("size", True)
+    STRETCH = ("stretch", False)
+    STRIKETHROUGH = ("strikethrough", True)
+    STYLE = ("style", True)
+    TEXT_DECORATION = ("text-decoration", True)
+    TEXT_POSITION = ("text-position", False)
+    TEXT_ROTATION = ("text-rotation", True)
+    TEXT_SHADOW = ("text-shadow", False)
+    UNDERLINE = ("underline", True)
+    VARIANT = ("variant", False)
+    VERTICAL_ALIGN = ("vertical-align", False)
+    WEIGHT = ("weight", True)
+    WRAP_MODE = ("wrap-mode", False)
+    WRITING_MODE = ("writing-mode", False)
+
+    @classmethod
+    def from_string(cls, string: str) -> AXTextAttribute | None:
+        """Returns the AXTextAttribute for the specified string."""
+
+        canonical = _TEXT_ATTRIBUTE_ALIASES.get(string, string)
+        for attribute in cls:
+            if attribute.get_attribute_name() == canonical:
+                return attribute
+
+        return None
+
+    @classmethod
+    def from_localized_string(cls, string: str) -> AXTextAttribute | None:
+        """Returns the AXTextAttribute for the specified localized string."""
+
+        for attribute in cls:
+            if attribute.get_localized_name() == string:
+                return attribute
+
+        return None
+
+    def get_attribute_name(self) -> str:
+        """Returns the non-localized name of the attribute."""
+
+        return self.value[0]
+
+    def get_value_from_attrs(self, attrs: dict[str, str]) -> str | None:
+        """Returns the value for this attribute from an attrs dict, checking aliases."""
+
+        key = self.value[0]
+        value = attrs.get(key)
+        if value is not None:
+            return value
+        for alias, canonical in _TEXT_ATTRIBUTE_ALIASES.items():
+            if canonical == key:
+                value = attrs.get(alias)
+                if value is not None:
+                    return value
+        return None
+
+    def get_localized_name(self) -> str:
+        """Returns the localized name of the attribute."""
+
+        name = self.value[0]
+        return text_attribute_names.attribute_names.get(name, name)
+
+    def get_localized_value(self, value) -> str:
+        """Returns the localized value of the attribute."""
+
+        if value is None:
+            return ""
+
+        if value.endswith("px"):
+            value = value.split("px")[0]
+            if locale.localeconv()["decimal_point"] in value:
+                return messages.pixel_count(float(value))
+            return messages.pixel_count(int(value))
+
+        if self in [AXTextAttribute.BG_COLOR, AXTextAttribute.FG_COLOR]:
+            return colornames.get_presentable_color_name(value)
+
+        # TODO - JD: Is this still needed?
+        value = value.replace("-moz", "")
+
+        # TODO - JD: Are these still needed?
+        if self == AXTextAttribute.JUSTIFICATION:
+            value = value.replace("justify", "fill")
+        elif self == AXTextAttribute.FAMILY_NAME:
+            value = value.split(",")[0].strip().strip('"')
+
+        return text_attribute_names.attribute_values.get(value, value)
+
+    def should_present_by_default(self) -> bool:
+        """Returns True if the attribute should be presented by default."""
+
+        return self.value[1]
+
+    def value_is_default(self, value) -> bool:
+        """Returns True if value should be treated as the default value for this attribute."""
+
+        null_values = ["0", "0mm", "0px", "none", "false", "normal", "", None]
+        if value in null_values:
+            return True
+
+        if self == AXTextAttribute.SCALE:
+            return float(value) == 1.0
+        if self in (AXTextAttribute.TEXT_POSITION, AXTextAttribute.VERTICAL_ALIGN):
+            return value == "baseline"
+        if self == AXTextAttribute.WEIGHT:
+            return value == "400"
+        if self == AXTextAttribute.LANGUAGE:
+            return value == language_utilities.get_current_language()
+
+        return False
+
+    def get_change_description(self, new_value: str | None) -> str:
+        """Returns a localized description for announcing a change."""
+
+        if self == AXTextAttribute.WEIGHT:
+            if new_value and (
+                new_value == "bold" or (new_value.isdigit() and int(new_value) > 400)
+            ):
+                return messages.BOLD
+            return messages.TEXT_ATTRIBUTE_OFF % messages.BOLD
+
+        if self == AXTextAttribute.STYLE:
+            localized_italic = self.get_localized_value("italic")
+            if new_value in ("italic", "oblique"):
+                return self.get_localized_value(new_value)
+            return messages.TEXT_ATTRIBUTE_OFF % localized_italic
+
+        if self in (AXTextAttribute.UNDERLINE, AXTextAttribute.STRIKETHROUGH):
+            if self.value_is_default(new_value):
+                return messages.TEXT_ATTRIBUTE_OFF % self.get_localized_name()
+            if new_value in ("single", "solid", "true"):
+                return self.get_localized_name()
+            return f"{self.get_localized_name()}: {self.get_localized_value(new_value)}"
+
+        if self == AXTextAttribute.MARK:
+            if self.value_is_default(new_value):
+                return messages.TEXT_ATTRIBUTE_OFF % self.get_localized_name()
+            return self.get_localized_name()
+
+        if self == AXTextAttribute.INVALID:
+            if new_value == "spelling":
+                return messages.MISSPELLED
+            if new_value == "grammar":
+                return object_properties.STATE_INVALID_GRAMMAR_SPEECH
+            return ""
+
+        if self in (AXTextAttribute.TEXT_POSITION, AXTextAttribute.VERTICAL_ALIGN):
+            if self.value_is_default(new_value):
+                return messages.TEXT_ATTRIBUTE_OFF % self.get_localized_name()
+            localized = self.get_localized_value(new_value)
+            # TODO - JD: LO reports percentages instead of "super"/"sub".
+            if localized == new_value and new_value and new_value.endswith("%"):
+                value = new_value.removesuffix("%")
+                with contextlib.suppress(ValueError):
+                    localized = self.get_localized_value("super" if float(value) > 0 else "sub")
+            return localized
+
+        return f"{self.get_localized_name()}: {self.get_localized_value(new_value)}"
+
+
+class AXText:
+    """Wrapper for the Atspi.Text interface."""
+
+    _CHARACTER_COUNT = "AXText.character-count"
+    _ALL_TEXT = "AXText.all-text"
+    _CACHE = ax_cache_manager.ScopedCache(
+        (_CHARACTER_COUNT, _ALL_TEXT),
+        ax_cache_manager.active_stable_tree_scope,
+    )
+    _ZERO_WIDTH_JOINER = "\u200d"
+    _ZERO_WIDTH_NO_BREAK_SPACE = "\ufeff"
+    _VARIATION_SELECTOR_RANGE = ("\ufe00", "\ufe0f")
+    _EMOJI_MODIFIER_RANGE = ("\U0001f3fb", "\U0001f3ff")
+    _REGIONAL_INDICATOR_RANGE = ("\U0001f1e6", "\U0001f1ff")
+    # Widest span (in code points) a handled emoji cluster can occupy, including Gecko's
+    # interleaved zero-width no-break spaces, with headroom. Bounds the text read for adjustment.
+    _WHOLE_CHARACTER_MARGIN = 64
+
+    @staticmethod
+    def _extends_previous_character(text: str, offset: int) -> bool:
+        """Returns True if text[offset] continues the previous character."""
+
+        char = text[offset]
+        if char == AXText._ZERO_WIDTH_NO_BREAK_SPACE:
+            return True
+
+        # Gecko interleaves zero-width no-break spaces, so look past them for the real neighbor.
+        index = offset - 1
+        while index >= 0 and text[index] == AXText._ZERO_WIDTH_NO_BREAK_SPACE:
+            index -= 1
+        if index < 0:
+            return False
+        previous = text[index]
+
+        if AXText._ZERO_WIDTH_JOINER in (char, previous):
+            return True
+        vs_low, vs_high = AXText._VARIATION_SELECTOR_RANGE
+        mod_low, mod_high = AXText._EMOJI_MODIFIER_RANGE
+        if vs_low <= char <= vs_high or mod_low <= char <= mod_high:
+            return True
+        ri_low, ri_high = AXText._REGIONAL_INDICATOR_RANGE
+        if ri_low <= char <= ri_high and ri_low <= previous <= ri_high:
+            # Two regional indicators form one flag, so break only after a complete pair.
+            run = 0
+            while index >= 0:
+                if text[index] == AXText._ZERO_WIDTH_NO_BREAK_SPACE:
+                    index -= 1
+                    continue
+                if not ri_low <= text[index] <= ri_high:
+                    break
+                run += 1
+                index -= 1
+            return run % 2 == 1
+        return False
+
+    @staticmethod
+    def _adjust_to_whole_characters(text: str, start: int, end: int) -> tuple[int, int]:
+        """Extends start and end outward so neither falls inside a multi-code-point character."""
+
+        length = len(text)
+        start = max(0, min(start, length))
+        end = max(start, min(end, length))
+        while 0 < start < length and AXText._extends_previous_character(text, start):
+            start -= 1
+        while 0 < end < length and AXText._extends_previous_character(text, end):
+            end += 1
+        return start, end
+
+    @staticmethod
+    def _whole_character_content(
+        obj: Atspi.Accessible, start: int, end: int
+    ) -> tuple[str, int, int]:
+        """Returns (content, start, end) grown to whole characters from a bounded text window."""
+
+        length = AXText.get_character_count(obj)
+        lo = max(0, start - AXText._WHOLE_CHARACTER_MARGIN)
+        hi = min(length, end + AXText._WHOLE_CHARACTER_MARGIN)
+        text = AXText.get_substring(obj, lo, hi)
+        adjusted_start, adjusted_end = AXText._adjust_to_whole_characters(
+            text, start - lo, end - lo
+        )
+        if (adjusted_start == 0 and lo > 0) or (adjusted_end == len(text) and hi < length):
+            # The cluster reached the window edge; reread the full text to be safe.
+            text = AXText.get_all_text(obj)
+            adjusted_start, adjusted_end = AXText._adjust_to_whole_characters(text, start, end)
+            return text[adjusted_start:adjusted_end], adjusted_start, adjusted_end
+        return text[adjusted_start:adjusted_end], adjusted_start + lo, adjusted_end + lo
+
+    @staticmethod
+    def get_character_at_offset(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+        ensure_whole_characters: bool = False,
+    ) -> tuple[str, int, int]:
+        """Returns the (character, start, end) for the current or specified offset."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return "", 0, 0
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        if not 0 <= offset <= length:
+            tokens = ["WARNING: Offset", offset, "is not valid. No character can be provided."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        try:
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.CHAR)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_character_at_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        if result is None:
+            tokens = ["AXText: get_string_at_offset (char) failed for", obj, "at", offset, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        debug_string = result.content.replace("\n", "\\n")
+        tokens = [
+            "AXText: Character at offset",
+            offset,
+            "in",
+            obj,
+            "'",
+            debug_string,
+            "' (",
+            result.start_offset,
+            "-",
+            result.end_offset,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        content, start, end = result.content, result.start_offset, result.end_offset
+        if ensure_whole_characters and start >= 0:
+            if end < start:
+                # Some engines return a broken boundary inside a multi-code-point
+                # character (e.g. Chromium between a flag's regional indicators).
+                start, end = offset, offset + 1
+            content, start, end = AXText._whole_character_content(obj, start, end)
+        return content, start, end
+
+    @staticmethod
+    def get_word_at_offset(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+        ensure_whole_characters: bool = False,
+    ) -> tuple[str, int, int]:
+        """Returns the (word, start, end) for the current or specified offset."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return "", 0, 0
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        offset = min(max(0, offset), length - 1)
+        try:
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.WORD)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_word_at_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        if result is None:
+            tokens = ["AXText: get_string_at_offset (word) failed for", obj, "at", offset, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        tokens = [
+            "AXText: Word at offset",
+            offset,
+            "in",
+            obj,
+            "'",
+            result.content,
+            "' (",
+            result.start_offset,
+            "-",
+            result.end_offset,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        content, start, end = result.content, result.start_offset, result.end_offset
+        if ensure_whole_characters and start >= 0:
+            if end < start:
+                # The engine returned a broken word boundary inside a multi-code-point
+                # character (e.g. Chromium inside a flag); recover the word from whitespace.
+                # Rare and limited to small web objects, so reading the full text is fine.
+                text = AXText.get_all_text(obj)
+                start = offset
+                while start > 0 and not text[start - 1].isspace():
+                    start -= 1
+                end = offset
+                while end < len(text) and not text[end].isspace():
+                    end += 1
+                start, end = AXText._adjust_to_whole_characters(text, start, end)
+                content = text[start:end]
+            else:
+                content, start, end = AXText._whole_character_content(obj, start, end)
+        return content, start, end
+
+    @staticmethod
+    def get_line_at_offset(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> tuple[str, int, int]:
+        """Returns the (line, start, end) for the current or specified offset."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return "", 0, 0
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        # Don't adjust the length in multiline text because we want to say "blank" at the end.
+        # This may or may not be sufficient. GTK3 seems to give us the correct, empty line. But
+        # (at least) Chromium does not. See comment below.
+        if (
+            not AXUtilitiesState.is_multi_line(obj)
+            and not AXUtilitiesRole.is_paragraph(obj)
+            and not AXUtilitiesRole.is_section(obj)
+        ):
+            offset = min(max(0, offset), length - 1)
+        else:
+            offset = max(0, offset)
+
+        try:
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.LINE)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_line_at_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        if result is None:
+            tokens = ["AXText: get_string_at_offset (line) failed for", obj, "at", offset, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        # Try again, e.g. Chromium returns "", -1, -1.
+        if result.start_offset == result.end_offset == -1 and offset == length:
+            offset -= 1
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.LINE)
+
+        if (
+            debug.debugLevel <= debug.LEVEL_INFO
+            and result.start_offset == result.end_offset == -1
+            and 0 < offset < length
+            and AXObject.get_toolkit_name(obj).startswith("chromium")
+        ):
+            tokens = [
+                "ERROR: Chromium returned invalid line boundary at offset",
+                offset,
+                ". See https://crbug.com/536662914",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        debug_string = result.content.replace("\n", "\\n")
+        tokens = [
+            "AXText: Line at offset",
+            offset,
+            "in",
+            obj,
+            "'",
+            debug_string,
+            "' (",
+            result.start_offset,
+            "-",
+            result.end_offset,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if 0 <= offset < result.start_offset:
+            offset -= 1
+            tokens = ["ERROR: Start offset is greater than offset. Trying with offset", offset]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.LINE)
+
+            debug_string = result.content.replace("\n", "\\n")
+            tokens = [
+                "AXText: Line at offset",
+                offset,
+                "in",
+                obj,
+                "'",
+                debug_string,
+                "' (",
+                result.start_offset,
+                "-",
+                result.end_offset,
+                ")",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return result.content, result.start_offset, result.end_offset
+
+    @staticmethod
+    def _find_sentence_boundaries(text: str) -> list[int]:
+        """Returns the offsets in text that should be treated as sentence beginnings."""
+
+        if not text:
+            return []
+
+        boundaries = [0]
+        pattern = r"[.!?]+(?=\s|\ufffc|$)|\n[^\S\n]*\n"
+        for match in re.finditer(pattern, text):
+            end_pos = match.end()
+            # Skip whitespace to find start of next sentence. Do not skip embedded object
+            # characters since they represent child objects that must be traversed.
+            while end_pos < len(text) and text[end_pos].isspace():
+                end_pos += 1
+            # Boundaries are strictly increasing, so only the last one can be a duplicate.
+            if end_pos < len(text) and end_pos != boundaries[-1]:
+                boundaries.append(end_pos)
+
+        if boundaries[-1] != len(text):
+            boundaries.append(len(text))
+
+        return boundaries
+
+    @staticmethod
+    def _get_sentence_at_offset_fallback(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> tuple[str, int, int]:
+        """Fallback sentence detection for broken implementations."""
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        text = AXText.get_all_text(obj)
+        if not text or offset < 0 or offset >= len(text):
+            return "", 0, 0
+
+        fallback_text, fallback_start, fallback_end = text, 0, len(text)
+        boundaries = AXText._find_sentence_boundaries(text)
+        for i in range(len(boundaries) - 1):
+            start, end = boundaries[i], boundaries[i + 1]
+            if start <= offset < end:
+                fallback_text, fallback_start, fallback_end = text[start:end], start, end
+                break
+
+        tokens = [
+            "AXText: Fallback sentence in",
+            obj,
+            "at offset",
+            offset,
+            ": '",
+            fallback_text,
+            "' (",
+            fallback_start,
+            "-",
+            fallback_end,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return fallback_text, fallback_start, fallback_end
+
+    @staticmethod
+    def get_sentence_at_offset(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> tuple[str, int, int]:
+        """Returns the (sentence, start, end) for the current or specified offset."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return "", 0, 0
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        offset = min(max(0, offset), length - 1)
+        try:
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.SENTENCE)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_sentence_at_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return AXText._get_sentence_at_offset_fallback(obj, offset)
+
+        if result is None:
+            tokens = ["AXText: get_string_at_offset (sentence) failed for", obj, "at", offset, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        if result.start_offset == result.end_offset == -1 or not result.content:
+            return AXText._get_sentence_at_offset_fallback(obj, offset)
+
+        if (
+            result.start_offset == result.end_offset
+            and result.start_offset in [0, -1]
+            and not result.content
+        ):
+            return AXText._get_sentence_at_offset_fallback(obj, offset)
+
+        if re.search(r"\n[^\S\n]*\n", result.content.rstrip()):
+            fallback = AXText._get_sentence_at_offset_fallback(obj, offset)
+            if result.start_offset <= fallback[1] <= offset < fallback[
+                2
+            ] <= result.end_offset and fallback[1:] != (result.start_offset, result.end_offset):
+                return fallback
+
+        tokens = [
+            "AXText: Sentence at offset",
+            offset,
+            "in",
+            obj,
+            "'",
+            result.content,
+            "' (",
+            result.start_offset,
+            "-",
+            result.end_offset,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result.content, result.start_offset, result.end_offset
+
+    @staticmethod
+    def get_paragraph_at_offset(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> tuple[str, int, int]:
+        """Returns the (paragraph, start, end) for the current or specified offset."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return "", 0, 0
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        offset = min(max(0, offset), length - 1)
+        try:
+            result = Atspi.Text.get_string_at_offset(obj, offset, Atspi.TextGranularity.PARAGRAPH)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_paragraph_at_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        if result is None:
+            tokens = ["AXText: get_string_at_offset (paragraph) failed for", obj, "at", offset, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return "", 0, 0
+
+        tokens = [
+            "AXText: Paragraph at offset",
+            offset,
+            "in",
+            obj,
+            "'",
+            result.content,
+            "' (",
+            result.start_offset,
+            "-",
+            result.end_offset,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result.content, result.start_offset, result.end_offset
+
+    @staticmethod
+    def get_character_count(obj: Atspi.Accessible) -> int:
+        """Returns the character count of obj."""
+
+        if not AXObject.supports_text(obj):
+            return 0
+
+        key = ax_cache_manager.get_object_key(obj)
+        cached = AXText._CACHE.get(AXText._CHARACTER_COUNT, key)
+        if cached is not ax_cache_manager.MISSING:
+            return cached
+
+        try:
+            count = Atspi.Text.get_character_count(obj)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_character_count:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return 0
+
+        tokens = ["AXText:", obj, "reports", count, "characters."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        AXText._CACHE.set(AXText._CHARACTER_COUNT, key, count)
+        return count
+
+    @staticmethod
+    def get_caret_offset(obj: Atspi.Accessible) -> int:
+        """Returns the caret offset of obj."""
+
+        if not AXObject.supports_text(obj):
+            return -1
+
+        try:
+            offset = Atspi.Text.get_caret_offset(obj)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_caret_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return -1
+
+        tokens = ["AXText:", obj, "reports caret offset of", offset, "."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return offset
+
+    @staticmethod
+    def set_caret_offset(obj: Atspi.Accessible, offset: int) -> bool:
+        """Returns False if we definitely failed to set the offset. True cannot be trusted."""
+
+        if not AXObject.supports_text(obj):
+            return False
+
+        try:
+            result = Atspi.Text.set_caret_offset(obj, offset)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in set_caret_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = ["AXText: Reported result of setting offset to", offset, "in", obj, ":", result]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def get_substring(obj: Atspi.Accessible, start_offset: int, end_offset: int) -> str:
+        """Returns the text of obj within the specified offsets."""
+
+        if not AXObject.supports_text(obj):
+            return ""
+
+        if end_offset == -1:
+            end_offset = AXText.get_character_count(obj)
+
+        try:
+            result = Atspi.Text.get_text(obj, start_offset, end_offset)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_substring:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return ""
+
+        debug_string = result.replace("\n", "\\n")
+        tokens = [
+            "AXText: Text of",
+            obj,
+            "(",
+            start_offset,
+            "-",
+            end_offset,
+            "): '",
+            debug_string,
+            "'",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def get_all_text(obj: Atspi.Accessible, length: int | None = None) -> str:
+        """Returns the text content of obj."""
+
+        key = ax_cache_manager.get_object_key(obj)
+        cached = AXText._CACHE.get(AXText._ALL_TEXT, key)
+        if cached is not ax_cache_manager.MISSING:
+            return cached
+
+        if length is None:
+            length = AXText.get_character_count(obj)
+        if not length:
+            return ""
+
+        try:
+            result = Atspi.Text.get_text(obj, 0, length)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_all_text:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return ""
+
+        if debug.debugLevel <= debug.LEVEL_INFO:
+            words = result.split()
+            if len(words) > 20:
+                debug_string = f"{' '.join(words[:5])} ... {' '.join(words[-5:])}"
+            else:
+                debug_string = result
+
+            debug_string = debug_string.replace("\n", "\\n")
+            tokens = ["AXText: Text of", obj, "'", debug_string, "'"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        AXText._CACHE.set(AXText._ALL_TEXT, key, result)
+        return result
+
+    @staticmethod
+    def get_n_selections(obj: Atspi.Accessible) -> int:
+        """Returns the number of reported selected substrings in obj."""
+
+        if not AXObject.supports_text(obj):
+            return 0
+
+        try:
+            result = Atspi.Text.get_n_selections(obj)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_n_selections:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return 0
+
+        tokens = ["AXText:", obj, "reports", result, "selection(s)."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def remove_selection(obj: Atspi.Accessible, selection_number: int) -> None:
+        """Attempts to remove the specified selection."""
+
+        if not AXObject.supports_text(obj):
+            return
+
+        try:
+            Atspi.Text.remove_selection(obj, selection_number)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in remove_selection:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return
+
+    @staticmethod
+    def get_selected_ranges(obj: Atspi.Accessible) -> list[tuple[int, int]]:
+        """Returns a list of (start_offset, end_offset) tuples reflecting the selected text."""
+
+        count = AXText.get_n_selections(obj)
+        if not count:
+            return []
+
+        selections = []
+        for i in range(count):
+            try:
+                result = Atspi.Text.get_selection(obj, i)
+            except GLib.GError as error:
+                tokens = ["AXText: Exception in get_selected_ranges:", error]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                break
+            if 0 <= result.start_offset < result.end_offset:
+                selections.append((result.start_offset, result.end_offset))
+
+        tokens = ["AXText:", obj, "reports selected ranges:", selections]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return selections
+
+    @staticmethod
+    def add_new_selection(obj: Atspi.Accessible, start_offset: int, end_offset: int) -> bool:
+        """Creates a new selection for the specified range in obj."""
+
+        if not AXObject.supports_text(obj):
+            return False
+
+        try:
+            result = Atspi.Text.add_selection(obj, start_offset, end_offset)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in add_new_selection:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        return result
+
+    @staticmethod
+    def update_existing_selection(
+        obj: Atspi.Accessible,
+        start_offset: int,
+        end_offset: int,
+        selection_number: int = 0,
+    ) -> bool:
+        """Modifies specified selection in obj to the specified range."""
+
+        if not AXObject.supports_text(obj):
+            return False
+
+        try:
+            result = Atspi.Text.set_selection(obj, selection_number, start_offset, end_offset)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in update_existing_selection:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        return result
+
+    # TODO - JD: This should be converted to return AXTextAttribute values.
+    @staticmethod
+    def get_text_attributes_at_offset(
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> tuple[dict[str, str], int, int]:
+        """Returns a (dict, start, end) tuple for attributes at offset in obj."""
+
+        if not AXObject.supports_text(obj):
+            return {}, 0, 0
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        try:
+            result = Atspi.Text.get_attribute_run(obj, offset, include_defaults=True)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_text_attributes_at_offset:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return {}, 0, AXText.get_character_count(obj)
+
+        if result is None or result[0] is None:
+            tokens = ["AXText: get_attribute_run failed for", obj, "at offset", offset, "."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return {}, 0, AXText.get_character_count(obj)
+
+        tokens = ["AXText: Attributes for", obj, "at offset", offset, ":", result]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        # Adjust for web browsers that report indentation and justification at object attributes
+        # rather than text attributes.
+        obj_attributes = AXObject.get_attributes_dict(obj, False)
+        if not result[0].get("justification"):
+            alternative = obj_attributes.get("text-align")
+            if alternative:
+                result[0]["justification"] = alternative
+        if not result[0].get("indent"):
+            alternative = obj_attributes.get("text-indent")
+            if alternative:
+                result[0]["indent"] = alternative
+
+        return result[0] or {}, result[1] or 0, result[2] or AXText.get_character_count(obj)
+
+    @staticmethod
+    def get_offset_at_point(obj: Atspi.Accessible, x: int, y: int) -> int:
+        """Returns the character offset in obj at the specified point."""
+
+        if not AXObject.supports_text(obj):
+            return -1
+
+        try:
+            offset = Atspi.Text.get_offset_at_point(obj, x, y, Atspi.CoordType.WINDOW)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_offset_at_point:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return -1
+
+        tokens = ["AXText: Offset in", obj, "at", x, ",", y, "is", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return offset
+
+    @staticmethod
+    def get_character_rect(obj: Atspi.Accessible, offset: int | None = None) -> Atspi.Rect:
+        """Returns the Atspi rect of the character at the specified offset in obj."""
+
+        if not AXObject.supports_text(obj):
+            return Atspi.Rect()
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        try:
+            rect = Atspi.Text.get_character_extents(obj, offset, Atspi.CoordType.WINDOW)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_character_rect:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return Atspi.Rect()
+
+        tokens = ["AXText: Offset", offset, "in", obj, "has rect", rect]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return rect
+
+    @staticmethod
+    def get_range_rect(obj: Atspi.Accessible, start: int, end: int) -> Atspi.Rect:
+        """Returns the Atspi rect of the string at the specified range in obj."""
+
+        if not AXObject.supports_text(obj):
+            return Atspi.Rect()
+
+        if end <= 0:
+            end = AXText.get_character_count(obj)
+
+        try:
+            rect = Atspi.Text.get_range_extents(obj, start, end, Atspi.CoordType.WINDOW)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in get_range_rect:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return Atspi.Rect()
+
+        tokens = ["AXText: Range", start, "-", end, "in", obj, "has rect", rect]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return rect
+
+    @staticmethod
+    def scroll_substring_to_point(
+        obj: Atspi.Accessible,
+        x: int,
+        y: int,
+        start_offset: int | None = None,
+        end_offset: int | None = None,
+    ) -> bool:
+        """Attempts to scroll obj to the specified point."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return False
+
+        if start_offset is None:
+            start_offset = 0
+        if end_offset is None:
+            end_offset = length - 1
+
+        try:
+            result = Atspi.Text.scroll_substring_to_point(
+                obj,
+                start_offset,
+                end_offset,
+                Atspi.CoordType.WINDOW,
+                x,
+                y,
+            )
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in scroll_substring_to_point:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = [
+            "AXText: Scrolled",
+            obj,
+            "substring (",
+            start_offset,
+            "-",
+            end_offset,
+            ") to",
+            x,
+            ",",
+            y,
+            ":",
+            result,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def scroll_substring_to_location(
+        obj: Atspi.Accessible,
+        location: Atspi.ScrollType,
+        start_offset: int | None = None,
+        end_offset: int | None = None,
+    ) -> bool:
+        """Attempts to scroll the substring to the specified Atspi.ScrollType location."""
+
+        length = AXText.get_character_count(obj)
+        if not length:
+            return False
+
+        if start_offset is None:
+            start_offset = 0
+        if end_offset is None:
+            end_offset = length - 1
+
+        try:
+            result = Atspi.Text.scroll_substring_to(obj, start_offset, end_offset, location)
+        except GLib.GError as error:
+            tokens = ["AXText: Exception in scroll_substring_to_location:", error]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = [
+            "AXText: Scrolled",
+            obj,
+            "substring (",
+            start_offset,
+            "-",
+            end_offset,
+            ") to",
+            location,
+            ":",
+            result,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result

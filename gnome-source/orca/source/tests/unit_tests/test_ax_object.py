@@ -1,0 +1,3094 @@
+# Unit tests for ax_object.py methods.
+#
+# Copyright 2025 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-public-methods
+# pylint: disable=wrong-import-position
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
+# pylint: disable=import-outside-toplevel
+# pylint: disable=too-many-lines
+# pylint: disable=wrong-import-order
+
+"""Unit tests for ax_object.py methods."""
+
+from __future__ import annotations
+
+import sys
+import time
+from typing import TYPE_CHECKING
+
+import gi
+import pytest
+
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi, GLib
+
+if TYPE_CHECKING:
+    from unittest.mock import MagicMock
+
+    from .orca_test_context import OrcaTestContext
+
+
+@pytest.mark.unit
+class TestAXObject:
+    """Test AXObject class methods."""
+
+    def _setup_soffice_collection_mocks(
+        self,
+        test_context,
+        has_document_text=False,
+        has_spreadsheet=False,
+    ):
+        """Set up common mocks for soffice collection testing scenarios."""
+
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_app = test_context.Mock(spec=Atspi.Accessible)
+
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "get_name", return_value="soffice")
+        test_context.patch_object(Atspi.Accessible, "get_application", return_value=mock_app)
+        test_context.patch_object(
+            Atspi.Accessible,
+            "get_collection_iface",
+            side_effect=lambda obj: test_context.Mock(),
+        )
+
+        if has_document_text:
+            mock_ancestor = test_context.Mock(spec=Atspi.Accessible)
+            test_context.patch_object(
+                AXObject,
+                "_find_ancestor_with_role",
+                side_effect=lambda obj, role: (
+                    mock_ancestor if role == Atspi.Role.DOCUMENT_TEXT else None
+                ),
+            )
+        else:
+            test_context.patch_object(AXObject, "_find_ancestor_with_role", return_value=None)
+            if has_spreadsheet:
+                test_context.patch_object(AXObject, "_has_document_spreadsheet", return_value=True)
+            else:
+                test_context.patch_object(AXObject, "_has_document_spreadsheet", return_value=False)
+
+        return mock_accessible
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for ax_object dependencies."""
+
+        core_modules = [
+            "orca.debug",
+            "orca.messages",
+            "orca.input_event",
+            "orca.keybindings",
+            "orca.cmdnames",
+            "orca.dbus_service",
+            "orca.script_manager",
+            "orca.orca_i18n",
+            "orca.guilabels",
+            "orca.text_attribute_names",
+            "orca.focus_manager",
+            "orca.braille",
+            "orca.keynames",
+        ]
+
+        essential_modules = {}
+        for module_name in core_modules:
+            mock_module = test_context.Mock()
+            test_context.patch_module(module_name, mock_module)
+            essential_modules[module_name] = mock_module
+
+        test_context.configure_shared_module_behaviors(essential_modules)
+        keynames_mock = essential_modules["orca.keynames"]
+        keynames_mock.KEY_BACKSPACE = "BackSpace"
+        keynames_mock.KEY_DELETE = "Delete"
+        keynames_mock.KEY_TAB = "Tab"
+        keynames_mock.KEY_RETURN = "Return"
+        keynames_mock.KEY_ESCAPE = "Escape"
+
+        return essential_modules
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "gecko_section_hack",
+                "test_type": "gecko_section_hack",
+                "obj_role": Atspi.Role.SECTION,
+                "parent_role": Atspi.Role.FRAME,
+                "toolkit": "gecko",
+                "expected_result": True,
+            },
+            {
+                "id": "normal_object",
+                "test_type": "normal_object",
+                "obj_role": Atspi.Role.BUTTON,
+                "parent_role": None,
+                "toolkit": "gtk",
+                "expected_result": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_is_bogus(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.is_bogus with various object types."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_parent = test_context.Mock(spec=Atspi.Accessible) if case["parent_role"] else None
+
+        if case["test_type"] == "gecko_section_hack":
+            mock_get_role = test_context.Mock(
+                side_effect=lambda obj: (
+                    case["obj_role"] if obj == mock_accessible else case["parent_role"]
+                ),
+            )
+        else:
+            mock_get_role = test_context.Mock(return_value=case["obj_role"])
+
+        mock_get_parent = test_context.Mock(return_value=mock_parent)
+        mock_get_toolkit = test_context.Mock(return_value=case["toolkit"])
+        test_context.patch_object(AXObject, "get_role", new=mock_get_role)
+        test_context.patch_object(AXObject, "get_parent", new=mock_get_parent)
+        test_context.patch_object(AXObject, "get_toolkit_name", new=mock_get_toolkit)
+
+        result = AXObject.is_bogus(mock_accessible)
+        assert result is case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "qt_bug",
+                "toolkit": "qt",
+                "obj_type": "mock",
+                "parent_role": "window",
+                "has_grandparent": False,
+                "expected_result": True,
+                "expects_debug": True,
+            },
+            {
+                "id": "good_qt_ancestry",
+                "toolkit": "qt",
+                "obj_type": "mock",
+                "parent_role": "button",
+                "has_grandparent": True,
+                "expected_result": False,
+                "expects_debug": False,
+            },
+            {
+                "id": "non_qt",
+                "toolkit": "gtk",
+                "obj_type": "mock",
+                "parent_role": "button",
+                "has_grandparent": False,
+                "expected_result": False,
+                "expects_debug": False,
+            },
+            {
+                "id": "none_object",
+                "toolkit": "qt",
+                "obj_type": "none",
+                "parent_role": "button",
+                "has_grandparent": False,
+                "expected_result": False,
+                "expects_debug": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_has_broken_ancestry(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.has_broken_ancestry with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        if case["obj_type"] == "none":
+            result = AXObject.has_broken_ancestry(None)
+            assert result is case["expected_result"]
+            return
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(
+            AXObject,
+            "get_toolkit_name",
+            side_effect=lambda obj: case["toolkit"],
+        )
+
+        if case["toolkit"] == "qt":
+            mock_parent = test_context.Mock(spec=Atspi.Accessible)
+
+            def mock_get_parent(obj) -> object:
+                if obj == mock_accessible:
+                    return mock_parent
+                if case["has_grandparent"] and obj == mock_parent:
+                    mock_app = test_context.Mock(spec=Atspi.Accessible)
+                    return mock_app
+                return None
+
+            def mock_get_role(obj) -> object:
+                if obj == mock_parent and case["parent_role"] == "window":
+                    return Atspi.Role.WINDOW
+                if case["has_grandparent"] and obj not in (mock_accessible, mock_parent):
+                    return Atspi.Role.APPLICATION
+                return Atspi.Role.BUTTON
+
+            test_context.patch_object(AXObject, "get_parent", new=mock_get_parent)
+            test_context.patch_object(AXObject, "get_role", new=mock_get_role)
+
+        result = AXObject.has_broken_ancestry(mock_accessible)
+        assert result is case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "successful",
+                "toolkit_result": "GTK",
+                "expects_error": False,
+                "expected_result": "gtk",
+                "expects_debug": False,
+            },
+            {
+                "id": "glib_error",
+                "toolkit_result": GLib.GError("Test error"),
+                "expects_error": True,
+                "expected_result": "",
+                "expects_debug": True,
+            },
+            {
+                "id": "none_result",
+                "toolkit_result": None,
+                "expects_error": False,
+                "expected_result": "",
+                "expects_debug": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_toolkit_name(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_toolkit_name with various scenarios."""
+
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_app = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(Atspi.Accessible, "get_application", return_value=mock_app)
+
+        if case["expects_error"]:
+
+            def raise_glib_error(app):
+                raise case["toolkit_result"]
+
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_toolkit_name",
+                side_effect=raise_glib_error,
+            )
+            from orca import debug
+
+            test_context.patch_object(
+                debug,
+                "print_tokens",
+                new=essential_modules["orca.debug"].print_tokens,
+            )
+        else:
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_toolkit_name",
+                side_effect=lambda app: case["toolkit_result"],
+            )
+
+        result = AXObject.get_toolkit_name(mock_accessible)
+        assert result == case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "supports_action",
+                "interface_type": "action",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_action_interface",
+                "interface_type": "action",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "action_glib_error",
+                "interface_type": "action",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_component",
+                "interface_type": "component",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_component_interface",
+                "interface_type": "component",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "component_glib_error",
+                "interface_type": "component",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_document",
+                "interface_type": "document",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_document_interface",
+                "interface_type": "document",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "document_glib_error",
+                "interface_type": "document",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_editable_text",
+                "interface_type": "editable_text",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_editable_text_interface",
+                "interface_type": "editable_text",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "editable_text_glib_error",
+                "interface_type": "editable_text",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_hyperlink",
+                "interface_type": "hyperlink",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_hyperlink_interface",
+                "interface_type": "hyperlink",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "hyperlink_glib_error",
+                "interface_type": "hyperlink",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_hypertext",
+                "interface_type": "hypertext",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_hypertext_interface",
+                "interface_type": "hypertext",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "hypertext_glib_error",
+                "interface_type": "hypertext",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_image",
+                "interface_type": "image",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_image_interface",
+                "interface_type": "image",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "image_glib_error",
+                "interface_type": "image",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_selection",
+                "interface_type": "selection",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_selection_interface",
+                "interface_type": "selection",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "selection_glib_error",
+                "interface_type": "selection",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_table",
+                "interface_type": "table",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_table_interface",
+                "interface_type": "table",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "table_glib_error",
+                "interface_type": "table",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_table_cell",
+                "interface_type": "table_cell",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_table_cell_interface",
+                "interface_type": "table_cell",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "table_cell_glib_error",
+                "interface_type": "table_cell",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_text",
+                "interface_type": "text",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_text_interface",
+                "interface_type": "text",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "text_glib_error",
+                "interface_type": "text",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+            {
+                "id": "supports_value",
+                "interface_type": "value",
+                "interface_result": "mock_interface",
+                "raises_error": False,
+                "expected_result": True,
+            },
+            {
+                "id": "no_value_interface",
+                "interface_type": "value",
+                "interface_result": None,
+                "raises_error": False,
+                "expected_result": False,
+            },
+            {
+                "id": "value_glib_error",
+                "interface_type": "value",
+                "interface_result": None,
+                "raises_error": True,
+                "expected_result": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_supports_interface_parametrized(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.supports_* interface methods with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+
+        interface_map = {
+            "action": ("get_action_iface", AXObject.supports_action),
+            "component": ("get_component_iface", AXObject.supports_component),
+            "document": ("get_document_iface", AXObject.supports_document),
+            "editable_text": ("get_editable_text_iface", AXObject.supports_editable_text),
+            "hyperlink": ("get_hyperlink", AXObject.supports_hyperlink),
+            "hypertext": ("get_hypertext_iface", AXObject.supports_hypertext),
+            "image": ("get_image_iface", AXObject.supports_image),
+            "selection": ("get_selection_iface", AXObject.supports_selection),
+            "table": ("get_table_iface", AXObject.supports_table),
+            "table_cell": ("get_table_cell", AXObject.supports_table_cell),
+            "text": ("get_text_iface", AXObject.supports_text),
+            "value": ("get_value_iface", AXObject.supports_value),
+        }
+
+        getter_name, support_method = interface_map[case["interface_type"]]
+
+        if case["raises_error"]:
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test error")
+
+            getter_mock = test_context.patch_object(
+                Atspi.Accessible, getter_name, side_effect=raise_glib_error
+            )
+            getter_mock.__name__ = getter_name
+            handle_error_mock = test_context.Mock()
+            test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+        else:
+            actual_interface_result = (
+                test_context.Mock()
+                if case["interface_result"] == "mock_interface"
+                else case["interface_result"]
+            )
+            getter_mock = test_context.patch_object(
+                Atspi.Accessible,
+                getter_name,
+                return_value=actual_interface_result,
+            )
+            getter_mock.__name__ = getter_name
+
+        result = support_method(mock_accessible)
+        assert result is case["expected_result"]
+
+        if case["raises_error"]:
+            handle_error_mock.assert_called_once()
+
+    def test_supports_interface_uses_cached_result(self, test_context: OrcaTestContext) -> None:
+        """Test repeated interface checks reuse the manager-backed result."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        getter_mock = test_context.patch_object(
+            Atspi.Accessible,
+            "get_text_iface",
+            return_value=test_context.Mock(),
+        )
+        getter_mock.__name__ = "get_text_iface"
+
+        assert AXObject.supports_text(mock_accessible) is True
+        assert AXObject.supports_text(mock_accessible) is True
+        getter_mock.assert_called_once_with(mock_accessible)
+        assert AXObject._CACHE.get_interface_support(mock_accessible, "get_text_iface") is True
+
+    def test_import_registers_axobject_cache_namespaces(
+        self, test_context: OrcaTestContext
+    ) -> None:
+        """Test importing AXObject creates its cache owner and namespaces."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+
+        manager = ax_cache_manager.get_manager()
+        register = test_context.patch_object(
+            manager,
+            "register_cache",
+            wraps=manager.register_cache,
+        )
+
+        from orca.ax_object import AXObject
+
+        assert register.call_count == 4
+        assert {call.args[0] for call in register.call_args_list} == {AXObject._CACHE}
+        namespaces = {call.args[1] for call in register.call_args_list}
+        assert namespaces == {
+            AXObject._CACHE.KNOWN_DEAD,
+            AXObject._CACHE.OBJECT_ATTRIBUTES,
+            AXObject._CACHE.SUPPORTED_INTERFACES,
+            AXObject._CACHE.HUNG_OBJECTS,
+        }
+        for call in register.call_args_list[:3]:
+            assert call.kwargs["lifetime"] is ax_cache_manager.Lifetime.PROCESS
+            assert call.kwargs["clear_on_demand"] is ax_cache_manager.ClearPolicy.CLEAR
+            assert "clear_interval_seconds" not in call.kwargs
+        hung_registration = register.call_args_list[3]
+        assert hung_registration.kwargs["lifetime"] is ax_cache_manager.Lifetime.PROCESS
+        assert hung_registration.kwargs["clear_on_demand"] is ax_cache_manager.ClearPolicy.PRESERVE
+        assert hung_registration.kwargs["clear_interval_seconds"] is None
+
+    def test_manager_clear_cache_now_preserves_hung_marker(
+        self, test_context: OrcaTestContext
+    ) -> None:
+        """Test ordinary clearing removes memo values but leaves hung markers."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+        from orca.ax_object import AXObject
+
+        manager = ax_cache_manager.get_manager()
+        known_dead = manager.get_cache(AXObject._CACHE, AXObject._CACHE.KNOWN_DEAD)
+        object_attributes = manager.get_cache(AXObject._CACHE, AXObject._CACHE.OBJECT_ATTRIBUTES)
+        supported_interfaces = manager.get_cache(
+            AXObject._CACHE, AXObject._CACHE.SUPPORTED_INTERFACES
+        )
+        assert known_dead is not None
+        assert object_attributes is not None
+        assert supported_interfaces is not None
+        known_dead.put(123, True)
+        object_attributes.put(456, {"role": "button"})
+        supported_interfaces.put((789, "get_text_iface"), True)
+        hung_obj = test_context.Mock(spec=Atspi.Accessible)
+        AXObject._CACHE.mark_hung(hung_obj)
+
+        manager.clear_cache_now("test reason")
+
+        assert known_dead.get(123) is ax_cache_manager.MISSING
+        assert object_attributes.get(456) is ax_cache_manager.MISSING
+        assert supported_interfaces.get((789, "get_text_iface")) is ax_cache_manager.MISSING
+        assert AXObject._CACHE.get_hung_timestamp(hung_obj) is not None
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "scenario": "invalid_object",
+                "app_name": "",
+                "has_interface": False,
+                "has_document_text": False,
+                "has_spreadsheet": False,
+                "raises_app_error": False,
+                "raises_iface_error": False,
+                "expected_result": False,
+                "expects_debug": False,
+            },
+            {
+                "id": "get_application_error",
+                "scenario": "get_application_error",
+                "app_name": "",
+                "has_interface": False,
+                "has_document_text": False,
+                "has_spreadsheet": False,
+                "raises_app_error": True,
+                "raises_iface_error": False,
+                "expected_result": False,
+                "expects_debug": True,
+            },
+            {
+                "id": "get_collection_iface_error",
+                "scenario": "get_collection_iface_error",
+                "app_name": "firefox",
+                "has_interface": False,
+                "has_document_text": False,
+                "has_spreadsheet": False,
+                "raises_app_error": False,
+                "raises_iface_error": True,
+                "expected_result": False,
+                "expects_debug": False,
+            },
+            {
+                "id": "non_soffice_with_interface",
+                "scenario": "non_soffice_with_interface",
+                "app_name": "firefox",
+                "has_interface": True,
+                "has_document_text": False,
+                "has_spreadsheet": False,
+                "raises_app_error": False,
+                "raises_iface_error": False,
+                "expected_result": True,
+                "expects_debug": False,
+            },
+            {
+                "id": "non_soffice_without_interface",
+                "scenario": "non_soffice_without_interface",
+                "app_name": "gedit",
+                "has_interface": False,
+                "has_document_text": False,
+                "has_spreadsheet": False,
+                "raises_app_error": False,
+                "raises_iface_error": False,
+                "expected_result": False,
+                "expects_debug": False,
+            },
+            {
+                "id": "soffice_with_document_text",
+                "scenario": "soffice_with_document_text",
+                "app_name": "soffice",
+                "has_interface": True,
+                "has_document_text": True,
+                "has_spreadsheet": False,
+                "raises_app_error": False,
+                "raises_iface_error": False,
+                "expected_result": True,
+                "expects_debug": False,
+            },
+            {
+                "id": "soffice_with_spreadsheet",
+                "scenario": "soffice_with_spreadsheet",
+                "app_name": "soffice",
+                "has_interface": True,
+                "has_document_text": False,
+                "has_spreadsheet": True,
+                "raises_app_error": False,
+                "raises_iface_error": False,
+                "expected_result": False,
+                "expects_debug": True,
+            },
+            {
+                "id": "soffice_without_text_or_spreadsheet",
+                "scenario": "soffice_without_text_or_spreadsheet",
+                "app_name": "soffice",
+                "has_interface": True,
+                "has_document_text": False,
+                "has_spreadsheet": False,
+                "raises_app_error": False,
+                "raises_iface_error": False,
+                "expected_result": True,
+                "expects_debug": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_supports_collection(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.supports_collection with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        if case["scenario"] == "invalid_object":
+            mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+            test_context.patch_object(AXObject, "is_valid", return_value=False)
+        elif case["app_name"] == "soffice":
+            mock_accessible = self._setup_soffice_collection_mocks(
+                test_context,
+                has_document_text=case["has_document_text"],
+                has_spreadsheet=case["has_spreadsheet"],
+            )
+        else:
+            mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+            mock_app = test_context.Mock(spec=Atspi.Accessible)
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(
+                AXObject,
+                "get_name",
+                side_effect=lambda obj: case["app_name"],
+            )
+
+            if case["raises_app_error"]:
+
+                def raise_app_error(_obj) -> None:
+                    raise GLib.GError("Test application error")
+
+                test_context.patch_object(
+                    Atspi.Accessible,
+                    "get_application",
+                    side_effect=raise_app_error,
+                )
+            elif case["raises_iface_error"]:
+
+                def raise_iface_error(_obj) -> None:
+                    raise GLib.GError("Test collection iface error")
+
+                handle_error_mock = test_context.Mock()
+                test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+                test_context.patch_object(
+                    Atspi.Accessible,
+                    "get_application",
+                    return_value=mock_app,
+                )
+                test_context.patch_object(
+                    Atspi.Accessible,
+                    "get_collection_iface",
+                    side_effect=raise_iface_error,
+                )
+            else:
+                test_context.patch_object(
+                    Atspi.Accessible,
+                    "get_application",
+                    return_value=mock_app,
+                )
+                mock_iface = test_context.Mock() if case["has_interface"] else None
+                test_context.patch_object(
+                    Atspi.Accessible,
+                    "get_collection_iface",
+                    return_value=mock_iface,
+                )
+
+        result = AXObject.supports_collection(mock_accessible)
+        assert result is case["expected_result"]
+
+        if case["raises_iface_error"]:
+            handle_error_mock.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "none_object",
+                "obj_type": "none",
+                "is_dead": False,
+                "is_hung": False,
+                "expected_result": False,
+            },
+            {
+                "id": "known_dead_object",
+                "obj_type": "mock",
+                "is_dead": True,
+                "is_hung": False,
+                "expected_result": False,
+            },
+            {
+                "id": "hung_object",
+                "obj_type": "mock",
+                "is_dead": False,
+                "is_hung": True,
+                "expected_result": False,
+            },
+            {
+                "id": "hung_app",
+                "obj_type": "mock",
+                "is_dead": False,
+                "is_hung": False,
+                "hung_app": True,
+                "expected_result": False,
+            },
+            {
+                "id": "valid_object",
+                "obj_type": "mock",
+                "is_dead": False,
+                "is_hung": False,
+                "expected_result": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_is_valid(self, test_context, case: dict) -> None:
+        """Test AXObject.is_valid with different object scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        test_app = None
+        if case["obj_type"] == "none":
+            test_obj = None
+        else:
+            test_obj = test_context.Mock(spec=Atspi.Accessible)
+            if case["is_dead"]:
+                AXObject._CACHE.set_dead_status(test_obj, True)
+            if case["is_hung"]:
+                AXObject._CACHE.mark_hung(test_obj)
+            if case.get("hung_app"):
+                test_app = test_context.Mock(spec=Atspi.Accessible)
+                AXObject._CACHE.mark_hung(test_app)
+
+        result = AXObject.is_valid(test_obj, test_app)
+        assert result == case["expected_result"]
+
+    def test_is_valid_returns_false_when_object_cannot_be_hashed(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test an uninitialized accessible is treated as invalid."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+        from orca.ax_object import AXObject
+
+        obj = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(
+            ax_cache_manager,
+            "get_object_key",
+            side_effect=RuntimeError("Accessible is not initialized"),
+        )
+
+        assert AXObject.is_valid(obj) is False
+
+    def test_check_hung_propagates_original_timestamp(self, test_context: OrcaTestContext) -> None:
+        """Test propagated app hung markers retain the source timestamp."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        test_obj = test_context.Mock(spec=Atspi.Accessible)
+        test_app = test_context.Mock(spec=Atspi.Accessible)
+        timestamp = time.monotonic()
+        AXObject._CACHE.mark_hung(test_obj, timestamp)
+
+        assert AXObject.check_hung(test_obj, test_app) is True
+        assert AXObject._CACHE.get_hung_timestamp(test_app) == timestamp
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "none_object", "use_none_object": True, "cache_status": None, "expected": False},
+            {
+                "id": "not_in_cache",
+                "use_none_object": False,
+                "cache_status": "clear",
+                "expected": False,
+            },
+            {
+                "id": "in_cache_as_dead",
+                "use_none_object": False,
+                "cache_status": True,
+                "expected": True,
+            },
+            {
+                "id": "in_cache_as_alive",
+                "use_none_object": False,
+                "cache_status": False,
+                "expected": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_object_is_known_dead_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.object_is_known_dead with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+        from orca.ax_object import AXObject
+
+        manager = ax_cache_manager.get_manager()
+        if case["use_none_object"]:
+            test_obj = None
+        else:
+            test_obj = test_context.Mock(spec=Atspi.Accessible)
+            if case["cache_status"] == "clear":
+                manager.invalidate_cache(AXObject._CACHE, AXObject._CACHE.KNOWN_DEAD)
+            elif isinstance(case["cache_status"], bool):
+                AXObject._CACHE.set_dead_status(test_obj, case["cache_status"])
+
+        result = AXObject.object_is_known_dead(test_obj)
+        assert result is case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "none_object",
+                "use_none_object": True,
+                "initial_status": None,
+                "new_status": True,
+                "expected_status": None,
+                "expects_debug_call": False,
+            },
+            {
+                "id": "same_status",
+                "use_none_object": False,
+                "initial_status": True,
+                "new_status": True,
+                "expected_status": True,
+                "expects_debug_call": False,
+            },
+            {
+                "id": "mark_as_dead",
+                "use_none_object": False,
+                "initial_status": "clear",
+                "new_status": True,
+                "expected_status": True,
+                "expects_debug_call": "print_message",
+            },
+            {
+                "id": "resurrect_object",
+                "use_none_object": False,
+                "initial_status": True,
+                "new_status": False,
+                "expected_status": False,
+                "expects_debug_call": "print_tokens",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_known_dead_status_scenarios(  # pylint: disable=too-many-arguments
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject._set_known_dead_status with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+        from orca.ax_object import AXObject
+
+        manager = ax_cache_manager.get_manager()
+        if case["use_none_object"]:
+            test_obj = None
+            AXObject._set_known_dead_status(test_obj, case["new_status"])
+        else:
+            test_obj = test_context.Mock(spec=Atspi.Accessible)
+            if case["initial_status"] == "clear":
+                manager.invalidate_cache(AXObject._CACHE, AXObject._CACHE.KNOWN_DEAD)
+            elif isinstance(case["initial_status"], bool):
+                AXObject._CACHE.set_dead_status(test_obj, case["initial_status"])
+
+            AXObject._set_known_dead_status(test_obj, case["new_status"])
+
+            if case["expected_status"] is not None:
+                assert AXObject._CACHE.get_dead_status(test_obj) is case["expected_status"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "object_not_exist",
+                "error_string": "accessible/123 does not exist",
+            },
+            {
+                "id": "object_not_exist_at_path",
+                "error_string": 'Object does not exist at path "/a/b/c"',
+            },
+            {
+                "id": "app_not_exist",
+                "error_string": "The application no longer exists",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_handle_error_marks_object_dead(self, test_context, case: dict) -> None:
+        """Test AXObject.handle_error marks defunct objects as known dead."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        AXObject._CACHE.set_dead_status(mock_accessible, False)
+        error = Exception(case["error_string"])
+        tokens = ["AXObject: Error calling method:", error]
+        AXObject.handle_error(mock_accessible, error, tokens)
+        assert AXObject._CACHE.get_dead_status(mock_accessible) is True
+
+    def test_handle_error_hung_process_stamps_hung_objects(
+        self, test_context: OrcaTestContext
+    ) -> None:
+        """Test AXObject.handle_error stores a hung-process marker."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        error = Exception("The process appears to be hung.")
+        AXObject.handle_error(mock_accessible, error, "AXObject: Exception: hung")
+        assert AXObject._CACHE.get_hung_timestamp(mock_accessible) is not None
+
+    def test_handle_error_other_error_does_not_stamp_hung_objects(
+        self, test_context: OrcaTestContext
+    ) -> None:
+        """Test AXObject.handle_error does not store a hung marker for unrelated errors."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        error = Exception("Some unrelated error")
+        AXObject.handle_error(mock_accessible, error, "AXObject: Exception: unrelated")
+        assert AXObject._CACHE.get_hung_timestamp(mock_accessible) is None
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "valid_object",
+                "scenario": "valid_object",
+                "expected_result": [1, 2],
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "glib_error",
+                "scenario": "glib_error",
+                "expected_result": [],
+                "should_call_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_path(self, test_context, case: dict) -> None:
+        """Test AXObject.get_path with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+        if case["scenario"] == "valid_object":
+            mock_parent = test_context.Mock(spec=Atspi.Accessible)
+
+            def mock_get_index(obj) -> int:
+                if obj == mock_accessible:
+                    return 2
+                if obj == mock_parent:
+                    return 1
+                return 0
+
+            test_context.patch_object(Atspi.Accessible, "get_index_in_parent", new=mock_get_index)
+
+            def mock_get_parent_checked(obj) -> object:
+                if obj == mock_accessible:
+                    return mock_parent
+                return None
+
+            test_context.patch_object(AXObject, "get_parent_checked", new=mock_get_parent_checked)
+
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test path error")
+
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_index_in_parent",
+                side_effect=raise_glib_error,
+            )
+
+        result = AXObject.get_path(mock_accessible)
+        assert result == case["expected_result"]
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "valid_index",
+                "scenario": "valid_index",
+                "expected_result": 3,
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "glib_error",
+                "scenario": "glib_error",
+                "expected_result": -1,
+                "should_call_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_index_in_parent(self, test_context, case: dict) -> None:
+        """Test AXObject.get_index_in_parent with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+        if case["scenario"] == "valid_index":
+            test_context.patch_object(Atspi.Accessible, "get_index_in_parent", return_value=3)
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test index error")
+
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_index_in_parent",
+                side_effect=raise_glib_error,
+            )
+
+        result = AXObject.get_index_in_parent(mock_accessible)
+        assert result == case["expected_result"]
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "valid_parent", "scenario": "valid_parent", "should_call_handle_error": False},
+            {"id": "glib_error", "scenario": "glib_error", "should_call_handle_error": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_parent(self, test_context, case: dict) -> None:
+        """Test AXObject.get_parent with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+        if case["scenario"] == "valid_parent":
+            mock_parent = test_context.Mock(spec=Atspi.Accessible)
+            test_context.patch_object(Atspi.Accessible, "get_parent", return_value=mock_parent)
+            result = AXObject.get_parent(mock_accessible)
+            assert result == mock_parent
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test parent error")
+
+            test_context.patch_object(Atspi.Accessible, "get_parent", side_effect=raise_glib_error)
+            result = AXObject.get_parent(mock_accessible)
+            assert result is None
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "valid_object",
+                "scenario": "valid_object",
+                "expected_result": Atspi.Role.BUTTON,
+                "should_call_handle_error": False,
+                "should_call_set_known_dead": True,
+            },
+            {
+                "id": "invalid_object",
+                "scenario": "invalid_object",
+                "expected_result": Atspi.Role.INVALID,
+                "should_call_handle_error": False,
+                "should_call_set_known_dead": False,
+            },
+            {
+                "id": "glib_error",
+                "scenario": "glib_error",
+                "expected_result": Atspi.Role.INVALID,
+                "should_call_handle_error": True,
+                "should_call_set_known_dead": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_role(
+        self,
+        test_context,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_role with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+        set_known_dead_status_mock = test_context.Mock()
+        test_context.patch_object(
+            AXObject,
+            "_set_known_dead_status",
+            new=set_known_dead_status_mock,
+        )
+
+        if case["scenario"] == "valid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(Atspi.Accessible, "get_role", return_value=Atspi.Role.BUTTON)
+        elif case["scenario"] == "invalid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=False)
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test role error")
+
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(Atspi.Accessible, "get_role", side_effect=raise_glib_error)
+
+        result = AXObject.get_role(mock_accessible)
+        assert result == case["expected_result"]
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+        if case["should_call_set_known_dead"]:
+            set_known_dead_status_mock.assert_called_once_with(mock_accessible, False)
+        else:
+            set_known_dead_status_mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "valid_not_localized",
+                "scenario": "valid_not_localized",
+                "localized": False,
+                "expected_result": "button",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "valid_localized",
+                "scenario": "valid_localized",
+                "localized": True,
+                "expected_result": "botón",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "invalid_object",
+                "scenario": "invalid_object",
+                "localized": None,
+                "expected_result": "",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "glib_error",
+                "scenario": "glib_error",
+                "localized": None,
+                "expected_result": "",
+                "should_call_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_role_name(
+        self,
+        test_context,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_role_name with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+        result = ""
+
+        if case["scenario"] == "valid_not_localized":
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(Atspi.Accessible, "get_role_name", return_value="button")
+            result = AXObject.get_role_name(mock_accessible, localized=False)
+        elif case["scenario"] == "valid_localized":
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_localized_role_name",
+                return_value="botón",
+            )
+            result = AXObject.get_role_name(mock_accessible, localized=True)
+        elif case["scenario"] == "invalid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=False)
+            result = AXObject.get_role_name(mock_accessible, localized=case["localized"])
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test role name error")
+
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_role_name",
+                side_effect=raise_glib_error,
+            )
+            result = AXObject.get_role_name(mock_accessible, localized=case["localized"])
+
+        assert result == case["expected_result"]
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+    def test_get_role_description_with_invalid_object(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_role_description with invalid object."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=False)
+        result = AXObject.get_role_description(mock_accessible)
+        assert result == ""
+
+    def test_get_role_description_with_role_description(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test AXObject.get_role_description with role description attribute."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(
+            AXObject,
+            "get_attributes_dict",
+            return_value={"roledescription": "custom button"},
+        )
+        result = AXObject.get_role_description(mock_accessible)
+        assert result == "custom button"
+
+    def test_get_role_description_with_braille_description(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test AXObject.get_role_description with braille role description."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(
+            AXObject,
+            "get_attributes_dict",
+            return_value={"roledescription": "custom button", "brailleroledescription": "btn"},
+        )
+        result = AXObject.get_role_description(mock_accessible, is_braille=True)
+        assert result == "btn"
+
+    def test_get_role_description_braille_fallback(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_role_description braille falls back to regular description."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(
+            AXObject,
+            "get_attributes_dict",
+            return_value={"roledescription": "custom button"},
+        )
+        result = AXObject.get_role_description(mock_accessible, is_braille=True)
+        assert result == "custom button"
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "scenario": "invalid_object",
+                "expected_result": "",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "valid_object",
+                "scenario": "valid_object",
+                "expected_result": "button-123",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "glib_error",
+                "scenario": "glib_error",
+                "expected_result": "",
+                "should_call_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_accessible_id(self, test_context, case: dict) -> None:
+        """Test AXObject.get_accessible_id with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+        if case["scenario"] == "invalid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=False)
+        elif case["scenario"] == "valid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_accessible_id",
+                return_value="button-123",
+            )
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test accessible id error")
+
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_accessible_id",
+                side_effect=raise_glib_error,
+            )
+
+        result = AXObject.get_accessible_id(mock_accessible)
+        assert result == case["expected_result"]
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "scenario": "invalid_object",
+                "expected_result": "",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "valid_object",
+                "scenario": "valid_object",
+                "expected_result": "Submit",
+                "should_call_handle_error": False,
+            },
+            {
+                "id": "glib_error",
+                "scenario": "glib_error",
+                "expected_result": "",
+                "should_call_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_name(self, test_context, case: dict) -> None:
+        """Test AXObject.get_name with different scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+        if case["scenario"] == "invalid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=False)
+        elif case["scenario"] == "valid_object":
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(Atspi.Accessible, "get_name", return_value="Submit")
+        elif case["scenario"] == "glib_error":
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test name error")
+
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            test_context.patch_object(Atspi.Accessible, "get_name", side_effect=raise_glib_error)
+
+        result = AXObject.get_name(mock_accessible)
+        assert result == case["expected_result"]
+
+        if case["should_call_handle_error"]:
+            handle_error_mock.assert_called_once()
+        else:
+            handle_error_mock.assert_not_called()
+
+    def test_has_same_non_empty_name_both_empty(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_same_non_empty_name with both objects having empty names."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_obj1 = test_context.Mock(spec=Atspi.Accessible)
+        mock_obj2 = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "get_name", return_value="")
+        result = AXObject.has_same_non_empty_name(mock_obj1, mock_obj2)
+        assert result is False
+
+    def test_has_same_non_empty_name_same_non_empty(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_same_non_empty_name with same non-empty names."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_obj1 = test_context.Mock(spec=Atspi.Accessible)
+        mock_obj2 = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "get_name", return_value="Submit")
+        result = AXObject.has_same_non_empty_name(mock_obj1, mock_obj2)
+        assert result is True
+
+    def test_has_same_non_empty_name_different_names(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_same_non_empty_name with different names."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_obj1 = test_context.Mock(spec=Atspi.Accessible)
+        mock_obj2 = test_context.Mock(spec=Atspi.Accessible)
+
+        def mock_get_name(obj) -> str:
+            if obj == mock_obj1:
+                return "Submit"
+            return "Cancel"
+
+        test_context.patch_object(AXObject, "get_name", new=mock_get_name)
+        result = AXObject.has_same_non_empty_name(mock_obj1, mock_obj2)
+        assert result is False
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "invalid_object", "is_valid": False, "raises_glib_error": False},
+            {"id": "valid_object", "is_valid": True, "raises_glib_error": False},
+            {"id": "glib_error", "is_valid": True, "raises_glib_error": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_state_set(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_state_set with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["is_valid"])
+
+        if case["is_valid"] and not case["raises_glib_error"]:
+            mock_state_set = test_context.Mock()
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_state_set",
+                return_value=mock_state_set,
+            )
+            set_known_dead_status_mock = test_context.Mock()
+            test_context.patch_object(
+                AXObject,
+                "_set_known_dead_status",
+                new=set_known_dead_status_mock,
+            )
+
+            result = AXObject.get_state_set(mock_accessible)
+            assert result == mock_state_set
+            set_known_dead_status_mock.assert_called_once_with(mock_accessible, False)
+        elif case["raises_glib_error"]:
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test state set error")
+
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_state_set",
+                side_effect=raise_glib_error,
+            )
+            handle_error_mock = test_context.Mock()
+            test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+            result = AXObject.get_state_set(mock_accessible)
+            assert isinstance(result, type(Atspi.StateSet()))
+            handle_error_mock.assert_called_once()
+        else:
+            result = AXObject.get_state_set(mock_accessible)
+            assert isinstance(result, type(Atspi.StateSet()))
+
+    def test_has_state_with_invalid_object(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_state with invalid object."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=False)
+        result = AXObject.has_state(mock_accessible, Atspi.StateType.FOCUSED)
+        assert result is False
+
+    def test_has_state_with_valid_object(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_state with valid object."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_state_set = test_context.Mock()
+        mock_state_set.contains.return_value = True
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "get_state_set", return_value=mock_state_set)
+        result = AXObject.has_state(mock_accessible, Atspi.StateType.FOCUSED)
+        assert result is True
+        mock_state_set.contains.assert_called_once_with(Atspi.StateType.FOCUSED)
+
+    def test_clear_cache_with_none_object(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.clear_cache with None object."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        AXObject.clear_cache(None)
+
+    def test_clear_cache_non_recursive(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.clear_cache non-recursive."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(Atspi.Accessible, "clear_cache_single", new=test_context.Mock())
+        AXObject.clear_cache(mock_accessible, recursive=False, reason="test")
+        sys.modules["gi.repository"].Atspi.Accessible.clear_cache_single.assert_called_once_with(
+            mock_accessible,
+        )
+
+    def test_clear_cache_non_recursive_with_glib_error(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.clear_cache non-recursive handles GLib.GError."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+
+        def raise_glib_error(_obj) -> None:
+            raise GLib.GError("Test clear cache error")
+
+        test_context.patch_object(
+            Atspi.Accessible,
+            "clear_cache_single",
+            side_effect=raise_glib_error,
+        )
+        AXObject.clear_cache(mock_accessible, recursive=False)
+
+    def test_clear_cache_recursive(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.clear_cache recursive."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_clear_cache = test_context.patch("gi.repository.Atspi.Accessible.clear_cache")
+        AXObject.clear_cache(mock_accessible, recursive=True)
+        mock_clear_cache.assert_called_once_with(mock_accessible)
+
+    def test_clear_cache_recursive_with_glib_error(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.clear_cache recursive handles GLib.GError."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+
+        def raise_glib_error(_obj) -> None:
+            raise GLib.GError("Test clear cache recursive error")
+
+        test_context.patch_object(Atspi.Accessible, "clear_cache", side_effect=raise_glib_error)
+        AXObject.clear_cache(mock_accessible, recursive=True)
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "is_valid": False,
+                "use_cache": True,
+                "cached_attrs": None,
+                "get_attributes_result": None,
+                "raises_error": False,
+                "expected_result": {},
+                "expects_cache_update": False,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "cache_hit",
+                "is_valid": True,
+                "use_cache": True,
+                "cached_attrs": {"id": "button1", "class": "primary"},
+                "get_attributes_result": None,
+                "raises_error": False,
+                "expected_result": {"id": "button1", "class": "primary"},
+                "expects_cache_update": False,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "no_cache_valid_attributes",
+                "is_valid": True,
+                "use_cache": False,
+                "cached_attrs": None,
+                "get_attributes_result": {"id": "button2", "class": "secondary"},
+                "raises_error": False,
+                "expected_result": {"id": "button2", "class": "secondary"},
+                "expects_cache_update": True,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "uncached_read_replaces_cached_attributes",
+                "is_valid": True,
+                "use_cache": False,
+                "cached_attrs": {"id": "stale"},
+                "get_attributes_result": {"id": "fresh"},
+                "raises_error": False,
+                "expected_result": {"id": "fresh"},
+                "expects_cache_update": True,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "glib_error",
+                "is_valid": True,
+                "use_cache": False,
+                "cached_attrs": None,
+                "get_attributes_result": None,
+                "raises_error": True,
+                "expected_result": {},
+                "expects_cache_update": False,
+                "expects_handle_error": True,
+            },
+            {
+                "id": "none_attributes",
+                "is_valid": True,
+                "use_cache": False,
+                "cached_attrs": None,
+                "get_attributes_result": None,
+                "raises_error": False,
+                "expected_result": {},
+                "expects_cache_update": False,
+                "expects_handle_error": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_attributes_dict_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_attributes_dict with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["is_valid"])
+
+        manager = ax_cache_manager.get_manager()
+        if case["cached_attrs"]:
+            AXObject._CACHE.set_attributes(mock_accessible, case["cached_attrs"])
+        else:
+            manager.invalidate_cache(
+                AXObject._CACHE,
+                AXObject._CACHE.OBJECT_ATTRIBUTES,
+            )
+
+        if case["raises_error"]:
+
+            def raise_glib_error(_obj) -> None:
+                raise GLib.GError("Test attributes error")
+
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_attributes",
+                side_effect=raise_glib_error,
+            )
+            handle_error_mock = test_context.Mock()
+            test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+        elif case["get_attributes_result"] is not None:
+            test_context.patch_object(
+                Atspi.Accessible,
+                "get_attributes",
+                return_value=case["get_attributes_result"],
+            )
+        else:
+            test_context.patch_object(Atspi.Accessible, "get_attributes", return_value=None)
+
+        result = AXObject.get_attributes_dict(mock_accessible, use_cache=case["use_cache"])
+        assert result == case["expected_result"]
+
+        if case["expects_cache_update"] and case["get_attributes_result"]:
+            assert AXObject._CACHE.get_attributes(mock_accessible) == case["get_attributes_result"]
+
+        if case["expects_handle_error"]:
+            handle_error_mock.assert_called_once()
+
+    def test_cached_attributes_are_isolated_from_callers(
+        self, test_context: OrcaTestContext
+    ) -> None:
+        """Mutating a stored or returned attributes dict must not corrupt the cached value."""
+
+        self._setup_dependencies(test_context)
+        from orca import ax_cache_manager
+        from orca.ax_object import AXObject
+
+        obj = test_context.Mock(spec=Atspi.Accessible)
+        stored = {"level": "2"}
+        AXObject._CACHE.set_attributes(obj, stored)
+        stored["mutated"] = "after set"
+        first = AXObject._CACHE.get_attributes(obj)
+        assert first == {"level": "2"}
+
+        first["mutated"] = "by caller"
+        assert AXObject._CACHE.get_attributes(obj) == {"level": "2"}
+        assert AXObject._CACHE.get_attributes(test_context.Mock(spec=Atspi.Accessible)) is (
+            ax_cache_manager.MISSING
+        )
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "is_valid": False,
+                "attributes_dict": {},
+                "attribute_name": "id",
+                "expected_result": "",
+            },
+            {
+                "id": "existing_attribute",
+                "is_valid": True,
+                "attributes_dict": {"id": "button1", "class": "primary"},
+                "attribute_name": "id",
+                "expected_result": "button1",
+            },
+            {
+                "id": "missing_attribute",
+                "is_valid": True,
+                "attributes_dict": {"id": "button1"},
+                "attribute_name": "class",
+                "expected_result": "",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_attribute_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_attribute with various scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["is_valid"])
+        test_context.patch_object(
+            AXObject,
+            "get_attributes_dict",
+            side_effect=lambda obj, use_cache: case["attributes_dict"],
+        )
+        result = AXObject.get_attribute(mock_accessible, case["attribute_name"])
+        assert result == case["expected_result"]
+
+    def test_grab_focus_no_component_support(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.grab_focus without component support."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "supports_component", return_value=False)
+        result = AXObject.grab_focus(mock_accessible)
+        assert result is False
+
+    def test_grab_focus_basic_success(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.grab_focus basic success path."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "supports_component", return_value=True)
+        test_context.patch_object(AXObject, "has_state", return_value=False)
+
+        def mock_grab_focus(_obj) -> bool:
+            from orca import debug
+
+            debug.LEVEL_INFO = 800
+            debug.debugLevel = 2
+            return True
+
+        test_context.patch("orca.ax_object.Atspi.Component.grab_focus", new=mock_grab_focus)
+        result = AXObject.grab_focus(mock_accessible)
+        assert result is True
+
+    def test_get_child_invalid_obj(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_child with invalid obj."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=False)
+        result = AXObject.get_child(mock_accessible, 0)
+        assert result is None
+
+    def test_get_child_no_children(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_child with no children."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "get_child_count", return_value=0)
+        result = AXObject.get_child(mock_accessible, 0)
+        assert result is None
+
+    def test_get_child_negative_index(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_child with -1 index (last child)."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_child = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "get_child_count", return_value=3)
+
+        def mock_get_child_at_index(_obj, index) -> object:
+            if index == 2:
+                return mock_child
+            return None
+
+        sys.modules["gi.repository"].Atspi.Accessible.get_child_at_index = mock_get_child_at_index
+        result = AXObject.get_child(mock_accessible, -1)
+        assert result == mock_child
+
+    def test_get_child_valid_index(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_child with valid index."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_child = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "get_child_count", return_value=3)
+        sys.modules["gi.repository"].Atspi.Accessible.get_child_at_index = lambda obj, idx: (
+            mock_child if idx == 1 else None
+        )
+        result = AXObject.get_child(mock_accessible, 1)
+        assert result == mock_child
+
+    def test_get_role_name_invalid_obj(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_role_name with invalid obj."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=False)
+        result = AXObject.get_role_name(mock_accessible)
+        assert result == ""
+
+    def test_get_role_name_non_localized(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_role_name non-localized."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        sys.modules["gi.repository"].Atspi.Accessible.get_role_name = test_context.Mock(
+            return_value="button",
+        )
+        result = AXObject.get_role_name(mock_accessible, localized=False)
+        assert result == "button"
+        sys.modules["gi.repository"].Atspi.Accessible.get_localized_role_name = test_context.Mock(
+            return_value="botón",
+        )
+        result = AXObject.get_role_name(mock_accessible, localized=True)
+        assert result == "botón"
+
+    def test_get_role_name_glib_error(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_role_name handles GLib.GError."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+        sys.modules["gi.repository"].Atspi.Accessible.get_role_name = test_context.Mock(
+            side_effect=GLib.GError("Test error"),
+        )
+        result = AXObject.get_role_name(mock_accessible)
+        assert result == ""
+
+    def test_has_same_non_empty_name_empty_name1(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_same_non_empty_name with empty first name."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_obj2 = test_context.Mock(spec=Atspi.Accessible)
+
+        def mock_get_name(obj) -> str:
+            if obj == mock_accessible:
+                return ""
+            return "test"
+
+        test_context.patch_object(AXObject, "get_name", new=mock_get_name)
+        result = AXObject.has_same_non_empty_name(mock_accessible, mock_obj2)
+        assert result is False
+
+    def test_has_same_non_empty_name_same_names(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.has_same_non_empty_name with same names."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_obj2 = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "get_name", return_value="test")
+        result = AXObject.has_same_non_empty_name(mock_accessible, mock_obj2)
+        assert result is True
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "desc_invalid_obj",
+                "method_name": "get_description",
+                "scenario": "invalid_obj",
+                "is_valid": False,
+                "atspi_method": "get_description",
+                "expected_result": "",
+                "expects_handle_error": False,
+            },
+            {
+                "id": "desc_success",
+                "method_name": "get_description",
+                "scenario": "success",
+                "is_valid": True,
+                "atspi_method": "get_description",
+                "expected_result": "Test description",
+                "expects_handle_error": False,
+            },
+            {
+                "id": "desc_glib_error",
+                "method_name": "get_description",
+                "scenario": "glib_error",
+                "is_valid": True,
+                "atspi_method": "get_description",
+                "expected_result": "",
+                "expects_handle_error": True,
+            },
+            {
+                "id": "child_count_invalid_obj",
+                "method_name": "get_child_count",
+                "scenario": "invalid_obj",
+                "is_valid": False,
+                "atspi_method": "get_child_count",
+                "expected_result": 0,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "child_count_success",
+                "method_name": "get_child_count",
+                "scenario": "success",
+                "is_valid": True,
+                "atspi_method": "get_child_count",
+                "expected_result": 3,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "child_count_glib_error",
+                "method_name": "get_child_count",
+                "scenario": "glib_error",
+                "is_valid": True,
+                "atspi_method": "get_child_count",
+                "expected_result": 0,
+                "expects_handle_error": True,
+            },
+            {
+                "id": "img_desc_invalid_obj",
+                "method_name": "get_image_description",
+                "scenario": "invalid_obj",
+                "is_valid": False,
+                "atspi_method": "get_image_description",
+                "expected_result": "",
+                "expects_handle_error": False,
+            },
+            {
+                "id": "img_desc_success",
+                "method_name": "get_image_description",
+                "scenario": "success",
+                "is_valid": True,
+                "atspi_method": "get_image_description",
+                "expected_result": "Image description",
+                "expects_handle_error": False,
+            },
+            {
+                "id": "img_desc_glib_error",
+                "method_name": "get_image_description",
+                "scenario": "glib_error",
+                "is_valid": True,
+                "atspi_method": "get_image_description",
+                "expected_result": "",
+                "expects_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_getter_methods_with_error_handling_scenarios(
+        self,
+        test_context,
+        case: dict,
+    ) -> None:
+        """Test AXObject getter methods with invalid_obj/success/glib_error scenarios."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["is_valid"])
+
+        if case["method_name"] == "get_image_description":
+            if case["scenario"] == "invalid_obj":
+                test_context.patch_object(AXObject, "supports_image", return_value=False)
+            else:
+                test_context.patch_object(AXObject, "supports_image", return_value=True)
+
+        if case["scenario"] == "glib_error":
+            handle_error_mock = test_context.Mock()
+            test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+            glib_error = GLib.GError("Test error")
+            if case["method_name"] == "get_image_description":
+                sys.modules["gi.repository"].Atspi.Image.get_image_description = test_context.Mock(
+                    side_effect=glib_error,
+                )
+            else:
+                setattr(
+                    sys.modules["gi.repository"].Atspi.Accessible,
+                    case["atspi_method"],
+                    test_context.Mock(side_effect=glib_error),
+                )
+        elif case["scenario"] == "success":
+            if case["method_name"] == "get_image_description":
+                sys.modules["gi.repository"].Atspi.Image.get_image_description = test_context.Mock(
+                    return_value=case["expected_result"],
+                )
+            else:
+                setattr(
+                    sys.modules["gi.repository"].Atspi.Accessible,
+                    case["atspi_method"],
+                    test_context.Mock(return_value=case["expected_result"]),
+                )
+
+        method_to_test = getattr(AXObject, case["method_name"])
+        result = method_to_test(mock_accessible)
+        assert result == case["expected_result"]
+
+        if case["scenario"] == "glib_error" and case["expects_handle_error"]:
+            handle_error_mock.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "action_invalid_obj",
+                "interface_name": "action",
+                "getter_method": "get_action_iface",
+                "has_error": False,
+                "expected_result": False,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "component_invalid_obj",
+                "interface_name": "component",
+                "getter_method": "get_component_iface",
+                "has_error": False,
+                "expected_result": False,
+                "expects_handle_error": False,
+            },
+            {
+                "id": "component_glib_error",
+                "interface_name": "component",
+                "getter_method": "get_component_iface",
+                "has_error": True,
+                "expected_result": False,
+                "expects_handle_error": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_supports_interface_error_paths(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.supports_* interface methods error paths."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        handle_error_mock = test_context.Mock()
+        test_context.patch_object(AXObject, "handle_error", new=handle_error_mock)
+
+        method = getattr(AXObject, f"supports_{case['interface_name']}")
+
+        if case["has_error"]:
+            test_context.patch_object(AXObject, "is_valid", return_value=True)
+            getter_mock = test_context.Mock(side_effect=GLib.GError("Test error"))
+            getter_mock.__name__ = case["getter_method"]
+            setattr(
+                sys.modules["gi.repository"].Atspi.Accessible,
+                case["getter_method"],
+                getter_mock,
+            )
+        else:
+            test_context.patch_object(AXObject, "is_valid", return_value=False)
+
+        result = method(mock_accessible)
+        assert result is case["expected_result"]
+        if case["expects_handle_error"]:
+            handle_error_mock.assert_called_once()
+
+    def test_has_document_spreadsheet_import_path(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject._has_document_spreadsheet import path."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_ax_collection = test_context.Mock()
+        mock_ax_collection.AXCollection = test_context.Mock()
+        mock_ax_collection.AXCollection.create_match_rule = test_context.Mock(return_value=None)
+        sys.modules["orca.ax_collection"] = mock_ax_collection
+        result = AXObject._has_document_spreadsheet(mock_accessible)
+        assert result is False
+
+    def test_has_document_spreadsheet_no_frame_path(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject._has_document_spreadsheet no frame path."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_ax_collection = test_context.Mock()
+        mock_ax_collection.AXCollection = test_context.Mock()
+        mock_ax_collection.AXCollection.create_match_rule = test_context.Mock(
+            return_value="mock_rule",
+        )
+        sys.modules["orca.ax_collection"] = mock_ax_collection
+        test_context.patch_object(AXObject, "_find_ancestor_with_role", return_value=None)
+        result = AXObject._has_document_spreadsheet(mock_accessible)
+        assert result is False
+
+    def test_has_document_spreadsheet_with_matches_path(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test AXObject._has_document_spreadsheet with matches path."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_frame = test_context.Mock(spec=Atspi.Accessible)
+        mock_ax_collection = test_context.Mock()
+        mock_ax_collection.AXCollection = test_context.Mock()
+        mock_ax_collection.AXCollection.create_match_rule = test_context.Mock(
+            return_value="mock_rule",
+        )
+        sys.modules["orca.ax_collection"] = mock_ax_collection
+        test_context.patch_object(AXObject, "_find_ancestor_with_role", return_value=mock_frame)
+        sys.modules["gi.repository"].Atspi.Collection.get_matches = test_context.Mock(
+            return_value=["match1"],
+        )
+        result = AXObject._has_document_spreadsheet(mock_accessible)
+        assert result is True
+
+    def test_get_parent_checked_invalid_obj(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_parent_checked with invalid obj."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=False)
+        result = AXObject.get_parent_checked(mock_accessible)
+        assert result is None
+
+    def test_get_parent_checked_invalid_role(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject.get_parent_checked with invalid role."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "get_role", return_value=Atspi.Role.INVALID)
+        result = AXObject.get_parent_checked(mock_accessible)
+        assert result is None
+
+    def test_has_document_spreadsheet_with_invalid_obj(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject._has_document_spreadsheet with invalid object."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=False)
+        result = AXObject._has_document_spreadsheet(mock_accessible)
+        assert result is False
+
+    def test_has_document_spreadsheet_with_valid_obj(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject._has_document_spreadsheet with valid object."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        mock_spreadsheet = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(
+            AXObject,
+            "_find_ancestor_with_role",
+            return_value=mock_spreadsheet,
+        )
+        result = AXObject._has_document_spreadsheet(mock_accessible)
+        assert result is True
+
+    def test_has_document_spreadsheet_no_spreadsheet(self, test_context: OrcaTestContext) -> None:
+        """Test AXObject._has_document_spreadsheet with no spreadsheet."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+        test_context.patch_object(AXObject, "_find_ancestor_with_role", return_value=None)
+        result = AXObject._has_document_spreadsheet(mock_accessible)
+        assert result is False
+
+    @pytest.mark.parametrize(
+        "interface_type,has_interface,expected",
+        [
+            ("document", True, True),
+            ("document", False, False),
+            ("editable_text", True, True),
+            ("editable_text", False, False),
+            ("hyperlink", True, True),
+            ("hyperlink", False, False),
+            ("image", True, True),
+            ("image", False, False),
+            ("selection", True, True),
+            ("selection", False, False),
+            ("table", True, True),
+            ("table", False, False),
+        ],
+    )
+    def test_supports_interface(
+        self,
+        test_context: OrcaTestContext,
+        interface_type: str,
+        has_interface: bool,
+        expected: bool,
+    ) -> None:
+        """Test AXObject.supports_* interface methods with various interface types."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        test_context.patch_object(AXObject, "is_valid", return_value=True)
+
+        interface_map = {
+            "document": (
+                "get_document_iface",
+                AXObject.supports_document,
+            ),
+            "editable_text": (
+                "get_editable_text_iface",
+                AXObject.supports_editable_text,
+            ),
+            "hyperlink": (
+                "get_hyperlink",
+                AXObject.supports_hyperlink,
+            ),
+            "image": (
+                "get_image_iface",
+                AXObject.supports_image,
+            ),
+            "selection": (
+                "get_selection_iface",
+                AXObject.supports_selection,
+            ),
+            "table": (
+                "get_table_iface",
+                AXObject.supports_table,
+            ),
+        }
+
+        getter_method, test_method = interface_map[interface_type]
+        mock_iface = test_context.Mock() if has_interface else None
+        getter_mock = test_context.Mock(return_value=mock_iface)
+        getter_mock.__name__ = getter_method
+        setattr(
+            sys.modules["gi.repository"].Atspi.Accessible,
+            getter_method,
+            getter_mock,
+        )
+
+        result = test_method(mock_accessible)
+        assert result is expected
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "valid_image_size", "image_support": True, "expected_result": (100, 200)},
+            {"id": "no_image_support", "image_support": False, "expected_result": (0, 0)},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_image_size_various_conditions(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_image_size with various conditions."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+
+        test_context.patch_object(AXObject, "supports_image", return_value=case["image_support"])
+
+        if case["image_support"]:
+            mock_point = test_context.Mock()
+            mock_point.x = case["expected_result"][0]
+            mock_point.y = case["expected_result"][1]
+
+            atspi_image_mock = test_context.Mock()
+            atspi_image_mock.get_image_size.return_value = mock_point
+            test_context.patch("orca.ax_object.Atspi.Image", new=atspi_image_mock)
+
+        result = AXObject.get_image_size(mock_accessible)
+        assert result == case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "atspi_error_fallback", "atspi_error": True, "expected_result": (0, 0)},
+            {"id": "successful_retrieval", "atspi_error": False, "expected_result": (150, 300)},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_image_size_error_handling(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test AXObject.get_image_size error handling."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+
+        test_context.patch_object(AXObject, "supports_image", return_value=True)
+
+        test_context.patch_object(AXObject, "handle_error", return_value=None)
+
+        atspi_image_mock = test_context.Mock()
+        if case["atspi_error"]:
+            atspi_image_mock.get_image_size.side_effect = GLib.GError("Image error")
+        else:
+            mock_point = test_context.Mock()
+            mock_point.x = case["expected_result"][0]
+            mock_point.y = case["expected_result"][1]
+            atspi_image_mock.get_image_size.return_value = mock_point
+
+        test_context.patch("orca.ax_object.Atspi.Image", new=atspi_image_mock)
+
+        result = AXObject.get_image_size(mock_accessible)
+        assert result == case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "atspi_help_text",
+                "valid_obj": True,
+                "atspi_error": False,
+                "fallback_attr": None,
+                "expected_result": "Official help text",
+            },
+            {
+                "id": "fallback_to_attribute",
+                "valid_obj": True,
+                "atspi_error": True,
+                "fallback_attr": "Fallback help",
+                "expected_result": "Fallback help",
+            },
+            {
+                "id": "no_help_available",
+                "valid_obj": True,
+                "atspi_error": True,
+                "fallback_attr": None,
+                "expected_result": "",
+            },
+            {
+                "id": "invalid_object",
+                "valid_obj": False,
+                "atspi_error": False,
+                "fallback_attr": None,
+                "expected_result": "",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_help_text_various_conditions(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_help_text with various conditions."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["valid_obj"])
+
+        if case["valid_obj"]:
+            test_context.patch_object(
+                AXObject,
+                "get_attribute",
+                side_effect=lambda obj, attr: case["fallback_attr"] if attr == "helptext" else None,
+            )
+
+            atspi_accessible_mock = test_context.Mock()
+            if case["atspi_error"]:
+                atspi_accessible_mock.get_help_text.side_effect = GLib.GError("Help text error")
+            else:
+                atspi_accessible_mock.get_help_text.return_value = case["expected_result"]
+
+            test_context.patch("orca.ax_object.Atspi.Accessible", new=atspi_accessible_mock)
+
+        result = AXObject.get_help_text(mock_accessible)
+        assert result == case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "is_valid": False,
+                "has_parent": True,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "no_parent",
+                "is_valid": True,
+                "has_parent": False,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "first_child_index_zero",
+                "is_valid": True,
+                "has_parent": True,
+                "index": 0,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "invalid_negative_index",
+                "is_valid": True,
+                "has_parent": True,
+                "index": -1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "valid_previous_sibling",
+                "is_valid": True,
+                "has_parent": True,
+                "index": 2,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": "sibling",
+            },
+            {
+                "id": "self_referential_sibling",
+                "is_valid": True,
+                "has_parent": True,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": True,
+                "expected_result": None,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_previous_sibling(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_previous_sibling with various conditions."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_obj = test_context.Mock(spec=Atspi.Accessible)
+        mock_parent = test_context.Mock(spec=Atspi.Accessible) if case["has_parent"] else None
+        mock_sibling = (
+            mock_obj if case["sibling_is_self"] else test_context.Mock(spec=Atspi.Accessible)
+        )
+
+        expected_result = case["expected_result"]
+        if expected_result == "sibling" and not case["sibling_is_self"]:
+            expected_result = mock_sibling
+
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["is_valid"])
+        test_context.patch_object(AXObject, "get_parent", return_value=mock_parent)
+        test_context.patch_object(
+            AXObject,
+            "get_index_in_parent",
+            side_effect=lambda obj: case["index"],
+        )
+        test_context.patch_object(
+            AXObject,
+            "get_child",
+            side_effect=lambda parent, idx: mock_sibling if case["has_sibling"] else None,
+        )
+
+        result = AXObject.get_previous_sibling(mock_obj)
+        assert result == expected_result
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "is_valid": False,
+                "has_parent": True,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "no_parent",
+                "is_valid": True,
+                "has_parent": False,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "invalid_negative_index",
+                "is_valid": True,
+                "has_parent": True,
+                "index": -1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+            {
+                "id": "valid_next_sibling",
+                "is_valid": True,
+                "has_parent": True,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": False,
+                "expected_result": "sibling",
+            },
+            {
+                "id": "self_referential_sibling",
+                "is_valid": True,
+                "has_parent": True,
+                "index": 1,
+                "has_sibling": True,
+                "sibling_is_self": True,
+                "expected_result": None,
+            },
+            {
+                "id": "no_next_sibling_available",
+                "is_valid": True,
+                "has_parent": True,
+                "index": 1,
+                "has_sibling": False,
+                "sibling_is_self": False,
+                "expected_result": None,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_next_sibling(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.get_next_sibling with various conditions."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_obj = test_context.Mock(spec=Atspi.Accessible)
+        mock_parent = test_context.Mock(spec=Atspi.Accessible) if case["has_parent"] else None
+        mock_sibling = (
+            mock_obj if case["sibling_is_self"] else test_context.Mock(spec=Atspi.Accessible)
+        )
+
+        expected_result = case["expected_result"]
+        if expected_result == "sibling" and not case["sibling_is_self"]:
+            expected_result = mock_sibling
+
+        test_context.patch_object(AXObject, "is_valid", side_effect=lambda obj: case["is_valid"])
+        test_context.patch_object(AXObject, "get_parent", return_value=mock_parent)
+        test_context.patch_object(
+            AXObject,
+            "get_index_in_parent",
+            side_effect=lambda obj: case["index"],
+        )
+        test_context.patch_object(
+            AXObject,
+            "get_child",
+            side_effect=lambda parent, idx: mock_sibling if case["has_sibling"] else None,
+        )
+
+        result = AXObject.get_next_sibling(mock_obj)
+        assert result == expected_result
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "invalid_object",
+                "is_valid": False,
+                "child_count": 3,
+                "children_valid": True,
+                "becomes_invalid": False,
+                "predicate_filter": None,
+                "expected_count": 0,
+                "warns_large": False,
+            },
+            {
+                "id": "no_children",
+                "is_valid": True,
+                "child_count": 0,
+                "children_valid": True,
+                "becomes_invalid": False,
+                "predicate_filter": None,
+                "expected_count": 0,
+                "warns_large": False,
+            },
+            {
+                "id": "all_valid_children",
+                "is_valid": True,
+                "child_count": 3,
+                "children_valid": True,
+                "becomes_invalid": False,
+                "predicate_filter": None,
+                "expected_count": 3,
+                "warns_large": False,
+            },
+            {
+                "id": "becomes_invalid_during_iteration",
+                "is_valid": True,
+                "child_count": 3,
+                "children_valid": True,
+                "becomes_invalid": True,
+                "predicate_filter": None,
+                "expected_count": 1,
+                "warns_large": False,
+            },
+            {
+                "id": "with_predicate_filter",
+                "is_valid": True,
+                "child_count": 3,
+                "children_valid": True,
+                "becomes_invalid": False,
+                "predicate_filter": "filter_odd",
+                "expected_count": 2,
+                "warns_large": False,
+            },
+            {
+                "id": "large_child_count_warning",
+                "is_valid": True,
+                "child_count": 600,
+                "children_valid": True,
+                "becomes_invalid": False,
+                "predicate_filter": None,
+                "expected_count": 600,
+                "warns_large": True,
+            },
+            {
+                "id": "all_children_none",
+                "is_valid": True,
+                "child_count": 2,
+                "children_valid": False,
+                "becomes_invalid": False,
+                "predicate_filter": None,
+                "expected_count": 0,
+                "warns_large": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_iter_children(  # pylint: disable=too-many-locals
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test AXObject.iter_children with various conditions."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_object import AXObject
+
+        mock_obj = test_context.Mock(spec=Atspi.Accessible)
+
+        mock_children = []
+        for i in range(case["child_count"]):
+            child = test_context.Mock(spec=Atspi.Accessible) if case["children_valid"] else None
+            if child:
+                child.index = i
+            mock_children.append(child)
+
+        valid_calls = [0]
+
+        def mock_is_valid(obj):
+            if obj == mock_obj:
+                if case["becomes_invalid"] and valid_calls[0] > 0:
+                    return False
+                valid_calls[0] += 1
+                return case["is_valid"]
+            return True
+
+        child_calls = [0]
+
+        def mock_get_child(parent, index, _n_children=None):  # pylint: disable=unused-argument
+            if case["becomes_invalid"] and child_calls[0] >= 1:
+                return None
+            child_calls[0] += 1
+            if index < len(mock_children):
+                return mock_children[index]
+            return None
+
+        test_context.patch_object(AXObject, "is_valid", new=mock_is_valid)
+        test_context.patch_object(AXObject, "get_child_count", return_value=case["child_count"])
+        test_context.patch_object(AXObject, "get_child", new=mock_get_child)
+
+        def pred_func(child):
+            return child.index % 2 == 0
+
+        predicate = pred_func if case["predicate_filter"] == "filter_odd" else None
+
+        debug_calls = []
+        debug_mock = test_context.Mock()
+        debug_mock.LEVEL_INFO = 1
+        debug_mock.print_tokens = test_context.Mock(
+            side_effect=lambda *args: debug_calls.append(args),
+        )
+        test_context.patch("orca.ax_object.debug", new=debug_mock)
+
+        results = list(AXObject.iter_children(mock_obj, predicate))
+
+        assert len(results) == case["expected_count"]
+
+        if case["warns_large"]:
+            assert len(debug_calls) > 0
+            warning_found = any("more than 500 children" in str(call) for call in debug_calls)
+            assert warning_found
+        else:
+            large_warning_found = any("more than 500 children" in str(call) for call in debug_calls)
+            assert not large_warning_found

@@ -1,0 +1,526 @@
+/*
+ * Copyright © 2008 Ryan Lortie
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of version 3 of the GNU General Public License as
+ * published by the Free Software Foundation.   
+ */
+
+#include "trashwatcher.h"
+
+#include <gio/gunixmounts.h>
+#include <gio/gio.h>
+#include <unistd.h>
+#include <string.h>
+
+#include "trashitem.h"
+#include "trashdir.h"
+
+typedef enum
+{
+  TRASH_WATCHER_TRUSTED,
+  TRASH_WATCHER_WATCH,
+  TRASH_WATCHER_NO_WATCH,
+} WatchType;
+
+/* decide_watch_type:
+ *
+ * This function is responsible for determining what sort of watching
+ * we should do on a given mountpoint according to the type of
+ * filesystem.  It must return one of the WatchType constants above.
+ *
+ *   TRASH_WATCHER_TRUSTED:
+ *
+ *     This is used for filesystems on which notification is supported
+ *     and all file events are reliably reported.  After initialisation
+ *     the trash directories are never manually rescanned since any
+ *     changes are already known to us from the notifications we
+ *     received about them (that's where the "trust" comes in).
+ *
+ *     This should be used for local filesystems such as ext3.
+ *
+ *   TRASH_WATCHER_WATCH:
+ *
+ *     This is used for filesystems on which notification is supported
+ *     but works unreliably.  Some changes to the filesystem may not
+ *     be delivered by the operating system.  The events which are
+ *     delivered are immediately reported but events which are not
+ *     delivered are not reported until the directory is manually
+ *     rescanned (ie: trash_watcher_rescan() is called).
+ *
+ *     This should be used for filesystems like NFS where local
+ *     changes are reported by the kernel but changes made on other
+ *     hosts are not.
+ *
+ *   TRASH_WATCHER_NO_WATCH:
+ *
+ *     Don't bother watching at all.  No change events are ever
+ *     delivered except while running trash_watcher_rescan().
+ *
+ *     This should be used for filesystems where change notification
+ *     is unsupported or is supported, but buggy enough to cause
+ *     problems when using the other two options.
+ */
+static WatchType
+decide_watch_type (GUnixMountEntry *mount,
+                   gboolean         is_home_trash)
+{
+  const gchar *fs_type;
+  const gchar *mount_path;
+
+  /* Let's assume that home trash is trusted if mount wasn't found.
+   * https://bugzilla.gnome.org/show_bug.cgi?id=747540
+   */
+  if (mount == NULL)
+    return TRASH_WATCHER_TRUSTED;
+
+  mount_path = g_unix_mount_entry_get_mount_path (mount);
+
+  /* Do not care about mount points without read access to avoid polling, see:
+   * https://bugzilla.gnome.org/show_bug.cgi?id=522314
+   */
+  if (access (mount_path, R_OK) != 0)
+    return TRASH_WATCHER_NO_WATCH;
+
+  fs_type = g_unix_mount_entry_get_fs_type (mount);
+
+  if (g_strcmp0 (fs_type, "nfs") == 0 ||
+      g_strcmp0 (fs_type, "nfs4") == 0 ||
+      g_strcmp0 (fs_type, "cifs") == 0)
+    return TRASH_WATCHER_WATCH;
+  else
+    return TRASH_WATCHER_TRUSTED;
+}
+
+/* find the mount entry for the directory containing 'file'.
+ * used to figure out what sort of filesystem the home trash
+ * folder is sitting on.
+ */
+static GUnixMountEntry *
+find_mount_entry_for_file (GFile *file)
+{
+  GUnixMountEntry *entry;
+  char *pathname;
+
+  pathname = g_file_get_path (file);
+  do
+    {
+      char *slash;
+
+      slash = strrchr (pathname, '/');
+
+      /* leave the leading '/' in place */
+      if (slash == pathname)
+        slash++;
+
+      *slash = '\0';
+
+      entry = g_unix_mount_entry_for (pathname, NULL);
+    }
+  while (entry == NULL && pathname[1]);
+
+  g_free (pathname);
+
+  /* Entry might not be found e.g. for bind mounts, btrfs subvolumes...
+   * https://bugzilla.gnome.org/show_bug.cgi?id=747540
+   */
+  if (entry == NULL)
+    {
+      pathname = g_file_get_path (file);
+      g_warning ("Mount entry was not found for %s", pathname);
+      g_free (pathname);
+    }
+
+  return entry;
+}
+
+typedef struct _TrashMount TrashMount;
+
+struct OPAQUE_TYPE__TrashWatcher
+{
+  TrashRoot *root;
+
+  GUnixMountMonitor *mount_monitor;
+  gulong mounts_changed_id;
+  GHashTable *mounts; /* mount_path -> TrashMount */
+  guint update_id;
+  guint64 last_mount_time;
+
+  TrashDir *homedir_trashdir;
+  WatchType homedir_type;
+
+  gboolean watching;
+};
+
+struct _TrashMount
+{
+  GUnixMountEntry *mount_entry;
+  TrashDir *dirs[2];
+  WatchType type;
+};
+
+#define UPDATE_TIMEOUT 100 /* ms */
+
+static void
+trash_mount_insert (TrashWatcher    *watcher,
+                    GUnixMountEntry *mount_entry)
+{
+  const char *mountpoint;
+  gboolean watching;
+  TrashMount *mount;
+
+  mountpoint = g_unix_mount_entry_get_mount_path (mount_entry);
+
+  mount = g_slice_new (TrashMount);
+  mount->mount_entry = mount_entry;
+  mount->type = decide_watch_type (mount_entry, FALSE);
+
+  watching = watcher->watching && mount->type != TRASH_WATCHER_NO_WATCH;
+
+  /* """
+   *   For showing trashed files, implementations SHOULD support (1) and
+   *   (2) at the same time (i.e. if both $topdir/.Trash/$uid and
+   *   $topdir/.Trash-$uid are present, it should list trashed files
+   *   from both of them).
+   * """
+   */
+
+  /* (1) */
+  mount->dirs[0] = trash_dir_new (watcher->root, watching, FALSE, mountpoint,
+                                  ".Trash/%d/files", (int) getuid ());
+
+  /* (2) */
+  mount->dirs[1] = trash_dir_new (watcher->root, watching, FALSE, mountpoint,
+                                  ".Trash-%d/files", (int) getuid ());
+
+  g_hash_table_insert (watcher->mounts, g_strdup (mountpoint), mount);
+}
+
+static void
+trash_mount_free (TrashMount *mount)
+{
+  trash_dir_free (mount->dirs[0]);
+  trash_dir_free (mount->dirs[1]);
+
+  g_unix_mount_entry_free (mount->mount_entry);
+  g_slice_free (TrashMount, mount);
+}
+
+static gboolean
+ignore_trash_mount (GUnixMountEntry *mount,
+                    GHashTable      *mount_points_by_path) /* gchar *path ~> GUnixMountPoint * */
+{
+  const gchar *mount_options;
+  gboolean is_system_internal;
+
+  mount_options = g_unix_mount_entry_get_options (mount);
+
+  if (mount_options != NULL)
+    {
+      if (strstr (mount_options, "x-gvfs-trash") != NULL)
+        return FALSE;
+
+      if (strstr (mount_options, "x-gvfs-notrash") != NULL)
+        return TRUE;
+    }
+
+  is_system_internal = g_unix_mount_entry_is_system_internal (mount);
+
+  if (mount_options == NULL || is_system_internal)
+    {
+      GUnixMountPoint *mount_point;
+      const gchar *mount_path = g_unix_mount_entry_get_mount_path (mount);
+      const gchar *fstab_options = NULL;
+
+      /* The x-gvfs-* options are userspace-only mount options: the kernel does
+       * not know about them, so they never appear in /proc/self/mountinfo.
+       * libmount can only report them from /run/mount/utab, which requires the
+       * filesystem to have been mounted by mount(8) and that file to have
+       * survived since boot; filesystems mounted by systemd, by the initrd or
+       * by an image-based OS carry no utab entry at all. So fall back to the
+       * fstab entry for this mount path.
+       *
+       * The mount_options == NULL case is the pre-existing fallback path, kept
+       * unchanged for platforms whose mount entries carry no options at all.
+       * The system-internal case is the new one, and is deliberately limited to
+       * that branch, which would ignore the mount anyway, so that this stays in
+       * sync with the identical check in GIO, see ignore_trash_mount() in
+       * glocalfile.c.
+       */
+      mount_point = g_hash_table_lookup (mount_points_by_path, mount_path);
+      if (mount_point != NULL)
+        fstab_options = g_unix_mount_point_get_options (mount_point);
+
+      if (fstab_options != NULL)
+        {
+          if (strstr (fstab_options, "x-gvfs-trash") != NULL)
+            return FALSE;
+
+          if (strstr (fstab_options, "x-gvfs-notrash") != NULL)
+            return TRUE;
+        }
+    }
+
+  return is_system_internal;
+}
+
+static void
+trash_watcher_remount_do (TrashWatcher *watcher)
+{
+  GHashTable *mount_paths;
+  GHashTable *mount_points_by_path; /* gchar *path ~> GUnixMountPoint * */
+  GHashTableIter iter;
+  GList *mounts;
+  GList *points;
+  GList *l;
+  gpointer key, value;
+  const char *mount_path;
+
+  if (!g_unix_mount_entries_changed_since (watcher->last_mount_time))
+    return;
+
+  mounts = g_unix_mount_entries_get (&watcher->last_mount_time);
+  mount_paths = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+
+  mount_points_by_path = g_hash_table_new_full (g_str_hash, g_str_equal, NULL,
+                                                (GDestroyNotify) g_unix_mount_point_free);
+
+  /* Move the fstab mount points into a hash table, so that ignore_trash_mount()
+   * does not have to call g_unix_mount_point_at() per mount entry: that
+   * function deep-copies the whole mount point list on every call
+   * (g_unix_mount_points_get() caches the fstab parse itself, but not the
+   * copy) and then throws all but one entry away.
+   */
+  points = g_unix_mount_points_get (NULL);
+  for (l = points; l != NULL; l = l->next)
+    {
+      GUnixMountPoint *mount_point = l->data;
+
+      g_hash_table_replace (mount_points_by_path,
+                            (gpointer) g_unix_mount_point_get_mount_path (mount_point),
+                            mount_point);
+    }
+  /* the mount_points_by_path took ownership of the mount point objects */
+  g_list_free (points);
+
+  for (l = mounts; l != NULL; l = l->next)
+    {
+      g_autoptr(GUnixMountEntry) mount_entry = l->data;
+
+      if (ignore_trash_mount (mount_entry, mount_points_by_path))
+        {
+          g_debug ("trash_watcher_remount_do: ignore %s %s %s\n",
+                   g_unix_mount_entry_get_device_path (mount_entry),
+                   g_unix_mount_entry_get_mount_path (mount_entry),
+                   g_unix_mount_entry_get_fs_type (mount_entry));
+          continue;
+        }
+
+      mount_path = g_unix_mount_entry_get_mount_path (mount_entry);
+      if (!g_hash_table_contains (watcher->mounts, mount_path))
+        {
+          g_debug ("trash_watcher_remount_do: insert %s %s %s\n",
+                   g_unix_mount_entry_get_device_path (mount_entry),
+                   g_unix_mount_entry_get_mount_path (mount_entry),
+                   g_unix_mount_entry_get_fs_type (mount_entry));
+
+          trash_mount_insert (watcher, g_steal_pointer (&mount_entry));
+        }
+
+      g_hash_table_add (mount_paths, g_strdup (mount_path));
+    }
+
+  g_list_free (mounts);
+  g_hash_table_destroy (mount_points_by_path);
+
+  g_hash_table_iter_init (&iter, watcher->mounts);
+  while (g_hash_table_iter_next (&iter, &key, &value))
+    {
+      TrashMount *mount = value;
+      mount_path = key;
+
+      if (!g_hash_table_contains (mount_paths, mount_path))
+        {
+          g_debug ("trash_watcher_remount_do: remove %s %s %s\n",
+                   g_unix_mount_entry_get_device_path (mount->mount_entry),
+                   g_unix_mount_entry_get_mount_path (mount->mount_entry),
+                   g_unix_mount_entry_get_fs_type (mount->mount_entry));
+
+          trash_mount_free (mount);
+          g_hash_table_iter_remove (&iter);
+        }
+    }
+
+  g_hash_table_destroy (mount_paths);
+}
+
+static gboolean
+trash_watcher_remount_timeout (gpointer user_data)
+{
+  TrashWatcher *watcher = user_data;
+
+  g_debug ("trash_watcher_remount_timeout\n");
+
+  watcher->update_id = 0;
+
+  trash_watcher_remount_do (watcher);
+
+  return G_SOURCE_REMOVE;
+}
+
+static void
+trash_watcher_remount (TrashWatcher *watcher)
+{
+  g_debug ("trash_watcher_remount\n");
+
+  if (watcher->update_id != 0)
+    return;
+
+  watcher->update_id = g_timeout_add (UPDATE_TIMEOUT * g_random_double_range (0.5, 5),
+                                      trash_watcher_remount_timeout,
+                                      watcher);
+}
+
+TrashWatcher *
+trash_watcher_new (TrashRoot *root)
+{
+  GUnixMountEntry *homedir_mount;
+  GFile *homedir_trashdir;
+  TrashWatcher *watcher;
+  GFile *user_datadir;
+
+  watcher = g_slice_new (TrashWatcher);
+  watcher->root = root;
+  watcher->mounts = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  watcher->watching = FALSE;
+  watcher->update_id = 0;
+  watcher->last_mount_time = 0;
+  watcher->mount_monitor = g_unix_mount_monitor_get ();
+  watcher->mounts_changed_id = 0;
+
+  user_datadir = g_file_new_for_path (g_get_user_data_dir ());
+  homedir_trashdir = g_file_get_child (user_datadir, "Trash/files");
+  homedir_mount = find_mount_entry_for_file (homedir_trashdir);
+  watcher->homedir_type = decide_watch_type (homedir_mount, TRUE);
+  watcher->homedir_trashdir = trash_dir_new (watcher->root,
+                                             FALSE, TRUE,
+                                             g_get_user_data_dir (),
+                                             "Trash/files");
+
+  if (homedir_mount)
+    g_unix_mount_entry_free (homedir_mount);
+  g_object_unref (homedir_trashdir);
+  g_object_unref (user_datadir);
+
+  trash_watcher_remount_do (watcher);
+
+  return watcher;
+}
+
+void
+trash_watcher_free (TrashWatcher *watcher)
+{
+  g_clear_handle_id (&watcher->update_id, g_source_remove);
+
+  /* We just leak everything here, as this is not normally hit.
+     This used to be a g_assert_not_reached(), and that got hit when
+     mounting the trash backend failed due to the trash already being
+     mounted. */
+}
+
+void
+trash_watcher_watch (TrashWatcher *watcher)
+{
+  GHashTableIter iter;
+  gpointer value;
+
+  g_debug ("trash_watcher_watch\n");
+
+  if (watcher->watching)
+    return;
+
+  watcher->mounts_changed_id =
+    g_signal_connect_swapped (watcher->mount_monitor, "mounts_changed",
+                              G_CALLBACK (trash_watcher_remount), watcher);
+
+  trash_watcher_remount_do (watcher);
+
+  if (watcher->homedir_type != TRASH_WATCHER_NO_WATCH)
+    trash_dir_watch (watcher->homedir_trashdir);
+
+  g_hash_table_iter_init (&iter, watcher->mounts);
+  while (g_hash_table_iter_next (&iter, NULL, &value))
+    {
+      TrashMount *mount = value;
+      if (mount->type != TRASH_WATCHER_NO_WATCH)
+        {
+          trash_dir_watch (mount->dirs[0]);
+          trash_dir_watch (mount->dirs[1]);
+        }
+    }
+
+  watcher->watching = TRUE;
+}
+
+void
+trash_watcher_unwatch (TrashWatcher *watcher)
+{
+  GHashTableIter iter;
+  gpointer value;
+
+  g_debug ("trash_watcher_unwatch\n");
+
+  if (!watcher->watching)
+    return;
+
+  g_signal_handler_disconnect (watcher->mount_monitor,
+                               watcher->mounts_changed_id);
+  watcher->mounts_changed_id = 0;
+
+  g_clear_handle_id (&watcher->update_id, g_source_remove);
+
+  if (watcher->homedir_type != TRASH_WATCHER_NO_WATCH)
+    trash_dir_unwatch (watcher->homedir_trashdir);
+
+  g_hash_table_iter_init (&iter, watcher->mounts);
+  while (g_hash_table_iter_next (&iter, NULL, &value))
+    {
+      TrashMount *mount = value;
+      if (mount->type != TRASH_WATCHER_NO_WATCH)
+        {
+          trash_dir_unwatch (mount->dirs[0]);
+          trash_dir_unwatch (mount->dirs[1]);
+        }
+    }
+
+  watcher->watching = FALSE;
+}
+
+void
+trash_watcher_rescan (TrashWatcher *watcher)
+{
+  GHashTableIter iter;
+  gpointer value;
+
+  if (!watcher->watching)
+    trash_watcher_remount_do (watcher);
+  else if (watcher->update_id != 0)
+    {
+      g_source_remove (watcher->update_id);
+      trash_watcher_remount_timeout (watcher);
+    }
+
+  if (!watcher->watching || watcher->homedir_type != TRASH_WATCHER_TRUSTED)
+    trash_dir_rescan (watcher->homedir_trashdir);
+
+  g_hash_table_iter_init (&iter, watcher->mounts);
+  while (g_hash_table_iter_next (&iter, NULL, &value))
+    {
+      TrashMount *mount = value;
+      if (!watcher->watching || mount->type != TRASH_WATCHER_TRUSTED)
+        {
+          trash_dir_rescan (mount->dirs[0]);
+          trash_dir_rescan (mount->dirs[1]);
+        }
+    }
+}

@@ -1,0 +1,94 @@
+# Orca
+#
+# Copyright (C) 2015 Igalia, S.L.
+#
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+"""Produces braille presentation for accessible objects."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from orca import braille, braille_generator, debug
+from orca.scripts import web
+
+if TYPE_CHECKING:
+    import gi
+
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+
+    from orca.braille_generator import BrailleGeneratorContext
+
+    from . import script
+
+
+class BrailleGenerator(web.BrailleGenerator, braille_generator.BrailleGenerator):
+    """Produces braille presentation for accessible objects."""
+
+    # Type annotation to override the base class script type
+    _script: script.Script
+
+    @staticmethod
+    def log_generator_output(func):
+        """Decorator for logging."""
+
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            tokens = ["EVOLUTION BRAILLE GENERATOR:", func.__name__, ":", result]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return result
+
+        return wrapper
+
+    @log_generator_output
+    def _generate_real_active_descendant_displayed_text(
+        self,
+        obj: Atspi.Accessible,
+    ) -> list[Any]:
+        if self._script.utilities.is_message_list_status_cell(obj):
+            return []
+
+        return super()._generate_real_active_descendant_displayed_text(obj)
+
+    def generate_braille(
+        self,
+        obj: Atspi.Accessible,
+        context: BrailleGeneratorContext,
+        *,
+        role: Atspi.Role | str | None = None,
+        include_context: bool = True,
+    ) -> list[Any]:
+        result, focused_region = super().generate_braille(
+            obj, context, role=role, include_context=include_context
+        )
+        if not result or focused_region != result[0]:
+            return [result, focused_region]
+
+        def has_obj(x):
+            return isinstance(x, (braille.Component, braille.Text))
+
+        def is_obj(x):
+            return obj == x.accessible
+
+        matches = [r for r in result if has_obj(r) and is_obj(r)]
+        if matches:
+            focused_region = matches[0]
+
+        return [result, focused_region]

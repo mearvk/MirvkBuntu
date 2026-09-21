@@ -1,0 +1,465 @@
+#ifdef GSK_PREAMBLE
+textures = 1;
+var_name = "gsk_gpu_convert_cicp";
+struct_name = "GskGpuConvertCicp";
+
+graphene_rect_t bounds;
+graphene_rect_t tex_rect;
+float opacity;
+guint32 color_primaries;
+guint32 transfer_function;
+guint32 matrix_coefficients;
+guint32 range;
+
+variation: gboolean premultiply;
+variation: gboolean reverse;
+#endif /* GSK_PREAMBLE */
+
+#include "gskgpuconvertcicpinstance.glsl"
+
+PASS(0) vec2 _pos;
+PASS_FLAT(1) Rect _bounds;
+PASS(2) vec2 _tex_coord;
+PASS_FLAT(3) float _opacity;
+PASS_FLAT(4) uint _transfer_function;
+PASS_FLAT(5) mat3 _mat;
+PASS_FLAT(8) mat3 _yuv;
+PASS_FLAT(11) vec3 _yuv_add;
+PASS_FLAT(12) uint _range;
+
+
+#ifdef GSK_VERTEX_SHADER
+
+const mat3 identity = mat3(
+  1.0, 0.0, 0.0,
+  0.0, 1.0, 0.0,
+  0.0, 0.0, 1.0
+);
+
+const mat3 srgb_to_xyz = mat3(
+  0.4124564, 0.2126729, 0.0193339,
+  0.3575761, 0.7151522, 0.1191920,
+  0.1804375, 0.0721750, 0.9503041
+);
+
+const mat3 xyz_to_srgb = mat3(
+  3.2404542, -0.9692660,  0.0556434,
+ -1.5371385,  1.8760108, -0.2040259,
+ -0.4985314,  0.0415560,  1.0572252
+);
+
+const mat3 rec2020_to_xyz = mat3(
+  0.6369580, 0.2627002, 0.0000000,
+  0.1446169, 0.6779981, 0.0280727,
+  0.1688810, 0.0593017, 1.0609851
+);
+
+const mat3 xyz_to_rec2020 = mat3(
+  1.7166512, -0.6666844,  0.0176399,
+ -0.3556708,  1.6164812, -0.0427706,
+ -0.2533663,  0.0157685,  0.9421031
+);
+
+const mat3 pal_to_xyz = mat3(
+ 0.4305538, 0.2220043, 0.0201822,
+ 0.3415498, 0.7066548, 0.1295534,
+ 0.1783523, 0.0713409, 0.9393222
+);
+
+const mat3 xyz_to_pal = mat3(
+  3.0633611, -0.9692436,  0.0678610,
+ -1.3933902,  1.8759675, -0.2287993,
+ -0.4758237,  0.0415551,  1.0690896
+);
+
+const mat3 ntsc_to_xyz = mat3(
+ 0.3935209, 0.2123764, 0.0187391,
+ 0.3652581, 0.7010599, 0.1119339,
+ 0.1916769, 0.0865638, 0.9583847
+);
+
+const mat3 xyz_to_ntsc = mat3(
+  3.5060033, -1.0690476,  0.0563066,
+ -1.7397907,  1.9777789, -0.1969757,
+ -0.5440583,  0.0351714,  1.0499523
+);
+
+const mat3 p3_to_xyz = mat3(
+ 0.4865709, 0.2289746, 0.0000000,
+ 0.2656677, 0.6917385, 0.0451134,
+ 0.1982173, 0.0792869, 1.0439444
+);
+
+const mat3 xyz_to_p3 = mat3(
+  2.4934969, -0.8294890,  0.0358458,
+ -0.9313836,  1.7626641, -0.0761724,
+ -0.4027108,  0.0236247,  0.9568845
+);
+
+const mat3 rgb_to_bt601 = mat3(
+  0.500000, 0.299000, -0.168736,
+  -0.418688, 0.587000, -0.331264,
+  -0.081312, 0.114000, 0.500000
+);
+
+const mat3 bt601_to_rgb = mat3(
+  1.402000, -0.714136, 0.000000,
+  1.000000, 1.000000, 1.000000,
+  0.000000, -0.344136, 1.772000
+);
+
+const mat3 rgb_to_bt709 = mat3(
+  0.500000, 0.212600, -0.114572,
+  -0.454153, 0.715200, -0.385428,
+  -0.045847, 0.072200, 0.500000
+);
+
+const mat3 bt709_to_rgb = mat3(
+  1.574800, -0.468124, -0.000000,
+  1.000000, 1.000000, 1.000000,
+  0.000000, -0.187324, 1.855600
+);
+
+const mat3 rgb_to_bt2020 = mat3(
+  0.500000, 0.262700, -0.139630,
+  -0.459786, 0.678000, -0.360370,
+  -0.040214, 0.059300, 0.500000
+);
+
+const mat3 bt2020_to_rgb = mat3(
+  1.474600, -0.571353, -0.000000,
+  1.000000, 1.000000, 1.000000,
+  -0.000000, -0.164553, 1.881400
+);
+
+mat3
+cicp_to_xyz (uint cp)
+{
+  switch (cp)
+    {
+    case 1u: return srgb_to_xyz;
+    case 5u: return pal_to_xyz;
+    case 6u:
+    case 7u: return ntsc_to_xyz;
+    case 9u: return rec2020_to_xyz;
+    case 10u: return identity;
+    case 12u: return p3_to_xyz;
+    default: return identity;
+    }
+}
+
+mat3
+cicp_from_xyz (uint cp)
+{
+  switch (cp)
+    {
+    case 1u: return xyz_to_srgb;
+    case 5u: return xyz_to_pal;
+    case 6u:
+    case 7u: return xyz_to_ntsc;
+    case 9u: return xyz_to_rec2020;
+    case 10u: return identity;
+    case 12u: return xyz_to_p3;
+    default: return identity;
+    }
+}
+
+
+mat3
+yuv_to_rgb (uint mc, out vec3 yuv_add)
+{
+  if (mc == 0u)
+    yuv_add = vec3(0.0, 0.0, 0.0);
+  else
+    yuv_add = vec3(-0.5, 0.0, -0.5);
+
+  switch (mc)
+    {
+    case 0u: return identity;
+    case 1u: return bt709_to_rgb;
+    case 5u:
+    case 6u: return bt601_to_rgb;
+    case 9u: return bt2020_to_rgb;
+    }
+  return mat3(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+}
+
+mat3
+rgb_to_yuv (uint mc, out vec3 yuv_add)
+{
+  if (mc == 0u)
+    yuv_add = vec3(0.0, 0.0, 0.0);
+  else
+    yuv_add = vec3(0.5, 0.0, 0.5);
+
+  switch (mc)
+    {
+    case 0u: return identity;
+    case 1u: return rgb_to_bt709;
+    case 5u:
+    case 6u: return rgb_to_bt601;
+    case 9u: return rgb_to_bt2020;
+    }
+  return mat3(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+}
+
+void
+run (out vec2 pos)
+{
+  Rect b = rect_from_gsk (in_bounds);
+
+  pos = rect_get_position (b);
+
+  _pos = pos;
+  _bounds = b;
+  _tex_coord = rect_get_coord (rect_from_gsk (in_tex_rect), pos);
+  _opacity = in_opacity;
+  _transfer_function = in_transfer_function;
+  _range = in_range;
+
+  if (VARIATION_REVERSE)
+    {
+      if (ALT_COLOR_SPACE == GDK_COLOR_STATE_ID_SRGB_LINEAR)
+        _mat = cicp_from_xyz (in_color_primaries) * srgb_to_xyz;
+      else if (ALT_COLOR_SPACE == GDK_COLOR_STATE_ID_REC2100_LINEAR)
+        _mat = cicp_from_xyz (in_color_primaries) * rec2020_to_xyz;
+      else
+        _mat = mat3(1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.8, 0.8, 0.8);
+
+      _yuv = rgb_to_yuv (in_matrix_coefficients, _yuv_add);
+    }
+  else
+    {
+      if (ALT_COLOR_SPACE == GDK_COLOR_STATE_ID_SRGB_LINEAR)
+        _mat = xyz_to_srgb * cicp_to_xyz (in_color_primaries);
+      else if (ALT_COLOR_SPACE == GDK_COLOR_STATE_ID_REC2100_LINEAR)
+        _mat = xyz_to_rec2020 * cicp_to_xyz (in_color_primaries);
+      else
+        _mat = mat3(1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.8, 0.8, 0.8);
+
+      _yuv = yuv_to_rgb (in_matrix_coefficients, _yuv_add);
+    }
+}
+
+#endif
+
+
+#ifdef GSK_FRAGMENT_SHADER
+
+
+vec3
+bt709_eotf (vec3 v)
+{
+  const float a = 1.099;
+  const float d = 0.0812;
+
+  vec3 lo = v / 4.5;
+  vec3 hi = sign (v) * pow ((abs (v) + (a - 1.0)) / a, vec3 (1.0 / 0.45));
+  return mix (hi, lo, lessThan (abs (v), vec3 (d)));
+}
+
+vec3
+bt709_oetf (vec3 v)
+{
+  const float a = 1.099;
+  const float b = 0.018;
+
+  vec3 lo = v * 4.5;
+  vec3 hi = sign (v) * (a * pow (abs (v), vec3 (0.45)) - (a - 1.0));
+  return mix (hi, lo, lessThan (abs (v), vec3 (b)));
+}
+
+vec3
+gamma22_oetf (vec3 v)
+{
+  return sign (v) * pow (abs (v), vec3 (1.0 / 2.2));
+}
+
+vec3
+gamma22_eotf (vec3 v)
+{
+  return sign (v) * pow (abs (v), vec3 (2.2));
+}
+
+vec3
+gamma28_oetf (vec3 v)
+{
+  return sign (v) * pow (abs (v), vec3 (1.0 / 2.8));
+}
+
+vec3
+gamma28_eotf (vec3 v)
+{
+  return sign (v) * pow (abs (v), vec3 (2.8));
+}
+
+vec3
+hlg_eotf (vec3 v)
+{
+  const float a = 0.17883277;
+  const float b = 0.28466892;
+  const float c = 0.55991073;
+
+  vec3 lo = sign (v) * ((v * v) / 3.0);
+  vec3 hi = sign (v) * ((exp ((abs (v) - c) / a) + b) / 12.0);
+  v = mix (hi, lo, lessThanEqual (abs (v), vec3 (0.5)));
+
+  float Ys = dot (vec3 (0.2627, 0.6780, 0.0593), v);
+  v *= (1000.0 / 203.0) * pow (max (Ys, 0.0), 0.2);
+
+  return v;
+}
+
+vec3
+hlg_oetf (vec3 v)
+{
+  const float a = 0.17883277;
+  const float b = 0.28466892;
+  const float c = 0.55991073;
+
+  float Yd = dot (vec3 (0.2627, 0.6780, 0.0593), v);
+  if (Yd > 0.0)
+    v *= pow (203.0 / 1000.0, 1.0 / 1.2) * pow (Yd, 1.0 / 1.2 - 1.0);
+
+  vec3 lo = sign (v) * sqrt (3.0 * abs (v));
+  vec3 hi = sign (v) * (a * log (12.0 * abs (v) - b) + c);
+  return mix (hi, lo, lessThanEqual (abs (v), vec3 (1.0 / 12.0)));
+}
+
+vec3
+apply_cicp_eotf (vec3 color,
+                 uint transfer_function)
+{
+  switch (transfer_function)
+    {
+    case 1u:
+    case 6u:
+    case 14u:
+    case 15u:
+      return bt709_eotf (color);
+
+    case 4u:
+      return gamma22_eotf (color);
+
+    case 5u:
+      return gamma28_eotf (color);
+
+    case 8u:
+      return color;
+
+    case 13u:
+      return srgb_eotf (color);
+
+    case 16u:
+      return pq_eotf (color);
+
+    case 18u:
+      return hlg_eotf (color);
+
+    default:
+      return vec3 (1.0, 0.2, 0.8);
+    }
+}
+
+vec3
+apply_cicp_oetf (vec3 color,
+                 uint transfer_function)
+{
+  switch (transfer_function)
+    {
+    case 1u:
+    case 6u:
+    case 14u:
+    case 15u:
+      return bt709_oetf (color);
+
+    case 4u:
+      return gamma22_oetf (color);
+
+    case 5u:
+      return gamma28_oetf (color);
+
+    case 8u:
+      return color;
+
+    case 13u:
+      return srgb_oetf (color);
+
+    case 16u:
+      return pq_oetf (color);
+
+    case 18u:
+      return hlg_oetf (color);
+
+    default:
+      return vec3 (1.0, 0.2, 0.8);
+    }
+}
+
+vec4
+convert_color_from_cicp (vec4 color)
+{
+  if (VARIATION_PREMULTIPLY)
+    color = color_unpremultiply (color);
+
+  if (_range == 0u)
+    {
+      color.r = clamp ((color.r - 16.0/255.0) * 255.0/224.0, 0.0, 1.0);
+      color.g = clamp ((color.g - 16.0/255.0) * 255.0/219.0, 0.0, 1.0);
+      color.b = clamp ((color.b - 16.0/255.0) * 255.0/224.0, 0.0, 1.0);
+    }
+
+  color.rgb = _yuv * (color.rgb + _yuv_add);
+
+  color.rgb = apply_cicp_eotf (color.rgb, _transfer_function);
+  color.rgb = _mat * color.rgb;
+
+  color = output_color_from_alt (color);
+
+  return color;
+}
+
+vec4
+convert_color_to_cicp (vec4 color)
+{
+  color = alt_color_from_output (color);
+
+  color.rgb = _mat * color.rgb;
+  color.rgb = apply_cicp_oetf (color.rgb, _transfer_function);
+
+  color.rgb = _yuv * color.rgb + _yuv_add;
+
+  color.rgb = clamp (color.rgb, 0.0, 1.0);
+
+  if (_range == 0u)
+    {
+      color.r = color.r * 224.0/255.0 + 16.0/255.0;
+      color.g = color.g * 219.0/255.0 + 16.0/255.0;
+      color.b = color.b * 224.0/255.0 + 16.0/255.0;
+    }
+
+  if (VARIATION_PREMULTIPLY)
+    color = color_premultiply (color);
+
+  return color;
+}
+
+void
+run (out vec4 color,
+     out vec2 position)
+{
+  vec4 pixel = gsk_texture0 (_tex_coord);
+
+  if (VARIATION_REVERSE)
+    pixel = convert_color_to_cicp (pixel);
+  else
+    pixel = convert_color_from_cicp (pixel);
+
+  float alpha = rect_coverage (_bounds, _pos) * _opacity;
+
+  color = output_color_alpha (pixel, alpha);
+
+  position = _pos;
+}
+
+#endif

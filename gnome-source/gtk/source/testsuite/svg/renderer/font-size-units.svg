@@ -1,0 +1,18 @@
+<svg
+        width='100%' height='100%'
+        viewBox='0 0 400 400'
+        xmlns='http://www.w3.org/2000/svg'>
+ <defs>
+   <g id='demo'>
+     <rect x='0' y='0' width='100px' height='1em' fill='pink'/>
+     <text y='1em' fill='black'>Test</text>
+   </g>
+  </defs>
+    <use href='#demo' x='0' y='0' font-size='20px'/>
+    <use href='#demo' x='0' y='25' font-size='30px'/>
+    <g font-size='40px'>
+      <use href='#demo' x='0' y='60'/>
+      <use href='#demo' x='0' y='105' font-size='smaller' font-weight='lighter'/>
+    </g>
+    <use href='#demo' x='0' y='140' font-size='large'/>
+</svg>

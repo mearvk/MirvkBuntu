@@ -1,0 +1,804 @@
+# Copyright 2006, 2007, 2008, 2009 Brailcom, o.p.s.
+#
+# Author: Tomas Cerha <cerha@brailcom.org>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=broad-exception-caught
+# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-locals
+
+"""Provides an Orca speech server for Speech Dispatcher backend."""
+
+from __future__ import annotations
+
+import contextlib
+import gc
+import queue
+import threading
+import time
+from typing import TYPE_CHECKING, Any
+
+from gi.repository import GLib
+
+from . import debug, guilabels, speechserver, systemd
+from .acss import ACSS
+from .speechserver import CapitalizationStyle, PunctuationStyle
+from .ssml import SSML, SSMLCapabilities
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+    from typing import ClassVar
+
+    from . import input_event
+    from .speechserver import VoiceFamily
+
+try:
+    import speechd
+except Exception:
+    _SPEECHD_AVAILABLE = False
+else:
+    _SPEECHD_AVAILABLE = True
+    try:
+        _CallbackType = speechd.CallbackType
+    except AttributeError:
+        _SPEECHD_VERSION_OK = False
+    else:
+        _SPEECHD_VERSION_OK = True
+
+
+class SpeechServer(speechserver.SpeechServer):
+    """Speech Dispatcher speech server for Orca."""
+
+    _LOG_PREFIX: ClassVar[str] = "SPEECH DISPATCHER"
+
+    @staticmethod
+    def get_factory_name() -> str:
+        return guilabels.SPEECH_DISPATCHER
+
+    @staticmethod
+    def get_speech_servers() -> list[speechserver.SpeechServer]:
+        servers = []
+        default = SpeechServer._get_speech_server(SpeechServer.DEFAULT_SERVER_ID)
+        if default is not None:
+            servers.append(default)
+            for module in default.list_output_modules():
+                server = SpeechServer._get_speech_server(module)
+                if server is not None:
+                    servers.append(server)
+        return servers
+
+    # *** Instance methods ***
+
+    def __init__(self, server_id: str) -> None:
+        super().__init__(server_id)
+        self._client: Any = None
+        self._probe_client: Any = None
+        self._probe_pending: bool = False
+        self._output_module: str | None = None
+        self._current_synthesis_voice: str | None = None
+        self._current_capitalization_style: str = CapitalizationStyle.NONE.value
+        self._voice_families_cache: dict[
+            tuple[str, str, str | None, int | None],
+            list[tuple[str, str, str | None]],
+        ] = {}
+        if not _SPEECHD_AVAILABLE:
+            msg = "ERROR: Speech Dispatcher is not available"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
+            return
+        if not _SPEECHD_VERSION_OK:
+            msg = "ERROR: Speech Dispatcher version 0.6.2 or later is required."
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
+            return
+        # The following constants must be initialized in runtime since they
+        # depend on the speechd module being available.
+        try:
+            most = speechd.PunctuationMode.MOST
+        except Exception:
+            most = speechd.PunctuationMode.SOME
+        self._punctuation_mode_map = {
+            PunctuationStyle.ALL: speechd.PunctuationMode.ALL,
+            PunctuationStyle.MOST: most,
+            PunctuationStyle.SOME: speechd.PunctuationMode.SOME,
+            PunctuationStyle.NONE: speechd.PunctuationMode.NONE,
+        }
+        self._callback_type_map = {
+            speechd.CallbackType.BEGIN: speechserver.SayAllContext.PROGRESS,
+            speechd.CallbackType.CANCEL: speechserver.SayAllContext.INTERRUPTED,
+            speechd.CallbackType.END: speechserver.SayAllContext.COMPLETED,
+            speechd.CallbackType.INDEX_MARK: speechserver.SayAllContext.PROGRESS,
+        }
+
+        self._default_voice_name = guilabels.SPEECH_DEFAULT_VOICE % server_id
+
+        try:
+            self._init()
+        except Exception:
+            debug.print_exception(debug.LEVEL_WARNING)
+            msg = "ERROR: Speech Dispatcher service failed to connect"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
+        else:
+            SpeechServer._active_servers[server_id] = self
+
+    def _init(self) -> None:
+        try:
+            self._client = client = speechd.SSIPClient("Orca", component=self._id)
+        except (speechd.SSIPCommunicationError, speechd.SpawnError) as error:
+            tokens = ["ERROR: Failed to connect to Speech Dispatcher:", error]
+            debug.print_tokens(debug.LEVEL_SEVERE, tokens, True)
+            self._client = None
+            systemd.get_manager().set_status("Speech", f"not connected ({error})")
+            return
+        client.set_priority(speechd.Priority.MESSAGE)
+
+        # The speechServerInfo setting is not connected to the speechServerFactory. As a result,
+        # the user's chosen server (synthesizer) might be from spiel. Don't mutate self._id
+        # here because it must stay consistent with the _active_servers key for proper cleanup.
+        # _output_module (set via set_output_module) takes precedence because it reflects
+        # what was explicitly configured; fall back to self._id for non-default servers.
+        module = self._output_module
+        if not module and self._id and self._id != self.DEFAULT_SERVER_ID:
+            module = self._id
+        if module:
+            try:
+                available_modules = client.list_output_modules()
+                if module in available_modules:
+                    client.set_output_module(module)
+            except (AttributeError, speechd.SSIPCommandError):
+                pass
+        self._current_voice_properties = {}
+        mode = self._punctuation_mode_map[self._current_punctuation_level]
+        client.set_punctuation(mode)
+        client.set_data_mode(speechd.DataMode.SSML)
+
+    def update_capitalization_style(self, style: str) -> None:
+        """Updates the capitalization style used by the speech server."""
+
+        self._current_capitalization_style = style
+        if self._client is None:
+            return
+
+        # "spell" is only applied per-character in speak_character() to
+        # prevent the synthesizer from announcing capitals in words and phrases.
+        if style == CapitalizationStyle.ICON.value:
+            sd_style = "icon"
+        else:
+            sd_style = "none"
+
+        try:
+            self._client.set_cap_let_recogn(sd_style)
+        except speechd.SSIPCommunicationError:
+            msg = "SPEECH DISPATCHER: Connection lost. Trying to reconnect."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.reset()
+            if self._client is not None:
+                self._client.set_cap_let_recogn(sd_style)
+        except Exception as error:
+            tokens = ["SPEECH DISPATCHER: set_cap_let_recogn failed:", error]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+
+    def update_punctuation_level(self, level: PunctuationStyle) -> None:
+        """Punctuation level changed, inform this speechServer."""
+        super().update_punctuation_level(level)
+        if self._client is None:
+            return
+        mode = self._punctuation_mode_map[level]
+        self._client.set_punctuation(mode)
+
+    def _send_command(self, command: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        try:
+            return command(*args, **kwargs)
+        except speechd.SSIPCommunicationError:
+            msg = "SPEECH DISPATCHER: Connection lost. Trying to reconnect."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            self.reset()
+            if self._client is None:
+                return None
+            try:
+                return command(*args, **kwargs)
+            except (AttributeError, speechd.SSIPCommandError) as error:
+                tokens = ["SPEECH DISPATCHER: Failed to reconnect:", error]
+                debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+                return None
+        except Exception:
+            return None
+
+    def _set_rate(self, acss_rate: float) -> None:
+        if self._client is None:
+            return
+        rate = int(2 * max(0, min(100, acss_rate)) - 100)
+        self._send_command(self._client.set_rate, rate)
+
+    def _set_pitch(self, acss_pitch: float) -> None:
+        if self._client is None:
+            return
+        pitch = int(20 * max(0, min(10, acss_pitch)) - 100)
+        self._send_command(self._client.set_pitch, pitch)
+
+    def _set_pitch_range(self, acss_pitch_range: float) -> None:
+        if self._client is None:
+            return
+        pitch_range = int(20 * max(0, min(10, acss_pitch_range)) - 100)
+        self._send_command(self._client.set_pitch_range, pitch_range)
+
+    def _set_volume(self, acss_volume: float) -> None:
+        if self._client is None:
+            return
+        volume = int(20 * max(0, min(10, acss_volume)) - 100)
+        self._send_command(self._client.set_volume, volume)
+
+    def _set_family(self, acss_family: dict[str, Any] | None) -> None:
+        if self._client is None:
+            return
+
+        lang, dialect = self._get_language_and_dialect(acss_family)
+        if lang:
+            self._send_command(self._client.set_language, lang)
+            if dialect:
+                # Try to set precise dialect
+                self._send_command(self._client.set_language, lang + "-" + dialect)
+
+        if acss_family is not None:
+            if name := acss_family.get(speechserver.VoiceFamily.NAME):
+                self._send_command(self._client.set_synthesis_voice, name)
+                self._current_synthesis_voice = name
+
+    def _debug_sd_values(self, prefix: str = "") -> None:
+        if debug.debugLevel > debug.LEVEL_INFO:
+            return
+
+        try:
+            if self._client is not None:
+                sd_rate = self._send_command(self._client.get_rate)
+                sd_pitch = self._send_command(self._client.get_pitch)
+                sd_volume = self._send_command(self._client.get_volume)
+                sd_language = self._send_command(self._client.get_language)
+            else:
+                sd_rate = sd_pitch = sd_volume = sd_language = "(client not available)"
+        except Exception:
+            sd_rate = sd_pitch = sd_volume = sd_language = "(exception occurred)"
+
+        family = self._current_voice_properties.get(ACSS.FAMILY) or {}
+
+        punctuation_style = self._current_punctuation_level.name
+
+        tokens = [
+            "SPEECH DISPATCHER:",
+            prefix,
+            "\nORCA rate",
+            self._current_voice_properties.get(ACSS.RATE),
+            ", pitch",
+            self._current_voice_properties.get(ACSS.AVERAGE_PITCH),
+            ", pitch-range",
+            self._current_voice_properties.get(ACSS.PITCH_RANGE),
+            ", volume",
+            self._current_voice_properties.get(ACSS.GAIN),
+            ", language",
+            self._get_language_and_dialect(family)[0],
+            ", punctuation:",
+            punctuation_style,
+            "\nSD rate",
+            sd_rate,
+            ", pitch",
+            sd_pitch,
+            ", volume",
+            sd_volume,
+            ", language",
+            sd_language,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+    def _apply_acss(self, acss: dict[str, Any] | None) -> None:
+        super()._apply_acss(acss)
+        self._apply_voice_to_backend()
+
+    def _apply_voice_to_backend(self) -> None:
+        """Push current voice properties to the speech-dispatcher connection."""
+
+        if self._client is None:
+            return
+        current = self._current_voice_properties
+        self._set_family(current.get(ACSS.FAMILY))
+        self._set_rate(current.get(ACSS.RATE, 50))
+        self._set_pitch(current.get(ACSS.AVERAGE_PITCH, 5.0))
+        self._set_pitch_range(current.get(ACSS.PITCH_RANGE, 5.0))
+        self._set_volume(current.get(ACSS.GAIN, 10.0))
+
+    def _speak(self, text: str, acss: dict[str, Any] | None, **kwargs: Any) -> None:
+        if isinstance(text, ACSS):
+            text = ""
+
+        ssml = SSML.markup_text(text, SSMLCapabilities.MARK)
+
+        self._apply_acss(acss)
+        self._debug_sd_values(f"Speaking '{ssml}' ")
+        if self._client is not None:
+            self._send_command(self._client.speak, ssml, **kwargs)
+
+    def _say_all(
+        self,
+        iterator: Iterator[tuple[speechserver.SayAllContext, dict[str, Any]]],
+        orca_callback: Callable[[speechserver.SayAllContext, int], None],
+    ) -> bool:
+        """Process another sayAll chunk.
+
+        Called by the gidle thread.
+
+        """
+        try:
+            context, acss = next(iterator)
+        except StopIteration:
+            pass
+        else:
+
+            def callback(callback_type, index_mark=None):
+                # This callback is called in Speech Dispatcher listener thread.
+                # No subsequent Speech Dispatcher interaction is allowed here,
+                # so we pass the calls to the gidle thread.
+                t = self._callback_type_map[callback_type]
+                if t == speechserver.SayAllContext.PROGRESS:
+                    if index_mark:
+                        index = index_mark.split(":")
+                        if len(index) >= 2:
+                            start, end = index[0:2]
+                            context.current_offset = context.start_offset + int(start)
+                            context.current_end_offset = context.start_offset + int(end)
+                            tokens = [
+                                "SPEECH DISPATCHER: Got mark",
+                                context.current_offset,
+                                ":",
+                                context.current_end_offset,
+                                "/",
+                                context.start_offset,
+                                ":",
+                                context.end_offset,
+                            ]
+                            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                    else:
+                        context.current_offset = context.start_offset
+                        context.current_end_offset = None
+                elif t == speechserver.SayAllContext.COMPLETED:
+                    context.current_offset = context.end_offset
+                    context.current_end_offset = None
+                GLib.idle_add(orca_callback, context.copy(), t)
+                if t == speechserver.SayAllContext.COMPLETED:
+                    GLib.idle_add(self._say_all, iterator, orca_callback)
+
+            self._speak(
+                context.utterance,
+                acss,
+                callback=callback,
+                event_types=list(self._callback_type_map.keys()),
+            )
+        return False  # to indicate, that we don't want to be called again.
+
+    def _cancel(self) -> None:
+        if self._client is not None:
+            self._send_command(self._client.cancel)
+
+    def get_voice_families(self) -> list[speechserver.VoiceFamily]:
+        """Returns the list of voice families available in the current synthesizer."""
+
+        voices: tuple[tuple[str, str, str | None], ...] = ()
+        if self._client is not None:
+            try:
+                # This command is not available with older SD versions.
+                list_synthesis_voices = self._client.list_synthesis_voices
+            except AttributeError:
+                pass
+            else:
+                try:
+                    result = self._send_command(list_synthesis_voices)
+                    if result:
+                        voices = tuple(result)
+                except Exception as error:
+                    tokens = ["SPEECH DISPATCHER: list_synthesis_voices failed:", error]
+                    debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+
+        return self._build_voice_families(voices)
+
+    def speak(self, text: str | None = None, acss: dict[str, Any] | None = None) -> None:
+        if not text:
+            return
+
+        if len(text) == 1:
+            if (
+                text.isupper()
+                and text.isalpha()
+                and self._current_capitalization_style == CapitalizationStyle.ICON.value
+            ):
+                # See https://gitlab.gnome.org/GNOME/orca/-/issues/657
+                self._apply_acss(acss)
+                self._speak(text, acss)
+                return
+            tokens = ["SPEECH DISPATCHER: Speaking '", text, "' as char"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            self._apply_acss(acss)
+            if self._client is not None:
+                self._send_command(self._client.char, text)
+        else:
+            tokens = ["SPEECH DISPATCHER: Speaking '", text, "' as string"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            self._speak(text, acss)
+
+    def say_all(
+        self,
+        utterance_iterator: Iterator[tuple[speechserver.SayAllContext, dict[str, Any]]],
+        progress_callback: Callable[[speechserver.SayAllContext, int], None],
+    ) -> None:
+        """Iterates through the given utterance_iterator, speaking each utterance."""
+
+        GLib.idle_add(self._say_all, utterance_iterator, progress_callback)
+
+    def speak_character(
+        self,
+        character: str,
+        acss: dict[str, Any] | None = None,
+        cap_style: CapitalizationStyle | None = None,
+    ) -> None:
+        """Speaks character."""
+
+        self._apply_acss(acss)
+        if cap_style == CapitalizationStyle.NONE:
+            character = character.lower()
+
+        name = character
+        if not name or name == character:
+            if cap_style == CapitalizationStyle.ICON:
+                # char() does not reliably trigger the icon sound whereas
+                # speak() does. See https://gitlab.gnome.org/GNOME/orca/-/issues/657
+                self._speak(character, acss)
+                return
+            tokens = ["SPEECH DISPATCHER: Speaking '", character, "' as char"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            if self._client is not None:
+                if cap_style == CapitalizationStyle.SPELL:
+                    self._send_command(self._client.set_cap_let_recogn, "spell")
+                self._send_command(self._client.char, character)
+                if cap_style == CapitalizationStyle.SPELL:
+                    self._send_command(self._client.set_cap_let_recogn, "none")
+            return
+
+        self.speak(name, acss)
+
+    def speak_key_event(
+        self,
+        event: input_event.KeyboardEvent,
+        acss: dict[str, Any] | None = None,
+    ) -> None:
+        """Speaks event."""
+
+        event_string = event.get_key_name()
+        locking_state_string = event.get_locking_state_string()
+        event_string = f"{event_string} {locking_state_string}".strip()
+        # Speaking this key event as a character makes the user experience more consistent.
+        # Example: The user presses '.' and then presses BackSpace and expects the output to
+        # be the same.
+        if len(event_string) == 1:
+            tokens = ["SPEECH DISPATCHER: Speaking '", event_string, "' as char"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            self._apply_acss(acss)
+            if self._client is not None:
+                self._send_command(self._client.char, event_string)
+        else:
+            tokens = ["SPEECH DISPATCHER: Speaking '", event_string, "' as string"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            self.speak(event_string, acss=acss)
+
+    def clear_voice_families_cache(self) -> None:
+        """Clear the cache for voice family lookups."""
+
+        msg = "SPEECH DISPATCHER: Clearing voice families cache"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self._voice_families_cache.clear()
+
+    def get_voice_families_for_language(
+        self,
+        language: str,
+        dialect: str = "",
+        variant: str | None = None,
+        maximum: int | None = None,
+    ) -> list[tuple[str, str, str | None]]:
+        """Returns the families for language available in the current synthesizer."""
+
+        if not language:
+            language, dialect = self._get_language_and_dialect(None)
+        elif not dialect:
+            locale_language, locale_dialect = self._get_language_and_dialect(None)
+            if language == locale_language:
+                dialect = locale_dialect
+
+        cache_key = (language, dialect, variant, maximum)
+        if cache_key in self._voice_families_cache:
+            tokens: list[Any] = [
+                "SPEECH DISPATCHER: Returning cached result for language='",
+                language,
+                "' dialect='",
+                dialect,
+                "' variant='",
+                variant,
+                "'",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return self._voice_families_cache[cache_key]
+        start = time.time()
+        target_language, target_dialect = self._normalized_language_and_dialect(language, dialect)
+
+        result = []
+        if self._client is None:
+            return result
+
+        tokens = [
+            "SPEECH DISPATCHER: Searching for language='",
+            language,
+            "' dialect='",
+            dialect,
+            "' variant='",
+            variant,
+            "'.",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        language_with_dialect = f"{language}-{dialect}" if dialect else language
+        try:
+            voices = self._client.list_synthesis_voices(language_with_dialect, variant)
+            tokens = [
+                "SPEECH DISPATCHER: Unfiltered voice list has",
+                len(voices),
+                "entries.",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            if not voices:
+                voices = self._client.list_synthesis_voices(language, variant)
+                tokens = [
+                    "SPEECH DISPATCHER: Unfiltered voice list (try 2) has",
+                    len(voices),
+                    "entries.",
+                ]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        except (AttributeError, ValueError) as error:
+            tokens = [
+                "SPEECH DISPATCHER: specifying language and variant failed:",
+                error,
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            try:
+                voices = self._client.list_synthesis_voices()
+            except (AttributeError, ValueError, speechd.SSIPCommandError) as error2:
+                tokens = ["SPEECH DISPATCHER: Error listing synthesis voices:", error2]
+                debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+                return []
+        except speechd.SSIPCommandError as error:
+            tokens = ["SPEECH DISPATCHER: Error listing synthesis voices:", error]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            return []
+
+        candidates, fallbacks = self._filter_voices_for_language(
+            voices,
+            target_language,
+            target_dialect,
+            maximum=maximum,
+        )
+
+        tokens = [
+            "SPEECH DISPATCHER: Found",
+            len(candidates),
+            "match(es) for language='",
+            language,
+            "' dialect='",
+            dialect,
+            "' variant='",
+            variant,
+            "' in",
+            round(time.time() - start, 4),
+            "s.",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if not candidates and fallbacks:
+            tokens = [
+                "SPEECH DISPATCHER: No direct matches found, using",
+                len(fallbacks),
+                "fallback(s).",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            candidates = fallbacks
+
+        self._voice_families_cache[cache_key] = candidates
+        return candidates
+
+    def get_output_module(self) -> str:
+        if self._client is None:
+            return ""
+        result = self._send_command(self._client.get_output_module)
+        if result is not None:
+            return result
+        return ""
+
+    def is_responsive(self, timeout: float = 2.0) -> bool:
+        """Returns True if a probe round-trip to Speech Dispatcher returns within timeout."""
+
+        # The probe runs on its own connection, not self._client: speechd's client puts no lock
+        # around its send-command-then-read-reply exchange, so two threads sharing one connection
+        # can read each other's replies. self._client stays main-thread-only.
+        if self._client is None:
+            return False
+
+        # Called only on the main thread, and _probe_client is touched only by the probe thread, so
+        # the check-and-set needs no lock. If a previous probe is still stuck on a wedged daemon,
+        # report unresponsive rather than pile on another thread; the stuck probe clears the flag
+        # when it unblocks.
+        if self._probe_pending:
+            return False
+
+        self._probe_pending = True
+        result: queue.Queue[bool] = queue.Queue()
+
+        def probe() -> None:
+            # Reuse the connection: reconnecting each probe is slow enough with some synthesizers
+            # to blow the timeout even when the daemon is healthy.
+            try:
+                if self._probe_client is None:
+                    self._probe_client = speechd.SSIPClient("Orca-probe", component=self._id)
+                self._probe_client.get_output_module()
+                result.put(True)
+            except Exception:  # pylint: disable=broad-except
+                if self._probe_client is not None:
+                    with contextlib.suppress(Exception):
+                        self._probe_client.close()
+                    self._probe_client = None
+                result.put(False)
+            finally:
+                self._probe_pending = False
+
+        threading.Thread(target=probe, daemon=True).start()
+        try:
+            return result.get(timeout=timeout)
+        except queue.Empty:
+            tokens = [self._LOG_PREFIX, ": Speech server health check timed out"]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            return False
+
+    def set_output_module(self, module_id: str) -> None:
+        """Set the speech output module to the specified provider."""
+
+        # TODO - JD: This updates the output module, but not the the value of self._id.
+        # That might be desired (e.g. self._id impacts what is shown in Orca preferences),
+        # but it can be confusing.
+        self._output_module = module_id
+        if self._client is not None:
+            self._send_command(self._client.set_output_module, module_id)
+            self.clear_voice_families_cache()
+            # Update the default voice name to match the new module
+            self._default_voice_name = guilabels.SPEECH_DEFAULT_VOICE % module_id
+
+    def stop(self) -> None:
+        self._cancel()
+
+    def shutdown(self) -> None:
+        if self._probe_client is not None:
+            with contextlib.suppress(Exception):
+                self._probe_client.close()
+            self._probe_client = None
+        try:
+            # Don't call _cancel() here because it can cut off messages we want to complete, such
+            # as "screen reader off."
+            if self._client is not None:
+                self._client.close()
+                # Set client to None to allow immediate garbage collection.
+                self._client = None
+                # Force garbage collection to clean up Speech Dispatcher objects immediately
+                # This prevents hanging during Python's final garbage collection.
+                gc.collect()
+        except Exception as error:
+            tokens = ["SPEECH DISPATCHER: Error during shutdown of server", self._id, ":", error]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+        finally:
+            if self._id in SpeechServer._active_servers:
+                del SpeechServer._active_servers[self._id]
+
+    def reset(self) -> None:
+        try:
+            tokens: list[Any] = ["SPEECH DISPATCHER: Resetting server", self._id]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            if self._client is not None:
+                self._client.close()
+        except Exception as error:
+            tokens = [
+                "SPEECH DISPATCHER: Error during reset of server",
+                self._id,
+                ":",
+                error,
+            ]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+        finally:
+            self.clear_voice_families_cache()
+            self._init()
+            if self._client is not None:
+                systemd.get_manager().set_status("Speech", "reconnected")
+            else:
+                systemd.get_manager().set_status("Speech", "not connected")
+
+    def list_output_modules(self) -> tuple[str, ...]:
+        """Return names of available output modules as a tuple of strings."""
+
+        if self._client is None:
+            return ()
+        try:
+            return self._send_command(self._client.list_output_modules)
+        except AttributeError:
+            return ()
+        except speechd.SSIPCommandError:
+            return ()
+
+    def get_voice_family(self) -> VoiceFamily:
+        """Returns the current voice family as a VoiceFamily dictionary."""
+
+        voice_name = self._current_synthesis_voice or self._default_voice_name
+        language = ""
+        try:
+            language = self._send_command(self._client.get_language)
+        except (AttributeError, speechd.SSIPCommandError) as error:
+            tokens = ["SPEECH DISPATCHER: Error getting language:", error]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+
+        lang_parts = language.partition("-")
+        lang = lang_parts[0]
+        dialect = lang_parts[2]
+        return speechserver.VoiceFamily(
+            {
+                speechserver.VoiceFamily.NAME: voice_name,
+                speechserver.VoiceFamily.LANG: lang,
+                speechserver.VoiceFamily.DIALECT: dialect,
+                speechserver.VoiceFamily.VARIANT: None,
+            },
+        )
+
+    def set_voice_family(self, family: VoiceFamily) -> None:
+        """Sets the voice family to family VoiceFamily dictionary."""
+
+        if not family:
+            return
+
+        voice_name = family.get(speechserver.VoiceFamily.NAME, "")
+        language = family.get(speechserver.VoiceFamily.LANG, "")
+        dialect = family.get(speechserver.VoiceFamily.DIALECT, "")
+        if dialect:
+            language = f"{language}-{dialect}" if language else dialect
+
+        # Try to set synthesis voice (individual voice like Nathan, Federica)
+        if voice_name:
+            try:
+                self._send_command(self._client.set_synthesis_voice, voice_name)
+                self._current_synthesis_voice = voice_name
+            except AttributeError as error:
+                tokens = ["SPEECH DISPATCHER: Synthesis voice not supported:", error]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                self._current_synthesis_voice = None
+            except speechd.SSIPCommandError as error:
+                tokens = [
+                    "SPEECH DISPATCHER: Error setting synthesis voice",
+                    voice_name,
+                    ":",
+                    error,
+                ]
+                debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+
+        if language:
+            try:
+                self._send_command(self._client.set_language, language)
+            except speechd.SSIPCommandError as error:
+                tokens = ["SPEECH DISPATCHER: Error setting language", language, ":", error]
+                debug.print_tokens(debug.LEVEL_WARNING, tokens, True)

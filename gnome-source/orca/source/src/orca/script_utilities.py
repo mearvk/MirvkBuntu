@@ -1,0 +1,978 @@
+# Orca
+#
+# Copyright 2010 Joanmarie Diggs.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-lines
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
+
+"""Utilities for providing app/toolkit-specific information about objects and events."""
+
+from __future__ import annotations
+
+import gi
+
+gi.require_version("Atspi", "2.0")
+from typing import TYPE_CHECKING
+
+from gi.repository import Atspi
+
+from . import (
+    ax_event_synthesizer,
+    debug,
+    focus_manager,
+    input_event_manager,
+    messages,
+    object_properties,
+    presentation_manager,
+    speech_presenter,
+    spellcheck_presenter,
+    table_navigator,
+)
+from .ax_object import AXObject
+from .ax_table import AXTable
+from .ax_text import AXText
+from .ax_utilities import AXUtilities
+from .ax_utilities_text import TextUnit
+
+if TYPE_CHECKING:
+    from .ax_utilities_text import CaretSetReason
+
+
+class Utilities:
+    """Utilities for providing app/toolkit-specific information about objects and events."""
+
+    ZERO_WIDTH_NO_BREAK_SPACE = "\ufeff"
+
+    def __init__(self, script):
+        self._script = script
+
+        # TODO - JD: We actually need to keep track of a root object and its descendant
+        # caret context, just like we do in the web script. And it all should move into
+        # the focus manager. In the meantime, just get things working for the active app.
+        self._caret_context = (None, -1)
+
+    def node_level(self, obj: Atspi.Accessible) -> int:
+        """Returns the node level of the specified tree item."""
+
+        if not AXUtilities.is_tree_or_tree_table_descendant(obj):
+            return -1
+
+        attrs = AXObject.get_attributes_dict(obj)
+        if "level" in attrs:
+            # ARIA levels are 1-based.
+            return int(attrs.get("level", 0)) - 1
+
+        nodes = []
+        node = obj
+        while node and (targets := AXUtilities.get_is_node_child_of(node)):
+            node = targets[0]
+            nodes.append(node)
+
+        return len(nodes) - 1
+
+    def child_nodes(self, obj: Atspi.Accessible) -> list[Atspi.Accessible]:
+        """Gets all of the objects that have RELATION_NODE_CHILD_OF pointing to this cell."""
+
+        if not AXUtilities.is_expanded(obj):
+            return []
+
+        table = AXUtilities.get_table(obj)
+        if table is None:
+            return []
+
+        nodes = AXUtilities.get_is_node_parent_of(obj)
+        tokens = ["SCRIPT UTILITIES:", len(nodes), "child nodes for", obj, "via node-parent-of"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if nodes:
+            return nodes
+
+        # Candidates will be in the rows beneath the current row. Only check in the current column
+        # and stop checking as soon as the node level of a candidate is equal or less than our
+        # current level.
+        row, col = AXTable.get_cell_coordinates(obj, prefer_attribute=False)
+        level = self.node_level(obj)
+
+        for i in range(row + 1, AXTable.get_row_count(table, prefer_attribute=False)):
+            cell = AXTable.get_cell_at(table, i, col)
+            targets = AXUtilities.get_is_node_child_of(cell)
+            if not targets:
+                continue
+
+            node_of = targets[0]
+            if obj == node_of:
+                nodes.append(cell)
+            elif self.node_level(node_of) <= level:
+                break
+
+        tokens = ["SCRIPT UTILITIES:", len(nodes), "child nodes for", obj, "via node-child-of"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return nodes
+
+    def frame_and_dialog(
+        self,
+        obj: Atspi.Accessible | None = None,
+    ) -> list[Atspi.Accessible | None]:
+        """Returns the frame and (possibly) the dialog containing obj."""
+
+        results = [None, None]
+
+        obj = obj or focus_manager.get_manager().get_locus_of_focus()
+        if not obj:
+            msg = "SCRIPT UTILITIES: frame_and_dialog() called without valid object"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return results
+
+        top_level = self.top_level_object(obj)
+        if top_level is None:
+            tokens = ["SCRIPT UTILITIES: could not find top-level object for", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return results
+
+        dialog_roles = [Atspi.Role.DIALOG, Atspi.Role.FILE_CHOOSER, Atspi.Role.ALERT]
+        role = AXObject.get_role(top_level)
+        if role in dialog_roles:
+            results[1] = top_level
+        else:
+            if role in [Atspi.Role.FRAME, Atspi.Role.WINDOW]:
+                results[0] = top_level
+
+            def is_dialog(x):
+                return AXObject.get_role(x) in dialog_roles
+
+            results[1] = AXUtilities.find_ancestor_inclusive(obj, is_dialog)
+
+        tokens = ["SCRIPT UTILITIES:", obj, "is in frame", results[0], "and dialog", results[1]]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return results
+
+    def grab_focus_when_setting_caret(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if we should grab focus when setting the caret."""
+
+        return AXUtilities.is_focusable(obj)
+
+    def grab_focus_before_routing(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if we should grab focus before routing the cursor."""
+
+        return (
+            AXUtilities.is_combo_box(obj)
+            and obj != focus_manager.get_manager().get_locus_of_focus()
+        )
+
+    def in_find_container(self, obj: Atspi.Accessible | None = None) -> bool:
+        """Returns True if obj is in a find-in-page container."""
+
+        if obj is None:
+            obj = focus_manager.get_manager().get_locus_of_focus()
+
+        if not AXUtilities.is_entry(obj):
+            return False
+
+        return AXUtilities.is_tool_bar_descendant(obj)
+
+    def get_find_results_count(self, _root: Atspi.Accessible | None = None) -> str:
+        """Returns a string description of the number of find-in-page results in root."""
+
+        return ""
+
+    def is_document(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is a document."""
+
+        # TODO - JD: See if the web script logic can be included here and then it all moved
+        # into AXUtilities.
+        return AXUtilities.is_document(obj)
+
+    def in_document_content(self, obj: Atspi.Accessible | None = None) -> bool:
+        """Returns True if obj (or the locus of focus) is in document content."""
+
+        obj = obj or focus_manager.get_manager().get_locus_of_focus()
+        return self.get_document_for_object(obj) is not None
+
+    def active_document(self) -> Atspi.Accessible | None:
+        """Returns the active document."""
+
+        window = focus_manager.get_manager().get_active_window()
+        documents = [
+            obj
+            for obj in AXUtilities.get_embeds(window)
+            if self.is_document(obj) and AXUtilities.is_showing(obj)
+        ]
+        if len(documents) == 1:
+            tokens = ["SCRIPT UTILITIES: Active document (via embeds):", documents[0]]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return documents[0]
+
+        document = self.get_top_level_document_for_object(
+            focus_manager.get_manager().get_locus_of_focus(),
+        )
+        tokens = ["SCRIPT UTILITIES: Active document (via locus of focus):", document]
+        return document
+
+    def is_top_level_document(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if obj is a top-level document."""
+
+        return self.is_document(obj) and not AXUtilities.find_ancestor(obj, self.is_document)
+
+    def get_top_level_document_for_object(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the top-level document containing obj."""
+
+        return AXUtilities.find_outermost_ancestor_inclusive(obj, self.is_document)
+
+    def get_document_for_object(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the nearest document ancestor of obj, or obj if it is a document."""
+
+        # TODO - JD: Replace callers of this function with the logic below.
+        return AXUtilities.find_ancestor_inclusive(obj, self.is_document)
+
+    def should_read_full_row(
+        self,
+        obj: Atspi.Accessible,
+        previous_object: Atspi.Accessible | None = None,
+    ) -> bool:
+        """Returns True if we should present the full row in speech."""
+
+        if (
+            focus_manager.get_manager().in_say_all()
+            or table_navigator.get_navigator().last_input_event_was_navigation_command()
+            or input_event_manager.get_manager().last_event_was_tab_navigation()
+            or not AXUtilities.cell_row_changed(obj, previous_object)
+        ):
+            return False
+
+        table = AXUtilities.get_table(obj)
+        if table is None:
+            return False
+
+        manager = speech_presenter.get_presenter()
+        if not self.get_document_for_object(table):
+            return manager.get_speak_row_in_gui_table()
+        if AXUtilities.is_spreadsheet_table(table):
+            return manager.get_speak_row_in_spreadsheet()
+        return manager.get_speak_row_in_document_table()
+
+    def get_notification_content(self, obj: Atspi.Accessible) -> str:
+        """Returns a string containing the content of the notification obj."""
+
+        if not AXUtilities.is_notification(obj):
+            return ""
+
+        tokens = []
+        name = AXObject.get_name(obj)
+        if name:
+            tokens.append(name)
+        text = AXUtilities.expand_eocs(obj)
+        if text and text not in tokens:
+            tokens.append(text)
+        else:
+            labels = " ".join(
+                AXText.get_all_text(x) or AXObject.get_name(x)
+                for x in self.unrelated_labels(obj, False, 1)
+            )
+            if labels and labels not in tokens:
+                tokens.append(labels)
+
+        description = AXObject.get_description(obj)
+        if description and description not in tokens:
+            tokens.append(description)
+
+        return " ".join(tokens)
+
+    def is_link(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is a link."""
+
+        return AXUtilities.is_link(obj)
+
+    def _is_top_level_object(self, obj: Atspi.Accessible) -> bool:
+        return (
+            AXObject.get_role(obj) in AXUtilities.get_top_level_roles()
+            and AXObject.get_role(AXObject.get_parent(obj)) == Atspi.Role.APPLICATION
+        )
+
+    def top_level_object(
+        self,
+        obj: Atspi.Accessible,
+        use_fallback_search: bool = False,
+    ) -> Atspi.Accessible | None:
+        """Returns the top-level object (frame, dialog ...) containing obj."""
+
+        rv = AXUtilities.find_ancestor_inclusive(obj, self._is_top_level_object)
+        tokens = ["SCRIPT UTILITIES:", rv, "is top-level object for:", obj]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if rv is None and use_fallback_search:
+            msg = "SCRIPT UTILITIES: Attempting to find top-level object via fallback search"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            rv = AXUtilities.find_window_with_descendant(obj)
+
+        return rv
+
+    def top_level_object_is_active_and_current(self, obj: Atspi.Accessible | None = None) -> bool:
+        """Returns true if the top-level object for obj/locus-of-focus is active and current."""
+
+        # TODO - JD: Candidate for the focus manager.
+        obj = obj or focus_manager.get_manager().get_locus_of_focus()
+        top_level = self.top_level_object(obj)
+        if not top_level:
+            return False
+
+        AXObject.clear_cache(top_level, False, "Ensuring we have the correct state.")
+        if not AXUtilities.is_active(top_level) or AXUtilities.is_defunct(top_level):
+            return False
+
+        return top_level == focus_manager.get_manager().get_active_window()
+
+    def unrelated_labels(
+        self,
+        root: Atspi.Accessible | None = None,
+        only_showing: bool = True,
+        minimum_words: int = 3,
+    ) -> list[Atspi.Accessible]:
+        """Returns a list of labels in root that lack a relationship."""
+
+        if spellcheck_presenter.get_presenter().is_active():
+            return []
+
+        label_roles = [Atspi.Role.LABEL, Atspi.Role.STATIC]
+        skip_roles = [
+            Atspi.Role.BUTTON,
+            Atspi.Role.COMBO_BOX,
+            Atspi.Role.DOCUMENT_EMAIL,
+            Atspi.Role.DOCUMENT_FRAME,
+            Atspi.Role.DOCUMENT_PRESENTATION,
+            Atspi.Role.DOCUMENT_SPREADSHEET,
+            Atspi.Role.DOCUMENT_TEXT,
+            Atspi.Role.DOCUMENT_WEB,
+            Atspi.Role.FRAME,
+            Atspi.Role.LIST_BOX,
+            Atspi.Role.LIST,
+            Atspi.Role.LIST_ITEM,
+            Atspi.Role.MENU,
+            Atspi.Role.MENU_BAR,
+            Atspi.Role.SCROLL_PANE,
+            Atspi.Role.SPLIT_PANE,
+            Atspi.Role.TABLE,
+            Atspi.Role.TOGGLE_BUTTON,
+            Atspi.Role.TREE,
+            Atspi.Role.TREE_TABLE,
+            Atspi.Role.WINDOW,
+        ]
+
+        if AXObject.get_role(root) in skip_roles:
+            return []
+
+        root_is_notification = AXUtilities.is_notification(root)
+
+        def _include(x):
+            if not (x and AXObject.get_role(x) in label_roles):
+                return False
+            if not AXUtilities.object_is_unrelated(x):
+                return False
+            if not root_is_notification and AXUtilities.is_focusable(x):
+                return False
+            return not (only_showing and not AXUtilities.is_showing(x))
+
+        def _exclude(x):
+            if not x or AXObject.get_role(x) in skip_roles:
+                return True
+            return only_showing and not AXUtilities.is_showing(x)
+
+        labels = AXUtilities.find_all_descendants(root, _include, _exclude)
+
+        root_name = AXObject.get_name(root)
+
+        # Eliminate things suspected to be labels for widgets
+        labels_filtered = []
+        for label in labels:
+            name = AXObject.get_name(label) or AXText.get_all_text(label)
+            if name and name in [root_name, AXObject.get_name(AXObject.get_parent(label))]:
+                continue
+            if len(name.split()) < minimum_words:
+                continue
+            if root_name.find(name) >= 0:
+                continue
+            labels_filtered.append(label)
+
+        return AXUtilities.sort_objects_by_position(labels_filtered)
+
+    def find_previous_object(
+        self,
+        obj: Atspi.Accessible,
+        restrict_to: Atspi.Accessible | None = None,
+    ) -> Atspi.Accessible | None:
+        """Finds the object before this one."""
+
+        if restrict_to is None:
+            restrict_to = self.get_top_level_document_for_object(obj)
+        return AXUtilities.find_previous_object(obj, restrict_to)
+
+    def find_next_object(
+        self,
+        obj: Atspi.Accessible,
+        restrict_to: Atspi.Accessible | None = None,
+    ) -> Atspi.Accessible | None:
+        """Finds the object after this one."""
+
+        if restrict_to is None:
+            restrict_to = self.get_top_level_document_for_object(obj)
+        return AXUtilities.find_next_object(obj, restrict_to)
+
+    def deleted_text(self, event: Atspi.Event) -> str:
+        """Tries to determine the real deleted text for the given event. Because app bugs."""
+
+        return event.any_data
+
+    def inserted_text(self, event: Atspi.Event) -> str:
+        """Tries to determine the real inserted text for the given event. Because app bugs."""
+
+        if event.any_data:
+            return event.any_data
+
+        msg = "SCRIPT UTILITIES: Broken text insertion event"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        if AXUtilities.is_password_text(event.source):
+            string = AXText.get_all_text(event.source)
+            if string:
+                tokens = ["HACK: Returning last char in '", string, "'"]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                return string[-1]
+
+        msg = "FAIL: Unable to correct broken text insertion event"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return ""
+
+    def clear_caret_context(
+        self,
+        document: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+    ) -> None:
+        """Clears the caret context."""
+
+        # TODO - JD: This logic ultimately belongs in the focus manager.
+        self._caret_context = (None, -1)
+
+    def set_caret_context(
+        self,
+        obj: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+        offset: int = -1,  # pylint: disable=unused-argument
+        document: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+    ) -> None:
+        """Sets the caret context in document to (obj, offset)."""
+
+        # TODO - JD: This logic ultimately belongs in the focus manager.
+        self._caret_context = (obj, offset)
+
+    def get_caret_context(
+        self,
+        document: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+        search_if_needed: bool = True,  # pylint: disable=unused-argument
+    ) -> tuple[Atspi.Accessible, int]:
+        """Returns an (obj, offset) tuple representing the current location."""
+
+        obj, offset = self._caret_context
+        if obj is not None:
+            tokens = ["SCRIPT UTILITIES: Returning cached caret context", obj, offset]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return obj, offset
+
+        obj = focus_manager.get_manager().get_locus_of_focus()
+        offset = AXText.get_caret_offset(obj)
+        tokens = ["SCRIPT UTILITIES: Returning focus + caret offset", obj, offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return obj, offset
+
+    def set_caret_position(
+        self,
+        obj: Atspi.Accessible,
+        offset: int,
+        document: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+        *,
+        reason: CaretSetReason,
+    ) -> None:
+        """Sets the locus of focus to obj and sets the caret position to offset."""
+
+        manager = focus_manager.get_manager()
+        manager.set_locus_of_focus(None, obj, False)
+        if self.grab_focus_when_setting_caret(obj):
+            AXObject.grab_focus(obj)
+
+        if not reason.is_text_selection():
+            # We cannot count on implementations clearing the selection for us when we set the
+            # caret offset. Also, we should clear the selected text first.
+            # https://bugs.documentfoundation.org/show_bug.cgi?id=167930
+            AXUtilities.clear_all_selected_text(obj)
+        self.set_caret_offset(obj, offset, reason=reason)
+
+        # TODO - JD: The web script's set_caret_position() also sets the caret context.
+        # Ensuring global structural navigation, caret navigation, browse mode, etc.
+        # work means we should do the same here. Ultimately, however, we need to clearly
+        # define and unite the whole offset + position + context + locus of focus +
+        # last cursor position.
+        manager.set_last_cursor_position(obj, offset)
+        self.set_caret_context(obj, offset)
+
+        scroll_to = max(0, min(offset, AXText.get_character_count(obj) - 1))
+        ax_event_synthesizer.get_synthesizer().scroll_into_view(obj, scroll_to)
+
+    def set_caret_offset(
+        self, obj: Atspi.Accessible, offset: int, *, reason: CaretSetReason
+    ) -> None:
+        """Sets the caret offset via AtspiText."""
+
+        # TODO - JD. Remove this function if the web override can be adjusted
+        AXUtilities.set_caret_offset_with_reason(obj, offset, reason)
+
+    def split_substring_by_language(
+        self,
+        obj: Atspi.Accessible,
+        start: int,
+        end: int,
+    ) -> list[tuple[int, int, str, str, str]]:
+        """Returns a list of (start, end, string, language, dialect) tuples."""
+
+        rv: list[tuple[int, int, str, str, str]] = []
+        all_substrings = self.get_language_and_dialect_from_text_attributes(obj, start, end)
+        for start_offset, end_offset, language, dialect in all_substrings:
+            if start >= end_offset:
+                continue
+            if end <= start_offset:
+                break
+            clamped_start = max(start, start_offset)
+            clamped_end = min(end, end_offset)
+            string = AXText.get_substring(obj, clamped_start, clamped_end)
+            rv.append((clamped_start, clamped_end, string, language, dialect))
+
+        return rv
+
+    def get_language_and_dialect_for_substring(
+        self,
+        obj: Atspi.Accessible,
+        start: int,
+        end: int,
+    ) -> tuple[str, str]:
+        """Returns a (language, dialect) tuple. If multiple languages apply to
+        the substring, language and dialect will be empty strings. Callers must
+        do any preprocessing to avoid that condition."""
+
+        all_substrings = self.get_language_and_dialect_from_text_attributes(obj, start, end)
+        for start_offset, end_offset, language, dialect in all_substrings:
+            if start_offset <= start and end_offset >= end:
+                return language, dialect
+
+        return "", ""
+
+    def get_language_and_dialect_from_text_attributes(
+        self,
+        obj: Atspi.Accessible,
+        start_offset: int = 0,
+        end_offset: int = -1,
+    ) -> list[tuple[int, int, str, str]]:
+        """Returns a list of (start, end, language, dialect) tuples for obj."""
+
+        rv: list[tuple[int, int, str, str]] = []
+        attribute_set = AXUtilities.get_all_text_attributes(obj, start_offset, end_offset)
+        last_language = last_dialect = ""
+        for start, end, attrs in attribute_set:
+            language = attrs.get("language", "")
+            dialect = ""
+            if "-" in language:
+                language, dialect = language.split("-", 1)
+            if rv and last_language == language and last_dialect == dialect:
+                rv[-1] = rv[-1][0], end, language, dialect
+            else:
+                rv.append((start, end, language, dialect))
+            last_language, last_dialect = language, dialect
+
+        return rv
+
+    def get_word_contents_at_offset(
+        self,
+        obj: Atspi.Accessible,
+        offset: int = 0,
+        use_cache: bool = True,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Returns a list of (obj, start, end, string) tuples for the word at offset."""
+
+        text, start, end = AXText.get_word_at_offset(obj, offset)
+        return [(obj, start, end, text)]
+
+    def get_previous_line_contents(
+        self,
+        obj: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+        offset: int = -1,  # pylint: disable=unused-argument
+        layout_mode: bool | None = None,  # pylint: disable=unused-argument
+        use_cache: bool = True,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Returns a list of (obj, start, end, string) tuples for the previous line."""
+
+        if obj is None:
+            obj, offset = self.get_caret_context()
+
+        if offset == -1:
+            offset = AXText.get_caret_offset(obj)
+
+        text, start, end = AXUtilities.get_previous_line(obj, offset)
+        if text:
+            return [(obj, start, end, text)]
+
+        _this_line, this_start, _this_end = AXText.get_line_at_offset(obj, offset)
+        if not this_start:
+            prev_obj, prev_offset = self.previous_context(obj, 0)
+            return self.get_line_contents_at_offset(prev_obj, prev_offset)
+
+        prev_obj, prev_offset = self.previous_context(obj, this_start)
+        if prev_obj is not None:
+            return self.get_line_contents_at_offset(prev_obj, prev_offset)
+
+        return [(obj, 0, 0, "")]
+
+    def get_line_contents_at_offset(
+        self,
+        obj: Atspi.Accessible,
+        offset: int,
+        layout_mode: bool | None = None,  # pylint: disable=unused-argument
+        use_cache: bool = True,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Returns a list of (obj, start, end, string) tuples for the line at offset."""
+
+        text, start, end = AXText.get_line_at_offset(obj, offset)
+        return [(obj, start, end, text)]
+
+    def get_next_line_contents(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+        layout_mode: bool | None = None,  # pylint: disable=unused-argument
+        use_cache: bool = True,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Returns a list of (obj, start, end, string) tuples for the next line."""
+
+        if obj is None:
+            obj, offset = self.get_caret_context()
+
+        if offset == -1:
+            offset = AXText.get_caret_offset(obj)
+
+        text, start, end = AXUtilities.get_next_line(obj, offset)
+        if text:
+            return [(obj, start, end, text)]
+
+        _this_line, _this_start, this_end = AXText.get_line_at_offset(obj, offset)
+        if this_end == AXText.get_character_count(obj):
+            if offset < this_end:
+                last_char = AXText.get_character_at_offset(obj, this_end - 1)[0]
+                if not last_char or last_char in "\r\n":
+                    return self.get_line_contents_at_offset(obj, this_end)
+
+            next_obj, next_offset = self.next_context(obj, this_end)
+            return self.get_line_contents_at_offset(next_obj, next_offset)
+
+        next_obj, next_offset = self.next_context(obj, max(this_end, offset))
+        if next_obj is not None:
+            return self.get_line_contents_at_offset(next_obj, next_offset)
+
+        return [(obj, 0, 0, "")]
+
+    def get_object_contents_at_offset(
+        self,
+        obj: Atspi.Accessible,
+        offset: int = 0,  # pylint: disable=unused-argument
+        use_cache: bool = True,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Returns a list of (obj, start, end, string) tuples for the object at offset."""
+
+        text = AXText.get_all_text(obj)
+        return [(obj, 0, len(text), text)]
+
+    def get_sentence_contents_at_offset(
+        self,
+        obj: Atspi.Accessible,
+        offset: int,
+        use_cache: bool = True,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Returns the sentence contents for the specified offset."""
+
+        text, start, end = AXText.get_sentence_at_offset(obj, offset)
+        return [(obj, start, end, text)]
+
+    def previous_context(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+        skip_space: bool = False,
+        restrict_to: Atspi.Accessible | None = None,
+    ) -> tuple[Atspi.Accessible | None, int]:
+        """Returns the previous viable/valid caret context given obj and offset."""
+
+        if obj is None:
+            obj, offset = self.get_caret_context()
+
+        prev_offset = offset - 1
+        if skip_space:
+            while prev_offset >= 0:
+                char = AXText.get_character_at_offset(obj, prev_offset)[0]
+                if char and not char.isspace():
+                    break
+                prev_offset -= 1
+
+        if prev_offset >= 0:
+            return obj, prev_offset
+
+        if prev_obj := self.find_previous_object(obj, restrict_to):
+            if prev_obj != obj and not AXText.get_character_count(prev_obj) and not skip_space:
+                return prev_obj, 0
+            length = AXText.get_character_count(prev_obj)
+            return self.previous_context(prev_obj, length, skip_space, restrict_to)
+
+        return None, -1
+
+    def next_context(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+        skip_space: bool = False,
+        restrict_to: Atspi.Accessible | None = None,
+    ) -> tuple[Atspi.Accessible | None, int]:
+        """Returns the next viable/valid caret context given obj and offset."""
+
+        if obj is None:
+            obj, offset = self.get_caret_context()
+
+        next_offset = offset + 1
+        if skip_space:
+            character_count = AXText.get_character_count(obj)
+            while next_offset <= character_count:
+                char = AXText.get_character_at_offset(obj, next_offset)[0]
+                if char and not char.isspace():
+                    break
+                next_offset += 1
+
+        if next_offset <= AXText.get_character_count(obj):
+            return obj, next_offset
+
+        if next_obj := self.find_next_object(obj, restrict_to):
+            if next_obj != obj and not AXText.get_character_count(next_obj) and not skip_space:
+                return next_obj, 0
+            return self.next_context(next_obj, -1, skip_space, restrict_to)
+
+        return None, -1
+
+    def first_context(self, obj: Atspi.Accessible, offset: int) -> tuple[Atspi.Accessible, int]:
+        """Returns the first viable/valid caret context given obj and offset."""
+
+        if AXObject.supports_text(obj):
+            return obj, offset
+
+        descendant = AXUtilities.get_descendant_supporting_text(obj)
+        if descendant is not None:
+            return descendant, 0
+
+        return obj, offset
+
+    def filter_contents_for_presentation(
+        self,
+        contents: list[tuple[Atspi.Accessible, int, int, str]],
+        infer_labels: bool = False,  # pylint: disable=unused-argument
+    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
+        """Filters contents for presentation, removing objects that should not be included."""
+
+        return contents
+
+    def last_context(self, root: Atspi.Accessible) -> tuple[Atspi.Accessible, int]:
+        """Returns the last viable/valid caret context in root."""
+
+        offset = max(0, AXText.get_character_count(root) - 1)
+        return root, offset
+
+    def speak_selected_cell_range(self, _obj: Atspi.Accessible) -> bool:
+        """Speaks the selected cell range in obj."""
+
+        # TODO - JD: This doesn't belong here.
+        return False
+
+    def is_clickable_element(
+        self,
+        obj: Atspi.Accessible,  # pylint: disable=unused-argument
+    ) -> bool:
+        """Returns true if obj is a clickable element (in the web sense of that word)."""
+
+        return False
+
+    def has_long_desc(
+        self,
+        obj: Atspi.Accessible,  # pylint: disable=unused-argument
+    ) -> bool:
+        """Returns true if obj has a longdesc (deprecated web attribute)."""
+
+        return False
+
+    def has_meaningful_toggle_action(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if obj has a toggle action that is meaningful. Because app bugs."""
+
+        return AXUtilities.has_action(obj, "toggle") or AXUtilities.has_action(
+            obj,
+            object_properties.ACTION_TOGGLE,
+        )
+
+    @staticmethod
+    def _strip_newline_from_repeated_word(
+        word: str,
+        prev_word: str,
+        start: int,
+        end: int,
+    ) -> tuple[int, int]:
+        """Strips leading/trailing newline from a word that matches the previous word."""
+
+        if "\n" not in word or word != prev_word:
+            return start, end
+        if word.startswith("\n"):
+            return start + 1, end
+        if word.endswith("\n"):
+            return start, end - 1
+        return start, end
+
+    def get_word_at_offset_adjusted_for_navigation(
+        self,
+        obj: Atspi.Accessible,
+        offset: int | None = None,
+    ) -> tuple[str, int, int]:
+        """Returns the word at offset, adjusted for native navigation commands."""
+
+        if offset is None:
+            offset = AXText.get_caret_offset(obj)
+
+        word, start, end = AXText.get_word_at_offset(obj, offset)
+        prev_obj, prev_offset = focus_manager.get_manager().get_penultimate_cursor_position()
+        if prev_obj != obj:
+            return word, start, end
+
+        manager = input_event_manager.get_manager()
+        was_previous_word_nav = manager.last_event_was_previous_word_navigation()
+        was_next_word_nav = manager.last_event_was_next_word_navigation()
+
+        # If we're in an ongoing series of native navigation-by-word commands, just present the
+        # newly-traversed string.
+        prev_word, prev_start, prev_end = AXText.get_word_at_offset(prev_obj, prev_offset)
+        if AXUtilities.get_last_text_unit_spoken() == TextUnit.WORD:
+            if was_previous_word_nav:
+                start = offset
+                end = prev_offset
+            elif was_next_word_nav:
+                start = prev_offset
+                end = offset
+
+            word = AXText.get_substring(obj, start, end)
+            debug_string = word.replace("\n", "\\n")
+            tokens = [
+                "SCRIPT UTILITIES: Adjusted word at offset",
+                offset,
+                "for ongoing word nav is '",
+                debug_string,
+                "' (",
+                start,
+                "-",
+                end,
+                ")",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return word, start, end
+
+        # Otherwise, attempt some smarts so that the user winds up with the same presentation
+        # they would get were this an ongoing series of native navigation-by-word commands.
+        if was_previous_word_nav:
+            # If we moved left via native nav, this should be the start of a native-navigation
+            # word boundary, regardless of what ATK/AT-SPI2 tells us.
+            start = offset
+
+            # The ATK/AT-SPI2 word typically ends in a space; if the ending is neither a space,
+            # nor an alphanumeric character, then suspect that character is a navigation boundary
+            # where we would have landed before via the native previous word command.
+            if not (word[-1].isspace() or word[-1].isalnum()):
+                end -= 1
+
+        elif was_next_word_nav:
+            # If we moved right via native nav, this should be the end of a native-navigation
+            # word boundary, regardless of what ATK/AT-SPI2 tells us.
+            end = offset
+
+            # This suggests we just moved to the end of the previous word.
+            if word != prev_word and prev_start < offset <= prev_end:
+                start = prev_start
+
+            # If the character to the left of our present position is neither a space, nor
+            # an alphanumeric character, then suspect that character is a navigation boundary
+            # where we would have landed before via the native next word command.
+            if offset > 0:
+                last_char = AXText.get_substring(obj, offset - 1, offset)
+                if not (last_char.isspace() or last_char.isalnum()):
+                    start = offset - 1
+
+        word = AXText.get_substring(obj, start, end)
+        start, end = self._strip_newline_from_repeated_word(word, prev_word, start, end)
+        word = AXText.get_substring(obj, start, end)
+        debug_string = word.replace("\n", "\\n")
+        tokens = [
+            "SCRIPT UTILITIES: Adjusted word at offset",
+            offset,
+            "for new word nav is '",
+            debug_string,
+            "' (",
+            start,
+            "-",
+            end,
+            ")",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return word, start, end
+
+    def handle_container_selection_change(self, obj: Atspi.Accessible) -> bool:
+        """Handles a change in a container that supports selection."""
+
+        all_already_selected = AXUtilities.get_all_items_selected_state(obj)
+        all_currently_selected = AXUtilities.all_items_selected(obj)
+        AXUtilities.set_all_items_selected_state(obj, all_currently_selected)
+        if all_already_selected and all_currently_selected:
+            return True
+        if input_event_manager.get_manager().last_event_was_select_all() and all_currently_selected:
+            presentation_manager.get_manager().present_message(messages.CONTAINER_SELECTED_ALL)
+            focus_manager.get_manager().set_locus_of_focus(None, obj, False)
+            return True
+
+        return False
+
+    # pylint: disable=unused-argument
+    def is_text_block_element(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is a text block element like a paragraph or heading."""
+
+        if not AXUtilities.is_text_block(obj, exclude_editable=True, exclude_focusable=True):
+            return False
+
+        return not self.has_name_and_action_and_no_useful_children(obj)
+
+    def has_name_and_action_and_no_useful_children(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj has a name, supports action, and has no useful children."""
+
+        return False
+
+    def is_content_editable_with_embedded_objects(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is content editable with embedded objects."""
+
+        return False
+
+    # pylint: enable=unused-argument

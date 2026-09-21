@@ -1,0 +1,31 @@
+<svg
+        xmlns='http://www.w3.org/2000/svg'
+        xmlns:svg='http://www.w3.org/2000/svg'
+        xmlns:gpa='https://www.gtk.org/grappa'
+        gpa:version='1'
+        gpa:state-names='zero empty'
+        gpa:state='0'
+        width='16'
+        height='16'>
+  <path
+          id='path0'
+          stroke-width='2'
+          d='M 0 0 L 100 100'
+          gpa:stroke-minwidth='1'
+          gpa:stroke-maxwidth='3'
+          gpa:stroke='foreground'
+          gpa:fill='accent'>
+  </path>
+  <rect
+          x='0'
+          y='5'
+          width='10'
+          height='10'
+          gpa:states='zero 2'>
+  </rect>
+  <circle
+          gpa:stroke-minwidth='4'
+          gpa:stroke='warning'
+          gpa:fill='rgb(255,170,187)'>
+  </circle>
+</svg>

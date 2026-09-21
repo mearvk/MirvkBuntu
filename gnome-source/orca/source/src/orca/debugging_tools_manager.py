@@ -1,0 +1,200 @@
+# Orca
+#
+# Copyright 2024 Igalia, S.L.
+# Copyright 2024 GNOME Foundation Inc.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+"""Provides debugging tools."""
+
+from __future__ import annotations
+
+import faulthandler
+import os
+import time
+from typing import TYPE_CHECKING, Any
+
+import gi
+
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+
+from . import (  # pylint: disable=no-name-in-module
+    debug,
+    debugging_tools_manager_command_definitions,
+    focus_manager,
+    guilabels,
+    input_event,
+    messages,
+    orca_platform,
+    presentation_manager,
+)
+from .ax_object import AXObject
+from .ax_utilities import AXUtilities
+from .extension import Extension
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from .command import Command
+    from .scripts import default
+
+
+class DebuggingToolsManager(Extension):
+    """Provides debugging tools."""
+
+    GROUP_LABEL = guilabels.KB_GROUP_DEBUGGING_TOOLS
+
+    def __init__(self) -> None:
+        if debug.debugFile and os.path.exists(debug.debugFile.name):
+            faulthandler.enable(file=debug.debugFile, all_threads=True)
+        else:
+            faulthandler.enable(all_threads=False)
+        super().__init__()
+
+    def _get_commands(self) -> list[Command]:
+        return debugging_tools_manager_command_definitions.get_commands(self)
+
+    def _cycle_debug_level(
+        self,
+        _script: default.Script,
+        _event: input_event.InputEvent | None = None,
+    ) -> bool:
+        """Cycles through the existing debug levels."""
+
+        levels = {
+            debug.LEVEL_ALL: "all",
+            debug.LEVEL_INFO: "info",
+            debug.LEVEL_WARNING: "warning",
+            debug.LEVEL_SEVERE: "severe",
+            debug.LEVEL_OFF: "off",
+        }
+
+        keys = list(levels.keys())
+        next_level = keys.index(debug.debugLevel) + 1
+        if next_level == len(keys):
+            next_level = 0
+
+        level = keys[next_level]
+        brief = levels.get(level)
+        debug.debugLevel = level
+        presentation_manager.get_manager().present_message(f"Debug level {brief}.", brief)
+        return True
+
+    def _clear_atspi_app_cache(
+        self,
+        _script: default.Script,
+        _event: input_event.InputEvent | None = None,
+    ) -> bool:
+        """Clears the AT-SPI cache for the current application."""
+
+        _mode, obj = focus_manager.get_manager().get_active_mode_and_object_of_interest()
+        if obj is None:
+            msg = "DEBUGGING TOOLS MANAGER: Cannot clear cache on null object of interest."
+            debug.print_message(debug.debugLevel, msg, True)
+            presentation_manager.get_manager().present_message(messages.DEBUG_CLEAR_CACHE_FAILED)
+            return True
+
+        app = AXUtilities.get_application(obj)
+        if app is None:
+            msg = "DEBUGGING TOOLS MANAGER: Cannot clear cache on null application."
+            debug.print_message(debug.debugLevel, msg, True)
+            presentation_manager.get_manager().present_message(messages.DEBUG_CLEAR_CACHE_FAILED)
+            return True
+
+        presentation_manager.get_manager().present_message(messages.DEBUG_CLEAR_CACHE)
+        AXObject.clear_cache(app, recursive=True, reason="User request.")
+        return True
+
+    def _get_running_applications_as_token_iter(
+        self,
+        is_command_line: bool,
+    ) -> Generator[list[Any], None, None]:
+        """Generator providing tokens with basic details about the running accessible apps."""
+
+        applications = AXUtilities.get_all_applications(is_debug=True)
+        prefix = "" if is_command_line else "DEBUGGING TOOLS MANAGER: "
+        yield [f"{prefix}Desktop has", len(applications), "app(s):"]
+
+        for i, app in enumerate(applications):
+            pid = AXUtilities.get_process_id(app)
+            if AXUtilities.is_application_unresponsive(app):
+                name = "[UNRESPONSIVE]"
+            else:
+                name = AXObject.get_name(app) or "[DEAD]"
+            try:
+                with open(f"/proc/{pid}/cmdline", encoding="utf-8") as f:
+                    cmdline = f.read().replace("\x00", " ")
+            except OSError as error:
+                cmdline = f"EXCEPTION: {error}"
+            if is_command_line:
+                prefix = f"{time.strftime('%H:%M:%S', time.localtime()):<12}"
+            else:
+                prefix = f"{i + 1:3}."
+
+            yield [f"{prefix} pid: {pid:<10} {name:<25}", cmdline]
+
+    def print_running_applications(
+        self,
+        force: bool = False,
+        is_command_line: bool = False,
+    ) -> None:
+        """Prints basic details about the running accessible applications."""
+
+        if force:
+            level = debug.LEVEL_SEVERE
+        else:
+            level = debug.LEVEL_INFO
+
+        if level < debug.debugLevel and not is_command_line:
+            return
+
+        for tokens in self._get_running_applications_as_token_iter(is_command_line):
+            if is_command_line:
+                print(" ".join(str(token) for token in tokens))  # noqa: T201
+            else:
+                debug.print_tokens(level, tokens, True)
+
+    def print_session_details(self, is_command_line: bool = False) -> None:
+        """Prints basic details about the current session."""
+
+        msg = f"Orca version {orca_platform.version}"
+        if orca_platform.revision:
+            msg += f" (rev {orca_platform.revision})"
+
+        atspi_version = Atspi.get_version()  # pylint: disable=no-value-for-parameter
+        msg += f", AT-SPI2 version: {atspi_version[0]}.{atspi_version[1]}.{atspi_version[2]}"
+        session_type = os.environ.get("XDG_SESSION_TYPE") or ""
+        session_desktop = os.environ.get("XDG_SESSION_DESKTOP") or ""
+        session = f"{session_type} {session_desktop}".strip()
+        if session:
+            msg += f", Session: {session}"
+
+        if is_command_line:
+            print(msg)  # noqa: T201
+        else:
+            tokens = ["DEBUGGING TOOLS MANAGER:", msg]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+
+_manager: DebuggingToolsManager = DebuggingToolsManager()
+
+
+def get_manager() -> DebuggingToolsManager:
+    """Returns the debugging tools manager."""
+
+    return _manager

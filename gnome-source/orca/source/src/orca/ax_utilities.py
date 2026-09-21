@@ -1,0 +1,1849 @@
+# Orca
+#
+# Copyright 2023-2025 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-lines
+
+"""Utilities for accessibility inspection."""
+
+from __future__ import annotations
+
+import functools
+import inspect
+import re
+from typing import TYPE_CHECKING, Any
+
+import gi
+
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+
+from . import ax_cache_manager, debug
+from .ax_component import AXComponent
+from .ax_hypertext import AXHypertext
+from .ax_object import AXObject
+from .ax_table import AXTable
+from .ax_text import AXText
+from .ax_utilities_action import AXUtilitiesAction
+from .ax_utilities_application import AXUtilitiesApplication
+from .ax_utilities_collection import AXUtilitiesCollection
+from .ax_utilities_component import AXUtilitiesComponent
+from .ax_utilities_document import AXUtilitiesDocument
+from .ax_utilities_event import AXUtilitiesEvent
+from .ax_utilities_hypertext import AXUtilitiesHypertext
+from .ax_utilities_math import AXUtilitiesMath
+from .ax_utilities_object import AXUtilitiesObject
+from .ax_utilities_relation import AXUtilitiesRelation
+from .ax_utilities_role import AXUtilitiesRole
+from .ax_utilities_selection import AXUtilitiesSelection
+from .ax_utilities_state import AXUtilitiesState
+from .ax_utilities_table import AXUtilitiesTable
+from .ax_utilities_text import AXUtilitiesText
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+_MAX_CHILDREN_FOR_SENSITIVITY_COUNT = 50
+
+
+class _AXUtilitiesCache:
+    """Provides utility-specific access to manager-backed cached values."""
+
+    SET_MEMBERS = "AXUtilities.set-members"
+    IS_LAYOUT_ONLY = "AXUtilities.is-layout-only"
+    IS_CODE_BLOCK_DESCENDANT = "AXUtilities.is-code-block-descendant"
+    IS_COMBO_BOX_DESCENDANT = "AXUtilities.is-combo-box-descendant"
+    IS_DOCUMENT_DESCENDANT = "AXUtilities.is-document-descendant"
+    IS_EDITABLE_COMBO_BOX_DESCENDANT = "AXUtilities.is-editable-combo-box-descendant"
+    IS_EMBEDDED_DESCENDANT = "AXUtilities.is-embedded-descendant"
+    IS_ENTRY_DESCENDANT = "AXUtilities.is-entry-descendant"
+    IS_GRID_DESCENDANT = "AXUtilities.is-grid-descendant"
+    IS_LABEL_OR_CAPTION_DESCENDANT = "AXUtilities.is-label-or-caption-descendant"
+    IS_LINK_DESCENDANT = "AXUtilities.is-link-descendant"
+    IS_MENU_DESCENDANT = "AXUtilities.is-menu-descendant"
+    IS_TOOL_BAR_DESCENDANT = "AXUtilities.is-tool-bar-descendant"
+    IS_TOOL_TIP_DESCENDANT = "AXUtilities.is-tool-tip-descendant"
+    IS_PRESENTATIONAL_CHILD = "AXUtilities.is-presentational-child"
+    IS_TREE_OR_TREE_TABLE_DESCENDANT = "AXUtilities.is-tree-or-tree-table-descendant"
+    NEAREST_BLOCK_ANCESTOR = "AXUtilities.nearest-block-ancestor"
+    EMBEDDED_DOCUMENT_FRAME = "AXUtilities.embedded-document-frame"
+
+    def __init__(self) -> None:
+        self._manager = ax_cache_manager.get_manager()
+        for namespace in (
+            self.SET_MEMBERS,
+            self.IS_LAYOUT_ONLY,
+            self.IS_CODE_BLOCK_DESCENDANT,
+            self.IS_COMBO_BOX_DESCENDANT,
+            self.IS_DOCUMENT_DESCENDANT,
+            self.IS_EDITABLE_COMBO_BOX_DESCENDANT,
+            self.IS_EMBEDDED_DESCENDANT,
+            self.IS_ENTRY_DESCENDANT,
+            self.IS_GRID_DESCENDANT,
+            self.IS_LABEL_OR_CAPTION_DESCENDANT,
+            self.IS_LINK_DESCENDANT,
+            self.IS_MENU_DESCENDANT,
+            self.IS_TOOL_BAR_DESCENDANT,
+            self.IS_TOOL_TIP_DESCENDANT,
+            self.IS_PRESENTATIONAL_CHILD,
+            self.IS_TREE_OR_TREE_TABLE_DESCENDANT,
+            self.NEAREST_BLOCK_ANCESTOR,
+            self.EMBEDDED_DOCUMENT_FRAME,
+        ):
+            self._manager.register_cache(
+                self,
+                namespace,
+                lifetime=ax_cache_manager.Lifetime.PROCESS,
+                clear_on_demand=ax_cache_manager.ClearPolicy.CLEAR,
+            )
+        self._members_cache = self._manager.get_cache(self, self.SET_MEMBERS)
+        self._layout_only_cache = self._manager.get_cache(self, self.IS_LAYOUT_ONLY)
+        self._nearest_block_ancestor_cache = self._manager.get_cache(
+            self, self.NEAREST_BLOCK_ANCESTOR
+        )
+        self._embedded_document_frame_cache = self._manager.get_cache(
+            self, self.EMBEDDED_DOCUMENT_FRAME
+        )
+        self._classification_caches = {
+            namespace: self._manager.get_cache(self, namespace)
+            for namespace in (
+                self.IS_CODE_BLOCK_DESCENDANT,
+                self.IS_COMBO_BOX_DESCENDANT,
+                self.IS_DOCUMENT_DESCENDANT,
+                self.IS_EDITABLE_COMBO_BOX_DESCENDANT,
+                self.IS_EMBEDDED_DESCENDANT,
+                self.IS_ENTRY_DESCENDANT,
+                self.IS_GRID_DESCENDANT,
+                self.IS_LABEL_OR_CAPTION_DESCENDANT,
+                self.IS_LINK_DESCENDANT,
+                self.IS_MENU_DESCENDANT,
+                self.IS_TOOL_BAR_DESCENDANT,
+                self.IS_TOOL_TIP_DESCENDANT,
+                self.IS_PRESENTATIONAL_CHILD,
+                self.IS_TREE_OR_TREE_TABLE_DESCENDANT,
+            )
+        }
+
+    def get_members(self, container: Atspi.Accessible | None) -> list[Atspi.Accessible] | None:
+        """Returns cached set members for container."""
+
+        if self._members_cache is None:
+            return None
+
+        return self._members_cache.get(ax_cache_manager.get_object_key(container), None)
+
+    def set_members(
+        self, container: Atspi.Accessible | None, members: list[Atspi.Accessible]
+    ) -> None:
+        """Stores set members for container."""
+
+        if self._members_cache is not None:
+            self._members_cache.put(ax_cache_manager.get_object_key(container), members)
+
+    def get_layout_only(self, obj: Atspi.Accessible) -> tuple[bool, str] | None:
+        """Returns the cached layout-only decision for obj."""
+
+        if self._layout_only_cache is None:
+            return None
+
+        return self._layout_only_cache.get(ax_cache_manager.get_object_key(obj), None)
+
+    def set_layout_only(self, obj: Atspi.Accessible, result: tuple[bool, str]) -> None:
+        """Stores a layout-only decision for obj."""
+
+        if self._layout_only_cache is not None:
+            self._layout_only_cache.put(ax_cache_manager.get_object_key(obj), result)
+
+    def get_nearest_block_ancestor(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the cached nearest block ancestor for obj."""
+
+        if self._nearest_block_ancestor_cache is None:
+            return None
+
+        return self._nearest_block_ancestor_cache.get(ax_cache_manager.get_object_key(obj), None)
+
+    def set_nearest_block_ancestor(self, obj: Atspi.Accessible, ancestor: Atspi.Accessible) -> None:
+        """Stores the nearest block ancestor for obj."""
+
+        if self._nearest_block_ancestor_cache is not None:
+            self._nearest_block_ancestor_cache.put(ax_cache_manager.get_object_key(obj), ancestor)
+
+    def get_embedded_document_frame(self, obj: Atspi.Accessible) -> Any:
+        """Returns the cached embedded document frame for obj, or MISSING on a miss."""
+
+        if self._embedded_document_frame_cache is None:
+            return ax_cache_manager.MISSING
+
+        key = ax_cache_manager.get_object_key(obj)
+        return self._embedded_document_frame_cache.get(key, ax_cache_manager.MISSING)
+
+    def set_embedded_document_frame(
+        self, obj: Atspi.Accessible, frame: Atspi.Accessible | None
+    ) -> None:
+        """Stores the embedded document frame for obj."""
+
+        if self._embedded_document_frame_cache is not None:
+            self._embedded_document_frame_cache.put(ax_cache_manager.get_object_key(obj), frame)
+
+    def get_classification(self, namespace: str, obj: Atspi.Accessible) -> bool | None:
+        """Returns a cached object classification."""
+
+        cache = self._classification_caches.get(namespace)
+        if cache is None:
+            return None
+
+        return cache.get(ax_cache_manager.get_object_key(obj), None)
+
+    def set_classification(self, namespace: str, obj: Atspi.Accessible, result: bool) -> None:
+        """Stores an object classification."""
+
+        cache = self._classification_caches.get(namespace)
+        if cache is not None:
+            cache.put(ax_cache_manager.get_object_key(obj), result)
+
+
+class AXUtilities:
+    """Utilities for accessibility inspection."""
+
+    COMPARE_COLLECTION_PERFORMANCE = False
+
+    _CACHE = _AXUtilitiesCache()
+
+    @staticmethod
+    def clear_all_cache_now(obj: Atspi.Accessible | None = None, reason: str = "") -> None:
+        """Clears all cached information immediately."""
+
+        ax_cache_manager.get_manager().clear_cache_now(reason)
+        if AXUtilitiesRole.is_table_related(obj):
+            ax_cache_manager.get_manager().invalidate_group(
+                AXTable.CACHE_INVALIDATION_GROUP, reason
+            )
+
+    @staticmethod
+    def can_be_active_window(window: Atspi.Accessible, clear_cache: bool = True) -> bool:
+        """Returns True if window can be the active window based on its state."""
+
+        if window is None:
+            return False
+
+        if clear_cache:
+            AXObject.clear_cache(window, False, "Checking if window can be the active window")
+        app = AXUtilitiesApplication.get_application(window)
+        tokens = ["AXUtilities:", window, "from", app]
+
+        window_states = AXObject.get_state_set(window)
+        can_be_active = True
+        if not AXUtilitiesState.is_active(window, window_states):
+            tokens.append("lacks active state")
+            can_be_active = False
+        elif not AXUtilitiesState.is_showing(window, window_states):
+            tokens.append("lacks showing state")
+            can_be_active = False
+        elif AXUtilitiesState.is_iconified(window, window_states):
+            tokens.append("is iconified")
+            can_be_active = False
+        elif AXUtilitiesApplication.is_mutter_x11_frames(app):
+            tokens.append("is from app that cannot have the real active window")
+            can_be_active = False
+        elif app and not AXUtilitiesApplication.is_application_in_desktop(app):
+            tokens.append("is from app unknown to AT-SPI2")
+            # Firefox alerts and dialogs suffer from this bug too, but if we ignore these windows
+            # we'll fail to fully present things like the file chooser dialog and the replace-file
+            # alert. https://bugzilla.mozilla.org/show_bug.cgi?id=1882794
+            if not AXUtilitiesRole.is_dialog_or_alert(window):
+                can_be_active = False
+
+        if can_be_active:
+            tokens.append("can be active window")
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return can_be_active
+
+    @staticmethod
+    def find_active_window() -> Atspi.Accessible | None:
+        """Tries to locate the active window; may or may not succeed."""
+
+        candidates = []
+        apps = AXUtilitiesApplication.get_all_applications(must_have_window=True)
+        for app in apps:
+            candidates.extend(list(AXObject.iter_children(app, AXUtilities.can_be_active_window)))
+
+        if not candidates:
+            tokens = ["AXUtilities: Unable to find active window from", apps]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return None
+
+        if len(candidates) == 1:
+            tokens = ["AXUtilities: Active window is", candidates[0]]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return candidates[0]
+
+        tokens = ["AXUtilities: These windows all claim to be active:", candidates]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        # Some electron apps running in the background claim to be active even when they
+        # are not. These are the ones we know about. We can add others as we go.
+        suspect_apps = ["slack", "discord", "outline-client", "whatsapp-desktop-linux"]
+        filtered = []
+        for frame in candidates:
+            if AXObject.get_name(AXUtilitiesApplication.get_application(frame)) in suspect_apps:
+                tokens = ["AXUtilities: Suspecting", frame, "is a non-active Electron app"]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            else:
+                filtered.append(frame)
+
+        if len(filtered) == 1:
+            tokens = ["AXUtilities: Active window is believed to be", filtered[0]]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return filtered[0]
+
+        guess: Atspi.Accessible | None = None
+        if filtered:
+            tokens = ["AXUtilities: Still have multiple active windows:", filtered]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            guess = filtered[0]
+
+        if guess is not None:
+            tokens = ["AXUtilities: Returning", guess, "as active window"]
+        else:
+            tokens = ["AXUtilities: No active window found"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return guess
+
+    @staticmethod
+    def is_unfocused_alert_or_dialog(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is an unfocused alert or dialog with presentable items."""
+
+        if not AXUtilitiesRole.is_dialog_or_alert(obj):
+            return False
+        if not AXObject.get_child_count(obj):
+            return False
+        if not AXUtilitiesState.is_showing(obj):
+            return False
+        return not AXUtilities.can_be_active_window(obj)
+
+    @staticmethod
+    def get_unfocused_alerts_and_dialogs(obj: Atspi.Accessible) -> list[Atspi.Accessible]:
+        """Returns a list of all the unfocused alerts and dialogs in the app and window of obj."""
+
+        app = AXUtilitiesApplication.get_application(obj)
+        result = list(AXObject.iter_children(app, AXUtilities.is_unfocused_alert_or_dialog))
+
+        frame = AXUtilitiesObject.find_ancestor(
+            obj,
+            lambda x: AXUtilitiesRole.is_application(AXObject.get_parent(x)),
+        )
+        result.extend(list(AXObject.iter_children(frame, AXUtilities.is_unfocused_alert_or_dialog)))
+
+        tokens = ["AXUtilities: Unfocused alerts and dialogs for", obj, ":", result]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def get_all_widgets(
+        obj: Atspi.Accessible,
+        must_be_showing_and_visible: bool = True,
+        exclude_push_button: bool = False,
+    ) -> list[Atspi.Accessible]:
+        """Returns all the descendants of obj with a widget role"""
+
+        roles = AXUtilitiesRole.get_widget_roles()
+        if exclude_push_button and Atspi.Role.BUTTON in roles:
+            roles.remove(Atspi.Role.BUTTON)
+
+        result = None
+        if AXObject.supports_collection(obj):
+            if not must_be_showing_and_visible:
+                result = AXUtilitiesCollection.find_all_with_role(obj, roles)
+            else:
+                states = [Atspi.StateType.SHOWING, Atspi.StateType.VISIBLE]
+                result = AXUtilitiesCollection.find_all_with_role_and_all_states(obj, roles, states)
+
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        def is_match(acc):
+            if AXObject.get_role(acc) not in roles:
+                return False
+            if must_be_showing_and_visible:
+                return AXUtilitiesState.is_showing_and_visible(acc)
+            return True
+
+        return AXUtilitiesObject.find_all_descendants(obj, is_match)
+
+    @staticmethod
+    def get_default_button(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the default button descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_default_button(obj)
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_default_button)
+
+    @staticmethod
+    def get_details_content(obj: Atspi.Accessible) -> list[str]:
+        """Returns a list of non-empty text strings from the details of obj."""
+
+        details = AXUtilitiesRelation.get_details(obj)
+        if (
+            not details
+            and AXUtilitiesRole.is_toggle_button(obj)
+            and AXUtilitiesState.is_expanded(obj)
+        ):
+            details = list(AXObject.iter_children(obj))
+
+        result: list[str] = []
+        for detail in details:
+            texts = [
+                AXText.get_all_text(d).strip() for d in AXUtilities.get_text_descendants(detail)
+            ]
+            result.extend(t for t in texts if t)
+        return result
+
+    @staticmethod
+    def get_description_list_terms(obj: Atspi.Accessible) -> list[Atspi.Accessible]:
+        """Returns all description list terms in obj, excluding nested description lists."""
+
+        if not AXUtilitiesRole.is_description_list(obj):
+            return []
+
+        if AXObject.supports_collection(obj):
+            matches = AXUtilitiesCollection.find_all_description_terms(obj)
+            return [
+                m
+                for m in matches
+                if AXUtilitiesObject.find_ancestor(m, AXUtilitiesRole.is_description_list) == obj
+            ]
+
+        return AXUtilitiesObject.find_all_descendants(
+            obj, AXUtilitiesRole.is_description_term, AXUtilitiesRole.is_description_list
+        )
+
+    @staticmethod
+    def get_text_descendants(obj: Atspi.Accessible) -> list[Atspi.Accessible]:
+        """Returns all descendants of obj that implement the Text interface."""
+
+        if AXObject.supports_collection(obj):
+            return AXUtilitiesCollection.find_all_with_interfaces(obj, ["Text"])
+
+        return AXUtilitiesObject.find_all_descendants(obj, AXObject.supports_text)
+
+    @staticmethod
+    def get_focused_object(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the focused descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_focused_object(obj)
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesState.is_focused)
+
+    @staticmethod
+    def get_info_bar(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the info bar descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_info_bar(obj)
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_info_bar)
+
+    @staticmethod
+    def get_status_bar(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the status bar descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_status_bar(obj)
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_status_bar)
+
+    @staticmethod
+    def get_label(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the label descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(obj, [Atspi.Role.LABEL])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_label)
+
+    @staticmethod
+    def get_list_item(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the list item descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(obj, [Atspi.Role.LIST_ITEM])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_list_item)
+
+    @staticmethod
+    def get_menu(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the menu descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(obj, [Atspi.Role.MENU])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_menu)
+
+    @staticmethod
+    def get_menu_or_list_box(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the menu or list box descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(
+                obj, [Atspi.Role.MENU, Atspi.Role.LIST_BOX]
+            )
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(
+            obj, lambda x: AXUtilitiesRole.is_menu(x) or AXUtilitiesRole.is_list_box(x)
+        )
+
+    @staticmethod
+    def get_progress_bar(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the progress bar descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(obj, [Atspi.Role.PROGRESS_BAR])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_progress_bar)
+
+    @staticmethod
+    def get_slider(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the slider descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(obj, [Atspi.Role.SLIDER])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_slider)
+
+    @staticmethod
+    def get_table_cell(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the table cell descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(obj, [Atspi.Role.TABLE_CELL])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_table_cell)
+
+    @staticmethod
+    def get_table_cell_or_header(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the table cell or header descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(
+                obj, AXUtilitiesRole.get_table_cell_roles()
+            )
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_table_cell_or_header)
+
+    @staticmethod
+    def get_descendant_supporting_text(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the first descendant of obj implementing the text interface"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_interfaces(obj, ["Text"])
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXObject.supports_text)
+
+    @staticmethod
+    def get_text_input(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the text input descendant of obj"""
+
+        result = None
+        if AXObject.supports_collection(obj):
+            result = AXUtilitiesCollection.find_first_with_role(
+                obj, [Atspi.Role.ENTRY, Atspi.Role.PASSWORD_TEXT, Atspi.Role.SPIN_BUTTON]
+            )
+            if result is None:
+                result = AXUtilitiesCollection.find_first_with_role_and_all_states(
+                    obj, [Atspi.Role.TEXT], [Atspi.StateType.EDITABLE, Atspi.StateType.SINGLE_LINE]
+                )
+            if not AXUtilities.COMPARE_COLLECTION_PERFORMANCE:
+                return result
+
+        return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_text_input)
+
+    @staticmethod
+    def _is_layout_only_layered_pane(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this layered pane is layout-only."""
+
+        if AXUtilitiesObject.find_ancestor(obj, AXUtilitiesRole.is_desktop_frame) is not None:
+            return True, "is inside desktop frame"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only_menu_or_list(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this menu or list in a combo box is layout-only."""
+
+        if AXUtilities.is_combo_box_descendant(obj):
+            return True, "is inside combo box"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only_group(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this group is layout-only."""
+
+        if not AXUtilities.has_explicit_name(obj):
+            return True, "lacks explicit name"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only_panel(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this panel or grouping is layout-only."""
+
+        name = AXObject.get_name(obj)
+        description = AXObject.get_description(obj)
+        labelled_by = AXUtilitiesRelation.get_is_labelled_by(obj)
+        described_by = AXUtilitiesRelation.get_is_described_by(obj)
+        if not (name or description or labelled_by or described_by):
+            return True, "lacks name, description, and relations"
+        if name == AXObject.get_name(AXUtilitiesApplication.get_application(obj)):
+            return True, "has same name as app"
+        if AXObject.get_child_count(obj) == 1:
+            child = AXObject.get_child(obj, 0)
+            if name == AXObject.get_name(child):
+                return True, "has same name as its only child"
+            if not AXUtilitiesRole.is_label(child) and child in labelled_by:
+                return True, "is labelled by non-label only child"
+        set_roles = AXUtilitiesRole.get_set_container_roles()
+        ancestor = AXUtilitiesObject.find_ancestor(obj, lambda x: AXObject.get_role(x) in set_roles)
+        if ancestor and AXObject.get_name(ancestor) == name:
+            return True, "is in set container with same name"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only_section(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this section or document is layout-only."""
+
+        if AXUtilitiesState.is_focusable(obj):
+            return False, "is focusable"
+        if AXUtilitiesAction.has_action(obj, "click"):
+            return False, "has click action"
+        if AXUtilitiesRole.is_code_block(obj):
+            return False, "is code block"
+        return True, "is not interactive"
+
+    @staticmethod
+    def _is_layout_only_toolbar(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this toolbar is layout-only."""
+
+        if AXUtilitiesRole.is_page_tab_list(AXObject.get_child(obj, 0)):
+            return True, "is parent of page tab list"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only_table(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this table is layout-only."""
+
+        if AXUtilitiesTable.is_layout_table(obj):
+            return True, "is layout table"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only_table_row(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this table row is layout-only."""
+
+        state_set = AXObject.get_state_set(obj)
+        if AXUtilitiesState.is_focusable(obj, state_set):
+            return False, "is focusable"
+        if AXUtilitiesState.is_selectable(obj, state_set):
+            return False, "is selectable"
+        if AXUtilitiesState.is_expandable(obj, state_set):
+            return False, "is expandable"
+        if AXUtilities.has_explicit_name(obj):
+            return False, "has explicit name"
+        return True, "is not focusable, selectable, or expandable and lacks explicit name"
+
+    @staticmethod
+    def _is_layout_only_table_cell(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True with reason if this table cell is layout-only."""
+
+        if AXUtilitiesRole.is_table_cell(AXObject.get_child(obj, 0)):
+            return True, "child of this cell is table cell"
+        table = AXUtilitiesTable.get_table(obj)
+        if AXUtilitiesRole.is_table(table) and AXUtilitiesTable.is_layout_table(table):
+            return True, "is in layout table"
+        return False, ""
+
+    @staticmethod
+    def _is_layout_only(obj: Atspi.Accessible) -> tuple[bool, str]:
+        """Returns True and a string reason if obj is believed to serve only for layout."""
+
+        role = AXObject.get_role(obj)
+        if role in AXUtilitiesRole.get_layout_only_roles():
+            return True, "has layout-only role"
+
+        result, reason = False, ""
+        if AXUtilitiesRole.is_layered_pane(obj, role):
+            result, reason = AXUtilities._is_layout_only_layered_pane(obj)
+        elif AXUtilitiesRole.is_menu(obj, role) or AXUtilitiesRole.is_list(obj, role):
+            result, reason = AXUtilities._is_layout_only_menu_or_list(obj)
+        elif AXUtilitiesRole.is_group(obj, role):
+            result, reason = AXUtilities._is_layout_only_group(obj)
+        elif AXUtilitiesRole.is_panel(obj, role) or AXUtilitiesRole.is_grouping(obj, role):
+            result, reason = AXUtilities._is_layout_only_panel(obj)
+        elif AXUtilities.is_embedded_document_frame(obj):
+            result, reason = False, "is an embedded document frame"
+        elif AXUtilitiesRole.is_section(obj, role) or AXUtilitiesRole.is_document(obj, role):
+            result, reason = AXUtilities._is_layout_only_section(obj)
+        elif AXUtilitiesRole.is_tool_bar(obj):
+            result, reason = AXUtilities._is_layout_only_toolbar(obj)
+        elif AXUtilitiesRole.is_table(obj, role):
+            result, reason = AXUtilities._is_layout_only_table(obj)
+        elif AXUtilitiesRole.is_table_row(obj):
+            result, reason = AXUtilities._is_layout_only_table_row(obj)
+        elif AXUtilitiesRole.is_table_cell(obj, role):
+            result, reason = AXUtilities._is_layout_only_table_cell(obj)
+        return result, reason
+
+    @staticmethod
+    def is_layout_only(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is believed to serve only for layout."""
+
+        cached = AXUtilities._CACHE.get_layout_only(obj)
+        if cached is None:
+            result, reason = AXUtilities._is_layout_only(obj)
+            AXUtilities._CACHE.set_layout_only(obj, (result, reason))
+        else:
+            result, reason = cached
+
+        if reason:
+            tokens = ["AXUtilities:", obj, "believed to be layout only:", result, ",", reason]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return result
+
+    @staticmethod
+    def _is_descendant(
+        namespace: str,
+        obj: Atspi.Accessible,
+        pred: Callable[[Atspi.Accessible], bool],
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj (or an ancestor) matches pred."""
+
+        if inclusive and pred(obj):
+            return True
+
+        rv = AXUtilities._CACHE.get_classification(namespace, obj)
+        if rv is not None:
+            return rv
+
+        parent = AXObject.get_parent(obj)
+        if parent is None:
+            AXUtilities._CACHE.set_classification(namespace, obj, False)
+            return False
+
+        if pred(parent):
+            AXUtilities._CACHE.set_classification(namespace, obj, True)
+            return True
+
+        parent_rv = AXUtilities._CACHE.get_classification(namespace, parent)
+        if parent_rv is None:
+            parent_rv = AXUtilitiesObject.find_ancestor(parent, pred) is not None
+            AXUtilities._CACHE.set_classification(namespace, parent, parent_rv)
+
+        AXUtilities._CACHE.set_classification(namespace, obj, parent_rv)
+        return parent_rv
+
+    @staticmethod
+    def is_code_block_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a code block ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_CODE_BLOCK_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_code_block,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_custom_image(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is a custom web element acting as an image."""
+
+        if not AXUtilitiesRole.is_web_element_custom(obj):
+            return False
+
+        if not (
+            AXUtilitiesRole.is_section(obj)
+            and AXUtilities.has_explicit_name(obj)
+            and AXObject.supports_text(obj)
+            and not re.search(r"[^\s\ufffc]", AXText.get_all_text(obj))
+        ):
+            return False
+
+        return all(
+            AXUtilitiesRole.is_image_or_canvas(child) or AXUtilitiesRole.is_svg(child)
+            for child in AXObject.iter_children(obj)
+        )
+
+    @staticmethod
+    def is_text_block(
+        obj: Atspi.Accessible,
+        role: Atspi.Role | None = None,
+        exclude_editable: bool = False,
+        exclude_focusable: bool = False,
+    ) -> bool:
+        """Returns True if obj is a non-interactive text block."""
+
+        if not AXObject.supports_text(obj):
+            return False
+        if exclude_editable and AXUtilitiesState.is_editable(obj):
+            return False
+        if exclude_focusable and AXUtilitiesState.is_focusable(obj):
+            return False
+        if AXUtilities.is_custom_image(obj):
+            return False
+        if role is None:
+            role = AXObject.get_role(obj)
+        if role == Atspi.Role.TABLE_CELL:
+            return not AXUtilitiesRole.is_grid_cell(obj)
+        return role in AXUtilitiesRole.get_text_block_roles()  # pylint: disable=unsupported-membership-test
+
+    @staticmethod
+    def is_combo_box_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a combo box ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_COMBO_BOX_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_combo_box,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_document_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a document ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_DOCUMENT_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_document,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_editable_combo_box_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has an editable combo box ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_EDITABLE_COMBO_BOX_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_editable_combo_box,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_embedded_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has an embedded ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_EMBEDDED_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_embedded,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_embedded_document_frame(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is a document frame nested inside an application."""
+
+        return AXUtilitiesRole.is_document_frame(obj) and AXUtilities.is_embedded_descendant(obj)
+
+    @staticmethod
+    def is_entry_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has an entry ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_ENTRY_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_entry,
+            inclusive,
+        )
+
+    @staticmethod
+    def get_nearest_block_ancestor(
+        obj: Atspi.Accessible, original: Atspi.Accessible | None = None
+    ) -> Atspi.Accessible | None:
+        """Returns obj or its nearest ancestor that is not an inline element."""
+
+        if original is None:
+            original = obj
+
+        # The wrapper transparency below holds only while ascending from the inline start, not
+        # for the start itself; the start is kept out of the cache too, so its answer and the
+        # ancestor answer for the same object cannot overwrite one another.
+        above_start = obj is not original
+        if above_start:
+            rv = AXUtilities._CACHE.get_nearest_block_ancestor(obj)
+            if rv is not None:
+                return rv
+
+        inline = AXUtilitiesRole.is_inline_element(obj)
+        parent = AXObject.get_parent(obj)
+        if not inline and above_start and AXUtilitiesRole.is_section(obj):
+            # A generic section whose text is only embedded objects (e.g. like-button-view-
+            # model) is a transparent wrapper; the section gate keeps a structural [OBJ]-only
+            # element (a table row of cells) from being treated as a wrapper.
+            text = AXText.get_all_text(obj)
+            inline = "\ufffc" in text and not re.search(r"[^\s\ufffc]", text)
+
+        if inline:
+            rv = (
+                AXUtilities.get_nearest_block_ancestor(parent, original)
+                if parent is not None
+                else obj
+            )
+        else:
+            rv = obj
+
+        if above_start and rv is not None:
+            AXUtilities._CACHE.set_nearest_block_ancestor(obj, rv)
+        return rv
+
+    @staticmethod
+    def get_nearest_table_row(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns obj or its nearest ancestor which is a table row, by role or CSS display."""
+
+        def is_row(x: Atspi.Accessible) -> bool:
+            return AXUtilitiesRole.is_table_row(x, include_display=True)
+
+        return AXUtilitiesObject.find_ancestor_inclusive(obj, is_row)
+
+    @staticmethod
+    def get_embedded_document_frame_for_object(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns obj's nearest document-frame ancestor that is inside an application, if any."""
+
+        cached = AXUtilities._CACHE.get_embedded_document_frame(obj)
+        if cached is not ax_cache_manager.MISSING:
+            return cached
+
+        rv = AXUtilitiesObject.find_ancestor_inclusive(obj, AXUtilities.is_embedded_document_frame)
+        AXUtilities._CACHE.set_embedded_document_frame(obj, rv)
+        return rv
+
+    @staticmethod
+    def is_grid_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a grid ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_GRID_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_grid,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_label_or_caption_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a label or caption ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_LABEL_OR_CAPTION_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_label_or_caption,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_link_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a link ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_LINK_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_link,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_menu_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a menu ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_MENU_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_menu,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_presentational_child(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj has an ancestor with presentational children."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_PRESENTATIONAL_CHILD,
+            obj,
+            AXUtilitiesRole.children_are_presentational,
+        )
+
+    @staticmethod
+    def is_tool_bar_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a toolbar ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_TOOL_BAR_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_tool_bar,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_tool_tip_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a tooltip ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_TOOL_TIP_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_tool_tip,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_tree_or_tree_table_descendant(
+        obj: Atspi.Accessible,
+        inclusive: bool = False,
+    ) -> bool:
+        """Returns True if obj has a tree or tree table ancestor."""
+
+        return AXUtilities._is_descendant(
+            AXUtilities._CACHE.IS_TREE_OR_TREE_TABLE_DESCENDANT,
+            obj,
+            AXUtilitiesRole.is_tree_or_tree_table,
+            inclusive,
+        )
+
+    @staticmethod
+    def is_message_dialog(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is a dialog that should be treated as a message dialog"""
+
+        if not AXUtilitiesRole.is_dialog_or_alert(obj):
+            return False
+
+        if not AXObject.supports_collection(obj):
+            widgets = AXUtilities.get_all_widgets(obj, exclude_push_button=True)
+            return not widgets
+
+        tokens = ["AXUtilities:", obj]
+        result = True
+        if AXUtilitiesCollection.has_scroll_pane(obj):
+            tokens.append("is not a message dialog: has scroll pane")
+            result = False
+        elif AXUtilitiesCollection.has_split_pane(obj):
+            tokens.append("is not a message dialog: has split pane")
+            result = False
+        elif AXUtilitiesCollection.has_tree_or_tree_table(obj):
+            tokens.append("is not a message dialog: has tree or tree table")
+            result = False
+        elif AXUtilitiesCollection.has_combo_box_or_list_box(obj):
+            tokens.append("is not a message dialog: has combo box or list box")
+            result = False
+        elif AXUtilitiesCollection.has_editable_object(obj):
+            tokens.append("is not a message dialog: has editable object")
+            result = False
+        else:
+            tokens.append("is believed to be a message dialog")
+
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def is_redundant_object(obj1: Atspi.Accessible, obj2: Atspi.Accessible) -> bool:
+        """Returns True if obj2 is redundant to obj1."""
+
+        if obj1 == obj2:
+            return False
+
+        if AXObject.get_name(obj1) != AXObject.get_name(obj2) or AXObject.get_role(
+            obj1,
+        ) != AXObject.get_role(obj2):
+            return False
+
+        tokens = ["AXUtilities:", obj2, "is redundant to", obj1]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return True
+
+    @staticmethod
+    def _sort_by_child_index(object_list: list[Atspi.Accessible]) -> list[Atspi.Accessible]:
+        """Returns the list of objects sorted according to child index."""
+
+        def cmp(x, y):
+            return AXObject.get_index_in_parent(x) - AXObject.get_index_in_parent(y)
+
+        if not object_list or len(object_list) == 1:
+            return object_list
+
+        result = sorted(object_list, key=functools.cmp_to_key(cmp))
+
+        first, second = result[0:2]
+        if AXUtilitiesRole.is_radio_button(first) and AXObject.get_toolkit_name(first) == "gtk":
+            # Gtk radio buttons are often in reverse order, except for when they're not.
+            # See https://gitlab.gnome.org/GNOME/gtk/-/issues/7839.
+            sorted_first, _sorted_second = AXUtilitiesComponent.sort_objects_by_position(
+                [first, second]
+            )
+            if sorted_first != first:
+                result.reverse()
+
+        if object_list != result:
+            tokens = ["AXUtilities: Original list", object_list]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            tokens = ["AXUtilities: Sorted list", result]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return result
+
+    @staticmethod
+    def _get_set_members(
+        obj: Atspi.Accessible,
+        container: Atspi.Accessible,
+    ) -> list[Atspi.Accessible]:
+        """Returns the members of the container of obj"""
+
+        if container is None:
+            tokens = ["AXUtilities: Members of", obj, "not obtainable: container is None"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return []
+
+        result = AXUtilitiesRelation.get_is_member_of(obj)
+        if result:
+            tokens = ["AXUtilities: Members of", obj, "in", container, "via member-of", result]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return AXUtilities._sort_by_child_index(result)
+
+        result = AXUtilitiesRelation.get_is_node_parent_of(obj)
+        if result:
+            tokens = ["AXUtilities: Members of", obj, "in", container, "via node-parent-of", result]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return AXUtilities._sort_by_child_index(result)
+
+        if AXUtilitiesRole.is_description_value(obj):
+            previous_sibling = AXObject.get_previous_sibling(obj)
+            while previous_sibling and AXUtilitiesRole.is_description_value(previous_sibling):
+                result.append(previous_sibling)
+                previous_sibling = AXObject.get_previous_sibling(previous_sibling)
+            result.append(obj)
+            next_sibling = AXObject.get_next_sibling(obj)
+            while next_sibling and AXUtilitiesRole.is_description_value(next_sibling):
+                result.append(next_sibling)
+                next_sibling = AXObject.get_next_sibling(next_sibling)
+            tokens = ["AXUtilities: Members of", obj, "in", container, "based on siblings", result]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return result
+
+        if AXUtilitiesRole.is_menu_related(obj):
+            result = list(AXObject.iter_children(container, AXUtilitiesRole.is_menu_related))
+            tokens = ["AXUtilities: Members of", obj, "in", container, "based on menu role", result]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return result
+
+        role = AXObject.get_role(obj)
+        result = list(AXObject.iter_children(container, lambda x: AXObject.get_role(x) == role))
+        tokens = ["AXUtilities: Members of", obj, "in", container, "based on role", result]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def get_set_members(obj: Atspi.Accessible) -> list[Atspi.Accessible]:
+        """Returns the members of the container of obj."""
+
+        container = AXObject.get_parent_checked(obj)
+        result = AXUtilities._CACHE.get_members(container) or []
+
+        if obj not in result:
+            if result:
+                tokens = ["AXUtilities:", obj, "not in cached members of", container, ":", result]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+            result = AXUtilities._get_set_members(obj, container)
+            AXUtilities._CACHE.set_members(container, result)
+
+        # In a collapsed combobox, one can arrow to change the selection without showing
+        # the items. In a listbox, items scrolled out of view lose the showing state but
+        # are still valid members.
+        def is_combo_box_or_list_box(x):
+            return AXUtilitiesRole.is_combo_box(x) or AXUtilitiesRole.is_list_box(x)
+
+        must_be_showing = not AXUtilitiesObject.find_ancestor(obj, is_combo_box_or_list_box)
+        if not must_be_showing:
+            return result
+
+        filtered = list(filter(AXUtilitiesState.is_showing, result))
+        if result != filtered and debug.debugLevel <= debug.LEVEL_INFO:
+            tokens = ["AXUtilities: Filtered non-showing:", set(result).difference(set(filtered))]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return filtered
+
+    @staticmethod
+    def get_sensitive_child_count(obj: Atspi.Accessible) -> int:
+        """Returns the number of sensitive children, assuming large sets are all sensitive."""
+
+        child_count = AXObject.get_child_count(obj)
+        if child_count > _MAX_CHILDREN_FOR_SENSITIVITY_COUNT:
+            return child_count
+
+        return sum(AXUtilitiesState.is_sensitive(child) for child in AXObject.iter_children(obj))
+
+    @staticmethod
+    def get_set_size(obj: Atspi.Accessible) -> int:  # pylint: disable=too-many-return-statements
+        """Returns the total number of objects in this container."""
+
+        result = AXObject.get_attribute(obj, "setsize", False)
+        if isinstance(result, str) and result.isnumeric():
+            return int(result)
+
+        parent = AXObject.get_parent(obj)
+        result = AXObject.get_attribute(parent, "setsize", False)
+        if isinstance(result, str) and result.isnumeric():
+            return int(result)
+
+        if AXUtilitiesRole.is_table_row(obj):
+            return AXTable.get_row_count(AXUtilitiesTable.get_table(obj))
+
+        if AXUtilitiesRole.is_table_cell_or_header(obj) and not AXUtilitiesRole.is_table_row(
+            parent,
+        ):
+            return AXTable.get_row_count(AXUtilitiesTable.get_table(obj))
+
+        if AXUtilitiesRole.is_combo_box(obj):
+            selected_children = AXUtilitiesSelection.get_selected_children(obj)
+            if not selected_children:
+                return -1
+            if len(selected_children) == 1:
+                obj = selected_children[0]
+
+        if AXUtilitiesRole.is_list(obj) or AXUtilitiesRole.is_list_box(obj):
+            obj = AXUtilities.get_list_item(obj)
+
+        child_count = AXObject.get_child_count(parent)
+        if child_count > 500:
+            return child_count
+
+        members = AXUtilities.get_set_members(obj)
+        return len(members)
+
+    @staticmethod
+    def get_set_size_is_unknown(obj: Atspi.Accessible) -> bool:
+        """Returns True if the total number of objects in this container is unknown."""
+
+        if AXUtilitiesState.is_indeterminate(obj):
+            return True
+
+        attrs = AXObject.get_attributes_dict(obj, False)
+        if attrs.get("setsize") == "-1":
+            return True
+
+        if AXObject.get_attribute(AXObject.get_parent(obj), "setsize", False) == "-1":
+            return True
+
+        if AXUtilitiesRole.is_table(obj):
+            return attrs.get("rowcount") == "-1" or attrs.get("colcount") == "-1"
+
+        return False
+
+    @staticmethod
+    def _get_table_row_position(obj: Atspi.Accessible) -> int:
+        """Returns the position of a table row from ARIA attributes, or -1."""
+
+        result = AXObject.get_attribute(obj, "rowindex", False)
+        if not (isinstance(result, str) and result.isnumeric()) and AXObject.get_child_count(obj):
+            cell = AXUtilities.get_table_cell_or_header(obj)
+            result = AXObject.get_attribute(cell, "rowindex", False)
+
+        if isinstance(result, str) and result.isnumeric():
+            return int(result) - 1
+        return -1
+
+    @staticmethod
+    def get_position_in_set(obj: Atspi.Accessible) -> int:
+        """Returns the position of obj with respect to the number of items in its container."""
+
+        result = AXObject.get_attribute(obj, "posinset", False)
+        if isinstance(result, str) and result.isnumeric():
+            return int(result) - 1
+
+        if AXUtilitiesRole.is_table_row(obj):
+            position = AXUtilities._get_table_row_position(obj)
+            if position >= 0:
+                return position
+
+        if AXUtilitiesRole.is_table_cell_or_header(obj) and not AXUtilitiesRole.is_table_row(
+            AXObject.get_parent(obj),
+        ):
+            return AXTable.get_cell_coordinates(obj)[0]
+
+        if AXUtilitiesRole.is_combo_box(obj):
+            selected_children = AXUtilitiesSelection.get_selected_children(obj)
+            if not selected_children:
+                return -1
+            if len(selected_children) == 1:
+                obj = selected_children[0]
+
+        if AXObject.get_child_count(AXObject.get_parent(obj)) > 500:
+            return AXObject.get_index_in_parent(obj)
+
+        members = AXUtilities.get_set_members(obj)
+        return members.index(obj) if obj in members else -1
+
+    @staticmethod
+    def has_explicit_name(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj has an author/app-provided name as opposed to a calculated name."""
+
+        return AXObject.get_attribute(obj, "explicit-name") == "true"
+
+    @staticmethod
+    def name_is_from_descendant(obj: Atspi.Accessible, descendant: Atspi.Accessible) -> bool:
+        """Returns True if obj's name was calculated from the text of descendant."""
+
+        name = AXObject.get_name(obj)
+        if not name or AXUtilities.has_explicit_name(obj):
+            return False
+
+        if not AXUtilitiesObject.is_ancestor(descendant, obj):
+            return False
+
+        text = " ".join(AXText.get_all_text(descendant).split())
+        return bool(text) and text in " ".join(name.split())
+
+    @staticmethod
+    def name_is_from_contents(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj's name was calculated and obj has no text of its own."""
+
+        if not AXObject.get_name(obj) or AXUtilities.has_explicit_name(obj):
+            return False
+
+        if not (text := AXText.get_all_text(obj)):
+            return False
+
+        return not text.replace("\ufffc", "").strip()
+
+    @staticmethod
+    def clips_its_own_text(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj's box is too small to hold the text inside it."""
+
+        n_chars = AXText.get_character_count(obj)
+        if not n_chars:
+            return False
+
+        text_rect = AXText.get_range_rect(obj, 0, n_chars)
+        rect = AXComponent.get_rect(obj)
+        if rect.height >= text_rect.height:
+            return False
+
+        if abs(text_rect.y - rect.y) > text_rect.height:
+            tokens = [
+                "AXUtilities: Rect of",
+                obj,
+                rect,
+                "is too far from its text",
+                text_rect,
+                "to determine clipping.",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = ["AXUtilities: Rect of", obj, rect, "clips its text", text_rect]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return True
+
+    @staticmethod
+    def has_visible_caption(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj has a visible caption."""
+
+        if not (AXUtilitiesRole.is_figure(obj) or AXObject.supports_table(obj)):
+            return False
+
+        labels = AXUtilitiesRelation.get_is_labelled_by(obj)
+        for label in labels:
+            if AXUtilitiesRole.is_caption(label) and AXUtilitiesState.is_showing_and_visible(label):
+                return True
+
+        return False
+
+    @staticmethod
+    def has_non_inline_children(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj has children with block, flex, or table display."""
+
+        for child in AXObject.iter_children(obj):
+            display = AXObject.get_attribute(child, "display")
+            if display in ("block", "flex", "table"):
+                return True
+        return False
+
+    @staticmethod
+    def get_label_covering_object(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns a non-focusable label whose bounds contain a focusable object's bounds."""
+
+        if not AXUtilitiesState.is_focusable(obj):
+            return None
+
+        bounds = AXComponent.get_rect(obj)
+        if bounds.width <= 0 or bounds.height <= 0:
+            return None
+
+        for label in AXUtilitiesRelation.get_is_labelled_by(obj):
+            if not AXUtilitiesRole.is_label(label) or AXUtilitiesState.is_focusable(label):
+                continue
+            if AXUtilitiesObject.is_ancestor(label, obj):
+                continue
+            overlap = AXUtilitiesComponent.get_rect_intersection(
+                bounds, AXComponent.get_rect(label)
+            )
+            if AXUtilitiesComponent.is_same_rect(bounds, overlap):
+                return label
+
+        return None
+
+    @staticmethod
+    def get_displayed_label(obj: Atspi.Accessible) -> str:
+        """Returns the displayed label of obj."""
+
+        labels = AXUtilitiesRelation.get_is_labelled_by(obj)
+        strings = [
+            AXObject.get_name(label) or AXUtilitiesHypertext.expand_eocs(label) for label in labels
+        ]
+        result = " ".join(strings)
+        return result
+
+    @staticmethod
+    def get_displayed_description(obj: Atspi.Accessible) -> str:
+        """Returns the displayed description of obj."""
+
+        descriptions = AXUtilitiesRelation.get_is_described_by(obj)
+        strings = [AXObject.get_name(desc) or AXText.get_all_text(desc) for desc in descriptions]
+        result = " ".join(strings)
+        return result
+
+    @staticmethod
+    def get_heading_level(obj: Atspi.Accessible) -> int:
+        """Returns the heading level of obj."""
+
+        if not AXUtilitiesRole.is_heading(obj):
+            return 0
+
+        use_cache = not AXUtilitiesState.is_editable(obj)
+        attrs = AXObject.get_attributes_dict(obj, use_cache)
+
+        try:
+            value = int(attrs.get("level", "0"))
+        except ValueError:
+            tokens = ["AXUtilities: Exception getting value for", obj, "(", attrs, ")"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return 0
+
+        return value
+
+    @staticmethod
+    def get_nesting_level(obj: Atspi.Accessible) -> int:
+        """Returns the nesting level of obj."""
+
+        def pred(x: Atspi.Accessible) -> bool:
+            if AXUtilitiesRole.is_list_item(obj):
+                return AXUtilitiesRole.is_list(AXObject.get_parent(x))
+            return AXUtilitiesRole.have_same_role(obj, x)
+
+        ancestors = []
+        ancestor = AXUtilitiesObject.find_ancestor(obj, pred)
+        while ancestor:
+            ancestors.append(ancestor)
+            ancestor = AXUtilitiesObject.find_ancestor(ancestor, pred)
+
+        return len(ancestors)
+
+    @staticmethod
+    def _get_next_object(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the next object (depth first, unless there's a flows-to relation)"""
+
+        if not AXObject.is_valid(obj):
+            return None
+
+        targets = AXUtilitiesRelation.get_flows_to(obj)
+        for target in targets:
+            if not AXObject.is_dead(target):
+                return target
+
+        index = AXObject.get_index_in_parent(obj) + 1
+        parent = AXObject.get_parent(obj)
+        while parent and not 0 < index < AXObject.get_child_count(parent):
+            obj = parent
+            index = AXObject.get_index_in_parent(obj) + 1
+            parent = AXObject.get_parent(obj)
+
+        if parent is None:
+            return None
+
+        next_object = AXObject.get_child(parent, index)
+        if next_object == obj:
+            tokens = ["AXUtilities:", obj, "claims to be its own next object"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return None
+
+        return next_object
+
+    @staticmethod
+    def _get_previous_object(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Returns the previous object (depth first, unless there's a flows-from relation)"""
+
+        if not AXObject.is_valid(obj):
+            return None
+
+        targets = AXUtilitiesRelation.get_flows_from(obj)
+        for target in targets:
+            if not AXObject.is_dead(target):
+                return target
+
+        index = AXObject.get_index_in_parent(obj) - 1
+        parent = AXObject.get_parent(obj)
+        while parent and not 0 <= index < AXObject.get_child_count(parent) - 1:
+            obj = parent
+            index = AXObject.get_index_in_parent(obj) - 1
+            parent = AXObject.get_parent(obj)
+
+        if parent is None:
+            return None
+
+        previous_object = AXObject.get_child(parent, index)
+        if previous_object == obj:
+            tokens = ["AXUtilities:", obj, "claims to be its own previous object"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return None
+
+        return previous_object
+
+    @staticmethod
+    def is_on_screen(obj: Atspi.Accessible, bounding_box: Atspi.Rect | None = None) -> bool:
+        """Returns true if obj should be treated as being on screen."""
+
+        AXObject.clear_cache(obj, False, "Updating to check if object is on screen.")
+
+        tokens = ["AXUtilities: Checking if", obj, "is showing and visible...."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if not AXUtilitiesState.is_showing_and_visible(obj):
+            tokens = ["AXUtilities:", obj, "is not showing and visible. Treating as off screen."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = ["AXUtilities:", obj, "is showing and visible. Checking size and rect..."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if AXUtilitiesComponent.has_no_size_or_invalid_rect(obj):
+            tokens = ["AXUtilities: Rect of", obj, "is unhelpful. Treating as on screen."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        tokens = ["AXUtilities:", obj, "has size and a valid rect. Checking if off screen..."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if AXUtilitiesComponent.object_is_off_screen(obj):
+            tokens = ["AXUtilities:", obj, "is believed to be off screen."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = [
+            "AXUtilities:",
+            obj,
+            "is not off screen. Checking",
+            bounding_box,
+            "intersection...",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if bounding_box is not None and not AXUtilitiesComponent.object_intersects_rect(
+            obj, bounding_box
+        ):
+            tokens = ["AXUtilities", obj, "not in", bounding_box, ". Treating as off screen."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        tokens = ["AXUtilities:", obj, "is believed to be on screen."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return True
+
+    @staticmethod
+    def treat_as_leaf_node(obj: Atspi.Accessible) -> bool:
+        """Returns True if obj should be treated as a leaf node."""
+
+        if AXUtilitiesRole.children_are_presentational(obj):
+            # In GTK, the contents of the page tab descends from the page tab.
+            return not AXUtilitiesRole.is_page_tab(obj)
+
+        role = AXObject.get_role(obj)
+        if AXUtilitiesRole.is_combo_box(obj, role):
+            return not AXUtilitiesState.is_expanded(obj)
+
+        if AXUtilitiesRole.is_menu(obj, role) and not AXUtilitiesRole.has_role_from_aria(obj):
+            return not AXUtilitiesState.is_expanded(obj)
+
+        if AXObject.get_name(obj):
+            return AXUtilitiesRole.is_link(obj, role) or AXUtilitiesRole.is_label(obj, role)
+
+        return False
+
+    @staticmethod
+    def _get_on_screen_objects(
+        root: Atspi.Accessible,
+        bounding_box: Atspi.Rect | None = None,
+    ) -> list:
+        tokens = ["AXUtilities: Getting on-screen objects in", root, "(", hex(id(root)), ")"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if not AXUtilities.is_on_screen(root, bounding_box):
+            return []
+
+        if AXUtilities.treat_as_leaf_node(root):
+            return [root]
+
+        if AXObject.supports_table(root) and AXObject.supports_selection(root):
+            return list(AXUtilitiesTable.iter_visible_cells(root))
+
+        objects = []
+        root_name = AXObject.get_name(root)
+        root_has_text = AXUtilitiesText.has_presentable_text(root)
+        if root_name or AXObject.get_description(root) or root_has_text:
+            objects.append(root)
+
+        if bounding_box is None:
+            bounding_box = AXComponent.get_rect(root)
+
+        for i, child in enumerate(AXObject.iter_children(root)):
+            tokens = ["AXUtilities: Child", i, "is", child, "(", hex(id(child)), ")"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+            if (
+                root_has_text
+                and AXUtilitiesRole.is_static(child)
+                and AXHypertext.get_character_offset_in_parent(child) == -1
+            ):
+                tokens = ["AXUtilities:", child, "text is inline in parent. Skipping as duplicate."]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                continue
+
+            children = AXUtilities._get_on_screen_objects(child, bounding_box)
+            objects.extend(children)
+            if (
+                root_name
+                and children
+                and root in objects
+                and (
+                    root_name == AXObject.get_name(child) or AXUtilities.name_is_from_contents(root)
+                )
+            ):
+                objects.remove(root)
+
+        is_interactive = AXUtilitiesState.is_focusable(root) or AXUtilitiesAction.has_action(
+            root, "click"
+        )
+        if not objects and is_interactive:
+            objects = [root]
+
+        return objects
+
+    @staticmethod
+    def get_on_screen_objects(
+        root: Atspi.Accessible,
+        bounding_box: Atspi.Rect | None = None,
+    ) -> list:
+        """Returns a list of onscreen objects in the given root."""
+
+        result = AXUtilities._get_on_screen_objects(root, bounding_box)
+        tokens = ["AXUtilities:", len(result), "onscreen objects found in", root]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return result
+
+    @staticmethod
+    def active_descendant(obj: Atspi.Accessible) -> Atspi.Accessible | None:
+        """Legacy table-cell code originally for managed descendants."""
+
+        # TODO - JD: Determine what actually needs this support and why.
+
+        if AXObject.is_dead(obj):
+            return None
+
+        if not AXUtilitiesRole.is_table_cell(obj):
+            return obj
+
+        if AXObject.get_name(obj):
+            return obj
+
+        # Its own text makes it the subject, not a managed descendant to defer to.
+        if AXUtilitiesText.has_presentable_text(obj):
+            return obj
+
+        def pred(x: Atspi.Accessible) -> bool:
+            return bool(AXObject.get_name(x) or AXText.get_all_text(x))
+
+        child = AXUtilitiesObject.find_descendant(obj, pred)
+        if child is not None:
+            return child
+
+        return obj
+
+    @staticmethod
+    def find_previous_object(
+        obj: Atspi.Accessible,
+        restrict_to: Atspi.Accessible | None = None,
+    ) -> Atspi.Accessible | None:
+        """Finds the object before this one, optionally restricted to a subtree."""
+
+        result = AXUtilities._get_previous_object(obj)
+        tokens = ["AXUtilities: Previous object for", obj, "is", result]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if restrict_to is not None and not AXUtilitiesObject.is_ancestor(result, restrict_to, True):
+            tokens = ["AXUtilities:", result, "is not a descendant of", restrict_to]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return None
+
+        return result
+
+    @staticmethod
+    def find_next_object(
+        obj: Atspi.Accessible,
+        restrict_to: Atspi.Accessible | None = None,
+    ) -> Atspi.Accessible | None:
+        """Finds the object after this one, optionally restricted to a subtree."""
+
+        result = AXUtilities._get_next_object(obj)
+        tokens = ["AXUtilities: Next object for", obj, "is", result]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        if restrict_to is not None and not AXUtilitiesObject.is_ancestor(result, restrict_to, True):
+            tokens = ["AXUtilities:", result, "is not a descendant of", restrict_to]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return None
+
+        return result
+
+
+for method_name, method in inspect.getmembers(AXUtilitiesAction, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesApplication, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesEvent, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesHypertext, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesRelation, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesRole, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesState, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesSelection, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesCollection, predicate=inspect.isfunction):
+    if method_name.startswith("find"):
+        setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesMath, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesObject, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesComponent, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesDocument, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesTable, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)
+
+for method_name, method in inspect.getmembers(AXUtilitiesText, predicate=inspect.isfunction):
+    setattr(AXUtilities, method_name, method)

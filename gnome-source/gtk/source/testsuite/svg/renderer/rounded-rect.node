@@ -1,0 +1,19 @@
+rounded-clip {
+  clip: 10 10 50 50 / 10;
+  child: color {
+    bounds: 10 10 50 50;
+    color: rgb(0,0,0);
+  }
+}
+stroke {
+  child: color {
+    bounds: 9 9 52 52;
+    color: rgb(255,0,0);
+  }
+  path: rounded-rect {
+    outline: 10 10 50 50 / 10;
+  }
+  line-width: 1;
+  line-cap: butt;
+  line-join: miter;
+}

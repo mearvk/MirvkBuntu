@@ -1,0 +1,205 @@
+/*  Copyright 2023 Red Hat, Inc.
+ *
+ * GTK is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * GTK is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with GTK; see the file COPYING.  If not,
+ * see <http://www.gnu.org/licenses/>.
+ *
+ * Author: Matthias Clasen
+ */
+
+#include "config.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+
+#include <glib/gi18n-lib.h>
+#include <glib/gprintf.h>
+#include <glib/gstdio.h>
+#include <gtk/gtk.h>
+#include "gtk-rendernode-tool.h"
+#include "gtk-tool-utils.h"
+
+#define N_NODE_TYPES (GSK_TURBULENCE_NODE + 1)
+
+typedef struct {
+  unsigned long long counts[N_NODE_TYPES];
+  unsigned long long unique[N_NODE_TYPES];
+  unsigned long long depth;
+  unsigned long long n_leafs;
+  unsigned long long n_unique_leafs;
+} NodeCount;
+
+static void
+node_count_add_child (NodeCount       *count,
+                      const NodeCount *child,
+                      gboolean         unique)
+{
+  gsize i;
+
+  for (i = 0; i < N_NODE_TYPES; i++)
+    {
+      count->counts[i] += child->counts[i];
+      if (unique)
+        count->unique[i] += child->unique[i];
+    }
+
+  count->depth = MAX (count->depth, child->depth + 1);
+  count->n_leafs += child->n_leafs;
+  if (unique)
+    count->n_unique_leafs += child->n_unique_leafs;
+}
+
+static void
+count_nodes (GskRenderNode *node,
+             GHashTable    *cache,
+             NodeCount     *count)
+{
+  GskRenderNode **children;
+  gsize i, n_children;
+
+  g_assert (gsk_render_node_get_node_type (node) < N_NODE_TYPES);
+
+  count->counts[gsk_render_node_get_node_type (node)] += 1;
+  count->unique[gsk_render_node_get_node_type (node)] += 1;
+  count->depth = 1;
+  children = gsk_render_node_get_children (node, &n_children);
+  if (n_children == 0)
+    count->n_leafs++;
+  for (i = 0; i < n_children; i++)
+    {
+      NodeCount *child;
+
+      child = g_hash_table_lookup (cache, children[i]);
+      if (child != NULL)
+        {
+          node_count_add_child (count, child, FALSE);
+        }
+      else
+        {
+          child = g_new0 (NodeCount, 1);
+          count_nodes (children[i], cache, child);
+          g_hash_table_insert (cache, children[i], child);
+          node_count_add_child (count, child, TRUE);
+        }
+    }
+}
+
+static void
+file_info (const char *filename)
+{
+  GskRenderNode *node;
+  GHashTable *cache;
+  NodeCount count = { { 0, } };
+  unsigned long long total = 0;
+  unsigned long long total_unique = 0;
+  unsigned int namelen = 0;
+  unsigned int digits = 0;
+  graphene_rect_t bounds, opaque;
+
+  node = load_node_file (filename);
+  cache = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
+
+  count_nodes (node, cache, &count);
+
+  for (unsigned int i = 0; i < G_N_ELEMENTS (count.counts); i++)
+    {
+      total += count.counts[i];
+      total_unique += count.unique[i];
+      if (count.counts[i] > 0)
+        namelen = MAX (namelen, strlen (get_node_name (i)));
+    }
+
+  namelen = MAX (namelen, strlen (_("Number of nodes:")));
+  namelen = MAX (namelen, strlen (_("leaf nodes")));
+
+  if (total == total_unique)
+    g_print ("%*s %llu\n", namelen, _("Number of nodes:"), total);
+  else
+    g_print ("%*s %llu (%s %llu)\n", namelen, _("Number of nodes:"), total, _("unique:"), total_unique);
+
+  while (pow (10, digits) < total)
+    digits++;
+
+  g_print ("%*s: %*llu\n", namelen - 1, _("leaf nodes"), digits, count.n_leafs);
+  for (unsigned int i = 0; i < G_N_ELEMENTS (count.counts); i++)
+    {
+      if (count.counts[i] != count.unique[i])
+        g_print ("%*s: %*llu (%s %llu)\n", namelen - 1, get_node_name (i), digits, count.counts[i], _("unique:"), count.unique[i]);
+      else if (count.counts[i] > 0)
+        g_print ("%*s: %*llu\n", namelen - 1, get_node_name (i), digits, count.counts[i]);
+    }
+
+  g_print ("%s %llu\n", _("Depth:"), count.depth);
+
+  gsk_render_node_get_bounds (node, &bounds);
+  g_print ("%s %g x %g\n", _("Bounds:"), bounds.size.width, bounds.size.height);
+  g_print ("%s %g %g\n", _("Origin:"), bounds.origin.x, bounds.origin.y);
+  if (gsk_render_node_get_opaque_rect (node, &opaque))
+    {
+      g_print ("%s %g %g, %g x %g (%.0f%%)\n",
+               _("Opaque part:"),
+               opaque.origin.x, opaque.origin.y,
+               opaque.size.width, opaque.size.height,
+               100 * (opaque.size.width * opaque.size.height) / (bounds.size.width * bounds.size.height));
+    }
+  else
+    g_print ("%s none\n", _("Opaque part:"));
+
+  g_hash_table_unref (cache);
+  gsk_render_node_unref (node);
+}
+
+void
+do_info (int          *argc,
+         const char ***argv)
+{
+  GOptionContext *context;
+  char **filenames = NULL;
+  const GOptionEntry entries[] = {
+    { G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_FILENAME_ARRAY, &filenames, NULL, N_("FILE") },
+    { NULL, }
+  };
+  GError *error = NULL;
+
+  g_set_prgname ("gtk4-rendernode-tool info");
+  context = g_option_context_new (NULL);
+  g_option_context_set_translation_domain (context, GETTEXT_PACKAGE);
+  g_option_context_add_main_entries (context, entries, NULL);
+  g_option_context_set_summary (context, _("Provide information about the render node."));
+
+  if (!g_option_context_parse (context, argc, (char ***)argv, &error))
+    {
+      g_printerr ("%s\n", error->message);
+      g_error_free (error);
+      exit (1);
+    }
+
+  g_option_context_free (context);
+
+  if (filenames == NULL)
+    {
+      g_printerr (_("No .node file specified\n"));
+      exit (1);
+    }
+
+  if (g_strv_length (filenames) > 1)
+    {
+      g_printerr (_("Can only accept a single .node file\n"));
+      exit (1);
+    }
+
+  file_info (filenames[0]);
+
+  g_strfreev (filenames);
+}

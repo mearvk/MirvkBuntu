@@ -1,0 +1,20 @@
+<svg width="16" height="16"
+        xmlns:gpa='https://www.gtk.org/grappa'
+        gpa:version='1'
+        gpa:state-names='zero empty'
+        gpa:state='0'>
+  <path d="m0 0 l100 100"
+     id='path0'
+     gpa:fill='accent'
+     gpa:stroke='foreground'
+     gpa:stroke-width='1 2 3'
+    />
+ <rect x='0' y='5' width='10' height='10'
+    gpa:states='zero 2'/>
+ <circle
+    gpa:fill=' #ffaabb '
+    gpa:stroke=' warning '
+    gpa:stroke-minwidth=' 4 '
+    gpa:states=' all '
+    />
+</svg>

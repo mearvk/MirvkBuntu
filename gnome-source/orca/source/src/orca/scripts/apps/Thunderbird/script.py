@@ -1,0 +1,80 @@
+# Orca
+#
+# Copyright 2004-2008 Sun Microsystems Inc.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+"""Custom script for Thunderbird."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from orca import document_presenter
+from orca.ax_object import AXObject
+from orca.ax_utilities import AXUtilities
+from orca.scripts.toolkits import Gecko
+
+if TYPE_CHECKING:
+    import gi
+
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+
+
+class Script(Gecko.Script):
+    """The script for Thunderbird."""
+
+    def _is_in_editable_message(self, obj: Atspi.Accessible) -> bool:
+        """Returns True if obj is in an editable message."""
+
+        return AXUtilities.is_editable(obj) and bool(
+            AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_editable_document)
+        )
+
+    def _on_busy_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:state-changed:busy accessibility events."""
+
+        if self._is_in_editable_message(event.source):
+            return True
+
+        if document_presenter.get_presenter().in_focus_mode(self.app):
+            return True
+
+        return super()._on_busy_changed(event)
+
+    def _on_caret_moved(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-caret-moved accessibility events."""
+
+        if self._is_in_editable_message(event.source) and event.detail1 == -1:
+            return True
+
+        return super()._on_caret_moved(event)
+
+    def _on_selection_changed(self, event: Atspi.Event) -> bool:
+        """Callback for object:selection-changed accessibility events."""
+
+        parent = AXObject.get_parent(event.source)
+        if AXUtilities.is_combo_box(parent) and not AXUtilities.is_focused(parent):
+            return True
+
+        return super()._on_selection_changed(event)
+
+    def _on_window_deactivated(self, event: Atspi.Event) -> bool:
+        """Callback for window:deactivate accessibility events."""
+
+        self.utilities.clear_content_cache()
+        return super()._on_window_deactivated(event)

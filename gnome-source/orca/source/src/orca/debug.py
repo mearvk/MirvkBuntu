@@ -1,0 +1,181 @@
+# Orca
+#
+# Copyright 2005-2008 Sun Microsystems Inc.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+"""Handles writing debugging messages to the debug file or stderr."""
+
+import contextlib
+import inspect
+import os
+import re
+import sys
+import threading
+import traceback
+from datetime import datetime, timezone
+from typing import Any, TextIO
+
+LEVEL_OFF = 10000
+LEVEL_SEVERE = 1000
+LEVEL_WARNING = 900
+LEVEL_INFO = 800
+LEVEL_ALL = 0
+
+# Leave these as-is for now so as not to break debugging for anyone using orca-customizations.py
+# pylint: disable=invalid-name
+debugLevel: int = LEVEL_SEVERE
+debugFile: TextIO | None = None
+# pylint: enable=invalid-name
+
+_printing = threading.local()
+
+
+def print_exception(level: int) -> None:
+    """Prints out information regarding the current exception."""
+    if level >= debugLevel:
+        _print_text(level)
+        traceback.print_exc(100, debugFile)
+        _print_text(level)
+
+
+def print_tokens(
+    level: int,
+    tokens: list[Any],
+    timestamp: bool = False,
+    stack: bool = False,
+) -> None:
+    """Prints out each token as a human-consumable string."""
+
+    if level < debugLevel:
+        return
+
+    # Avoid importing AXObject through AXUtilitiesDebugging before AXCacheManager initializes.
+    # pylint: disable=import-outside-toplevel
+    from .ax_utilities_debugging import AXUtilitiesDebugging
+
+    text = _join_tokens([AXUtilitiesDebugging.as_string(token) for token in tokens])
+    _print_text(level, text, timestamp, stack)
+
+
+def _join_tokens(strings: list[str]) -> str:
+    """Joins token strings, where nothing already separates them, with a space."""
+
+    text = ""
+    for i, string in enumerate(strings):
+        already_apart = (
+            text.endswith(("'", "=", "(", "["))
+            or text[-1:].isspace()
+            or string.startswith("'")
+            or string[:1].isspace()
+        )
+        if i and not already_apart:
+            text += " "
+        text += string
+    return re.sub(r" (?=[,.:)\]])(?![\n])", "", text)
+
+
+def print_message(level: int, text: str, timestamp: bool = False, stack: bool = False) -> None:
+    """Prints out text."""
+
+    if level < debugLevel:
+        return
+
+    _print_text(level, text, timestamp, stack)
+
+
+def shutdown() -> None:
+    """Flushes debugFile and fsyncs it so no buffered writes are lost on exit."""
+
+    if debugFile is None:
+        return
+    with contextlib.suppress(OSError):
+        debugFile.flush()
+        os.fsync(debugFile.fileno())
+
+
+def _stack_as_string(max_frames: int = 4) -> str:
+    # Avoid importing AXObject through AXUtilitiesDebugging before AXCacheManager initializes.
+    # pylint: disable=import-outside-toplevel
+    from .ax_utilities_debugging import AXUtilitiesDebugging
+
+    callers = []
+    current_module = inspect.getmodule(inspect.currentframe())
+    stack = inspect.stack()
+    for i in range(1, len(stack)):
+        frame = stack[i]
+        module = inspect.getmodule(frame[0])
+        if module == current_module:
+            continue
+        if frame.function == "main":
+            continue
+        if module is None or module.__name__ is None:
+            continue
+        callers.append(frame)
+        if len(callers) >= max_frames:
+            break
+
+    callers.reverse()
+    return " > ".join(map(AXUtilitiesDebugging.as_string, callers))
+
+
+def _print_text(level: int, text: str = "", timestamp: bool = False, stack: bool = False) -> None:
+    if level < debugLevel:
+        return
+
+    # Prevent reentrancy.
+    if getattr(_printing, "active", False):
+        return
+
+    _printing.active = True
+
+    try:
+        if timestamp:
+            text = text.replace("\n", f"\n{' ' * 18}")
+            local_time = datetime.now(tz=timezone.utc).astimezone()
+            text = f"{local_time.strftime('%H:%M:%S.%f')} - {text}"
+        if stack:
+            text += f" {_stack_as_string()}"
+
+        if debugFile:
+            try:
+                debugFile.write(f"{text}\n")
+            except (AttributeError, OSError):
+                return
+            except (TypeError, ValueError, UnicodeEncodeError) as error:
+                text = f"Exception trying to write text to file: {error}"
+                with contextlib.suppress(
+                    AttributeError, OSError, TypeError, ValueError, UnicodeEncodeError
+                ):
+                    debugFile.write(f"{text}\n")
+            if level >= LEVEL_SEVERE:
+                with contextlib.suppress(
+                    AttributeError, OSError, TypeError, ValueError, UnicodeEncodeError
+                ):
+                    sys.stderr.write(f"{text}\n")
+        else:
+            try:
+                sys.stderr.write(f"{text}\n")
+            except (AttributeError, OSError):
+                return
+            except (TypeError, ValueError, UnicodeEncodeError) as error:
+                text = f"Exception trying to write text to stderr: {error}"
+                with contextlib.suppress(
+                    AttributeError, OSError, TypeError, ValueError, UnicodeEncodeError
+                ):
+                    sys.stderr.write(f"{text}\n")
+    finally:
+        _printing.active = False

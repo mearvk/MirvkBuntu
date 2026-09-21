@@ -1,0 +1,412 @@
+# Orca
+#
+# Copyright 2023 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-public-methods
+
+"""Utilities for accessible states."""
+
+from __future__ import annotations
+
+import gi
+
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+
+from . import debug, messages
+from .ax_object import AXObject
+
+
+class AXUtilitiesState:
+    """Utilities for accessible states."""
+
+    @staticmethod
+    def get_current_item_status_string(obj: Atspi.Accessible) -> str:
+        """Returns the current item status string of obj."""
+
+        if not AXUtilitiesState.is_active(obj):
+            return ""
+
+        result = AXObject.get_attribute(obj, "current")
+        if not result:
+            status = ""
+        elif result == "date":
+            status = messages.CURRENT_DATE
+        elif result == "time":
+            status = messages.CURRENT_TIME
+        elif result == "location":
+            status = messages.CURRENT_LOCATION
+        elif result == "page":
+            status = messages.CURRENT_PAGE
+        elif result == "step":
+            status = messages.CURRENT_STEP
+        else:
+            status = messages.CURRENT_ITEM
+        return status
+
+    @staticmethod
+    def has_no_state(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has an empty state set"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        return state_set.is_empty()
+
+    @staticmethod
+    def has_popup(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the has-popup state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.HAS_POPUP, state_set)
+
+    @staticmethod
+    def has_tooltip(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the has-tooltip state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.HAS_TOOLTIP, state_set)
+
+    @staticmethod
+    def is_active(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the active state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.ACTIVE, state_set)
+
+    @staticmethod
+    def is_animated(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the animated state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.ANIMATED, state_set)
+
+    @staticmethod
+    def is_armed(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the armed state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.ARMED, state_set)
+
+    @staticmethod
+    def is_busy(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the busy state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.BUSY, state_set)
+
+    @staticmethod
+    def is_checkable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the checkable state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if AXObject.has_state(obj, Atspi.StateType.CHECKABLE, state_set):
+            return True
+
+        if AXObject.has_state(obj, Atspi.StateType.CHECKED, state_set):
+            tokens = ["AXUtilitiesState:", obj, "is checked but lacks state checkable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        return False
+
+    @staticmethod
+    def is_checked(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the checked state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if not AXObject.has_state(obj, Atspi.StateType.CHECKED, state_set):
+            return False
+
+        if not AXObject.has_state(obj, Atspi.StateType.CHECKABLE, state_set):
+            tokens = ["AXUtilitiesState:", obj, "is checked but lacks state checkable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return True
+
+    @staticmethod
+    def is_collapsed(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the collapsed state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.COLLAPSED, state_set)
+
+    @staticmethod
+    def is_default(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the is-default state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.IS_DEFAULT, state_set)
+
+    @staticmethod
+    def is_defunct(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the defunct state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.DEFUNCT, state_set)
+
+    @staticmethod
+    def is_editable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the editable state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.EDITABLE, state_set)
+
+    @staticmethod
+    def is_enabled(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the enabled state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.ENABLED, state_set)
+
+    @staticmethod
+    def is_expandable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the expandable state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if AXObject.has_state(obj, Atspi.StateType.EXPANDABLE, state_set):
+            return True
+
+        if AXObject.has_state(obj, Atspi.StateType.EXPANDED, state_set):
+            tokens = ["AXUtilitiesState:", obj, "is expanded but lacks state expandable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        return False
+
+    @staticmethod
+    def is_expanded(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the expanded state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if not AXObject.has_state(obj, Atspi.StateType.EXPANDED, state_set):
+            return False
+
+        if not AXObject.has_state(obj, Atspi.StateType.EXPANDABLE, state_set):
+            tokens = ["AXUtilitiesState:", obj, "is expanded but lacks state expandable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return True
+
+    @staticmethod
+    def is_focusable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the focusable state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if AXObject.has_state(obj, Atspi.StateType.FOCUSABLE, state_set):
+            return True
+
+        if AXObject.has_state(obj, Atspi.StateType.FOCUSED, state_set):
+            tokens = ["AXUtilitiesState:", obj, "is focused but lacks state focusable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        return False
+
+    @staticmethod
+    def is_focused(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the focused state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if not AXObject.has_state(obj, Atspi.StateType.FOCUSED, state_set):
+            return False
+
+        if not AXObject.has_state(obj, Atspi.StateType.FOCUSABLE, state_set):
+            tokens = ["AXUtilitiesState:", obj, "is focused but lacks state focusable"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return True
+
+    @staticmethod
+    def is_horizontal(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the horizontal state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.HORIZONTAL, state_set)
+
+    @staticmethod
+    def is_iconified(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the iconified state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.ICONIFIED, state_set)
+
+    @staticmethod
+    def is_indeterminate(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the indeterminate state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.INDETERMINATE, state_set)
+
+    @staticmethod
+    def is_invalid_state(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the invalid_state state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.INVALID, state_set)
+
+    @staticmethod
+    def is_invalid_entry(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the invalid_entry state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.INVALID_ENTRY, state_set)
+
+    @staticmethod
+    def is_modal(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the modal state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.MODAL, state_set)
+
+    @staticmethod
+    def is_multi_line(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the multi_line state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.MULTI_LINE, state_set)
+
+    @staticmethod
+    def is_multiselectable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the multiselectable state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.MULTISELECTABLE, state_set)
+
+    @staticmethod
+    def is_opaque(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the opaque state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.OPAQUE, state_set)
+
+    @staticmethod
+    def is_pressed(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the pressed state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.PRESSED, state_set)
+
+    @staticmethod
+    def is_read_only(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the read-only state"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        if AXObject.has_state(obj, Atspi.StateType.READ_ONLY, state_set):
+            return True
+        if AXUtilitiesState.is_editable(obj, state_set):
+            return False
+
+        # We cannot count on GTK to set the read-only state on text objects.
+        return AXObject.get_role(obj) == Atspi.Role.TEXT
+
+    @staticmethod
+    def is_required(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the required state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.REQUIRED, state_set)
+
+    @staticmethod
+    def is_resizable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the resizable state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.RESIZABLE, state_set)
+
+    @staticmethod
+    def is_selectable(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the selectable state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SELECTABLE, state_set)
+
+    @staticmethod
+    def is_selectable_text(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the selectable-text state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SELECTABLE_TEXT, state_set)
+
+    @staticmethod
+    def is_selected(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the selected state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SELECTED, state_set)
+
+    @staticmethod
+    def is_sensitive(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the sensitive state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SENSITIVE, state_set)
+
+    @staticmethod
+    def is_showing(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the showing state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SHOWING, state_set)
+
+    @staticmethod
+    def is_showing_and_visible(
+        obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None
+    ) -> bool:
+        """Returns true if obj has both the showing and visible states"""
+
+        if state_set is None:
+            state_set = AXObject.get_state_set(obj)
+        return AXObject.has_state(obj, Atspi.StateType.SHOWING, state_set) and AXObject.has_state(
+            obj, Atspi.StateType.VISIBLE, state_set
+        )
+
+    @staticmethod
+    def is_single_line(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the single-line state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SINGLE_LINE, state_set)
+
+    @staticmethod
+    def is_stale(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the stale state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.STALE, state_set)
+
+    @staticmethod
+    def is_transient(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the transient state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.TRANSIENT, state_set)
+
+    @staticmethod
+    def is_truncated(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the truncated state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.TRUNCATED, state_set)
+
+    @staticmethod
+    def is_vertical(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the vertical state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.VERTICAL, state_set)
+
+    @staticmethod
+    def is_visible(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the visible state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.VISIBLE, state_set)
+
+    @staticmethod
+    def is_visited(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the visited state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.VISITED, state_set)
+
+    @staticmethod
+    def manages_descendants(obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None) -> bool:
+        """Returns true if obj has the manages-descendants state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.MANAGES_DESCENDANTS, state_set)
+
+    @staticmethod
+    def supports_autocompletion(
+        obj: Atspi.Accessible, state_set: Atspi.StateSet | None = None
+    ) -> bool:
+        """Returns true if obj has the supports-autocompletion state"""
+
+        return AXObject.has_state(obj, Atspi.StateType.SUPPORTS_AUTOCOMPLETION, state_set)

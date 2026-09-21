@@ -1,0 +1,20 @@
+rounded-clip {
+  clip: 30 30 40 40 / 20;
+  child: color {
+    bounds: 30 30 40 40;
+    color: rgb(0,0,0);
+  }
+}
+stroke {
+  child: color {
+    bounds: 29.5 29.5 41 41;
+    color: rgb(255,0,0);
+  }
+  path: circle {
+    center: 50 50;
+    radius: 20;
+  }
+  line-width: 1;
+  line-cap: butt;
+  line-join: miter;
+}

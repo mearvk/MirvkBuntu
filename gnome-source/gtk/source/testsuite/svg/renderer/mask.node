@@ -1,0 +1,17 @@
+mask {
+  mode: luminance;
+  source: rounded-clip {
+    clip: 20 20 80 80 / 40;
+    child: color {
+      bounds: 20 20 80 80;
+      color: rgb(0,0,0);
+    }
+  }
+  mask: rounded-clip {
+    clip: 0 0 80 80 / 40;
+    child: color {
+      bounds: 0 0 80 80;
+      color: rgba(255,0,128,0.5);
+    }
+  }
+}

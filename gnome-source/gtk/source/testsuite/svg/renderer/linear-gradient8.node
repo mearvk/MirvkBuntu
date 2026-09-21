@@ -1,0 +1,14 @@
+stroke {
+  child: linear-gradient {
+    bounds: 45 45 210 110;
+    start: 0 0;
+    end: 20 10;
+    stops: 0 rgb(255,0,0), 0.5 rgb(255,0,0), 0.5 rgb(255,255,0), 1 rgb(255,255,0);
+    repeat: repeat;
+    premultiplied: false;
+  }
+  path: 50 50 200 100;
+  line-width: 10;
+  line-cap: butt;
+  line-join: miter;
+}

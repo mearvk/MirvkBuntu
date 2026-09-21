@@ -1,0 +1,53 @@
+clip {
+  clip: 0 0 110 110;
+  child: container {
+    clip {
+      clip: -5 -5 60 60;
+      child: blur {
+        blur: 20;
+        child: color {
+          bounds: -5 -5 60 60;
+          color: rgb(0,0,255);
+        }
+      }
+    }
+    color {
+      bounds: 10 10 30 30;
+      color: rgb(0,0,255);
+    }
+    clip {
+      clip: 25 25 60 60;
+      child: blur {
+        blur: 20;
+        child: color {
+          bounds: 25 25 60 60;
+          color: rgb(255,0,0);
+        }
+      }
+    }
+    color {
+      bounds: 40 40 30 30;
+      color: rgb(255,0,0);
+    }
+    clip {
+      clip: 55 55 60 60;
+      child: blur {
+        blur: 20;
+        child: linear-gradient {
+          bounds: 55 55 60 60;
+          start: 55 55;
+          end: 115 55;
+          stops: 0 rgb(255,255,0), 1 rgb(128,0,128);
+          premultiplied: false;
+        }
+      }
+    }
+    linear-gradient {
+      bounds: 70 70 30 30;
+      start: 70 70;
+      end: 100 70;
+      stops: 0 rgb(255,255,0), 1 rgb(128,0,128);
+      premultiplied: false;
+    }
+  }
+}

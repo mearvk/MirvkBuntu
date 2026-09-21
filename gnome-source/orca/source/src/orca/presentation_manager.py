@@ -1,0 +1,613 @@
+# Orca
+#
+# Copyright 2026 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-return-statements
+
+"""Module for managing presentation of information to the user via speech, braille, and sound."""
+
+from __future__ import annotations
+
+import contextlib
+import enum
+import os
+import time
+from typing import TYPE_CHECKING
+
+from . import (
+    ax_cache_manager,
+    braille_presenter,
+    debug,
+    focus_manager,
+    input_event_manager,
+    live_region_presenter,
+    messages,
+    script_manager,
+    sound,
+    sound_presenter,
+    speech_manager,
+    speech_presenter,
+    speechserver,
+    typing_echo_presenter,
+)
+from .ax_object import AXObject
+from .ax_utilities import AXUtilities
+from .ax_value import AXValue
+from .generator import PresentationReason
+
+if TYPE_CHECKING:
+    import gi
+
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+
+    from .input_event import KeyboardEvent
+    from .scripts import default
+
+
+class _Command(enum.Enum):
+    """Commands whose announcement should be deduplicated."""
+
+    UNDO = enum.auto()
+    REDO = enum.auto()
+    PASTE = enum.auto()
+
+
+class PresentationManager:
+    """Manages presentation of information to the user via speech, braille, and sound."""
+
+    def _get_active_script(self) -> default.Script | None:
+        """Returns the active script."""
+
+        return script_manager.get_manager().get_active_script()
+
+    def is_flash_message_displayed(self) -> bool:
+        """Returns True if a flash message is currently being displayed on braille."""
+
+        return braille_presenter.get_presenter().is_flash_active()
+
+    def interrupt_presentation(self, kill_flash: bool = True) -> None:
+        """Convenience method to interrupt whatever is being presented at the moment."""
+
+        msg = "PRESENTATION MANAGER: Interrupting presentation"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        speech_manager.get_manager().interrupt_speech()
+        speech_presenter.get_presenter().record_interrupt()
+        if kill_flash:
+            braille_presenter.get_presenter().kill_flash()
+        live_region_presenter.get_presenter().flush_messages()
+
+    def interrupt_if_needed_for_object_presentation(self) -> None:
+        """Interrupts presentation unless the last input was a recent keyboard event."""
+
+        if input_event_manager.get_manager().last_event_was_keyboard(within=1.0):
+            return
+        self.interrupt_presentation()
+
+    def interrupt_if_needed_for_focus_change(
+        self,
+        old_focus: Atspi.Accessible,
+        new_focus: Atspi.Accessible,
+        event: Atspi.Event | None = None,
+    ) -> None:
+        """Interrupts presentation if the focus change warrants it."""
+
+        if self._should_interrupt_for_focus_change(old_focus, new_focus, event):
+            self.interrupt_presentation()
+
+    def _should_interrupt_for_focus_change(
+        self,
+        old_focus: Atspi.Accessible,
+        new_focus: Atspi.Accessible,
+        event: Atspi.Event | None = None,
+    ) -> bool:
+        """Returns True if speech should be interrupted to present the new focus."""
+
+        msg = "PRESENTATION MANAGER: Not interrupting for locusOfFocus change: "
+        if time.monotonic() - self._last_announcement_time <= 1.0:
+            debug.print_message(debug.LEVEL_INFO, msg + "recent announcement", True)
+            return False
+
+        if event is None:
+            debug.print_message(debug.LEVEL_INFO, msg + "event is None", True)
+            return False
+
+        if old_focus == new_focus:
+            debug.print_message(debug.LEVEL_INFO, msg + "old locusOfFocus is same as new", True)
+            return False
+
+        if event.type.startswith(
+            "object:active-descendant-changed",
+        ) and input_event_manager.get_manager().last_event_was_keyboard(within=1.0):
+            debug.print_message(
+                debug.LEVEL_INFO,
+                msg + "event is active-descendant-changed during keyboard use",
+                True,
+            )
+            return False
+
+        if (
+            AXUtilities.is_table_cell(old_focus)
+            and AXUtilities.is_text(new_focus)
+            and AXUtilities.is_editable(new_focus)
+        ):
+            msg += "suspected editable cell"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if AXUtilities.is_menu_related(new_focus):
+            if (
+                AXUtilities.is_expanded(old_focus)
+                and (AXUtilities.is_menu(old_focus) or AXUtilities.is_menu_item(old_focus))
+                and AXObject.get_parent(old_focus) != AXObject.get_parent(new_focus)
+            ):
+                msg += "suspected newly-expanded menu"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return False
+        elif AXUtilities.is_check_menu_item(old_focus) or AXUtilities.is_radio_menu_item(old_focus):
+            msg += "suspected menuitem state change"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if AXUtilities.is_ancestor(new_focus, old_focus):
+            if old_name := AXObject.get_name(old_focus):
+                if old_name == AXObject.get_name(new_focus):
+                    return True
+                msg += "old locusOfFocus is ancestor of new locusOfFocus, and has a name"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return False
+            if AXUtilities.is_dialog_or_window(old_focus):
+                if AXUtilities.is_menu(new_focus):
+                    return True
+                msg += "old locusOfFocus is ancestor dialog or window of the new locusOfFocus"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return False
+            return True
+
+        if AXUtilities.object_is_controlled_by(
+            old_focus,
+            new_focus,
+        ) or AXUtilities.object_is_controlled_by(new_focus, old_focus):
+            msg += "new locusOfFocus and old locusOfFocus have controls relation"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        return True
+
+    _announced_command: _Command | None = None
+    _last_announcement_time: float = 0.0
+
+    def present_announcement(self, announcement: str) -> None:
+        """Presents an announcement made by the application."""
+
+        self._last_announcement_time = time.monotonic()
+        self.present_message(announcement)
+
+    def present_command_announcement(self) -> None:
+        """Presents undo/redo/paste announcement once per command."""
+
+        manager = input_event_manager.get_manager()
+        if manager.last_event_was_undo():
+            if self._announced_command != _Command.UNDO:
+                self.present_message(messages.UNDO)
+                self._announced_command = _Command.UNDO
+        elif manager.last_event_was_redo():
+            if self._announced_command != _Command.REDO:
+                self.present_message(messages.REDO)
+                self._announced_command = _Command.REDO
+        elif manager.last_event_was_paste():
+            if self._announced_command != _Command.PASTE:
+                self.present_message(
+                    messages.CLIPBOARD_PASTED_FULL, messages.CLIPBOARD_PASTED_BRIEF
+                )
+                self._announced_command = _Command.PASTE
+
+    def clear_command_announcement(self) -> None:
+        """Clears the announced-command state."""
+
+        self._announced_command = None
+
+    def refresh_presenters(self) -> None:
+        """Refreshes braille and speech settings after profile/settings change."""
+
+        # Braille settings apply dynamically; just ensure enabled/disabled state is correct.
+        braille_presenter.get_presenter().check_braille_setting()
+        # Speech needs full restart because synthesizer/server might have changed.
+        speech_manager.get_manager().refresh_speech()
+
+    def shutdown_presenters(self) -> None:
+        """Shuts down braille, speech, and sound."""
+
+        msg = "PRESENTATION MANAGER: Shutting down presenters"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        sound_presenter.get_presenter().shutdown_sound()
+        speech_presenter.get_presenter().destroy_monitor()
+        speech_manager.get_manager().shutdown_speech()
+        braille_presenter.get_presenter().shutdown_braille()
+
+    def start_presenters(self) -> None:
+        """Starts braille, speech, and sound if each is enabled."""
+
+        msg = "PRESENTATION MANAGER: Starting presenters"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        speech_manager.get_manager().start_speech()
+        braille_presenter.get_presenter().init_braille()
+        sound_presenter.get_presenter().init_sound()
+        speech_presenter.get_presenter().init_monitor()
+
+    def present_keyboard_event(self, event: KeyboardEvent) -> None:
+        """Presents the KeyboardEvent event."""
+
+        typing_echo_presenter.get_presenter().echo_keyboard_event(event)
+
+    def present_key_event(self, event: KeyboardEvent) -> None:
+        """Presents a key event via speech (and potentially braille/sound in the future)."""
+
+        key_name = event.get_key_name()
+        if len(key_name) == 1:
+            self.speak_character(key_name)
+            return
+        speech_presenter.get_presenter().present_key_event(event)
+
+    # pylint: disable-next=too-many-arguments, too-many-positional-arguments
+    def present_message(
+        self,
+        full: str,
+        brief: str | None = None,
+        voice_type: str = speechserver.VoiceType.SYSTEM,
+    ) -> None:
+        """Convenience method to speak a message and 'flash' it in braille."""
+
+        if not full:
+            return
+
+        if brief is None:
+            brief = full
+
+        speech_pres = speech_presenter.get_presenter()
+        message = full if speech_pres.get_messages_are_detailed() else brief
+        if message:
+            self.speak_message(message, voice_type)
+
+        braille_pres = braille_presenter.get_presenter()
+        if not (braille_pres.use_braille() and braille_pres.get_flash_messages_are_enabled()):
+            return
+
+        message = full if braille_pres.get_flash_messages_are_detailed() else brief
+        if not message:
+            return
+
+        if isinstance(message[0], list):
+            message = message[0]
+        if isinstance(message, list):
+            message = [i for i in message if isinstance(i, str)]
+            message = " ".join(message)
+
+        braille_pres.present_message(message)
+
+    @staticmethod
+    def display_message(message: str, persistent: bool = False) -> None:
+        """Displays a plain message in braille, or clears it if message is empty."""
+
+        presenter = braille_presenter.get_presenter()
+        if not message:
+            presenter.kill_flash(restore_saved=True)
+            return
+
+        presenter.present_message(
+            message,
+            restore_previous=not persistent,
+            flash_time=-1 if persistent else None,
+        )
+
+    @staticmethod
+    def play_sound_file(path: str, interrupt: bool = True) -> bool:
+        """Plays the sound file at path."""
+
+        sound_path = os.path.abspath(os.path.expanduser(path))
+        if not os.path.isfile(sound_path):
+            tokens = ["PRESENTATION MANAGER: Sound file not found:", path]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            return False
+
+        icon = sound.Icon(os.path.dirname(sound_path), os.path.basename(sound_path))
+        sound_presenter.get_presenter().play(icon, interrupt)
+        return True
+
+    @staticmethod
+    def play_tone(
+        duration: float,
+        frequency: int,
+        volume: float = 1.0,
+        wave: str = "sine",
+        interrupt: bool = True,
+    ) -> bool:
+        """Plays a tone."""
+
+        if duration <= 0:
+            tokens = ["PRESENTATION MANAGER: Invalid tone duration:", duration]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            return False
+
+        wave_values = {
+            "sine": sound.Tone.SINE_WAVE,
+            "square": sound.Tone.SQUARE_WAVE,
+            "saw": sound.Tone.SAW_WAVE,
+            "triangle": sound.Tone.TRIANGLE_WAVE,
+            "silence": sound.Tone.SILENCE,
+            "white-noise": sound.Tone.WHITE_UNIFORM_NOISE,
+            "pink-noise": sound.Tone.PINK_NOISE,
+        }
+        wave_value = wave_values.get(wave)
+        if wave_value is None:
+            tokens = ["PRESENTATION MANAGER: Unknown tone wave:", wave]
+            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            return False
+
+        tone = sound.Tone(duration, frequency, min(max(0.0, volume), 1.0), wave_value)
+        sound_presenter.get_presenter().play(tone, interrupt)
+        return True
+
+    @staticmethod
+    def present_braille_message(message: str, restore_previous: bool = True) -> None:
+        """Displays a single line in braille."""
+
+        braille_presenter.get_presenter().present_message(
+            message,
+            restore_previous=restore_previous,
+        )
+
+    def spell_item(
+        self,
+        text: str,
+        obj: Atspi.Accessible | None = None,
+        start_offset: int | None = None,
+    ) -> None:
+        """Speak the characters in the string one by one."""
+
+        speech_presenter.get_presenter().spell_item(text, obj, start_offset)
+
+    def spell_phonetically(
+        self,
+        item_string: str,
+        obj: Atspi.Accessible | None = None,
+        start_offset: int | None = None,
+    ) -> None:
+        """Phonetically spell item_string."""
+
+        speech_presenter.get_presenter().spell_phonetically(item_string, obj, start_offset)
+
+    @staticmethod
+    def _get_cap_style(character: str) -> speechserver.CapitalizationStyle | None:
+        """Returns the capitalization style if character is uppercase alpha."""
+
+        if character.isupper() and character.strip().isalpha():
+            style_str = speech_manager.get_manager().get_capitalization_style()
+            return speechserver.CapitalizationStyle(style_str)
+        return None
+
+    def speak_character(
+        self,
+        character: str,
+        obj: Atspi.Accessible | None = None,
+        language: str = "",
+        dialect: str = "",
+    ) -> None:
+        """Speaks a single character."""
+
+        speech_presenter.get_presenter().speak_character(
+            character,
+            voice_from=character,
+            cap_style=self._get_cap_style(character),
+            obj=obj,
+            language=language,
+            dialect=dialect,
+        )
+
+    def speak_character_at_offset(
+        self,
+        obj: Atspi.Accessible,
+        offset: int,
+        character: str,
+    ) -> None:
+        """Speaks a character at the given offset, handling capitalization style."""
+
+        cap_style = self._get_cap_style(character)
+        speech_presenter.get_presenter().speak_character_at_offset(
+            obj,
+            offset,
+            character,
+            cap_style=cap_style,
+        )
+
+    def speak_accessible_text(
+        self,
+        obj: Atspi.Accessible | None,
+        text: str,
+        start_offset: int | None = None,
+    ) -> None:
+        """Speaks text from an accessible object."""
+
+        if speech_manager.get_manager().get_speech_is_muted():
+            return
+        speech_presenter.get_presenter().speak_accessible_text(obj, text, start_offset)
+
+    def speak_message(
+        self,
+        text: str,
+        voice_type: str = speechserver.VoiceType.SYSTEM,
+    ) -> None:
+        """Speaks a single string."""
+
+        if not speech_manager.get_manager().get_speech_is_enabled_and_not_muted():
+            return
+        speech_presenter.get_presenter().speak_message(text, voice_type)
+
+    # pylint: disable-next=too-many-arguments
+    def present_object(
+        self,
+        script: default.Script,
+        obj: Atspi.Accessible,
+        *,
+        generate_speech: bool = True,
+        generate_braille: bool = True,
+        generate_sound: bool = False,
+        prior_obj: Atspi.Accessible | None = None,
+        reason: PresentationReason | None = None,
+    ) -> None:
+        """Generates and presents an object via speech, braille, and sound."""
+
+        if obj is None:
+            return
+
+        if reason == PresentationReason.PROGRESS_BAR_UPDATE:
+            percent = AXValue.get_value_as_percent(obj)
+            is_same_app = (
+                AXUtilities.get_application(obj)
+                == script_manager.get_manager().get_active_script_app()
+            )
+            is_same_window = (
+                script.utilities.top_level_object(obj)
+                == focus_manager.get_manager().get_active_window()
+            )
+            if generate_speech:
+                generate_speech = (
+                    speech_presenter.get_presenter().should_present_progress_bar_update(
+                        obj,
+                        percent,
+                        is_same_app,
+                        is_same_window,
+                    )
+                )
+            if generate_braille:
+                generate_braille = (
+                    braille_presenter.get_presenter().should_present_progress_bar_update(
+                        obj,
+                        percent,
+                        is_same_app,
+                        is_same_window,
+                    )
+                )
+            if generate_sound:
+                generate_sound = sound_presenter.get_presenter().should_present_progress_bar_update(
+                    obj,
+                    percent,
+                    is_same_app,
+                    is_same_window,
+                )
+
+        if not (generate_speech or generate_braille or generate_sound):
+            return
+
+        with self._stable_tree_scope_for(obj):
+            if generate_speech:
+                speech_presenter.get_presenter().present_generated_speech(
+                    script,
+                    obj,
+                    prior_obj=prior_obj,
+                    reason=reason,
+                )
+
+            if generate_braille:
+                braille_presenter.get_presenter().present_generated_braille(
+                    script,
+                    obj,
+                    prior_obj=prior_obj,
+                    reason=reason,
+                )
+
+            if generate_sound:
+                sound_presenter.get_presenter().present_generated_sound(
+                    script,
+                    obj,
+                    prior_obj=prior_obj,
+                    reason=reason,
+                )
+
+    @staticmethod
+    def _stable_tree_scope_for(
+        obj: Atspi.Accessible,
+    ) -> contextlib.AbstractContextManager[None]:
+        """Returns a scope treating the tree as stable, or a null one where it cannot be."""
+
+        # A terminal's or editable's contents can change while being presented.
+        if AXUtilities.is_editable(obj) or AXUtilities.is_terminal(obj):
+            return contextlib.nullcontext()
+        return ax_cache_manager.stable_tree_scope()
+
+    def present_contents(
+        self,
+        contents: list[tuple[Atspi.Accessible, int, int, str]],
+        *,
+        reason: PresentationReason | None = None,
+        prior_obj: Atspi.Accessible | None = None,
+    ) -> None:
+        """Speaks and displays the specified contents."""
+
+        if not contents:
+            return
+
+        with self._stable_tree_scope_for(contents[0][0]):
+            self.speak_contents(contents, reason=reason, prior_obj=prior_obj)
+            self.display_contents(contents)
+
+    def speak_contents(
+        self,
+        contents: list[tuple[Atspi.Accessible, int, int, str]],
+        *,
+        reason: PresentationReason | None = None,
+        prior_obj: Atspi.Accessible | None = None,
+    ) -> None:
+        """Speaks the specified contents."""
+
+        speech_presenter.get_presenter().speak_contents(
+            contents, reason=reason, prior_obj=prior_obj
+        )
+
+    def display_contents(
+        self,
+        contents: list[tuple[Atspi.Accessible, int, int, str]],
+    ) -> None:
+        """Displays contents in braille."""
+
+        tokens = ["PRESENTATION MANAGER: Displaying", contents]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True, True)
+
+        if not (active_script := self._get_active_script()):
+            return
+
+        braille_presenter.get_presenter().display_generated_contents(
+            active_script,
+            contents,
+        )
+
+    def present_window_title(self, script: default.Script, obj: Atspi.Accessible) -> None:
+        """Generates and presents the window title."""
+
+        for string in speech_presenter.get_presenter().generate_window_title_strings(script, obj):
+            self.present_message(string)
+
+
+_manager: PresentationManager = PresentationManager()
+
+
+def get_manager() -> PresentationManager:
+    """Returns the Presentation Manager singleton."""
+    return _manager

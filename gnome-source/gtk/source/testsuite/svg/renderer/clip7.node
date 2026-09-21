@@ -1,0 +1,154 @@
+clip {
+  clip: 33.3333 33.3333 10.4167 10.4167;
+  child: color {
+    bounds: 33.3333 33.3333 10.4167 10.4167;
+    color: rgb(0,255,0);
+  }
+}
+clip {
+  clip: 44.7917 33.3333 10.4167 10.4167;
+  child: color {
+    bounds: 44.7917 33.3333 10.4167 10.4167;
+    color: rgb(0,255,0);
+  }
+}
+clip {
+  clip: 56.25 33.3333 10.4167 10.4167;
+  child: color {
+    bounds: 56.25 33.3333 10.4167 10.4167;
+    color: rgb(0,255,0);
+  }
+}
+color {
+  bounds: 33.3854 44.8437 10.3125 10.3125;
+  color: rgb(255,0,0);
+}
+clip {
+  clip: 33.3333 44.7917 10.4167 10.4167;
+  child: color {
+    bounds: 33.3333 44.7917 10.4167 10.4167;
+    color: rgb(0,255,0);
+  }
+}
+color {
+  bounds: 44.8437 44.8437 10.3125 10.3125;
+  color: rgb(255,0,0);
+}
+clip {
+  clip: 44.7917 44.7917 10.4167 10.4167;
+  child: clip {
+    clip: 44.7917 44.7917 10.4167 10.4167;
+    child: color {
+      bounds: 44.7917 44.7917 10.4167 10.4167;
+      color: rgb(0,255,0);
+    }
+  }
+}
+clip {
+  clip: 56.3021 44.8437 10.3125 10.3125;
+  child: color {
+    bounds: 56.3021 44.8437 10.3125 10.3125;
+    color: rgb(255,0,0);
+  }
+}
+clip {
+  clip: 56.25 44.7917 10.4167 10.4167;
+  child: clip {
+    clip: 56.25 44.7917 10.4167 10.4167;
+    child: color {
+      bounds: 56.25 44.7917 10.4167 10.4167;
+      color: rgb(0,255,0);
+    }
+  }
+}
+clip {
+  clip: 33.3333 56.25 10.4167 10.4167;
+  child: color {
+    bounds: 33.3333 56.25 10.4167 10.4167;
+    color: rgb(0,255,0);
+  }
+}
+clip {
+  clip: 37.5 60.4167 2.08333 2.08333;
+  child: clip {
+    clip: 33.3333 56.25 10.4167 10.4167;
+    child: color {
+      bounds: 33.3333 56.25 10.4167 10.4167;
+      color: rgb(255,0,0);
+    }
+  }
+}
+clip {
+  clip: 37.3958 60.3125 2.29167 2.29167;
+  child: color {
+    bounds: 37.3958 60.3125 2.29167 2.29167;
+    color: rgb(0,255,0);
+  }
+}
+clip {
+  clip: 44.7917 56.25 10.4167 10.4167;
+  child: color {
+    bounds: 44.7917 56.25 10.4167 10.4167;
+    color: rgb(0,255,0);
+  }
+}
+clip {
+  clip: 48.9583 60.4167 2.08333 2.08333;
+  child: clip {
+    clip: 44.7917 56.25 10.4167 10.4167;
+    child: color {
+      bounds: 44.7917 56.25 10.4167 10.4167;
+      color: rgb(255,0,0);
+    }
+  }
+}
+clip {
+  clip: 48.8542 60.3125 2.29167 2.29167;
+  child: color {
+    bounds: 48.8542 60.3125 2.29167 2.29167;
+    color: rgb(0,255,0);
+  }
+}
+clip {
+  clip: 56.3021 56.3021 10.3125 10.3125;
+  child: color {
+    bounds: 56.3021 56.3021 10.3125 10.3125;
+    color: rgb(255,0,0);
+  }
+}
+clip {
+  clip: 56.25 56.25 10.4167 10.4167;
+  child: clip {
+    clip: 56.25 56.25 10.4167 10.4167;
+    child: color {
+      bounds: 56.25 56.25 10.4167 10.4167;
+      color: rgb(0,255,0);
+    }
+  }
+}
+transform {
+  transform: translate(0, 12.5) scale(0.104167) translate(320, 200);
+  child: stroke {
+    child: color {
+      bounds: -0.5 -0.5 321 321;
+      color: rgb(0,0,0);
+    }
+    path: 0 0 320 320;
+    line-width: 1;
+    line-cap: butt;
+    line-join: miter;
+  }
+}
+transform {
+  transform: translate(0, 12.5) scale(0.208333);
+  child: stroke {
+    child: color {
+      bounds: 0.5 0.5 479 359;
+      color: rgb(0,0,0);
+    }
+    path: 1 1 478 358;
+    line-width: 1;
+    line-cap: butt;
+    line-join: miter;
+  }
+}

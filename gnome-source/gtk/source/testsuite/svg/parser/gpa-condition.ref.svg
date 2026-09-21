@@ -1,0 +1,48 @@
+<svg
+        xmlns='http://www.w3.org/2000/svg'
+        xmlns:svg='http://www.w3.org/2000/svg'
+        xmlns:gpa='https://www.gtk.org/grappa'
+        gpa:version='1'
+        gpa:state='0'
+        width='150'
+        height='150'
+        viewBox='0 0 150 150'>
+  <rect
+          fill='rgb(255,0,0)'
+          x='10'
+          y='10'
+          width='20'
+          height='20'>
+    <animate
+            attributeName='x'
+            begin='StateChange(not 1, 1)'
+            dur='4000ms'
+            from='10'
+            to='20'
+            keyTimes='0; 1'/>
+    <animate
+            attributeName='y'
+            begin='StateChange(0, 2 3)'
+            end='4e+06ms'
+            dur='4000ms'
+            from='10'
+            to='20'
+            keyTimes='0; 1'/>
+    <animate
+            attributeName='width'
+            begin='StateChange(1, all)'
+            end='4e+06ms'
+            dur='4000ms'
+            from='10'
+            to='20'
+            keyTimes='0; 1'/>
+    <animate
+            attributeName='height'
+            begin='StateChange(2 4, 1 2)'
+            end='4e+06ms'
+            dur='4000ms'
+            from='10'
+            to='20'
+            keyTimes='0; 1'/>
+  </rect>
+</svg>

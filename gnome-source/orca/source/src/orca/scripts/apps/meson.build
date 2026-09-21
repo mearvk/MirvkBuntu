@@ -1,0 +1,19 @@
+subdir('evolution')
+subdir('gajim')
+subdir('gnome-shell')
+subdir('kwin')
+subdir('notification-daemon')
+subdir('pidgin')
+subdir('soffice')
+subdir('smuxi-frontend-gnome')
+subdir('Thunderbird')
+subdir('xfwm4')
+
+lib_sources = [
+  '__init__.py',
+]
+
+python3.install_sources(
+  lib_sources,
+  subdir: meson.project_name() / 'scripts' / 'apps'
+)

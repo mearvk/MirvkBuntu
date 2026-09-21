@@ -1,0 +1,1507 @@
+# Unit tests for speech_manager.py methods.
+#
+# Copyright 2025 Igalia, S.L.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=wrong-import-position
+# pylint: disable=import-outside-toplevel
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-statements
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-lines
+
+"""Unit tests for speech_manager.py methods."""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import TYPE_CHECKING
+
+import pytest
+
+
+class PunctuationStyle(Enum):
+    """Test-local copy of PunctuationStyle for mocking."""
+
+    NONE = 3
+    SOME = 2
+    MOST = 1
+    ALL = 0
+
+    @property
+    def string_name(self) -> str:
+        """Returns the lowercase string name for this enum value."""
+
+        return self.name.lower()
+
+
+class CapitalizationStyle(Enum):
+    """Test-local copy of CapitalizationStyle for mocking."""
+
+    NONE = "none"
+    SPELL = "spell"
+    ICON = "icon"
+
+    @property
+    def string_name(self) -> str:
+        """Returns the lowercase string name for this enum value."""
+
+        return self.name.lower()
+
+
+if TYPE_CHECKING:
+    from unittest.mock import MagicMock
+
+    from .orca_test_context import OrcaTestContext
+
+
+@pytest.mark.unit
+class TestSpeechManager:
+    """Test SpeechManager class methods."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for speech_manager dependencies."""
+
+        additional_modules = [
+            "orca.speechserver",
+            "orca.acss",
+            "orca.presentation_manager",
+            "orca.preferences_grid_base",
+        ]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        focus_manager_mock = essential_modules["orca.focus_manager"]
+        focus_manager_mock.get_manager.return_value = test_context.Mock()
+
+        dbus_service_mock = essential_modules["orca.dbus_service"]
+        dbus_service_mock.get_remote_controller.return_value = test_context.Mock()
+
+        def passthrough_decorator(func):
+            return func
+
+        dbus_service_mock.getter = passthrough_decorator
+        dbus_service_mock.setter = passthrough_decorator
+        dbus_service_mock.command = passthrough_decorator
+        dbus_service_mock.parameterized_command = passthrough_decorator
+
+        cmdnames_mock = essential_modules["orca.cmdnames"]
+        cmdnames_mock.SWITCH_VOICE_SET = "Switch voice to: %s"
+
+        guilabels_mock = essential_modules["orca.guilabels"]
+        guilabels_mock.VOICE_SET_GLOBAL = "Global"
+
+        debug_mock = essential_modules["orca.debug"]
+        debug_mock.print_message.return_value = None
+        debug_mock.print_tokens.return_value = None
+        debug_mock.LEVEL_INFO = 800
+        debug_mock.LEVEL_WARNING = 900
+
+        acss_mock = essential_modules["orca.acss"]
+        acss_mock.ACSS = test_context.Mock()
+        acss_mock.ACSS.RATE = "rate"
+        acss_mock.ACSS.AVERAGE_PITCH = "average-pitch"
+        acss_mock.ACSS.GAIN = "gain"
+        acss_mock.ACSS.FAMILY = "family"
+
+        speechserver_mock = essential_modules["orca.speechserver"]
+        speechserver_mock.VoiceFamily = test_context.Mock()
+        speechserver_mock.VoiceFamily.NAME = "name"
+        speechserver_mock.VoiceFamily.LANG = "lang"
+        speechserver_mock.VoiceFamily.DIALECT = "dialect"
+        speechserver_mock.VoiceFamily.VARIANT = "variant"
+        speechserver_mock.PunctuationStyle = PunctuationStyle
+        speechserver_mock.CapitalizationStyle = CapitalizationStyle
+        from orca.speechserver import VoiceType
+
+        speechserver_mock.VoiceType = VoiceType
+        speechserver_mock.DEFAULT_VOICE = VoiceType.DEFAULT
+        speechserver_mock.UPPERCASE_VOICE = VoiceType.UPPERCASE
+        speechserver_mock.HYPERLINK_VOICE = VoiceType.HYPERLINK
+        speechserver_mock.SYSTEM_VOICE = VoiceType.SYSTEM
+
+        orca_i18n_mock = essential_modules["orca.orca_i18n"]
+        orca_i18n_mock._ = lambda x: x
+        orca_i18n_mock.C_ = lambda c, x: x
+        orca_i18n_mock.ngettext = lambda s, p, n: s if n == 1 else p
+
+        from orca import gsettings_registry
+
+        gsettings_registry.get_registry().clear_runtime_values()
+
+        return essential_modules
+
+    def test_init(self, test_context: OrcaTestContext) -> None:
+        """Test manager initialization and D-Bus registration."""
+
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        # Verify D-Bus registration occurred
+        controller = essential_modules["orca.dbus_service"].get_remote_controller()
+        controller.register_decorated_module.assert_called_with("SpeechManager", manager)
+
+    def test_set_up_commands(self, test_context: OrcaTestContext) -> None:
+        """Test that set_up_commands registers commands in CommandManager."""
+
+        self._setup_dependencies(test_context)
+        from orca import command_manager
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        manager.set_up_commands()
+
+        # Verify commands are registered in CommandManager
+        cmd_manager = command_manager.get_manager()
+        assert cmd_manager.get_command("toggleSilenceSpeechHandler") is not None
+        assert cmd_manager.get_command("cycleCapitalizationStyleHandler") is not None
+        assert cmd_manager.get_command("cycleSpeakingPunctuationLevelHandler") is not None
+        assert cmd_manager.get_command("cycleSynthesizerHandler") is not None
+
+        primary_switch = cmd_manager.get_command("switch-voice-set-primary")
+        assert primary_switch is not None
+        assert primary_switch.get_description() == "Switch voice to: Global"
+
+    def test_refresh_voice_set_commands(self, test_context: OrcaTestContext) -> None:
+        """Test refresh_voice_set_commands adds new sets and drops deleted ones."""
+
+        self._setup_dependencies(test_context)
+        from orca import command_manager
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "get_voice_set_names", return_value=["es"])
+        manager.set_up_commands()
+
+        cmd_manager = command_manager.get_manager()
+        assert cmd_manager.get_command("switch-voice-set-es") is not None
+
+        test_context.patch_object(manager, "get_voice_set_names", return_value=["it"])
+        manager.refresh_voice_set_commands()
+
+        assert cmd_manager.get_command("switch-voice-set-primary") is not None
+        assert cmd_manager.get_command("switch-voice-set-it") is not None
+        assert cmd_manager.get_command("switch-voice-set-es") is None
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "server_none", "scenario": "none_server", "expected_result": None},
+            {"id": "server_unresponsive", "scenario": "unresponsive", "expected_result": None},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_server_scenarios(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test _get_server method scenarios."""
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        if case["scenario"] == "none_server":
+            manager._server = None
+        else:  # unresponsive server
+            mock_speech_server = test_context.Mock()
+            mock_speech_server.is_responsive.return_value = False
+            manager._server = mock_speech_server
+
+        result = manager._get_server()
+        assert result is case["expected_result"]
+
+    def test_get_server_module_map_import_errors(self, test_context: OrcaTestContext) -> None:
+        """Test _get_server_module_map method with import errors."""
+
+        self._setup_dependencies(test_context)
+        from orca import speech_manager as sm_module
+        from orca.speech_manager import SpeechManager
+
+        test_context.patch_object(sm_module, "SPEECH_FACTORY_MODULES", new=["nonexistent_module"])
+
+        def mock_import_module(name) -> None:
+            raise ImportError("Module not found")
+
+        test_context.patch("importlib.import_module", new=mock_import_module)
+        manager = SpeechManager()
+        result = manager._get_server_module_map()
+        assert not result
+
+    def test_switch_server_invalid(self, test_context: OrcaTestContext) -> None:
+        """Test _switch_server method with invalid server."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server_module_map", return_value={})
+        result = manager._switch_server("Invalid Server")
+        assert result is False
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "none", "server_return": None, "expected_result": ""},
+            {"id": "with_server", "server_return": "mock_server", "expected_result": "Test Server"},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_current_server_scenarios(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_current_server method with various scenarios."""
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        if case["server_return"] == "mock_server":
+            mock_server = test_context.Mock()
+            mock_server.get_factory_name.return_value = "Test Server"
+            test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        else:
+            test_context.patch_object(manager, "_get_server", return_value=case["server_return"])
+
+        result = manager.get_current_server()
+        assert result == case["expected_result"]
+
+    def test_get_current_synthesizer_none(self, test_context: OrcaTestContext) -> None:
+        """Test get_current_synthesizer method when server is None."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=None)
+        result = manager.get_current_synthesizer()
+        assert result == ""
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "set_current_synthesizer",
+                "method_name": "set_current_synthesizer",
+                "method_args": ["espeak-ng"],
+                "expected_result": False,
+            },
+            {
+                "id": "get_available_synthesizers",
+                "method_name": "get_available_synthesizers",
+                "method_args": [],
+                "expected_result": [],
+            },
+            {
+                "id": "get_available_voices",
+                "method_name": "get_available_voices",
+                "method_args": [],
+                "expected_result": [],
+            },
+            {
+                "id": "get_voices_for_language",
+                "method_name": "get_voices_for_language",
+                "method_args": ["en"],
+                "expected_result": [],
+            },
+            {
+                "id": "get_current_voice",
+                "method_name": "get_current_voice",
+                "method_args": [],
+                "expected_result": "",
+            },
+            {
+                "id": "set_current_voice",
+                "method_name": "set_current_voice",
+                "method_args": ["en"],
+                "expected_result": False,
+            },
+            {
+                "id": "interrupt_speech",
+                "method_name": "interrupt_speech",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "shutdown_speech",
+                "method_name": "shutdown_speech",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "decrease_rate",
+                "method_name": "decrease_rate",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "increase_rate",
+                "method_name": "increase_rate",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "decrease_pitch",
+                "method_name": "decrease_pitch",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "increase_pitch",
+                "method_name": "increase_pitch",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "decrease_pitch_range",
+                "method_name": "decrease_pitch_range",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "increase_pitch_range",
+                "method_name": "increase_pitch_range",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "decrease_volume",
+                "method_name": "decrease_volume",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "increase_volume",
+                "method_name": "increase_volume",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "update_capitalization_style",
+                "method_name": "update_capitalization_style",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "update_punctuation_level",
+                "method_name": "update_punctuation_level",
+                "method_args": [],
+                "expected_result": True,
+            },
+            {
+                "id": "update_synthesizer",
+                "method_name": "update_synthesizer",
+                "method_args": [],
+                "expected_result": None,
+            },
+            {
+                "id": "cycle_synthesizer",
+                "method_name": "cycle_synthesizer",
+                "method_args": [],
+                "expected_result": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_methods_no_server(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test various methods when speech server is None."""
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=None)
+
+        method = getattr(manager, case["method_name"])
+        result = method(*case["method_args"])
+
+        if case["expected_result"] is False:
+            assert not result
+        else:
+            assert result == case["expected_result"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "get_capitalization_style", "setting_value": "spell", "expected": "spell"},
+            {"id": "get_capitalization_style_none", "setting_value": "none", "expected": "none"},
+            {"id": "get_capitalization_style_icon", "setting_value": "icon", "expected": "icon"},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_capitalization_style(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_capitalization_style method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "capitalization-style",
+            case["setting_value"],
+        )
+
+        result = manager.get_capitalization_style()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_capitalization_style_valid", "input_value": "spell", "expected": True},
+            {"id": "set_capitalization_style_none", "input_value": "none", "expected": True},
+            {"id": "set_capitalization_style_icon", "input_value": "icon", "expected": True},
+            {"id": "set_capitalization_style_invalid", "input_value": "invalid", "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_capitalization_style(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test set_capitalization_style method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        mock_update = test_context.Mock()
+        test_context.patch_object(manager, "update_capitalization_style", new=mock_update)
+
+        result = manager.set_capitalization_style(case["input_value"])
+        assert result == case["expected"]
+
+        if case["expected"]:
+            assert manager.get_capitalization_style() == case["input_value"]
+            mock_update.assert_called_once()
+        else:
+            mock_update.assert_not_called()
+
+    def test_get_punctuation_level_default(self, test_context: OrcaTestContext) -> None:
+        """Test get_punctuation_level returns 'most' as default fallback."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.get_punctuation_level()
+        assert result == "most"
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "punctuation_none", "lookup_value": "none", "expected": "none"},
+            {"id": "punctuation_some", "lookup_value": "some", "expected": "some"},
+            {"id": "punctuation_most", "lookup_value": "most", "expected": "most"},
+            {"id": "punctuation_all", "lookup_value": "all", "expected": "all"},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_punctuation_level_from_dconf(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test get_punctuation_level reads from layered_lookup."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+
+        registry = gsettings_registry.get_registry()
+        registry.set_runtime_value("speech", "punctuation-level", case["lookup_value"])
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.get_punctuation_level()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "set_punctuation_none",
+                "input_value": "none",
+                "expected": True,
+                "setting_int": 3,
+            },
+            {
+                "id": "set_punctuation_some",
+                "input_value": "some",
+                "expected": True,
+                "setting_int": 2,
+            },
+            {
+                "id": "set_punctuation_most",
+                "input_value": "most",
+                "expected": True,
+                "setting_int": 1,
+            },
+            {"id": "set_punctuation_all", "input_value": "all", "expected": True, "setting_int": 0},
+            {
+                "id": "set_punctuation_invalid",
+                "input_value": "invalid",
+                "expected": False,
+                "setting_int": None,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_punctuation_level(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test set_punctuation_level method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        mock_update = test_context.Mock()
+        test_context.patch_object(manager, "update_punctuation_level", new=mock_update)
+
+        result = manager.set_punctuation_level(case["input_value"])
+        assert result == case["expected"]
+
+        if case["expected"]:
+            assert manager.get_punctuation_level() == case["input_value"]
+            mock_update.assert_called_once()
+        else:
+            mock_update.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "speech_enabled_true", "setting_value": True, "expected": True},
+            {"id": "speech_enabled_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_speech_is_enabled(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_speech_is_enabled method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "enable",
+            case["setting_value"],
+        )
+
+        result = manager.get_speech_is_enabled()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "speech_muted_true", "setting_value": True, "expected": True},
+            {"id": "speech_muted_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_speech_is_muted(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_speech_is_muted method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        manager._mute_speech = case["setting_value"]
+
+        result = manager.get_speech_is_muted()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "enabled_and_not_muted",
+                "enable_speech": True,
+                "silence_speech": False,
+                "expected": True,
+            },
+            {
+                "id": "enabled_and_muted",
+                "enable_speech": True,
+                "silence_speech": True,
+                "expected": False,
+            },
+            {
+                "id": "disabled_and_not_muted",
+                "enable_speech": False,
+                "silence_speech": False,
+                "expected": False,
+            },
+            {
+                "id": "disabled_and_muted",
+                "enable_speech": False,
+                "silence_speech": True,
+                "expected": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_speech_is_enabled_and_not_muted(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test get_speech_is_enabled_and_not_muted method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        manager._mute_speech = case["silence_speech"]
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "enable",
+            case["enable_speech"],
+        )
+
+        result = manager.get_speech_is_enabled_and_not_muted()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "speech_disabled",
+                "speech_enabled": False,
+                "expected_method": "shutdown_speech",
+            },
+            {"id": "speech_enabled", "speech_enabled": True, "expected_method": "start_speech"},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_check_speech_setting(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test check_speech_setting method with various speech enabled settings."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "enable",
+            case["speech_enabled"],
+        )
+        mock_method = test_context.Mock()
+        test_context.patch_object(manager, case["expected_method"], new=mock_method)
+        manager.check_speech_setting()
+        mock_method.assert_called_once()
+
+    def test_refresh_speech(self, test_context: OrcaTestContext) -> None:
+        """Test refresh_speech method."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        mock_shutdown = test_context.Mock()
+        test_context.patch_object(manager, "shutdown_speech", new=mock_shutdown)
+        mock_start = test_context.Mock()
+        test_context.patch_object(manager, "start_speech", new=mock_start)
+        result = manager.refresh_speech()
+        assert result is True
+        mock_shutdown.assert_called_once()
+        mock_start.assert_called_once()
+
+    def test_get_server_with_valid_server(self, test_context: OrcaTestContext) -> None:
+        """Test _get_server method with valid speech server."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        mock_server = test_context.Mock()
+        mock_server.is_alive.return_value = True
+        manager._server = mock_server
+        result = manager._get_server()
+        assert result is mock_server
+
+    def test_get_current_synthesizer_with_server(self, test_context: OrcaTestContext) -> None:
+        """Test get_current_synthesizer method with valid server."""
+
+        mock_server = test_context.Mock()
+        mock_server.get_output_module.return_value = "espeak-ng"
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        result = manager.get_current_synthesizer()
+        assert result == "espeak-ng"
+
+    def test_cycle_capitalization_style(self, test_context: OrcaTestContext) -> None:
+        """Test cycle_capitalization_style method."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "update_capitalization_style", new=test_context.Mock())
+        result = manager.cycle_capitalization_style()
+        assert result is True
+
+    def test_cycle_synthesizer_with_server(self, test_context: OrcaTestContext) -> None:
+        """Test cycle_synthesizer method with current not in available list."""
+
+        mock_server = test_context.Mock()
+        mock_server.list_output_modules.return_value = ["espeak", "festival"]
+        mock_server.get_output_module.return_value = "unknown"
+        mock_server.set_output_module.return_value = True
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        result = manager.cycle_synthesizer()
+        assert result is True
+        mock_server.set_output_module.assert_called_once_with("espeak")
+
+    def test_get_voice_set_voice_falls_back_to_set_default(
+        self, test_context: OrcaTestContext
+    ) -> None:
+        """Test get_voice_set_voice uses the set's default when the type isn't configured."""
+
+        essential_modules = self._setup_dependencies(test_context)
+        essential_modules["orca.acss"].ACSS = dict
+        essential_modules["orca.speechserver"].VoiceType.DEFAULT = "default"
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        established: dict[str, dict] = {
+            "default": {"established": True, "family": {"name": "luca"}}
+        }
+
+        def fake_get_voice_properties(  # pylint: disable=unused-argument
+            voice_type: str = "", app_name=None, voice_set: str = ""
+        ) -> dict:
+            return established.get(voice_type, {})
+
+        test_context.patch_object(
+            manager, "get_voice_properties", side_effect=fake_get_voice_properties
+        )
+
+        established["hyperlink"] = {"established": True, "family": {"name": "alicia"}}
+        assert manager.get_voice_set_voice("hyperlink", "it")["family"]["name"] == "alicia"
+
+        del established["hyperlink"]
+        assert manager.get_voice_set_voice("hyperlink", "it")["family"]["name"] == "luca"
+        assert not manager.get_voice_set_voice("hyperlink", "it", fall_back_to_default=False)
+
+        established.clear()
+        assert not manager.get_voice_set_voice("hyperlink", "it")
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "decrease_rate",
+                "method_name": "decrease_rate",
+                "server_method": "decrease_speech_rate",
+            },
+            {
+                "id": "increase_rate",
+                "method_name": "increase_rate",
+                "server_method": "increase_speech_rate",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_rate_adjustment_with_server(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test rate adjustment methods delegate to the speech server."""
+
+        mock_server = test_context.Mock()
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        test_context.patch_object(manager, "set_rate", return_value=True)
+        test_context.patch_object(manager, "set_pitch", return_value=True)
+        result = getattr(manager, case["method_name"])()
+        assert result is True
+        getattr(mock_server, case["server_method"]).assert_called_once()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "decrease_pitch",
+                "method_name": "decrease_pitch",
+                "server_method": "decrease_speech_pitch",
+            },
+            {
+                "id": "increase_pitch",
+                "method_name": "increase_pitch",
+                "server_method": "increase_speech_pitch",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_pitch_adjustment_with_server(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test pitch adjustment methods delegate to the speech server."""
+
+        mock_server = test_context.Mock()
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        test_context.patch_object(manager, "set_rate", return_value=True)
+        test_context.patch_object(manager, "set_pitch", return_value=True)
+        result = getattr(manager, case["method_name"])()
+        assert result is True
+        getattr(mock_server, case["server_method"]).assert_called_once()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "decrease_pitch_range",
+                "method_name": "decrease_pitch_range",
+                "server_method": "decrease_speech_inflection",
+            },
+            {
+                "id": "increase_pitch_range",
+                "method_name": "increase_pitch_range",
+                "server_method": "increase_speech_inflection",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_pitch_range_adjustment_with_server(
+        self, test_context: OrcaTestContext, case: dict
+    ) -> None:
+        """Test pitch range adjustment methods delegate to the speech server."""
+
+        mock_server = test_context.Mock()
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        test_context.patch_object(manager, "set_pitch_range", return_value=True)
+        result = getattr(manager, case["method_name"])()
+        assert result is True
+        getattr(mock_server, case["server_method"]).assert_called_once()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "decrease_volume",
+                "method_name": "decrease_volume",
+                "server_method": "decrease_speech_volume",
+            },
+            {
+                "id": "increase_volume",
+                "method_name": "increase_volume",
+                "server_method": "increase_speech_volume",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_volume_adjustment_with_server(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test volume adjustment methods delegate to the speech server."""
+
+        mock_server = test_context.Mock()
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        test_context.patch_object(manager, "set_volume", return_value=True)
+        result = getattr(manager, case["method_name"])()
+        assert result is True
+        getattr(mock_server, case["server_method"]).assert_called_once()
+
+    def test_set_rate_valid(self, test_context: OrcaTestContext) -> None:
+        """Test set_rate method with valid value."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_sync_runtime_value_to_all_voice_types")
+
+        result = manager.set_rate(75)
+        assert result is True
+        assert manager.get_rate() == 75
+
+    def test_set_volume_valid(self, test_context: OrcaTestContext) -> None:
+        """Test set_volume method with valid value."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_sync_runtime_value_to_all_voice_types")
+
+        result = manager.set_volume(8.0)
+        assert result is True
+        assert manager.get_volume() == 8.0
+
+    def test_set_pitch_range_valid(self, test_context: OrcaTestContext) -> None:
+        """Test set_pitch_range method with valid value."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "_sync_runtime_value_to_all_voice_types")
+
+        result = manager.set_pitch_range(7.0)
+        assert result is True
+        assert manager.get_pitch_range() == 7.0
+
+    def test_update_synthesizer_with_server(self, test_context: OrcaTestContext) -> None:
+        """Test update_synthesizer method with server and different synthesizer ID."""
+
+        mock_server = test_context.Mock()
+        mock_server.get_output_module.return_value = "espeak"
+        mock_server.set_output_module.return_value = True
+        self._setup_dependencies(test_context)
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        test_context.patch_object(manager, "_get_server", return_value=mock_server)
+        from orca import gsettings_registry
+
+        registry = gsettings_registry.get_registry()
+        registry.set_runtime_value("speech", "synthesizer", "espeak-ng")
+        manager.update_synthesizer()
+        mock_server.set_output_module.assert_called_once_with("espeak-ng")
+        registry.clear_runtime_values()
+
+    def test_get_manager_singleton(self, test_context: OrcaTestContext) -> None:
+        """Test get_manager function returns the same instance."""
+
+        self._setup_dependencies(test_context)
+        from orca import speech_manager
+
+        manager1 = speech_manager.get_manager()
+        manager2 = speech_manager.get_manager()
+
+        assert manager1 is manager2
+        assert isinstance(manager1, speech_manager.SpeechManager)
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "speak_numbers_true", "setting_value": True, "expected": True},
+            {"id": "speak_numbers_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_speak_numbers_as_digits(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_speak_numbers_as_digits method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "speak-numbers-as-digits",
+            case["setting_value"],
+        )
+
+        result = manager.get_speak_numbers_as_digits()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_speak_numbers_true", "input_value": True, "expected": True},
+            {"id": "set_speak_numbers_false", "input_value": False, "expected": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_speak_numbers_as_digits(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test set_speak_numbers_as_digits method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.set_speak_numbers_as_digits(case["input_value"])
+        assert result == case["expected"]
+        assert manager.get_speak_numbers_as_digits() == case["input_value"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "use_pronunciation_dict_true", "setting_value": True, "expected": True},
+            {"id": "use_pronunciation_dict_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_use_pronunciation_dictionary(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test get_use_pronunciation_dictionary method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "use-pronunciation-dictionary",
+            case["setting_value"],
+        )
+
+        result = manager.get_use_pronunciation_dictionary()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_pronunciation_dict_true", "input_value": True, "expected": True},
+            {"id": "set_pronunciation_dict_false", "input_value": False, "expected": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_use_pronunciation_dictionary(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test set_use_pronunciation_dictionary method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.set_use_pronunciation_dictionary(case["input_value"])
+        assert result == case["expected"]
+        assert manager.get_use_pronunciation_dictionary() == case["input_value"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "use_color_names_true", "setting_value": True, "expected": True},
+            {"id": "use_color_names_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_use_color_names(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_use_color_names method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "use-color-names",
+            case["setting_value"],
+        )
+
+        result = manager.get_use_color_names()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_color_names_true", "input_value": True, "expected": True},
+            {"id": "set_color_names_false", "input_value": False, "expected": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_use_color_names(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test set_use_color_names method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.set_use_color_names(case["input_value"])
+        assert result == case["expected"]
+        assert manager.get_use_color_names() == case["input_value"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "insert_pauses_true", "setting_value": True, "expected": True},
+            {"id": "insert_pauses_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_insert_pauses_between_utterances(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test get_insert_pauses_between_utterances method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "insert-pauses-between-utterances",
+            case["setting_value"],
+        )
+
+        result = manager.get_insert_pauses_between_utterances()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_pauses_true", "input_value": True, "expected": True},
+            {"id": "set_pauses_false", "input_value": False, "expected": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_insert_pauses_between_utterances(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test set_insert_pauses_between_utterances method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.set_insert_pauses_between_utterances(case["input_value"])
+        assert result == case["expected"]
+        assert manager.get_insert_pauses_between_utterances() == case["input_value"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "auto_lang_true", "setting_value": True, "expected": True},
+            {"id": "auto_lang_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_auto_language_switching(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test get_auto_language_switching method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "auto-language-switching",
+            case["setting_value"],
+        )
+
+        result = manager.get_auto_language_switching()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_auto_lang_true", "input_value": True, "expected": True},
+            {"id": "set_auto_lang_false", "input_value": False, "expected": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_auto_language_switching(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test set_auto_language_switching method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.set_auto_language_switching(case["input_value"])
+        assert result == case["expected"]
+        assert manager.get_auto_language_switching() == case["input_value"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "ui_true", "setting_value": True, "expected": True},
+            {"id": "ui_false", "setting_value": False, "expected": False},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_get_auto_language_switching_ui(
+        self, test_context: OrcaTestContext, case: dict
+    ) -> None:
+        """Test get_auto_language_switching_ui method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value(
+            "speech",
+            "auto-language-switching-ui",
+            case["setting_value"],
+        )
+
+        result = manager.get_auto_language_switching_ui()
+        assert result == case["expected"]
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {"id": "set_ui_true", "input_value": True, "expected": True},
+            {"id": "set_ui_false", "input_value": False, "expected": True},
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_set_auto_language_switching_ui(
+        self, test_context: OrcaTestContext, case: dict
+    ) -> None:
+        """Test set_auto_language_switching_ui method."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+
+        result = manager.set_auto_language_switching_ui(case["input_value"])
+        assert result == case["expected"]
+        assert manager.get_auto_language_switching_ui() == case["input_value"]
+
+    def test_toggle_speech_unmutes_when_muted(self, test_context: OrcaTestContext) -> None:
+        """Test toggle_speech unmutes when speech is currently muted."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        manager._mute_speech = True
+        script = test_context.Mock()
+        manager.toggle_speech(script)
+
+        assert manager._mute_speech is False
+
+    def test_toggle_speech_enables_when_disabled(self, test_context: OrcaTestContext) -> None:
+        """Test toggle_speech enables speech when enableSpeech is False."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        gsettings_registry.get_registry().set_runtime_value("speech", "enable", False)
+        mock_init = test_context.patch_object(manager, "_init_server")
+        script = test_context.Mock()
+        manager.toggle_speech(script)
+
+        assert manager.get_speech_is_enabled() is True
+        mock_init.assert_called()
+
+    def test_toggle_speech_mutes_when_app_profile_has_speech_enabled(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test toggle_speech mutes when the app profile has enableSpeech=True."""
+
+        self._setup_dependencies(test_context)
+
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        script = test_context.Mock()
+        manager.toggle_speech(script)
+
+        assert manager._mute_speech is True
+        assert manager.get_speech_is_enabled() is True
+
+    def test_toggle_speech_disables_when_app_profile_has_speech_disabled(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test toggle_speech shuts down when underlying setting disables speech."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+
+        manager = SpeechManager()
+        test_context.patch_object(manager, "get_speech_is_enabled", side_effect=[True, False])
+        mock_shutdown = test_context.patch_object(manager, "shutdown_speech")
+
+        script = test_context.Mock()
+        manager.toggle_speech(script)
+
+        found, _value = gsettings_registry.get_registry().get_runtime_value("speech", "enable")
+        assert found is False
+        mock_shutdown.assert_called_once()
+
+
+class TestVoicesPreferencesGridUI:
+    """Test VoicesPreferencesGrid save behavior."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for VoicesPreferencesGrid dependencies."""
+
+        additional_modules = [
+            "orca.speechserver",
+            "orca.acss",
+            "orca.presentation_manager",
+        ]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        speechserver_mock = essential_modules["orca.speechserver"]
+        speechserver_mock.PunctuationStyle = PunctuationStyle
+        speechserver_mock.CapitalizationStyle = CapitalizationStyle
+        from orca.speechserver import VoiceType
+
+        speechserver_mock.VoiceType = VoiceType
+        speechserver_mock.DEFAULT_VOICE = VoiceType.DEFAULT
+        speechserver_mock.UPPERCASE_VOICE = VoiceType.UPPERCASE
+        speechserver_mock.HYPERLINK_VOICE = VoiceType.HYPERLINK
+        speechserver_mock.SYSTEM_VOICE = VoiceType.SYSTEM
+
+        from orca import gsettings_registry
+
+        gsettings_registry.get_registry().clear_runtime_values()
+
+        return essential_modules
+
+    def test_save_settings_includes_speech_server_factory(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test save_settings includes speech-server-factory."""
+
+        self._setup_dependencies(test_context)
+
+        from orca import gsettings_registry
+        from orca.speech_manager import SpeechManager
+        from orca.speech_manager_preferences_grid import VoicesPreferencesGrid
+
+        registry = gsettings_registry.get_registry()
+        registry.set_runtime_value("speech", "speech-server-factory", "spiel")
+        registry.set_runtime_value("speech", "speech-server", "Spiel")
+        registry.set_runtime_value("speech", "synthesizer", "Piper")
+
+        manager = SpeechManager()
+
+        grid_mock = test_context.Mock()
+        grid_mock._manager = manager
+        grid_mock._voices = {
+            "default": {},
+            "uppercase": {},
+            "hyperlink": {},
+            "system": {},
+        }
+        grid_mock._has_unsaved_changes = True
+        grid_mock._speak_numbers_switch.get_active.return_value = False
+        grid_mock._use_color_names_switch.get_active.return_value = True
+        grid_mock._enable_pause_breaks_switch.get_active.return_value = True
+        grid_mock._use_pronunciation_dict_switch.get_active.return_value = True
+        grid_mock._auto_language_switching_content_switch.get_active.return_value = True
+        grid_mock._auto_language_switching_ui_switch.get_active.return_value = True
+        grid_mock._only_switch_configured_languages_switch.get_active.return_value = False
+
+        result = VoicesPreferencesGrid.save_settings(grid_mock)
+
+        assert result["speech-server-factory"] == "spiel"
+        assert result["speech-server"] == "Spiel"
+        assert result["synthesizer"] == "Piper"
+
+
+@pytest.mark.unit
+class TestVoiceTypesPreferencesGridMatching:
+    """Test VoiceTypesPreferencesGrid voice-set language matching."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for VoiceTypesPreferencesGrid dependencies."""
+
+        additional_modules = ["orca.speechserver", "orca.acss", "orca.presentation_manager"]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        family = essential_modules["orca.speechserver"].VoiceFamily
+        family.NAME = "name"
+        family.LANG = "lang"
+        family.DIALECT = "dialect"
+        return essential_modules
+
+    @pytest.mark.parametrize(
+        "code, expected",
+        [
+            pytest.param("nl", ["Dutch"], id="language_only"),
+            pytest.param("fr-fr", ["French (France)"], id="dialect_case_insensitive"),
+            pytest.param("fr-be", ["French (Belgium)"], id="dialect_specific"),
+            pytest.param("fr", ["French (France)", "French (Belgium)"], id="language_all_dialects"),
+            pytest.param("de", [], id="no_match"),
+        ],
+    )
+    def test_families_for_language(
+        self, test_context: OrcaTestContext, code: str, expected: list[str]
+    ) -> None:
+        """Test that families are matched by language with case-insensitive dialects."""
+
+        self._setup_dependencies(test_context)
+        from orca.speech_manager_preferences_grid import VoiceTypesPreferencesGrid
+
+        families = [
+            {"name": "Dutch", "lang": "nl", "dialect": ""},
+            {"name": "French (France)", "lang": "fr", "dialect": "FR"},
+            {"name": "French (Belgium)", "lang": "fr", "dialect": "BE"},
+        ]
+
+        grid_mock = test_context.Mock()
+        grid_mock._voices_grid.get_voice_families.return_value = families
+
+        result = VoiceTypesPreferencesGrid._families_for_language(grid_mock, code)
+        assert [family["name"] for family in result] == expected

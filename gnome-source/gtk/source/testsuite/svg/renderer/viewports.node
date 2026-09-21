@@ -1,0 +1,47 @@
+clip {
+  clip: 0 0 480 360;
+  child: container {
+    stroke {
+      child: color {
+        bounds: -0.5 -0.5 481 361;
+        color: rgb(0,0,0);
+      }
+      path: 0 0 480 360;
+      line-width: 1;
+      line-cap: butt;
+      line-join: miter;
+    }
+    clip {
+      clip: 20 20 200 200;
+      child: transform {
+        transform: translate(20, 20);
+        child: stroke {
+          child: color {
+            bounds: -0.5 -0.5 201 201;
+            color: rgb(255,0,0);
+          }
+          path: 0 0 200 200;
+          line-width: 1;
+          line-cap: butt;
+          line-join: miter;
+        }
+      }
+    }
+    clip {
+      clip: 0 0 200 200;
+      child: transform {
+        transform: translate(-40, -40) scale(2);
+        child: stroke {
+          child: color {
+            bounds: -0.5 -0.5 101 101;
+            color: rgb(0,0,255);
+          }
+          path: 0 0 100 100;
+          line-width: 1;
+          line-cap: butt;
+          line-join: miter;
+        }
+      }
+    }
+  }
+}

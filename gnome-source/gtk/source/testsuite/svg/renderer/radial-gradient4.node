@@ -1,0 +1,16 @@
+stroke {
+  child: radial-gradient {
+    bounds: 45 45 110 110;
+    start: 100 100 0;
+    end: 100 100 50;
+    stops: 0 rgb(255,0,0), 0 rgb(255,255,0), 1 rgb(255,255,0), 1 rgb(0,0,255);
+    premultiplied: false;
+  }
+  path: circle {
+    center: 100 100;
+    radius: 50;
+  }
+  line-width: 10;
+  line-cap: butt;
+  line-join: miter;
+}

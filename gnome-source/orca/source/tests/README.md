@@ -1,0 +1,315 @@
+# Orca Tests
+
+## Dependencies
+
+The unit tests need:
+
+* [pytest](https://pytest.org)
+* [pytest-mock](https://pytest-mock.readthedocs.io/) - Mock plugin for pytest
+
+The integration tests additionally need the following, on top of what Orca itself requires.
+Some missing dependencies cause skips; others cause import or setup failures. Tests which
+launch Orca need an installed build of the version being tested.
+
+* Xvfb
+* `dbus-run-session`, `gdbus`, and `dbus-update-activation-environment`
+* AT-SPI's `at-spi-bus-launcher` and `at-spi2-registryd`
+* `pgrep` (from procps) and `fusermount` (for sandbox FUSE cleanup)
+* Python GObject introspection and Cairo bindings, with the AT-SPI, GTK3, and PangoCairo typelibs
+* `glib-compile-schemas` for the GSettings tests
+* The DejaVu Serif, DejaVu Sans, and DejaVu Sans Mono fonts for consistent line wrapping
+* VTE 2.91 (GTK3), including its typelib, Python curses, xterm terminfo, bash, less, nano, vim,
+  and `seq` (from coreutils), for the terminal tests
+* liblouis's Python bindings and en-us-g1/en-us-g2 tables for the braille tests. Its pkg-config
+  metadata must be available when building Orca so it can locate the tables (in Fedora and
+  openSUSE, install `liblouis-devel`).
+* MathCAT enabled in the installed Orca build for the math tests.
+* Chrome (beta preferred) or Chromium for the web tests, with accessibility enabled in the
+  environment before running the tests:
+
+  ```bash
+  export ACCESSIBILITY_ENABLED=1
+  ```
+
+## Running Tests
+
+These tests, especially the new integration tests, are currently intended for
+use by the maintainer. Documenting all expected dependencies and versions and
+ensuring compatibility with multiple distros are still pending. For this reason,
+the integration tests are currently disabled by default.
+
+In addition, the Chromium web tests have unresolved browser-version and
+cross-distribution rendering compatibility issues. They are not yet ready for
+non-maintainer use and are not run in CI.
+
+The integration tests cannot run while Orca is already active on the user's
+session because each test launches and drives its own Orca. It was decided
+that the test harness should not first kill any running instance of Orca
+because doing so might be unexpected. If you rely on Orca in your active
+session, you can still run the tests by signing in as a second local user
+(via `su` or `ssh`) and running them from there.
+
+### Using Pytest
+
+```bash
+pytest tests/unit_tests/                # All unit tests
+coverage run -m pytest tests/unit_tests # Unit tests with coverage
+python3 -m pytest tests/unit_tests/test_ax_text.py -v # Specific file
+```
+
+### Using Meson
+
+Orca's tests are grouped into the following named suites:
+
+* unit (the only suite run by default)
+* integration (all integration tests)
+* core (infrastructure such as GSettings and D-Bus support)
+* gtk3 (non-terminal GTK3 UI tests)
+* gtk3-terminal (for terminal applications using VTE for GTK3)
+* chromium (for web content using Chrome or Chromium)
+
+```bash
+meson test -C _build
+meson test -C _build --suite <suite name>
+```
+
+## Adding New Unit Tests
+
+### 1. Create Test File
+
+Follow naming convention: `test_[module_name].py`
+
+### 2. Test File Structure
+
+```python
+from typing import TYPE_CHECKING
+import pytest
+
+if TYPE_CHECKING:
+    from .orca_test_context import OrcaTestContext
+    from unittest.mock import MagicMock
+
+@pytest.mark.unit
+class TestMyModule:
+    """Test MyModule class methods."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
+        """Set up mocks for my_module dependencies."""
+
+        # Use setup_shared_dependencies for common modules
+        additional_modules = ["orca.module_specific_to_my_module"]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        # Configure module-specific behavior
+        my_mock = essential_modules["orca.module_specific_to_my_module"]
+        my_mock.some_method.return_value = "expected_value"
+
+        return essential_modules
+
+    def test_my_function(self, test_context: OrcaTestContext) -> None:
+        """Test MyModule.my_function behavior."""
+
+        # Set up mocks BEFORE importing the module under test.
+        # Python's import system caches modules - if MyModule imports its
+        # dependencies before we mock them, it gets the real modules.
+        self._setup_dependencies(test_context)
+
+        # Import AFTER mocks are set up so MyModule gets our mocked dependencies.
+        from orca.my_module import MyModule
+
+        result = MyModule.my_function()
+        assert result == "expected_value"
+```
+
+### 3. Mocking and Patching
+
+The `test_context` fixture provides testing utilities using pytest-mock patterns:
+
+#### `test_context.Mock()`
+
+* Creates mock objects consistently across all tests
+* Use `spec=` when the class itself hasn't been replaced (even if you're mocking instances of it)
+* Omit `spec=` for method replacements, function replacements, class replacements, and ad-hoc test data
+
+```python
+# Use spec when the class itself hasn't been replaced
+mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+mock_accessible.get_name.return_value = "Test Button"
+
+# Mock a function and use the spec mock as return value
+mock_match_rule_new = test_context.Mock()
+test_context.patch("gi.repository.Atspi.MatchRule.new", side_effect=mock_match_rule_new)
+mock_rule = test_context.Mock(spec=Atspi.MatchRule)
+mock_match_rule_new.return_value = mock_rule
+
+# Don't use spec when the class itself is being mocked
+mock_state_set_class = test_context.Mock()
+test_context.patch("gi.repository.Atspi.StateSet", new=mock_state_set_class)
+mock_state_set = test_context.Mock()  # StateSet class was replaced, can't use spec
+mock_state_set_class.return_value = mock_state_set
+
+# Don't use spec for method/function replacements
+debug_mock.print_message = test_context.Mock()
+mock_function = test_context.Mock()
+test_context.patch("module.function", side_effect=mock_function)
+
+# Don't use spec for ad-hoc test data
+test_config = test_context.Mock()
+test_config.enabled = True
+```
+
+#### `test_context.patch()` and `test_context.patch_object()`
+
+* Returns mock objects for assertions
+* Use `patch()` for string-based patching of deep module paths
+* Use `patch_object()` for patching attributes on existing objects
+
+```python
+mock_clear_cache = test_context.patch("gi.repository.Atspi.Accessible.clear_cache")
+AXObject.clear_cache(mock_accessible, recursive=True)
+mock_clear_cache.assert_called_once_with(mock_accessible)
+
+mock_present_line = test_context.patch_object(presenter, "present_line")
+presenter.go_previous_line(script_mock, event_mock)
+mock_present_line.assert_called_once_with(script_mock, event_mock)
+```
+
+#### `test_context.patch_module()` and `test_context.patch_modules()`
+
+* Use instead of `patch()` or `patch_object()` when you need to replace entire modules in `sys.modules`
+* Useful when the module under test imports dependencies at module level
+* Ensures the mock module is available when the test module imports it
+
+```python
+# Single module replacement
+mock_module = test_context.Mock()
+test_context.patch_module("orca.special_module", mock_module)
+
+# Multiple modules at once
+test_context.patch_modules({
+    "orca.module1": mock_module1,
+    "orca.module2": mock_module2
+})
+```
+
+#### `test_context.patch_env()`
+
+* Patches environment variables for the test duration
+* Can add new variables or remove existing ones
+
+```python
+test_context.patch_env(
+    {"XDG_SESSION_TYPE": "wayland", "HOME": "/tmp/test"},
+    remove_vars=["DISPLAY"]
+)
+```
+
+#### Shared Dependencies
+
+Most tests should use `test_context.setup_shared_dependencies()` which provides
+common modules.
+
+### 4. Parameterized Tests
+
+Use pytest's parameterize decorator for testing multiple inputs efficiently.
+
+#### Simple Parameters
+
+For straightforward test cases:
+
+```python
+@pytest.mark.parametrize(
+    "focus, window, expected",
+    [
+        pytest.param(None, None, True, id="both_none"),
+        pytest.param(None, "window", False, id="focus_none_window_set"),
+        pytest.param("focus", None, False, id="focus_set_window_none"),
+        pytest.param("focus", "window", False, id="both_set"),
+    ],
+)
+def test_focus_and_window_are_unknown(self, test_context, focus, window, expected):
+    """Test FocusManager.focus_and_window_are_unknown."""
+
+    self._setup_dependencies(test_context)
+    from orca.focus_manager import FocusManager
+
+    manager = FocusManager()
+    focus_obj = test_context.Mock(spec=Atspi.Accessible) if focus else None
+    window_obj = test_context.Mock(spec=Atspi.Accessible) if window else None
+    test_context.patch_object(manager, "_focus", new=focus_obj)
+    test_context.patch_object(manager, "_window", new=window_obj)
+    result = manager.focus_and_window_are_unknown()
+    assert result == expected
+```
+
+#### Dictionary with ID Lambda
+
+For tests with complex configurations:
+
+```python
+@pytest.mark.parametrize(
+    "case",
+    [
+        {
+            "id": "layout_only_role",
+            "mocks_config": {"ax_object.get_role": Atspi.Role.FILLER},
+            "expected": True,
+        },
+        {
+            "id": "group_with_explicit_name",
+            "mocks_config": {
+                "ax_utilities_role.is_group": True,
+                "has_explicit_name": True
+            },
+            "expected": False,
+        },
+        {
+            "id": "layered_pane_in_desktop",
+            "mocks_config": {
+                "ax_utilities_role.is_layered_pane": True,
+                "ax_utilities_role.is_desktop_frame": True,
+                "ax_object.find_ancestor": "desktop",
+            },
+            "expected": True,
+        },
+    ],
+    ids=lambda case: case["id"],
+)
+def test_is_layout_only_scenarios(self, test_context: OrcaTestContext, case: dict):
+    """Test AXUtilities.is_layout_only with various scenarios."""
+
+    mocks_config = case["mocks_config"]
+    expected = case["expected"]
+    essential_modules = self._setup_dependencies(test_context)
+
+    for mock_path, mock_value in mocks_config.items():
+        if mock_path == "has_explicit_name":
+            test_context.patch(
+                "orca.ax_utilities.AXUtilities.has_explicit_name",
+                return_value=mock_value,
+            )
+        elif mock_path.startswith("ax_object.get_role"):
+            essential_modules["orca.ax_object"].AXObject.get_role = test_context.Mock(
+                return_value=mock_value
+            )
+        elif mock_path.startswith("ax_utilities_role."):
+            method_name = mock_path.split(".", 1)[1]
+            setattr(
+                essential_modules["orca.ax_utilities_role"].AXUtilitiesRole,
+                method_name,
+                test_context.Mock(return_value=mock_value),
+            )
+
+    from orca.ax_utilities import AXUtilities
+    mock_obj = test_context.Mock(spec=Atspi.Accessible)
+    result = AXUtilities.is_layout_only(mock_obj)
+    assert result is expected
+```
+
+Benefits of parameterized tests:
+
+* Test multiple scenarios efficiently
+* Clear test case identification
+* Easy to add new test cases
+* Better coverage with less code duplication
+* Dictionary pattern keeps related test data together

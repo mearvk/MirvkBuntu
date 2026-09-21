@@ -1,0 +1,27 @@
+isolation {
+  child: container {
+    rounded-clip {
+      clip: 50 50 200 200 / 100;
+      child: color {
+        bounds: 50 50 200 200;
+        color: rgb(255,87,51);
+      }
+    }
+    copy {
+      child: blend {
+        mode: multiply;
+        bottom: paste {
+          bounds: 120 120 200 200;
+        }
+        top: rounded-clip {
+          clip: 120 120 200 200 / 100;
+          child: color {
+            bounds: 120 120 200 200;
+            color: rgb(51,113,255);
+          }
+        }
+      }
+    }
+  }
+  isolations: background;
+}

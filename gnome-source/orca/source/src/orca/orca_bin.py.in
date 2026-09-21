@@ -1,0 +1,402 @@
+#!@PYTHON@
+#
+# Orca
+#
+# Copyright 2010-2012 The Orca Team
+# Copyright 2012 Igalia, S.L.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=too-many-branches
+
+"""The main entry point for starting Orca."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import signal
+import subprocess
+import sys
+import time
+from collections.abc import Sequence
+from typing import Any
+
+try:
+    from setproctitle import setproctitle
+    HAS_SETPROCTITLE = True
+except ImportError:
+    HAS_SETPROCTITLE = False
+
+try:
+    from ctypes import cdll, byref, create_string_buffer
+    HAS_CTYPES = True
+except ImportError:
+    HAS_CTYPES = False
+
+sys.prefix = "@prefix@"
+sys.path.insert(1, "@libdir@")
+
+_share_dir = os.path.join(sys.prefix, "share")
+if os.path.isdir(_share_dir):
+    _xdg = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    if _share_dir not in _xdg.split(":"):
+        os.environ["XDG_DATA_DIRS"] = f"{_share_dir}:{_xdg}"
+
+# Do not import Orca here. It is imported in main(). The reason why is that
+# start-up failures due to imports in orca.py are not getting output, making
+# them challenging to debug when they cannot be reproduced locally.
+
+import importlib
+import importlib.util
+from gi.repository import GLib
+
+from orca import debug
+from orca import debugging_tools_manager
+from orca import extension_loader
+from orca import gsettings_registry
+from orca import messages
+from orca import screen_reader_manager
+from orca import speech_manager
+
+class ListApps(argparse.Action):
+    """Action to list all the running accessible applications."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None
+    ) -> None:
+        debugging_tools_manager.get_manager().print_running_applications(is_command_line=True)
+        parser.exit()
+
+class PrintVersion(argparse.Action):
+    """Action to print the version of Orca."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None
+    ) -> None:
+        debugging_tools_manager.get_manager().print_session_details(is_command_line=True)
+        parser.exit()
+
+class HelpFormatter(argparse.RawTextHelpFormatter):
+    """Lists the available actions and usage, preserving newlines in help text."""
+
+    def __init__(
+        self,
+        prog: str,
+        indent_increment: int = 2,
+        max_help_position: int = 32,
+        width: int | None = None
+    ) -> None:
+        super().__init__(prog, indent_increment, max_help_position, width)
+
+    def add_usage(
+        self,
+        usage: str | None,
+        actions: Any,
+        groups: Any,
+        prefix: str | None = None
+    ) -> None:
+        super().add_usage(usage, actions, groups, messages.CLI_USAGE)
+
+class Parser(argparse.ArgumentParser):
+    """Parser for command line arguments."""
+
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        super().__init__(epilog=messages.CLI_EPILOG, formatter_class=HelpFormatter, add_help=False)
+        self.add_argument(
+            "-h", "--help", action="help", help=messages.CLI_HELP)
+        self.add_argument(
+            "-v", "--version", action=PrintVersion, nargs=0, help=messages.CLI_VERSION)
+        self.add_argument(
+            "-r", "--replace", action="store_true", help=messages.CLI_REPLACE)
+        self.add_argument(
+            "-s", "--setup", action="store_true", help=messages.CLI_GUI_SETUP)
+        self.add_argument(
+            "-l", "--list-apps", action=ListApps, nargs=0,
+            help=messages.CLI_LIST_APPS)
+        self.add_argument(
+            "-p", "--profile", action="store",
+            help=messages.CLI_LOAD_PROFILE, metavar=messages.CLI_PROFILE_NAME)
+        self.add_argument(
+            "--speech-system", action="store",
+            help=messages.CLI_SPEECH_SYSTEM, metavar=messages.CLI_SPEECH_SYSTEM_NAME)
+        self.add_argument(
+            "--debug-file", action="store",
+            help=messages.CLI_DEBUG_FILE, metavar=messages.CLI_DEBUG_FILE_NAME)
+        self.add_argument(
+            "--debug", action="store_true", help=messages.CLI_ENABLE_DEBUG)
+        self.add_argument(
+            "--approve-extension", action="store",
+            help=messages.CLI_APPROVE_EXTENSION,
+            metavar=messages.CLI_EXTENSION_FILENAME)
+        self.add_argument(
+            "--revoke-extension", action="store",
+            help=messages.CLI_REVOKE_EXTENSION,
+            metavar=messages.CLI_EXTENSION_FILENAME)
+
+        self._optionals.title = messages.CLI_OPTIONAL_ARGUMENTS
+
+    def parse_known_args(self, args: Any = None, namespace: Any = None) -> Any:
+        opts, invalid = super().parse_known_args(args, namespace)
+        if invalid:
+            print((messages.CLI_INVALID_OPTIONS + " ".join(invalid)))
+
+        if opts.debug_file:
+            opts.debug = True
+        elif opts.debug:
+            opts.debug_file = time.strftime("debug-%Y-%m-%d-%H:%M:%S.out")
+
+        return opts, invalid
+
+def set_process_name(name: str) -> bool:
+    """Attempts to set the process name to the specified name."""
+
+    sys.argv[0] = name
+
+    if HAS_SETPROCTITLE:
+        setproctitle(name)
+        return True
+
+    if HAS_CTYPES:
+        try:
+            libc = cdll.LoadLibrary("libc.so.6")
+            string_buffer = create_string_buffer(len(name) + 1)
+            string_buffer.value = bytes(name, "UTF-8")
+            libc.prctl(15, byref(string_buffer), 0, 0, 0)
+            return True
+        except (OSError, AttributeError):
+            pass
+
+    return False
+
+def in_graphical_desktop() -> bool:
+    """Returns True if we are in a graphical desktop."""
+
+    session_type = os.environ.get("XDG_SESSION_TYPE") or ""
+    if session_type.lower() in ("x11", "wayland"):
+        return True
+
+    if os.environ.get("DISPLAY"):
+        return True
+
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return True
+
+    return False
+
+def other_orcas() -> list[int]:
+    """Returns the pid of any other instances of Orca owned by this user."""
+
+    with subprocess.Popen(
+        ["pgrep", "-u", str(os.getuid()), "-x", "orca"],
+        stdout=subprocess.PIPE,
+    ) as proc:
+        pids = proc.stdout.read() if proc.stdout else b""
+
+    orcas = [int(p) for p in pids.split()]
+    pid = os.getpid()
+    return [p for p in orcas if p != pid]
+
+def cleanup(sigval: int) -> None:
+    """Tries to clean up any other running Orca instances owned by this user."""
+
+    orcas_to_kill = other_orcas()
+    debug.print_message(debug.LEVEL_INFO, f"INFO: Cleaning up these PIDs: {orcas_to_kill}")
+
+    def on_timeout(_signum: int, _frame: Any) -> None:
+        orcas_to_kill = other_orcas()
+        debug.print_message(debug.LEVEL_INFO, f"INFO: Timeout cleaning up: {orcas_to_kill}")
+        for pid in orcas_to_kill:
+            os.kill(pid, signal.SIGKILL)
+
+    for pid in orcas_to_kill:
+        os.kill(pid, sigval)
+    signal.signal(signal.SIGALRM, on_timeout)
+    signal.alarm(2)
+    while other_orcas():
+        time.sleep(0.5)
+
+def _create_prefs_dirs(prefs_dir: str) -> None:
+    """Creates the preferences directory structure."""
+
+    extensions_dir = os.path.join(prefs_dir, "extensions")
+    sounds_dir = os.path.join(prefs_dir, "sounds")
+    for dir_path in [prefs_dir, extensions_dir, sounds_dir]:
+        os.makedirs(dir_path, exist_ok=True)
+
+    customizations_file = os.path.join(prefs_dir, "orca-customizations.py")
+    if not os.path.exists(customizations_file):
+        os.close(os.open(customizations_file, os.O_CREAT, 0o700))
+
+def _load_customizations(prefs_dir: str) -> None:
+    """Loads the user's orca-customizations.py."""
+
+    module_path = os.path.join(prefs_dir, "orca-customizations.py")
+    tokens: list[str] = ["ORCA: Attempt to load orca-customizations"]
+
+    try:
+        spec = importlib.util.spec_from_file_location("orca-customizations", module_path)
+        if spec is not None and spec.loader is not None:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            tokens.extend(["from", module_path, "succeeded."])
+        else:
+            tokens.extend(["from", module_path, "failed. Spec not found."])
+    except FileNotFoundError:
+        tokens.extend(["from", module_path, "failed. File not found."])
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        tokens.extend(["failed due to:", str(error), ". Not loading customizations."])
+
+    debug.print_tokens(debug.LEVEL_ALL, tokens, True)
+
+def _approve_extension(extensions_dir: str, filename: str) -> int:
+    """Approves a user extension for loading."""
+
+    filepath = os.path.join(extensions_dir, filename)
+    is_file = os.path.isfile(filepath)
+    is_package = os.path.isfile(os.path.join(filepath, "__init__.py"))
+    if not (is_file or is_package):
+        print(messages.CLI_EXTENSION_NOT_FOUND % filepath)
+        return 1
+
+    loader = extension_loader.get_loader()
+    loader.approve_extension_file(filepath)
+    print(messages.CLI_EXTENSION_APPROVED % filename)
+
+    class_name = loader.get_class_name(filepath)
+    if class_name and class_name in loader.get_disabled_extensions():
+        print(messages.CLI_EXTENSION_APPROVED_BUT_DISABLED % class_name)
+
+    return 0
+
+def _revoke_extension(filename: str) -> int:
+    """Revokes approval for a user extension."""
+
+    loader = extension_loader.get_loader()
+    approved = loader.get_approved_extensions()
+    if filename not in approved:
+        print(messages.CLI_EXTENSION_NOT_APPROVED % filename)
+        return 1
+
+    loader.revoke_extension(filename)
+    print(messages.CLI_EXTENSION_REVOKED % filename)
+    return 0
+
+def _get_speech_server_factory_names() -> list[str]:
+    """Returns the names of valid speech server factory modules."""
+
+    names: list[str] = []
+    for module_name in speech_manager.SPEECH_FACTORY_MODULES:
+        try:
+            importlib.import_module(f"orca.{module_name}")
+            names.append(module_name)
+            tokens = ["ORCA: Valid speech server factory:", module_name]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        except ImportError:
+            tokens = ["ORCA: Invalid speech server factory:", module_name]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+    return names
+
+def main() -> int:
+    """Launches Orca."""
+
+    set_process_name("orca")
+
+    parser = Parser()
+    args, _invalid = parser.parse_known_args()
+
+    if args.debug:
+        debug.debugLevel = debug.LEVEL_ALL
+        # Line-buffered to reduce loss of debug output on abnormal exit.
+        # pylint: disable=consider-using-with
+        debug.debugFile = open(
+            args.debug_file,
+            "w",
+            encoding="utf-8",
+            buffering=1,
+            opener=lambda path, flags: os.open(path, flags, 0o600),
+        )
+
+    if args.replace:
+        cleanup(signal.SIGKILL)
+
+    if not in_graphical_desktop():
+        print(messages.CLI_NO_DESKTOP_ERROR)
+        return 1
+
+    debug.print_message(debug.LEVEL_INFO, "INFO: Preparing to launch.", True)
+    prefs_dir = os.path.join(GLib.get_user_data_dir(), "orca")  # pylint: disable=no-value-for-parameter
+    _create_prefs_dirs(prefs_dir)
+
+    extensions_dir = os.path.join(prefs_dir, "extensions")
+    if args.approve_extension:
+        return _approve_extension(extensions_dir, args.approve_extension)
+    if args.revoke_extension:
+        return _revoke_extension(args.revoke_extension)
+
+    _load_customizations(prefs_dir)
+    extension_loader.get_loader().discover_and_load(extensions_dir)
+
+    if os.environ.get("ORCA_PROFILING"):
+        debug.debugLevel = debug.LEVEL_OFF
+
+    if args.profile:
+        try:
+            gsettings_registry.get_registry().set_active_profile(args.profile)
+        except (ValueError, KeyError, OSError):
+            print(messages.CLI_LOAD_PROFILE_ERROR.format(args.profile))
+            gsettings_registry.get_registry().set_active_profile("default")
+
+    if args.speech_system:
+        try:
+            # Check successfully loaded factory modules ("orca.<speech system>") and get their names
+            factories = _get_speech_server_factory_names()
+            if args.speech_system not in factories:
+                raise KeyError
+
+            gsettings_registry.get_registry().set_runtime_value(
+                "speech", "speech-server-factory", args.speech_system
+            )
+        except (KeyError, AttributeError):
+            print(messages.CLI_SPEECH_SYSTEM_ERROR.format(args.speech_system, ", ".join(factories)))
+
+    if args.setup:
+        if running_orcas := other_orcas():
+            # Send SIGUSR1 to the running Orca to show preferences window.
+            for pid in running_orcas:
+                os.kill(pid, signal.SIGUSR1)
+            return 0
+        screen_reader_manager.get_manager().show_preferences_gui()
+
+    if other_orcas():
+        print(messages.CLI_OTHER_ORCAS_ERROR)
+        return 1
+
+    from orca import orca  # pylint: disable=import-outside-toplevel
+    debug.print_message(debug.LEVEL_INFO, "INFO: About to launch Orca.", True)
+    return orca.main()
+
+if __name__ == "__main__":
+    sys.exit(main())

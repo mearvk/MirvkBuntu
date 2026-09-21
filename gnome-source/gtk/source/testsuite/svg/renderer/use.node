@@ -1,0 +1,14 @@
+rounded-clip {
+  clip: 10 0 20 20 / 10;
+  child: color {
+    bounds: 10 0 20 20;
+    color: rgb(255,0,0);
+  }
+}
+rounded-clip {
+  clip: 0 10 20 20 / 10;
+  child: color {
+    bounds: 0 10 20 20;
+    color: rgb(0,0,255);
+  }
+}

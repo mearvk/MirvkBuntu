@@ -1,0 +1,16 @@
+color {
+  bounds: 5 5 40 90;
+  color: rgb(0,0,0);
+}
+color {
+  bounds: 55 5 40 90;
+  color: rgb(255,0,255);
+}
+color {
+  bounds: 105 5 40 90;
+  color: rgba(0,0,0,0);
+}
+color {
+  bounds: 105 5 40 90;
+  color: rgba(0,0,0,0);
+}

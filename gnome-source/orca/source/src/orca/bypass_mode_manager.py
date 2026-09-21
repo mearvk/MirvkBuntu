@@ -1,0 +1,95 @@
+# Orca
+#
+# Copyright 2024 Igalia, S.L.
+# Copyright 2024 GNOME Foundation Inc.
+# Author: Joanmarie Diggs <jdiggs@igalia.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+"""Provides means to pass keyboard events to the app being used."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from . import (
+    bypass_mode_manager_command_definitions,
+    command_manager,
+    guilabels,
+    input_event,
+    messages,
+    orca_modifier_manager,
+    presentation_manager,
+)
+from .extension import Extension
+
+if TYPE_CHECKING:
+    from .command import Command
+    from .scripts import default
+
+
+class BypassModeManager(Extension):
+    """Provides means to pass keyboard events to the app being used."""
+
+    GROUP_LABEL = guilabels.KB_GROUP_BYPASS_MODE
+    COMMAND_NAME = "bypass_mode_toggle"
+
+    def __init__(self) -> None:
+        self._is_active: bool = False
+        super().__init__()
+
+    def _get_commands(self) -> list[Command]:
+        return bypass_mode_manager_command_definitions.get_commands(self)
+
+    def is_active(self) -> bool:
+        """Returns True if bypass mode is active."""
+
+        return self._is_active
+
+    def toggle_enabled(
+        self,
+        _script: default.Script,
+        event: input_event.InputEvent | None = None,
+    ) -> bool:
+        """Toggles bypass mode."""
+
+        self._is_active = not self._is_active
+        manager = command_manager.get_manager()
+        if not self._is_active:
+            if event is not None:
+                presentation_manager.get_manager().present_message(messages.BYPASS_MODE_DISABLED)
+            reason = "bypass mode disabled"
+            manager.set_all_suspended(False)
+            orca_modifier_manager.get_manager().refresh_orca_modifiers(reason)
+            return True
+
+        if event is not None:
+            presentation_manager.get_manager().present_message(messages.BYPASS_MODE_ENABLED)
+
+        reason = "bypass mode enabled"
+        manager.set_all_suspended(True, frozenset({self.COMMAND_NAME}))
+        orca_modifier_manager.get_manager().unset_orca_modifiers(reason)
+
+        return True
+
+
+_manager: BypassModeManager = BypassModeManager()
+
+
+def get_manager() -> BypassModeManager:
+    """Returns the bypass-mode-manager singleton."""
+
+    return _manager

@@ -1,0 +1,14 @@
+rounded-clip {
+  clip: 0 0 200 200 / 100;
+  child: transform {
+    transform: rotate(45);
+    child: repeat {
+      bounds: 0 -141.421 282.843 282.843;
+      child-bounds: 0 0 20 20;
+      child: color {
+        bounds: 0 0 10 10;
+        color: rgb(0,128,0);
+      }
+    }
+  }
+}

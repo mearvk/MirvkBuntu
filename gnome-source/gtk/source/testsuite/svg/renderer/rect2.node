@@ -1,0 +1,22 @@
+clip {
+  clip: 0 0 100 100;
+  child: transform {
+    transform: rotate(30);
+    child: container {
+      color {
+        bounds: 10 10 50 20;
+        color: rgb(0,0,0);
+      }
+      stroke {
+        child: color {
+          bounds: 9.5 9.5 51 21;
+          color: rgb(255,0,0);
+        }
+        path: 10 10 50 20;
+        line-width: 1;
+        line-cap: butt;
+        line-join: miter;
+      }
+    }
+  }
+}

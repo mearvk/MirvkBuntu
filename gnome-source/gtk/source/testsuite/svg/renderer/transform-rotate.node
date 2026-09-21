@@ -1,0 +1,74 @@
+rounded-clip {
+  clip: 431.491 213.312 50.0178 50.0178 / 25.0089;
+  child: color {
+    bounds: 431.491 213.312 50.0178 50.0178;
+    color: rgb(160,160,160);
+  }
+}
+transform {
+  transform: translate(456.5, 741.5) scale(1.00036);
+  child: container {
+    stroke {
+      child: color {
+        bounds: -27.5 -530.5 55 55;
+        color: rgb(230,45,66);
+      }
+      path: circle {
+        center: 0 -503;
+        radius: 25;
+      }
+      line-width: 5;
+      line-cap: butt;
+      line-join: miter;
+    }
+    stroke {
+      child: color {
+        bounds: -35 -523 70 40;
+        color: rgb(230,45,66);
+      }
+      path: "M -15 -503 L 15 -503";
+      line-width: 5;
+      line-cap: butt;
+      line-join: miter;
+    }
+    transform {
+      transform: translate(0, -503) rotate(90) translate(-0, 503);
+      child: stroke {
+        child: color {
+          bounds: -35 -523 70 40;
+          color: rgb(230,45,66);
+        }
+        path: "M -15 -503 L 15 -503";
+        line-width: 5;
+        line-cap: butt;
+        line-join: miter;
+      }
+    }
+    transform {
+      transform: translate(0, -503) rotate(45) translate(-0, 503);
+      child: stroke {
+        child: color {
+          bounds: -35 -523 70 40;
+          color: rgb(230,45,66);
+        }
+        path: "M -15 -503 L 15 -503";
+        line-width: 5;
+        line-cap: butt;
+        line-join: miter;
+      }
+    }
+    transform {
+      transform: translate(0, -503) rotate(135) translate(-0, 503);
+      child: stroke {
+        child: color {
+          bounds: -35 -523 70 40;
+          color: rgb(230,45,66);
+        }
+        path: "M -15 -503 L 15 -503";
+        line-width: 5;
+        line-cap: butt;
+        line-join: miter;
+      }
+    }
+  }
+}

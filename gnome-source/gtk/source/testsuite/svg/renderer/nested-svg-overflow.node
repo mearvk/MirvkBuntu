@@ -1,0 +1,49 @@
+clip {
+  clip: 0 0 300 200;
+  child: container {
+    rounded-clip {
+      clip: -10 -10 100 100 / 50;
+      child: color {
+        bounds: -10 -10 100 100;
+        color: rgb(255,0,0);
+      }
+    }
+    clip {
+      clip: 90 10 60 60;
+      child: rounded-clip {
+        clip: 70 -10 100 100 / 50;
+        child: color {
+          bounds: 70 -10 100 100;
+          color: rgb(0,0,255);
+        }
+      }
+    }
+    clip {
+      clip: 170 10 60 60;
+      child: rounded-clip {
+        clip: 150 -10 100 100 / 50;
+        child: color {
+          bounds: 150 -10 100 100;
+          color: rgb(0,128,0);
+        }
+      }
+    }
+    rounded-clip {
+      clip: -10 70 100 100 / 50;
+      child: color {
+        bounds: -10 70 100 100;
+        color: rgb(255,255,0);
+      }
+    }
+    clip {
+      clip: 90 90 60 60;
+      child: rounded-clip {
+        clip: 70 70 100 100 / 50;
+        child: color {
+          bounds: 70 70 100 100;
+          color: rgb(128,0,128);
+        }
+      }
+    }
+  }
+}
