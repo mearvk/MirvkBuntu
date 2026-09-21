@@ -1,5 +1,31 @@
 # Installer Primer
 
+## Edition Installer (full slim/minimal/full install to disk)
+
+`mirvkbuntu-installer` is the full, edition-aware system installer: a single
+native C11 ELF ([`linux/mirvkbuntu_installer.c`](linux/mirvkbuntu_installer.c) +
+`.h`) that performs the **real** install to disk for the three MirvkBuntu ISO
+editions — **slim**, **minimal**, and **full** — including partitioning,
+formatting, copying the root filesystem, **edition-specific** configuration, and
+the bootloader.
+
+Unlike `white-installer` (a control plane that only delegates) and
+`package-installer` (which copies package artifacts), this binary owns the
+edition contract end to end. It auto-detects the edition from the running live
+image (`/etc/mirvkbuntu/*.conf` marker or the kernel `edition=` cmdline token)
+and follows the White Edition safety model
+(`DISCOVER → … → REPORT`), defaulting to a non-destructive **DRY RUN**. A
+destructive install requires `--install`, a valid `--target` device, and root.
+
+```sh
+make -C installer/linux mirvkbuntu-installer         # build just this binary
+mirvkbuntu-installer --edition slim --emit-script    # inspect the exact steps
+sudo mirvkbuntu-installer --edition slim --target /dev/sda --install --yes
+```
+
+Full flags, edition table, safety contract, and ISO-staging details are in
+[`EDITION_INSTALLER.md`](EDITION_INSTALLER.md).
+
 ## Package Installer (direct package-software install)
 
 `package-installer` installs the repository's package software **directly** into

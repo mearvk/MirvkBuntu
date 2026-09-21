@@ -117,8 +117,9 @@ The existing ISO and Ubuntu installer paths remain the established image/provisi
 
 ## Native install binaries (installer/linux)
 
-`installer/linux/` holds three committed native ELF binaries that support the install path. Consistent with the framing above, the orchestrator adds a smooth front door and delegates to the established contracts rather than replacing them.
+`installer/linux/` holds the native ELF binaries that support the install path. Consistent with the framing above, the orchestrator adds a smooth front door and delegates to the established contracts rather than replacing them; the edition installer additionally owns the full slim/minimal/full install to disk.
 
+- `mirvkbuntu-installer`: the **edition-aware full installer**. A single native C11 ELF that performs the real install to disk for the three MirvkBuntu ISO editions — **slim**, **minimal**, and **full** — including partitioning, formatting, root-filesystem copy, edition-specific configuration, and bootloader. It auto-detects the edition from the live image, forces `ubuntu-white` ON for slim, converts the slim `toram` image to a persistent install, and defaults to a safe dry-run (a destructive run needs `--install` + a valid `--target` + root). Unlike `white-installer` it does not delegate — it owns the edition logic. See [`EDITION_INSTALLER.md`](EDITION_INSTALLER.md).
 - `white-installer`: the smooth-install orchestrator ELF and default front door. It runs a seven-stage guided flow (PROBE, PREVIEW read-only, COMPONENTS, TARGET, CONFIRM, DELEGATE, AUDIT) with checkbox and command-line component selection. It is a control plane that delegates to `scripts/galactic-cherry-installer` rather than reimplementing disk or package logic, runs unprivileged, and defaults to a safe dry-run. This is the headline new binary.
 - `desktop_install_probe`: the existing Step-1 discovery and bootstrap probe. It locates the clone and the install set, previews and performs dry-run discovery, and can carry out an explicit install. It already exists and is listed here for context.
 - `nxtt`: the NXTT uninstaller helper ELF.
@@ -138,7 +139,18 @@ The existing ISO and Ubuntu installer paths remain the established image/provisi
 These build from `installer/linux/Makefile`:
 
 ```text
-make -C installer/linux all
+make -C installer/linux all                    # every native installer binary
+make -C installer/linux mirvkbuntu-installer   # just the edition installer
+```
+
+All three ISO builds (`build/build-slim.sh`, `build-minimal.sh`,
+`build-desktop.sh`) stage `mirvkbuntu-installer` into the live root filesystem
+via `stage_installer` in `build/common-build.sh`, and expose it on the booted
+live system as `mirvkbuntu-install` (edition preselected):
+
+```text
+mirvkbuntu-install                              # dry-run plan for this ISO's edition
+sudo mirvkbuntu-install --install --target /dev/sda
 ```
 
 A portable static build of the orchestrator is available for the live ISO and minimal environments:

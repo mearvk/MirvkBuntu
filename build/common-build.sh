@@ -91,6 +91,63 @@ stage_native_outputs(){
   cp -f "$native_root/artifacts/release.env" "$work_dir/config/includes.chroot/etc/mirvkbuntu/native-release.env"
   cp -f "$native_root/artifacts/rootfs.sha256" "$work_dir/config/includes.chroot/etc/mirvkbuntu/native-rootfs.sha256"
 }
+# Build and stage the edition-aware installer (and the Bash install engine it
+# can delegate to) into the live rootfs, and expose a "mirvkbuntu-install"
+# convenience wrapper on PATH. This is what makes the ISO self-installing: the
+# live session ships a real installer executable (mirvkbuntu-installer) that
+# lays the chosen edition down on disk. $1 is the live-build work dir, $2 is the
+# edition name (slim|minimal|full) baked into the wrapper's default.
+stage_installer(){
+  local work_dir="$1"
+  local edition="${2:-full}"
+  local inc="$work_dir/config/includes.chroot"
+  local installer_dir="$REPO_ROOT/packages/installer/linux"
+  local engine="$REPO_ROOT/sources/scripts/galactic-cherry-installer"
+
+  mkdir -p "$inc/usr/sbin" "$inc/usr/bin"
+
+  # Compile the native installer binaries if a toolchain is present. The ISO
+  # ships the prebuilt ELF; a missing compiler on the build host is non-fatal
+  # (a committed binary in the repo, if any, is used instead).
+  if [ -f "$installer_dir/Makefile" ] && command -v cc >/dev/null 2>&1; then
+    make -C "$installer_dir" mirvkbuntu-installer white-installer >/dev/null 2>&1 || \
+      printf 'build: WARNING: native installer build failed; staging any prebuilt binary\n' >&2
+  fi
+
+  if [ -x "$installer_dir/mirvkbuntu-installer" ]; then
+    cp -f "$installer_dir/mirvkbuntu-installer" "$inc/usr/sbin/mirvkbuntu-installer"
+    chmod 0755 "$inc/usr/sbin/mirvkbuntu-installer"
+  else
+    printf 'build: WARNING: mirvkbuntu-installer binary not found to stage\n' >&2
+  fi
+  [ -x "$installer_dir/white-installer" ] && \
+    cp -f "$installer_dir/white-installer" "$inc/usr/sbin/white-installer"
+
+  # Stage the Bash install engine under /usr/sbin so white-installer's
+  # delegation target resolves on the live system as well.
+  if [ -f "$engine" ]; then
+    cp -f "$engine" "$inc/usr/sbin/galactic-cherry-installer"
+    chmod 0755 "$inc/usr/sbin/galactic-cherry-installer"
+  fi
+
+  # A tiny PATH wrapper that launches the installer with the edition this ISO
+  # was built for as the default (still overridable with --edition).
+  cat > "$inc/usr/bin/mirvkbuntu-install" <<WRAP
+#!/bin/sh
+# MirvkBuntu ${edition} edition — install-to-disk launcher (live session).
+# Runs the edition-aware installer as root. Default run is a safe dry-run;
+# pass --install (and a --target) to actually write to disk.
+exec sudo /usr/sbin/mirvkbuntu-installer --edition ${edition} "\$@"
+WRAP
+  chmod 0755 "$inc/usr/bin/mirvkbuntu-install"
+
+  # Record the edition marker so the installer auto-detects it at runtime.
+  mkdir -p "$inc/etc/mirvkbuntu"
+  printf 'MIRVKBUNTU_EDITION=%s\n' "$edition" > "$inc/etc/mirvkbuntu/edition.conf"
+
+  printf 'build: staged mirvkbuntu-installer (edition=%s) into the live rootfs\n' "$edition"
+}
+
 run_live_build(){
   local work_dir="$1"
   local log_file="${work_dir}/live-build.log"
