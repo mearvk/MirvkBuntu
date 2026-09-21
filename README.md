@@ -164,6 +164,62 @@ bash gnome-source/pull-all-source.sh
 sudo bash build/build-slim.sh            # -> build/output/MirvkBuntu-slim-amd64.iso
 ```
 
+## Build Order
+
+Both the main OS ISO and the Slim OS ISO are built from MirvkBuntu's own source.
+Run the numbered scripts in the order shown, from the repository root, on a
+Debian/Ubuntu host as root with network access.
+
+### Main OS ISO (desktop)
+
+| # | Command | Purpose |
+|---|---------|---------|
+| 1 | `bash build/prerequisites.sh native` | Install host build tooling (live-build, debootstrap, xorriso, toolchain). |
+| 2 | `bash kernels/git.sh` | Fetch real Linux kernel source into `kernels/`. |
+| 3 | `bash gnome-source/pull-all-source.sh` | Populate every GNOME module `source/` (pinned versions). |
+| 4 | `bash build/build-desktop.sh` | Build the ISO → `build/output/MirvkBuntu-desktop-amd64.iso`. |
+
+Step 4 (`build-desktop.sh`) internally runs, in order:
+
+1. `require_commands live-build lb` — verify host tooling
+2. `require_mirvkbuntu_source` — verify author source directories
+3. `run_native_build` → `build/native-build.sh`, whose stages run in order:
+   1. `build_kernels` (skip: `BUILD_SKIP_KERNELS=1`)
+   2. `build_chromium` → `build/chromium/build-chromium.sh` (skip: `BUILD_SKIP_CHROMIUM=1`)
+   3. `build_gnome` (skip: `BUILD_SKIP_GNOME=1`)
+   4. `build_other_native_projects` (skip: `BUILD_SKIP_OTHER=1`)
+   5. `verify_native_output` → `write_release_manifest` → `create_split_bundle`
+4. `lb config` — configure live-build (desktop)
+5. `write_package_list` → `stage_mirvkbuntu_source` → `write_mirvkbuntu_manifest` → `stage_native_outputs`
+6. `run_live_build` (`lb build`) → `find_iso` → `publish_iso`
+
+Steps 1–3 above can be run in one shot via `build/bootstrap-native.sh` (it
+fetches the kernel then calls `build-desktop.sh`).
+
+### Slim OS ISO (full OS to RAM, boots to GNOME)
+
+| # | Command | Purpose |
+|---|---------|---------|
+| 1 | `bash build/prerequisites.sh native` | Install host build tooling. |
+| 2 | `bash kernels/git.sh` | Fetch real Linux kernel source into `kernels/`. |
+| 3 | `bash gnome-source/pull-all-source.sh` | Populate every GNOME module `source/` (pinned versions). |
+| 4 | `bash build/build-slim.sh` | Build the ISO → `build/output/MirvkBuntu-slim-amd64.iso`. |
+
+Step 4 (`build-slim.sh`) internally runs the same native gate as the desktop
+build, then configures live-build for a RAM-loaded (`toram`) GNOME live session
+with a 400 MB writable overlay:
+
+1. `require_commands live-build lb`
+2. `require_mirvkbuntu_source`
+3. `run_native_build` → `build/native-build.sh` (same ordered stages as above)
+4. `lb config` with `--bootappend-live "boot=live components toram ..."`
+5. `write_package_list` (+ the slim GNOME package list) → `stage_mirvkbuntu_source` → `write_mirvkbuntu_manifest` → `stage_native_outputs`
+6. slim live-session config (overlay-limit service, GDM autologin, GNOME session hook)
+7. `run_live_build` (`lb build`) → `find_iso` → `publish_iso`
+
+The only difference between the two ISOs is step 4's script
+(`build-desktop.sh` vs `build-slim.sh`); steps 1–3 are identical.
+
 ## Relationship to Ubuntu.Determinant.Beta.Restricted
 
 MirvkBuntu is the cleaner distribution-level home for the operating-system base.
