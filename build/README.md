@@ -140,6 +140,9 @@ is still being populated, use the `BUILD_SKIP_*` flags for a partial build.
 - `build-desktop.sh`: desktop development image (native path).
 - `build-iso.sh`: convenience entry point for the desktop ISO.
 
+All build flags and environment variables are documented in
+[`BUILD.FLAGS.md`](BUILD.FLAGS.md).
+
 ## Populating GNOME source
 
 The native path compiles the GNOME stack from `gnome-source/<module>/source/`.
