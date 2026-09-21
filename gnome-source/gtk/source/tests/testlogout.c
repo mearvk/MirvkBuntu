@@ -137,7 +137,7 @@ main (int argc, char *argv[])
 {
   GtkApplication *app;
 
-  app = gtk_application_new ("org.gtk.Test.session", G_APPLICATION_DEFAULT_FLAGS);
+  app = gtk_application_new ("org.gtk.Test.session", 0);
   g_object_set (app, "register-session", TRUE, NULL);
 
   g_signal_connect (app, "activate",

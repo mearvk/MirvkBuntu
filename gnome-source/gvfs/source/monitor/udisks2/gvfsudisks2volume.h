@@ -35,7 +35,7 @@ G_BEGIN_DECLS
 #define GVFS_UDISKS2_VOLUME(o)    (G_TYPE_CHECK_INSTANCE_CAST ((o), GVFS_TYPE_UDISKS2_VOLUME, GVfsUDisks2Volume))
 #define GVFS_IS_UDISKS2_VOLUME(o) (G_TYPE_CHECK_INSTANCE_TYPE ((o), GVFS_TYPE_UDISKS2_VOLUME))
 
-GType              gvfs_udisks2_volume_get_type    (void);
+GType              gvfs_udisks2_volume_get_type    (void) G_GNUC_CONST;
 
 GVfsUDisks2Volume *gvfs_udisks2_volume_new         (GVfsUDisks2VolumeMonitor   *monitor,
                                                     UDisksBlock                *block,
@@ -47,7 +47,6 @@ void               gvfs_udisks2_volume_removed     (GVfsUDisks2Volume          *
 
 UDisksBlock       *gvfs_udisks2_volume_get_block       (GVfsUDisks2Volume      *volume);
 GUnixMountPoint   *gvfs_udisks2_volume_get_mount_point (GVfsUDisks2Volume      *volume);
-GVfsUDisks2Drive  *gvfs_udisks2_volume_get_udisks2_drive (GVfsUDisks2Volume    *volume);
 dev_t              gvfs_udisks2_volume_get_dev         (GVfsUDisks2Volume      *volume);
 
 void               gvfs_udisks2_volume_set_mount   (GVfsUDisks2Volume          *volume,

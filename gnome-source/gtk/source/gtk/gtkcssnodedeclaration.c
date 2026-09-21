@@ -92,14 +92,14 @@ GtkCssNodeDeclaration *
 gtk_css_node_declaration_new (void)
 {
   static GtkCssNodeDeclaration empty = {
-    1,
+    1, /* need to own a ref ourselves so the copy-on-write path kicks in when people change things */
     0,
     0,
     0,
     0
   };
 
-  return g_memdup2 (&empty, sizeof_this_node (&empty));
+  return gtk_css_node_declaration_ref (&empty);
 }
 
 GtkCssNodeDeclaration *
@@ -435,7 +435,7 @@ gtk_css_node_declaration_print (const GtkCssNodeDeclaration *decl,
   for (i = 0; i < decl->n_classes; i++)
     classnames[i] = (char *)g_quark_to_string (decl->classes[i]);
 
-  g_sort_array (classnames, decl->n_classes, sizeof (char *), cmpstr, NULL);
+  g_qsort_with_data (classnames, decl->n_classes, sizeof (char *), cmpstr, NULL);
 
   for (i = 0; i < decl->n_classes; i++)
     {
@@ -446,9 +446,9 @@ gtk_css_node_declaration_print (const GtkCssNodeDeclaration *decl,
 
   for (i = 0; i < sizeof (GtkStateFlags) * 8; i++)
     {
-      if (decl->state & (1u << i))
+      if (decl->state & (1 << i))
         {
-          const char *name = gtk_css_pseudoclass_name (1u << i);
+          const char *name = gtk_css_pseudoclass_name (1 << i);
           g_assert (name);
           g_string_append_c (string, ':');
           g_string_append (string, name);

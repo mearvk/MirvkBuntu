@@ -77,7 +77,7 @@ wp_fractional_scale_manager_get_fractional_scale (struct wl_client   *client,
 {
   MetaWaylandSurface *surface;
   struct wl_resource *fractional_scale_resource;
-  MetaLogicalMonitor *logical_monitor;
+  double scale;
 
   surface = wl_resource_get_user_data (surface_resource);
   if (surface->fractional_scale.resource)
@@ -98,21 +98,14 @@ wp_fractional_scale_manager_get_fractional_scale (struct wl_client   *client,
                                   wp_fractional_scale_destructor);
 
   surface->fractional_scale.resource = fractional_scale_resource;
-  surface->fractional_scale.scale = 0.0;
   surface->fractional_scale.destroy_handler_id =
     g_signal_connect (surface,
                       "destroy",
                       G_CALLBACK (on_surface_destroyed),
                       NULL);
 
-  logical_monitor = meta_wayland_surface_get_preferred_scale_monitor (surface);
-  if (logical_monitor)
-    {
-      double scale;
-
-      scale = meta_logical_monitor_get_scale (logical_monitor);
-      meta_wayland_fractional_scale_maybe_send_preferred_scale (surface, scale);
-    }
+  scale = meta_wayland_surface_get_highest_output_scale (surface);
+  meta_wayland_fractional_scale_maybe_send_preferred_scale (surface, scale);
 }
 
 static const struct wp_fractional_scale_manager_v1_interface meta_wayland_fractional_scale_manager_interface = {
@@ -162,7 +155,7 @@ meta_wayland_fractional_scale_maybe_send_preferred_scale (MetaWaylandSurface *su
       G_APPROX_VALUE (scale, surface->fractional_scale.scale, FLT_EPSILON))
     return;
 
-  wire_scale = (int) round (scale * 120);
+  wire_scale = round (scale * 120);
   wp_fractional_scale_v1_send_preferred_scale (surface->fractional_scale.resource,
                                                wire_scale);
   surface->fractional_scale.scale = scale;

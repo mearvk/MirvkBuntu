@@ -56,7 +56,7 @@ struct _GFilenameCompleterClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType               g_filename_completer_get_type              (void);
+GType               g_filename_completer_get_type              (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GFilenameCompleter *g_filename_completer_new                   (void);

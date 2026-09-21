@@ -34,8 +34,7 @@ test_map_buffer_range (void)
   CoglAttribute *tex_coord_attribute;
   CoglPrimitive *primitive;
 
-  if (!cogl_driver_has_feature (cogl_context_get_driver (test_ctx),
-                                COGL_FEATURE_ID_MAP_BUFFER_FOR_WRITE))
+  if (!cogl_has_feature (test_ctx, COGL_FEATURE_ID_MAP_BUFFER_FOR_WRITE))
     {
       g_test_skip ("Missing map buffer for write capability");
       return;
@@ -74,7 +73,7 @@ test_map_buffer_range (void)
                                 COGL_BUFFER_ACCESS_WRITE,
                                 COGL_BUFFER_MAP_HINT_DISCARD_RANGE,
                                 NULL); /* don't catch errors */
-  g_assert_nonnull (data);
+  g_assert (data != NULL);
 
   data->x = vertex_data[2].x;
   data->y = vertex_data[2].y;

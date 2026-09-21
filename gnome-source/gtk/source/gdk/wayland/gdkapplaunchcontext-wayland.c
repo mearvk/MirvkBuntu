@@ -17,8 +17,6 @@
 
 #include "config.h"
 
-#include "gdkapplaunchcontext-wayland.h"
-
 #include <string.h>
 #include <unistd.h>
 
@@ -26,9 +24,7 @@
 #include <gio/gdesktopappinfo.h>
 
 #include "gdkwayland.h"
-#include "gdkdisplay-wayland.h"
-#include "gdkseat-wayland.h"
-#include "gdkdevice-wayland-private.h"
+#include "gdkprivate-wayland.h"
 #include "gdkapplaunchcontextprivate.h"
 #include <glib/gi18n-lib.h>
 
@@ -63,36 +59,6 @@ peek_launcher_toplevel (GdkSeat *seat)
     wl_surface = gdk_wayland_surface_get_wl_surface (focus_surface);
 
   return wl_surface;
-}
-
-/* Try to find the appropriate app-id for the app being launched,
- * to use with xdg-activation.
- */
-static char *
-find_app_id (GAppInfo *info)
-{
-  const char *id;
-
-  /* For Flatpak, it's directly written in the desktop file */
-  if (G_IS_DESKTOP_APP_INFO (info))
-    {
-      id = g_desktop_app_info_get_string (G_DESKTOP_APP_INFO (info), "X-Flatpak");
-      if (id)
-        return (char *) id;
-    }
-
-  /* We could look at g_desktop_app_info_get_startup_wm_class here.
-   * However it appears that generally the desktop ID is more likely
-   * to result in a modern reverse DNS-like application ID.
-   */
-
-  id = g_app_info_get_id (info);
-
-  /* Strip ".desktop" from the name */
-  if (!id || !g_str_has_suffix (id, ".desktop"))
-    return g_strdup (id);
-
-  return g_strndup (id, strlen (id) - 8);
 }
 
 static char *
@@ -130,16 +96,6 @@ gdk_wayland_app_launch_context_get_startup_notify_id (GAppLaunchContext *context
       if (wl_surface)
         xdg_activation_token_v1_set_surface (token, wl_surface);
 
-      if (info)
-        {
-          char *app_id = find_app_id (info);
-          if (app_id)
-            {
-              xdg_activation_token_v1_set_app_id (token, app_id);
-              g_free (app_id);
-            }
-        }
-
       xdg_activation_token_v1_commit (token);
 
       while (app_launch_data.token == NULL)
@@ -174,7 +130,7 @@ struct _GdkWaylandAppLaunchContext
 {
   GdkAppLaunchContext base;
   char *name;
-  uint32_t serial;
+  guint serial;
 };
 
 struct _GdkWaylandAppLaunchContextClass
@@ -201,7 +157,7 @@ gdk_wayland_app_launch_context_init (GdkWaylandAppLaunchContext *ctx)
 }
 
 GdkAppLaunchContext *
-gdk_wayland_display_get_app_launch_context (GdkDisplay *display)
+_gdk_wayland_display_get_app_launch_context (GdkDisplay *display)
 {
   GdkAppLaunchContext *ctx;
 

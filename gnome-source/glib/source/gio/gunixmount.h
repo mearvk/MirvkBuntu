@@ -44,7 +44,7 @@ struct _GUnixMountClass
   GObjectClass parent_class;
 };
 
-GType        _g_unix_mount_get_type       (void);
+GType        _g_unix_mount_get_type       (void) G_GNUC_CONST;
 
 GUnixMount * _g_unix_mount_new            (GVolumeMonitor  *volume_monitor,
                                            GUnixMountEntry *mount_entry,

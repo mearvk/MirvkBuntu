@@ -19,7 +19,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef __ST_THEME_CONTEXT_H__
+#define __ST_THEME_CONTEXT_H__
 
 #include <clutter/clutter.h>
 #include <pango/pango.h>
@@ -28,9 +29,8 @@
 G_BEGIN_DECLS
 
 /**
- * StThemeContext:
- *
- * Holds global information about a tree of styled objects
+ * SECTION:st-theme-context
+ * @short_description: holds global information about a tree of styled objects
  *
  * #StThemeContext is responsible for managing information global to a tree of styled objects,
  * such as the set of stylesheets or the default font. In normal usage, a #StThemeContext
@@ -42,29 +42,24 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (StThemeContext, st_theme_context,
                       ST, THEME_CONTEXT, GObject)
 
+StThemeContext *st_theme_context_new           (void);
 StThemeContext *st_theme_context_get_for_stage (ClutterStage *stage);
 
-void                        st_theme_context_set_theme        (StThemeContext             *context,
-                                                               StTheme                    *theme);
-StTheme *                   st_theme_context_get_theme        (StThemeContext             *context);
+void                        st_theme_context_set_theme      (StThemeContext             *context,
+                                                             StTheme                    *theme);
+StTheme *                   st_theme_context_get_theme      (StThemeContext             *context);
 
-void                        st_theme_context_set_font         (StThemeContext             *context,
-                                                               const PangoFontDescription *font);
-const PangoFontDescription *st_theme_context_get_font         (StThemeContext             *context);
+void                        st_theme_context_set_font       (StThemeContext             *context,
+                                                             const PangoFontDescription *font);
+const PangoFontDescription *st_theme_context_get_font       (StThemeContext             *context);
 
-void                        st_theme_context_get_accent_color (StThemeContext             *context,
-                                                               CoglColor                  *color,
-                                                               CoglColor                  *fg_color);
+StThemeNode *               st_theme_context_get_root_node  (StThemeContext             *context);
 
-StThemeNode *               st_theme_context_get_root_node    (StThemeContext             *context);
-
-StThemeNode *               st_theme_context_intern_node      (StThemeContext             *context,
-                                                               StThemeNode                *node);
+StThemeNode *               st_theme_context_intern_node    (StThemeContext             *context,
+                                                             StThemeNode                *node);
 
 int st_theme_context_get_scale_factor (StThemeContext *context);
-void st_theme_context_set_scale_factor (StThemeContext *context,
-                                        int             factor);
-
-double st_theme_context_get_resolution (StThemeContext *context);
 
 G_END_DECLS
+
+#endif /* __ST_THEME_CONTEXT_H__ */

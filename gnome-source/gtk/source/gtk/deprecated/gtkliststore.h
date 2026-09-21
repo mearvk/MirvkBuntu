@@ -58,7 +58,7 @@ struct _GtkListStoreClass
 
 
 GDK_AVAILABLE_IN_ALL
-GType         gtk_list_store_get_type         (void);
+GType         gtk_list_store_get_type         (void) G_GNUC_CONST;
 GDK_DEPRECATED_IN_4_10_FOR(GListStore)
 GtkListStore *gtk_list_store_new              (int           n_columns,
 					       ...);

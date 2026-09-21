@@ -22,8 +22,7 @@
 #include <xf86drmMode.h>
 
 #include "backends/native/meta-kms-types.h"
-#include "core/util-private.h"
-#include "mtk/mtk-monitor-transform.h"
+#include "backends/meta-monitor-transform.h"
 
 enum _MetaKmsPlaneType
 {
@@ -31,29 +30,6 @@ enum _MetaKmsPlaneType
   META_KMS_PLANE_TYPE_CURSOR,
   META_KMS_PLANE_TYPE_OVERLAY,
 };
-
-typedef enum _MetaKmsPlaneYCbCrColorEncoding
-{
-  META_KMS_PLANE_YCBCR_COLOR_ENCODING_BT601 = 0,
-  META_KMS_PLANE_YCBCR_COLOR_ENCODING_BT709,
-  META_KMS_PLANE_YCBCR_COLOR_ENCODING_BT2020,
-  META_KMS_PLANE_YCBCR_COLOR_ENCODING_N_PROPS,
-} MetaKmsPlaneYCbCrColorEncoding;
-
-typedef enum _MetaKmsPlaneYCbCrColorRanges
-{
-  META_KMS_PLANE_YCBCR_COLOR_RANGE_LIMITED = 0,
-  META_KMS_PLANE_YCBCR_COLOR_RANGE_FULL,
-  META_KMS_PLANE_YCBCR_COLOR_RANGE_N_PROPS,
-} MetaKmsPlaneYCbCrColorRange;
-
-typedef struct _MetaKmsPlaneCursorSizeHints
-{
-  gboolean has_size_hints;
-  uint64_t num_of_size_hints;
-  uint64_t *cursor_width;
-  uint64_t *cursor_height;
-} MetaKmsPlaneCursorSizeHints;
 
 #define META_TYPE_KMS_PLANE meta_kms_plane_get_type ()
 G_DECLARE_FINAL_TYPE (MetaKmsPlane, meta_kms_plane,
@@ -68,17 +44,8 @@ uint32_t meta_kms_plane_get_id (MetaKmsPlane *plane);
 META_EXPORT_TEST
 MetaKmsPlaneType meta_kms_plane_get_plane_type (MetaKmsPlane *plane);
 
-const MetaKmsPlaneCursorSizeHints *
-meta_kms_plane_get_cursor_size_hints (MetaKmsPlane *plane);
-
-gboolean meta_kms_plane_is_transform_handled (MetaKmsPlane        *plane,
-                                              MtkMonitorTransform  transform);
-
-gboolean meta_kms_plane_is_color_encoding_handled (MetaKmsPlane                   *plane,
-                                                   MetaKmsPlaneYCbCrColorEncoding  encoding);
-
-gboolean meta_kms_plane_is_color_range_handled (MetaKmsPlane                *plane,
-                                                MetaKmsPlaneYCbCrColorRange  range);
+gboolean meta_kms_plane_is_transform_handled (MetaKmsPlane         *plane,
+                                              MetaMonitorTransform  transform);
 
 gboolean meta_kms_plane_supports_cursor_hotspot (MetaKmsPlane *plane);
 
@@ -96,14 +63,4 @@ gboolean meta_kms_plane_is_usable_with (MetaKmsPlane *plane,
 
 void meta_kms_plane_update_set_rotation (MetaKmsPlane           *plane,
                                          MetaKmsPlaneAssignment *plane_assignment,
-                                         MtkMonitorTransform     transform);
-
-void meta_kms_plane_update_set_color_encoding (MetaKmsPlane                   *plane,
-                                               MetaKmsPlaneAssignment         *plane_assignment,
-                                               MetaKmsPlaneYCbCrColorEncoding  encoding);
-
-void meta_kms_plane_update_set_color_range (MetaKmsPlane                *plane,
-                                            MetaKmsPlaneAssignment      *plane_assignment,
-                                            MetaKmsPlaneYCbCrColorRange  range);
-
-const char * meta_kms_plane_type_to_string (MetaKmsPlaneType plane_type);
+                                         MetaMonitorTransform    transform);

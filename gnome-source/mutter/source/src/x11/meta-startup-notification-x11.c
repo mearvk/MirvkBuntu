@@ -32,8 +32,7 @@
 
 enum
 {
-  PROP_0,
-
+  PROP_SEQ_X11_0,
   PROP_SEQ_X11_SEQ,
   N_SEQ_X11_PROPS
 };
@@ -142,7 +141,8 @@ meta_startup_sequence_x11_class_init (MetaStartupSequenceX11Class *klass)
 
   seq_x11_props[PROP_SEQ_X11_SEQ] =
     g_param_spec_pointer ("seq", NULL, NULL,
-                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE |
+                          G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (object_class, N_SEQ_X11_PROPS,
                                      seq_x11_props);
@@ -368,22 +368,20 @@ meta_x11_startup_notification_launch (MetaX11Display *x11_display,
   screen = meta_x11_display_get_screen_number (x11_display);
   sn_launcher = sn_launcher_context_new (x11_sn->sn_display, screen);
 
+  sn_launcher_context_set_name (sn_launcher, g_app_info_get_name (app_info));
   sn_launcher_context_set_workspace (sn_launcher, workspace);
-
-  if (app_info)
-    {
-      sn_launcher_context_set_name (sn_launcher, g_app_info_get_name (app_info));
-      sn_launcher_context_set_binary_name (sn_launcher,
-                                           g_app_info_get_executable (app_info));
-    }
+  sn_launcher_context_set_binary_name (sn_launcher,
+                                       g_app_info_get_executable (app_info));
 
   if (G_IS_DESKTOP_APP_INFO (app_info))
     {
       const char *application_id;
-      static SetAppIdFunc launcher_context_set_application_id = NULL;
+      SetAppIdFunc func = NULL;
+      GModule *self;
 
       application_id =
         g_desktop_app_info_get_filename (G_DESKTOP_APP_INFO (app_info));
+      self = g_module_open (NULL, G_MODULE_BIND_MASK);
 
       /* This here is a terrible workaround to bypass a libsn bug that is not
        * likely to get fixed at this point.
@@ -394,34 +392,22 @@ meta_x11_startup_notification_launch (MetaX11Display *x11_display,
        * We look up the symbol instead, but still prefer the correctly named
        * function, if one were ever to be added.
        */
-      if (application_id &&
-          g_once_init_enter_pointer (&launcher_context_set_application_id))
+      if (!g_module_symbol (self, "sn_launcher_context_set_application_id",
+                            (gpointer *) &func))
         {
-          GModule *self;
-          SetAppIdFunc func = NULL;
-
-          self = g_module_open (NULL, G_MODULE_BIND_MASK);
-
-          if (!g_module_symbol (self, "sn_launcher_context_set_application_id",
-                                (gpointer *) &func))
-            {
-              g_module_symbol (self, "sn_launcher_set_application_id",
-                               (gpointer *) &func);
-            }
-
-          g_module_close (self);
-
-          g_once_init_leave_pointer (&launcher_context_set_application_id,
-                                     func);
+          g_module_symbol (self, "sn_launcher_set_application_id",
+                           (gpointer *) &func);
         }
 
-      if (launcher_context_set_application_id && application_id)
-        launcher_context_set_application_id (sn_launcher, application_id);
+      if (func && application_id)
+        func (sn_launcher, application_id);
+
+      g_module_close (self);
     }
 
   sn_launcher_context_initiate (sn_launcher,
                                 g_get_prgname (),
-                                app_info ? g_app_info_get_name (app_info) : "",
+                                g_app_info_get_name (app_info),
                                 timestamp);
 
   startup_id = g_strdup (sn_launcher_context_get_startup_id (sn_launcher));

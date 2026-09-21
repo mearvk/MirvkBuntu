@@ -114,7 +114,7 @@ interactive_dialog_clicked (GtkButton *button,
   g_signal_connect_data (dialog, "response",
                          G_CALLBACK (on_dialog_response),
                          data, (GClosureNotify) g_free,
-                         G_CONNECT_DEFAULT);
+                         0);
 
   gtk_window_present (GTK_WINDOW (dialog));
 }

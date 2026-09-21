@@ -21,7 +21,7 @@
 
 /**
  * ClutterPropertyTransition:
- *
+ * 
  * Property transitions
  *
  * #ClutterPropertyTransition is a specialized [class@Transition] that
@@ -332,21 +332,23 @@ clutter_property_transition_set_property_name (ClutterPropertyTransition *transi
 
   priv = clutter_property_transition_get_instance_private (transition);
 
-  if (g_set_str (&priv->property_name, property_name))
+  if (g_strcmp0 (priv->property_name, property_name) == 0)
+    return;
+
+  g_free (priv->property_name);
+  priv->property_name = g_strdup (property_name);
+  priv->pspec = NULL;
+
+  animatable =
+    clutter_transition_get_animatable (CLUTTER_TRANSITION (transition));
+  if (animatable != NULL)
     {
-      priv->pspec = NULL;
-
-      animatable =
-        clutter_transition_get_animatable (CLUTTER_TRANSITION (transition));
-      if (animatable != NULL)
-        {
-          priv->pspec = clutter_animatable_find_property (animatable,
-                                                          priv->property_name);
-        }
-
-      g_object_notify_by_pspec (G_OBJECT (transition),
-                                obj_props[PROP_PROPERTY_NAME]);
+      priv->pspec = clutter_animatable_find_property (animatable,
+                                                      priv->property_name);
     }
+
+  g_object_notify_by_pspec (G_OBJECT (transition),
+                            obj_props[PROP_PROPERTY_NAME]);
 }
 
 /**

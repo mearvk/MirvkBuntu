@@ -37,12 +37,6 @@ typedef struct _GtkATContext           GtkATContext;
 typedef struct _GtkBitset              GtkBitset;
 typedef struct _GtkBuilder             GtkBuilder;
 typedef struct _GtkBuilderScope        GtkBuilderScope;
-
-/**
- * GtkCssStyleChange:
- *
- * A CSS style change.
- */
 typedef struct _GtkCssStyleChange      GtkCssStyleChange;
 typedef struct _GtkEventController     GtkEventController;
 typedef struct _GtkGesture             GtkGesture;

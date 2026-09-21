@@ -6,10 +6,7 @@ enum
 {
   PROP_0,
   PROP_PROGRESS,
-  N_PROPS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 struct _Demo4Widget
 {
@@ -57,7 +54,6 @@ rotate_colors (GtkWidget     *widget,
 static void
 demo4_widget_init (Demo4Widget *self)
 {
-  PangoContext *context;
   PangoFontDescription *desc;
 
   self->progress = 0.5;
@@ -77,10 +73,7 @@ demo4_widget_init (Demo4Widget *self)
     }
 
   self->layout = gtk_widget_create_pango_layout (GTK_WIDGET (self), "123");
-  context = pango_layout_get_context (self->layout);
-  desc = pango_font_description_copy (pango_context_get_font_description (context));
-  pango_font_description_set_weight (desc, PANGO_WEIGHT_BOLD);
-  pango_font_description_set_size (desc, 210 * PANGO_SCALE);
+  desc = pango_font_description_from_string ("Cantarell Bold 210");
   pango_layout_set_font_description (self->layout, desc);
   pango_font_description_free (desc);
 
@@ -219,11 +212,10 @@ demo4_widget_class_init (Demo4WidgetClass *class)
 
   widget_class->snapshot = demo4_widget_snapshot;
 
-  props[PROP_PROGRESS] = g_param_spec_double ("progress", NULL, NULL,
-                                              0.0, 1.0, 0.5,
-                                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_PROGRESS,
+      g_param_spec_double ("progress", NULL, NULL,
+                           0.0, 1.0, 0.5,
+                           G_PARAM_READWRITE));
 }
 
 GtkWidget *

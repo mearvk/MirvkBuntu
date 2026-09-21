@@ -17,8 +17,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <clutter/clutter-pango.h>
-
 #include "st-private.h"
 #include "st-password-entry.h"
 #include "st-icon.h"
@@ -153,7 +151,9 @@ st_password_entry_class_init (StPasswordEntryClass *klass)
    *
    * Whether the text in the entry is masked for privacy.
    */
-  props[PROP_PASSWORD_VISIBLE] = g_param_spec_boolean ("password-visible", NULL, NULL,
+  props[PROP_PASSWORD_VISIBLE] = g_param_spec_boolean ("password-visible",
+                                                       "Password visible",
+                                                       "Whether the text in the entry is masked or not",
                                                        FALSE,
                                                        ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -163,7 +163,9 @@ st_password_entry_class_init (StPasswordEntryClass *klass)
    * Whether to display an icon button to toggle the masking enabled by the
    * #StPasswordEntry:password-visible property.
    */
-  props[PROP_SHOW_PEEK_ICON] = g_param_spec_boolean ("show-peek-icon", NULL, NULL,
+  props[PROP_SHOW_PEEK_ICON] = g_param_spec_boolean ("show-peek-icon",
+                                                     "Show peek icon",
+                                                     "Whether to show the password peek icon",
                                                      TRUE,
                                                      ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -205,10 +207,10 @@ clutter_text_password_char_cb (GObject    *object,
                                gpointer    user_data)
 {
   StPasswordEntry *entry = ST_PASSWORD_ENTRY (user_data);
-  ClutterText *clutter_text;
+  ClutterActor *clutter_text;
 
   clutter_text = st_entry_get_clutter_text (ST_ENTRY (entry));
-  if (clutter_text_get_password_char (clutter_text) == 0)
+  if (clutter_text_get_password_char (CLUTTER_TEXT (clutter_text)) == 0)
     st_password_entry_set_password_visible (entry, TRUE);
   else
     st_password_entry_set_password_visible (entry, FALSE);
@@ -218,13 +220,12 @@ static void
 st_password_entry_init (StPasswordEntry *entry)
 {
   StPasswordEntryPrivate *priv = ST_PASSWORD_ENTRY_PRIV (entry);
-  ClutterText *clutter_text;
+  ClutterActor *clutter_text;
 
   priv->peek_password_icon = g_object_new (ST_TYPE_ICON,
                                            "style-class", "peek-password",
                                            "icon-name", "view-reveal-symbolic",
                                            NULL);
-  g_object_ref_sink (priv->peek_password_icon);
   st_entry_set_secondary_icon (ST_ENTRY (entry), priv->peek_password_icon);
 
   st_password_entry_set_show_peek_icon (entry, TRUE);
@@ -236,10 +237,9 @@ st_password_entry_init (StPasswordEntry *entry)
                            0);
 
   clutter_text = st_entry_get_clutter_text (ST_ENTRY (entry));
-  clutter_text_set_password_char (clutter_text, BLACK_CIRCLE);
+  clutter_text_set_password_char (CLUTTER_TEXT (clutter_text), BLACK_CIRCLE);
 
   st_entry_set_input_purpose (ST_ENTRY (entry), CLUTTER_INPUT_CONTENT_PURPOSE_PASSWORD);
-  st_entry_set_input_hints (ST_ENTRY (entry), CLUTTER_INPUT_CONTENT_HINT_HIDDEN_TEXT);
 
   g_signal_connect (clutter_text, "notify::password-char",
                     G_CALLBACK (clutter_text_password_char_cb), entry);
@@ -318,8 +318,7 @@ st_password_entry_set_password_visible (StPasswordEntry *entry,
                                         gboolean         value)
 {
   StPasswordEntryPrivate *priv;
-  ClutterText *clutter_text;
-  ClutterInputContentHintFlags hints;
+  ClutterActor *clutter_text;
 
   g_return_if_fail (ST_IS_PASSWORD_ENTRY (entry));
 
@@ -332,21 +331,13 @@ st_password_entry_set_password_visible (StPasswordEntry *entry,
   clutter_text = st_entry_get_clutter_text (ST_ENTRY (entry));
   if (priv->password_visible)
     {
-      clutter_text_set_password_char (clutter_text, 0);
+      clutter_text_set_password_char (CLUTTER_TEXT (clutter_text), 0);
       st_icon_set_icon_name (ST_ICON (priv->peek_password_icon), "view-conceal-symbolic");
-
-      hints = st_entry_get_input_hints (ST_ENTRY (entry));
-      hints &= ~CLUTTER_INPUT_CONTENT_HINT_HIDDEN_TEXT;
-      st_entry_set_input_hints (ST_ENTRY (entry), hints);
     }
   else
     {
-      clutter_text_set_password_char (clutter_text, BLACK_CIRCLE);
+      clutter_text_set_password_char (CLUTTER_TEXT (clutter_text), BLACK_CIRCLE);
       st_icon_set_icon_name (ST_ICON (priv->peek_password_icon), "view-reveal-symbolic");
-
-      hints = st_entry_get_input_hints (ST_ENTRY (entry));
-      hints |= CLUTTER_INPUT_CONTENT_HINT_HIDDEN_TEXT;
-      st_entry_set_input_hints (ST_ENTRY (entry), hints);
     }
 
   g_object_notify_by_pspec (G_OBJECT (entry), props[PROP_PASSWORD_VISIBLE]);

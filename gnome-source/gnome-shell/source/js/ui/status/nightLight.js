@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';

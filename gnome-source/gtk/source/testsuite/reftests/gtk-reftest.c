@@ -24,7 +24,7 @@
 #include "reftest-module.h"
 #include "reftest-snapshot.h"
 
-#ifdef HAVE_BACKTRACE
+#ifndef G_OS_WIN32
 #include <execinfo.h>
 #endif
 #include <string.h>
@@ -86,7 +86,6 @@ parse_command_line (int *argc, char ***argv)
   if (!g_option_context_parse (context, argc, argv, &error))
     {
       g_print ("option parsing failed: %s\n", error->message);
-      g_clear_error (&error);
       return FALSE;
     }
   g_option_context_free (context);
@@ -375,11 +374,8 @@ test_ui_file (GFile *file)
 
   diff_image = reftest_compare_textures (ui_image, reference_image);
 
-  if (diff_image || g_test_verbose ())
-    {
-      save_image (ui_image, ui_file, ".out.png");
-      save_image (reference_image, ui_file, ".ref.png");
-    }
+  save_image (ui_image, ui_file, ".out.png");
+  save_image (reference_image, ui_file, ".ref.png");
   if (diff_image)
     {
       save_node (g_object_get_data (G_OBJECT (ui_image), "source-render-node"), ui_file, ".out.node");
@@ -473,7 +469,7 @@ log_writer (GLogLevelFlags   log_level,
             gsize            n_fields,
             gpointer         user_data)
 {
-#ifdef HAVE_BACKTRACE
+#ifndef G_OS_WIN32
   if (log_level & G_LOG_LEVEL_CRITICAL)
     {
       void *buffer[1024];
@@ -565,10 +561,15 @@ main (int argc, char **argv)
   /* We need to ensure the process' current working directory
    * is the same as the reftest data, because we're using the
    * "file" property of GtkImage as a relative path in builder files.
+   *
+   * The g_assert() is needed to ensure GNU libc does not complain
+   * about the unused return value, and the G_GNUC_UNUSED is needed
+   * to avoid compiler warnings when g_assert() is compiled out
+   * during the release build.
    */
-  int res;
+  int res G_GNUC_UNUSED;
   res = chdir (basedir);
-  g_assert_true (res == 0);
+  g_assert (res == 0);
 
   g_log_set_writer_func (log_writer, NULL, NULL);
 

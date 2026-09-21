@@ -46,16 +46,13 @@ class TestSchemaRegistration:
             "caret-navigation",
             "chat",
             "document",
-            "extensions",
             "flat-review",
             "keybindings",
             "live-regions",
-            "math-presentation",
             "metadata",
             "mouse-review",
             "pronunciations",
             "say-all",
-            "sleep-mode",
             "sound",
             "speech",
             "spellcheck",
@@ -173,17 +170,11 @@ class TestRegistryLookup:
     def test_voice_type_routes_to_correct_sub_path(
         self, gsettings_registry, gsettings_handle, gsettings_profile
     ) -> None:
-        """voice_type='uppercase' should read from voice-sets/primary/uppercase."""
-
-        from orca.gsettings_registry import GSettingsRegistry
+        """voice_type='uppercase' should read from voices/uppercase, not voices/default."""
 
         handle = gsettings_handle("voice")
-        handle.get_for_profile(
-            "default", sub_path=GSettingsRegistry.voice_set_sub_path("default")
-        ).set_double("pitch", 1.0)
-        handle.get_for_profile(
-            "default", sub_path=GSettingsRegistry.voice_set_sub_path("uppercase")
-        ).set_double("pitch", 9.0)
+        handle.get_for_profile("default", sub_path="voices/default").set_double("pitch", 1.0)
+        handle.get_for_profile("default", sub_path="voices/uppercase").set_double("pitch", 9.0)
 
         default_pitch = gsettings_registry.layered_lookup(
             "voice", "pitch", "d", voice_type="default"
@@ -243,20 +234,6 @@ class TestSaveSchema:
         handle = gsettings_handle("keybindings")
         assert handle.get_strv("desktop-modifier-keys") == ["Insert"]
         assert handle.get_strv("laptop-modifier-keys") == ["Caps_Lock"]
-
-    def test_round_trip_sleep_mode_apps(
-        self, gsettings_registry, gsettings_handle, gsettings_profile
-    ) -> None:
-        """Sleep mode app list should survive a save_schema round-trip."""
-
-        gsettings_registry.save_schema(
-            "sleep-mode",
-            {"apps": ["chromium-browser", "virt-manager"]},
-            "default",
-        )
-
-        handle = gsettings_handle("sleep-mode")
-        assert handle.get_strv("apps") == ["chromium-browser", "virt-manager"]
 
     def test_app_override_isolation(
         self, gsettings_registry, gsettings_handle, gsettings_profile
@@ -379,144 +356,32 @@ class TestProfileOperations:
 
 
 @pytest.mark.gsettings
-@pytest.mark.parametrize(
-    "property_name, key, acss_key, primary_value, system_value, set_value, step",
-    [
-        ("rate", "rate", "rate", 65, 59, 50, 5),
-        ("pitch", "pitch", "average-pitch", 6.0, 4.0, 5.0, 0.5),
-        ("pitch_range", "pitch-range", "pitch-range", 6.0, 4.0, 5.0, 0.5),
-        ("volume", "volume", "gain", 6.0, 4.0, 5.0, 0.5),
-    ],
-)
-@pytest.mark.parametrize("configured", [False, True])
-@pytest.mark.parametrize("system_voice", [False, True])
-def test_voice_adjustment_targets_active_voice_set(
-    gsettings_registry,
-    gsettings_handle,
-    gsettings_profile,
-    monkeypatch,
-    property_name,
-    key,
-    acss_key,
-    primary_value,
-    system_value,
-    set_value,
-    step,
-    configured,
-    system_voice,
-) -> None:
-    """Voice commands affect the selected set without changing primary voices or stored settings."""
-
-    from orca import speech_manager, speechserver
-    from orca.acss import ACSS
-
-    registry = gsettings_registry
-    handle = gsettings_handle("voice")
-    setter = "set_int" if key == "rate" else "set_double"
-    for voice_type, value in (("default", primary_value), ("system", system_value)):
-        gs = handle.get_for_profile("default", registry.voice_set_sub_path(voice_type))
-        gs.set_boolean("established", True)
-        getattr(gs, setter)(key, value)
-
-    selected = handle.get_for_profile("default", registry.voice_set_sub_path("default", "it"))
-    selected.set_boolean("established", True)
-    selected.set_string("family-lang", "it")
-    if configured:
-        getattr(selected, setter)(key, set_value)
-    if system_voice:
-        system = handle.get_for_profile("default", registry.voice_set_sub_path("system", "it"))
-        system.set_boolean("established", True)
-        getattr(system, setter)(key, system_value)
-
-    manager = speech_manager.get_manager()
-    monkeypatch.setattr(manager, "_active_voice_set", "primary")
-    monkeypatch.setattr(manager, "_server", speechserver.SpeechServer())
-    monkeypatch.setattr(manager, "get_voice_set_names", lambda: ["it"])
-    get_value = getattr(manager, f"get_{property_name}")
-    increase = getattr(manager, f"increase_{property_name}")
-    decrease = getattr(manager, f"decrease_{property_name}")
-    registry.clear_runtime_values()
-    try:
-        assert manager.set_active_voice_set("it")
-        initial_value = set_value if configured else primary_value
-        assert get_value() == initial_value
-        assert increase(notify_user=False)
-        assert get_value() == initial_value + step
-        registry.set_active_app("another-app")
-        voice = manager.apply_voice_set(ACSS({acss_key: primary_value}))
-        assert voice[acss_key] == initial_value + step
-        assert voice[ACSS.FAMILY]["lang"] == "it"
-        voice = ACSS({acss_key: system_value})
-        voice[ACSS.VOICE_TYPE] = "system"
-        voice = manager.apply_voice_set(voice)
-        assert voice[acss_key] == (initial_value + step if system_voice else system_value)
-
-        assert manager.set_active_voice_set("primary")
-        assert get_value() == primary_value
-        assert manager.get_voice_properties("system")[acss_key] == system_value
-        assert manager.set_active_voice_set("it")
-        assert get_value() == initial_value + step
-        assert decrease(notify_user=False)
-        assert get_value() == initial_value
-        voice = manager.apply_voice_set(ACSS({acss_key: primary_value}))
-        assert voice[acss_key] == initial_value
-        stored = selected.get_user_value(key)
-        assert (stored.unpack() if stored is not None else None) == (
-            set_value if configured else None
-        )
-        registry.clear_runtime_values()
-        assert get_value() == initial_value
-    finally:
-        registry.clear_runtime_values()
-
-
-@pytest.mark.gsettings
-@pytest.mark.parametrize(
-    "language, dialect, expected_navigation_dialect",
-    [("ro", None, ""), ("ro", "RO", "RO"), ("en", None, "GB"), ("en", "US", "US")],
-)
-def test_voice_set_dialect_overlay(
-    gsettings_registry,
-    gsettings_handle,
-    gsettings_profile,
-    monkeypatch,
-    language,
-    dialect,
-    expected_navigation_dialect,
-) -> None:
-    """A set inherits a dialect only from the same language and preserves explicit dialects."""
-
-    from orca import speech_manager, speechserver
-    from orca.acss import ACSS
-
-    registry = gsettings_registry
-    handle = gsettings_handle("voice")
-    selected = handle.get_for_profile("default", registry.voice_set_sub_path("default", "test"))
-    selected.set_boolean("established", True)
-    selected.set_string("family-lang", language)
-    selected.set_string("family-name", "Romanian+grandma")
-    selected.set_string("family-variant", "grandma")
-    if dialect is not None:
-        selected.set_string("family-dialect", dialect)
-    manager = speech_manager.get_manager()
-    monkeypatch.setattr(manager, "_active_voice_set", "test")
-    server = speechserver.SpeechServer()
-
-    navigation = manager.apply_voice_set(ACSS({"family": {"lang": "en", "dialect": "GB"}}))
-    say_all = manager.apply_voice_set(ACSS())
-    assert server.get_language_and_dialect(navigation[ACSS.FAMILY]) == (
-        language,
-        expected_navigation_dialect,
-    )
-    assert server.get_language_and_dialect(say_all[ACSS.FAMILY]) == (language, dialect or "")
-    for voice in (navigation, say_all):
-        assert voice[ACSS.FAMILY]["name"] == "Romanian+grandma"
-        assert voice[ACSS.FAMILY]["variant"] == "grandma"
-
-
-@pytest.mark.gsettings
 class TestDictSchemas:
     """Tests pronunciation and keybinding schemas (dict serialization)."""
+
+    def test_pronunciation_round_trip(self, gsettings_registry, gsettings_profile) -> None:
+        """Pronunciations should survive import -> get_pronunciations."""
+
+        from orca import gsettings_migrator
+
+        gs = gsettings_registry.get_settings("pronunciations", "default", "pronunciations")
+        gsettings_migrator.import_pronunciations(
+            gs, {"orca": ["orca", "or-kah"], "GNOME": ["GNOME", "guh-nome"]}
+        )
+
+        result = gsettings_registry.get_pronunciations("default")
+        assert result == {"orca": "or-kah", "GNOME": "guh-nome"}
+
+    def test_keybinding_round_trip(self, gsettings_registry, gsettings_profile) -> None:
+        """Keybindings should survive import -> get_keybindings."""
+
+        from orca import gsettings_migrator
+
+        gs = gsettings_registry.get_settings("keybindings", "default", "keybindings")
+        gsettings_migrator.import_keybindings(gs, {"doAction": [["65", "0", "1", "1"]]})
+
+        result = gsettings_registry.get_keybindings("default")
+        assert result["doAction"] == [["65", "0", "1", "1"]]
 
     def test_pronunciations_empty_for_unset_profile(
         self, gsettings_registry, gsettings_profile
@@ -531,3 +396,53 @@ class TestDictSchemas:
         """get_keybindings should return {} for a profile with no data."""
 
         assert gsettings_registry.get_keybindings("nonexistent") == {}
+
+
+@pytest.mark.gsettings
+class TestMigrationRoundTrip:
+    """Tests JSON-to-dconf migration via _write_profile_settings."""
+
+    def test_legacy_keys_land_in_correct_schemas(
+        self, gsettings_registry, gsettings_handle, gsettings_profile
+    ) -> None:
+        """Legacy prefs should be mapped to their correct GSettings schema and key."""
+
+        general = {
+            "enableSpeech": False,
+            "enableBraille": False,
+        }
+        gsettings_registry._write_profile_settings("migrated", general, {}, {})
+
+        gsettings_registry.set_active_profile("migrated")
+        speech = gsettings_handle("speech")
+        braille = gsettings_handle("braille")
+
+        assert speech.get_boolean("enable") is False
+        assert braille.get_boolean("enabled") is False
+
+    def test_migration_includes_pronunciations(self, gsettings_registry, gsettings_profile) -> None:
+        """_write_profile_settings should also persist pronunciations."""
+
+        gsettings_registry._write_profile_settings(
+            "with-pron", {"enableSpeech": True}, {"orca": ["orca", "or-kah"]}, {}
+        )
+        assert gsettings_registry.get_pronunciations("with-pron") == {"orca": "or-kah"}
+
+    def test_migration_includes_keybindings(self, gsettings_registry, gsettings_profile) -> None:
+        """_write_profile_settings should also persist keybindings."""
+
+        gsettings_registry._write_profile_settings(
+            "with-kb", {"enableSpeech": True}, {}, {"doAction": [["65", "0", "1", "1"]]}
+        )
+        result = gsettings_registry.get_keybindings("with-kb")
+        assert "doAction" in result
+
+    def test_migration_sets_profile_metadata(self, gsettings_registry, gsettings_profile) -> None:
+        """_write_profile_settings should write display-name and internal-name."""
+
+        general = {"enableSpeech": True, "profile": ["My Profile", "my-profile"]}
+        gsettings_registry._write_profile_settings("my-profile", general, {}, {})
+
+        gs = gsettings_registry.get_settings("metadata", "my-profile")
+        assert gs.get_string("display-name") == "My Profile"
+        assert gs.get_string("internal-name") == "my-profile"

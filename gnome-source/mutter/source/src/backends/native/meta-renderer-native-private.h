@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "backends/meta-gles3.h"
 #include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-renderer-native.h"
 
@@ -58,16 +59,20 @@ typedef struct _MetaRendererNativeGpuData
    */
   struct {
     MetaSharedFramebufferCopyMode copy_mode;
-    gboolean copy_mode_primary_force_cpu;
     gboolean has_EGL_EXT_image_dma_buf_import_modifiers;
-    gboolean is_nvidia;
+    gboolean needs_explicit_sync;
 
     /* For GPU blit mode */
     EGLContext egl_context;
+    EGLConfig egl_config;
   } secondary;
 
   gulong crtc_needs_flush_handler_id;
 } MetaRendererNativeGpuData;
+
+MetaEgl * meta_renderer_native_get_egl (MetaRendererNative *renderer_native);
+
+MetaGles3 * meta_renderer_native_get_gles3 (MetaRendererNative *renderer_native);
 
 MetaRendererNativeGpuData * meta_renderer_native_get_gpu_data (MetaRendererNative *renderer_native,
                                                                MetaGpuKms         *gpu_kms);
@@ -77,6 +82,8 @@ gboolean meta_renderer_native_has_pending_mode_sets (MetaRendererNative *rendere
 
 gboolean meta_renderer_native_has_pending_mode_set (MetaRendererNative *renderer_native);
 
+void meta_renderer_native_notify_mode_sets_reset (MetaRendererNative *renderer_native);
+
 void meta_renderer_native_post_mode_set_updates (MetaRendererNative *renderer_native);
 
 void meta_renderer_native_queue_mode_set_update (MetaRendererNative *renderer_native,
@@ -85,7 +92,15 @@ void meta_renderer_native_queue_mode_set_update (MetaRendererNative *renderer_na
 void meta_renderer_native_queue_power_save_page_flip (MetaRendererNative *renderer_native,
                                                       CoglOnscreen       *onscreen);
 
+CoglFramebuffer * meta_renderer_native_create_dma_buf_framebuffer (MetaRendererNative  *renderer_native,
+                                                                   int                  dmabuf_fd,
+                                                                   uint32_t             width,
+                                                                   uint32_t             height,
+                                                                   uint32_t             stride,
+                                                                   uint32_t             offset,
+                                                                   uint64_t            *modifier,
+                                                                   uint32_t             drm_format,
+                                                                   GError             **error);
+
 gboolean meta_renderer_native_pop_pending_mode_set (MetaRendererNative *renderer_native,
                                                     MetaRendererView   *view);
-
-void meta_renderer_native_queue_modes_reset (MetaRendererNative *renderer_native);

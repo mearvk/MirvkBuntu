@@ -21,14 +21,14 @@
 
 #include "backends/meta-backend-types.h"
 #include "backends/meta-crtc-mode.h"
+#include "backends/meta-monitor-transform.h"
 #include "core/util-private.h"
 #include "meta/boxes.h"
-#include "mtk/mtk.h"
 
 typedef struct _MetaCrtcConfig
 {
   graphene_rect_t layout;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   MetaCrtcMode *mode;
 } MetaCrtcConfig;
 
@@ -47,11 +47,6 @@ struct _MetaCrtcClass
   void (* set_gamma_lut) (MetaCrtc           *crtc,
                           const MetaGammaLut *lut);
 
-  gboolean (* is_ctm_supported) (MetaCrtc *crtc);
-
-  void (* set_ctm) (MetaCrtc      *crtc,
-                    const MetaCtm *ctm);
-
   gboolean (* assign_extra) (MetaCrtc            *crtc,
                              MetaCrtcAssignment  *crtc_assignment,
                              GPtrArray           *crtc_assignments,
@@ -60,10 +55,6 @@ struct _MetaCrtcClass
   void (* set_config) (MetaCrtc             *crtc,
                        const MetaCrtcConfig *config,
                        gpointer              backend_private);
-
-  void (* unset_config) (MetaCrtc *crtc);
-
-  gboolean (* is_leased) (MetaCrtc *crtc);
 };
 
 META_EXPORT_TEST
@@ -85,7 +76,7 @@ META_EXPORT_TEST
 void meta_crtc_unassign_output (MetaCrtc   *crtc,
                                 MetaOutput *output);
 
-MtkMonitorTransform meta_crtc_get_all_transforms (MetaCrtc *crtc);
+MetaMonitorTransform meta_crtc_get_all_transforms (MetaCrtc *crtc);
 
 META_EXPORT_TEST
 void meta_crtc_set_config (MetaCrtc       *crtc,
@@ -109,11 +100,6 @@ MetaGammaLut * meta_crtc_get_gamma_lut (MetaCrtc *crtc);
 
 void meta_crtc_set_gamma_lut (MetaCrtc           *crtc,
                               const MetaGammaLut *lut);
-
-gboolean meta_crtc_is_ctm_supported (MetaCrtc *crtc);
-
-void meta_crtc_set_ctm (MetaCrtc      *crtc,
-                        const MetaCtm *ctm);
 
 META_EXPORT_TEST
 void meta_gamma_lut_free (MetaGammaLut *lut);
@@ -142,29 +128,8 @@ gboolean meta_gamma_lut_equal (const MetaGammaLut *gamma,
                                const MetaGammaLut *other_gamma);
 
 META_EXPORT_TEST
-void meta_ctm_free (MetaCtm *ctm);
-
-MetaCtm * meta_ctm_new (void);
-
-/* Diagonal matrix from RGB scale factors. Scales are clamped to [0, 1], and
- * non-finite scales are treated as 0. */
-META_EXPORT_TEST
-MetaCtm * meta_ctm_new_from_rgb_scales (float red,
-                                        float green,
-                                        float blue);
-
-META_EXPORT_TEST
-MetaCtm * meta_ctm_copy (const MetaCtm *ctm);
-
-gboolean meta_ctm_equal (const MetaCtm *ctm,
-                         const MetaCtm *other_ctm);
-
-META_EXPORT_TEST
-MetaCrtcConfig * meta_crtc_config_new (graphene_rect_t     *layout,
-                                       MetaCrtcMode        *mode,
-                                       MtkMonitorTransform  transform);
-
-gboolean meta_crtc_is_leased (MetaCrtc *crtc);
+MetaCrtcConfig * meta_crtc_config_new (graphene_rect_t      *layout,
+                                       MetaCrtcMode         *mode,
+                                       MetaMonitorTransform  transform);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaGammaLut, meta_gamma_lut_free)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaCtm, meta_ctm_free)

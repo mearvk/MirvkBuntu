@@ -29,7 +29,6 @@
 #include "giomodule-priv.h"
 #include "gnotification-private.h"
 #include "gthemedicon.h"
-#include "gbytesicon.h"
 #include "gfileicon.h"
 #include "gfile.h"
 
@@ -79,22 +78,6 @@ nsimage_from_gicon (GIcon *icon)
         }
       return image;
     }
-  else if (G_IS_BYTES_ICON (icon))
-    {
-      NSImage *image = nil;
-      GBytes *bytes;
-      gconstpointer bytes_data;
-      gsize bytes_size;
-      NSData *data;
-
-      bytes = g_bytes_icon_get_bytes (G_BYTES_ICON (icon));
-      bytes_data = g_bytes_get_data (bytes, &bytes_size);
-      data = [[NSData alloc] initWithBytes:bytes_data
-                                    length:bytes_size];
-
-      image = [[NSImage alloc] initWithData:data];
-      return image;
-    }
   else
     {
       g_warning ("This icon type is not handled by this NotificationBackend");
@@ -122,11 +105,6 @@ activate_detailed_action (const char * action)
         g_variant_unref (target);
     }
 }
-
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-/* first deprecated in macOS 11.0 - All NSUserNotifications API should be
- * replaced with UserNotifications.frameworks API
- */
 
 @interface GNotificationCenterDelegate : NSObject<NSUserNotificationCenterDelegate> @end
 @implementation GNotificationCenterDelegate
@@ -284,8 +262,6 @@ g_cocoa_notification_backend_withdraw_notification (GNotificationBackend *backen
 
   [str_id release];
 }
-
-G_GNUC_END_IGNORE_DEPRECATIONS
 
 static void
 g_cocoa_notification_backend_init (GCocoaNotificationBackend *backend)

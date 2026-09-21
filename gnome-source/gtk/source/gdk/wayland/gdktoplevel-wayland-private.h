@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "gdksurfaceprivate.h"
 
 void gdk_wayland_toplevel_set_geometry_hints      (GdkWaylandToplevel *toplevel,
                                                    const GdkGeometry  *geometry,
@@ -34,24 +33,10 @@ void gdk_wayland_toplevel_set_dbus_properties     (GdkToplevel *toplevel,
                                                    const char  *application_object_path,
                                                    const char  *unique_bus_name);
 
+void     gdk_wayland_toplevel_announce_csd        (GdkToplevel *toplevel);
+void     gdk_wayland_toplevel_announce_ssd        (GdkToplevel *toplevel);
+
 gboolean gdk_wayland_toplevel_inhibit_idle        (GdkToplevel *toplevel);
 void     gdk_wayland_toplevel_uninhibit_idle      (GdkToplevel *toplevel);
 
 void     gdk_wayland_toplevel_destroy             (GdkToplevel *toplevel);
-
-void     gdk_wayland_toplevel_set_session_id      (GdkToplevel *toplevel,
-                                                   const char  *session_id);
-
-const char *
-         gdk_wayland_toplevel_get_session_id      (GdkToplevel *toplevel);
-
-void     gdk_wayland_toplevel_restore_from_session
-                                                  (GdkToplevel *toplevel);
-
-void     gdk_wayland_toplevel_ensure_in_session   (GdkToplevel *toplevel);
-
-void     gdk_wayland_toplevel_remove_from_session (GdkToplevel *toplevel);
-
-void gdk_wayland_toplevel_set_a11y_properties (GdkToplevel *toplevel,
-                                               const char  *bus_name,
-                                               const char  *toplevel_object_path);

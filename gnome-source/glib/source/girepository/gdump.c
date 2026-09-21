@@ -33,7 +33,6 @@
 
 #include <glib.h>
 #include <glib-object.h>
-#include <glib/gstdio.h>
 #include <gmodule.h>
 
 #include <stdlib.h>
@@ -68,38 +67,20 @@ write_all (FILE          *out,
 
 /* Analogue of g_data_input_stream_read_line(). */
 static char *
-read_line (FILE      *input,
-           size_t    *len_out,
-           gboolean  *out_reached_eof,
-           GError   **error)
+read_line (FILE   *input,
+           size_t *len_out)
 {
   GByteArray *buffer = g_byte_array_new ();
   const uint8_t nul = '\0';
-
-  *out_reached_eof = FALSE;
 
   while (TRUE)
     {
       size_t ret;
       uint8_t byte;
-      int saved_errno;
 
       ret = fread (&byte, 1, 1, input);
-      saved_errno = errno;
       if (ret == 0)
-        {
-          if (ferror (input))
-            {
-              g_set_error (error, G_FILE_ERROR, (int) g_file_error_from_errno (saved_errno),
-                           "Error reading from input file: %s",
-                           g_strerror (saved_errno));
-            }
-          else if (feof (input))
-            {
-              *out_reached_eof = TRUE;
-            }
-          break;
-        }
+        break;
 
       if (byte == '\n')
         break;
@@ -467,13 +448,6 @@ dump_boxed_type (GType type, const char *symbol, FILE *out)
 }
 
 static void
-dump_pointer_type (GType type, const char *symbol, FILE *out)
-{
-  escaped_printf (out, "  <pointer name=\"%s\" get-type=\"%s\"/>\n",
-                  g_type_name (type), symbol);
-}
-
-static void
 dump_flags_type (GType type, const char *symbol, FILE *out)
 {
   unsigned int i;
@@ -588,7 +562,7 @@ dump_type (GType type, const char *symbol, FILE *out)
       dump_enum_type (type, symbol, out);
       break;
     case G_TYPE_POINTER:
-      dump_pointer_type (type, symbol, out);
+      /* GValue, etc.  Just skip them. */
       break;
     default:
       dump_fundamental_type (type, symbol, out);
@@ -644,7 +618,6 @@ gi_repository_dump (const char  *input_filename,
   FILE *output;
   GModule *self;
   gboolean caught_error = FALSE;
-  gboolean reached_eof = FALSE;
 
   self = g_module_open (NULL, 0);
   if (!self)
@@ -657,11 +630,11 @@ gi_repository_dump (const char  *input_filename,
       return FALSE;
     }
 
-  input = g_fopen (input_filename, "rbe");
+  input = fopen (input_filename, "rb");
   if (input == NULL)
     {
       int saved_errno = errno;
-      g_set_error (error, G_FILE_ERROR, (int) g_file_error_from_errno (saved_errno),
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (saved_errno),
                    "Failed to open ‘%s’: %s", input_filename, g_strerror (saved_errno));
 
       g_module_close (self);
@@ -669,11 +642,11 @@ gi_repository_dump (const char  *input_filename,
       return FALSE;
     }
 
-  output = g_fopen (output_filename, "wbe");
+  output = fopen (output_filename, "wb");
   if (output == NULL)
     {
       int saved_errno = errno;
-      g_set_error (error, G_FILE_ERROR, (int) g_file_error_from_errno (saved_errno),
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (saved_errno),
                    "Failed to open ‘%s’: %s", output_filename, g_strerror (saved_errno));
 
       fclose (input);
@@ -687,22 +660,19 @@ gi_repository_dump (const char  *input_filename,
 
   output_types = g_hash_table_new (NULL, NULL);
 
-  while (!reached_eof)
+  while (TRUE)
     {
       size_t len;
-      char *line = read_line (input, &len, &reached_eof, error);
+      char *line = read_line (input, &len);
       const char *function;
 
-      if (line == NULL)
+      if (line == NULL || *line == '\0')
         {
-          caught_error = TRUE;
+          g_free (line);
           break;
         }
 
       g_strchomp (line);
-
-      if (*line == '\0')
-        goto next;
 
       if (strncmp (line, "get-type:", strlen ("get-type:")) == 0)
         {
@@ -758,7 +728,7 @@ gi_repository_dump (const char  *input_filename,
       {
         int saved_errno = errno;
 
-        g_set_error (error, G_FILE_ERROR, (int) g_file_error_from_errno (saved_errno),
+        g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (saved_errno),
                      "Error closing input file ‘%s’: %s", input_filename,
                      g_strerror (saved_errno));
         caught_error = TRUE;
@@ -768,7 +738,7 @@ gi_repository_dump (const char  *input_filename,
       {
         int saved_errno = errno;
 
-        g_set_error (error, G_FILE_ERROR, (int) g_file_error_from_errno (saved_errno),
+        g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (saved_errno),
                      "Error closing output file ‘%s’: %s", output_filename,
                      g_strerror (saved_errno));
         caught_error = TRUE;

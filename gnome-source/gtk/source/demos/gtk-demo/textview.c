@@ -67,25 +67,25 @@ create_tags (GtkTextBuffer *buffer)
                               "background", "red", NULL);
 
   gtk_text_buffer_create_tag (buffer, "big_gap_before_line",
-                              "pixels-above-lines", 30, NULL);
+                              "pixels_above_lines", 30, NULL);
 
   gtk_text_buffer_create_tag (buffer, "big_gap_after_line",
-                              "pixels-below-lines", 30, NULL);
+                              "pixels_below_lines", 30, NULL);
 
   gtk_text_buffer_create_tag (buffer, "double_spaced_line",
-                              "pixels-inside-wrap", 10, NULL);
+                              "pixels_inside_wrap", 10, NULL);
 
   gtk_text_buffer_create_tag (buffer, "not_editable",
                               "editable", FALSE, NULL);
 
   gtk_text_buffer_create_tag (buffer, "word_wrap",
-                              "wrap-mode", GTK_WRAP_WORD, NULL);
+                              "wrap_mode", GTK_WRAP_WORD, NULL);
 
   gtk_text_buffer_create_tag (buffer, "char_wrap",
-                              "wrap-mode", GTK_WRAP_CHAR, NULL);
+                              "wrap_mode", GTK_WRAP_CHAR, NULL);
 
   gtk_text_buffer_create_tag (buffer, "no_wrap",
-                              "wrap-mode", GTK_WRAP_NONE, NULL);
+                              "wrap_mode", GTK_WRAP_NONE, NULL);
 
   gtk_text_buffer_create_tag (buffer, "center",
                               "justification", GTK_JUSTIFY_CENTER, NULL);
@@ -94,7 +94,7 @@ create_tags (GtkTextBuffer *buffer)
                               "justification", GTK_JUSTIFY_RIGHT, NULL);
 
   gtk_text_buffer_create_tag (buffer, "wide_margins",
-                              "left-margin", 50, "right-margin", 50,
+                              "left_margin", 50, "right_margin", 50,
                               NULL);
 
   gtk_text_buffer_create_tag (buffer, "strikethrough",
@@ -117,11 +117,11 @@ create_tags (GtkTextBuffer *buffer)
                               NULL);
 
   gtk_text_buffer_create_tag (buffer, "rtl_quote",
-                              "wrap-mode", GTK_WRAP_WORD,
+                              "wrap_mode", GTK_WRAP_WORD,
                               "direction", GTK_TEXT_DIR_RTL,
                               "indent", 30,
-                              "left-margin", 20,
-                              "right-margin", 20,
+                              "left_margin", 20,
+                              "right_margin", 20,
                               NULL);
 }
 
@@ -142,7 +142,7 @@ insert_text (GtkTextView *view)
                                      NULL,
                                      32, 1,
                                      gtk_widget_get_direction (widget),
-                                     GTK_ICON_LOOKUP_NONE);
+                                     0);
   nuclear = gtk_nuclear_animation_new (TRUE);
 
   /* get start of buffer; each insertion will revalidate the

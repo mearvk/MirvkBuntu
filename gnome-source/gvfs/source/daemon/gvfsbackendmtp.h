@@ -60,8 +60,6 @@ struct _GVfsBackendMtp
 
   gboolean android_extension;
   gboolean get_partial_object_capability;
-  gboolean send_partial_object_capability;
-  gboolean edit_objects_capability;
   gboolean move_object_capability;
   gboolean copy_object_capability;
 
@@ -75,7 +73,7 @@ struct _GVfsBackendMtpClass
   GVfsBackendClass parent_class;
 };
 
-GType g_vfs_backend_mtp_get_type (void);
+GType g_vfs_backend_mtp_get_type (void) G_GNUC_CONST;
 
 G_END_DECLS
 

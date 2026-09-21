@@ -37,6 +37,10 @@ meta_xwayland_handle_wl_surface_id (MetaWindow *window,
                                     guint32     surface_id);
 
 void
+meta_xwayland_handle_xwayland_grab (MetaWindow *window,
+                                    gboolean    allow);
+
+void
 meta_xwayland_associate_window_with_surface (MetaWindow          *window,
                                              MetaWaylandSurface  *surface);
 
@@ -44,11 +48,3 @@ META_EXPORT_TEST
 gboolean meta_xwayland_signal (MetaXWaylandManager  *manager,
                                int                   signum,
                                GError              **error);
-
-int meta_xwayland_get_effective_scale (MetaXWaylandManager *manager);
-
-int meta_xwayland_get_x11_ui_scaling_factor (MetaXWaylandManager *manager);
-
-const char * meta_xwayland_get_public_display_name (MetaXWaylandManager *manager);
-
-const char * meta_xwayland_get_xauthority (MetaXWaylandManager *manager);

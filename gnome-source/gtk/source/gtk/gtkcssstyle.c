@@ -24,15 +24,11 @@
 
 #include "gtkcssanimationprivate.h"
 #include "gtkcssarrayvalueprivate.h"
-#include "gtkcsscustompropertypoolprivate.h"
 #include "gtkcssenumvalueprivate.h"
-#include "gtkcssimagevalueprivate.h"
 #include "gtkcssinheritvalueprivate.h"
 #include "gtkcssinitialvalueprivate.h"
 #include "gtkcssnumbervalueprivate.h"
 #include "gtkcsscolorvalueprivate.h"
-#include "gtkcsspalettevalueprivate.h"
-#include "gtkcssshadowvalueprivate.h"
 #include "gtkcssshorthandpropertyprivate.h"
 #include "gtkcssstringvalueprivate.h"
 #include "gtkcssfontvariationsvalueprivate.h"
@@ -43,7 +39,6 @@
 #include "gtkstyleanimationprivate.h"
 #include "gtkstylepropertyprivate.h"
 #include "gtkstyleproviderprivate.h"
-#include "gtkcssvaluesprivate.h"
 
 G_DEFINE_ABSTRACT_TYPE (GtkCssStyle, gtk_css_style, G_TYPE_OBJECT)
 
@@ -72,16 +67,11 @@ gtk_css_style_finalize (GObject *object)
   gtk_css_values_unref ((GtkCssValues *)style->icon);
   gtk_css_values_unref ((GtkCssValues *)style->outline);
   gtk_css_values_unref ((GtkCssValues *)style->font);
-  gtk_css_values_unref ((GtkCssValues *)style->text_decoration);
   gtk_css_values_unref ((GtkCssValues *)style->font_variant);
   gtk_css_values_unref ((GtkCssValues *)style->animation);
   gtk_css_values_unref ((GtkCssValues *)style->transition);
   gtk_css_values_unref ((GtkCssValues *)style->size);
   gtk_css_values_unref ((GtkCssValues *)style->other);
-  gtk_css_values_unref ((GtkCssValues *)style->used);
-
-  if (style->variables)
-    gtk_css_variable_set_unref (style->variables);
 
   G_OBJECT_CLASS (gtk_css_style_parent_class)->finalize (object);
 }
@@ -106,59 +96,6 @@ GtkCssValue *
 gtk_css_style_get_value (GtkCssStyle *style,
                          guint        id)
 {
-  return gtk_css_style_get_used_value (style, id);
-}
-
-GtkCssValue *
-gtk_css_style_get_used_value (GtkCssStyle *style,
-                              guint        id)
-{
-  switch (id)
-    {
-    case GTK_CSS_PROPERTY_COLOR:
-      return style->used->color;
-    case GTK_CSS_PROPERTY_ICON_PALETTE:
-      return style->used->icon_palette;
-    case GTK_CSS_PROPERTY_BACKGROUND_COLOR:
-      return style->used->background_color;
-    case GTK_CSS_PROPERTY_BOX_SHADOW:
-      return style->used->box_shadow;
-    case GTK_CSS_PROPERTY_BACKGROUND_IMAGE:
-      return style->used->background_image;
-    case GTK_CSS_PROPERTY_BORDER_TOP_COLOR:
-      return style->used->border_top_color;
-    case GTK_CSS_PROPERTY_BORDER_RIGHT_COLOR:
-      return style->used->border_right_color;
-    case GTK_CSS_PROPERTY_BORDER_BOTTOM_COLOR:
-      return style->used->border_bottom_color;
-    case GTK_CSS_PROPERTY_BORDER_LEFT_COLOR:
-      return style->used->border_left_color;
-    case GTK_CSS_PROPERTY_BORDER_IMAGE_SOURCE:
-      return style->used->border_image_source;
-    case GTK_CSS_PROPERTY_ICON_SHADOW:
-      return style->used->icon_shadow;
-    case GTK_CSS_PROPERTY_OUTLINE_COLOR:
-      return style->used->outline_color;
-    case GTK_CSS_PROPERTY_CARET_COLOR:
-      return style->used->caret_color;
-    case GTK_CSS_PROPERTY_SECONDARY_CARET_COLOR:
-      return style->used->secondary_caret_color;
-    case GTK_CSS_PROPERTY_TEXT_SHADOW:
-      return style->used->text_shadow;
-    case GTK_CSS_PROPERTY_TEXT_DECORATION_COLOR:
-      return style->used->text_decoration_color;
-    case GTK_CSS_PROPERTY_ICON_SOURCE:
-      return style->used->icon_source;
-
-    default:
-      return gtk_css_style_get_computed_value (style, id);
-    }
-}
-
-GtkCssValue *
-gtk_css_style_get_computed_value (GtkCssStyle *style,
-                                  guint        id)
-{
   switch (id)
     {
     case GTK_CSS_PROPERTY_COLOR:
@@ -177,18 +114,18 @@ gtk_css_style_get_computed_value (GtkCssStyle *style,
       return style->font->font_style;
     case GTK_CSS_PROPERTY_FONT_WEIGHT:
       return style->font->font_weight;
-    case GTK_CSS_PROPERTY_FONT_WIDTH:
-      return style->font->font_width;
+    case GTK_CSS_PROPERTY_FONT_STRETCH:
+      return style->font->font_stretch;
     case GTK_CSS_PROPERTY_LETTER_SPACING:
       return style->font->letter_spacing;
     case GTK_CSS_PROPERTY_LINE_HEIGHT:
       return style->font->line_height;
     case GTK_CSS_PROPERTY_TEXT_DECORATION_LINE:
-      return style->text_decoration->text_decoration_line;
+      return style->font_variant->text_decoration_line;
     case GTK_CSS_PROPERTY_TEXT_DECORATION_COLOR:
-      return style->text_decoration->text_decoration_color;
+      return style->font_variant->text_decoration_color ? style->font_variant->text_decoration_color : style->core->color;
     case GTK_CSS_PROPERTY_TEXT_DECORATION_STYLE:
-      return style->text_decoration->text_decoration_style;
+      return style->font_variant->text_decoration_style;
     case GTK_CSS_PROPERTY_TEXT_TRANSFORM:
       return style->font_variant->text_transform;
     case GTK_CSS_PROPERTY_FONT_KERNING:
@@ -264,15 +201,15 @@ gtk_css_style_get_computed_value (GtkCssStyle *style,
     case GTK_CSS_PROPERTY_BACKGROUND_POSITION:
       return style->background->background_position;
     case GTK_CSS_PROPERTY_BORDER_TOP_COLOR:
-      return style->border->border_top_color;
+      return style->border->border_top_color ? style->border->border_top_color : style->core->color;
     case GTK_CSS_PROPERTY_BORDER_RIGHT_COLOR:
-      return style->border->border_right_color;
+      return style->border->border_right_color ? style->border->border_right_color : style->core->color;
     case GTK_CSS_PROPERTY_BORDER_BOTTOM_COLOR:
-      return style->border->border_bottom_color;
+      return style->border->border_bottom_color ? style->border->border_bottom_color : style->core->color;
     case GTK_CSS_PROPERTY_BORDER_LEFT_COLOR:
-      return style->border->border_left_color;
+      return style->border->border_left_color ? style->border->border_left_color: style->core->color;
     case GTK_CSS_PROPERTY_OUTLINE_COLOR:
-      return style->outline->outline_color;
+      return style->outline->outline_color ? style->outline->outline_color : style->core->color;
     case GTK_CSS_PROPERTY_BACKGROUND_REPEAT:
       return style->background->background_repeat;
     case GTK_CSS_PROPERTY_BACKGROUND_IMAGE:
@@ -299,8 +236,6 @@ gtk_css_style_get_computed_value (GtkCssStyle *style,
       return style->other->icon_transform;
     case GTK_CSS_PROPERTY_ICON_FILTER:
       return style->other->icon_filter;
-    case GTK_CSS_PROPERTY_ICON_WEIGHT:
-      return style->icon->icon_weight;
     case GTK_CSS_PROPERTY_BORDER_SPACING:
       return style->size->border_spacing;
     case GTK_CSS_PROPERTY_TRANSFORM:
@@ -337,14 +272,12 @@ gtk_css_style_get_computed_value (GtkCssStyle *style,
       return style->animation->animation_fill_mode;
     case GTK_CSS_PROPERTY_OPACITY:
       return style->other->opacity;
-    case GTK_CSS_PROPERTY_BACKDROP_FILTER:
-      return style->other->backdrop_filter;
     case GTK_CSS_PROPERTY_FILTER:
       return style->other->filter;
     case GTK_CSS_PROPERTY_CARET_COLOR:
-      return style->font->caret_color;
+      return style->font->caret_color ? style->font->caret_color : style->core->color;
     case GTK_CSS_PROPERTY_SECONDARY_CARET_COLOR:
-      return style->font->secondary_caret_color;
+      return style->font->secondary_caret_color ? style->font->secondary_caret_color : style->core->color;
     case GTK_CSS_PROPERTY_FONT_FEATURE_SETTINGS:
       return style->font->font_feature_settings;
     case GTK_CSS_PROPERTY_FONT_VARIATION_SETTINGS:
@@ -378,15 +311,6 @@ gtk_css_style_get_static_style (GtkCssStyle *style)
   return GTK_CSS_STYLE_GET_CLASS (style)->get_static_style (style);
 }
 
-GtkCssValue *
-gtk_css_style_get_original_value (GtkCssStyle *style,
-                                  guint        id)
-{
-  gtk_internal_return_val_if_fail (GTK_IS_CSS_STYLE (style), NULL);
-
-  return GTK_CSS_STYLE_GET_CLASS (style)->get_original_value (style, id);
-}
-
 /*
  * gtk_css_style_print:
  * @style: a `GtkCssStyle`
@@ -417,26 +341,19 @@ gtk_css_style_print (GtkCssStyle *style,
     {
       GtkCssSection *section;
       GtkCssStyleProperty *prop;
-      GtkCssValue *value, *computed, *initial;
+      GtkCssValue *value;
       const char *name;
+
+      section = gtk_css_style_get_section (style, i);
+      if (!section && skip_initial)
+        continue;
 
       prop = _gtk_css_style_property_lookup_by_id (i);
       name = _gtk_style_property_get_name (GTK_STYLE_PROPERTY (prop));
-      computed = gtk_css_style_get_computed_value (style, i);
-      value = gtk_css_style_get_used_value (style, i);
-      initial = _gtk_css_style_property_get_initial_value (prop);
-
-      section = gtk_css_style_get_section (style, i);
-      if (skip_initial)
-        {
-          if (!section &&
-              (computed == initial ||
-               !gtk_css_value_contains_current_color (computed)))
-            continue;
-        }
+      value = gtk_css_style_get_value (style, i);
 
       g_string_append_printf (string, "%*s%s: ", indent, "", name);
-      gtk_css_value_print (value, string);
+      _gtk_css_value_print (value, string);
       g_string_append_c (string, ';');
 
       if (section)
@@ -450,43 +367,6 @@ gtk_css_style_print (GtkCssStyle *style,
 
       retval = TRUE;
     }
-
-    if (style->variables)
-      {
-        GtkCssCustomPropertyPool *pool = gtk_css_custom_property_pool_get ();
-        GArray *ids = gtk_css_variable_set_list_ids (style->variables);
-
-        for (i = 0; i < ids->len; i++)
-          {
-            int id = g_array_index (ids, int, i);
-            const char *name = gtk_css_custom_property_pool_get_name (pool, id);
-            GtkCssVariableSet *source;
-            GtkCssVariableValue *value = gtk_css_variable_set_lookup (style->variables, id, &source);
-
-            if (!value)
-              continue;
-
-            if (source != style->variables && skip_initial)
-              continue;
-
-            g_string_append_printf (string, "%*s%s: ", indent, "", name);
-            gtk_css_variable_value_print (value, string);
-            g_string_append_c (string, ';');
-
-            if (value->section)
-              {
-                g_string_append (string, " /* ");
-                gtk_css_section_print (value->section, string);
-                g_string_append (string, " */");
-              }
-
-            g_string_append_c (string, '\n');
-          }
-
-        retval = TRUE;
-
-        g_array_unref (ids);
-      }
 
   return retval;
 }
@@ -511,12 +391,12 @@ get_pango_underline_from_style (GtkTextDecorationStyle style)
   switch (style)
     {
     case GTK_CSS_TEXT_DECORATION_STYLE_DOUBLE:
-      return PANGO_UNDERLINE_DOUBLE_LINE;
+      return PANGO_UNDERLINE_DOUBLE;
     case GTK_CSS_TEXT_DECORATION_STYLE_WAVY:
-      return PANGO_UNDERLINE_ERROR_LINE;
+      return PANGO_UNDERLINE_ERROR;
     case GTK_CSS_TEXT_DECORATION_STYLE_SOLID:
     default:
-      return PANGO_UNDERLINE_SINGLE_LINE;
+      return PANGO_UNDERLINE_SINGLE;
     }
 
   g_return_val_if_reached (PANGO_UNDERLINE_SINGLE);
@@ -716,22 +596,20 @@ gtk_css_style_get_pango_attributes (GtkCssStyle *style)
   GtkTextDecorationStyle decoration_style;
   const GdkRGBA *color;
   const GdkRGBA *decoration_color;
-  gboolean has_decoration_color;
   double letter_spacing;
 
   /* text-decoration */
-  decoration_line = _gtk_css_text_decoration_line_value_get (style->text_decoration->text_decoration_line);
-  decoration_style = _gtk_css_text_decoration_style_value_get (style->text_decoration->text_decoration_style);
-
-  color = gtk_css_color_value_get_rgba (style->used->color);
-  decoration_color = gtk_css_color_value_get_rgba (style->used->text_decoration_color);
-
-  has_decoration_color = !gdk_rgba_equal (color, decoration_color);
+  decoration_line = _gtk_css_text_decoration_line_value_get (style->font_variant->text_decoration_line);
+  decoration_style = _gtk_css_text_decoration_style_value_get (style->font_variant->text_decoration_style);
+  color = gtk_css_color_value_get_rgba (style->core->color);
+  decoration_color = gtk_css_color_value_get_rgba (style->font_variant->text_decoration_color
+                                                   ? style->font_variant->text_decoration_color
+                                                   : style->core->color);
 
   if (decoration_line & GTK_CSS_TEXT_DECORATION_LINE_UNDERLINE)
     {
       attrs = add_pango_attr (attrs, pango_attr_underline_new (get_pango_underline_from_style (decoration_style)));
-      if (has_decoration_color)
+      if (!gdk_rgba_equal (color, decoration_color))
         attrs = add_pango_attr (attrs, pango_attr_underline_color_new (decoration_color->red * 65535. + 0.5,
                                                                        decoration_color->green * 65535. + 0.5,
                                                                        decoration_color->blue * 65535. + 0.5));
@@ -739,7 +617,7 @@ gtk_css_style_get_pango_attributes (GtkCssStyle *style)
   if (decoration_line & GTK_CSS_TEXT_DECORATION_LINE_OVERLINE)
     {
       attrs = add_pango_attr (attrs, pango_attr_overline_new (get_pango_overline_from_style (decoration_style)));
-      if (has_decoration_color)
+      if (!gdk_rgba_equal (color, decoration_color))
         attrs = add_pango_attr (attrs, pango_attr_overline_color_new (decoration_color->red * 65535. + 0.5,
                                                                       decoration_color->green * 65535. + 0.5,
                                                                       decoration_color->blue * 65535. + 0.5));
@@ -747,14 +625,14 @@ gtk_css_style_get_pango_attributes (GtkCssStyle *style)
   if (decoration_line & GTK_CSS_TEXT_DECORATION_LINE_LINE_THROUGH)
     {
       attrs = add_pango_attr (attrs, pango_attr_strikethrough_new (TRUE));
-      if (has_decoration_color)
+      if (!gdk_rgba_equal (color, decoration_color))
         attrs = add_pango_attr (attrs, pango_attr_strikethrough_color_new (decoration_color->red * 65535. + 0.5,
                                                                            decoration_color->green * 65535. + 0.5,
                                                                            decoration_color->blue * 65535. + 0.5));
     }
 
   /* letter-spacing */
-  letter_spacing = gtk_css_number_value_get (style->font->letter_spacing, 100);
+  letter_spacing = _gtk_css_number_value_get (style->font->letter_spacing, 100);
   if (letter_spacing != 0)
     {
       attrs = add_pango_attr (attrs, pango_attr_letter_spacing_new (letter_spacing * PANGO_SCALE));
@@ -852,16 +730,16 @@ gtk_css_style_get_pango_font (GtkCssStyle *style)
     }
 
   v = style->core->font_size;
-  pango_font_description_set_absolute_size (description, round (gtk_css_number_value_get (v, 100) * PANGO_SCALE));
+  pango_font_description_set_absolute_size (description, round (_gtk_css_number_value_get (v, 100) * PANGO_SCALE));
 
   v = style->font->font_style;
   pango_font_description_set_style (description, _gtk_css_font_style_value_get (v));
 
   v = style->font->font_weight;
-  pango_font_description_set_weight (description, gtk_css_number_value_get (v, 100));
+  pango_font_description_set_weight (description, _gtk_css_number_value_get (v, 100));
 
-  v = style->font->font_width;
-  pango_font_description_set_width (description, gtk_css_number_value_get (v, 1000));
+  v = style->font->font_stretch;
+  pango_font_description_set_stretch (description, _gtk_css_font_stretch_value_get (v));
 
   v = style->font->font_variation_settings;
   str = gtk_css_font_variations_value_get_variations (v);
@@ -870,32 +748,6 @@ gtk_css_style_get_pango_font (GtkCssStyle *style)
   g_free (str);
 
   return description;
-}
-
-void
-gtk_css_style_lookup_symbolic_colors (GtkCssStyle *style,
-                                      GdkRGBA      color_out[5])
-{
-  const char *names[5] = {
-    [GTK_SYMBOLIC_COLOR_ERROR] = "error",
-    [GTK_SYMBOLIC_COLOR_WARNING] = "warning",
-    [GTK_SYMBOLIC_COLOR_SUCCESS] = "success",
-    [GTK_SYMBOLIC_COLOR_ACCENT] = "accent",
-  };
-
-  color_out[GTK_SYMBOLIC_COLOR_FOREGROUND] = *gtk_css_color_value_get_rgba (style->used->color);
-
-  for (gsize i = 1; i < G_N_ELEMENTS (names); i++)
-    {
-      GtkCssValue *lookup;
-
-      lookup = gtk_css_palette_value_get_color (style->used->icon_palette, names[i]);
-
-      if (lookup)
-        color_out[i] = *gtk_css_color_value_get_rgba (lookup);
-      else
-        color_out[i] = color_out[GTK_SYMBOLIC_COLOR_FOREGROUND];
-    }
 }
 
 /* Refcounted value structs */
@@ -907,13 +759,11 @@ static const int values_size[] = {
   sizeof (GtkCssIconValues),
   sizeof (GtkCssOutlineValues),
   sizeof (GtkCssFontValues),
-  sizeof (GtkCssTextDecorationValues),
   sizeof (GtkCssFontVariantValues),
   sizeof (GtkCssAnimationValues),
   sizeof (GtkCssTransitionValues),
   sizeof (GtkCssSizeValues),
-  sizeof (GtkCssOtherValues),
-  sizeof (GtkCssUsedValues)
+  sizeof (GtkCssOtherValues)
 };
 
 #define TYPE_INDEX(type) ((type) - ((type) % 2))
@@ -932,9 +782,10 @@ GtkCssValues *gtk_css_values_ref (GtkCssValues *values)
 static void
 gtk_css_values_free (GtkCssValues *values)
 {
+  int i;
   GtkCssValue **v = GET_VALUES (values);
 
-  for (int i = 0; i < N_VALUES (values->type); i++)
+  for (i = 0; i < N_VALUES (values->type); i++)
     {
       if (v[i])
         gtk_css_value_unref (v[i]);
@@ -959,13 +810,14 @@ gtk_css_values_copy (GtkCssValues *values)
 {
   GtkCssValues *copy;
   GtkCssValue **v, **v2;
+  int i;
 
-  copy = gtk_css_values_new (TYPE_INDEX (values->type));
+  copy = gtk_css_values_new (TYPE_INDEX(values->type));
 
   v = GET_VALUES (values);
   v2 = GET_VALUES (copy);
 
-  for (int i = 0; i < N_VALUES (values->type); i++)
+  for (i = 0; i < N_VALUES (values->type); i++)
     {
       if (v[i])
         v2[i] = gtk_css_value_ref (v[i]);
@@ -979,121 +831,9 @@ gtk_css_values_new (GtkCssValuesType type)
 {
   GtkCssValues *values;
 
-  values = (GtkCssValues *) g_malloc0 (VALUES_SIZE (type));
+  values = (GtkCssValues *)g_malloc0 (VALUES_SIZE(type));
   values->ref_count = 1;
   values->type = type;
 
   return values;
-}
-
-GtkCssVariableValue *
-gtk_css_style_get_custom_property (GtkCssStyle *style,
-                                   int          id)
-{
-  if (style->variables)
-    return gtk_css_variable_set_lookup (style->variables, id, NULL);
-
-  return NULL;
-}
-
-GArray *
-gtk_css_style_list_custom_properties (GtkCssStyle *style)
-{
-  if (style->variables)
-    return gtk_css_variable_set_list_ids (style->variables);
-
-  return NULL;
-}
-
-GtkCssValue *
-gtk_css_style_resolve_used_value (GtkCssStyle          *style,
-                                  GtkCssValue          *value,
-                                  guint                 id,
-                                  GtkCssComputeContext *context)
-{
-  GtkCssValue *used;
-
-  switch (id)
-    {
-    case GTK_CSS_PROPERTY_COLOR:
-      {
-        GtkCssValue *current;
-
-        if (context->parent_style && context->parent_style->core->color == value)
-          used = gtk_css_value_ref (context->parent_style->used->color);
-        else
-          {
-            if (context->parent_style)
-              current = context->parent_style->used->color;
-            else
-              current = _gtk_css_style_property_get_initial_value (_gtk_css_style_property_lookup_by_id (GTK_CSS_PROPERTY_COLOR));
-
-            used = gtk_css_value_resolve (value, context, current);
-          }
-      }
-      break;
-
-    case GTK_CSS_PROPERTY_BACKGROUND_COLOR:
-    case GTK_CSS_PROPERTY_TEXT_DECORATION_COLOR:
-    case GTK_CSS_PROPERTY_BORDER_TOP_COLOR:
-    case GTK_CSS_PROPERTY_BORDER_RIGHT_COLOR:
-    case GTK_CSS_PROPERTY_BORDER_BOTTOM_COLOR:
-    case GTK_CSS_PROPERTY_BORDER_LEFT_COLOR:
-    case GTK_CSS_PROPERTY_OUTLINE_COLOR:
-    case GTK_CSS_PROPERTY_CARET_COLOR:
-    case GTK_CSS_PROPERTY_SECONDARY_CARET_COLOR:
-    case GTK_CSS_PROPERTY_BOX_SHADOW:
-    case GTK_CSS_PROPERTY_TEXT_SHADOW:
-    case GTK_CSS_PROPERTY_ICON_SHADOW:
-    case GTK_CSS_PROPERTY_ICON_PALETTE:
-    case GTK_CSS_PROPERTY_BACKGROUND_IMAGE:
-    case GTK_CSS_PROPERTY_ICON_SOURCE:
-    case GTK_CSS_PROPERTY_BORDER_IMAGE_SOURCE:
-      used = gtk_css_value_resolve (value, context, style->used->color);
-      break;
-
-    default:
-      return NULL;
-    }
-
-  g_assert (!gtk_css_value_contains_current_color (used));
-
-  return used;
-}
-
-static inline void
-gtk_css_take_value (GtkCssValue **variable,
-                    GtkCssValue  *value)
-{
-  if (*variable)
-    gtk_css_value_unref (*variable);
-  *variable = value;
-}
-
-void
-gtk_css_style_resolve_used_values (GtkCssStyle          *style,
-                                   GtkCssComputeContext *context)
-{
-  GtkCssValue **values;
-
-  if (style->used)
-    gtk_css_values_unref ((GtkCssValues *) style->used);
-
-  style->used = (GtkCssUsedValues *) gtk_css_values_new (GTK_CSS_USED_VALUES);
-  values = &style->used->color;
-
-  for (guint i = 0; i < G_N_ELEMENTS (used_props); i++)
-    {
-      guint id = used_props[i];
-      GtkCssValue *value, *used;
-
-      value = gtk_css_style_get_computed_value (style, id);
-
-      if (gtk_css_value_contains_current_color (value))
-        used = gtk_css_style_resolve_used_value (style, value, id, context);
-      else
-        used = gtk_css_value_ref (value);
-
-      gtk_css_take_value (&values[i], used);
-    }
 }

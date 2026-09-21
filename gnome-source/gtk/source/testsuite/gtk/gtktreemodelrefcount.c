@@ -113,7 +113,11 @@ gtk_tree_model_ref_count_finalize (GObject *object)
 {
   GtkTreeModelRefCount *ref_model = GTK_TREE_MODEL_REF_COUNT (object);
 
-  g_clear_pointer (&ref_model->priv->node_hash, g_hash_table_destroy);
+  if (ref_model->priv->node_hash)
+    {
+      g_hash_table_destroy (ref_model->priv->node_hash);
+      ref_model->priv->node_hash = NULL;
+    }
 
   G_OBJECT_CLASS (gtk_tree_model_ref_count_parent_class)->finalize (object);
 }

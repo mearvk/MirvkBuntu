@@ -76,7 +76,14 @@ void
 _cogl_list_remove (CoglList *elm);
 
 int
+_cogl_list_length (CoglList *list);
+
+int
 _cogl_list_empty (CoglList *list);
+
+void
+_cogl_list_insert_list (CoglList *list,
+                        CoglList *other);
 
 /* This assigns to iterator first so that taking a reference to it
  * later in the second step won't be an undefined operation. It
@@ -105,3 +112,15 @@ _cogl_list_empty (CoglList *list);
        &pos->member != (head);                                          \
        pos = tmp,                                                       \
          _cogl_list_set_iterator (pos->member.next, tmp, member))
+
+#define _cogl_list_for_each_reverse(pos, head, member)                  \
+  for (_cogl_list_set_iterator ((head)->prev, pos, member);             \
+       &pos->member != (head);                                          \
+       _cogl_list_set_iterator (pos->member.prev, pos, member))
+
+#define _cogl_list_for_each_reverse_safe(pos, tmp, head, member)        \
+  for (_cogl_list_set_iterator ((head)->prev, pos, member),             \
+         _cogl_list_set_iterator ((pos)->member.prev, tmp, member);     \
+       &pos->member != (head);                                          \
+       pos = tmp,                                                       \
+         _cogl_list_set_iterator (pos->member.prev, tmp, member))

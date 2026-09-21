@@ -13,6 +13,18 @@ mtk_c_args = [
   '-DG_LOG_DOMAIN="Mtk"',
 ]
 
+mtk_debug_c_args = []
+if buildtype != 'plain'
+  if not get_option('debug')
+    mtk_debug_c_args += [
+      '-DG_DISABLE_ASSERT',
+      '-DG_DISABLE_CAST_CHECKS',
+    ]
+  endif
+endif
+mtk_debug_c_args = cc.get_supported_arguments(mtk_debug_c_args)
+mtk_c_args += mtk_debug_c_args
+
 mtk_pkg_deps = [
   glib_dep,
   gobject_dep,
@@ -21,7 +33,7 @@ mtk_pkg_deps = [
   pixman_dep,
 ]
 
-if have_xwayland
+if have_x11
   mtk_pkg_deps += x11_dep
 endif
 

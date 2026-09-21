@@ -21,7 +21,7 @@
 /**
  * GtkGesture:
  *
- * The base class for gesture recognition.
+ * `GtkGesture` is the base class for gesture recognition.
  *
  * Although `GtkGesture` is quite generalized to serve as a base for
  * multi-touch gestures, it is suitable to implement single-touch and
@@ -128,10 +128,7 @@ typedef struct _PointData PointData;
 
 enum {
   PROP_N_POINTS = 1,
-  N_PROPS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum {
   BEGIN,
@@ -775,11 +772,12 @@ gtk_gesture_class_init (GtkGestureClass *klass)
    * The number of touch points that trigger
    * recognition on this gesture.
    */
-  props[PROP_N_POINTS] = g_param_spec_uint ("n-points", NULL, NULL,
-                                            1, G_MAXUINT, 1,
-                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_N_POINTS,
+                                   g_param_spec_uint ("n-points", NULL, NULL,
+                                                      1, G_MAXUINT, 1,
+                                                      GTK_PARAM_READWRITE |
+                                                      G_PARAM_CONSTRUCT_ONLY));
   /**
    * GtkGesture::begin:
    * @gesture: the object which received the signal
@@ -1030,7 +1028,6 @@ gtk_gesture_set_sequence_state (GtkGesture            *gesture,
                                 GtkEventSequenceState  state)
 {
   GtkGesturePrivate *priv;
-  GtkWidget *widget;
   PointData *data;
 
   g_return_val_if_fail (GTK_IS_GESTURE (gesture), FALSE);
@@ -1057,8 +1054,8 @@ gtk_gesture_set_sequence_state (GtkGesture            *gesture,
 
   data->state = state;
 
-  widget = gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (gesture));
-  gtk_widget_propagate_event_sequence_state (widget, gesture, sequence, state);
+  gtk_widget_cancel_event_sequence (gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (gesture)),
+                                    gesture, sequence, state);
   g_signal_emit (gesture, signals[SEQUENCE_STATE_CHANGED], 0,
                  sequence, state);
 

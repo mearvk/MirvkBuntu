@@ -72,7 +72,7 @@ print_debug (const gchar *format, ...)
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-GType g_proxy_mount_operation_get_type (void);
+GType g_proxy_mount_operation_get_type (void) G_GNUC_CONST;
 
 typedef struct
 {
@@ -1019,15 +1019,13 @@ handle_mount_unmount (GVfsRemoteVolumeMonitor *object,
   for (l = mounts; l != NULL; l = l->next)
     {
       char *mount_id;
-      gboolean same;
 
       mount = G_MOUNT (l->data);
       mount_id = g_strdup_printf ("%p", mount);
-      same = strcmp (mount_id, arg_id) == 0;
-      g_free (mount_id);
-
-      if (same)
+      if (strcmp (mount_id, arg_id) == 0)
         break;
+
+      g_free (mount_id);
     }
   if (l == NULL)
     mount = NULL;
@@ -1258,15 +1256,13 @@ handle_volume_mount (GVfsRemoteVolumeMonitor *object,
   for (l = volumes; l != NULL; l = l->next)
     {
       char *volume_id;
-      gboolean same;
 
       volume = G_VOLUME (l->data);
       volume_id = g_strdup_printf ("%p", volume);
-      same = strcmp (volume_id, arg_id) == 0;
-      g_free (volume_id);
-
-      if (same)
+      if (strcmp (volume_id, arg_id) == 0)
         break;
+
+      g_free (volume_id);
     }
   if (l == NULL)
     volume = NULL;

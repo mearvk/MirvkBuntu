@@ -51,7 +51,7 @@ class BrailleGenerator(web.BrailleGenerator, braille_generator.BrailleGenerator)
 
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
-            tokens = ["EVOLUTION BRAILLE GENERATOR:", func.__name__, ":", result]
+            tokens = [f"EVOLUTION BRAILLE GENERATOR: {func.__name__}:", result]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return result
 
@@ -61,23 +61,20 @@ class BrailleGenerator(web.BrailleGenerator, braille_generator.BrailleGenerator)
     def _generate_real_active_descendant_displayed_text(
         self,
         obj: Atspi.Accessible,
+        **args,
     ) -> list[Any]:
         if self._script.utilities.is_message_list_status_cell(obj):
             return []
 
-        return super()._generate_real_active_descendant_displayed_text(obj)
+        return super()._generate_real_active_descendant_displayed_text(obj, **args)
 
     def generate_braille(
         self,
         obj: Atspi.Accessible,
         context: BrailleGeneratorContext,
-        *,
-        role: Atspi.Role | str | None = None,
-        include_context: bool = True,
+        **args,
     ) -> list[Any]:
-        result, focused_region = super().generate_braille(
-            obj, context, role=role, include_context=include_context
-        )
+        result, focused_region = super().generate_braille(obj, context, **args)
         if not result or focused_region != result[0]:
             return [result, focused_region]
 

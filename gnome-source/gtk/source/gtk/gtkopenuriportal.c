@@ -66,7 +66,8 @@ init_openuri_portal (void)
               g_warning ("Cannot create OpenURI portal proxy: %s", error->message);
               g_error_free (error);
             }
-          else if (gtk_xdp_open_uri_get_version (openuri) < 3)
+
+          if (gtk_xdp_open_uri_get_version (openuri) < 3)
             {
               g_warning ("Not a supported version of the OpenURI portal: %u", gtk_xdp_open_uri_get_version (openuri));
               g_clear_object (&openuri);
@@ -117,7 +118,7 @@ typedef struct {
   GTask *task;
   char *handle;
   guint signal_id;
-  gulong cancel_handler;
+  glong cancel_handler;
   int call;
 } OpenUriData;
 
@@ -127,7 +128,8 @@ open_uri_data_free (OpenUriData *data)
   if (data->signal_id)
     g_dbus_connection_signal_unsubscribe (data->connection, data->signal_id);
   g_clear_object (&data->connection);
-  g_clear_signal_handler (&data->cancel_handler, data->cancellable);
+  if (data->cancel_handler)
+    g_signal_handler_disconnect (data->cancellable, data->cancel_handler);
   if (data->parent && data->parent_handle)
     gtk_window_unexport_handle (data->parent, data->parent_handle);
   g_free (data->parent_handle);
@@ -285,7 +287,6 @@ open_uri (OpenUriData         *data,
   data->connection = g_object_ref (connection);
 
   task = g_task_new (NULL, NULL, callback, data);
-  g_task_set_source_tag (task, open_uri);
   g_task_set_check_cancellable (task, FALSE);
   g_task_set_task_data (task, data, NULL);
   if (data->cancellable)
@@ -335,10 +336,7 @@ open_uri (OpenUriData         *data,
       int fd, fd_id, errsv;
 
       path = g_file_peek_path (file);
-      if (data->flags & GTK_OPENURI_FLAGS_WRITABLE)
-        fd = g_open (path, O_RDWR | O_CLOEXEC);
-      else
-        fd = g_open (path, O_RDONLY | O_CLOEXEC);
+      fd = g_open (path, O_RDONLY | O_CLOEXEC);
       errsv = errno;
       if (fd == -1)
         {
@@ -361,7 +359,7 @@ open_uri (OpenUriData         *data,
           data->call = OPEN_FOLDER;
           gtk_xdp_open_uri_call_open_directory (openuri,
                                              parent_window ? parent_window : "",
-                                             g_variant_new_handle (fd_id),
+                                             g_variant_new ("h", fd_id),
                                              opts,
                                              fd_list,
                                              NULL,
@@ -373,7 +371,7 @@ open_uri (OpenUriData         *data,
           data->call = OPEN_FILE;
           gtk_xdp_open_uri_call_open_file (openuri,
                                         parent_window ? parent_window : "",
-                                        g_variant_new_handle (fd_id),
+                                        g_variant_new ("h", fd_id),
                                         opts,
                                         fd_list,
                                         NULL,
@@ -445,8 +443,14 @@ window_handle_exported (GtkWindow  *window,
   else
     display = gdk_display_get_default ();
 
+  /* FIXME
+   * Call the vfunc directly since g_app_launch_context_get_startup_notify_id
+   * has NULL checks.
+   *
+   * We should have a more direct way to do this.
+   */
   context = G_APP_LAUNCH_CONTEXT (gdk_display_get_app_launch_context (display));
-  activation_token = g_app_launch_context_get_startup_notify_id (context, NULL, NULL);
+  activation_token = G_APP_LAUNCH_CONTEXT_GET_CLASS (context)->get_startup_notify_id (context, NULL, NULL);
   g_object_unref (context);
 
   open_uri (data, handle, activation_token, open_uri_done);
@@ -532,33 +536,4 @@ gtk_openuri_portal_open_uri_finish (GAsyncResult  *result,
   g_return_val_if_fail (g_task_get_source_tag (G_TASK (result)) == gtk_openuri_portal_open_uri_async, FALSE);
 
   return g_task_propagate_boolean (G_TASK (result), error);
-}
-
-gboolean
-gtk_openuri_portal_can_open (const char *uri)
-{
-  const char *scheme;
-  GVariantBuilder opt_builder;
-  gboolean supported;
-
-  scheme = g_uri_peek_scheme (uri);
-  if (!scheme)
-    return FALSE;
-
-  if (!init_openuri_portal ())
-    return FALSE;
-
-  if (gtk_xdp_open_uri_get_version (openuri) < 5)
-    return TRUE;
-
-  g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
-  if (!gtk_xdp_open_uri_call_scheme_supported_sync (openuri,
-                                                    scheme,
-                                                    g_variant_builder_end (&opt_builder),
-                                                    &supported,
-                                                    NULL,
-                                                    NULL))
-   return TRUE;
-
-  return supported;
 }

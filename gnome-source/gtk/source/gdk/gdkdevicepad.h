@@ -28,10 +28,10 @@
 G_BEGIN_DECLS
 
 #define GDK_TYPE_DEVICE_PAD         (gdk_device_pad_get_type ())
+#define GDK_DEVICE_PAD(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), GDK_TYPE_DEVICE_PAD, GdkDevicePad))
+#define GDK_IS_DEVICE_PAD(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), GDK_TYPE_DEVICE_PAD))
 
-GDK_AVAILABLE_IN_ALL
-GDK_DECLARE_INTERNAL_TYPE (GdkDevicePad, gdk_device_pad, GDK, DEVICE_PAD, GObject)
-
+typedef struct _GdkDevicePad GdkDevicePad;
 typedef struct _GdkDevicePadInterface GdkDevicePadInterface;
 
 /**
@@ -47,6 +47,9 @@ typedef enum {
   GDK_DEVICE_PAD_FEATURE_RING,
   GDK_DEVICE_PAD_FEATURE_STRIP
 } GdkDevicePadFeature;
+
+GDK_AVAILABLE_IN_ALL
+GType gdk_device_pad_get_type          (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 int   gdk_device_pad_get_n_groups      (GdkDevicePad *pad);

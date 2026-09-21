@@ -1,8 +1,6 @@
 *.swp
 *~
 **/tags.*
-subprojects/.wraplock
-subprojects/gvdb/
 subprojects/sysprof/
 __pycache__/
 .buildconfig

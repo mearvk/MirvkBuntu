@@ -23,7 +23,7 @@
 
 /**
  * ClutterInputDevice:
- *
+ * 
  * An input device managed by Clutter
  *
  * #ClutterInputDevice represents an input device known to Clutter.
@@ -57,14 +57,15 @@ enum
   PROP_DEVICE_TYPE,
   PROP_CAPABILITIES,
   PROP_SEAT,
+  PROP_DEVICE_MODE,
+
+  PROP_HAS_CURSOR,
 
   PROP_VENDOR_ID,
   PROP_PRODUCT_ID,
-  PROP_BUS_TYPE,
 
   PROP_N_STRIPS,
   PROP_N_RINGS,
-  PROP_N_DIALS,
   PROP_N_MODE_GROUPS,
   PROP_N_BUTTONS,
   PROP_DEVICE_NODE,
@@ -80,21 +81,22 @@ struct _ClutterInputDevicePrivate
 {
   ClutterInputDeviceType device_type;
   ClutterInputCapabilities capabilities;
+  ClutterInputMode device_mode;
 
   char *device_name;
 
   ClutterSeat *seat;
 
-  guint vendor_id;
-  guint product_id;
-  guint bus_type;
+  char *vendor_id;
+  char *product_id;
   char *node_path;
 
   int n_rings;
   int n_strips;
-  int n_dials;
   int n_mode_groups;
   int n_buttons;
+
+  gboolean has_cursor;
 };
 
 G_DEFINE_TYPE_WITH_PRIVATE (ClutterInputDevice, clutter_input_device, G_TYPE_OBJECT);
@@ -105,8 +107,6 @@ clutter_input_device_constructed (GObject *gobject)
   ClutterInputDevice *device = CLUTTER_INPUT_DEVICE (gobject);
   ClutterInputDevicePrivate *priv =
     clutter_input_device_get_instance_private (device);
-
-  G_OBJECT_CLASS (clutter_input_device_parent_class)->constructed (gobject);
 
   if (priv->capabilities == 0)
     {
@@ -156,7 +156,12 @@ clutter_input_device_dispose (GObject *gobject)
     clutter_input_device_get_instance_private (device);
 
   g_clear_pointer (&priv->device_name, g_free);
+  g_clear_pointer (&priv->vendor_id, g_free);
+  g_clear_pointer (&priv->product_id, g_free);
   g_clear_pointer (&priv->node_path, g_free);
+
+  if (device->accessibility_virtual_device)
+    g_clear_object (&device->accessibility_virtual_device);
 
   G_OBJECT_CLASS (clutter_input_device_parent_class)->dispose (gobject);
 }
@@ -185,20 +190,24 @@ clutter_input_device_set_property (GObject      *gobject,
       priv->seat = g_value_get_object (value);
       break;
 
+    case PROP_DEVICE_MODE:
+      priv->device_mode = g_value_get_enum (value);
+      break;
+
     case PROP_NAME:
       priv->device_name = g_value_dup_string (value);
       break;
 
+    case PROP_HAS_CURSOR:
+      priv->has_cursor = g_value_get_boolean (value);
+      break;
+
     case PROP_VENDOR_ID:
-      priv->vendor_id = g_value_get_uint (value);
+      priv->vendor_id = g_value_dup_string (value);
       break;
 
     case PROP_PRODUCT_ID:
-      priv->product_id = g_value_get_uint (value);
-      break;
-
-    case PROP_BUS_TYPE:
-      priv->bus_type = g_value_get_uint (value);
+      priv->product_id = g_value_dup_string (value);
       break;
 
     case PROP_N_RINGS:
@@ -207,10 +216,6 @@ clutter_input_device_set_property (GObject      *gobject,
 
     case PROP_N_STRIPS:
       priv->n_strips = g_value_get_int (value);
-      break;
-
-    case PROP_N_DIALS:
-      priv->n_dials = g_value_get_int (value);
       break;
 
     case PROP_N_MODE_GROUPS:
@@ -255,20 +260,24 @@ clutter_input_device_get_property (GObject    *gobject,
       g_value_set_object (value, priv->seat);
       break;
 
+    case PROP_DEVICE_MODE:
+      g_value_set_enum (value, priv->device_mode);
+      break;
+
     case PROP_NAME:
       g_value_set_string (value, priv->device_name);
       break;
 
+    case PROP_HAS_CURSOR:
+      g_value_set_boolean (value, priv->has_cursor);
+      break;
+
     case PROP_VENDOR_ID:
-      g_value_set_uint (value, priv->vendor_id);
+      g_value_set_string (value, priv->vendor_id);
       break;
 
     case PROP_PRODUCT_ID:
-      g_value_set_uint (value, priv->product_id);
-      break;
-
-    case PROP_BUS_TYPE:
-      g_value_set_uint (value, priv->bus_type);
+      g_value_set_string (value, priv->product_id);
       break;
 
     case PROP_N_RINGS:
@@ -277,10 +286,6 @@ clutter_input_device_get_property (GObject    *gobject,
 
     case PROP_N_STRIPS:
       g_value_set_int (value, priv->n_strips);
-      break;
-
-    case PROP_N_DIALS:
-      g_value_set_int (value, priv->n_dials);
       break;
 
     case PROP_N_MODE_GROUPS:
@@ -356,34 +361,53 @@ clutter_input_device_class_init (ClutterInputDeviceClass *klass)
                          G_PARAM_CONSTRUCT_ONLY);
 
   /**
+   * ClutterInputDevice:mode:
+   *
+   * The mode of the device.
+   */
+  obj_props[PROP_DEVICE_MODE] =
+    g_param_spec_enum ("device-mode", NULL, NULL,
+                       CLUTTER_TYPE_INPUT_MODE,
+                       CLUTTER_INPUT_MODE_FLOATING,
+                       G_PARAM_READWRITE |
+                       G_PARAM_STATIC_STRINGS |
+                       G_PARAM_CONSTRUCT_ONLY);
+
+  /**
+   * ClutterInputDevice:has-cursor:
+   *
+   * Whether the device has an on screen cursor following its movement.
+   */
+  obj_props[PROP_HAS_CURSOR] =
+    g_param_spec_boolean ("has-cursor", NULL, NULL,
+                          FALSE,
+                          G_PARAM_READWRITE |
+                          G_PARAM_STATIC_STRINGS |
+                          G_PARAM_CONSTRUCT_ONLY);
+
+  /**
    * ClutterInputDevice:vendor-id:
    *
-   * Vendor ID of this device.
+   * Vendor ID of this device.2
    */
   obj_props[PROP_VENDOR_ID] =
-    g_param_spec_uint ("vendor-id", NULL, NULL,
-                       0, 0xffff, 0,
-                       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+    g_param_spec_string ("vendor-id", NULL, NULL,
+                         NULL,
+                         G_PARAM_READWRITE |
+                         G_PARAM_STATIC_STRINGS |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   /**
    * ClutterInputDevice:product-id:
    *
-   * Product ID of this device.
+   * Product ID of this device.2
    */
   obj_props[PROP_PRODUCT_ID] =
-    g_param_spec_uint ("product-id", NULL, NULL,
-                       0, 0xffff, 0,
-                       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
-
-  /**
-   * ClutterInputDevice:bus-type:
-   *
-   * Bus type of this device.
-   */
-  obj_props[PROP_BUS_TYPE] =
-    g_param_spec_uint ("bus-type", NULL, NULL,
-                       0, 0xff, 0,
-                       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+    g_param_spec_string ("product-id", NULL, NULL,
+                         NULL,
+                         G_PARAM_READWRITE |
+                         G_PARAM_STATIC_STRINGS |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   obj_props[PROP_N_RINGS] =
     g_param_spec_int ("n-rings", NULL, NULL,
@@ -394,13 +418,6 @@ clutter_input_device_class_init (ClutterInputDeviceClass *klass)
 
   obj_props[PROP_N_STRIPS] =
     g_param_spec_int ("n-strips", NULL, NULL,
-                      0, G_MAXINT, 0,
-                      G_PARAM_READWRITE |
-                      G_PARAM_STATIC_STRINGS |
-                      G_PARAM_CONSTRUCT_ONLY);
-
-  obj_props[PROP_N_DIALS] =
-    g_param_spec_int ("n-dials", NULL, NULL,
                       0, G_MAXINT, 0,
                       G_PARAM_READWRITE |
                       G_PARAM_STATIC_STRINGS |
@@ -504,20 +521,61 @@ clutter_input_device_get_device_name (ClutterInputDevice *device)
 }
 
 /**
+ * clutter_input_device_get_has_cursor:
+ * @device: a #ClutterInputDevice
+ *
+ * Retrieves whether @device has a pointer that follows the
+ * device motion.
+ *
+ * Return value: %TRUE if the device has a cursor
+ */
+gboolean
+clutter_input_device_get_has_cursor (ClutterInputDevice *device)
+{
+  ClutterInputDevicePrivate *priv =
+    clutter_input_device_get_instance_private (device);
+
+  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), FALSE);
+
+  return priv->has_cursor;
+}
+
+/**
+ * clutter_input_device_get_device_mode:
+ * @device: a #ClutterInputDevice
+ *
+ * Retrieves the #ClutterInputMode of @device.
+ *
+ * Return value: the device mode
+ */
+ClutterInputMode
+clutter_input_device_get_device_mode (ClutterInputDevice *device)
+{
+  ClutterInputDevicePrivate *priv =
+    clutter_input_device_get_instance_private (device);
+
+  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device),
+                        CLUTTER_INPUT_MODE_FLOATING);
+
+  return priv->device_mode;
+}
+
+/**
  * clutter_input_device_get_vendor_id:
  * @device: a physical #ClutterInputDevice
  *
  * Gets the vendor ID of this device.
  *
- * Returns: the vendor ID
+ * Returns: the vendor ID2
  */
-guint
+const gchar *
 clutter_input_device_get_vendor_id (ClutterInputDevice *device)
 {
   ClutterInputDevicePrivate *priv =
     clutter_input_device_get_instance_private (device);
 
-  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), 0);
+  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), NULL);
+  g_return_val_if_fail (clutter_input_device_get_device_mode (device) != CLUTTER_INPUT_MODE_LOGICAL, NULL);
 
   return priv->vendor_id;
 }
@@ -530,36 +588,16 @@ clutter_input_device_get_vendor_id (ClutterInputDevice *device)
  *
  * Returns: the product ID2
  */
-guint
+const gchar *
 clutter_input_device_get_product_id (ClutterInputDevice *device)
 {
   ClutterInputDevicePrivate *priv =
     clutter_input_device_get_instance_private (device);
 
-  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), 0);
+  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), NULL);
+  g_return_val_if_fail (clutter_input_device_get_device_mode (device) != CLUTTER_INPUT_MODE_LOGICAL, NULL);
 
   return priv->product_id;
-}
-
-/**
- * clutter_input_device_get_bus_type:
- * @device: a physical #ClutterInputDevice
- *
- * Gets the bus type of this device. The returned
- * value is one of the BUS_* constants defined in
- * linux/input.h.
- *
- * Returns: the bus type
- */
-guint
-clutter_input_device_get_bus_type (ClutterInputDevice *device)
-{
-  ClutterInputDevicePrivate *priv =
-    clutter_input_device_get_instance_private (device);
-
-  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), 0);
-
-  return priv->bus_type;
 }
 
 gint
@@ -582,17 +620,6 @@ clutter_input_device_get_n_strips (ClutterInputDevice *device)
   g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), 0);
 
   return priv->n_strips;
-}
-
-gint
-clutter_input_device_get_n_dials (ClutterInputDevice *device)
-{
-  ClutterInputDevicePrivate *priv =
-    clutter_input_device_get_instance_private (device);
-
-  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), 0);
-
-  return priv->n_dials;
 }
 
 gint

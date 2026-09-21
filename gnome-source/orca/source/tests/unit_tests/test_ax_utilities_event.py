@@ -31,7 +31,6 @@
 
 """Unit tests for ax_utilities_event.py event-related utilities."""
 
-import time
 from typing import TYPE_CHECKING
 
 import gi
@@ -44,34 +43,6 @@ if TYPE_CHECKING:
     from unittest.mock import MagicMock
 
     from .orca_test_context import OrcaTestContext
-
-
-_STATE_NAMESPACE_ATTRIBUTES = {
-    "checked": "LAST_KNOWN_CHECKED",
-    "expanded": "LAST_KNOWN_EXPANDED",
-    "indeterminate": "LAST_KNOWN_INDETERMINATE",
-    "invalid_entry": "LAST_KNOWN_INVALID_ENTRY",
-    "pressed": "LAST_KNOWN_PRESSED",
-    "selected": "LAST_KNOWN_SELECTED",
-}
-
-
-def _get_state_cache(event_utilities, change_type: str) -> str:
-    """Returns the cache namespace for a presentable state change."""
-
-    return getattr(event_utilities._CACHE, _STATE_NAMESPACE_ATTRIBUTES[change_type])
-
-
-def _set_last_known_state(event_utilities, change_type: str, obj, state: bool) -> None:
-    """Stores a last-known state in AXUtilitiesEvent's cache."""
-
-    event_utilities._CACHE.set_state(_get_state_cache(event_utilities, change_type), obj, state)
-
-
-def _get_last_known_state(event_utilities, change_type: str, obj) -> bool | None:
-    """Returns a last-known state from AXUtilitiesEvent's cache."""
-
-    return event_utilities._CACHE.get_state(_get_state_cache(event_utilities, change_type), obj)
 
 
 @pytest.mark.unit
@@ -95,7 +66,6 @@ class TestAXUtilitiesEvent:
             "orca.AXText",
             "orca.AXUtilities",
             "orca.input_event",
-            "orca.text_selection_manager",
             "orca.ax_utilities_object",
         ]
         essential_modules = test_context.setup_shared_dependencies(additional_modules)
@@ -184,11 +154,6 @@ class TestAXUtilitiesEvent:
         focus_manager_instance.get_locus_of_focus.return_value = None
         essential_modules["orca.focus_manager"].get_manager.return_value = focus_manager_instance
 
-        selection_manager = essential_modules[
-            "orca.text_selection_manager"
-        ].get_manager.return_value
-        selection_manager.get_current_selection_command.return_value = None
-
         essential_modules["orca.AXObject"].supports_collection.return_value = True
         essential_modules["orca.AXUtilities"].is_heading.return_value = False
 
@@ -198,7 +163,17 @@ class TestAXUtilitiesEvent:
         essential_modules["orca.debug"].print_message = test_context.Mock()
         essential_modules["orca.debug"].LEVEL_INFO = 800
 
-        self._clear_event_cache()
+        from orca.ax_utilities_event import AXUtilitiesEvent
+
+        AXUtilitiesEvent.LAST_KNOWN_NAME.clear()
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION.clear()
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_CHECKED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_PRESSED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_SELECTED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE.clear()
+        AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY.clear()
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.clear()
 
         from orca.ax_object import AXObject
         from orca.ax_text import AXText
@@ -225,36 +200,6 @@ class TestAXUtilitiesEvent:
         test_context.patch_object(AXUtilitiesState, "is_showing", return_value=True)
 
         return essential_modules
-
-    @staticmethod
-    def _clear_event_cache() -> None:
-        """Clears event caches through the manager."""
-
-        from orca import ax_cache_manager
-
-        ax_cache_manager.get_manager().clear_cache_now("Unit test.")
-
-    def test_import_registers_event_cache_namespaces(self, test_context) -> None:
-        """Test importing event utilities registers its cache namespaces."""
-
-        test_context.setup_shared_dependencies(["orca.ax_utilities_object"])
-        from orca import ax_cache_manager
-
-        manager = ax_cache_manager.get_manager()
-        register = test_context.patch_object(
-            manager,
-            "register_cache",
-            wraps=manager.register_cache,
-        )
-
-        from orca.ax_utilities_event import AXUtilitiesEvent
-
-        event_calls = [
-            call for call in register.call_args_list if call.args[0] is AXUtilitiesEvent._CACHE
-        ]
-        assert len(event_calls) == 13
-        for call in event_calls:
-            assert call.kwargs["lifetime"] is ax_cache_manager.Lifetime.PROCESS
 
     @pytest.mark.parametrize(
         "case",
@@ -285,7 +230,7 @@ class TestAXUtilitiesEvent:
         mock_event = test_context.Mock(spec=Atspi.Event)
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_obj
-        _set_last_known_state(AXUtilitiesEvent, "expanded", mock_obj, case["initial_state"])
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED[hash(mock_obj)] = case["initial_state"]
         test_context.patch_object(
             AXUtilitiesState,
             "is_expanded",
@@ -330,16 +275,16 @@ class TestAXUtilitiesEvent:
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_obj
         mock_event.any_data = case["new_description"]
-        AXUtilitiesEvent._CACHE.set_description(mock_obj, case["old_description"])
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(mock_obj)] = case["old_description"]
 
         def mock_is_presentable_description_change(event):
             if not isinstance(event.any_data, str):
                 return False
-            old_description = AXUtilitiesEvent._CACHE.get_description(event.source)
+            old_description = AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION.get(hash(event.source))
             new_description = event.any_data
             if old_description == new_description:
                 return False
-            AXUtilitiesEvent._CACHE.set_description(event.source, new_description)
+            AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(event.source)] = new_description
             return bool(new_description)
 
         test_context.patch_object(
@@ -357,11 +302,9 @@ class TestAXUtilitiesEvent:
         self._setup_dependencies(test_context)
         from orca.ax_utilities_event import AXUtilitiesEvent
 
-        set_name = test_context.patch_object(AXUtilitiesEvent._CACHE, "set_name")
-        set_description = test_context.patch_object(AXUtilitiesEvent._CACHE, "set_description")
         AXUtilitiesEvent.save_object_info_for_events(None)
-        set_name.assert_not_called()
-        set_description.assert_not_called()
+        assert not AXUtilitiesEvent.LAST_KNOWN_NAME
+        assert not AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION
 
     def test_get_text_event_reason_with_cached_reason(self, test_context):
         """Test AXUtilitiesEvent.get_text_event_reason with cached reason."""
@@ -370,7 +313,7 @@ class TestAXUtilitiesEvent:
         from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
 
         mock_event = test_context.Mock(spec=Atspi.Event)
-        AXUtilitiesEvent._CACHE.set_text_event_reason(mock_event, TextEventReason.TYPING)
+        AXUtilitiesEvent.TEXT_EVENT_REASON[mock_event] = TextEventReason.TYPING
         result = AXUtilitiesEvent.get_text_event_reason(mock_event)
         assert result == TextEventReason.TYPING
 
@@ -385,28 +328,6 @@ class TestAXUtilitiesEvent:
 
         with pytest.raises(ValueError, match="Unexpected event type"):
             AXUtilitiesEvent.get_text_event_reason(mock_event)
-
-    @pytest.mark.parametrize(
-        "string, expected",
-        [
-            (" ESC[6", True),
-            (" ESC[5", True),
-            (" ESC[6\n", True),
-            ("ESC[1;2A", True),
-            ("ESC[200~", True),
-            ("ESCAPE", False),
-            ("line 20", False),
-            ("$ ", False),
-            ("", False),
-        ],
-    )
-    def test_is_terminal_escape_sequence(self, test_context, string, expected):
-        """Test AXUtilitiesEvent._is_terminal_escape_sequence."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_event import AXUtilitiesEvent
-
-        assert AXUtilitiesEvent._is_terminal_escape_sequence(string) is expected
 
     @pytest.mark.parametrize(
         "case",
@@ -459,9 +380,7 @@ class TestAXUtilitiesEvent:
             mock_event.any_data = case["setup_data"]["any_data"]
 
         if case["method_name"] == "checked_change":
-            _set_last_known_state(
-                AXUtilitiesEvent, "checked", mock_obj, case["setup_data"]["last_state"]
-            )
+            AXUtilitiesEvent.LAST_KNOWN_CHECKED[hash(mock_obj)] = case["setup_data"]["last_state"]
             test_context.patch_object(
                 AXUtilitiesState,
                 "is_checked",
@@ -469,15 +388,12 @@ class TestAXUtilitiesEvent:
             )
             method = AXUtilitiesEvent.is_presentable_checked_change
         elif case["method_name"] == "name_change":
-            AXUtilitiesEvent._CACHE.set_name(mock_obj, case["setup_data"]["last_name"])
+            AXUtilitiesEvent.LAST_KNOWN_NAME[hash(mock_obj)] = case["setup_data"]["last_name"]
             method = AXUtilitiesEvent.is_presentable_name_change
         elif case["method_name"] == "indeterminate_change":
-            _set_last_known_state(
-                AXUtilitiesEvent,
-                "indeterminate",
-                mock_obj,
-                case["setup_data"]["last_state"],
-            )
+            AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE[hash(mock_obj)] = case["setup_data"][
+                "last_state"
+            ]
             test_context.patch_object(
                 AXUtilitiesState,
                 "is_indeterminate",
@@ -544,7 +460,7 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_obj
 
         if case["method_name"] == "pressed_change":
-            _set_last_known_state(AXUtilitiesEvent, "pressed", mock_obj, case["last_state"])
+            AXUtilitiesEvent.LAST_KNOWN_PRESSED[hash(mock_obj)] = case["last_state"]
             test_context.patch_object(
                 AXUtilitiesState,
                 "is_pressed",
@@ -552,11 +468,11 @@ class TestAXUtilitiesEvent:
             )
 
             def mock_is_presentable_pressed_change(event):
-                old_state = _get_last_known_state(AXUtilitiesEvent, "pressed", event.source)
+                old_state = AXUtilitiesEvent.LAST_KNOWN_PRESSED.get(hash(event.source))
                 new_state = AXUtilitiesState.is_pressed(event.source)
                 if old_state == new_state:
                     return False
-                _set_last_known_state(AXUtilitiesEvent, "pressed", event.source, new_state)
+                AXUtilitiesEvent.LAST_KNOWN_PRESSED[hash(event.source)] = new_state
                 return True
 
             test_context.patch_object(
@@ -569,7 +485,7 @@ class TestAXUtilitiesEvent:
         elif case["method_name"] == "selected_change":
             from orca.ax_object import AXObject
 
-            _set_last_known_state(AXUtilitiesEvent, "selected", mock_obj, case["last_state"])
+            AXUtilitiesEvent.LAST_KNOWN_SELECTED[hash(mock_obj)] = case["last_state"]
             test_context.patch_object(
                 AXUtilitiesState,
                 "is_selected",
@@ -583,7 +499,7 @@ class TestAXUtilitiesEvent:
             method = AXUtilitiesEvent.is_presentable_selected_change
 
         elif case["method_name"] == "invalid_entry_change":
-            _set_last_known_state(AXUtilitiesEvent, "invalid_entry", mock_obj, case["last_state"])
+            AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY[hash(mock_obj)] = case["last_state"]
             test_context.patch_object(
                 AXUtilitiesState,
                 "is_invalid_entry",
@@ -593,15 +509,11 @@ class TestAXUtilitiesEvent:
             if case["current_state"] != case["last_state"]:
 
                 def mock_is_presentable_invalid_entry_change(event):
-                    old_state = _get_last_known_state(
-                        AXUtilitiesEvent, "invalid_entry", event.source
-                    )
+                    old_state = AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY.get(hash(event.source))
                     new_state = AXUtilitiesState.is_invalid_entry(event.source)
                     if old_state == new_state:
                         return False
-                    _set_last_known_state(
-                        AXUtilitiesEvent, "invalid_entry", event.source, new_state
-                    )
+                    AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY[hash(event.source)] = new_state
                     return True
 
                 test_context.patch_object(
@@ -652,15 +564,15 @@ class TestAXUtilitiesEvent:
 
         AXUtilitiesEvent.save_object_info_for_events(mock_obj)
 
-        assert AXUtilitiesEvent._CACHE.get_name(mock_obj) == "test name"
-        assert AXUtilitiesEvent._CACHE.get_description(mock_obj) == "test desc"
-        assert _get_last_known_state(AXUtilitiesEvent, "checked", mock_obj) is True
-        assert _get_last_known_state(AXUtilitiesEvent, "expanded", mock_obj) is False
-        assert _get_last_known_state(AXUtilitiesEvent, "indeterminate", mock_obj) is True
-        assert _get_last_known_state(AXUtilitiesEvent, "pressed", mock_obj) is False
-        assert _get_last_known_state(AXUtilitiesEvent, "selected", mock_obj) is True
-        assert AXUtilitiesEvent._CACHE.get_name(mock_window) == "window name"
-        assert AXUtilitiesEvent._CACHE.get_description(mock_window) == "window desc"
+        assert AXUtilitiesEvent.LAST_KNOWN_NAME[hash(mock_obj)] == "test name"
+        assert AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(mock_obj)] == "test desc"
+        assert AXUtilitiesEvent.LAST_KNOWN_CHECKED[hash(mock_obj)] is True
+        assert AXUtilitiesEvent.LAST_KNOWN_EXPANDED[hash(mock_obj)] is False
+        assert AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE[hash(mock_obj)] is True
+        assert AXUtilitiesEvent.LAST_KNOWN_PRESSED[hash(mock_obj)] is False
+        assert AXUtilitiesEvent.LAST_KNOWN_SELECTED[hash(mock_obj)] is True
+        assert AXUtilitiesEvent.LAST_KNOWN_NAME[hash(mock_window)] == "window name"
+        assert AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(mock_window)] == "window desc"
 
     @pytest.mark.parametrize(
         "case",
@@ -706,7 +618,7 @@ class TestAXUtilitiesEvent:
 
         result = AXUtilitiesEvent.get_text_event_reason(mock_event)
         assert result == expected_reason
-        assert AXUtilitiesEvent._CACHE.get_text_event_reason(mock_event) == expected_reason
+        assert AXUtilitiesEvent.TEXT_EVENT_REASON[mock_event] == expected_reason
 
     @pytest.mark.parametrize(
         "case",
@@ -773,7 +685,6 @@ class TestAXUtilitiesEvent:
             "last_event_was_primary_click_or_release": False,
             "last_event_was_tab_navigation": False,
             "last_event_was_command": False,
-            "last_event_was_escape": False,
             "last_event_was_printable_key": False,
         }
         for attr, value in input_defaults.items():
@@ -793,46 +704,6 @@ class TestAXUtilitiesEvent:
 
         result = AXUtilitiesEvent._get_caret_moved_event_reason(mock_event)
         assert result == getattr(TextEventReason, case["expected_reason"])
-
-    def test_get_caret_moved_event_reason_uses_caret_set_reason(self, test_context):
-        """Test why Orca set the caret determines the reason for the resulting event."""
-
-        self._setup_dependencies(test_context)
-        from orca import focus_manager
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
-        from orca.ax_utilities_role import AXUtilitiesRole
-        from orca.ax_utilities_text import AXUtilitiesText, CaretSetReason
-
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_event.source = test_context.Mock(spec=Atspi.Accessible)
-        mock_event.detail1 = 4
-        mock_focus_manager = test_context.Mock()
-        mock_focus_manager.get_active_mode_and_object_of_interest.return_value = (
-            "normal",
-            mock_event.source,
-        )
-        test_context.patch_object(focus_manager, "get_manager", return_value=mock_focus_manager)
-        test_context.patch_object(AXUtilitiesRole, "is_text_input_search", return_value=False)
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
-        test_context.patch_object(
-            AXUtilitiesEvent,
-            "_is_spin_button_descendant",
-            return_value=False,
-        )
-        last_caret_set = test_context.Mock()
-        last_caret_set.obj = mock_event.source
-        last_caret_set.offset = mock_event.detail1
-        last_caret_set.time = time.monotonic()
-        last_caret_set.reason = CaretSetReason.TEXT_SELECTION_BY_WORD
-        test_context.patch_object(
-            AXUtilitiesText,
-            "get_last_caret_set",
-            return_value=last_caret_set,
-        )
-
-        result = AXUtilitiesEvent._get_caret_moved_event_reason(mock_event)
-
-        assert result == TextEventReason.SELECTION_BY_WORD
 
     @pytest.mark.parametrize(
         "case",
@@ -957,9 +828,6 @@ class TestAXUtilitiesEvent:
             "last_event_was_redo": False,
             "last_event_was_page_switch": False,
             "last_event_was_command": False,
-            "last_event_was_escape": False,
-            "last_event_was_up_or_down": False,
-            "last_event_was_page_up_or_page_down": False,
         }
         input_defaults.update(case["input_events"])
         for attr, value in input_defaults.items():
@@ -1567,7 +1435,7 @@ class TestAXUtilitiesEvent:
         mock_focus = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_obj
 
-        _set_last_known_state(AXUtilitiesEvent, "checked", mock_obj, False)
+        AXUtilitiesEvent.LAST_KNOWN_CHECKED[hash(mock_obj)] = False
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_focus
@@ -1610,7 +1478,7 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_obj
         mock_event.any_data = "new description"
 
-        AXUtilitiesEvent._CACHE.set_description(mock_obj, "old description")
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(mock_obj)] = "old description"
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_focus
@@ -1641,7 +1509,7 @@ class TestAXUtilitiesEvent:
         mock_focus = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_obj
         mock_event.detail1 = 1
-        _set_last_known_state(AXUtilitiesEvent, "expanded", mock_obj, False)
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED[hash(mock_obj)] = False
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_focus
@@ -1670,7 +1538,7 @@ class TestAXUtilitiesEvent:
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_obj
 
-        _set_last_known_state(AXUtilitiesEvent, "indeterminate", mock_obj, False)
+        AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE[hash(mock_obj)] = False
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_obj
@@ -1697,7 +1565,7 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_frame
         mock_event.any_data = "New Window Title: user input text"
 
-        AXUtilitiesEvent._CACHE.set_name(mock_frame, "Old Window Title")
+        AXUtilitiesEvent.LAST_KNOWN_NAME[hash(mock_frame)] = "Old Window Title"
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_active_window.return_value = mock_frame
@@ -1872,36 +1740,10 @@ class TestAXUtilitiesEvent:
                 "expected_result": "UNSPECIFIED_COMMAND",
             },
             {
-                "id": "command_focus_change",
-                "test_scenario": "command_focus_change",
-                "input_manager_config": {"last_event_was_command": True},
-                "editable_state": True,
-                "focus_differs_from_source": True,
-                "source_is_focused": True,
-                "expected_result": "FOCUS_CHANGE",
-            },
-            {
-                "id": "escape",
-                "test_scenario": "escape",
-                "input_manager_config": {"last_event_was_escape": True},
-                "editable_state": True,
-                "expected_result": "UNSPECIFIED_COMMAND",
-            },
-            {
-                "id": "escape_focus_change",
-                "test_scenario": "escape_focus_change",
-                "input_manager_config": {"last_event_was_escape": True},
-                "editable_state": True,
-                "focus_differs_from_source": True,
-                "source_is_focused": True,
-                "expected_result": "FOCUS_CHANGE",
-            },
-            {
                 "id": "tab_navigation",
                 "test_scenario": "tab_navigation",
                 "input_manager_config": {"last_event_was_tab_navigation": True},
                 "editable_state": False,
-                "source_is_focused": True,
                 "expected_result": "FOCUS_CHANGE",
             },
             {
@@ -1953,14 +1795,10 @@ class TestAXUtilitiesEvent:
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_obj
 
-        if case.get("focus_differs_from_source", False):
-            focus_obj = test_context.Mock(spec=Atspi.Accessible)
-        else:
-            focus_obj = mock_obj
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_active_mode_and_object_of_interest.return_value = (
             "normal",
-            focus_obj,
+            mock_obj,
         )
         test_context.patch_object(focus_manager, "get_manager", return_value=mock_focus_manager)
 
@@ -1984,11 +1822,8 @@ class TestAXUtilitiesEvent:
             "last_event_was_redo": False,
             "last_event_was_page_switch": False,
             "last_event_was_command": False,
-            "last_event_was_escape": False,
             "last_event_was_printable_key": False,
             "last_event_was_tab_navigation": False,
-            "last_event_was_up_or_down": False,
-            "last_event_was_page_up_or_page_down": False,
         }
         default_config.update(case["input_manager_config"])
 
@@ -2005,11 +1840,6 @@ class TestAXUtilitiesEvent:
             AXUtilitiesState,
             "is_editable",
             side_effect=lambda obj: case["editable_state"],
-        )
-        test_context.patch_object(
-            AXUtilitiesState,
-            "is_focused",
-            return_value=case.get("source_is_focused", False),
         )
         test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
         if case["test_scenario"] == "ui_update":
@@ -2354,6 +2184,23 @@ class TestAXUtilitiesEvent:
         result = AXUtilitiesEvent.get_text_event_reason(mock_event)
         assert result == TextEventReason.UNSPECIFIED_COMMAND
 
+    def test_clear_all_dictionaries_direct_call(self, test_context):
+        """Test _clear_all_dictionaries method directly."""
+
+        self._setup_dependencies(test_context)
+        from orca import debug
+        from orca.ax_utilities_event import AXUtilitiesEvent
+
+        mock_print_message = test_context.Mock()
+        test_context.patch_object(debug, "print_message", new=mock_print_message)
+
+        AXUtilitiesEvent._clear_all_dictionaries("direct test")
+
+        mock_print_message.assert_called_once()
+        args = mock_print_message.call_args[0]
+        assert "AXUtilitiesEvent: Clearing local cache." in args[1]
+        assert "Reason: direct test" in args[1]
+
     @pytest.mark.parametrize(
         "case",
         [
@@ -2493,7 +2340,7 @@ class TestAXUtilitiesEvent:
         test_context.patch_object(AXUtilitiesObject, "find_ancestor", return_value=None)
 
         result = AXUtilitiesEvent._get_text_deletion_event_reason(mock_event)
-        assert result == TextEventReason.AUTO_DELETION_UNPRESENTABLE
+        assert result == TextEventReason.AUTO_DELETION
 
     def test_get_text_deletion_event_reason_children_change(self, test_context):
         """Test AXUtilitiesEvent._get_text_deletion_event_reason with children change."""
@@ -2531,317 +2378,6 @@ class TestAXUtilitiesEvent:
 
         result = AXUtilitiesEvent._get_text_deletion_event_reason(mock_event)
         assert result == TextEventReason.CHILDREN_CHANGE
-
-    def test_get_text_insertion_event_reason_children_change_in_editable(self, test_context):
-        """Test _get_text_insertion_event_reason with embedded objects inserted due to a command."""
-
-        self._setup_dependencies(test_context)
-        from orca import input_event_manager
-        from orca.ax_object import AXObject
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
-        from orca.ax_utilities_role import AXUtilitiesRole
-        from orca.ax_utilities_state import AXUtilitiesState
-
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_event.source = mock_obj
-        mock_event.any_data = "￼￼￼"
-        mock_event.type = "object:text-changed:insert"
-
-        mock_input_manager = test_context.Mock()
-        mock_input_manager.last_event_was_page_switch.return_value = False
-        mock_input_manager.last_event_was_command.return_value = True
-        test_context.patch_object(
-            input_event_manager,
-            "get_manager",
-            return_value=mock_input_manager,
-        )
-
-        test_context.patch_object(AXObject, "get_role", return_value=Atspi.Role.ENTRY)
-        test_context.patch_object(
-            AXUtilitiesRole,
-            "get_text_ui_roles",
-            return_value=[Atspi.Role.LABEL],
-        )
-        test_context.patch_object(AXUtilitiesState, "is_editable", return_value=True)
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
-
-        result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
-        assert result == TextEventReason.CHILDREN_CHANGE
-
-    @pytest.mark.parametrize(
-        "case",
-        [
-            {
-                "id": "multiline_after_line_navigation_is_a_repaint",
-                "any_data": "4\nline 5\nline 6",
-                "was_caret_nav": True,
-                "was_up_or_down": True,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": False,
-                "expected": "AUTO_DELETION_UNPRESENTABLE",
-            },
-            {
-                "id": "multiline_after_file_boundary_navigation_is_a_repaint",
-                "any_data": "58\nline 59\nline 60",
-                "was_caret_nav": True,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "AUTO_DELETION_UNPRESENTABLE",
-            },
-            {
-                "id": "multiline_after_ctrl_tab_is_a_repaint",
-                "any_data": "line 1\nline 2\nline 3\n",
-                "was_caret_nav": False,
-                "was_up_or_down": False,
-                "was_ctrl_tab": True,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "AUTO_DELETION_UNPRESENTABLE",
-            },
-            {
-                "id": "single_line_is_not_a_repaint",
-                "any_data": "value",
-                "was_caret_nav": True,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "UNSPECIFIED_COMMAND",
-            },
-        ],
-        ids=lambda case: case["id"],
-    )
-    def test_get_text_deletion_event_reason_caret_navigation(self, test_context, case):
-        """Test _get_text_deletion_event_reason for deletions which follow caret navigation."""
-
-        self._setup_dependencies(test_context)
-        from orca import input_event_manager
-        from orca.ax_object import AXObject
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
-        from orca.ax_utilities_role import AXUtilitiesRole
-        from orca.ax_utilities_state import AXUtilitiesState
-        from orca.ax_utilities_text import AXUtilitiesText
-
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_event.source = mock_obj
-        mock_event.any_data = case["any_data"]
-        mock_event.type = "object:text-changed:delete"
-
-        mock_input_manager = test_context.Mock()
-        for predicate in (
-            "last_event_was_page_switch",
-            "last_event_was_backspace",
-            "last_event_was_delete",
-            "last_event_was_cut",
-            "last_event_was_paste",
-            "last_event_was_undo",
-            "last_event_was_redo",
-            "last_event_was_printable_key",
-            "last_event_was_page_up_or_page_down",
-        ):
-            getattr(mock_input_manager, predicate).return_value = False
-        mock_input_manager.last_event_was_not_in_current_object.return_value = case[
-            "was_not_in_current_object"
-        ]
-        mock_input_manager.last_event_was_caret_navigation.return_value = case["was_caret_nav"]
-        mock_input_manager.last_event_was_ctrl_tab.return_value = case["was_ctrl_tab"]
-        mock_input_manager.last_event_was_command.return_value = case["was_command"]
-        mock_input_manager.last_event_was_up_or_down.return_value = case["was_up_or_down"]
-        test_context.patch_object(
-            input_event_manager, "get_manager", return_value=mock_input_manager
-        )
-
-        test_context.patch_object(AXObject, "get_role", return_value=Atspi.Role.ENTRY)
-        test_context.patch_object(
-            AXUtilitiesRole, "get_text_ui_roles", return_value=[Atspi.Role.LABEL]
-        )
-        test_context.patch_object(AXUtilitiesState, "is_editable", return_value=True)
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
-        test_context.patch_object(
-            AXUtilitiesText, "get_cached_selected_text", return_value=("", 0, 0)
-        )
-        test_context.patch_object(
-            AXUtilitiesEvent, "_is_spin_button_descendant", return_value=False
-        )
-
-        result = AXUtilitiesEvent._get_text_deletion_event_reason(mock_event)
-        assert result == getattr(TextEventReason, case["expected"])
-
-    @pytest.mark.parametrize(
-        "case",
-        [
-            {
-                "id": "multiline_after_line_navigation_is_a_repaint",
-                "any_data": "4\nline 5\nline 6",
-                "is_single_line": False,
-                "was_caret_nav": True,
-                "was_up_or_down": True,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": False,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-            {
-                "id": "multiline_after_file_boundary_navigation_is_a_repaint",
-                "any_data": "58\nline 59\nline 60",
-                "is_single_line": False,
-                "was_caret_nav": True,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-            {
-                "id": "partial_line_after_file_boundary_navigation_is_a_repaint",
-                "any_data": "7",
-                "is_single_line": False,
-                "was_caret_nav": True,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-            {
-                "id": "multiline_after_ctrl_tab_is_a_repaint",
-                "any_data": "foo\nbar\nbaz\n",
-                "is_single_line": False,
-                "was_caret_nav": False,
-                "was_up_or_down": False,
-                "was_ctrl_tab": True,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-            {
-                "id": "tab_typed_with_ctrl_tab_is_still_presented",
-                "any_data": "\t",
-                "is_single_line": False,
-                "was_caret_nav": False,
-                "was_up_or_down": False,
-                "was_ctrl_tab": True,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "UNSPECIFIED_COMMAND",
-            },
-            {
-                "id": "multiline_typed_in_another_object_is_unpresentable",
-                "any_data": "49\nline 50\nline 51",
-                "is_single_line": False,
-                "was_caret_nav": False,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": True,
-                "was_command": False,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-            {
-                "id": "partial_line_typed_in_another_object_is_unpresentable",
-                "any_data": "7",
-                "is_single_line": False,
-                "was_caret_nav": False,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": True,
-                "was_command": False,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-            {
-                "id": "spin_button_value_change_is_not_a_repaint",
-                "any_data": "100",
-                "is_single_line": False,
-                "is_spin_button": True,
-                "was_caret_nav": True,
-                "was_up_or_down": False,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": True,
-                "expected": "UNSPECIFIED_COMMAND",
-            },
-            {
-                "id": "single_line_is_an_autocompletion",
-                "any_data": "completion",
-                "is_single_line": True,
-                "was_caret_nav": True,
-                "was_up_or_down": True,
-                "was_ctrl_tab": False,
-                "was_not_in_current_object": False,
-                "was_command": False,
-                "expected": "AUTO_INSERTION_PRESENTABLE",
-            },
-        ],
-        ids=lambda case: case["id"],
-    )
-    def test_get_text_insertion_event_reason_caret_navigation(self, test_context, case):
-        """Test _get_text_insertion_event_reason for insertions which follow caret navigation."""
-
-        self._setup_dependencies(test_context)
-        from orca import input_event_manager
-        from orca.ax_object import AXObject
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
-        from orca.ax_utilities_role import AXUtilitiesRole
-        from orca.ax_utilities_state import AXUtilitiesState
-        from orca.ax_utilities_text import AXUtilitiesText
-
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_event.source = mock_obj
-        mock_event.any_data = case["any_data"]
-        mock_event.type = "object:text-changed:insert"
-
-        mock_input_manager = test_context.Mock()
-        for predicate in (
-            "last_event_was_page_switch",
-            "last_event_was_backspace",
-            "last_event_was_delete",
-            "last_event_was_cut",
-            "last_event_was_paste",
-            "last_event_was_undo",
-            "last_event_was_redo",
-            "last_event_was_space",
-            "last_event_was_tab",
-            "last_event_was_return",
-            "last_event_was_printable_key",
-            "last_event_was_middle_click",
-            "last_event_was_middle_release",
-            "last_event_was_page_up_or_page_down",
-        ):
-            getattr(mock_input_manager, predicate).return_value = False
-        mock_input_manager.last_event_was_not_in_current_object.return_value = case[
-            "was_not_in_current_object"
-        ]
-        mock_input_manager.last_event_was_caret_navigation.return_value = case["was_caret_nav"]
-        mock_input_manager.last_event_was_ctrl_tab.return_value = case["was_ctrl_tab"]
-        mock_input_manager.last_event_was_command.return_value = case["was_command"]
-        mock_input_manager.last_event_was_up_or_down.return_value = case["was_up_or_down"]
-        test_context.patch_object(
-            input_event_manager, "get_manager", return_value=mock_input_manager
-        )
-
-        test_context.patch_object(AXObject, "get_role", return_value=Atspi.Role.ENTRY)
-        test_context.patch_object(
-            AXUtilitiesRole, "get_text_ui_roles", return_value=[Atspi.Role.LABEL]
-        )
-        test_context.patch_object(AXUtilitiesState, "is_editable", return_value=True)
-        test_context.patch_object(
-            AXUtilitiesState, "is_single_line", return_value=case["is_single_line"]
-        )
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
-        test_context.patch_object(AXUtilitiesText, "get_selected_text", return_value=("", 0, 0))
-        test_context.patch_object(
-            AXUtilitiesEvent,
-            "_is_spin_button_descendant",
-            return_value=case.get("is_spin_button", False),
-        )
-
-        result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
-        assert result == getattr(TextEventReason, case["expected"])
 
     def test_get_text_insertion_event_reason_selected_text_restoration(self, test_context):
         """Test AXUtilitiesEvent._get_text_insertion_event_reason with selected text restoration."""
@@ -3013,141 +2549,6 @@ class TestAXUtilitiesEvent:
         result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
         assert result == TextEventReason.AUTO_INSERTION_UNPRESENTABLE
 
-    @pytest.mark.parametrize(
-        "case",
-        [
-            {
-                "id": "caret_at_end_of_inserted_text_was_typed_by_the_user",
-                "caret_offset": 14,
-                "expected": "AUTO_INSERTION_PRESENTABLE",
-            },
-            {
-                "id": "caret_elsewhere_was_not_typed_by_the_user",
-                "caret_offset": 1,
-                "expected": "AUTO_INSERTION_UNPRESENTABLE",
-            },
-        ],
-        ids=lambda case: case["id"],
-    )
-    def test_get_text_insertion_event_reason_return_caret_location(self, test_context, case):
-        """Test _get_text_insertion_event_reason for the caret's location after Return."""
-
-        self._setup_dependencies(test_context)
-        from orca import input_event_manager
-        from orca.ax_object import AXObject
-        from orca.ax_text import AXText
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
-        from orca.ax_utilities_role import AXUtilitiesRole
-        from orca.ax_utilities_state import AXUtilitiesState
-        from orca.ax_utilities_text import AXUtilitiesText
-
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_event.source = mock_obj
-        mock_event.any_data = "\nline 1\nline 2"
-        mock_event.detail1 = 0
-        mock_event.detail2 = 14
-        mock_event.type = "object:text-changed:insert"
-
-        mock_input_manager = test_context.Mock()
-        for predicate in (
-            "last_event_was_page_switch",
-            "last_event_was_backspace",
-            "last_event_was_delete",
-            "last_event_was_cut",
-            "last_event_was_paste",
-            "last_event_was_undo",
-            "last_event_was_redo",
-            "last_event_was_command",
-            "last_event_was_space",
-            "last_event_was_tab",
-            "last_event_was_printable_key",
-            "last_event_was_caret_navigation",
-            "last_event_was_ctrl_tab",
-            "last_event_was_not_in_current_object",
-        ):
-            getattr(mock_input_manager, predicate).return_value = False
-        mock_input_manager.last_event_was_return.return_value = True
-        test_context.patch_object(
-            input_event_manager, "get_manager", return_value=mock_input_manager
-        )
-
-        test_context.patch_object(AXObject, "get_role", return_value=Atspi.Role.ENTRY)
-        test_context.patch_object(
-            AXUtilitiesRole, "get_text_ui_roles", return_value=[Atspi.Role.LABEL]
-        )
-        test_context.patch_object(AXUtilitiesState, "is_editable", return_value=True)
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
-        test_context.patch_object(AXUtilitiesState, "is_single_line", return_value=False)
-        test_context.patch_object(AXUtilitiesText, "get_selected_text", return_value=("", 0, 0))
-        test_context.patch_object(AXText, "get_caret_offset", return_value=case["caret_offset"])
-
-        result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
-        assert result == getattr(TextEventReason, case["expected"])
-
-    @pytest.mark.parametrize(
-        "caret_offset",
-        [14, 1],
-        ids=["caret_at_end_of_this_events_range", "caret_no_longer_at_this_events_range"],
-    )
-    def test_get_text_insertion_event_reason_return_terminal_ignores_caret(
-        self, test_context, caret_offset
-    ):
-        """Test that terminal Return output is presented regardless of caret offset."""
-
-        self._setup_dependencies(test_context)
-        from orca import input_event_manager
-        from orca.ax_object import AXObject
-        from orca.ax_text import AXText
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
-        from orca.ax_utilities_role import AXUtilitiesRole
-        from orca.ax_utilities_state import AXUtilitiesState
-        from orca.ax_utilities_text import AXUtilitiesText
-
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_event.source = mock_obj
-        mock_event.any_data = "\nline 1\nline 2"
-        mock_event.detail1 = 0
-        mock_event.detail2 = 14
-        mock_event.type = "object:text-changed:insert"
-
-        mock_input_manager = test_context.Mock()
-        for predicate in (
-            "last_event_was_page_switch",
-            "last_event_was_backspace",
-            "last_event_was_delete",
-            "last_event_was_cut",
-            "last_event_was_paste",
-            "last_event_was_undo",
-            "last_event_was_redo",
-            "last_event_was_command",
-            "last_event_was_space",
-            "last_event_was_tab",
-            "last_event_was_printable_key",
-            "last_event_was_caret_navigation",
-            "last_event_was_ctrl_tab",
-            "last_event_was_not_in_current_object",
-        ):
-            getattr(mock_input_manager, predicate).return_value = False
-        mock_input_manager.last_event_was_return.return_value = True
-        test_context.patch_object(
-            input_event_manager, "get_manager", return_value=mock_input_manager
-        )
-
-        test_context.patch_object(AXObject, "get_role", return_value=Atspi.Role.TERMINAL)
-        test_context.patch_object(
-            AXUtilitiesRole, "get_text_ui_roles", return_value=[Atspi.Role.LABEL]
-        )
-        test_context.patch_object(AXUtilitiesState, "is_editable", return_value=False)
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=True)
-        test_context.patch_object(AXUtilitiesState, "is_single_line", return_value=False)
-        test_context.patch_object(AXUtilitiesText, "get_selected_text", return_value=("", 0, 0))
-        test_context.patch_object(AXText, "get_caret_offset", return_value=caret_offset)
-
-        result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
-        assert result == TextEventReason.AUTO_INSERTION_PRESENTABLE
-
     def test_get_text_insertion_event_reason_middle_click(self, test_context):
         """Test AXUtilitiesEvent._get_text_insertion_event_reason with middle click."""
 
@@ -3202,23 +2603,16 @@ class TestAXUtilitiesEvent:
         result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
         assert result == TextEventReason.MOUSE_MIDDLE_BUTTON
 
-    def test_manager_clear_cache_now_clears_event_cache(self, test_context):
-        """Test routine manager clearing removes cached event values."""
+    def test_clear_cache_now_with_reason(self, test_context):
+        """Test AXUtilitiesEvent.clear_cache_now with reason parameter."""
 
         self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-        from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
+        from orca.ax_utilities_event import AXUtilitiesEvent
 
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        AXUtilitiesEvent._CACHE.set_name(mock_obj, "name")
-        AXUtilitiesEvent._CACHE.set_description(mock_obj, "description")
-        AXUtilitiesEvent._CACHE.set_text_event_reason(mock_event, TextEventReason.TYPING)
-
-        ax_cache_manager.get_manager().clear_cache_now("test reason")
-        assert AXUtilitiesEvent._CACHE.get_name(mock_obj) is None
-        assert AXUtilitiesEvent._CACHE.get_description(mock_obj) is None
-        assert AXUtilitiesEvent._CACHE.get_text_event_reason(mock_event) is None
+        AXUtilitiesEvent.clear_cache_now("test reason")
+        assert len(AXUtilitiesEvent.LAST_KNOWN_NAME) == 0
+        assert len(AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION) == 0
+        assert len(AXUtilitiesEvent.TEXT_EVENT_REASON) == 0
 
     def test_get_text_deletion_event_reason_page_switch(self, test_context):
         """Test _get_text_deletion_event_reason with page switch scenario."""
@@ -3480,7 +2874,7 @@ class TestAXUtilitiesEvent:
         """Test _get_text_selection_changed_event_reason with various scenarios."""
 
         self._setup_dependencies(test_context)
-        from orca import focus_manager, input_event_manager, text_selection_manager
+        from orca import focus_manager, input_event_manager
         from orca.ax_utilities_event import AXUtilitiesEvent, TextEventReason
         from orca.ax_utilities_role import AXUtilitiesRole
         from orca.ax_utilities_state import AXUtilitiesState
@@ -3513,14 +2907,6 @@ class TestAXUtilitiesEvent:
         test_context.patch_object(AXUtilitiesState, "is_editable", return_value=False)
         test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
 
-        selection_manager = text_selection_manager.get_manager.return_value
-        selection_command = test_context.Mock()
-        selection_command.should_notify_user.return_value = False
-        selection_manager.get_current_selection_command.return_value = selection_command
-        result = AXUtilitiesEvent._get_text_selection_changed_event_reason(mock_event)
-        assert result == TextEventReason.SELECTION_UNPRESENTABLE
-
-        selection_manager.get_current_selection_command.return_value = None
         result = AXUtilitiesEvent._get_text_selection_changed_event_reason(mock_event)
         assert result == TextEventReason.SEARCH_PRESENTABLE
 
@@ -3574,22 +2960,6 @@ class TestAXUtilitiesEvent:
         mock_input_manager.last_event_was_file_boundary_navigation.return_value = False
         result = AXUtilitiesEvent._get_text_selection_changed_event_reason(mock_event)
         assert result == TextEventReason.UNSPECIFIED_SELECTION
-
-        mock_input_manager.last_event_was_caret_selection.return_value = False
-        selection_command.should_notify_user.return_value = True
-        from orca.ax_utilities_text import AXUtilitiesText, CaretSetReason
-
-        last_caret_set = test_context.Mock()
-        last_caret_set.reason = CaretSetReason.TEXT_SELECTION_BY_CHARACTER
-        test_context.patch_object(
-            AXUtilitiesText,
-            "get_last_caret_set",
-            return_value=last_caret_set,
-        )
-        selection_manager.get_current_selection_command.return_value = selection_command
-        result = AXUtilitiesEvent._get_text_selection_changed_event_reason(mock_event)
-        assert result == TextEventReason.SELECTION_BY_CHARACTER
-        selection_manager.get_current_selection_command.assert_called_with(mock_event.source)
 
     def test_get_text_selection_changed_event_reason_caret_navigation(self, test_context):
         """Test _get_text_selection_changed_event_reason caret navigation scenarios."""
@@ -3859,7 +3229,7 @@ class TestAXUtilitiesEvent:
         mock_focus_manager.get_locus_of_focus.return_value = mock_focus
         test_context.patch_object(focus_manager, "get_manager", return_value=mock_focus_manager)
         test_context.patch_object(AXUtilitiesState, "is_checked", return_value=True)
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_CHECKED.clear()
 
         if case["test_scenario"] == "ancestor_not_list_tree_item":
             test_context.patch_object(AXUtilitiesObject, "is_ancestor", return_value=True)
@@ -3906,7 +3276,7 @@ class TestAXUtilitiesEvent:
         mock_source = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_source
         mock_event.any_data = case["description_data"]
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION.clear()
 
         test_context.patch_object(
             AXUtilitiesState,
@@ -3993,7 +3363,7 @@ class TestAXUtilitiesEvent:
         mock_source = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_source
         mock_event.detail1 = case["detail1"]
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED.clear()
 
         test_context.patch_object(AXUtilitiesState, "is_expanded", return_value=True)
         mock_focus = test_context.Mock(spec=Atspi.Accessible)
@@ -4053,7 +3423,8 @@ class TestAXUtilitiesEvent:
         mock_source = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_source
 
-        self._clear_event_cache()
+        cache_name = f"LAST_KNOWN_{case['change_type'].upper()}"
+        getattr(AXUtilitiesEvent, cache_name).clear()
 
         test_context.patch_object(AXUtilitiesState, case["state_method"], return_value=True)
 
@@ -4080,7 +3451,7 @@ class TestAXUtilitiesEvent:
         mock_source = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_source
         mock_event.any_data = "new name"
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_NAME.clear()
 
         mock_event.any_data = ""
         result = AXUtilitiesEvent.is_presentable_name_change(mock_event)
@@ -4145,7 +3516,8 @@ class TestAXUtilitiesEvent:
         mock_source = test_context.Mock(spec=Atspi.Accessible)
         mock_event.source = mock_source
 
-        self._clear_event_cache()
+        cache_name = f"LAST_KNOWN_{case['change_type'].upper()}"
+        getattr(AXUtilitiesEvent, cache_name).clear()
 
         test_context.patch_object(AXUtilitiesState, case["state_method"], return_value=True)
 
@@ -4264,20 +3636,22 @@ class TestAXUtilitiesEvent:
         result = AXUtilitiesEvent._get_text_insertion_event_reason(mock_event)
         assert result == TextEventReason.TYPING
 
-    def test_ignore_name_changes_for_cleared_by_manager_clear_cache_now(self, test_context):
-        """Test routine manager clearing removes ignored name-change sources."""
+    def test_ignore_name_changes_for_cleared_by_clear_all(self, test_context):
+        """Test that IGNORE_NAME_CHANGES_FOR is cleared by _clear_all_dictionaries."""
 
         self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
+        from orca import debug
         from orca.ax_utilities_event import AXUtilitiesEvent
 
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        AXUtilitiesEvent._CACHE.ignore_name_changes_for(mock_obj)
-        assert AXUtilitiesEvent._CACHE.is_ignoring_name_changes_for(mock_obj) is True
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.append(hash(mock_obj))
+        assert len(AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR) == 1
 
-        ax_cache_manager.get_manager().clear_cache_now("test clear")
+        test_context.patch_object(debug, "print_message", new=test_context.Mock())
 
-        assert AXUtilitiesEvent._CACHE.is_ignoring_name_changes_for(mock_obj) is False
+        AXUtilitiesEvent._clear_all_dictionaries("test clear")
+
+        assert len(AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR) == 0
 
     def test_is_presentable_name_change_returns_false_when_source_in_ignore_list(
         self,
@@ -4293,8 +3667,8 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_source
         mock_event.any_data = "new name"
 
-        self._clear_event_cache()
-        AXUtilitiesEvent._CACHE.ignore_name_changes_for(mock_source)
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.clear()
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.append(hash(mock_source))
 
         result = AXUtilitiesEvent.is_presentable_name_change(mock_event)
         assert result is False
@@ -4316,7 +3690,8 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_source
         mock_event.any_data = "Downloading... 50%"
 
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_NAME.clear()
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.clear()
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_source
@@ -4332,7 +3707,7 @@ class TestAXUtilitiesEvent:
 
         result = AXUtilitiesEvent.is_presentable_name_change(mock_event)
         assert result is False
-        assert AXUtilitiesEvent._CACHE.is_ignoring_name_changes_for(mock_source) is True
+        assert hash(mock_source) in AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR
 
     def test_is_presentable_name_change_list_item_without_progress_bar(self, test_context):
         """Test is_presentable_name_change returns True for list item without progress bar."""
@@ -4350,7 +3725,8 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_source
         mock_event.any_data = "List item name"
 
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_NAME.clear()
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.clear()
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_source
@@ -4364,7 +3740,7 @@ class TestAXUtilitiesEvent:
 
         result = AXUtilitiesEvent.is_presentable_name_change(mock_event)
         assert result is True
-        assert AXUtilitiesEvent._CACHE.is_ignoring_name_changes_for(mock_source) is False
+        assert hash(mock_source) not in AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR
 
     def test_is_presentable_name_change_subsequent_calls_ignored(self, test_context):
         """Test that subsequent name changes are ignored after source added to ignore list."""
@@ -4383,7 +3759,8 @@ class TestAXUtilitiesEvent:
         mock_event.source = mock_source
         mock_event.any_data = "Downloading... 50%"
 
-        self._clear_event_cache()
+        AXUtilitiesEvent.LAST_KNOWN_NAME.clear()
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.clear()
 
         mock_focus_manager = test_context.Mock()
         mock_focus_manager.get_locus_of_focus.return_value = mock_source
@@ -4399,7 +3776,7 @@ class TestAXUtilitiesEvent:
 
         result1 = AXUtilitiesEvent.is_presentable_name_change(mock_event)
         assert result1 is False
-        assert AXUtilitiesEvent._CACHE.is_ignoring_name_changes_for(mock_source) is True
+        assert hash(mock_source) in AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR
 
         mock_event.any_data = "Downloading... 75%"
         result2 = AXUtilitiesEvent.is_presentable_name_change(mock_event)

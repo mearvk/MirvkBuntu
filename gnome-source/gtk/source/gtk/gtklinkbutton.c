@@ -24,12 +24,9 @@
 /**
  * GtkLinkButton:
  *
- * A button with a hyperlink.
+ * A `GtkLinkButton` is a button with a hyperlink.
  *
- * <picture>
- *   <source srcset="link-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkLinkButton" src="link-button.png">
- * </picture>
+ * ![An example GtkLinkButton](link-button.png)
  *
  * It is useful to show quick links to resources.
  *
@@ -45,19 +42,6 @@
  * [signal@Gtk.LinkButton::activate-link] signal and returning %TRUE from
  * the signal handler.
  *
- * # Shortcuts and Gestures
- *
- * `GtkLinkButton` supports the following keyboard shortcuts:
- *
- * - <kbd>Shift</kbd>+<kbd>F10</kbd> or <kbd>Menu</kbd> opens the context menu.
- *
- * # Actions
- *
- * `GtkLinkButton` defines a set of built-in actions:
- *
- * - `clipboard.copy` copies the url to the clipboard.
- * - `menu.popup` opens the context menu.
- *
  * # CSS nodes
  *
  * `GtkLinkButton` has a single CSS node with name button. To differentiate
@@ -65,7 +49,7 @@
  *
  * # Accessibility
  *
- * `GtkLinkButton` uses the [enum@Gtk.AccessibleRole.link] role.
+ * `GtkLinkButton` uses the %GTK_ACCESSIBLE_ROLE_LINK role.
  */
 
 #include "config.h"
@@ -81,7 +65,6 @@
 #include "gtkmarshalers.h"
 #include "gtkpopovermenu.h"
 #include "gtkprivate.h"
-#include "gtkshortcuttrigger.h"
 #include "gtksizerequest.h"
 #include "gtktooltip.h"
 #include "gtkurilauncher.h"
@@ -115,11 +98,8 @@ enum
 {
   PROP_0,
   PROP_URI,
-  PROP_VISITED,
-  N_PROPS
+  PROP_VISITED
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -180,7 +160,6 @@ gtk_link_button_class_init (GtkLinkButtonClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
   GtkButtonClass *button_class = GTK_BUTTON_CLASS (klass);
-  GtkShortcut *shortcut;
 
   gobject_class->set_property = gtk_link_button_set_property;
   gobject_class->get_property = gtk_link_button_get_property;
@@ -191,26 +170,28 @@ gtk_link_button_class_init (GtkLinkButtonClass *klass)
   klass->activate_link = gtk_link_button_activate_link;
 
   /**
-   * GtkLinkButton:uri:
+   * GtkLinkButton:uri: (attributes org.gtk.Property.get=gtk_link_button_get_uri org.gtk.Property.set=gtk_link_button_set_uri)
    *
    * The URI bound to this button.
    */
-  props[PROP_URI] = g_param_spec_string ("uri", NULL, NULL,
-                                         NULL,
-                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+                                   PROP_URI,
+                                   g_param_spec_string ("uri", NULL, NULL,
+                                                        NULL,
+                                                        GTK_PARAM_READWRITE));
 
   /**
-   * GtkLinkButton:visited:
+   * GtkLinkButton:visited: (attributes org.gtk.Property.get=gtk_link_button_get_visited org.gtk.Property.set=gtk_link_button_set_visited)
    *
    * The 'visited' state of this button.
    *
    * A visited link is drawn in a different color.
    */
-  props[PROP_VISITED] = g_param_spec_boolean ("visited", NULL, NULL,
-                                              FALSE,
-                                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+                                   PROP_VISITED,
+                                   g_param_spec_boolean ("visited", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkLinkButton::activate-link:
@@ -258,10 +239,14 @@ gtk_link_button_class_init (GtkLinkButtonClass *klass)
    */
   gtk_widget_class_install_action (widget_class, "menu.popup", NULL, gtk_link_button_popup_menu);
 
-  shortcut = gtk_shortcut_new (gtk_shortcut_trigger_create_for_menu (),
-                               gtk_named_action_new ("menu.popup"));
-  gtk_widget_class_add_shortcut (widget_class, shortcut);
-  g_object_unref (shortcut);
+  gtk_widget_class_add_binding_action (widget_class,
+                                       GDK_KEY_F10, GDK_SHIFT_MASK,
+                                       "menu.popup",
+                                       NULL);
+  gtk_widget_class_add_binding_action (widget_class,
+                                       GDK_KEY_Menu, 0,
+                                       "menu.popup",
+                                       NULL);
 }
 
 static GMenuModel *
@@ -296,7 +281,7 @@ struct _GtkLinkContentClass
   GdkContentProviderClass parent_class;
 };
 
-GType gtk_link_content_get_type (void);
+GType gtk_link_content_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE (GtkLinkContent, gtk_link_content, GDK_TYPE_CONTENT_PROVIDER)
 
@@ -672,7 +657,7 @@ gtk_link_button_query_tooltip_cb (GtkWidget    *widget,
 }
 
 /**
- * gtk_link_button_set_uri:
+ * gtk_link_button_set_uri: (attributes org.gtk.Method.set_property=uri)
  * @link_button: a `GtkLinkButton`
  * @uri: a valid URI
  *
@@ -690,13 +675,13 @@ gtk_link_button_set_uri (GtkLinkButton *link_button,
   g_free (link_button->uri);
   link_button->uri = g_strdup (uri);
 
-  g_object_notify_by_pspec (G_OBJECT (link_button), props[PROP_URI]);
+  g_object_notify (G_OBJECT (link_button), "uri");
 
   gtk_link_button_set_visited (link_button, FALSE);
 }
 
 /**
- * gtk_link_button_get_uri:
+ * gtk_link_button_get_uri: (attributes org.gtk.Method.get_property=uri)
  * @link_button: a `GtkLinkButton`
  *
  * Retrieves the URI of the `GtkLinkButton`.
@@ -713,7 +698,7 @@ gtk_link_button_get_uri (GtkLinkButton *link_button)
 }
 
 /**
- * gtk_link_button_set_visited:
+ * gtk_link_button_set_visited: (attributes org.gtk.Method.set_property=visited)
  * @link_button: a `GtkLinkButton`
  * @visited: the new “visited” state
  *
@@ -748,12 +733,12 @@ gtk_link_button_set_visited (GtkLinkButton *link_button,
           gtk_widget_set_state_flags (GTK_WIDGET (link_button), GTK_STATE_FLAG_LINK, FALSE);
         }
 
-      g_object_notify_by_pspec (G_OBJECT (link_button), props[PROP_VISITED]);
+      g_object_notify (G_OBJECT (link_button), "visited");
     }
 }
 
 /**
- * gtk_link_button_get_visited:
+ * gtk_link_button_get_visited: (attributes org.gtk.Method.get_property=visited)
  * @link_button: a `GtkLinkButton`
  *
  * Retrieves the “visited” state of the `GtkLinkButton`.

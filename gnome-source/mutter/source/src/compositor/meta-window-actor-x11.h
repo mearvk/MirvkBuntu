@@ -20,8 +20,6 @@
 
 #pragma once
 
-#include <X11/extensions/Xdamage.h>
-
 #include "compositor/meta-window-actor-private.h"
 
 #define META_TYPE_WINDOW_ACTOR_X11 (meta_window_actor_x11_get_type())
@@ -30,4 +28,15 @@ G_DECLARE_FINAL_TYPE (MetaWindowActorX11,
                       META, WINDOW_ACTOR_X11,
                       MetaWindowActor)
 
+void meta_window_actor_x11_process_x11_damage (MetaWindowActorX11 *actor_x11,
+                                               XDamageNotifyEvent *event);
+
+gboolean meta_window_actor_x11_should_unredirect (MetaWindowActorX11 *actor_x11);
+
+void meta_window_actor_x11_set_unredirected (MetaWindowActorX11 *actor_x11,
+                                             gboolean            unredirected);
+
 void meta_window_actor_x11_update_shape (MetaWindowActorX11 *actor_x11);
+
+void meta_window_actor_x11_process_damage (MetaWindowActorX11 *actor_x11,
+                                           XDamageNotifyEvent *event);

@@ -21,386 +21,141 @@
 #include "gdkconfig.h"
 
 #include "gdkcairocontext-win32.h"
-#include "gdkdisplay-win32.h"
 #include "gdkprivate-win32.h"
+#include "gdksurface-win32.h"
 #include "gdkwin32misc.h"
 
 #include <cairo-win32.h>
 
-struct _GdkWin32CairoContext
-{
-  GdkCairoContext parent_instance;
-
-  IDXGISwapChain3 *swap_chain;
-  ID3D11Texture2D *staging_texture;
-
-  /* only set while drawing */
-  cairo_surface_t *cairo_surface;
-};
-struct _GdkWin32CairoContextClass
-{
-  GdkCairoContextClass parent_class;
-};
-
+#include <windows.h>
 
 G_DEFINE_TYPE (GdkWin32CairoContext, gdk_win32_cairo_context, GDK_TYPE_CAIRO_CONTEXT)
 
-static void
-gdk_win32_cairo_context_ensure_staging_texture (GdkWin32CairoContext *self)
+static cairo_surface_t *
+create_cairo_surface_for_surface (GdkSurface *surface,
+                                  int         scale)
 {
-  GdkDrawContext *context = GDK_DRAW_CONTEXT (self);
-  GdkWin32Display *display;
-  guint width, height;
-
-  if (self->staging_texture)
-    return;
-  
-  display = GDK_WIN32_DISPLAY (gdk_draw_context_get_display (context));
- 
-  gdk_draw_context_get_buffer_size (context, &width, &height);
-  
-  hr_warn (ID3D11Device_CreateTexture2D (gdk_win32_display_get_d3d11_device (display),
-                                         (&(D3D11_TEXTURE2D_DESC) {
-                                             .Width = width,
-                                             .Height = height,
-                                             .MipLevels = 1,
-                                             .ArraySize = 1,
-                                             .Format = DXGI_FORMAT_B8G8R8A8_UNORM,
-                                             .SampleDesc = {
-                                                 .Count = 1,
-                                                 .Quality = 0
-                                             },
-                                             .Usage = D3D11_USAGE_STAGING,
-                                             .BindFlags = 0,
-                                             .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE | D3D11_CPU_ACCESS_READ,
-                                             .MiscFlags = 0,
-                                         }),
-                                         NULL,
-                                         &self->staging_texture));
-}
-
-static gboolean
-gdk_win32_cairo_context_surface_attach (GdkDrawContext  *context,
-                                        GError         **error)
-{
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (context);
-  GdkWin32Surface *surface;
-  GdkWin32Display *display;
-  ID3D11Device *d3d11_device;
-  IDXGISwapChain1 *swap_chain;
-  guint width, height;
-
-  display = GDK_WIN32_DISPLAY (gdk_draw_context_get_display (context));
-  surface = GDK_WIN32_SURFACE (gdk_draw_context_get_surface (context));
-  d3d11_device = gdk_win32_display_get_d3d11_device (display);
-  if (d3d11_device == NULL ||
-      !gdk_win32_display_get_dcomp_device (display))
-    return TRUE; /* We'll fallback */
-
-  gdk_draw_context_get_buffer_size (context, &width, &height);
-
-  hr_warn (IDXGIFactory4_CreateSwapChainForComposition (gdk_win32_display_get_dxgi_factory (display),
-                                                        (IUnknown *) d3d11_device,
-                                                        (&(DXGI_SWAP_CHAIN_DESC1) {
-                                                            .Width = width,
-                                                            .Height = height,
-                                                            .Format = DXGI_FORMAT_B8G8R8A8_UNORM,
-                                                            .Stereo = false,
-                                                            .SampleDesc = (DXGI_SAMPLE_DESC) {
-                                                                .Count = 1,
-                                                                .Quality = 0,
-                                                            },
-                                                            .BufferUsage = 0,
-                                                            .BufferCount = 2,
-                                                            .Scaling = DXGI_SCALING_STRETCH,
-                                                            .SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
-                                                            .AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED,
-                                                            .Flags = 0,
-                                                        }),
-                                                        NULL,
-                                                        &swap_chain));
-
-  hr_warn (IDXGISwapChain1_QueryInterface (swap_chain, &IID_IDXGISwapChain3, (void **) &self->swap_chain));
-  gdk_win32_com_clear (&swap_chain);
-
-  gdk_win32_surface_set_dcomp_content (GDK_WIN32_SURFACE (surface), (IUnknown *) self->swap_chain);
-
-  return TRUE;
-}
-
-static void
-gdk_win32_cairo_context_surface_detach (GdkDrawContext *context)
-{
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (context);
-  GdkSurface *surface = gdk_draw_context_get_surface (context);
-  GdkWin32Display *display = GDK_WIN32_DISPLAY (gdk_draw_context_get_display (context));
-
-  if (!GDK_SURFACE_DESTROYED (surface) && gdk_win32_display_get_dcomp_device (display))
-    gdk_win32_surface_set_dcomp_content (GDK_WIN32_SURFACE (surface), NULL);
-
-  gdk_win32_com_clear (&self->staging_texture);
-  gdk_win32_com_clear (&self->swap_chain);
-}
-
-static void
-gdk_win32_cairo_context_begin_frame_dcomp (GdkDrawContext  *draw_context,
-                                           gpointer         context_data,
-                                           cairo_region_t  *region,
-                                           GdkColorState  **out_color_state,
-                                           GdkMemoryDepth  *out_depth)
-{
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
-  cairo_t *cr;
-  GdkWin32Display *display;
-  ID3D11Device *d3d11_device;
-  ID3D11DeviceContext *d3d11_context;
-  D3D11_MAPPED_SUBRESOURCE map;
-  guint width, height;
-
-  gdk_win32_cairo_context_ensure_staging_texture (self);
-
-  display = GDK_WIN32_DISPLAY (gdk_draw_context_get_display (draw_context));
-  d3d11_device = gdk_win32_display_get_d3d11_device (display);
-
-  ID3D11Device_GetImmediateContext (d3d11_device, &d3d11_context);
-  gdk_draw_context_get_buffer_size (draw_context, &width, &height);
-  
-  hr_warn (ID3D11DeviceContext_Map (d3d11_context,
-                                    (ID3D11Resource *) self->staging_texture,
-                                    0,
-                                    D3D11_MAP_READ_WRITE,
-                                    0,
-                                    &map));
-  
-  self->cairo_surface = cairo_image_surface_create_for_data (map.pData,
-                                                             CAIRO_FORMAT_ARGB32,
-                                                             width,
-                                                             height,
-                                                             map.RowPitch);
-
-  cr = cairo_create (self->cairo_surface);
-  cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
-  gdk_cairo_region (cr, region);
-  cairo_fill (cr);
-  cairo_destroy (cr);
-
-  gdk_win32_com_clear (&d3d11_context);
-
-  *out_color_state = GDK_COLOR_STATE_SRGB;
-  *out_depth = gdk_color_state_get_depth (GDK_COLOR_STATE_SRGB);
-}
-
-static void
-gdk_win32_cairo_context_end_frame_dcomp (GdkDrawContext *draw_context,
-                                         gpointer        context_data,
-                                         cairo_region_t *painted)
-{
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
-  GdkWin32Display *display;
-  ID3D11Device *d3d11_device;
-  ID3D11DeviceContext *d3d11_context;
-  ID3D11Texture2D *texture;
-  guint width, height;
-
-  display = GDK_WIN32_DISPLAY (gdk_draw_context_get_display (draw_context));
-  d3d11_device = gdk_win32_display_get_d3d11_device (display);
-
-  ID3D11Device_GetImmediateContext (d3d11_device, &d3d11_context);
-  gdk_draw_context_get_buffer_size (draw_context, &width, &height);
-
-  cairo_surface_flush (self->cairo_surface);
-  g_clear_pointer (&self->cairo_surface, cairo_surface_destroy);
-
-  ID3D11DeviceContext_Unmap (d3d11_context, (ID3D11Resource *) self->staging_texture, 0);
-
-  hr_warn (IDXGISwapChain3_GetBuffer (self->swap_chain,
-                                      IDXGISwapChain3_GetCurrentBackBufferIndex (self->swap_chain),
-                                      &IID_ID3D11Texture2D,
-                                      (void **) &texture));
-
-  if (cairo_region_contains_rectangle (painted,
-                                       &(cairo_rectangle_int_t) {
-                                           .x = 0,
-                                           .y = 0,
-                                           .width = width,
-                                           .height = height,
-                                       }) == CAIRO_REGION_OVERLAP_IN)
-    {
-      ID3D11DeviceContext_CopySubresourceRegion (d3d11_context,
-                                                 (ID3D11Resource *) texture,
-                                                 0,
-                                                 0, 0, 0,
-                                                 (ID3D11Resource *) self->staging_texture,
-                                                 0,
-                                                 (&(D3D11_BOX) {
-                                                     .left = 0,
-                                                     .top = 0,
-                                                     .front = 0,
-                                                     .right = width,
-                                                     .bottom = height,
-                                                     .back = 1
-                                                 }));
-      hr_warn (IDXGISwapChain3_Present1 (self->swap_chain,
-                                        0,
-                                        DXGI_PRESENT_RESTART,
-                                        (&(DXGI_PRESENT_PARAMETERS) {
-                                            .DirtyRectsCount = 0,
-                                            .pDirtyRects = NULL,
-                                        })));
-    }
-  else
-    {
-      int i, n_rects;
-      RECT *rects;
-      cairo_rectangle_int_t crect;
-
-      n_rects = cairo_region_num_rectangles (painted);
-      if (n_rects > 0)
-        {
-          rects = g_new (RECT, n_rects);
-          for (i = 0; i < n_rects; i++)
-            {
-              cairo_region_get_rectangle (painted, i, &crect);
-              rects[i].left = crect.x;
-              rects[i].top = crect.y;
-              rects[i].right = crect.x + crect.width;
-              rects[i].bottom = crect.y + crect.height;
-              ID3D11DeviceContext_CopySubresourceRegion (d3d11_context,
-                                                        (ID3D11Resource *) texture,
-                                                        0,
-                                                        crect.x, crect.y, 0,
-                                                        (ID3D11Resource *) self->staging_texture,
-                                                        0,
-                                                        (&(D3D11_BOX) {
-                                                            .left = crect.x,
-                                                            .top = crect.y,
-                                                            .front = 0,
-                                                            .right = crect.x + crect.width,
-                                                            .bottom = crect.y + crect.height,
-                                                            .back = 1
-                                                        }));
-            }
-
-          hr_warn (IDXGISwapChain3_Present1 (self->swap_chain,
-                                            0,
-                                            DXGI_PRESENT_RESTART,
-                                            (&(DXGI_PRESENT_PARAMETERS) {
-                                                .DirtyRectsCount = n_rects,
-                                                .pDirtyRects = rects,
-                                            })));
-          g_clear_pointer (&rects, g_free);
-        }
-    }
-
-  gdk_win32_com_clear (&texture);
-  gdk_win32_com_clear (&d3d11_context);
-}
-
-static void
-gdk_win32_cairo_context_begin_frame_gdi (GdkDrawContext  *draw_context,
-                                         gpointer         context_data,
-                                         cairo_region_t  *region,
-                                         GdkColorState  **out_color_state,
-                                         GdkMemoryDepth  *out_depth)
-{
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
-  GdkSurface *surface = gdk_draw_context_get_surface (draw_context);
-  cairo_t *cr;
+  cairo_surface_t *cairo_surface;
   HDC hdc;
 
-  hdc = GetDC (gdk_win32_surface_get_handle (surface));
+  hdc = GetDC (GDK_SURFACE_HWND (surface));
   if (!hdc)
     {
       WIN32_GDI_FAILED ("GetDC");
-      return;
+      return NULL;
     }
 
-  self->cairo_surface = cairo_win32_surface_create_with_format (hdc, CAIRO_FORMAT_ARGB32);
+  cairo_surface = cairo_win32_surface_create_with_format (hdc, CAIRO_FORMAT_ARGB32);
+  cairo_surface_set_device_scale (cairo_surface, scale, scale);
 
-  cr = cairo_create (self->cairo_surface);
-  cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
-  gdk_cairo_region (cr, region);
-  cairo_fill (cr);
-  cairo_destroy (cr);
-
-  *out_color_state = GDK_COLOR_STATE_SRGB;
-  *out_depth = gdk_color_state_get_depth (GDK_COLOR_STATE_SRGB);
+  return cairo_surface;
 }
 
 static void
-gdk_win32_cairo_context_end_frame_gdi (GdkDrawContext *draw_context,
-                                       gpointer        context_data,
-                                       cairo_region_t *painted)
+gdk_win32_cairo_context_begin_frame (GdkDrawContext *draw_context,
+                                     GdkMemoryDepth  depth,
+                                     cairo_region_t *region)
 {
   GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
-  GdkSurface *surface = gdk_draw_context_get_surface (draw_context);
-  HDC hdc;
+  GdkSurface *surface;
+  int scale;
+  cairo_t *cr;
+  int width, height;
+  RECT queued_window_rect;
 
-  hdc = cairo_win32_surface_get_dc (self->cairo_surface);
-  cairo_surface_flush (self->cairo_surface);
+  surface = gdk_draw_context_get_surface (draw_context);
+  scale = gdk_surface_get_scale_factor (surface);
 
-  ReleaseDC (gdk_win32_surface_get_handle (surface), hdc);
-  g_clear_pointer (&self->cairo_surface, cairo_surface_destroy);
-}
+  queued_window_rect = gdk_win32_surface_handle_queued_move_resize (draw_context);
 
-static void
-gdk_win32_cairo_context_begin_frame (GdkDrawContext  *draw_context,
-                                     gpointer         context_data,
-                                     cairo_region_t  *region,
-                                     GdkColorState  **out_color_state,
-                                     GdkMemoryDepth  *out_depth)
-{
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
+  width = queued_window_rect.right - queued_window_rect.left;
+  height = queued_window_rect.bottom - queued_window_rect.top;
+  width = MAX (width, 1);
+  height = MAX (height, 1);
 
-  if (self->swap_chain)
-    gdk_win32_cairo_context_begin_frame_dcomp (draw_context, context_data, region, out_color_state, out_depth);
+  self->window_surface = create_cairo_surface_for_surface (surface, scale);
+
+  if (!self->double_buffered)
+    /* Non-double-buffered windows paint on the window surface directly */
+    self->paint_surface = cairo_surface_reference (self->window_surface);
   else
-    gdk_win32_cairo_context_begin_frame_gdi (draw_context, context_data, region, out_color_state, out_depth);
+    {
+      if (width > self->db_width ||
+          height > self->db_height)
+        {
+          self->db_width = MAX (width, self->db_width);
+          self->db_height = MAX (height, self->db_height);
+
+          g_clear_pointer (&self->db_surface, cairo_surface_destroy);
+
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+          self->db_surface = gdk_surface_create_similar_surface (surface,
+                                                                 cairo_surface_get_content (self->window_surface),
+                                                                 self->db_width,
+                                                                 self->db_height);
+G_GNUC_END_IGNORE_DEPRECATIONS
+        }
+
+      /* Double-buffered windows paint on a DB surface.
+       * Due to performance concerns we don't recreate it unless forced to.
+       */
+      self->paint_surface = cairo_surface_reference (self->db_surface);
+    }
+
+  /* Clear the paint region.
+   * For non-double-buffered rendering we must clear it, otherwise
+   * semi-transparent pixels will "add up" with each repaint.
+   * We must also clear the old pixels from the DB cache surface
+   * that we're going to use as a buffer.
+   */
+  cr = cairo_create (self->paint_surface);
+  cairo_set_source_rgba (cr, 0, 0, 0, 00);
+  cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+  gdk_cairo_region (cr, region);
+  cairo_clip (cr);
+  cairo_paint (cr);
+  cairo_destroy (cr);
 }
 
 static void
 gdk_win32_cairo_context_end_frame (GdkDrawContext *draw_context,
-                                   gpointer        context_data,
                                    cairo_region_t *painted)
 {
   GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
 
-  if (self->swap_chain)
-    gdk_win32_cairo_context_end_frame_dcomp (draw_context, context_data, painted);
-  else
-    gdk_win32_cairo_context_end_frame_gdi (draw_context, context_data, painted);
+  /* The code to resize double-buffered windows immediately
+   * before blitting the buffer contents onto them used
+   * to be here.
+   */
+
+  /* For double-buffered windows we need to blit
+   * the DB buffer contents into the window itself.
+   */
+  if (self->double_buffered)
+    {
+      cairo_t *cr;
+
+      cr = cairo_create (self->window_surface);
+
+      cairo_set_source_surface (cr, self->paint_surface, 0, 0);
+      gdk_cairo_region (cr, painted);
+      cairo_clip (cr);
+
+      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+      cairo_paint (cr);
+
+      cairo_destroy (cr);
+    }
+
+  cairo_surface_flush (self->window_surface);
+
+  g_clear_pointer (&self->paint_surface, cairo_surface_destroy);
+  g_clear_pointer (&self->window_surface, cairo_surface_destroy);
 }
 
 static void
-gdk_win32_cairo_context_surface_resized (GdkDrawContext *draw_context)
+gdk_win32_cairo_context_empty_frame (GdkDrawContext *draw_context)
 {
-  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (draw_context);
-  guint width, height;
-
-  gdk_win32_com_clear (&self->staging_texture);
-
-  if (self->swap_chain)
-    {
-      GdkWin32Display *display;
-      ID3D11Device *d3d11_device;
-      ID3D11DeviceContext *d3d11_context;
-
-      display = GDK_WIN32_DISPLAY (gdk_draw_context_get_display (draw_context));
-      d3d11_device = gdk_win32_display_get_d3d11_device (display);
-
-      ID3D11Device_GetImmediateContext (d3d11_device, &d3d11_context);
-      ID3D11DeviceContext_ClearState (d3d11_context);
-      gdk_win32_com_clear (&d3d11_context);
- 
-      gdk_draw_context_get_buffer_size (draw_context, &width, &height);
-
-      hr_warn (IDXGISwapChain3_ResizeBuffers (self->swap_chain,
-                                              4,
-                                              width,
-                                              height,
-                                              DXGI_FORMAT_B8G8R8A8_UNORM,
-                                              0));
-    }
 }
 
 static cairo_t *
@@ -408,7 +163,17 @@ gdk_win32_cairo_context_cairo_create (GdkCairoContext *context)
 {
   GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (context);
 
-  return cairo_create (self->cairo_surface);
+  return cairo_create (self->paint_surface);
+}
+
+static void
+gdk_win32_cairo_context_finalize (GObject *object)
+{
+  GdkWin32CairoContext *self = GDK_WIN32_CAIRO_CONTEXT (object);
+
+  g_clear_pointer (&self->db_surface, cairo_surface_destroy);
+
+  G_OBJECT_CLASS (gdk_win32_cairo_context_parent_class)->finalize (object);
 }
 
 static void
@@ -416,12 +181,13 @@ gdk_win32_cairo_context_class_init (GdkWin32CairoContextClass *klass)
 {
   GdkDrawContextClass *draw_context_class = GDK_DRAW_CONTEXT_CLASS (klass);
   GdkCairoContextClass *cairo_context_class = GDK_CAIRO_CONTEXT_CLASS (klass);
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->finalize = gdk_win32_cairo_context_finalize;
 
   draw_context_class->begin_frame = gdk_win32_cairo_context_begin_frame;
   draw_context_class->end_frame = gdk_win32_cairo_context_end_frame;
-  draw_context_class->surface_attach = gdk_win32_cairo_context_surface_attach;
-  draw_context_class->surface_detach = gdk_win32_cairo_context_surface_detach;
-  draw_context_class->surface_resized = gdk_win32_cairo_context_surface_resized;
+  draw_context_class->empty_frame = gdk_win32_cairo_context_empty_frame;
 
   cairo_context_class->cairo_create = gdk_win32_cairo_context_cairo_create;
 }
@@ -429,4 +195,8 @@ gdk_win32_cairo_context_class_init (GdkWin32CairoContextClass *klass)
 static void
 gdk_win32_cairo_context_init (GdkWin32CairoContext *self)
 {
+  self->double_buffered = g_strcmp0 (g_getenv ("GDK_WIN32_CAIRO_DB"), "1") == 0;
+  self->db_width = -1;
+  self->db_height = -1;
 }
+

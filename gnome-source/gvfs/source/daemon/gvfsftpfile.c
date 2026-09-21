@@ -68,28 +68,18 @@ g_vfs_ftp_file_compute_gvfs_path (const char *ftp_path)
  * g_vfs_ftp_file_new_from_gvfs:
  * @ftp: the ftp backend this file is to be used on
  * @gvfs_path: gvfs path to create the file from
- * @error: location to take an eventual error or %NULL
  *
- * Constructs a new #GVfsFtpFile representing the given gvfs path. If the
- * display name is invalid, @error is set and %NULL is returned.
+ * Constructs a new #GVfsFtpFile representing the given gvfs path.
  *
- * Returns: a new file or %NULL on error
+ * Returns: a new file
  **/
 GVfsFtpFile *
-g_vfs_ftp_file_new_from_gvfs (GVfsBackendFtp *ftp, const char *gvfs_path, GError **error)
+g_vfs_ftp_file_new_from_gvfs (GVfsBackendFtp *ftp, const char *gvfs_path)
 {
   GVfsFtpFile *file;
 
   g_return_val_if_fail (G_VFS_IS_BACKEND_FTP (ftp), NULL);
   g_return_val_if_fail (gvfs_path != NULL, NULL);
-
-  if (strpbrk (gvfs_path, "\r\n") != NULL)
-    {
-      g_set_error_literal (error,
-                           G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
-                           _("Filename contains invalid characters."));
-      return NULL;
-    }
 
   file = g_slice_new (GVfsFtpFile);
   file->backend = g_object_ref (ftp);
@@ -103,28 +93,18 @@ g_vfs_ftp_file_new_from_gvfs (GVfsBackendFtp *ftp, const char *gvfs_path, GError
  * g_vfs_ftp_file_new_from_ftp:
  * @ftp: the ftp backend this file is to be used on
  * @ftp_path: ftp path to create the file from
- * @error: location to take an eventual error or %NULL
  *
- * Constructs a new #GVfsFtpFile representing the given ftp path. If the
- * display name is invalid, @error is set and %NULL is returned.
+ * Constructs a new #GVfsFtpFile representing the given ftp path.
  *
- * Returns: a new file or %NULL on error
+ * Returns: a new file
  **/
 GVfsFtpFile *
-g_vfs_ftp_file_new_from_ftp (GVfsBackendFtp *ftp, const char *ftp_path, GError **error)
+g_vfs_ftp_file_new_from_ftp (GVfsBackendFtp *ftp, const char *ftp_path)
 {
   GVfsFtpFile *file;
 
   g_return_val_if_fail (G_VFS_IS_BACKEND_FTP (ftp), NULL);
   g_return_val_if_fail (ftp_path != NULL, NULL);
-
-  if (strpbrk (ftp_path, "\r\n") != NULL)
-    {
-      g_set_error_literal (error,
-                           G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
-                           _("Filename contains invalid characters."));
-      return NULL;
-    }
 
   file = g_slice_new (GVfsFtpFile);
   file->backend = g_object_ref (ftp);
@@ -156,7 +136,7 @@ g_vfs_ftp_file_new_parent (const GVfsFtpFile *file)
     return g_vfs_ftp_file_copy (file);
 
   dirname = g_path_get_dirname (file->gvfs_path);
-  dir = g_vfs_ftp_file_new_from_gvfs (file->backend, dirname, NULL);
+  dir = g_vfs_ftp_file_new_from_gvfs (file->backend, dirname);
   g_free (dirname);
 
   return dir;
@@ -183,7 +163,7 @@ g_vfs_ftp_file_new_child (const GVfsFtpFile *parent, const char *display_name, G
   g_return_val_if_fail (parent != NULL, NULL);
   g_return_val_if_fail (display_name != NULL, NULL);
 
-  if (strchr (display_name, '/') != NULL)
+  if (strpbrk (display_name, "/\r\n"))
     {
       g_set_error_literal (error,
                            G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
@@ -192,7 +172,7 @@ g_vfs_ftp_file_new_child (const GVfsFtpFile *parent, const char *display_name, G
     }
 
   new_path = g_strconcat (parent->gvfs_path, parent->gvfs_path[1] == 0 ? "" : "/", display_name, NULL);
-  child = g_vfs_ftp_file_new_from_gvfs (parent->backend, new_path, error);
+  child = g_vfs_ftp_file_new_from_gvfs (parent->backend, new_path);
   g_free (new_path);
   return child;
 }

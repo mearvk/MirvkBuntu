@@ -19,10 +19,10 @@
 /**
  * GtkFileFilter:
  *
- * Filters files by name or mime type.
+ * `GtkFileFilter` filters files by name or mime type.
  *
  * `GtkFileFilter` can be used to restrict the files being shown in a
- * file chooser. Files can be filtered based on their name (with
+ * `GtkFileChooser`. Files can be filtered based on their name (with
  * [method@Gtk.FileFilter.add_pattern] or [method@Gtk.FileFilter.add_suffix])
  * or on their mime type (with [method@Gtk.FileFilter.add_mime_type]).
  *
@@ -32,8 +32,8 @@
  * text/plain. Note that `GtkFileFilter` allows wildcards for the
  * subtype of a mime type, so you can e.g. filter for image/\*.
  *
- * Normally, file filters are used by adding them to a file chooser
- * (see [method@Gtk.FileDialog.set_filters]), but it is also possible to
+ * Normally, file filters are used by adding them to a `GtkFileChooser`
+ * (see [method@Gtk.FileChooser.add_filter]), but it is also possible to
  * manually use a file filter on any [class@Gtk.FilterListModel] containing
  * `GFileInfo` objects.
  *
@@ -75,11 +75,6 @@
 #include "gtkbuilderprivate.h"
 #include "gtkfilter.h"
 #include "gtkprivate.h"
-
-#ifdef GDK_WINDOWING_ANDROID
-#include "android/gdkandroidinit-private.h"
-#include "android/gdkandroidutils-private.h"
-#endif
 
 #include <glib/gi18n-lib.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -177,7 +172,8 @@ gtk_file_filter_set_property (GObject      *object,
     case PROP_MIME_TYPES:
       strv = (const char * const *) g_value_get_boxed (value);
       if (strv)
-        gtk_file_filter_add_mime_types (filter, (const char **) strv);
+        for (int i = 0; strv[i]; i++)
+          gtk_file_filter_add_mime_type (filter, strv[i]);
       break;
 
     case PROP_SUFFIXES:
@@ -259,17 +255,17 @@ gtk_file_filter_class_init (GtkFileFilterClass *class)
   filter_class->match = gtk_file_filter_match;
 
   /**
-   * GtkFileFilter:name:
+   * GtkFileFilter:name: (attributes org.gtk.Property.get=gtk_file_filter_get_name org.gtk.Property.set=gtk_file_filter_set_name)
    *
    * The human-readable name of the filter.
    *
-   * This is the string that will be displayed in the user interface
-   * if there is a selectable list of filters.
+   * This is the string that will be displayed in the file chooser
+   * user interface if there is a selectable list of filters.
    */
   props[PROP_NAME] =
       g_param_spec_string ("name", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkFileFilter:patterns:
@@ -281,7 +277,7 @@ gtk_file_filter_class_init (GtkFileFilterClass *class)
   props[PROP_PATTERNS] =
       g_param_spec_boxed ("patterns", NULL, NULL,
                           G_TYPE_STRV,
-                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkFileFilter:mime-types:
@@ -293,7 +289,7 @@ gtk_file_filter_class_init (GtkFileFilterClass *class)
   props[PROP_MIME_TYPES] =
       g_param_spec_boxed ("mime-types", NULL, NULL,
                           G_TYPE_STRV,
-                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkFileFilter:suffixes:
@@ -305,7 +301,7 @@ gtk_file_filter_class_init (GtkFileFilterClass *class)
   props[PROP_SUFFIXES] =
       g_param_spec_boxed ("suffixes", NULL, NULL,
                           G_TYPE_STRV,
-                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, props);
 }
@@ -446,8 +442,6 @@ gtk_file_filter_buildable_custom_tag_start (GtkBuildable       *buildable,
 
   if (strcmp (tagname, "mime-types") == 0)
     {
-      gtk_buildable_tag_deprecation_warning (buildable,builder, "mime-types", "mime-types");
-
       data = g_new0 (SubParserData, 1);
       data->string = g_string_new ("");
       data->type = PARSE_MIME_TYPES;
@@ -459,8 +453,6 @@ gtk_file_filter_buildable_custom_tag_start (GtkBuildable       *buildable,
     }
   else if (strcmp (tagname, "patterns") == 0)
     {
-      gtk_buildable_tag_deprecation_warning (buildable,builder, "patterns", "patterns");
-
       data = g_new0 (SubParserData, 1);
       data->string = g_string_new ("");
       data->type = PARSE_PATTERNS;
@@ -472,8 +464,6 @@ gtk_file_filter_buildable_custom_tag_start (GtkBuildable       *buildable,
     }
   else if (strcmp (tagname, "suffixes") == 0)
     {
-      gtk_buildable_tag_deprecation_warning (buildable,builder, "suffixes", "suffixes");
-
       data = g_new0 (SubParserData, 1);
       data->string = g_string_new ("");
       data->type = PARSE_SUFFIXES;
@@ -543,13 +533,14 @@ gtk_file_filter_new (void)
 }
 
 /**
- * gtk_file_filter_set_name:
- * @filter: a file filter
- * @name: (nullable): the human-readable name for the filter
+ * gtk_file_filter_set_name: (attributes org.gtk.Method.set_property=name)
+ * @filter: a `GtkFileFilter`
+ * @name: (nullable): the human-readable-name for the filter, or %NULL
+ *   to remove any existing name.
  *
  * Sets a human-readable name of the filter.
  *
- * This is the string that will be displayed in the user interface
+ * This is the string that will be displayed in the file chooser
  * if there is a selectable list of filters.
  */
 void
@@ -568,14 +559,14 @@ gtk_file_filter_set_name (GtkFileFilter *filter,
 }
 
 /**
- * gtk_file_filter_get_name:
- * @filter: a file filter
+ * gtk_file_filter_get_name: (attributes org.gtk.Method.get_property=name)
+ * @filter: a `GtkFileFilter`
  *
  * Gets the human-readable name for the filter.
  *
  * See [method@Gtk.FileFilter.set_name].
  *
- * Returns: (nullable): the human-readable name of the filter
+ * Returns: (nullable): The human-readable name of the filter
  */
 const char *
 gtk_file_filter_get_name (GtkFileFilter *filter)
@@ -616,10 +607,10 @@ file_filter_add_attribute (GtkFileFilter *filter,
 
 /**
  * gtk_file_filter_add_mime_type:
- * @filter: A file filter
+ * @filter: A `GtkFileFilter`
  * @mime_type: name of a MIME type
  *
- * Adds a rule allowing a given mime type.
+ * Adds a rule allowing a given mime type to @filter.
  */
 void
 gtk_file_filter_add_mime_type (GtkFileFilter *filter,
@@ -640,41 +631,11 @@ gtk_file_filter_add_mime_type (GtkFileFilter *filter,
 }
 
 /**
- * gtk_file_filter_add_mime_types:
- * @filter: a file filter
- * @mime_types: (array zero-terminated=1): a %NULL-terminated array of mime types
- *
- * Adds a rule allowing a given array of mime types.
- * It can for example be used with
- * [Gly.Loader.get_mime_types](https://gnome.pages.gitlab.gnome.org/glycin/libglycin/type_func.Loader.get_mime_types.html).
- *
- * This is equivalent to calling [method@Gtk.FileFilter.add_mime_type]
- * for all the supported mime types.
- *
- * Since: 4.22
- */
-void
-gtk_file_filter_add_mime_types (GtkFileFilter  *filter,
-                                const char    **mime_types)
-{
-  FilterRule *rule;
-
-  g_return_if_fail (GTK_IS_FILE_FILTER (filter));
-
-  rule = g_new (FilterRule, 1);
-  rule->type = FILTER_RULE_MIME_TYPE;
-  rule->u.content_types = g_strdupv ((char **) mime_types);
-
-  file_filter_add_attribute (filter, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE);
-  file_filter_add_rule (filter, rule);
-}
-
-/**
  * gtk_file_filter_add_pattern:
- * @filter: a file filter
- * @pattern: a shell style glob pattern
+ * @filter: a `GtkFileFilter`
+ * @pattern: a shell style glob
  *
- * Adds a rule allowing a shell style glob pattern.
+ * Adds a rule allowing a shell style glob to a filter.
  *
  * Note that it depends on the platform whether pattern
  * matching ignores case or not. On Windows, it does, on
@@ -699,19 +660,13 @@ gtk_file_filter_add_pattern (GtkFileFilter *filter,
 
 /**
  * gtk_file_filter_add_suffix:
- * @filter: a file filter
+ * @filter: a `GtkFileFilter`
  * @suffix: filename suffix to match
  *
  * Adds a suffix match rule to a filter.
  *
- * This is similar to adding a match for the pattern "*.@suffix"
- *
- * An exaple to filter files with the suffix ".sub":
- * ```c
- * gtk_file_filter_add_suffix (filter, "sub");
- * ```
- *
- * Filters with multiple dots are allowed.
+ * This is similar to adding a match for the pattern
+ * "*.@suffix".
  *
  * In contrast to pattern matches, suffix matches
  * are *always* case-insensitive.
@@ -737,15 +692,13 @@ gtk_file_filter_add_suffix (GtkFileFilter *filter,
 
 /**
  * gtk_file_filter_add_pixbuf_formats:
- * @filter: a file filter
+ * @filter: a `GtkFileFilter`
  *
- * Adds a rule allowing image files in the formats supported by `GdkPixbuf`.
+ * Adds a rule allowing image files in the formats supported
+ * by GdkPixbuf.
  *
  * This is equivalent to calling [method@Gtk.FileFilter.add_mime_type]
  * for all the supported mime types.
- *
- * Deprecated: 4.20: Use the api of your image loading framework (e.g. glycin)
- *   to enumerate supported formats
  */
 void
 gtk_file_filter_add_pixbuf_formats (GtkFileFilter *filter)
@@ -786,13 +739,14 @@ gtk_file_filter_add_pixbuf_formats (GtkFileFilter *filter)
 
 /**
  * gtk_file_filter_get_attributes:
- * @filter: a file filter
+ * @filter: a `GtkFileFilter`
  *
  * Gets the attributes that need to be filled in for the `GFileInfo`
  * passed to this filter.
  *
  * This function will not typically be used by applications;
- * it is intended for use in file chooser implementation.
+ * it is intended principally for use in the implementation
+ * of `GtkFileChooser`.
  *
  * Returns: (transfer none): the attributes
  */
@@ -859,49 +813,6 @@ NSArray * _gtk_file_filter_get_as_pattern_nsstrings (GtkFileFilter *filter)
 }
 #endif
 
-#ifdef GDK_WINDOWING_ANDROID
-void _gtk_file_filter_store_types_in_list (GtkFileFilter *filter, jobject list)
-{
-  JNIEnv *env = gdk_android_get_env ();
-  (*env)->PushLocalFrame (env, 2);
-
-  for (GSList *i = filter->rules; i != NULL; i = i->next)
-    {
-      FilterRule *rule = i->data;
-
-      switch (rule->type)
-        {
-        case FILTER_RULE_MIME_TYPE:
-        case FILTER_RULE_PIXBUF_FORMATS:
-          {
-            for (gsize j = 0; rule->u.content_types[j] != NULL; j++)
-              {
-                jstring content_type = gdk_android_utf8_to_java (rule->u.content_types[j]);
-                jstring normalized = (*env)->CallStaticObjectMethod (env, gdk_android_get_java_cache ()->a_intent.klass,
-                                                                     gdk_android_get_java_cache ()->a_intent.normalize_mimetype,
-                                                                     content_type);
-                (*env)->CallBooleanMethod (env, list,
-                                           gdk_android_get_java_cache ()->j_list.add,
-                                           normalized);
-                (*env)->DeleteLocalRef (env, normalized);
-                (*env)->DeleteLocalRef (env, content_type);
-              }
-          }
-          break;
-
-        case FILTER_RULE_SUFFIX:
-        case FILTER_RULE_PATTERN:
-        default:
-          // unsupported
-          break;
-       }
-    }
-
-  (*env)->PopLocalFrame (env, NULL);
-}
-#endif
-
-#ifdef GDK_WINDOWING_WIN32
 char **
 _gtk_file_filter_get_as_patterns (GtkFileFilter *filter)
 {
@@ -917,12 +828,8 @@ _gtk_file_filter_get_as_patterns (GtkFileFilter *filter)
       switch (rule->type)
         {
         case FILTER_RULE_MIME_TYPE:
-          for (int i = 0; rule->u.content_types[i]; i++)
-            {
-              /* When the content type is a file extension, use it as pattern */
-              if (rule->u.content_types[i][0] == '.')
-                g_ptr_array_add (array, g_strdup_printf ("*%s", rule->u.content_types[i]));
-            }
+          g_ptr_array_free (array, TRUE);
+          return NULL;
           break;
 
         case FILTER_RULE_PATTERN:
@@ -958,14 +865,9 @@ _gtk_file_filter_get_as_patterns (GtkFileFilter *filter)
         }
     }
 
-  /* If patterns list is empty, add a catch-all as fallback */
-  if (array->len == 0)
-    g_ptr_array_add (array, g_strdup ("*"));
-
   g_ptr_array_add (array, NULL); /* Null terminate */
   return (char **)g_ptr_array_free (array, FALSE);
 }
-#endif
 
 static GtkFilterMatch
 gtk_file_filter_get_strictness (GtkFilter *filter)
@@ -1054,7 +956,7 @@ gtk_file_filter_match (GtkFilter *filter,
 
 /**
  * gtk_file_filter_to_gvariant:
- * @filter: a file filter
+ * @filter: a `GtkFileFilter`
  *
  * Serialize a file filter to an `a{sv}` variant.
  *

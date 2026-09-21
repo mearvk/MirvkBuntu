@@ -41,8 +41,7 @@ typedef struct _GVfsJobOpenForWriteClass   GVfsJobOpenForWriteClass;
 typedef enum {
   OPEN_FOR_WRITE_CREATE = 0,
   OPEN_FOR_WRITE_APPEND = 1,
-  OPEN_FOR_WRITE_REPLACE = 2,
-  OPEN_FOR_WRITE_EDIT = 3
+  OPEN_FOR_WRITE_REPLACE = 2
 } GVfsJobOpenForWriteMode;
 
 typedef enum {
@@ -78,7 +77,7 @@ struct _GVfsJobOpenForWriteClass
   GVfsJobDBusClass parent_class;
 };
 
-GType g_vfs_job_open_for_write_get_type (void);
+GType g_vfs_job_open_for_write_get_type (void) G_GNUC_CONST;
 
 gboolean g_vfs_job_open_for_write_new_handle         (GVfsDBusMount         *object,
                                                       GDBusMethodInvocation *invocation,

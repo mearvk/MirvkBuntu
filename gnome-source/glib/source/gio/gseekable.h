@@ -74,7 +74,7 @@ struct _GSeekableIface
 };
 
 GIO_AVAILABLE_IN_ALL
-GType    g_seekable_get_type     (void);
+GType    g_seekable_get_type     (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 goffset  g_seekable_tell         (GSeekable     *seekable);

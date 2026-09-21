@@ -50,8 +50,6 @@
 #  endif
 #endif /* HAVE_XKB */
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 typedef struct _DirectionCacheEntry DirectionCacheEntry;
 
 struct _DirectionCacheEntry
@@ -95,8 +93,6 @@ struct _GdkX11Keymap
    * cache.
    */
   DirectionCacheEntry group_direction_cache[4];
-
-  int layout_index;
 #endif
 };
 
@@ -132,7 +128,6 @@ gdk_x11_keymap_init (GdkX11Keymap *keymap)
   keymap->xkb_desc = NULL;
   keymap->current_group_atom = 0;
   keymap->current_cache_serial = 0;
-  keymap->layout_index = -1;
 #endif
 
 }
@@ -206,16 +201,6 @@ update_modmap (Display      *display,
     }
 }
 
-static int
-get_xkb_layout_index (GdkX11Keymap *keymap_x11)
-{
-  XkbStateRec state_rec;
-
-  XkbGetState (KEYMAP_XDISPLAY (GDK_KEYMAP (keymap_x11)), XkbUseCoreKbd, &state_rec);
-
-  return (state_rec.group);
-}
-
 static XkbDescPtr
 get_xkb (GdkX11Keymap *keymap_x11)
 {
@@ -236,9 +221,6 @@ get_xkb (GdkX11Keymap *keymap_x11)
       XkbGetNames (xdisplay, XkbGroupNamesMask | XkbVirtualModNamesMask, keymap_x11->xkb_desc);
 
       update_modmap (xdisplay, keymap_x11);
-
-      if (keymap_x11->layout_index < 0)
-        keymap_x11->layout_index = get_xkb_layout_index (keymap_x11);
     }
   else if (keymap_x11->current_serial != display_x11->keymap_serial)
     {
@@ -689,7 +671,6 @@ _gdk_x11_keymap_state_changed (GdkDisplay   *display,
     {
       GdkX11Keymap *keymap_x11 = GDK_X11_KEYMAP (display_x11->keymap);
       GdkDevice *keyboard;
-      int layout_index;
 
       keyboard = gdk_seat_get_keyboard (gdk_display_get_default_seat (display));
 
@@ -701,13 +682,6 @@ _gdk_x11_keymap_state_changed (GdkDisplay   *display,
                              xkb_event->state.locked_mods,
                              xkb_event->state.mods))
         g_signal_emit_by_name (keymap_x11, "state-changed");
-
-      layout_index = xkb_event->state.group;
-      if (keymap_x11->layout_index != layout_index)
-        {
-          keymap_x11->layout_index = layout_index;
-          g_object_notify (G_OBJECT (keyboard), "active-layout-index");
-        }
     }
 }
 
@@ -744,17 +718,7 @@ _gdk_x11_keymap_keys_changed (GdkDisplay *display)
   ++display_x11->keymap_serial;
 
   if (display_x11->keymap)
-    {
-      g_signal_emit_by_name (display_x11->keymap, "keys-changed", 0);
-
-    if (KEYMAP_USE_XKB (display_x11->keymap))
-      {
-        GdkDevice *keyboard;
-
-        keyboard = gdk_seat_get_keyboard (gdk_display_get_default_seat (display));
-        g_object_notify (G_OBJECT (keyboard), "layout-names");
-      }
-    }
+    g_signal_emit_by_name (display_x11->keymap, "keys_changed", 0);
 }
 
 static PangoDirection
@@ -1431,53 +1395,6 @@ gdk_x11_keymap_translate_keyboard_state (GdkKeymap       *keymap,
   return tmp_keyval != NoSymbol;
 }
 
-static int
-gdk_x11_keymap_get_active_layout_index (GdkKeymap *keymap)
-{
-  if (KEYMAP_USE_XKB (keymap))
-    {
-      GdkX11Keymap *keymap_x11 = GDK_X11_KEYMAP (keymap);
-
-      if (keymap_x11->layout_index < 0)
-        keymap_x11->layout_index = get_xkb_layout_index (keymap_x11);
-
-      return keymap_x11->layout_index;
-    }
-
-  return -1;
-}
-
-static char **
-gdk_x11_keymap_get_layout_names (GdkKeymap *keymap)
-{
-  if (KEYMAP_USE_XKB (keymap))
-    {
-      GdkDisplay *display = keymap->display;
-      GdkX11Keymap *keymap_x11 = GDK_X11_KEYMAP (keymap);
-      XkbDescPtr xkb = get_xkb (keymap_x11);
-      GStrvBuilder *names_builder;
-      char **layout_names;
-      int num_layouts;
-
-      num_layouts = get_num_groups (keymap, xkb);
-      names_builder = g_strv_builder_new ();
-
-      for (int i = 0; i < num_layouts; i++)
-        {
-          const char *layout_name =
-            gdk_x11_get_xatom_name_for_display (display, xkb->names->groups[i]);
-          g_strv_builder_add (names_builder, layout_name ? layout_name : "");
-        }
-
-      layout_names = g_strv_builder_end (names_builder);
-      g_strv_builder_unref (names_builder);
-
-      return layout_names;
-    }
-
-  return NULL;
-}
-
 /*< private >
  * gdk_x11_keymap_get_group_for_state:
  * @keymap: (type GdkX11Keymap): a `GdkX11Keymap`
@@ -1609,6 +1526,4 @@ gdk_x11_keymap_class_init (GdkX11KeymapClass *klass)
   keymap_class->get_entries_for_keycode = gdk_x11_keymap_get_entries_for_keycode;
   keymap_class->lookup_key = gdk_x11_keymap_lookup_key;
   keymap_class->translate_keyboard_state = gdk_x11_keymap_translate_keyboard_state;
-  keymap_class->get_active_layout_index = gdk_x11_keymap_get_active_layout_index;
-  keymap_class->get_layout_names = gdk_x11_keymap_get_layout_names;
 }

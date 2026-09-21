@@ -37,8 +37,9 @@ struct _GtkSidebarRowClass
   GtkListBoxRowClass parent;
 };
 
-GType      gtk_sidebar_row_get_type   (void);
+GType      gtk_sidebar_row_get_type   (void) G_GNUC_CONST;
 
+GtkSidebarRow *gtk_sidebar_row_new    (void);
 GtkSidebarRow *gtk_sidebar_row_clone  (GtkSidebarRow *self);
 
 /* Use these methods instead of gtk_widget_hide/show to use an animation */

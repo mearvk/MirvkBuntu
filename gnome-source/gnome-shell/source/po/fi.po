@@ -25,8 +25,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gnome-shell\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gnome-shell/issues/\n"
-"POT-Creation-Date: 2026-08-16 09:14+0000\n"
-"PO-Revision-Date: 2026-08-18 18:46+0300\n"
+"POT-Creation-Date: 2024-03-16 16:54+0000\n"
+"PO-Revision-Date: 2024-03-17 12:14+0200\n"
 "Last-Translator: Jiri Grönroos <jiri.gronroos+l10n@iki.fi>\n"
 "Language-Team: suomi <lokalisointi-lista@googlegroups.com>\n"
 "Language: fi\n"
@@ -34,7 +34,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 3.9\n"
+"X-Generator: Poedit 3.4.2\n"
 "X-DamnedLies-Scope: partial\n"
 "X-Project-Style: gnome\n"
 "X-POT-Import-Date: 2012-03-05 15:06:10+0000\n"
@@ -116,28 +116,31 @@ msgid "Open new window of pinned app 9"
 msgstr "Avaa uusi ikkuna kiinnitetystä sovelluksesta 9"
 
 #. Translators: name of the folder under ~/Pictures for screenshots.
-#: data/50-gnome-shell-screenshots.xml:6 js/ui/screenshot.js:2699
+#: data/50-gnome-shell-screenshots.xml:6 js/ui/screenshot.js:2276
 msgid "Screenshots"
 msgstr "Kuvakaappaukset"
 
-#: data/50-gnome-shell-screenshots.xml:9 data/org.gnome.shell.gschema.xml.in:267
+#: data/50-gnome-shell-screenshots.xml:9
+#: data/org.gnome.shell.gschema.xml.in:287
 msgid "Take a screenshot interactively"
 msgstr "Ota kuvakaappaus vuorovaikutteisesti"
 
-#: data/50-gnome-shell-screenshots.xml:12 data/org.gnome.shell.gschema.xml.in:279
+#: data/50-gnome-shell-screenshots.xml:12
+#: data/org.gnome.shell.gschema.xml.in:299
 msgid "Take a screenshot"
 msgstr "Ota kuvakaappaus"
 
-#: data/50-gnome-shell-screenshots.xml:15 data/org.gnome.shell.gschema.xml.in:275
+#: data/50-gnome-shell-screenshots.xml:15
+#: data/org.gnome.shell.gschema.xml.in:295
 msgid "Take a screenshot of a window"
 msgstr "Ota kuvakaappaus ikkunasta"
 
-#: data/50-gnome-shell-screenshots.xml:18 data/org.gnome.shell.gschema.xml.in:271
+#: data/50-gnome-shell-screenshots.xml:18
+#: data/org.gnome.shell.gschema.xml.in:291
 msgid "Record a screencast interactively"
 msgstr "Nauhoita näyttötallennevideo vuorovaikutteisesti"
 
-#: data/50-gnome-shell-system.xml:6 data/X-GNOME-Shell-System.directory.desktop.in:2
-#: js/ui/messageTray.js:1328
+#: data/50-gnome-shell-system.xml:6 js/ui/messageTray.js:1293
 msgid "System"
 msgstr "Järjestelmä"
 
@@ -161,13 +164,26 @@ msgstr "Näytä yleisnäkymä"
 msgid "Show all apps"
 msgstr "Näytä kaikki sovellukset"
 
+#: data/org.gnome.Shell.desktop.in.in:4
+msgid "GNOME Shell"
+msgstr "Gnome Shell"
+
+#: data/org.gnome.Shell.desktop.in.in:5
+msgid "Window management and application launching"
+msgstr "Ikkunanhallinta ja sovelluksien käynnistäminen"
+
 #: data/org.gnome.shell.gschema.xml.in:6
 msgid "Enable internal tools useful for developers and testers from Alt-F2"
-msgstr "Ota käyttöön sisäiset kehittäjiä ja testaajia hyödyttävät työkalut Alt-F2:sta"
+msgstr ""
+"Ota käyttöön sisäiset kehittäjiä ja testaajia hyödyttävät työkalut Alt-F2:sta"
 
 #: data/org.gnome.shell.gschema.xml.in:9
-msgid "Allows access to internal debugging and monitoring tools using the Alt-F2 dialog."
-msgstr "Salli pääsy sisäiseen vianselvitys- ja monitorointityökaluun Alt-F2-ikkunan kautta."
+msgid ""
+"Allows access to internal debugging and monitoring tools using the Alt-F2 "
+"dialog."
+msgstr ""
+"Salli pääsy sisäiseen vianselvitys- ja monitorointityökaluun Alt-F2-ikkunan "
+"kautta."
 
 #: data/org.gnome.shell.gschema.xml.in:16
 msgid "UUIDs of extensions to enable"
@@ -175,14 +191,15 @@ msgstr "Käyttöön otettavien laajennusten UUID:t"
 
 #: data/org.gnome.shell.gschema.xml.in:17
 msgid ""
-"GNOME Shell extensions have a UUID property; this key lists extensions which should be loaded. "
-"Any extension that wants to be loaded needs to be in this list. You can also manipulate this "
-"list with the EnableExtension and DisableExtension D-Bus methods on org.gnome.Shell."
+"GNOME Shell extensions have a UUID property; this key lists extensions which "
+"should be loaded. Any extension that wants to be loaded needs to be in this "
+"list. You can also manipulate this list with the EnableExtension and "
+"DisableExtension D-Bus methods on org.gnome.Shell."
 msgstr ""
-"GNOMEn ikkunanhallinnan laajennuksilla on uuid-tunnisteominaisuus, ja tämä avain luettelee "
-"laajennukset, jotka ladataan. Niiden laajennosten, jotka halutaan ladata, on oltava tässä "
-"luettelossa. Tätä luetteloa voi muokata myös org.gnome.Shell-DBus-metodeilla EnableExtension ja "
-"DisableExtension."
+"GNOMEn ikkunanhallinnan laajennuksilla on uuid-tunnisteominaisuus, ja tämä "
+"avain luettelee laajennukset, jotka ladataan. Niiden laajennosten, jotka "
+"halutaan ladata, on oltava tässä luettelossa. Tätä luetteloa voi muokata "
+"myös org.gnome.Shell-DBus-metodeilla EnableExtension ja DisableExtension."
 
 #: data/org.gnome.shell.gschema.xml.in:26
 msgid "UUIDs of extensions to force disabling"
@@ -190,15 +207,17 @@ msgstr "Käytöstä pakotetusti estettyjen laajennusten UUID:t"
 
 #: data/org.gnome.shell.gschema.xml.in:27
 msgid ""
-"GNOME Shell extensions have a UUID property; this key lists extensions which should be disabled, "
-"even if loaded as part of the current mode. You can also manipulate this list with the "
-"EnableExtension and DisableExtension D-Bus methods on org.gnome.Shell. This key takes precedence "
-"over the “enabled-extensions” setting."
+"GNOME Shell extensions have a UUID property; this key lists extensions which "
+"should be disabled, even if loaded as part of the current mode. You can also "
+"manipulate this list with the EnableExtension and DisableExtension D-Bus "
+"methods on org.gnome.Shell. This key takes precedence over the “enabled-"
+"extensions” setting."
 msgstr ""
-"GNOMEn ikkunanhallinnan laajennuksilla on uuid-tunnisteominaisuus, ja tämä avain luettelee "
-"laajennukset, joiden ei pitäisi olla käytössä, vaikka ne ladattaisiin osana nykyistä tilaa. Tätä "
-"luetteloa voi muokata myös org.gnome.Shell-DBus-metodeilla EnableExtension ja DisableExtension. "
-"Tämä avain on etusijalla liitännäisten käyttöönoton asetukseen nähden."
+"GNOMEn ikkunanhallinnan laajennuksilla on uuid-tunnisteominaisuus, ja tämä "
+"avain luettelee laajennukset, joiden ei pitäisi olla käytössä, vaikka ne "
+"ladattaisiin osana nykyistä tilaa. Tätä luetteloa voi muokata myös org.gnome."
+"Shell-DBus-metodeilla EnableExtension ja DisableExtension. Tämä avain on "
+"etusijalla liitännäisten käyttöönoton asetukseen nähden."
 
 #: data/org.gnome.shell.gschema.xml.in:37
 msgid "Disable user extensions"
@@ -206,10 +225,11 @@ msgstr "Poista käytöstä käyttäjälaajennukset"
 
 #: data/org.gnome.shell.gschema.xml.in:38
 msgid ""
-"Disable all extensions the user has enabled without affecting the “enabled-extension” setting."
+"Disable all extensions the user has enabled without affecting the “enabled-"
+"extension” setting."
 msgstr ""
-"Poista käytöstä kaikki käyttäjän käyttöönottamat laajennukset vaikuttamatta “enabled-extension”-"
-"asetukseen."
+"Poista käytöstä kaikki käyttäjän käyttöönottamat laajennukset vaikuttamatta "
+"“enabled-extension”-asetukseen."
 
 #: data/org.gnome.shell.gschema.xml.in:45
 msgid "Allow extension installation"
@@ -217,10 +237,11 @@ msgstr "Salli laajennuksen asennus"
 
 #: data/org.gnome.shell.gschema.xml.in:46
 msgid ""
-"Allow users to install extensions in their home folder. If disabled, the InstallRemoteExtension "
-"D-Bus method will fail, and extensions are only loaded from system directories on startup. It "
-"does not affect extensions that are already loaded, so a change only takes full effect on the "
-"next login."
+"Allow users to install extensions in their home folder. If disabled, the "
+"InstallRemoteExtension D-Bus method will fail, and extensions are only "
+"loaded from system directories on startup. It does not affect extensions "
+"that are already loaded, so a change only takes full effect on the next "
+"login."
 msgstr ""
 
 #: data/org.gnome.shell.gschema.xml.in:56
@@ -229,845 +250,567 @@ msgstr "Poistaa käytöstä laajennusten versioyhteensopivuuden tarkistuksen"
 
 #: data/org.gnome.shell.gschema.xml.in:57
 msgid ""
-"GNOME Shell will only load extensions that claim to support the current running version. "
-"Enabling this option will disable this check and try to load all extensions regardless of the "
-"versions they claim to support."
+"GNOME Shell will only load extensions that claim to support the current "
+"running version. Enabling this option will disable this check and try to "
+"load all extensions regardless of the versions they claim to support."
 msgstr ""
-"Gnome Shell lataa vain ne laajennukset, jotka väittävät tukevan käytössä olevaa Shell-versiota. "
-"Tämä valinta poistaa tarkistuksen käytöstä ja yrittää ladata kaikki laajennukset siitä "
-"huolimatta, mitä versiota laajennukset väittävät tukevansa."
+"Gnome Shell lataa vain ne laajennukset, jotka väittävät tukevan käytössä "
+"olevaa Shell-versiota. Tämä valinta poistaa tarkistuksen käytöstä ja yrittää "
+"ladata kaikki laajennukset siitä huolimatta, mitä versiota laajennukset "
+"väittävät tukevansa."
 
-#: data/org.gnome.shell.gschema.xml.in:67
+#: data/org.gnome.shell.gschema.xml.in:65
 msgid "List of desktop file IDs for favorite applications"
 msgstr "Luettelo työpöytätiedostojen tunnisteista lempisovelluksille"
 
-#: data/org.gnome.shell.gschema.xml.in:68
+#: data/org.gnome.shell.gschema.xml.in:66
 msgid ""
-"The applications corresponding to these identifiers will be displayed in the favorites area."
+"The applications corresponding to these identifiers will be displayed in the "
+"favorites area."
 msgstr "Näitä tunnisteita vastaavat sovellukset näytetään suosikkien alueella."
 
-#: data/org.gnome.shell.gschema.xml.in:75
+#: data/org.gnome.shell.gschema.xml.in:73
 msgid "History for command (Alt-F2) dialog"
 msgstr "Historia komentoikkunalle (Alt-F2)"
 
 #. Translators: looking glass is a debugger and inspector tool, see https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/docs/looking-glass.md
-#: data/org.gnome.shell.gschema.xml.in:80
+#: data/org.gnome.shell.gschema.xml.in:78
 msgid "History for the looking glass dialog"
 msgstr "Historia näyttölasi-ikkunalle"
 
-#: data/org.gnome.shell.gschema.xml.in:84
+#: data/org.gnome.shell.gschema.xml.in:82
 msgid "Always show the “Log Out” action in the system menu"
 msgstr "Näytä aina “Kirjaudu ulos”-toiminto järjestelmävalikossa"
 
-#: data/org.gnome.shell.gschema.xml.in:85
+#: data/org.gnome.shell.gschema.xml.in:83
 #, fuzzy
 #| msgid ""
-#| "This key overrides the automatic hiding of the “Log out” menu item in single-user, single-"
-#| "session situations."
+#| "This key overrides the automatic hiding of the “Log out” menu item in "
+#| "single-user, single-session situations."
 msgid ""
-"This key overrides the automatic hiding of the “Log out” action in the system menu for logged-in "
-"situations where there is a single, local, non-system user and only a single available session "
-"type (e.g. GNOME on Wayland)."
+"This key overrides the automatic hiding of the “Log out” action in the "
+"system menu for logged-in situations where there is a single, local, non-"
+"system user and only a single available session type (e.g. GNOME on Wayland)."
 msgstr ""
-"Tämä avain ohittaa “Kirjaudu ulos”-valikkokohdan automaattisen piilotuksen \"yksi käyttäjä, yksi "
-"istunto\"-tilanteissa."
+"Tämä avain ohittaa “Kirjaudu ulos”-valikkokohdan automaattisen piilotuksen "
+"\"yksi käyttäjä, yksi istunto\"-tilanteissa."
 
-#: data/org.gnome.shell.gschema.xml.in:94
-msgid "Whether to remember password for mounting encrypted or remote filesystems"
-msgstr "Muistetaanko salattujen tai etätiedostojärjestelmien liittämiseen tarvittava salasana"
-
-#: data/org.gnome.shell.gschema.xml.in:95
+#: data/org.gnome.shell.gschema.xml.in:92
 msgid ""
-"The shell will request a password when an encrypted device or a remote filesystem is mounted. If "
-"the password can be saved for future use a “Remember Password” checkbox will be present. This "
-"key sets the default state of the checkbox."
+"Whether to remember password for mounting encrypted or remote filesystems"
 msgstr ""
-"Shell pyytää salasanaa, kun salattu laite tai etätiedostojärjestelmä liitetään. Jos salasana "
-"voidaan tallentaa tulevaa käyttöä varten, “Muista salasana”-valintaruutu näytetään. Tämä avain "
-"asettaa valintaruudun oletustilan."
+"Muistetaanko salattujen tai etätiedostojärjestelmien liittämiseen tarvittava "
+"salasana"
 
-#: data/org.gnome.shell.gschema.xml.in:104
+#: data/org.gnome.shell.gschema.xml.in:93
+msgid ""
+"The shell will request a password when an encrypted device or a remote "
+"filesystem is mounted. If the password can be saved for future use a "
+"“Remember Password” checkbox will be present. This key sets the default "
+"state of the checkbox."
+msgstr ""
+"Shell pyytää salasanaa, kun salattu laite tai etätiedostojärjestelmä "
+"liitetään. Jos salasana voidaan tallentaa tulevaa käyttöä varten, “Muista "
+"salasana”-valintaruutu näytetään. Tämä avain asettaa valintaruudun "
+"oletustilan."
+
+#: data/org.gnome.shell.gschema.xml.in:102
 msgid "The last selected non-default power profile"
 msgstr "Viimeksi valittu muu kuin oletusarvoinen tehoprofiili"
 
-#: data/org.gnome.shell.gschema.xml.in:105
+#: data/org.gnome.shell.gschema.xml.in:103
 msgid ""
-"Some systems support more than two power profiles. In order to still support toggling between "
-"two profiles, this key records the last selected non-default profile."
+"Some systems support more than two power profiles. In order to still support "
+"toggling between two profiles, this key records the last selected non-"
+"default profile."
 msgstr ""
 
-#: data/org.gnome.shell.gschema.xml.in:113
+#: data/org.gnome.shell.gschema.xml.in:111
 msgid "The last version the “Welcome to GNOME” dialog was shown for"
 msgstr ""
 
-#: data/org.gnome.shell.gschema.xml.in:114
+#: data/org.gnome.shell.gschema.xml.in:112
 msgid ""
-"This key determines for which version the “Welcome to GNOME” dialog was last shown. An empty "
-"string represents the oldest possible version, and a huge number will represent versions that do "
-"not exist yet. This huge number can be used to effectively disable the dialog."
+"This key determines for which version the “Welcome to GNOME” dialog was last "
+"shown. An empty string represents the oldest possible version, and a huge "
+"number will represent versions that do not exist yet. This huge number can "
+"be used to effectively disable the dialog."
 msgstr ""
 
-#: data/org.gnome.shell.gschema.xml.in:125
+#: data/org.gnome.shell.gschema.xml.in:145
 msgid "Layout of the app picker"
 msgstr "Sovellusvalitsimen asettelu"
 
-#: data/org.gnome.shell.gschema.xml.in:126
+#: data/org.gnome.shell.gschema.xml.in:146
 msgid ""
-"Layout of the app picker. Each entry in the array is a page. Pages are stored in the order they "
-"appear in GNOME Shell. Each page contains an “application id” → 'data' pair. Currently, the "
-"following values are stored as 'data': • “position”: the position of the application icon in the "
-"page"
+"Layout of the app picker. Each entry in the array is a page. Pages are "
+"stored in the order they appear in GNOME Shell. Each page contains an "
+"“application id” → 'data' pair. Currently, the following values are stored "
+"as 'data': • “position”: the position of the application icon in the page"
 msgstr ""
 
-#: data/org.gnome.shell.gschema.xml.in:145 data/org.gnome.shell.gschema.xml.in:152
+#: data/org.gnome.shell.gschema.xml.in:165
+#: data/org.gnome.shell.gschema.xml.in:172
 msgid "Keybinding to shift between overview states"
 msgstr "Yleisnäkymän avaukseen käytettävä pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:146
+#: data/org.gnome.shell.gschema.xml.in:166
 msgid "Keybinding to shift between session, window picker and app grid"
-msgstr "Istunnon, ikkunavalitsimen ja sovellusruudukon välillä vaihtoon käytettävä pikanäppäin"
+msgstr ""
+"Istunnon, ikkunavalitsimen ja sovellusruudukon välillä vaihtoon käytettävä "
+"pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:153
+#: data/org.gnome.shell.gschema.xml.in:173
 msgid "Keybinding to shift between app grid, window picker and session"
-msgstr "Sovellusruudukon, ikkunavalitsimen ja istunnon välillä vaihtoon käytettävä pikanäppäin"
+msgstr ""
+"Sovellusruudukon, ikkunavalitsimen ja istunnon välillä vaihtoon käytettävä "
+"pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:159
+#: data/org.gnome.shell.gschema.xml.in:179
 msgid "Keybinding to open the “Show Applications” view"
 msgstr "Näytä sovellukset -näkymän avaukseen käytettävä pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:160
-msgid "Keybinding to open the “Show Applications” view of the Activities Overview."
-msgstr "Yleisnäkymän Näytä sovellukset -näkymän avaukseen käytettävä pikanäppäin."
+#: data/org.gnome.shell.gschema.xml.in:180
+msgid ""
+"Keybinding to open the “Show Applications” view of the Activities Overview."
+msgstr ""
+"Yleisnäkymän Näytä sovellukset -näkymän avaukseen käytettävä pikanäppäin."
 
-#: data/org.gnome.shell.gschema.xml.in:167
+#: data/org.gnome.shell.gschema.xml.in:187
 msgid "Keybinding to open the overview"
 msgstr "Yleisnäkymän avaukseen käytettävä pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:168
+#: data/org.gnome.shell.gschema.xml.in:188
 msgid "Keybinding to open the Activities Overview."
 msgstr "Yleisnäkymän avaukseen käytettävä pikanäppäin."
 
-#: data/org.gnome.shell.gschema.xml.in:174
+#: data/org.gnome.shell.gschema.xml.in:194
 msgid "Keybinding to toggle the visibility of the notification list"
 msgstr "Ilmoitusalueen näyttämiseen/piilottamiseen tarkoitettu pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:175
+#: data/org.gnome.shell.gschema.xml.in:195
 msgid "Keybinding to toggle the visibility of the notification list."
 msgstr "Ilmoitusluettelon näyttämiseen/piilottamiseen tarkoitettu pikanäppäin."
 
-#: data/org.gnome.shell.gschema.xml.in:181
+#: data/org.gnome.shell.gschema.xml.in:201
 msgid "Keybinding to toggle the quick settings menu"
 msgstr "Pika-asetusvalikon avaukseen käytettävä pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:182
+#: data/org.gnome.shell.gschema.xml.in:202
 msgid "Keybinding to toggle the quick settings menu."
 msgstr "Pika-asetusvalikon avaukseen käytettävä pikanäppäin."
 
-#: data/org.gnome.shell.gschema.xml.in:188
+#: data/org.gnome.shell.gschema.xml.in:208
 msgid "Keybinding to focus the active notification"
 msgstr "Aktiiviseen ilmoitukseen kohdistava pikanäppäin"
 
-#: data/org.gnome.shell.gschema.xml.in:189
+#: data/org.gnome.shell.gschema.xml.in:209
 msgid "Keybinding to focus the active notification."
 msgstr "Aktiiviseen ilmoitukseen kohdistava pikanäppäin."
 
-#: data/org.gnome.shell.gschema.xml.in:195
+#: data/org.gnome.shell.gschema.xml.in:215
 msgid "Switch to application 1"
 msgstr "Vaihda sovellukseen 1"
 
-#: data/org.gnome.shell.gschema.xml.in:199
+#: data/org.gnome.shell.gschema.xml.in:219
 msgid "Switch to application 2"
 msgstr "Vaihda sovellukseen 2"
 
-#: data/org.gnome.shell.gschema.xml.in:203
+#: data/org.gnome.shell.gschema.xml.in:223
 msgid "Switch to application 3"
 msgstr "Vaihda sovellukseen 3"
 
-#: data/org.gnome.shell.gschema.xml.in:207
+#: data/org.gnome.shell.gschema.xml.in:227
 msgid "Switch to application 4"
 msgstr "Vaihda sovellukseen 4"
 
-#: data/org.gnome.shell.gschema.xml.in:211
+#: data/org.gnome.shell.gschema.xml.in:231
 msgid "Switch to application 5"
 msgstr "Vaihda sovellukseen 5"
 
-#: data/org.gnome.shell.gschema.xml.in:215
+#: data/org.gnome.shell.gschema.xml.in:235
 msgid "Switch to application 6"
 msgstr "Vaihda sovellukseen 6"
 
-#: data/org.gnome.shell.gschema.xml.in:219
+#: data/org.gnome.shell.gschema.xml.in:239
 msgid "Switch to application 7"
 msgstr "Vaihda sovellukseen 7"
 
-#: data/org.gnome.shell.gschema.xml.in:223
+#: data/org.gnome.shell.gschema.xml.in:243
 msgid "Switch to application 8"
 msgstr "Vaihda sovellukseen 8"
 
-#: data/org.gnome.shell.gschema.xml.in:227
+#: data/org.gnome.shell.gschema.xml.in:247
 msgid "Switch to application 9"
 msgstr "Vaihda sovellukseen 9"
 
-#: data/org.gnome.shell.gschema.xml.in:231
+#: data/org.gnome.shell.gschema.xml.in:251
 msgid "Open a new instance of application 1"
 msgstr "Avaa uusi instanssi sovelluksesta 1"
 
-#: data/org.gnome.shell.gschema.xml.in:235
+#: data/org.gnome.shell.gschema.xml.in:255
 msgid "Open a new instance of application 2"
 msgstr "Avaa uusi instanssi sovelluksesta 2"
 
-#: data/org.gnome.shell.gschema.xml.in:239
+#: data/org.gnome.shell.gschema.xml.in:259
 msgid "Open a new instance of application 3"
 msgstr "Avaa uusi instanssi sovelluksesta 3"
 
-#: data/org.gnome.shell.gschema.xml.in:243
+#: data/org.gnome.shell.gschema.xml.in:263
 msgid "Open a new instance of application 4"
 msgstr "Avaa uusi instanssi sovelluksesta 4"
 
-#: data/org.gnome.shell.gschema.xml.in:247
+#: data/org.gnome.shell.gschema.xml.in:267
 msgid "Open a new instance of application 5"
 msgstr "Avaa uusi instanssi sovelluksesta 5"
 
-#: data/org.gnome.shell.gschema.xml.in:251
+#: data/org.gnome.shell.gschema.xml.in:271
 msgid "Open a new instance of application 6"
 msgstr "Avaa uusi instanssi sovelluksesta 6"
 
-#: data/org.gnome.shell.gschema.xml.in:255
+#: data/org.gnome.shell.gschema.xml.in:275
 msgid "Open a new instance of application 7"
 msgstr "Avaa uusi instanssi sovelluksesta 7"
 
-#: data/org.gnome.shell.gschema.xml.in:259
+#: data/org.gnome.shell.gschema.xml.in:279
 msgid "Open a new instance of application 8"
 msgstr "Avaa uusi instanssi sovelluksesta 8"
 
-#: data/org.gnome.shell.gschema.xml.in:263
+#: data/org.gnome.shell.gschema.xml.in:283
 msgid "Open a new instance of application 9"
 msgstr "Avaa uusi instanssi sovelluksesta 9"
 
-#: data/org.gnome.shell.gschema.xml.in:283
-msgid "Screen brightness up"
-msgstr "Lisää näytön kirkkautta"
-
-#: data/org.gnome.shell.gschema.xml.in:287
-msgid "Screen brightness up on current monitor"
-msgstr ""
-
-#: data/org.gnome.shell.gschema.xml.in:291
-msgid "Screen brightness down"
-msgstr "Vähennä näytön kirkkautta"
-
-#: data/org.gnome.shell.gschema.xml.in:295
-msgid "Screen brightness down on current monitor"
-msgstr ""
-
-#: data/org.gnome.shell.gschema.xml.in:299
-msgid "Screen brightness cycle"
-msgstr ""
-
-#: data/org.gnome.shell.gschema.xml.in:303
-msgid "Screen brightness cycle on current monitor"
-msgstr ""
-
-#: data/org.gnome.shell.gschema.xml.in:312 data/org.gnome.shell.gschema.xml.in:339
+#: data/org.gnome.shell.gschema.xml.in:308
+#: data/org.gnome.shell.gschema.xml.in:335
 msgid "Limit switcher to current workspace."
 msgstr "Rajoita vaihtaja nykyiseen työtilaan."
 
-#: data/org.gnome.shell.gschema.xml.in:313
+#: data/org.gnome.shell.gschema.xml.in:309
 msgid ""
-"If true, only applications that have windows on the current workspace are shown in the switcher. "
-"Otherwise, all applications are included."
+"If true, only applications that have windows on the current workspace are "
+"shown in the switcher. Otherwise, all applications are included."
 msgstr ""
-"Jos tosi, näytetään vaihtajassa vain niiden sovellusten ikkunat, jotka sijaitsevat nykyisessä "
-"työtilassa. Muussa tapauksessa kaikki sovellukset sisällytetään."
+"Jos tosi, näytetään vaihtajassa vain niiden sovellusten ikkunat, jotka "
+"sijaitsevat nykyisessä työtilassa. Muussa tapauksessa kaikki sovellukset "
+"sisällytetään."
 
-#: data/org.gnome.shell.gschema.xml.in:330
+#: data/org.gnome.shell.gschema.xml.in:326
 msgid "The application icon mode."
 msgstr "Sovelluskuvakkeen tila."
 
-#: data/org.gnome.shell.gschema.xml.in:331
+#: data/org.gnome.shell.gschema.xml.in:327
 msgid ""
-"Configures how the windows are shown in the switcher. Valid possibilities are “thumbnail-only” "
-"(shows a thumbnail of the window), “app-icon-only” (shows only the application icon) or “both”."
+"Configures how the windows are shown in the switcher. Valid possibilities "
+"are “thumbnail-only” (shows a thumbnail of the window), “app-icon-"
+"only” (shows only the application icon) or “both”."
 msgstr ""
-"Määrittää kuinka ikkunat näytetään ikkunavaihtimessa. Mahdolliset arvot ovat 'thumbnail-only' "
-"(näyttää ikkunan pienoiskuvan), 'app-icon-only' (näyttää vain sovelluksen kuvakkeen) tai "
-"'both'(molemmat)."
+"Määrittää kuinka ikkunat näytetään ikkunavaihtimessa. Mahdolliset arvot ovat "
+"'thumbnail-only' (näyttää ikkunan pienoiskuvan), 'app-icon-only' (näyttää "
+"vain sovelluksen kuvakkeen) tai 'both'(molemmat)."
 
-#: data/org.gnome.shell.gschema.xml.in:340
+#: data/org.gnome.shell.gschema.xml.in:336
 msgid ""
-"If true, only windows from the current workspace are shown in the switcher. Otherwise, all "
-"windows are included."
+"If true, only windows from the current workspace are shown in the switcher. "
+"Otherwise, all windows are included."
 msgstr ""
-"Jos tosi,vain nykyisessä työtilassa olevat ikkunat näytetään vaihtajassa. Muussa tapauksessa "
-"kaikki ikkunat näytetään."
+"Jos tosi,vain nykyisessä työtilassa olevat ikkunat näytetään vaihtajassa. "
+"Muussa tapauksessa kaikki ikkunat näytetään."
 
-#: data/org.gnome.shell.gschema.xml.in:350
+#: data/org.gnome.shell.gschema.xml.in:346
 msgid "Locations"
 msgstr "Sijainnit"
 
-#: data/org.gnome.shell.gschema.xml.in:351
+#: data/org.gnome.shell.gschema.xml.in:347
 msgid "The locations to show in world clocks"
 msgstr "Maailmankellossa näytettävät sijainnit"
 
-#: data/org.gnome.shell.gschema.xml.in:361
+#: data/org.gnome.shell.gschema.xml.in:357
 msgid "Automatic location"
 msgstr "Automaattinen sijainti"
 
-#: data/org.gnome.shell.gschema.xml.in:362
+#: data/org.gnome.shell.gschema.xml.in:358
 msgid "Whether to fetch the current location or not"
 msgstr "Noudetaanko sijainti vai ei"
 
-#: data/org.gnome.shell.gschema.xml.in:369
+#: data/org.gnome.shell.gschema.xml.in:365
 msgid "Location"
 msgstr "Sijainti"
 
-#: data/org.gnome.shell.gschema.xml.in:370
+#: data/org.gnome.shell.gschema.xml.in:366
 msgid "The location for which to show a forecast"
 msgstr "Sijainti jonka ennuste näytetään"
 
-#. Keep in sync with GNOME/gnome-extensions-app
-#: data/org.gnome.Shell.Extensions.desktop.in:4
+#. Keep in sync with subprojects/extensions-app
+#: data/org.gnome.Shell.Extensions.desktop.in.in:5
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:5
+#: subprojects/extensions-app/data/org.gnome.Extensions.desktop.in.in:4
+#: subprojects/extensions-app/data/ui/extensions-window.ui:57
 msgid "Extensions"
 msgstr "Laajennukset"
 
-#: data/org.gnome.Shell.CalendarServer.desktop.in.in:3
-msgid "Reminder Notifications"
-msgstr "Muistutusilmoitukset"
-
-#: data/org.gnome.Shell.PortalHelper.desktop.in:2
+#: data/org.gnome.Shell.PortalHelper.desktop.in.in:3
 msgid "Network Login"
 msgstr "Verkkokirjautuminen"
 
-#: data/X-GNOME-Shell-Utilities.directory.desktop.in:2
-msgid "Utilities"
-msgstr "Apuohjelmat"
+#: js/dbusServices/extensions/ui/extension-error-page.ui:15
+#: subprojects/extensions-app/data/ui/extensions-window.ui:277
+msgid "Something’s gone wrong"
+msgstr "Jokin meni pieleen"
 
-#: js/dbusServices/extensions/extensionPrefsDialog.js:70
-msgid "Extension Error"
-msgstr "Laajennusvirhe"
-
-#. Translators: %s is an extension name
-#: js/dbusServices/extensions/extensionPrefsDialog.js:103
-#, javascript-format
-msgid "Unable to display the settings for “%s”."
-msgstr "Laajennuksen “%s” asetuksia ei voitu näyttää."
-
-#. Translators: Link label in the phrase "Information about this
-#. problem may be available on the extension website"
-#: js/dbusServices/extensions/extensionPrefsDialog.js:109
-msgid "extension website"
-msgstr "laajennuksen verkkosivulla"
-
-#. Translators: %s is "extension website"
-#: js/dbusServices/extensions/extensionPrefsDialog.js:113
-#, javascript-format
-msgid "Information about this problem may be available on the %s."
-msgstr "Tietoja tästä ongelmasta voi olla saatavilla %s."
-
-#: js/dbusServices/extensions/ui/extension-error-page.ui:19
-msgid "Error Details"
-msgstr "Virheen tiedot"
-
-#: js/dbusServices/extensions/ui/extension-error-page.ui:26
-msgid "Copy Error"
-msgstr "Kopiointivirhe"
-
-#: js/gdm/authPrompt.js:61 js/misc/timeLimitsManager.js:1443
-msgid "Screen Time Limit Reached"
-msgstr "Ruutuaika loppui"
-
-#: js/gdm/authPrompt.js:67
-msgid "Daily limit for screen time on this device has been reached. Resume tomorrow."
-msgstr "Päivittäinen ruutuaika tällä laitteella on tullut täyteen. Palaa takaisin huomenna."
-
-#. Translators: this is for ignoring a screen time limit for parental controls
-#: js/gdm/authPrompt.js:75
-msgid "Ignore"
-msgstr "Älä huomioi"
-
-#: js/gdm/authPrompt.js:269
-msgid "Back"
-msgstr "Takaisin"
-
-#: js/gdm/authPrompt.js:366
-msgid "Submit"
-msgstr "Lähetä"
-
-#: js/gdm/authPrompt.js:533 js/gdm/authServicesLegacy.js:25 js/ui/components/networkAgent.js:214
-#: js/ui/components/networkAgent.js:234 js/ui/components/networkAgent.js:266
-#: js/ui/components/networkAgent.js:299 js/ui/components/networkAgent.js:338
-#: js/ui/components/networkAgent.js:351 js/ui/components/polkitAgent.js:286
-#: js/ui/shellMountOperation.js:349 subprojects/extensions-tool/src/command-upload.c:252
-msgid "Password"
-msgstr "Salasana"
-
-#: js/gdm/authServices.js:33
-msgid "Insert smartcard"
-msgstr "Syötä älykortti"
-
-#: js/gdm/authServices.js:37
-msgid "Insert security key"
-msgstr "Syötä suojausavain"
-
-#: js/gdm/authServices.js:44
-msgid "Unlock with fingerprint"
-msgstr "Avaa lukitus sormenjäljellä"
-
-#: js/gdm/authServicesLegacy.js:31
-msgid "Smartcard"
-msgstr "Älykortti"
-
-#: js/gdm/authServicesLegacy.js:37
-msgid "Fingerprint"
-msgstr "Sormenjälki"
-
-#. Translators: this message is shown below the password entry field
-#. to indicate the user can swipe their finger on the fingerprint reader
-#: js/gdm/authServicesLegacy.js:194
-msgid "(or swipe finger across reader)"
-msgstr "(tai pyyhkäise sormella sormenjälkilukijaa)"
-
-#. Translators: this message is shown below the password entry field
-#. to indicate the user can place their finger on the fingerprint reader instead
-#: js/gdm/authServicesLegacy.js:197
-msgid "(or place finger on reader)"
-msgstr "(tai aseta sormi sormenjälkilukijaan)"
-
-#: js/gdm/authServicesSSSDSwitchable.js:467
-msgid "Insert Smartcard"
-msgstr "Syötä älykortti"
-
-#: js/gdm/authServicesSSSDSwitchable.js:468
-msgid "Select Identity"
-msgstr "Valitse identiteetti"
-
-#: js/gdm/authServicesSSSDSwitchable.js:507
-msgid "Organization"
-msgstr "Organisaatio"
-
-#: js/gdm/authServicesSSSDSwitchable.js:534
-#, javascript-format
+#: js/dbusServices/extensions/ui/extension-error-page.ui:23
 msgid ""
-"You have %d attempts left. If the passkey gets locked, you may not able to access your account."
-msgstr "Yrityksiä on %d jäljellä. Jos todentamisavain lukittuu, et välttämättä pääse tilillesi.."
-
-#: js/gdm/authServicesSSSDSwitchable.js:561 js/ui/padOsd.js:223
-msgid "Done"
-msgstr "Valmis"
-
-#. Translators: is running for <username>
-#: js/gdm/conflictingSessionDialog.js:50
-#, javascript-format
-msgid ""
-"Remote login is not possible because a remote session is already running for %s. To login "
-"remotely, you must log out from the remote session or force stop it."
+"We’re very sorry, but there’s been a problem: the settings for this "
+"extension can’t be displayed. We recommend that you report the issue to the "
+"extension authors."
 msgstr ""
-"Etäkirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo etäistunto. Kirjautuaksesi "
-"etäältä sinun tulee ensin kirjautua ulos etäistunnosta tai pakottaa istunnon lopettaminen."
+"Ongelma havaittu: tämän laajennuksen asetuksia ei voi näyttää. Suosittelemme "
+"ilmoittamaan ongelmasta laajennuksen tekijälle."
 
-#. Translators: is running for <username>
-#: js/gdm/conflictingSessionDialog.js:53
-#, javascript-format
-msgid ""
-"Login is not possible because a remote session is already running for %s. To login, you must log "
-"out from the remote session or force stop it."
-msgstr ""
-"Kirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo etäistunto. Kirjautuaksesi sinun "
-"tulee ensin kirjautua ulos etäistunnosta tai pakottaa istunnon lopettaminen."
+#: js/dbusServices/extensions/ui/extension-error-page.ui:48
+msgid "Technical Details"
+msgstr "Tekniset tiedot"
 
-#. Translators: is running for <username>
-#: js/gdm/conflictingSessionDialog.js:56
-#, javascript-format
-msgid ""
-"Remote login is not possible because a local session is already running for %s. To login "
-"remotely, you must log out from the local session or force stop it."
-msgstr ""
-"Etäkirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo paikallinen istunto. "
-"Kirjautuaksesi etäältä sinun tulee ensin kirjautua ulos paikallisesta istunnosta tai pakottaa "
-"istunnon lopettaminen."
+#: js/dbusServices/extensions/ui/extension-error-page.ui:90
+msgid "Homepage"
+msgstr "Verkkosivu"
 
-#. Translators: is running for <username>
-#: js/gdm/conflictingSessionDialog.js:59
-#, javascript-format
-msgid ""
-"Login is not possible because a session is already running for %s. To login, you must log out "
-"from the session or force stop it."
-msgstr ""
-"Kirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo istunto. Kirjautuaksesi sinun tulee "
-"ensin kirjautua ulos istunnosta tai pakottaa istunnon lopettaminen."
+#: js/dbusServices/extensions/ui/extension-error-page.ui:91
+msgid "Visit extension homepage"
+msgstr "Käy laajennuksen verkkosivulla"
 
-#: js/gdm/conflictingSessionDialog.js:68
-msgid "Session Already Running"
-msgstr "Istunto on jo käynnissä"
-
-#: js/gdm/conflictingSessionDialog.js:80
-msgid "Force stopping will quit any running apps and processes, and could result in data loss"
-msgstr ""
-"Pakolla lopettaminen lopettaa kaikki käynnissä olevat sovellukset ja prosessit, ja se saattaa "
-"johtaa tietojen katoamiseen"
-
-#: js/gdm/conflictingSessionDialog.js:94 js/gdm/webLogin.js:191 js/ui/audioDeviceSelection.js:60
-#: js/ui/components/networkAgent.js:114 js/ui/components/polkitAgent.js:144
-#: js/ui/endSessionDialog.js:402 js/ui/extensionDownloader.js:276 js/ui/shellMountOperation.js:399
-#: js/ui/shellMountOperation.js:409
+#: js/gdm/authPrompt.js:151 js/gdm/loginDialog.js:466
+#: js/ui/audioDeviceSelection.js:66 js/ui/components/networkAgent.js:114
+#: js/ui/components/polkitAgent.js:146 js/ui/endSessionDialog.js:438
+#: js/ui/extensionDownloader.js:278 js/ui/shellMountOperation.js:384
+#: js/ui/shellMountOperation.js:394
 msgid "Cancel"
 msgstr "Peru"
 
-#: js/gdm/conflictingSessionDialog.js:101
+#: js/gdm/authPrompt.js:317 js/ui/components/networkAgent.js:214
+#: js/ui/components/networkAgent.js:234 js/ui/components/networkAgent.js:266
+#: js/ui/components/networkAgent.js:299 js/ui/components/networkAgent.js:338
+#: js/ui/components/networkAgent.js:351 js/ui/components/polkitAgent.js:288
+#: js/ui/shellMountOperation.js:334
+msgid "Password"
+msgstr "Salasana"
+
+#: js/gdm/loginDialog.js:327
+msgid "Choose Session"
+msgstr "Valitse istunto"
+
+#. Translators: is running for <username>
+#: js/gdm/loginDialog.js:424
+#, javascript-format
+msgid ""
+"Remote login is not possible because a remote session is already running for "
+"%s. To login remotely, you must log out from the remote session or force "
+"stop it."
+msgstr ""
+"Etäkirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo etäistunto. "
+"Kirjautuaksesi etäältä sinun tulee ensin kirjautua ulos etäistunnosta tai "
+"pakottaa istunnon lopettaminen."
+
+#. Translators: is running for <username>
+#: js/gdm/loginDialog.js:427
+#, javascript-format
+msgid ""
+"Login is not possible because a remote session is already running for %s. To "
+"login, you must log out from the remote session or force stop it."
+msgstr ""
+"Kirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo etäistunto. "
+"Kirjautuaksesi sinun tulee ensin kirjautua ulos etäistunnosta tai pakottaa "
+"istunnon lopettaminen."
+
+#. Translators: is running for <username>
+#: js/gdm/loginDialog.js:430
+#, javascript-format
+msgid ""
+"Remote login is not possible because a local session is already running for "
+"%s. To login remotely, you must log out from the local session or force stop "
+"it."
+msgstr ""
+"Etäkirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo paikallinen "
+"istunto. Kirjautuaksesi etäältä sinun tulee ensin kirjautua ulos "
+"paikallisesta istunnosta tai pakottaa istunnon lopettaminen."
+
+#. Translators: is running for <username>
+#: js/gdm/loginDialog.js:433
+#, javascript-format
+msgid ""
+"Login is not possible because a session is already running for %s. To login, "
+"you must log out from the session or force stop it."
+msgstr ""
+"Kirjautuminen ei ole mahdollista, koska käyttäjällä %s on jo istunto. "
+"Kirjautuaksesi sinun tulee ensin kirjautua ulos istunnosta tai pakottaa "
+"istunnon lopettaminen."
+
+#: js/gdm/loginDialog.js:442
+msgid "Session Already Running"
+msgstr "Istunto on jo käynnissä"
+
+#: js/gdm/loginDialog.js:454
+msgid ""
+"Force stopping will quit any running apps and processes, and could result in "
+"data loss."
+msgstr ""
+"Pakolla lopettaminen lopettaa kaikki käynnissä olevat sovellukset ja "
+"prosessit, ja se saattaa johtaa tietojen katoamiseen."
+
+#: js/gdm/loginDialog.js:474
 msgid "Force Stop"
 msgstr "Pakota lopetus"
 
-#: js/gdm/loginDialog.js:53 js/gdm/loginDialog.js:534 js/ui/unlockDialog.js:678
-msgid "Login Options"
-msgstr "Kirjautumisvalinnat"
-
-#: js/gdm/loginDialog.js:54
-msgid "Session Type"
-msgstr "Istunnon tyyppi"
-
-#: js/gdm/loginDialog.js:332 js/ui/status/accessibility.js:35
-msgid "Accessibility"
-msgstr "Esteettömyys"
-
-#: js/gdm/loginDialog.js:450
+#: js/gdm/loginDialog.js:542
 msgid "Not listed?"
 msgstr "Ei luettelossa?"
 
 #. Translators: this message is shown below the username entry field
 #. to clue the user in on how to login to the local network realm
-#: js/gdm/loginDialog.js:1100
+#: js/gdm/loginDialog.js:1010
 #, javascript-format
 msgid "(e.g., user or %s)"
 msgstr "(esim. käyttäjä tai %s)"
 
-#: js/gdm/loginDialog.js:1107 js/ui/components/networkAgent.js:258
+#: js/gdm/loginDialog.js:1015 js/ui/components/networkAgent.js:258
 #: js/ui/components/networkAgent.js:293 js/ui/components/networkAgent.js:327
-#: subprojects/extensions-tool/src/command-upload.c:234
 msgid "Username"
 msgstr "Käyttäjätunnus"
 
-#: js/gdm/loginDialog.js:1171
+#: js/gdm/loginDialog.js:1081
 msgid "Login Attempt Timed Out"
 msgstr "Kirjautumisyritys aikakatkaistiin"
 
-#: js/gdm/loginDialog.js:1172
+#: js/gdm/loginDialog.js:1082
 msgid "Login took too long, please try again"
 msgstr "Kirjautuminen kesti liian kauan, yritä uudelleen"
 
-#: js/gdm/loginDialog.js:1534
+#: js/gdm/loginDialog.js:1427
 msgid "Login Window"
 msgstr "Kirjautumisikkuna"
 
-#: js/gdm/userVerifier.js:315
+#: js/gdm/util.js:497
 msgid "Authentication error"
 msgstr "Tunnistautumisvirhe"
 
-#: js/gdm/webLogin.js:63
-msgid "Login code: "
-msgstr "Kirjautumiskoodi: "
+#. Translators: this message is shown below the password entry field
+#. to indicate the user can swipe their finger on the fingerprint reader
+#: js/gdm/util.js:728
+msgid "(or swipe finger across reader)"
+msgstr "(tai pyyhkäise sormella sormenjälkilukijaa)"
 
-#: js/misc/breakManager.js:776
-msgid "Break complete sound"
-msgstr "Suoritetun tauon ääni"
-
-#: js/misc/breakManager.js:985
-#, javascript-format
-msgid "%d second"
-msgid_plural "%d seconds"
-msgstr[0] "%d sekunti"
-msgstr[1] "%d sekuntia"
-
-#: js/misc/breakManager.js:991
-#, javascript-format
-msgid "%d minute"
-msgid_plural "%d minutes"
-msgstr[0] "%d minuutti"
-msgstr[1] "%d minuuttia"
-
-#: js/misc/breakManager.js:997
-#, javascript-format
-msgid "%d hour"
-msgid_plural "%d hours"
-msgstr[0] "%d tunti"
-msgstr[1] "%d tuntia"
-
-#: js/misc/breakManager.js:1003
-#, javascript-format
-msgid "%d day"
-msgid_plural "%d days"
-msgstr[0] "%d päivä"
-msgstr[1] "%d päivää"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1085
-#, javascript-format
-msgid "It will be time for a break in %s"
-msgid_plural "It will be time for a break in %s"
-msgstr[0] "Taukoon aikaa %s"
-msgstr[1] "It will be time for a break in %s"
-
-#: js/misc/breakManager.js:1093
-msgid "Movement Break Soon"
-msgstr "Liikuntatauko pian"
-
-#: js/misc/breakManager.js:1096
-msgid "Eyesight Break Soon"
-msgstr "Katselutauko pian"
-
-#: js/misc/breakManager.js:1099
-msgid "Break Soon"
-msgstr "Tauko pian"
-
-#: js/misc/breakManager.js:1144
-msgid "Movement Break in Progress"
-msgstr "Liikuntatauko meneillään"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1147
-#, javascript-format
-msgid "Continue moving around for %s"
-msgid_plural "Continue moving around for %s"
-msgstr[0] "Jatka liikkumista vielä %s"
-msgstr[1] "Jatka liikkumista vielä %s"
-
-#: js/misc/breakManager.js:1153
-msgid "Eyesight Break in Progress"
-msgstr "Katselutauko meneillään"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1156
-#, javascript-format
-msgid "Continue looking away for %s"
-msgid_plural "Continue looking away for %s"
-msgstr[0] "Katsele muualle kuin näyttöön vielä %s"
-msgstr[1] "Katsele muualle kuin näyttöön vielä %s"
-
-#: js/misc/breakManager.js:1162
-msgid "Break in Progress"
-msgstr "Tauko meneillään"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1165
-#, javascript-format
-msgid "%s left in your break"
-msgid_plural "%s left in your break"
-msgstr[0] "%s jäljellä taukoa"
-msgstr[1] "%s jäljellä taukoa"
-
-#: js/misc/breakManager.js:1204
-msgid "Time for a Movement Break"
-msgstr "Liikuntatauon aika"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1207
-#, javascript-format
-msgid "Take a break from the device and move around for %s"
-msgid_plural "Take a break from the device and move around for %s"
-msgstr[0] "Pidä taukoa laitteelta ja liiku %s"
-msgstr[1] "Pidä taukoa laitteelta ja liiku %s"
-
-#: js/misc/breakManager.js:1213
-msgid "Time for an Eyesight Break"
-msgstr "Katselutauon aika"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1216
-#, javascript-format
-msgid "Take a break from the screen. Look at least 6 meters away for at least %s"
-msgid_plural "Take a break from the screen. Look at least 6 meters away for at least %s"
-msgstr[0] "Pidä tauko näytön katselulta. Katso vähintään kuuden metrin päähän %s"
-msgstr[1] "Pidä tauko näytön katselulta. Katso vähintään kuuden metrin päähän %s"
-
-#: js/misc/breakManager.js:1222
-msgid "Time for a Break"
-msgstr "Tauon aika"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1225
-#, javascript-format
-msgid "It’s time to take a break. Get away from the device for %s!"
-msgid_plural "It’s time to take a break. Get away from the device for %s!"
-msgstr[0] "Aika pitää tauko. Pidä taukoa %s!"
-msgstr[1] "It’s time to take a break. Get away from the device for %s!"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1249
-#, javascript-format
-msgid "You were due to take a break %s ago"
-msgid_plural "You were due to take a break %s ago"
-msgstr[0] "Tauon pitäminen myöhästyi %s"
-msgstr[1] "Tauon pitäminen myöhästyi %s"
-
-#: js/misc/breakManager.js:1255
-msgid "Break Overdue"
-msgstr "Tauko myöhässä"
-
-#: js/misc/breakManager.js:1271
-#, javascript-format
-msgid "There is %s remaining in your break"
-msgid_plural "There are %s remaining in your break"
-msgstr[0] "Taukoa jäljellä %s"
-msgstr[1] "Taukoa jäljellä %s"
-
-#: js/misc/breakManager.js:1277
-msgid "Break Interrupted"
-msgstr "Tauko keskeytetty"
-
-#. Translators: As in "Delay the break"
-#: js/misc/breakManager.js:1355
-msgid "Delay"
-msgstr "Viive"
-
-#. Translators: As in "Skip the break"
-#: js/misc/breakManager.js:1377 js/ui/welcomeDialog.js:61
-msgid "Skip"
-msgstr "Ohita"
-
-#. Translators: As in "Take the break"
-#: js/misc/breakManager.js:1399
-msgid "Take"
-msgstr "Pidä"
-
-#. Translators: This is a notification to warn the user that a
-#. screen time break will start shortly.
-#: js/misc/breakManager.js:1462
-#, javascript-format
-msgid "Break in %d second"
-msgid_plural "Break in %d seconds"
-msgstr[0] "Tauko %d sekunnin päästä"
-msgstr[1] "Tauko %d sekunnin päästä"
-
-#: js/misc/brightnessManager.js:292 js/ui/status/brightness.js:10
-msgid "Brightness"
-msgstr "Kirkkaus"
+#. Translators: this message is shown below the password entry field
+#. to indicate the user can place their finger on the fingerprint reader instead
+#: js/gdm/util.js:733
+msgid "(or place finger on reader)"
+msgstr "(tai aseta sormi sormenjälkilukijaan)"
 
 #. Translators: The name of the power-off action in search
-#: js/misc/systemActions.js:98
+#: js/misc/systemActions.js:91
 msgctxt "search-result"
 msgid "Power Off"
 msgstr "Sammuta"
 
 #. Translators: A list of keywords that match the power-off action, separated by semicolons
-#: js/misc/systemActions.js:101
+#: js/misc/systemActions.js:94
 msgid "power off;poweroff;shutdown;halt;stop"
 msgstr "power off;poweroff;shutdown;halt;stop;sammuta"
 
 #. Translators: The name of the restart action in search
-#: js/misc/systemActions.js:106
+#: js/misc/systemActions.js:99
 msgctxt "search-result"
 msgid "Restart"
 msgstr "Käynnistä uudelleen"
 
 #. Translators: A list of keywords that match the restart action, separated by semicolons
-#: js/misc/systemActions.js:109
+#: js/misc/systemActions.js:102
 msgid "reboot;restart;"
 msgstr "reboot;restart;uudelleenkäynnistys;käynnistä uudelleen;boottaa;"
 
 #. Translators: The name of the lock screen action in search
-#: js/misc/systemActions.js:114
+#: js/misc/systemActions.js:107
 msgctxt "search-result"
 msgid "Lock Screen"
 msgstr "Lukitse näyttö"
 
 #. Translators: A list of keywords that match the lock screen action, separated by semicolons
-#: js/misc/systemActions.js:117
+#: js/misc/systemActions.js:110
 msgid "lock screen"
 msgstr "lock screen"
 
 #. Translators: The name of the logout action in search
-#: js/misc/systemActions.js:122
+#: js/misc/systemActions.js:115
 msgctxt "search-result"
 msgid "Log Out"
 msgstr "Kirjaudu ulos"
 
 #. Translators: A list of keywords that match the logout action, separated by semicolons
-#: js/misc/systemActions.js:125
+#: js/misc/systemActions.js:118
 msgid "logout;log out;sign off"
 msgstr "logout;log out;sign off;kirjaudu ulos;uloskirjautuminen;poistu"
 
 #. Translators: The name of the suspend action in search
-#: js/misc/systemActions.js:130
+#: js/misc/systemActions.js:123
 msgctxt "search-result"
 msgid "Suspend"
 msgstr "Valmiustila"
 
 #. Translators: A list of keywords that match the suspend action, separated by semicolons
-#: js/misc/systemActions.js:133
+#: js/misc/systemActions.js:126
 msgid "suspend;sleep"
 msgstr "suspend;sleep"
 
 #. Translators: The name of the switch user action in search
-#: js/misc/systemActions.js:138
+#: js/misc/systemActions.js:131
 msgctxt "search-result"
 msgid "Switch User"
 msgstr "Vaihda käyttäjää"
 
 #. Translators: A list of keywords that match the switch user action, separated by semicolons
-#: js/misc/systemActions.js:141
+#: js/misc/systemActions.js:134
 msgid "switch user"
 msgstr "switch user"
 
 #. Translators: A list of keywords that match the lock orientation action, separated by semicolons
-#: js/misc/systemActions.js:148
+#: js/misc/systemActions.js:141
 msgid "lock orientation;unlock orientation;screen;rotation"
 msgstr ""
-"lock orientation;unlock orientation;screen;rotation;lukitse kierto;lukitse suunta;suunta;kääntö"
+"lock orientation;unlock orientation;screen;rotation;lukitse kierto;lukitse "
+"suunta;suunta;kääntö"
 
 #. Translators: The name of the screenshot UI action in search
-#: js/misc/systemActions.js:153
+#: js/misc/systemActions.js:146
 msgctxt "search-result"
 msgid "Take a Screenshot"
 msgstr "Ota kuvakaappaus"
 
 #. Translators: A list of keywords that match the screenshot UI action, separated by semicolons
-#: js/misc/systemActions.js:156
+#: js/misc/systemActions.js:149
 msgid "screenshot;screencast;snip;capture;record"
-msgstr "screenshot;screencast;snip;capture;record;kuvakaappaus;näyttökaappaus;näyttövideo;nauhoita"
+msgstr ""
+"screenshot;screencast;snip;capture;record;kuvakaappaus;näyttökaappaus;"
+"näyttövideo;nauhoita"
 
-#: js/misc/systemActions.js:267
+#: js/misc/systemActions.js:249
 msgctxt "search-result"
 msgid "Unlock Screen Rotation"
 msgstr "Vapauta näytön kierto"
 
-#: js/misc/systemActions.js:268
+#: js/misc/systemActions.js:250
 msgctxt "search-result"
 msgid "Lock Screen Rotation"
 msgstr "Lukitse näytön kierto"
 
-#: js/misc/timeLimitsManager.js:473
-msgid "GNOME needs to save screen time data"
-msgstr "Gnomen täytyy tallentaa dataa näytön käyttöajasta"
-
-#: js/misc/timeLimitsManager.js:1408
-msgid "Screen Time Limit is almost up"
-msgstr "Ruutuaika loppuu pian"
-
-#: js/misc/timeLimitsManager.js:1410
-#, javascript-format
-msgid "The computer will lock in %d second."
-msgid_plural "The computer will lock in %d seconds."
-msgstr[0] "Tietokone lukitaan %d sekunnin kuluttua."
-msgstr[1] "Tietokone lukitaan %d sekunnin kuluttua."
-
-#: js/misc/timeLimitsManager.js:1418
-#, javascript-format
-msgid "Screen Time Limit in %d Minute"
-msgid_plural "Screen Time Limit in %d Minutes"
-msgstr[0] "Ruutuaika loppuu %d minuutin päästä"
-msgstr[1] "Ruutuaika loppuu %d minuutin päästä"
-
-#: js/misc/timeLimitsManager.js:1422
-msgid "Your screen time limit is approaching"
-msgstr "Ruutuaika loppuu pian"
-
-#: js/misc/timeLimitsManager.js:1444
-msgid "It’s time to stop using the device"
-msgstr "Aika lopettaa laitteen käyttäminen"
-
-#: js/misc/util.js:131
+#: js/misc/util.js:139
 msgid "Command not found"
 msgstr "Komentoa ei löydy"
 
-#: js/misc/util.js:169
+#. Replace "Error invoking GLib.shell_parse_argv: " with
+#. something nicer
+#: js/misc/util.js:179
+msgid "Could not parse command:"
+msgstr "Komentoa ei voi jäsentää:"
+
+#: js/misc/util.js:187
 #, javascript-format
 msgid "Execution of “%s” failed:"
 msgstr "Kohteen ”%s” suorittaminen epäonnistui:"
@@ -1090,7 +833,7 @@ msgid_plural "%d hours ago"
 msgstr[0] "%d tunti sitten"
 msgstr[1] "%d tuntia sitten"
 
-#: js/misc/dateUtils.js:85 js/ui/dateMenu.js:184
+#: js/misc/dateUtils.js:85 js/ui/dateMenu.js:185
 msgid "Yesterday"
 msgstr "Eilen"
 
@@ -1124,21 +867,21 @@ msgstr[1] "%d vuotta sitten"
 
 #. Translators: Time in 24h format
 #: js/misc/dateUtils.js:155
-msgid "%H:%M"
+msgid "%H∶%M"
 msgstr "%H.%M"
 
 #. Translators: this is the word "Yesterday" followed by a
 #. time string in 24h format. i.e. "Yesterday, 14:30"
 #: js/misc/dateUtils.js:161
 #, no-c-format
-msgid "Yesterday, %H:%M"
+msgid "Yesterday, %H∶%M"
 msgstr "Eilen, %H.%M"
 
 #. Translators: this is the week day name followed by a time
 #. string in 24h format. i.e. "Monday, 14:30"
 #: js/misc/dateUtils.js:167
 #, no-c-format
-msgid "%A, %H:%M"
+msgid "%A, %H∶%M"
 msgstr "%A, %H.%M"
 
 #. Translators: this is the month name and day number
@@ -1146,7 +889,7 @@ msgstr "%A, %H.%M"
 #. i.e. "May 25, 14:30"
 #: js/misc/dateUtils.js:173
 #, no-c-format
-msgid "%B %-d, %H:%M"
+msgid "%B %-d, %H∶%M"
 msgstr "%-d. %Bta, %H.%M"
 
 #. Translators: this is the month name, day number, year
@@ -1154,28 +897,28 @@ msgstr "%-d. %Bta, %H.%M"
 #. i.e. "May 25 2012, 14:30"
 #: js/misc/dateUtils.js:179
 #, no-c-format
-msgid "%B %-d %Y, %H:%M"
+msgid "%B %-d %Y, %H∶%M"
 msgstr "%-d. %Bta %Y, %H.%M"
 
 #. Show only the time if date is on today
 #. eslint-disable-line no-lonely-if
 #. Translators: Time in 12h format
 #: js/misc/dateUtils.js:184
-msgid "%l:%M %p"
-msgstr "%l.%M %p"
+msgid "%l∶%M %p"
+msgstr "%l∶%M %p"
 
 #. Translators: this is the word "Yesterday" followed by a
 #. time string in 12h format. i.e. "Yesterday, 2:30 pm"
 #: js/misc/dateUtils.js:190
 #, no-c-format
-msgid "Yesterday, %l:%M %p"
+msgid "Yesterday, %l∶%M %p"
 msgstr "Eilen, %l∶%M %p"
 
 #. Translators: this is the week day name followed by a time
 #. string in 12h format. i.e. "Monday, 2:30 pm"
 #: js/misc/dateUtils.js:196
 #, no-c-format
-msgid "%A, %l:%M %p"
+msgid "%A, %l∶%M %p"
 msgstr "%A, %l∶%M %p"
 
 #. Translators: this is the month name and day number
@@ -1183,7 +926,7 @@ msgstr "%A, %l∶%M %p"
 #. i.e. "May 25, 2:30 pm"
 #: js/misc/dateUtils.js:202
 #, no-c-format
-msgid "%B %-d, %l:%M %p"
+msgid "%B %-d, %l∶%M %p"
 msgstr "%B %-d, %l∶%M %p"
 
 #. Translators: this is the month name, day number, year
@@ -1191,133 +934,116 @@ msgstr "%B %-d, %l∶%M %p"
 #. i.e. "May 25 2012, 2:30 pm"
 #: js/misc/dateUtils.js:208
 #, no-c-format
-msgid "%B %-d %Y, %l:%M %p"
+msgid "%B %-d %Y, %l∶%M %p"
 msgstr "%B %-d %Y, %l∶%M %p"
 
-#: js/portalHelper/main.js:104
+#: js/portalHelper/main.js:98
 msgid "Your connection seems to be secure"
 msgstr "Yhteys vaikuttaa turvalliselta"
 
-#: js/portalHelper/main.js:110
+#: js/portalHelper/main.js:104
 msgid ""
-"Your connection to this hotspot login is not secure. Passwords or other information you enter on "
-"this page can be viewed by people nearby."
+"Your connection to this hotspot login is not secure. Passwords or other "
+"information you enter on this page can be viewed by people nearby."
 msgstr ""
-"Yhteytesi tukiaseman kirjautumissivuun ei ole salattu. Salasanat ja muut välittämäsi tiedot "
-"voivat olla muiden ihmisten nähtävissä."
+"Yhteytesi tukiaseman kirjautumissivuun ei ole salattu. Salasanat ja muut "
+"välittämäsi tiedot voivat olla muiden ihmisten nähtävissä."
 
-#: js/portalHelper/main.js:121
+#: js/portalHelper/main.js:115
 msgid "Hotspot Login"
 msgstr "Tukiasemaan kirjautuminen"
 
 #. No support for non-modal system dialogs, so ignore the option
 #. let modal = options['modal'] || true;
-#: js/ui/accessDialog.js:51 js/ui/inhibitShortcutsDialog.js:92
+#: js/ui/accessDialog.js:45 js/ui/inhibitShortcutsDialog.js:92
 msgid "Deny"
 msgstr "Kiellä"
 
-#: js/ui/accessDialog.js:52 js/ui/inhibitShortcutsDialog.js:101
+#: js/ui/accessDialog.js:46 js/ui/inhibitShortcutsDialog.js:101
 msgid "Allow"
 msgstr "Salli"
 
-#: js/ui/appDisplay.js:158
-msgid "App grid"
-msgstr "Sovellusruudukko"
-
-#: js/ui/appDisplay.js:1737
+#: js/ui/appDisplay.js:1775
 msgid "Unnamed Folder"
 msgstr "Nimetön kansio"
 
-#: js/ui/appDisplay.js:2564
-msgid "Folder name"
-msgstr "Kansion nimi"
-
-#: js/ui/appDisplay.js:2587
-msgid "Edit folder name"
-msgstr "Muokkaa kansion nimeä"
-
-#: js/ui/appFavorites.js:104
+#: js/ui/appFavorites.js:166
 #, javascript-format
-#| msgid "Pin to Dash"
-msgid "%s Pinned to Dash"
-msgstr "%s kiinnitetty telakkaan"
+msgid "%s has been pinned to the dash."
+msgstr "%s on kiinnitetty telakkaan."
 
-#: js/ui/appFavorites.js:135
+#: js/ui/appFavorites.js:199
 #, javascript-format
-msgid "%s Unpinned From Dash"
-msgstr "%s irrotettu telakasta"
-
-#: js/ui/appFavorites.js:149 js/ui/main.js:302
-msgid "Undo"
-msgstr "Kumoa"
+msgid "%s has been unpinned from the dash."
+msgstr "%s ei ole enää kiinnitetty telakkaan."
 
 #. Translators: This is the heading of a list of open windows
-#: js/ui/appMenu.js:49
+#: js/ui/appMenu.js:51
 msgid "Open Windows"
 msgstr "Avoimet ikkunat"
 
-#: js/ui/appMenu.js:57
+#: js/ui/appMenu.js:59
 msgid "New Window"
 msgstr "Uusi ikkuna"
 
-#: js/ui/appMenu.js:84
+#: js/ui/appMenu.js:86
 msgid "App Details"
 msgstr "Sovelluksen tiedot"
 
-#: js/ui/appMenu.js:100
+#: js/ui/appMenu.js:102
 msgid "Quit"
 msgstr "Lopeta"
 
-#: js/ui/appMenu.js:160 js/ui/dash.js:244
+#: js/ui/appMenu.js:162 js/ui/dash.js:250
 msgid "Unpin"
 msgstr "Poista kiinnitys"
 
-#: js/ui/appMenu.js:161
+#: js/ui/appMenu.js:163
 msgid "Pin to Dash"
 msgstr "Kiinnitä telakkaan"
 
-#: js/ui/appMenu.js:178
-msgid "Launch Using Integrated Graphics Card"
+#: js/ui/appMenu.js:180
+msgid "Launch using Integrated Graphics Card"
 msgstr "Käynnistä integroitua näytönohjainta käyttäen"
 
-#: js/ui/appMenu.js:179
-msgid "Launch Using Discrete Graphics Card"
+#: js/ui/appMenu.js:181
+msgid "Launch using Discrete Graphics Card"
 msgstr "Käynnistä erillistä näytönohjainta käyttäen"
 
 #: js/ui/audioDeviceSelection.js:46
 msgid "Select Audio Device"
 msgstr "Valitse äänilaite"
 
-#: js/ui/audioDeviceSelection.js:67 js/ui/status/volume.js:81
+#: js/ui/audioDeviceSelection.js:61 js/ui/status/volume.js:83
 msgid "Sound Settings"
 msgstr "Ääniasetukset"
 
-#: js/ui/audioDeviceSelection.js:75
+#: js/ui/audioDeviceSelection.js:74
 msgid "Headphones"
 msgstr "Kuulokkeet"
 
-#: js/ui/audioDeviceSelection.js:77
+#: js/ui/audioDeviceSelection.js:76
 msgid "Headset"
 msgstr "Headset-kuulokkeet"
 
-#: js/ui/audioDeviceSelection.js:79 js/ui/status/volume.js:372
+#: js/ui/audioDeviceSelection.js:78 js/ui/status/volume.js:358
 msgid "Microphone"
 msgstr "Mikrofoni"
 
-#: js/ui/backgroundMenu.js:12
+#: js/ui/backgroundMenu.js:15
 msgid "Change Background…"
 msgstr "Muuta työpöydän taustaa…"
 
-#: js/ui/backgroundMenu.js:14
+#: js/ui/backgroundMenu.js:17
 msgid "Display Settings"
 msgstr "Näytön asetukset"
 
-#: js/ui/backgroundMenu.js:15
+#: js/ui/backgroundMenu.js:18
 msgid "Settings"
 msgstr "Asetukset"
 
 #. Translators: Enter 0-6 (Sunday-Saturday) for non-work days. Examples: "0" (Sunday) "6" (Saturday) "06" (Sunday and Saturday).
-#: js/ui/calendar.js:34
+#: js/ui/calendar.js:39
 msgctxt "calendar-no-work"
 msgid "06"
 msgstr "06"
@@ -1327,43 +1053,43 @@ msgstr "06"
 #. * NOTE: These grid abbreviations are always shown together
 #. * and in order, e.g. "S M T W T F S".
 #.
-#: js/ui/calendar.js:60
+#: js/ui/calendar.js:65
 msgctxt "grid sunday"
 msgid "S"
 msgstr "S"
 
 #. Translators: Calendar grid abbreviation for Monday
-#: js/ui/calendar.js:62
+#: js/ui/calendar.js:67
 msgctxt "grid monday"
 msgid "M"
 msgstr "M"
 
 #. Translators: Calendar grid abbreviation for Tuesday
-#: js/ui/calendar.js:64
+#: js/ui/calendar.js:69
 msgctxt "grid tuesday"
 msgid "T"
 msgstr "T"
 
 #. Translators: Calendar grid abbreviation for Wednesday
-#: js/ui/calendar.js:66
+#: js/ui/calendar.js:71
 msgctxt "grid wednesday"
 msgid "W"
 msgstr "K"
 
 #. Translators: Calendar grid abbreviation for Thursday
-#: js/ui/calendar.js:68
+#: js/ui/calendar.js:73
 msgctxt "grid thursday"
 msgid "T"
 msgstr "T"
 
 #. Translators: Calendar grid abbreviation for Friday
-#: js/ui/calendar.js:70
+#: js/ui/calendar.js:75
 msgctxt "grid friday"
 msgid "F"
 msgstr "P"
 
 #. Translators: Calendar grid abbreviation for Saturday
-#: js/ui/calendar.js:72
+#: js/ui/calendar.js:77
 msgctxt "grid saturday"
 msgid "S"
 msgstr "L"
@@ -1374,7 +1100,7 @@ msgstr "L"
 #. * "%OB" is the new format specifier introduced in glibc 2.27,
 #. * in most cases you should not change it.
 #.
-#: js/ui/calendar.js:425
+#: js/ui/calendar.js:428
 msgid "%OB"
 msgstr "%OB"
 
@@ -1387,96 +1113,96 @@ msgstr "%OB"
 #. * in most cases you should not use the old "%B" here unless you
 #. * absolutely know what you are doing.
 #.
-#: js/ui/calendar.js:435
+#: js/ui/calendar.js:438
 msgid "%OB %Y"
 msgstr "%OB %Y"
 
-#: js/ui/calendar.js:513
+#: js/ui/calendar.js:500
 msgid "Previous month"
 msgstr "Edellinen kuukausi"
 
-#: js/ui/calendar.js:531
+#: js/ui/calendar.js:518
 msgid "Next month"
 msgstr "Seuraava kuukausi"
 
-#: js/ui/calendar.js:676
+#: js/ui/calendar.js:669
 #, no-javascript-format
 msgctxt "date day number format"
 msgid "%d"
 msgstr "%d"
 
-#: js/ui/calendar.js:735
+#: js/ui/calendar.js:728
 msgid "Week %V"
 msgstr "Viikko %V"
 
-#: js/ui/calendar.js:788
+#: js/ui/calendar.js:920
 msgid "No Notifications"
 msgstr "Ei ilmoituksia"
 
-#: js/ui/calendar.js:829
+#: js/ui/calendar.js:976
+msgid "Do Not Disturb"
+msgstr "Älä häiritse"
+
+#: js/ui/calendar.js:997
 msgid "Clear"
 msgstr "Tyhjennä"
 
-#: js/ui/calendar.js:833
+#: js/ui/calendar.js:1001
 msgctxt "action"
 msgid "Clear all notifications"
 msgstr "Tyhjennä kaikki ilmoitukset"
 
 #. Translators: %s is an application name
-#: js/ui/closeDialog.js:40
+#: js/ui/closeDialog.js:44
 #, javascript-format
-msgid "“%s” Is Not Responding"
-msgstr "“%s” ei vastaa"
+msgid "“%s” is not responding."
+msgstr "“%s” ei vastaa."
 
-#: js/ui/closeDialog.js:41
-msgid "You may choose to wait a short while for it to continue or force the app to quit entirely"
-msgstr "Voit odottaa hetken sovelluksen jatkamista tai pakottaa sovelluksen lopetuksen"
+#: js/ui/closeDialog.js:45
+msgid ""
+"You may choose to wait a short while for it to continue or force the app to "
+"quit entirely."
+msgstr ""
+"Voit odottaa hetken sovelluksen jatkamista tai pakottaa sovelluksen "
+"lopetuksen."
 
-#: js/ui/closeDialog.js:69
+#: js/ui/closeDialog.js:73
 msgid "Force Quit"
 msgstr "Pakota lopetus"
 
-#: js/ui/closeDialog.js:74
+#: js/ui/closeDialog.js:78
 msgid "Wait"
 msgstr "Odota"
 
-#: js/ui/components/automountManager.js:82
+#: js/ui/components/automountManager.js:84
 msgid "External drive connected"
 msgstr "Erillinen asema yhdistetty"
 
-#: js/ui/components/automountManager.js:95
+#: js/ui/components/automountManager.js:96
 msgid "External drive disconnected"
 msgstr "Erillinen asema irrotettu"
 
-#: js/ui/components/automountManager.js:209
+#: js/ui/components/automountManager.js:207
 msgid "Unable to unlock volume"
 msgstr "Taltion lukituksen avaaminen epäonnistui"
 
-#: js/ui/components/automountManager.js:210
+#: js/ui/components/automountManager.js:208
 msgid "The installed udisks version does not support the PIM setting"
 msgstr "Asennettu udisks-versio ei tue PIM-asetusta"
 
-#. Translators: %s is the name of a partition on a external drive
-#: js/ui/components/autorunManager.js:190
-#, javascript-format
-msgid "“%s” connected"
-msgstr "“%s” yhdistetty"
-
-#: js/ui/components/autorunManager.js:191
-msgid "Disk can now be used"
-msgstr "Levyä voi käyttää nyt"
-
-#: js/ui/components/autorunManager.js:203
+#: js/ui/components/autorunManager.js:200
 #, javascript-format
 msgid "Open with %s"
 msgstr "Avaa käyttäen sovellusta %s"
 
 #: js/ui/components/networkAgent.js:96
-msgid "Alternatively you can connect by pushing the “WPS” button on your router"
-msgstr "Vaihtoehtoisesti voit yhdistää painamalla reitittimesi “WPS”-painiketta"
+msgid ""
+"Alternatively you can connect by pushing the “WPS” button on your router."
+msgstr ""
+"Vaihtoehtoisesti voit yhdistää painamalla reitittimesi “WPS”-painiketta."
 
-#: js/ui/components/networkAgent.js:108 js/ui/status/bluetooth.js:245 js/ui/status/network.js:361
-#: js/ui/status/network.js:445
+#: js/ui/components/networkAgent.js:108 js/ui/status/bluetooth.js:246
+#: js/ui/status/network.js:360 js/ui/status/network.js:444
 msgid "Connect"
 msgstr "Yhdistä"
 
@@ -1497,16 +1223,18 @@ msgid "Service"
 msgstr "Palvelu"
 
 #: js/ui/components/networkAgent.js:371 js/ui/components/networkAgent.js:407
-#: js/ui/components/networkAgent.js:744 js/ui/components/networkAgent.js:765
+#: js/ui/components/networkAgent.js:750 js/ui/components/networkAgent.js:771
 msgid "Authentication required"
 msgstr "Tunnistautuminen vaaditaan"
 
-#: js/ui/components/networkAgent.js:372 js/ui/components/networkAgent.js:745
+#: js/ui/components/networkAgent.js:372 js/ui/components/networkAgent.js:751
 #, javascript-format
-msgid "Passwords or encryption keys are required to access the wireless network “%s”"
-msgstr "Langaton verkko “%s” vaatii salasanan tai salausavaimia"
+msgid ""
+"Passwords or encryption keys are required to access the wireless network "
+"“%s”."
+msgstr "Langaton verkko \"%s\" vaatii salasanan tai salausavaimia."
 
-#: js/ui/components/networkAgent.js:376 js/ui/components/networkAgent.js:749
+#: js/ui/components/networkAgent.js:376 js/ui/components/networkAgent.js:755
 msgid "Wired 802.1X authentication"
 msgstr "Kiinteän 802.1X-yhteyden tunnistautuminen"
 
@@ -1514,15 +1242,15 @@ msgstr "Kiinteän 802.1X-yhteyden tunnistautuminen"
 msgid "Network name"
 msgstr "Verkon nimi"
 
-#: js/ui/components/networkAgent.js:387 js/ui/components/networkAgent.js:753
+#: js/ui/components/networkAgent.js:387 js/ui/components/networkAgent.js:759
 msgid "DSL authentication"
 msgstr "DSL-tunnistautuminen"
 
-#: js/ui/components/networkAgent.js:394 js/ui/components/networkAgent.js:758
+#: js/ui/components/networkAgent.js:394 js/ui/components/networkAgent.js:764
 msgid "PIN code required"
 msgstr "PIN-koodi vaaditaan"
 
-#: js/ui/components/networkAgent.js:395 js/ui/components/networkAgent.js:759
+#: js/ui/components/networkAgent.js:395 js/ui/components/networkAgent.js:765
 msgid "PIN code is needed for the mobile broadband device"
 msgstr "Mobiililaajakaista vaatii PIN-koodin"
 
@@ -1530,26 +1258,26 @@ msgstr "Mobiililaajakaista vaatii PIN-koodin"
 msgid "PIN"
 msgstr "PIN"
 
-#: js/ui/components/networkAgent.js:408 js/ui/components/networkAgent.js:750
-#: js/ui/components/networkAgent.js:754 js/ui/components/networkAgent.js:766
-#: js/ui/components/networkAgent.js:770
+#: js/ui/components/networkAgent.js:408 js/ui/components/networkAgent.js:756
+#: js/ui/components/networkAgent.js:760 js/ui/components/networkAgent.js:772
+#: js/ui/components/networkAgent.js:776
 #, javascript-format
-msgid "A password is required to connect to “%s”"
-msgstr "Salasana vaaditaan kohteeseen “%s” yhdistämiseksi"
+msgid "A password is required to connect to “%s”."
+msgstr "Salasana vaaditaan kohteeseen \"%s\" yhdistämiseksi."
 
-#: js/ui/components/networkAgent.js:769
+#: js/ui/components/networkAgent.js:775
 msgid "VPN password"
 msgstr "VPN-salasana"
 
-#: js/ui/components/polkitAgent.js:44
+#: js/ui/components/polkitAgent.js:46
 msgid "Authentication Required"
 msgstr "Tunnistautuminen vaaditaan"
 
-#: js/ui/components/polkitAgent.js:84
+#: js/ui/components/polkitAgent.js:86
 msgid "Administrator"
 msgstr "Ylläpitäjä"
 
-#: js/ui/components/polkitAgent.js:149
+#: js/ui/components/polkitAgent.js:151
 msgid "Authenticate"
 msgstr "Tunnistaudu"
 
@@ -1557,21 +1285,21 @@ msgstr "Tunnistaudu"
 #. * requested authentication was not gained; this can happen
 #. * because of an authentication error (like invalid password),
 #. * for instance.
-#: js/ui/components/polkitAgent.js:263 js/ui/shellMountOperation.js:432
+#: js/ui/components/polkitAgent.js:265 js/ui/shellMountOperation.js:417
 msgid "Sorry, that didn’t work. Please try again."
 msgstr "Kirjautuminen epäonnistui. Yritä uudelleen."
 
-#: js/ui/ctrlAltTab.js:23 js/ui/overviewControls.js:408
+#: js/ui/ctrlAltTab.js:25 js/ui/overviewControls.js:418
 msgid "Windows"
 msgstr "Ikkunat"
 
-#: js/ui/dash.js:200 js/ui/dash.js:246
+#: js/ui/dash.js:206 js/ui/dash.js:252
 msgid "Show Apps"
 msgstr "Näytä sovellukset"
 
 #. Translators: this is the name of the dock/favorites area on
 #. the bottom of the overview
-#: js/ui/dash.js:400
+#: js/ui/dash.js:410
 msgid "Dash"
 msgstr "Pikavalikko"
 
@@ -1580,7 +1308,7 @@ msgstr "Pikavalikko"
 #. * "Tue 9:29 AM").  The string itself should become a full date, e.g.,
 #. * "February 17 2015".
 #.
-#: js/ui/dateMenu.js:99
+#: js/ui/dateMenu.js:101
 msgid "%B %-d %Y"
 msgstr "%-d. %Bta %Y"
 
@@ -1588,34 +1316,34 @@ msgstr "%-d. %Bta %Y"
 #. * below the time in the shell; it should combine the weekday and the
 #. * date, e.g. "Tuesday February 17 2015".
 #.
-#: js/ui/dateMenu.js:106
+#: js/ui/dateMenu.js:108
 msgid "%A %B %e %Y"
 msgstr "%A, %e. %Bta %Y"
 
 #. Translators: Shown on calendar heading when selected day occurs on current year
-#: js/ui/dateMenu.js:173
+#: js/ui/dateMenu.js:174
 msgctxt "calendar heading"
 msgid "%B %-d"
 msgstr "%e. %Bta"
 
 #. Translators: Shown on calendar heading when selected day occurs on different year
-#: js/ui/dateMenu.js:176
+#: js/ui/dateMenu.js:177
 msgctxt "calendar heading"
 msgid "%B %-d %Y"
 msgstr "%e. %Bta %Y"
 
-#: js/ui/dateMenu.js:182
+#: js/ui/dateMenu.js:183
 msgid "Today"
 msgstr "Tänään"
 
-#: js/ui/dateMenu.js:186
+#: js/ui/dateMenu.js:187
 msgid "Tomorrow"
 msgstr "Huomenna"
 
 #. Translators: Shown in calendar event list for all day events
 #. * Keep it short, best if you can use less then 10 characters
 #.
-#: js/ui/dateMenu.js:217
+#: js/ui/dateMenu.js:218
 msgctxt "event list time"
 msgid "All Day"
 msgstr "Koko päivä"
@@ -1623,19 +1351,19 @@ msgstr "Koko päivä"
 #. Translators: Shown in calendar event list as the start/end of events
 #. * that only show day and month
 #.
-#: js/ui/dateMenu.js:239
+#: js/ui/dateMenu.js:240
 msgid "%m/%d"
 msgstr ""
 
-#: js/ui/dateMenu.js:290
+#: js/ui/dateMenu.js:291
 msgid "No Events"
 msgstr "Ei tapahtumia"
 
-#: js/ui/dateMenu.js:412
-msgid "Add World Clocks…"
+#: js/ui/dateMenu.js:413
+msgid "Add world clocks…"
 msgstr "Lisää maailmankelloja…"
 
-#: js/ui/dateMenu.js:413
+#: js/ui/dateMenu.js:414
 msgid "World Clocks"
 msgstr "Maailmankellot"
 
@@ -1644,11 +1372,11 @@ msgid "Loading…"
 msgstr "Ladataan…"
 
 #: js/ui/dateMenu.js:714
-msgid "Go Online for Weather Information"
+msgid "Go online for weather information"
 msgstr "Yhdistä verkkoon saadaksesi säätietoja"
 
 #: js/ui/dateMenu.js:716
-msgid "Weather Information Unavailable"
+msgid "Weather information is currently unavailable"
 msgstr "Säätiedot eivät ole juuri nyt saatavilla"
 
 #: js/ui/dateMenu.js:726
@@ -1656,155 +1384,180 @@ msgid "Weather"
 msgstr "Sää"
 
 #: js/ui/dateMenu.js:728
-msgid "Select Weather Location…"
+msgid "Select weather location…"
 msgstr "Valitse sään sijainti…"
 
-#: js/ui/endSessionDialog.js:46
+#: js/ui/endSessionDialog.js:48
 #, javascript-format
 msgctxt "title"
 msgid "Log Out %s"
 msgstr "Kirjaa %s ulos"
 
-#: js/ui/endSessionDialog.js:47
+#: js/ui/endSessionDialog.js:49
 msgctxt "title"
 msgid "Log Out"
 msgstr "Kirjaudu ulos"
 
-#: js/ui/endSessionDialog.js:50
+#: js/ui/endSessionDialog.js:52
 #, javascript-format
-msgid "%s will be logged out automatically in %d second"
-msgid_plural "%s will be logged out automatically in %d seconds"
-msgstr[0] "%s kirjataan ulos automaattisesti %d sekunnin kuluttua"
-msgstr[1] "%s kirjataan ulos automaattisesti %d sekunnin kuluttua"
+msgid "%s will be logged out automatically in %d second."
+msgid_plural "%s will be logged out automatically in %d seconds."
+msgstr[0] "%s - kirjaudutaan ulos automaattisesti %d sekunnin kuluttua."
+msgstr[1] "%s - kirjaudutaan ulos automaattisesti %d sekunnin kuluttua."
 
-#: js/ui/endSessionDialog.js:56
+#: js/ui/endSessionDialog.js:58
 #, javascript-format
-msgid "You will be logged out automatically in %d second"
-msgid_plural "You will be logged out automatically in %d seconds"
-msgstr[0] "Sinut kirjataan ulos automaattisesti %d sekunnin kuluttua"
-msgstr[1] "Sinut kirjataan ulos automaattisesti %d sekunnin kuluttua"
+msgid "You will be logged out automatically in %d second."
+msgid_plural "You will be logged out automatically in %d seconds."
+msgstr[0] "Sinut kirjataan ulos automaattisesti %d sekunnin kuluttua."
+msgstr[1] "Sinut kirjataan ulos automaattisesti %d sekunnin kuluttua."
 
-#: js/ui/endSessionDialog.js:63
+#: js/ui/endSessionDialog.js:65
 msgctxt "button"
 msgid "Log Out"
 msgstr "Kirjaudu ulos"
 
-#: js/ui/endSessionDialog.js:69 js/ui/status/system.js:180
+#: js/ui/endSessionDialog.js:71 js/ui/status/system.js:176
 msgctxt "title"
 msgid "Power Off"
 msgstr "Sammuta"
 
-#: js/ui/endSessionDialog.js:70
+#: js/ui/endSessionDialog.js:72
 msgctxt "title"
 msgid "Install Updates & Power Off"
 msgstr "Asenna päivitykset ja sammuta"
 
-#: js/ui/endSessionDialog.js:73
+#: js/ui/endSessionDialog.js:75
 #, javascript-format
-msgid "The system will power off automatically in %d second"
-msgid_plural "The system will power off automatically in %d seconds"
-msgstr[0] "Järjestelmä sammuu automaattisesti %d sekunnin kuluttua"
-msgstr[1] "Järjestelmä sammuu automaattisesti %d sekunnin kuluttua"
+msgid "The system will power off automatically in %d second."
+msgid_plural "The system will power off automatically in %d seconds."
+msgstr[0] "Järjestelmä sammuu automaattisesti %d sekunnin kuluttua."
+msgstr[1] "Järjestelmä sammuu automaattisesti %d sekunnin kuluttua."
 
-#: js/ui/endSessionDialog.js:77 js/ui/endSessionDialog.js:96
+#: js/ui/endSessionDialog.js:79 js/ui/endSessionDialog.js:98
 msgctxt "checkbox"
 msgid "Install pending software updates"
 msgstr "Asenna odottavat ohjelmistopäivitykset"
 
-#: js/ui/endSessionDialog.js:81
+#: js/ui/endSessionDialog.js:83
 msgctxt "button"
 msgid "Power Off"
 msgstr "Sammuta"
 
-#: js/ui/endSessionDialog.js:88
+#: js/ui/endSessionDialog.js:90
 msgctxt "title"
 msgid "Restart"
 msgstr "Käynnistä uudelleen"
 
-#: js/ui/endSessionDialog.js:89
+#: js/ui/endSessionDialog.js:91
 msgctxt "title"
 msgid "Install Updates & Restart"
 msgstr "Asenna päivitykset ja käynnistä uudelleen"
 
-#: js/ui/endSessionDialog.js:92
+#: js/ui/endSessionDialog.js:94
 #, javascript-format
-msgid "The system will restart automatically in %d second"
-msgid_plural "The system will restart automatically in %d seconds"
-msgstr[0] "Järjestelmä käynnistyy automaattisesti uudelleen %d sekunnin kuluttua"
-msgstr[1] "Järjestelmä käynnistyy automaattisesti uudelleen %d sekunnin kuluttua"
+msgid "The system will restart automatically in %d second."
+msgid_plural "The system will restart automatically in %d seconds."
+msgstr[0] ""
+"Järjestelmä käynnistyy automaattisesti uudelleen %d sekunnin kuluttua."
+msgstr[1] ""
+"Järjestelmä käynnistyy automaattisesti uudelleen %d sekunnin kuluttua."
 
-#: js/ui/endSessionDialog.js:100
+#: js/ui/endSessionDialog.js:102
 msgctxt "button"
 msgid "Restart"
 msgstr "Käynnistä uudelleen"
 
-#: js/ui/endSessionDialog.js:108
+#: js/ui/endSessionDialog.js:110
 msgctxt "title"
 msgid "Restart & Install Updates"
 msgstr "Käynnistä uudelleen ja asenna päivitykset"
 
-#: js/ui/endSessionDialog.js:111
+#: js/ui/endSessionDialog.js:113
 #, javascript-format
-msgid "The system will automatically restart and install updates in %d second"
-msgid_plural "The system will automatically restart and install updates in %d seconds"
+msgid "The system will automatically restart and install updates in %d second."
+msgid_plural ""
+"The system will automatically restart and install updates in %d seconds."
 msgstr[0] ""
-"Järjestelmä käynnistyy automaattisesti uudelleen ja asentaa päivitykset %d sekunnin kuluttua"
+"Järjestelmä käynnistyy automaattisesti uudelleen ja asentaa päivitykset %d "
+"sekunnin kuluttua."
 msgstr[1] ""
-"Järjestelmä käynnistyy automaattisesti uudelleen ja asentaa päivitykset %d sekunnin kuluttua"
+"Järjestelmä käynnistyy automaattisesti uudelleen ja asentaa päivitykset %d "
+"sekunnin kuluttua."
 
-#: js/ui/endSessionDialog.js:118
+#: js/ui/endSessionDialog.js:120 js/ui/endSessionDialog.js:141
 msgctxt "button"
 msgid "Restart & Install"
 msgstr "Käynnistä uudelleen ja asenna"
 
-#: js/ui/endSessionDialog.js:120
+#: js/ui/endSessionDialog.js:122
 msgctxt "button"
 msgid "Install & Power Off"
 msgstr "Asenna ja sammuta"
 
-#: js/ui/endSessionDialog.js:121
+#: js/ui/endSessionDialog.js:123
 msgctxt "checkbox"
 msgid "Power off after updates are installed"
 msgstr "Sammuta päivitysten asennuksen jälkeen"
 
-#: js/ui/endSessionDialog.js:262
-msgid "Low battery power: please plug in before installing updates"
-msgstr "Laitteen akkuvirta vähissä: kiinnitä verkkovirtaan ennen päivitysten asennusta"
+#: js/ui/endSessionDialog.js:130
+msgctxt "title"
+msgid "Restart & Install Upgrade"
+msgstr "Käynnistä uudelleen ja asenna päivitys"
 
-#: js/ui/endSessionDialog.js:271
+#. Translators: This is the text displayed for system upgrades in the
+#. shut down dialog. First %s gets replaced with the distro name and
+#. second %s with the distro version to upgrade to
+#: js/ui/endSessionDialog.js:135
+#, javascript-format
+msgid ""
+"%s %s will be installed after restart. Upgrade installation can take a long "
+"time: ensure that you have backed up and that the computer is plugged in."
+msgstr ""
+"%s %s asennetaan uudelleenkäynnistyksen jälkeen. Versiopäivityksen asennus "
+"voi kestää kauan: varmista varmuuskopioidesi ajantasaisuus ja toimivuus. "
+"Kiinnitä kone myös verkkovirtaan."
+
+#: js/ui/endSessionDialog.js:284
+msgid "Low battery power: please plug in before installing updates."
+msgstr ""
+"Laitteen akkuvirta vähissä: kiinnitä verkkovirtaan ennen päivitysten "
+"asennusta."
+
+#: js/ui/endSessionDialog.js:293
 msgid "Some applications are busy or have unsaved work"
 msgstr "Jotkin sovellukset ovat kiireisiä tai sisältävät tallentamatonta työtä"
 
-#: js/ui/endSessionDialog.js:276
+#: js/ui/endSessionDialog.js:298
 msgid "Other users are logged in"
 msgstr "Muita käyttäjiä on kirjautuneena"
 
-#: js/ui/endSessionDialog.js:432
+#: js/ui/endSessionDialog.js:468
 msgctxt "button"
 msgid "Boot Options"
 msgstr "Käynnistysvalinnat"
 
 #. Translators: Remote here refers to a remote session, like a ssh login
-#: js/ui/endSessionDialog.js:637
+#: js/ui/endSessionDialog.js:673
 #, javascript-format
 msgid "%s (remote)"
 msgstr "%s (etä)"
 
 #. Translators: Console here refers to a tty like a VT console
-#: js/ui/endSessionDialog.js:640
+#: js/ui/endSessionDialog.js:676
 #, javascript-format
 msgid "%s (console)"
 msgstr "%s (konsoli)"
 
-#: js/ui/extensionDownloader.js:280
+#: js/ui/extensionDownloader.js:282
 msgid "Install"
 msgstr "Asenna"
 
-#: js/ui/extensionDownloader.js:286
+#: js/ui/extensionDownloader.js:288
 msgid "Install Extension"
 msgstr "Asenna laajennus"
 
-#: js/ui/extensionDownloader.js:287
+#: js/ui/extensionDownloader.js:289
 #, javascript-format
 msgid "Download and install “%s” from extensions.gnome.org?"
 msgstr "Ladataanko ja asennetaanko ”%s” sivustolta extensions.gnome.org?"
@@ -1814,8 +1567,8 @@ msgid "Extension Updates Available"
 msgstr "Laajennusten päivityksiä saatavilla"
 
 #: js/ui/extensionSystem.js:355
-msgid "Extension updates are ready to be installed"
-msgstr "Laajennusten päivitykset ovat valmiina asennettavaksi"
+msgid "Extension updates are ready to be installed."
+msgstr "Laajennusten päivitykset ovat valmiina asennettavaksi."
 
 #: js/ui/inhibitShortcutsDialog.js:70
 msgid "Allow inhibiting shortcuts"
@@ -1834,8 +1587,8 @@ msgstr "Sovellus haluaa rajoittaa pikanäppäinten toimintaa"
 #. Translators: %s is a keyboard shortcut like "Super+x"
 #: js/ui/inhibitShortcutsDialog.js:81
 #, javascript-format
-msgid "You can restore shortcuts by pressing %s"
-msgstr "Voit palauttaa pikanäppäinten toiminnan painamalla %s"
+msgid "You can restore shortcuts by pressing %s."
+msgstr "Voit palauttaa pikanäppäinten toiminnan painamalla %s."
 
 #: js/ui/kbdA11yDialog.js:34
 msgid "Slow Keys Turned On"
@@ -1847,11 +1600,12 @@ msgstr "Hitaat näppäimet poistettu käytöstä"
 
 #: js/ui/kbdA11yDialog.js:36
 msgid ""
-"You just held down the Shift key for 8 seconds. This is the shortcut for the Slow Keys feature, "
-"which affects the way your keyboard works."
+"You just held down the Shift key for 8 seconds. This is the shortcut for the "
+"Slow Keys feature, which affects the way your keyboard works."
 msgstr ""
-"Pidit juuri Shift-näppäintä pohjassa kahdeksan sekuntia. Se toimii pikanäppäimenä hitaiden "
-"näppäinten ominaisuudelle, joka taasen vaikuttaa näppäimistön toimintatapaan."
+"Pidit juuri Shift-näppäintä pohjassa kahdeksan sekuntia. Se toimii "
+"pikanäppäimenä hitaiden näppäinten ominaisuudelle, joka taasen vaikuttaa "
+"näppäimistön toimintatapaan."
 
 #: js/ui/kbdA11yDialog.js:42
 msgid "Sticky Keys Turned On"
@@ -1863,20 +1617,22 @@ msgstr "Pohjaan jäävät näppäimet poistettu käytöstä"
 
 #: js/ui/kbdA11yDialog.js:45
 msgid ""
-"You just pressed the Shift key 5 times in a row. This is the shortcut for the Sticky Keys "
-"feature, which affects the way your keyboard works."
+"You just pressed the Shift key 5 times in a row. This is the shortcut for "
+"the Sticky Keys feature, which affects the way your keyboard works."
 msgstr ""
-"Painoit juuri Shift-näppäintä viisi kertaa peräkkäin. Se toimii pikanäppäimenä pohjaan jäävien "
-"näppäinten ominaisuudelle, joka taasen vaikuttaa näppäimistön toimintatapaan."
+"Painoit juuri Shift-näppäintä viisi kertaa peräkkäin. Se toimii "
+"pikanäppäimenä pohjaan jäävien näppäinten ominaisuudelle, joka taasen "
+"vaikuttaa näppäimistön toimintatapaan."
 
 #: js/ui/kbdA11yDialog.js:47
 msgid ""
-"You just pressed two keys at once, or pressed the Shift key 5 times in a row. This turns off the "
-"Sticky Keys feature, which affects the way your keyboard works."
+"You just pressed two keys at once, or pressed the Shift key 5 times in a "
+"row. This turns off the Sticky Keys feature, which affects the way your "
+"keyboard works."
 msgstr ""
-"Painoit juuri kahta näppäintä samanaikaisesti, tai painoit Shift-näppäintä viisi kertaa "
-"peräkkäin. Tämä kytkee pohjaan jäävien näppäinten ominaisuuden pois käytöstä, joka taasen "
-"vaikuttaa näppäimistön toimintatapaan."
+"Painoit juuri kahta näppäintä samanaikaisesti, tai painoit Shift-näppäintä "
+"viisi kertaa peräkkäin. Tämä kytkee pohjaan jäävien näppäinten ominaisuuden "
+"pois käytöstä, joka taasen vaikuttaa näppäimistön toimintatapaan."
 
 #: js/ui/kbdA11yDialog.js:57
 msgid "Leave On"
@@ -1886,7 +1642,7 @@ msgstr "Jätä käyttöön"
 msgid "Turn On"
 msgstr "Ota käyttöön"
 
-#: js/ui/kbdA11yDialog.js:67 js/ui/status/network.js:456
+#: js/ui/kbdA11yDialog.js:67 js/ui/status/network.js:455
 msgid "Turn Off"
 msgstr "Sammuta"
 
@@ -1894,107 +1650,111 @@ msgstr "Sammuta"
 msgid "Leave Off"
 msgstr "Poista käytöstä"
 
-#: js/ui/keyboard.js:219 js/ui/status/keyboard.js:895
+#: js/ui/keyboard.js:181 js/ui/status/keyboard.js:899
 msgid "Keyboard Settings"
 msgstr "Näppäimistön asetukset"
 
-#: js/ui/lookingGlass.js:753
+#: js/ui/lookingGlass.js:724
 msgid "No extensions installed"
 msgstr "Laajennuksia ei asennettu"
 
 #. Translators: argument is an extension UUID.
-#: js/ui/lookingGlass.js:816
+#: js/ui/lookingGlass.js:785
 #, javascript-format
-msgid "%s has not emitted any errors"
-msgstr "%s ei ole lähettänyt virheitä"
+msgid "%s has not emitted any errors."
+msgstr "%s ei ole lähettänyt virheitä."
 
-#: js/ui/lookingGlass.js:822
+#: js/ui/lookingGlass.js:791
 msgid "Hide Errors"
 msgstr "Piilota virheet"
 
-#: js/ui/lookingGlass.js:826 js/ui/lookingGlass.js:906
+#: js/ui/lookingGlass.js:795 js/ui/lookingGlass.js:872
 msgid "Show Errors"
 msgstr "Näytä virheet"
 
-#: js/ui/lookingGlass.js:835
+#: js/ui/lookingGlass.js:804
 msgid "Active"
 msgstr "Aktiivinen"
 
-#: js/ui/lookingGlass.js:838
+#: js/ui/lookingGlass.js:807
 msgid "Inactive"
 msgstr "Passiivinen"
 
-#: js/ui/lookingGlass.js:840
+#: js/ui/lookingGlass.js:809
 msgid "Error"
 msgstr "Virhe"
 
-#: js/ui/lookingGlass.js:842
+#: js/ui/lookingGlass.js:811
 msgid "Out of date"
 msgstr "Ei ajan tasalla"
 
-#: js/ui/lookingGlass.js:844
+#: js/ui/lookingGlass.js:813
 msgid "Downloading"
 msgstr "Noudetaan"
 
-#: js/ui/lookingGlass.js:846
+#: js/ui/lookingGlass.js:815
 msgid "Deactivating"
 msgstr "Deaktivoidaan"
 
-#: js/ui/lookingGlass.js:848
+#: js/ui/lookingGlass.js:817
 msgid "Activating"
 msgstr "Aktivoidaan"
 
-#: js/ui/lookingGlass.js:884
+#: js/ui/lookingGlass.js:850
 msgid "View Source"
 msgstr "Näytä lähde"
 
-#: js/ui/lookingGlass.js:895
+#: js/ui/lookingGlass.js:861
 msgid "Web Page"
 msgstr "Verkkosivusto"
 
-#: js/ui/main.js:298
+#: js/ui/main.js:279
 msgid "System was put in unsafe mode"
 msgstr "Järjestelmä asetettiin turvattomaan tilaan"
 
-#: js/ui/main.js:299
+#: js/ui/main.js:280
 msgid "Apps now have unrestricted access"
 msgstr "Sovelluksilla on nyt rajoittamaton pääsy"
 
-#: js/ui/main.js:360
+#: js/ui/main.js:283 js/ui/overview.js:54
+msgid "Undo"
+msgstr "Kumoa"
+
+#: js/ui/main.js:340
 msgid "Logged in as a privileged user"
 msgstr "Kirjautuneena etuoikeutettuna käyttäjänä"
 
-#: js/ui/main.js:361
+#: js/ui/main.js:341
 msgid ""
-"Running a session as a privileged user should be avoided for security reasons. If possible, you "
-"should log in as a normal user."
+"Running a session as a privileged user should be avoided for security "
+"reasons. If possible, you should log in as a normal user."
 msgstr ""
-"Istunnon suorittamista etuoikeutettuna käyttäjänä tulisi välttää tietoturvasyistä. Jos "
-"mahdollista, kirjaudu tavallisena käyttäjänä."
+"Istunnon suorittamista etuoikeutettuna käyttäjänä tulisi välttää "
+"tietoturvasyistä. Jos mahdollista, kirjaudu tavallisena käyttäjänä."
 
-#: js/ui/main.js:409
+#: js/ui/main.js:389
 msgid "Screen Lock disabled"
 msgstr "Näytön lukitus pois käytöstä"
 
-#: js/ui/main.js:410
-msgid "Screen Locking requires the GNOME display manager"
-msgstr "Näytön lukitus vaatii Gnomen kirjautumishallinnan"
+#: js/ui/main.js:390
+msgid "Screen Locking requires the GNOME display manager."
+msgstr "Näytön lukitus vaatii Gnomen kirjautumishallinnan."
 
 #. Translators: this is the string displayed in the header when a message
 #. source doesn't have a name
-#: js/ui/messageList.js:405
+#: js/ui/messageList.js:400
 msgid "Unknown App"
 msgstr "Tuntematon sovellus"
 
-#: js/ui/messageTray.js:331 js/ui/messageTray.js:333
+#: js/ui/messageTray.js:328 js/ui/messageTray.js:330
 msgid "Notification sound"
 msgstr "Ilmoitusääni"
 
-#: js/ui/mpris.js:144
+#: js/ui/mpris.js:198
 msgid "Unknown artist"
 msgstr "Tuntematon esittäjä"
 
-#: js/ui/mpris.js:154
+#: js/ui/mpris.js:208
 msgid "Unknown title"
 msgstr "Tuntematon kappale"
 
@@ -2002,336 +1762,366 @@ msgstr "Tuntematon kappale"
 #. in the search entry when no search is
 #. active; it should not exceed ~30
 #. characters.
-#: js/ui/overviewControls.js:331
+#: js/ui/overviewControls.js:342
 msgid "Type to search"
 msgstr "Kirjoita hakeaksesi"
 
-#: js/ui/overviewControls.js:396
+#: js/ui/overviewControls.js:406
 msgid "Apps"
 msgstr "Sovellukset"
 
 #. Translators: This is the main view to select
 #. activities. See also note for "Activities" string.
-#: js/ui/overview.js:33
+#: js/ui/overview.js:67
 msgid "Overview"
 msgstr "Yleisnäkymä"
 
-#: js/ui/padOsd.js:98
+#: js/ui/padOsd.js:100
 msgid "New shortcut…"
 msgstr "Uusi pikanäppäin…"
 
-#: js/ui/padOsd.js:151
+#: js/ui/padOsd.js:153
 msgid "App defined"
 msgstr "Sovelluksen määrittämä"
 
-#: js/ui/padOsd.js:152
+#: js/ui/padOsd.js:154
 msgid "Show on-screen help"
 msgstr "Näytä ohje"
 
-#: js/ui/padOsd.js:153
+#: js/ui/padOsd.js:155
 msgid "Switch monitor"
 msgstr "Vaihda näyttöä"
 
-#: js/ui/padOsd.js:154
+#: js/ui/padOsd.js:156
 msgid "Assign keystroke"
 msgstr "Määritä painallus"
 
-#: js/ui/padOsd.js:743
+#: js/ui/padOsd.js:225
+msgid "Done"
+msgstr "Valmis"
+
+#: js/ui/padOsd.js:728
 msgid "Edit…"
 msgstr "Muokkaa…"
 
-#: js/ui/padOsd.js:791
+#: js/ui/padOsd.js:775
 msgid "None"
 msgstr "Ei mitään"
 
-#: js/ui/padOsd.js:868
+#: js/ui/padOsd.js:846
 msgid "Press a button to configure"
 msgstr "Paina näppäintä määrittääksesi asetukset"
 
-#: js/ui/padOsd.js:869
+#: js/ui/padOsd.js:847
 msgid "Press Esc to exit"
 msgstr "Paina Esc poistuaksesi"
 
-#: js/ui/padOsd.js:872
+#: js/ui/padOsd.js:850
 msgid "Press any key to exit"
 msgstr "Paina mitä tahansa näppäintä poistuaksesi"
 
 #. Translators: If there is no suitable word for "Activities"
 #. in your language, you can use the word for "Overview".
-#: js/ui/panel.js:226
+#: js/ui/panel.js:425
 msgid "Activities"
 msgstr "Toiminnot"
 
-#: js/ui/panel.js:304
+#: js/ui/panel.js:506
 msgctxt "System menu in the top bar"
 msgid "System"
 msgstr "Järjestelmä"
 
-#: js/ui/panel.js:498
+#: js/ui/panel.js:680
 msgid "Top Bar"
 msgstr "Yläpalkki"
 
-#: js/ui/quickSettings.js:162 js/ui/quickSettings.js:261
+#: js/ui/quickSettings.js:187
 msgid "Open menu"
 msgstr "Avaa valikko"
 
-#: js/ui/runDialog.js:74
+#: js/ui/runDialog.js:63
 msgid "Run a Command"
 msgstr "Suorita komento"
 
-#: js/ui/runDialog.js:93
+#: js/ui/runDialog.js:78
 msgid "Press ESC to close"
 msgstr "Paina ESC poistuaksesi"
 
-#: js/ui/screenShield.js:226
+#: js/ui/runDialog.js:243
+msgid "Restart is not available on Wayland"
+msgstr "Uudelleenkäynnistys ei ole käytettävissä Waylandilla"
+
+#: js/ui/runDialog.js:248
+msgid "Restarting…"
+msgstr "Käynnistetään uudelleen…"
+
+#: js/ui/screenShield.js:235
 msgid "GNOME needs to lock the screen"
 msgstr "Gnomen täytyy lukita näyttö"
 
-#. Translators: notification source name for screenshots and recordings.
-#: js/ui/screenshot.js:40
-msgid "Screen Capture"
-msgstr "Näytön kaappaus"
+#: js/ui/screenShield.js:276 js/ui/screenShield.js:669
+msgid "Unable to lock"
+msgstr "Lukitus epäonnistui"
 
-#: js/ui/screenshot.js:1690
+#: js/ui/screenShield.js:277 js/ui/screenShield.js:670
+msgid "Lock was blocked by an app"
+msgstr "Lukitus estettiin sovelluksen toimesta"
+
+#: js/ui/screenshot.js:1254
 msgid "Selection"
 msgstr "Valinta"
 
-#: js/ui/screenshot.js:1700
+#: js/ui/screenshot.js:1264
 msgid "Area Selection"
 msgstr "Aluevalinta"
 
-#: js/ui/screenshot.js:1705
+#: js/ui/screenshot.js:1269
 msgid "Screen"
 msgstr "Näyttö"
 
-#: js/ui/screenshot.js:1715
+#: js/ui/screenshot.js:1279
 msgid "Screen Selection"
 msgstr "Näytön valinta"
 
-#: js/ui/screenshot.js:1720
+#: js/ui/screenshot.js:1284
 msgid "Window"
 msgstr "Ikkuna"
 
-#: js/ui/screenshot.js:1730
+#: js/ui/screenshot.js:1294
 msgid "Window Selection"
 msgstr "Ikkunan valinta"
 
-#: js/ui/screenshot.js:1755 js/ui/status/system.js:117
+#. Translators: entry in the window right click menu.
+#: js/ui/screenshot.js:1319 js/ui/status/system.js:113 js/ui/windowMenu.js:30
 msgid "Take Screenshot"
 msgstr "Ota kuvakaappaus"
 
-#: js/ui/screenshot.js:1771
+#: js/ui/screenshot.js:1335
 msgid "Record Screen"
 msgstr "Ota näyttötallennevideo"
 
 #. Translators: since this string refers to an action,
 #. it needs to be phrased as a verb.
-#: js/ui/screenshot.js:1788
+#: js/ui/screenshot.js:1352
 msgid "Capture"
 msgstr "Ota kuvakaappaus"
 
-#: js/ui/screenshot.js:1810
+#: js/ui/screenshot.js:1374
 msgid "Show Pointer"
 msgstr "Näytä osoitin"
 
 #. Translators: this is the folder where recorded
 #. screencasts are stored.
-#: js/ui/screenshot.js:2443
+#: js/ui/screenshot.js:1998
 msgid "Screencasts"
 msgstr "Näyttötallennevideot"
 
 #. Translators: this is a filename used for screencast
 #. * recording, where "%d" and "%t" date and time, e.g.
-#. * "Screencast From 07-17-2013 10:00:46 PM"
-#: js/ui/screenshot.js:2448
+#. * "Screencast from 07-17-2013 10:00:46 PM"
+#: js/ui/screenshot.js:2003
 #, no-c-format
-msgid "Screencast From %d %t"
+msgid "Screencast from %d %t"
 msgstr "Näyttötallennevideo - %d %t"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2494
-msgid "Screencast Recorded"
-msgstr "Näyttötallennevideo tallennettu"
+#: js/ui/screenshot.js:2049
+msgid "Screencast recorded"
+msgstr "Näyttötallennevideo otettu"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2507
-msgid "Screencast Failed to Start"
+#: js/ui/screenshot.js:2062
+msgid "Screencast failed to start"
 msgstr "Näyttötallennevideon käynnistäminen epäonnistui"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2513
-msgid "Screencast Failed: Out of Disk Space"
-msgstr "Näyttötallennevideo epäonnistui: levytila loppui"
+#: js/ui/screenshot.js:2068
+msgid "Screencast ended: Out of disk space"
+msgstr "Näyttötallennevideo päättyi: levytila loppui"
 
 #. We can encourage user to try again on service crashes since the
 #. recorder will auto-blocklist the pipeline that crashed.
 #. Translators: notification title.
-#: js/ui/screenshot.js:2519
-msgid "Screencast Failed, Please Try Again"
-msgstr "Näyttötallennevideo epäonnistui, yritä uudelleen"
+#: js/ui/screenshot.js:2074
+msgid "Screencast ended unexpectedly, please try again"
+msgstr "Näyttötallennevideo päättyi odottamatta, yritä uudelleen"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2522
-msgid "Screencast Failed"
-msgstr "Näyttötallennevideo epäonnistui"
+#: js/ui/screenshot.js:2077
+msgid "Screencast ended unexpectedly"
+msgstr "Näyttötallennevideo päättyi odottamatta"
+
+#. Translators: notification source name.
+#: js/ui/screenshot.js:2087 js/ui/screenshot.js:2329
+msgid "Screenshot"
+msgstr "Kuvakaappaus"
 
 #. Translators: notification body when a screencast was recorded.
-#: js/ui/screenshot.js:2535
-msgid "Click here to view the video"
-msgstr "Napsauta tästä katsoaksesi videon"
+#: js/ui/screenshot.js:2094
+msgid "Click here to view the video."
+msgstr "Napsauta tästä katsoaksesi videon."
 
 #. Translators: button on the screencast notification.
 #. Translators: button on the screenshot notification.
-#: js/ui/screenshot.js:2543 js/ui/screenshot.js:2766
+#: js/ui/screenshot.js:2102 js/ui/screenshot.js:2345
 msgid "Show in Files"
-msgstr "Näytä tiedostonhallinnassa"
+msgstr "Näytä tiedostohallinnassa"
 
 #. Translators: this is the name of the file that the screenshot is
 #. saved to. The placeholder is a timestamp, e.g. "2017-05-21 12-24-03".
-#: js/ui/screenshot.js:2712
+#: js/ui/screenshot.js:2289
 #, javascript-format
-msgid "Screenshot From %s"
+msgid "Screenshot from %s"
 msgstr "Kuvakaappaus - %s"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2756
-msgid "Screenshot Captured"
+#: js/ui/screenshot.js:2335
+msgid "Screenshot captured"
 msgstr "Kuvakaappaus otettu"
 
 #. Translators: notification body when a screenshot was captured.
-#: js/ui/screenshot.js:2758
-msgid "You can paste the image from the clipboard"
-msgstr "Voit liittää kuvan leikepöydältä"
+#: js/ui/screenshot.js:2337
+msgid "You can paste the image from the clipboard."
+msgstr "Voit liittää kuvan leikepöydältä."
 
-#: js/ui/screenshot.js:2817 js/ui/screenshot.js:2980
+#: js/ui/screenshot.js:2393 js/ui/screenshot.js:2557
 msgid "Screenshot taken"
 msgstr "Kuvakaappaus otettu"
 
-#: js/ui/search.js:887
-msgid "Searching"
-msgstr "Etsitään"
+#: js/ui/search.js:831
+msgid "Searching…"
+msgstr "Etsitään…"
 
-#: js/ui/search.js:890
-msgid "No results"
-msgstr "Ei tuloksia"
+#: js/ui/search.js:833
+msgid "No results."
+msgstr "Ei tuloksia."
 
-#: js/ui/search.js:1026
+#: js/ui/search.js:964
 #, javascript-format
 msgid "%d more"
 msgid_plural "%d more"
 msgstr[0] "%d lisää"
 msgstr[1] "%d lisää"
 
-#: js/ui/searchController.js:97
+#: js/ui/searchController.js:89
+#: subprojects/extensions-app/data/ui/extensions-window.ui:73
 msgid "Search"
 msgstr "Haku"
 
-#: js/ui/shellEntry.js:21
+#: js/ui/shellEntry.js:23
 msgid "Copy"
 msgstr "Kopioi"
 
-#: js/ui/shellEntry.js:26
+#: js/ui/shellEntry.js:28
 msgid "Paste"
 msgstr "Liitä"
 
-#: js/ui/shellEntry.js:81
+#: js/ui/shellEntry.js:80
 msgid "Show Text"
 msgstr "Näytä teksti"
 
-#: js/ui/shellEntry.js:83
+#: js/ui/shellEntry.js:82
 msgid "Hide Text"
 msgstr "Piilota teksti"
 
-#: js/ui/shellEntry.js:172
-msgid "Caps lock is on"
-msgstr "Caps Lock on päällä"
+#: js/ui/shellEntry.js:176
+msgid "Caps lock is on."
+msgstr "Caps Lock on päällä."
 
-#: js/ui/shellMountOperation.js:303
+#: js/ui/shellMountOperation.js:288
 msgid "Hidden Volume"
 msgstr "Piilotettu taltio"
 
-#: js/ui/shellMountOperation.js:306
+#: js/ui/shellMountOperation.js:291
 msgid "Windows System Volume"
 msgstr "Windows-järjestelmätaltio"
 
-#: js/ui/shellMountOperation.js:309
+#: js/ui/shellMountOperation.js:294
 msgid "Uses Keyfiles"
 msgstr "Käyttää avaintiedostoja"
 
 #. Translators: %s is the Disks application
-#: js/ui/shellMountOperation.js:317
+#: js/ui/shellMountOperation.js:302
 #, javascript-format
-msgid "To unlock a volume that uses keyfiles, use the <i>%s</i> utility instead"
-msgstr "Avataksesi avaintiedostoja käyttävän taltion, käytä <i>%s</i>"
+msgid ""
+"To unlock a volume that uses keyfiles, use the <i>%s</i> utility instead."
+msgstr "Avataksesi avaintiedostoja käyttävän taltion, käytä <i>%s</i>."
 
-#: js/ui/shellMountOperation.js:321
-msgid "You need an external utility like <i>Disks</i> to unlock a volume that uses keyfiles"
+#: js/ui/shellMountOperation.js:306
+msgid ""
+"You need an external utility like <i>Disks</i> to unlock a volume that uses "
+"keyfiles."
 msgstr ""
-"Tarvitset erillisen sovelluksen, kuten <i>Levyt</i>, avataksesi avaintiedostoja käyttävän taltion"
+"Tarvitset erillisen sovelluksen, kuten <i>Levyt</i>, avataksesi "
+"avaintiedostoja käyttävän taltion."
 
-#: js/ui/shellMountOperation.js:329
+#: js/ui/shellMountOperation.js:314
 msgid "PIM Number"
 msgstr "PIM-numero"
 
-#: js/ui/shellMountOperation.js:388
+#: js/ui/shellMountOperation.js:373
 msgid "Remember Password"
 msgstr "Muista salasana"
 
-#: js/ui/shellMountOperation.js:403
+#: js/ui/shellMountOperation.js:388
 msgid "Unlock"
 msgstr "Avaa lukitus"
 
 #. Translators: %s is the Disks application
-#: js/ui/shellMountOperation.js:417
+#: js/ui/shellMountOperation.js:402
 #, javascript-format
 msgid "Open %s"
 msgstr "Avaa %s"
 
-#: js/ui/shellMountOperation.js:453
-msgid "The PIM must be a number or empty"
-msgstr "PIM tulee olla numeerinen tai tyhjä"
+#: js/ui/shellMountOperation.js:438
+msgid "The PIM must be a number or empty."
+msgstr "PIM tulee olla numeerinen tai tyhjä."
 
-#: js/ui/status/accessibility.js:45 js/ui/status/accessibility.js:153
+#: js/ui/status/accessibility.js:36
+msgid "Accessibility"
+msgstr "Esteettömyys"
+
+#: js/ui/status/accessibility.js:46
 msgid "High Contrast"
 msgstr "Korkea kontrasti"
 
-#: js/ui/status/accessibility.js:48 js/ui/status/accessibility.js:169
+#: js/ui/status/accessibility.js:49
 msgid "Zoom"
 msgstr "Lähennys"
 
-#: js/ui/status/accessibility.js:55 js/ui/status/accessibility.js:221
+#: js/ui/status/accessibility.js:56
 msgid "Screen Reader"
 msgstr "Näytönlukija"
 
-#: js/ui/status/accessibility.js:59 js/ui/status/accessibility.js:237
+#: js/ui/status/accessibility.js:60
 msgid "Screen Keyboard"
 msgstr "Näyttönäppäimistö"
 
-#: js/ui/status/accessibility.js:63 js/ui/status/accessibility.js:253
+#: js/ui/status/accessibility.js:64
 msgid "Visual Alerts"
 msgstr "Visuaaliset hälytykset"
 
-#: js/ui/status/accessibility.js:67 js/ui/status/accessibility.js:269
+#: js/ui/status/accessibility.js:68
 msgid "Sticky Keys"
 msgstr "Pohjaan jäävät näppäimet"
 
-#: js/ui/status/accessibility.js:71 js/ui/status/accessibility.js:285
+#: js/ui/status/accessibility.js:72
 msgid "Slow Keys"
 msgstr "Hitaat näppäimet"
 
-#: js/ui/status/accessibility.js:75 js/ui/status/accessibility.js:301
+#: js/ui/status/accessibility.js:76
 msgid "Bounce Keys"
 msgstr "Kimmonäppäimet"
 
-#: js/ui/status/accessibility.js:79 js/ui/status/accessibility.js:317
+#: js/ui/status/accessibility.js:80
 msgid "Mouse Keys"
 msgstr "Hiirinäppäimet"
 
-#: js/ui/status/accessibility.js:84
+#: js/ui/status/accessibility.js:85
 msgid "Accessibility Settings"
 msgstr "Esteettömyyden asetukset"
 
-#: js/ui/status/accessibility.js:122 js/ui/status/accessibility.js:185
+#: js/ui/status/accessibility.js:142
 msgid "Large Text"
 msgstr "Suuri tekstin koko"
 
@@ -2339,349 +2129,301 @@ msgstr "Suuri tekstin koko"
 msgid "Auto Rotate"
 msgstr "Automaattinen kääntö"
 
-#: js/ui/status/backgroundApps.js:155
+#: js/ui/status/backgroundApps.js:156
 msgctxt "title"
 msgid "Background Apps"
 msgstr "Taustasovellukset"
 
-#: js/ui/status/backgroundApps.js:170
+#: js/ui/status/backgroundApps.js:171
 msgid "Apps known to be running without a window"
 msgstr "Sovellukset, joiden tiedetään olevan käynnissä ilman ikkunaa"
 
-#: js/ui/status/backgroundApps.js:181
+#: js/ui/status/backgroundApps.js:182
 msgid "App Settings"
 msgstr "Sovelluksen asetukset"
 
-#: js/ui/status/backgroundApps.js:238
+#: js/ui/status/backgroundApps.js:239
 msgid "No Background Apps"
 msgstr "Ei taustasovelluksia"
 
-#: js/ui/status/backgroundApps.js:240
+#: js/ui/status/backgroundApps.js:241
 #, javascript-format
 msgid "%d Background App"
 msgid_plural "%d Background Apps"
 msgstr[0] "%d taustasovellus"
 msgstr[1] "%d taustasovellusta"
 
-#: js/ui/status/backlight.js:39
+#: js/ui/status/backlight.js:40
 msgid "Keyboard Brightness"
 msgstr "Näppäimistön kirkkaus"
 
-#: js/ui/status/backlight.js:83
+#: js/ui/status/backlight.js:80
 msgid "Off"
 msgstr "Pois"
 
-#: js/ui/status/backlight.js:84
+#: js/ui/status/backlight.js:81
 msgid "Low"
 msgstr "Matala"
 
-#: js/ui/status/backlight.js:85
+#: js/ui/status/backlight.js:82
 msgid "High"
 msgstr "Korkea"
 
-#: js/ui/status/backlight.js:158 js/ui/status/keyboard.js:877
+#: js/ui/status/backlight.js:148 js/ui/status/keyboard.js:881
 msgid "Keyboard"
 msgstr "Näppäimistö"
 
-#: js/ui/status/backlight.js:160
-msgid "Open keyboard brightness menu"
-msgstr "Avaa näppäimistön kirkkauden valikko"
-
-#: js/ui/status/bluetooth.js:245 js/ui/status/network.js:361
+#: js/ui/status/bluetooth.js:246 js/ui/status/network.js:360
 msgid "Disconnect"
 msgstr "Katkaise yhteys"
 
-#. Translators: %s is a device name like "MyPhone"
-#: js/ui/status/bluetooth.js:266 js/ui/status/network.js:355
-#, javascript-format
-msgid "Disconnect %s"
-msgstr "Katkaise yhteys kohteeseen %s"
-
-#. Translators: %s is a device name like "MyPhone"
-#: js/ui/status/bluetooth.js:268 js/ui/status/network.js:357
-#, javascript-format
-msgid "Connect to %s"
-msgstr "Yhdistä kohteeseen %s"
-
-#: js/ui/status/bluetooth.js:276 js/ui/status/bluetooth.js:280
+#: js/ui/status/bluetooth.js:263 js/ui/status/bluetooth.js:265
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
-#: js/ui/status/bluetooth.js:277
-msgid "Open Bluetooth menu"
-msgstr "Avaa Bluetooth-valikko"
-
-#: js/ui/status/bluetooth.js:303 js/ui/status/network.js:1939
+#: js/ui/status/bluetooth.js:288 js/ui/status/network.js:1900
 msgid "Bluetooth Settings"
 msgstr "Bluetooth-asetukset"
 
-#: js/ui/status/bluetooth.js:350
+#: js/ui/status/bluetooth.js:335
 msgid "No available or connected devices"
 msgstr "Ei käytettävissä olevia tai yhdistettyjä laitteita"
 
-#: js/ui/status/bluetooth.js:351
+#: js/ui/status/bluetooth.js:336
 msgid "Turn on Bluetooth to connect to devices"
 msgstr "Kytke Bluetooth päälle yhdistääksesi laitteisiin"
 
 #. Translators: This is the number of connected bluetooth devices
-#: js/ui/status/bluetooth.js:415
+#: js/ui/status/bluetooth.js:390
 #, javascript-format
 msgid "%d Connected"
 msgid_plural "%d Connected"
 msgstr[0] "%d yhdistetty"
 msgstr[1] "%d yhdistetty"
 
-#: js/ui/status/brightness.js:42
-msgid "Open brightness menu"
-msgstr "Avaa kirkkauden valikko"
+#: js/ui/status/brightness.js:34
+msgid "Brightness"
+msgstr "Kirkkaus"
 
 #: js/ui/status/darkMode.js:12
 msgid "Dark Style"
 msgstr "Tumma tyyli"
 
-#: js/ui/status/doNotDisturb.js:10
-msgid "Do Not Disturb"
-msgstr "Älä häiritse"
-
-#: js/ui/status/dwellClick.js:14
+#: js/ui/status/dwellClick.js:15
 msgid "Single Click"
 msgstr "Kertanapsautus"
 
-#: js/ui/status/dwellClick.js:19
+#: js/ui/status/dwellClick.js:20
 msgid "Double Click"
 msgstr "Kaksoisnapsautus"
 
-#: js/ui/status/dwellClick.js:24
+#: js/ui/status/dwellClick.js:25
 msgid "Drag"
 msgstr "Vedä"
 
-#: js/ui/status/dwellClick.js:29
+#: js/ui/status/dwellClick.js:30
 msgid "Secondary Click"
 msgstr "Toissijainen napsautus"
 
-#: js/ui/status/dwellClick.js:38
+#: js/ui/status/dwellClick.js:39
 msgid "Dwell Click"
 msgstr "Napsautus kohdistamalla"
 
-#: js/ui/status/keyboard.js:894
+#: js/ui/status/keyboard.js:898
 msgid "Show Keyboard Layout"
 msgstr "Näytä näppäimistön asettelu"
 
-#: js/ui/status/location.js:337
+#: js/ui/status/location.js:339
 msgid "Allow location access"
 msgstr "Salli sijainnin käyttö"
 
 #. Translators: %s is an application name
-#: js/ui/status/location.js:339
+#: js/ui/status/location.js:341
 #, javascript-format
 msgid "The app %s wants to access your location"
 msgstr "%s haluaa käyttää sijaintitietoasi"
 
-#: js/ui/status/location.js:349
-msgid "Location access can be changed at any time from the privacy settings"
-msgstr "Sijaintitiedon käyttöoikeuksia voi muuttaa milloin tahansa yksityisyysasetuksista"
+#: js/ui/status/location.js:351
+msgid "Location access can be changed at any time from the privacy settings."
+msgstr ""
+"Sijaintitiedon käyttöoikeuksia voi muuttaa milloin tahansa "
+"yksityisyysasetuksista."
 
-#: js/ui/status/location.js:357
+#: js/ui/status/location.js:359
 msgid "Deny Access"
 msgstr "Estä pääsy"
 
-#: js/ui/status/location.js:362
+#: js/ui/status/location.js:364
 msgid "Grant Access"
 msgstr "Salli pääsy"
 
-#: js/ui/status/network.js:63
+#: js/ui/status/network.js:62
 msgid "<unknown>"
 msgstr "<tuntematon>"
 
-#: js/ui/status/network.js:1061
+#. Translators: %s is a device name like "MyPhone"
+#: js/ui/status/network.js:354
+#, javascript-format
+msgid "Disconnect %s"
+msgstr "Katkaise yhteys kohteeseen %s"
+
+#. Translators: %s is a device name like "MyPhone"
+#: js/ui/status/network.js:356
+#, javascript-format
+msgid "Connect to %s"
+msgstr "Yhdistä kohteeseen %s"
+
+#: js/ui/status/network.js:1050
 msgid "Secure"
 msgstr "Turvallinen"
 
-#: js/ui/status/network.js:1061
+#: js/ui/status/network.js:1050
 msgid "Not secure"
 msgstr "Ei turvallinen"
 
-#: js/ui/status/network.js:1062
+#: js/ui/status/network.js:1051
 #, javascript-format
 msgid "Signal strength %s%%"
 msgstr "Signaalin vahvuus %s%%"
 
 #. translators: The first placeholder is the network name, the second and indication whether it is secure, and the last the signal strength indication
-#: js/ui/status/network.js:1064
+#: js/ui/status/network.js:1053
 #, javascript-format
 msgid "%s, %s, %s"
 msgstr "%s, %s, %s"
 
 #. Translators: %s is a network identifier
-#: js/ui/status/network.js:1167
+#: js/ui/status/network.js:1155
 #, javascript-format
 msgid "%s Hotspot"
 msgstr "%s - Yhteyspiste"
 
-#: js/ui/status/network.js:1448
+#: js/ui/status/network.js:1426
 #, javascript-format
 msgid "%d connected"
 msgid_plural "%d connected"
 msgstr[0] "%d yhdistetty"
 msgstr[1] "%d yhdistetty"
 
-#: js/ui/status/network.js:1546 js/ui/status/network.js:1563
+#: js/ui/status/network.js:1524 js/ui/status/network.js:1540
 msgid "VPN"
 msgstr "VPN"
 
-#: js/ui/status/network.js:1547
-msgid "Open VPN menu"
-msgstr "Avaa VPN-valikko"
-
-#: js/ui/status/network.js:1548
+#: js/ui/status/network.js:1525
 msgid "VPN Settings"
 msgstr "VPN-asetukset"
 
-#: js/ui/status/network.js:1808
+#: js/ui/status/network.js:1785
 msgid "Wi–Fi"
 msgstr "Wi-Fi"
 
-#: js/ui/status/network.js:1809
-msgid "Open Wi–Fi menu"
-msgstr "Avaa Wi–Fi-valikko"
-
-#: js/ui/status/network.js:1811
+#: js/ui/status/network.js:1787
 msgid "All Networks"
 msgstr "Kaikki verkot"
 
-#: js/ui/status/network.js:1921
+#: js/ui/status/network.js:1884
 msgid "Wired Connections"
 msgstr "Kiinteät yhteydet"
 
-#: js/ui/status/network.js:1922
-msgid "Open wired connections menu"
-msgstr "Avaa kiinteiden yhteyksien valikko"
-
-#: js/ui/status/network.js:1923
+#: js/ui/status/network.js:1885
 msgid "Wired Settings"
 msgstr "Kiinteän yhteyden asetukset"
 
-#: js/ui/status/network.js:1937
+#: js/ui/status/network.js:1899
 msgid "Bluetooth Tethers"
 msgstr "Bluetoothilla jaetut yhteydet"
 
-#: js/ui/status/network.js:1938
-msgid "Open Bluetooth tethers menu"
-msgstr "Avaa Bluetooth-tetheröinnin valikko"
-
 #. Translators: "Tether" from "Bluetooth Tether"
-#: js/ui/status/network.js:1945
+#: js/ui/status/network.js:1906
 msgid "Tether"
 msgstr "Tether"
 
-#: js/ui/status/network.js:1958
+#: js/ui/status/network.js:1919
 msgid "Mobile Connections"
 msgstr "Mobiiliyhteydet"
 
-#: js/ui/status/network.js:1959
-msgid "Open mobile connections menu"
-msgstr "Avaa mobiiliyhteyksien valikko"
-
-#: js/ui/status/network.js:1961
+#: js/ui/status/network.js:1921
 msgid "Mobile Broadband Settings"
 msgstr "Mobiililaajakaistan asetukset"
 
 #. Translators: "Mobile" from "Mobile Broadband"
-#: js/ui/status/network.js:1970
+#: js/ui/status/network.js:1930
 msgid "Mobile"
 msgstr "Mobiili"
 
-#: js/ui/status/network.js:2004
-msgid "Sign in to Network"
-msgstr "Kirjaudu verkkoon"
-
-#: js/ui/status/network.js:2191
+#: js/ui/status/network.js:2035
 msgid "Connection failed"
 msgstr "Yhteys epäonnistui"
 
-#: js/ui/status/network.js:2192
+#: js/ui/status/network.js:2036
 msgid "Activation of network connection failed"
 msgstr "Verkkoyhteyden aktivointi epäonnistui"
 
-#: js/ui/status/nightLight.js:19
+#: js/ui/status/nightLight.js:21
 msgid "Night Light"
 msgstr "Yövalo"
 
-#: js/ui/status/powerProfiles.js:19
+#: js/ui/status/powerProfiles.js:21
 msgctxt "Power profile"
 msgid "Performance"
 msgstr "Suorituskyky"
 
-#: js/ui/status/powerProfiles.js:24
+#: js/ui/status/powerProfiles.js:26
 msgctxt "Power profile"
 msgid "Balanced"
 msgstr "Tasapainotettu"
 
-#: js/ui/status/powerProfiles.js:29
+#: js/ui/status/powerProfiles.js:31
 msgctxt "Power profile"
 msgid "Power Saver"
 msgstr "Virransäästö"
 
-#: js/ui/status/powerProfiles.js:35
-msgctxt "Power profile"
-msgid "Custom"
-msgstr "Mukautettu"
-
-#: js/ui/status/powerProfiles.js:45
-msgctxt "Quick settings button title"
+#: js/ui/status/powerProfiles.js:41 js/ui/status/powerProfiles.js:71
 msgid "Power Mode"
 msgstr "Tehotila"
 
-#: js/ui/status/powerProfiles.js:46
-msgid "Open power profiles menu"
-msgstr "Avaa virtaprofiilien valikko"
-
-#: js/ui/status/powerProfiles.js:77
-msgctxt "Quick settings menu header"
-msgid "Power Mode"
-msgstr "Tehotila"
-
-#: js/ui/status/powerProfiles.js:79
+#: js/ui/status/powerProfiles.js:73
 msgid "Power Settings"
 msgstr "Virranhallinta"
 
-#: js/ui/status/remoteAccess.js:73
+#: js/ui/status/remoteAccess.js:76
 msgid "Stop Screencast"
 msgstr "Pysäytä näyttötallennevideo"
 
-#: js/ui/status/remoteAccess.js:141
+#: js/ui/status/remoteAccess.js:146
 msgid "Stop Screen Sharing"
 msgstr "Lopeta näytön jakaminen"
 
-#: js/ui/status/rfkill.js:97
+#: js/ui/status/rfkill.js:101
 msgid "Airplane Mode"
 msgstr "Lentokonetila"
 
-#: js/ui/status/system.js:174
+#: js/ui/status/system.js:170
 msgid "Power Off Menu"
 msgstr "Sammutusvalikko"
 
-#: js/ui/status/system.js:182
+#: js/ui/status/system.js:178
 msgid "Suspend"
 msgstr "Valmiustila"
 
-#: js/ui/status/system.js:187
+#: js/ui/status/system.js:183
 msgid "Restart…"
 msgstr "Käynnistä uudelleen…"
 
-#: js/ui/status/system.js:192
+#: js/ui/status/system.js:188
 msgid "Power Off…"
 msgstr "Sammuta…"
 
-#: js/ui/status/system.js:199
+#: js/ui/status/system.js:195
+#: subprojects/extensions-app/data/ui/extensions-window.ui:124
 msgid "Log Out…"
 msgstr "Kirjaudu ulos…"
 
-#: js/ui/status/system.js:204 js/ui/unlockDialog.js:671
+#: js/ui/status/system.js:200
 msgid "Switch User…"
 msgstr "Vaihda käyttäjää…"
 
-#: js/ui/status/system.js:248
+#: js/ui/status/system.js:244
 msgctxt "action"
 msgid "Lock Screen"
 msgstr "Lukitse näyttö"
@@ -2692,19 +2434,20 @@ msgstr "Tuntematon Thunderbolt-laite"
 
 #: js/ui/status/thunderbolt.js:311
 msgid ""
-"New device has been detected while you were away. Please disconnect and reconnect the device to "
-"start using it."
+"New device has been detected while you were away. Please disconnect and "
+"reconnect the device to start using it."
 msgstr ""
-"Uusi laite havaittiin, kun olit pois. Katkaise laitteen yhteys ja yhdistä se uudelleen, jotta "
-"voit aloittaa sen käyttämisen."
+"Uusi laite havaittiin, kun olit pois. Katkaise laitteen yhteys ja yhdistä se "
+"uudelleen, jotta voit aloittaa sen käyttämisen."
 
 #: js/ui/status/thunderbolt.js:314
 msgid "Unauthorized Thunderbolt device"
 msgstr "Thunderbolt-laite ilman valtuutusta"
 
 #: js/ui/status/thunderbolt.js:315
-msgid "New device has been detected and needs to be authorized by an administrator"
-msgstr "Uusi laite on havaittu. Se tulee valtuuttaa ylläpitäjän toimesta"
+msgid ""
+"New device has been detected and needs to be authorized by an administrator."
+msgstr "Uusi laite on havaittu. Se tulee valtuuttaa ylläpitäjän toimesta."
 
 #: js/ui/status/thunderbolt.js:321
 msgid "Thunderbolt authorization error"
@@ -2715,133 +2458,121 @@ msgstr "Thunderbolt-valtuutusvirhe"
 msgid "Could not authorize the Thunderbolt device: %s"
 msgstr "Thunderbolt-laitetta ei voitu valtuuttaa: %s"
 
-#: js/ui/status/volume.js:218
+#: js/ui/status/volume.js:220
 msgid "Volume changed"
 msgstr "Äänenvoimakkuutta muutettu"
 
-#: js/ui/status/volume.js:231
+#: js/ui/status/volume.js:233
 msgid "Unmute"
 msgstr "Palauta ääni"
 
-#: js/ui/status/volume.js:231
+#: js/ui/status/volume.js:233
 msgid "Mute"
 msgstr "Vaimenna"
 
-#: js/ui/status/volume.js:298
+#: js/ui/status/volume.js:288
 msgid "Volume"
 msgstr "Äänenvoimakkuus"
 
-#: js/ui/status/volume.js:314
+#: js/ui/status/volume.js:304
 msgid "Sound Output"
 msgstr "Äänen ulostulo"
 
-#: js/ui/status/volume.js:315
-msgid "Open sound output menu"
-msgstr "Avaa äänen ulostulon valikko"
-
-#: js/ui/status/volume.js:391
+#: js/ui/status/volume.js:376
 msgid "Sound Input"
 msgstr "Äänen sisääntulo"
-
-#: js/ui/status/volume.js:392
-msgid "Open sound input menu"
-msgstr "Avaa äänen sisääntulon valikko"
 
 #. Translators: this is for display mirroring i.e. cloning.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:20
+#: js/ui/switchMonitor.js:22
 msgid "Mirror"
 msgstr "Peili"
 
 #. Translators: this is for the desktop spanning displays.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:29
+#: js/ui/switchMonitor.js:31
 msgid "Join Displays"
 msgstr "Liitä näytöt"
 
 #. Translators: this is for using only external displays.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:39
+#: js/ui/switchMonitor.js:41
 msgid "External Only"
 msgstr "Vain ulkoinen"
 
 #. Translators: this is for using only the laptop display.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:47
+#: js/ui/switchMonitor.js:49
 msgid "Built-in Only"
 msgstr "Vain sisäinen"
 
-#: js/ui/unlockDialog.js:24
-msgid "Unlock Options"
-msgstr "Avausvalinnat"
-
 #. Translators: This is a time format for a date in
 #. long format
-#: js/ui/unlockDialog.js:419
+#: js/ui/unlockDialog.js:374
 msgid "%A %B %-d"
 msgstr "%A, %-e. %Bta"
 
-#: js/ui/unlockDialog.js:434
-msgid "Swipe up"
-msgstr "Pyyhkäise ylös"
+#: js/ui/unlockDialog.js:380
+msgid "Swipe up to unlock"
+msgstr "Vedä ylös avataksesi lukituksen"
 
-#: js/ui/unlockDialog.js:436
-msgid "Click or press a key"
-msgstr "Napsauta tai paina näppäintä"
+#: js/ui/unlockDialog.js:381
+msgid "Click or press a key to unlock"
+msgstr "Napsauta tai paina näppäintä avataksesi lukituksen"
 
-#: js/ui/unlockDialog.js:652
+#: js/ui/unlockDialog.js:564
 msgid "Unlock Window"
 msgstr "Lukituksen avausikkuna"
 
-#: js/ui/unlockDialog.js:666
+#: js/ui/unlockDialog.js:573
 msgid "Log in as another user"
 msgstr "Kirjaudu toisena käyttäjänä"
 
-#: js/ui/unlockDialog.js:694
-msgid "Background Authentication Methods"
-msgstr "Taustalla tapahtuvan tunnistuksen menetelmät"
-
-#: js/ui/welcomeDialog.js:47
+#: js/ui/welcomeDialog.js:49
 #, javascript-format
 msgid "GNOME %s"
 msgstr "Gnome %s"
 
-#: js/ui/welcomeDialog.js:51
+#: js/ui/welcomeDialog.js:53
 #, javascript-format
 msgid "Welcome to %s"
 msgstr "Tervetuloa, tämä on %s"
 
-#: js/ui/welcomeDialog.js:52
-msgid "If you want to learn your way around, check out the tour"
-msgstr "Lähde tutustumiskierrokselle oppiaksesi oleelliset asiat"
+#: js/ui/welcomeDialog.js:54
+msgid "If you want to learn your way around, check out the tour."
+msgstr "Lähde tutustumiskierrokselle oppiaksesi oleelliset asiat."
 
-#: js/ui/welcomeDialog.js:66
+#: js/ui/welcomeDialog.js:63
+msgid "Skip"
+msgstr "Ohita"
+
+#: js/ui/welcomeDialog.js:68
 msgid "Take Tour"
 msgstr "Aloita tutustumiskierros"
 
-#: js/ui/windowAttentionHandler.js:18
+#: js/ui/windowAttentionHandler.js:20
 #, javascript-format
 msgid "“%s” is ready"
 msgstr "“%s” on valmis"
 
 #. Translators: This string should be shorter than 30 characters
-#: js/ui/windowManager.js:60
+#: js/ui/windowManager.js:69
 msgid "Keep these display settings?"
 msgstr "Haluatko säilyttää nämä näyttöasetukset?"
 
-#: js/ui/windowManager.js:70
+#: js/ui/windowManager.js:79
 msgid "Revert Settings"
 msgstr "Palauta asetukset"
 
-#: js/ui/windowManager.js:75
+#: js/ui/windowManager.js:84
 msgid "Keep Changes"
 msgstr "Säilytä muutokset"
 
-#: js/ui/windowManager.js:95
+#: js/ui/windowManager.js:104
 #, javascript-format
 msgid "Settings changes will revert in %d second"
 msgid_plural "Settings changes will revert in %d seconds"
@@ -2850,151 +2581,369 @@ msgstr[1] "Asetusmuutokset palautetaan %d sekunnissa"
 
 #. Translators: This represents the size of a window. The first number is
 #. * the width of the window and the second is the height.
-#: js/ui/windowManager.js:490
+#: js/ui/windowManager.js:496
 #, javascript-format
 msgid "%d × %d"
 msgstr "%d × %d"
 
-#. Translators: entry in the window right click menu.
-#: js/ui/windowMenu.js:27
-msgctxt "window-menu"
-msgid "Take Screenshot"
-msgstr "Ota kuvakaappaus"
-
-#: js/ui/windowMenu.js:39
+#: js/ui/windowMenu.js:42
 msgid "Hide"
 msgstr "Piilota"
 
-#: js/ui/windowMenu.js:46
+#: js/ui/windowMenu.js:49
 msgid "Restore"
 msgstr "Palauta"
 
-#: js/ui/windowMenu.js:50
+#: js/ui/windowMenu.js:53
 msgid "Maximize"
 msgstr "Suurenna"
 
-#: js/ui/windowMenu.js:57
+#: js/ui/windowMenu.js:60
 msgid "Move"
 msgstr "Siirrä"
 
-#: js/ui/windowMenu.js:71
+#: js/ui/windowMenu.js:80
 msgid "Resize"
 msgstr "Muuta kokoa"
 
-#: js/ui/windowMenu.js:85
+#: js/ui/windowMenu.js:101
+msgid "Move Titlebar Onscreen"
+msgstr "Siirrä ikkunapalkki näytölle"
+
+#: js/ui/windowMenu.js:106
 msgid "Always on Top"
 msgstr "Aina päällimmäisenä"
 
-#: js/ui/windowMenu.js:104
+#: js/ui/windowMenu.js:125
 msgid "Always on Visible Workspace"
 msgstr "Aina näkyvissä olevassa työtilassa"
 
-#: js/ui/windowMenu.js:118
+#: js/ui/windowMenu.js:139
 msgid "Move to Workspace Left"
 msgstr "Siirrä vasemmalla olevaan työtilaan"
 
-#: js/ui/windowMenu.js:124
+#: js/ui/windowMenu.js:145
 msgid "Move to Workspace Right"
 msgstr "Siirrä oikealla olevaan työtilaan"
 
-#: js/ui/windowMenu.js:130
+#: js/ui/windowMenu.js:151
 msgid "Move to Workspace Up"
 msgstr "Siirrä ylempänä olevaan työtilaan"
 
-#: js/ui/windowMenu.js:136
+#: js/ui/windowMenu.js:157
 msgid "Move to Workspace Down"
 msgstr "Siirrä alempana olevaan työtilaan"
 
-#: js/ui/windowMenu.js:154
+#: js/ui/windowMenu.js:175
 msgid "Move to Monitor Up"
 msgstr "Siirrä ylempänä olevaan näyttöön"
 
-#: js/ui/windowMenu.js:163
+#: js/ui/windowMenu.js:184
 msgid "Move to Monitor Down"
 msgstr "Siirrä alempana olevaan näyttöön"
 
-#: js/ui/windowMenu.js:172
+#: js/ui/windowMenu.js:193
 msgid "Move to Monitor Left"
 msgstr "Siirrä vasemmalla olevaan näyttöön"
 
-#: js/ui/windowMenu.js:181
+#: js/ui/windowMenu.js:202
 msgid "Move to Monitor Right"
 msgstr "Siirrä oikealla olevaan näyttöön"
 
-#: js/ui/windowMenu.js:189
+#: js/ui/windowMenu.js:210
 msgid "Close"
 msgstr "Sulje"
 
-#: src/calendar-server/reminder-watcher.c:130
-msgid "Reminders"
-msgstr "Muistutukset"
-
-#: src/calendar-server/reminder-watcher.c:135
-msgid "Snooze"
-msgstr "Torkuta"
-
-#: src/calendar-server/reminder-watcher.c:136
-msgid "Dismiss"
-msgstr "Hylkää"
-
-#: src/main.c:515 subprojects/extensions-tool/src/main.c:338
+#: src/main.c:529 subprojects/extensions-tool/src/main.c:336
 msgid "Print version"
 msgstr "Tulosta versio"
 
-#: src/main.c:521
+#: src/main.c:535
 msgid "Mode used by GDM for login screen"
 msgstr "GDM:n kirjautumisruudussa käyttämä tila"
 
-#: src/main.c:527
+#: src/main.c:541
 msgid "Use a specific mode, e.g. “gdm” for login screen"
 msgstr "Käytä tiettyä tilaa (esim. “gdm”) kirjautumisnäkymää varten"
 
-#: src/main.c:533
+#: src/main.c:547
 msgid "List possible modes"
 msgstr "Listaa mahdolliset tilat"
 
-#: src/main.c:539
+#: src/main.c:553
 msgid "Force animations to be enabled"
 msgstr "Pakota animaatiot käyttöön"
 
-#: src/shell-app.c:264
+#: src/shell-app.c:253
 msgctxt "program"
 msgid "Unknown"
 msgstr "Tuntematon"
 
-#: src/shell-app.c:514
+#: src/shell-app.c:504
 #, c-format
 msgid "Failed to launch “%s”"
 msgstr "Sovelluksen “%s” käynnistäminen epäonnistui"
 
-#: src/shell-keyring-prompt.c:776
-msgid "Passwords do not match"
-msgstr "Salasanat eivät täsmää"
+#: src/shell-keyring-prompt.c:764
+msgid "Passwords do not match."
+msgstr "Salasanat eivät täsmää."
 
-#: src/shell-keyring-prompt.c:784
+#: src/shell-keyring-prompt.c:772
 msgid "Password cannot be blank"
 msgstr "Salasana ei voi olla tyhjä"
 
-#: src/shell-polkit-authentication-agent.c:342
+#: src/shell-polkit-authentication-agent.c:344
 msgid "Authentication dialog was dismissed by the user"
 msgstr "Käyttäjä poistui tunnistautumisvalintaikkunasta"
 
-#: src/st/st-icon-theme.c:1857
+#: src/st/st-icon-theme.c:1865
 #, c-format
 msgid "Icon '%s' not present in theme %s"
 msgstr "Kuvaketta '%s' ei ole teemassa %s"
 
-#: src/st/st-icon-theme.c:3450 src/st/st-icon-theme.c:3754
+#: src/st/st-icon-theme.c:3454 src/st/st-icon-theme.c:3757
 msgid "Failed to load icon"
 msgstr "Kuvakkeen lataaminen epäonnistui"
 
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:6
+msgid "Manage your GNOME Extensions"
+msgstr "Hallitse Gnome-laajennuksia"
+
+#. developer_name tag deprecated with Appstream 1.0
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:19
+msgid "The GNOME Project"
+msgstr "Gnome-projekti"
+
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:51
+msgid ""
+"GNOME Extensions handles updating extensions, configuring extension "
+"preferences and removing or disabling unwanted extensions."
+msgstr ""
+"Gnomen laajennussovellus Laajennukset käsittelee laajennusten päivitykset, "
+"niiden asetukset ja sen avulla voi poistaa laajennuksia käytöstä tai "
+"kokonaan järjestelmästä."
+
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:70
+msgid "Main Window"
+msgstr "Pääikkuna"
+
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:74
+msgid "Available Updates"
+msgstr "Saatavilla olevat päivitykset"
+
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:78
+msgid "Search View"
+msgstr "Hakunäkymä"
+
+#: subprojects/extensions-app/data/org.gnome.Extensions.desktop.in.in:7
+msgid "Configure GNOME Shell Extensions"
+msgstr "Hallitse Gnome Shell -laajennuksia"
+
+#: subprojects/extensions-app/js/extensionManager.js:237
+#, javascript-format
+msgid ""
+"The installed version of this extension (%s) is incompatible with the "
+"current version of GNOME (%s). The extension has been disabled."
+msgstr ""
+"Asennettu versio laajennuksesta (%s) ei ole yhteensopiva nykyisen Gnome-"
+"version (%s) kanssa. Tämä laajennus on poistettu käytöstä."
+
+#: subprojects/extensions-app/js/extensionManager.js:238
+#, javascript-format
+msgid ""
+"The installed version of this extension is incompatible with the current "
+"version of GNOME (%s). The extension has been disabled."
+msgstr ""
+"Tämän laajennuksen asennettu versio ei ole yhteensopiva nykyisen Gnome-"
+"version (%s) kanssa. Tämä laajennus on poistettu käytöstä."
+
+#: subprojects/extensions-app/js/extensionManager.js:242
+msgid ""
+"An error has occurred in this extension. This could cause issues elsewhere "
+"in the system. It is recommended to turn the extension off until the error "
+"is resolved."
+msgstr ""
+"Tässä laajennuksessa tapahtui virhe. Tämä saattaa aiheuttaa ongelmia muualla "
+"järjestelmässä. On suositeltavaa poistaa tämä laajennus käytöstä, kunnes "
+"virhe on selvitetty."
+
+#. translators: Details for an extension error
+#: subprojects/extensions-app/js/extensionManager.js:248
+msgid "Error details:"
+msgstr "Virheen tiedot:"
+
+#: subprojects/extensions-app/js/extensionRow.js:82
+#, javascript-format
+msgid "Version %s"
+msgstr "Versio %s"
+
+#: subprojects/extensions-app/js/extensionsWindow.js:113
+#, javascript-format
+msgid "Remove “%s”?"
+msgstr "Poista “%s”?"
+
+#: subprojects/extensions-app/js/extensionsWindow.js:114
+msgid ""
+"If you remove the extension, you need to return to download it if you want "
+"to enable it again"
+msgstr ""
+"Ota huomioon jos poistat laajennuksen; sinun tulee palata ja ladata se "
+"uudelleen, jos haluat sen uudelleen käyttöön"
+
+#: subprojects/extensions-app/js/extensionsWindow.js:117
+msgid "_Cancel"
+msgstr "_Peru"
+
+#: subprojects/extensions-app/js/extensionsWindow.js:118
+msgid "_Remove"
+msgstr "P_oista"
+
+#: subprojects/extensions-app/js/extensionsWindow.js:158
+msgid "translator-credits"
+msgstr "Jiri Grönroos"
+
+#: subprojects/extensions-app/js/extensionsWindow.js:203
+#, javascript-format
+msgid "%d extension will be updated on next login."
+msgid_plural "%d extensions will be updated on next login."
+msgstr[0] "%d laajennus päivitetään seuraavan kerran, kun kirjaudut sisään."
+msgstr[1] "%d laajennusta päivitetään seuraavan kerran, kun kirjaudut sisään."
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:21
+msgid "Error Details"
+msgstr "Virheen tiedot"
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:61
+msgid "Updates Details"
+msgstr "Päivityksen tiedot"
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:71
+msgid ""
+"A new version of this extension is ready and will be loaded on next login."
+msgstr ""
+"Uusi versio tästä laajennuksessa on valmis ja se ladataan seuraavan kerran, "
+"kun kirjaudut sisään."
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:107
+msgid "Extension Details"
+msgstr "Laajennuksen tiedot"
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:193
+msgid "_Website"
+msgstr "_Verkkosivusto"
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:220
+msgid "_Settings"
+msgstr "_Asetukset"
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:247
+msgid "_Remove…"
+msgstr "_Poista…"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:6
+msgid "Keyboard Shortcuts"
+msgstr "Pikanäppäimet"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:10
+msgid "About Extensions"
+msgstr "Tietoja - Laajennukset"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:64
+msgid "Main Menu"
+msgstr "Päävalikko"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:106
+msgid "Search extensions"
+msgstr "Etsi laajennuksia"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:134
+msgid "_Extensions"
+msgstr "_Laajennukset"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:143
+msgid "More Information"
+msgstr "Lisätietoja"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:153
+msgid ""
+"Extensions can cause performance and stability issues. It is recommended to "
+"disable all extensions if you experience problems with your system."
+msgstr ""
+"Laajennukset voivat aiheuttaa suorituskyky- tai vakausongelmia. Poista "
+"kaikki laajennukset käytöstä, jos kohtaat ongelmia järjestelmän kanssa."
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:180
+msgid "User Extensions"
+msgstr "Käyttäjälaajennukset"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:200
+msgid "System Extensions"
+msgstr "Järjestelmälaajennukset"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:235
+msgid "Search Results"
+msgstr "Hakutulokset"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:254
+msgid "No Results Found"
+msgstr "Tuloksia ei löytynyt"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:255
+msgid "Try a different search."
+msgstr "Kokeile eri hakuehtoja."
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:266
+msgid "No Installed Extensions"
+msgstr "Ei asennettuja laajennuksia"
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:267
+msgid ""
+"To find and add extensions, visit <a href=\"https://extensions.gnome."
+"org\">extensions.gnome.org</a>."
+msgstr ""
+"Etsi ja asenna laajennuksia osoitteessa <a href=\"https://extensions.gnome."
+"org\">extensions.gnome.org</a>."
+
+#: subprojects/extensions-app/data/ui/extensions-window.ui:278
+msgid ""
+"We’re very sorry, but it was not possible to get the list of installed "
+"extensions. Make sure you are logged into GNOME and try again."
+msgstr ""
+"Valitettavasti asennettujen laajennusten listaa ei voitu muodostaa. Varmista "
+"että olet kirjautunut Gnomeen ja yritä uudelleen."
+
+#: subprojects/extensions-app/data/ui/help-overlay.ui:9
+msgctxt "shortcut window"
+msgid "General"
+msgstr "Yleiset"
+
+#: subprojects/extensions-app/data/ui/help-overlay.ui:12
+msgctxt "shortcut window"
+msgid "Open Menu"
+msgstr "Avaa valikko"
+
+#: subprojects/extensions-app/data/ui/help-overlay.ui:18
+msgctxt "shortcut window"
+msgid "Toggle Search"
+msgstr "Haku päälle/pois"
+
+#: subprojects/extensions-app/data/ui/help-overlay.ui:24
+msgctxt "shortcut window"
+msgid "Show Shortcuts"
+msgstr "Näytä pikanäppäimet"
+
+#: subprojects/extensions-app/data/ui/help-overlay.ui:30
+msgctxt "shortcut window"
+msgid "Quit"
+msgstr "Lopeta"
+
 #. Translators: a file path to an extension directory
-#: subprojects/extensions-tool/src/command-create.c:285
+#: subprojects/extensions-tool/src/command-create.c:284
 #, c-format
 msgid "The new extension was successfully created in %s.\n"
 msgstr "Uusi laajennus luotiin polkuun %s.\n"
 
-#: subprojects/extensions-tool/src/command-create.c:377
+#: subprojects/extensions-tool/src/command-create.c:376
 #, c-format
 msgid ""
 "Name should be a very short (ideally descriptive) string.\n"
@@ -3003,11 +2952,12 @@ msgstr ""
 "Nimen tulisi olla erittäin lyhyt, mieluiten kuvaava, merkkijono.\n"
 "Esimerkkejä: %s"
 
-#: subprojects/extensions-tool/src/command-create.c:383 subprojects/extensions-tool/src/main.c:245
+#: subprojects/extensions-tool/src/command-create.c:382
+#: subprojects/extensions-tool/src/main.c:243
 msgid "Name"
 msgstr "Nimi"
 
-#: subprojects/extensions-tool/src/command-create.c:397
+#: subprojects/extensions-tool/src/command-create.c:396
 #, c-format
 msgid ""
 "Description is a single-sentence explanation of what your extension does.\n"
@@ -3016,208 +2966,205 @@ msgstr ""
 "Kuvaus on yhden lauseen selvitys laajennuksen käyttötarkoituksesta.\n"
 "Esimerkkejä: %s"
 
-#: subprojects/extensions-tool/src/command-create.c:403 subprojects/extensions-tool/src/main.c:248
+#: subprojects/extensions-tool/src/command-create.c:402
+#: subprojects/extensions-tool/src/main.c:246
 msgid "Description"
 msgstr "Kuvaus"
 
-#: subprojects/extensions-tool/src/command-create.c:417
-#, c-format
+#: subprojects/extensions-tool/src/command-create.c:416
 msgid ""
 "UUID is a globally-unique identifier for your extension.\n"
-"This should be in the format of an email address (clicktofocus@janedoe.example.com)\n"
+"This should be in the format of an email address (clicktofocus@janedoe."
+"example.com)\n"
 msgstr ""
 "UUID on yksilöllinen tunniste laajennukselle.\n"
-"Tämän tulee olla sähköpostiosoitteen muodossa (clicktofocus@janedoe.example.com)\n"
+"Tämän tulee olla sähköpostiosoitteen muodossa (clicktofocus@janedoe.example."
+"com)\n"
 
-#: subprojects/extensions-tool/src/command-create.c:444
-#, c-format
+#: subprojects/extensions-tool/src/command-create.c:443
 msgid "Choose one of the available templates:\n"
 msgstr "Valitse yksi mallipohjista:\n"
 
-#: subprojects/extensions-tool/src/command-create.c:458
+#: subprojects/extensions-tool/src/command-create.c:457
 msgid "Template"
 msgstr "Mallipohja"
 
-#: subprojects/extensions-tool/src/command-create.c:516
+#: subprojects/extensions-tool/src/command-create.c:515
 msgid "The unique identifier of the new extension"
 msgstr "Yksilöllinen tunniste uudelle laajennukselle"
 
-#: subprojects/extensions-tool/src/command-create.c:519
+#: subprojects/extensions-tool/src/command-create.c:518
 msgid "NAME"
 msgstr "NIMI"
 
-#: subprojects/extensions-tool/src/command-create.c:520
+#: subprojects/extensions-tool/src/command-create.c:519
 msgid "The user-visible name of the new extension"
 msgstr "Uuden laajennuksen käyttäjälle näkyvä nimi"
 
-#: subprojects/extensions-tool/src/command-create.c:522
+#: subprojects/extensions-tool/src/command-create.c:521
 msgid "DESCRIPTION"
 msgstr "KUVAUS"
 
-#: subprojects/extensions-tool/src/command-create.c:524
+#: subprojects/extensions-tool/src/command-create.c:523
 msgid "A short description of what the extension does"
 msgstr "Lyhyt kuvaus siitä, mitä laajennus tekee"
 
-#: subprojects/extensions-tool/src/command-create.c:526
+#: subprojects/extensions-tool/src/command-create.c:525
 #: subprojects/extensions-tool/src/command-pack.c:455
 msgid "DOMAIN"
 msgstr "DOMAIN"
 
-#: subprojects/extensions-tool/src/command-create.c:528
+#: subprojects/extensions-tool/src/command-create.c:527
 msgid "The gettext domain used by the extension"
 msgstr "Laajennuksen käyttämä gettext-domain"
 
-#: subprojects/extensions-tool/src/command-create.c:530
+#: subprojects/extensions-tool/src/command-create.c:529
 #: subprojects/extensions-tool/src/command-pack.c:448
 msgid "SCHEMA"
 msgstr "SKEEMA"
 
-#: subprojects/extensions-tool/src/command-create.c:532
+#: subprojects/extensions-tool/src/command-create.c:531
 msgid "The GSettings schema used by the extension"
 msgstr "Laajennuksen käyttämä GSettings-skeema"
 
-#: subprojects/extensions-tool/src/command-create.c:535
+#: subprojects/extensions-tool/src/command-create.c:534
 msgid "TEMPLATE"
 msgstr "MALLIPOHJA"
 
-#: subprojects/extensions-tool/src/command-create.c:536
+#: subprojects/extensions-tool/src/command-create.c:535
 msgid "The template to use for the new extension"
 msgstr "Mallipohja uudelle laajennukselle"
 
-#: subprojects/extensions-tool/src/command-create.c:539
+#: subprojects/extensions-tool/src/command-create.c:538
 msgid "Include prefs.js template"
 msgstr "Sisällytä prefs.js-mallipohja"
 
-#: subprojects/extensions-tool/src/command-create.c:545
+#: subprojects/extensions-tool/src/command-create.c:544
 msgid "Enter extension information interactively"
 msgstr "Kirjoita laajennuksen tiedot vuorovaikutteisesti"
 
-#: subprojects/extensions-tool/src/command-create.c:553
+#: subprojects/extensions-tool/src/command-create.c:552
 msgid "Create a new extension"
 msgstr "Luo uusi laajennus"
 
-#: subprojects/extensions-tool/src/command-create.c:571
-#: subprojects/extensions-tool/src/command-list.c:191
+#: subprojects/extensions-tool/src/command-create.c:570
+#: subprojects/extensions-tool/src/command-list.c:190
 msgid "Unknown arguments"
 msgstr "Tuntemattomat argumentit"
 
-#: subprojects/extensions-tool/src/command-create.c:596
+#: subprojects/extensions-tool/src/command-create.c:595
 msgid "UUID, name and description are required"
 msgstr "UUID, nimi ja kuvaus ovat pakollisia tietoja"
 
-#: subprojects/extensions-tool/src/command-disable.c:63
-#: subprojects/extensions-tool/src/command-enable.c:63
+#: subprojects/extensions-tool/src/command-disable.c:62
+#: subprojects/extensions-tool/src/command-enable.c:62
 #, c-format
 msgid "Extension “%s” does not exist\n"
 msgstr "Laajennusta “%s” ei ole olemassa\n"
 
-#: subprojects/extensions-tool/src/command-disable.c:99
+#: subprojects/extensions-tool/src/command-disable.c:98
 msgid "Disable an extension"
 msgstr "Poista laajennus käytöstä"
 
-#: subprojects/extensions-tool/src/command-disable.c:117
-#: subprojects/extensions-tool/src/command-enable.c:117
-#: subprojects/extensions-tool/src/command-info.c:104
-#: subprojects/extensions-tool/src/command-prefs.c:106
-#: subprojects/extensions-tool/src/command-reset.c:77
-#: subprojects/extensions-tool/src/command-uninstall.c:105
+#: subprojects/extensions-tool/src/command-disable.c:116
+#: subprojects/extensions-tool/src/command-enable.c:116
+#: subprojects/extensions-tool/src/command-info.c:103
+#: subprojects/extensions-tool/src/command-prefs.c:105
+#: subprojects/extensions-tool/src/command-reset.c:76
+#: subprojects/extensions-tool/src/command-uninstall.c:104
 msgid "No UUID given"
 msgstr "UUID:tä ei annettu"
 
-#: subprojects/extensions-tool/src/command-disable.c:122
-#: subprojects/extensions-tool/src/command-enable.c:122
-#: subprojects/extensions-tool/src/command-info.c:109
-#: subprojects/extensions-tool/src/command-prefs.c:111
-#: subprojects/extensions-tool/src/command-reset.c:82
-#: subprojects/extensions-tool/src/command-uninstall.c:110
+#: subprojects/extensions-tool/src/command-disable.c:121
+#: subprojects/extensions-tool/src/command-enable.c:121
+#: subprojects/extensions-tool/src/command-info.c:108
+#: subprojects/extensions-tool/src/command-prefs.c:110
+#: subprojects/extensions-tool/src/command-reset.c:81
+#: subprojects/extensions-tool/src/command-uninstall.c:109
 msgid "More than one UUID given"
 msgstr "Enemmän kuin yksi UUID annettu"
 
-#: subprojects/extensions-tool/src/command-enable.c:99
+#: subprojects/extensions-tool/src/command-enable.c:98
 msgid "Enable an extension"
 msgstr "Ota laajennus käyttöön"
 
-#: subprojects/extensions-tool/src/command-info.c:51
-#: subprojects/extensions-tool/src/command-list.c:67 subprojects/extensions-tool/src/main.c:152
-#, c-format
+#: subprojects/extensions-tool/src/command-info.c:50
+#: subprojects/extensions-tool/src/command-list.c:66
+#: subprojects/extensions-tool/src/main.c:150
 msgid "Failed to connect to GNOME Shell\n"
 msgstr "Gnome Shelliin yhdistäminen epäonnistui\n"
 
-#: subprojects/extensions-tool/src/command-info.c:60 subprojects/extensions-tool/src/main.c:161
+#: subprojects/extensions-tool/src/command-info.c:59
+#: subprojects/extensions-tool/src/main.c:159
 #, c-format
 msgid "Extension “%s” doesn't exist\n"
 msgstr "Laajennusta “%s” ei ole olemassa\n"
 
-#: subprojects/extensions-tool/src/command-info.c:86
+#: subprojects/extensions-tool/src/command-info.c:85
 msgid "Show extensions info"
 msgstr "Näytä laajennuksen tiedot"
 
-#: subprojects/extensions-tool/src/command-install.c:195
+#: subprojects/extensions-tool/src/command-install.c:190
 msgid "Overwrite an existing extension"
 msgstr "Korvaa olemassa oleva laajennus"
 
-#: subprojects/extensions-tool/src/command-install.c:198
-msgid "Print extension UUID on success"
-msgstr "Tulosta laajennuksen UUID onnistumisen myötä"
-
-#: subprojects/extensions-tool/src/command-install.c:200
+#: subprojects/extensions-tool/src/command-install.c:192
 msgid "EXTENSION_BUNDLE"
 msgstr "EXTENSION_BUNDLE"
 
-#: subprojects/extensions-tool/src/command-install.c:209
+#: subprojects/extensions-tool/src/command-install.c:201
 msgid "Install an extension bundle"
 msgstr "Asenna laajennuspaketti"
 
-#: subprojects/extensions-tool/src/command-install.c:227
+#: subprojects/extensions-tool/src/command-install.c:219
 msgid "No extension bundle specified"
 msgstr "Laajennuspakettia ei määritetty"
 
-#: subprojects/extensions-tool/src/command-install.c:233
+#: subprojects/extensions-tool/src/command-install.c:225
 msgid "More than one extension bundle specified"
 msgstr "Enemmän kuin yksi laajennuspaketti määritetty"
 
-#: subprojects/extensions-tool/src/command-list.c:141
+#: subprojects/extensions-tool/src/command-list.c:140
 msgid "Show user-installed extensions"
 msgstr "Näytä käyttäjän asentamat laajennukset"
 
-#: subprojects/extensions-tool/src/command-list.c:144
+#: subprojects/extensions-tool/src/command-list.c:143
 msgid "Show system-installed extensions"
 msgstr "Näytä järjestelmän asentamat laajennukset"
 
-#: subprojects/extensions-tool/src/command-list.c:147
+#: subprojects/extensions-tool/src/command-list.c:146
 msgid "Show enabled extensions"
 msgstr "Näytä käytössä olevat laajennukset"
 
-#: subprojects/extensions-tool/src/command-list.c:150
+#: subprojects/extensions-tool/src/command-list.c:149
 msgid "Show disabled extensions"
 msgstr "Näytä käytöstä poistetut laajennukset"
 
-#: subprojects/extensions-tool/src/command-list.c:153
+#: subprojects/extensions-tool/src/command-list.c:152
 msgid "Show extensions in active state"
 msgstr "Näytä aktiivisessa tilassa olevat laajennukset"
 
-#: subprojects/extensions-tool/src/command-list.c:156
+#: subprojects/extensions-tool/src/command-list.c:155
 msgid "Show extensions in inactive state"
 msgstr "Näytä passiivisessa tilassa olevat laajennukset"
 
-#: subprojects/extensions-tool/src/command-list.c:159
+#: subprojects/extensions-tool/src/command-list.c:158
 msgid "Show extensions with preferences"
 msgstr "Näytä laajennukset, joilla on asetuksia"
 
-#: subprojects/extensions-tool/src/command-list.c:162
+#: subprojects/extensions-tool/src/command-list.c:161
 msgid "Show extensions with updates"
 msgstr "Näytä laajennukset, joihin on päivityksiä"
 
-#: subprojects/extensions-tool/src/command-list.c:165
+#: subprojects/extensions-tool/src/command-list.c:164
 msgid "Print extension details"
 msgstr "Tulosta laajennuksen tiedot"
 
-#: subprojects/extensions-tool/src/command-list.c:173
+#: subprojects/extensions-tool/src/command-list.c:172
 msgid "List installed extensions"
 msgstr "Listaa asennetut laajennukset"
 
 #: subprojects/extensions-tool/src/command-pack.c:444
-#: subprojects/extensions-tool/src/command-upload.c:427
 msgid "FILE"
 msgstr "TIEDOSTO"
 
@@ -3262,223 +3209,172 @@ msgstr "Luo laajennuspaketti"
 msgid "More than one source directory specified"
 msgstr "Enemmän kuin yksi lähdekansio määritetty"
 
-#: subprojects/extensions-tool/src/command-prefs.c:48
+#: subprojects/extensions-tool/src/command-prefs.c:47
 #, c-format
 msgid "Extension “%s” doesn't have preferences\n"
 msgstr "Laajennuksella “%s” ei ole asetuksia\n"
 
-#: subprojects/extensions-tool/src/command-prefs.c:63
+#: subprojects/extensions-tool/src/command-prefs.c:62
 #, c-format
 msgid "Failed to open prefs for extension “%s”: %s\n"
 msgstr "Laajennuksen “%s” asetusten avaaminen epäonnistui: %s\n"
 
-#: subprojects/extensions-tool/src/command-prefs.c:88
+#: subprojects/extensions-tool/src/command-prefs.c:87
 msgid "Opens extension preferences"
 msgstr "Avaa laajennuksen asetukset"
 
-#: subprojects/extensions-tool/src/command-reset.c:59
+#: subprojects/extensions-tool/src/command-reset.c:58
 msgid "Reset an extension"
 msgstr "Nollaa laajennus"
 
-#: subprojects/extensions-tool/src/command-uninstall.c:50
-#, c-format
+#: subprojects/extensions-tool/src/command-uninstall.c:49
 msgid "Cannot uninstall system extensions\n"
 msgstr "Järjestelmän laajennuksia ei voi poistaa\n"
 
-#: subprojects/extensions-tool/src/command-uninstall.c:65
+#: subprojects/extensions-tool/src/command-uninstall.c:64
 #, c-format
 msgid "Failed to uninstall “%s”\n"
 msgstr "Ei voitu poistaa “%s”\n"
 
-#: subprojects/extensions-tool/src/command-uninstall.c:87
+#: subprojects/extensions-tool/src/command-uninstall.c:86
 msgid "Uninstall an extension"
 msgstr "Poista laajennus"
 
-#: subprojects/extensions-tool/src/command-upload.c:226
-#, c-format
-msgid "Login to extensions.gnome.org\n"
-msgstr "Kirjaudu extensions.gnome.org-palveluun\n"
-
-#: subprojects/extensions-tool/src/command-upload.c:256
-#, c-format
-msgid "Warning! Password will be echoed"
-msgstr "Varoitus! Salasana kaiutetaan"
-
-#: subprojects/extensions-tool/src/command-upload.c:419
-msgid "USERNAME"
-msgstr "KÄYTTÄJÄNIMI"
-
-#: subprojects/extensions-tool/src/command-upload.c:421
-msgid "Username to log into https://extensions.gnome.org"
-msgstr "Käyttäjänimi https://extensions.gnome.org-palveluun kirjautumiseksi"
-
-#: subprojects/extensions-tool/src/command-upload.c:423
-msgid "PASSWORD"
-msgstr "SALASANA"
-
-#: subprojects/extensions-tool/src/command-upload.c:425
-msgid "Password to log into https://extensions.gnome.org"
-msgstr "Salasana https://extensions.gnome.org-palveluun kirjautumiseksi"
-
-#: subprojects/extensions-tool/src/command-upload.c:429
-msgid "Read https://extensions.gnome.org password from file, use \"-\" for stdin"
-msgstr "Lue https://extensions.gnome.org-salasana tiedostosta, käytä \"-\" lukeaksesi stdinistä"
-
-#: subprojects/extensions-tool/src/command-upload.c:432
-msgid "Accept the terms of service at https://extensions.gnome.org/upload/"
-msgstr "Hyväksy käyttöehdot osoitteessa https://extensions.gnome.org/upload/"
-
-#: subprojects/extensions-tool/src/command-upload.c:434
-msgid "FILE…"
-msgstr "TIEDOSTO…"
-
-#: subprojects/extensions-tool/src/command-upload.c:443
-msgid "Upload new extension versions"
-msgstr "Lähetä uusia laajennuksen versioita"
-
-#: subprojects/extensions-tool/src/command-upload.c:461
-msgid "Only one of --password and --password-file can be used"
-msgstr "Vain joko --password tai --password-file on mahdollista käyttää"
-
-#: subprojects/extensions-tool/src/command-upload.c:467
-msgid "You must accept the terms of service to upload extensions"
-msgstr "Sinun tulee hyväksyä käyttöehdot lähettääksesi laajennuksia"
-
-#: subprojects/extensions-tool/src/command-upload.c:473
-msgid "No files given"
-msgstr "Tiedostoja ei annettu"
-
-#: subprojects/extensions-tool/src/main.c:78
+#: subprojects/extensions-tool/src/main.c:76
 msgid "Do not print error messages"
 msgstr "Älä tulosta virheviestejä"
 
-#: subprojects/extensions-tool/src/main.c:251
+#: subprojects/extensions-tool/src/main.c:249
 msgid "Path"
 msgstr "Polku"
 
-#: subprojects/extensions-tool/src/main.c:254
+#: subprojects/extensions-tool/src/main.c:252
 msgid "URL"
 msgstr "URL-osoite"
 
-#: subprojects/extensions-tool/src/main.c:257
+#: subprojects/extensions-tool/src/main.c:255
 msgid "Original author"
 msgstr "Alkuperäinen tekijä"
 
-#: subprojects/extensions-tool/src/main.c:263 subprojects/extensions-tool/src/main.c:265
-#: subprojects/extensions-tool/src/main.c:267
+#: subprojects/extensions-tool/src/main.c:261
+#: subprojects/extensions-tool/src/main.c:263
+#: subprojects/extensions-tool/src/main.c:265
 msgid "Version"
 msgstr "Versio"
 
-#: subprojects/extensions-tool/src/main.c:270
+#: subprojects/extensions-tool/src/main.c:268
 msgid "Enabled"
 msgstr "Käytössä"
 
-#: subprojects/extensions-tool/src/main.c:270
+#: subprojects/extensions-tool/src/main.c:268
 msgid "Yes"
 msgstr "Kyllä"
 
-#: subprojects/extensions-tool/src/main.c:270
+#: subprojects/extensions-tool/src/main.c:268
 msgid "No"
 msgstr "Ei"
 
-#: subprojects/extensions-tool/src/main.c:273
+#: subprojects/extensions-tool/src/main.c:271
 msgid "State"
 msgstr "Tila"
 
-#: subprojects/extensions-tool/src/main.c:311
+#: subprojects/extensions-tool/src/main.c:309
 msgid "“version” takes no arguments"
 msgstr "“version” ei kelpuuta argumentteja"
 
-#: subprojects/extensions-tool/src/main.c:313 subprojects/extensions-tool/src/main.c:333
+#: subprojects/extensions-tool/src/main.c:311
+#: subprojects/extensions-tool/src/main.c:331
 msgid "Usage:"
 msgstr "Käyttö:"
 
-#: subprojects/extensions-tool/src/main.c:316
+#: subprojects/extensions-tool/src/main.c:314
 msgid "Print version information and exit."
 msgstr "Tulosta versiotiedot ja poistu."
 
-#: subprojects/extensions-tool/src/main.c:331 subprojects/extensions-tool/src/main.c:334
+#: subprojects/extensions-tool/src/main.c:329
+#: subprojects/extensions-tool/src/main.c:332
 msgid "COMMAND"
 msgstr "KOMENTO"
 
-#: subprojects/extensions-tool/src/main.c:334
+#: subprojects/extensions-tool/src/main.c:332
 msgid "[ARGS…]"
 msgstr "[ARGS…]"
 
-#: subprojects/extensions-tool/src/main.c:336
+#: subprojects/extensions-tool/src/main.c:334
 msgid "Commands:"
 msgstr "Komennot:"
 
-#: subprojects/extensions-tool/src/main.c:337
+#: subprojects/extensions-tool/src/main.c:335
 msgid "Print help"
 msgstr "Tulosta ohje"
 
-#: subprojects/extensions-tool/src/main.c:339
+#: subprojects/extensions-tool/src/main.c:337
 msgid "Enable extension"
 msgstr "Ota laajennus käyttöön"
 
-#: subprojects/extensions-tool/src/main.c:340
+#: subprojects/extensions-tool/src/main.c:338
 msgid "Disable extension"
 msgstr "Poista laajennus käytöstä"
 
-#: subprojects/extensions-tool/src/main.c:341
+#: subprojects/extensions-tool/src/main.c:339
 msgid "Reset extension"
 msgstr "Nollaa laajennus"
 
-#: subprojects/extensions-tool/src/main.c:342
+#: subprojects/extensions-tool/src/main.c:340
 msgid "Uninstall extension"
 msgstr "Poista laajennus"
 
-#: subprojects/extensions-tool/src/main.c:343
+#: subprojects/extensions-tool/src/main.c:341
 msgid "List extensions"
 msgstr "Listaa laajennukset"
 
-#: subprojects/extensions-tool/src/main.c:344 subprojects/extensions-tool/src/main.c:345
+#: subprojects/extensions-tool/src/main.c:342
+#: subprojects/extensions-tool/src/main.c:343
 msgid "Show extension info"
 msgstr "Näytä laajennuksen tiedot"
 
-#: subprojects/extensions-tool/src/main.c:346
+#: subprojects/extensions-tool/src/main.c:344
 msgid "Open extension preferences"
 msgstr "Avaa laajennuksen asetukset"
 
-#: subprojects/extensions-tool/src/main.c:347
+#: subprojects/extensions-tool/src/main.c:345
 msgid "Create extension"
 msgstr "Luo laajennus"
 
-#: subprojects/extensions-tool/src/main.c:348
+#: subprojects/extensions-tool/src/main.c:346
 msgid "Package extension"
 msgstr "Paketoi laajennus"
 
-#: subprojects/extensions-tool/src/main.c:349
+#: subprojects/extensions-tool/src/main.c:347
 msgid "Install extension bundle"
 msgstr "Asenna laajennuspaketti"
 
-#: subprojects/extensions-tool/src/main.c:351
+#: subprojects/extensions-tool/src/main.c:349
 #, c-format
 msgid "Use “%s” to get detailed help.\n"
 msgstr "Suorita “%s” nähdäksesi yksityiskohtaisia ohjeita.\n"
 
-#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:3
+#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:4
 msgid "Plain"
 msgstr "Yksinkertainen"
 
-#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:4
+#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:5
 msgid "An empty extension"
 msgstr "Tyhjä laajennus"
 
-#: subprojects/extensions-tool/src/templates/indicator.desktop.in:3
+#: subprojects/extensions-tool/src/templates/indicator.desktop.in:4
 msgid "Indicator"
 msgstr "Ilmaisin"
 
-#: subprojects/extensions-tool/src/templates/indicator.desktop.in:4
+#: subprojects/extensions-tool/src/templates/indicator.desktop.in:5
 msgid "Add an icon to the top bar"
 msgstr "Lisää kuvake yläpalkkiin"
 
-#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:3
+#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:4
 msgid "Quick Settings Item"
 msgstr "Pika-asetusten kohde"
 
-#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:4
+#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:5
 msgid "Add an item to quick settings"
 msgstr "Lisää kohde pika-asetuksiin"
 
@@ -3510,263 +3406,10 @@ msgstr[1] "%u sisääntuloa"
 msgid "System Sounds"
 msgstr "Järjestelmän äänet"
 
-#~ msgid "Choose Session"
-#~ msgstr "Valitse istunto"
-
-#, javascript-format
-#~ msgid "%s has been pinned to the dash."
-#~ msgstr "%s on kiinnitetty telakkaan."
-
-#~ msgid "Screencast ended unexpectedly"
-#~ msgstr "Näyttötallennevideo päättyi odottamatta"
-
-#~ msgid "Manage your GNOME Extensions"
-#~ msgstr "Hallitse Gnome-laajennuksia"
-
-#~ msgid "The GNOME Project"
-#~ msgstr "Gnome-projekti"
-
-#~ msgid ""
-#~ "GNOME Extensions handles updating extensions, configuring extension preferences and removing "
-#~ "or disabling unwanted extensions."
-#~ msgstr ""
-#~ "Gnomen laajennussovellus Laajennukset käsittelee laajennusten päivitykset, niiden asetukset "
-#~ "ja sen avulla voi poistaa laajennuksia käytöstä tai kokonaan järjestelmästä."
-
-#~ msgid "Main Window"
-#~ msgstr "Pääikkuna"
-
-#~ msgid "Available Updates"
-#~ msgstr "Saatavilla olevat päivitykset"
-
-#~ msgid "Search View"
-#~ msgstr "Hakunäkymä"
-
-#~ msgid "Configure GNOME Shell Extensions"
-#~ msgstr "Hallitse Gnome Shell -laajennuksia"
-
-#, javascript-format
-#~ msgid ""
-#~ "The installed version of this extension (%s) is incompatible with the current version of "
-#~ "GNOME (%s). The extension has been disabled."
-#~ msgstr ""
-#~ "Asennettu versio laajennuksesta (%s) ei ole yhteensopiva nykyisen Gnome-version (%s) kanssa. "
-#~ "Tämä laajennus on poistettu käytöstä."
-
-#, javascript-format
-#~ msgid ""
-#~ "The installed version of this extension is incompatible with the current version of GNOME "
-#~ "(%s). The extension has been disabled."
-#~ msgstr ""
-#~ "Tämän laajennuksen asennettu versio ei ole yhteensopiva nykyisen Gnome-version (%s) kanssa. "
-#~ "Tämä laajennus on poistettu käytöstä."
-
-#~ msgid ""
-#~ "An error has occurred in this extension. This could cause issues elsewhere in the system. It "
-#~ "is recommended to turn the extension off until the error is resolved."
-#~ msgstr ""
-#~ "Tässä laajennuksessa tapahtui virhe. Tämä saattaa aiheuttaa ongelmia muualla järjestelmässä. "
-#~ "On suositeltavaa poistaa tämä laajennus käytöstä, kunnes virhe on selvitetty."
-
-#~ msgid "Error details:"
-#~ msgstr "Virheen tiedot:"
-
-#, javascript-format
-#~ msgid "Version %s"
-#~ msgstr "Versio %s"
-
-#, javascript-format
-#~ msgid "Remove “%s”?"
-#~ msgstr "Poista “%s”?"
-
-#~ msgid ""
-#~ "If you remove the extension, you need to return to download it if you want to enable it again"
-#~ msgstr ""
-#~ "Ota huomioon jos poistat laajennuksen; sinun tulee palata ja ladata se uudelleen, jos haluat "
-#~ "sen uudelleen käyttöön"
-
-#~ msgid "_Cancel"
-#~ msgstr "_Peru"
-
-#~ msgid "_Remove"
-#~ msgstr "P_oista"
-
-#~ msgid "translator-credits"
-#~ msgstr "Jiri Grönroos"
-
-#, javascript-format
-#~ msgid "%d extension will be updated on next login."
-#~ msgid_plural "%d extensions will be updated on next login."
-#~ msgstr[0] "%d laajennus päivitetään seuraavan kerran, kun kirjaudut sisään."
-#~ msgstr[1] "%d laajennusta päivitetään seuraavan kerran, kun kirjaudut sisään."
-
-#~ msgid "Updates Details"
-#~ msgstr "Päivityksen tiedot"
-
-#~ msgid "A new version of this extension is ready and will be loaded on next login."
-#~ msgstr ""
-#~ "Uusi versio tästä laajennuksessa on valmis ja se ladataan seuraavan kerran, kun kirjaudut "
-#~ "sisään."
-
-#~ msgid "Extension Details"
-#~ msgstr "Laajennuksen tiedot"
-
-#~ msgid "_Website"
-#~ msgstr "_Verkkosivusto"
-
-#~ msgid "_Settings"
-#~ msgstr "_Asetukset"
-
-#~ msgid "_Remove…"
-#~ msgstr "_Poista…"
-
-#~ msgid "Keyboard Shortcuts"
-#~ msgstr "Pikanäppäimet"
-
-#~ msgid "About Extensions"
-#~ msgstr "Tietoja - Laajennukset"
-
-#~ msgid "Main Menu"
-#~ msgstr "Päävalikko"
-
-#~ msgid "Search extensions"
-#~ msgstr "Etsi laajennuksia"
-
-#~ msgid "_Log Out…"
-#~ msgstr "_Kirjaudu ulos…"
-
-#~ msgid "_Extensions"
-#~ msgstr "_Laajennukset"
-
-#~ msgid "More Information"
-#~ msgstr "Lisätietoja"
-
-#~ msgid ""
-#~ "Extensions can cause performance and stability issues. It is recommended to disable all "
-#~ "extensions if you experience problems with your system."
-#~ msgstr ""
-#~ "Laajennukset voivat aiheuttaa suorituskyky- tai vakausongelmia. Poista kaikki laajennukset "
-#~ "käytöstä, jos kohtaat ongelmia järjestelmän kanssa."
-
-#~ msgid "User Extensions"
-#~ msgstr "Käyttäjälaajennukset"
-
-#~ msgid "System Extensions"
-#~ msgstr "Järjestelmälaajennukset"
-
-#~ msgid "Search Results"
-#~ msgstr "Hakutulokset"
-
-#~ msgid "No Results Found"
-#~ msgstr "Tuloksia ei löytynyt"
-
-#~ msgid "Try a different search"
-#~ msgstr "Kokeile eri hakuehtoja"
-
-#~ msgid "No Installed Extensions"
-#~ msgstr "Ei asennettuja laajennuksia"
-
-#~ msgid ""
-#~ "To find and add extensions, visit <a href=\"https://"
-#~ "extensions.gnome.org\">extensions.gnome.org</a>."
-#~ msgstr ""
-#~ "Etsi ja asenna laajennuksia osoitteessa <a href=\"https://"
-#~ "extensions.gnome.org\">extensions.gnome.org</a>."
-
-#~ msgid "Something’s gone wrong"
-#~ msgstr "Jokin meni pieleen"
-
-#~ msgid ""
-#~ "We’re very sorry, but it was not possible to get the list of installed extensions. Make sure "
-#~ "you are logged into GNOME and try again."
-#~ msgstr ""
-#~ "Valitettavasti asennettujen laajennusten listaa ei voitu muodostaa. Varmista että olet "
-#~ "kirjautunut Gnomeen ja yritä uudelleen."
-
-#~ msgctxt "shortcut window"
-#~ msgid "General"
-#~ msgstr "Yleiset"
-
-#~ msgctxt "shortcut window"
-#~ msgid "Open Menu"
-#~ msgstr "Avaa valikko"
-
-#~ msgctxt "shortcut window"
-#~ msgid "Toggle Search"
-#~ msgstr "Haku päälle/pois"
-
-#~ msgctxt "shortcut window"
-#~ msgid "Show Shortcuts"
-#~ msgstr "Näytä pikanäppäimet"
-
-#~ msgctxt "shortcut window"
-#~ msgid "Quit"
-#~ msgstr "Lopeta"
-
-#~ msgctxt "title"
-#~ msgid "Restart & Install Upgrade"
-#~ msgstr "Käynnistä uudelleen ja asenna päivitys"
-
-#, javascript-format
-#~ msgid ""
-#~ "%s %s will be installed after restart. Upgrade installation can take a long time: ensure that "
-#~ "you have backed up and that the computer is plugged in."
-#~ msgstr ""
-#~ "%s %s asennetaan uudelleenkäynnistyksen jälkeen. Versiopäivityksen asennus voi kestää kauan: "
-#~ "varmista varmuuskopioidesi ajantasaisuus ja toimivuus. Kiinnitä kone myös verkkovirtaan."
-
-#~ msgid "Restart is not available on Wayland"
-#~ msgstr "Uudelleenkäynnistys ei ole käytettävissä Waylandilla"
-
-#~ msgid "Restarting…"
-#~ msgstr "Käynnistetään uudelleen…"
-
-#~ msgid "Unable to lock"
-#~ msgstr "Lukitus epäonnistui"
-
-#~ msgid "Lock was blocked by an app"
-#~ msgstr "Lukitus estettiin sovelluksen toimesta"
-
-#~ msgid "GNOME Shell"
-#~ msgstr "Gnome Shell"
-
-#~ msgid "Window management and application launching"
-#~ msgstr "Ikkunanhallinta ja sovelluksien käynnistäminen"
-
-#~ msgid ""
-#~ "We’re very sorry, but there’s been a problem: the settings for this extension can’t be "
-#~ "displayed. We recommend that you report the issue to the extension authors."
-#~ msgstr ""
-#~ "Ongelma havaittu: tämän laajennuksen asetuksia ei voi näyttää. Suosittelemme ilmoittamaan "
-#~ "ongelmasta laajennuksen tekijälle."
-
-#~ msgid "Technical Details"
-#~ msgstr "Tekniset tiedot"
-
-#~ msgid "Homepage"
-#~ msgstr "Verkkosivu"
-
-#~ msgid "Visit extension homepage"
-#~ msgstr "Käy laajennuksen verkkosivulla"
-
-#~ msgid "%H∶%M"
-#~ msgstr "%H.%M"
-
-#~ msgid "%l∶%M %p"
-#~ msgstr "%l∶%M %p"
-
-#~ msgid "Screenshot"
-#~ msgstr "Kuvakaappaus"
-
-#~ msgid "Could not parse command:"
-#~ msgstr "Komentoa ei voi jäsentää:"
-
-#~ msgid "Move Titlebar Onscreen"
-#~ msgstr "Siirrä ikkunapalkki näytölle"
-
 #, javascript-format
 #~ msgid "Try to login again to start a session for user %s."
-#~ msgstr "Yritä kirjautua uudelleen aloittaaksesi uuden istunnon käyttäjänä %s."
+#~ msgstr ""
+#~ "Yritä kirjautua uudelleen aloittaaksesi uuden istunnon käyttäjänä %s."
 
 #, javascript-format
 #~ msgid "%s is now known as %s"
@@ -3815,11 +3458,16 @@ msgstr "Järjestelmän äänet"
 #~ msgid "Screenshot / Screencast"
 #~ msgstr "Kuvakaappaus / näyttötallennevideo"
 
+#~ msgid "Power Profiles"
+#~ msgstr "Virtaprofiilit"
+
 #~ msgid "Attach modal dialog to the parent window"
 #~ msgstr "Kiinnitä modaali-ikkuna isäntäikkunaan"
 
-#~ msgid "This key overrides the key in org.gnome.mutter when running GNOME Shell."
-#~ msgstr "Tämä avain syrjäyttää avaimen org.gnome.mutter Gnome Shelliä käyttäessä."
+#~ msgid ""
+#~ "This key overrides the key in org.gnome.mutter when running GNOME Shell."
+#~ msgstr ""
+#~ "Tämä avain syrjäyttää avaimen org.gnome.mutter Gnome Shelliä käyttäessä."
 
 #~ msgid "Enable edge tiling when dropping windows on screen edges"
 #~ msgstr "Käytä reunakiinnitystä tiputtaessa ikkunoita näytön reunoille"
@@ -3831,7 +3479,9 @@ msgstr "Järjestelmän äänet"
 #~ msgstr "Työtilat ainoastaan ensisijaisella näytöllä"
 
 #~ msgid "Delay focus changes in mouse mode until the pointer stops moving"
-#~ msgstr "Viivästytä kohdistuksen vaihtumista hiiritilassa, kunnes osoitin lopettaa liikkumisen"
+#~ msgstr ""
+#~ "Viivästytä kohdistuksen vaihtumista hiiritilassa, kunnes osoitin lopettaa "
+#~ "liikkumisen"
 
 #~ msgid "Region & Language Settings"
 #~ msgstr "Kielen & alueen asetukset"
@@ -3852,6 +3502,9 @@ msgstr "Järjestelmän äänet"
 
 #~ msgid "Log Out"
 #~ msgstr "Kirjaudu ulos"
+
+#~ msgid "Bluetooth On"
+#~ msgstr "Bluetooth päällä"
 
 #~ msgid "Bluetooth Off"
 #~ msgstr "Bluetooth pois"
@@ -3922,6 +3575,9 @@ msgstr "Järjestelmän äänet"
 
 #~ msgid "Turn On Wi-Fi"
 #~ msgstr "Ota wifi käyttöön"
+
+#~ msgid "Wi-Fi Networks"
+#~ msgstr "Wifi-verkot"
 
 #~ msgid "Select a network"
 #~ msgstr "Valitse verkko"
@@ -4014,11 +3670,13 @@ msgstr "Järjestelmän äänet"
 #~ msgstr "Varoitus"
 
 #~ msgid ""
-#~ "Extensions can cause system issues, including performance problems. If you encounter problems "
-#~ "with your system, it is recommended to disable all extensions."
+#~ "Extensions can cause system issues, including performance problems. If "
+#~ "you encounter problems with your system, it is recommended to disable all "
+#~ "extensions."
 #~ msgstr ""
-#~ "Laajennukset voivat aiheuttaa ongelmia järjestelmässä, myös suorituskykyyn. Jos kohtaat "
-#~ "ongelmia järjestelmän kanssa, on suositeltavaa poistaa kaikki laajennukset käytöstä."
+#~ "Laajennukset voivat aiheuttaa ongelmia järjestelmässä, myös "
+#~ "suorituskykyyn. Jos kohtaat ongelmia järjestelmän kanssa, on "
+#~ "suositeltavaa poistaa kaikki laajennukset käytöstä."
 
 #~ msgid "Failed to connect to GNOME Shell"
 #~ msgstr "Gnome Shelliin yhdistäminen epäonnistui"
@@ -4026,9 +3684,12 @@ msgstr "Järjestelmän äänet"
 #~ msgid "Enable introspection API"
 #~ msgstr "Käytä introspektiivistä API:a"
 
-#~ msgid "Enables a D-Bus API that allows to introspect the application state of the shell."
+#~ msgid ""
+#~ "Enables a D-Bus API that allows to introspect the application state of "
+#~ "the shell."
 #~ msgstr ""
-#~ "Ottaa käyttöön D-Bus-rajapinnan, joka mahdollistaa shellin sovellustilan itsetutkiskelun."
+#~ "Ottaa käyttöön D-Bus-rajapinnan, joka mahdollistaa shellin sovellustilan "
+#~ "itsetutkiskelun."
 
 #~ msgid "Minimize"
 #~ msgstr "Pienennä"
@@ -4061,6 +3722,9 @@ msgstr "Järjestelmän äänet"
 
 #~ msgid "On"
 #~ msgstr "Päällä"
+
+#~ msgid "Copy Error"
+#~ msgstr "Kopiointivirhe"
 
 #~ msgid "Username…"
 #~ msgstr "Käyttäjänimi…"
@@ -4246,6 +3910,9 @@ msgstr "Järjestelmän äänet"
 #~ msgid "Eject"
 #~ msgstr "Poista asemasta"
 
+#~ msgid "Invitation"
+#~ msgstr "Kutsu"
+
 #~ msgid "Call"
 #~ msgstr "Soita"
 
@@ -4327,7 +3994,8 @@ msgstr "Järjestelmän äänet"
 #~ msgid "This account is already connected to the server"
 #~ msgstr "Tämä tili on jo yhteydessä palvelimeen"
 
-#~ msgid "Connection has been replaced by a new connection using the same resource"
+#~ msgid ""
+#~ "Connection has been replaced by a new connection using the same resource"
 #~ msgstr "Yhteys on korvattu uudella samaa resurssia käyttävällä yhteydellä"
 
 #~ msgid "The account already exists on the server"
@@ -4339,13 +4007,16 @@ msgstr "Järjestelmän äänet"
 #~ msgid "Certificate has been revoked"
 #~ msgstr "Varmenne on kumottu"
 
-#~ msgid "Certificate uses an insecure cipher algorithm or is cryptographically weak"
+#~ msgid ""
+#~ "Certificate uses an insecure cipher algorithm or is cryptographically weak"
 #~ msgstr "Varmenne käyttää turvatonta salausmenetelmää"
 
 #~ msgid ""
-#~ "The length of the server certificate, or the depth of the server certificate chain, exceed "
-#~ "the limits imposed by the cryptography library"
-#~ msgstr "Palvelinvarmenne tai palvelinvarmenneketju on liian pitkä salauskirjastolle"
+#~ "The length of the server certificate, or the depth of the server "
+#~ "certificate chain, exceed the limits imposed by the cryptography library"
+#~ msgstr ""
+#~ "Palvelinvarmenne tai palvelinvarmenneketju on liian pitkä "
+#~ "salauskirjastolle"
 
 #~ msgid "Internal error"
 #~ msgstr "Sisäinen virhe"
@@ -4377,9 +4048,12 @@ msgstr "Järjestelmän äänet"
 #~ msgid "Arrangement of buttons on the titlebar"
 #~ msgstr "Painikkeiden järjestys otsikkopalkissa"
 
-#~ msgid "This key overrides the key in org.gnome.desktop.wm.preferences when running GNOME Shell."
+#~ msgid ""
+#~ "This key overrides the key in org.gnome.desktop.wm.preferences when "
+#~ "running GNOME Shell."
 #~ msgstr ""
-#~ "Tämä avain syrjäyttää avaimen org.gnome.desktop.wm.preferences Gnome Shelliä käyttäessä."
+#~ "Tämä avain syrjäyttää avaimen org.gnome.desktop.wm.preferences Gnome "
+#~ "Shelliä käyttäessä."
 
 #~ msgid "Select an extension to configure using the combobox above."
 #~ msgstr "Valitse muokattava laajennus alta."
@@ -4417,7 +4091,8 @@ msgstr "Järjestelmän äänet"
 #~ msgid "Pairing confirmation for %s"
 #~ msgstr "Paritusvahvistus kohteelle %s"
 
-#~ msgid "Please confirm whether the Passkey '%06d' matches the one on the device."
+#~ msgid ""
+#~ "Please confirm whether the Passkey '%06d' matches the one on the device."
 #~ msgstr "Vahvista, täsmääkö koodi \"%06d\" laitteen koodin kanssa."
 
 #~ msgid "Does not match"
@@ -4457,66 +4132,79 @@ msgstr "Järjestelmän äänet"
 #~ msgstr "Kerätäänkö sovellusten käytöstä tilastoja"
 
 #~ msgid ""
-#~ "The shell normally monitors active applications in order to present the most used ones (e.g. "
-#~ "in launchers). While this data will be kept private, you may want to disable this for privacy "
-#~ "reasons. Please note that doing so won't remove already saved data."
+#~ "The shell normally monitors active applications in order to present the "
+#~ "most used ones (e.g. in launchers). While this data will be kept private, "
+#~ "you may want to disable this for privacy reasons. Please note that doing "
+#~ "so won't remove already saved data."
 #~ msgstr ""
-#~ "Ikkunanhallinta seuraa normaalisti aktiivisia sovelluksia, jotta eniten käytetyt voidaan "
-#~ "esittää (esim. käynnistimissä). Vaikka nämä tiedot pysyvät yksityisinä, voit silti haluta "
-#~ "ottaa ominaisuuden pois käytöstä yksityisyyden vuoksi. Huomaa että pois kytkeminen ei poista "
-#~ "aiemmin tallennettuja tietoja."
+#~ "Ikkunanhallinta seuraa normaalisti aktiivisia sovelluksia, jotta eniten "
+#~ "käytetyt voidaan esittää (esim. käynnistimissä). Vaikka nämä tiedot "
+#~ "pysyvät yksityisinä, voit silti haluta ottaa ominaisuuden pois käytöstä "
+#~ "yksityisyyden vuoksi. Huomaa että pois kytkeminen ei poista aiemmin "
+#~ "tallennettuja tietoja."
 
 #~ msgid "Keybinding to toggle the screen recorder"
-#~ msgstr "Kuvakaappausvideon nauhoitukseen/lopetukseen tarkoitettu pikanäppäin"
+#~ msgstr ""
+#~ "Kuvakaappausvideon nauhoitukseen/lopetukseen tarkoitettu pikanäppäin"
 
 #~ msgid "Keybinding to start/stop the builtin screen recorder."
-#~ msgstr "Kuvakaappausvideon nauhoitukseen/lopetukseen tarkoitettu pikanäppäin."
+#~ msgstr ""
+#~ "Kuvakaappausvideon nauhoitukseen/lopetukseen tarkoitettu pikanäppäin."
 
 #~ msgid "Framerate used for recording screencasts."
 #~ msgstr "Kuvakaappausvideoiden kuvataajuus."
 
 #~ msgid ""
-#~ "The framerate of the resulting screencast recordered by GNOME Shell's screencast recorder in "
-#~ "frames-per-second."
+#~ "The framerate of the resulting screencast recordered by GNOME Shell's "
+#~ "screencast recorder in frames-per-second."
 #~ msgstr ""
-#~ "Nauhoituksesta tuloksena saatavan kuvakaappausvideon kuvataajuus kun käytössä on GNOMEn "
-#~ "ikkunanhallinnan nauhoitin, kuvaa per sekunti."
+#~ "Nauhoituksesta tuloksena saatavan kuvakaappausvideon kuvataajuus kun "
+#~ "käytössä on GNOMEn ikkunanhallinnan nauhoitin, kuvaa per sekunti."
 
 #~ msgid "The gstreamer pipeline used to encode the screencast"
 #~ msgstr "Gstreamer-liukuhihna jolla kuvakaappausvideot pakataan"
 
 #, fuzzy
 #~ msgid ""
-#~ "Sets the GStreamer pipeline used to encode recordings. It follows the syntax used for gst-"
-#~ "launch. The pipeline should have an unconnected sink pad where the recorded video is "
-#~ "recorded. It will normally have a unconnected source pad; output from that pad will be "
-#~ "written into the output file. However the pipeline can also take care of its own output - "
-#~ "this might be used to send the output to an icecast server via shout2send or similar. When "
-#~ "unset or set to an empty value, the default pipeline will be used. This is currently 'vp8enc "
-#~ "min_quantizer=13 max_quantizer=13 cpu-used=5 deadline=1000000 threads=%T ! queue ! webmmux' "
-#~ "and records to WEBM using the VP8 codec. %T is used as a placeholder for a guess at the "
+#~ "Sets the GStreamer pipeline used to encode recordings. It follows the "
+#~ "syntax used for gst-launch. The pipeline should have an unconnected sink "
+#~ "pad where the recorded video is recorded. It will normally have a "
+#~ "unconnected source pad; output from that pad will be written into the "
+#~ "output file. However the pipeline can also take care of its own output - "
+#~ "this might be used to send the output to an icecast server via shout2send "
+#~ "or similar. When unset or set to an empty value, the default pipeline "
+#~ "will be used. This is currently 'vp8enc min_quantizer=13 max_quantizer=13 "
+#~ "cpu-used=5 deadline=1000000 threads=%T ! queue ! webmmux' and records to "
+#~ "WEBM using the VP8 codec. %T is used as a placeholder for a guess at the "
 #~ "optimal thread count on the system."
 #~ msgstr ""
-#~ "Asettaa GStreamer-liukuhihnan, jota käytetään nauhoitusten pakkaamiseen. Asetus noudattaa gst-"
-#~ "launch-komennon syntaksia. Liukuhihnalla tulee olla yhdistämätön viemärialusta, jonne "
-#~ "nauhoitettu video syötetään. Normaalisti sillä on yhdistämätön lähde, jonka tuloste "
-#~ "kirjoitetaan tulostetiedostoon. Liukuhihna voi kuitenkin huolehtia itse tulosteesta - tätä "
-#~ "voidaan käyttää vaikkapa lähettämään tuloste Icecast-palvelimelle shout2send- tai vastaavalla "
-#~ "komponentilla. Jos tätä ei aseteta tai arvona on tyhjää, käytetään oletusliukuhihnaa. "
-#~ "Oletusliukuhihna on tällä hetkellä ”videorate ! vp8enc quality=10 speed=2 threads=%T ! "
-#~ "queue ! webmmux” ja nauhoittaa WEBM-muotoon VP8-koodekilla. %T korvautuu arvauksella parhaan "
-#~ "suorituskyvyn antavasta säiemäärästä järjestelmässä."
+#~ "Asettaa GStreamer-liukuhihnan, jota käytetään nauhoitusten pakkaamiseen. "
+#~ "Asetus noudattaa gst-launch-komennon syntaksia. Liukuhihnalla tulee olla "
+#~ "yhdistämätön viemärialusta, jonne nauhoitettu video syötetään. "
+#~ "Normaalisti sillä on yhdistämätön lähde, jonka tuloste kirjoitetaan "
+#~ "tulostetiedostoon. Liukuhihna voi kuitenkin huolehtia itse tulosteesta - "
+#~ "tätä voidaan käyttää vaikkapa lähettämään tuloste Icecast-palvelimelle "
+#~ "shout2send- tai vastaavalla komponentilla. Jos tätä ei aseteta tai arvona "
+#~ "on tyhjää, käytetään oletusliukuhihnaa. Oletusliukuhihna on tällä "
+#~ "hetkellä ”videorate ! vp8enc quality=10 speed=2 threads=%T ! queue ! "
+#~ "webmmux” ja nauhoittaa WEBM-muotoon VP8-koodekilla. %T korvautuu "
+#~ "arvauksella parhaan suorituskyvyn antavasta säiemäärästä järjestelmässä."
 
 #~ msgid "File extension used for storing the screencast"
 #~ msgstr "Tiedostopääte kuvakaappausvideoiden tallentamiseen"
 
 #~ msgid ""
-#~ "The filename for recorded screencasts will be a unique filename based on the current date, "
-#~ "and use this extension. It should be changed when recording to a different container format."
+#~ "The filename for recorded screencasts will be a unique filename based on "
+#~ "the current date, and use this extension. It should be changed when "
+#~ "recording to a different container format."
 #~ msgstr ""
-#~ "Nauhoitetuille kuvakaappausvideoille valitaan yksikäsitteinen tiedostonimi nykyisen "
-#~ "päivämäärän ja tämän tiedostopäätteen mukaisesti. Tiedostopääte tulisi vaihtaa mikäli "
-#~ "nauhoitetaan eri tallennusmuotoon."
+#~ "Nauhoitetuille kuvakaappausvideoille valitaan yksikäsitteinen "
+#~ "tiedostonimi nykyisen päivämäärän ja tämän tiedostopäätteen mukaisesti. "
+#~ "Tiedostopääte tulisi vaihtaa mikäli nauhoitetaan eri tallennusmuotoon."
+
+#~| msgid "Session..."
+#~ msgid "Session…"
+#~ msgstr "Istunto…"
 
 #~| msgid "Power Off"
 #~ msgid "Power"
@@ -4524,22 +4212,24 @@ msgstr "Järjestelmän äänet"
 
 #~ msgid "Click Log Out to quit these applications and log out of the system."
 #~ msgstr ""
-#~ "Napsauta Kirjaudu ulos poistuaksesi näistä sovelluksista ja kirjautuaksesi ulos "
-#~ "järjestelmästä."
+#~ "Napsauta Kirjaudu ulos poistuaksesi näistä sovelluksista ja "
+#~ "kirjautuaksesi ulos järjestelmästä."
 
 #~ msgid "Logging out of the system."
 #~ msgstr "Kirjaudutaan ulos järjestelmästä."
 
 #~ msgid "Click Power Off to quit these applications and power off the system."
-#~ msgstr "Napsauta Sammuta poistuaksesi näistä sovelluksista ja sammuttaaksesi järjestelmän."
+#~ msgstr ""
+#~ "Napsauta Sammuta poistuaksesi näistä sovelluksista ja sammuttaaksesi "
+#~ "järjestelmän."
 
 #~ msgid "Powering off the system."
 #~ msgstr "Sammutetaan järjestelmää"
 
 #~ msgid "Click Restart to quit these applications and restart the system."
 #~ msgstr ""
-#~ "Napsauta Käynnistä uudelleen poistuaksesi näistä sovelluksista ja käynnistääksesi "
-#~ "järjestelmän uudelleen."
+#~ "Napsauta Käynnistä uudelleen poistuaksesi näistä sovelluksista ja "
+#~ "käynnistääksesi järjestelmän uudelleen."
 
 #~ msgid "Restarting the system."
 #~ msgstr "Käynnistetään järjestelmää uudelleen."
@@ -4661,14 +4351,18 @@ msgstr "Järjestelmän äänet"
 #~ msgstr "Pikaviestitilaksi asetetaan ”kiireinen”"
 
 #~ msgid ""
-#~ "Notifications are now disabled, including chat messages. Your online status has been adjusted "
-#~ "to let others know that you might not see their messages."
+#~ "Notifications are now disabled, including chat messages. Your online "
+#~ "status has been adjusted to let others know that you might not see their "
+#~ "messages."
 #~ msgstr ""
-#~ "Ilmoitukset, kuten keskusteluviestit, ovat nyt poissa käytöstä. Pikaviestitilaasi on "
-#~ "muutettu, jotta muut tietävät, että et ehkä näe heidän viestejään."
+#~ "Ilmoitukset, kuten keskusteluviestit, ovat nyt poissa käytöstä. "
+#~ "Pikaviestitilaasi on muutettu, jotta muut tietävät, että et ehkä näe "
+#~ "heidän viestejään."
 
 #~ msgid "Shutting down might cause them to lose unsaved work."
-#~ msgstr "Sammuttaminen saattaa aiheuttaa muiden käyttäjien menettävän tallentamattomia tietoja."
+#~ msgstr ""
+#~ "Sammuttaminen saattaa aiheuttaa muiden käyttäjien menettävän "
+#~ "tallentamattomia tietoja."
 
 #~ msgctxt "title"
 #~ msgid "Sign In"
@@ -4679,6 +4373,14 @@ msgstr "Järjestelmän äänet"
 
 #~ msgid "SETTINGS"
 #~ msgstr "ASETUKSET"
+
+#~ msgctxt "event list time"
+#~ msgid "%H:%M"
+#~ msgstr "%H.%M"
+
+#~ msgctxt "event list time"
+#~ msgid "%l:%M %p"
+#~ msgstr "%l.%M %p"
 
 #~ msgid "Subscription request"
 #~ msgstr "Tilauspyyntö"

@@ -122,14 +122,13 @@
 
 #include "glibintl.h"
 
-#define G_DBUS_CONNECTION_FLAGS_ALL                           \
-  (G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT |            \
-   G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER |            \
-   G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS |   \
-   G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |           \
-   G_DBUS_CONNECTION_FLAGS_DELAY_MESSAGE_PROCESSING |         \
-   G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_REQUIRE_SAME_USER | \
-   G_DBUS_CONNECTION_FLAGS_CROSS_NAMESPACE)
+#define G_DBUS_CONNECTION_FLAGS_ALL \
+  (G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT | \
+   G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER | \
+   G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS | \
+   G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION | \
+   G_DBUS_CONNECTION_FLAGS_DELAY_MESSAGE_PROCESSING | \
+   G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_REQUIRE_SAME_USER)
 
 /**
  * GDBusConnection:
@@ -290,8 +289,8 @@ call_destroy_notify (GMainContext  *context,
 
 typedef struct
 {
+  /* All fields are immutable after construction. */
   gatomicrefcount ref_count;
-  /* All remaining fields are immutable after construction. */
   GDBusSignalCallback callback;
   gpointer user_data;
   GDestroyNotify user_data_free_func;
@@ -461,7 +460,7 @@ enum {
     FLAG_INITIALIZED = 1 << 0,
     FLAG_EXIT_ON_CLOSE = 1 << 1,
     FLAG_CLOSED = 1 << 2
-} G_GNUC_FLAG_ENUM;
+};
 
 struct _GDBusConnection
 {
@@ -483,7 +482,7 @@ struct _GDBusConnection
   GMutex init_lock;
 
   /* Set (by loading the contents of /var/lib/dbus/machine-id) the first time
-   * someone calls DBUS_INTERFACE_PEER.GetMachineId(). Protected by @lock.
+   * someone calls org.freedesktop.DBus.Peer.GetMachineId(). Protected by @lock.
    */
   gchar *machine_id;
 
@@ -698,7 +697,7 @@ check_initialized (GDBusConnection *connection)
 
 typedef enum {
     MAY_BE_UNINITIALIZED = (1<<1)
-} G_GNUC_FLAG_ENUM CheckUnclosedFlags;
+} CheckUnclosedFlags;
 
 /*
  * Check the same thing as check_initialized(), and also that the
@@ -1368,15 +1367,15 @@ flush_in_thread_func (GTask         *task,
  * @user_data: The data to pass to @callback
  *
  * Asynchronously flushes @connection, that is, writes all queued
- * outgoing messages to the transport and then flushes the transport
+ * outgoing message to the transport and then flushes the transport
  * (using g_output_stream_flush_async()). This is useful in programs
- * that want to emit a D-Bus signal and then exit immediately. Without
- * flushing the connection, there is no guarantee that the message has
+ * that wants to emit a D-Bus signal and then exit immediately. Without
+ * flushing the connection, there is no guaranteed that the message has
  * been sent to the networking buffers in the OS kernel.
  *
  * This is an asynchronous method. When the operation is finished,
- * @callback will be invoked in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * @callback will be invoked in the
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from. You can
  * then call g_dbus_connection_flush_finish() to get the result of the
  * operation. See g_dbus_connection_flush_sync() for the synchronous
@@ -1561,13 +1560,13 @@ schedule_closed_unlocked (GDBusConnection *connection,
  * %G_IO_ERROR_CLOSED.
  *
  * When @connection has been closed, the #GDBusConnection::closed
- * signal is emitted in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * signal is emitted in the
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread that @connection was constructed in.
  *
  * This is an asynchronous method. When the operation is finished,
- * @callback will be invoked in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * @callback will be invoked in the 
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from. You can
  * then call g_dbus_connection_close_finish() to get the result of the
  * operation. See g_dbus_connection_close_sync() for the synchronous
@@ -1763,22 +1762,9 @@ g_dbus_connection_send_message_unlocked (GDBusConnection   *connection,
     return FALSE;
 
   if (flags & G_DBUS_SEND_MESSAGE_FLAGS_PRESERVE_SERIAL)
-    {
-      serial_to_use = g_dbus_message_get_serial (message);
-    }
+    serial_to_use = g_dbus_message_get_serial (message);
   else
-    {
-      /* The serial_to_use must not be zero, as per
-       * https://dbus.freedesktop.org/doc/dbus-specification.html#message-protocol-messages. */
-      if (connection->last_serial == G_MAXUINT32)
-        connection->last_serial = 1;
-      else
-        connection->last_serial++;
-
-      serial_to_use = connection->last_serial;
-    }
-
-  g_assert (serial_to_use != 0);
+    serial_to_use = ++connection->last_serial; /* TODO: handle overflow */
 
   switch (blob[0])
     {
@@ -1852,8 +1838,7 @@ g_dbus_connection_send_message_unlocked (GDBusConnection   *connection,
  * %G_IO_ERROR_CLOSED. If @message is not well-formed,
  * the operation fails with %G_IO_ERROR_INVALID_ARGUMENT.
  *
- * See this [server][class@Gio.DBusConnection#an-example-d-bus-server]
- * and [client][class@Gio.DBusConnection#an-example-for-file-descriptor-passing]
+ * See this [server][gdbus-server] and [client][gdbus-unix-fd-client]
  * for an example of how to use this low-level API to send and receive
  * UNIX file descriptors.
  *
@@ -2139,8 +2124,8 @@ g_dbus_connection_send_message_with_reply_unlocked (GDBusConnection     *connect
  * the operation fails with %G_IO_ERROR_INVALID_ARGUMENT.
  *
  * This is an asynchronous method. When the operation is finished, @callback
- * will be invoked in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * will be invoked in the 
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from. You can then call
  * g_dbus_connection_send_message_with_reply_finish() to get the result of the operation.
  * See g_dbus_connection_send_message_with_reply_sync() for the synchronous version.
@@ -2148,8 +2133,7 @@ g_dbus_connection_send_message_with_reply_unlocked (GDBusConnection     *connect
  * Note that @message must be unlocked, unless @flags contain the
  * %G_DBUS_SEND_MESSAGE_FLAGS_PRESERVE_SERIAL flag.
  *
- * See this [server][class@Gio.DBusConnection#an-example-d-bus-server]
- * and [client][class@Gio.DBusConnection#an-example-for-file-descriptor-passing]
+ * See this [server][gdbus-server] and [client][gdbus-unix-fd-client]
  * for an example of how to use this low-level API to send and receive
  * UNIX file descriptors.
  *
@@ -2196,8 +2180,7 @@ g_dbus_connection_send_message_with_reply (GDBusConnection       *connection,
  * be of type %G_DBUS_MESSAGE_TYPE_ERROR. Use
  * g_dbus_message_to_gerror() to transcode this to a #GError.
  *
- * See this [server][class@Gio.DBusConnection#an-example-d-bus-server]
- * and [client][class@Gio.DBusConnection#an-example-for-file-descriptor-passing]
+ * See this [server][gdbus-server] and [client][gdbus-unix-fd-client]
  * for an example of how to use this low-level API to send and receive
  * UNIX file descriptors.
  *
@@ -2273,8 +2256,7 @@ send_message_with_reply_sync_cb (GDBusConnection *connection,
  * be of type %G_DBUS_MESSAGE_TYPE_ERROR. Use
  * g_dbus_message_to_gerror() to transcode this to a #GError.
  *
- * See this [server][class@Gio.DBusConnection#an-example-d-bus-server]
- * and [client][class@Gio.DBusConnection#an-example-for-file-descriptor-passing]
+ * See this [server][gdbus-server] and [client][gdbus-unix-fd-client]
  * for an example of how to use this low-level API to send and receive
  * UNIX file descriptors.
  *
@@ -2436,7 +2418,7 @@ name_watcher_deliver_get_name_owner_reply_unlocked (SignalData *name_watcher,
   if (type == G_DBUS_MESSAGE_TYPE_ERROR)
     {
       if (g_strcmp0 (g_dbus_message_get_error_name (message),
-                     DBUS_ERROR_NAME_HAS_NO_OWNER))
+                     "org.freedesktop.DBus.Error.NameHasNoOwner"))
         name_watcher_set_name_owner_unlocked (name_watcher, NULL);
       /* else it's something like NoReply or AccessDenied, which tells
        * us nothing - leave the owner set to whatever we most recently
@@ -2866,7 +2848,7 @@ initable_init (GInitable     *initable,
   /* Because of init_lock, we can't get here twice in different threads */
   g_assert (connection->initialization_error == NULL);
 
-  /* The user can pass multiple (but mutually exclusive) construct
+  /* The user can pass multiple (but mutally exclusive) construct
    * properties:
    *
    *  - stream (of type GIOStream)
@@ -2990,9 +2972,9 @@ initable_init (GInitable     *initable,
         }
 
       hello_result = g_dbus_connection_call_sync (connection,
-                                                  DBUS_SERVICE_DBUS,
-                                                  DBUS_PATH_DBUS,
-                                                  DBUS_INTERFACE_DBUS,
+                                                  "org.freedesktop.DBus", /* name */
+                                                  "/org/freedesktop/DBus", /* path */
+                                                  "org.freedesktop.DBus", /* interface */
                                                   "Hello",
                                                   NULL, /* parameters */
                                                   G_VARIANT_TYPE ("(s)"),
@@ -3673,9 +3655,9 @@ add_match_rule (GDBusConnection *connection,
   if (match_rule[0] == '-')
     return;
 
-  message = g_dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-                                            DBUS_PATH_DBUS,
-                                            DBUS_INTERFACE_DBUS,
+  message = g_dbus_message_new_method_call ("org.freedesktop.DBus", /* name */
+                                            "/org/freedesktop/DBus", /* path */
+                                            "org.freedesktop.DBus", /* interface */
                                             "AddMatch");
   g_dbus_message_set_body (message, g_variant_new ("(s)", match_rule));
   error = NULL;
@@ -3704,9 +3686,9 @@ remove_match_rule (GDBusConnection *connection,
   if (match_rule[0] == '-')
     return;
 
-  message = g_dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-                                            DBUS_PATH_DBUS,
-                                            DBUS_INTERFACE_DBUS,
+  message = g_dbus_message_new_method_call ("org.freedesktop.DBus", /* name */
+                                            "/org/freedesktop/DBus", /* path */
+                                            "org.freedesktop.DBus", /* interface */
                                             "RemoveMatch");
   g_dbus_message_set_body (message, g_variant_new ("(s)", match_rule));
 
@@ -3732,9 +3714,9 @@ remove_match_rule (GDBusConnection *connection,
 static gboolean
 is_signal_data_for_name_lost_or_acquired (SignalData *signal_data)
 {
-  return g_strcmp0 (signal_data->sender, DBUS_SERVICE_DBUS) == 0 &&
-         g_strcmp0 (signal_data->interface_name, DBUS_INTERFACE_DBUS) == 0 &&
-         g_strcmp0 (signal_data->object_path, DBUS_PATH_DBUS) == 0 &&
+  return g_strcmp0 (signal_data->sender, "org.freedesktop.DBus") == 0 &&
+         g_strcmp0 (signal_data->interface_name, "org.freedesktop.DBus") == 0 &&
+         g_strcmp0 (signal_data->object_path, "/org/freedesktop/DBus") == 0 &&
          (g_strcmp0 (signal_data->member, "NameLost") == 0 ||
           g_strcmp0 (signal_data->member, "NameAcquired") == 0);
 }
@@ -3799,8 +3781,8 @@ add_signal_data (GDBusConnection *connection,
  *     subscription is removed or %NULL
  *
  * Subscribes to signals on @connection and invokes @callback whenever
- * the signal is received. Note that @callback will be invoked in the
- * thread-default main context (see [method@GLib.MainContext.push_thread_default])
+ * the signal is received. Note that @callback will be invoked in the 
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from.
  *
  * If @connection is not a message bus connection, @sender must be
@@ -3903,7 +3885,7 @@ g_dbus_connection_signal_subscribe (GDBusConnection     *connection,
    */
   rule = args_to_rule (sender, interface_name, member, object_path, arg0, flags);
 
-  if (sender != NULL && (g_dbus_is_unique_name (sender) || g_strcmp0 (sender, DBUS_SERVICE_DBUS) == 0))
+  if (sender != NULL && (g_dbus_is_unique_name (sender) || g_strcmp0 (sender, "org.freedesktop.DBus") == 0))
     sender_is_its_own_owner = TRUE;
   else
     sender_is_its_own_owner = FALSE;
@@ -4230,8 +4212,8 @@ static gboolean
 namespace_rule_matches (const gchar *namespace,
                         const gchar *name)
 {
-  size_t len_namespace;
-  size_t len_name;
+  gint len_namespace;
+  gint len_name;
 
   len_namespace = strlen (namespace);
   len_name = strlen (name);
@@ -4249,7 +4231,7 @@ static gboolean
 path_rule_matches (const gchar *path_a,
                    const gchar *path_b)
 {
-  size_t len_a, len_b;
+  gint len_a, len_b;
 
   len_a = strlen (path_a);
   len_b = strlen (path_b);
@@ -4501,7 +4483,10 @@ purge_all_signal_subscriptions (GDBusConnection *connection)
 static GDBusInterfaceVTable *
 _g_dbus_interface_vtable_copy (const GDBusInterfaceVTable *vtable)
 {
-  return g_memdup2 ((gconstpointer) vtable, sizeof (GDBusInterfaceVTable));
+  /* Don't waste memory by copying padding - remember to update this
+   * when changing struct _GDBusInterfaceVTable in gdbusconnection.h
+   */
+  return g_memdup2 ((gconstpointer) vtable, 3 * sizeof (gpointer));
 }
 
 static void
@@ -4515,7 +4500,10 @@ _g_dbus_interface_vtable_free (GDBusInterfaceVTable *vtable)
 static GDBusSubtreeVTable *
 _g_dbus_subtree_vtable_copy (const GDBusSubtreeVTable *vtable)
 {
-  return g_memdup2 ((gconstpointer) vtable, sizeof (GDBusSubtreeVTable));
+  /* Don't waste memory by copying padding - remember to update this
+   * when changing struct _GDBusSubtreeVTable in gdbusconnection.h
+   */
+  return g_memdup2 ((gconstpointer) vtable, 3 * sizeof (gpointer));
 }
 
 static void
@@ -4727,11 +4715,8 @@ invoke_get_property_in_idle_cb (gpointer _data)
                                     &es))
     {
       reply = g_dbus_message_new_method_error (data->message,
-                                               DBUS_ERROR_UNKNOWN_METHOD,
-                                               /* Translators: The first placeholder is a D-Bus interface,
-                                                * the second is the path of an object. */
-                                               _("No such interface “%s” on object at path %s"),
-                                               DBUS_INTERFACE_PROPERTIES,
+                                               "org.freedesktop.DBus.Error.UnknownMethod",
+                                               _("No such interface “org.freedesktop.DBus.Properties” on object at path %s"),
                                                g_dbus_message_get_path (data->message));
       g_dbus_connection_send_message (data->connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
       g_object_unref (reply);
@@ -4750,7 +4735,7 @@ invoke_get_property_in_idle_cb (gpointer _data)
 
   if (value != NULL)
     {
-      g_assert (error == NULL);
+      g_assert_no_error (error);
 
       g_variant_take_ref (value);
       reply = g_dbus_message_new_method_reply (data->message);
@@ -4866,7 +4851,7 @@ validate_and_maybe_schedule_property_getset (GDBusConnection            *connect
   if (vtable == NULL)
     goto out;
 
-  /* Check that the property exists - if not fail with DBUS_ERROR_INVALID_ARGS
+  /* Check that the property exists - if not fail with org.freedesktop.DBus.Error.InvalidArgs
    */
   property_info = NULL;
 
@@ -4875,7 +4860,7 @@ validate_and_maybe_schedule_property_getset (GDBusConnection            *connect
   if (property_info == NULL)
     {
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_INVALID_ARGS,
+                                               "org.freedesktop.DBus.Error.InvalidArgs",
                                                _("No such property “%s”"),
                                                property_name);
       g_dbus_connection_send_message_unlocked (connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -4887,7 +4872,7 @@ validate_and_maybe_schedule_property_getset (GDBusConnection            *connect
   if (is_get && !(property_info->flags & G_DBUS_PROPERTY_INFO_FLAGS_READABLE))
     {
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_INVALID_ARGS,
+                                               "org.freedesktop.DBus.Error.InvalidArgs",
                                                _("Property “%s” is not readable"),
                                                property_name);
       g_dbus_connection_send_message_unlocked (connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -4898,7 +4883,7 @@ validate_and_maybe_schedule_property_getset (GDBusConnection            *connect
   else if (!is_get && !(property_info->flags & G_DBUS_PROPERTY_INFO_FLAGS_WRITABLE))
     {
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_INVALID_ARGS,
+                                               "org.freedesktop.DBus.Error.InvalidArgs",
                                                _("Property “%s” is not writable"),
                                                property_name);
       g_dbus_connection_send_message_unlocked (connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -4911,14 +4896,14 @@ validate_and_maybe_schedule_property_getset (GDBusConnection            *connect
     {
       GVariant *value;
 
-      /* Fail with DBUS_ERROR_INVALID_ARGS if the type
+      /* Fail with org.freedesktop.DBus.Error.InvalidArgs if the type
        * of the given value is wrong
        */
       g_variant_get_child (g_dbus_message_get_body (message), 2, "v", &value);
       if (g_strcmp0 (g_variant_get_type_string (value), property_info->signature) != 0)
         {
           reply = g_dbus_message_new_method_error (message,
-                                                   DBUS_ERROR_INVALID_ARGS,
+                                                   "org.freedesktop.DBus.Error.InvalidArgs",
                                                    _("Error setting property “%s”: Expected type “%s” but got “%s”"),
                                                    property_name, property_info->signature,
                                                    g_variant_get_type_string (value));
@@ -5015,7 +5000,7 @@ handle_getset_property (GDBusConnection *connection,
                    &property_name,
                    NULL);
 
-  /* Fail with DBUS_ERROR_INVALID_ARGS if there is
+  /* Fail with org.freedesktop.DBus.Error.InvalidArgs if there is
    * no such interface registered
    */
   ei = g_hash_table_lookup (eo->map_if_name_to_ei, interface_name);
@@ -5023,7 +5008,7 @@ handle_getset_property (GDBusConnection *connection,
     {
       GDBusMessage *reply;
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_INVALID_ARGS,
+                                               "org.freedesktop.DBus.Error.InvalidArgs",
                                                _("No such interface “%s”"),
                                                interface_name);
       g_dbus_connection_send_message_unlocked (eo->connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -5084,9 +5069,8 @@ invoke_get_all_properties_in_idle_cb (gpointer _data)
                                     &es))
     {
       reply = g_dbus_message_new_method_error (data->message,
-                                               DBUS_ERROR_UNKNOWN_METHOD,
-                                               _("No such interface “%s” on object at path %s"),
-                                               DBUS_INTERFACE_PROPERTIES,
+                                               "org.freedesktop.DBus.Error.UnknownMethod",
+                                               _("No such interface “org.freedesktop.DBus.Properties” on object at path %s"),
                                                g_dbus_message_get_path (data->message));
       g_dbus_connection_send_message (data->connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
       g_object_unref (reply);
@@ -5099,7 +5083,7 @@ invoke_get_all_properties_in_idle_cb (gpointer _data)
    *       We could fail the whole call if just a single get_property() call
    *       returns an error. We need clarification in the D-Bus spec about this.
    */
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("(a{sv})"));
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("(a{sv})"));
   g_variant_builder_open (&builder, G_VARIANT_TYPE ("a{sv}"));
   for (n = 0; data->interface_info->properties != NULL && data->interface_info->properties[n] != NULL; n++)
     {
@@ -5231,7 +5215,7 @@ handle_get_all_properties (GDBusConnection *connection,
                  "(&s)",
                  &interface_name);
 
-  /* Fail with DBUS_ERROR_INVALID_ARGS if there is
+  /* Fail with org.freedesktop.DBus.Error.InvalidArgs if there is
    * no such interface registered
    */
   ei = g_hash_table_lookup (eo->map_if_name_to_ei, interface_name);
@@ -5239,7 +5223,7 @@ handle_get_all_properties (GDBusConnection *connection,
     {
       GDBusMessage *reply;
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_INVALID_ARGS,
+                                               "org.freedesktop.DBus.Error.InvalidArgs",
                                                _("No such interface “%s”"),
                                                interface_name);
       g_dbus_connection_send_message_unlocked (eo->connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -5272,7 +5256,7 @@ static const gchar introspect_tail[] =
   "</node>\n";
 
 static const gchar introspect_properties_interface[] =
-  "  <interface name=\"" DBUS_INTERFACE_PROPERTIES "\">\n"
+  "  <interface name=\"org.freedesktop.DBus.Properties\">\n"
   "    <method name=\"Get\">\n"
   "      <arg type=\"s\" name=\"interface_name\" direction=\"in\"/>\n"
   "      <arg type=\"s\" name=\"property_name\" direction=\"in\"/>\n"
@@ -5295,12 +5279,12 @@ static const gchar introspect_properties_interface[] =
   "  </interface>\n";
 
 static const gchar introspect_introspectable_interface[] =
-  "  <interface name=\"" DBUS_INTERFACE_INTROSPECTABLE "\">\n"
+  "  <interface name=\"org.freedesktop.DBus.Introspectable\">\n"
   "    <method name=\"Introspect\">\n"
   "      <arg type=\"s\" name=\"xml_data\" direction=\"out\"/>\n"
   "    </method>\n"
   "  </interface>\n"
-  "  <interface name=\"" DBUS_INTERFACE_PEER "\">\n"
+  "  <interface name=\"org.freedesktop.DBus.Peer\">\n"
   "    <method name=\"Ping\"/>\n"
   "    <method name=\"GetMachineId\">\n"
   "      <arg type=\"s\" name=\"machine_uuid\" direction=\"out\"/>\n"
@@ -5405,11 +5389,11 @@ handle_introspect (GDBusConnection *connection,
                           sizeof (introspect_tail));
   introspect_append_header (s);
   if (!g_hash_table_lookup (eo->map_if_name_to_ei,
-                            DBUS_INTERFACE_PROPERTIES))
+                            "org.freedesktop.DBus.Properties"))
     g_string_append (s, introspect_properties_interface);
 
   if (!g_hash_table_lookup (eo->map_if_name_to_ei,
-                            DBUS_INTERFACE_INTROSPECTABLE))
+                            "org.freedesktop.DBus.Introspectable"))
     g_string_append (s, introspect_introspectable_interface);
 
   /* then include the registered interfaces */
@@ -5455,7 +5439,7 @@ call_in_idle_cb (gpointer user_data)
     {
       GDBusMessage *reply;
       reply = g_dbus_message_new_method_error (g_dbus_method_invocation_get_message (invocation),
-                                               DBUS_ERROR_UNKNOWN_METHOD,
+                                               "org.freedesktop.DBus.Error.UnknownMethod",
                                                _("No such interface “%s” on object at path %s"),
                                                g_dbus_method_invocation_get_interface_name (invocation),
                                                g_dbus_method_invocation_get_object_path (invocation));
@@ -5550,13 +5534,13 @@ validate_and_maybe_schedule_method_call (GDBusConnection            *connection,
   /* TODO: the cost of this is O(n) - it might be worth caching the result */
   method_info = g_dbus_interface_info_lookup_method (interface_info, g_dbus_message_get_member (message));
 
-  /* if the method doesn't exist, return the DBUS_ERROR_UNKNOWN_METHOD
+  /* if the method doesn't exist, return the org.freedesktop.DBus.Error.UnknownMethod
    * error to the caller
    */
   if (method_info == NULL)
     {
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_UNKNOWN_METHOD,
+                                               "org.freedesktop.DBus.Error.UnknownMethod",
                                                _("No such method “%s”"),
                                                g_dbus_message_get_member (message));
       g_dbus_connection_send_message_unlocked (connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -5577,7 +5561,7 @@ validate_and_maybe_schedule_method_call (GDBusConnection            *connection,
     }
 
   /* Check that the incoming args are of the right type - if they are not, return
-   * the DBUS_ERROR_INVALID_ARGS error to the caller
+   * the org.freedesktop.DBus.Error.InvalidArgs error to the caller
    */
   in_type = _g_dbus_compute_complete_signature (method_info->in_args);
   if (!g_variant_is_of_type (parameters, in_type))
@@ -5587,7 +5571,7 @@ validate_and_maybe_schedule_method_call (GDBusConnection            *connection,
       type_string = g_variant_type_dup_string (in_type);
 
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_INVALID_ARGS,
+                                               "org.freedesktop.DBus.Error.InvalidArgs",
                                                _("Type of message, “%s”, does not match expected type “%s”"),
                                                g_variant_get_type_string (parameters),
                                                type_string);
@@ -5661,28 +5645,28 @@ obj_message_func (GDBusConnection *connection,
         }
     }
 
-  if (g_strcmp0 (interface_name, DBUS_INTERFACE_INTROSPECTABLE) == 0 &&
+  if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Introspectable") == 0 &&
       g_strcmp0 (member, "Introspect") == 0 &&
       g_strcmp0 (signature, "") == 0)
     {
       handled = handle_introspect (connection, eo, message);
       goto out;
     }
-  else if (g_strcmp0 (interface_name, DBUS_INTERFACE_PROPERTIES) == 0 &&
+  else if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Properties") == 0 &&
            g_strcmp0 (member, "Get") == 0 &&
            g_strcmp0 (signature, "ss") == 0)
     {
       handled = handle_getset_property (connection, eo, message, TRUE);
       goto out;
     }
-  else if (g_strcmp0 (interface_name, DBUS_INTERFACE_PROPERTIES) == 0 &&
+  else if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Properties") == 0 &&
            g_strcmp0 (member, "Set") == 0 &&
            g_strcmp0 (signature, "ssv") == 0)
     {
       handled = handle_getset_property (connection, eo, message, FALSE);
       goto out;
     }
-  else if (g_strcmp0 (interface_name, DBUS_INTERFACE_PROPERTIES) == 0 &&
+  else if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Properties") == 0 &&
            g_strcmp0 (member, "GetAll") == 0 &&
            g_strcmp0 (signature, "s") == 0)
     {
@@ -5708,8 +5692,8 @@ obj_message_func (GDBusConnection *connection,
  * D-Bus interface that is described in @interface_info.
  *
  * Calls to functions in @vtable (and @user_data_free_func) will happen
- * in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * in the 
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from.
  *
  * Note that all #GVariant values passed to functions in @vtable will match
@@ -5741,8 +5725,7 @@ obj_message_func (GDBusConnection *connection,
  * reference count is -1, see g_dbus_interface_info_ref()) for as long
  * as the object is exported. Also note that @vtable will be copied.
  *
- * See this [server][class@Gio.DBusConnection#an-example-d-bus-server]
- * for an example of how to use this method.
+ * See this [server][gdbus-server] for an example of how to use this method.
  *
  * Returns: 0 if @error is set, otherwise a registration id (never 0)
  *     that can be used with g_dbus_connection_unregister_object()
@@ -5963,11 +5946,6 @@ register_with_closures_on_method_call (GDBusConnection       *connection,
   g_value_set_variant (&params[5], parameters);
 
   g_value_init (&params[6], G_TYPE_DBUS_METHOD_INVOCATION);
-  /* NOTE: This is deliberately *not* g_value_take_object(). A reference to
-   * `invocation` is transferred in to this function, and it needs to be
-   * transferred onwards to the `g_dbus_method_invocation_return_*()` method
-   * call which must eventually happen (either in the closure function, or in
-   * a delayed consequence from it). Changing this will break API. */
   g_value_set_object (&params[6], invocation);
 
   g_closure_invoke (data->method_call_closure, NULL, G_N_ELEMENTS (params), params, NULL);
@@ -6102,18 +6080,10 @@ register_with_closures_on_set_property (GDBusConnection *connection,
  * Version of g_dbus_connection_register_object() using closures instead of a
  * #GDBusInterfaceVTable for easier binding in other languages.
  *
- * Note that the reference counting semantics of the function wrapped by
- * @method_call_closure are the same as those of
- * [callback@Gio.DBusInterfaceMethodCallFunc]: ownership of a reference to the
- * [class@Gio.DBusMethodInvocation] is transferred to the function.
- *
  * Returns: 0 if @error is set, otherwise a registration ID (never 0)
  * that can be used with g_dbus_connection_unregister_object() .
  *
  * Since: 2.46
- * Deprecated: 2.84: Deprecated in favour of
- *    [method@Gio.DBusConnection.register_object_with_closures2], which has more
- *    binding-friendly reference counting semantics.
  */
 guint
 g_dbus_connection_register_object_with_closures (GDBusConnection     *connection,
@@ -6139,118 +6109,7 @@ g_dbus_connection_register_object_with_closures (GDBusConnection     *connection
                                             object_path,
                                             interface_info,
                                             &vtable,
-                                            g_steal_pointer (&data),
-                                            register_object_free_func,
-                                            error);
-}
-
-static void
-register_with_closures_on_method_call2 (GDBusConnection       *connection,
-                                        const gchar           *sender,
-                                        const gchar           *object_path,
-                                        const gchar           *interface_name,
-                                        const gchar           *method_name,
-                                        GVariant              *parameters,
-                                        GDBusMethodInvocation *invocation,
-                                        gpointer               user_data)
-{
-  RegisterObjectData *data = user_data;
-  GValue params[] = { G_VALUE_INIT, G_VALUE_INIT, G_VALUE_INIT, G_VALUE_INIT, G_VALUE_INIT, G_VALUE_INIT, G_VALUE_INIT };
-
-  g_value_init (&params[0], G_TYPE_DBUS_CONNECTION);
-  g_value_set_object (&params[0], connection);
-
-  g_value_init (&params[1], G_TYPE_STRING);
-  g_value_set_string (&params[1], sender);
-
-  g_value_init (&params[2], G_TYPE_STRING);
-  g_value_set_string (&params[2], object_path);
-
-  g_value_init (&params[3], G_TYPE_STRING);
-  g_value_set_string (&params[3], interface_name);
-
-  g_value_init (&params[4], G_TYPE_STRING);
-  g_value_set_string (&params[4], method_name);
-
-  g_value_init (&params[5], G_TYPE_VARIANT);
-  g_value_set_variant (&params[5], parameters);
-
-  g_value_init (&params[6], G_TYPE_DBUS_METHOD_INVOCATION);
-  /* NOTE: This is deliberately *not* g_value_set_object(), in contrast with the
-   * deprecated implementation in register_with_closures_on_method_call().
-   *
-   * A reference to `invocation` is transferred in to this function, but
-   * bindings don’t expect a `GClosure` to provide any (transfer full)
-   * arguments, so consume the reference here. Bindings need to add an
-   * additional reference to the `GDBusMethodInvocation` before calling any
-   * `g_dbus_method_invocation_return_*()` methods on it. They can do this
-   * automatically based on the introspection annotations for those methods. */
-  g_value_take_object (&params[6], invocation);
-
-  g_closure_invoke (data->method_call_closure, NULL, G_N_ELEMENTS (params), params, NULL);
-
-  g_value_unset (params + 0);
-  g_value_unset (params + 1);
-  g_value_unset (params + 2);
-  g_value_unset (params + 3);
-  g_value_unset (params + 4);
-  g_value_unset (params + 5);
-  g_value_unset (params + 6);
-}
-
-/**
- * g_dbus_connection_register_object_with_closures2:
- * @connection: A [class@Gio.DBusConnection].
- * @object_path: The object path to register at.
- * @interface_info: Introspection data for the interface.
- * @method_call_closure: (nullable): [type@GObject.Closure] for handling incoming method calls.
- * @get_property_closure: (nullable): [type@GObject.Closure] for getting a property.
- * @set_property_closure: (nullable): [type@GObject.Closure] for setting a property.
- * @error: Return location for error or `NULL`.
- *
- * Version of [method@Gio.DBusConnection.register_object] using closures instead
- * of a [type@Gio.DBusInterfaceVTable] for easier binding in other languages.
- *
- * In contrast to [method@Gio.DBusConnection.register_object] and
- * [method@Gio.DBusConnection.register_object_with_closures], the reference
- * counting semantics of the function wrapped by @method_call_closure are *not*
- * the same as those of [callback@Gio.DBusInterfaceMethodCallFunc]. Ownership of
- * a reference to the [class@Gio.DBusMethodInvocation] is *not* transferred to
- * the function. Bindings must ensure that they add a reference to the
- * [class@Gio.DBusMethodInvocation] before calling any
- * `g_dbus_method_invocation_return_*()` methods on it. This should be automatic
- * as a result of the introspection annotations on those methods.
- *
- * Returns: `0` if @error is set, otherwise a registration ID (never `0`)
- * that can be used with [method@Gio.DBusConnection.unregister_object].
- *
- * Since: 2.84
- */
-guint
-g_dbus_connection_register_object_with_closures2 (GDBusConnection     *connection,
-                                                  const gchar         *object_path,
-                                                  GDBusInterfaceInfo  *interface_info,
-                                                  GClosure            *method_call_closure,
-                                                  GClosure            *get_property_closure,
-                                                  GClosure            *set_property_closure,
-                                                  GError             **error)
-{
-  RegisterObjectData *data;
-  GDBusInterfaceVTable vtable =
-    {
-      method_call_closure != NULL  ? register_with_closures_on_method_call2  : NULL,
-      get_property_closure != NULL ? register_with_closures_on_get_property : NULL,
-      set_property_closure != NULL ? register_with_closures_on_set_property : NULL,
-      { 0 }
-    };
-
-  data = register_object_data_new (method_call_closure, get_property_closure, set_property_closure);
-
-  return g_dbus_connection_register_object (connection,
-                                            object_path,
-                                            interface_info,
-                                            &vtable,
-                                            g_steal_pointer (&data),
+                                            data,
                                             register_object_free_func,
                                             error);
 }
@@ -6814,8 +6673,8 @@ g_dbus_connection_call_sync_internal (GDBusConnection         *connection,
  * ]|
  *
  * This is an asynchronous method. When the operation is finished,
- * @callback will be invoked in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * @callback will be invoked in the
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from. You can then call
  * g_dbus_connection_call_finish() to get the result of the operation.
  * See g_dbus_connection_call_sync() for the synchronous version of this
@@ -7003,7 +6862,7 @@ g_dbus_connection_call_with_unix_fd_list (GDBusConnection     *connection,
 /**
  * g_dbus_connection_call_with_unix_fd_list_finish:
  * @connection: a #GDBusConnection
- * @out_fd_list: (out) (optional) (nullable): return location for a #GUnixFDList or %NULL
+ * @out_fd_list: (out) (optional): return location for a #GUnixFDList or %NULL
  * @res: a #GAsyncResult obtained from the #GAsyncReadyCallback passed to
  *     g_dbus_connection_call_with_unix_fd_list()
  * @error: return location for error or %NULL
@@ -7050,7 +6909,7 @@ g_dbus_connection_call_with_unix_fd_list_finish (GDBusConnection  *connection,
  * @timeout_msec: the timeout in milliseconds, -1 to use the default
  *     timeout or %G_MAXINT for no timeout
  * @fd_list: (nullable): a #GUnixFDList or %NULL
- * @out_fd_list: (out) (optional) (nullable): return location for a #GUnixFDList or %NULL
+ * @out_fd_list: (out) (optional): return location for a #GUnixFDList or %NULL
  * @cancellable: (nullable): a #GCancellable or %NULL
  * @error: return location for error or %NULL
  *
@@ -7152,9 +7011,9 @@ handle_subtree_introspect (GDBusConnection *connection,
 
       for (n = 0; interfaces[n] != NULL; n++)
         {
-          if (strcmp (interfaces[n]->name, DBUS_INTERFACE_PROPERTIES) == 0)
+          if (strcmp (interfaces[n]->name, "org.freedesktop.DBus.Properties") == 0)
             has_properties_interface = TRUE;
-          else if (strcmp (interfaces[n]->name, DBUS_INTERFACE_INTROSPECTABLE) == 0)
+          else if (strcmp (interfaces[n]->name, "org.freedesktop.DBus.Introspectable") == 0)
             has_introspectable_interface = TRUE;
         }
       if (!has_properties_interface)
@@ -7236,7 +7095,7 @@ handle_subtree_method_invocation (GDBusConnection *connection,
   is_property_get = FALSE;
   is_property_set = FALSE;
   is_property_get_all = FALSE;
-  if (g_strcmp0 (interface_name, DBUS_INTERFACE_PROPERTIES) == 0)
+  if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Properties") == 0)
     {
       if (g_strcmp0 (member, "Get") == 0 && g_strcmp0 (signature, "ss") == 0)
         is_property_get = TRUE;
@@ -7318,7 +7177,7 @@ handle_subtree_method_invocation (GDBusConnection *connection,
                                                          interface_user_data);
       CONNECTION_UNLOCK (connection);
     }
-  /* handle DBUS_INTERFACE_PROPERTIES if not explicitly handled */
+  /* handle org.freedesktop.DBus.Properties interface if not explicitly handled */
   else if (is_property_get || is_property_set || is_property_get_all)
     {
       if (is_property_get)
@@ -7337,14 +7196,14 @@ handle_subtree_method_invocation (GDBusConnection *connection,
             interface_info = interfaces[n];
         }
 
-      /* Fail with DBUS_ERROR_INVALID_ARGS if the user-code
+      /* Fail with org.freedesktop.DBus.Error.InvalidArgs if the user-code
        * claims it won't support the interface
        */
       if (interface_info == NULL)
         {
           GDBusMessage *reply;
           reply = g_dbus_message_new_method_error (message,
-                                                   DBUS_ERROR_INVALID_ARGS,
+                                                   "org.freedesktop.DBus.Error.InvalidArgs",
                                                    _("No such interface “%s”"),
                                                    interface_name);
           g_dbus_connection_send_message (es->connection, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
@@ -7433,7 +7292,7 @@ process_subtree_vtable_message_in_idle_cb (gpointer _data)
 
   handled = FALSE;
 
-  if (g_strcmp0 (g_dbus_message_get_interface (data->message), DBUS_INTERFACE_INTROSPECTABLE) == 0 &&
+  if (g_strcmp0 (g_dbus_message_get_interface (data->message), "org.freedesktop.DBus.Introspectable") == 0 &&
       g_strcmp0 (g_dbus_message_get_member (data->message), "Introspect") == 0 &&
       g_strcmp0 (g_dbus_message_get_signature (data->message), "") == 0)
     handled = handle_subtree_introspect (data->es->connection,
@@ -7456,7 +7315,7 @@ process_subtree_vtable_message_in_idle_cb (gpointer _data)
     {
       GDBusMessage *reply;
       reply = g_dbus_message_new_method_error (data->message,
-                                               DBUS_ERROR_UNKNOWN_METHOD,
+                                               "org.freedesktop.DBus.Error.UnknownMethod",
                                                _("Method “%s” on interface “%s” with signature “%s” does not exist"),
                                                g_dbus_message_get_member (data->message),
                                                g_dbus_message_get_interface (data->message),
@@ -7525,8 +7384,8 @@ subtree_message_func (GDBusConnection *connection,
  * #gpointer will be used to call into the interface vtable for processing
  * the request.
  *
- * All calls into user-provided code will be invoked in the thread-default
- * main context (see [method@GLib.MainContext.push_thread_default])
+ * All calls into user-provided code will be invoked in the
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from.
  *
  * If an existing subtree is already registered at @object_path or
@@ -7542,8 +7401,8 @@ subtree_message_func (GDBusConnection *connection,
  * Note that @vtable will be copied so you cannot change it after
  * registration.
  *
- * See this [server][class@Gio.DBusConnection#an-example-for-exporting-a-subtree]
- * for an example of how to use this method.
+ * See this [server][gdbus-subtree-server] for an example of how to use
+ * this method.
  *
  * Returns: 0 if @error is set, otherwise a subtree registration ID (never 0)
  * that can be used with g_dbus_connection_unregister_subtree()
@@ -7687,7 +7546,7 @@ handle_generic_get_machine_id_unlocked (GDBusConnection *connection,
       if (connection->machine_id == NULL)
         {
           reply = g_dbus_message_new_method_error_literal (message,
-                                                           DBUS_ERROR_FAILED,
+                                                           "org.freedesktop.DBus.Error.Failed",
                                                            error->message);
           g_error_free (error);
         }
@@ -7750,21 +7609,21 @@ handle_generic_unlocked (GDBusConnection *connection,
   signature = g_dbus_message_get_signature (message);
   path = g_dbus_message_get_path (message);
 
-  if (g_strcmp0 (interface_name, DBUS_INTERFACE_INTROSPECTABLE) == 0 &&
+  if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Introspectable") == 0 &&
       g_strcmp0 (member, "Introspect") == 0 &&
       g_strcmp0 (signature, "") == 0)
     {
       handle_generic_introspect_unlocked (connection, path, message);
       handled = TRUE;
     }
-  else if (g_strcmp0 (interface_name, DBUS_INTERFACE_PEER) == 0 &&
+  else if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Peer") == 0 &&
            g_strcmp0 (member, "Ping") == 0 &&
            g_strcmp0 (signature, "") == 0)
     {
       handle_generic_ping_unlocked (connection, path, message);
       handled = TRUE;
     }
-  else if (g_strcmp0 (interface_name, DBUS_INTERFACE_PEER) == 0 &&
+  else if (g_strcmp0 (interface_name, "org.freedesktop.DBus.Peer") == 0 &&
            g_strcmp0 (member, "GetMachineId") == 0 &&
            g_strcmp0 (signature, "") == 0)
     {
@@ -7864,7 +7723,7 @@ distribute_method_call (GDBusConnection *connection,
   if (object_found == TRUE)
     {
       reply = g_dbus_message_new_method_error (message,
-                                               DBUS_ERROR_UNKNOWN_METHOD,
+                                               "org.freedesktop.DBus.Error.UnknownMethod",
                                                _("No such interface “%s” on object at path %s"),
                                                interface_name,
                                                path);
@@ -7872,7 +7731,7 @@ distribute_method_call (GDBusConnection *connection,
   else
     {
       reply = g_dbus_message_new_method_error (message,
-                                           DBUS_ERROR_UNKNOWN_METHOD,
+                                           "org.freedesktop.DBus.Error.UnknownMethod",
                                            _("Object does not exist at path “%s”"),
                                            path);
     }

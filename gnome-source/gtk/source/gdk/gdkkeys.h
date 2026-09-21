@@ -33,7 +33,7 @@
 G_BEGIN_DECLS
 
 GDK_AVAILABLE_IN_ALL
-const char *gdk_keyval_name      (guint        keyval);
+const char *gdk_keyval_name      (guint        keyval) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 guint    gdk_keyval_from_name    (const char *keyval_name);
@@ -42,23 +42,19 @@ void     gdk_keyval_convert_case (guint        symbol,
 				  guint       *lower,
 				  guint       *upper);
 GDK_AVAILABLE_IN_ALL
-guint    gdk_keyval_to_upper     (guint        keyval);
+guint    gdk_keyval_to_upper     (guint        keyval) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
-guint    gdk_keyval_to_lower     (guint        keyval);
+guint    gdk_keyval_to_lower     (guint        keyval) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
-gboolean gdk_keyval_is_upper     (guint        keyval);
+gboolean gdk_keyval_is_upper     (guint        keyval) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
-gboolean gdk_keyval_is_lower     (guint        keyval);
+gboolean gdk_keyval_is_lower     (guint        keyval) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
-guint32  gdk_keyval_to_unicode   (guint        keyval);
+guint32  gdk_keyval_to_unicode   (guint        keyval) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
-guint    gdk_unicode_to_keyval   (guint32      wc);
+guint    gdk_unicode_to_keyval   (guint32      wc) G_GNUC_CONST;
 
-GDK_AVAILABLE_IN_4_24
-const guint *
-         gdk_keyval_get_aliases  (guint        keyval,
-                                  guint       *n_aliases);
 
 G_END_DECLS
 

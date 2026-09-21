@@ -732,7 +732,7 @@ create_statusbar (GtkWidget *widget)
 
       statusbar = gtk_statusbar_new ();
       g_signal_connect (statusbar,
-			"text-popped",
+			"text_popped",
 			G_CALLBACK (statusbar_popped),
 			NULL);
 
@@ -1330,7 +1330,7 @@ create_tooltips (GtkWidget *widget)
 
       frame = g_object_new (gtk_frame_get_type (),
 			      "label", "ToolTips Inspector",
-			      "label-xalign", (double) 0.5,
+			      "label_xalign", (double) 0.5,
 			      NULL);
       gtk_box_append (GTK_BOX (box2), frame);
       gtk_frame_set_child (GTK_FRAME (frame), box3);
@@ -2245,14 +2245,14 @@ create_size_group_window (GdkDisplay   *display,
   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button), SIZE_GROUP_INITIAL_SIZE);
   gtk_widget_set_hexpand (spin_button, TRUE);
   gtk_box_append (GTK_BOX (hbox), spin_button);
-  g_signal_connect (spin_button, "value-changed",
+  g_signal_connect (spin_button, "value_changed",
 		    G_CALLBACK (size_group_hsize_changed), main_button);
 
   spin_button = gtk_spin_button_new_with_range (1, 100, 1);
   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button), SIZE_GROUP_INITIAL_SIZE);
   gtk_widget_set_hexpand (spin_button, TRUE);
   gtk_box_append (GTK_BOX (hbox), spin_button);
-  g_signal_connect (spin_button, "value-changed",
+  g_signal_connect (spin_button, "value_changed",
 		    G_CALLBACK (size_group_vsize_changed), main_button);
 
   return window;
@@ -2372,7 +2372,7 @@ spin_button_time_output_func (GtkSpinButton *spin_button)
   hours = gtk_adjustment_get_value (adjustment) / 60.0;
   minutes = (fabs(floor (hours) - hours) < 1e-5) ? 0.0 : 30;
   sprintf (buf, "%02.0f:%02.0f", floor (hours), minutes);
-  if (strcmp (buf, gtk_editable_get_text (GTK_EDITABLE (spin_button))) != 0)
+  if (strcmp (buf, gtk_editable_get_text (GTK_EDITABLE (spin_button))))
     gtk_editable_set_text (GTK_EDITABLE (spin_button), buf);
   return TRUE;
 }
@@ -2423,7 +2423,7 @@ spin_button_month_output_func (GtkSpinButton *spin_button)
   for (i = 1; i <= 12; i++)
     if (fabs (value - (double)i) < 1e-5)
       {
-        if (strcmp (month[i-1], gtk_editable_get_text (GTK_EDITABLE (spin_button))) != 0)
+        if (strcmp (month[i-1], gtk_editable_get_text (GTK_EDITABLE (spin_button))))
           gtk_editable_set_text (GTK_EDITABLE (spin_button), month[i-1]);
       }
   return TRUE;
@@ -2459,7 +2459,7 @@ spin_button_hex_output_func (GtkSpinButton *spin_button)
     sprintf (buf, "0x00");
   else
     sprintf (buf, "0x%.2X", (int) val);
-  if (strcmp (buf, gtk_editable_get_text (GTK_EDITABLE (spin_button))) != 0)
+  if (strcmp (buf, gtk_editable_get_text (GTK_EDITABLE (spin_button))))
     gtk_editable_set_text (GTK_EDITABLE (spin_button), buf);
 
   return TRUE;
@@ -2607,7 +2607,7 @@ create_spins (GtkWidget *widget)
 
       adjustment = gtk_adjustment_new (2, 1, 15, 1, 1, 0);
       spinner2 = gtk_spin_button_new (adjustment, 0.0, 0);
-      g_signal_connect (adjustment, "value-changed",
+      g_signal_connect (adjustment, "value_changed",
 			G_CALLBACK (change_digits),
 			spinner2);
       gtk_box_append (GTK_BOX (vbox2), spinner2);
@@ -2665,7 +2665,7 @@ create_spins (GtkWidget *widget)
       spinner = gtk_spin_button_new_with_range (0.0, 10.0, 0.009);
       gtk_widget_set_hexpand (spinner, TRUE);
       gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinner), 0.0);
-      g_signal_connect (spinner, "value-changed",
+      g_signal_connect (spinner, "value_changed",
 			G_CALLBACK (get_spin_value), val_label);
       gtk_box_append (GTK_BOX (hbox), spinner);
       gtk_box_append (GTK_BOX (hbox), val_label);
@@ -2954,7 +2954,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
       frame =
 	g_object_new (gtk_frame_get_type (),
-			"label-xalign", 0.5,
+			"label_xalign", 0.5,
 			"label", "Cursor Area",
 			NULL);
       gtk_box_append (GTK_BOX (vbox), frame);
@@ -3819,7 +3819,7 @@ create_notebook (GtkWidget *widget)
       gtk_window_set_child (GTK_WINDOW (window), box1);
 
       sample_notebook = gtk_notebook_new ();
-      g_signal_connect (sample_notebook, "switch-page",
+      g_signal_connect (sample_notebook, "switch_page",
                         G_CALLBACK (page_switch), NULL);
       gtk_notebook_set_tab_pos (GTK_NOTEBOOK (sample_notebook), GTK_POS_TOP);
       gtk_widget_set_vexpand (sample_notebook, TRUE);
@@ -4584,7 +4584,7 @@ tracking_label (GtkWidget *window)
   g_signal_connect_object (gtk_native_get_surface (GTK_NATIVE (window)), "notify::state",
                            G_CALLBACK (surface_state_callback),
                            label,
-                           G_CONNECT_DEFAULT);
+                           0);
 
   button = gtk_button_new_with_label ("Unminimize");
   g_signal_connect_object (button,
@@ -5027,16 +5027,21 @@ progress_timeout (gpointer data)
   gtk_label_set_text (GTK_LABEL (pdata->label), text);
   g_free (text);
 
-  return G_SOURCE_CONTINUE;
+  return TRUE;
 }
 
 static void
 destroy_progress (GtkWidget     *widget,
 		  ProgressData **pdata)
 {
-  g_clear_handle_id (&(*pdata)->timer, g_source_remove);
+  if ((*pdata)->timer)
+    {
+      g_source_remove ((*pdata)->timer);
+      (*pdata)->timer = 0;
+    }
   (*pdata)->window = NULL;
-  g_clear_pointer (pdata, g_free);
+  g_free (*pdata);
+  *pdata = NULL;
 }
 
 static void
@@ -5100,7 +5105,11 @@ toggle_running (GtkWidget *widget, ProgressData *pdata)
     }
   else
     {
-      g_clear_handle_id (&pdata->timer, g_source_remove);
+      if (pdata->timer != 0)
+        {
+          g_source_remove (pdata->timer);
+          pdata->timer = 0;
+        }
     }
 }
 
@@ -5277,7 +5286,7 @@ timeout_test (GtkWidget *label)
   sprintf (buffer, "count: %d", ++count);
   gtk_label_set_text (GTK_LABEL (label), buffer);
 
-  return G_SOURCE_CONTINUE;
+  return TRUE;
 }
 
 static void
@@ -5294,7 +5303,11 @@ static void
 stop_timeout_test (GtkWidget *widget,
 		   gpointer   data)
 {
-  g_clear_handle_id (&timer, g_source_remove);
+  if (timer)
+    {
+      g_source_remove (timer);
+      timer = 0;
+    }
 }
 
 static void
@@ -6020,7 +6033,7 @@ main (int argc, char *argv[])
    */
   for (i = 1; i < argc; i++)
     {
-      if (g_str_has_prefix (argv[i], "--bench"))
+      if (strncmp (argv[i], "--bench", strlen("--bench")) == 0)
         {
           int num = 1;
 	  char *nextarg;

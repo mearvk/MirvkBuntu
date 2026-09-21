@@ -27,7 +27,6 @@
 #include "core/util-private.h"
 #include "meta/boxes.h"
 #include "meta/common.h"
-#include "mtk/mtk.h"
 
 #define BOX_LEFT(box)    ((box).x)                /* Leftmost pixel of rect */
 #define BOX_RIGHT(box)   ((box).x + (box).width)  /* One pixel past right   */
@@ -91,6 +90,12 @@ GList*   meta_rectangle_get_minimal_spanning_set_for_region (
                                          const MtkRectangle *basic_rect,
                                          const GSList       *all_struts);
 
+/* Expand all rectangles in region by the given amount on each side */
+GList*   meta_rectangle_expand_region   (GList               *region,
+                                         const int            left_expand,
+                                         const int            right_expand,
+                                         const int            top_expand,
+                                         const int            bottom_expand);
 /* Same as for meta_rectangle_expand_region except that rectangles not at
  * least min_x or min_y in size are not expanded in that direction
  */
@@ -231,3 +236,10 @@ META_EXPORT_TEST
 GList* meta_rectangle_find_nonintersected_monitor_edges (
                                            const GList         *monitor_rects,
                                            const GSList        *all_struts);
+
+META_EXPORT_TEST
+void meta_rectangle_transform (const MtkRectangle   *rect,
+                               MetaMonitorTransform  transform,
+                               int                   width,
+                               int                   height,
+                               MtkRectangle         *dest);

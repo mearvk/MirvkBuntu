@@ -19,7 +19,6 @@
 
 #include "gtkcsslookupprivate.h"
 
-#include "gtkcsscustompropertypoolprivate.h"
 #include "gtkcssstylepropertyprivate.h"
 #include "gtkcsstypesprivate.h"
 #include "gtkprivatetypebuiltins.h"
@@ -37,9 +36,6 @@ void
 _gtk_css_lookup_destroy (GtkCssLookup *lookup)
 {
   _gtk_bitmask_free (lookup->set_values);
-
-  if (lookup->custom_values)
-    g_hash_table_unref (lookup->custom_values);
 }
 
 gboolean
@@ -77,18 +73,4 @@ _gtk_css_lookup_set (GtkCssLookup  *lookup,
   lookup->values[id].value = value;
   lookup->values[id].section = section;
   lookup->set_values = _gtk_bitmask_set (lookup->set_values, id, TRUE);
-}
-
-void
-_gtk_css_lookup_set_custom (GtkCssLookup        *lookup,
-                            int                  id,
-                            GtkCssVariableValue *value)
-{
-  gtk_internal_return_if_fail (lookup != NULL);
-
-  if (!lookup->custom_values)
-    lookup->custom_values = g_hash_table_new (g_direct_hash, g_direct_equal);
-
-  if (!g_hash_table_contains (lookup->custom_values, GINT_TO_POINTER (id)))
-    g_hash_table_replace (lookup->custom_values, GINT_TO_POINTER (id), value);
 }

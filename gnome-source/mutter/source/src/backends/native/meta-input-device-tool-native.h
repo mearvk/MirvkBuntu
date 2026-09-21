@@ -49,20 +49,13 @@ ClutterInputDeviceTool * meta_input_device_tool_native_new      (struct libinput
 
 gdouble                  meta_input_device_tool_native_translate_pressure_in_impl (ClutterInputDeviceTool *tool,
                                                                                    double                  pressure);
-GDesktopStylusButtonAction meta_input_device_tool_native_get_button_code_in_impl (ClutterInputDeviceTool *tool,
-                                                                                  uint32_t                button);
+uint32_t                 meta_input_device_tool_native_get_button_code_in_impl (ClutterInputDeviceTool *tool,
+                                                                                uint32_t                button);
 
 void                     meta_input_device_tool_native_set_pressure_curve_in_impl (ClutterInputDeviceTool *tool,
-                                                                                   double                  curve[4],
-                                                                                   double                  range[2]);
-void                     meta_input_device_tool_native_set_button_code_in_impl (ClutterInputDeviceTool     *tool,
-                                                                                uint32_t                    button,
-                                                                                GDesktopStylusButtonAction  evcode);
-
-GDesktopStylusButtonAction meta_input_device_tool_native_get_eraser_button_code_in_impl (ClutterInputDeviceTool *tool);
-
-void                       meta_input_device_tool_native_set_eraser_button_action_in_impl (ClutterInputDeviceTool         *tool,
-                                                                                           GDesktopStylusEraserButtonMode  mode,
-                                                                                           GDesktopStylusButtonAction      action);
+                                                                                   double                  curve[4]);
+void                     meta_input_device_tool_native_set_button_code_in_impl (ClutterInputDeviceTool *tool,
+                                                                                uint32_t                button,
+                                                                                uint32_t                evcode);
 
 G_END_DECLS

@@ -67,12 +67,14 @@ check_focus_states (GtkWidget *focus_widget)
     }
 }
 
-static void
+static gboolean
 quit_iteration_loop (gpointer user_data)
 {
   gboolean *keep_running = user_data;
 
   *keep_running = FALSE;
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -80,8 +82,7 @@ timed_loop (guint millis)
 {
   gboolean keep_running = TRUE;
 
-  /* gobject-linter-ignore-next-line: g_source_id_not_stored */
-  g_timeout_add_once (millis, quit_iteration_loop, &keep_running);
+  g_timeout_add (millis, quit_iteration_loop, &keep_running);
   while (keep_running)
     g_main_context_iteration (NULL, TRUE);
 }
@@ -173,7 +174,7 @@ generate_focus_chain (GtkWidget        *window,
 static GtkDirectionType
 get_dir_for_file (const char *path)
 {
-  const char *p;
+  char *p;
   int i;
 
   p = strrchr (path, '.');
@@ -215,7 +216,9 @@ load_ui_file (GFile *ui_file,
 
   gtk_window_present (GTK_WINDOW (window));
 
-  timeout_handle_id = g_timeout_add_once (2000, quit_iteration_loop, &keep_running);
+  timeout_handle_id = g_timeout_add (2000,
+                                     quit_iteration_loop,
+                                     &keep_running);
   while (keep_running && !gtk_window_is_active (GTK_WINDOW (window)))
     g_main_context_iteration (NULL, TRUE);
 
@@ -253,7 +256,7 @@ load_ui_file (GFile *ui_file,
 
   dir = get_dir_for_file (ref_path);
   output = generate_focus_chain (window, dir);
-  diff = diff_string_with_file (ref_path, output, -1, &error);
+  diff = diff_with_file (ref_path, output, -1, &error);
   g_assert_no_error (error);
 
   if (diff && diff[0])

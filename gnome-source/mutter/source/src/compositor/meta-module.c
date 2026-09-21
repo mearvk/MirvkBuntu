@@ -104,7 +104,8 @@ meta_module_finalize (GObject *object)
 {
   MetaModule *module = META_MODULE (object);
 
-  g_clear_pointer (&module->path, g_free);
+  g_free (module->path);
+  module->path = NULL;
 
   G_OBJECT_CLASS (meta_module_parent_class)->finalize (object);
 }
@@ -165,7 +166,8 @@ meta_module_class_init (MetaModuleClass *klass)
 				   PROP_PATH,
 				   g_param_spec_string ("path", NULL, NULL,
 							NULL,
-							G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME));
+							G_PARAM_READWRITE |
+						      G_PARAM_CONSTRUCT_ONLY));
 }
 
 static void

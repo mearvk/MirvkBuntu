@@ -26,7 +26,8 @@
 /**
  * GtkBoolFilter:
  *
- * Evaluates a boolean expression to determine whether to include items.
+ * `GtkBoolFilter` evaluates a boolean `GtkExpression`
+ * to determine whether to include items.
  */
 
 struct _GtkBoolFilter
@@ -152,23 +153,23 @@ gtk_bool_filter_class_init (GtkBoolFilterClass *class)
   object_class->dispose = gtk_bool_filter_dispose;
 
   /**
-   * GtkBoolFilter:expression: (type GtkExpression)
+   * GtkBoolFilter:expression: (type GtkExpression) (attributes org.gtk.Property.get=gtk_bool_filter_get_expression org.gtk.Property.set=gtk_bool_filter_set_expression)
    *
-   * The boolean expression to evaluate on each item.
+   * The boolean expression to evaluate on item.
    */
   properties[PROP_EXPRESSION] =
     gtk_param_spec_expression ("expression", NULL, NULL,
-                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkBoolFilter:invert:
+   * GtkBoolFilter:invert: (attributes org.gtk.Property.get=gtk_bool_filter_get_invert org.gtk.Property.set=gtk_bool_filter_set_invert)
    *
    * If the expression result should be inverted.
    */
   properties[PROP_INVERT] =
       g_param_spec_boolean ("invert", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }
@@ -180,7 +181,7 @@ gtk_bool_filter_init (GtkBoolFilter *self)
 
 /**
  * gtk_bool_filter_new:
- * @expression: (transfer full) (nullable): the expression to evaluate
+ * @expression: (transfer full) (nullable): The expression to evaluate
  *
  * Creates a new bool filter.
  *
@@ -201,13 +202,13 @@ gtk_bool_filter_new (GtkExpression *expression)
 }
 
 /**
- * gtk_bool_filter_get_expression:
- * @self: a bool filter
+ * gtk_bool_filter_get_expression: (attributes org.gtk.Method.get_property=expression)
+ * @self: a `GtkBoolFilter`
  *
- * Gets the expression that the filter evaluates for
- * each item.
+ * Gets the expression that the filter uses to evaluate if
+ * an item should be filtered.
  *
- * Returns: (transfer none) (nullable): the expression
+ * Returns: (transfer none) (nullable): a `GtkExpression`
  */
 GtkExpression *
 gtk_bool_filter_get_expression (GtkBoolFilter *self)
@@ -218,14 +219,14 @@ gtk_bool_filter_get_expression (GtkBoolFilter *self)
 }
 
 /**
- * gtk_bool_filter_set_expression:
- * @self: a bool filter
- * @expression: (nullable): the expression
+ * gtk_bool_filter_set_expression: (attributes org.gtk.Method.set_property=expression)
+ * @self: a `GtkBoolFilter`
+ * @expression: (nullable): a `GtkExpression`
  *
  * Sets the expression that the filter uses to check if items
  * should be filtered.
  *
- * The expression must have a value type of `G_TYPE_BOOLEAN`.
+ * The expression must have a value type of %G_TYPE_BOOLEAN.
  */
 void
 gtk_bool_filter_set_expression (GtkBoolFilter *self,
@@ -241,18 +242,18 @@ gtk_bool_filter_set_expression (GtkBoolFilter *self,
   if (expression)
     self->expression = gtk_expression_ref (expression);
 
-  gtk_filter_changed (GTK_FILTER (self), GTK_FILTER_CHANGE_DIFFERENT_REWATCH);
+  gtk_filter_changed (GTK_FILTER (self), GTK_FILTER_CHANGE_DIFFERENT);
 
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_EXPRESSION]);
 }
 
 /**
- * gtk_bool_filter_get_invert:
- * @self: a bool filter
+ * gtk_bool_filter_get_invert: (attributes org.gtk.Method.get_property=invert)
+ * @self: a `GtkBoolFilter`
  *
  * Returns whether the filter inverts the expression.
  *
- * Returns: true if the filter inverts
+ * Returns: %TRUE if the filter inverts
  */
 gboolean
 gtk_bool_filter_get_invert (GtkBoolFilter *self)
@@ -263,9 +264,9 @@ gtk_bool_filter_get_invert (GtkBoolFilter *self)
 }
 
 /**
- * gtk_bool_filter_set_invert:
- * @self: a bool filter
- * @invert: true to invert
+ * gtk_bool_filter_set_invert: (attributes org.gtk.Method.set_property=invert)
+ * @self: a `GtkBoolFilter`
+ * @invert: %TRUE to invert
  *
  * Sets whether the filter should invert the expression.
  */

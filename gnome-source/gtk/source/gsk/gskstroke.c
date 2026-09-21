@@ -24,7 +24,8 @@
 /**
  * GskStroke:
  *
- * Collects the parameters that are needed when stroking a path.
+ * A `GskStroke` struct collects the parameters that influence
+ * the operation of stroking a path.
  *
  * Since: 4.14
  */
@@ -47,7 +48,7 @@ gsk_stroke_new (float line_width)
 {
   GskStroke *self;
 
-  g_return_val_if_fail (line_width >= 0, NULL);
+  g_return_val_if_fail (line_width > 0, NULL);
 
   self = g_new0 (GskStroke, 1);
 
@@ -61,9 +62,9 @@ gsk_stroke_new (float line_width)
 
 /**
  * gsk_stroke_copy:
- * @other: the stroke to copy
+ * @other: `GskStroke` to copy
  *
- * Creates a copy of a `GskStroke`.
+ * Creates a copy of the given @other stroke.
  *
  * Returns: a new `GskStroke`. Use [method@Gsk.Stroke.free] to free it
  *
@@ -85,7 +86,7 @@ gsk_stroke_copy (const GskStroke *other)
 
 /**
  * gsk_stroke_free:
- * @self: a stroke
+ * @self: a `GskStroke`
  *
  * Frees a `GskStroke`.
  *
@@ -104,11 +105,11 @@ gsk_stroke_free (GskStroke *self)
 
 /**
  * gsk_stroke_to_cairo:
- * @self: a stroke
+ * @self: a `GskStroke`
  * @cr: the cairo context to configure
  *
  * A helper function that sets the stroke parameters
- * of a cairo context from a `GskStroke`.
+ * of @cr from the values found in @self.
  *
  * Since: 4.14
  */
@@ -171,12 +172,12 @@ gsk_stroke_to_cairo (const GskStroke *self,
 
 /**
  * gsk_stroke_equal:
- * @stroke1: the first stroke
- * @stroke2: the second stroke
+ * @stroke1: the first `GskStroke`
+ * @stroke2: the second `GskStroke`
  *
- * Checks if two strokes are identical.
+ * Checks if 2 strokes are identical.
  *
- * Returns: true if the two strokes are equal, false otherwise
+ * Returns: `TRUE` if the 2 strokes are equal, `FALSE` otherwise
  *
  * Since: 4.14
  */
@@ -204,12 +205,12 @@ gsk_stroke_equal (gconstpointer stroke1,
 
 /**
  * gsk_stroke_set_line_width:
- * @self: a stroke
+ * @self: a `GskStroke`
  * @line_width: width of the line in pixels
  *
  * Sets the line width to be used when stroking.
  *
- * The line width must be >= 0.
+ * The line width must be > 0.
  *
  * Since: 4.14
  */
@@ -218,18 +219,18 @@ gsk_stroke_set_line_width (GskStroke *self,
                            float      line_width)
 {
   g_return_if_fail (self != NULL);
-  g_return_if_fail (line_width >= 0);
+  g_return_if_fail (line_width > 0);
 
   self->line_width = line_width;
 }
 
 /**
  * gsk_stroke_get_line_width:
- * @self: a stroke
+ * @self: a `GskStroke`
  *
  * Gets the line width used.
  *
- * Returns: the line width
+ * Returns: The line width
  *
  * Since: 4.14
  */
@@ -243,8 +244,8 @@ gsk_stroke_get_line_width (const GskStroke *self)
 
 /**
  * gsk_stroke_set_line_cap:
- * @self: a stroke
- * @line_cap: the line cap
+ * @self: a`GskStroke`
+ * @line_cap: the `GskLineCap`
  *
  * Sets the line cap to be used when stroking.
  *
@@ -263,13 +264,13 @@ gsk_stroke_set_line_cap (GskStroke  *self,
 
 /**
  * gsk_stroke_get_line_cap:
- * @self: a stroke
+ * @self: a `GskStroke`
  *
  * Gets the line cap used.
  *
  * See [enum@Gsk.LineCap] for details.
  *
- * Returns: the line cap
+ * Returns: The line cap
  *
  * Since: 4.14
  */
@@ -283,8 +284,8 @@ gsk_stroke_get_line_cap (const GskStroke *self)
 
 /**
  * gsk_stroke_set_line_join:
- * @self: a stroke
- * @line_join: the line join to use
+ * @self: a `GskStroke`
+ * @line_join: The line join to use
  *
  * Sets the line join to be used when stroking.
  *
@@ -303,13 +304,13 @@ gsk_stroke_set_line_join (GskStroke   *self,
 
 /**
  * gsk_stroke_get_line_join:
- * @self: a stroke
+ * @self: a `GskStroke`
  *
  * Gets the line join used.
  *
  * See [enum@Gsk.LineJoin] for details.
  *
- * Returns: the line join
+ * Returns: The line join
  *
  * Since: 4.14
  */
@@ -323,18 +324,17 @@ gsk_stroke_get_line_join (const GskStroke *self)
 
 /**
  * gsk_stroke_set_miter_limit:
- * @self: a stroke
+ * @self: a `GskStroke`
  * @limit: the miter limit
  *
- * Sets the miter limit to be used when stroking.
- *
- * The miter limit is the distance from the corner where sharp
+ * Sets the limit for the distance from the corner where sharp
  * turns of joins get cut off.
  *
- * The limit is specfied in units of line width and must be non-negative.
+ * The miter limit is in units of line width and must be non-negative.
  *
- * For joins of type [enum@Gsk.LineJoin.miter] that exceed the miter limit,
- * the join gets rendered as if it was of type [enum@Gsk.LineJoin.bevel].
+ * For joins of type `GSK_LINE_JOIN_MITER` that exceed the miter
+ * limit, the join gets rendered as if it was of type
+ * `GSK_LINE_JOIN_BEVEL`.
  *
  * Since: 4.14
  */
@@ -350,11 +350,9 @@ gsk_stroke_set_miter_limit (GskStroke  *self,
 
 /**
  * gsk_stroke_get_miter_limit:
- * @self: a stroke
+ * @self: a `GskStroke`
  *
- * Gets the miter limit.
- *
- * Returns: the miter limit
+ * Returns the miter limit of a `GskStroke`.
  *
  * Since: 4.14
  */
@@ -368,12 +366,12 @@ gsk_stroke_get_miter_limit (const GskStroke *self)
 
 /**
  * gsk_stroke_set_dash:
- * @self: a stroke
+ * @self: a `GskStroke`
  * @dash: (array length=n_dash) (transfer none) (nullable):
  *   the array of dashes
  * @n_dash: number of elements in @dash
  *
- * Sets the dash pattern to use.
+ * Sets the dash pattern to use by this stroke.
  *
  * A dash pattern is specified by an array of alternating non-negative
  * values. Each value provides the length of alternate "on" and "off"
@@ -381,8 +379,8 @@ gsk_stroke_get_miter_limit (const GskStroke *self)
  *
  * Each "on" segment will have caps applied as if the segment were a
  * separate contour. In particular, it is valid to use an "on" length
- * of 0 with [enum@Gsk.LineCap.round] or [enum@Gsk.LineCap.square]
- * to draw dots or squares along a path.
+ * of 0 with `GSK_LINE_CAP_ROUND` or `GSK_LINE_CAP_SQUARE` to draw dots
+ * or squares along a path.
  *
  * If @n_dash is 0, if all elements in @dash are 0, or if there are
  * negative values in @dash, then dashing is disabled.
@@ -423,19 +421,19 @@ gsk_stroke_set_dash (GskStroke   *self,
 
   self->dash_length = dash_length;
   g_free (self->dash);
-  self->dash = g_memdup2 (dash, sizeof (gfloat) * n_dash);
+  self->dash = g_memdup (dash, sizeof (gfloat) * n_dash);
   self->n_dash = n_dash;
 }
 
 /**
  * gsk_stroke_get_dash:
- * @self: a stroke
+ * @self: a `GskStroke`
  * @n_dash: (out): number of elements in the array returned
  *
- * Gets the dash array in use.
+ * Gets the dash array in use or `NULL` if dashing is disabled.
  *
  * Returns: (array length=n_dash) (transfer none) (nullable):
- *   the dash array or `NULL` if the dash array is empty
+ *   The dash array or `NULL` if the dash array is empty.
  *
  * Since: 4.14
  */
@@ -453,7 +451,7 @@ gsk_stroke_get_dash (const GskStroke *self,
 
 /**
  * gsk_stroke_set_dash_offset:
- * @self: a stroke
+ * @self: a `GskStroke`
  * @offset: offset into the dash pattern
  *
  * Sets the offset into the dash pattern where dashing should begin.
@@ -476,11 +474,9 @@ gsk_stroke_set_dash_offset (GskStroke *self,
 
 /**
  * gsk_stroke_get_dash_offset:
- * @self: a stroke
+ * @self: a `GskStroke`
  *
- * Gets the dash offset.
- *
- * Returns: the dash offset
+ * Returns the dash_offset of a `GskStroke`.
  *
  * Since: 4.14
  */
@@ -494,9 +490,9 @@ gsk_stroke_get_dash_offset (const GskStroke *self)
 
 /*< private >
  * gsk_stroke_get_join_width:
- * @stroke: a stroke
+ * @stroke: a `GskStroke`
  *
- * Returns a width that is sufficient to use
+ * Return a width that is sufficient to use
  * when calculating stroke bounds around joins
  * and caps.
  *
@@ -513,10 +509,10 @@ gsk_stroke_get_join_width (const GskStroke *stroke)
       width = 0;
       break;
     case GSK_LINE_CAP_ROUND:
-      width = stroke->line_width / 2;
+      width = stroke->line_width;
       break;
     case GSK_LINE_CAP_SQUARE:
-      width = G_SQRT2 * stroke->line_width / 2;
+      width = G_SQRT2 * stroke->line_width;
       break;
     default:
       g_assert_not_reached ();
@@ -529,7 +525,7 @@ gsk_stroke_get_join_width (const GskStroke *stroke)
       break;
     case GSK_LINE_JOIN_ROUND:
     case GSK_LINE_JOIN_BEVEL:
-      width = MAX (width, stroke->line_width / 2);
+      width = MAX (width, stroke->line_width);
       break;
     default:
       g_assert_not_reached ();
@@ -537,3 +533,4 @@ gsk_stroke_get_join_width (const GskStroke *stroke)
 
   return width;
 }
+

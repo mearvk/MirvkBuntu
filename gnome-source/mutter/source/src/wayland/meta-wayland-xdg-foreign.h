@@ -27,5 +27,3 @@
 #include "wayland/meta-wayland-types.h"
 
 gboolean meta_wayland_xdg_foreign_init (MetaWaylandCompositor *compositor);
-
-void meta_wayland_xdg_foreign_finalize (MetaWaylandCompositor *compositor);

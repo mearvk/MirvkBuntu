@@ -210,17 +210,19 @@ maybe_release_barrier (gpointer key,
 
 static void
 maybe_release_barriers (MetaBarrierManagerNative *manager,
-                        graphene_point_t          prev,
-                        graphene_point_t          cur)
+                        float                     prev_x,
+                        float                     prev_y,
+                        float                     x,
+                        float                     y)
 {
   MetaLine2 motion = {
     .a = {
-      .x = prev.x,
-      .y = prev.y,
+      .x = prev_x,
+      .y = prev_y,
     },
     .b = {
-      .x = cur.x,
-      .y = cur.y,
+      .x = x,
+      .y = y,
     },
   };
 
@@ -350,17 +352,6 @@ typedef struct
   MetaBarrierState state;
 } MetaBarrierIdleData;
 
-static void
-barrier_idle_data_free (gpointer data)
-{
-  MetaBarrierIdleData *idle_data = data;
-
-  g_clear_pointer (&idle_data->event, meta_barrier_event_unref);
-  g_clear_object (&idle_data->barrier);
-
-  g_free (idle_data);
-}
-
 static gboolean
 emit_event_idle (MetaBarrierIdleData *idle_data)
 {
@@ -368,6 +359,8 @@ emit_event_idle (MetaBarrierIdleData *idle_data)
     meta_barrier_emit_hit_signal (idle_data->barrier, idle_data->event);
   else
     meta_barrier_emit_left_signal (idle_data->barrier, idle_data->event);
+
+  meta_barrier_event_unref (idle_data->event);
 
   return G_SOURCE_REMOVE;
 }
@@ -381,7 +374,7 @@ queue_event (MetaBarrierImplNative *self,
 
   idle_data = g_new0 (MetaBarrierIdleData, 1);
   idle_data->state = self->state;
-  g_set_object (&idle_data->barrier, self->barrier);
+  idle_data->barrier = self->barrier;
   idle_data->event = event;
 
   source = g_idle_source_new ();
@@ -389,7 +382,7 @@ queue_event (MetaBarrierImplNative *self,
   g_source_set_callback (source,
                          (GSourceFunc) emit_event_idle,
                          idle_data,
-                         barrier_idle_data_free);
+                         g_free);
 
   g_source_attach (source, self->main_context);
   g_source_unref (source);
@@ -452,9 +445,6 @@ maybe_emit_barrier_event (gpointer key, gpointer value, gpointer user_data)
   MetaBarrierImplNative *self = key;
   MetaBarrierEventData *data = user_data;
 
-  if (G_UNLIKELY (!self->is_active))
-    return;
-
   switch (self->state)
     {
     case META_BARRIER_STATE_ACTIVE:
@@ -479,7 +469,8 @@ maybe_emit_barrier_event (gpointer key, gpointer value, gpointer user_data)
 static void
 clamp_to_barrier (MetaBarrierImplNative *self,
                   MetaBarrierDirection  *motion_dir,
-                  graphene_point_t      *pos)
+                  float                 *x,
+                  float                 *y)
 {
   MetaBarrier *barrier = self->barrier;
   MetaBorder *border = meta_barrier_get_border (barrier);
@@ -487,9 +478,9 @@ clamp_to_barrier (MetaBarrierImplNative *self,
   if (is_barrier_horizontal (barrier))
     {
       if (*motion_dir & META_BARRIER_DIRECTION_POSITIVE_Y)
-        pos->y = border->line.a.y;
+        *y = border->line.a.y;
       else if (*motion_dir & META_BARRIER_DIRECTION_NEGATIVE_Y)
-        pos->y = border->line.a.y;
+        *y = border->line.a.y;
 
       self->blocked_dir = *motion_dir & (META_BARRIER_DIRECTION_POSITIVE_Y |
                                          META_BARRIER_DIRECTION_NEGATIVE_Y);
@@ -499,9 +490,9 @@ clamp_to_barrier (MetaBarrierImplNative *self,
   else
     {
       if (*motion_dir & META_BARRIER_DIRECTION_POSITIVE_X)
-        pos->x = border->line.a.x;
+        *x = border->line.a.x;
       else if (*motion_dir & META_BARRIER_DIRECTION_NEGATIVE_X)
-        pos->x = border->line.a.x;
+        *x = border->line.a.x;
 
       self->blocked_dir = *motion_dir & (META_BARRIER_DIRECTION_POSITIVE_X |
                                          META_BARRIER_DIRECTION_NEGATIVE_X);
@@ -515,12 +506,14 @@ clamp_to_barrier (MetaBarrierImplNative *self,
 static gboolean
 stick_to_barrier (MetaBarrierImplNative *self,
                   MetaBarrierDirection   motion_dir,
-                  graphene_point_t       prev,
-                  graphene_point_t      *cur_inout)
+                  float                  prev_x,
+                  float                  prev_y,
+                  float                 *x,
+                  float                 *y)
 {
   MetaLine2 motion = {
-    .a = { .x = prev.x, .y = prev.y },
-    .b = { .x = cur_inout->x, .y = cur_inout->y },
+    .a = { .x = prev_x, .y = prev_y },
+    .b = { .x = *x, .y = *y },
   };
   MetaBorder *border = meta_barrier_get_border (self->barrier);
   MetaVector2 intersection;
@@ -528,8 +521,8 @@ stick_to_barrier (MetaBarrierImplNative *self,
   if (meta_line2_intersects_with (&motion, &border->line,
                                   &intersection))
     {
-      cur_inout->x = intersection.x;
-      cur_inout->y = intersection.y;
+      *x = intersection.x;
+      *y = intersection.y;
 
       self->blocked_dir = motion_dir;
       self->state = META_BARRIER_STATE_HIT;
@@ -544,31 +537,44 @@ stick_to_barrier (MetaBarrierImplNative *self,
 
 void
 meta_barrier_manager_native_process_in_impl (MetaBarrierManagerNative *manager,
-                                             uint32_t                  time,
-                                             graphene_point_t          prev,
-                                             graphene_point_t         *new_inout)
+                                             ClutterInputDevice       *device,
+                                             guint32                   time,
+                                             float                    *x,
+                                             float                    *y)
 {
-  graphene_point_t orig = *new_inout;
+  graphene_point_t prev_pos;
+  float prev_x;
+  float prev_y;
+  float orig_x = *x;
+  float orig_y = *y;
   MetaBarrierDirection motion_dir = 0;
   MetaBarrierEventData barrier_event_data;
   MetaBarrierImplNative *barrier_impl;
 
+  if (!clutter_seat_query_state (clutter_input_device_get_seat (device),
+                                 device, NULL, &prev_pos, NULL))
+    return;
+
+  prev_x = prev_pos.x;
+  prev_y = prev_pos.y;
+
   if (manager->pointer_trap)
     {
-      *new_inout = prev;
+      *x = prev_pos.x;
+      *y = prev_pos.y;
       return;
     }
 
   g_mutex_lock (&manager->mutex);
 
   /* Get the direction of the motion vector. */
-  if (prev.x < new_inout->x)
+  if (prev_x < *x)
     motion_dir |= META_BARRIER_DIRECTION_POSITIVE_X;
-  else if (prev.x > new_inout->x)
+  else if (prev_x > *x)
     motion_dir |= META_BARRIER_DIRECTION_NEGATIVE_X;
-  if (prev.y < new_inout->y)
+  if (prev_y < *y)
     motion_dir |= META_BARRIER_DIRECTION_POSITIVE_Y;
-  else if (prev.y > new_inout->y)
+  else if (prev_y > *y)
     motion_dir |= META_BARRIER_DIRECTION_NEGATIVE_Y;
 
   /* Clamp to the closest barrier in any direction until either there are no
@@ -576,8 +582,8 @@ meta_barrier_manager_native_process_in_impl (MetaBarrierManagerNative *manager,
   while (motion_dir != 0)
     {
       if (get_closest_barrier (manager,
-                               prev.x, prev.y,
-                               new_inout->x, new_inout->y,
+                               prev_x, prev_y,
+                               *x, *y,
                                motion_dir,
                                &barrier_impl))
         {
@@ -586,28 +592,28 @@ meta_barrier_manager_native_process_in_impl (MetaBarrierManagerNative *manager,
           if (meta_barrier_get_flags (barrier) & META_BARRIER_FLAG_STICKY)
             {
               if (stick_to_barrier (barrier_impl, motion_dir,
-                                    prev, new_inout))
+                                    prev_x, prev_y, x, y))
                 break;
             }
 
-          clamp_to_barrier (barrier_impl, &motion_dir, new_inout);
+          clamp_to_barrier (barrier_impl, &motion_dir, x, y);
         }
       else
         break;
     }
 
   /* Potentially release active barrier movements. */
-  maybe_release_barriers (manager, prev, *new_inout);
+  maybe_release_barriers (manager, prev_x, prev_y, *x, *y);
 
   /* Initiate or continue barrier interaction. */
   barrier_event_data = (MetaBarrierEventData) {
     .time = time,
-    .prev_x = prev.x,
-    .prev_y = prev.y,
-    .x = new_inout->x,
-    .y = new_inout->y,
-    .dx = orig.x - prev.x,
-    .dy = orig.y - prev.y,
+    .prev_x = prev_x,
+    .prev_y = prev_y,
+    .x = *x,
+    .y = *y,
+    .dx = orig_x - prev_x,
+    .dy = orig_y - prev_y,
   };
 
   g_hash_table_foreach (manager->barriers,

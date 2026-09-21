@@ -55,20 +55,24 @@ struct _MetaPointerConstraintImplClass
   GObjectClass parent_class;
 
   void (* constrain) (MetaPointerConstraintImpl *constraint_impl,
+                      ClutterInputDevice        *device,
                       uint32_t                   time,
                       float                      prev_x,
                       float                      prev_y,
                       float                     *x,
                       float                     *y);
-  void (* ensure_constrained) (MetaPointerConstraintImpl *constraint_impl);
+  void (* ensure_constrained) (MetaPointerConstraintImpl *constraint_impl,
+                               ClutterInputDevice        *device);
 };
 
 void meta_pointer_constraint_impl_constrain (MetaPointerConstraintImpl *constraint_impl,
+                                             ClutterInputDevice        *device,
                                              uint32_t                   time,
                                              float                      prev_x,
                                              float                      prev_y,
                                              float                     *x,
                                              float                     *y);
-void meta_pointer_constraint_impl_ensure_constrained (MetaPointerConstraintImpl *constraint_impl);
+void meta_pointer_constraint_impl_ensure_constrained (MetaPointerConstraintImpl *constraint_impl,
+                                                      ClutterInputDevice        *device);
 
 G_END_DECLS

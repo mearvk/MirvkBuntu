@@ -70,19 +70,25 @@ typedef struct {
   gint total_items;
 } DeepCountState;
 
-typedef struct _ShellMimeSniffer
+typedef struct _ShellMimeSnifferPrivate   ShellMimeSnifferPrivate;
+
+struct _ShellMimeSniffer
 {
   GObject parent_instance;
 
+  ShellMimeSnifferPrivate *priv;
+};
+
+struct _ShellMimeSnifferPrivate {
   GFile *file;
 
   GCancellable *cancellable;
   guint watchdog_id;
 
   GTask *task;
-} ShellMimeSniffer;
+};
 
-G_DEFINE_FINAL_TYPE (ShellMimeSniffer, shell_mime_sniffer, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_PRIVATE (ShellMimeSniffer, shell_mime_sniffer, G_TYPE_OBJECT);
 
 static void deep_count_load (DeepCountState *state,
                              GFile *file);
@@ -226,7 +232,7 @@ prepare_async_result (DeepCountState *state)
   mimes = (gchar **) g_ptr_array_free (sniffed_mime, FALSE);
 
   g_array_free (results, TRUE);
-  g_task_return_pointer (self->task, mimes, (GDestroyNotify)g_strfreev);
+  g_task_return_pointer (self->priv->task, mimes, (GDestroyNotify)g_strfreev);
 }
 
 /* adapted from nautilus/libnautilus-private/nautilus-directory-async.c */
@@ -243,7 +249,7 @@ deep_count_one (DeepCountState *state,
       subdir = g_file_get_child (state->file, g_file_info_get_name (info));
       state->deep_count_subdirectories =
         g_list_append (state->deep_count_subdirectories, subdir);
-    }
+    } 
   else
     {
       content_type = g_file_info_get_content_type (info);
@@ -267,7 +273,7 @@ deep_count_finish (DeepCountState *state)
       g_object_unref (state->enumerator);
     }
 
-  g_cancellable_reset (state->self->cancellable);
+  g_cancellable_reset (state->self->priv->cancellable);
   g_clear_object (&state->file);
 
   g_list_free_full (state->deep_count_subdirectories, g_object_unref);
@@ -309,15 +315,15 @@ deep_count_more_files_callback (GObject *source_object,
 
   state = user_data;
 
-  if (g_cancellable_is_cancelled (state->self->cancellable))
+  if (g_cancellable_is_cancelled (state->self->priv->cancellable))
     {
       deep_count_finish (state);
       return;
     }
-
+	
   files = g_file_enumerator_next_files_finish (state->enumerator,
                                                res, NULL);
-
+  
   for (l = files; l != NULL; l = l->next)
     {
       info = l->data;
@@ -338,7 +344,7 @@ deep_count_more_files_callback (GObject *source_object,
       g_file_enumerator_next_files_async (state->enumerator,
                                           DIRECTORY_LOAD_ITEMS_PER_CALLBACK,
                                           G_PRIORITY_LOW,
-                                          state->self->cancellable,
+                                          state->self->priv->cancellable,
                                           deep_count_more_files_callback,
                                           state);
     }
@@ -356,7 +362,7 @@ deep_count_callback (GObject *source_object,
 
   state = user_data;
 
-  if (g_cancellable_is_cancelled (state->self->cancellable))
+  if (g_cancellable_is_cancelled (state->self->priv->cancellable))
     {
       deep_count_finish (state);
       return;
@@ -364,7 +370,7 @@ deep_count_callback (GObject *source_object,
 
   enumerator = g_file_enumerate_children_finish (G_FILE (source_object),
                                                  res, NULL);
-
+	
   if (enumerator == NULL)
     {
       deep_count_next_dir (state);
@@ -375,7 +381,7 @@ deep_count_callback (GObject *source_object,
       g_file_enumerator_next_files_async (state->enumerator,
                                           DIRECTORY_LOAD_ITEMS_PER_CALLBACK,
                                           G_PRIORITY_LOW,
-                                          state->self->cancellable,
+                                          state->self->priv->cancellable,
                                           deep_count_more_files_callback,
                                           state);
     }
@@ -391,7 +397,7 @@ deep_count_load (DeepCountState *state,
                                    LOADER_ATTRS,
                                    G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, /* flags */
                                    G_PRIORITY_LOW, /* prio */
-                                   state->self->cancellable,
+                                   state->self->priv->cancellable,
                                    deep_count_callback,
                                    state);
 }
@@ -404,7 +410,7 @@ deep_count_start (ShellMimeSniffer *self)
   state = g_new0 (DeepCountState, 1);
   state->self = self;
 
-  deep_count_load (state, self->file);
+  deep_count_load (state, self->priv->file);
 }
 
 static void
@@ -421,14 +427,14 @@ query_info_async_ready_cb (GObject *source,
 
   if (error != NULL)
     {
-      g_task_return_error (self->task, error);
+      g_task_return_error (self->priv->task, error);
 
       return;
     }
 
   if (g_file_info_get_file_type (info) != G_FILE_TYPE_DIRECTORY)
     {
-      g_task_return_new_error (self->task,
+      g_task_return_new_error (self->priv->task,
                                G_IO_ERROR,
                                G_IO_ERROR_NOT_DIRECTORY,
                                "Not a directory");
@@ -439,23 +445,25 @@ query_info_async_ready_cb (GObject *source,
   deep_count_start (self);
 }
 
-static void
+static gboolean
 watchdog_timeout_reached_cb (gpointer user_data)
 {
   ShellMimeSniffer *self = user_data;
 
-  self->watchdog_id = 0;
-  g_cancellable_cancel (self->cancellable);
+  self->priv->watchdog_id = 0;
+  g_cancellable_cancel (self->priv->cancellable);
+
+  return FALSE;
 }
 
 static void
 start_loading_file (ShellMimeSniffer *self)
 {
-  g_file_query_info_async (self->file,
+  g_file_query_info_async (self->priv->file,
                            LOADER_ATTRS,
                            G_FILE_QUERY_INFO_NONE,
                            G_PRIORITY_DEFAULT,
-                           self->cancellable,
+                           self->priv->cancellable,
                            query_info_async_ready_cb,
                            self);
 }
@@ -464,8 +472,8 @@ static void
 shell_mime_sniffer_set_file (ShellMimeSniffer *self,
                             GFile *file)
 {
-  g_clear_object (&self->file);
-  self->file = g_object_ref (file);
+  g_clear_object (&self->priv->file);
+  self->priv->file = g_object_ref (file);
 }
 
 static void
@@ -473,11 +481,11 @@ shell_mime_sniffer_dispose (GObject *object)
 {
   ShellMimeSniffer *self = SHELL_MIME_SNIFFER (object);
 
-  g_clear_object (&self->file);
-  g_clear_object (&self->cancellable);
-  g_clear_object (&self->task);
+  g_clear_object (&self->priv->file);
+  g_clear_object (&self->priv->cancellable);
+  g_clear_object (&self->priv->task);
 
-  g_clear_handle_id (&self->watchdog_id, g_source_remove);
+  g_clear_handle_id (&self->priv->watchdog_id, g_source_remove);
 
   G_OBJECT_CLASS (shell_mime_sniffer_parent_class)->dispose (object);
 }
@@ -492,7 +500,7 @@ shell_mime_sniffer_get_property (GObject *object,
 
   switch (prop_id) {
   case PROP_FILE:
-    g_value_set_object (value, self->file);
+    g_value_set_object (value, self->priv->file);
     break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -529,7 +537,9 @@ shell_mime_sniffer_class_init (ShellMimeSnifferClass *klass)
   oclass->set_property = shell_mime_sniffer_set_property;
 
   properties[PROP_FILE] =
-    g_param_spec_object ("file", NULL, NULL,
+    g_param_spec_object ("file",
+                         "File",
+                         "The loaded file",
                          G_TYPE_FILE,
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
@@ -539,6 +549,7 @@ shell_mime_sniffer_class_init (ShellMimeSnifferClass *klass)
 static void
 shell_mime_sniffer_init (ShellMimeSniffer *self)
 {
+  self->priv = shell_mime_sniffer_get_instance_private (self);
   init_mimetypes ();
 }
 
@@ -555,18 +566,17 @@ shell_mime_sniffer_sniff_async (ShellMimeSniffer *self,
                                 GAsyncReadyCallback callback,
                                 gpointer user_data)
 {
-  g_assert (self->watchdog_id == 0);
-  g_assert (self->task == NULL);
+  g_assert (self->priv->watchdog_id == 0);
+  g_assert (self->priv->task == NULL);
 
-  self->cancellable = g_cancellable_new ();
-  self->task = g_task_new (self, self->cancellable,
-                           callback, user_data);
-  g_task_set_source_tag (self->task, shell_mime_sniffer_sniff_async);
+  self->priv->cancellable = g_cancellable_new ();
+  self->priv->task = g_task_new (self, self->priv->cancellable,
+                                 callback, user_data);
 
-  self->watchdog_id =
-    g_timeout_add_once (WATCHDOG_TIMEOUT,
-                        watchdog_timeout_reached_cb, self);
-  g_source_set_name_by_id (self->watchdog_id, "[gnome-shell] watchdog_timeout_reached_cb");
+  self->priv->watchdog_id =
+    g_timeout_add (WATCHDOG_TIMEOUT,
+                   watchdog_timeout_reached_cb, self);
+  g_source_set_name_by_id (self->priv->watchdog_id, "[gnome-shell] watchdog_timeout_reached_cb");
 
   start_loading_file (self);
 }
@@ -576,5 +586,5 @@ shell_mime_sniffer_sniff_finish (ShellMimeSniffer *self,
                                  GAsyncResult *res,
                                  GError **error)
 {
-  return g_task_propagate_pointer (self->task, error);
+  return g_task_propagate_pointer (self->priv->task, error);
 }

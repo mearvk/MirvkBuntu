@@ -25,12 +25,12 @@
 #include "gdkcairocontextprivate.h"
 
 #include "gdkcairo.h"
-#include "gdksurface.h"
 
 /**
  * GdkCairoContext:
  *
- * Represents the platform-specific draw context.
+ * `GdkCairoContext` is an object representing the platform-specific
+ * draw context.
  *
  * `GdkCairoContext`s are created for a surface using
  * [method@Gdk.Surface.create_cairo_context], and the context
@@ -71,33 +71,24 @@ gdk_cairo_context_init (GdkCairoContext *self)
  *
  * Returns: (transfer full) (nullable): a Cairo context
  *   to draw on `GdkSurface
- *
- * Deprecated: 4.18: Drawing content with Cairo should be done via
- *   Cairo rendernodes, not by using renderers.
  */
 cairo_t *
 gdk_cairo_context_cairo_create (GdkCairoContext *self)
 {
   GdkDrawContext *draw_context;
   cairo_t *cr;
-  double scale;
 
   g_return_val_if_fail (GDK_IS_CAIRO_CONTEXT (self), NULL);
 
   draw_context = GDK_DRAW_CONTEXT (self);
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   if (!gdk_draw_context_is_in_frame (draw_context))
     return NULL;
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   cr = GDK_CAIRO_CONTEXT_GET_CLASS (self)->cairo_create (self);
 
-  gdk_cairo_region (cr, gdk_draw_context_get_render_region (draw_context));
+  gdk_cairo_region (cr, gdk_draw_context_get_frame_region (draw_context));
   cairo_clip (cr);
-
-  scale = gdk_surface_get_scale (gdk_draw_context_get_surface (draw_context));
-  cairo_scale (cr, scale, scale);
 
   return cr;
 }

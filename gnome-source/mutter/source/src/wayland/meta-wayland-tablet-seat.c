@@ -30,7 +30,7 @@
 #include "wayland/meta-wayland-tablet-tool.h"
 #include "wayland/meta-wayland-tablet.h"
 
-#include "tablet-v2-server-protocol.h"
+#include "tablet-unstable-v2-server-protocol.h"
 
 static void
 unbind_resource (struct wl_resource *resource)
@@ -167,6 +167,9 @@ is_tablet_device (ClutterInputDevice *device)
 {
   ClutterInputCapabilities capabilities;
 
+  if (clutter_input_device_get_device_mode (device) == CLUTTER_INPUT_MODE_LOGICAL)
+    return FALSE;
+
   capabilities = clutter_input_device_get_capabilities (device);
 
   return (capabilities & CLUTTER_INPUT_CAPABILITY_TABLET_TOOL) != 0;
@@ -176,6 +179,9 @@ static gboolean
 is_pad_device (ClutterInputDevice *device)
 {
   ClutterInputCapabilities capabilities;
+
+  if (clutter_input_device_get_device_mode (device) == CLUTTER_INPUT_MODE_LOGICAL)
+    return FALSE;
 
   capabilities = clutter_input_device_get_capabilities (device);
 
@@ -248,17 +254,11 @@ meta_wayland_tablet_seat_new (MetaWaylandTabletManager *manager,
 {
   MetaWaylandTabletSeat *tablet_seat;
   GList *devices, *l;
-  MetaWaylandCompositor *compositor = seat->compositor;
-  MetaContext *context =
-    meta_wayland_compositor_get_context (compositor);
-  MetaBackend *backend = meta_context_get_backend (context);
-  ClutterBackend *clutter_backend =
-    meta_backend_get_clutter_backend (backend);
 
   tablet_seat = g_new0 (MetaWaylandTabletSeat, 1);
   tablet_seat->manager = manager;
   tablet_seat->seat = seat;
-  tablet_seat->clutter_seat = clutter_backend_get_default_seat (clutter_backend);
+  tablet_seat->clutter_seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
   tablet_seat->tablets = g_hash_table_new_full (NULL, NULL, NULL,
                                                 (GDestroyNotify) meta_wayland_tablet_free);
   tablet_seat->tools = g_hash_table_new_full (NULL, NULL, NULL,
@@ -340,6 +340,13 @@ meta_wayland_tablet_seat_lookup_tablet (MetaWaylandTabletSeat *tablet_seat,
   return g_hash_table_lookup (tablet_seat->tablets, device);
 }
 
+MetaWaylandTabletTool *
+meta_wayland_tablet_seat_lookup_tool (MetaWaylandTabletSeat  *tablet_seat,
+                                      ClutterInputDeviceTool *tool)
+{
+  return g_hash_table_lookup (tablet_seat->tools, tool);
+}
+
 MetaWaylandTabletPad *
 meta_wayland_tablet_seat_lookup_pad (MetaWaylandTabletSeat *tablet_seat,
                                      ClutterInputDevice    *device)
@@ -349,6 +356,7 @@ meta_wayland_tablet_seat_lookup_pad (MetaWaylandTabletSeat *tablet_seat,
 
 static MetaWaylandTabletTool *
 meta_wayland_tablet_seat_ensure_tool (MetaWaylandTabletSeat  *tablet_seat,
+                                      ClutterInputDevice     *device,
                                       ClutterInputDeviceTool *device_tool)
 {
   MetaWaylandTabletTool *tool;
@@ -357,7 +365,7 @@ meta_wayland_tablet_seat_ensure_tool (MetaWaylandTabletSeat  *tablet_seat,
 
   if (!tool)
     {
-      tool = meta_wayland_tablet_tool_new (tablet_seat, device_tool);
+      tool = meta_wayland_tablet_tool_new (tablet_seat, device, device_tool);
       g_hash_table_insert (tablet_seat->tools, device_tool, tool);
     }
 
@@ -385,7 +393,7 @@ meta_wayland_tablet_seat_update (MetaWaylandTabletSeat *tablet_seat,
       device_tool = clutter_event_get_device_tool (event);
 
       if (device && device_tool)
-        tool = meta_wayland_tablet_seat_ensure_tool (tablet_seat, device_tool);
+        tool = meta_wayland_tablet_seat_ensure_tool (tablet_seat, device, device_tool);
 
       if (!tool)
         return;
@@ -396,7 +404,6 @@ meta_wayland_tablet_seat_update (MetaWaylandTabletSeat *tablet_seat,
     case CLUTTER_PAD_BUTTON_RELEASE:
     case CLUTTER_PAD_RING:
     case CLUTTER_PAD_STRIP:
-    case CLUTTER_PAD_DIAL:
       pad = g_hash_table_lookup (tablet_seat->pads, device);
       if (!pad)
         return;
@@ -435,15 +442,12 @@ meta_wayland_tablet_seat_handle_event (MetaWaylandTabletSeat *tablet_seat,
     case CLUTTER_PAD_BUTTON_RELEASE:
     case CLUTTER_PAD_RING:
     case CLUTTER_PAD_STRIP:
-    case CLUTTER_PAD_DIAL:
       pad = g_hash_table_lookup (tablet_seat->pads,
                                  clutter_event_get_source_device (event));
       if (!pad)
         return CLUTTER_EVENT_PROPAGATE;
 
       return meta_wayland_tablet_pad_handle_event (pad, event);
-    case CLUTTER_DEVICE_REMOVED:
-      return CLUTTER_EVENT_PROPAGATE;
     default:
       return CLUTTER_EVENT_STOP;
     }
@@ -566,13 +570,13 @@ meta_wayland_tablet_seat_can_popup (MetaWaylandTabletSeat *tablet_seat,
 }
 
 gboolean
-meta_wayland_tablet_seat_get_grab_info (MetaWaylandTabletSeat  *tablet_seat,
-                                        MetaWaylandSurface     *surface,
-                                        uint32_t                serial,
-                                        gboolean                require_pressed,
-                                        ClutterSprite         **sprite_out,
-                                        float                  *x,
-                                        float                  *y)
+meta_wayland_tablet_seat_get_grab_info (MetaWaylandTabletSeat *tablet_seat,
+                                        MetaWaylandSurface    *surface,
+                                        uint32_t               serial,
+                                        gboolean               require_pressed,
+                                        ClutterInputDevice   **device_out,
+                                        float                 *x,
+                                        float                 *y)
 {
   g_autoptr (GList) tools = NULL;
   GList *l;
@@ -587,7 +591,7 @@ meta_wayland_tablet_seat_get_grab_info (MetaWaylandTabletSeat  *tablet_seat,
                                                   surface,
                                                   serial,
                                                   require_pressed,
-                                                  sprite_out,
+                                                  device_out,
                                                   x, y))
         return TRUE;
     }
@@ -617,28 +621,6 @@ meta_wayland_tablet_seat_get_current_surface (MetaWaylandTabletSeat *tablet_seat
   return NULL;
 }
 
-MetaWaylandSurface *
-meta_wayland_tablet_seat_get_implicit_grab_surface (MetaWaylandTabletSeat *tablet_seat,
-                                                    ClutterInputDevice    *device)
-{
-  MetaWaylandTablet *tablet;
-  g_autoptr (GList) tools = NULL;
-  GList *l;
-
-  tools = g_hash_table_get_values (tablet_seat->tools);
-  tablet = meta_wayland_tablet_seat_lookup_tablet (tablet_seat, device);
-
-  for (l = tools; l; l = l->next)
-    {
-      MetaWaylandTabletTool *tool = l->data;
-
-      if (meta_wayland_tablet_tool_has_current_tablet (tool, tablet))
-        return meta_wayland_tablet_tool_get_implicit_grab_surface (tool);
-    }
-
-  return NULL;
-}
-
 void
 meta_wayland_tablet_seat_focus_surface (MetaWaylandTabletSeat *tablet_seat,
                                         ClutterInputDevice    *device,
@@ -658,24 +640,4 @@ meta_wayland_tablet_seat_focus_surface (MetaWaylandTabletSeat *tablet_seat,
       if (meta_wayland_tablet_tool_has_current_tablet (tool, tablet))
         meta_wayland_tablet_tool_focus_surface (tool, surface);
     }
-}
-
-ClutterCursor *
-meta_wayland_tablet_seat_get_cursor (MetaWaylandTabletSeat *tablet_seat,
-                                     ClutterSprite         *sprite)
-{
-  MetaWaylandTabletTool *tool;
-  GHashTableIter iter;
-
-  g_hash_table_iter_init (&iter, tablet_seat->tools);
-  while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &tool))
-    {
-      ClutterCursor *cursor;
-
-      cursor = meta_wayland_tablet_tool_get_cursor (tool, sprite);
-      if (cursor)
-        return cursor;
-    }
-
-  return NULL;
 }

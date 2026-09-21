@@ -37,7 +37,6 @@ class Systemd:
         self._notify_socket: socket.socket | None = None
         self._watchdog_interval: int | None = None
         self._last_ping: float = 0.0
-        self._component_statuses: dict[str, str] = {}
 
         socket_path = os.environ.get("NOTIFY_SOCKET")
         if socket_path:
@@ -61,25 +60,12 @@ class Systemd:
         # Reference:
         # https://freedesktop.org/software/systemd/man/sd_notify.html#Standalone%20Implementations
         if self._notify_socket:
-            debug.print_tokens(
+            debug.print_message(
                 debug.LEVEL_INFO,
-                ["SYSTEMD: Sending:", message.decode("utf-8")],
+                f"SYSTEMD: Sending: {message.decode('utf-8')}",
                 True,
             )
             self._notify_socket.sendall(message)
-
-    def set_status(self, component: str, status: str) -> None:
-        """Update a component's status and push the combined line to systemd."""
-        old_status = self._component_statuses.get(component)
-        if old_status == status:
-            return
-        self._component_statuses[component] = status
-        if not self._notify_socket:
-            return
-        combined = "; ".join(
-            f"{name}: {value}" for name, value in sorted(self._component_statuses.items())
-        )
-        self._notify(f"STATUS={combined}".encode())
 
     def notify_ready(self) -> None:
         """Tell systemd that Orca has finished starting up / reloading"""
@@ -106,8 +92,8 @@ class Systemd:
         if not self._watchdog_interval:
             return
 
-        tokens = ["SYSTEMD: notify_alive called.", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SYSTEMD: notify_alive called. {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         elapsed_ms = (time.time() - self._last_ping) * 1000
         if elapsed_ms >= self._watchdog_interval // 2:
             self._ping_watchdog()
@@ -126,13 +112,12 @@ class Systemd:
         # systemd will restart Orca. So, we want to ping more quickly than
         # requested, to avoid a situation where timer inaccuracies will
         # cause us to miss the deadline. systemd's code for this pings
-        # anywhere from 133% - 200% faster than necessary. We ping 4x as
-        # fast: the main-loop stall we can survive is the deadline minus one
-        # interval. Use a high priority so that it is scheduled ahead of
-        # other work done on the main loop (e.g. event processing during a
-        # flood).
+        # anywhere from 133% - 200% faster than necessary. For us it's
+        # easier to just ping 2x as fast. Use a high priority so that it is
+        # scheduled ahead of other work done on the main loop (e.g. event
+        # processing during a flood).
         GLib.timeout_add(
-            self._watchdog_interval // 4,
+            self._watchdog_interval // 2,
             _on_watchdog_tick,
             priority=GLib.PRIORITY_HIGH,
         )

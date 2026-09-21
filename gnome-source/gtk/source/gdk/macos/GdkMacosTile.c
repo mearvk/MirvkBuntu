@@ -30,6 +30,7 @@
 {
   self = [super init];
 
+  [self setContentsScale:1.0];
   [self setEdgeAntialiasingMask:0];
   [self setDrawsAsynchronously:YES];
 

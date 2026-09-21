@@ -22,8 +22,6 @@
 
 #include "core/util-private.h"
 
-#define DEVICE_ID_INVALID ((dev_t) {0})
-
 typedef enum _MetaDeviceFileFlags
 {
   META_DEVICE_FILE_FLAG_NONE = 0,
@@ -41,20 +39,10 @@ typedef enum _MetaDeviceFileTags
 typedef struct _MetaDeviceFile MetaDeviceFile;
 typedef struct _MetaDevicePool MetaDevicePool;
 
-static inline gboolean
-meta_is_device_id_valid (dev_t device_id)
-{
-  dev_t invalid_device_id = DEVICE_ID_INVALID;
-
-  return memcmp (&device_id, &invalid_device_id, sizeof (dev_t)) != 0;
-}
-
 META_EXPORT_TEST
 int meta_device_file_get_fd (MetaDeviceFile *device_file);
 
 const char * meta_device_file_get_path (MetaDeviceFile *device_file);
-
-dev_t meta_device_file_get_device_id (MetaDeviceFile *device_file);
 
 void meta_device_file_tag (MetaDeviceFile     *device_file,
                            MetaDeviceFileTags  tag,

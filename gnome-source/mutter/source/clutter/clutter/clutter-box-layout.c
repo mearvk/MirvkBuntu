@@ -222,6 +222,7 @@ get_base_size_for_opposite_orientation (ClutterBoxLayout   *self,
     clutter_box_layout_get_instance_private (self);
   ClutterActorIter iter;
   ClutterActor *child;
+  gint n_children = 0;
   gfloat minimum, natural;
   ClutterOrientation opposite_orientation =
     priv->orientation == CLUTTER_ORIENTATION_HORIZONTAL
@@ -237,6 +238,8 @@ get_base_size_for_opposite_orientation (ClutterBoxLayout   *self,
 
       if (!clutter_actor_is_visible (child))
 	continue;
+
+      n_children++;
 
       get_child_size (child, opposite_orientation, -1, &child_min, &child_nat);
 
@@ -516,12 +519,12 @@ compare_gap (gconstpointer p1,
   const guint *c1 = p1;
   const guint *c2 = p2;
 
-  const int d1 = (int) MAX (sizes[*c1].natural_size -
-                            sizes[*c1].minimum_size,
-                            0);
-  const int d2 = (int) MAX (sizes[*c2].natural_size -
-                            sizes[*c2].minimum_size,
-                            0);
+  const gint d1 = MAX (sizes[*c1].natural_size -
+                       sizes[*c1].minimum_size,
+                       0);
+  const gint d2 = MAX (sizes[*c2].natural_size -
+                       sizes[*c2].minimum_size,
+                       0);
 
   gint delta = (d2 - d1);
 
@@ -585,9 +588,9 @@ distribute_natural_allocation (float          extra_space,
    */
 
   /* Sort descending by gap and position. */
-  g_sort_array (spreading,
-                n_requested_sizes, sizeof (unsigned int),
-                compare_gap, sizes);
+  g_qsort_with_data (spreading,
+                     n_requested_sizes, sizeof (unsigned int),
+                     compare_gap, sizes);
 
   /* Distribute available space.
    * This master piece of a loop was conceived by Behdad Esfahbod.
@@ -598,7 +601,7 @@ distribute_natural_allocation (float          extra_space,
        * Sort order and reducing remaining space by assigned space
        * ensures that space is distributed equally.
        */
-      float glue = (extra_space + i) / (i + 1.0f);
+      float glue = (extra_space + i) / (i + 1.0);
       float gap =
         sizes[(spreading[i])].natural_size - sizes[(spreading[i])].minimum_size;
 
@@ -651,9 +654,9 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
   sizes = g_newa (RequestedSize, nvis_children);
 
   if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
-    size = (int) (box->y2 - box->y1 - (nvis_children - 1) * priv->spacing);
+    size = box->y2 - box->y1 - (nvis_children - 1) * priv->spacing;
   else
-    size = (int) (box->x2 - box->x1 - (nvis_children - 1) * priv->spacing);
+    size = box->x2 - box->x1 - (nvis_children - 1) * priv->spacing;
 
   actor = CLUTTER_ACTOR (container);
 
@@ -707,7 +710,7 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
                    ? box->x2 - box->x1
                    : box->y2 - box->y1);
 
-      size -= (int) sizes[i].minimum_size;
+      size -= sizes[i].minimum_size;
 
       sizes[i].actor = child;
 
@@ -720,9 +723,9 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
        * minimum sizes for children that are not going to fill
        */
       if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
-        size = (int) (box->y2 - box->y1 - (nvis_children - 1) * priv->spacing);
+        size = box->y2 - box->y1 - (nvis_children - 1) * priv->spacing;
       else
-        size = (int) (box->x2 - box->x1 - (nvis_children - 1) * priv->spacing);
+        size = box->x2 - box->x1 - (nvis_children - 1) * priv->spacing;
 
       extra = size / nvis_children;
       n_extra_widgets = size % nvis_children;
@@ -760,14 +763,14 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
   if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
     {
       child_allocation.x1 = box->x1;
-      child_allocation.x2 = MAX (1.0f, box->x2);
-      y = (int) box->y1;
+      child_allocation.x2 = MAX (1.0, box->x2);
+      y = box->y1;
     }
   else
     {
       child_allocation.y1 = box->y1;
-      child_allocation.y2 = MAX (1.0f, box->y2);
-      x = (int) box->x1;
+      child_allocation.y2 = MAX (1.0, box->y2);
+      x = box->x1;
     }
 
   i = 0;
@@ -811,7 +814,7 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
           if (clutter_actor_needs_expand (child, priv->orientation))
             {
               child_allocation.y1 = y;
-              child_allocation.y2 = child_allocation.y1 + MAX (1.0f, child_size);
+              child_allocation.y2 = child_allocation.y1 + MAX (1.0, child_size);
             }
           else
             {
@@ -819,14 +822,14 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
               child_allocation.y2 = child_allocation.y1 + sizes[i].minimum_size;
             }
 
-          y += (int) (child_size + priv->spacing);
+          y += child_size + priv->spacing;
         }
       else /* CLUTTER_ORIENTATION_HORIZONTAL */
         {
           if (clutter_actor_needs_expand (child, priv->orientation))
             {
               child_allocation.x1 = x;
-              child_allocation.x2 = child_allocation.x1 + MAX (1.0f, child_size);
+              child_allocation.x2 = child_allocation.x1 + MAX (1.0, child_size);
             }
           else
             {
@@ -834,7 +837,7 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
               child_allocation.x2 = child_allocation.x1 + sizes[i].minimum_size;
             }
 
-          x += (int) (child_size + priv->spacing);
+          x += child_size + priv->spacing;
 
           if (is_rtl)
             {
@@ -1020,7 +1023,7 @@ clutter_box_layout_set_spacing (ClutterBoxLayout *layout,
 
       clutter_layout_manager_layout_changed (manager);
 
-      g_object_notify_by_pspec (G_OBJECT (layout), obj_props[PROP_SPACING]);
+      g_object_notify (G_OBJECT (layout), "spacing");
     }
 }
 
@@ -1064,14 +1067,6 @@ clutter_box_layout_set_orientation (ClutterBoxLayout   *layout,
     return;
 
   priv->orientation = orientation;
-
-  if (priv->container != NULL)
-    {
-      clutter_actor_set_request_mode (CLUTTER_ACTOR (priv->container),
-                                      orientation == CLUTTER_ORIENTATION_VERTICAL
-                                        ? CLUTTER_REQUEST_HEIGHT_FOR_WIDTH
-                                        : CLUTTER_REQUEST_WIDTH_FOR_HEIGHT);
-    }
 
   manager = CLUTTER_LAYOUT_MANAGER (layout);
 
@@ -1127,7 +1122,7 @@ clutter_box_layout_set_homogeneous (ClutterBoxLayout *layout,
 
       clutter_layout_manager_layout_changed (manager);
 
-      g_object_notify_by_pspec (G_OBJECT (layout), obj_props[PROP_HOMOGENEOUS]);
+      g_object_notify (G_OBJECT (layout), "homogeneous");
     }
 }
 

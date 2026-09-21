@@ -2,6 +2,8 @@
 
 #include <gsk/gsktypes.h>
 
+G_BEGIN_DECLS
+
 typedef struct _GskBoundingBox GskBoundingBox;
 
 struct _GskBoundingBox {

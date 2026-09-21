@@ -30,9 +30,5 @@ void gdk_macos_device_query_state (GdkDevice        *device,
                                    double           *win_y,
                                    GdkModifierType  *mask);
 
-void gdk_macos_device_set_implicit_grab (GdkDevice  *device,
-                                         GdkSurface *surface);
-
-GdkSurface * gdk_macos_device_get_implicit_grab (GdkDevice *device);
-
 G_END_DECLS
+

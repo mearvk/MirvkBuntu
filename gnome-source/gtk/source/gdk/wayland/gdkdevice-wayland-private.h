@@ -1,6 +1,5 @@
 #pragma once
 
-#include "gdkfractionalscale-private.h"
 #include "gdkwaylanddevice.h"
 #include "gdkwaylandseat.h"
 
@@ -34,7 +33,7 @@ struct _GdkWaylandTouchData
   double y;
   GdkSurface *surface;
   uint32_t touch_down_serial;
-  uint32_t initial_touch : 1;
+  guint initial_touch : 1;
 };
 
 struct _GdkWaylandPointerFrameData
@@ -45,7 +44,6 @@ struct _GdkWaylandPointerFrameData
   double delta_x, delta_y;
   int32_t value120_x, value120_y;
   gint8 is_scroll_stop;
-  GdkScrollRelativeDirection relative_direction;
   enum wl_pointer_axis_source source;
 };
 
@@ -64,22 +62,15 @@ struct _GdkWaylandPointerData {
   uint32_t grab_time;
 
   struct wl_surface *pointer_surface;
-  struct wp_viewport *pointer_surface_viewport;
-  struct wp_cursor_shape_device_v1 *shape_device;
-
-  uint32_t cursor_is_default: 1;
-  uint32_t has_cursor_surface : 1;
-
-  uint32_t cursor_shape;
-
+  guint cursor_is_default: 1;
   GdkCursor *cursor;
-  uint32_t touchpad_event_sequence;
+  guint cursor_timeout_id;
+  guint cursor_image_index;
+  guint cursor_image_delay;
+  guint touchpad_event_sequence;
 
-  int32_t cursor_hotspot_x;
-  int32_t cursor_hotspot_y;
-
-  GdkFractionalScale preferred_scale;
-  struct wp_fractional_scale_v1 *fractional_scale;
+  guint current_output_scale;
+  GSList *pointer_surface_outputs;
 
   /* Accumulated event data for a pointer frame */
   GdkWaylandPointerFrameData frame;
@@ -91,15 +82,14 @@ struct _GdkWaylandTabletPadGroupData
   struct zwp_tablet_pad_group_v2 *wp_tablet_pad_group;
   GList *rings;
   GList *strips;
-  GList *dials;
   GList *buttons;
 
-  uint32_t mode_switch_serial;
-  uint32_t n_modes;
-  uint32_t current_mode;
+  guint mode_switch_serial;
+  guint n_modes;
+  guint current_mode;
 
   struct {
-    uint32_t source;
+    guint source;
     gboolean is_stop;
     double value;
   } axis_tmp_info;
@@ -113,13 +103,12 @@ struct _GdkWaylandTabletPadData
 
   GdkWaylandTabletData *current_tablet;
 
-  uint32_t enter_serial;
+  guint enter_serial;
   uint32_t n_buttons;
   char *path;
 
   GList *rings;
   GList *strips;
-  GList *dials;
   GList *mode_groups;
 };
 
@@ -127,11 +116,10 @@ struct _GdkWaylandTabletToolData
 {
   GdkSeat *seat;
   struct zwp_tablet_tool_v2 *wp_tablet_tool;
-  struct wp_cursor_shape_device_v1 *shape_device;
   GdkAxisFlags axes;
   GdkDeviceToolType type;
-  uint64_t hardware_serial;
-  uint64_t hardware_id_wacom;
+  guint64 hardware_serial;
+  guint64 hardware_id_wacom;
 
   GdkDeviceTool *tool;
   GdkWaylandTabletData *current_tablet;
@@ -144,13 +132,11 @@ struct _GdkWaylandTabletData
   char *path;
   uint32_t vid;
   uint32_t pid;
-  uint32_t bustype;
 
   GdkDevice *logical_device;
   GdkDevice *stylus_device;
   GdkSeat *seat;
   GdkWaylandPointerData pointer_info;
-  GList *events;
 
   GList *pads;
 
@@ -164,7 +150,7 @@ struct _GdkWaylandSeat
 {
   GdkSeat parent_instance;
 
-  uint32_t id;
+  guint32 id;
   struct wl_seat *wl_seat;
   struct wl_pointer *wl_pointer;
   struct wl_keyboard *wl_keyboard;
@@ -200,6 +186,7 @@ struct _GdkWaylandSeat
 
   GdkModifierType key_modifiers;
   GdkSurface *keyboard_focus;
+  GdkSurface *grab_surface;
   uint32_t grab_time;
   gboolean have_server_repeat;
   uint32_t server_repeat_rate;
@@ -211,10 +198,10 @@ struct _GdkWaylandSeat
   GdkDragAction pending_action;
 
   struct wl_callback *repeat_callback;
-  uint32_t repeat_timer;
-  uint32_t repeat_key;
-  uint32_t repeat_count;
-  int64_t repeat_deadline;
+  guint32 repeat_timer;
+  guint32 repeat_key;
+  guint32 repeat_count;
+  gint64 repeat_deadline;
   uint32_t keyboard_time;
   uint32_t keyboard_key_serial;
 
@@ -225,7 +212,7 @@ struct _GdkWaylandSeat
   GdkDrop *drop;
 
   /* Some tracking on gesture events */
-  uint32_t gesture_n_fingers;
+  guint gesture_n_fingers;
   double gesture_scale;
 
   GdkCursor *grab_cursor;
@@ -233,6 +220,9 @@ struct _GdkWaylandSeat
 
 #define GDK_TYPE_WAYLAND_DEVICE_PAD (gdk_wayland_device_pad_get_type ())
 GType gdk_wayland_device_pad_get_type (void);
+
+void gdk_wayland_seat_stop_cursor_animation (GdkWaylandSeat        *seat,
+                                             GdkWaylandPointerData *pointer);
 
 GdkWaylandPointerData * gdk_wayland_device_get_pointer (GdkWaylandDevice *wayland_device);
 
@@ -252,7 +242,7 @@ void gdk_wayland_device_query_state (GdkDevice        *device,
 
 void gdk_wayland_device_pad_set_feedback (GdkDevice           *device,
                                           GdkDevicePadFeature  feature,
-                                          uint32_t             feature_idx,
+                                          guint                feature_idx,
                                           const char          *label);
 
 GdkWaylandTabletPadData * gdk_wayland_seat_find_pad (GdkWaylandSeat *seat,
@@ -266,22 +256,12 @@ GdkWaylandTouchData * gdk_wayland_seat_get_touch (GdkWaylandSeat *seat,
 
 void gdk_wayland_device_maybe_emit_grab_crossing (GdkDevice  *device,
                                                   GdkSurface *window,
-                                                  uint32_t    time);
+                                                  guint32     time);
 
 GdkSurface * gdk_wayland_device_maybe_emit_ungrab_crossing (GdkDevice *device,
-                                                            uint32_t   time_);
+                                                            guint32    time_);
 
-void gdk_wayland_device_update_surface_cursor (GdkDevice *device);
+gboolean gdk_wayland_device_update_surface_cursor (GdkDevice *device);
 
 GdkModifierType gdk_wayland_device_get_modifiers (GdkDevice *device);
 
-GdkKeymap *_gdk_wayland_device_get_keymap (GdkDevice *device);
-
-GdkSurface * gdk_wayland_device_get_focus (GdkDevice *device);
-
-struct wl_data_device * gdk_wayland_device_get_data_device (GdkDevice *gdk_device);
-void gdk_wayland_device_set_selection (GdkDevice             *gdk_device,
-                                       struct wl_data_source *source);
-
-void gdk_wayland_device_unset_touch_grab (GdkDevice        *device,
-                                          GdkEventSequence *sequence);

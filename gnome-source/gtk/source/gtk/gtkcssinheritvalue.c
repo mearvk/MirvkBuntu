@@ -34,19 +34,23 @@ gtk_css_value_inherit_free (GtkCssValue *value)
 }
 
 static GtkCssValue *
-gtk_css_value_inherit_compute (GtkCssValue          *value,
-                               guint                 property_id,
-                               GtkCssComputeContext *context)
+gtk_css_value_inherit_compute (GtkCssValue      *value,
+                               guint             property_id,
+                               GtkStyleProvider *provider,
+                               GtkCssStyle      *style,
+                               GtkCssStyle      *parent_style)
 {
-  if (context->parent_style)
+  if (parent_style)
     {
-      return gtk_css_value_ref (gtk_css_style_get_value (context->parent_style, property_id));
+      return _gtk_css_value_ref (gtk_css_style_get_value (parent_style, property_id));
     }
   else
     {
-      return gtk_css_value_compute (_gtk_css_initial_value_get (),
-                                    property_id,
-                                    context);
+      return _gtk_css_value_compute (_gtk_css_initial_value_get (),
+                                     property_id,
+                                     provider,
+                                     style,
+                                     parent_style);
     }
 }
 
@@ -77,7 +81,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_INHERIT = {
   "GtkCssInheritValue",
   gtk_css_value_inherit_free,
   gtk_css_value_inherit_compute,
-  NULL,
   gtk_css_value_inherit_equal,
   gtk_css_value_inherit_transition,
   NULL,
@@ -90,7 +93,7 @@ static GtkCssValue inherit = { &GTK_CSS_VALUE_INHERIT, 1 };
 GtkCssValue *
 _gtk_css_inherit_value_new (void)
 {
-  return gtk_css_value_ref (&inherit);
+  return _gtk_css_value_ref (&inherit);
 }
 
 GtkCssValue *

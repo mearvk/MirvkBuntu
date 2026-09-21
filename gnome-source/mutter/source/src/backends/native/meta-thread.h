@@ -30,13 +30,6 @@ typedef enum _MetaThreadType
   META_THREAD_TYPE_USER,
 } MetaThreadType;
 
-typedef enum _MetaSchedulingPriority
-{
-  META_SCHEDULING_PRIORITY_NORMAL,
-  META_SCHEDULING_PRIORITY_REALTIME,
-  META_SCHEDULING_PRIORITY_HIGH_PRIORITY,
-} MetaSchedulingPriority;
-
 #define META_TYPE_THREAD (meta_thread_get_type ())
 META_EXPORT_TEST
 G_DECLARE_DERIVABLE_TYPE (MetaThread, meta_thread,
@@ -59,6 +52,10 @@ typedef void (* MetaThreadTaskFeedbackFunc) (gpointer      retval,
                                              gpointer      user_data);
 
 META_EXPORT_TEST
+void meta_thread_reset_thread_type (MetaThread     *thread,
+                                    MetaThreadType  thread_type);
+
+META_EXPORT_TEST
 void meta_thread_register_callback_context (MetaThread   *thread,
                                             GMainContext *main_context);
 
@@ -72,11 +69,6 @@ void meta_thread_queue_callback (MetaThread         *thread,
                                  MetaThreadCallback  callback,
                                  gpointer            user_data,
                                  GDestroyNotify      user_data_destroy);
-
-META_EXPORT_TEST
-void meta_thread_attach_source (MetaThread   *thread,
-                                GMainContext *main_context,
-                                GSource      *source);
 
 META_EXPORT_TEST
 void meta_thread_flush_callbacks (MetaThread *thread);

@@ -31,6 +31,7 @@ static void
 setup_test_environment (void)
 {
   MetaBackend *backend = meta_context_get_backend (test_context);
+  MetaSettings *settings = meta_backend_get_settings (backend);
   MetaMonitorManager *monitor_manager =
     meta_backend_get_monitor_manager (backend);
   MetaRenderer *renderer = meta_backend_get_renderer (backend);
@@ -38,10 +39,15 @@ setup_test_environment (void)
   GError *error = NULL;
   GList *views;
 
-  monitor_info = meta_virtual_monitor_info_new_simple (100, 100, 60.0,
-                                                       "MetaTestVendor",
-                                                       "MetaVirtualMonitor",
-                                                       "0x1234");
+  meta_settings_override_experimental_features (settings);
+  meta_settings_enable_experimental_feature (
+    settings,
+    META_EXPERIMENTAL_FEATURE_SCALE_MONITOR_FRAMEBUFFER);
+
+  monitor_info = meta_virtual_monitor_info_new (100, 100, 60.0,
+                                                "MetaTestVendor",
+                                                "MetaVirtualMonitor",
+                                                "0x1234");
   virtual_monitor = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                  monitor_info,
                                                                  &error);
@@ -89,7 +95,7 @@ meta_test_ref_test_sanity (void)
   actor1 = clutter_actor_new ();
   clutter_actor_set_position (actor1, 10, 10);
   clutter_actor_set_size (actor1, 50, 50);
-  clutter_actor_set_background_color (actor1, &COGL_COLOR_INIT (245, 121, 0, 255));
+  clutter_actor_set_background_color (actor1, &CLUTTER_COLOR_INIT (245, 121, 0, 255));
   clutter_actor_add_child (stage, actor1);
 
   meta_ref_test_verify_view (get_view (),
@@ -99,7 +105,7 @@ meta_test_ref_test_sanity (void)
   actor2 = clutter_actor_new ();
   clutter_actor_set_position (actor2, 20, 20);
   clutter_actor_set_size (actor2, 50, 50);
-  clutter_actor_set_background_color (actor2, &COGL_COLOR_INIT (52, 101, 164, 255));
+  clutter_actor_set_background_color (actor2, &CLUTTER_COLOR_INIT (52, 101, 164, 255));
   clutter_actor_add_child (stage, actor2);
 
   g_test_expect_message ("libmutter-test",
@@ -131,7 +137,7 @@ main (int    argc,
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   init_ref_test_sanity_tests ();
 

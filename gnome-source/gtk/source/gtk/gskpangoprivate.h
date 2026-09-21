@@ -20,7 +20,6 @@
 
 #include <pango/pango.h>
 #include "gtk/gtksnapshot.h"
-#include "gtk/gtkcssstyleprivate.h"
 
 G_BEGIN_DECLS
 
@@ -58,8 +57,7 @@ struct _GskPangoRenderer
 
   GtkWidget             *widget;
   GtkSnapshot           *snapshot;
-  GdkColor               fg_color;
-  GtkCssStyle           *shadow_style;
+  const GdkRGBA         *fg_color;
 
   /* Error underline color for this widget */
   GdkRGBA               *error_color;
@@ -76,7 +74,7 @@ struct _GskPangoRendererClass
   PangoRendererClass parent_class;
 };
 
-GType             gsk_pango_renderer_get_type  (void);
+GType             gsk_pango_renderer_get_type  (void) G_GNUC_CONST;
 void              gsk_pango_renderer_set_state (GskPangoRenderer      *crenderer,
                                                 GskPangoRendererState  state);
 void              gsk_pango_renderer_set_shape_handler (GskPangoRenderer      *crenderer,

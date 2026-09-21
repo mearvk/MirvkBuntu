@@ -22,11 +22,11 @@
 #include <stdint.h>
 #include <xf86drmMode.h>
 
+#include "backends/meta-monitor-transform.h"
 #include "backends/meta-output.h"
 #include "backends/native/meta-drm-buffer.h"
 #include "backends/native/meta-kms-types.h"
 #include "meta/boxes.h"
-#include "mtk/mtk.h"
 
 typedef enum _MetaKmsFeedbackResult
 {
@@ -39,7 +39,7 @@ typedef enum _MetaKmsAssignPlaneFlag
   META_KMS_ASSIGN_PLANE_FLAG_NONE = 0,
   META_KMS_ASSIGN_PLANE_FLAG_FB_UNCHANGED = 1 << 0,
   META_KMS_ASSIGN_PLANE_FLAG_ALLOW_FAIL = 1 << 1,
-  META_KMS_ASSIGN_PLANE_FLAG_DISABLE_IMPLICIT_SYNC = 1 << 2,
+  META_KMS_ASSIGN_PLANE_FLAG_DIRECT_SCANOUT = 1 << 2,
 } MetaKmsAssignPlaneFlag;
 
 struct _MetaKmsPageFlipListenerVtable
@@ -86,12 +86,14 @@ MetaKmsFeedbackResult meta_kms_feedback_get_result (const MetaKmsFeedback *feedb
 
 gboolean meta_kms_feedback_did_pass (const MetaKmsFeedback *feedback);
 
+GList * meta_kms_feedback_get_failed_planes (const MetaKmsFeedback *feedback);
+
 const GError * meta_kms_feedback_get_error (const MetaKmsFeedback *feedback);
 
-int64_t meta_kms_feedback_get_ready_time_us (const MetaKmsFeedback *feedback);
-
-void meta_kms_feedback_set_ready_time_us (MetaKmsFeedback *feedback,
-                                          int64_t          ready_time_us);
+META_EXPORT_TEST
+void meta_kms_feedback_dispatch_result (MetaKmsFeedback *feedback,
+                                        MetaKms         *kms,
+                                        GList           *result_listeners);
 
 META_EXPORT_TEST
 MetaKmsUpdate * meta_kms_update_new (MetaKmsDevice *device);
@@ -137,6 +139,9 @@ void meta_kms_update_set_broadcast_rgb (MetaKmsUpdate      *update,
                                         MetaOutputRGBRange  rgb_range);
 
 META_EXPORT_TEST
+void meta_kms_update_set_power_save (MetaKmsUpdate *update);
+
+META_EXPORT_TEST
 void meta_kms_update_mode_set (MetaKmsUpdate *update,
                                MetaKmsCrtc   *crtc,
                                GList         *connectors,
@@ -147,33 +152,14 @@ void meta_kms_update_set_vrr (MetaKmsUpdate *update,
                               MetaKmsCrtc   *crtc,
                               gboolean       enabled);
 
-void meta_kms_update_set_crtc_degamma (MetaKmsUpdate      *update,
-                                       MetaKmsCrtc        *crtc,
-                                       const MetaGammaLut *degamma);
-
-void meta_kms_update_set_crtc_ctm (MetaKmsUpdate *update,
-                                   MetaKmsCrtc   *crtc,
-                                   const MetaCtm *ctm);
-
 META_EXPORT_TEST
 void meta_kms_update_set_crtc_gamma (MetaKmsUpdate      *update,
                                      MetaKmsCrtc        *crtc,
                                      const MetaGammaLut *gamma);
 
-int
-meta_kms_update_get_sync_fd (MetaKmsUpdate *update);
-
-void
-meta_kms_update_set_sync_fd (MetaKmsUpdate *update,
-                             int            sync_fd);
-
-int64_t meta_kms_update_get_target_presentation_time (MetaKmsUpdate *update);
-
-void meta_kms_update_set_target_presentation_time (MetaKmsUpdate *update,
-                                                   int64_t        target_presentation_time_us);
-
 void meta_kms_plane_assignment_set_fb_damage (MetaKmsPlaneAssignment *plane_assignment,
-                                              const MtkRegion        *region);
+                                              const int              *rectangles,
+                                              int                     n_rectangles);
 
 META_EXPORT_TEST
 MetaKmsPlaneAssignment * meta_kms_update_assign_plane (MetaKmsUpdate          *update,
@@ -195,6 +181,10 @@ void meta_kms_update_add_page_flip_listener (MetaKmsUpdate                      
                                              GMainContext                        *main_context,
                                              gpointer                             user_data,
                                              GDestroyNotify                       destroy_notify);
+
+void meta_kms_update_set_custom_page_flip (MetaKmsUpdate             *update,
+                                           MetaKmsCustomPageFlipFunc  func,
+                                           gpointer                   user_data);
 
 META_EXPORT_TEST
 void meta_kms_plane_assignment_set_cursor_hotspot (MetaKmsPlaneAssignment *plane_assignment,
@@ -227,7 +217,7 @@ meta_fixed_16_to_int (MetaFixed16 fixed)
 static inline MetaFixed16
 meta_fixed_16_from_double (double d)
 {
-  return (MetaFixed16) (d * (1 << 16));
+  return d * (1 << 16);
 }
 
 static inline double

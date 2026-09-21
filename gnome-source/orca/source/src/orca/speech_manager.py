@@ -21,6 +21,7 @@
 # pylint: disable=too-many-public-methods
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-positional-arguments
+# pylint: disable=too-many-statements
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-lines
 
@@ -29,43 +30,1240 @@
 from __future__ import annotations
 
 import importlib
-import os
+import locale
+import queue
+import threading
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GObject, Gtk
+
 from . import (
+    cmdnames,
     command_manager,
     dbus_service,
     debug,
     gsettings_registry,
     guilabels,
     input_event,
-    language_utilities,
+    keybindings,
     messages,
+    preferences_grid_base,
     presentation_manager,
-    speech_manager_command_definitions,
+    speech,
     speechserver,
-    systemd,
 )
 from .acss import ACSS
-from .extension import Extension
 from .speechserver import CapitalizationStyle, PunctuationStyle
 
 if TYPE_CHECKING:
-    from .command import Command, KeyboardCommand
-    from .dbus_service import UInt32
     from .scripts import default
-    from .speech_manager_preferences_grid import VoicesPreferencesGrid, VoiceTypesPreferencesGrid
     from .speechserver import SpeechServer
 
 SPEECH_FACTORY_MODULES: list[str] = ["speechdispatcherfactory", "spiel"]
 
 
+# pylint: disable-next=too-many-instance-attributes
+class VoicesPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+    """GtkGrid containing the Voice settings page."""
+
+    _VOICE_SCHEMA = "voice"
+
+    class VoiceType(Enum):
+        """Voice type enumeration for voice settings."""
+
+        DEFAULT = 0
+        UPPERCASE = 1
+        HYPERLINK = 2
+        SYSTEM = 3
+
+    def __init__(self, manager: SpeechManager, app_name: str = "") -> None:
+        super().__init__(guilabels.SPEECH)
+        self._manager = manager
+        self._app_name: str = app_name
+        self._initializing = True
+
+        self._default_voice = manager.get_voice_properties(
+            speechserver.DEFAULT_VOICE,
+            app_name=self._app_name,
+        )
+        self._uppercase_voice = manager.get_voice_properties(
+            speechserver.UPPERCASE_VOICE,
+            app_name=self._app_name,
+        )
+        self._hyperlink_voice = manager.get_voice_properties(
+            speechserver.HYPERLINK_VOICE,
+            app_name=self._app_name,
+        )
+        self._system_voice = manager.get_voice_properties(
+            speechserver.SYSTEM_VOICE,
+            app_name=self._app_name,
+        )
+
+        # All voice family dicts from server
+        self._voice_families: list[speechserver.VoiceFamily] = []
+        # Filtered families for each voice type
+        self._default_family_choices: list[speechserver.VoiceFamily] = []
+        self._hyperlink_family_choices: list[speechserver.VoiceFamily] = []
+        self._uppercase_family_choices: list[speechserver.VoiceFamily] = []
+        self._system_family_choices: list[speechserver.VoiceFamily] = []
+
+        self._speech_systems_combo: Gtk.ComboBox
+        self._speech_synthesizers_combo: Gtk.ComboBox
+        self._punctuation_combo: Gtk.ComboBox
+        self._capitalization_combo: Gtk.ComboBox
+        self._global_frame: Gtk.Frame | None = None
+        self._voice_types_frame: Gtk.Frame | None = None
+
+        # Default voice widgets (created on-demand in dialogs)
+        self._default_languages_combo: Gtk.ComboBox | None = None
+        self._default_families_combo: Gtk.ComboBox | None = None
+        self._default_rate_scale: Gtk.Scale | None = None
+        self._default_pitch_scale: Gtk.Scale | None = None
+        self._default_volume_scale: Gtk.Scale | None = None
+
+        # Hyperlink voice widgets (created on-demand in dialogs)
+        self._hyperlink_languages_combo: Gtk.ComboBox | None = None
+        self._hyperlink_families_combo: Gtk.ComboBox | None = None
+        self._hyperlink_rate_scale: Gtk.Scale | None = None
+        self._hyperlink_pitch_scale: Gtk.Scale | None = None
+        self._hyperlink_volume_scale: Gtk.Scale | None = None
+
+        # Uppercase voice widgets (created on-demand in dialogs)
+        self._uppercase_languages_combo: Gtk.ComboBox | None = None
+        self._uppercase_families_combo: Gtk.ComboBox | None = None
+        self._uppercase_rate_scale: Gtk.Scale | None = None
+        self._uppercase_pitch_scale: Gtk.Scale | None = None
+        self._uppercase_volume_scale: Gtk.Scale | None = None
+
+        # System voice widgets (created on-demand in dialogs)
+        self._system_languages_combo: Gtk.ComboBox | None = None
+        self._system_families_combo: Gtk.ComboBox | None = None
+        self._system_rate_scale: Gtk.Scale | None = None
+        self._system_pitch_scale: Gtk.Scale | None = None
+        self._system_volume_scale: Gtk.Scale | None = None
+
+        self._families_sorted: bool = False
+
+        self._build()
+        self._populate_speech_systems()
+        self.refresh()
+
+    def _build(self) -> None:
+        """Create the Gtk widgets composing the grid."""
+
+        row = 0
+
+        self._global_frame, global_content = self._create_frame(
+            guilabels.VOICE_GLOBAL_VOICE_SETTINGS,
+            margin_top=12,
+        )
+
+        punctuation_model = Gtk.ListStore(GObject.TYPE_STRING, GObject.TYPE_INT)
+        punctuation_model.append([guilabels.PUNCTUATION_STYLE_NONE, PunctuationStyle.NONE.value])
+        punctuation_model.append([guilabels.PUNCTUATION_STYLE_SOME, PunctuationStyle.SOME.value])
+        punctuation_model.append([guilabels.PUNCTUATION_STYLE_MOST, PunctuationStyle.MOST.value])
+        punctuation_model.append([guilabels.PUNCTUATION_STYLE_ALL, PunctuationStyle.ALL.value])
+
+        capitalization_model = Gtk.ListStore(GObject.TYPE_STRING, GObject.TYPE_STRING)
+        capitalization_model.append(
+            [guilabels.CAPITALIZATION_STYLE_NONE, CapitalizationStyle.NONE.value],
+        )
+        capitalization_model.append(
+            [guilabels.CAPITALIZATION_STYLE_ICON, CapitalizationStyle.ICON.value],
+        )
+        capitalization_model.append(
+            [guilabels.CAPITALIZATION_STYLE_SPELL, CapitalizationStyle.SPELL.value],
+        )
+
+        global_listbox = preferences_grid_base.FocusManagedListBox()
+        combo_size_group = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
+
+        row_data = [
+            (
+                guilabels.VOICE_SPEECH_SYSTEM,
+                Gtk.ListStore(GObject.TYPE_STRING),
+                self._on_speech_system_changed,
+            ),
+            (
+                guilabels.VOICE_SPEECH_SYNTHESIZER,
+                Gtk.ListStore(GObject.TYPE_STRING),
+                self._on_speech_synthesizer_changed,
+            ),
+            (guilabels.PUNCTUATION_STYLE, punctuation_model, self._on_punctuation_changed),
+            (
+                guilabels.VOICE_CAPITALIZATION_STYLE,
+                capitalization_model,
+                self._on_capitalization_changed,
+            ),
+        ]
+
+        global_combos = []
+        for label_text, model, changed_handler in row_data:
+            row_widget, combo, _label = self._create_combo_box_row(
+                label_text,
+                model,
+                changed_handler,
+                include_top_separator=False,
+            )
+            combo_size_group.add_widget(combo)
+            global_listbox.add_row_with_widget(row_widget, combo)
+            global_combos.append(combo)
+
+        self._speech_systems_combo = global_combos[0]
+        self._speech_synthesizers_combo = global_combos[1]
+        self._punctuation_combo = global_combos[2]
+        self._capitalization_combo = global_combos[3]
+
+        switch_data = [
+            (
+                guilabels.VOICE_SPEAK_NUMBERS_AS_DIGITS,
+                self._on_speak_numbers_toggled,
+                self._manager.get_speak_numbers_as_digits(),
+            ),
+            (
+                guilabels.SPEECH_SPEAK_COLORS_AS_NAMES,
+                self._on_use_color_names_toggled,
+                self._manager.get_use_color_names(),
+            ),
+            (
+                guilabels.SPEECH_BREAK_INTO_CHUNKS,
+                self._on_enable_pause_breaks_toggled,
+                self._manager.get_insert_pauses_between_utterances(),
+            ),
+            (
+                guilabels.SPEECH_USE_PRONUNCIATION_DICTIONARY,
+                self._on_use_pronunciation_dict_toggled,
+                self._manager.get_use_pronunciation_dictionary(),
+            ),
+            (
+                guilabels.AUTO_LANGUAGE_SWITCHING,
+                self._on_auto_language_switching_toggled,
+                self._manager.get_auto_language_switching(),
+            ),
+        ]
+
+        switches = []
+        for label_text, handler, state in switch_data:
+            row_widget, switch, _label = self._create_switch_row(
+                label_text,
+                handler,
+                state,
+                include_top_separator=False,
+            )
+            global_listbox.add_row_with_widget(row_widget, switch)
+            switches.append(switch)
+
+        self._speak_numbers_switch = switches[0]
+        self._use_color_names_switch = switches[1]
+        self._enable_pause_breaks_switch = switches[2]
+        self._use_pronunciation_dict_switch = switches[3]
+        self._auto_language_switching_switch = switches[4]
+
+        global_content.add(global_listbox)  # pylint: disable=no-member
+        self.attach(self._global_frame, 0, row, 1, 1)
+        row += 1
+
+        self._voice_types_frame, voice_types_content = self._create_frame(
+            guilabels.VOICE_VOICE_TYPE_SETTINGS,
+            margin_top=12,
+        )
+
+        voice_types_listbox, voice_buttons = self._create_button_listbox(
+            [
+                (
+                    guilabels.SPEECH_VOICE_TYPE_DEFAULT,
+                    "applications-system-symbolic",
+                    lambda _btn: self._show_voice_settings_dialog(self.VoiceType.DEFAULT),
+                ),
+                (
+                    guilabels.SPEECH_VOICE_TYPE_HYPERLINK,
+                    "applications-system-symbolic",
+                    lambda _btn: self._show_voice_settings_dialog(self.VoiceType.HYPERLINK),
+                ),
+                (
+                    guilabels.SPEECH_VOICE_TYPE_UPPERCASE,
+                    "applications-system-symbolic",
+                    lambda _btn: self._show_voice_settings_dialog(self.VoiceType.UPPERCASE),
+                ),
+                (
+                    guilabels.SPEECH_VOICE_TYPE_SYSTEM,
+                    "applications-system-symbolic",
+                    lambda _btn: self._show_voice_settings_dialog(self.VoiceType.SYSTEM),
+                ),
+            ],
+        )
+
+        voice_type_labels = [
+            guilabels.SPEECH_VOICE_TYPE_DEFAULT,
+            guilabels.SPEECH_VOICE_TYPE_HYPERLINK,
+            guilabels.SPEECH_VOICE_TYPE_UPPERCASE,
+            guilabels.SPEECH_VOICE_TYPE_SYSTEM,
+        ]
+        for button, voice_label in zip(voice_buttons, voice_type_labels, strict=True):
+            accessible_name = guilabels.VOICE_TYPE_SETTINGS % voice_label
+            button.set_tooltip_text(accessible_name)
+            accessible = button.get_accessible()
+            if accessible:
+                accessible.set_name(accessible_name)
+
+        voice_types_content.add(voice_types_listbox)  # pylint: disable=no-member
+        self.attach(self._voice_types_frame, 0, row, 1, 1)
+
+        self.show_all()  # pylint: disable=no-member
+
+    def _show_voice_settings_dialog(self, voice_type: VoicesPreferencesGrid.VoiceType) -> None:
+        """Show a dialog for editing settings for a specific voice type."""
+
+        voice_type_labels = {
+            self.VoiceType.DEFAULT: guilabels.SPEECH_VOICE_TYPE_DEFAULT,
+            self.VoiceType.HYPERLINK: guilabels.SPEECH_VOICE_TYPE_HYPERLINK,
+            self.VoiceType.UPPERCASE: guilabels.SPEECH_VOICE_TYPE_UPPERCASE,
+            self.VoiceType.SYSTEM: guilabels.SPEECH_VOICE_TYPE_SYSTEM,
+        }
+        title = voice_type_labels.get(voice_type, "Voice Settings")
+
+        # Save current ACSS state in case user cancels
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        saved_acss = ACSS(dict(voice_acss))
+
+        dialog, ok_button = self._create_header_bar_dialog(
+            title,
+            guilabels.BTN_CANCEL,
+            guilabels.BTN_OK,
+        )
+
+        content_area = dialog.get_content_area()
+
+        voice_listbox = preferences_grid_base.FocusManagedListBox()
+        combo_size_group = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
+
+        def on_language_changed(widget: Gtk.ComboBox) -> None:
+            self._on_speech_language_changed(widget, voice_type)
+
+        lang_row, lang_combo, _lang_label = self._create_combo_box_row(
+            guilabels.VOICE_LANGUAGE,
+            Gtk.ListStore(GObject.TYPE_STRING),
+            on_language_changed,
+            include_top_separator=False,
+        )
+        combo_size_group.add_widget(lang_combo)
+        voice_listbox.add_row_with_widget(lang_row, lang_combo)
+
+        def on_family_changed(widget: Gtk.ComboBox) -> None:
+            self._on_speech_family_changed(widget, voice_type)
+
+        person_row, person_combo, _person_label = self._create_combo_box_row(
+            guilabels.VOICE_PERSON,
+            Gtk.ListStore(GObject.TYPE_STRING),
+            on_family_changed,
+            include_top_separator=False,
+        )
+        combo_size_group.add_widget(person_combo)
+        voice_listbox.add_row_with_widget(person_row, person_combo)
+
+        def on_rate_changed(widget: Gtk.Scale) -> None:
+            self._on_rate_changed(widget, voice_type)
+
+        rate_adj = Gtk.Adjustment(value=50, lower=0, upper=100, step_increment=1, page_increment=10)
+        rate_row, rate_scale, _rate_label = self._create_slider_row(
+            guilabels.VOICE_RATE,
+            rate_adj,
+            changed_handler=on_rate_changed,
+            include_top_separator=False,
+        )
+        voice_listbox.add_row_with_widget(rate_row, rate_scale)
+
+        def on_pitch_changed(widget: Gtk.Scale) -> None:
+            self._on_pitch_changed(widget, voice_type)
+
+        pitch_adj = Gtk.Adjustment(
+            value=5.0,
+            lower=0,
+            upper=10,
+            step_increment=0.1,
+            page_increment=1,
+        )
+        pitch_row, pitch_scale, _pitch_label = self._create_slider_row(
+            guilabels.VOICE_PITCH,
+            pitch_adj,
+            changed_handler=on_pitch_changed,
+            include_top_separator=False,
+            digits=1,
+        )
+        voice_listbox.add_row_with_widget(pitch_row, pitch_scale)
+
+        def on_volume_changed(widget: Gtk.Scale) -> None:
+            self._on_volume_changed(widget, voice_type)
+
+        volume_adj = Gtk.Adjustment(
+            value=10.0,
+            lower=0,
+            upper=10,
+            step_increment=0.1,
+            page_increment=1,
+        )
+        volume_row, volume_scale, _volume_label = self._create_slider_row(
+            guilabels.VOICE_VOLUME,
+            volume_adj,
+            changed_handler=on_volume_changed,
+            include_top_separator=False,
+            digits=1,
+        )
+        voice_listbox.add_row_with_widget(volume_row, volume_scale)
+
+        languages_combo = lang_combo
+        families_combo = person_combo
+
+        if voice_type == self.VoiceType.DEFAULT:
+            self._default_languages_combo = languages_combo
+            self._default_families_combo = families_combo
+            self._default_rate_scale = rate_scale
+            self._default_pitch_scale = pitch_scale
+            self._default_volume_scale = volume_scale
+        elif voice_type == self.VoiceType.HYPERLINK:
+            self._hyperlink_languages_combo = languages_combo
+            self._hyperlink_families_combo = families_combo
+            self._hyperlink_rate_scale = rate_scale
+            self._hyperlink_pitch_scale = pitch_scale
+            self._hyperlink_volume_scale = volume_scale
+        elif voice_type == self.VoiceType.UPPERCASE:
+            self._uppercase_languages_combo = languages_combo
+            self._uppercase_families_combo = families_combo
+            self._uppercase_rate_scale = rate_scale
+            self._uppercase_pitch_scale = pitch_scale
+            self._uppercase_volume_scale = volume_scale
+        elif voice_type == self.VoiceType.SYSTEM:
+            self._system_languages_combo = languages_combo
+            self._system_families_combo = families_combo
+            self._system_rate_scale = rate_scale
+            self._system_pitch_scale = pitch_scale
+            self._system_volume_scale = volume_scale
+
+        self._populate_languages_for_voice_type(voice_type)
+        self._populate_families_for_voice_type(voice_type, apply_changes=False)
+
+        self._initializing = True
+        self._refresh_voice_widgets(voice_type, rate_scale, pitch_scale, volume_scale)
+        self._initializing = False
+
+        def on_response(dlg, response_id):
+            if response_id in (Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT):
+                # User cancelled - revert local copy and sync runtime values
+                voice_acss.clear()
+                voice_acss.update(saved_acss)
+            else:
+                # User clicked OK. The combo may show a selection the user
+                # didn't interact with (e.g. auto-selected first entry after
+                # a synthesizer change). Sync it so the ACSS dict matches
+                # what the UI shows.
+                if ACSS.FAMILY not in voice_acss:
+                    _lang, families_combo, family_choices = self._get_widgets_for_voice_type(
+                        voice_type
+                    )
+                    active = families_combo.get_active()
+                    if 0 <= active < len(family_choices):
+                        voice_acss[ACSS.FAMILY] = family_choices[active]
+                self._has_unsaved_changes = True
+
+            self._sync_voice_to_settings(voice_type)
+            dlg.destroy()
+
+        dialog.connect("response", on_response)
+
+        parent = self.get_toplevel()  # pylint: disable=no-member
+
+        def on_parent_destroy(*_args):
+            if not dialog.get_property("visible"):
+                return
+            # Trigger cancel response which will clean up and destroy the dialog
+            dialog.response(Gtk.ResponseType.DELETE_EVENT)
+
+        parent.connect("destroy", on_parent_destroy)
+
+        content_area.pack_start(voice_listbox, True, True, 0)
+        dialog.show_all()  # pylint: disable=no-member
+        ok_button.grab_default()
+
+    # TODO - JD: Remove this function if it continues to prove unnecessary
+    # pylint: disable-next=useless-parent-delegation
+    def has_changes(self) -> bool:
+        """Return True if there are unsaved changes."""
+
+        return super().has_changes()
+
+    def reload(self) -> None:
+        """Reload settings from manager and refresh the UI."""
+
+        app = self._app_name
+        self._default_voice = self._manager.get_voice_properties(
+            speechserver.DEFAULT_VOICE,
+            app_name=app,
+        )
+        self._uppercase_voice = self._manager.get_voice_properties(
+            speechserver.UPPERCASE_VOICE,
+            app_name=app,
+        )
+        self._hyperlink_voice = self._manager.get_voice_properties(
+            speechserver.HYPERLINK_VOICE,
+            app_name=app,
+        )
+        self._system_voice = self._manager.get_voice_properties(
+            speechserver.SYSTEM_VOICE,
+            app_name=app,
+        )
+
+        self._voice_families = self._manager.get_voice_families()
+        self._families_sorted = False
+
+        self._has_unsaved_changes = False
+        self.refresh()
+
+    def save_settings(self) -> dict[str, dict | list | int | str | bool]:
+        """Save settings and return a dictionary of the current values for those settings."""
+
+        result: dict[str, dict | list | int | str | bool] = {
+            "voices": {
+                speechserver.DEFAULT_VOICE: dict(self._default_voice),
+                speechserver.UPPERCASE_VOICE: dict(self._uppercase_voice),
+                speechserver.HYPERLINK_VOICE: dict(self._hyperlink_voice),
+                speechserver.SYSTEM_VOICE: dict(self._system_voice),
+            },
+        }
+
+        result[SpeechManager.KEY_SPEECH_SERVER] = self._manager.get_current_server()
+        result[SpeechManager.KEY_SYNTHESIZER] = self._manager.get_current_synthesizer()
+        result[SpeechManager.KEY_SPEECH_SERVER_FACTORY] = self._manager.get_speech_server_factory()
+
+        model = self._punctuation_combo.get_model()
+        active = self._punctuation_combo.get_active()
+        if model and active >= 0:
+            result[SpeechManager.KEY_PUNCTUATION_LEVEL] = PunctuationStyle(
+                model[active][1]
+            ).string_name
+
+        model = self._capitalization_combo.get_model()
+        active = self._capitalization_combo.get_active()
+        if model and active >= 0:
+            result[SpeechManager.KEY_CAPITALIZATION_STYLE] = model[active][1]
+
+        result[SpeechManager.KEY_SPEAK_NUMBERS_AS_DIGITS] = self._speak_numbers_switch.get_active()
+        result[SpeechManager.KEY_USE_COLOR_NAMES] = self._use_color_names_switch.get_active()
+        result[SpeechManager.KEY_INSERT_PAUSES_BETWEEN_UTTERANCES] = (
+            self._enable_pause_breaks_switch.get_active()
+        )
+        result[SpeechManager.KEY_USE_PRONUNCIATION_DICTIONARY] = (
+            self._use_pronunciation_dict_switch.get_active()
+        )
+        result[SpeechManager.KEY_AUTO_LANGUAGE_SWITCHING] = (
+            self._auto_language_switching_switch.get_active()
+        )
+
+        self._has_unsaved_changes = False
+        return result
+
+    def refresh(self) -> None:
+        """Update widget states to reflect current settings."""
+
+        self._initializing = True
+
+        self._populate_speech_systems()
+        self._initializing = True
+
+        app = self._app_name
+        model = self._punctuation_combo.get_model()
+        if model:
+            current_level = PunctuationStyle[
+                self._manager.get_punctuation_level(app_name=app).upper()
+            ].value
+            for i, row in enumerate(model):
+                if row[1] == current_level:
+                    self._punctuation_combo.set_active(i)
+                    break
+
+        model = self._capitalization_combo.get_model()
+        if model:
+            for i, row in enumerate(model):
+                if row[1] == self._manager.get_capitalization_style(app_name=app):
+                    self._capitalization_combo.set_active(i)
+                    break
+
+        self._speak_numbers_switch.set_active(
+            self._manager.get_speak_numbers_as_digits(app_name=app),
+        )
+        self._use_color_names_switch.set_active(
+            self._manager.get_use_color_names(app_name=app),
+        )
+        self._enable_pause_breaks_switch.set_active(
+            self._manager.get_insert_pauses_between_utterances(app_name=app),
+        )
+        self._use_pronunciation_dict_switch.set_active(
+            self._manager.get_use_pronunciation_dictionary(app_name=app),
+        )
+        self._auto_language_switching_switch.set_active(
+            self._manager.get_auto_language_switching(app_name=app),
+        )
+
+        # Note: Voice type widgets are created on-demand in dialogs, so no need to refresh them here
+
+        self._initializing = False
+
+    def _refresh_voice_widgets(
+        self,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+        rate_scale: Gtk.Scale,
+        pitch_scale: Gtk.Scale,
+        volume_scale: Gtk.Scale,
+    ) -> None:
+        """Update widgets for a specific voice type."""
+
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+
+        rate = voice_acss.get(ACSS.RATE, 50)
+        rate_scale.set_value(rate)
+
+        pitch = voice_acss.get(ACSS.AVERAGE_PITCH, 5.0)
+        pitch_scale.set_value(pitch)
+
+        volume = voice_acss.get(ACSS.GAIN, 10.0)
+        volume_scale.set_value(volume)
+
+    def _get_acss_for_voice_type(self, voice_type: VoicesPreferencesGrid.VoiceType) -> ACSS:
+        """Return the local ACSS copy for the given voice type."""
+
+        if voice_type == self.VoiceType.DEFAULT:
+            return self._default_voice
+        if voice_type == self.VoiceType.UPPERCASE:
+            return self._uppercase_voice
+        if voice_type == self.VoiceType.HYPERLINK:
+            return self._hyperlink_voice
+        if voice_type == self.VoiceType.SYSTEM:
+            return self._system_voice
+        return self._default_voice
+
+    def _get_widgets_for_voice_type(
+        self,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> tuple[Gtk.ComboBox, Gtk.ComboBox, list[speechserver.VoiceFamily]]:
+        """Return the widgets and family choices for a given voice type."""
+
+        if voice_type == self.VoiceType.DEFAULT:
+            return (
+                self._default_languages_combo,
+                self._default_families_combo,
+                self._default_family_choices,
+            )
+        if voice_type == self.VoiceType.HYPERLINK:
+            return (
+                self._hyperlink_languages_combo,
+                self._hyperlink_families_combo,
+                self._hyperlink_family_choices,
+            )
+        if voice_type == self.VoiceType.UPPERCASE:
+            return (
+                self._uppercase_languages_combo,
+                self._uppercase_families_combo,
+                self._uppercase_family_choices,
+            )
+        if voice_type == self.VoiceType.SYSTEM:
+            return (
+                self._system_languages_combo,
+                self._system_families_combo,
+                self._system_family_choices,
+            )
+        return (
+            self._default_languages_combo,
+            self._default_families_combo,
+            self._default_family_choices,
+        )
+
+    def _set_family_choices_for_voice_type(
+        self,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+        choices: list[speechserver.VoiceFamily],
+    ) -> None:
+        """Set the family choices for a given voice type."""
+
+        if voice_type == self.VoiceType.DEFAULT:
+            self._default_family_choices = choices
+        elif voice_type == self.VoiceType.HYPERLINK:
+            self._hyperlink_family_choices = choices
+        elif voice_type == self.VoiceType.UPPERCASE:
+            self._uppercase_family_choices = choices
+        elif voice_type == self.VoiceType.SYSTEM:
+            self._system_family_choices = choices
+
+    def _populate_speech_systems(self) -> None:
+        """Populate the speech systems combo."""
+
+        self._initializing = True
+
+        model = self._speech_systems_combo.get_model()
+        if not model:
+            model = Gtk.ListStore(str)
+        self._speech_systems_combo.set_model(None)
+        model.clear()
+
+        available = self._manager.get_available_servers()
+        for server_name in available:
+            model.append([server_name])
+
+        self._speech_systems_combo.set_model(model)
+
+        current = self._manager.get_current_server()
+        found = False
+        selected_server = None
+        for i, row in enumerate(model):
+            if row[0] == current:
+                self._speech_systems_combo.set_active(i)
+                selected_server = current
+                found = True
+                break
+
+        if not found and len(model) > 0:
+            self._speech_systems_combo.set_active(0)
+            tree_iter = model.get_iter_first()
+            if tree_iter:
+                selected_server = model.get_value(tree_iter, 0)
+
+        if selected_server:
+            self._manager.set_current_server(selected_server)
+
+        self._initializing = False
+        self._populate_speech_synthesizers()
+
+    def _populate_speech_synthesizers(self) -> None:
+        """Populate the speech synthesizers combo."""
+
+        self._initializing = True
+
+        model = self._speech_synthesizers_combo.get_model()
+        if not model:
+            model = Gtk.ListStore(str)
+        self._speech_synthesizers_combo.set_model(None)
+        model.clear()
+
+        available = self._manager.get_available_synthesizers()
+        for synth_name in available:
+            model.append([synth_name])
+
+        self._speech_synthesizers_combo.set_model(model)
+
+        current = self._manager.get_current_synthesizer()
+        found = False
+        selected_synth = None
+        for i, row in enumerate(model):
+            if row[0] == current:
+                self._speech_synthesizers_combo.set_active(i)
+                selected_synth = current
+                found = True
+                break
+
+        if not found and len(model) > 0:
+            self._speech_synthesizers_combo.set_active(0)
+            tree_iter = model.get_iter_first()
+            if tree_iter:
+                selected_synth = model.get_value(tree_iter, 0)
+
+        if selected_synth:
+            self._manager.set_current_synthesizer(selected_synth)
+
+        self._voice_families = self._manager.get_voice_families()
+        self._initializing = False
+        # Note: Voice widgets are created on-demand in dialogs, so we don't populate them here
+
+    # pylint: disable-next=too-many-branches
+    def _populate_languages_for_voice_type(
+        self,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> None:
+        """Populate the languages combo for a specific voice type."""
+
+        languages_combo, _, _ = self._get_widgets_for_voice_type(voice_type)
+
+        self._initializing = True
+
+        model = languages_combo.get_model()
+        if not model:
+            model = Gtk.ListStore(str, str)
+        languages_combo.set_model(None)
+        model.clear()
+
+        if len(self._voice_families) == 0:
+            languages_combo.set_model(model)
+            self._initializing = False
+            return
+
+        if not self._families_sorted:
+            default_marker = guilabels.SPEECH_DEFAULT_VOICE.replace("%s", "").strip().lower()
+
+            def _get_sort_key(family):
+                variant = family.get(speechserver.VoiceFamily.VARIANT)
+                name = family.get(speechserver.VoiceFamily.NAME, "")
+                if default_marker in name.lower() or "default" in name.lower():
+                    return (0, "")
+                if variant not in (None, "none", "None"):
+                    return (1, variant.lower())
+                return (1, name.lower())
+
+            self._voice_families.sort(key=_get_sort_key)
+            self._families_sorted = True
+
+        done = {}
+        languages = []
+        for family in self._voice_families:
+            lang = family.get(speechserver.VoiceFamily.LANG, "")
+            dialect = family.get(speechserver.VoiceFamily.DIALECT, "")
+
+            if (lang, dialect) in done:
+                continue
+            done[(lang, dialect)] = True
+
+            if dialect:
+                language = f"{lang}-{dialect}"
+            else:
+                language = lang
+
+            msg = language or "default language"
+            languages.append(language)
+            model.append([msg])
+
+        languages_combo.set_model(model)
+
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        saved_family: speechserver.VoiceFamily | None = voice_acss.get(ACSS.FAMILY)
+        selected_index = 0
+        saved_language = ""
+
+        if saved_family:
+            lang = saved_family.get(speechserver.VoiceFamily.LANG, "")
+            dialect = saved_family.get(speechserver.VoiceFamily.DIALECT, "")
+            if dialect:
+                saved_language = f"{lang}-{dialect}"
+            else:
+                saved_language = lang
+        elif voice_type == self.VoiceType.DEFAULT:
+            family_locale, _encoding = locale.getlocale(locale.LC_MESSAGES)
+            if family_locale:
+                locale_parts = family_locale.split("_")
+                lang = locale_parts[0]
+                dialect = locale_parts[1] if len(locale_parts) > 1 else ""
+                saved_language = f"{lang}-{dialect}" if dialect else lang
+
+        if saved_language:
+            lang_only = saved_language.partition("-")[0]
+            partial_match = -1
+            for i, language in enumerate(languages):
+                if language == saved_language:
+                    selected_index = i
+                    break
+                if partial_match < 0:
+                    if language == lang_only or language.startswith(f"{lang_only}-"):
+                        partial_match = i
+            else:
+                if partial_match >= 0:
+                    selected_index = partial_match
+
+        if len(languages) > 0:
+            languages_combo.set_active(selected_index)
+
+        self._initializing = False
+
+    # pylint: disable-next=too-many-branches
+    def _populate_families_for_voice_type(
+        self,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+        apply_changes: bool = True,
+    ) -> None:
+        """Populate the families/persons combo for a specific voice type."""
+
+        languages_combo, families_combo, _ = self._get_widgets_for_voice_type(voice_type)
+
+        self._initializing = True
+
+        families_model = families_combo.get_model()
+        if not families_model:
+            families_model = Gtk.ListStore(str, str)
+        families_combo.set_model(None)
+        families_model.clear()
+
+        active = languages_combo.get_active()
+        if active < 0:
+            families_combo.set_model(families_model)
+            self._initializing = False
+            return
+
+        languages_model = languages_combo.get_model()
+        tree_iter = languages_model.get_iter(active)
+        current_language = languages_model.get_value(tree_iter, 0)
+
+        family_choices = []
+        for family in self._voice_families:
+            lang = family.get(speechserver.VoiceFamily.LANG, "")
+            dialect = family.get(speechserver.VoiceFamily.DIALECT, "")
+
+            if dialect:
+                language = f"{lang}-{dialect}"
+            else:
+                language = lang
+
+            if language != current_language:
+                continue
+
+            name = family.get(speechserver.VoiceFamily.NAME, "")
+            variant = family.get(speechserver.VoiceFamily.VARIANT, "")
+
+            # Show variant if it exists and is not "none", otherwise show name
+            display_name = name
+            if variant and variant not in ("none", "None"):
+                display_name = variant
+
+            family_choices.append(family)
+            families_model.append([display_name])
+
+        families_combo.set_model(families_model)
+
+        self._set_family_choices_for_voice_type(voice_type, family_choices)
+
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        saved_family: speechserver.VoiceFamily | None = voice_acss.get(ACSS.FAMILY)
+        selected_index = 0
+
+        if saved_family and len(family_choices) > 0:
+            saved_name = saved_family.get(speechserver.VoiceFamily.NAME, "")
+
+            for i, family in enumerate(family_choices):
+                family_name = family.get(speechserver.VoiceFamily.NAME, "")
+                if family_name == saved_name:
+                    selected_index = i
+                    break
+
+        if len(family_choices) > 0:
+            families_combo.set_active(selected_index)
+
+            if apply_changes:
+                family = family_choices[selected_index]
+                voice_name = family.get(speechserver.VoiceFamily.NAME, "")
+
+                voice_acss[ACSS.FAMILY] = family
+                voice_acss["established"] = True
+
+                # Sync runtime values so the voice change is heard immediately
+                self._sync_voice_to_settings(voice_type)
+
+                # Only set as current voice if this is the default voice type
+                if voice_type == self.VoiceType.DEFAULT:
+                    self._manager.set_current_voice(voice_name)
+
+        self._initializing = False
+
+    def _sync_voice_to_settings(self, voice_type: VoicesPreferencesGrid.VoiceType) -> None:
+        """Sync local voice copy to runtime values for immediate preview."""
+
+        voice_map = {
+            self.VoiceType.DEFAULT: (self._default_voice, speechserver.DEFAULT_VOICE),
+            self.VoiceType.UPPERCASE: (self._uppercase_voice, speechserver.UPPERCASE_VOICE),
+            self.VoiceType.HYPERLINK: (self._hyperlink_voice, speechserver.HYPERLINK_VOICE),
+            self.VoiceType.SYSTEM: (self._system_voice, speechserver.SYSTEM_VOICE),
+        }
+
+        local_voice, settings_key = voice_map[voice_type]
+        voice = ACSS(local_voice)
+        registry = gsettings_registry.get_registry()
+        schema = self._VOICE_SCHEMA
+
+        if ACSS.RATE in voice:
+            registry.set_runtime_value(
+                schema, SpeechManager.KEY_RATE, voice[ACSS.RATE], voice_type=settings_key
+            )
+        if ACSS.AVERAGE_PITCH in voice:
+            registry.set_runtime_value(
+                schema,
+                SpeechManager.KEY_PITCH,
+                voice[ACSS.AVERAGE_PITCH],
+                voice_type=settings_key,
+            )
+        if ACSS.GAIN in voice:
+            registry.set_runtime_value(
+                schema, SpeechManager.KEY_VOLUME, voice[ACSS.GAIN], voice_type=settings_key
+            )
+        family = voice.get(ACSS.FAMILY, {})
+        for dconf_key, family_key in (
+            (SpeechManager.KEY_FAMILY_NAME, speechserver.VoiceFamily.NAME),
+            (SpeechManager.KEY_FAMILY_LANG, speechserver.VoiceFamily.LANG),
+            (SpeechManager.KEY_FAMILY_DIALECT, speechserver.VoiceFamily.DIALECT),
+            (SpeechManager.KEY_FAMILY_GENDER, speechserver.VoiceFamily.GENDER),
+            (SpeechManager.KEY_FAMILY_VARIANT, speechserver.VoiceFamily.VARIANT),
+        ):
+            if family_key in family:
+                registry.set_runtime_value(
+                    schema,
+                    dconf_key,
+                    family[family_key],
+                    voice_type=settings_key,
+                )
+
+        server = self._manager.get_server()
+        if server is not None:
+            if settings_key == speechserver.DEFAULT_VOICE:
+                server.set_default_voice(voice)
+            server.clear_cached_voice_properties()
+
+    def _on_rate_changed(
+        self,
+        widget: Gtk.Scale,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> None:
+        """Handle rate slider change for a specific voice type."""
+
+        if self._initializing:
+            return
+
+        rate = widget.get_value()
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        voice_acss[ACSS.RATE] = rate
+        voice_acss["established"] = True
+        self._sync_voice_to_settings(voice_type)
+        self._has_unsaved_changes = True
+
+    def _on_pitch_changed(
+        self,
+        widget: Gtk.Scale,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> None:
+        """Handle pitch slider change for a specific voice type."""
+
+        if self._initializing:
+            return
+
+        pitch = widget.get_value()
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        voice_acss[ACSS.AVERAGE_PITCH] = pitch
+        voice_acss["established"] = True
+        self._sync_voice_to_settings(voice_type)
+        self._has_unsaved_changes = True
+
+    def _on_volume_changed(
+        self,
+        widget: Gtk.Scale,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> None:
+        """Handle volume slider change for a specific voice type."""
+
+        if self._initializing:
+            return
+
+        volume = widget.get_value()
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        voice_acss[ACSS.GAIN] = volume
+        voice_acss["established"] = True
+        self._sync_voice_to_settings(voice_type)
+        self._has_unsaved_changes = True
+
+    def _on_punctuation_changed(self, widget: Gtk.ComboBox) -> None:
+        """Handle punctuation combo box change."""
+
+        if self._initializing:
+            return
+
+        active = widget.get_active()
+        if active < 0:
+            return
+
+        model = widget.get_model()
+        tree_iter = model.get_iter(active)
+        level = model.get_value(tree_iter, 1)
+
+        gsettings_registry.get_registry().set_runtime_value(
+            SpeechManager.SPEECH_SCHEMA,
+            SpeechManager.KEY_PUNCTUATION_LEVEL,
+            PunctuationStyle(level).string_name,
+        )
+        self._manager.update_punctuation_level()
+        self._has_unsaved_changes = True
+
+    def _on_capitalization_changed(self, widget: Gtk.ComboBox) -> None:
+        """Handle capitalization combo box change."""
+
+        if self._initializing:
+            return
+
+        active = widget.get_active()
+        if active < 0:
+            return
+
+        model = widget.get_model()
+        tree_iter = model.get_iter(active)
+        style = model.get_value(tree_iter, 1)
+
+        gsettings_registry.get_registry().set_runtime_value(
+            SpeechManager.SPEECH_SCHEMA,
+            SpeechManager.KEY_CAPITALIZATION_STYLE,
+            CapitalizationStyle(style).string_name,
+        )
+        self._manager.update_capitalization_style()
+        self._has_unsaved_changes = True
+
+    def _on_speak_numbers_toggled(self, switch: Gtk.Switch, _state: Any) -> None:
+        """Handle speak numbers as digits switch change."""
+        if self._initializing:
+            return
+        self._manager.set_speak_numbers_as_digits(switch.get_active())
+        self._has_unsaved_changes = True
+
+    def _on_use_color_names_toggled(self, switch: Gtk.Switch, _state: Any) -> None:
+        """Handle use color names switch change."""
+        if self._initializing:
+            return
+        self._manager.set_use_color_names(switch.get_active())
+        self._has_unsaved_changes = True
+
+    def _on_enable_pause_breaks_toggled(self, switch: Gtk.Switch, _state: Any) -> None:
+        """Handle enable pause breaks switch change."""
+        if self._initializing:
+            return
+        self._manager.set_insert_pauses_between_utterances(switch.get_active())
+        self._has_unsaved_changes = True
+
+    def _on_use_pronunciation_dict_toggled(self, switch: Gtk.Switch, _state: Any) -> None:
+        """Handle use pronunciation dictionary switch change."""
+        if self._initializing:
+            return
+        self._manager.set_use_pronunciation_dictionary(switch.get_active())
+        self._has_unsaved_changes = True
+
+    def _on_auto_language_switching_toggled(self, switch: Gtk.Switch, _state: Any) -> None:
+        """Handle auto language switching switch change."""
+        if self._initializing:
+            return
+        self._manager.set_auto_language_switching(switch.get_active())
+        self._has_unsaved_changes = True
+
+    def _on_speech_system_changed(self, widget: Gtk.ComboBox) -> None:
+        """Handle speech system combo change."""
+
+        if self._initializing:
+            return
+
+        active = widget.get_active()
+        if active < 0:
+            return
+
+        model = widget.get_model()
+        tree_iter = model.get_iter(active)
+        server_name = model.get_value(tree_iter, 0)
+
+        self._manager.set_current_server(server_name)
+
+        self._populate_speech_synthesizers()
+        self._has_unsaved_changes = True
+
+    def _on_speech_synthesizer_changed(self, widget: Gtk.ComboBox) -> None:
+        """Handle speech synthesizer combo change."""
+
+        if self._initializing:
+            return
+
+        active = widget.get_active()
+        if active < 0:
+            return
+
+        model = widget.get_model()
+        tree_iter = model.get_iter(active)
+        synth_name = model.get_value(tree_iter, 0)
+
+        self._manager.set_current_synthesizer(synth_name)
+
+        self._voice_families = self._manager.get_voice_families()
+        self._families_sorted = False
+
+        # When synthesizer changes, replace the old family with a default
+        # from the new synthesizer. Without this, import_voice only writes
+        # keys present in the ACSS dict, so old family values persist in dconf.
+        default_family = self._voice_families[0] if self._voice_families else None
+        for voice_type in [
+            self.VoiceType.DEFAULT,
+            self.VoiceType.HYPERLINK,
+            self.VoiceType.UPPERCASE,
+            self.VoiceType.SYSTEM,
+        ]:
+            voice_acss = self._get_acss_for_voice_type(voice_type)
+            if ACSS.FAMILY in voice_acss:
+                del voice_acss[ACSS.FAMILY]
+            if default_family is not None:
+                voice_acss[ACSS.FAMILY] = default_family
+
+        self._has_unsaved_changes = True
+
+    def _on_speech_language_changed(
+        self,
+        widget: Gtk.ComboBox,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> None:
+        """Handle speech language combo change for a specific voice type."""
+
+        if self._initializing:
+            return
+
+        self._populate_families_for_voice_type(voice_type)
+        self._has_unsaved_changes = True
+
+        if voice_type == self.VoiceType.DEFAULT:
+            self._propagate_language_to_other_voices(widget)
+
+    def _propagate_language_to_other_voices(self, _language_combo: Gtk.ComboBox) -> None:
+        """Update other voice types to use the same voice family as the Default voice."""
+
+        default_voice = self._get_acss_for_voice_type(self.VoiceType.DEFAULT)
+        default_family = default_voice.get(ACSS.FAMILY)
+        if not default_family:
+            return
+
+        voice_types = [self.VoiceType.HYPERLINK, self.VoiceType.UPPERCASE, self.VoiceType.SYSTEM]
+        for voice_type in voice_types:
+            voice_acss = self._get_acss_for_voice_type(voice_type)
+            voice_acss[ACSS.FAMILY] = default_family
+            voice_acss["established"] = True
+            self._sync_voice_to_settings(voice_type)
+
+    def _on_speech_family_changed(
+        self,
+        widget: Gtk.ComboBox,
+        voice_type: VoicesPreferencesGrid.VoiceType,
+    ) -> None:
+        """Handle speech family combo change for a specific voice type."""
+
+        if self._initializing:
+            return
+
+        _, _, family_choices = self._get_widgets_for_voice_type(voice_type)
+
+        active = widget.get_active()
+        if active < 0 or active >= len(family_choices):
+            return
+
+        family = family_choices[active]
+        voice_name = family.get(speechserver.VoiceFamily.NAME, "")
+
+        voice_acss = self._get_acss_for_voice_type(voice_type)
+        voice_acss[ACSS.FAMILY] = family
+        voice_acss["established"] = True
+        self._sync_voice_to_settings(voice_type)
+
+        # Only set as current voice if this is the default voice type
+        if voice_type == self.VoiceType.DEFAULT:
+            self._manager.set_current_voice(voice_name)
+
+        self._has_unsaved_changes = True
+
+
 @gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Speech", name="speech")
 @gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Voice", name="voice")
-class SpeechManager(Extension):
+class SpeechManager:
     """Manages the speech engine: server, synthesizer, voice, and output parameters."""
-
-    GROUP_LABEL = guilabels.KB_GROUP_SPEECH_VERBOSITY
 
     SPEECH_SCHEMA = "speech"
     _VOICE_SCHEMA = "voice"
@@ -79,15 +1277,12 @@ class SpeechManager(Extension):
     KEY_INSERT_PAUSES_BETWEEN_UTTERANCES = "insert-pauses-between-utterances"
     KEY_USE_PRONUNCIATION_DICTIONARY = "use-pronunciation-dictionary"
     KEY_AUTO_LANGUAGE_SWITCHING = "auto-language-switching"
-    KEY_AUTO_LANGUAGE_SWITCHING_UI = "auto-language-switching-ui"
-    KEY_ONLY_SWITCH_CONFIGURED_LANGUAGES = "only-switch-configured-languages"
     KEY_CAPITALIZATION_STYLE = "capitalization-style"
     KEY_PUNCTUATION_LEVEL = "punctuation-level"
 
     KEY_ESTABLISHED = "established"
     KEY_RATE = "rate"
     KEY_PITCH = "pitch"
-    KEY_PITCH_RANGE = "pitch-range"
     KEY_VOLUME = "volume"
     KEY_FAMILY_NAME = "family-name"
     KEY_FAMILY_LANG = "family-lang"
@@ -95,21 +1290,13 @@ class SpeechManager(Extension):
     KEY_FAMILY_GENDER = "family-gender"
     KEY_FAMILY_VARIANT = "family-variant"
 
-    def _get_setting(
-        self,
-        key: str,
-        gtype: str,
-        default: Any,
-        app_name: str | None = None,
-        genum: str | None = None,
-    ) -> Any:
+    def _get_setting(self, key: str, gtype: str, default: Any, app_name: str | None = None) -> Any:
         """Returns the dconf value for key, or default if not in dconf."""
 
         return gsettings_registry.get_registry().layered_lookup(
             self.SPEECH_SCHEMA,
             key,
             gtype,
-            genum=genum,
             default=default,
             app_name=app_name,
         )
@@ -118,15 +1305,10 @@ class SpeechManager(Extension):
         self,
         voice_type: str = "",
         app_name: str | None = None,
-        voice_set: str = gsettings_registry.PRIMARY_VOICE_SET,
     ) -> ACSS:
-        """Returns voice properties from dconf for the given voice type and set."""
+        """Returns voice properties from dconf for the given voice type."""
 
-        vtype = voice_type or speechserver.VoiceType.DEFAULT
-
-        if voice_set != gsettings_registry.PRIMARY_VOICE_SET:
-            return self._get_voice_set_properties(vtype, voice_set)
-
+        vtype = voice_type or speechserver.DEFAULT_VOICE
         lookup = gsettings_registry.get_registry().layered_lookup
         voice: dict[str, Any] = {}
 
@@ -146,11 +1328,6 @@ class SpeechManager(Extension):
         pitch = lookup(self._VOICE_SCHEMA, self.KEY_PITCH, "d", voice_type=vtype, app_name=app_name)
         if pitch is not None:
             voice[ACSS.AVERAGE_PITCH] = pitch
-        pitch_range = lookup(
-            self._VOICE_SCHEMA, self.KEY_PITCH_RANGE, "d", voice_type=vtype, app_name=app_name
-        )
-        if pitch_range is not None:
-            voice[ACSS.PITCH_RANGE] = pitch_range
         volume = lookup(
             self._VOICE_SCHEMA, self.KEY_VOLUME, "d", voice_type=vtype, app_name=app_name
         )
@@ -173,278 +1350,112 @@ class SpeechManager(Extension):
 
         return ACSS(voice)
 
-    def get_voice_set_voice(
-        self, voice_type: str, voice_set: str, fall_back_to_default: bool = True
-    ) -> ACSS:
-        """Returns the set's voice for voice_type, optionally falling back to its default voice."""
-
-        if fall_back_to_default:
-            types: tuple[str, ...] = (voice_type, speechserver.VoiceType.DEFAULT)
-        else:
-            types = (voice_type,)
-        for vtype in types:
-            config = self.get_voice_properties(vtype, voice_set=voice_set)
-            if config and config.get(self.KEY_ESTABLISHED):
-                return config
-        return ACSS({})
-
-    def _set_runtime_voice_family(self, voice_type: str, family: dict[str, str]) -> None:
-        """Overrides the runtime voice family for voice_type, clearing any previous override."""
-
-        registry = gsettings_registry.get_registry()
-        for family_key, key in (
-            (speechserver.VoiceFamily.NAME, self.KEY_FAMILY_NAME),
-            (speechserver.VoiceFamily.LANG, self.KEY_FAMILY_LANG),
-            (speechserver.VoiceFamily.DIALECT, self.KEY_FAMILY_DIALECT),
-            (speechserver.VoiceFamily.GENDER, self.KEY_FAMILY_GENDER),
-            (speechserver.VoiceFamily.VARIANT, self.KEY_FAMILY_VARIANT),
-        ):
-            registry.remove_runtime_value(self._VOICE_SCHEMA, key, voice_type=voice_type)
-            if value := family.get(family_key):
-                registry.set_runtime_value(self._VOICE_SCHEMA, key, value, voice_type=voice_type)
-
-    def _set_runtime_voice(self, voice_type: str, voice: ACSS) -> None:
-        """Overrides the runtime voice for voice_type, clearing any previous override."""
-
-        registry = gsettings_registry.get_registry()
-        prosody = (
-            (ACSS.RATE, self.KEY_RATE),
-            (ACSS.AVERAGE_PITCH, self.KEY_PITCH),
-            (ACSS.PITCH_RANGE, self.KEY_PITCH_RANGE),
-            (ACSS.GAIN, self.KEY_VOLUME),
-        )
-        for _attr, key in ((None, self.KEY_ESTABLISHED), *prosody):
-            registry.remove_runtime_value(self._VOICE_SCHEMA, key, voice_type=voice_type)
-        # A non-default voice type is only used if it is established; mirror that here so the
-        # generator applies it rather than falling back to the default voice.
-        registry.set_runtime_value(
-            self._VOICE_SCHEMA,
-            self.KEY_ESTABLISHED,
-            bool(voice.get("established")),
-            voice_type=voice_type,
-        )
-        for acss_key, key in prosody:
-            if acss_key in voice:
-                registry.set_runtime_value(
-                    self._VOICE_SCHEMA, key, voice[acss_key], voice_type=voice_type
-                )
-        self._set_runtime_voice_family(voice_type, voice.get(ACSS.FAMILY, {}))
-
-    def apply_live_voice(self, voice: ACSS) -> None:
-        """Auditions voice as the live default voice, bypassing voice-set rerouting."""
-
-        self._auditioning_voice = True
-        self._set_runtime_voice(speechserver.VoiceType.DEFAULT, voice)
-        if (server := self.get_server()) is not None:
-            server.set_default_voice(voice)
-            server.clear_cached_voice_properties()
-
-    def restore_live_voices(self, voices: dict[str, ACSS]) -> None:
-        """Makes each staged voice live by voice type and resumes normal voice-set processing."""
-
-        self._auditioning_voice = False
-        for voice_type, voice in voices.items():
-            self._set_runtime_voice(voice_type, voice)
-        if (server := self.get_server()) is not None:
-            server.set_default_voice(voices.get(speechserver.VoiceType.DEFAULT, ACSS({})))
-            server.clear_cached_voice_properties()
-
-    @staticmethod
-    def apply_voice_overrides(base: ACSS, override: ACSS) -> ACSS:
-        """Overlays family and prosody from override onto base, returning the merged ACSS."""
-
-        tokens = ["SPEECH MANAGER: Applying voice overrides:", override, "onto:", base]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        if ACSS.FAMILY in override:
-            family = dict(base.get(ACSS.FAMILY, {}))
-            overrides = override[ACSS.FAMILY]
-            language = overrides.get(speechserver.VoiceFamily.LANG)
-            if language and language != family.get(speechserver.VoiceFamily.LANG):
-                family.pop(speechserver.VoiceFamily.DIALECT, None)
-            family.update(overrides)
-            base[ACSS.FAMILY] = family
-        for prop in (ACSS.RATE, ACSS.AVERAGE_PITCH, ACSS.PITCH_RANGE, ACSS.GAIN):
-            if prop in override:
-                base[prop] = override[prop]
-        return base
-
-    def apply_voice_set(self, voice: ACSS) -> ACSS:
-        """Overlays the active voice set, or the set matching the voice's language."""
-
-        if self._auditioning_voice:
-            # A voice is being auditioned in preferences; let it be heard as configured.
-            return voice
-        voice_type = voice.get(ACSS.VOICE_TYPE, speechserver.VoiceType.DEFAULT)
-        fall_back_to_default = True
-        if self._active_voice_set != gsettings_registry.PRIMARY_VOICE_SET:
-            # A command loaded a set manually; it overrides every voice type. The system
-            # voice is used only if the set configures one; otherwise status messages stay
-            # in Orca's own voice rather than borrowing the set's default voice.
-            voice_set = self._active_voice_set
-            fall_back_to_default = voice_type != speechserver.VoiceType.SYSTEM
-        else:
-            # Otherwise follow the voice's own language (automatic switching).
-            family = voice.get(ACSS.FAMILY)
-            if not family:
-                return voice
-            lang = family.get(speechserver.VoiceFamily.LANG, "")
-            if not lang:
-                return voice
-            dialect = family.get(speechserver.VoiceFamily.DIALECT, "")
-            voice_set = f"{lang}-{dialect}".lower() if dialect else lang.lower()
-            voice_set_names = self.get_voice_set_names()
-            if voice_set not in voice_set_names:
-                voice_set = lang.lower()
-            if voice_set not in voice_set_names:
-                return voice
-
-        voice.pop(ACSS.VOICE_TYPE, None)
-        config = self.get_voice_set_voice(voice_type, voice_set, fall_back_to_default)
-        if not config.get(self.KEY_ESTABLISHED):
-            return voice
-
-        registry = gsettings_registry.get_registry()
-        for key, acss_key in (
-            (self.KEY_RATE, ACSS.RATE),
-            (self.KEY_PITCH, ACSS.AVERAGE_PITCH),
-            (self.KEY_PITCH_RANGE, ACSS.PITCH_RANGE),
-            (self.KEY_VOLUME, ACSS.GAIN),
-        ):
-            found, value = registry.get_runtime_value(self._VOICE_SCHEMA, key, voice_set=voice_set)
-            if found:
-                config[acss_key] = value
-
-        tokens = ["SPEECH MANAGER: Applying voice set", voice_set, "for", voice_type]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return self.apply_voice_overrides(voice, config)
-
-    def _get_voice_set_properties(self, voice_type: str, voice_set: str) -> ACSS:
-        """Returns voice properties for a non-primary voice set."""
-
-        registry = gsettings_registry.get_registry()
-        sub = gsettings_registry.get_registry().voice_set_sub_path(voice_type, voice_set)
-        gs = registry.get_settings("voice", registry.get_active_profile(), sub)
-        if gs is None:
-            return ACSS({})
-
-        voice: dict[str, Any] = {}
-        for key, acss_key in (
-            (self.KEY_RATE, ACSS.RATE),
-            (self.KEY_PITCH, ACSS.AVERAGE_PITCH),
-            (self.KEY_PITCH_RANGE, ACSS.PITCH_RANGE),
-            (self.KEY_VOLUME, ACSS.GAIN),
-        ):
-            if gs.get_user_value(key) is not None:
-                voice[acss_key] = gs.get_value(key).unpack()
-
-        established = gs.get_user_value(self.KEY_ESTABLISHED)
-        if established is not None:
-            voice["established"] = established.get_boolean()
-
-        family: dict[str, str] = {}
-        for dconf_key, family_key in (
-            (self.KEY_FAMILY_NAME, speechserver.VoiceFamily.NAME),
-            (self.KEY_FAMILY_LANG, speechserver.VoiceFamily.LANG),
-            (self.KEY_FAMILY_DIALECT, speechserver.VoiceFamily.DIALECT),
-            (self.KEY_FAMILY_GENDER, speechserver.VoiceFamily.GENDER),
-            (self.KEY_FAMILY_VARIANT, speechserver.VoiceFamily.VARIANT),
-        ):
-            val = gs.get_user_value(dconf_key)
-            if val is not None:
-                family[family_key] = val.get_string()
-        if family:
-            voice[ACSS.FAMILY] = family
-
-        return ACSS(voice)
-
-    def set_voice_set_properties(self, voice_type: str, voice_set: str, properties: ACSS) -> None:
-        """Stores voice properties for a voice set."""
-
-        registry = gsettings_registry.get_registry()
-        sub = gsettings_registry.get_registry().voice_set_sub_path(voice_type, voice_set)
-        gs = registry.get_settings("voice", registry.get_active_profile(), sub)
-        if gs is None:
-            return
-
-        gs.set_boolean(self.KEY_ESTABLISHED, True)
-
-        for key, acss_key, setter in (
-            (self.KEY_RATE, ACSS.RATE, gs.set_int),
-            (self.KEY_PITCH, ACSS.AVERAGE_PITCH, gs.set_double),
-            (self.KEY_PITCH_RANGE, ACSS.PITCH_RANGE, gs.set_double),
-            (self.KEY_VOLUME, ACSS.GAIN, gs.set_double),
-        ):
-            if acss_key in properties:
-                setter(key, properties[acss_key])
-
-        family = properties.get(ACSS.FAMILY, {})
-        for dconf_key, family_key in (
-            (self.KEY_FAMILY_NAME, speechserver.VoiceFamily.NAME),
-            (self.KEY_FAMILY_LANG, speechserver.VoiceFamily.LANG),
-            (self.KEY_FAMILY_DIALECT, speechserver.VoiceFamily.DIALECT),
-            (self.KEY_FAMILY_GENDER, speechserver.VoiceFamily.GENDER),
-            (self.KEY_FAMILY_VARIANT, speechserver.VoiceFamily.VARIANT),
-        ):
-            if family.get(family_key):
-                gs.set_string(dconf_key, family[family_key])
-
-    def get_voice_set_names(self) -> list[str]:
-        """Returns the names of configured voice sets (excluding primary)."""
-
-        registry = gsettings_registry.get_registry()
-        profile = registry.get_active_profile()
-        gs = registry.get_settings(
-            "voice", profile, f"voice-sets/{gsettings_registry.PRIMARY_VOICE_SET}/default"
-        )
-        if gs is None:
-            return []
-
-        entries = gsettings_registry.GSettingsRegistry.dconf_list(
-            f"{gsettings_registry.GSETTINGS_PATH_PREFIX}"
-            f"{gsettings_registry.GSettingsRegistry.sanitize_gsettings_path(profile)}/voice-sets/"
-        )
-        return [e for e in entries if e != gsettings_registry.PRIMARY_VOICE_SET]
-
     def __init__(self) -> None:
         self._families_sorted: bool = False
-        self._mute_speech: bool = False
+        self._health_check_pending: bool = False
+        self._initialized: bool = False
         self._server: SpeechServer | None = None
-        self._active_voice_set: str = gsettings_registry.PRIMARY_VOICE_SET
-        self._auditioning_voice = False
-        self._voice_set_command_names: set[str] = set()
-        super().__init__()
-        gsettings_registry.get_registry().add_profile_change_observer(
-            self.refresh_voice_set_commands
-        )
 
-    def _get_commands(self) -> list[Command]:
-        """Returns commands for registration."""
+        msg = "SPEECH MANAGER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("SpeechManager", self)
 
-        commands = speech_manager_command_definitions.get_commands(self)
-        commands.extend(self._build_voice_set_commands())
-        return commands
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
 
-    def _build_voice_set_commands(self) -> list[KeyboardCommand]:
-        """Returns one unbound activation command per available voice set."""
-
-        commands = speech_manager_command_definitions.get_voice_set_commands(self)
-        self._voice_set_command_names = {cmd.get_name() for cmd in commands}
-        return commands
-
-    def refresh_voice_set_commands(self, _profile: str = "") -> None:
-        """Re-registers the per-set activation commands after the available sets change."""
-
-        if not self._commands_initialized:
+        if self._initialized:
             return
+        self._initialized = True
 
         manager = command_manager.get_manager()
-        previous = self._voice_set_command_names
-        commands = self._build_voice_set_commands()
-        for name in previous:
-            manager.remove_command(name)
-        for command in commands:
-            manager.add_command(command)
+        group_label = guilabels.KB_GROUP_SPEECH_VERBOSITY
+
+        # Common keybindings (same for desktop and laptop)
+        kb_s = keybindings.KeyBinding("s", keybindings.ORCA_MODIFIER_MASK)
+
+        # (name, function, description, desktop_kb, laptop_kb)
+        commands_data = [
+            (
+                "cycleCapitalizationStyleHandler",
+                self.cycle_capitalization_style,
+                cmdnames.CYCLE_CAPITALIZATION_STYLE,
+                None,
+                None,
+            ),
+            (
+                "cycleSpeakingPunctuationLevelHandler",
+                self.cycle_punctuation_level,
+                cmdnames.CYCLE_PUNCTUATION_LEVEL,
+                None,
+                None,
+            ),
+            (
+                "cycleSynthesizerHandler",
+                self.cycle_synthesizer,
+                cmdnames.CYCLE_SYNTHESIZER,
+                None,
+                None,
+            ),
+            ("toggleSilenceSpeechHandler", self.toggle_speech, cmdnames.TOGGLE_SPEECH, kb_s, kb_s),
+            (
+                "decreaseSpeechRateHandler",
+                self.decrease_rate,
+                cmdnames.DECREASE_SPEECH_RATE,
+                None,
+                None,
+            ),
+            (
+                "increaseSpeechRateHandler",
+                self.increase_rate,
+                cmdnames.INCREASE_SPEECH_RATE,
+                None,
+                None,
+            ),
+            (
+                "decreaseSpeechPitchHandler",
+                self.decrease_pitch,
+                cmdnames.DECREASE_SPEECH_PITCH,
+                None,
+                None,
+            ),
+            (
+                "increaseSpeechPitchHandler",
+                self.increase_pitch,
+                cmdnames.INCREASE_SPEECH_PITCH,
+                None,
+                None,
+            ),
+            (
+                "decreaseSpeechVolumeHandler",
+                self.decrease_volume,
+                cmdnames.DECREASE_SPEECH_VOLUME,
+                None,
+                None,
+            ),
+            (
+                "increaseSpeechVolumeHandler",
+                self.increase_volume,
+                cmdnames.INCREASE_SPEECH_VOLUME,
+                None,
+                None,
+            ),
+        ]
+
+        for name, function, description, desktop_kb, laptop_kb in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=desktop_kb,
+                    laptop_keybinding=laptop_kb,
+                ),
+            )
+
+        msg = "SPEECH MANAGER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def get_server(self) -> SpeechServer | None:
         """Returns the speech server instance, or None if not initialized."""
@@ -452,7 +1463,7 @@ class SpeechManager(Extension):
         return self._server
 
     def _get_server(self) -> SpeechServer | None:
-        """Returns the speech server if it is responsive."""
+        """Returns the speech server if it is responsive.."""
 
         result = self._server
         if result is None:
@@ -460,8 +1471,28 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return None
 
-        if not result.is_responsive():
-            msg = "SPEECH MANAGER: Speech server is not responsive."
+        if self._health_check_pending:
+            msg = "SPEECH MANAGER: Health check already in progress."
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
+            return None
+
+        self._health_check_pending = True
+        result_queue: queue.Queue[bool] = queue.Queue()
+
+        def health_check_thread():
+            try:
+                result.get_output_module()
+                result_queue.put(True)
+            finally:
+                self._health_check_pending = False
+
+        thread = threading.Thread(target=health_check_thread, daemon=True)
+        thread.start()
+
+        try:
+            result_queue.get(timeout=2.0)
+        except queue.Empty:
+            msg = "SPEECH MANAGER: Speech server health check timed out"
             debug.print_message(debug.LEVEL_WARNING, msg, True)
             return None
 
@@ -493,7 +1524,7 @@ class SpeechManager(Extension):
                     result[server_name] = module_name
 
             except (AttributeError, TypeError, ImportError) as error:
-                tokens = ["SPEECH MANAGER:", module_name, "not available:", error]
+                tokens = [f"SPEECH MANAGER: {module_name} not available:", error]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         return result
@@ -520,8 +1551,8 @@ class SpeechManager(Extension):
         """Returns a list of available servers."""
 
         result = self._get_available_servers()
-        tokens = ["SPEECH MANAGER: Available servers:", result, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Available servers: {result}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return result
 
     @gsettings_registry.get_registry().gsetting(
@@ -542,8 +1573,8 @@ class SpeechManager(Extension):
             return ""
 
         name = server.get_factory_name()
-        tokens = ["SPEECH MANAGER: Server is:", name, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Server is: {name}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return name
 
     @dbus_service.setter
@@ -551,11 +1582,6 @@ class SpeechManager(Extension):
         """Sets the current speech server (e.g. Speech Dispatcher or Spiel)."""
 
         return self._switch_server(value)
-
-    def get_speech_server(self, app_name: str | None = None) -> str:
-        """Returns the speech server setting."""
-
-        return self._get_setting(self.KEY_SPEECH_SERVER, "s", "", app_name=app_name)
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_SPEECH_SERVER_FACTORY,
@@ -568,9 +1594,6 @@ class SpeechManager(Extension):
     def get_speech_server_factory(self) -> str:
         """Returns the speech server factory module name."""
 
-        # Test override: the integration test harness points this at a no-audio server.
-        if override := os.environ.get("ORCA_TEST_SPEECH_SERVER_FACTORY"):
-            return override
         return self._get_setting(self.KEY_SPEECH_SERVER_FACTORY, "s", "speechdispatcherfactory")
 
     @gsettings_registry.get_registry().gsetting(
@@ -591,8 +1614,8 @@ class SpeechManager(Extension):
             return ""
 
         result = server.get_output_module()
-        tokens = ["SPEECH MANAGER: Synthesizer is:", result, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Synthesizer is: {result}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return result
 
     @dbus_service.setter
@@ -607,19 +1630,14 @@ class SpeechManager(Extension):
 
         available = self.get_available_synthesizers()
         if value not in available:
-            tokens = ["SPEECH MANAGER: '", value, "' is not in", available]
+            tokens = [f"SPEECH MANAGER: '{value}' is not in", available]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return False
 
-        tokens = ["SPEECH MANAGER: Setting synthesizer to:", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting synthesizer to: {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         server.set_output_module(value)
         return server.get_output_module() == value
-
-    def get_synthesizer(self, app_name: str | None = None) -> str:
-        """Returns the synthesizer setting."""
-
-        return self._get_setting(self.KEY_SYNTHESIZER, "s", "", app_name=app_name)
 
     @dbus_service.getter
     def get_available_synthesizers(self) -> list[str]:
@@ -633,8 +1651,8 @@ class SpeechManager(Extension):
 
         synthesizers = server.get_speech_servers()
         result = [s.get_info()[1] for s in synthesizers]
-        tokens = ["SPEECH MANAGER: Available synthesizers:", result, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Available synthesizers: {result}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return result
 
     @dbus_service.getter
@@ -675,10 +1693,11 @@ class SpeechManager(Extension):
         variant: str = "",
         script: default.Script | None = None,
         event: input_event.InputEvent | None = None,
+        notify_user: bool = False,
     ) -> list[tuple[str, str, str]]:
         """Returns a list of available voices for the specified language."""
 
-        tokens: list[Any] = [
+        tokens = [
             "SPEECH MANAGER: get_voices_for_language. Language:",
             language,
             "Variant:",
@@ -687,6 +1706,8 @@ class SpeechManager(Extension):
             script,
             "Event:",
             event,
+            "notify_user:",
+            notify_user,
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
@@ -699,8 +1720,8 @@ class SpeechManager(Extension):
         for name, lang, var in voices:
             result.append((name, lang or "", var or ""))
 
-        tokens = ["SPEECH MANAGER: Found", len(result), "voice(s) for '", language, "'."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Found {len(result)} voice(s) for '{language}'."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return result
 
     @gsettings_registry.get_registry().gsetting(
@@ -810,8 +1831,8 @@ class SpeechManager(Extension):
 
         available = self.get_available_voices()
         if voice_name not in available:
-            tokens = ["SPEECH MANAGER: '", voice_name, "' is not in", available]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"SPEECH MANAGER: '{voice_name}' is not in {available}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         voices = server.get_voice_families()
@@ -823,12 +1844,11 @@ class SpeechManager(Extension):
             family_name = voice_family.get(speechserver.VoiceFamily.NAME, "")
             if family_name == voice_name:
                 server.set_voice_family(voice_family)
-                self._set_runtime_voice_family(speechserver.VoiceType.DEFAULT, voice_family)
                 result = True
                 break
 
-        tokens = ["SPEECH MANAGER: Set voice to '", voice_name, "':", result]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Set voice to '{voice_name}': {result}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return result
 
     def get_current_speech_server_info(self) -> tuple[str, str]:
@@ -842,8 +1862,8 @@ class SpeechManager(Extension):
             return ("", "")
 
         server_name, server_id = server.get_info()
-        tokens = ["SPEECH MANAGER: Speech server info:", server_name, ",", server_id, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Speech server info: {server_name}, {server_id}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return server_name, server_id
 
     def check_speech_setting(self) -> None:
@@ -903,7 +1923,11 @@ class SpeechManager(Extension):
             tokens = ["SPEECH MANAGER: Using speech server factory:", factory]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
-            synth = self._get_setting(self.KEY_SYNTHESIZER, "s", "")
+            synth = gsettings_registry.get_registry().layered_lookup(
+                self.SPEECH_SCHEMA,
+                self.KEY_SYNTHESIZER,
+                "s",
+            )
             if synth:
                 self._server.set_output_module(synth)
 
@@ -914,11 +1938,10 @@ class SpeechManager(Extension):
         else:
             msg = "SPEECH MANAGER: Speech not available"
             debug.print_message(debug.LEVEL_INFO, msg, True)
-            systemd.get_manager().set_status("Speech", "not available")
 
+        speech.set_server(self._server)
+        speech.set_mute_speech(self.get_speech_is_muted())
         debug.print_message(debug.LEVEL_INFO, "SPEECH MANAGER: Server initialized", True)
-        if self._server:
-            systemd.get_manager().set_status("Speech", "enabled")
 
     @staticmethod
     def _init_server_from_module(
@@ -940,8 +1963,8 @@ class SpeechManager(Extension):
                 debug.print_exception(debug.LEVEL_SEVERE)
 
         if not factory:
-            tokens: list[Any] = ["SPEECH MANAGER: Failed to import module:", module_name]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            msg = f"SPEECH MANAGER: Failed to import module: {module_name}"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
             return None
 
         server = None
@@ -950,16 +1973,13 @@ class SpeechManager(Extension):
 
         if not server:
             if speech_server_info:
-                tokens = [
-                    "SPEECH MANAGER: Could not use server info:",
-                    speech_server_info,
-                ]
+                tokens = ["SPEECH MANAGER: Could not use server info:", speech_server_info]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             server = factory.SpeechServer.get_speech_server()
 
         if not server:
-            tokens = ["SPEECH MANAGER: No speech server for factory:", module_name]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            msg = f"SPEECH MANAGER: No speech server for factory: {module_name}"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
 
         return server
 
@@ -1009,6 +2029,7 @@ class SpeechManager(Extension):
         if server := self._get_server():
             server.shutdown_active_servers()
             self._server = None
+            speech.set_server(None)
 
         return True
 
@@ -1056,58 +2077,31 @@ class SpeechManager(Extension):
         summary="Speech rate (0-100)",
     )
     @dbus_service.getter
-    def get_rate(self) -> UInt32:
+    def get_rate(self) -> int:
         """Returns the current speech rate."""
-
-        return self._get_active_voice_value(self.KEY_RATE, ACSS.RATE, 50)
-
-    def _get_active_voice_value(self, key: str, acss_key: str, default: Any) -> Any:
-        """Returns a voice property including overrides for the selected voice set."""
-
-        if self._active_voice_set != gsettings_registry.PRIMARY_VOICE_SET:
-            found, value = gsettings_registry.get_registry().get_runtime_value(
-                self._VOICE_SCHEMA, key, voice_set=self._active_voice_set
-            )
-            if found:
-                return value
-            voice = self.get_voice_set_voice(speechserver.VoiceType.DEFAULT, self._active_voice_set)
-            if acss_key in voice:
-                return voice[acss_key]
 
         return gsettings_registry.get_registry().layered_lookup(
             self._VOICE_SCHEMA,
-            key,
-            "i" if key == self.KEY_RATE else "d",
-            default=default,
+            self.KEY_RATE,
+            "i",
+            default=50,
         )
-
-    def _set_active_voice_value(self, key: str, value: Any) -> None:
-        """Sets a temporary voice property for the selected voice set."""
-
-        gsettings_registry.get_registry().set_runtime_value(
-            self._VOICE_SCHEMA, key, value, voice_set=self._active_voice_set
-        )
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            self._sync_runtime_value_to_all_voice_types(key, value)
-
-    def _sync_runtime_value_to_all_voice_types(self, key: str, value: Any) -> None:
-        """Sets a runtime value override for all voice types."""
-
-        registry = gsettings_registry.get_registry()
-        for vtype in speechserver.VoiceType:
-            registry.set_runtime_value(self._VOICE_SCHEMA, key, value, voice_type=vtype)
 
     @dbus_service.setter
-    def set_rate(self, value: UInt32) -> bool:
+    def set_rate(self, value: int) -> bool:
         """Sets the current speech rate (0-100, default: 50)."""
 
         if not isinstance(value, (int, float)):
             return False
 
-        self._set_active_voice_value(self.KEY_RATE, value)
+        registry = gsettings_registry.get_registry()
+        registry.set_runtime_value(self._VOICE_SCHEMA, self.KEY_RATE, value)
+        registry.set_runtime_value(
+            self._VOICE_SCHEMA, self.KEY_RATE, value, voice_type=speechserver.DEFAULT_VOICE
+        )
 
-        tokens = ["SPEECH MANAGER: Set rate to:", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Set rate to: {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return True
 
     @dbus_service.command
@@ -1135,8 +2129,7 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.decrease_speech_rate()
+        server.decrease_speech_rate()
         new_rate = max(0, self.get_rate() - 5)
         self.set_rate(new_rate)
         if notify_user and script is not None:
@@ -1170,9 +2163,8 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.increase_speech_rate()
-        new_rate = min(100, self.get_rate() + 5)
+        server.increase_speech_rate()
+        new_rate = min(99, self.get_rate() + 5)
         self.set_rate(new_rate)
         if notify_user and script is not None:
             full = f"{messages.SPEECH_FASTER} {new_rate}"
@@ -1191,7 +2183,12 @@ class SpeechManager(Extension):
     def get_pitch(self) -> float:
         """Returns the current speech pitch."""
 
-        return self._get_active_voice_value(self.KEY_PITCH, ACSS.AVERAGE_PITCH, 5.0)
+        return gsettings_registry.get_registry().layered_lookup(
+            self._VOICE_SCHEMA,
+            self.KEY_PITCH,
+            "d",
+            default=5.0,
+        )
 
     @dbus_service.setter
     def set_pitch(self, value: float) -> bool:
@@ -1200,10 +2197,14 @@ class SpeechManager(Extension):
         if not isinstance(value, (int, float)):
             return False
 
-        self._set_active_voice_value(self.KEY_PITCH, value)
+        registry = gsettings_registry.get_registry()
+        registry.set_runtime_value(self._VOICE_SCHEMA, self.KEY_PITCH, value)
+        registry.set_runtime_value(
+            self._VOICE_SCHEMA, self.KEY_PITCH, value, voice_type=speechserver.DEFAULT_VOICE
+        )
 
-        tokens = ["SPEECH MANAGER: Set pitch to:", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Set pitch to: {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return True
 
     @dbus_service.command
@@ -1231,8 +2232,7 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.decrease_speech_pitch()
+        server.decrease_speech_pitch()
         new_pitch = max(0.0, self.get_pitch() - 0.5)
         self.set_pitch(new_pitch)
         if notify_user and script is not None:
@@ -1266,109 +2266,12 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.increase_speech_pitch()
-        new_pitch = min(10.0, self.get_pitch() + 0.5)
+        server.increase_speech_pitch()
+        new_pitch = min(9.0, self.get_pitch() + 0.5)
         self.set_pitch(new_pitch)
         if notify_user and script is not None:
             full = f"{messages.SPEECH_HIGHER} {new_pitch:g}"
             presentation_manager.get_manager().present_message(full, f"{new_pitch:g}")
-
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_PITCH_RANGE,
-        schema="voice",
-        gtype="d",
-        default=5.0,
-        summary="Speech inflection / pitch range (0.0-10.0)",
-    )
-    @dbus_service.getter
-    def get_pitch_range(self) -> float:
-        """Returns the current speech inflection (pitch range)."""
-
-        return self._get_active_voice_value(self.KEY_PITCH_RANGE, ACSS.PITCH_RANGE, 5.0)
-
-    @dbus_service.setter
-    def set_pitch_range(self, value: float) -> bool:
-        """Sets the current speech inflection / pitch range (0.0-10.0, default: 5.0)."""
-
-        if not isinstance(value, (int, float)):
-            return False
-
-        self._set_active_voice_value(self.KEY_PITCH_RANGE, value)
-
-        tokens = ["SPEECH MANAGER: Set pitch range to:", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return True
-
-    @dbus_service.command
-    def decrease_pitch_range(
-        self,
-        script: default.Script | None = None,
-        event: input_event.InputEvent | None = None,
-        notify_user: bool = True,
-    ) -> bool:
-        """Decreases the speech inflection (pitch range)."""
-
-        tokens = [
-            "SPEECH MANAGER: decrease_pitch_range. Script:",
-            script,
-            "Event:",
-            event,
-            "notify_user:",
-            notify_user,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        server = self._get_server()
-        if server is None:
-            msg = "SPEECH MANAGER: Cannot get speech server."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return True
-
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.decrease_speech_inflection()
-        new_pitch_range = max(0.0, self.get_pitch_range() - 0.5)
-        self.set_pitch_range(new_pitch_range)
-        if notify_user and script is not None:
-            full = f"{messages.SPEECH_LESS_INFLECTION} {new_pitch_range:g}"
-            presentation_manager.get_manager().present_message(full, f"{new_pitch_range:g}")
-
-        return True
-
-    @dbus_service.command
-    def increase_pitch_range(
-        self,
-        script: default.Script | None = None,
-        event: input_event.InputEvent | None = None,
-        notify_user: bool = True,
-    ) -> bool:
-        """Increases the speech inflection (pitch range)."""
-
-        tokens = [
-            "SPEECH MANAGER: increase_pitch_range. Script:",
-            script,
-            "Event:",
-            event,
-            "notify_user:",
-            notify_user,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        server = self._get_server()
-        if server is None:
-            msg = "SPEECH MANAGER: Cannot get speech server."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return True
-
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.increase_speech_inflection()
-        new_pitch_range = min(10.0, self.get_pitch_range() + 0.5)
-        self.set_pitch_range(new_pitch_range)
-        if notify_user and script is not None:
-            full = f"{messages.SPEECH_MORE_INFLECTION} {new_pitch_range:g}"
-            presentation_manager.get_manager().present_message(full, f"{new_pitch_range:g}")
 
         return True
 
@@ -1383,7 +2286,12 @@ class SpeechManager(Extension):
     def get_volume(self) -> float:
         """Returns the current speech volume."""
 
-        return self._get_active_voice_value(self.KEY_VOLUME, ACSS.GAIN, 10.0)
+        return gsettings_registry.get_registry().layered_lookup(
+            self._VOICE_SCHEMA,
+            self.KEY_VOLUME,
+            "d",
+            default=10.0,
+        )
 
     @dbus_service.setter
     def set_volume(self, value: float) -> bool:
@@ -1392,10 +2300,14 @@ class SpeechManager(Extension):
         if not isinstance(value, (int, float)):
             return False
 
-        self._set_active_voice_value(self.KEY_VOLUME, value)
+        registry = gsettings_registry.get_registry()
+        registry.set_runtime_value(self._VOICE_SCHEMA, self.KEY_VOLUME, value)
+        registry.set_runtime_value(
+            self._VOICE_SCHEMA, self.KEY_VOLUME, value, voice_type=speechserver.DEFAULT_VOICE
+        )
 
-        tokens = ["SPEECH MANAGER: Set volume to:", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Set volume to: {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return True
 
     @dbus_service.command
@@ -1423,8 +2335,7 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.decrease_speech_volume()
+        server.decrease_speech_volume()
         new_volume = max(0.0, self.get_volume() - 0.5)
         self.set_volume(new_volume)
         if notify_user and script is not None:
@@ -1458,9 +2369,8 @@ class SpeechManager(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
-        if self._active_voice_set == gsettings_registry.PRIMARY_VOICE_SET:
-            server.increase_speech_volume()
-        new_volume = min(10.0, self.get_volume() + 0.5)
+        server.increase_speech_volume()
+        new_volume = min(9.0, self.get_volume() + 0.5)
         self.set_volume(new_volume)
         if notify_user and script is not None:
             full = f"{messages.SPEECH_LOUDER} {new_volume:g}"
@@ -1480,13 +2390,15 @@ class SpeechManager(Extension):
     def get_capitalization_style(self, app_name: str | None = None) -> str:
         """Returns the current capitalization style."""
 
-        return self._get_setting(
+        value = gsettings_registry.get_registry().layered_lookup(
+            self.SPEECH_SCHEMA,
             self.KEY_CAPITALIZATION_STYLE,
             "",
+            genum="org.gnome.Orca.CapitalizationStyle",
             default="none",
             app_name=app_name,
-            genum="org.gnome.Orca.CapitalizationStyle",
         )
+        return value
 
     @dbus_service.setter
     def set_capitalization_style(self, value: str) -> bool:
@@ -1495,12 +2407,12 @@ class SpeechManager(Extension):
         try:
             style = CapitalizationStyle[value.upper()]
         except KeyError:
-            tokens = ["SPEECH MANAGER: Invalid capitalization style:", value]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            msg = f"SPEECH MANAGER: Invalid capitalization style: {value}"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
             return False
 
-        tokens = ["SPEECH MANAGER: Setting capitalization style to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting capitalization style to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_CAPITALIZATION_STYLE,
@@ -1570,13 +2482,15 @@ class SpeechManager(Extension):
     def get_punctuation_level(self, app_name: str | None = None) -> str:
         """Returns the current punctuation level."""
 
-        return self._get_setting(
+        value = gsettings_registry.get_registry().layered_lookup(
+            self.SPEECH_SCHEMA,
             self.KEY_PUNCTUATION_LEVEL,
             "",
+            genum="org.gnome.Orca.PunctuationStyle",
             default="most",
             app_name=app_name,
-            genum="org.gnome.Orca.PunctuationStyle",
         )
+        return value
 
     @dbus_service.setter
     def set_punctuation_level(self, value: str) -> bool:
@@ -1585,12 +2499,12 @@ class SpeechManager(Extension):
         try:
             style = PunctuationStyle[value.upper()]
         except KeyError:
-            tokens = ["SPEECH MANAGER: Invalid punctuation level:", value]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            msg = f"SPEECH MANAGER: Invalid punctuation level: {value}"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
             return False
 
-        tokens = ["SPEECH MANAGER: Setting punctuation level to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting punctuation level to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_PUNCTUATION_LEVEL,
@@ -1664,11 +2578,15 @@ class SpeechManager(Extension):
 
         active_id = server.get_output_module()
         if not server_id:
-            server_id = self._get_setting(self.KEY_SYNTHESIZER, "s", "")
+            server_id = gsettings_registry.get_registry().layered_lookup(
+                self.SPEECH_SCHEMA,
+                self.KEY_SYNTHESIZER,
+                "s",
+            )
 
         if server_id and server_id != active_id:
-            tokens = ["SPEECH MANAGER: Updating synthesizer from", active_id, "to", server_id, "."]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"SPEECH MANAGER: Updating synthesizer from {active_id} to {server_id}."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             server.set_output_module(server_id)
 
     @dbus_service.command
@@ -1729,95 +2647,16 @@ class SpeechManager(Extension):
     def get_speech_is_muted(self) -> bool:
         """Returns whether speech output is temporarily muted."""
 
-        return self._mute_speech
+        return speech.get_mute_speech()
 
     @dbus_service.setter
     def set_speech_is_muted(self, value: bool) -> bool:
         """Sets whether speech output is temporarily muted."""
 
-        tokens = ["SPEECH MANAGER: Setting speech muted to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        self._mute_speech = value
+        msg = f"SPEECH MANAGER: Setting speech muted to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        speech.set_mute_speech(value)
         return True
-
-    @dbus_service.getter
-    def get_available_voice_sets(self) -> list[str]:
-        """Returns the valid values for the active voice set."""
-
-        result = [gsettings_registry.PRIMARY_VOICE_SET, *sorted(self.get_voice_set_names())]
-        tokens = ["SPEECH MANAGER: Available voice sets:", result, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return result
-
-    @dbus_service.getter
-    def get_active_voice_set(self) -> str:
-        """Returns the name of the active voice set used for speech output."""
-
-        return self._active_voice_set
-
-    @dbus_service.setter
-    def set_active_voice_set(self, name: str) -> bool:
-        """Sets the active voice set used for speech output."""
-
-        if name != gsettings_registry.PRIMARY_VOICE_SET and name not in self.get_voice_set_names():
-            tokens = ["SPEECH MANAGER: Ignoring unknown voice set", name, "."]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return False
-        tokens = ["SPEECH MANAGER: Setting active voice set to", name, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        self._active_voice_set = name
-        return True
-
-    def _voice_set_display_name(self, set_id: str) -> str:
-        """Returns the user-facing name for the given voice set."""
-
-        if set_id == gsettings_registry.PRIMARY_VOICE_SET:
-            return guilabels.VOICE_SET_GLOBAL
-        return language_utilities.get_language_display_name(set_id, in_own_language=True)
-
-    @dbus_service.parameterized_command
-    def activate_voice_set(
-        self,
-        set_id: str,
-        script: default.Script | None = None,
-        event: input_event.InputEvent | None = None,
-        notify_user: bool = True,
-    ) -> bool:
-        """Makes set_id the active voice set and announces the change."""
-
-        tokens = ["SPEECH MANAGER: activate_voice_set", set_id, "Script:", script, "Event:", event]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        if not self.set_active_voice_set(set_id):
-            return True
-
-        if script is not None and notify_user:
-            presentation_manager.get_manager().present_message(
-                self._voice_set_display_name(set_id), voice_type=speechserver.VoiceType.DEFAULT
-            )
-        return True
-
-    @dbus_service.command
-    def cycle_voice_set(
-        self,
-        script: default.Script | None = None,
-        event: input_event.InputEvent | None = None,
-        notify_user: bool = True,
-    ) -> bool:
-        """Switches to the next available voice set, wrapping after the last."""
-
-        tokens = ["SPEECH MANAGER: cycle_voice_set. Script:", script, "Event:", event]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        available = self.get_available_voice_sets()
-        try:
-            index = available.index(self._active_voice_set) + 1
-        except ValueError:
-            index = 0
-        if index == len(available):
-            index = 0
-
-        return self.activate_voice_set(available[index], script, event, notify_user)
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_ENABLE,
@@ -1840,8 +2679,8 @@ class SpeechManager(Extension):
         if value == self.get_speech_is_enabled():
             return True
 
-        tokens = ["SPEECH MANAGER: Setting speech enabled to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting speech enabled to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA, self.KEY_ENABLE, value
@@ -1849,11 +2688,9 @@ class SpeechManager(Extension):
         if value:
             self.start_speech()
             presentation_manager.get_manager().present_message(messages.SPEECH_ENABLED)
-            systemd.get_manager().set_status("Speech", "enabled")
         else:
             presentation_manager.get_manager().present_message(messages.SPEECH_DISABLED)
             self.shutdown_speech()
-            systemd.get_manager().set_status("Speech", "disabled")
 
         return True
 
@@ -1875,8 +2712,8 @@ class SpeechManager(Extension):
     def set_speak_numbers_as_digits(self, value: bool) -> bool:
         """Sets whether numbers are spoken as digits."""
 
-        tokens = ["SPEECH MANAGER: Setting speak numbers as digits to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting speak numbers as digits to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_SPEAK_NUMBERS_AS_DIGITS,
@@ -1902,8 +2739,8 @@ class SpeechManager(Extension):
     def set_use_color_names(self, value: bool) -> bool:
         """Sets whether colors are announced by name or as RGB values."""
 
-        tokens = ["SPEECH MANAGER: Setting use color names to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting use color names to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_USE_COLOR_NAMES,
@@ -1931,8 +2768,8 @@ class SpeechManager(Extension):
     def set_insert_pauses_between_utterances(self, value: bool) -> bool:
         """Sets whether pauses are inserted between utterances, e.g. between name and role."""
 
-        tokens = ["SPEECH MANAGER: Setting insert pauses to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting insert pauses to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_INSERT_PAUSES_BETWEEN_UTTERANCES,
@@ -1960,8 +2797,8 @@ class SpeechManager(Extension):
     def set_use_pronunciation_dictionary(self, value: bool) -> bool:
         """Sets whether the user's pronunciation dictionary should be applied."""
 
-        tokens = ["SPEECH MANAGER: Setting use pronunciation dictionary to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting use pronunciation dictionary to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_USE_PRONUNCIATION_DICTIONARY,
@@ -1974,78 +2811,24 @@ class SpeechManager(Extension):
         schema="speech",
         gtype="b",
         default=True,
-        summary="Automatically switch voice based on document content language",
+        summary="Automatically switch voice based on text language",
         migration_key="enableAutoLanguageSwitching",
     )
     @dbus_service.getter
     def get_auto_language_switching(self, app_name: str | None = None) -> bool:
-        """Returns whether automatic language switching for document content is enabled."""
+        """Returns whether automatic language switching is enabled."""
 
         return self._get_setting(self.KEY_AUTO_LANGUAGE_SWITCHING, "b", True, app_name=app_name)
 
     @dbus_service.setter
     def set_auto_language_switching(self, value: bool) -> bool:
-        """Sets whether automatic language switching for document content is enabled."""
+        """Sets whether automatic language switching is enabled."""
 
-        tokens = ["SPEECH MANAGER: Setting auto language switching for content to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH MANAGER: Setting auto language switching to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self.SPEECH_SCHEMA,
             self.KEY_AUTO_LANGUAGE_SWITCHING,
-            value,
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_AUTO_LANGUAGE_SWITCHING_UI,
-        schema="speech",
-        gtype="b",
-        default=False,
-        summary="Automatically switch voice based on UI element language",
-    )
-    @dbus_service.getter
-    def get_auto_language_switching_ui(self, app_name: str | None = None) -> bool:
-        """Returns whether automatic language switching for UI elements is enabled."""
-
-        return self._get_setting(self.KEY_AUTO_LANGUAGE_SWITCHING_UI, "b", False, app_name=app_name)
-
-    @dbus_service.setter
-    def set_auto_language_switching_ui(self, value: bool) -> bool:
-        """Sets whether automatic language switching for UI elements is enabled."""
-
-        tokens = ["SPEECH MANAGER: Setting auto language switching for UI to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self.SPEECH_SCHEMA,
-            self.KEY_AUTO_LANGUAGE_SWITCHING_UI,
-            value,
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ONLY_SWITCH_CONFIGURED_LANGUAGES,
-        schema="speech",
-        gtype="b",
-        default=False,
-        summary="Only switch languages that have a configured voice set",
-    )
-    @dbus_service.getter
-    def get_only_switch_configured_languages(self, app_name: str | None = None) -> bool:
-        """Returns whether language switching is limited to configured voice sets."""
-
-        return self._get_setting(
-            self.KEY_ONLY_SWITCH_CONFIGURED_LANGUAGES, "b", False, app_name=app_name
-        )
-
-    @dbus_service.setter
-    def set_only_switch_configured_languages(self, value: bool) -> bool:
-        """Sets whether language switching is limited to configured voice sets."""
-
-        tokens = ["SPEECH MANAGER: Setting only switch configured languages to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self.SPEECH_SCHEMA,
-            self.KEY_ONLY_SWITCH_CONFIGURED_LANGUAGES,
             value,
         )
         return True
@@ -2097,20 +2880,7 @@ class SpeechManager(Extension):
     def create_voices_preferences_grid(self, app_name: str = "") -> VoicesPreferencesGrid:
         """Returns the GtkGrid containing the voices preferences UI."""
 
-        # pylint: disable-next=import-outside-toplevel
-        from .speech_manager_preferences_grid import VoicesPreferencesGrid
-
         return VoicesPreferencesGrid(self, app_name=app_name)
-
-    def create_voice_types_preferences_grid(
-        self, voices_grid: VoicesPreferencesGrid
-    ) -> VoiceTypesPreferencesGrid:
-        """Returns the GtkGrid containing the voice types preferences UI."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .speech_manager_preferences_grid import VoiceTypesPreferencesGrid
-
-        return VoiceTypesPreferencesGrid(voices_grid)
 
 
 _manager: SpeechManager = SpeechManager()

@@ -168,7 +168,7 @@
   <object class="GtkSingleSelection" id="selection_model">
     <property name="model">
       <object class="GtkDirectoryList" id="dirlist">
-        <property name="attributes">standard::name,standard::display-name,standard::icon,standard::size,standard::content-type,standard::type</property>
+        <property name="attributes">standard::name,standard::display-name,standard::icon,standard::size,standard::content-type</property>
       </object>
     </property>
   </object>
@@ -178,14 +178,11 @@
     <property name="default-height">400</property>
     <child type="titlebar">
       <object class="GtkHeaderBar" id="">
-        <child type="start">
+        <child>
           <object class="GtkButton">
             <property name="icon-name">go-up-symbolic</property>
             <signal name="clicked" handler="filebrowser_up_clicked_cb" object="dirlist" swapped="no"/>
           </object>
-        </child>
-        <child type="start">
-          <object class="GtkSpinner" id="loading-spinner"/>
         </child>
         <child type="end">
           <object class="GtkListView">
@@ -232,7 +229,7 @@
     <child>
       <object class="GtkScrolledWindow">
         <property name="can-focus">1</property>
-        <property name="child">
+        <child>
           <object class="GtkGridView" id="view">
             <property name="model">selection_model</property>
             <property name="max-columns">15</property>
@@ -248,7 +245,7 @@
             </binding>
             <signal name="activate" handler="filebrowser_view_activated_cb" object="dirlist" swapped="no"/>
           </object>
-        </property>
+        </child>
       </object>
     </child>
   </object>

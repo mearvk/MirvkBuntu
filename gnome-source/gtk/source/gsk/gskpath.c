@@ -25,12 +25,12 @@
 #include "gskpathbuilder.h"
 #include "gskpathpoint.h"
 #include "gskcontourprivate.h"
-#include "gskroundedrectprivate.h"
 
 /**
  * GskPath:
  *
- * Describes lines and curves that are more complex than simple rectangles.
+ * A `GskPath` describes lines and curves that are more complex
+ * than simple rectangles.
  *
  * Paths can used for rendering (filling or stroking) and for animations
  * (e.g. as trajectories).
@@ -78,7 +78,7 @@ gsk_path_new_from_contours (const GSList *contours)
   guint8 *contour_data;
   GskPathFlags flags;
 
-  flags = GSK_PATH_CLOSED | GSK_PATH_FLAT | GSK_PATH_ZERO_LENGTH;
+  flags = GSK_PATH_CLOSED | GSK_PATH_FLAT;
   size = 0;
   n_contours = 0;
   for (l = contours; l; l = l->next)
@@ -135,17 +135,15 @@ gsk_path_get_n_contours (const GskPath *self)
 }
 
 /* }}} */
-/* }}} */
-
 /* {{{ Public API */
 
 /**
  * gsk_path_ref:
- * @self: a path
+ * @self: a `GskPath`
  *
- * Increases the reference count of a path by one.
+ * Increases the reference count of a `GskPath` by one.
  *
- * Returns: the passed in `GskPath`
+ * Returns: the passed in `GskPath`.
  *
  * Since: 4.14
  */
@@ -161,9 +159,9 @@ gsk_path_ref (GskPath *self)
 
 /**
  * gsk_path_unref:
- * @self: a path
+ * @self: a `GskPath`
  *
- * Decreases the reference count of a path by one.
+ * Decreases the reference count of a `GskPath` by one.
  *
  * If the resulting reference count is zero, frees the path.
  *
@@ -184,10 +182,11 @@ gsk_path_unref (GskPath *self)
 
 /**
  * gsk_path_print:
- * @self: a path
- * @string: the string to print into
+ * @self: a `GskPath`
+ * @string:  The string to print into
  *
- * Converts the path into a human-readable representation.
+ * Converts @self into a human-readable string representation suitable
+ * for printing.
  *
  * The string is compatible with (a superset of)
  * [SVG path syntax](https://www.w3.org/TR/SVG11/paths.html#PathData),
@@ -214,9 +213,9 @@ gsk_path_print (GskPath *self,
 
 /**
  * gsk_path_to_string:
- * @self: a path
+ * @self: a `GskPath`
  *
- * Converts the path into a human-readable string.
+ * Converts the path into a string that is suitable for printing.
  *
  * You can use this function in a debugger to get a quick overview
  * of the path.
@@ -224,7 +223,7 @@ gsk_path_print (GskPath *self,
  * This is a wrapper around [method@Gsk.Path.print], see that function
  * for details.
  *
- * Returns: a new string for @self
+ * Returns: A new string for @self
  *
  * Since: 4.14
  */
@@ -279,10 +278,11 @@ gsk_path_to_cairo_add_op (GskPathOperation        op,
 
 /**
  * gsk_path_to_cairo:
- * @self: a path
+ * @self: a `GskPath`
  * @cr: a cairo context
  *
- * Appends the path to a cairo context for drawing with Cairo.
+ * Appends the given @path to the given cairo context for drawing
+ * with Cairo.
  *
  * This may cause some suboptimal conversions to be performed as
  * Cairo does not support all features of `GskPath`.
@@ -308,11 +308,11 @@ gsk_path_to_cairo (GskPath *self,
 
 /**
  * gsk_path_is_empty:
- * @self: a path
+ * @self: a `GskPath`
  *
  * Checks if the path is empty, i.e. contains no lines or curves.
  *
- * Returns: true if the path is empty
+ * Returns: `TRUE` if the path is empty
  *
  * Since: 4.14
  */
@@ -326,11 +326,12 @@ gsk_path_is_empty (GskPath *self)
 
 /**
  * gsk_path_is_closed:
- * @self: a path
+ * @self: a `GskPath`
  *
- * Returns if the path represents a single closed contour.
+ * Returns if the path represents a single closed
+ * contour.
  *
- * Returns: true if the path is closed
+ * Returns: `TRUE` if the path is closed
  *
  * Since: 4.14
  */
@@ -348,27 +349,26 @@ gsk_path_is_closed (GskPath *self)
 
 /**
  * gsk_path_get_bounds:
- * @self: a path
- * @bounds: (out caller-allocates): return location for the bounds
+ * @self: a `GskPath`
+ * @bounds: (out caller-allocates): the bounds of the given path
  *
  * Computes the bounds of the given path.
  *
  * The returned bounds may be larger than necessary, because this
  * function aims to be fast, not accurate. The bounds are guaranteed
- * to contain the path. For accurate bounds, use
- * [method@Gsk.Path.get_tight_bounds].
+ * to contain the path.
  *
  * It is possible that the returned rectangle has 0 width and/or height.
  * This can happen when the path only describes a point or an
  * axis-aligned line.
  *
- * If the path is empty, false is returned and @bounds are set to
+ * If the path is empty, `FALSE` is returned and @bounds are set to
  * graphene_rect_zero(). This is different from the case where the path
  * is a single point at the origin, where the @bounds will also be set to
- * the zero rectangle but true will be returned.
+ * the zero rectangle but `TRUE` will be returned.
  *
- * Returns: true if the path has bounds, false if the path is known
- *   to be empty and have no bounds
+ * Returns: `TRUE` if the path has bounds, `FALSE` if the path is known
+ *   to be empty and have no bounds.
  *
  * Since: 4.14
  */
@@ -403,65 +403,20 @@ gsk_path_get_bounds (GskPath         *self,
 }
 
 /**
- * gsk_path_get_tight_bounds:
- * @self: a path
- * @bounds: (out caller-allocates): return location for the bounds
- *
- * Computes the tight bounds of the given path.
- *
- * This function works harder than [method@Gsk.Path.get_bounds] to
- * produce the smallest possible bounds.
- *
- * Returns: true if the path has bounds, false if the path is known
- *   to be empty and have no bounds
- *
- * Since: 4.22
- */
-gboolean
-gsk_path_get_tight_bounds (GskPath         *self,
-                           graphene_rect_t *bounds)
-{
-  GskBoundingBox b;
-
-  g_return_val_if_fail (self != NULL, FALSE);
-  g_return_val_if_fail (bounds != NULL, FALSE);
-
-  if (self->n_contours == 0)
-    {
-      graphene_rect_init_from_rect (bounds, graphene_rect_zero ());
-      return FALSE;
-    }
-
-  gsk_contour_get_tight_bounds (self->contours[0], &b);
-
-  for (gsize i = 1; i < self->n_contours; i++)
-    {
-      GskBoundingBox tmp;
-
-      gsk_contour_get_tight_bounds (self->contours[i], &tmp);
-      gsk_bounding_box_union (&b, &tmp, &b);
-    }
-
-  gsk_bounding_box_to_rect (&b, bounds);
-
-  return TRUE;
-}
-
-/**
  * gsk_path_get_stroke_bounds:
- * @self: a path
+ * @self: a #GtkPath
  * @stroke: stroke parameters
  * @bounds: (out caller-allocates): the bounds to fill in
  *
  * Computes the bounds for stroking the given path with the
- * given parameters.
+ * parameters in @stroke.
  *
  * The returned bounds may be larger than necessary, because this
  * function aims to be fast, not accurate. The bounds are guaranteed
  * to contain the area affected by the stroke, including protrusions
  * like miters.
  *
- * Returns: true if the path has bounds, false if the path is known
+ * Returns: `TRUE` if the path has bounds, `FALSE` if the path is known
  *   to be empty and have no bounds.
  *
  * Since: 4.14
@@ -499,16 +454,18 @@ gsk_path_get_stroke_bounds (GskPath         *self,
 
 /**
  * gsk_path_in_fill:
- * @self: a path
+ * @self: a `GskPath`
  * @point: the point to test
  * @fill_rule: the fill rule to follow
  *
- * Returns whether a point is inside the fill area of a path.
+ * Returns whether the given point is inside the area
+ * that would be affected if the path was filled according
+ * to @fill_rule.
  *
  * Note that this function assumes that filling a contour
  * implicitly closes it.
  *
- * Returns: true if @point is inside
+ * Returns: `TRUE` if @point is inside
  *
  * Since: 4.14
  */
@@ -535,15 +492,15 @@ gsk_path_in_fill (GskPath                *self,
 
 /**
  * gsk_path_get_start_point:
- * @self: a path
+ * @self: a `GskPath`
  * @result: (out caller-allocates): return location for point
  *
  * Gets the start point of the path.
  *
- * An empty path has no points, so false
+ * An empty path has no points, so `FALSE`
  * is returned in this case.
  *
- * Returns: true if @result was filled
+ * Returns: `TRUE` if @result was filled
  *
  * Since: 4.14
  */
@@ -563,7 +520,6 @@ gsk_path_get_start_point (GskPath      *self,
    */
   result->contour = 0;
   result->idx = 1;
-  result->idx = MIN (1, gsk_contour_get_n_ops (self->contours[0]) - 1);
   result->t = 0;
 
   return TRUE;
@@ -571,15 +527,15 @@ gsk_path_get_start_point (GskPath      *self,
 
 /**
  * gsk_path_get_end_point:
- * @self: a path
+ * @self: a `GskPath`
  * @result: (out caller-allocates): return location for point
  *
  * Gets the end point of the path.
  *
- * An empty path has no points, so false
+ * An empty path has no points, so `FALSE`
  * is returned in this case.
  *
- * Returns: true if @result was filled
+ * Returns: `TRUE` if @result was filled
  *
  * Since: 4.14
  */
@@ -601,112 +557,21 @@ gsk_path_get_end_point (GskPath      *self,
 }
 
 /**
- * gsk_path_get_next:
- * @self: a path
- * @point: (inout): the current point
- *
- * Moves @point to the next vertex.
- *
- * An empty path has no points, so false
- * is returned in this case.
- *
- * Returns: true if @point was set
- *
- * Since: 4.22
- */
-gboolean
-gsk_path_get_next (GskPath      *self,
-                   GskPathPoint *point)
-{
-  g_return_val_if_fail (self != NULL, FALSE);
-  g_return_val_if_fail (point != NULL, FALSE);
-
-  if (self->n_contours == 0)
-    return FALSE;
-
-  if (point->t < 1)
-    {
-      point->t = 1;
-    }
-  else if (point->idx < gsk_contour_get_n_ops (self->contours[point->contour]) - 1)
-    {
-      point->idx++;
-    }
-  else if (point->contour < self->n_contours - 1)
-    {
-      point->contour++;
-      point->idx = 0;
-      point->t = 0;
-    }
-  else
-    {
-      return FALSE;
-    }
-
-  return TRUE;
-}
-
-/**
- * gsk_path_get_previous:
- * @self: a path
- * @point: (inout): the current point
- *
- * Moves @point to the previous vertex.
- *
- * An empty path has no points, so false
- * is returned in this case.
- *
- * Returns: true if @point was set
- *
- * Since: 4.22
- */
-gboolean
-gsk_path_get_previous (GskPath      *self,
-                       GskPathPoint *point)
-{
-  g_return_val_if_fail (self != NULL, FALSE);
-  g_return_val_if_fail (point != NULL, FALSE);
-
-  if (self->n_contours == 0)
-    return FALSE;
-
-  if (point->t > 0)
-    {
-      point->t = 0;
-    }
-  else if (point->idx > 0)
-    {
-      point->idx--;
-    }
-  else if (point->contour > 0)
-    {
-      point->contour--;
-      point->idx = gsk_contour_get_n_ops (self->contours[point->contour]) - 1;
-      point->t = 1;
-    }
-  else
-    {
-      return FALSE;
-    }
-
-  return TRUE;
-}
-
-/**
  * gsk_path_get_closest_point:
- * @self: a path
+ * @self: a `GskPath`
  * @point: the point
  * @threshold: maximum allowed distance
  * @result: (out caller-allocates): return location for the closest point
  * @distance: (out) (optional): return location for the distance
  *
- * Computes the closest point on the path to the given point.
+ * Computes the closest point on the path to the given point
+ * and sets the @result to it.
  *
  * If there is no point closer than the given threshold,
- * false is returned.
+ * `FALSE` is returned.
  *
- * Returns: true if @point was set to the closest point
- *   on @self, false if no point is closer than @threshold
+ * Returns: `TRUE` if @point was set to the closest point
+ *   on @self, `FALSE` if no point is closer than @threshold
  *
  * Since: 4.14
  */
@@ -745,44 +610,14 @@ gsk_path_get_closest_point (GskPath                *self,
   return found;
 }
 
-/**
- * gsk_path_equal:
- * @path1: a path
- * @path2: another path
- *
- * Returns whether two paths have identical structure.
- *
- * Note that it is possible to construct paths that render
- * identical even though they don't have the same structure.
- *
- * Returns: true if @path1 and @path2 have identical structure
- *
- * Since: 4.22
- */
-gboolean
-gsk_path_equal (const GskPath *path1,
-                const GskPath *path2)
-{
-  if (path1 == path2)
-    return TRUE;
-
-  if (path1->n_contours != path2->n_contours)
-    return FALSE;
-
-  for (int i = 0; i < path1->n_contours; i++)
-    if (!gsk_contour_equal (path1->contours[i], path2->contours[i]))
-      return FALSE;
-
-  return TRUE;
-}
-
 /* }}} */
 /* {{{ Foreach and decomposition */
 
 /**
  * gsk_path_foreach:
- * @self: a path
- * @flags: flags to pass to the foreach function
+ * @self: a `GskPath`
+ * @flags: flags to pass to the foreach function. See [flags@Gsk.PathForeachFlags]
+ *   for details about flags
  * @func: (scope call) (closure user_data): the function to call for operations
  * @user_data: (nullable): user data passed to @func
  *
@@ -800,7 +635,7 @@ gsk_path_equal (const GskPath *path1,
  * - When the @flags disallow certain operations, it provides
  *   an approximation of the path using just the allowed operations.
  *
- * Returns: false if @func returned false, true otherwise.
+ * Returns: `FALSE` if @func returned FALSE`, `TRUE` otherwise.
  *
  * Since: 4.14
  */
@@ -866,13 +701,6 @@ gsk_path_foreach_trampoline (GskPathOperation        op,
                              gpointer                data)
 {
   GskPathForeachTrampoline *trampoline = data;
-  GskAlignedPoint *aligned = g_alloca (sizeof (graphene_point_t) * n_pts);
-
-  /* We can't necessarily guarantee that pts is 8-byte aligned
-   * (probably it is, but we've been through too many layers of
-   * indirection to be sure) so copy it into a buffer that is
-   * definitely suitably-aligned. */
-  memcpy (aligned, pts, sizeof (graphene_point_t) * n_pts);
 
   switch (op)
     {
@@ -903,7 +731,7 @@ gsk_path_foreach_trampoline (GskPathOperation        op,
                                      trampoline->user_data);
           }
 
-        gsk_curve_init (&curve, gsk_pathop_encode (GSK_PATH_QUAD, aligned));
+        gsk_curve_init (&curve, gsk_pathop_encode (GSK_PATH_QUAD, pts));
         return gsk_curve_decompose (&curve,
                                     trampoline->tolerance,
                                     gsk_path_foreach_trampoline_add_line,
@@ -917,7 +745,7 @@ gsk_path_foreach_trampoline (GskPathOperation        op,
         if (trampoline->flags & GSK_PATH_FOREACH_ALLOW_CUBIC)
           return trampoline->func (op, pts, n_pts, weight, trampoline->user_data);
 
-        gsk_curve_init (&curve, gsk_pathop_encode (GSK_PATH_CUBIC, aligned));
+        gsk_curve_init (&curve, gsk_pathop_encode (GSK_PATH_CUBIC, pts));
         if (trampoline->flags & (GSK_PATH_FOREACH_ALLOW_QUAD|GSK_PATH_FOREACH_ALLOW_CONIC))
           return gsk_curve_decompose_curve (&curve,
                                             trampoline->flags,
@@ -938,7 +766,7 @@ gsk_path_foreach_trampoline (GskPathOperation        op,
         if (trampoline->flags & GSK_PATH_FOREACH_ALLOW_CONIC)
           return trampoline->func (op, pts, n_pts, weight, trampoline->user_data);
 
-        gsk_curve_init (&curve, gsk_pathop_encode (GSK_PATH_CONIC, (GskAlignedPoint[4]) { { pts[0] }, { pts[1] }, { { weight, 0.f } }, { pts[2] } } ));
+        gsk_curve_init (&curve, gsk_pathop_encode (GSK_PATH_CONIC, (graphene_point_t[4]) { pts[0], pts[1], { weight, 0.f }, pts[2] } ));
         if (trampoline->flags & (GSK_PATH_FOREACH_ALLOW_QUAD|GSK_PATH_FOREACH_ALLOW_CUBIC))
           return gsk_curve_decompose_curve (&curve,
                                             trampoline->flags,
@@ -991,4 +819,4 @@ gsk_path_foreach_with_tolerance (GskPath             *self,
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

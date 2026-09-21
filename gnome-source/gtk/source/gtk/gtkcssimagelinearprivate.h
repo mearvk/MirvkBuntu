@@ -36,9 +36,8 @@ typedef struct _GtkCssImageLinearClass      GtkCssImageLinearClass;
 typedef struct _GtkCssImageLinearColorStop  GtkCssImageLinearColorStop;
 
 struct _GtkCssImageLinearColorStop {
-  GtkCssValue        *transition_hint;
-  GtkCssValue        *color;
   GtkCssValue        *offset;
+  GtkCssValue        *color;
 };
 
 struct _GtkCssImageLinear
@@ -49,9 +48,6 @@ struct _GtkCssImageLinear
   guint repeating :1;
   GtkCssValue *angle;
 
-  GtkCssColorSpace color_space;
-  GtkCssHueInterpolation hue_interp;
-
   guint n_stops;
   GtkCssImageLinearColorStop *color_stops;
 };
@@ -61,7 +57,7 @@ struct _GtkCssImageLinearClass
   GtkCssImageClass parent_class;
 };
 
-GType          _gtk_css_image_linear_get_type             (void);
+GType          _gtk_css_image_linear_get_type             (void) G_GNUC_CONST;
 
 G_END_DECLS
 

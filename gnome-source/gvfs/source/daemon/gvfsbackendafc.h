@@ -26,7 +26,7 @@ struct _GVfsBackendAfcClass {
     GVfsBackendClass parent_class;
 };
 
-GType g_vfs_backend_afc_get_type (void);
+GType g_vfs_backend_afc_get_type (void) G_GNUC_CONST;
 
 G_END_DECLS
 

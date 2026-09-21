@@ -53,32 +53,25 @@ typedef struct _MetaKbdA11ySettings
   int mousekeys_accel_time;
 } MetaKbdA11ySettings;
 
-typedef struct _MetaCustomAccelConfig
-{
-  double step;
-  const double *points;
-  size_t points_len;
-} MetaCustomAccelConfig;
-
 struct _MetaInputSettingsClass
 {
   GObjectClass parent_class;
 
-  void (* set_send_events) (MetaInputSettings        *settings,
-                            ClutterInputDevice       *device,
-                            GDesktopDeviceSendEvents  mode);
-  void (* set_matrix) (MetaInputSettings  *settings,
-                       ClutterInputDevice *device,
-                       const float         matrix[6]);
-  void (* set_speed) (MetaInputSettings  *settings,
-                      ClutterInputDevice *device,
-                      gdouble             speed);
-  void (* set_left_handed) (MetaInputSettings  *settings,
-                            ClutterInputDevice *device,
-                            gboolean            enabled);
-  void (* set_tap_enabled) (MetaInputSettings  *settings,
-                            ClutterInputDevice *device,
-                            gboolean            enabled);
+  void (* set_send_events)   (MetaInputSettings        *settings,
+                              ClutterInputDevice       *device,
+                              GDesktopDeviceSendEvents  mode);
+  void (* set_matrix)        (MetaInputSettings  *settings,
+                              ClutterInputDevice *device,
+                              const float         matrix[6]);
+  void (* set_speed)         (MetaInputSettings  *settings,
+                              ClutterInputDevice *device,
+                              gdouble             speed);
+  void (* set_left_handed)   (MetaInputSettings  *settings,
+                              ClutterInputDevice *device,
+                              gboolean            enabled);
+  void (* set_tap_enabled)   (MetaInputSettings  *settings,
+                              ClutterInputDevice *device,
+                              gboolean            enabled);
   void (* set_tap_button_map) (MetaInputSettings            *settings,
                                ClutterInputDevice           *device,
                                GDesktopTouchpadTapButtonMap  mode);
@@ -91,15 +84,12 @@ struct _MetaInputSettingsClass
   void (* set_disable_while_typing) (MetaInputSettings  *settings,
                                      ClutterInputDevice *device,
                                      gboolean            enabled);
-  void (* set_disable_while_typing_timeout) (MetaInputSettings  *settings,
-                                             ClutterInputDevice *device,
-                                             uint32_t            millis);
   void (* set_invert_scroll) (MetaInputSettings  *settings,
                               ClutterInputDevice *device,
                               gboolean            inverted);
-  void (* set_edge_scroll) (MetaInputSettings  *settings,
-                            ClutterInputDevice *device,
-                            gboolean            enabled);
+  void (* set_edge_scroll)   (MetaInputSettings  *settings,
+                              ClutterInputDevice *device,
+                              gboolean            enabled);
   void (* set_two_finger_scroll) (MetaInputSettings  *settings,
                                   ClutterInputDevice *device,
                                   gboolean            enabled);
@@ -108,44 +98,40 @@ struct _MetaInputSettingsClass
                               guint               button,
                               gboolean            button_lock);
 
-  void (* set_click_method) (MetaInputSettings            *settings,
-                             ClutterInputDevice           *device,
-                             GDesktopTouchpadClickMethod   mode);
+  void (* set_click_method)  (MetaInputSettings            *settings,
+                              ClutterInputDevice           *device,
+                              GDesktopTouchpadClickMethod   mode);
 
   void (* set_keyboard_repeat) (MetaInputSettings *settings,
                                 gboolean           repeat,
                                 guint              delay,
                                 guint              interval);
 
-  void (* set_tablet_mapping) (MetaInputSettings      *settings,
-                               ClutterInputDevice     *device,
-                               GDesktopTabletMapping   mapping);
-  void (* set_tablet_aspect_ratio) (MetaInputSettings      *settings,
-                                    ClutterInputDevice     *device,
-                                    double                  ratio);
-  void (* set_tablet_area) (MetaInputSettings      *settings,
-                            ClutterInputDevice     *device,
-                            gdouble                 padding_left,
-                            gdouble                 padding_right,
-                            gdouble                 padding_top,
-                            gdouble                 padding_bottom);
+  void (* set_tablet_mapping)        (MetaInputSettings      *settings,
+                                      ClutterInputDevice     *device,
+                                      GDesktopTabletMapping   mapping);
+  void (* set_tablet_aspect_ratio)   (MetaInputSettings      *settings,
+                                      ClutterInputDevice     *device,
+                                      double                  ratio);
+  void (* set_tablet_area)           (MetaInputSettings      *settings,
+                                      ClutterInputDevice     *device,
+                                      gdouble                 padding_left,
+                                      gdouble                 padding_right,
+                                      gdouble                 padding_top,
+                                      gdouble                 padding_bottom);
 
-  void (* set_mouse_accel_profile) (MetaInputSettings           *settings,
-                                    ClutterInputDevice          *device,
-                                    GDesktopPointerAccelProfile  profile,
-                                    MetaCustomAccelConfig       *accel_config);
+  void (* set_mouse_accel_profile) (MetaInputSettings          *settings,
+                                    ClutterInputDevice         *device,
+                                    GDesktopPointerAccelProfile profile);
   void (* set_touchpad_accel_profile) (MetaInputSettings           *settings,
                                        ClutterInputDevice          *device,
-                                       GDesktopPointerAccelProfile  profile,
-                                       MetaCustomAccelConfig       *accel_config);
-  void (* set_trackball_accel_profile) (MetaInputSettings           *settings,
-                                        ClutterInputDevice          *device,
-                                        GDesktopPointerAccelProfile  profile,
-                                        MetaCustomAccelConfig       *accel_config);
+                                       GDesktopPointerAccelProfile  profile);
+  void (* set_trackball_accel_profile) (MetaInputSettings          *settings,
+                                        ClutterInputDevice         *device,
+                                        GDesktopPointerAccelProfile profile);
   void (* set_pointing_stick_accel_profile) (MetaInputSettings           *settings,
                                              ClutterInputDevice          *device,
-                                             GDesktopPointerAccelProfile  profile,
-                                             MetaCustomAccelConfig       *accel_config);
+                                             GDesktopPointerAccelProfile  profile);
   void (* set_pointing_stick_scroll_method) (MetaInputSettings                 *settings,
                                              ClutterInputDevice                *device,
                                              GDesktopPointingStickScrollMethod  profile);
@@ -153,20 +139,13 @@ struct _MetaInputSettingsClass
   void (* set_stylus_pressure) (MetaInputSettings            *settings,
                                 ClutterInputDevice           *device,
                                 ClutterInputDeviceTool       *tool,
-                                const gint32                  curve[4],
-                                const gdouble                 range[2]);
+                                const gint32                  curve[4]);
   void (* set_stylus_button_map) (MetaInputSettings          *settings,
                                   ClutterInputDevice         *device,
                                   ClutterInputDeviceTool     *tool,
                                   GDesktopStylusButtonAction  primary,
                                   GDesktopStylusButtonAction  secondary,
                                   GDesktopStylusButtonAction  tertiary);
-
-  void (* set_eraser_button_action) (MetaInputSettings              *settings,
-                                     ClutterInputDevice             *device,
-                                     ClutterInputDeviceTool         *tool,
-                                     GDesktopStylusEraserButtonMode  mode,
-                                     GDesktopStylusButtonAction      button);
 
   void (* set_mouse_middle_click_emulation) (MetaInputSettings  *settings,
                                              ClutterInputDevice *device,
@@ -213,14 +192,3 @@ void meta_input_settings_notify_kbd_a11y_change (MetaInputSettings     *input_se
                                                  MetaKeyboardA11yFlags  what_changed);
 
 MetaBackend * meta_input_settings_get_backend (MetaInputSettings *input_settings);
-
-GDesktopStylusButtonAction meta_input_settings_get_tool_button_action (MetaInputSettings       *input_settings,
-                                                                       ClutterInputDevice      *device,
-                                                                       ClutterInputDeviceTool  *tool,
-                                                                       uint32_t                 clutter_button,
-                                                                       char                   **keybinding);
-
-GDesktopStylusButtonAction meta_input_settings_get_eraser_button_action (MetaInputSettings       *input_settings,
-                                                                         ClutterInputDevice      *device,
-                                                                         ClutterInputDeviceTool  *tool,
-                                                                         char                   **keybinding);

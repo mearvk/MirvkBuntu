@@ -24,6 +24,7 @@
 #include "stdio.h"
 #include <string.h>
 #include "cr-input.h"
+#include "cr-enc-handler.h"
 
 /**
  *@CRInput:
@@ -116,6 +117,7 @@ cr_input_new_real (void)
  *@a_buf: the memory buffer to create the input stream from.
  *The #CRInput keeps this pointer so user should not free it !.
  *@a_len: the size of the input buffer.
+ *@a_enc: the buffer's encoding.
  *@a_free_buf: if set to TRUE, this a_buf will be freed
  *at the destruction of this instance. If set to false, it is up
  *to the caller to free it.
@@ -126,21 +128,148 @@ cr_input_new_real (void)
 CRInput *
 cr_input_new_from_buf (guchar * a_buf,
                        gulong a_len,
+                       enum CREncoding a_enc,
                        gboolean a_free_buf)
 {
         CRInput *result = NULL;
+        enum CRStatus status = CR_OK;
+        CREncHandler *enc_handler = NULL;
+        gulong len = a_len;
 
         g_return_val_if_fail (a_buf, NULL);
 
         result = cr_input_new_real ();
         g_return_val_if_fail (result, NULL);
 
-        PRIVATE (result)->in_buf = (guchar *) a_buf;
-        PRIVATE (result)->in_buf_size = a_len;
-        PRIVATE (result)->nb_bytes = a_len;
-        PRIVATE (result)->free_in_buf = a_free_buf;
+        /*transform the encoding in utf8 */
+        if (a_enc != CR_UTF_8) {
+                enc_handler = cr_enc_handler_get_instance (a_enc);
+                if (!enc_handler) {
+                        goto error;
+                }
+
+                status = cr_enc_handler_convert_input
+                        (enc_handler, a_buf, &len,
+                         &PRIVATE (result)->in_buf,
+                         &PRIVATE (result)->in_buf_size);
+                if (status != CR_OK)
+                        goto error;
+                PRIVATE (result)->free_in_buf = TRUE;
+                if (a_free_buf == TRUE && a_buf) {
+                        g_free (a_buf) ;
+                        a_buf = NULL ;
+                }                
+                PRIVATE (result)->nb_bytes = PRIVATE (result)->in_buf_size;
+        } else {
+                PRIVATE (result)->in_buf = (guchar *) a_buf;
+                PRIVATE (result)->in_buf_size = a_len;
+                PRIVATE (result)->nb_bytes = a_len;
+                PRIVATE (result)->free_in_buf = a_free_buf;
+        }
         PRIVATE (result)->line = 1;
         PRIVATE (result)->col =  0;
+        return result;
+
+ error:
+        if (result) {
+                cr_input_destroy (result);
+                result = NULL;
+        }
+
+        return NULL;
+}
+
+/**
+ * cr_input_new_from_uri:
+ *@a_file_uri: the file to create *the input stream from.
+ *@a_enc: the encoding of the file *to create the input from.
+ *
+ *Creates a new input stream from
+ *a file.
+ *
+ *Returns the newly created input stream if
+ *this method could read the file and create it,
+ *NULL otherwise.
+ */
+
+CRInput *
+cr_input_new_from_uri (const gchar * a_file_uri, enum CREncoding a_enc)
+{
+        CRInput *result = NULL;
+        enum CRStatus status = CR_OK;
+        FILE *file_ptr = NULL;
+        guchar tmp_buf[CR_INPUT_MEM_CHUNK_SIZE] = { 0 };
+        gulong nb_read = 0,
+                len = 0,
+                buf_size = 0;
+        gboolean loop = TRUE;
+        guchar *buf = NULL;
+
+        g_return_val_if_fail (a_file_uri, NULL);
+
+        file_ptr = fopen (a_file_uri, "r");
+
+        if (file_ptr == NULL) {
+
+#ifdef CR_DEBUG
+                cr_utils_trace_debug ("could not open file");
+#endif
+                g_warning ("Could not open file %s\n", a_file_uri);
+
+                return NULL;
+        }
+
+        /*load the file */
+        while (loop) {
+                nb_read = fread (tmp_buf, 1 /*read bytes */ ,
+                                 CR_INPUT_MEM_CHUNK_SIZE /*nb of bytes */ ,
+                                 file_ptr);
+
+                if (nb_read != CR_INPUT_MEM_CHUNK_SIZE) {
+                        /*we read less chars than we wanted */
+                        if (feof (file_ptr)) {
+                                /*we reached eof */
+                                loop = FALSE;
+                        } else {
+                                /*a pb occurred !! */
+                                cr_utils_trace_debug ("an io error occurred");
+                                status = CR_ERROR;
+                                goto cleanup;
+                        }
+                }
+
+                if (status == CR_OK) {
+                        /*read went well */
+                        buf = g_realloc (buf, len + CR_INPUT_MEM_CHUNK_SIZE);
+                        memcpy (buf + len, tmp_buf, nb_read);
+                        len += nb_read;
+                        buf_size += CR_INPUT_MEM_CHUNK_SIZE;
+                }
+        }
+
+        if (status == CR_OK) {
+                result = cr_input_new_from_buf (buf, len, a_enc, TRUE);
+                if (!result) {
+                        goto cleanup;
+                }
+                /*
+                 *we should  free buf here because it's own by CRInput.
+                 *(see the last parameter of cr_input_new_from_buf().
+                 */
+                buf = NULL;
+        }
+
+ cleanup:
+        if (file_ptr) {
+                fclose (file_ptr);
+                file_ptr = NULL;
+        }
+
+        if (buf) {
+                g_free (buf);
+                buf = NULL;
+        }
+
         return result;
 }
 
@@ -208,6 +337,32 @@ cr_input_unref (CRInput * a_this)
                 return TRUE;
         }
         return FALSE;
+}
+
+/**
+ * cr_input_end_of_input:
+ *@a_this: the current instance of #CRInput.
+ *@a_end_of_input: out parameter. Is set to TRUE if
+ *the current instance has reached the end of its input buffer,
+ *FALSE otherwise.
+ *
+ *Tests whether the current instance of
+ *#CRInput has reached its input buffer.
+ *
+ * Returns CR_OK upon successful completion, an error code otherwise.
+ * Note that all the out parameters of this method are valid if
+ * and only if this method returns CR_OK.
+ */
+enum CRStatus
+cr_input_end_of_input (CRInput const * a_this, gboolean * a_end_of_input)
+{
+        g_return_val_if_fail (a_this && PRIVATE (a_this)
+                              && a_end_of_input, CR_BAD_PARAM_ERROR);
+
+        *a_end_of_input = (PRIVATE (a_this)->next_byte_index
+                           >= PRIVATE (a_this)->in_buf_size) ? TRUE : FALSE;
+
+        return CR_OK;
 }
 
 /**

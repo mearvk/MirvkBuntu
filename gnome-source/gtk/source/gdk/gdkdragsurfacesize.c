@@ -23,7 +23,8 @@
 /**
  * GdkDragSurfaceSize:
  *
- * Contains information that is useful to compute the size of a drag surface.
+ * The `GdkDragSurfaceSize` struct contains information that is useful
+ * to compute the size of a drag surface.
  *
  * Since: 4.12
  */

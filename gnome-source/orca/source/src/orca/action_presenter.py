@@ -32,12 +32,14 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
 
 from . import (
-    action_presenter_command_definitions,
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     focus_manager,
     guilabels,
     input_event,
+    keybindings,
     messages,
     presentation_manager,
     script_manager,
@@ -45,7 +47,6 @@ from . import (
 from .ax_action import AXAction
 from .ax_object import AXObject
 from .ax_utilities import AXUtilities
-from .extension import Extension
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -53,23 +54,47 @@ if TYPE_CHECKING:
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
 
-    from .command import Command
     from .scripts import default
 
 
-class ActionPresenter(Extension):
+class ActionPresenter:
     """Provides a list for performing accessible actions on an object."""
-
-    GROUP_LABEL = guilabels.KB_GROUP_ACTIONS
 
     def __init__(self) -> None:
         self._gui: ActionList | None = None
         self._obj: Atspi.Accessible | None = None
         self._window: Atspi.Accessible | None = None
-        super().__init__()
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return action_presenter_command_definitions.get_commands(self)
+        msg = "ACTION PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("ActionPresenter", self)
+
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_ACTIONS
+        kb = keybindings.KeyBinding("a", keybindings.ORCA_SHIFT_MODIFIER_MASK)
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "show_actions_list",
+                self.show_actions_list,
+                group_label,
+                cmdnames.SHOW_ACTIONS_LIST,
+                desktop_keybinding=kb,
+                laptop_keybinding=kb,
+            ),
+        )
+
+        msg = "ACTION PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _restore_focus(self) -> None:
         """Restores focus to the object associated with the actions list."""
@@ -135,24 +160,15 @@ class ActionPresenter(Extension):
             return True
 
         actions = {}
-        n_actions = AXAction.get_n_actions(obj)
-        for i in range(n_actions):
-            name = AXAction.get_action_name(obj, i, n_actions)
-            localized_name = AXAction.get_action_localized_name(obj, i, n_actions)
-            description = AXAction.get_action_description(obj, i, n_actions)
+        for i in range(AXAction.get_n_actions(obj)):
+            name = AXAction.get_action_name(obj, i)
+            localized_name = AXAction.get_action_localized_name(obj, i)
+            description = AXAction.get_action_description(obj, i)
             tokens = [
-                "ACTION PRESENTER: Action",
-                i,
-                "on",
+                f"ACTION PRESENTER: Action {i} on",
                 obj,
-                ": '",
-                name,
-                "' localized name: '",
-                localized_name,
-                "'",
-                "localized description: '",
-                description,
-                "'",
+                f": '{name}' localized name: '{localized_name}' ",
+                f"localized description: '{description}'",
             ]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             actions[name] = localized_name or description or name

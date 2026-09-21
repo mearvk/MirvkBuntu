@@ -26,14 +26,11 @@
 #include <glib/gi18n-lib.h>
 #include "gtkmodulesprivate.h"
 #include "gtknomediafileprivate.h"
-#ifdef HAVE_GSTREAMER
-#include "media/gtkgstmediafileprivate.h"
-#endif
 
 /**
  * GtkMediaFile:
  *
- * Implements the `GtkMediaStream` interface for files.
+ * `GtkMediaFile` implements `GtkMediaStream` for files.
  *
  * This provides a simple way to play back video files with GTK.
  *
@@ -154,17 +151,17 @@ gtk_media_file_class_init (GtkMediaFileClass *class)
   gobject_class->dispose = gtk_media_file_dispose;
 
   /**
-   * GtkMediaFile:file:
+   * GtkMediaFile:file: (attributes org.gtk.Property.get=gtk_media_file_get_file org.gtk.Property.set=gtk_media_file_set_file)
    *
    * The file being played back or %NULL if not playing a file.
    */
   properties[PROP_FILE] =
     g_param_spec_object ("file", NULL, NULL,
                          G_TYPE_FILE,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkMediaFile:input-stream:
+   * GtkMediaFile:input-stream: (attributes org.gtk.Property.get=gtk_media_file_get_input_stream org.gtk.Property.set=gtk_media_file_set_input_stream)
    *
    * The stream being played back or %NULL if not playing a stream.
    *
@@ -173,7 +170,7 @@ gtk_media_file_class_init (GtkMediaFileClass *class)
   properties[PROP_INPUT_STREAM] =
     g_param_spec_object ("input-stream", NULL, NULL,
                          G_TYPE_INPUT_STREAM,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -190,19 +187,7 @@ gtk_media_file_get_extension (void)
   GIOExtension *e;
   GIOExtensionPoint *ep;
 
-  g_type_ensure (GTK_TYPE_NO_MEDIA_FILE);
-
-#ifdef HAVE_MEDIA_GSTREAMER
-  g_type_ensure (GTK_TYPE_GST_MEDIA_FILE);
-#endif
-
   GTK_DEBUG (MODULES, "Looking up MediaFile extension");
-
-  g_type_ensure (GTK_TYPE_NO_MEDIA_FILE);
-
-#ifdef HAVE_GSTREAMER
-  g_type_ensure (GTK_TYPE_GST_MEDIA_FILE);
-#endif
 
   ep = g_io_extension_point_lookup (GTK_MEDIA_FILE_EXTENSION_POINT_NAME);
   e = NULL;
@@ -435,7 +420,7 @@ gtk_media_file_clear (GtkMediaFile *self)
  * @self: a `GtkMediaFile`
  * @filename: (type filename) (nullable): name of file to play
  *
- * Sets the `GtkMediaFile` to play the given file.
+ * Sets the `GtkMediaFile to play the given file.
  *
  * This is a utility function that converts the given @filename
  * to a `GFile` and calls [method@Gtk.MediaFile.set_file].
@@ -464,7 +449,7 @@ gtk_media_file_set_filename (GtkMediaFile *self,
  * @self: a `GtkMediaFile`
  * @resource_path: (nullable): path to resource to play
  *
- * Sets the `GtkMediaFile` to play the given resource.
+ * Sets the `GtkMediaFile to play the given resource.
  *
  * This is a utility function that converts the given @resource_path
  * to a `GFile` and calls [method@Gtk.MediaFile.set_file].
@@ -502,7 +487,7 @@ gtk_media_file_set_resource (GtkMediaFile *self,
 }
 
 /**
- * gtk_media_file_set_file:
+ * gtk_media_file_set_file: (attributes org.gtk.Method.set_property=file)
  * @self: a `GtkMediaFile`
  * @file: (nullable): the file to play
  *
@@ -538,7 +523,7 @@ gtk_media_file_set_file (GtkMediaFile *self,
 }
 
 /**
- * gtk_media_file_get_file:
+ * gtk_media_file_get_file: (attributes org.gtk.Method.get_property=file)
  * @self: a `GtkMediaFile`
  *
  * Returns the file that @self is currently playing from.
@@ -559,7 +544,7 @@ gtk_media_file_get_file (GtkMediaFile *self)
 }
 
 /**
- * gtk_media_file_set_input_stream:
+ * gtk_media_file_set_input_stream: (attributes org.gtk.Method.set_property=input-stream)
  * @self: a `GtkMediaFile`
  * @stream: (nullable): the stream to play from
  *
@@ -598,7 +583,7 @@ gtk_media_file_set_input_stream (GtkMediaFile *self,
 }
 
 /**
- * gtk_media_file_get_input_stream:
+ * gtk_media_file_get_input_stream: (attributes org.gtk.Method.get_property=input-stream)
  * @self: a `GtkMediaFile`
  *
  * Returns the stream that @self is currently playing from.
@@ -630,6 +615,8 @@ gtk_media_file_extension_init (void)
 
   ep = g_io_extension_point_register (GTK_MEDIA_FILE_EXTENSION_POINT_NAME);
   g_io_extension_point_set_required_type (ep, GTK_TYPE_MEDIA_FILE);
+
+  g_type_ensure (GTK_TYPE_NO_MEDIA_FILE);
 
   scope = g_io_module_scope_new (G_IO_MODULE_SCOPE_BLOCK_DUPLICATES);
 

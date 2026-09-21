@@ -36,11 +36,10 @@
 #include "gtkdebug.h"
 #include "gtkeditable.h"
 #include "gtkemojichooser.h"
-#include "gtkemojicompletionprivate.h"
+#include "gtkemojicompletion.h"
 #include "gtkentrybuffer.h"
 #include "gtkgesturedrag.h"
 #include <glib/gi18n-lib.h>
-#include "gtkjoinedmenuprivate.h"
 #include "gtklabel.h"
 #include "gtkmain.h"
 #include "gtkmarshalers.h"
@@ -58,7 +57,6 @@
 #include "gtkdragsourceprivate.h"
 #include "gtkdragicon.h"
 #include "gtkwidgetpaintable.h"
-#include "gtkbuilderprivate.h"
 
 #include <cairo-gobject.h>
 #include <string.h>
@@ -66,12 +64,9 @@
 /**
  * GtkEntry:
  *
- * A single-line text entry widget.
+ * `GtkEntry` is a single line text entry widget.
  *
- * <picture>
- *   <source srcset="entry-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkEntry" src="entry.png">
- * </picture>
+ * ![An example GtkEntry](entry.png)
  *
  * A fairly large set of key bindings are supported by default. If the
  * entered text is longer than the allocation of the widget, the widget
@@ -155,7 +150,7 @@
  *
  * # Accessibility
  *
- * `GtkEntry` uses the [enum@Gtk.AccessibleRole.text_box] role.
+ * `GtkEntry` uses the %GTK_ACCESSIBLE_ROLE_TEXT_BOX role.
  */
 
 #define MAX_ICONS 2
@@ -175,9 +170,6 @@ struct _GtkEntryPrivate
 
   GtkWidget     *text;
   GtkWidget     *progress_widget;
-  GMenuModel    *extra_menu;
-  gchar         *menu_entry_icon_primary_text;
-  gchar         *menu_entry_icon_secondary_text;
 
   guint         show_emoji_icon         : 1;
   guint         editing_canceled        : 1; /* Only used by GtkCellRendererText */
@@ -242,11 +234,8 @@ enum {
   PROP_EXTRA_MENU,
   PROP_SHOW_EMOJI_ICON,
   PROP_ENABLE_EMOJI_COMPLETION,
-  PROP_MENU_ENTRY_ICON_PRIMARY_TEXT,
-  PROP_MENU_ENTRY_ICON_SECONDARY_TEXT,
-  /* GtkCellEditable */
   PROP_EDITING_CANCELED,
-  NUM_PROPERTIES
+  NUM_PROPERTIES = PROP_EDITING_CANCELED,
 };
 
 static GParamSpec *entry_props[NUM_PROPERTIES] = { NULL, };
@@ -301,8 +290,6 @@ static void   gtk_entry_direction_changed    (GtkWidget        *widget,
  */
 static void gtk_entry_start_editing (GtkCellEditable *cell_editable,
 				     GdkEvent        *event);
-
-static void update_extra_menu (GtkEntry *entry);
 
 /* Default signal handlers
  */
@@ -376,8 +363,6 @@ gtk_entry_buildable_custom_tag_start (GtkBuildable       *buildable,
     {
       GtkPangoAttributeParserData *parser_data;
 
-      gtk_buildable_tag_deprecation_warning (buildable, builder, "attributes", "attributes");
-
       parser_data = g_new0 (GtkPangoAttributeParserData, 1);
       parser_data->builder = g_object_ref (builder);
       parser_data->object = (GObject *) g_object_ref (buildable);
@@ -445,18 +430,6 @@ gtk_entry_mnemonic_activate (GtkWidget *widget,
 }
 
 static void
-gtk_entry_activate_misc_icon (GtkWidget  *widget,
-                              const char *action_name,
-                              GVariant   *parameter)
-{
-  GtkEntry *self = GTK_ENTRY (widget);
-  gtk_entry_activate_icon (self,
-                           g_str_equal (action_name, "misc.menu_entry_icon_primary")
-                           ? GTK_ENTRY_ICON_PRIMARY
-                           : GTK_ENTRY_ICON_SECONDARY);
-}
-
-static void
 gtk_entry_class_init (GtkEntryClass *class)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (class);
@@ -481,17 +454,17 @@ gtk_entry_class_init (GtkEntryClass *class)
   quark_entry_completion = g_quark_from_static_string ("gtk-entry-completion-key");
 
   /**
-   * GtkEntry:buffer:
+   * GtkEntry:buffer: (attributes org.gtk.Property.get=gtk_entry_get_buffer org.gtk.Property.set=gtk_entry_set_buffer)
    *
    * The buffer object which actually stores the text.
    */
   entry_props[PROP_BUFFER] =
       g_param_spec_object ("buffer", NULL, NULL,
                            GTK_TYPE_ENTRY_BUFFER,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:max-length:
+   * GtkEntry:max-length: (attributes org.gtk.Property.get=gtk_entry_get_max_length org.gtk.Property.set=gtk_entry_set_max_length)
    *
    * Maximum number of characters for this entry.
    */
@@ -499,10 +472,10 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_int ("max-length", NULL, NULL,
                         0, GTK_ENTRY_BUFFER_MAX_SIZE,
                         0,
-                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:visibility:
+   * GtkEntry:visibility: (attributes org.gtk.Property.get=gtk_entry_get_visibility org.gtk.Property.set=gtk_entry_set_visibility)
    *
    * Whether the entry should show the “invisible char” instead of the
    * actual text (“password mode”).
@@ -510,37 +483,37 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_VISIBILITY] =
       g_param_spec_boolean ("visibility", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:has-frame:
+   * GtkEntry:has-frame: (attributes org.gtk.Property.get=gtk_entry_get_has_frame org.gtk.Property.set=gtk_entry_set_has_frame)
    *
    * Whether the entry should draw a frame.
    */
   entry_props[PROP_HAS_FRAME] =
       g_param_spec_boolean ("has-frame", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:invisible-char:
+   * GtkEntry:invisible-char: (attributes org.gtk.Property.get=gtk_entry_get_invisible_char org.gtk.Property.set=gtk_entry_set_invisible_char)
    *
    * The character to use when masking entry contents (“password mode”).
    */
   entry_props[PROP_INVISIBLE_CHAR] =
       g_param_spec_unichar ("invisible-char", NULL, NULL,
                             '*',
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:activates-default:
+   * GtkEntry:activates-default: (attributes org.gtk.Property.get=gtk_entry_get_activates_default org.gtk.Property.set=gtk_entry_set_activates_default)
    *
    * Whether to activate the default widget when Enter is pressed.
    */
   entry_props[PROP_ACTIVATES_DEFAULT] =
       g_param_spec_boolean ("activates-default", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:scroll-offset:
@@ -551,7 +524,7 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_int ("scroll-offset", NULL, NULL,
                         0, G_MAXINT,
                         0,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READABLE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:truncate-multiline:
@@ -561,20 +534,20 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_TRUNCATE_MULTILINE] =
       g_param_spec_boolean ("truncate-multiline", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:overwrite-mode:
+   * GtkEntry:overwrite-mode: (attributes org.gtk.Property.get=gtk_entry_get_overwrite_mode org.gtk.Property.set=gtk_entry_set_overwrite_mode)
    *
    * If text is overwritten when typing in the `GtkEntry`.
    */
   entry_props[PROP_OVERWRITE_MODE] =
       g_param_spec_boolean ("overwrite-mode", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:text-length:
+   * GtkEntry:text-length: (attributes org.gtk.Property.get=gtk_entry_get_text_length)
    *
    * The length of the text in the `GtkEntry`.
    */
@@ -582,7 +555,7 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_uint ("text-length", NULL, NULL,
                          0, G_MAXUINT16,
                          0,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READABLE);
 
   /**
    * GtkEntry:invisible-char-set:
@@ -592,10 +565,10 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_INVISIBLE_CHAR_SET] =
       g_param_spec_boolean ("invisible-char-set", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                            GTK_PARAM_READWRITE);
 
   /**
-   * GtkEntry:progress-fraction:
+   * GtkEntry:progress-fraction: (attributes org.gtk.Property.get=gtk_entry_get_progress_fraction org.gtk.Property.set=gtk_entry_set_progress_fraction)
    *
    * The current fraction of the task that's been completed.
    */
@@ -603,10 +576,10 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_double ("progress-fraction", NULL, NULL,
                            0.0, 1.0,
                            0.0,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:progress-pulse-step:
+   * GtkEntry:progress-pulse-step: (attributes org.gtk.Property.get=gtk_entry_get_progress_pulse_step org.gtk.Property.set=gtk_entry_set_progress_pulse_step)
    *
    * The fraction of total entry width to move the progress
    * bouncing block for each pulse.
@@ -617,10 +590,10 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_double ("progress-pulse-step", NULL, NULL,
                            0.0, 1.0,
                            0.0,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-  * GtkEntry:placeholder-text:
+  * GtkEntry:placeholder-text: (attributes org.gtk.Property.get=gtk_entry_get_placeholder_text org.gtk.Property.set=gtk_entry_set_placeholder_text)
   *
   * The text that will be displayed in the `GtkEntry` when it is empty
   * and unfocused.
@@ -628,7 +601,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_PLACEHOLDER_TEXT] =
       g_param_spec_string ("placeholder-text", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
    /**
    * GtkEntry:primary-icon-paintable:
@@ -638,7 +611,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_PAINTABLE_PRIMARY] =
       g_param_spec_object ("primary-icon-paintable", NULL, NULL,
                            GDK_TYPE_PAINTABLE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-paintable:
@@ -648,7 +621,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_PAINTABLE_SECONDARY] =
       g_param_spec_object ("secondary-icon-paintable", NULL, NULL,
                            GDK_TYPE_PAINTABLE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:primary-icon-name:
@@ -658,7 +631,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_ICON_NAME_PRIMARY] =
       g_param_spec_string ("primary-icon-name", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-name:
@@ -668,7 +641,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_ICON_NAME_SECONDARY] =
       g_param_spec_string ("secondary-icon-name", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:primary-icon-gicon:
@@ -678,7 +651,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_GICON_PRIMARY] =
       g_param_spec_object ("primary-icon-gicon", NULL, NULL,
                            G_TYPE_ICON,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-gicon:
@@ -688,7 +661,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_GICON_SECONDARY] =
       g_param_spec_object ("secondary-icon-gicon", NULL, NULL,
                            G_TYPE_ICON,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:primary-icon-storage-type:
@@ -699,7 +672,7 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_enum ("primary-icon-storage-type", NULL, NULL,
                          GTK_TYPE_IMAGE_TYPE,
                          GTK_IMAGE_EMPTY,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READABLE);
 
   /**
    * GtkEntry:secondary-icon-storage-type:
@@ -710,7 +683,7 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_enum ("secondary-icon-storage-type", NULL, NULL,
                          GTK_TYPE_IMAGE_TYPE,
                          GTK_IMAGE_EMPTY,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READABLE);
 
   /**
    * GtkEntry:primary-icon-activatable:
@@ -727,7 +700,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_ACTIVATABLE_PRIMARY] =
       g_param_spec_boolean ("primary-icon-activatable", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-activatable:
@@ -744,7 +717,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_ACTIVATABLE_SECONDARY] =
       g_param_spec_boolean ("secondary-icon-activatable", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:primary-icon-sensitive:
@@ -761,7 +734,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_SENSITIVE_PRIMARY] =
       g_param_spec_boolean ("primary-icon-sensitive", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-sensitive:
@@ -778,7 +751,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_SENSITIVE_SECONDARY] =
       g_param_spec_boolean ("secondary-icon-sensitive", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:primary-icon-tooltip-text:
@@ -790,7 +763,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_TOOLTIP_TEXT_PRIMARY] =
       g_param_spec_string ("primary-icon-tooltip-text", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-tooltip-text:
@@ -802,7 +775,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_TOOLTIP_TEXT_SECONDARY] =
       g_param_spec_string ("secondary-icon-tooltip-text", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:primary-icon-tooltip-markup:
@@ -814,7 +787,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_TOOLTIP_MARKUP_PRIMARY] =
       g_param_spec_string ("primary-icon-tooltip-markup", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:secondary-icon-tooltip-markup:
@@ -826,7 +799,7 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_TOOLTIP_MARKUP_SECONDARY] =
       g_param_spec_string ("secondary-icon-tooltip-markup", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:im-module:
@@ -842,10 +815,10 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_IM_MODULE] =
       g_param_spec_string ("im-module", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:completion:
+   * GtkEntry:completion: (attributes org.gtk.Property.get=gtk_entry_get_completion org.gtk.Property.set=gtk_entry_set_completion)
    *
    * The auxiliary completion object to use with the entry.
    *
@@ -854,10 +827,10 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_COMPLETION] =
       g_param_spec_object ("completion", NULL, NULL,
                            GTK_TYPE_ENTRY_COMPLETION,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_DEPRECATED);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY|G_PARAM_DEPRECATED);
 
   /**
-   * GtkEntry:input-purpose:
+   * GtkEntry:input-purpose: (attributes org.gtk.Property.get=gtk_entry_get_input_purpose org.gtk.Property.set=gtk_entry_set_input_purpose)
    *
    * The purpose of this text field.
    *
@@ -872,10 +845,10 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_enum ("input-purpose", NULL, NULL,
                          GTK_TYPE_INPUT_PURPOSE,
                          GTK_INPUT_PURPOSE_FREE_FORM,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:input-hints:
+   * GtkEntry:input-hints: (attributes org.gtk.Property.get=gtk_entry_get_input_hints org.gtk.Property.set=gtk_entry_set_input_hints)
    *
    * Additional hints that allow input methods to fine-tune their behavior.
    *
@@ -885,10 +858,10 @@ gtk_entry_class_init (GtkEntryClass *class)
       g_param_spec_flags ("input-hints", NULL, NULL,
                           GTK_TYPE_INPUT_HINTS,
                           GTK_INPUT_HINT_NONE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:attributes:
+   * GtkEntry:attributes: (attributes org.gtk.Property.get=gtk_entry_get_attributes org.gtk.Property.set=gtk_entry_set_attributes)
    *
    * A list of Pango attributes to apply to the text of the entry.
    *
@@ -900,20 +873,20 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_ATTRIBUTES] =
       g_param_spec_boxed ("attributes", NULL, NULL,
                           PANGO_TYPE_ATTR_LIST,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:tabs:
+   * GtkEntry::tabs: (attributes org.gtk.Property.get=gtk_entry_get_tabs org.gtk.Property.set=gtk_entry_set_tabs)
    *
    * A list of tabstops to apply to the text of the entry.
    */
   entry_props[PROP_TABS] =
       g_param_spec_boxed ("tabs", NULL, NULL,
                           PANGO_TYPE_TAB_ARRAY,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:show-emoji-icon:
+   * GtkEntry::show-emoji-icon: 
    *
    * Whether the entry will show an Emoji icon in the secondary icon position
    * to open the Emoji chooser.
@@ -921,17 +894,17 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_SHOW_EMOJI_ICON] =
       g_param_spec_boolean ("show-emoji-icon", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkEntry:extra-menu:
+   * GtkEntry:extra-menu: (attributes org.gtk.Property.get=gtk_entry_get_extra_menu org.gtk.Property.set=gtk_entry_set_extra_menu)
    *
    * A menu model whose contents will be appended to the context menu.
    */
   entry_props[PROP_EXTRA_MENU] =
       g_param_spec_object ("extra-menu", NULL, NULL,
                            G_TYPE_MENU_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEntry:enable-emoji-completion:
@@ -942,60 +915,11 @@ gtk_entry_class_init (GtkEntryClass *class)
   entry_props[PROP_ENABLE_EMOJI_COMPLETION] =
       g_param_spec_boolean ("enable-emoji-completion", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  /**
-   * GtkEntry:menu-entry-icon-primary-text:
-   *
-   * Text for an item in the context menu to activate the primary icon action.
-   *
-   * When the primary icon is activatable and this property has been set, a new entry
-   * in the context menu of this GtkEntry will appear with this text. Selecting that
-   * menu entry will result in the primary icon being activated, exactly in the same way
-   * as it would be activated from a mouse click.
-   *
-   * This simplifies adding accessibility support to applications using activatable
-   * icons. The activatable icons aren't focusable when navigating the interface with
-   * the keyboard This is why Gtk recommends to also add those actions in the context
-   * menu. This set of methods greatly simplifies this, by adding a menu item that, when
-   * enabled, calls the same callback than clicking on the icon.
-   *
-   * Since: 4.20
-   */
-  entry_props[PROP_MENU_ENTRY_ICON_PRIMARY_TEXT] =
-      g_param_spec_string ("menu-entry-icon-primary-text", NULL, NULL,
-                           NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  /**
-   * GtkEntry:menu-entry-icon-secondary-text:
-   *
-   * Text for an item in the context menu to activate the secondary icon action.
-   *
-   * When the primary icon is activatable and this property has been set, a new entry
-   * in the context menu of this GtkEntry will appear with this text. Selecting that
-   * menu entry will result in the primary icon being activated, exactly in the same way
-   * as it would be activated from a mouse click.
-   *
-   * This simplifies adding accessibility support to applications using activatable
-   * icons. The activatable icons aren't focusable when navigating the interface with
-   * the keyboard This is why Gtk recommends to also add those actions in the context
-   * menu. This set of methods greatly simplifies this, by adding a menu item that, when
-   * enabled, calls the same callback than clicking on the icon.
-   *
-   * Since: 4.20
-   */
-  entry_props[PROP_MENU_ENTRY_ICON_SECONDARY_TEXT] =
-      g_param_spec_string ("menu-entry-icon-secondary-text", NULL, NULL,
-                           NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  entry_props[PROP_EDITING_CANCELED] = g_param_spec_override ("editing-canceled",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_CELL_EDITABLE), "editing-canceled"));
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, entry_props);
-
-  gtk_editable_install_properties (gobject_class, NUM_PROPERTIES);
+  g_object_class_override_property (gobject_class, PROP_EDITING_CANCELED, "editing-canceled");
+  gtk_editable_install_properties (gobject_class, PROP_EDITING_CANCELED + 1);
 
   /**
    * GtkEntry::activate:
@@ -1051,11 +975,6 @@ gtk_entry_class_init (GtkEntryClass *class)
 
   gtk_widget_class_set_css_name (widget_class, I_("entry"));
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_TEXT_BOX);
-
-  gtk_widget_class_install_action (widget_class, "misc.menu_entry_icon_primary", NULL,
-                                   gtk_entry_activate_misc_icon);
-  gtk_widget_class_install_action (widget_class, "misc.menu_entry_icon_secondary", NULL,
-                                   gtk_entry_activate_misc_icon);
 }
 
 static GtkEditable *
@@ -1090,7 +1009,7 @@ gtk_entry_set_property (GObject         *object,
 
   if (gtk_editable_delegate_set_property (object, prop_id, value, pspec))
     {
-      if (prop_id == NUM_PROPERTIES + GTK_EDITABLE_PROP_EDITABLE)
+      if (prop_id == PROP_EDITING_CANCELED + 1 + GTK_EDITABLE_PROP_EDITABLE)
         {
           gtk_accessible_update_property (GTK_ACCESSIBLE (entry),
                                           GTK_ACCESSIBLE_PROPERTY_READ_ONLY, !g_value_get_boolean (value),
@@ -1223,7 +1142,7 @@ gtk_entry_set_property (GObject         *object,
       if (priv->editing_canceled != g_value_get_boolean (value))
         {
           priv->editing_canceled = g_value_get_boolean (value);
-          g_object_notify_by_pspec (object, entry_props[PROP_EDITING_CANCELED]);
+          g_object_notify (object, "editing-canceled");
         }
       break;
 
@@ -1239,18 +1158,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
     case PROP_EXTRA_MENU:
       gtk_entry_set_extra_menu (entry, g_value_get_object (value));
-      break;
-
-    case PROP_MENU_ENTRY_ICON_PRIMARY_TEXT:
-      gtk_entry_set_menu_entry_icon_text (entry,
-                                          GTK_ENTRY_ICON_PRIMARY,
-                                          g_value_get_string (value));
-      break;
-
-    case PROP_MENU_ENTRY_ICON_SECONDARY_TEXT:
-      gtk_entry_set_menu_entry_icon_text (entry,
-                                          GTK_ENTRY_ICON_SECONDARY,
-                                          g_value_get_string (value));
       break;
 
     default:
@@ -1415,18 +1322,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       g_value_set_object (value, gtk_entry_get_extra_menu (entry));
       break;
 
-    case PROP_MENU_ENTRY_ICON_PRIMARY_TEXT:
-      g_value_set_string (value,
-                          gtk_entry_get_menu_entry_icon_text (entry,
-                                                              GTK_ENTRY_ICON_PRIMARY));
-      break;
-
-    case PROP_MENU_ENTRY_ICON_SECONDARY_TEXT:
-      g_value_set_string (value,
-                          gtk_entry_get_menu_entry_icon_text (entry,
-                                                              GTK_ENTRY_ICON_SECONDARY));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1528,9 +1423,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       gtk_editable_finish_delegate (GTK_EDITABLE (entry));
     }
   g_clear_pointer (&priv->text, gtk_widget_unparent);
-  g_clear_object (&priv->extra_menu);
-  g_clear_pointer (&priv->menu_entry_icon_primary_text, g_free);
-  g_clear_pointer (&priv->menu_entry_icon_secondary_text, g_free);
 
   G_OBJECT_CLASS (gtk_entry_parent_class)->dispose (object);
 }
@@ -1718,9 +1610,7 @@ construct_icon_info (GtkWidget            *widget,
   icon_info = g_new0 (EntryIconInfo, 1);
   priv->icons[icon_pos] = icon_info;
 
-  icon_info->widget = g_object_new (GTK_TYPE_IMAGE,
-                                    "visible", FALSE,
-                                    NULL);
+  icon_info->widget = gtk_image_new ();
   gtk_widget_set_cursor_from_name (icon_info->widget, "default");
   if (icon_pos == GTK_ENTRY_ICON_PRIMARY)
     gtk_widget_insert_before (icon_info->widget, widget, priv->text);
@@ -2091,7 +1981,6 @@ gtk_entry_clear_icon (GtkEntry             *entry,
     }
 
   gtk_image_clear (GTK_IMAGE (icon_info->widget));
-  gtk_widget_set_visible (icon_info->widget, FALSE);
 
   g_object_notify_by_pspec (G_OBJECT (entry),
                             entry_props[icon_pos == GTK_ENTRY_ICON_PRIMARY
@@ -2142,7 +2031,7 @@ get_buffer (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_get_buffer:
+ * gtk_entry_get_buffer: (attributes org.gtk.Method.get_property=buffer)
  * @entry: a `GtkEntry`
  *
  * Get the `GtkEntryBuffer` object which holds the text for
@@ -2159,7 +2048,7 @@ gtk_entry_get_buffer (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_buffer:
+ * gtk_entry_set_buffer: (attributes org.gtk.Method.set_property=buffer)
  * @entry: a `GtkEntry`
  * @buffer: a `GtkEntryBuffer`
  *
@@ -2178,7 +2067,7 @@ gtk_entry_set_buffer (GtkEntry       *entry,
 }
 
 /**
- * gtk_entry_set_visibility:
+ * gtk_entry_set_visibility: (attributes org.gtk.Method.set_property=visibility)
  * @entry: a `GtkEntry`
  * @visible: %TRUE if the contents of the entry are displayed as plaintext
  *
@@ -2209,7 +2098,7 @@ gtk_entry_set_visibility (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_visibility:
+ * gtk_entry_get_visibility: (attributes org.gtk.Method.get_property=visibility)
  * @entry: a `GtkEntry`
  *
  * Retrieves whether the text in @entry is visible.
@@ -2229,7 +2118,7 @@ gtk_entry_get_visibility (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_invisible_char:
+ * gtk_entry_set_invisible_char: (attributes org.gtk.Method.set_property=invisible-char)
  * @entry: a `GtkEntry`
  * @ch: a Unicode character
  *
@@ -2256,7 +2145,7 @@ gtk_entry_set_invisible_char (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_invisible_char:
+ * gtk_entry_get_invisible_char: (attributes org.gtk.Method.get_property=invisible-char)
  * @entry: a `GtkEntry`
  *
  * Retrieves the character displayed in place of the actual text
@@ -2293,7 +2182,7 @@ gtk_entry_unset_invisible_char (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_overwrite_mode:
+ * gtk_entry_set_overwrite_mode: (attributes org.gtk.Method.set_property=overwrite-mode)
  * @entry: a `GtkEntry`
  * @overwrite: new value
  *
@@ -2311,7 +2200,7 @@ gtk_entry_set_overwrite_mode (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_overwrite_mode:
+ * gtk_entry_get_overwrite_mode: (attributes org.gtk.Method.get_property=overwrite-mode)
  * @entry: a `GtkEntry`
  *
  * Gets whether the `GtkEntry` is in overwrite mode.
@@ -2330,7 +2219,7 @@ gtk_entry_get_overwrite_mode (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_max_length:
+ * gtk_entry_set_max_length: (attributes org.gtk.Method.set_property=max-length)
  * @entry: a `GtkEntry`
  * @max: the maximum length of the entry, or 0 for no maximum.
  *   (other than the maximum length of entries.) The value passed in will
@@ -2356,7 +2245,7 @@ gtk_entry_set_max_length (GtkEntry     *entry,
 }
 
 /**
- * gtk_entry_get_max_length:
+ * gtk_entry_get_max_length: (attributes org.gtk.Method.get_property=max-length)
  * @entry: a `GtkEntry`
  *
  * Retrieves the maximum allowed length of the text in @entry.
@@ -2377,7 +2266,7 @@ gtk_entry_get_max_length (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_get_text_length:
+ * gtk_entry_get_text_length: (attributes org.gtk.Method.get_property=text-length)
  * @entry: a `GtkEntry`
  *
  * Retrieves the current length of the text in @entry.
@@ -2399,7 +2288,7 @@ gtk_entry_get_text_length (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_activates_default:
+ * gtk_entry_set_activates_default: (attributes org.gtk.Method.set_property=activates-default)
  * @entry: a `GtkEntry`
  * @setting: %TRUE to activate window’s default widget on Enter keypress
  *
@@ -2421,7 +2310,7 @@ gtk_entry_set_activates_default (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_activates_default:
+ * gtk_entry_get_activates_default: (attributes org.gtk.Method.get_property=activates-default)
  * @entry: a `GtkEntry`
  *
  * Retrieves the value set by gtk_entry_set_activates_default().
@@ -2439,7 +2328,7 @@ gtk_entry_get_activates_default (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_has_frame:
+ * gtk_entry_set_has_frame: (attributes org.gtk.Method.set_property=has-frame)
  * @entry: a `GtkEntry`
  * @setting: new value
  *
@@ -2465,7 +2354,7 @@ gtk_entry_set_has_frame (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_has_frame:
+ * gtk_entry_get_has_frame: (attributes org.gtk.Method.get_property=has-frame)
  * @entry: a `GtkEntry`
  *
  * Gets the value set by gtk_entry_set_has_frame().
@@ -2556,7 +2445,6 @@ gtk_entry_set_icon_from_paintable (GtkEntry             *entry,
       g_object_ref (paintable);
 
       gtk_image_set_from_paintable (GTK_IMAGE (icon_info->widget), paintable);
-      gtk_widget_set_visible (icon_info->widget, TRUE);
 
       if (icon_pos == GTK_ENTRY_ICON_PRIMARY)
         {
@@ -2615,7 +2503,6 @@ gtk_entry_set_icon_from_icon_name (GtkEntry             *entry,
   if (icon_name != NULL)
     {
       gtk_image_set_from_icon_name (GTK_IMAGE (icon_info->widget), icon_name);
-      gtk_widget_set_visible (icon_info->widget, TRUE);
 
       if (icon_pos == GTK_ENTRY_ICON_PRIMARY)
         {
@@ -2671,7 +2558,6 @@ gtk_entry_set_icon_from_gicon (GtkEntry             *entry,
   if (icon)
     {
       gtk_image_set_from_gicon (GTK_IMAGE (icon_info->widget), icon);
-      gtk_widget_set_visible (icon_info->widget, TRUE);
 
       if (icon_pos == GTK_ENTRY_ICON_PRIMARY)
         {
@@ -2726,7 +2612,6 @@ gtk_entry_set_icon_activatable (GtkEntry             *entry,
                                             ? PROP_ACTIVATABLE_PRIMARY
                                             : PROP_ACTIVATABLE_SECONDARY]);
     }
-  update_extra_menu (entry);
 }
 
 /**
@@ -2876,7 +2761,6 @@ gtk_entry_set_icon_sensitive (GtkEntry             *entry,
                                             ? PROP_SENSITIVE_PRIMARY
                                             : PROP_SENSITIVE_SECONDARY]);
     }
-  update_extra_menu (entry);
 }
 
 /**
@@ -2948,7 +2832,7 @@ gtk_entry_get_icon_storage_type (GtkEntry             *entry,
  * The position’s coordinates are relative to the @entry’s
  * top left corner. If @x, @y doesn’t lie inside an icon,
  * -1 is returned. This function is intended for use in a
- * [signal@Gtk.Widget::query-tooltip] signal handler.
+ *  [signal@Gtk.Widget::query-tooltip] signal handler.
  *
  * Returns: the index of the icon at the given position, or -1
  */
@@ -3322,7 +3206,7 @@ gtk_entry_query_tooltip (GtkWidget  *widget,
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
 /**
- * gtk_entry_set_completion:
+ * gtk_entry_set_completion: (attributes org.gtk.Method.set_property=completion)
  * @entry: A `GtkEntry`
  * @completion: (nullable): The `GtkEntryCompletion`
  *
@@ -3372,7 +3256,7 @@ gtk_entry_set_completion (GtkEntry           *entry,
 }
 
 /**
- * gtk_entry_get_completion:
+ * gtk_entry_get_completion: (attributes org.gtk.Method.get_property=completion)
  * @entry: A `GtkEntry`
  *
  * Returns the auxiliary completion object currently
@@ -3416,7 +3300,7 @@ gtk_entry_ensure_progress_widget (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_progress_fraction:
+ * gtk_entry_set_progress_fraction: (attributes org.gtk.Method.set_property=progress-fraction)
  * @entry: a `GtkEntry`
  * @fraction: fraction of the task that’s been completed
  *
@@ -3448,7 +3332,7 @@ gtk_entry_set_progress_fraction (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_progress_fraction:
+ * gtk_entry_get_progress_fraction: (attributes org.gtk.Method.get_property=progress-fraction)
  * @entry: a `GtkEntry`
  *
  * Returns the current fraction of the task that’s been completed.
@@ -3471,7 +3355,7 @@ gtk_entry_get_progress_fraction (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_progress_pulse_step:
+ * gtk_entry_set_progress_pulse_step: (attributes org.gtk.Method.set_property=progress-pulse-step)
  * @entry: a `GtkEntry`
  * @fraction: fraction between 0.0 and 1.0
  *
@@ -3501,7 +3385,7 @@ gtk_entry_set_progress_pulse_step (GtkEntry *entry,
 }
 
 /**
- * gtk_entry_get_progress_pulse_step:
+ * gtk_entry_get_progress_pulse_step: (attributes org.gtk.Method.get_property=progress-pulse-step)
  * @entry: a `GtkEntry`
  *
  * Retrieves the pulse step set with
@@ -3547,7 +3431,7 @@ gtk_entry_progress_pulse (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_placeholder_text:
+ * gtk_entry_set_placeholder_text: (attributes org.gtk.Method.set_property=placeholder-text)
  * @entry: a `GtkEntry`
  * @text: (nullable): a string to be displayed when @entry is empty and unfocused
  *
@@ -3572,7 +3456,7 @@ gtk_entry_set_placeholder_text (GtkEntry    *entry,
 }
 
 /**
- * gtk_entry_get_placeholder_text:
+ * gtk_entry_get_placeholder_text: (attributes org.gtk.Method.get_property=placeholder-text)
  * @entry: a `GtkEntry`
  *
  * Retrieves the text that will be displayed when @entry
@@ -3595,7 +3479,7 @@ gtk_entry_get_placeholder_text (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_input_purpose:
+ * gtk_entry_set_input_purpose: (attributes org.gtk.Method.set_property=input-purpose)
  * @entry: a `GtkEntry`
  * @purpose: the purpose
  *
@@ -3615,7 +3499,7 @@ gtk_entry_set_input_purpose (GtkEntry        *entry,
 }
 
 /**
- * gtk_entry_get_input_purpose:
+ * gtk_entry_get_input_purpose: (attributes org.gtk.Method.get_property=input-purpose)
  * @entry: a `GtkEntry`
  *
  * Gets the input purpose of the `GtkEntry`.
@@ -3633,7 +3517,7 @@ gtk_entry_get_input_purpose (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_input_hints:
+ * gtk_entry_set_input_hints: (attributes org.gtk.Method.set_property=input-hints)
  * @entry: a `GtkEntry`
  * @hints: the hints
  *
@@ -3653,7 +3537,7 @@ gtk_entry_set_input_hints (GtkEntry      *entry,
 }
 
 /**
- * gtk_entry_get_input_hints:
+ * gtk_entry_get_input_hints: (attributes org.gtk.Method.get_property=input-hints)
  * @entry: a `GtkEntry`
  *
  * Gets the input hints of this `GtkEntry`.
@@ -3671,7 +3555,7 @@ gtk_entry_get_input_hints (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_attributes:
+ * gtk_entry_set_attributes: (attributes org.gtk.Method.set_property=attributes)
  * @entry: a `GtkEntry`
  * @attrs: a `PangoAttrList`
  *
@@ -3695,7 +3579,7 @@ gtk_entry_set_attributes (GtkEntry      *entry,
 }
 
 /**
- * gtk_entry_get_attributes:
+ * gtk_entry_get_attributes: (attributes org.gtk.Method.get_property=attributes)
  * @entry: a `GtkEntry`
  *
  * Gets the attribute list of the `GtkEntry`.
@@ -3715,7 +3599,7 @@ gtk_entry_get_attributes (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_set_tabs:
+ * gtk_entry_set_tabs: (attributes org.gtk.Method.set_property=tabs)
  * @entry: a `GtkEntry`
  * @tabs: (nullable): a `PangoTabArray`
  *
@@ -3736,7 +3620,7 @@ gtk_entry_set_tabs (GtkEntry      *entry,
 }
 
 /**
- * gtk_entry_get_tabs:
+ * gtk_entry_get_tabs: (attributes org.gtk.Method.get_property=tabs)
  * @entry: a `GtkEntry`
  *
  * Gets the tabstops of the `GtkEntry`.
@@ -3836,173 +3720,7 @@ gtk_entry_get_text_widget (GtkEntry *entry)
 }
 
 /**
- * gtk_entry_get_menu_entry_icon_text:
- * @entry: a `GtkEntry`
- * @icon_pos: either @GTK_ENTRY_ICON_PRIMARY or @GTK_ENTRY_ICON_SECONDARY
- *
- * Gets the text that will be used in the context menu of the `GtkEntry`
- * when the specified icon is activatable. Selecting this item in the menu
- * results, from all aspects, the same than clicking on the specified icon.
- * This greatly simplifies making accessible applications, because the icons
- * aren't focusable when using keyboard navigation. This is why Gtk recommends
- * to add the same action to the context menu.
- *
- * Returns: (nullable) (transfer none): the text that will be used in the menu item,
- *   or NULL if no menu item is desired.
- *
- * Since: 4.20
- */
-const char *
-gtk_entry_get_menu_entry_icon_text (GtkEntry             *entry,
-                                    GtkEntryIconPosition  icon_pos)
-{
-  GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
-  g_return_val_if_fail (GTK_IS_ENTRY (entry), NULL);
-
-  switch (icon_pos)
-    {
-    case GTK_ENTRY_ICON_PRIMARY:
-      return priv->menu_entry_icon_primary_text;
-    case GTK_ENTRY_ICON_SECONDARY:
-      return priv->menu_entry_icon_secondary_text;
-    default:
-      g_assert_not_reached ();
-      return NULL;
-    }
-}
-
-/**
- * gtk_entry_set_menu_entry_icon_text:
- * @entry: a `GtkEntry`
- * @icon_pos: either @GTK_ENTRY_ICON_PRIMARY or @GTK_ENTRY_ICON_SECONDARY
- * @text: the text used for the menu item in the context menu, or NULL to not add a menu item.
- *
- * Sets the text that will be used in the context menu of the `GtkEntry`
- * when the specified icon is activatable. Selecting this item in the menu
- * results, from all aspects, the same than clicking on the specified icon.
- * This greatly simplifies making accessible applications, because the icons
- * aren't focusable when using keyboard navigation. This is why Gtk recommends
- * to add the same action to the context menu.
- *
- * Since: 4.20
- */
-void
-gtk_entry_set_menu_entry_icon_text (GtkEntry             *entry,
-                                    GtkEntryIconPosition  icon_pos,
-                                    const gchar          *text)
-{
-  GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
-  char **text_p = NULL;
-  guint prop_id = 0;
-
-  g_return_if_fail (GTK_IS_ENTRY (entry));
-
-  switch (icon_pos)
-    {
-    case GTK_ENTRY_ICON_PRIMARY:
-      text_p = &priv->menu_entry_icon_primary_text;
-      prop_id = PROP_MENU_ENTRY_ICON_PRIMARY_TEXT;
-      break;
-
-    case GTK_ENTRY_ICON_SECONDARY:
-      text_p = &priv->menu_entry_icon_secondary_text;
-      prop_id = PROP_MENU_ENTRY_ICON_SECONDARY_TEXT;
-      break;
-
-    default:
-      g_assert_not_reached ();
-      return;
-    }
-
-  if (!g_set_str (text_p, text))
-    return;
-
-  update_extra_menu (entry);
-
-  g_object_notify_by_pspec (G_OBJECT (entry), entry_props[prop_id]);
-}
-
-static GMenuItem *
-create_icon_menu_entry (GtkEntry             *entry,
-                        GtkEntryIconPosition  icon_pos,
-                        const gchar          *menu_entry_text)
-{
-  GMenuItem *item;
-  GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
-  const gchar *action_name = (icon_pos == GTK_ENTRY_ICON_PRIMARY)
-                             ? "misc.menu_entry_icon_primary"
-                             : "misc.menu_entry_icon_secondary";
-  EntryIconInfo *icon_info = priv->icons[icon_pos];
-
-  if (icon_info == NULL)
-    return NULL;
-
-  if (icon_info->nonactivatable)
-    return NULL;
-
-  if (menu_entry_text == NULL)
-    return NULL;
-
-  item = g_menu_item_new (menu_entry_text, action_name);
-  gtk_widget_action_set_enabled (GTK_WIDGET (entry), action_name,
-                                 gtk_widget_get_sensitive (icon_info->widget));
-  return item;
-}
-
-static void
-update_extra_menu (GtkEntry *entry)
-{
-  GtkJoinedMenu *joined;
-  GMenu *menu;
-  GMenu *section;
-  GMenuItem *item;
-  gboolean has_icon_entries = FALSE;
-  GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
-
-  joined = gtk_joined_menu_new ();
-  menu = g_menu_new ();
-  section = g_menu_new ();
-
-  item = create_icon_menu_entry (entry,
-                                 GTK_ENTRY_ICON_PRIMARY,
-                                 priv->menu_entry_icon_primary_text);
-  if (item != NULL)
-    {
-      has_icon_entries = TRUE;
-      g_menu_append_item (section, item);
-      g_clear_object (&item);
-    }
-
-  item = create_icon_menu_entry (entry,
-                                 GTK_ENTRY_ICON_SECONDARY,
-                                 priv->menu_entry_icon_secondary_text);
-  if (item != NULL)
-    {
-      has_icon_entries = TRUE;
-      g_menu_append_item (section, item);
-      g_clear_object (&item);
-    }
-
-  if (has_icon_entries)
-    {
-      g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
-      gtk_joined_menu_append_menu (joined, G_MENU_MODEL (menu));
-      if (priv->extra_menu != NULL)
-        gtk_joined_menu_append_menu (joined, G_MENU_MODEL (priv->extra_menu));
-      gtk_text_set_extra_menu (GTK_TEXT (priv->text), G_MENU_MODEL (joined));
-    }
-  else
-    {
-      gtk_text_set_extra_menu (GTK_TEXT (priv->text), priv->extra_menu);
-    }
-
-  g_object_unref (joined);
-  g_object_unref (menu);
-  g_object_unref (section);
-}
-
-/**
- * gtk_entry_set_extra_menu:
+ * gtk_entry_set_extra_menu: (attributes org.gtk.Method.set_property=extra-menu)
  * @entry: a `GtkEntry`
  * @model: (nullable): a `GMenuModel`
  *
@@ -4017,16 +3735,13 @@ gtk_entry_set_extra_menu (GtkEntry   *entry,
 
   g_return_if_fail (GTK_IS_ENTRY (entry));
 
-  g_clear_object (&priv->extra_menu);
-  priv->extra_menu = g_object_ref (model);
-
-  update_extra_menu (entry);
+  gtk_text_set_extra_menu (GTK_TEXT (priv->text), model);
 
   g_object_notify_by_pspec (G_OBJECT (entry), entry_props[PROP_EXTRA_MENU]);
 }
 
 /**
- * gtk_entry_get_extra_menu:
+ * gtk_entry_get_extra_menu: (attributes org.gtk.Method.get_property=extra-menu)
  * @entry: a `GtkEntry`
  *
  * Gets the menu model set with gtk_entry_set_extra_menu().
@@ -4040,7 +3755,7 @@ gtk_entry_get_extra_menu (GtkEntry *entry)
 
   g_return_val_if_fail (GTK_IS_ENTRY (entry), NULL);
 
-  return priv->extra_menu;
+  return gtk_text_get_extra_menu (GTK_TEXT (priv->text));
 }
 
 /*< private >

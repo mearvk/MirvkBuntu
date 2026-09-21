@@ -19,8 +19,6 @@
 
 """Utilities for playing sounds."""
 
-from __future__ import annotations
-
 import os
 
 import gi
@@ -42,8 +40,8 @@ class Icon:
 
     def __init__(self, location: str, filename: str) -> None:
         self.path = os.path.join(location, filename)
-        tokens = ["SOUND: Looking for '", filename, "' in", location]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SOUND: Looking for '{filename}' in {location}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def __str__(self) -> str:
         return f"Icon(path: {self.path}, is_valid: {self.is_valid()})"
@@ -105,6 +103,9 @@ class Player:
         if not self._gstreamer_available:
             msg = "SOUND: Gstreamer is not available"
             debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        self.init()
 
     def _on_player_message(self, _bus: Gst.Bus, message: Gst.Message) -> None:
         assert self._player is not None
@@ -113,8 +114,8 @@ class Player:
         elif message.type == Gst.MessageType.ERROR:
             self._player.set_state(Gst.State.NULL)
             error, _info = message.parse_error()
-            tokens = ["SOUND ERROR:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"SOUND ERROR: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _on_pipeline_message(self, _bus: Gst.Bus, message: Gst.Message) -> None:
         assert self._pipeline is not None
@@ -123,8 +124,8 @@ class Player:
         elif message.type == Gst.MessageType.ERROR:
             self._pipeline.set_state(Gst.State.NULL)
             error, _info = message.parse_error()
-            tokens = ["SOUND:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"SOUND: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _on_timeout(self, element: Gst.Element) -> bool:
         element.set_state(Gst.State.NULL)
@@ -195,7 +196,6 @@ class Player:
     def play(self, item: Icon | Tone, interrupt: bool = True) -> None:
         """Plays a sound, interrupting the current play first unless specified."""
 
-        self.init()
         if isinstance(item, Icon):
             self._play_icon(item, interrupt)
         elif isinstance(item, Tone):

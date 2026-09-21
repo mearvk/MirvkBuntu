@@ -124,6 +124,10 @@ typedef LONG
 typedef LONG
 (WINAPI *funcDisplayConfigGetDeviceInfo) (DISPLAYCONFIG_DEVICE_INFO_HEADER* requestPacket);
 
+#ifndef MONITORINFOF_PRIMARY
+#define MONITORINFOF_PRIMARY 1
+#endif
+
 #define G_GUID_FORMAT "%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X"
 #define g_format_guid(guid) (guid)->Data1, \
                             (guid)->Data2, \
@@ -510,7 +514,7 @@ typedef struct {
 static BOOL CALLBACK
 enum_monitor (HMONITOR hmonitor,
               HDC      hdc,
-              LPRECT   unused,
+              LPRECT   rect,
               LPARAM   param)
 {
   EnumMonitorData *data = (EnumMonitorData *) param;
@@ -562,8 +566,6 @@ enum_monitor (HMONITOR hmonitor,
           GdkWin32Monitor *w32mon;
           GdkMonitor *mon;
           GdkRectangle rect;
-          HMONITOR scale_hmonitor;
-          POINT pt;
           int scale;
 
           memset (&dd_monitor, 0, sizeof (dd_monitor));
@@ -663,14 +665,25 @@ enum_monitor (HMONITOR hmonitor,
           /* This is temporary, scale will be applied below */
           w32mon->work_rect = rect;
 
-          /* First acquire the scale using the current screen */
-          scale = gdk_win32_display_get_monitor_scale_factor (data->display, NULL, NULL);
+          if (data->display->has_fixed_scale)
+            scale = data->display->surface_scale;
+          else
+            {
+              /* First acquire the scale using the current screen */
+              scale = gdk_win32_display_get_monitor_scale_factor (data->display, NULL, NULL);
 
-          /* acquire the scale using the monitor which the window is nearest */
-          pt.x = w32mon->work_rect.x + w32mon->work_rect.width / 2;
-          pt.y = w32mon->work_rect.y + w32mon->work_rect.height / 2;
-          scale_hmonitor = MonitorFromPoint (pt, MONITOR_DEFAULTTONEAREST);
-          scale = gdk_win32_display_get_monitor_scale_factor (data->display, NULL, scale_hmonitor);
+              /* acquire the scale using the monitor which the window is nearest on Windows 8.1+ */
+              if (data->display->have_at_least_win81)
+                {
+                  HMONITOR hmonitor;
+                  POINT pt;
+
+                  pt.x = w32mon->work_rect.x + w32mon->work_rect.width / 2;
+                  pt.y = w32mon->work_rect.y + w32mon->work_rect.height / 2;
+                  hmonitor = MonitorFromPoint (pt, MONITOR_DEFAULTTONEAREST);
+                  scale = gdk_win32_display_get_monitor_scale_factor (data->display, NULL, hmonitor);
+                }
+            }
 
           gdk_monitor_set_scale_factor (mon, scale);
           /* Now apply the scale to the work rectangle */

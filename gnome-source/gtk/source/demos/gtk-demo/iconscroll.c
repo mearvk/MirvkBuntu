@@ -13,7 +13,7 @@ static GtkWidget *window = NULL;
 static GtkWidget *scrolledwindow;
 static int selected;
 
-#define N_WIDGET_TYPES 12
+#define N_WIDGET_TYPES 8
 
 
 static int hincrement = 5;
@@ -43,7 +43,7 @@ scroll_cb (GtkWidget *widget,
   return G_SOURCE_CONTINUE;
 }
 
-extern GtkWidget *create_icon_by_id (gsize id);
+extern GtkWidget *create_icon (void);
 
 static void
 populate_icons (void)
@@ -62,7 +62,7 @@ populate_icons (void)
 
   for (top = 0; top < 100; top++)
     for (left = 0; left < 15; left++)
-      gtk_grid_attach (GTK_GRID (grid), create_icon_by_id (top * 15 + left), left, top, 1, 1);
+      gtk_grid_attach (GTK_GRID (grid), create_icon (), left, top, 1, 1);
 
   hincrement = 0;
   vincrement = 5;
@@ -73,77 +73,30 @@ populate_icons (void)
   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), grid);
 }
 
+static char *content;
+static gsize content_len;
+
 extern void fontify (const char *format, GtkTextBuffer *buffer);
 
-enum {
-  PLAIN_TEXT,
-  HIGHLIGHTED_TEXT,
-  UNDERLINED_TEXT,
-};
-
 static void
-underlinify (GtkTextBuffer *buffer)
-{
-  GtkTextTagTable *tags;
-  GtkTextTag *tag[3];
-  GtkTextIter start, end;
-
-  tags = gtk_text_buffer_get_tag_table (buffer);
-  tag[0] = gtk_text_tag_new ("error");
-  tag[1] = gtk_text_tag_new ("strikeout");
-  tag[2] = gtk_text_tag_new ("double");
-  g_object_set (tag[0], "underline", PANGO_UNDERLINE_ERROR, NULL);
-  g_object_set (tag[1], "strikethrough", TRUE, NULL);
-  g_object_set (tag[2],
-                "underline", PANGO_UNDERLINE_DOUBLE,
-                "underline-rgba", &(GdkRGBA){0., 1., 1., 1. },
-                NULL);
-  gtk_text_tag_table_add (tags, tag[0]);
-  gtk_text_tag_table_add (tags, tag[1]);
-  gtk_text_tag_table_add (tags, tag[2]);
-
-  gtk_text_buffer_get_start_iter (buffer, &end);
-
-  while (TRUE)
-    {
-      gtk_text_iter_forward_word_end (&end);
-      start = end;
-      gtk_text_iter_backward_word_start (&start);
-      gtk_text_buffer_apply_tag (buffer, tag[g_random_int_range (0, 3)], &start, &end);
-      if (!gtk_text_iter_forward_word_ends (&end, 3))
-        break;
-    }
-}
-
-static void
-populate_text (const char *resource, int kind)
+populate_text (gboolean highlight)
 {
   GtkWidget *textview;
   GtkTextBuffer *buffer;
-  char *content;
-  gsize content_len;
-  GBytes *bytes;
 
-  bytes = g_resources_lookup_data (resource, 0, NULL);
-  content = g_bytes_unref_to_data (bytes, &content_len);
+  if (!content)
+    {
+      GBytes *bytes;
+
+      bytes = g_resources_lookup_data ("/sources/font_features.c", 0, NULL);
+      content = g_bytes_unref_to_data (bytes, &content_len);
+    }
 
   buffer = gtk_text_buffer_new (NULL);
   gtk_text_buffer_set_text (buffer, content, (int)content_len);
 
-  switch (kind)
-    {
-    case HIGHLIGHTED_TEXT:
-      fontify ("c", buffer);
-      break;
-
-    case UNDERLINED_TEXT:
-      underlinify (buffer);
-      break;
-
-    case PLAIN_TEXT:
-    default:
-      break;
-    }
+  if (highlight)
+    fontify ("c", buffer);
 
   textview = gtk_text_view_new ();
   gtk_text_view_set_buffer (GTK_TEXT_VIEW (textview), buffer);
@@ -201,6 +154,14 @@ static void
 populate_image (void)
 {
   GtkWidget *image;
+
+  if (!content)
+    {
+      GBytes *bytes;
+
+      bytes = g_resources_lookup_data ("/sources/font_features.c", 0, NULL);
+      content = g_bytes_unref_to_data (bytes, &content_len);
+    }
 
   image = gtk_picture_new_for_resource ("/sliding_puzzle/portland-rose.jpg");
   gtk_picture_set_can_shrink (GTK_PICTURE (image), FALSE);
@@ -274,311 +235,6 @@ populate_list2 (void)
   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), list);
 }
 
-struct {
-  const char *path;
-  GdkPaintable *paintable;
-} symbolics[] = {
-  { "bookmark-new-symbolic.svg", NULL },
-  { "color-select-symbolic.svg", NULL },
-  { "document-open-recent-symbolic.svg", NULL },
-  { "document-open-symbolic.svg", NULL },
-  { "document-save-as-symbolic.svg", NULL },
-  { "document-save-symbolic.svg", NULL },
-  { "edit-clear-all-symbolic.svg", NULL },
-  { "edit-clear-symbolic-rtl.svg", NULL },
-  { "edit-clear-symbolic.svg", NULL },
-  { "edit-copy-symbolic.svg", NULL },
-  { "edit-cut-symbolic.svg", NULL },
-  { "edit-delete-symbolic.svg", NULL },
-  { "edit-find-symbolic.svg", NULL },
-  { "edit-paste-symbolic.svg", NULL },
-  { "edit-select-all-symbolic.svg", NULL },
-  { "find-location-symbolic.svg", NULL },
-  { "folder-new-symbolic.svg", NULL },
-  { "function-linear-symbolic.svg", NULL },
-  { "gesture-pinch-symbolic.svg", NULL },
-  { "gesture-rotate-anticlockwise-symbolic.svg", NULL },
-  { "gesture-rotate-clockwise-symbolic.svg", NULL },
-  { "gesture-stretch-symbolic.svg", NULL },
-  { "gesture-swipe-left-symbolic.svg", NULL },
-  { "gesture-swipe-right-symbolic.svg", NULL },
-  { "gesture-two-finger-swipe-left-symbolic.svg", NULL },
-  { "gesture-two-finger-swipe-right-symbolic.svg", NULL },
-  { "go-next-symbolic-rtl.svg", NULL },
-  { "go-next-symbolic.svg", NULL },
-  { "go-previous-symbolic-rtl.svg", NULL },
-  { "go-previous-symbolic.svg", NULL },
-  { "insert-image-symbolic.svg", NULL },
-  { "insert-object-symbolic.svg", NULL },
-  { "list-add-symbolic.svg", NULL },
-  { "list-remove-all-symbolic.svg", NULL },
-  { "list-remove-symbolic.svg", NULL },
-  { "media-eject-symbolic.svg", NULL },
-  { "media-playback-pause-symbolic.svg", NULL },
-  { "media-playback-start-symbolic.svg", NULL },
-  { "media-playback-stop-symbolic.svg", NULL },
-  { "media-record-symbolic.svg", NULL },
-  { "object-select-symbolic.svg", NULL },
-  { "open-menu-symbolic.svg", NULL },
-  { "pan-down-symbolic.svg", NULL },
-  { "pan-end-symbolic-rtl.svg", NULL },
-  { "pan-end-symbolic.svg", NULL },
-  { "pan-start-symbolic-rtl.svg", NULL },
-  { "pan-start-symbolic.svg", NULL },
-  { "pan-up-symbolic.svg", NULL },
-  { "system-run-symbolic.svg", NULL },
-  { "system-search-symbolic.svg", NULL },
-  { "value-decrease-symbolic.svg", NULL },
-  { "value-increase-symbolic.svg", NULL },
-  { "view-conceal-symbolic.svg", NULL },
-  { "view-grid-symbolic.svg", NULL },
-  { "view-list-symbolic.svg", NULL },
-  { "view-more-symbolic.svg", NULL },
-  { "view-refresh-symbolic.svg", NULL },
-  { "view-reveal-symbolic.svg", NULL },
-  { "window-close-symbolic.svg", NULL },
-  { "window-maximize-symbolic.svg", NULL },
-  { "window-minimize-symbolic.svg", NULL },
-  { "window-restore-symbolic.svg", NULL },
-  { "emoji-activities-symbolic.svg", NULL },
-  { "emoji-body-symbolic.svg", NULL },
-  { "emoji-flags-symbolic.svg", NULL },
-  { "emoji-food-symbolic.svg", NULL },
-  { "emoji-nature-symbolic.svg", NULL },
-  { "emoji-objects-symbolic.svg", NULL },
-  { "emoji-people-symbolic.svg", NULL },
-  { "emoji-recent-symbolic.svg", NULL },
-  { "emoji-symbols-symbolic.svg", NULL },
-  { "emoji-travel-symbolic.svg", NULL },
-  { "drive-harddisk-symbolic.svg", NULL },
-  { "printer-symbolic.svg", NULL },
-  { "emblem-important-symbolic.svg", NULL },
-  { "emblem-system-symbolic.svg", NULL },
-  { "face-smile-big-symbolic.svg", NULL },
-  { "face-smile-symbolic.svg", NULL },
-  { "application-x-executable-symbolic.svg", NULL },
-  { "text-x-generic-symbolic.svg", NULL },
-  { "folder-documents-symbolic.svg", NULL },
-  { "folder-download-symbolic.svg", NULL },
-  { "folder-music-symbolic.svg", NULL },
-  { "folder-pictures-symbolic.svg", NULL },
-  { "folder-publicshare-symbolic.svg", NULL },
-  { "folder-remote-symbolic.svg", NULL },
-  { "folder-saved-search-symbolic.svg", NULL },
-  { "folder-symbolic.svg", NULL },
-  { "folder-templates-symbolic.svg", NULL },
-  { "folder-videos-symbolic.svg", NULL },
-  { "network-server-symbolic.svg", NULL },
-  { "network-workgroup-symbolic.svg", NULL },
-  { "user-desktop-symbolic.svg", NULL },
-  { "user-home-symbolic.svg", NULL },
-  { "user-trash-symbolic.svg", NULL },
-  { "audio-volume-high-symbolic.svg", NULL },
-  { "audio-volume-low-symbolic.svg", NULL },
-  { "audio-volume-medium-symbolic.svg", NULL },
-  { "audio-volume-muted-symbolic.svg", NULL },
-  { "caps-lock-symbolic.svg", NULL },
-  { "changes-allow-symbolic.svg", NULL },
-  { "changes-prevent-symbolic.svg", NULL },
-  { "dialog-error-symbolic.svg", NULL },
-  { "dialog-information-symbolic.svg", NULL },
-  { "dialog-password-symbolic.svg", NULL },
-  { "dialog-question-symbolic.svg", NULL },
-  { "dialog-warning-symbolic.svg", NULL },
-  { "display-brightness-symbolic.svg", NULL },
-  { "media-playlist-repeat-symbolic.svg", NULL },
-  { "orientation-landscape-inverse-symbolic.svg", NULL },
-  { "orientation-landscape-symbolic.svg", NULL },
-  { "orientation-portrait-inverse-symbolic.svg", NULL },
-  { "orientation-portrait-symbolic.svg", NULL },
-  { "process-working-symbolic.svg", NULL },
-  { "switch-off-symbolic.svg", NULL },
-  { "switch-on-symbolic.svg", NULL },
-};
-
-GtkWidget *
-create_symbolic (void)
-{
-  GtkWidget *image;
-  static int idx = 0;
-
-  idx = (idx + 1) % G_N_ELEMENTS (symbolics);
-  if (symbolics[idx].paintable == NULL)
-    {
-      char *uri;
-      GFile *file;
-
-      uri = g_strconcat ("resource:///org/gtk/libgtk/icons/", symbolics[idx].path, NULL);
-      file = g_file_new_for_uri (uri);
-      symbolics[idx].paintable = GDK_PAINTABLE (gtk_icon_paintable_new_for_file (file, 16, 1));
-      g_object_unref (file);
-      g_free (uri);
-    }
-
-  image = gtk_image_new ();
-  gtk_image_set_icon_size (GTK_IMAGE (image), GTK_ICON_SIZE_LARGE);
-  gtk_image_set_from_paintable (GTK_IMAGE (image), symbolics[idx].paintable);
-
-  return image;
-}
-
-static void
-populate_symbolics (void)
-{
-  GtkWidget *grid;
-  int top, left;
-
-  grid = gtk_grid_new ();
-  gtk_widget_set_halign (grid, GTK_ALIGN_CENTER);
-  gtk_widget_set_margin_start (grid, 10);
-  gtk_widget_set_margin_end (grid, 10);
-  gtk_widget_set_margin_top (grid, 10);
-  gtk_widget_set_margin_bottom (grid, 10);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 10);
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 10);
-
-  for (top = 0; top < 100; top++)
-    for (left = 0; left < 15; left++)
-       {
-         gtk_grid_attach (GTK_GRID (grid), create_symbolic (), left, top, 1, 1);
-       }
-
-  hincrement = 0;
-  vincrement = 5;
-
-  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolledwindow),
-                                  GTK_POLICY_NEVER,
-                                  GTK_POLICY_AUTOMATIC);
-  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), grid);
-}
-
-GtkWidget *
-create_svg (void)
-{
-  GtkWidget *image;
-  static int idx = 0;
-
-  idx = (idx + 1) % G_N_ELEMENTS (symbolics);
-  if (symbolics[idx].paintable == NULL)
-    {
-      char *path;
-
-      path = g_strconcat ("/org/gtk/libgtk/icons/", symbolics[idx].path, NULL);
-      symbolics[idx].paintable = GDK_PAINTABLE (gtk_svg_new_from_resource (path));
-      g_free (path);
-    }
-
-  image = gtk_image_new ();
-  gtk_image_set_icon_size (GTK_IMAGE (image), GTK_ICON_SIZE_LARGE);
-  gtk_image_set_from_paintable (GTK_IMAGE (image), symbolics[idx].paintable);
-
-  return image;
-}
-
-static void
-populate_svg (void)
-{
-  GtkWidget *grid;
-  int top, left;
-
-  grid = gtk_grid_new ();
-  gtk_widget_set_halign (grid, GTK_ALIGN_CENTER);
-  gtk_widget_set_margin_start (grid, 10);
-  gtk_widget_set_margin_end (grid, 10);
-  gtk_widget_set_margin_top (grid, 10);
-  gtk_widget_set_margin_bottom (grid, 10);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 10);
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 10);
-
-  for (top = 0; top < 100; top++)
-    for (left = 0; left < 15; left++)
-       {
-         gtk_grid_attach (GTK_GRID (grid), create_svg (), left, top, 1, 1);
-       }
-
-  hincrement = 0;
-  vincrement = 5;
-
-  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolledwindow),
-                                  GTK_POLICY_NEVER,
-                                  GTK_POLICY_AUTOMATIC);
-  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), grid);
-}
-
-GtkWidget *create_squiggle (void);
-
-GtkWidget *
-create_squiggle (void)
-{
-  GtkWidget *image;
-  GtkSnapshot *snapshot;
-  GdkPaintable *paintable;
-  GskStroke *stroke;
-  GskPathBuilder *builder;
-  GskPath *path;
-  float x, y;
-
-  builder = gsk_path_builder_new ();
-
-  x = g_random_double_range (1, 16);
-  y = g_random_double_range (1, 16);
-  gsk_path_builder_move_to (builder, x, y);
-  for (int i = 0; i < 5; i++)
-    {
-      x = g_random_double_range (1, 16);
-      y = g_random_double_range (1, 16);
-      gsk_path_builder_line_to (builder, x, y);
-    }
-  gsk_path_builder_close (builder);
-
-  path = gsk_path_builder_free_to_path (builder);
-  stroke = gsk_stroke_new (1);
-
-  snapshot = gtk_snapshot_new ();
-  gtk_snapshot_append_stroke (snapshot, path, stroke, &(GdkRGBA) { 0, 0, 0, 1});
-  paintable = gtk_snapshot_free_to_paintable (snapshot, &GRAPHENE_SIZE_INIT (18, 18));
-
-  image = gtk_image_new ();
-  gtk_image_set_icon_size (GTK_IMAGE (image), GTK_ICON_SIZE_LARGE);
-  gtk_image_set_from_paintable (GTK_IMAGE (image), paintable);
-
-  g_object_unref (paintable);
-  gsk_stroke_free (stroke);
-  gsk_path_unref (path);
-
-  return image;
-}
-
-static void
-populate_squiggles (void)
-{
-  GtkWidget *grid;
-  int top, left;
-
-  grid = gtk_grid_new ();
-  gtk_widget_set_halign (grid, GTK_ALIGN_CENTER);
-  gtk_widget_set_margin_start (grid, 10);
-  gtk_widget_set_margin_end (grid, 10);
-  gtk_widget_set_margin_top (grid, 10);
-  gtk_widget_set_margin_bottom (grid, 10);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 10);
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 10);
-
-  for (top = 0; top < 100; top++)
-    for (left = 0; left < 15; left++)
-       {
-         gtk_grid_attach (GTK_GRID (grid), create_squiggle (), left, top, 1, 1);
-       }
-
-  hincrement = 0;
-  vincrement = 5;
-
-  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolledwindow),
-                                  GTK_POLICY_NEVER,
-                                  GTK_POLICY_AUTOMATIC);
-  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), grid);
-}
-
 static void
 set_widget_type (int type)
 {
@@ -599,57 +255,37 @@ set_widget_type (int type)
 
     case 1:
       gtk_window_set_title (GTK_WINDOW (window), "Scrolling plain text");
-      populate_text ("/sources/font_features.c", PLAIN_TEXT);
+      populate_text (FALSE);
       break;
 
     case 2:
-      gtk_window_set_title (GTK_WINDOW (window), "Scrolling colored text");
-      populate_text ("/sources/font_features.c", HIGHLIGHTED_TEXT);
+      gtk_window_set_title (GTK_WINDOW (window), "Scrolling complex text");
+      populate_text (TRUE);
       break;
 
     case 3:
-      gtk_window_set_title (GTK_WINDOW (window), "Scrolling text with underlines");
-      populate_text ("/org/gtk/Demo4/Moby-Dick.txt", UNDERLINED_TEXT);
-      break;
-
-    case 4:
       gtk_window_set_title (GTK_WINDOW (window), "Scrolling text with Emoji");
       populate_emoji_text ();
       break;
 
-    case 5:
+    case 4:
       gtk_window_set_title (GTK_WINDOW (window), "Scrolling a big image");
       populate_image ();
       break;
 
-    case 6:
+    case 5:
       gtk_window_set_title (GTK_WINDOW (window), "Scrolling a list");
       populate_list ();
       break;
 
-    case 7:
+    case 6:
       gtk_window_set_title (GTK_WINDOW (window), "Scrolling a columned list");
       populate_list2 ();
       break;
 
-    case 8:
+    case 7:
       gtk_window_set_title (GTK_WINDOW (window), "Scrolling a grid");
       populate_grid ();
-      break;
-
-    case 9:
-      gtk_window_set_title (GTK_WINDOW (window), "Scrolling symbolics");
-      populate_symbolics ();
-      break;
-
-    case 10:
-      gtk_window_set_title (GTK_WINDOW (window), "Scrolling SVG");
-      populate_svg ();
-      break;
-
-    case 11:
-      gtk_window_set_title (GTK_WINDOW (window), "Scrolling squiggles");
-      populate_squiggles ();
       break;
 
     default:
@@ -739,10 +375,7 @@ do_iconscroll (GtkWidget *do_widget)
       gtk_widget_realize (window);
       hadjustment = GTK_ADJUSTMENT (gtk_builder_get_object (builder, "hadjustment"));
       vadjustment = GTK_ADJUSTMENT (gtk_builder_get_object (builder, "vadjustment"));
-      if (g_getenv ("ICONSCROLL"))
-        set_widget_type (CLAMP (atoi (g_getenv ("ICONSCROLL")), 0, N_WIDGET_TYPES));
-      else
-        set_widget_type (0);
+      set_widget_type (0);
 
       label = GTK_WIDGET (gtk_builder_get_object (builder, "fps_label"));
       id = g_timeout_add_full (G_PRIORITY_HIGH, 500, update_fps, label, NULL);

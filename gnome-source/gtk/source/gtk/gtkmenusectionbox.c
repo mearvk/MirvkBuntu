@@ -173,7 +173,7 @@ gtk_menu_section_box_schedule_separator_sync (GtkMenuSectionBox *box)
 
   if (!box->separator_sync_idle)
     {
-      box->separator_sync_idle = g_idle_add_full (G_PRIORITY_DEFAULT, /* before menu is drawn... */
+      box->separator_sync_idle = g_idle_add_full (G_PRIORITY_HIGH_IDLE, /* before resize... */
                                                   gtk_menu_section_box_handle_sync_separators,
                                                   box, NULL);
       gdk_source_set_static_name_by_id (box->separator_sync_idle, "[gtk] menu section box handle sync separators");
@@ -505,11 +505,19 @@ gtk_menu_section_box_dispose (GObject *object)
 {
   GtkMenuSectionBox *box = GTK_MENU_SECTION_BOX (object);
 
-  g_clear_handle_id (&box->separator_sync_idle, g_source_remove);
+  if (box->separator_sync_idle)
+    {
+      g_source_remove (box->separator_sync_idle);
+      box->separator_sync_idle = 0;
+    }
 
   g_clear_object (&box->separator);
 
-  g_clear_pointer (&box->tracker, gtk_menu_tracker_free);
+  if (box->tracker)
+    {
+      gtk_menu_tracker_free (box->tracker);
+      box->tracker = NULL;
+    }
 
   g_clear_object (&box->indicators);
   g_clear_pointer (&box->custom_slots, g_hash_table_unref);
@@ -566,7 +574,7 @@ gtk_menu_section_box_new_toplevel (GtkPopoverMenu      *popover,
                                        gtk_menu_section_box_insert_func,
                                        gtk_menu_section_box_remove_func, box);
 
-  g_signal_connect_object (G_OBJECT (popover), "notify::position", G_CALLBACK (update_popover_position_cb), box, G_CONNECT_DEFAULT);
+  g_signal_connect (G_OBJECT (popover), "notify::position", G_CALLBACK (update_popover_position_cb), box);
 }
 
 static void
@@ -671,10 +679,6 @@ gtk_menu_section_box_new_section (GtkMenuTrackerItem *item,
           gtk_widget_set_halign (title, GTK_ALIGN_START);
           g_object_bind_property (item, "label", title, "label", G_BINDING_SYNC_CREATE);
           gtk_box_append (GTK_BOX (box->item_box), title);
-          gtk_accessible_update_relation (GTK_ACCESSIBLE (box),
-                                          GTK_ACCESSIBLE_RELATION_LABELLED_BY,
-                                          title,
-                                          NULL, -1);
         }
 
       item_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
@@ -709,10 +713,6 @@ gtk_menu_section_box_new_section (GtkMenuTrackerItem *item,
       gtk_label_set_xalign (GTK_LABEL (title), 0.0);
       gtk_widget_add_css_class (title, "title");
       gtk_box_append (GTK_BOX (box->separator), title);
-      gtk_accessible_update_relation (GTK_ACCESSIBLE (box),
-                                      GTK_ACCESSIBLE_RELATION_LABELLED_BY,
-                                      title,
-                                      NULL, -1);
     }
   else
     {

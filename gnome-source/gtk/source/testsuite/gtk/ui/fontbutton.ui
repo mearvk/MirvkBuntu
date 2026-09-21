@@ -1,5 +1,0 @@
-<interface>
-  <object class="GtkFontDialogButton">
-    <property name="font-desc">Cantarell Bold 11px</property>
-  </object>
-</interface>

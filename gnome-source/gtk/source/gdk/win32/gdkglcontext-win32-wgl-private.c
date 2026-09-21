@@ -48,15 +48,9 @@ gdk_win32_private_wglGetCurrentContext (void)
   return wglGetCurrentContext ();
 }
 
-void epoxy_handle_external_wglMakeCurrent (void);
-
 BOOL
 gdk_win32_private_wglMakeCurrent (HDC   hdc,
                                   HGLRC hglrc)
 {
-  BOOL ret = wglMakeCurrent (hdc, hglrc);
-
-  epoxy_handle_external_wglMakeCurrent ();
-
-  return ret;
+  return wglMakeCurrent (hdc, hglrc);
 }

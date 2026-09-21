@@ -30,6 +30,7 @@
 struct _MetaWaylandTabletPadGroup
 {
   MetaWaylandTabletPad *pad;
+  GArray *buttons;
   uint32_t n_modes;
   uint32_t current_mode;
 
@@ -39,7 +40,6 @@ struct _MetaWaylandTabletPadGroup
 
   GList *strips;
   GList *rings;
-  GList *dials;
 };
 
 MetaWaylandTabletPadGroup * meta_wayland_tablet_pad_group_new  (MetaWaylandTabletPad      *pad);

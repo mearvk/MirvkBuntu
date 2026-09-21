@@ -25,7 +25,7 @@ G_BEGIN_DECLS
 
 typedef struct _GtkMagnifier GtkMagnifier;
 
-GType       gtk_magnifier_get_type           (void);
+GType       gtk_magnifier_get_type           (void) G_GNUC_CONST;
 
 GtkWidget * _gtk_magnifier_new               (GtkWidget       *inspected);
 

@@ -4,7 +4,7 @@
 
 #include "tests/clutter-test-utils.h"
 
-static const CoglColor colors[] = {
+static const ClutterColor colors[] = {
   { 255,   0,   0, 255 },
   {   0, 255,   0, 255 },
   {   0,   0, 255, 255 },
@@ -45,6 +45,7 @@ test_keyframe_transition_main (int argc, char *argv[])
   clutter_test_init (&argc, &argv);
 
   stage = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Keyframe Transitions");
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_test_quit), NULL);
 
   for (i = 0; i < 3; i++)
@@ -59,8 +60,7 @@ test_keyframe_transition_main (int argc, char *argv[])
       cur_y = PADDING + ((SIZE + PADDING) * i);
 
       new_x = clutter_actor_get_width (stage) - PADDING - SIZE;
-      new_y = (float) g_random_double_range (PADDING,
-                                             clutter_actor_get_height (stage) - PADDING - SIZE);
+      new_y = g_random_double_range (PADDING, clutter_actor_get_height (stage) - PADDING - SIZE);
 
       name = g_strdup_printf ("rect%02d", i);
 

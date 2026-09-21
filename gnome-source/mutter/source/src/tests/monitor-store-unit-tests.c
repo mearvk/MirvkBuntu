@@ -57,7 +57,7 @@ typedef struct _MonitorStoreTestCaseLogicalMonitor
 {
   MtkRectangle layout;
   float scale;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   gboolean is_primary;
   gboolean is_presentation;
   MonitorStoreTestCaseMonitor monitors[MAX_N_MONITORS];
@@ -66,7 +66,6 @@ typedef struct _MonitorStoreTestCaseLogicalMonitor
 
 typedef struct _MonitorStoreTestConfiguration
 {
-  MetaLogicalMonitorLayoutMode layout_mode;
   MonitorStoreTestCaseLogicalMonitor logical_monitors[MAX_N_LOGICAL_MONITORS];
   int n_logical_monitors;
 } MonitorStoreTestConfiguration;
@@ -113,8 +112,7 @@ create_config_key_from_expect (MonitorStoreTestConfiguration *expect_config)
 
   config_key = g_new0 (MetaMonitorsConfigKey, 1);
   *config_key = (MetaMonitorsConfigKey) {
-    .monitor_specs = monitor_specs,
-    .layout_mode = expect_config->layout_mode,
+    .monitor_specs = monitor_specs
   };
 
   return config_key;
@@ -133,7 +131,7 @@ check_monitor_store_configuration (MetaMonitorConfigStore        *config_store,
   config = meta_monitor_config_store_lookup (config_store, config_key);
   g_assert_nonnull (config);
 
-  g_assert_true (meta_monitors_config_key_equal (config->key, config_key));
+  g_assert (meta_monitors_config_key_equal (config->key, config_key));
   meta_monitors_config_key_free (config_key);
 
   g_assert_cmpuint (g_list_length (config->logical_monitor_configs),
@@ -146,8 +144,8 @@ check_monitor_store_configuration (MetaMonitorConfigStore        *config_store,
       GList *k;
       int j;
 
-      g_assert_true (mtk_rectangle_equal (&logical_monitor_config->layout,
-                                          &config_expect->logical_monitors[i].layout));
+      g_assert (mtk_rectangle_equal (&logical_monitor_config->layout,
+                                     &config_expect->logical_monitors[i].layout));
       g_assert_cmpfloat (logical_monitor_config->scale,
                          ==,
                          config_expect->logical_monitors[i].scale);
@@ -242,7 +240,6 @@ meta_test_monitor_store_single (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -288,7 +285,6 @@ meta_test_monitor_store_vertical (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -360,7 +356,6 @@ meta_test_monitor_store_primary (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -432,7 +427,6 @@ meta_test_monitor_store_underscanning (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -479,7 +473,6 @@ meta_test_monitor_store_refresh_rate_mode_fixed (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -526,7 +519,6 @@ meta_test_monitor_store_refresh_rate_mode_variable (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -573,7 +565,6 @@ meta_test_monitor_store_max_bpc (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -620,7 +611,6 @@ meta_test_monitor_store_rgb_range (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -666,7 +656,6 @@ meta_test_monitor_store_scale (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -712,7 +701,6 @@ meta_test_monitor_store_fractional_scale (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -758,7 +746,6 @@ meta_test_monitor_store_high_precision_fractional_scale (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -804,7 +791,6 @@ meta_test_monitor_store_mirrored (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -861,7 +847,6 @@ meta_test_monitor_store_first_rotated (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -871,7 +856,7 @@ meta_test_monitor_store_first_rotated (void)
               .height = 1024
             },
             .scale = 1,
-            .transform = MTK_MONITOR_TRANSFORM_270,
+            .transform = META_MONITOR_TRANSFORM_270,
             .is_primary = TRUE,
             .is_presentation = FALSE,
             .monitors = {
@@ -898,7 +883,7 @@ meta_test_monitor_store_first_rotated (void)
               .height = 768
             },
             .scale = 1,
-            .transform = MTK_MONITOR_TRANSFORM_NORMAL,
+            .transform = META_MONITOR_TRANSFORM_NORMAL,
             .is_primary = FALSE,
             .is_presentation = FALSE,
             .monitors = {
@@ -935,7 +920,6 @@ meta_test_monitor_store_second_rotated (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -945,7 +929,7 @@ meta_test_monitor_store_second_rotated (void)
               .height = 768
             },
             .scale = 1,
-            .transform = MTK_MONITOR_TRANSFORM_NORMAL,
+            .transform = META_MONITOR_TRANSFORM_NORMAL,
             .is_primary = TRUE,
             .is_presentation = FALSE,
             .monitors = {
@@ -972,7 +956,7 @@ meta_test_monitor_store_second_rotated (void)
               .height = 1024
             },
             .scale = 1,
-            .transform = MTK_MONITOR_TRANSFORM_90,
+            .transform = META_MONITOR_TRANSFORM_90,
             .is_primary = FALSE,
             .is_presentation = FALSE,
             .monitors = {
@@ -1009,7 +993,6 @@ meta_test_monitor_store_interlaced (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {
@@ -1056,7 +1039,6 @@ meta_test_monitor_store_unknown_elements (void)
   MonitorStoreTestExpect expect = {
     .configurations = {
       {
-        .layout_mode = META_LOGICAL_MONITOR_LAYOUT_MODE_LOGICAL,
         .logical_monitors = {
           {
             .layout = {

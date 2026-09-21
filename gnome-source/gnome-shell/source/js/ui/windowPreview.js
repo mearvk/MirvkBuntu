@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -26,37 +28,22 @@ const ICON_OVERLAP = 0.7;
 
 const ICON_TITLE_SPACING = 6;
 
-export class WindowPreview extends Shell.WindowPreview {
-    static [GObject.properties] = {
+export const WindowPreview = GObject.registerClass({
+    Properties: {
         'overlay-enabled': GObject.ParamSpec.boolean(
-            'overlay-enabled', null, null,
+            'overlay-enabled', 'overlay-enabled', 'overlay-enabled',
             GObject.ParamFlags.READWRITE,
             true),
-    };
-
-    static [GObject.signals] = {
+    },
+    Signals: {
         'drag-begin': {},
         'drag-cancelled': {},
         'drag-end': {},
         'selected': {param_types: [GObject.TYPE_UINT]},
         'show-chrome': {},
         'size-changed': {},
-    };
-
-    static {
-        GObject.registerClass(this);
-
-        const bindingPool = this.get_binding_pool();
-
-        bindingPool.install_closure(
-            'activate', Clutter.KEY_Return, 0,
-            obj => {
-                obj._activate();
-                return Clutter.EVENT_STOP;
-            }
-        );
-    }
-
+    },
+}, class WindowPreview extends Shell.WindowPreview {
     _init(metaWindow, workspace, overviewAdjustment) {
         this.metaWindow = metaWindow;
         this.metaWindow._delegate = this;
@@ -64,17 +51,17 @@ export class WindowPreview extends Shell.WindowPreview {
         this._workspace = workspace;
         this._overviewAdjustment = overviewAdjustment;
 
-        const windowContainer = new Clutter.Actor({
-            pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
-        });
-
         super._init({
             reactive: true,
             can_focus: true,
             accessible_role: Atk.Role.PUSH_BUTTON,
             offscreen_redirect: Clutter.OffscreenRedirect.AUTOMATIC_FOR_OPACITY,
-            windowContainer,
         });
+
+        const windowContainer = new Clutter.Actor({
+            pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
+        });
+        this.window_container = windowContainer;
 
         windowContainer.connect('notify::scale-x',
             () => this._adjustOverlayOffsets());
@@ -123,22 +110,20 @@ export class WindowPreview extends Shell.WindowPreview {
             dragActorMaxSize: WINDOW_DND_SIZE,
             dragActorOpacity: DRAGGING_WINDOW_OPACITY,
         });
-        this._draggable.connectObject(
-            'drag-begin', this._onDragBegin.bind(this),
-            'drag-cancelled', this._onDragCancelled.bind(this),
-            'drag-end', this._onDragEnd.bind(this),
-            this);
+        this._draggable.connect('drag-begin', this._onDragBegin.bind(this));
+        this._draggable.connect('drag-cancelled', this._onDragCancelled.bind(this));
+        this._draggable.connect('drag-end', this._onDragEnd.bind(this));
         this.inDrag = false;
 
-        const clickGesture = new Clutter.ClickGesture();
-        clickGesture.connect('recognize', () => this._activate());
-        this.add_action(clickGesture);
+        let clickAction = new Clutter.ClickAction();
+        clickAction.connect('clicked', () => this._activate());
+        clickAction.connect('long-press', (action, actor, state) => {
+            if (state === Clutter.LongPressState.ACTIVATE)
+                this.showOverlay(true);
+            return true;
+        });
 
-        const longPressGesture = new Clutter.LongPressGesture();
-        longPressGesture.connect('recognize', () => this.showOverlay(true));
-        this.add_action(longPressGesture);
-
-        longPressGesture.can_not_cancel(this._draggable.startGesture);
+        this._draggable.addClickAction(clickAction);
 
         this._overlayEnabled = true;
         this._overlayShown = false;
@@ -248,11 +233,6 @@ export class WindowPreview extends Shell.WindowPreview {
             this._title.ensure_style();
             this._icon.ensure_style();
         });
-
-        const motionController = new Clutter.MotionController();
-        motionController.connect('enter', () => this._onEnter());
-        motionController.connect('leave', () => this._onLeave());
-        this.add_action(motionController);
     }
 
     _updateIconScale() {
@@ -280,8 +260,8 @@ export class WindowPreview extends Shell.WindowPreview {
         if (this.metaWindow.title)
             return this.metaWindow.title;
 
-        const tracker = Shell.WindowTracker.get_default();
-        const app = tracker.get_window_app(this.metaWindow);
+        let tracker = Shell.WindowTracker.get_default();
+        let app = tracker.get_window_app(this.metaWindow);
         return app.get_name();
     }
 
@@ -480,8 +460,8 @@ export class WindowPreview extends Shell.WindowPreview {
     }
 
     _updateAttachedDialogs() {
-        const iter = win => {
-            const actor = win.get_compositor_private();
+        let iter = win => {
+            let actor = win.get_compositor_private();
 
             if (!actor)
                 return false;
@@ -544,8 +524,8 @@ export class WindowPreview extends Shell.WindowPreview {
             // We'll fix up the stack after the drag
             return;
 
-        const parent = this.get_parent();
-        const actualAbove = this._getActualStackAbove();
+        let parent = this.get_parent();
+        let actualAbove = this._getActualStackAbove();
         if (actualAbove == null)
             parent.set_child_below_sibling(this, null);
         else
@@ -578,13 +558,18 @@ export class WindowPreview extends Shell.WindowPreview {
         this.emit('selected', global.get_current_time());
     }
 
-    _onEnter() {
+    vfunc_enter_event(event) {
         this.showOverlay(true);
+        return super.vfunc_enter_event(event);
     }
 
-    _onLeave() {
+    vfunc_leave_event(event) {
         if (this._destroyed)
-            return;
+            return super.vfunc_leave_event(event);
+
+        if ((event.get_flags() & Clutter.EventFlags.FLAG_GRAB_NOTIFY) !== 0 &&
+            global.stage.get_grab_actor() === this._closeButton)
+            return super.vfunc_leave_event(event);
 
         if (this._idleHideOverlayId > 0)
             GLib.source_remove(this._idleHideOverlayId);
@@ -605,6 +590,8 @@ export class WindowPreview extends Shell.WindowPreview {
             });
 
         GLib.Source.set_name_by_id(this._idleHideOverlayId, '[gnome-shell] this._idleHideOverlayId');
+
+        return super.vfunc_leave_event(event);
     }
 
     vfunc_key_focus_in() {
@@ -619,26 +606,29 @@ export class WindowPreview extends Shell.WindowPreview {
             this.hideOverlay(true);
     }
 
+    vfunc_key_press_event(event) {
+        let symbol = event.get_key_symbol();
+        let isEnter = symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter;
+        if (isEnter) {
+            this._activate();
+            return true;
+        }
+
+        return super.vfunc_key_press_event(event);
+    }
+
     _restack() {
         // We may not have a parent if DnD completed successfully, in
         // which case our clone will shortly be destroyed and replaced
         // with a new one on the target workspace.
         const parent = this.get_parent();
         if (parent !== null) {
-            if (this._overlayShown) {
+            if (this._overlayShown)
                 parent.set_child_above_sibling(this, null);
-            } else if (this._stackAbove === null) {
+            else if (this._stackAbove === null)
                 parent.set_child_below_sibling(this, null);
-            } else if (!this._stackAbove._overlayShown) {
+            else if (!this._stackAbove._overlayShown)
                 parent.set_child_above_sibling(this, this._stackAbove);
-            } else {
-                // This window shall still be above this._stackAbove._stackAbove
-                const above = this._stackAbove._stackAbove;
-                if (above === null)
-                    parent.set_child_below_sibling(this, null);
-                else
-                    parent.set_child_above_sibling(this, above);
-            }
         }
     }
 
@@ -670,4 +660,4 @@ export class WindowPreview extends Shell.WindowPreview {
 
         this.emit('drag-end');
     }
-}
+});

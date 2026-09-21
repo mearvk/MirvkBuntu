@@ -3,7 +3,6 @@
 #include "gdktexture.h"
 
 #include "gdkenums.h"
-#include "gdkmemoryformatprivate.h"
 
 G_BEGIN_DECLS
 
@@ -15,6 +14,10 @@ struct _GdkTextureChain
   GMutex lock;
 };
 
+#define GDK_TEXTURE_CLASS(klass)            (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_TEXTURE, GdkTextureClass))
+#define GDK_IS_TEXTURE_CLASS(klass)         (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_TEXTURE))
+#define GDK_TEXTURE_GET_CLASS(obj)          (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_TEXTURE, GdkTextureClass))
+
 struct _GdkTexture
 {
   GObject parent_instance;
@@ -22,7 +25,6 @@ struct _GdkTexture
   GdkMemoryFormat format;
   int width;
   int height;
-  GdkColorState *color_state;
 
   gpointer render_key;
   gpointer render_data;
@@ -43,25 +45,20 @@ struct _GdkTextureClass {
 
   /* mandatory: Download in the given format into data */
   void                  (* download)                    (GdkTexture             *texture,
+                                                         GdkMemoryFormat         format,
                                                          guchar                 *data,
-                                                         const GdkMemoryLayout  *layout,
-                                                         GdkColorState          *color_state);
+                                                         gsize                   stride);
 };
 
 gboolean                gdk_texture_can_load            (GBytes                 *bytes);
 
 GdkTexture *            gdk_texture_new_for_surface     (cairo_surface_t        *surface);
-cairo_surface_t *       gdk_texture_download_surface    (GdkTexture             *texture,
-                                                         GdkColorState          *color_state);
-
-GdkMemoryDepth          gdk_texture_get_depth           (GdkTexture             *self);
+cairo_surface_t *       gdk_texture_download_surface    (GdkTexture             *texture);
 
 void                    gdk_texture_do_download         (GdkTexture             *texture,
+                                                         GdkMemoryFormat         format,
                                                          guchar                 *data,
-                                                         const GdkMemoryLayout  *layout,
-                                                         GdkColorState          *color_state);
-GBytes *                gdk_texture_download_bytes      (GdkTexture             *self,
-                                                         GdkMemoryLayout        *out_layout);
+                                                         gsize                   stride);
 void                    gdk_texture_diff                (GdkTexture             *self,
                                                          GdkTexture             *other,
                                                          cairo_region_t         *region);
@@ -74,7 +71,6 @@ gboolean                gdk_texture_set_render_data     (GdkTexture             
                                                          gpointer                key,
                                                          gpointer                data,
                                                          GDestroyNotify          notify);
-void                    gdk_texture_steal_render_data   (GdkTexture             *self);
 void                    gdk_texture_clear_render_data   (GdkTexture             *self);
 gpointer                gdk_texture_get_render_data     (GdkTexture             *self,
                                                          gpointer                key);

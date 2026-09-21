@@ -176,8 +176,6 @@ _cogl_sampler_cache_get_entry_gl (CoglSamplerCache *cache,
                                   const CoglSamplerCacheEntry *key)
 {
   CoglSamplerCacheEntry *entry;
-  CoglDriver *driver = cogl_context_get_driver (cache->context);
-  CoglDriverClass *driver_klass = COGL_DRIVER_GET_CLASS (driver);
 
   entry = g_hash_table_lookup (cache->hash_table_gl, key);
 
@@ -185,7 +183,7 @@ _cogl_sampler_cache_get_entry_gl (CoglSamplerCache *cache,
     {
       entry = g_memdup2 (key, sizeof (CoglSamplerCacheEntry));
 
-      driver_klass->sampler_init (driver, entry);
+      cache->context->driver_vtable->sampler_init (cache->context, entry);
 
       g_hash_table_insert (cache->hash_table_gl, entry, entry);
     }
@@ -224,7 +222,7 @@ _cogl_sampler_cache_get_entry_cogl (CoglSamplerCache *cache,
 const CoglSamplerCacheEntry *
 _cogl_sampler_cache_get_default_entry (CoglSamplerCache *cache)
 {
-  CoglSamplerCacheEntry key = { 0, };
+  CoglSamplerCacheEntry key;
 
   key.wrap_mode_s = COGL_SAMPLER_CACHE_WRAP_MODE_AUTOMATIC;
   key.wrap_mode_t = COGL_SAMPLER_CACHE_WRAP_MODE_AUTOMATIC;
@@ -270,10 +268,8 @@ hash_table_free_gl_cb (void *key,
 {
   CoglContext *context = user_data;
   CoglSamplerCacheEntry *entry = value;
-  CoglDriver *driver = cogl_context_get_driver (context);
-  CoglDriverClass *driver_klass = COGL_DRIVER_GET_CLASS (driver);
 
-  driver_klass->sampler_free (driver, entry);
+  context->driver_vtable->sampler_free (context, entry);
 
   g_free (entry);
 }

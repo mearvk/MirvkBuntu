@@ -5,6 +5,7 @@
 #include <glib.h>
 #include <gmodule.h>
 
+#include "backends/x11/nested/meta-backend-x11-nested.h"
 #include "meta-test/meta-context-test.h"
 #include "tests/clutter-test-utils.h"
 
@@ -59,7 +60,7 @@ get_unit_name_description (const char *unit_name,
   if (max_len > 0 && strlen (description) >= max_len)
     {
       GString *buf = g_string_sized_new (max_len);
-      const char *newline;
+      char *newline;
 
       newline = strchr (description, '\n');
       if (newline != NULL)
@@ -223,3 +224,4 @@ out:
 
   return ret;
 }
+

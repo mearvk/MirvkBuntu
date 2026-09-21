@@ -124,7 +124,7 @@ class TestEventManager:
         script_mgr_instance = test_context.Mock()
         script_instance = test_context.Mock()
         script_instance.app = test_context.Mock()
-        script_instance.record_queued_event = test_context.Mock()
+        script_instance.event_cache = {}
         script_instance.listeners = {}
         script_instance.is_activatable_event = test_context.Mock(return_value=True)
         script_instance.force_script_activation = test_context.Mock(return_value=False)
@@ -175,7 +175,6 @@ class TestEventManager:
         ax_utilities_mock.is_defunct = test_context.Mock(return_value=False)
         ax_utilities_mock.is_application_in_desktop = test_context.Mock(return_value=True)
         ax_utilities_mock.is_iconified = test_context.Mock(return_value=False)
-        ax_utilities_mock.is_mutter_x11_frames = test_context.Mock(return_value=False)
 
         glib_mock = test_context.Mock()
         glib_mock.idle_add = test_context.Mock(return_value=123)
@@ -296,36 +295,36 @@ class TestEventManager:
     @pytest.mark.parametrize(
         "case",
         [
-            {"id": "window_event", "event_type": "window:activate", "expected_priority": "HIGHEST"},
+            {"id": "window_event", "event_type": "window:activate", "expected_priority": 2},
             {
                 "id": "focus_changed",
                 "event_type": "object:state-changed:focused",
-                "expected_priority": "HIGH",
+                "expected_priority": 3,
             },
             {
                 "id": "active_descendant",
                 "event_type": "object:active-descendant-changed",
-                "expected_priority": "HIGH",
+                "expected_priority": 3,
             },
             {
                 "id": "announcement_normal",
                 "event_type": "object:announcement",
-                "expected_priority": "NORMAL",
+                "expected_priority": 4,
             },
             {
                 "id": "invalid_entry",
                 "event_type": "object:state-changed:invalid-entry",
-                "expected_priority": "LOWER",
+                "expected_priority": 5,
             },
             {
                 "id": "children_changed",
                 "event_type": "object:children-changed:add",
-                "expected_priority": "LOW",
+                "expected_priority": 6,
             },
             {
-                "id": "text_changed_event",
+                "id": "other_event",
                 "event_type": "object:text-changed:insert",
-                "expected_priority": "MEDIUM_HIGH",
+                "expected_priority": 4,
             },
         ],
         ids=lambda case: case["id"],
@@ -334,7 +333,7 @@ class TestEventManager:
         """Test EventManager._get_priority."""
 
         essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
-        from orca.event_manager import EventManager, EventPriority
+        from orca.event_manager import EventManager
 
         manager = EventManager()
         mock_event = test_context.Mock(spec=Atspi.Event)
@@ -345,16 +344,15 @@ class TestEventManager:
         if case["event_type"] == "object:state-changed:active":
             ax_utilities.is_frame.return_value = True
         elif case["event_type"] == "object:announcement":
-            mock_event.detail1 = Atspi.Live.POLITE if case["expected_priority"] == "HIGH" else 0
-        ax_utilities.AXUtilities.has_live_region_role.return_value = False
+            mock_event.detail1 = Atspi.Live.POLITE if case["expected_priority"] == 3 else 0
         priority = manager._get_priority(mock_event)
-        assert priority == getattr(EventPriority, case["expected_priority"])
+        assert priority == case["expected_priority"]
 
     def test_get_priority_announcement_levels(self, test_context: OrcaTestContext) -> None:
         """Test EventManager._get_priority for announcement event levels."""
 
         self._setup_dependencies(test_context)
-        from orca.event_manager import EventManager, EventPriority
+        from orca.event_manager import EventManager
 
         manager = EventManager()
         mock_event = test_context.Mock(spec=Atspi.Event)
@@ -363,72 +361,56 @@ class TestEventManager:
 
         mock_event.detail1 = Atspi.Live.ASSERTIVE
         priority = manager._get_priority(mock_event)
-        assert priority == EventPriority.HIGHEST
+        assert priority == 2  # PRIORITY_IMPORTANT
 
         mock_event.detail1 = Atspi.Live.POLITE
         priority = manager._get_priority(mock_event)
-        assert priority == EventPriority.HIGH
+        assert priority == 3  # PRIORITY_HIGH
 
         mock_event.detail1 = 999
         priority = manager._get_priority(mock_event)
-        assert priority == EventPriority.NORMAL
-
-    def test_get_priority_live_region_levels(self, test_context: OrcaTestContext) -> None:
-        """Test EventManager._get_priority for live region text insertions."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca.event_manager import EventManager, EventPriority
-
-        manager = EventManager()
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_event.type = "object:text-changed:insert"
-        mock_event.source = test_context.Mock()
-        ax_utilities = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities.has_live_region_role.return_value = True
-        ax_object = essential_modules["orca.ax_object"].AXObject
-
-        ax_object.get_attribute.return_value = "assertive"
-        assert manager._get_priority(mock_event) == EventPriority.HIGHEST
-
-        ax_object.get_attribute.return_value = "polite"
-        assert manager._get_priority(mock_event) == EventPriority.HIGH
-
-        ax_object.get_attribute.return_value = "off"
-        assert manager._get_priority(mock_event) == EventPriority.MEDIUM_HIGH
-
-        ax_utilities.has_live_region_role.return_value = False
-        ax_object.get_attribute.return_value = "assertive"
-        assert manager._get_priority(mock_event) == EventPriority.MEDIUM_HIGH
+        assert priority == 4  # PRIORITY_NORMAL
 
     @pytest.mark.parametrize(
         "case",
         [
             {
-                "id": "skippable_type_obsoleted",
-                "event_type": "object:state-changed:focused",
-                "counter": 5,
-                "latest_counter": 10,
+                "id": "duplicate_events",
+                "new_type": "object:text-changed:insert",
+                "new_detail1": 5,
+                "new_detail2": 10,
+                "new_data": "test",
+                "existing_type": "object:text-changed:insert",
+                "existing_detail1": 5,
+                "existing_detail2": 10,
+                "existing_data": "test",
+                "priority": 4,
                 "should_obsolete": True,
             },
             {
-                "id": "skippable_type_not_obsoleted_if_latest",
-                "event_type": "object:state-changed:focused",
-                "counter": 10,
-                "latest_counter": 10,
-                "should_obsolete": False,
+                "id": "window_events",
+                "new_type": "window:activate",
+                "new_detail1": 0,
+                "new_detail2": 0,
+                "new_data": None,
+                "existing_type": "window:deactivate",
+                "existing_detail1": 0,
+                "existing_detail2": 0,
+                "existing_data": None,
+                "priority": 2,
+                "should_obsolete": True,
             },
             {
-                "id": "non_skippable_type_not_obsoleted",
-                "event_type": "object:other-event",
-                "counter": 5,
-                "latest_counter": 10,
-                "should_obsolete": False,
-            },
-            {
-                "id": "empty_index_not_obsoleted",
-                "event_type": "object:text-caret-moved",
-                "counter": 5,
-                "latest_counter": None,
+                "id": "no_obsolescence",
+                "new_type": "object:text-changed:insert",
+                "new_detail1": 0,
+                "new_detail2": 0,
+                "new_data": None,
+                "existing_type": None,
+                "existing_detail1": None,
+                "existing_detail2": None,
+                "existing_data": None,
+                "priority": None,
                 "should_obsolete": False,
             },
         ],
@@ -439,20 +421,28 @@ class TestEventManager:
         test_context: OrcaTestContext,
         case: dict,
     ) -> None:
-        """Test EventManager._is_obsoleted_by uses the latest-event index."""
+        """Test EventManager._is_obsoleted_by for various obsolescence scenarios."""
         self._setup_dependencies(test_context)
         from orca.event_manager import EventManager
 
         manager = EventManager()
         mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_event.type = case["event_type"]
+        mock_event.type = case["new_type"]
         mock_event.source = test_context.Mock()
+        mock_event.detail1 = case["new_detail1"]
+        mock_event.detail2 = case["new_detail2"]
+        mock_event.any_data = case["new_data"]
 
-        if case["latest_counter"] is not None:
-            key = (mock_event.type, hash(mock_event.source))
-            manager._latest_event[key] = case["latest_counter"]
+        if case["existing_type"] is not None and case["priority"] is not None:
+            existing_event = test_context.Mock(spec=Atspi.Event)
+            existing_event.type = case["existing_type"]
+            existing_event.source = mock_event.source
+            existing_event.detail1 = case["existing_detail1"]
+            existing_event.detail2 = case["existing_detail2"]
+            existing_event.any_data = case["existing_data"]
+            manager._event_queue.put((case["priority"], 1, existing_event))
 
-        result = manager._is_obsoleted_by(mock_event, case["counter"])
+        result = manager._is_obsoleted_by(mock_event)
         if case["should_obsolete"]:
             assert result is not None
         else:
@@ -556,7 +546,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_window", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.is_frame", return_value=True)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch("orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=True)
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="mutter-x11-frames")
         assert manager._ignore(mock_event) is True
 
         regular_app = test_context.Mock()
@@ -566,9 +556,7 @@ class TestEventManager:
             "orca.event_manager.AXUtilities.get_application",
             return_value=regular_app,
         )
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         assert manager._ignore(mock_event) is False
 
     def test_ignore_text_events(self, test_context: OrcaTestContext) -> None:
@@ -647,9 +635,6 @@ class TestEventManager:
 
         ax_utilities.is_notification.return_value = False
         ax_utilities.is_alert.return_value = False
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
         getattr(ax_utilities, case["utility_method"]).return_value = case["utility_value"]
 
         assert manager._ignore(mock_event) is case["expected_result"]
@@ -669,10 +654,6 @@ class TestEventManager:
         mock_event.any_data = test_context.Mock()
         ax_utilities = essential_modules["orca.ax_utilities"]
         focus_mgr = essential_modules["focus_manager_instance"]
-
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
 
         focus_mgr.get_locus_of_focus.return_value = mock_event.source
         assert manager._ignore(mock_event) is False
@@ -749,9 +730,6 @@ class TestEventManager:
         ax_utilities.is_selected.return_value = False
         ax_utilities.is_focused.return_value = False
         ax_utilities.is_section.return_value = True
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
 
         ax_object.get_attribute.return_value = "polite"
         assert manager._ignore(mock_event) is False
@@ -801,9 +779,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         test_context.patch("orca.event_manager.AXObject.get_attribute", return_value=None)
         test_context.patch("orca.event_manager.focus_manager.get_manager", return_value=focus_mgr)
         assert manager._ignore(mock_event) is False
@@ -819,9 +795,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         test_context.patch("orca.event_manager.AXObject.get_attribute", return_value=None)
         test_context.patch("orca.event_manager.focus_manager.get_manager", return_value=focus_mgr)
         assert manager._ignore(mock_event) is True
@@ -837,9 +811,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         test_context.patch("orca.event_manager.AXObject.get_attribute", return_value=None)
         test_context.patch("orca.event_manager.focus_manager.get_manager", return_value=focus_mgr)
         assert manager._ignore(mock_event) is False
@@ -882,7 +854,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch("orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=True)
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="mutter-x11-frames")
         test_context.patch("orca.event_manager.AXObject.get_attribute", return_value=None)
         test_context.patch("orca.event_manager.focus_manager.get_manager", return_value=focus_mgr)
         manager._event_history = {}
@@ -897,7 +869,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "HIGHEST",
+                "expected_priority": 2,
             },
             {
                 "id": "active_frame",
@@ -905,7 +877,7 @@ class TestEventManager:
                 "is_frame": True,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "HIGHEST",
+                "expected_priority": 2,
             },
             {
                 "id": "active_dialog",
@@ -913,7 +885,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": True,
                 "detail1": 0,
-                "expected_priority": "HIGHEST",
+                "expected_priority": 2,
             },
             {
                 "id": "focused_event",
@@ -921,7 +893,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "HIGH",
+                "expected_priority": 3,
             },
             {
                 "id": "active_descendant",
@@ -929,7 +901,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "HIGH",
+                "expected_priority": 3,
             },
             {
                 "id": "assertive_announcement",
@@ -937,7 +909,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 2,
-                "expected_priority": "HIGHEST",
+                "expected_priority": 2,
             },
             {
                 "id": "polite_announcement",
@@ -945,7 +917,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 1,
-                "expected_priority": "HIGH",
+                "expected_priority": 3,
             },
             {
                 "id": "other_announcement",
@@ -953,7 +925,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 3,
-                "expected_priority": "NORMAL",
+                "expected_priority": 4,
             },
             {
                 "id": "invalid_entry",
@@ -961,7 +933,7 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "LOWER",
+                "expected_priority": 5,
             },
             {
                 "id": "children_changed",
@@ -969,15 +941,15 @@ class TestEventManager:
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "LOW",
+                "expected_priority": 6,
             },
             {
-                "id": "text_changed",
+                "id": "default_normal",
                 "event_type": "object:text-changed:insert",
                 "is_frame": False,
                 "is_dialog_or_alert": False,
                 "detail1": 0,
-                "expected_priority": "MEDIUM_HIGH",
+                "expected_priority": 4,
             },
         ],
         ids=lambda case: case["id"],
@@ -989,8 +961,8 @@ class TestEventManager:
     ) -> None:
         """Test EventManager._get_priority with various event types and conditions."""
 
-        self._setup_dependencies(test_context)
-        from orca.event_manager import EventManager, EventPriority
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca.event_manager import EventManager
 
         manager = EventManager()
         mock_event = test_context.Mock(spec=Atspi.Event)
@@ -1005,7 +977,8 @@ class TestEventManager:
         )
 
         result = manager._get_priority(mock_event)
-        assert result == getattr(EventPriority, case["expected_priority"])
+        assert result == case["expected_priority"]
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1107,47 +1080,45 @@ class TestEventManager:
         test_context.patch("time.time", return_value=100.0)
         test_context.patch(
             "orca.event_manager.AXUtilities.is_window",
-            side_effect=lambda obj, *args: (
+            side_effect=lambda obj: (
                 case["source_role"] == "window" if obj == mock_event.source else False
             ),
         )
         test_context.patch("orca.event_manager.AXUtilities.is_frame", return_value=False)
         test_context.patch(
             "orca.event_manager.AXUtilities.is_text",
-            side_effect=lambda obj, *args: (
+            side_effect=lambda obj: (
                 case["source_role"] == "text" if obj == mock_event.source else False
             ),
         )
         test_context.patch(
             "orca.event_manager.AXUtilities.is_notification",
-            side_effect=lambda obj, *args: (
-                case["source_role"] == "notification" if obj == mock_event.source else False
-            ),
+            side_effect=lambda obj: case["source_role"] == "notification"
+            if obj == mock_event.source
+            else False,
         )
         test_context.patch(
             "orca.event_manager.AXUtilities.is_alert",
-            side_effect=lambda obj, *args: (
+            side_effect=lambda obj: (
                 case["source_role"] == "alert" if obj == mock_event.source else False
             ),
         )
         test_context.patch("orca.event_manager.AXUtilities.is_selected", return_value=False)
         test_context.patch(
             "orca.event_manager.AXUtilities.is_focused",
-            side_effect=lambda obj, *args: (
+            side_effect=lambda obj: (
                 case["source_is_focused"] if obj == mock_event.source else False
             ),
         )
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch(
             "orca.event_manager.AXUtilities.manages_descendants",
-            side_effect=lambda obj, *args: (
+            side_effect=lambda obj: (
                 case["manages_descendants"] if obj == mock_event.source else False
             ),
         )
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
 
         result = manager._ignore(mock_event)
         assert result is case["expected_ignore"]
@@ -1185,9 +1156,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=True)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         test_context.patch(
             "orca.event_manager.AXObject.get_attribute",
             side_effect=lambda obj, attr: "polite" if attr == "live" else None,
@@ -1237,9 +1206,7 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         test_context.patch("orca.event_manager.AXObject.get_attribute", return_value=None)
 
         # First call should not be ignored
@@ -1252,50 +1219,70 @@ class TestEventManager:
         result2 = manager._ignore(mock_event)
         assert result2 is True
 
-    def test_is_obsoleted_by_index_check(self, test_context: OrcaTestContext) -> None:
-        """Test that _is_obsoleted_by uses the _latest_event index."""
+    def test_is_obsoleted_by_identical_events(self, test_context: OrcaTestContext) -> None:
+        """Test EventManager._is_obsoleted_by with identical events in queue."""
 
         self._setup_dependencies(test_context)
         from orca.event_manager import EventManager
 
         manager = EventManager()
         mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_event.type = "object:text-caret-moved"
+        mock_event.type = "object:test-event"
         mock_event.source = test_context.Mock()
+        mock_event.detail1 = 1
+        mock_event.detail2 = 2
+        mock_event.any_data = "test_data"
 
-        assert manager._is_obsoleted_by(mock_event, 5) is None
+        identical_event = test_context.Mock(spec=Atspi.Event)
+        identical_event.type = "object:test-event"
+        identical_event.source = mock_event.source
+        identical_event.detail1 = 1
+        identical_event.detail2 = 2
+        identical_event.any_data = "test_data"
 
-        key = (mock_event.type, hash(mock_event.source))
-        manager._latest_event[key] = 10
-        assert manager._is_obsoleted_by(mock_event, 5) is not None
-        assert manager._is_obsoleted_by(mock_event, 10) is None
+        queue_data = [(4, 1, identical_event)]
+        with manager._event_queue.mutex:
+            manager._event_queue.queue = queue_data
+
+        result = manager._is_obsoleted_by(mock_event)
+        assert result == identical_event
 
     @pytest.mark.parametrize(
         "case",
         [
             {
                 "id": "active_descendant_obsoletes",
-                "event_type": "object:active-descendant-changed",
+                "existing_type": "object:active-descendant-changed",
+                "existing_source_same": True,
+                "new_type": "object:active-descendant-changed",
                 "should_obsolete": True,
             },
             {
                 "id": "state_changed_obsoletes",
-                "event_type": "object:state-changed:focused",
+                "existing_type": "object:state-changed:focused",
+                "existing_source_same": True,
+                "new_type": "object:state-changed:focused",
                 "should_obsolete": True,
             },
             {
                 "id": "caret_moved_obsoletes",
-                "event_type": "object:text-caret-moved",
+                "existing_type": "object:text-caret-moved",
+                "existing_source_same": True,
+                "new_type": "object:text-caret-moved",
                 "should_obsolete": True,
             },
             {
                 "id": "window_activate_obsoletes",
-                "event_type": "window:activate",
+                "existing_type": "window:activate",
+                "existing_source_same": True,
+                "new_type": "window:activate",
                 "should_obsolete": True,
             },
             {
                 "id": "non_skippable_does_not_obsolete",
-                "event_type": "object:other-event",
+                "existing_type": "object:other-event",
+                "existing_source_same": True,
+                "new_type": "object:other-event",
                 "should_obsolete": False,
             },
         ],
@@ -1314,15 +1301,28 @@ class TestEventManager:
         manager = EventManager()
         mock_source = test_context.Mock()
         mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_event.type = case["event_type"]
+        mock_event.type = case["new_type"]
         mock_event.source = mock_source
+        mock_event.detail1 = 0
+        mock_event.detail2 = 0
+        mock_event.any_data = None
 
-        key = (mock_event.type, hash(mock_source))
-        manager._latest_event[key] = 10
+        existing_event = test_context.Mock(spec=Atspi.Event)
+        existing_event.type = case["existing_type"]
+        existing_event.source = mock_source if case["existing_source_same"] else test_context.Mock()
+        existing_event.detail1 = (
+            0 if case["should_obsolete"] else 1
+        )  # Make it different for non-obsoleting case
+        existing_event.detail2 = 0
+        existing_event.any_data = None
 
-        result = manager._is_obsoleted_by(mock_event, 5)
+        queue_data = [(4, 1, existing_event)]
+        with manager._event_queue.mutex:
+            manager._event_queue.queue = queue_data
+
+        result = manager._is_obsoleted_by(mock_event)
         if case["should_obsolete"]:
-            assert result is not None
+            assert result == existing_event
         else:
             assert result is None
 
@@ -1353,9 +1353,9 @@ class TestEventManager:
 
         test_context.patch(
             "orca.event_manager.AXObject.get_parent",
-            side_effect=lambda obj: (
-                parent_mock if obj in [mock_source, sibling_source] else test_context.Mock()
-            ),
+            side_effect=lambda obj: parent_mock
+            if obj in [mock_source, sibling_source]
+            else test_context.Mock(),
         )
 
         queue_data = [(4, 1, sibling_event)]
@@ -1377,10 +1377,16 @@ class TestEventManager:
         mock_event = test_context.Mock(spec=Atspi.Event)
         mock_event.type = "window:activate"
         mock_event.source = mock_source
+        mock_event.detail1 = 0
+        mock_event.detail2 = 0
+        mock_event.any_data = None
 
         existing_event = test_context.Mock(spec=Atspi.Event)
-        existing_event.type = "window:deactivate"
+        existing_event.type = "window:activate"
         existing_event.source = mock_source
+        existing_event.detail1 = 0
+        existing_event.detail2 = 0
+        existing_event.any_data = None
 
         queue_data = [(4, 1, existing_event)]
         with manager._event_queue.mutex:
@@ -1456,13 +1462,25 @@ class TestEventManager:
         test_context.patch("orca.event_manager.AXUtilities.is_section", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.manages_descendants", return_value=False)
         test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch(
-            "orca.event_manager.AXUtilities.is_mutter_x11_frames", return_value=False
-        )
+        test_context.patch("orca.event_manager.AXObject.get_name", return_value="regular-app")
         test_context.patch("orca.event_manager.AXObject.get_attribute", return_value=None)
 
         result = manager._ignore(mock_event)
         assert result is False
+
+    def test_queue_println(self, test_context: OrcaTestContext) -> None:
+        """Test EventManager._queue_println."""
+
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca.event_manager import EventManager
+
+        manager = EventManager()
+        mock_event = test_context.Mock(spec=Atspi.Event)
+        mock_event.type = "test:event"
+        debug_mock = essential_modules["orca.debug"]
+        debug_mock.debugLevel = 10
+        manager._queue_println(mock_event)
+        manager._queue_println(mock_event, is_enqueue=False)
 
     def test_enqueue_object_event_ignored(self, test_context: OrcaTestContext) -> None:
         """Test EventManager._enqueue_object_event for ignored events."""
@@ -1474,28 +1492,6 @@ class TestEventManager:
         manager._active = False
         mock_event = test_context.Mock(spec=Atspi.Event)
         mock_event.type = "object:text-changed:insert"
-        manager._enqueue_object_event(mock_event)
-        assert manager._event_queue.empty()
-
-    def test_enqueue_object_event_dropped_when_hung(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test EventManager._enqueue_object_event drops events from hung sources/apps."""
-
-        self._setup_dependencies(test_context)
-        from orca.event_manager import EventManager
-
-        manager = EventManager()
-        manager._active = True
-        manager._paused = False
-        mock_event = test_context.Mock(spec=Atspi.Event)
-        mock_event.type = "object:text-changed:insert"
-        mock_event.source = test_context.Mock()
-        mock_app = test_context.Mock()
-        test_context.patch_object(manager, "_ignore", new=test_context.Mock(return_value=False))
-        test_context.patch("orca.event_manager.AXUtilities.get_application", return_value=mock_app)
-        test_context.patch("orca.event_manager.AXObject.check_hung", return_value=True)
         manager._enqueue_object_event(mock_event)
         assert manager._event_queue.empty()
 
@@ -1884,11 +1880,7 @@ class TestEventManager:
         mock_event = test_context.Mock(spec=Atspi.Event)
         mock_is_obsoleted = test_context.Mock(return_value=test_context.Mock())
         test_context.patch_object(manager, "_is_obsoleted_by", new=mock_is_obsoleted)
-        mock_handle_early = test_context.patch_object(manager, "_handle_early_event_processing")
         manager._process_object_event(mock_event)
-
-        mock_is_obsoleted.assert_called_once_with(mock_event, -1)
-        mock_handle_early.assert_not_called()
 
     def test_process_object_event_dead_source(self, test_context: OrcaTestContext) -> None:
         """Test EventManager._process_object_event with dead event source."""
@@ -1921,6 +1913,35 @@ class TestEventManager:
             "Active window is dead or defunct",
         )
 
+    def test_process_object_event_no_listener(self, test_context: OrcaTestContext) -> None:
+        """Test EventManager._process_object_event with no matching listener."""
+
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca.event_manager import EventManager
+
+        manager = EventManager()
+        mock_event = test_context.Mock(spec=Atspi.Event)
+        mock_event.type = "object:unknown-event"
+        mock_event.source = test_context.Mock()
+        mock_is_obsoleted = test_context.Mock(return_value=None)
+        test_context.patch_object(manager, "_is_obsoleted_by", new=mock_is_obsoleted)
+        ax_object = essential_modules["orca.ax_object"]
+        ax_utilities = essential_modules["orca.ax_utilities"]
+        ax_object.is_dead.return_value = False
+        ax_utilities.is_defunct.return_value = False
+        ax_utilities.is_iconified.return_value = False
+        mock_script = test_context.Mock()
+        mock_script.listeners = {}
+        script_mgr = essential_modules["script_manager_instance"]
+        script_mgr.get_active_script.return_value = mock_script
+        mock_get_script = test_context.Mock(return_value=mock_script)
+        mock_is_activatable = test_context.Mock(return_value=(False, "test"))
+        mock_should_process = test_context.Mock(return_value=True)
+        test_context.patch_object(manager, "_get_script_for_event", new=mock_get_script)
+        test_context.patch_object(manager, "_is_activatable_event", new=mock_is_activatable)
+        test_context.patch_object(manager, "_should_process_event", new=mock_should_process)
+        manager._process_object_event(mock_event)
+
     def test_get_manager(self, test_context: OrcaTestContext) -> None:
         """Test event_manager.get_manager."""
 
@@ -1951,7 +1972,7 @@ class TestEventManager:
         mock_event.source = test_context.Mock()
         mock_app = test_context.Mock()
         mock_script = test_context.Mock()
-        mock_script.record_queued_event = test_context.Mock()
+        mock_script.event_cache = {}
 
         mock_ignore = test_context.Mock(return_value=False)
         test_context.patch_object(manager, "_ignore", new=mock_ignore)
@@ -1967,7 +1988,7 @@ class TestEventManager:
         manager._enqueue_object_event(mock_event)
 
         assert not manager._event_queue.empty()
-        mock_script.record_queued_event.assert_called_once_with(mock_event)
+        assert mock_event.type in mock_script.event_cache
         mock_idle_add.assert_called_once_with(manager._dequeue_object_event)
         assert manager._gidle_id == 456
 

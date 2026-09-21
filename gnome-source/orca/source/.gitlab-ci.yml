@@ -20,7 +20,6 @@ include:
 stages:
   - container-build
   - build
-  - test
   - format
   - lint
   - pages
@@ -63,45 +62,6 @@ build-opensuse-x86_64:
       - _build/help
     expire_in: 1 day
 
-unit-tests:
-  stage: test
-  extends:
-    - '.orca_opensuse_tumbleweed_x86_64'
-    - '.fdo.distribution-image@opensuse'
-  needs:
-    - job: opensuse-container@x86_64
-      artifacts: false
-  script:
-    - bash -x ci/install_atspi.sh
-    - source ci/env.sh
-    - meson setup -D prefix=/usr -D mathcat=false "${MESON_BUILD_DIR}"
-    - meson test -C "${MESON_BUILD_DIR}" --suite unit --print-errorlogs
-
-.integration-tests:
-  stage: test
-  extends:
-    - '.orca_opensuse_tumbleweed_x86_64'
-    - '.fdo.distribution-image@opensuse'
-  needs:
-    - job: opensuse-container@x86_64
-      artifacts: false
-  before_script:
-    - source ci/env.sh
-    - bash -x ci/install_atspi.sh
-    - bash -x ci/build_and_install.sh
-  allow_failure: true
-  artifacts:
-    when: always
-    reports:
-      junit: _build/meson-logs/testlog.junit.xml
-    expire_in: 1 day
-
-integration-tests-base:
-  extends: .integration-tests
-  allow_failure: false
-  script:
-    - meson test -C "${MESON_BUILD_DIR}" --suite core --suite gtk3 --suite gtk3-terminal --num-processes 1 --print-errorlogs
-
 # Linters: Ruff and Mypy
 #
 # The configurations are in pyproject.toml.
@@ -121,7 +81,6 @@ linters:
     - codespell src/orca || status=1
     - ruff format --check src/orca || status=1
     - ruff check src/orca || status=1
-    - python ci/check_orca_rules.py || status=1
     - mypy src/orca || status=1
     - exit $status
   allow_failure: true
@@ -180,7 +139,6 @@ build-release-tarball:
       when: always
     - when: never
   script:
-    - bash -x ci/install_atspi.sh
     - meson setup "${MESON_BUILD_DIR}"
     - meson dist -C "${MESON_BUILD_DIR}"
   artifacts:

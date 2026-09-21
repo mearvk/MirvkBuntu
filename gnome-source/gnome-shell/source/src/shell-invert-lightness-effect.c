@@ -20,10 +20,10 @@
  */
 
 /**
- * ShellInvertLightnessEffect:
- *
- * A colorization effect where lightness is inverted but
+ * SECTION:shell-invert-lightness-effect
+ * @short_description: A colorization effect where lightness is inverted but
  * color is not.
+ * @see_also: #ClutterEffect, #ClutterOffscreenEffect
  *
  * #ShellInvertLightnessEffect is a sub-class of #ClutterEffect that enhances
  * the appearance of a clutter actor.  Specifically it inverts the lightness
@@ -38,8 +38,6 @@
 #include "shell-invert-lightness-effect.h"
 
 #include <cogl/cogl.h>
-
-#include "shell-global.h"
 
 struct _ShellInvertLightnessEffect
 {
@@ -116,13 +114,8 @@ shell_invert_lightness_effect_init (ShellInvertLightnessEffect *self)
   if (G_UNLIKELY (klass->base_pipeline == NULL))
     {
       CoglSnippet *snippet;
-      ShellGlobal *global = shell_global_get ();
-      ClutterStage *stage = shell_global_get_stage (global);
-      ClutterContext *clutter_context =
-        clutter_actor_get_context (CLUTTER_ACTOR (stage));
-      ClutterBackend *backend =
-        clutter_context_get_backend (clutter_context);
-      CoglContext *ctx = clutter_backend_get_cogl_context (backend);
+      CoglContext *ctx =
+        clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
       klass->base_pipeline = cogl_pipeline_new (ctx);
 

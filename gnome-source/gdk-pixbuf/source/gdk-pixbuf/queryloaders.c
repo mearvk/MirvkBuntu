@@ -62,7 +62,7 @@ static int
 loader_sanity_check (const char *path, GdkPixbufFormat *info, GdkPixbufModule *vtable)
 {
         const GdkPixbufModulePattern *pattern;
-        const char *error = NULL;
+        const char *error = "";
 
         for (pattern = info->signature; pattern->prefix; pattern++)
         {
@@ -115,7 +115,7 @@ loader_sanity_check (const char *path, GdkPixbufFormat *info, GdkPixbufModule *v
 
  error:
         g_fprintf (stderr, "Loader sanity check failed for %s: %s\n",
-                   path, error != NULL ? error : "unknown error");
+                   path, error);
 
         return 0;
 }

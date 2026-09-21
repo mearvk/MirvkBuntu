@@ -52,7 +52,7 @@ struct _GtkText
 };
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_text_get_type                       (void);
+GType           gtk_text_get_type                       (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkWidget *     gtk_text_new                            (void);
@@ -164,8 +164,6 @@ void            gtk_text_compute_cursor_extents         (GtkText         *self,
                                                          graphene_rect_t *strong,
                                                          graphene_rect_t *weak);
 
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkText, g_object_unref)
 
 G_END_DECLS
 

@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -71,7 +73,7 @@ export async function installExtension(uuid, invocation) {
  * @param {string} uuid
  */
 export function uninstallExtension(uuid) {
-    const extension = Main.extensionManager.lookup(uuid);
+    let extension = Main.extensionManager.lookup(uuid);
     if (!extension)
         return false;
 
@@ -88,7 +90,7 @@ export function uninstallExtension(uuid) {
         const updatesDir = Gio.File.new_for_path(GLib.build_filenamev(
             [global.userdatadir, 'extension-updates', extension.uuid]));
         FileUtils.recursivelyDeleteDir(updatesDir, true);
-    } catch {
+    } catch (e) {
         // not an error
     }
 
@@ -195,9 +197,9 @@ export async function checkForUpdates() {
     if (!Main.extensionManager.updatesSupported)
         return;
 
-    const metadatas = {};
+    let metadatas = {};
     Main.extensionManager.getUuids().forEach(uuid => {
-        const extension = Main.extensionManager.lookup(uuid);
+        let extension = Main.extensionManager.lookup(uuid);
         if (extension.type !== ExtensionUtils.ExtensionType.PER_USER)
             return;
         if (extension.hasUpdate)
@@ -282,7 +284,7 @@ class InstallExtensionDialog extends ModalDialog.ModalDialog {
             default: true,
         }]);
 
-        const content = new Dialog.MessageDialogContent({
+        let content = new Dialog.MessageDialogContent({
             title: _('Install Extension'),
             description: _('Download and install “%s” from extensions.gnome.org?').format(info.name),
         });

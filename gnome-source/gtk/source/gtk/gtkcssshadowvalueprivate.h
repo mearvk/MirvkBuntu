@@ -29,7 +29,6 @@
 #include "gtktypes.h"
 #include "gtkcssvalueprivate.h"
 #include "gtksnapshot.h"
-#include "gdk/gdkcolorprivate.h"
 
 G_BEGIN_DECLS
 
@@ -56,19 +55,6 @@ gboolean        gtk_css_shadow_value_push_snapshot    (const GtkCssValue        
                                                        GtkSnapshot              *snapshot);
 void            gtk_css_shadow_value_pop_snapshot     (const GtkCssValue        *value,
                                                        GtkSnapshot              *snapshot);
-
-guint           gtk_css_shadow_value_get_n_shadows    (const GtkCssValue        *value);
-
-void            gtk_css_shadow_value_get_offset       (const GtkCssValue        *value,
-                                                       guint                     n,
-                                                       graphene_point_t         *offset);
-
-void            gtk_css_shadow_value_get_color        (const GtkCssValue        *value,
-                                                       guint                     n,
-                                                       GdkColor                 *color);
-
-double          gtk_css_shadow_value_get_radius       (const GtkCssValue        *value,
-                                                       guint                     n);
 
 G_END_DECLS
 

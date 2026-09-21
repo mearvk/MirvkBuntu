@@ -28,7 +28,7 @@ typedef GType (*GTypeGetFunc) (void);
 
 static gboolean finalized = FALSE;
 
-static void
+static gboolean
 main_loop_quit_cb (gpointer data)
 {
   gboolean *done = data;
@@ -38,6 +38,7 @@ main_loop_quit_cb (gpointer data)
   g_main_context_wakeup (NULL);
 
   g_assert_true (finalized);
+  return FALSE;
 }
 
 static void
@@ -68,20 +69,11 @@ test_finalize_object (gconstpointer data)
                              NULL);
       gdk_content_formats_unref (formats);
     }
-  else if (g_type_is_a (test_type, GDK_TYPE_TEXTURE))
-    {
-      static const guint8 pixels[4] = { 0xff, 0x00, 0x00, 0xff };
-      GBytes *bytes = g_bytes_new_static (pixels, sizeof (pixels));
-      object = (GObject *) gdk_memory_texture_new (1, 1, GDK_MEMORY_DEFAULT, bytes, 4);
-      g_bytes_unref (bytes);
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    }
   else if (g_type_is_a (test_type, GSK_TYPE_GL_SHADER))
     {
       GBytes *bytes = g_bytes_new_static ("", 0);
       object = g_object_new (test_type, "source", bytes, NULL);
       g_bytes_unref (bytes);
-G_GNUC_END_IGNORE_DEPRECATIONS
     }
   else if (g_type_is_a (test_type, GTK_TYPE_FILTER_LIST_MODEL) ||
            g_type_is_a (test_type, GTK_TYPE_NO_SELECTION) ||
@@ -123,7 +115,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
   /* Even if the object did finalize, it may have left some dangerous stuff in the GMainContext */
   done = FALSE;
-  g_timeout_add_once (50, main_loop_quit_cb, &done);
+  g_timeout_add (50, main_loop_quit_cb, &done);
   while (!done)
     g_main_context_iteration (NULL, TRUE);
 }

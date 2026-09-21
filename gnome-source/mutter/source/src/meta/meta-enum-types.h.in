@@ -19,7 +19,7 @@ G_END_DECLS
 /*** END file-tail ***/
 
 /*** BEGIN value-header ***/
-META_EXPORT GType @enum_name@_get_type (void);
+META_EXPORT GType @enum_name@_get_type (void) G_GNUC_CONST;
 #define META_TYPE_@ENUMSHORT@ (@enum_name@_get_type())
 
 /*** END value-header ***/

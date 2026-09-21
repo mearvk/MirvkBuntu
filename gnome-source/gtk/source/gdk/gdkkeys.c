@@ -130,7 +130,7 @@ gdk_keymap_class_init (GdkKeymapClass *klass)
   props[PROP_DISPLAY] =
     g_param_spec_object ("display", NULL, NULL,
                          GDK_TYPE_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
 
@@ -249,9 +249,9 @@ gdk_keyval_to_lower (guint keyval)
  * gdk_keyval_is_upper:
  * @keyval: a key value.
  *
- * Returns true if the given key value is in upper case.
+ * Returns %TRUE if the given key value is in upper case.
  *
- * Returns: true if @keyval is in upper case, or if @keyval is not subject to
+ * Returns: %TRUE if @keyval is in upper case, or if @keyval is not subject to
  *  case conversion.
  */
 gboolean
@@ -271,9 +271,9 @@ gdk_keyval_is_upper (guint keyval)
  * gdk_keyval_is_lower:
  * @keyval: a key value.
  *
- * Returns true if the given key value is in lower case.
+ * Returns %TRUE if the given key value is in lower case.
  *
- * Returns: true if @keyval is in lower case, or if @keyval is not
+ * Returns: %TRUE if @keyval is in lower case, or if @keyval is not
  *   subject to case conversion.
  */
 gboolean
@@ -296,10 +296,10 @@ gdk_keyval_is_lower (guint keyval)
  * Returns the direction of effective layout of the keymap.
  *
  * The direction of a layout is the direction of the majority of its
- * symbols. See [func@Pango.unichar_direction].
+ * symbols. See pango_unichar_direction().
  *
- * Returns: `PANGO_DIRECTION_LTR` or `PANGO_DIRECTION_RTL`
- *   if it can determine the direction, and `PANGO_DIRECTION_NEUTRAL`
+ * Returns: %PANGO_DIRECTION_LTR or %PANGO_DIRECTION_RTL
+ *   if it can determine the direction. %PANGO_DIRECTION_NEUTRAL
  *   otherwise.
  */
 PangoDirection
@@ -317,7 +317,7 @@ gdk_keymap_get_direction (GdkKeymap *keymap)
  * Determines if keyboard layouts for both right-to-left and left-to-right
  * languages are in use.
  *
- * Returns: true if there are layouts in both directions, false otherwise
+ * Returns: %TRUE if there are layouts in both directions, %FALSE otherwise
  */
 gboolean
 gdk_keymap_have_bidi_layouts (GdkKeymap *keymap)
@@ -333,7 +333,7 @@ gdk_keymap_have_bidi_layouts (GdkKeymap *keymap)
  *
  * Returns whether the Caps Lock modifier is locked.
  *
- * Returns: true if Caps Lock is on
+ * Returns: %TRUE if Caps Lock is on
  */
 gboolean
 gdk_keymap_get_caps_lock_state (GdkKeymap *keymap)
@@ -349,7 +349,7 @@ gdk_keymap_get_caps_lock_state (GdkKeymap *keymap)
  *
  * Returns whether the Num Lock modifier is locked.
  *
- * Returns: true if Num Lock is on
+ * Returns: %TRUE if Num Lock is on
  */
 gboolean
 gdk_keymap_get_num_lock_state (GdkKeymap *keymap)
@@ -365,7 +365,7 @@ gdk_keymap_get_num_lock_state (GdkKeymap *keymap)
  *
  * Returns whether the Scroll Lock modifier is locked.
  *
- * Returns: true if Scroll Lock is on
+ * Returns: %TRUE if Scroll Lock is on
  */
 gboolean
 gdk_keymap_get_scroll_lock_state (GdkKeymap *keymap)
@@ -395,60 +395,16 @@ gdk_keymap_get_modifier_state (GdkKeymap *keymap)
 }
 
 /*< private >
- * gdk_keymap_get_active_layout_index:
- * @keymap: a `GdkKeymap`
- *
- * Returns the index of the active layout.
- *
- * If there is no valid active layout, this function will return -1;
- *
- * Returns: The layout index of the active layout or -1.
- */
-gint
-gdk_keymap_get_active_layout_index (GdkKeymap *keymap)
-{
-  g_return_val_if_fail (GDK_IS_KEYMAP (keymap), -1);
-
-  if (GDK_KEYMAP_GET_CLASS (keymap)->get_active_layout_index)
-    return GDK_KEYMAP_GET_CLASS (keymap)->get_active_layout_index (keymap);
-
-  return -1;
-}
-
-
-/*< private >
- * gdk_keymap_get_layout_names:
- * @keymap: a `GdkKeymap`
- *
- * Returns the layouts as a `NULL`-terminated array of strings.
- *
- * Returns: (transfer full) (nullable) (array zero-terminated=1):
- *   `NULL`-terminated array of strings of layouts,
- */
-gchar **
-gdk_keymap_get_layout_names (GdkKeymap *keymap)
-{
-  g_return_val_if_fail (GDK_IS_KEYMAP (keymap), NULL);
-
-  if (GDK_KEYMAP_GET_CLASS (keymap)->get_layout_names)
-    return GDK_KEYMAP_GET_CLASS (keymap)->get_layout_names (keymap);
-
-  return NULL;
-}
-
-/*< private >
  * gdk_keymap_get_entries_for_keyval:
  * @keymap: a `GdkKeymap`
- * @keyval: a keyval, such as `GDK_KEY_a`, `GDK_KEY_Up`, `GDK_KEY_Return`, etc.
+ * @keyval: a keyval, such as %GDK_KEY_a, %GDK_KEY_Up, %GDK_KEY_Return, etc.
  * @keys: (out) (array length=n_keys) (transfer full): return location
  *   for an array of `GdkKeymapKey`
  * @n_keys: return location for number of elements in returned array
  *
  * Obtains a list of keycode/group/level combinations that will
- * generate @keyval.
- *
- * Groups and levels are two kinds of keyboard mode; in general,
- * the level determines whether the top or bottom symbol
+ * generate @keyval. Groups and levels are two kinds of keyboard mode;
+ * in general, the level determines whether the top or bottom symbol
  * on a key is used, and the group determines whether the left or
  * right symbol is used. On US keyboards, the shift key changes the
  * keyboard level, and there are no groups. A group switch key might
@@ -458,7 +414,7 @@ gdk_keymap_get_layout_names (GdkKeymap *keymap)
  * The returned array should be freed
  * with g_free().
  *
- * Returns: true if keys were found and returned
+ * Returns: %TRUE if keys were found and returned
  **/
 gboolean
 gdk_keymap_get_entries_for_keyval (GdkKeymap     *keymap,
@@ -480,7 +436,7 @@ gdk_keymap_get_entries_for_keyval (GdkKeymap     *keymap,
   *n_keys = array->len;
   *keys = (GdkKeymapKey *)g_array_free (array, FALSE);
 
-  return *n_keys > 0;
+  return TRUE;
 }
 
 void
@@ -531,14 +487,13 @@ gdk_keymap_get_cached_entries_for_keyval (GdkKeymap     *keymap,
  * @n_entries: length of @keys and @keyvals
  *
  * Returns the keyvals bound to @hardware_keycode.
- *
  * The Nth `GdkKeymapKey` in @keys is bound to the Nth
  * keyval in @keyvals. Free the returned arrays with g_free().
  * When a keycode is pressed by the user, the keyval from
  * this list of entries is selected by considering the effective
  * keyboard group and level. See gdk_keymap_translate_keyboard_state().
  *
- * Returns: true if there were any entries
+ * Returns: %TRUE if there were any entries
  **/
 gboolean
 gdk_keymap_get_entries_for_keycode (GdkKeymap     *keymap,
@@ -560,7 +515,6 @@ gdk_keymap_get_entries_for_keycode (GdkKeymap     *keymap,
  * @key: a `GdkKeymapKey` with keycode, group, and level initialized
  *
  * Looks up the keyval mapped to a keycode/group/level triplet.
- *
  * If no keyval is bound to @key, returns 0. For normal user input,
  * you want to use gdk_keymap_translate_keyboard_state() instead of
  * this function, since the effective group/level may not be
@@ -591,10 +545,9 @@ gdk_keymap_lookup_key (GdkKeymap          *keymap,
  *   that were used to determine the group or level
  *
  * Translates the contents of a `GdkEventKey` into a keyval, effective
- * group, and level.
- *
- * Modifiers that affected the translation and are thus unavailable for
- * application use are returned in @consumed_modifiers.
+ * group, and level. Modifiers that affected the translation and
+ * are thus unavailable for application use are returned in
+ * @consumed_modifiers.
  * See [Groups][key-group-explanation] for an explanation of
  * groups and levels. The @effective_group is the group that was
  * actually used for the translation; some keys such as Enter are not
@@ -607,7 +560,7 @@ gdk_keymap_lookup_key (GdkKeymap          *keymap,
  * the `plus` symbol is shifted, so when comparing a key press to a
  * `<Control>plus` accelerator `<Shift>` should be masked out.
  *
- * ```c
+ * |[<!-- language="C" -->
  * // We want to ignore irrelevant modifiers like ScrollLock
  * #define ALL_ACCELS_MASK (GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_ALT_MASK)
  * state = gdk_event_get_modifier_state (event);
@@ -619,19 +572,18 @@ gdk_keymap_lookup_key (GdkKeymap          *keymap,
  * if (keyval == GDK_PLUS &&
  *     (state & ~consumed & ALL_ACCELS_MASK) == GDK_CONTROL_MASK)
  *   // Control was pressed
- * ```
+ * ]|
  * 
  * An older interpretation @consumed_modifiers was that it contained
  * all modifiers that might affect the translation of the key;
  * this allowed accelerators to be stored with irrelevant consumed
  * modifiers, by doing:
- *
- * ```c
+ * |[<!-- language="C" -->
  * // XXX Don’t do this XXX
  * if (keyval == accel_keyval &&
  *     (state & ~consumed & ALL_ACCELS_MASK) == (accel_mods & ~consumed))
  *   // Accelerator was pressed
- * ```
+ * ]|
  *
  * However, this did not work if multi-modifier combinations were
  * used in the keymap, since, for instance, `<Control>` would be
@@ -643,7 +595,7 @@ gdk_keymap_lookup_key (GdkKeymap          *keymap,
  * you store accelerators, you should always store them with consumed
  * modifiers removed. Store `<Control>plus`, not `<Control><Shift>plus`,
  *
- * Returns: true if there was a keyval bound to the keycode/state/group
+ * Returns: %TRUE if there was a keyval bound to the keycode/state/group
  **/
 gboolean
 gdk_keymap_translate_keyboard_state (GdkKeymap       *keymap,
@@ -677,7 +629,7 @@ static char *
 _gdk_keyval_name (guint keyval)
 {
   static char buf[100];
-  const gdk_key *found;
+  gdk_key *found;
 
   /* Check for directly encoded 24-bit UCS characters: */
   if ((keyval & 0xff000000) == 0x01000000)
@@ -718,7 +670,7 @@ gdk_keys_name_compare (const void *pkey, const void *pbase)
 static guint
 _gdk_keyval_from_name (const char *keyval_name)
 {
-  const gdk_key *found;
+  gdk_key *found;
 
   g_return_val_if_fail (keyval_name != NULL, 0);
 
@@ -764,7 +716,7 @@ gdk_keyval_name (guint keyval)
  * `gdk/gdkkeysyms.h` header file
  * but without the leading “GDK_KEY_”.
  *
- * Returns: the corresponding key value, or `GDK_KEY_VoidSymbol`
+ * Returns: the corresponding key value, or %GDK_KEY_VoidSymbol
  *   if the key name is not a valid key
  */
 guint
@@ -912,115 +864,4 @@ gdk_keyval_convert_case (guint symbol,
     *lower = xlower;
   if (upper)
     *upper = xupper;
-}
-
-/* Note that this array must have a 0 at the beginning,
- * at the end, and between any two sets of aliases
- */
-static const guint aliases[] = {
-  0,
-  GDK_KEY_space, GDK_KEY_KP_Space,
-  0,
-  GDK_KEY_Tab, GDK_KEY_ISO_Left_Tab, GDK_KEY_KP_Tab,
-  0,
-  GDK_KEY_Return, GDK_KEY_ISO_Enter, GDK_KEY_KP_Enter,
-  0,
-  GDK_KEY_Home, GDK_KEY_KP_Home,
-  0,
-  GDK_KEY_End, GDK_KEY_KP_End,
-  0,
-  GDK_KEY_Left, GDK_KEY_KP_Left,
-  0,
-  GDK_KEY_Up, GDK_KEY_KP_Up,
-  0,
-  GDK_KEY_Right, GDK_KEY_KP_Right,
-  0,
-  GDK_KEY_Down, GDK_KEY_KP_Down,
-  0,
-  GDK_KEY_Page_Up, GDK_KEY_KP_Page_Up,
-  0,
-  GDK_KEY_Page_Down, GDK_KEY_KP_Page_Down,
-  0,
-  GDK_KEY_Prior, GDK_KEY_KP_Prior,
-  0,
-  GDK_KEY_Next, GDK_KEY_KP_Next,
-  0,
-  GDK_KEY_Insert, GDK_KEY_KP_Insert,
-  0,
-  GDK_KEY_Delete, GDK_KEY_KP_Delete,
-  0,
-  GDK_KEY_equal, GDK_KEY_KP_Equal,
-  0,
-  GDK_KEY_plus, GDK_KEY_KP_Add,
-  0,
-  GDK_KEY_minus, GDK_KEY_KP_Subtract,
-  0,
-  GDK_KEY_asterisk, GDK_KEY_KP_Multiply,
-  0,
-  GDK_KEY_slash, GDK_KEY_KP_Divide,
-  0,
-  GDK_KEY_Menu, GDK_KEY_ContextMenu,
-  0,
-  GDK_KEY_0, GDK_KEY_KP_0,
-  0,
-  GDK_KEY_1, GDK_KEY_KP_1,
-  0,
-  GDK_KEY_2, GDK_KEY_KP_2,
-  0,
-  GDK_KEY_3, GDK_KEY_KP_3,
-  0,
-  GDK_KEY_4, GDK_KEY_KP_4,
-  0,
-  GDK_KEY_5, GDK_KEY_KP_5,
-  0,
-  GDK_KEY_6, GDK_KEY_KP_6,
-  0,
-  GDK_KEY_7, GDK_KEY_KP_7,
-  0,
-  GDK_KEY_8, GDK_KEY_KP_8,
-  0,
-  GDK_KEY_9, GDK_KEY_KP_9,
-  0,
-};
-
-/**
- * gdk_keyval_get_aliases:
- * @keyval: the keyval to get aliases for
- * @n_aliases: (out): return location for the number of aliases
- *
- * Gets keyvals that are 'aliases' for @keyval.
- *
- * Aliases are meant to be functionally equivalent and
- * should be treated the same with respect to keyboard
- * shortcuts, etc. An example are keypad keys that are
- * aliases for their normal counterpart, such as
- * `GDK_KEY_KP_Left` and `GDK_KEY_Left`.
- *
- * Returns: (transfer none) (nullable) (array length=n_aliases):
- *     an array of keyvals
- *
- * Since: 4.24
- */
-const guint *
-gdk_keyval_get_aliases (guint  keyval,
-                        guint *n_aliases)
-{
-  guint start = 1, end = 1;
-
-  for (unsigned int i = 0; i < G_N_ELEMENTS (aliases); i++)
-    {
-      if (aliases[i] == 0)
-        start = i + 1;
-
-      if (aliases[i] == keyval)
-        {
-          for (end = i + 1; aliases[end] != 0; end++) ;
-
-          *n_aliases = end - start;
-          return &aliases[start];
-        }
-    }
-
-  *n_aliases = 0;
-  return NULL;
 }

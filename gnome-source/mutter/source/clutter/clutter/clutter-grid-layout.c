@@ -632,15 +632,15 @@ clutter_grid_request_spanning (ClutterGridRequest *request,
       compute_request_for_child (request, child, orientation, contextual,
                                  &minimum, &natural);
 
-      span_minimum = (int) ((attach->span - 1) * linedata->spacing);
-      span_natural = (int) ((attach->span - 1) * linedata->spacing);
+      span_minimum = (attach->span - 1) * linedata->spacing;
+      span_natural = (attach->span - 1) * linedata->spacing;
       span_expand = 0;
       force_expand = FALSE;
       for (i = 0; i < attach->span; i++)
         {
           line = &lines->lines[attach->pos - lines->min + i];
-          span_minimum += (int) line->minimum;
-          span_natural += (int) line->natural;
+          span_minimum += line->minimum;
+          span_natural += line->natural;
           if (line->expand)
             span_expand += 1;
         }
@@ -665,7 +665,7 @@ clutter_grid_request_spanning (ClutterGridRequest *request,
             {
               gint total, m;
 
-              total = (int) (minimum - (attach->span - 1) * linedata->spacing);
+              total = minimum - (attach->span - 1) * linedata->spacing;
               m = total / attach->span + (total % attach->span ? 1 : 0);
               for (i = 0; i < attach->span; i++)
                 {
@@ -675,7 +675,7 @@ clutter_grid_request_spanning (ClutterGridRequest *request,
             }
           else
             {
-              extra = (int) (minimum - span_minimum);
+              extra = minimum - span_minimum;
               expand = span_expand;
               for (i = 0; i < attach->span; i++)
                 {
@@ -697,7 +697,7 @@ clutter_grid_request_spanning (ClutterGridRequest *request,
             {
               gint total, n;
 
-              total = (int) (natural - (attach->span - 1) * linedata->spacing);
+              total = natural - (attach->span - 1) * linedata->spacing;
               n = total / attach->span + (total % attach->span ? 1 : 0);
               for (i = 0; i < attach->span; i++)
                 {
@@ -707,7 +707,7 @@ clutter_grid_request_spanning (ClutterGridRequest *request,
             }
           else
             {
-              extra = (int) (natural - span_natural);
+              extra = natural - span_natural;
               expand = span_expand;
               for (i = 0; i < attach->span; i++)
                 {
@@ -903,12 +903,12 @@ compare_gap (gconstpointer p1,
   const guint *c1 = p1;
   const guint *c2 = p2;
 
-  const int d1 = (int) MAX (sizes[*c1].natural_size -
-                            sizes[*c1].minimum_size,
-                            0);
-  const int d2 = (int) MAX (sizes[*c2].natural_size -
-                            sizes[*c2].minimum_size,
-                            0);
+  const gint d1 = MAX (sizes[*c1].natural_size -
+                       sizes[*c1].minimum_size,
+                       0);
+  const gint d2 = MAX (sizes[*c2].natural_size -
+                       sizes[*c2].minimum_size,
+                       0);
 
   gint delta = (d2 - d1);
 
@@ -948,7 +948,7 @@ distribute_natural_allocation (gint           extra_space,
 
   g_return_val_if_fail (extra_space >= 0, 0);
 
-  spreading = g_newa0 (guint, n_requested_sizes);
+  spreading = g_newa (guint, n_requested_sizes);
 
   for (i = 0; i < n_requested_sizes; i++)
     spreading[i] = i;
@@ -971,9 +971,9 @@ distribute_natural_allocation (gint           extra_space,
    */
 
   /* Sort descending by gap and position. */
-  g_sort_array (spreading,
-                n_requested_sizes, sizeof (guint),
-                compare_gap, sizes);
+  g_qsort_with_data (spreading,
+                     n_requested_sizes, sizeof (guint),
+                     compare_gap, sizes);
 
   /* Distribute available space.
    * This master piece of a loop was conceived by Behdad Esfahbod.
@@ -985,8 +985,8 @@ distribute_natural_allocation (gint           extra_space,
        * ensures that space is distributed equally.
        */
       gint glue = (extra_space + i) / (i + 1);
-      gint gap = (int) (sizes[(spreading[i])].natural_size -
-                        sizes[(spreading[i])].minimum_size);
+      gint gap = sizes[(spreading[i])].natural_size
+               - sizes[(spreading[i])].minimum_size;
 
       gint extra = MIN (glue, gap);
 
@@ -1027,7 +1027,7 @@ clutter_grid_request_allocate (ClutterGridRequest *request,
   linedata = &grid->linedata[orientation];
   lines = &request->lines[orientation];
 
-  size = (int) (total_size - (nonempty - 1) * linedata->spacing);
+  size = total_size - (nonempty - 1) * linedata->spacing;
 
   if (linedata->homogeneous)
     {
@@ -1059,7 +1059,7 @@ clutter_grid_request_allocate (ClutterGridRequest *request,
           if (line->empty)
             continue;
 
-          size -= (int) line->minimum;
+          size -= line->minimum;
 
           sizes[j].minimum_size = line->minimum;
           sizes[j].natural_size = line->natural;
@@ -1501,11 +1501,11 @@ clutter_grid_layout_get_property (GObject    *gobject,
       break;
 
     case PROP_ROW_SPACING:
-      g_value_set_uint (value, (int) COLUMNS (self)->spacing);
+      g_value_set_uint (value, COLUMNS (self)->spacing);
       break;
 
     case PROP_COLUMN_SPACING:
-      g_value_set_uint (value, (int) ROWS (self)->spacing);
+      g_value_set_uint (value, ROWS (self)->spacing);
       break;
 
     case PROP_ROW_HOMOGENEOUS:
@@ -1962,7 +1962,7 @@ clutter_grid_layout_get_row_spacing (ClutterGridLayout *layout)
 {
   g_return_val_if_fail (CLUTTER_IS_GRID_LAYOUT (layout), 0);
 
-  return (unsigned int) COLUMNS (layout)->spacing;
+  return COLUMNS (layout)->spacing;
 }
 
 /**
@@ -2001,7 +2001,7 @@ clutter_grid_layout_get_column_spacing (ClutterGridLayout *layout)
 {
   g_return_val_if_fail (CLUTTER_IS_GRID_LAYOUT (layout), 0);
 
-  return (unsigned int) ROWS (layout)->spacing;
+  return ROWS (layout)->spacing;
 }
 
 /**

@@ -28,19 +28,22 @@
 
 G_BEGIN_DECLS
 
+#define GDK_CURSOR_CLASS(klass)      (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_CURSOR, GdkCursorClass))
+#define GDK_IS_CURSOR_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_CURSOR))
+#define GDK_CURSOR_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_CURSOR, GdkCursorClass))
+
+typedef struct _GdkCursorClass GdkCursorClass;
+
 struct _GdkCursor
 {
   GObject parent_instance;
 
+  GdkDisplay *display;
   GdkCursor *fallback;
   char *name;
   GdkTexture *texture;
   int hotspot_x;
   int hotspot_y;
-
-  GdkCursorGetTextureCallback callback;
-  gpointer data;
-  GDestroyNotify destroy;
 };
 
 struct _GdkCursorClass
@@ -51,14 +54,6 @@ struct _GdkCursorClass
 guint                   gdk_cursor_hash                         (gconstpointer          pointer);
 gboolean                gdk_cursor_equal                        (gconstpointer          a,
                                                                  gconstpointer          b);
-
-GdkTexture *            gdk_cursor_get_texture_for_size         (GdkCursor *cursor,
-                                                                 int        cursor_size,
-                                                                 double     scale,
-                                                                 int       *width,
-                                                                 int       *height,
-                                                                 int       *hotspot_x,
-                                                                 int       *hotspot_y);
 
 G_END_DECLS
 

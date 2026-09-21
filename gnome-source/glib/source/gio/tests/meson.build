@@ -7,7 +7,7 @@ common_gio_tests_deps = [
 
 test_c_args = [
   '-DG_LOG_DOMAIN="GLib-GIO"',
-  '-DGLIB_MKENUMS="@0@"'.format(glib_mkenums.full_path()),
+  '-DGLIB_MKENUMS="@0@"'.format(glib_mkenums),
   '-DGLIB_COMPILE_SCHEMAS="@0@"'.format(glib_compile_schemas.full_path()),
   '-UG_DISABLE_ASSERT',
 ]
@@ -60,21 +60,22 @@ gio_tests = {
   'buffered-output-stream' : {},
   'cancellable' : {},
   'contexts' : {},
-  'contenttype' : {},
+  'contenttype' : {
+    # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/1392 / https://gitlab.gnome.org/GNOME/glib/-/issues/1251
+    'can_fail' : host_system == 'darwin',
+  },
   'converter-stream' : {
     # musl: charset tests fail due to missing collation support in musl libc
     # From https://wiki.musl-libc.org/roadmap#Open_future_goals
     # "LC_COLLATE support for collation orders other than simple codepoint order"
     'can_fail' : linux_libc == 'musl',
   },
-  'converter' : {},
   'credentials' : {},
   'data-input-stream' : {},
   'data-output-stream' : {},
   'error': {},
   'file-thumbnail' : {},
   'fileattributematcher' : {},
-  'filenamecompleter' : {},
   'filter-streams' : {},
   'giomodule' : {
     'depends' : glib_build_shared ? [libtestmodulea, libtestmoduleb] : [],
@@ -85,8 +86,9 @@ gio_tests = {
   },
   'g-file' : {},
   'g-file-info' : {
+    # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3070
     # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3148
-    'can_fail' : host_system in ['gnu'] or host_system == 'windows' and cc.get_id() != 'gcc',
+    'can_fail' : host_system in ['darwin', 'gnu'] or host_system == 'windows' and cc.get_id() != 'gcc',
   },
   'g-icon' : {},
   'gdbus-addresses' : {},
@@ -98,17 +100,9 @@ gio_tests = {
     # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3148
     'can_fail' : host_system in ['darwin', 'windows', 'gnu'],
   },
-  'file-enumerator' : {},
   'inet-address' : {},
   'io-stream' : {},
-  'iptosmessage' : {
-    # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3906
-    'can_fail' : host_system in ['freebsd'],
-  },
-  'max-version' : {
-    'install' : false,
-    'c_args' : c_standards.has_key('99') ? [c_standards['99']] : [],
-  },
+  'max-version' : {'install' : false},
   'memory-input-stream' : {},
   'memory-monitor' : {},
   'memory-output-stream' : {},
@@ -135,18 +129,14 @@ gio_tests = {
     # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3148
     'can_fail' : host_system in ['darwin', 'gnu'],
   },
-  'socket-listener' : {
-    'dependencies': libdl_dep,
-  },
+  'socket-listener' : {},
   'socket-service' : {},
   'srvtarget' : {},
   'task' : {},
   'vfs' : {},
   'volumemonitor' : {},
   'glistmodel' : {},
-  'testfilemonitor' : {
-    'suite' : ['slow'],
-  },
+  'testfilemonitor' : {'suite' : ['slow', 'flaky']},
   'thumbnail-verification' : {},
   'tls-certificate' : {'extra_sources' : ['gtesttlsbackend.c']},
   'tls-interaction' : {'extra_sources' : ['gtesttlsbackend.c']},
@@ -161,25 +151,6 @@ gio_tests = {
   },
   'win32-appinfo' : {},
 }
-
-if host_system == 'linux'
-  gio_tests += {
-    'memory-monitor-psi' : {},
-    'memory-monitor-psi-env-set' :{},
-  }
-endif
-
-if glib_conf.has('HAVE_SYSINFO')
-  gio_tests += {
-    'memory-monitor-poll' : {},
-  }
-endif
-
-if glib_have_cocoa
-  gio_tests += {
-    'osx-appinfo' : {}
-  }
-endif
 
 if have_cxx
   gio_tests += {
@@ -211,22 +182,12 @@ test_extra_programs = {
 python_tests = {
   # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/2764
   'codegen.py' : {
-    'env': {'_G_TEST_PROGRAM_RUNNER_PATH': fs.parent(gdbus_codegen.full_path())},
-    'extra-files': ['codegen-test-extension.py'],
     'can_fail' : host_system == 'freebsd',
     'suite': ['gdbus-codegen', 'slow'],
     'timeout': 90,
   },
-  'gdbus-tool.py' : {
-    'depends' : gdbus_tool,
-    'env': {'_G_TEST_PROGRAM_RUNNER_PATH': fs.parent(gdbus_tool.full_path())},
-  },
   'gio-tool.py' : {
-    'depends' : [
-      gio_tool,
-      have_gio_launch_desktop ? gio_launch_desktop : [],
-    ],
-    'env': {'_G_TEST_PROGRAM_RUNNER_PATH': fs.parent(gio_tool.full_path())},
+    'depends' : gio_tool,
     'can_fail' : host_system == 'windows',
   },
 }
@@ -236,7 +197,7 @@ test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 test_env.set('GIO_MODULE_DIR', '')
 
-if have_gio_launch_desktop
+if host_system != 'windows' and not glib_have_cocoa
   test_env.set('GIO_LAUNCH_DESKTOP', gio_launch_desktop.full_path())
 endif
 
@@ -342,34 +303,31 @@ if host_machine.system() != 'windows'
     'g-file-info-filesystem-readonly' : {},
     'gschema-compile' : {'install' : false},
     'trash' : {
+      # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3069
+      'can_fail' : host_system == 'darwin',
     },
   }
 
-  if have_rtld_next and glib_build_shared
-    asan_env = {}
-    if 'address' in glib_sanitizers
-      asan_env = {'ASAN_OPTIONS': 'verify_asan_link_order=0'}
-    endif
-
-    slow_connect_preload_lib = shared_library('slow-connect-preload',
-      'slow-connect-preload.c',
-      name_prefix : '',
-      dependencies: libdl_dep,
-      install_dir : installed_tests_execdir,
-      install_tag : 'tests',
-      install: installed_tests_enabled,
-    )
-
+  # LD_PRELOAD modules don't work so well with AddressSanitizer
+  if have_rtld_next and glib_build_shared and get_option('b_sanitize') == 'none'
     gio_tests += {
       'gsocketclient-slow' : {
-        'depends' : slow_connect_preload_lib,
+        'depends' : [
+          shared_library('slow-connect-preload',
+            'slow-connect-preload.c',
+            name_prefix : '',
+            dependencies: libdl_dep,
+            install_dir : installed_tests_execdir,
+            install_tag : 'tests',
+            install: installed_tests_enabled,
+          )
+        ],
         'env' : {
-          'LD_PRELOAD': slow_connect_preload_lib.full_path(),
-        } + asan_env,
+          'LD_PRELOAD': '@0@/slow-connect-preload.so'.format(meson.current_build_dir())
+        },
         'installed_tests_env' : {
-        } + asan_env,
-          'LD_PRELOAD': installed_tests_execdir /
-            fs.name(slow_connect_preload_lib.full_path()),
+          'LD_PRELOAD': '@0@/slow-connect-preload.so'.format(installed_tests_execdir),
+        },
       },
     }
   endif
@@ -382,6 +340,13 @@ if host_machine.system() != 'windows'
         'install' : false,
         'extra_programs' : ['appinfo-test'],
       },
+      'desktop-app-info' : {
+        'install' : false,
+        'depends' : gio_launch_desktop,
+        'extra_programs' : ['apps', 'appinfo-test'],
+        # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3148
+        'can_fail' : host_system == 'gnu',
+      },
     }
   endif
 
@@ -389,7 +354,6 @@ if host_machine.system() != 'windows'
     'basic-application' : {},
     'dbus-launch' : {},
     'appinfo-test' : {},
-    'snapinfo-test' : {},
   }
 
   if not glib_have_cocoa
@@ -480,7 +444,6 @@ if host_machine.system() != 'windows'
       },
       'fdo-notification-backend': {},
       'gdbus-auth' : {'extra_sources' : extra_sources},
-      'gdbus-auth-mechanism-sha1': {'extra_sources' : extra_sources},
       'gdbus-bz627724' : {'extra_sources' : extra_sources},
       'gdbus-close-pending' : {'extra_sources' : extra_sources},
       'gdbus-connection' : {
@@ -570,6 +533,15 @@ if host_machine.system() != 'windows'
       },
     }
 
+    if not glib_have_cocoa
+      gio_tests += {
+        'dbus-appinfo' : {
+          'extra_sources' : extra_sources,
+          'extra_programs' : ['fake-document-portal'],
+        },
+      }
+    endif
+
     fake_document_portal_generated = custom_target('fake-document-portal-generated',
         input :   ['../org.freedesktop.portal.Documents.xml'],
         output :  ['fake-document-portal-generated.h',
@@ -583,64 +555,10 @@ if host_machine.system() != 'windows'
                    '--c-namespace', 'Fake',
                    '@INPUT@'])
 
-    fake_openuri_portal_generated = custom_target('fake-openuri-portal-generated',
-        input :   ['../org.freedesktop.portal.OpenURI.xml'],
-        output :  ['fake-openuri-portal-generated.h',
-                   'fake-openuri-portal-generated.c'],
-        depend_files : gdbus_codegen_built_files,
-        depends : gdbus_codegen_built_targets,
-        command : [python, gdbus_codegen,
-                   '--interface-prefix', 'org.freedesktop.portal.',
-                   '--output-directory', '@OUTDIR@',
-                   '--generate-c-code', 'fake-openuri-portal-generated',
-                   '--c-namespace', 'Fake',
-                   '@INPUT@'])
-
-    fake_request_portal_generated = custom_target('fake-request-portal-generated',
-        input :   ['../org.freedesktop.portal.Request.xml'],
-        output :  ['fake-request-portal-generated.h',
-                   'fake-request-portal-generated.c'],
-        depend_files : gdbus_codegen_built_files,
-        depends : gdbus_codegen_built_targets,
-        command : [python, gdbus_codegen,
-                   '--interface-prefix', 'org.freedesktop.portal.',
-                   '--output-directory', '@OUTDIR@',
-                   '--generate-c-code', 'fake-request-portal-generated',
-                   '--c-namespace', 'Fake',
-                   '@INPUT@'])
-
-    fake_document_portal_sources = [
-      'fake-document-portal.c',
-      fake_document_portal_generated,
-      'fake-desktop-portal.c',
-      fake_openuri_portal_generated,
-      fake_request_portal_generated,
-    ]
-
-    if not glib_have_cocoa
-      gio_tests += {
-        'documentportal' : {
-          'extra_sources' : [
-            extra_sources,
-            document_portal_sources,
-            fake_document_portal_sources,
-          ],
-        },
-        'dbus-appinfo' : {
-          'extra_sources' : [extra_sources, fake_document_portal_sources],
-        },
-        'desktop-app-info' : {
-          'install' : false,
-          'depends' : gio_launch_desktop,
-          'extra_programs' : ['apps', 'appinfo-test', 'snapinfo-test'],
-          # FIXME: https://gitlab.gnome.org/GNOME/glib/-/issues/3148
-          'can_fail' : host_system == 'gnu',
-          'extra_sources' : [extra_sources, fake_document_portal_sources],
-        },
-      }
-    endif
-
     test_extra_programs += {
+      'fake-document-portal' : {
+        'extra_sources': fake_document_portal_generated,
+      },
       'fake-service-name' : {}
     }
   endif # have_dbus_daemon
@@ -648,7 +566,7 @@ if host_machine.system() != 'windows'
   # This test is currently unreliable
   executable('gdbus-overflow', 'gdbus-overflow.c',
       c_args : test_c_args,
-      dependencies : common_gio_tests_deps + [test_profile_dep],
+      dependencies : common_gio_tests_deps,
       install_dir : installed_tests_execdir,
       install_tag : 'tests',
       install : installed_tests_enabled)
@@ -765,7 +683,6 @@ appinfo_test_desktop_files = [
   'appinfo-test-path',
   'appinfo-test',
   'appinfo-test2',
-  'snap-app_appinfo-test',
 ]
 
 foreach appinfo_test_desktop_file : appinfo_test_desktop_files
@@ -805,7 +722,6 @@ if installed_tests_enabled
     'file.c',
     'org.gtk.test.dbusappinfo.desktop',
     'org.gtk.test.dbusappinfo.flatpak.desktop',
-    'org.gtk.test.dbusappinfo.snap.desktop',
     'test1.overlay',
     install_dir : installed_tests_execdir,
     install_tag : 'tests',
@@ -919,23 +835,8 @@ if not meson.is_cross_build()
 
   test_gresource = custom_target('test.gresource',
     input : 'test.gresource.xml',
-    depends : [test_generated_txt, gspawn_helpers],
+    depends : test_generated_txt,
     output : 'test.gresource',
-    command : [glib_compile_resources,
-               compiler_type,
-               '--target=@OUTPUT@',
-               '--sourcedir=' + meson.current_source_dir(),
-               '--sourcedir=' + meson.current_build_dir(),
-               '--internal',
-               '@INPUT@'],
-    install_dir : installed_tests_execdir,
-    install_tag : 'tests',
-    install : installed_tests_enabled)
-
-  test6_gresource = custom_target('test6.gresource',
-    input : 'test6.gresource.xml',
-    depends : [gspawn_helpers],
-    output : 'test6.gresource',
     command : [glib_compile_resources,
                compiler_type,
                '--target=@OUTPUT@',
@@ -949,7 +850,6 @@ if not meson.is_cross_build()
 
   test_resources2_c = custom_target('test_resources2.c',
     input : 'test3.gresource.xml',
-    depends : [gspawn_helpers],
     output : 'test_resources2.c',
     command : [glib_compile_resources,
                compiler_type,
@@ -963,7 +863,6 @@ if not meson.is_cross_build()
 
   test_resources2_h = custom_target('test_resources2.h',
     input : 'test3.gresource.xml',
-    depends : [gspawn_helpers],
     output : 'test_resources2.h',
     command : [glib_compile_resources,
                compiler_type,
@@ -977,7 +876,7 @@ if not meson.is_cross_build()
 
   test_resources_c = custom_target('test_resources.c',
     input : 'test2.gresource.xml',
-    depends : [big_test_resource, gspawn_helpers],
+    depends : big_test_resource,
     output : 'test_resources.c',
     command : [glib_compile_resources,
                compiler_type,
@@ -991,7 +890,6 @@ if not meson.is_cross_build()
 
   digit_test_resources_c = custom_target('digit_test_resources.c',
     input : '111_digit_test.gresource.xml',
-    depends : [gspawn_helpers],
     output : 'digit_test_resources.c',
     command : [glib_compile_resources,
                compiler_type,
@@ -1005,7 +903,6 @@ if not meson.is_cross_build()
 
   digit_test_resources_h = custom_target('digit_test_resources.h',
     input : '111_digit_test.gresource.xml',
-    depends : [gspawn_helpers],
     output : 'digit_test_resources.h',
     command : [glib_compile_resources,
                compiler_type,
@@ -1018,7 +915,6 @@ if not meson.is_cross_build()
 
   resources_extra_sources = [
     test_gresource,
-    test6_gresource,
     test_resources_c,
     test_resources2_c,
     test_resources2_h,
@@ -1059,7 +955,6 @@ if not meson.is_cross_build()
 
     test_gresource_binary = custom_target('test5.gresource',
       input : 'test5.gresource.xml',
-      depends : [gspawn_helpers],
       output : 'test5.gresource',
       command : [glib_compile_resources,
                  compiler_type,
@@ -1075,7 +970,6 @@ if not meson.is_cross_build()
     # Create resource data file
     test_resources_binary_c = custom_target('test_resources_binary.c',
       input : 'test5.gresource.xml',
-      depends : [gspawn_helpers],
       output : 'test_resources_binary.c',
       command : [glib_compile_resources,
                  compiler_type,
@@ -1126,7 +1020,6 @@ if not meson.is_cross_build()
     'resources' : {
       'c_args' : resources_c_args,
       'extra_sources' : resources_extra_sources,
-      'dependencies' : [gvdb_dep],
       'depends' : resource_plugin,
       # FIXME: musl: https://gitlab.gnome.org/GNOME/glib/-/issues/3160
       'can_fail' : linux_libc == 'musl',
@@ -1143,7 +1036,7 @@ foreach program_name, extra_args : test_extra_programs
     program_name : executable(program_name,
       sources: [source, extra_sources],
       c_args : test_c_args,
-      dependencies : common_gio_tests_deps + extra_args.get('dependencies', []) + [test_profile_dep],
+      dependencies : common_gio_tests_deps + extra_args.get('dependencies', []),
       install_dir : installed_tests_execdir,
       install_tag : 'tests',
       install : install,
@@ -1165,7 +1058,7 @@ foreach test_name, extra_args : gio_tests
     if installed_tests_env != {}
       envs = []
       foreach var, value : installed_tests_env
-        envs += '@0@=\'@1@\''.format(var, value)
+         envs += '@0@=@1@'.format(var, value)
       endforeach
       test_env_override = '@0@ @1@ '.format(env_program.full_path(), ' '.join(envs))
     endif
@@ -1182,7 +1075,7 @@ foreach test_name, extra_args : gio_tests
   exe = executable(test_name, [source, extra_sources],
     c_args : test_c_args + extra_args.get('c_args', []),
     cpp_args : test_cpp_args + extra_args.get('cpp_args', []),
-    dependencies : common_gio_tests_deps + extra_args.get('dependencies', []) + [test_profile_dep],
+    dependencies : common_gio_tests_deps + extra_args.get('dependencies', []),
     install_rpath : extra_args.get('install_rpath', ''),
     install_dir: installed_tests_execdir,
     install_tag: 'tests',
@@ -1192,7 +1085,7 @@ foreach test_name, extra_args : gio_tests
   suite = ['gio'] + extra_args.get('suite', [])
   timeout = suite.contains('slow') ? test_timeout_slow : test_timeout
   local_test_env = test_env
-  depends = [extra_args.get('depends', []), gspawn_helpers]
+  depends = [extra_args.get('depends', [])]
 
   foreach program : extra_args.get('extra_programs', [])
     depends += test_extra_programs_targets[program]
@@ -1217,13 +1110,6 @@ foreach test_name, extra_args : gio_tests
   )
 endforeach
 
-python_test_env = test_env
-python_test_env.prepend('PYTHONPATH', python_test_libraries_path)
-python_test_env.prepend('PYTHONPATH', python_test_libraries_built)
-if python_test_env_common_path.length() > 0
-  python_test_env.prepend('PATH', python_test_env_common_path)
-endif
-
 foreach test_name, extra_args : python_tests
   depends = [extra_args.get('depends', [])]
   suite = ['gio', 'no-valgrind'] + extra_args.get('suite', [])
@@ -1237,29 +1123,20 @@ foreach test_name, extra_args : python_tests
     depends += test_extra_programs_targets[program]
   endforeach
 
-  local_test_env = python_test_env
-  foreach var, value : extra_args.get('env', {})
-    local_test_env.append(var, value)
-  endforeach
-
   test(
     test_name,
     python,
     protocol : extra_args.get('protocol', test_protocol),
     depends: depends,
     args: ['-B', files(test_name)],
-    env: local_test_env,
+    env: test_env,
     timeout: timeout,
     suite: suite,
   )
 
-  foreach file : extra_args.get('extra-files', [])
-    fs.copyfile(file)
-  endforeach
-
   if installed_tests_enabled
     install_data(
-      files([test_name] + extra_args.get('extra-files', [])),
+      files(test_name),
       install_dir: installed_tests_execdir,
       install_tag: 'tests',
       install_mode: 'rwxr-xr-x',
@@ -1278,6 +1155,15 @@ foreach test_name, extra_args : python_tests
     )
   endif
 endforeach
+
+# TAP test runner for Python tests
+if installed_tests_enabled
+  install_data(
+    files('taptestrunner.py'),
+    install_dir: installed_tests_execdir,
+    install_tag: 'tests',
+  )
+endif
 
 if have_bash and have_pkg_config
   prefix = get_option('prefix')

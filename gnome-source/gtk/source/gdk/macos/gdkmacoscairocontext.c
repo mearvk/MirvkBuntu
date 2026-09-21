@@ -26,8 +26,6 @@
 #include <QuartzCore/QuartzCore.h>
 #include <CoreGraphics/CoreGraphics.h>
 
-#import "GdkMacosLayer.h"
-
 #include "gdkmacosbuffer-private.h"
 #include "gdkmacoscairocontext-private.h"
 #include "gdkmacossurface-private.h"
@@ -55,6 +53,7 @@ _gdk_macos_cairo_context_cairo_create (GdkCairoContext *cairo_context)
   NSWindow *nswindow;
   cairo_t *cr;
   gpointer data;
+  double scale;
   guint width;
   guint height;
   guint stride;
@@ -70,6 +69,7 @@ _gdk_macos_cairo_context_cairo_create (GdkCairoContext *cairo_context)
   damage = _gdk_macos_buffer_get_damage (buffer);
   width = _gdk_macos_buffer_get_width (buffer);
   height = _gdk_macos_buffer_get_height (buffer);
+  scale = _gdk_macos_buffer_get_device_scale (buffer);
   stride = _gdk_macos_buffer_get_stride (buffer);
   data = _gdk_macos_buffer_get_data (buffer);
 
@@ -81,18 +81,24 @@ _gdk_macos_cairo_context_cairo_create (GdkCairoContext *cairo_context)
    * Additionally, cairo_quartz_surface_t can't handle a number of
    * tricks that the GSK cairo renderer does with border nodes and
    * shadows, so an image surface is necessary for that.
+   *
+   * Since our IOSurfaceRef is width*scale-by-height*scale, we undo
+   * the scaling using cairo_surface_set_device_scale() so the renderer
+   * just thinks it's on a 2x scale surface for HiDPI.
    */
   image_surface = cairo_image_surface_create_for_data (data,
                                                        CAIRO_FORMAT_ARGB32,
                                                        width,
                                                        height,
                                                        stride);
+  cairo_surface_set_device_scale (image_surface, scale, scale);
 
   /* The buffer should already be locked at this point, and will
    * be unlocked as part of end_frame.
    */
 
-  cr = cairo_create (image_surface);
+  if (!(cr = cairo_create (image_surface)))
+    goto failure;
 
   /* Clip to the current damage region */
   if (damage != NULL)
@@ -101,16 +107,36 @@ _gdk_macos_cairo_context_cairo_create (GdkCairoContext *cairo_context)
       cairo_clip (cr);
     }
 
+  /* If we have some exposed transparent area in the damage region,
+   * we need to clear the existing content first to leave an transparent
+   * area for cairo. We use (surface_bounds or damage)-(opaque) to get
+   * the smallest set of rectangles we need to clear as it's expensive.
+   */
   if (!opaque)
     {
+      cairo_region_t *transparent;
+      cairo_rectangle_int_t r = { 0, 0, width/scale, height/scale };
+
       cairo_save (cr);
 
-      cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
-      cairo_paint (cr);
+      if (damage != NULL)
+        cairo_region_get_extents (damage, &r);
+      transparent = cairo_region_create_rectangle (&r);
+      if (surface->opaque_region)
+        cairo_region_subtract (transparent, surface->opaque_region);
 
+      if (!cairo_region_is_empty (transparent))
+        {
+          gdk_cairo_region (cr, transparent);
+          cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
+          cairo_fill (cr);
+        }
+
+      cairo_region_destroy (transparent);
       cairo_restore (cr);
     }
 
+failure:
   cairo_surface_destroy (image_surface);
 
   return cr;
@@ -119,7 +145,8 @@ _gdk_macos_cairo_context_cairo_create (GdkCairoContext *cairo_context)
 static void
 copy_surface_data (GdkMacosBuffer       *from,
                    GdkMacosBuffer       *to,
-                   const cairo_region_t *region)
+                   const cairo_region_t *region,
+                   int                   scale)
 {
   const guint8 *from_base;
   guint8 *to_base;
@@ -147,6 +174,11 @@ copy_surface_data (GdkMacosBuffer       *from,
 
       cairo_region_get_rectangle (region, i, &rect);
 
+      rect.y *= scale;
+      rect.height *= scale;
+      rect.x *= scale;
+      rect.width *= scale;
+
       y2 = rect.y + rect.height;
 
       for (int y = rect.y; y < y2; y++)
@@ -157,11 +189,17 @@ copy_surface_data (GdkMacosBuffer       *from,
 }
 
 static void
-_gdk_macos_cairo_context_begin_frame (GdkDrawContext  *draw_context,
-                                      gpointer         context_data,
-                                      cairo_region_t  *region,
-                                      GdkColorState  **out_color_state,
-                                      GdkMemoryDepth  *out_depth)
+clamp_region_to_surface (cairo_region_t *region,
+                         GdkSurface     *surface)
+{
+  cairo_rectangle_int_t rectangle = {0, 0, surface->width, surface->height};
+  cairo_region_intersect_rectangle (region, &rectangle);
+}
+
+static void
+_gdk_macos_cairo_context_begin_frame (GdkDrawContext *draw_context,
+                                      GdkMemoryDepth  depth,
+                                      cairo_region_t *region)
 {
   GdkMacosCairoContext *self = (GdkMacosCairoContext *)draw_context;
   GdkMacosBuffer *buffer;
@@ -174,6 +212,8 @@ _gdk_macos_cairo_context_begin_frame (GdkDrawContext  *draw_context,
 
   surface = GDK_MACOS_SURFACE (gdk_draw_context_get_surface (draw_context));
   buffer = _gdk_macos_surface_get_buffer (surface);
+
+  clamp_region_to_surface (region, GDK_SURFACE (surface));
 
   _gdk_macos_buffer_set_damage (buffer, region);
   _gdk_macos_buffer_set_flipped (buffer, FALSE);
@@ -199,22 +239,20 @@ _gdk_macos_cairo_context_begin_frame (GdkDrawContext  *draw_context,
 
           if (!cairo_region_is_empty (copy))
             {
+              int scale = gdk_surface_get_scale_factor (GDK_SURFACE (surface));
+
               _gdk_macos_buffer_read_lock (surface->front);
-              copy_surface_data (surface->front, buffer, copy);
+              copy_surface_data (surface->front, buffer, copy, scale);
               _gdk_macos_buffer_read_unlock (surface->front);
             }
 
           cairo_region_destroy (copy);
         }
     }
-
-  *out_color_state = GDK_COLOR_STATE_SRGB;
-  *out_depth = gdk_color_state_get_depth (GDK_COLOR_STATE_SRGB);
 }
 
 static void
 _gdk_macos_cairo_context_end_frame (GdkDrawContext *draw_context,
-                                    gpointer        context_data,
                                     cairo_region_t *painted)
 {
   GdkMacosCairoContext *self = (GdkMacosCairoContext *)draw_context;
@@ -234,25 +272,16 @@ _gdk_macos_cairo_context_end_frame (GdkDrawContext *draw_context,
 }
 
 static void
+_gdk_macos_cairo_context_empty_frame (GdkDrawContext *draw_context)
+{
+}
+
+static void
 _gdk_macos_cairo_context_surface_resized (GdkDrawContext *draw_context)
 {
   g_assert (GDK_IS_MACOS_CAIRO_CONTEXT (draw_context));
 
   /* Do nothing, next begin_frame will get new buffer */
-}
-
-static gboolean
-_gdk_macos_cairo_context_surface_attach (GdkDrawContext  *context,
-                                         GError         **error)
-{
-  GdkSurface *surface = gdk_draw_context_get_surface (context);
-  NSView *view = _gdk_macos_surface_get_view (GDK_MACOS_SURFACE (surface));
-
-  [view setLayerContentsRedrawPolicy:NSViewLayerContentsRedrawNever];
-  [view setLayer:[GdkMacosLayer layer]];
-  [view setWantsLayer:YES];
-
-  return TRUE;
 }
 
 static void
@@ -263,8 +292,8 @@ _gdk_macos_cairo_context_class_init (GdkMacosCairoContextClass *klass)
 
   draw_context_class->begin_frame = _gdk_macos_cairo_context_begin_frame;
   draw_context_class->end_frame = _gdk_macos_cairo_context_end_frame;
+  draw_context_class->empty_frame = _gdk_macos_cairo_context_empty_frame;
   draw_context_class->surface_resized = _gdk_macos_cairo_context_surface_resized;
-  draw_context_class->surface_attach = _gdk_macos_cairo_context_surface_attach;
 
   cairo_context_class->cairo_create = _gdk_macos_cairo_context_cairo_create;
 }

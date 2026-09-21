@@ -49,28 +49,12 @@ test_launch_for_app_info (GAppInfo *appinfo)
   g_free (uri);
 }
 
-static gboolean
-skip_missing_dbus_daemon (void)
-{
-  gchar *path = g_find_program_in_path ("dbus-daemon");
-  if (path == NULL)
-    {
-      g_test_skip ("dbus-daemon is required to run this test");
-      return TRUE;
-    }
-  g_free (path);
-  return FALSE;
-}
-
 static void
 test_launch (void)
 {
   GTestDBus *bus = NULL;
   GAppInfo *appinfo;
   const gchar *path;
-
-  if (skip_missing_dbus_daemon ())
-    return;
 
   /* Set up a test session bus to keep D-Bus traffic off the real session bus. */
   bus = g_test_dbus_new (G_TEST_DBUS_NONE);
@@ -111,9 +95,6 @@ test_launch_no_app_id (void)
   GTestDBus *bus = NULL;
   gchar *exec_line_variants[2];
   gsize i;
-
-  if (skip_missing_dbus_daemon ())
-    return;
 
   exec_line_variants[0] = g_strdup_printf (
       "Exec=%s/appinfo-test --option %%U %%i --name %%c --filename %%k %%m %%%%",
@@ -375,9 +356,6 @@ test_launch_context_signals (void)
   gboolean success;
   gchar *cmdline;
 
-  if (skip_missing_dbus_daemon ())
-    return;
-
   /* Set up a test session bus to keep D-Bus traffic off the real session bus. */
   bus = g_test_dbus_new (G_TEST_DBUS_NONE);
   g_test_dbus_up (bus);
@@ -495,38 +473,6 @@ test_associations (void)
   g_assert_true (g_app_info_can_delete (appinfo));
   g_assert_true (g_app_info_delete (appinfo));
   g_object_unref (appinfo);
-}
-
-static void
-test_extension_validation (void)
-{
-  GAppInfo *appinfo = NULL;
-  GError *local_error = NULL;
-  gboolean result;
-  char *cmdline = NULL;
-  const char *invalid_extensions[] =
-    {
-      "",
-      "../path/traversal",
-      "..\\windows\\path\\traversal",
-    };
-
-  cmdline = g_strconcat (g_test_get_dir (G_TEST_BUILT), "/appinfo-test --option", NULL);
-  appinfo = g_app_info_create_from_commandline (cmdline,
-                                                "cmdline-app-test",
-                                                G_APP_INFO_CREATE_SUPPORTS_URIS,
-                                                NULL);
-  g_free (cmdline);
-
-  for (size_t i = 0; i < G_N_ELEMENTS (invalid_extensions); i++)
-    {
-      result = g_app_info_set_as_default_for_extension (appinfo, invalid_extensions[i], &local_error);
-      g_assert_error (local_error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-      g_assert_false (result);
-      g_clear_error (&local_error);
-    }
-
-  g_clear_object (&appinfo);
 }
 
 static void
@@ -670,7 +616,6 @@ main (int argc, char *argv[])
   g_test_add_func ("/appinfo/launch-context-signals", test_launch_context_signals);
   g_test_add_func ("/appinfo/tryexec", test_tryexec);
   g_test_add_func ("/appinfo/associations", test_associations);
-  g_test_add_func ("/appinfo/extension-validation", test_extension_validation);
   g_test_add_func ("/appinfo/environment", test_environment);
   g_test_add_func ("/appinfo/startup-wm-class", test_startup_wm_class);
   g_test_add_func ("/appinfo/supported-types", test_supported_types);

@@ -17,7 +17,7 @@
 
 #include "config.h"
 
-#include "gdkeventsourceprivate.h"
+#include "gdkeventsource.h"
 
 #include "gdk/gdkeventsprivate.h"
 
@@ -26,7 +26,6 @@
 #include "gdkdisplay-x11.h"
 #include "xsettings-client.h"
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
 static gboolean gdk_event_source_prepare  (GSource     *source,
                                            int         *timeout);
@@ -440,7 +439,8 @@ gdk_event_source_finalize (GSource *source)
 {
   GdkEventSource *event_source = (GdkEventSource *)source;
 
-  g_clear_list (&event_source->translators, NULL);
+  g_list_free (event_source->translators);
+  event_source->translators = NULL;
 }
 
 GSource *

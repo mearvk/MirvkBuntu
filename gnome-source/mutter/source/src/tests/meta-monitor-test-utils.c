@@ -24,14 +24,11 @@
 #include <float.h>
 
 #include "backends/meta-backend-private.h"
-#include "backends/meta-backlight-sysfs-private.h"
 #include "backends/meta-crtc.h"
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "backends/meta-monitor-config-manager.h"
 #include "backends/meta-monitor-config-store.h"
-#include "tests/meta-context-test-private.h"
-#include "tests/meta-crtc-test.h"
-#include "tests/meta-output-test.h"
+#include "backends/meta-output.h"
 #include "tests/meta-test-utils.h"
 #include "meta-backend-test.h"
 
@@ -131,7 +128,7 @@ check_monitor_mode (MetaMonitor         *monitor,
 
   output = output_from_winsys_id (backend,
                                   data->expect_crtc_mode_iter->output);
-  g_assert_true (monitor_crtc_mode->output == output);
+  g_assert (monitor_crtc_mode->output == output);
 
   expect_crtc_mode_index = data->expect_crtc_mode_iter->crtc_mode;
   if (expect_crtc_mode_index == -1)
@@ -145,7 +142,7 @@ check_monitor_mode (MetaMonitor         *monitor,
       crtc_mode = g_list_nth_data (meta_gpu_get_modes (gpu),
                                    expect_crtc_mode_index);
     }
-  g_assert_true (monitor_crtc_mode->crtc_mode == crtc_mode);
+  g_assert (monitor_crtc_mode->crtc_mode == crtc_mode);
 
   if (crtc_mode)
     {
@@ -200,7 +197,7 @@ check_current_monitor_mode (MetaMonitor         *monitor,
       crtc_config = meta_crtc_get_config (crtc);
       g_assert_nonnull (crtc_config);
 
-      g_assert_true (monitor_crtc_mode->crtc_mode == crtc_config->mode);
+      g_assert (monitor_crtc_mode->crtc_mode == crtc_config->mode);
 
       logical_monitor = meta_monitor_get_logical_monitor (monitor);
       g_assert_nonnull (logical_monitor);
@@ -240,12 +237,6 @@ check_logical_monitor (MetaMonitorManager             *monitor_manager,
   GList *l;
   int i;
 
-  g_debug ("Checking logical monitor with layout %dx%d+%d+%d",
-           test_logical_monitor->layout.width,
-           test_logical_monitor->layout.height,
-           test_logical_monitor->layout.x,
-           test_logical_monitor->layout.y);
-
   logical_monitor = logical_monitor_from_layout (monitor_manager,
                                                  &test_logical_monitor->layout);
   g_assert_nonnull (logical_monitor);
@@ -270,7 +261,7 @@ check_logical_monitor (MetaMonitorManager             *monitor_manager,
                     test_logical_monitor->transform);
 
   if (logical_monitor == monitor_manager->primary_logical_monitor)
-    g_assert_true (meta_logical_monitor_is_primary (logical_monitor));
+    g_assert (meta_logical_monitor_is_primary (logical_monitor));
 
   primary_output = NULL;
   monitors = meta_logical_monitor_get_monitors (logical_monitor);
@@ -299,7 +290,7 @@ check_logical_monitor (MetaMonitorManager             *monitor_manager,
           MetaOutput *output = l_output->data;
           MetaCrtc *crtc;
 
-          g_assert_true (meta_output_get_monitor (output) == monitor);
+          g_assert (meta_output_get_monitor (output) == monitor);
 
           if (meta_output_is_primary (output))
             {
@@ -310,10 +301,10 @@ check_logical_monitor (MetaMonitorManager             *monitor_manager,
           crtc = meta_output_get_assigned_crtc (output);
           if (crtc)
             {
-              g_assert_true (meta_monitor_get_logical_monitor (monitor) ==
-                             logical_monitor);
-              g_assert_true (g_list_find ((GList *) meta_crtc_get_outputs (crtc),
-                                          output));
+              g_assert (meta_monitor_get_logical_monitor (monitor) ==
+                        logical_monitor);
+              g_assert (g_list_find ((GList *) meta_crtc_get_outputs (crtc),
+                                     output));
               *all_crtcs = g_list_remove (*all_crtcs, crtc);
             }
           else
@@ -402,7 +393,7 @@ meta_check_monitor_configuration (MetaContext           *context,
           unsigned int output_max_bpc;
           MetaOutputRGBRange rgb_range = META_OUTPUT_RGB_RANGE_AUTO;
 
-          g_assert_true (output == output_from_winsys_id (backend, winsys_id));
+          g_assert (output == output_from_winsys_id (backend, winsys_id));
           g_assert_cmpint (expect->monitors[i].is_underscanning,
                            ==,
                            meta_output_is_underscanning (output));
@@ -495,17 +486,11 @@ meta_check_monitor_configuration (MetaContext           *context,
         expected_current_mode = g_list_nth (modes,
                                             expected_current_mode_index)->data;
 
-      g_assert_true (current_mode == expected_current_mode);
+      g_assert (current_mode == expected_current_mode);
       if (current_mode)
-        g_assert_true (meta_monitor_is_active (monitor));
+        g_assert (meta_monitor_is_active (monitor));
       else
-        g_assert_false (meta_monitor_is_active (monitor));
-
-      if (meta_monitor_is_builtin (monitor) &&
-          meta_backend_is_lid_closed (backend))
-        g_assert_false (meta_monitor_is_available (monitor));
-      else
-        g_assert_true (meta_monitor_is_available (monitor));
+        g_assert (!meta_monitor_is_active (monitor));
 
       if (current_mode)
         {
@@ -522,7 +507,8 @@ meta_check_monitor_configuration (MetaContext           *context,
                                             NULL);
         }
 
-      g_assert_true (current_mode == meta_monitor_get_current_mode (monitor));
+      meta_monitor_derive_current_mode (monitor);
+      g_assert (current_mode == meta_monitor_get_current_mode (monitor));
     }
 
   n_logical_monitors =
@@ -551,16 +537,16 @@ meta_check_monitor_configuration (MetaContext           *context,
       logical_monitor =
         logical_monitor_from_layout (monitor_manager,
                                      &test_logical_monitor->layout);
-      g_assert_true (logical_monitor == monitor_manager->primary_logical_monitor);
+      g_assert (logical_monitor == monitor_manager->primary_logical_monitor);
     }
 
   all_crtcs = NULL;
   for (l = meta_backend_get_gpus (backend); l; l = l->next)
     {
-      MetaGpu *current_gpu = l->data;
+      MetaGpu *gpu = l->data;
 
       all_crtcs = g_list_concat (all_crtcs,
-                                 g_list_copy (meta_gpu_get_crtcs (current_gpu)));
+                                 g_list_copy (meta_gpu_get_crtcs (gpu)));
     }
 
   for (i = 0; i < expect->n_logical_monitors; i++)
@@ -610,7 +596,7 @@ meta_check_monitor_configuration (MetaContext           *context,
               g_debug ("Checking CRTC Output %d",
                        g_list_index ((GList *) outputs, output));
 
-              g_assert_true (meta_output_get_assigned_crtc (output) == crtc);
+              g_assert (meta_output_get_assigned_crtc (output) == crtc);
               g_assert_null (g_list_find (l_output->next, output));
             }
 
@@ -619,7 +605,7 @@ meta_check_monitor_configuration (MetaContext           *context,
           expected_current_mode =
             g_list_nth_data (meta_gpu_get_modes (gpu),
                              expect->crtcs[i].current_mode);
-          g_assert_true (crtc_config->mode == expected_current_mode);
+          g_assert (crtc_config->mode == expected_current_mode);
 
           g_assert_cmpuint (crtc_config->transform,
                             ==,
@@ -657,19 +643,10 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
                                 MonitorTestCaseSetup *setup,
                                 MonitorTestFlag       flags)
 {
-  MetaContextTest *context_test =
-    META_CONTEXT_TEST (meta_backend_get_context (backend));
   MetaMonitorTestSetup *test_setup;
   int i;
-#define META_N_CONNECTOR_TYPES 21
-  int connector_counter[META_N_CONNECTOR_TYPES] = {};
-
-  static char *last_test_path = NULL;
-  static int test_serial_count_base = 0x1010000;
-
-  if (g_strcmp0 (last_test_path, g_test_get_path ()) != 0)
-    test_serial_count_base += 0x1000;
-  g_set_str (&last_test_path, g_test_get_path ());
+  int n_laptop_panels = 0;
+  int n_normal_panels = 0;
 
   test_setup = g_new0 (MetaMonitorTestSetup, 1);
 
@@ -706,8 +683,6 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
                            NULL);
       if (setup->crtcs[i].disable_gamma_lut)
         meta_crtc_test_disable_gamma_lut (META_CRTC_TEST (crtc));
-      if (setup->crtcs[i].enable_ctm)
-        meta_crtc_test_enable_ctm (META_CRTC_TEST (crtc));
 
       test_setup->crtcs = g_list_append (test_setup->crtcs, crtc);
     }
@@ -716,6 +691,7 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
   for (i = 0; i < setup->n_outputs; i++)
     {
       MetaOutput *output;
+      MetaOutputTest *output_test;
       int crtc_index;
       MetaCrtc *crtc;
       int preferred_mode_index;
@@ -725,11 +701,10 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
       int j;
       MetaCrtc **possible_crtcs;
       int n_possible_crtcs;
-      MetaConnectorType connector_type;
-      int connector_number;
+      int scale;
+      gboolean is_laptop_panel;
       char *serial;
       g_autoptr (MetaOutputInfo) output_info = NULL;
-      g_autoptr (MetaBacklight) backlight = NULL;
 
       crtc_index = setup->outputs[i].crtc;
       if (crtc_index == -1)
@@ -751,7 +726,7 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
           int mode_index;
 
           mode_index = setup->outputs[i].modes[j];
-          modes[j] = g_object_ref (g_list_nth_data (test_setup->modes, mode_index));
+          modes[j] = g_list_nth_data (test_setup->modes, mode_index);
         }
 
       n_possible_crtcs = setup->outputs[i].n_possible_crtcs;
@@ -765,29 +740,21 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
                                                possible_crtc_index);
         }
 
-      connector_type = setup->outputs[i].connector_type;
-      if (connector_type == META_CONNECTOR_TYPE_Unknown)
-        connector_type = META_CONNECTOR_TYPE_DisplayPort;
+      scale = setup->outputs[i].scale;
+      if (scale < 1 && scale != -1)
+        scale = 1;
+
+      is_laptop_panel = setup->outputs[i].is_laptop_panel;
 
       serial = g_strdup (setup->outputs[i].serial);
       if (!serial)
-        serial = g_strdup_printf ("0x%x", test_serial_count_base + i);
+        serial = g_strdup_printf ("0x123456%d", i);
 
       output_info = meta_output_info_new ();
 
-      connector_number = setup->outputs[i].connector_number;
-
-      if (connector_number == 0)
-        {
-          g_assert_cmpuint (connector_type, <, G_N_ELEMENTS (connector_counter));
-          connector_counter[connector_type]++;
-          connector_number = connector_counter[connector_type];
-        }
-
-      output_info->name =
-        g_strdup_printf ("%s-%d",
-                         meta_connector_type_get_name (connector_type),
-                         connector_number);
+      output_info->name = (is_laptop_panel
+                           ? g_strdup_printf ("eDP-%d", ++n_laptop_panels)
+                           : g_strdup_printf ("DP-%d", ++n_normal_panels));
       output_info->vendor = g_strdup ("MetaProduct's Inc.");
       output_info->product = g_strdup ("MetaMonitor");
       output_info->serial = serial;
@@ -805,7 +772,7 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
         }
       output_info->width_mm = setup->outputs[i].width_mm;
       output_info->height_mm = setup->outputs[i].height_mm;
-      output_info->subpixel_order = META_SUBPIXEL_ORDER_UNKNOWN;
+      output_info->subpixel_order = COGL_SUBPIXEL_ORDER_UNKNOWN;
       output_info->preferred_mode = preferred_mode;
       output_info->n_modes = n_modes;
       output_info->modes = modes;
@@ -813,7 +780,8 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
       output_info->possible_crtcs = possible_crtcs;
       output_info->n_possible_clones = 0;
       output_info->possible_clones = NULL;
-      output_info->connector_type = connector_type;
+      output_info->connector_type = (is_laptop_panel ? META_CONNECTOR_TYPE_eDP
+                                     : META_CONNECTOR_TYPE_DisplayPort);
       output_info->tile_info = setup->outputs[i].tile_info;
       output_info->panel_orientation_transform =
         setup->outputs[i].panel_orientation_transform;
@@ -826,97 +794,15 @@ meta_create_monitor_test_setup (MetaBackend          *backend,
                                          (uint8_t *) &setup->outputs[i].edid_info,
                                          sizeof (setup->outputs[i].edid_info));
         }
-      output_info->supported_color_spaces =
-        setup->outputs[i].supported_color_spaces;
-      output_info->supported_hdr_eotfs =
-        setup->outputs[i].supported_hdr_eotfs;
-
-      if (setup->outputs[i].backlight_min > 0 &&
-          setup->outputs[i].backlight_max > 0)
-        {
-          backlight =
-            g_object_new (META_TYPE_BACKLIGHT_TEST,
-                          "backend", backend,
-                          "name", output_info->name,
-                          "brightness-min", setup->outputs[i].backlight_min,
-                          "brightness-max", setup->outputs[i].backlight_max,
-                          "brightness", setup->outputs[i].backlight_max,
-                          NULL);
-        }
-
-      if (setup->outputs[i].sysfs_backlight)
-        {
-          UMockdevTestbed *udev_testbed =
-            meta_context_test_get_udev_testbed (context_test);
-          g_autofree char *max_str = NULL;
-          g_autofree char *connector_name = NULL;
-          g_autofree char *connector_udev = NULL;
-          g_autofree char *backlight_udev = NULL;
-          int min;
-
-          g_assert_true (umockdev_in_mock_environment ());
-
-          umockdev_testbed_clear (udev_testbed);
-
-          max_str = g_strdup_printf ("%i", setup->outputs[i].backlight_max);
-          connector_name = g_strdup_printf ("card0-%s", output_info->name);
-
-          /* add an enabled drm connector which will be the parent of the backlight */
-          connector_udev = umockdev_testbed_add_device (udev_testbed,
-                                                        /* subsystem */
-                                                        "drm",
-                                                        /* name */
-                                                        connector_name,
-                                                        /* parent */
-                                                        NULL,
-                                                        /* attributes */
-                                                        "enabled", "enabled",
-                                                        NULL,
-                                                        /* properties */
-                                                        NULL);
-
-          backlight_udev = umockdev_testbed_add_device (udev_testbed,
-                                                        /* subsystem */
-                                                        "backlight",
-                                                        /* name */
-                                                        setup->outputs[i].sysfs_backlight,
-                                                        /* parent */
-                                                        connector_udev,
-                                                        /* attributes */
-                                                        "type", "raw",
-                                                        "max_brightness", max_str,
-                                                        "brightness", max_str,
-                                                        NULL,
-                                                        /* properties */
-                                                        NULL);
-
-          backlight = META_BACKLIGHT (meta_backlight_sysfs_new (backend,
-                                                                output_info,
-                                                                NULL));
-          g_assert_nonnull (backlight);
-
-          meta_backlight_get_brightness_info (backlight, &min, NULL);
-          g_assert_cmpint (min, ==, setup->outputs[i].backlight_min);
-        }
 
       output = g_object_new (META_TYPE_OUTPUT_TEST,
                              "id", (uint64_t) i,
                              "gpu", meta_test_get_gpu (backend),
                              "info", output_info,
-                             "backlight", backlight,
                              NULL);
 
-      if (!setup->outputs[i].dynamic_scale)
-        {
-          MetaOutputTest *output_test = META_OUTPUT_TEST (output);
-          float scale;
-
-          scale = setup->outputs[i].scale;
-          if (scale == 0.0f)
-            scale = 1.0f;
-
-          meta_output_test_override_scale (output_test, scale);
-        }
+      output_test = META_OUTPUT_TEST (output);
+      output_test->scale = scale;
 
       if (crtc)
         {
@@ -1075,6 +961,56 @@ on_max_wait_timeout (gpointer data)
 }
 
 /*
+ * Assert that the orientation eventually changes to @orientation.
+ */
+void
+meta_wait_for_orientation (MetaOrientationManager *orientation_manager,
+                           MetaOrientation         orientation,
+                           unsigned int           *times_signalled_out)
+{
+  WaitForOrientation wfo = {
+    .expected = orientation,
+  };
+
+  wfo.orientation = meta_orientation_manager_get_orientation (orientation_manager);
+  g_test_message ("%s: Waiting for orientation to change from "
+                  "%d: %s to %d: %s...",
+                  G_STRFUNC, wfo.orientation,
+                  meta_orientation_to_string (wfo.orientation),
+                  orientation, meta_orientation_to_string (orientation));
+
+  /* This timeout can be relatively generous because we don't expect to
+   * reach it: if we do, that's a test failure. */
+  wfo.timeout_id = g_timeout_add_seconds (10, on_max_wait_timeout, &wfo);
+  wfo.connection_id = g_signal_connect_swapped (orientation_manager,
+                                                "orientation-changed",
+                                                G_CALLBACK (on_orientation_changed),
+                                                &wfo);
+
+  while (wfo.orientation != orientation && wfo.timeout_id != 0)
+    g_main_context_iteration (NULL, TRUE);
+
+  if (wfo.orientation != orientation)
+    {
+      g_error ("Timed out waiting for orientation to change from %s to %s "
+               "(received %u orientation-changed signal(s) while waiting)",
+               meta_orientation_to_string (wfo.orientation),
+               meta_orientation_to_string (orientation),
+               wfo.times_signalled);
+    }
+
+  g_test_message ("%s: Orientation is now %d: %s",
+                  G_STRFUNC, orientation,
+                  meta_orientation_to_string (orientation));
+
+  g_clear_handle_id (&wfo.timeout_id, g_source_remove);
+  g_signal_handler_disconnect (orientation_manager, wfo.connection_id);
+
+  if (times_signalled_out != NULL)
+    *times_signalled_out = wfo.times_signalled;
+}
+
+/*
  * Wait for a possible orientation change, but don't assert that one occurs.
  */
 void
@@ -1119,28 +1055,4 @@ meta_wait_for_possible_orientation_change (MetaOrientationManager *orientation_m
 
   if (times_signalled_out != NULL)
     *times_signalled_out = wfo.times_signalled;
-}
-
-static void
-mark_as_signalled (gboolean *did_signal)
-{
-  *did_signal = TRUE;
-}
-
-void
-meta_fake_hotplug (MetaContext *context)
-{
-  MetaBackend *backend = meta_context_get_backend (context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  gboolean did_signal;
-  gulong monitors_changed_handler_id;
-
-  did_signal = FALSE;
-  monitors_changed_handler_id =
-    g_signal_connect_swapped (monitor_manager, "monitors-changed",
-                              G_CALLBACK (mark_as_signalled), &did_signal);
-  meta_monitor_manager_reload (monitor_manager);
-  g_assert_true (did_signal);
-  g_signal_handler_disconnect (monitor_manager, monitors_changed_handler_id);
 }

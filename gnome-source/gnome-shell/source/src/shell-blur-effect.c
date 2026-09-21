@@ -21,14 +21,12 @@
 #include <mtk/mtk.h>
 
 #include "shell-blur-effect.h"
-#include "shell-global.h"
 
 #include "shell-enum-types.h"
 
 /**
- * ShellBlurEffect:
- *
- * Blur effect for actors
+ * SECTION:shell-blur-effect
+ * @short_description: Blur effect for actors
  *
  * #ShellBlurEffect is a blur implementation based on Clutter. It also has
  * an optional brightness property.
@@ -108,13 +106,8 @@ create_base_pipeline (void)
 
   if (G_UNLIKELY (base_pipeline == NULL))
     {
-      ShellGlobal *global = shell_global_get ();
-      ClutterStage *stage = shell_global_get_stage (global);
-      ClutterContext *clutter_context =
-        clutter_actor_get_context (CLUTTER_ACTOR (stage));
-      ClutterBackend *backend =
-        clutter_context_get_backend (clutter_context);
-      CoglContext *ctx = clutter_backend_get_cogl_context (backend);
+      CoglContext *ctx =
+        clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
       base_pipeline = cogl_pipeline_new (ctx);
       cogl_pipeline_set_layer_null_texture (base_pipeline, 0);
@@ -193,13 +186,8 @@ update_fbo (FramebufferData *data,
             unsigned int     height,
             float            downscale_factor)
 {
-  ShellGlobal *global = shell_global_get ();
-  ClutterStage *stage = shell_global_get_stage (global);
-  ClutterContext *clutter_context =
-    clutter_actor_get_context (CLUTTER_ACTOR (stage));
-  ClutterBackend *backend =
-    clutter_context_get_backend (clutter_context);
-  CoglContext *ctx = clutter_backend_get_cogl_context (backend);
+  CoglContext *ctx =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
   g_clear_object (&data->texture);
   g_clear_object (&data->framebuffer);
@@ -787,17 +775,23 @@ shell_blur_effect_class_init (ShellBlurEffectClass *klass)
   effect_class->paint_node = shell_blur_effect_paint_node;
 
   properties[PROP_RADIUS] =
-    g_param_spec_int ("radius", NULL, NULL,
+    g_param_spec_int ("radius",
+                      "Radius",
+                      "Radius in pixels",
                       0, G_MAXINT, 0,
                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   properties[PROP_BRIGHTNESS] =
-    g_param_spec_float ("brightness", NULL, NULL,
+    g_param_spec_float ("brightness",
+                        "Brightness",
+                        "Brightness",
                         0.f, 1.f, 1.f,
                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   properties[PROP_MODE] =
-    g_param_spec_enum ("mode", NULL, NULL,
+    g_param_spec_enum ("mode",
+                       "Blur mode",
+                       "Blur mode",
                        SHELL_TYPE_BLUR_MODE,
                        SHELL_BLUR_MODE_ACTOR,
                        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
@@ -854,7 +848,7 @@ shell_blur_effect_set_radius (ShellBlurEffect *self,
 float
 shell_blur_effect_get_brightness (ShellBlurEffect *self)
 {
-  g_return_val_if_fail (SHELL_IS_BLUR_EFFECT (self), -1);
+  g_return_val_if_fail (SHELL_IS_BLUR_EFFECT (self), FALSE);
 
   return self->brightness;
 }
@@ -880,7 +874,7 @@ shell_blur_effect_set_brightness (ShellBlurEffect *self,
 ShellBlurMode
 shell_blur_effect_get_mode (ShellBlurEffect *self)
 {
-  g_return_val_if_fail (SHELL_IS_BLUR_EFFECT (self), SHELL_BLUR_MODE_ACTOR);
+  g_return_val_if_fail (SHELL_IS_BLUR_EFFECT (self), -1);
 
   return self->mode;
 }

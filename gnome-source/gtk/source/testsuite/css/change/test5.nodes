@@ -1,3 +1,0 @@
-window.background:dir(ltr)    
-  box.horizontal:dir(ltr)    name
-    label.a:dir(ltr)    name|state|hover

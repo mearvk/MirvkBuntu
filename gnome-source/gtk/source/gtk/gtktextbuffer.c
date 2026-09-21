@@ -68,9 +68,6 @@ struct _GtkTextBufferPrivate
 
   GtkTextHistory *history;
 
-  GArray *commit_funcs;
-  guint last_commit_handler;
-
   guint user_action_count;
 
   /* Whether the buffer has been modified since last save */
@@ -78,7 +75,6 @@ struct _GtkTextBufferPrivate
   guint has_selection : 1;
   guint can_undo : 1;
   guint can_redo : 1;
-  guint in_commit_notify : 1;
 };
 
 typedef struct _ClipboardRequest ClipboardRequest;
@@ -90,15 +86,6 @@ struct _ClipboardRequest
   guint default_editable : 1;
   guint replace_selection : 1;
 };
-
-typedef struct _CommitFunc
-{
-  GtkTextBufferCommitNotify callback;
-  gpointer user_data;
-  GDestroyNotify user_data_destroy;
-  GtkTextBufferNotifyFlags flags;
-  guint handler_id;
-} CommitFunc;
 
 enum {
   INSERT_TEXT,
@@ -164,10 +151,6 @@ static void gtk_text_buffer_real_mark_set              (GtkTextBuffer     *buffe
                                                         GtkTextMark       *mark);
 static void gtk_text_buffer_real_undo                  (GtkTextBuffer     *buffer);
 static void gtk_text_buffer_real_redo                  (GtkTextBuffer     *buffer);
-static void gtk_text_buffer_commit_notify              (GtkTextBuffer     *buffer,
-                                                        GtkTextBufferNotifyFlags flags,
-                                                        guint              position,
-                                                        guint              length);
 
 static GtkTextBTree* get_btree (GtkTextBuffer *buffer);
 static void          free_log_attr_cache (GtkTextLogAttrCache *cache);
@@ -229,7 +212,7 @@ struct _GtkTextBufferContentClass
   GdkContentProviderClass parent_class;
 };
 
-GType gtk_text_buffer_content_get_type (void);
+GType gtk_text_buffer_content_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE (GtkTextBufferContent, gtk_text_buffer_content, GDK_TYPE_CONTENT_PROVIDER)
 
@@ -371,9 +354,7 @@ gtk_text_buffer_deserialize_text_plain (GdkContentDeserializer *deserializer)
                       buffer);
 
   /* validates the stream */
-  converter = g_charset_converter_new ("utf-8",
-                                       gdk_content_deserializer_get_user_data (deserializer),
-                                       &error);
+  converter = g_charset_converter_new ("utf-8", "utf-8", &error);
   if (converter == NULL)
     {
       gdk_content_deserializer_return_error (deserializer, error);
@@ -416,23 +397,6 @@ gtk_text_buffer_serialize_text_plain (GdkContentSerializer *serializer)
   GtkTextBuffer *buffer;
   GtkTextIter start, end;
   char *str;
-  GOutputStream *filter;
-  GCharsetConverter *converter;
-  GError *error = NULL;
-
-  converter = g_charset_converter_new (gdk_content_serializer_get_user_data (serializer),
-                                       "utf-8",
-                                       &error);
-  if (converter == NULL)
-    {
-      gdk_content_serializer_return_error (serializer, error);
-      return;
-    }
-  g_charset_converter_set_use_fallback (converter, TRUE);
-
-  filter = g_converter_output_stream_new (gdk_content_serializer_get_output_stream (serializer),
-                                          G_CONVERTER (converter));
-  g_object_unref (converter);
 
   buffer = g_value_get_object (gdk_content_serializer_get_value (serializer));
 
@@ -446,57 +410,28 @@ gtk_text_buffer_serialize_text_plain (GdkContentSerializer *serializer)
     }
   gdk_content_serializer_set_task_data (serializer, str, g_free);
 
-  g_output_stream_write_all_async (filter,
+  g_output_stream_write_all_async (gdk_content_serializer_get_output_stream (serializer),
                                    str,
                                    strlen (str),
                                    gdk_content_serializer_get_priority (serializer),
                                    gdk_content_serializer_get_cancellable (serializer),
                                    gtk_text_buffer_serialize_text_plain_finish,
                                    serializer);
-  g_object_unref (filter);
 }
 
 static void
 gtk_text_buffer_register_serializers (void)
 {
-  const char *charset;
-
   gdk_content_register_deserializer ("text/plain;charset=utf-8",
                                      GTK_TYPE_TEXT_BUFFER,
                                      gtk_text_buffer_deserialize_text_plain,
-                                     (gpointer) "utf-8",
+                                     NULL,
                                      NULL);
   gdk_content_register_serializer (GTK_TYPE_TEXT_BUFFER,
                                    "text/plain;charset=utf-8",
                                    gtk_text_buffer_serialize_text_plain,
-                                   (gpointer) "utf-8",
+                                   NULL,
                                    NULL);
-  gdk_content_register_deserializer ("text/plain",
-                                     GTK_TYPE_TEXT_BUFFER,
-                                     gtk_text_buffer_deserialize_text_plain,
-                                     (gpointer) "ASCII",
-                                     NULL);
-  gdk_content_register_serializer (GTK_TYPE_TEXT_BUFFER,
-                                   "text/plain",
-                                   gtk_text_buffer_serialize_text_plain,
-                                   (gpointer) "ASCII",
-                                   NULL);
-  if (!g_get_charset (&charset))
-    {
-      char *mime = g_strdup_printf ("text/plain;charset=%s", charset);
-      gdk_content_register_serializer (GTK_TYPE_TEXT_BUFFER,
-                                       mime,
-                                       gtk_text_buffer_serialize_text_plain,
-                                       (gpointer) charset,
-                                       NULL);
-      gdk_content_register_deserializer (mime,
-                                         GTK_TYPE_TEXT_BUFFER,
-                                         gtk_text_buffer_deserialize_text_plain,
-                                         (gpointer) charset,
-                                         NULL);
-      g_free (mime);
-    }
-
 }
 
 static void
@@ -521,19 +456,19 @@ gtk_text_buffer_class_init (GtkTextBufferClass *klass)
 
   /* Construct */
   /**
-   * GtkTextBuffer:tag-table:
+   * GtkTextBuffer:tag-table: (attributes org.gtk.Property.get=gtk_text_buffer_get_tag_table)
    *
    * The GtkTextTagTable for the buffer.
    */
   text_buffer_props[PROP_TAG_TABLE] =
       g_param_spec_object ("tag-table", NULL, NULL,
                            GTK_TYPE_TEXT_TAG_TABLE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+                           GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   /* Normal properties */
 
   /**
-   * GtkTextBuffer:text:
+   * GtkTextBuffer:text: (attributes org.gtk.Property.set=gtk_text_buffer_set_text)
    *
    * The text content of the buffer.
    *
@@ -543,7 +478,7 @@ gtk_text_buffer_class_init (GtkTextBufferClass *klass)
   text_buffer_props[PROP_TEXT] =
       g_param_spec_string ("text", NULL, NULL,
                            "",
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
    * GtkTextBuffer:has-selection:
@@ -553,37 +488,37 @@ gtk_text_buffer_class_init (GtkTextBufferClass *klass)
   text_buffer_props[PROP_HAS_SELECTION] =
       g_param_spec_boolean ("has-selection", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            GTK_PARAM_READABLE);
 
   /**
-   * GtkTextBuffer:can-undo:
+   * GtkTextBuffer:can-undo: (attributes org.gtk.Property.get=gtk_text_buffer_get_can_undo)
    *
    * Denotes that the buffer can undo the last applied action.
    */
   text_buffer_props[PROP_CAN_UNDO] =
     g_param_spec_boolean ("can-undo", NULL, NULL,
                           FALSE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          GTK_PARAM_READABLE);
 
   /**
-   * GtkTextBuffer:can-redo:
+   * GtkTextBuffer:can-redo: (attributes org.gtk.Property.get=gtk_text_buffer_get_can_redo)
    *
    * Denotes that the buffer can reapply the last undone action.
    */
   text_buffer_props[PROP_CAN_REDO] =
     g_param_spec_boolean ("can-redo", NULL, NULL,
                           FALSE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          GTK_PARAM_READABLE);
 
   /**
-   * GtkTextBuffer:enable-undo:
+   * GtkTextBuffer:enable-undo: (attributes org.gtk.Property.get=gtk_text_buffer_get_enable_undo org.gtk.Property.set=gtk_text_buffer_set_enable_undo)
    *
    * Denotes if support for undoing and redoing changes to the buffer is allowed.
    */
   text_buffer_props[PROP_ENABLE_UNDO] =
     g_param_spec_boolean ("enable-undo", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkTextBuffer:cursor-position:
@@ -597,7 +532,7 @@ gtk_text_buffer_class_init (GtkTextBufferClass *klass)
       g_param_spec_int ("cursor-position", NULL, NULL,
 			0, G_MAXINT,
                         0,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        GTK_PARAM_READABLE);
 
   g_object_class_install_properties (object_class, LAST_PROP, text_buffer_props);
 
@@ -1146,17 +1081,20 @@ gtk_text_buffer_finalize (GObject *object)
 
   remove_all_selection_clipboards (buffer);
 
-  g_clear_pointer (&buffer->priv->commit_funcs, g_array_unref);
-
   g_clear_object (&buffer->priv->history);
 
   if (priv->tag_table)
     {
       _gtk_text_tag_table_remove_buffer (priv->tag_table, buffer);
-      g_clear_object (&priv->tag_table);
+      g_object_unref (priv->tag_table);
+      priv->tag_table = NULL;
     }
 
-  g_clear_pointer (&priv->btree, _gtk_text_btree_unref);
+  if (priv->btree)
+    {
+      _gtk_text_btree_unref (priv->btree);
+      priv->btree = NULL;
+    }
 
   if (priv->log_attr_cache)
     free_log_attr_cache (priv->log_attr_cache);
@@ -1185,7 +1123,7 @@ _gtk_text_buffer_get_btree (GtkTextBuffer *buffer)
 }
 
 /**
- * gtk_text_buffer_get_tag_table:
+ * gtk_text_buffer_get_tag_table: (attributes org.gtk.Method.get_property=tag-table)
  * @buffer: a `GtkTextBuffer`
  *
  * Get the `GtkTextTagTable` associated with this buffer.
@@ -1201,7 +1139,7 @@ gtk_text_buffer_get_tag_table (GtkTextBuffer *buffer)
 }
 
 /**
- * gtk_text_buffer_set_text:
+ * gtk_text_buffer_set_text: (attributes org.gtk.Method.set_property=text)
  * @buffer: a `GtkTextBuffer`
  * @text: UTF-8 text to insert
  * @len: length of @text in bytes
@@ -1260,29 +1198,7 @@ gtk_text_buffer_real_insert_text (GtkTextBuffer *buffer,
                                   text,
                                   len);
 
-  if (buffer->priv->commit_funcs == NULL)
-    {
-      _gtk_text_btree_insert (iter, text, len);
-    }
-  else
-    {
-      guint position;
-      guint n_chars;
-
-      if (len < 0)
-        len = strlen (text);
-
-      position = gtk_text_iter_get_offset (iter);
-      n_chars = g_utf8_strlen (text, len);
-
-      gtk_text_buffer_commit_notify (buffer,
-                                     GTK_TEXT_BUFFER_NOTIFY_BEFORE_INSERT,
-                                     position, n_chars);
-      _gtk_text_btree_insert (iter, text, len);
-      gtk_text_buffer_commit_notify (buffer,
-                                     GTK_TEXT_BUFFER_NOTIFY_AFTER_INSERT,
-                                     position, n_chars);
-    }
+  _gtk_text_btree_insert (iter, text, len);
 
   g_signal_emit (buffer, signals[CHANGED], 0);
   g_object_notify_by_pspec (G_OBJECT (buffer), text_buffer_props[PROP_CURSOR_POSITION]);
@@ -1295,7 +1211,6 @@ gtk_text_buffer_emit_insert (GtkTextBuffer *buffer,
                              int            len)
 {
   g_return_if_fail (GTK_IS_TEXT_BUFFER (buffer));
-  g_return_if_fail (buffer->priv->in_commit_notify == FALSE);
   g_return_if_fail (iter != NULL);
   g_return_if_fail (text != NULL);
 
@@ -1602,7 +1517,8 @@ insert_range_untagged (GtkTextBuffer     *buffer,
 
                   gtk_text_buffer_insert_paintable (buffer, iter, paintable);
 
-                  g_clear_pointer (&r, restore_range);
+                  restore_range (r);
+                  r = NULL;
 
                   gtk_text_iter_forward_char (&range_end);
 
@@ -1651,7 +1567,8 @@ insert_range_untagged (GtkTextBuffer     *buffer,
                              &range_end,
                              interactive);
 
-          g_clear_pointer (&r, restore_range);
+          restore_range (r);
+          r = NULL;
 
           range_start = range_end;
         }
@@ -1715,7 +1632,8 @@ insert_range_not_inside_self (GtkTextBuffer     *buffer,
 
       insert_range_untagged (buffer, iter, &range_start, &range_end, interactive);
 
-      g_clear_pointer (&r, restore_range);
+      restore_range (r);
+      r = NULL;
 
       if (insert_tags)
         {
@@ -2037,36 +1955,7 @@ gtk_text_buffer_real_delete_range (GtkTextBuffer *buffer,
       g_free (text);
     }
 
-
-
-  if (buffer->priv->commit_funcs == NULL)
-    {
-      _gtk_text_btree_delete (start, end);
-    }
-  else
-    {
-      guint off1 = gtk_text_iter_get_offset (start);
-      guint off2 = gtk_text_iter_get_offset (end);
-
-      if (off2 < off1)
-        {
-          guint tmp = off1;
-          off1 = off2;
-          off2 = tmp;
-        }
-
-      buffer->priv->in_commit_notify = TRUE;
-
-      gtk_text_buffer_commit_notify (buffer,
-                                     GTK_TEXT_BUFFER_NOTIFY_BEFORE_DELETE,
-                                     off1, off2 - off1);
-      _gtk_text_btree_delete (start, end);
-      gtk_text_buffer_commit_notify (buffer,
-                                     GTK_TEXT_BUFFER_NOTIFY_AFTER_DELETE,
-                                     off1, 0);
-
-      buffer->priv->in_commit_notify = FALSE;
-    }
+  _gtk_text_btree_delete (start, end);
 
   /* may have deleted the selection... */
   update_selection_clipboards (buffer);
@@ -2090,7 +1979,6 @@ gtk_text_buffer_emit_delete (GtkTextBuffer *buffer,
   g_return_if_fail (GTK_IS_TEXT_BUFFER (buffer));
   g_return_if_fail (start != NULL);
   g_return_if_fail (end != NULL);
-  g_return_if_fail (buffer->priv->in_commit_notify == FALSE);
 
   if (gtk_text_iter_equal (start, end))
     return;
@@ -3863,20 +3751,11 @@ gtk_text_buffer_paste_clipboard_finish (GObject      *source,
   ClipboardRequest *request_data = data;
   GtkTextBuffer *src_buffer;
   GtkTextIter start, end;
-  GtkTextMark *paste_point_override;
   const GValue *value;
 
   value = gdk_clipboard_read_value_finish (clipboard, result, NULL);
   if (value == NULL)
-    {
-      /* Clear paste point override from empty middle-click paste */
-      paste_point_override = gtk_text_buffer_get_mark (request_data->buffer,
-                                                       "gtk_paste_point_override");
-      if (paste_point_override != NULL)
-        gtk_text_buffer_delete_mark (request_data->buffer, paste_point_override);
-
-      return;
-    }
+    return;
 
   src_buffer = g_value_get_object (value);
 
@@ -4034,7 +3913,8 @@ remove_all_selection_clipboards (GtkTextBuffer *buffer)
       g_free (selection_clipboard);
     }
 
-  g_clear_slist (&priv->selection_clipboards, NULL);
+  g_slist_free (priv->selection_clipboards);
+  priv->selection_clipboards = NULL;
 }
 
 /**
@@ -4191,7 +4071,7 @@ gtk_text_buffer_backspace (GtkTextBuffer *buffer,
 					  default_editable))
     {
       /* special case \r\n, since we never want to reinsert \r */
-      if (backspace_deletes_character && strcmp ("\r\n", cluster_text) != 0)
+      if (backspace_deletes_character && strcmp ("\r\n", cluster_text))
 	{
 	  char *normalized_text = g_utf8_normalize (cluster_text,
 						     strlen (cluster_text),
@@ -4451,7 +4331,8 @@ clear_log_attr_cache (GtkTextLogAttrCache *cache)
 
   for (i = 0; i < ATTR_CACHE_SIZE; i++)
     {
-      g_clear_pointer (&cache->entries[i].attrs, g_free);
+      g_free (cache->entries[i].attrs);
+      cache->entries[i].attrs = NULL;
     }
 }
 
@@ -4758,11 +4639,6 @@ insert_tags_for_attributes (GtkTextBuffer     *buffer,
           INT_ATTR (stretch);
           break;
 
-#if PANGO_VERSION_CHECK (1, 58, 0)
-        case PANGO_ATTR_WIDTH:
-          break; /* FIXME: add width to GtkTextTag */
-#endif
-
         case PANGO_ATTR_SIZE:
           INT_ATTR (size);
           break;
@@ -4985,7 +4861,7 @@ gtk_text_buffer_real_redo (GtkTextBuffer *buffer)
 }
 
 /**
- * gtk_text_buffer_get_can_undo:
+ * gtk_text_buffer_get_can_undo: (attributes org.gtk.Method.get_property=can-undo)
  * @buffer: a `GtkTextBuffer`
  *
  * Gets whether there is an undoable action in the history.
@@ -5001,7 +4877,7 @@ gtk_text_buffer_get_can_undo (GtkTextBuffer *buffer)
 }
 
 /**
- * gtk_text_buffer_get_can_redo:
+ * gtk_text_buffer_get_can_redo: (attributes org.gtk.Method.get_property=can-redo)
  * @buffer: a `GtkTextBuffer`
  *
  * Gets whether there is a redoable action in the history.
@@ -5118,7 +4994,7 @@ gtk_text_buffer_redo (GtkTextBuffer *buffer)
 }
 
 /**
- * gtk_text_buffer_get_enable_undo:
+ * gtk_text_buffer_get_enable_undo: (attributes org.gtk.Method.get_property=enable-undo)
  * @buffer: a `GtkTextBuffer`
  *
  * Gets whether the buffer is saving modifications to the buffer
@@ -5139,7 +5015,7 @@ gtk_text_buffer_get_enable_undo (GtkTextBuffer *buffer)
 }
 
 /**
- * gtk_text_buffer_set_enable_undo:
+ * gtk_text_buffer_set_enable_undo: (attributes org.gtk.Method.set_property=enable-undo)
  * @buffer: a `GtkTextBuffer`
  * @enable_undo: %TRUE to enable undo
  *
@@ -5294,7 +5170,9 @@ gtk_text_direction_to_string (GtkTextDirection direction)
 const char *
 gtk_wrap_mode_to_string (GtkWrapMode wrap_mode)
 {
-  /* Keep these in sync with pango_wrap_mode_to_string() */
+  /* Keep these in sync with pango_wrap_mode_to_string(); note that
+   * here we have an extra case for NONE.
+   */
   switch (wrap_mode)
     {
     case GTK_WRAP_NONE:
@@ -5841,131 +5719,4 @@ gtk_text_buffer_add_run_attributes (GtkTextBuffer *buffer,
   val_set = FALSE;
 
   g_slist_free (tags);
-}
-
-static void
-clear_commit_func (gpointer data)
-{
-  CommitFunc *func = data;
-
-  if (func->user_data_destroy)
-    func->user_data_destroy (func->user_data);
-}
-
-/**
- * gtk_text_buffer_add_commit_notify:
- * @buffer: a [type@Gtk.TextBuffer]
- * @flags: which notifications should be dispatched to @callback
- * @commit_notify: (scope async) (closure user_data) (destroy destroy): a
- *   [callback@Gtk.TextBufferCommitNotify] to call for commit notifications
- * @user_data: closure data for @commit_notify
- * @destroy: a callback to free @user_data when @commit_notify is removed
- *
- * Adds a [callback@Gtk.TextBufferCommitNotify] to be called when a change
- * is to be made to the [type@Gtk.TextBuffer].
- *
- * Functions are explicitly forbidden from making changes to the
- * [type@Gtk.TextBuffer] from this callback. It is intended for tracking
- * changes to the buffer only.
- *
- * It may be advantageous to use [callback@Gtk.TextBufferCommitNotify] over
- * connecting to the [signal@Gtk.TextBuffer::insert-text] or
- * [signal@Gtk.TextBuffer::delete-range] signals to avoid ordering issues with
- * other signal handlers which may further modify the [type@Gtk.TextBuffer].
- *
- * Returns: a handler id which may be used to remove the commit notify
- *   callback using [method@Gtk.TextBuffer.remove_commit_notify].
- *
- * Since: 4.16
- */
-guint
-gtk_text_buffer_add_commit_notify (GtkTextBuffer             *buffer,
-                                   GtkTextBufferNotifyFlags   flags,
-                                   GtkTextBufferCommitNotify  commit_notify,
-                                   gpointer                   user_data,
-                                   GDestroyNotify             destroy)
-{
-  CommitFunc func;
-
-  g_return_val_if_fail (GTK_IS_TEXT_BUFFER (buffer), 0);
-  g_return_val_if_fail (buffer->priv->in_commit_notify == FALSE, 0);
-
-  func.callback = commit_notify;
-  func.user_data = user_data;
-  func.user_data_destroy = destroy;
-  func.handler_id = ++buffer->priv->last_commit_handler;
-  func.flags = flags;
-
-  if (buffer->priv->commit_funcs == NULL)
-    {
-      buffer->priv->commit_funcs = g_array_new (FALSE, FALSE, sizeof (CommitFunc));
-      g_array_set_clear_func (buffer->priv->commit_funcs, clear_commit_func);
-    }
-
-  g_array_append_val (buffer->priv->commit_funcs, func);
-
-  return func.handler_id;
-}
-
-/**
- * gtk_text_buffer_remove_commit_notify:
- * @buffer: a `GtkTextBuffer`
- * @commit_notify_handler: the notify handler identifier returned from
- *   [method@Gtk.TextBuffer.add_commit_notify].
- *
- * Removes the `GtkTextBufferCommitNotify` handler previously registered
- * with [method@Gtk.TextBuffer.add_commit_notify].
- *
- * This may result in the `user_data_destroy` being called that was passed when registering
- * the commit notify functions.
- *
- * Since: 4.16
- */
-void
-gtk_text_buffer_remove_commit_notify (GtkTextBuffer *buffer,
-                                      guint          commit_notify_handler)
-{
-  g_return_if_fail (GTK_IS_TEXT_BUFFER (buffer));
-  g_return_if_fail (commit_notify_handler > 0);
-  g_return_if_fail (buffer->priv->in_commit_notify == FALSE);
-
-  if (buffer->priv->commit_funcs != NULL)
-    {
-      for (guint i = 0; i < buffer->priv->commit_funcs->len; i++)
-        {
-          const CommitFunc *func = &g_array_index (buffer->priv->commit_funcs, CommitFunc, i);
-
-          if (func->handler_id == commit_notify_handler)
-            {
-              g_array_remove_index (buffer->priv->commit_funcs, i);
-
-              if (buffer->priv->commit_funcs->len == 0)
-                g_clear_pointer (&buffer->priv->commit_funcs, g_array_unref);
-
-              return;
-            }
-        }
-    }
-
-  g_warning ("No such GtkTextBufferCommitNotify matching %u",
-             commit_notify_handler);
-}
-
-static void
-gtk_text_buffer_commit_notify (GtkTextBuffer            *buffer,
-                               GtkTextBufferNotifyFlags  flags,
-                               guint                     position,
-                               guint                     length)
-{
-  buffer->priv->in_commit_notify = TRUE;
-
-  for (guint i = 0; i < buffer->priv->commit_funcs->len; i++)
-    {
-      const CommitFunc *func = &g_array_index (buffer->priv->commit_funcs, CommitFunc, i);
-
-      if (func->flags & flags)
-        func->callback (buffer, flags, position, length, func->user_data);
-    }
-
-  buffer->priv->in_commit_notify = FALSE;
 }

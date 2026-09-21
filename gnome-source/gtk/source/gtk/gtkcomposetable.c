@@ -248,43 +248,25 @@ parse_compose_sequence (const char *seq,
 
       if (is_codepoint (match))
         {
-          gunichar ch = (gunichar) g_ascii_strtoll (match + 1, NULL, 16);
-          if (ch > 0xffff)
-            {
-              g_warning ("Can't handle > 16bit Unicode codepoints");
-              goto fail;
-            }
+          keyval = gdk_unicode_to_keyval ((gunichar) g_ascii_strtoll (match + 1, NULL, 16));
+          if (keyval > 0xffff)
+            g_warning ("Can't handle >16bit keyvals");
 
-          keyval = gdk_unicode_to_keyval (ch);
-          if (keyval > 0xffff &&
-              gdk_keyval_to_unicode (keyval & 0xffff) != 0)
-            {
-              g_warning ("Can't handle Unicode codepoint %x", ch);
-              keyval = 0;
-              goto fail;
-            }
-
-          sequence[n] = ch;
+          sequence[n] = (guint16) keyval;
           sequence[n + 1] = 0;
         }
       else
         {
           keyval = gdk_keyval_from_name (match);
-          if (keyval == GDK_KEY_VoidSymbol)
-            {
-              g_warning ("Could not get code point of keysym %s", match);
-              goto fail;
-            }
-          else if (keyval > 0xffff)
-            {
-              g_warning ("Can't handle >16bit keyvals");
-              goto fail;
-            }
+          if (keyval > 0xffff)
+            g_warning ("Can't handle >16bit keyvals");
 
-          sequence[n] = keyval;
+          sequence[n] = (guint16) keyval;
           sequence[n + 1] = 0;
         }
 
+      if (keyval == GDK_KEY_VoidSymbol)
+        g_warning ("Could not get code point of keysym %s", match);
       g_free (match);
       n++;
     }
@@ -387,9 +369,6 @@ add_sequence (gunichar   *sequence,
 
   seq = g_new (gunichar, len + 1);
   memcpy (seq, sequence, (len + 1) * sizeof (gunichar));
-
-  if (seq[0] == 0)
-    g_print ("bad sequence, value %s\n", value);
 
   g_hash_table_replace (parser->sequences, seq, g_strdup (value));
 }
@@ -706,7 +685,8 @@ gtk_compose_hash_get_cache_path (guint32 hash)
   if (g_mkdir_with_parents (dir, 0755) != 0)
     {
       g_warning ("Failed to mkdir %s", dir);
-      g_clear_pointer (&path, g_free);
+      g_free (path);
+      path = NULL;
     }
 
   g_free (dir);
@@ -1000,11 +980,12 @@ parser_get_compose_table (GtkComposeParser *parser)
 
       if (sequence[0] != current_first)
         {
+          g_assert (sequence[0] <= 0xffff);
           if (current_first != 0)
             first_pos += index_rowstride;
-          current_first = sequence[0];
+          current_first = (guint16)sequence[0];
 
-          data[first_pos] = sequence[0] & 0xffff;
+          data[first_pos] = (guint16)sequence[0];
 
           for (i = 1; i < index_rowstride; i++)
             data[first_pos + i] = rest_pos;
@@ -1013,7 +994,8 @@ parser_get_compose_table (GtkComposeParser *parser)
       for (i = 1; i < len; i++)
         {
           g_assert (sequence[i] != 0);
-          data[rest_pos + i - 1] = sequence[i] & 0xffff;
+          g_assert (sequence[i] <= 0xffff);
+          data[rest_pos + i - 1] = (guint16) sequence[i];
         }
 
       g_assert (encoded_value != 0);
@@ -1272,16 +1254,6 @@ gtk_compose_table_new_with_data (const guint16 *data,
   return compose_table;
 }
 
-static guint
-gtk_compose_key_flag (guint key)
-{
-  const char *name = gdk_keyval_name (key);
-  if (!name || g_str_has_prefix (name, "0x"))
-    return 0x1000000;
-
-  return 0;
-}
-
 static int
 compare_seq (const void *key, const void *value)
 {
@@ -1291,13 +1263,10 @@ compare_seq (const void *key, const void *value)
 
   while (keysyms[i])
     {
-      guint keysym = seq[i];
-      guint flag = gtk_compose_key_flag (keysym);
-
-      if (keysyms[i] < (keysym + flag))
-        return (0xffff & keysyms[i]) - keysym;
-      else if (keysyms[i]> (keysym + flag))
-        return (0xffff & keysyms[i]) - keysym;
+      if (keysyms[i] < seq[i])
+        return -1;
+      else if (keysyms[i] > seq[i])
+        return 1;
 
       i++;
     }
@@ -1310,13 +1279,11 @@ compare_seq_index (const void *key, const void *value)
 {
   const guint *keysyms = key;
   const guint16 *seq = value;
-  guint keysym = seq[0];
-  guint flag = gtk_compose_key_flag (keysym);
 
-  if (keysyms[0] < (keysym + flag))
-    return (0xffff & keysyms[0]) - keysym;
-  else if (keysyms[0] > (keysym + flag))
-    return (0xffff & keysyms[0]) - keysym;
+  if (keysyms[0] < seq[0])
+    return -1;
+  else if (keysyms[0] > seq[0])
+    return 1;
 
   return 0;
 }
@@ -1543,7 +1510,7 @@ gtk_compose_table_foreach (const GtkComposeTable      *table,
  * are added and we need to update the upper limit.
  */
 #define IS_DEAD_KEY(k) \
-    ((k) >= GDK_KEY_dead_grave && (k) <= GDK_KEY_dead_hamza)
+    ((k) >= GDK_KEY_dead_grave && (k) <= GDK_KEY_dead_greek)
 
 gboolean
 gtk_check_algorithmically (const guint *compose_buffer,
@@ -1638,7 +1605,6 @@ gtk_check_algorithmically (const guint *compose_buffer,
             CASE (U, 0x367);
             CASE (small_schwa, 0x1DEA);
             CASE (capital_schwa, 0x1DEA);
-            CASE (hamza, 0x654);
 #undef CASE
             default:
               g_string_append_unichar (input, gdk_keyval_to_unicode (compose_buffer[i]));

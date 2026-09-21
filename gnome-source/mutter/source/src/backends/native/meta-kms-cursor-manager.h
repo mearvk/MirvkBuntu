@@ -20,10 +20,10 @@
 #include <glib-object.h>
 #include <graphene.h>
 
+#include "backends/meta-monitor-transform.h"
 #include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-kms-types.h"
 #include "core/util-private.h"
-#include "mtk/mtk.h"
 
 typedef struct _MetaKmsCrtcLayout
 {
@@ -45,8 +45,7 @@ MetaKmsCursorManager * meta_kms_cursor_manager_new (MetaKms *kms);
 
 void meta_kms_cursor_manager_set_query_func (MetaKmsCursorManager     *cursor_manager,
                                              MetaKmsCursorQueryInImpl  func,
-                                             gpointer                  user_data,
-                                             GDestroyNotify            free_func);
+                                             gpointer                  user_data);
 
 META_EXPORT_TEST
 void meta_kms_cursor_manager_position_changed_in_input_impl (MetaKmsCursorManager   *cursor_manager,
@@ -55,7 +54,7 @@ void meta_kms_cursor_manager_position_changed_in_input_impl (MetaKmsCursorManage
 void meta_kms_cursor_manager_update_sprite (MetaKmsCursorManager   *cursor_manager,
                                             MetaKmsCrtc            *crtc,
                                             MetaDrmBuffer          *buffer,
-                                            MtkMonitorTransform     transform,
+                                            MetaMonitorTransform    transform,
                                             const graphene_point_t *hotspot);
 
 META_EXPORT_TEST

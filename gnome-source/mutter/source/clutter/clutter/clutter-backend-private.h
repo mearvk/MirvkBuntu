@@ -21,14 +21,9 @@
 
 #pragma once
 
-#ifdef HAVE_FONTS
-#include <cairo.h>
-#endif
-
 #include "clutter/clutter-backend.h"
 #include "clutter/clutter-seat.h"
 #include "clutter/clutter-stage-window.h"
-#include "clutter/clutter-stage.h"
 
 #define CLUTTER_BACKEND_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), CLUTTER_TYPE_BACKEND, ClutterBackendClass))
 #define CLUTTER_IS_BACKEND_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), CLUTTER_TYPE_BACKEND))
@@ -36,22 +31,23 @@
 
 G_BEGIN_DECLS
 
+typedef struct _ClutterBackendPrivate   ClutterBackendPrivate;
+
 struct _ClutterBackend
 {
   /*< private >*/
   GObject parent_instance;
 
-  ClutterContext *context;
-
   CoglRenderer *cogl_renderer;
   CoglDisplay *cogl_display;
   CoglContext *cogl_context;
+  GSource *cogl_source;
 
   CoglOnscreen *dummy_onscreen;
 
-#ifdef HAVE_FONTS
   cairo_font_options_t *font_options;
-#endif
+
+  gchar *font_name;
 
   float fallback_resource_scale;
 
@@ -73,9 +69,7 @@ struct _ClutterBackendClass
                                                 GError         **error);
   CoglDisplay *         (* get_display)        (ClutterBackend  *backend,
                                                 CoglRenderer    *renderer,
-                                                GError         **error);
-  CoglContext *         (* get_context)        (ClutterBackend  *backend,
-                                                CoglDisplay     *display,
+                                                CoglSwapChain   *swap_chain,
                                                 GError         **error);
   gboolean              (* create_context)     (ClutterBackend  *backend,
                                                 GError         **error);
@@ -84,34 +78,10 @@ struct _ClutterBackendClass
 
   gboolean              (* is_display_server)  (ClutterBackend *backend);
 
-  ClutterSprite * (* get_sprite) (ClutterBackend     *backend,
-                                  ClutterStage       *stage,
-                                  const ClutterEvent *for_event);
-
-  ClutterSprite * (* lookup_sprite) (ClutterBackend       *backend,
-                                     ClutterStage         *stage,
-                                     ClutterInputDevice   *device,
-                                     ClutterEventSequence *sequence);
-
-  ClutterSprite * (* get_pointer_sprite) (ClutterBackend *backend,
-                                          ClutterStage   *stage);
-
-  void (* destroy_sprite) (ClutterBackend *backend,
-                           ClutterSprite  *sprite);
-
-  gboolean (* foreach_sprite) (ClutterBackend               *backend,
-                               ClutterStage                 *stage,
-                               ClutterStageInputForeachFunc  func,
-                               gpointer                      user_data);
-
-  ClutterKeyFocus * (* get_key_focus) (ClutterBackend *backend,
-                                       ClutterStage   *stage);
-
-  ClutterCursor * (* get_cursor) (ClutterBackend    *backend,
-                                  ClutterCursorType  cursor_type);
-
   /* signals */
   void (* resolution_changed) (ClutterBackend *backend);
+  void (* font_changed)       (ClutterBackend *backend);
+  void (* settings_changed)   (ClutterBackend *backend);
 };
 
 ClutterStageWindow *    _clutter_backend_create_stage                   (ClutterBackend         *backend,
@@ -130,11 +100,6 @@ void clutter_backend_set_fallback_resource_scale (ClutterBackend *backend,
 float clutter_backend_get_fallback_resource_scale (ClutterBackend *backend);
 
 gboolean clutter_backend_is_display_server (ClutterBackend *backend);
-
-gboolean clutter_backend_foreach_sprite (ClutterBackend               *backend,
-                                         ClutterStage                 *stage,
-                                         ClutterStageInputForeachFunc  func,
-                                         gpointer                      user_data);
 
 CLUTTER_EXPORT
 void clutter_backend_destroy (ClutterBackend *backend);

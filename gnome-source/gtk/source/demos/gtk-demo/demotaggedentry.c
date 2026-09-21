@@ -60,11 +60,6 @@ demo_tagged_entry_init (DemoTaggedEntry *entry)
   gtk_style_context_add_provider_for_display (gdk_display_get_default (),
                                               GTK_STYLE_PROVIDER (provider),
                                               800);
-
-  gtk_accessible_update_property (GTK_ACCESSIBLE (entry),
-                                  GTK_ACCESSIBLE_PROPERTY_LABEL, "Tagged Entry",
-                                  -1);
-
   g_object_unref (provider);
 }
 
@@ -203,10 +198,7 @@ enum {
   PROP_0,
   PROP_LABEL,
   PROP_HAS_CLOSE_BUTTON,
-  N_PROPS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum {
   SIGNAL_CLICKED,
@@ -368,12 +360,12 @@ demo_tagged_entry_tag_class_init (DemoTaggedEntryTagClass *class)
                     0, NULL, NULL, NULL,
                     G_TYPE_NONE, 0);
 
-  props[PROP_LABEL] = g_param_spec_string ("label", NULL, NULL,
-                                           NULL, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_HAS_CLOSE_BUTTON] = g_param_spec_boolean ("has-close-button", NULL, NULL,
-                                                       FALSE, G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_LABEL,
+      g_param_spec_string ("label", "Label", "Label",
+                           NULL, G_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_HAS_CLOSE_BUTTON,
+      g_param_spec_boolean ("has-close-button", "Has close button", "Whether this tag has a close button",
+                            FALSE, G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   gtk_widget_class_set_css_name (widget_class, "tag");
 }
@@ -429,11 +421,7 @@ demo_tagged_entry_tag_set_has_close_button (DemoTaggedEntryTag *tag,
       GtkWidget *image;
 
       image = gtk_image_new_from_icon_name ("window-close-symbolic");
-      g_object_set (image, "accessible-role", GTK_ACCESSIBLE_ROLE_PRESENTATION, NULL);
       tag->button = gtk_button_new ();
-      gtk_accessible_update_property (GTK_ACCESSIBLE (tag->button),
-                                      GTK_ACCESSIBLE_PROPERTY_LABEL, "Close",
-                                      -1);
       gtk_button_set_child (GTK_BUTTON (tag->button), image);
       gtk_widget_set_halign (tag->button, GTK_ALIGN_CENTER);
       gtk_widget_set_valign (tag->button, GTK_ALIGN_CENTER);
@@ -442,7 +430,7 @@ demo_tagged_entry_tag_set_has_close_button (DemoTaggedEntryTag *tag,
       g_signal_connect (tag->button, "clicked", G_CALLBACK (on_button_clicked), tag);
     }
 
-  g_object_notify_by_pspec (G_OBJECT (tag), props[PROP_HAS_CLOSE_BUTTON]);
+  g_object_notify (G_OBJECT (tag), "has-close-button");
 }
 
 gboolean

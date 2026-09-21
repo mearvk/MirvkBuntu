@@ -39,12 +39,8 @@
 /**
  * GtkStack:
  *
- * Shows one of its children at a time.
- *
- * <picture>
- *   <source srcset="stack-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkStack" src="stack.png">
- * </picture>
+ * `GtkStack` is a container which only shows one of its children
+ * at a time.
  *
  * In contrast to `GtkNotebook`, `GtkStack` does not provide a means
  * for users to change the visible child. Instead, a separate widget
@@ -53,9 +49,8 @@
  *
  * Transitions between pages can be animated as slides or fades. This
  * can be controlled with [method@Gtk.Stack.set_transition_type].
- *
  * These animations respect the [property@Gtk.Settings:gtk-enable-animations]
- * and [property@Gtk.Settings:gtk-interface-reduced-motion] settings.
+ * setting.
  *
  * `GtkStack` maintains a [class@Gtk.StackPage] object for each added
  * child, which holds additional per-child properties. You
@@ -89,7 +84,7 @@
  *
  * # Accessibility
  *
- * `GtkStack` uses the [enum@Gtk.AccessibleRole.tab_panel] role for the stack
+ * `GtkStack` uses the %GTK_ACCESSIBLE_ROLE_TAB_PANEL for the stack
  * pages, which are the accessible parent objects of the child widgets.
  */
 
@@ -127,7 +122,7 @@
 /**
  * GtkStackPage:
  *
- * An auxiliary class used by `GtkStack`.
+ * `GtkStackPage` is an auxiliary class used by `GtkStack`.
  */
 
 /* TODO:
@@ -202,9 +197,9 @@ enum
   CHILD_PROP_NEEDS_ATTENTION,
   CHILD_PROP_VISIBLE,
   CHILD_PROP_USE_UNDERLINE,
-  /* GtkAccessible */
-  PROP_ACCESSIBLE_ROLE,
   LAST_CHILD_PROP,
+
+  PROP_ACCESSIBLE_ROLE
 };
 
 struct _GtkStackPage
@@ -489,7 +484,6 @@ static void
 gtk_stack_page_class_init (GtkStackPageClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
-  gpointer iface;
 
   object_class->finalize = gtk_stack_page_finalize;
   object_class->dispose = gtk_stack_page_dispose;
@@ -498,47 +492,47 @@ gtk_stack_page_class_init (GtkStackPageClass *class)
   object_class->constructed = gtk_stack_page_constructed;
 
   /**
-   * GtkStackPage:child:
+   * GtkStackPage:child: (attributes org.gtk.Property.get=gtk_stack_page_get_child)
    *
    * The child that this page is for.
    */
   stack_page_props[CHILD_PROP_CHILD] =
     g_param_spec_object ("child", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   /**
-   * GtkStackPage:name:
+   * GtkStackPage:name: (attributes org.gtk.Property.get=gtk_stack_page_get_name org.gtk.Property.set=gtk_stack_page_set_name)
    *
    * The name of the child page.
    */
   stack_page_props[CHILD_PROP_NAME] =
     g_param_spec_string ("name", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READWRITE);
 
   /**
-   * GtkStackPage:title:
+   * GtkStackPage:title: (attributes org.gtk.Property.get=gtk_stack_page_get_title org.gtk.Property.set=gtk_stack_page_set_title)
    *
    * The title of the child page.
    */
   stack_page_props[CHILD_PROP_TITLE] =
     g_param_spec_string ("title", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READWRITE);
 
   /**
-   * GtkStackPage:icon-name:
+   * GtkStackPage:icon-name: (attributes org.gtk.Property.get=gtk_stack_page_get_icon_name org.gtk.Property.set=gtk_stack_page_set_icon_name)
    *
    * The icon name of the child page.
    */
   stack_page_props[CHILD_PROP_ICON_NAME] =
     g_param_spec_string ("icon-name", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READWRITE);
 
   /**
-   * GtkStackPage:needs-attention:
+   * GtkStackPage:needs-attention: (attributes org.gtk.Property.get=gtk_stack_page_get_needs_attention org.gtk.Property.set=gtk_stack_page_set_needs_attention)
    *
    * Whether the page requires the user attention.
    *
@@ -549,35 +543,31 @@ gtk_stack_page_class_init (GtkStackPageClass *class)
   stack_page_props[CHILD_PROP_NEEDS_ATTENTION] =
     g_param_spec_boolean ("needs-attention", NULL, NULL,
                          FALSE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStackPage:visible:
+   * GtkStackPage:visible: (attributes org.gtk.Property.get=gtk_stack_page_get_visible org.gtk.Property.set=gtk_stack_page_set_visible)
    *
    * Whether this page is visible.
    */
   stack_page_props[CHILD_PROP_VISIBLE] =
     g_param_spec_boolean ("visible", NULL, NULL,
                          TRUE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStackPage:use-underline:
+   * GtkStackPage:use-underline: (attributes org.gtk.Property.get=gtk_stack_page_get_use_underline org.gtk.Property.set=gtk_stack_page_set_use_underline)
    *
    * If set, an underline in the title indicates a mnemonic.
    */
   stack_page_props[CHILD_PROP_USE_UNDERLINE] =
     g_param_spec_boolean ("use-underline", NULL, NULL,
                          FALSE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  /* GtkAccessible */
-  iface = g_type_default_interface_peek (GTK_TYPE_ACCESSIBLE);
-  stack_page_props[PROP_ACCESSIBLE_ROLE] =
-    g_param_spec_override ("accessible-role",
-                           g_object_interface_find_property (iface, "accessible-role"));
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_CHILD_PROP, stack_page_props);
+
+  g_object_class_override_property (object_class, PROP_ACCESSIBLE_ROLE, "accessible-role");
 }
 
 #define GTK_TYPE_STACK_PAGES (gtk_stack_pages_get_type ())
@@ -733,12 +723,12 @@ gtk_stack_pages_class_init (GtkStackPagesClass *klass)
   pages_properties[PAGES_PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         GTK_TYPE_STACK_PAGE,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   pages_properties[PAGES_PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, PAGES_N_PROPS, pages_properties);
 }
@@ -973,94 +963,94 @@ gtk_stack_class_init (GtkStackClass *klass)
   widget_class->get_request_mode = gtk_stack_get_request_mode;
 
   /**
-   * GtkStack:hhomogeneous:
+   * GtkStack:hhomogeneous: (attributes org.gtk.Property.get=gtk_stack_get_hhomogeneous org.gtk.Property.set=gtk_stack_set_hhomogeneous)
    *
    * %TRUE if the stack allocates the same width for all children.
    */
   stack_props[PROP_HHOMOGENEOUS] =
       g_param_spec_boolean ("hhomogeneous", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:vhomogeneous:
+   * GtkStack:vhomogeneous: (attributes org.gtk.Property.get=gtk_stack_get_vhomogeneous org.gtk.Property.set=gtk_stack_set_vhomogeneous)
    *
    * %TRUE if the stack allocates the same height for all children.
    */
   stack_props[PROP_VHOMOGENEOUS] =
       g_param_spec_boolean ("vhomogeneous", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:visible-child:
+   * GtkStack:visible-child: (attributes org.gtk.Property.get=gtk_stack_get_visible_child org.gtk.Property.set=gtk_stack_set_visible_child)
    *
    * The widget currently visible in the stack.
    */
   stack_props[PROP_VISIBLE_CHILD] =
       g_param_spec_object ("visible-child", NULL, NULL,
                            GTK_TYPE_WIDGET,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:visible-child-name:
+   * GtkStack:visible-child-name: (attributes org.gtk.Property.get=gtk_stack_get_visible_child_name org.gtk.Property.set=gtk_stack_set_visible_child_name)
    *
    * The name of the widget currently visible in the stack.
    */
   stack_props[PROP_VISIBLE_CHILD_NAME] =
       g_param_spec_string ("visible-child-name", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:transition-duration:
+   * GtkStack:transition-duration: (attributes org.gtk.Property.get=gtk_stack_get_transition_duration org.gtk.Property.set=gtk_stack_set_transition_duration)
    *
    * The animation duration, in milliseconds.
    */
   stack_props[PROP_TRANSITION_DURATION] =
       g_param_spec_uint ("transition-duration", NULL, NULL,
                          0, G_MAXUINT, 200,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:transition-type:
+   * GtkStack:transition-type: (attributes org.gtk.Property.get=gtk_stack_get_transition_type org.gtk.Property.set=gtk_stack_set_transition_type)
    *
    * The type of animation used to transition.
    */
   stack_props[PROP_TRANSITION_TYPE] =
       g_param_spec_enum ("transition-type", NULL, NULL,
                          GTK_TYPE_STACK_TRANSITION_TYPE, GTK_STACK_TRANSITION_TYPE_NONE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:transition-running:
+   * GtkStack:transition-running: (attributes org.gtk.Property.get=gtk_stack_get_transition_running)
    *
    * Whether or not the transition is currently running.
    */
   stack_props[PROP_TRANSITION_RUNNING] =
       g_param_spec_boolean ("transition-running", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            GTK_PARAM_READABLE);
 
   /**
-   * GtkStack:interpolate-size:
+   * GtkStack:interpolate-size: (attributes org.gtk.Property.get=gtk_stack_get_interpolate_size org.gtk.Property.set=gtk_stack_set_interpolate_size)
    *
    * Whether or not the size should smoothly change during the transition.
    */
   stack_props[PROP_INTERPOLATE_SIZE] =
       g_param_spec_boolean ("interpolate-size", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStack:pages:
+   * GtkStack:pages: (attributes org.gtk.Property.get=gtk_stack_get_pages)
    *
    * A selection model with the stack pages.
    */
   stack_props[PROP_PAGES] =
       g_param_spec_object ("pages", NULL, NULL,
                            GTK_TYPE_SELECTION_MODEL,
-                           G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READABLE);
 
   g_object_class_install_properties (object_class, LAST_PROP, stack_props);
 
@@ -1284,10 +1274,10 @@ gtk_stack_transition_cb (GtkWidget     *widget,
       priv->tick_id = 0;
       g_object_notify_by_pspec (G_OBJECT (stack), stack_props[PROP_TRANSITION_RUNNING]);
 
-      return G_SOURCE_REMOVE;
+      return FALSE;
     }
 
-  return G_SOURCE_CONTINUE;
+  return TRUE;
 }
 
 static void
@@ -1313,33 +1303,13 @@ gtk_stack_unschedule_ticks (GtkStack *stack)
       gtk_widget_remove_tick_callback (GTK_WIDGET (stack), priv->tick_id);
       priv->tick_id = 0;
       g_object_notify_by_pspec (G_OBJECT (stack), stack_props[PROP_TRANSITION_RUNNING]);
-      gtk_widget_set_overflow (GTK_WIDGET (stack), GTK_OVERFLOW_VISIBLE);
     }
 }
 
 static GtkStackTransitionType
-get_effective_transition_type (GtkStack               *stack,
-                               GtkStackTransitionType  transition_type)
+effective_transition_type (GtkStack               *stack,
+                           GtkStackTransitionType  transition_type)
 {
-  if (transition_type != GTK_STACK_TRANSITION_TYPE_NONE)
-    {
-      GtkStackPrivate *priv = gtk_stack_get_instance_private (stack);
-      GtkReducedMotion reduced_motion;
-
-      g_object_get (gtk_widget_get_settings (GTK_WIDGET (stack)),
-                    "gtk-interface-reduced-motion", &reduced_motion,
-                    NULL);
-
-      if (reduced_motion == GTK_REDUCED_MOTION_REDUCE)
-        {
-          if (priv->homogeneous[GTK_ORIENTATION_VERTICAL] &&
-              priv->homogeneous[GTK_ORIENTATION_HORIZONTAL])
-            return GTK_STACK_TRANSITION_TYPE_CROSSFADE;
-          else
-            return GTK_STACK_TRANSITION_TYPE_NONE;
-        }
-    }
-
   if (_gtk_widget_get_direction (GTK_WIDGET (stack)) == GTK_TEXT_DIR_RTL)
     {
       switch (transition_type)
@@ -1392,27 +1362,20 @@ gtk_stack_start_transition (GtkStack               *stack,
 {
   GtkStackPrivate *priv = gtk_stack_get_instance_private (stack);
   GtkWidget *widget = GTK_WIDGET (stack);
-  GtkStackTransitionType effective_transition_type = GTK_STACK_TRANSITION_TYPE_NONE;
 
   if (gtk_widget_get_mapped (widget) &&
-      gtk_settings_get_enable_animations (gtk_widget_get_settings (widget)))
-    effective_transition_type = get_effective_transition_type (stack, transition_type);
-
-  if (effective_transition_type != GTK_STACK_TRANSITION_TYPE_NONE &&
+      gtk_settings_get_enable_animations (gtk_widget_get_settings (widget)) &&
+      transition_type != GTK_STACK_TRANSITION_TYPE_NONE &&
       transition_duration != 0 &&
       priv->last_visible_child != NULL)
     {
-      priv->active_transition_type = effective_transition_type;
+      priv->active_transition_type = effective_transition_type (stack, transition_type);
       priv->first_frame_skipped = FALSE;
       gtk_stack_schedule_ticks (stack);
       gtk_progress_tracker_start (&priv->tracker,
                                   priv->transition_duration * 1000,
                                   0,
                                   1.0);
-      /* We set overflow to hidden during transitions to avoid
-       * input problems.
-       */
-      gtk_widget_set_overflow (GTK_WIDGET (stack), GTK_OVERFLOW_HIDDEN);
     }
   else
     {
@@ -1495,13 +1458,8 @@ set_visible_child (GtkStack               *stack,
     }
 
   if (priv->last_visible_child)
-    {
-      gtk_widget_set_child_visible (priv->last_visible_child->widget, FALSE);
-      gtk_accessible_update_state (GTK_ACCESSIBLE (priv->last_visible_child),
-                                   GTK_ACCESSIBLE_STATE_HIDDEN, TRUE,
-                                   -1);
-    }
-      priv->last_visible_child = NULL;
+    gtk_widget_set_child_visible (priv->last_visible_child->widget, FALSE);
+  priv->last_visible_child = NULL;
 
   if (priv->visible_child && priv->visible_child->widget)
     {
@@ -1515,9 +1473,6 @@ set_visible_child (GtkStack               *stack,
         {
           gtk_widget_set_child_visible (priv->visible_child->widget, FALSE);
         }
-      gtk_accessible_update_state (GTK_ACCESSIBLE (priv->visible_child),
-                                   GTK_ACCESSIBLE_STATE_HIDDEN, TRUE,
-                                   -1);
     }
 
   priv->visible_child = child_info;
@@ -1525,9 +1480,6 @@ set_visible_child (GtkStack               *stack,
   if (child_info)
     {
       gtk_widget_set_child_visible (child_info->widget, TRUE);
-      gtk_accessible_update_state (GTK_ACCESSIBLE (child_info),
-                                   GTK_ACCESSIBLE_STATE_HIDDEN, FALSE,
-                                   -1);
 
       if (contains_focus)
         {
@@ -1907,7 +1859,7 @@ gtk_stack_get_child_by_name (GtkStack    *stack,
 }
 
 /**
- * gtk_stack_page_get_child:
+ * gtk_stack_page_get_child: (attributes org.gtk.Method.get_property=child)
  * @self: a `GtkStackPage`
  *
  * Returns the stack child to which @self belongs.
@@ -1921,7 +1873,7 @@ gtk_stack_page_get_child (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_set_hhomogeneous:
+ * gtk_stack_set_hhomogeneous: (attributes org.gtk.Method.set_property=hhomogeneous)
  * @stack: a `GtkStack`
  * @hhomogeneous: %TRUE to make @stack horizontally homogeneous
  *
@@ -1953,7 +1905,7 @@ gtk_stack_set_hhomogeneous (GtkStack *stack,
 }
 
 /**
- * gtk_stack_get_hhomogeneous:
+ * gtk_stack_get_hhomogeneous: (attributes org.gtk.Method.get_property=hhomogeneous)
  * @stack: a `GtkStack`
  *
  * Gets whether @stack is horizontally homogeneous.
@@ -1971,7 +1923,7 @@ gtk_stack_get_hhomogeneous (GtkStack *stack)
 }
 
 /**
- * gtk_stack_set_vhomogeneous:
+ * gtk_stack_set_vhomogeneous: (attributes org.gtk.Method.set_property=vhomogeneous)
  * @stack: a `GtkStack`
  * @vhomogeneous: %TRUE to make @stack vertically homogeneous
  *
@@ -2003,7 +1955,7 @@ gtk_stack_set_vhomogeneous (GtkStack *stack,
 }
 
 /**
- * gtk_stack_get_vhomogeneous:
+ * gtk_stack_get_vhomogeneous: (attributes org.gtk.Method.get_property=vhomogeneous)
  * @stack: a `GtkStack`
  *
  * Gets whether @stack is vertically homogeneous.
@@ -2021,7 +1973,7 @@ gtk_stack_get_vhomogeneous (GtkStack *stack)
 }
 
 /**
- * gtk_stack_get_transition_duration:
+ * gtk_stack_get_transition_duration: (attributes org.gtk.Method.get_property=transition-duration)
  * @stack: a `GtkStack`
  *
  * Returns the amount of time (in milliseconds) that
@@ -2040,7 +1992,7 @@ gtk_stack_get_transition_duration (GtkStack *stack)
 }
 
 /**
- * gtk_stack_set_transition_duration:
+ * gtk_stack_set_transition_duration: (attributes org.gtk.Method.set_property=transition-duration)
  * @stack: a `GtkStack`
  * @duration: the new duration, in milliseconds
  *
@@ -2064,7 +2016,7 @@ gtk_stack_set_transition_duration (GtkStack *stack,
 }
 
 /**
- * gtk_stack_get_transition_type:
+ * gtk_stack_get_transition_type: (attributes org.gtk.Method.get_property=transition-type)
  * @stack: a `GtkStack`
  *
  * Gets the type of animation that will be used
@@ -2083,7 +2035,7 @@ gtk_stack_get_transition_type (GtkStack *stack)
 }
 
 /**
- * gtk_stack_set_transition_type:
+ * gtk_stack_set_transition_type: (attributes org.gtk.Method.set_property=transition-type)
  * @stack: a `GtkStack`
  * @transition: the new transition type
  *
@@ -2113,7 +2065,7 @@ gtk_stack_set_transition_type (GtkStack              *stack,
 }
 
 /**
- * gtk_stack_get_transition_running:
+ * gtk_stack_get_transition_running: (attributes org.gtk.Method.get_property=transition-running)
  * @stack: a `GtkStack`
  *
  * Returns whether the @stack is currently in a transition from one page to
@@ -2132,7 +2084,7 @@ gtk_stack_get_transition_running (GtkStack *stack)
 }
 
 /**
- * gtk_stack_set_interpolate_size:
+ * gtk_stack_set_interpolate_size: (attributes org.gtk.Method.set_property=interpolate-size)
  * @stack: A `GtkStack`
  * @interpolate_size: the new value
  *
@@ -2162,7 +2114,7 @@ gtk_stack_set_interpolate_size (GtkStack *stack,
 }
 
 /**
- * gtk_stack_get_interpolate_size:
+ * gtk_stack_get_interpolate_size: (attributes org.gtk.Method.get_property=interpolate-size)
  * @stack: A `GtkStack`
  *
  * Returns whether the `GtkStack` is set up to interpolate between
@@ -2182,7 +2134,7 @@ gtk_stack_get_interpolate_size (GtkStack *stack)
 
 
 /**
- * gtk_stack_get_visible_child:
+ * gtk_stack_get_visible_child: (attributes org.gtk.Method.get_property=visible-child)
  * @stack: a `GtkStack`
  *
  * Gets the currently visible child of @stack.
@@ -2202,7 +2154,7 @@ gtk_stack_get_visible_child (GtkStack *stack)
 }
 
 /**
- * gtk_stack_get_visible_child_name:
+ * gtk_stack_get_visible_child_name: (attributes org.gtk.Method.get_property=visible-child-name)
  * @stack: a `GtkStack`
  *
  * Returns the name of the currently visible child of @stack.
@@ -2226,7 +2178,7 @@ gtk_stack_get_visible_child_name (GtkStack *stack)
 }
 
 /**
- * gtk_stack_set_visible_child:
+ * gtk_stack_set_visible_child: (attributes org.gtk.Method.set_property=visible-child)
  * @stack: a `GtkStack`
  * @child: a child of @stack
  *
@@ -2265,7 +2217,7 @@ gtk_stack_set_visible_child (GtkStack  *stack,
 }
 
 /**
- * gtk_stack_set_visible_child_name:
+ * gtk_stack_set_visible_child_name: (attributes org.gtk.Method.set_property=visible-child-name)
  * @stack: a `GtkStack`
  * @name: the name of the child to make visible
  *
@@ -2376,29 +2328,8 @@ gtk_stack_compute_expand (GtkWidget *widget,
 static GtkSizeRequestMode
 gtk_stack_get_request_mode (GtkWidget *widget)
 {
-  GtkStack *stack = GTK_STACK (widget);
-  GtkStackPrivate *priv = gtk_stack_get_instance_private (stack);
   GtkWidget *w;
   int wfh = 0, hfw = 0;
-
-  if (!priv->homogeneous[GTK_ORIENTATION_VERTICAL] &&
-      !priv->homogeneous[GTK_ORIENTATION_HORIZONTAL])
-    {
-      GtkSizeRequestMode lv_mode;
-
-      /* Only the visible child, and perhaps the last visible child
-       * during a transition, matter.  Attempt to return constant-size
-       * when we can.  */
-      if (priv->last_visible_child)
-        lv_mode = gtk_widget_get_request_mode (priv->last_visible_child->widget);
-      else
-        lv_mode = GTK_SIZE_REQUEST_CONSTANT_SIZE;
-
-      if (lv_mode == GTK_SIZE_REQUEST_CONSTANT_SIZE && priv->visible_child)
-        return gtk_widget_get_request_mode (priv->visible_child->widget);
-      else
-        return lv_mode;
-    }
 
   for (w = gtk_widget_get_first_child (widget);
        w != NULL;
@@ -2723,58 +2654,6 @@ gtk_stack_snapshot (GtkWidget   *widget,
 }
 
 static void
-adjust_child_allocation (GtkWidget     *child,
-                         GtkAllocation *allocation)
-{
-  int min, width, height;
-  GtkAlign align;
-
-  if (gtk_widget_get_request_mode (child) == GTK_SIZE_REQUEST_WIDTH_FOR_HEIGHT)
-    {
-      gtk_widget_measure (child, GTK_ORIENTATION_VERTICAL, -1,
-                          &min, NULL, NULL, NULL);
-      height = MAX (allocation->height, min);
-      gtk_widget_measure (child, GTK_ORIENTATION_HORIZONTAL, height,
-                          &min, NULL, NULL, NULL);
-      width = MAX (allocation->width, min);
-    }
-  else /* GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH or CONSTANT_SIZE */
-    {
-      gtk_widget_measure (child, GTK_ORIENTATION_HORIZONTAL, -1,
-                          &min, NULL, NULL, NULL);
-      width = MAX (allocation->width, min);
-      gtk_widget_measure (child, GTK_ORIENTATION_VERTICAL, width,
-                          &min, NULL, NULL, NULL);
-      height = MAX (allocation->height, min);
-    }
-
-  if (width > allocation->width)
-    {
-      GtkTextDirection direction = _gtk_widget_get_direction (child);
-      align = gtk_widget_get_halign (child);
-
-      if (align == GTK_ALIGN_CENTER || align == GTK_ALIGN_FILL)
-        allocation->x -= (width - allocation->width) / 2;
-      else if (align == (direction == GTK_TEXT_DIR_RTL ? GTK_ALIGN_START : GTK_ALIGN_END))
-        allocation->x -= (width - allocation->width);
-
-      allocation->width = width;
-    }
-
-  if (height > allocation->height)
-    {
-      align = gtk_widget_get_valign (child);
-
-      if (align == GTK_ALIGN_CENTER || align == GTK_ALIGN_FILL)
-        allocation->y -= (height - allocation->height) / 2;
-      else if (align == GTK_ALIGN_END)
-        allocation->y -= (height - allocation->height);
-
-      allocation->height = height;
-    }
-}
-
-static void
 gtk_stack_size_allocate (GtkWidget *widget,
                          int        width,
                          int        height,
@@ -2786,12 +2665,20 @@ gtk_stack_size_allocate (GtkWidget *widget,
 
   if (priv->last_visible_child)
     {
-      child_allocation = (GtkAllocation) {0, 0, width, height};
-      adjust_child_allocation (priv->last_visible_child->widget,
-                               &child_allocation);
+      int child_width, child_height;
+      int min, nat;
+
+      gtk_widget_measure (priv->last_visible_child->widget, GTK_ORIENTATION_HORIZONTAL,
+                          -1,
+                          &min, &nat, NULL, NULL);
+      child_width = MAX (min, width);
+      gtk_widget_measure (priv->last_visible_child->widget, GTK_ORIENTATION_VERTICAL,
+                          child_width,
+                          &min, &nat, NULL, NULL);
+      child_height = MAX (min, height);
 
       gtk_widget_size_allocate (priv->last_visible_child->widget,
-                                &child_allocation, -1);
+                                &(GtkAllocation) { 0, 0, child_width, child_height }, -1);
     }
 
   child_allocation.x = get_bin_window_x (stack);
@@ -2801,34 +2688,42 @@ gtk_stack_size_allocate (GtkWidget *widget,
 
   if (priv->visible_child)
     {
-      adjust_child_allocation (priv->visible_child->widget,
-                               &child_allocation);
+      int min_width;
+      int min_height;
+
+      gtk_widget_measure (priv->visible_child->widget, GTK_ORIENTATION_HORIZONTAL,
+                          height, &min_width, NULL, NULL, NULL);
+      child_allocation.width = MAX (child_allocation.width, min_width);
+
+      gtk_widget_measure (priv->visible_child->widget, GTK_ORIENTATION_VERTICAL,
+                          child_allocation.width, &min_height, NULL, NULL, NULL);
+      child_allocation.height = MAX (child_allocation.height, min_height);
+
+      if (child_allocation.width > width)
+        {
+          GtkAlign halign = gtk_widget_get_halign (priv->visible_child->widget);
+
+          if (halign == GTK_ALIGN_CENTER || halign == GTK_ALIGN_FILL)
+            child_allocation.x = (width - child_allocation.width) / 2;
+          else if (halign == GTK_ALIGN_END)
+            child_allocation.x = (width - child_allocation.width);
+        }
+
+      if (child_allocation.height > height)
+        {
+          GtkAlign valign = gtk_widget_get_valign (priv->visible_child->widget);
+
+          if (valign == GTK_ALIGN_CENTER || valign == GTK_ALIGN_FILL)
+            child_allocation.y = (height - child_allocation.height) / 2;
+          else if (valign == GTK_ALIGN_END)
+            child_allocation.y = (height - child_allocation.height);
+        }
 
       gtk_widget_size_allocate (priv->visible_child->widget, &child_allocation, -1);
     }
 }
 
-static inline double
-lerp (int    a,
-      int    b,
-      double progress)
-{
-  return a * (1.0 - progress) + b * progress;
-}
-
-/*
- * Given lerp (a, b, progress) -> r, find b. In other words: we know what size
- * we're interpolating *from*, the current size, and the current interpolation
- * progress; guess which size we're interpolating *to*.
- */
-static inline double
-inverse_lerp (int    a,
-              int    r,
-              double progress)
-{
-  return (r - a * (1.0 - progress)) / progress;
-}
-
+#define LERP(a, b, t) ((a) + (((b) - (a)) * (1.0 - (t))))
 static void
 gtk_stack_measure (GtkWidget      *widget,
                    GtkOrientation  orientation,
@@ -2842,52 +2737,8 @@ gtk_stack_measure (GtkWidget      *widget,
   GtkStackPrivate *priv = gtk_stack_get_instance_private (stack);
   GtkStackPage *child_info;
   GtkWidget *child;
+  int child_min, child_nat;
   guint idx;
-  int child_min, child_nat, child_for_size;
-  int last_size, last_opposite_size;
-  double t;
-
-  if (priv->interpolate_size && priv->last_visible_child)
-    {
-      t = gtk_progress_tracker_get_ease_out_cubic (&priv->tracker, FALSE);
-
-      if (orientation == GTK_ORIENTATION_HORIZONTAL)
-        {
-          last_size = priv->last_visible_widget_width;
-          last_opposite_size = priv->last_visible_widget_height;
-        }
-      else
-        {
-          last_size = priv->last_visible_widget_height;
-          last_opposite_size = priv->last_visible_widget_width;
-        }
-
-      /* Work out which for_size we want to pass for measuring our children */
-      if (for_size == -1 || for_size == last_opposite_size ||
-          priv->homogeneous[OPPOSITE_ORIENTATION(orientation)])
-        child_for_size = for_size;
-      else if (t <= 0.0)
-        /* We're going to return last_size anyway */
-        child_for_size = -1;
-      else
-        {
-          double d = inverse_lerp (last_opposite_size, for_size, t);
-          /* inverse_lerp is numerically unstable due to its use of floating-
-           * point division, potentially by a very small value when progress is
-           * close to zero. So we sanity check the return value.
-           */
-          if (isnan (d) || isinf (d) || d < 0 || d >= G_MAXINT)
-            child_for_size = -1;
-          else
-            child_for_size = floor (d);
-        }
-    }
-  else
-    {
-      t = 1.0;
-      last_size = 0;
-      child_for_size = for_size;
-    }
 
   *minimum = 0;
   *natural = 0;
@@ -2900,46 +2751,37 @@ gtk_stack_measure (GtkWidget      *widget,
       if (!priv->homogeneous[orientation] &&
           priv->visible_child != child_info)
         continue;
-      if (!gtk_widget_get_visible (child))
-        continue;
 
-      if (!priv->homogeneous[OPPOSITE_ORIENTATION(orientation)] && priv->visible_child != child_info)
+      if (gtk_widget_get_visible (child))
         {
-          int measure_for_size;
-
-          /* Make sure to measure at least for the minimum size */
-          if (child_for_size == -1)
-            measure_for_size = -1;
-          else
+          if (!priv->homogeneous[OPPOSITE_ORIENTATION(orientation)] && priv->visible_child != child_info)
             {
-              gtk_widget_measure (child, OPPOSITE_ORIENTATION (orientation),
-                                  -1,
-                                  &measure_for_size, NULL,
-                                  NULL, NULL);
-              measure_for_size = MAX (measure_for_size, child_for_size);
+              int min_for_size;
+
+              gtk_widget_measure (child, OPPOSITE_ORIENTATION (orientation), -1, &min_for_size, NULL, NULL, NULL);
+
+              gtk_widget_measure (child, orientation, MAX (min_for_size, for_size), &child_min, &child_nat, NULL, NULL);
             }
+          else
+            gtk_widget_measure (child, orientation, for_size, &child_min, &child_nat, NULL, NULL);
 
-          gtk_widget_measure (child, orientation,
-                              measure_for_size,
-                              &child_min, &child_nat,
-                              NULL, NULL);
+          *minimum = MAX (*minimum, child_min);
+          *natural = MAX (*natural, child_nat);
         }
-      else
-        gtk_widget_measure (child, orientation,
-                            child_for_size,
-                            &child_min, &child_nat,
-                            NULL, NULL);
+    }
 
-      *minimum = MAX (*minimum, child_min);
-      *natural = MAX (*natural, child_nat);
-  }
-
-  if (priv->last_visible_child != NULL &&
-      priv->interpolate_size &&
-      !priv->homogeneous[orientation])
+  if (priv->last_visible_child != NULL && !priv->homogeneous[orientation])
     {
-      *minimum = ceil (lerp (last_size, *minimum, t));
-      *natural = ceil (lerp (last_size, *natural, t));
+      double t = priv->interpolate_size ? gtk_progress_tracker_get_ease_out_cubic (&priv->tracker, FALSE) : 1.0;
+      int last_size;
+
+      if (orientation == GTK_ORIENTATION_HORIZONTAL)
+        last_size = priv->last_visible_widget_width;
+      else
+        last_size = priv->last_visible_widget_height;
+
+      *minimum = LERP (*minimum, last_size, t);
+      *natural = LERP (*natural, last_size, t);
     }
 }
 
@@ -2956,7 +2798,7 @@ gtk_stack_init (GtkStack *stack)
 }
 
 /**
- * gtk_stack_get_pages:
+ * gtk_stack_get_pages: (attributes org.gtk.Method.get_property=pages)
  * @stack: a `GtkStack`
  *
  * Returns a `GListModel` that contains the pages of the stack.
@@ -2984,7 +2826,7 @@ gtk_stack_get_pages (GtkStack *stack)
 }
 
 /**
- * gtk_stack_page_get_visible:
+ * gtk_stack_page_get_visible: (attributes org.gtk.Method.get_property=visible)
  * @self: a `GtkStackPage`
  *
  * Returns whether @page is visible in its `GtkStack`.
@@ -3003,7 +2845,7 @@ gtk_stack_page_get_visible (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_page_set_visible:
+ * gtk_stack_page_set_visible: (attributes org.gtk.Method.set_property=visible)
  * @self: a `GtkStackPage`
  * @visible: The new property value
  *
@@ -3029,7 +2871,7 @@ gtk_stack_page_set_visible (GtkStackPage *self,
 }
 
 /**
- * gtk_stack_page_get_needs_attention:
+ * gtk_stack_page_get_needs_attention: (attributes org.gtk.Method.get_property=needs-attention)
  * @self: a `GtkStackPage`
  *
  * Returns whether the page is marked as “needs attention”.
@@ -3044,7 +2886,7 @@ gtk_stack_page_get_needs_attention (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_page_set_needs_attention:
+ * gtk_stack_page_set_needs_attention: (attributes org.gtk.Method.set_property=needs-attention)
  * @self: a `GtkStackPage`
  * @setting: the new value to set
  *
@@ -3064,7 +2906,7 @@ gtk_stack_page_set_needs_attention (GtkStackPage *self,
 }
 
 /**
- * gtk_stack_page_get_use_underline:
+ * gtk_stack_page_get_use_underline: (attributes org.gtk.Method.get_property=use-underline)
  * @self: a `GtkStackPage`
  *
  * Gets whether underlines in the page title indicate mnemonics.
@@ -3078,7 +2920,7 @@ gtk_stack_page_get_use_underline (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_page_set_use_underline:
+ * gtk_stack_page_set_use_underline: (attributes org.gtk.Method.set_property=use-underline)
  * @self: a `GtkStackPage`
  * @setting: the new value to set
  *
@@ -3099,7 +2941,7 @@ gtk_stack_page_set_use_underline (GtkStackPage *self,
 
 
 /**
- * gtk_stack_page_get_name:
+ * gtk_stack_page_get_name: (attributes org.gtk.Method.get_property=name)
  * @self: a `GtkStackPage`
  *
  * Returns the name of the page.
@@ -3115,7 +2957,7 @@ gtk_stack_page_get_name (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_page_set_name:
+ * gtk_stack_page_set_name: (attributes org.gtk.Method.set_property=name)
  * @self: a `GtkStackPage`
  * @setting: (transfer none): the new value to set
  *
@@ -3166,7 +3008,7 @@ gtk_stack_page_set_name (GtkStackPage *self,
 }
 
 /**
- * gtk_stack_page_get_title:
+ * gtk_stack_page_get_title: (attributes org.gtk.Method.get_property=title)
  * @self: a `GtkStackPage`
  *
  * Gets the page title.
@@ -3182,7 +3024,7 @@ gtk_stack_page_get_title (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_page_set_title:
+ * gtk_stack_page_set_title: (attributes org.gtk.Method.set_property=title)
  * @self: a `GtkStackPage`
  * @setting: (transfer none): the new value to set
  *
@@ -3207,7 +3049,7 @@ gtk_stack_page_set_title (GtkStackPage *self,
 }
 
 /**
- * gtk_stack_page_get_icon_name:
+ * gtk_stack_page_get_icon_name: (attributes org.gtk.Method.get_property=icon-name)
  * @self: a `GtkStackPage`
  *
  * Returns the icon name of the page.
@@ -3223,7 +3065,7 @@ gtk_stack_page_get_icon_name (GtkStackPage *self)
 }
 
 /**
- * gtk_stack_page_set_icon_name:
+ * gtk_stack_page_set_icon_name: (attributes org.gtk.Method.set_property=icon-name)
  * @self: a `GtkStackPage`
  * @setting: (transfer none): the new value to set
  *

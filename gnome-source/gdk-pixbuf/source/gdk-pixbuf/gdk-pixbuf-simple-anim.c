@@ -32,8 +32,6 @@
 #include "gdk-pixbuf-private.h"
 #include "gdk-pixbuf-simple-anim.h"
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 struct _GdkPixbufSimpleAnimClass
 {
         GdkPixbufAnimationClass parent_class;
@@ -157,8 +155,6 @@ gdk_pixbuf_simple_anim_class_init (GdkPixbufSimpleAnimClass *klass)
          * Whether the animation should loop when it reaches the end.
          *
          * Since: 2.18
-         *
-         * Deprecated: 2.44: Use a different image loading library for animatable assets
          */
         g_object_class_install_property (object_class,
                                          PROP_LOOP,
@@ -425,8 +421,6 @@ on_currently_loading_frame (GdkPixbufAnimationIter *anim_iter)
  * Returns: a newly allocated #GdkPixbufSimpleAnim 
  *
  * Since: 2.8
- *
- * Deprecated: 2.44: Use a different image loading library for animatable assets
  */
 GdkPixbufSimpleAnim *
 gdk_pixbuf_simple_anim_new (gint   width, 
@@ -453,8 +447,6 @@ gdk_pixbuf_simple_anim_new (gint   width,
  * was constructed.
  *
  * Since: 2.8
- *
- * Deprecated: 2.44: Use a different image loading library for animatable assets
  */
 void
 gdk_pixbuf_simple_anim_add_frame (GdkPixbufSimpleAnim *animation,
@@ -523,8 +515,6 @@ gdk_pixbuf_simple_anim_set_property (GObject         *object,
  * Sets whether @animation should loop indefinitely when it reaches the end.
  *
  * Since: 2.18
- *
- * Deprecated: 2.44: Use a different image loading library for animatable assets
  **/
 void
 gdk_pixbuf_simple_anim_set_loop (GdkPixbufSimpleAnim *animation,
@@ -547,8 +537,6 @@ gdk_pixbuf_simple_anim_set_loop (GdkPixbufSimpleAnim *animation,
  * Returns: %TRUE if the animation loops forever, %FALSE otherwise
  *
  * Since: 2.18
- *
- * Deprecated: 2.44: Use a different image loading library for animatable assets
  **/
 gboolean
 gdk_pixbuf_simple_anim_get_loop (GdkPixbufSimpleAnim *animation)

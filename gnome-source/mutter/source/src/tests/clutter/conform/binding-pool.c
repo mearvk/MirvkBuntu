@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include <clutter/clutter.h>
-#include <clutter/clutter-mutter.h>
 
 #include "tests/clutter-test-utils.h"
 
@@ -18,11 +17,7 @@ struct _KeyGroup
 {
   ClutterActor parent_instance;
 
-  ClutterVirtualInputDevice *keyboard;
-
   gint selected_index;
-  gint serial;
-  gint activation_count;
 };
 
 struct _KeyGroupClass
@@ -46,15 +41,6 @@ enum
 
 static guint group_signals[LAST_SIGNAL] = { 0, };
 
-static void
-wait_for_event (KeyGroup *group)
-{
-  int serial = group->serial;
-
-  while (group->serial == serial)
-    g_main_context_iteration (NULL, FALSE);
-}
-
 static gboolean
 key_group_action_move_left (KeyGroup            *self,
                             const gchar         *action_name,
@@ -72,9 +58,6 @@ key_group_action_move_left (KeyGroup            *self,
 
   if (self->selected_index < 0)
     self->selected_index = n_children - 1;
-
-  clutter_actor_queue_redraw (CLUTTER_ACTOR (self));
-  self->serial++;
 
   return TRUE;
 }
@@ -97,9 +80,6 @@ key_group_action_move_right (KeyGroup            *self,
   if (self->selected_index >= n_children)
     self->selected_index = 0;
 
-  clutter_actor_queue_redraw (CLUTTER_ACTOR (self));
-  self->serial++;
-
   return TRUE;
 }
 
@@ -112,9 +92,9 @@ key_group_action_activate (KeyGroup            *self,
   ClutterActor *child = NULL;
 
   g_assert_cmpstr (action_name, ==, "activate");
-  g_assert_true (key_val == CLUTTER_KEY_Return ||
-                 key_val == CLUTTER_KEY_KP_Enter ||
-                 key_val == CLUTTER_KEY_ISO_Enter);
+  g_assert (key_val == CLUTTER_KEY_Return ||
+            key_val == CLUTTER_KEY_KP_Enter ||
+            key_val == CLUTTER_KEY_ISO_Enter);
 
   if (self->selected_index == -1)
     return FALSE;
@@ -123,12 +103,32 @@ key_group_action_activate (KeyGroup            *self,
   if (child != NULL)
     {
       g_signal_emit (self, group_signals[ACTIVATE], 0, child);
-      clutter_actor_queue_redraw (CLUTTER_ACTOR (self));
-      self->serial++;
       return TRUE;
     }
   else
     return FALSE;
+}
+
+static gboolean
+key_group_key_press (ClutterActor *actor,
+                     ClutterEvent *event)
+{
+  ClutterBindingPool *pool;
+  gboolean res;
+
+  pool = clutter_binding_pool_find (G_OBJECT_TYPE_NAME (actor));
+  g_assert (pool != NULL);
+
+  res = clutter_binding_pool_activate (pool,
+                                       clutter_event_get_key_symbol (event),
+                                       clutter_event_get_state (event),
+                                       G_OBJECT (actor));
+
+  /* if we activate a key binding, redraw the actor */
+  if (res)
+    clutter_actor_queue_redraw (actor);
+
+  return res;
 }
 
 static void
@@ -137,7 +137,7 @@ key_group_paint (ClutterActor        *actor,
 {
   KeyGroup *self = KEY_GROUP (actor);
   CoglContext *ctx =
-    clutter_backend_get_cogl_context (clutter_test_get_backend ());
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
   ClutterActorIter iter;
   ClutterActor *child;
   CoglPipeline *pipeline;
@@ -146,7 +146,7 @@ key_group_paint (ClutterActor        *actor,
   gint i = 0;
 
   pipeline = cogl_pipeline_new (ctx);
-  cogl_color_init_from_4f (&color, 1.0f, 1.0f, 0.0f, 224.0f / 255.0f );
+  cogl_color_init_from_4f (&color, 1.0, 1.0, 0.0, 224. / 255. );
   cogl_pipeline_set_color (pipeline, &color);
 
   framebuffer = clutter_paint_context_get_framebuffer (paint_context);
@@ -177,25 +177,14 @@ key_group_paint (ClutterActor        *actor,
 }
 
 static void
-key_group_finalize (GObject *object)
-{
-  KeyGroup *key_group = KEY_GROUP (object);
-
-  g_clear_object (&key_group->keyboard);
-
-  G_OBJECT_CLASS (key_group_parent_class)->finalize (object);
-}
-
-static void
 key_group_class_init (KeyGroupClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   ClutterActorClass *actor_class = CLUTTER_ACTOR_CLASS (klass);
   ClutterBindingPool *binding_pool;
 
-  gobject_class->finalize = key_group_finalize;
-
   actor_class->paint = key_group_paint;
+  actor_class->key_press_event = key_group_key_press;
 
   group_signals[ACTIVATE] =
     g_signal_new (g_intern_static_string ("activate"),
@@ -221,32 +210,40 @@ key_group_class_init (KeyGroupClass *klass)
                                        CLUTTER_KEY_Return, 0,
                                        G_CALLBACK (key_group_action_activate),
                                        NULL, NULL);
+  clutter_binding_pool_install_action (binding_pool, "activate",
+                                       CLUTTER_KEY_KP_Enter, 0,
+                                       G_CALLBACK (key_group_action_activate),
+                                       NULL, NULL);
+  clutter_binding_pool_install_action (binding_pool, "activate",
+                                       CLUTTER_KEY_ISO_Enter, 0,
+                                       G_CALLBACK (key_group_action_activate),
+                                       NULL, NULL);
 }
 
 static void
 key_group_init (KeyGroup *self)
 {
-  ClutterSeat *seat;
-
   self->selected_index = -1;
-
-  seat = clutter_test_get_default_seat ();
-  self->keyboard = clutter_seat_create_virtual_device (seat, CLUTTER_KEYBOARD_DEVICE);
 }
 
 static void
 send_keyval (KeyGroup *group, int keyval)
 {
-  clutter_virtual_input_device_notify_keyval (group->keyboard,
-                                              g_get_monotonic_time (),
-                                              keyval,
-                                              CLUTTER_KEY_STATE_PRESSED);
-  clutter_virtual_input_device_notify_keyval (group->keyboard,
-                                              g_get_monotonic_time (),
-                                              keyval,
-                                              CLUTTER_KEY_STATE_RELEASED);
+  ClutterSeat *seat;
+  ClutterEvent *event;
 
-  wait_for_event (group);
+  seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
+  event = clutter_event_key_new (CLUTTER_KEY_PRESS,
+                                 CLUTTER_EVENT_FLAG_SYNTHETIC,
+                                 CLUTTER_CURRENT_TIME,
+                                 clutter_seat_get_keyboard (seat),
+                                 (ClutterModifierSet) { 0, },
+                                 0,
+                                 keyval,
+                                 0, 0, 0);
+
+  clutter_actor_event (CLUTTER_ACTOR (group), event, FALSE);
+  clutter_event_free (event);
 }
 
 static void
@@ -257,17 +254,12 @@ on_activate (KeyGroup     *key_group,
   gint _index = GPOINTER_TO_INT (data);
 
   g_assert_cmpint (key_group->selected_index, ==, _index);
-
-  key_group->activation_count++;
 }
 
 static void
 binding_pool (void)
 {
-  ClutterActor *stage;
-  KeyGroup *key_group;
-
-  key_group = g_object_new (TYPE_KEY_GROUP, NULL);
+  KeyGroup *key_group = g_object_new (TYPE_KEY_GROUP, NULL);
   g_object_ref_sink (key_group);
 
   clutter_actor_add_child (CLUTTER_ACTOR (key_group),
@@ -289,11 +281,6 @@ binding_pool (void)
                                          "x", 150.0, "y", 0.0,
                                          NULL));
 
-  stage = clutter_test_get_stage ();
-  clutter_actor_add_child (stage, CLUTTER_ACTOR (key_group));
-  clutter_actor_set_reactive (CLUTTER_ACTOR (key_group), TRUE);
-  clutter_actor_grab_key_focus (CLUTTER_ACTOR (key_group));
-
   g_assert_cmpint (key_group->selected_index, ==, -1);
 
   send_keyval (key_group, CLUTTER_KEY_Left);
@@ -312,16 +299,9 @@ binding_pool (void)
                     "activate", G_CALLBACK (on_activate),
                     GINT_TO_POINTER (0));
 
-  g_assert_cmpint (key_group->activation_count, ==, 0);
-
   send_keyval (key_group, CLUTTER_KEY_Return);
-  g_assert_cmpint (key_group->activation_count, ==, 1);
-
-  send_keyval (key_group, CLUTTER_KEY_KP_Enter);
-  g_assert_cmpint (key_group->activation_count, ==, 2);
 
   clutter_actor_destroy (CLUTTER_ACTOR (key_group));
-  g_object_unref (key_group);
 }
 
 CLUTTER_TEST_SUITE (

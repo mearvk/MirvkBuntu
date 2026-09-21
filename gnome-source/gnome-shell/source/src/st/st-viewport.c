@@ -36,9 +36,8 @@
  */
 
 /**
- * StViewport:
- *
- * Scrollable container
+ * SECTION:st-viewport
+ * @short_description: a scrollable container
  *
  * The #StViewport is a generic #StScrollable implementation.
  *
@@ -174,15 +173,12 @@ st_viewport_scrollable_interface_init (StScrollableInterface *iface)
   iface->get_adjustments = scrollable_get_adjustments;
 }
 
-void
+static void
 st_viewport_set_clip_to_view (StViewport *viewport,
                               gboolean    clip_to_view)
 {
-  StViewportPrivate *priv;
-
-  g_return_if_fail (ST_IS_VIEWPORT (viewport));
-
-  priv = st_viewport_get_instance_private (viewport);
+  StViewportPrivate *priv =
+    st_viewport_get_instance_private (viewport);
 
   if (!!priv->clip_to_view != !!clip_to_view)
     {
@@ -190,17 +186,6 @@ st_viewport_set_clip_to_view (StViewport *viewport,
       clutter_actor_queue_redraw (CLUTTER_ACTOR (viewport));
       g_object_notify_by_pspec (G_OBJECT (viewport), props[PROP_CLIP_TO_VIEW]);
     }
-}
-
-gboolean
-st_viewport_get_clip_to_view (StViewport *viewport)
-{
-  StViewportPrivate *priv;
-
-  g_return_val_if_fail (ST_IS_VIEWPORT (viewport), FALSE);
-
-  priv = st_viewport_get_instance_private (viewport);
-  return priv->clip_to_view;
 }
 
 static void
@@ -414,32 +399,6 @@ get_border_paint_offsets (StViewport *viewport,
 
 
 static void
-st_viewport_paint_node (ClutterActor        *actor,
-                        ClutterPaintNode    *node,
-                        ClutterPaintContext *paint_context)
-{
-  StViewport *viewport = ST_VIEWPORT (actor);
-  int x, y;
-
-  get_border_paint_offsets (viewport, &x, &y);
-  if (x != 0 || y != 0)
-    {
-      g_autoptr (ClutterPaintNode) transform_node = NULL;
-      graphene_matrix_t transform;
-
-      graphene_matrix_init_translate (&transform,
-                                      &GRAPHENE_POINT3D_INIT (x, y, 0));
-
-      transform_node = clutter_transform_node_new (&transform);
-      clutter_paint_node_add_child (node, transform_node);
-
-      node = transform_node;
-    }
-
-  st_widget_paint_background (ST_WIDGET (actor), node, paint_context);
-}
-
-static void
 st_viewport_paint (ClutterActor        *actor,
                    ClutterPaintContext *paint_context)
 {
@@ -452,13 +411,23 @@ st_viewport_paint (ClutterActor        *actor,
   ClutterActor *child;
   CoglFramebuffer *fb = clutter_paint_context_get_framebuffer (paint_context);
 
+  get_border_paint_offsets (viewport, &x, &y);
+  if (x != 0 || y != 0)
+    {
+      cogl_framebuffer_push_matrix (fb);
+      cogl_framebuffer_translate (fb, x, y, 0);
+    }
+
+  st_widget_paint_background (ST_WIDGET (actor), paint_context);
+
+  if (x != 0 || y != 0)
+    cogl_framebuffer_pop_matrix (fb);
+
   if (clutter_actor_get_n_children (actor) == 0)
     return;
 
   clutter_actor_get_allocation_box (actor, &allocation_box);
   st_theme_node_get_content_box (theme_node, &allocation_box, &content_box);
-
-  get_border_paint_offsets (viewport, &x, &y);
 
   content_box.x1 += x;
   content_box.y1 += y;
@@ -534,28 +503,34 @@ st_viewport_get_paint_volume (ClutterActor       *actor,
   StThemeNode *theme_node = st_widget_get_theme_node (ST_WIDGET (actor));
   ClutterActorBox allocation_box;
   ClutterActorBox content_box;
-  graphene_point3d_t origin = { 0 };
   int x, y;
-  double width, height;
 
   /* Setting the paint volume does not make sense when we don't have any allocation */
   if (!clutter_actor_has_allocation (actor))
     return FALSE;
 
-  if (!priv->clip_to_view || !(priv->hadjustment || priv->vadjustment))
+  if (!priv->clip_to_view)
     return CLUTTER_ACTOR_CLASS (st_viewport_parent_class)->get_paint_volume (actor, volume);
 
   /* When have an adjustment we are clipped to the content box, so base
    * our paint volume on that. */
+  if (priv->hadjustment || priv->vadjustment)
+    {
+      double width, height;
 
-  clutter_actor_get_allocation_box (actor, &allocation_box);
-  st_theme_node_get_content_box (theme_node, &allocation_box, &content_box);
+      clutter_actor_get_allocation_box (actor, &allocation_box);
+      st_theme_node_get_content_box (theme_node, &allocation_box, &content_box);
 
-  width = content_box.x2 - content_box.x1;
-  height = content_box.y2 - content_box.y1;
+      width = content_box.x2 - content_box.x1;
+      height = content_box.y2 - content_box.y1;
 
-  clutter_paint_volume_set_width (volume, width);
-  clutter_paint_volume_set_height (volume, height);
+      clutter_paint_volume_set_width (volume, width);
+      clutter_paint_volume_set_height (volume, height);
+    }
+  else if (!CLUTTER_ACTOR_CLASS (st_viewport_parent_class)->get_paint_volume (actor, volume))
+    {
+      return FALSE;
+    }
 
   /* When scrolled, st_viewport_apply_transform() includes the scroll offset
    * and affects paint volumes. This is right for our children, but our paint volume
@@ -563,10 +538,15 @@ st_viewport_get_paint_volume (ClutterActor       *actor,
    * to reverse-compensate here, the same as we do when painting.
    */
   get_border_paint_offsets (viewport, &x, &y);
-  origin.x = content_box.x1 + x;
-  origin.y = content_box.y1 + y;
+  if (x != 0 || y != 0)
+    {
+      graphene_point3d_t origin;
 
-  clutter_paint_volume_set_origin (volume, &origin);
+      clutter_paint_volume_get_origin (volume, &origin);
+      origin.x += x;
+      origin.y += y;
+      clutter_paint_volume_set_origin (volume, &origin);
+    }
 
   return TRUE;
 }
@@ -584,13 +564,14 @@ st_viewport_class_init (StViewportClass *klass)
   actor_class->allocate = st_viewport_allocate;
   actor_class->apply_transform = st_viewport_apply_transform;
 
-  actor_class->paint_node = st_viewport_paint_node;
   actor_class->paint = st_viewport_paint;
   actor_class->get_paint_volume = st_viewport_get_paint_volume;
   actor_class->pick = st_viewport_pick;
 
   props[PROP_CLIP_TO_VIEW] =
-    g_param_spec_boolean ("clip-to-view", NULL, NULL,
+    g_param_spec_boolean ("clip-to-view",
+                          "Clip to view",
+                          "Clip to view",
                           TRUE,
                           ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 

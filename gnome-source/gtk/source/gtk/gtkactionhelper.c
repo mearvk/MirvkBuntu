@@ -348,13 +348,13 @@ gtk_action_helper_class_init (GtkActionHelperClass *class)
   class->finalize = gtk_action_helper_finalize;
 
   gtk_action_helper_pspecs[PROP_ENABLED] = g_param_spec_boolean ("enabled", NULL, NULL, FALSE,
-                                                                 G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                                                                 G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   gtk_action_helper_pspecs[PROP_ACTIVE] = g_param_spec_boolean ("active", NULL, NULL, FALSE,
-                                                                G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                                                                G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   gtk_action_helper_pspecs[PROP_ROLE] = g_param_spec_enum ("role", NULL, NULL,
                                                            GTK_TYPE_BUTTON_ROLE,
                                                            GTK_BUTTON_ROLE_NORMAL,
-                                                           G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                                                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (class, N_PROPS, gtk_action_helper_pspecs);
 }
 
@@ -443,12 +443,13 @@ gtk_action_helper_set_action_name (GtkActionHelper *helper,
     {
       helper->action_name = g_strdup (action_name);
 
-      if (gtk_action_observable_subscribe (GTK_ACTION_OBSERVABLE (helper->action_context),
-                                           helper->action_name,
-                                           GTK_ACTION_OBSERVER (helper),
-                                           &enabled,
-                                           &parameter_type,
-                                           &state))
+      gtk_action_observable_register_observer (GTK_ACTION_OBSERVABLE (helper->action_context),
+                                               helper->action_name,
+                                               GTK_ACTION_OBSERVER (helper));
+
+      if (gtk_action_muxer_query_action (helper->action_context, helper->action_name,
+                                         &enabled, &parameter_type,
+                                         NULL, NULL, &state))
         {
           GTK_DEBUG (ACTIONS, "%s: action %s existed from the start", "actionhelper", helper->action_name);
 
@@ -475,7 +476,6 @@ gtk_action_helper_set_action_name (GtkActionHelper *helper,
   if (helper->active != was_active)
     gtk_action_helper_report_change (helper, PROP_ACTIVE);
 
-  /* gobject-linter-ignore-next-line: use_g_object_notify_by_pspec */
   g_object_notify (G_OBJECT (helper->widget), "action-name");
 }
 
@@ -502,7 +502,11 @@ gtk_action_helper_set_action_target_value (GtkActionHelper *helper,
       return;
     }
 
-  g_clear_pointer (&helper->target, g_variant_unref);
+  if (helper->target)
+    {
+      g_variant_unref (helper->target);
+      helper->target = NULL;
+    }
 
   if (target_value)
     helper->target = g_variant_ref_sink (target_value);
@@ -548,7 +552,6 @@ gtk_action_helper_set_action_target_value (GtkActionHelper *helper,
   if (helper->active != was_active)
     gtk_action_helper_report_change (helper, PROP_ACTIVE);
 
-  /* gobject-linter-ignore-next-line: use_g_object_notify_by_pspec */
   g_object_notify (G_OBJECT (helper->widget), "action-target");
 }
 
@@ -606,3 +609,4 @@ gtk_action_helper_get_role (GtkActionHelper *helper)
 
   return helper->role;
 }
+

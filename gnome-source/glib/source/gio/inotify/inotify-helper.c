@@ -4,8 +4,6 @@
 
    Copyright (C) 2007 John McCutchan
 
-   SPDX-License-Identifier: LGPL-2.1-or-later
-
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
    License as published by the Free Software Foundation; either
@@ -260,7 +258,7 @@ ih_not_missing_callback (inotify_sub *sub)
 static GFileMonitorEvent
 ih_mask_to_EventFlags (guint32 mask)
 {
-  mask &= (guint32) ~IN_ISDIR;
+  mask &= ~IN_ISDIR;
   switch (mask)
     {
     case IN_MODIFY:
@@ -287,6 +285,6 @@ ih_mask_to_EventFlags (guint32 mask)
     case IN_ACCESS:
     case IN_IGNORED:
     default:
-      return (GFileMonitorEvent) -1;
+      return -1;
     }
 }

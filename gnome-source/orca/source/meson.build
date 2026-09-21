@@ -1,5 +1,5 @@
 project('orca',
-  version: '51.1',
+  version: '50.2',
   meson_version: '>= 1.0.0',
 )
 
@@ -14,25 +14,9 @@ if not python3.language_version().version_compare(f'>= @python_minimum_version@'
 endif
 
 # Hard dependencies (checked via pkg-config)
-dependency('atspi-2', version: '>= 2.58.6')
-dependency('atk-bridge-2.0', version: '>= 2.58.6')
+dependency('atspi-2', version: '>= 2.56.0')
+dependency('atk-bridge-2.0', version: '>= 2.56.0')
 dependency('pygobject-3.0', version: '>= 3.18')
-
-# Verify the AT-SPI Python overrides are installed. See at-spi2-core#172.
-libdir = python3.get_path('purelib').replace(python3.get_path('data'), get_option('prefix'))
-atspi_override_command = ' '.join([
-  'import sys;',
-  'sys.path.insert(1, "' + libdir + '");',
-  'import gi;',
-  'gi.require_version("Atspi", "2.0");',
-  'from gi.repository import Atspi;',
-  'sys.exit(0 if Atspi.Accessible.__hash__.__module__ == "gi.overrides.Atspi" else 1)',
-])
-atspi_override_test = run_command(python3, '-c', atspi_override_command, check: false)
-if atspi_override_test.returncode() != 0
-  error('AT-SPI Python overrides (gi/overrides/Atspi.py) are not installed. '
-        + 'Rebuild at-spi2-core with Python available at configure time.')
-endif
 
 # Hard Python module dependencies
 dasbus_result = python.find_installation('python3', modules:['dasbus'], required: false)
@@ -59,7 +43,6 @@ endif
 
 # Optional python modules with their descriptions
 optional_modules = {
-  'babel': 'language display names',
   'brlapi': 'braille output',
   'louis': 'contracted braille',
   'psutil': 'system information commands',
@@ -75,20 +58,6 @@ foreach module, description : optional_modules
     summary += {description: f'no (missing @module@)'}
   endif
 endforeach
-
-# MathCAT support for presentation of math in speech and braille
-mathcat_rules_dir = ''
-if get_option('mathcat')
-  cargo = find_program('cargo', required: false)
-  if not cargo.found()
-    error('MathML support comes from MathCAT. Install cargo or run setup with -Dmathcat=false.')
-  endif
-  subproject('mathcat-py')
-  mathcat_rules_dir = get_option('prefix') / get_option('datadir') / 'mathcat' / 'Rules'
-  summary += {'mathcat': 'yes (found cargo, building MathCATForPython)'}
-else
-  summary += {'mathcat': 'no (disabled)'}
-endif
 
 # Optional synthesizer services
 speech_output = []

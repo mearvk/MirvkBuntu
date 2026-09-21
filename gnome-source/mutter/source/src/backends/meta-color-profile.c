@@ -26,7 +26,6 @@
 #include <gio/gio.h>
 
 #include "backends/meta-color-manager-private.h"
-#include "mtk/mtk.h"
 
 enum
 {
@@ -116,13 +115,13 @@ meta_color_profile_finalize (GObject *object)
 
   g_cancellable_cancel (color_profile->cancellable);
   g_clear_object (&color_profile->cancellable);
-  g_clear_handle_id (&color_profile->notify_ready_id, mtk_source_remove);
+  g_clear_handle_id (&color_profile->notify_ready_id, g_source_remove);
 
   if (color_profile->is_owner)
     {
-      g_autoptr (CdProfile) cd_profile = NULL;
+      CdProfile *cd_profile;
 
-      cd_profile = g_steal_pointer (&color_profile->cd_profile);
+      cd_profile = color_profile->cd_profile;
       if (!cd_profile && !color_profile->is_ready)
         {
           g_autoptr (GError) error = NULL;
@@ -307,7 +306,7 @@ meta_color_profile_new_from_icc (MetaColorManager     *color_manager,
   return color_profile;
 }
 
-static void
+static gboolean
 notify_ready_idle (gpointer user_data)
 {
   MetaColorProfile *color_profile = user_data;
@@ -315,6 +314,8 @@ notify_ready_idle (gpointer user_data)
   color_profile->notify_ready_id = 0;
   color_profile->is_ready = TRUE;
   g_signal_emit (color_profile, signals[READY], 0, TRUE);
+
+  return G_SOURCE_REMOVE;
 }
 
 MetaColorProfile *
@@ -340,12 +341,29 @@ meta_color_profile_new_from_cd_profile (MetaColorManager     *color_manager,
   color_profile->cd_profile_id = g_strdup_printf ("icc-%s", checksum);
   color_profile->cd_profile = g_object_ref (cd_profile);
 
-  color_profile->notify_ready_id = mtk_idle_add_once (notify_ready_idle,
-                                                      color_profile);
-  mtk_source_set_name_by_id (color_profile->notify_ready_id,
-                             "[mutter] notify_ready_idle [color profile]");
+  color_profile->notify_ready_id = g_idle_add (notify_ready_idle,
+                                               color_profile);
 
   return color_profile;
+}
+
+gboolean
+meta_color_profile_equals_bytes (MetaColorProfile *color_profile,
+                                 GBytes           *bytes)
+{
+  return g_bytes_equal (color_profile->bytes, bytes);
+}
+
+const uint8_t *
+meta_color_profile_get_data (MetaColorProfile *color_profile)
+{
+  return g_bytes_get_data (color_profile->bytes, NULL);
+}
+
+size_t
+meta_color_profile_get_data_size (MetaColorProfile *color_profile)
+{
+  return g_bytes_get_size (color_profile->bytes);
 }
 
 CdIcc *
@@ -433,16 +451,16 @@ generate_gamma_lut_from_vcgt (MetaColorProfile  *color_profile,
     {
       cmsFloat32Number in;
 
-      in = (cmsFloat32Number) ((double) i / (double) (lut_size - 1));
+      in = (double) i / (double) (lut_size - 1);
       lut->red[i] =
-        (uint16_t) (cmsEvalToneCurveFloat (vcgt[0], in) *
-                    blackbody_color.R * (double) 0xffff);
+        cmsEvalToneCurveFloat (vcgt[0], in) *
+        blackbody_color.R * (double) 0xffff;
       lut->green[i] =
-        (uint16_t) (cmsEvalToneCurveFloat (vcgt[1], in) *
-                    blackbody_color.G * (double) 0xffff);
+        cmsEvalToneCurveFloat (vcgt[1], in) *
+        blackbody_color.G * (double) 0xffff;
       lut->blue[i] =
-        (uint16_t) (cmsEvalToneCurveFloat (vcgt[2], in) *
-                    blackbody_color.B * (gdouble) 0xffff);
+        cmsEvalToneCurveFloat (vcgt[2], in) *
+        blackbody_color.B * (gdouble) 0xffff;
     }
 
   return lut;
@@ -474,9 +492,9 @@ generate_gamma_lut (MetaColorProfile *color_profile,
       uint16_t in;
 
       in = (i * 0xffff) / (lut->size - 1);
-      lut->red[i] = (uint16_t) (in * blackbody_color.R);
-      lut->green[i] = (uint16_t) (in * blackbody_color.G);
-      lut->blue[i] = (uint16_t) (in * blackbody_color.B);
+      lut->red[i] = in * blackbody_color.R;
+      lut->green[i] = in * blackbody_color.G;
+      lut->blue[i] = in * blackbody_color.B;
     }
 
   return lut;
@@ -489,32 +507,16 @@ meta_color_profile_generate_gamma_lut (MetaColorProfile *color_profile,
 {
   g_assert (lut_size > 0);
 
-  if (color_profile && color_profile->calibration->has_vcgt)
+  if (color_profile->calibration->has_vcgt)
     {
       return generate_gamma_lut_from_vcgt (color_profile,
                                            color_profile->calibration->vcgt,
                                            temperature, lut_size);
     }
-
-  /* Uncalibrated temperature ramp; @color_profile may be NULL. */
-  return generate_gamma_lut (color_profile, temperature, lut_size);
-}
-
-void
-meta_color_get_temperature_rgb_scales (unsigned int  temperature,
-                                       float        *out_red,
-                                       float        *out_green,
-                                       float        *out_blue)
-{
-  CdColorRGB blackbody_color;
-
-  g_return_if_fail (out_red && out_green && out_blue);
-
-  set_blackbody_color_for_temperature (&blackbody_color, temperature);
-
-  *out_red = (float) blackbody_color.R;
-  *out_green = (float) blackbody_color.G;
-  *out_blue = (float) blackbody_color.B;
+  else
+    {
+      return generate_gamma_lut (color_profile, temperature, lut_size);
+    }
 }
 
 const MetaColorCalibration *

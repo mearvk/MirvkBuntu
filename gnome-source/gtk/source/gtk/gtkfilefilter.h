@@ -34,7 +34,7 @@ G_BEGIN_DECLS
 typedef struct _GtkFileFilter     GtkFileFilter;
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_file_filter_get_type           (void);
+GType           gtk_file_filter_get_type           (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkFileFilter * gtk_file_filter_new                (void);
@@ -48,10 +48,6 @@ GDK_AVAILABLE_IN_ALL
 void            gtk_file_filter_add_mime_type      (GtkFileFilter *filter,
                                                     const char    *mime_type);
 
-GDK_AVAILABLE_IN_4_22
-void            gtk_file_filter_add_mime_types (GtkFileFilter  *filter,
-                                                const char    **mime_types);
-
 GDK_AVAILABLE_IN_ALL
 void            gtk_file_filter_add_pattern        (GtkFileFilter *filter,
                                                     const char    *pattern);
@@ -60,7 +56,7 @@ GDK_AVAILABLE_IN_4_4
 void            gtk_file_filter_add_suffix         (GtkFileFilter *filter,
                                                     const char    *suffix);
 
-GDK_DEPRECATED_IN_4_20
+GDK_AVAILABLE_IN_ALL
 void            gtk_file_filter_add_pixbuf_formats (GtkFileFilter *filter);
 
 GDK_AVAILABLE_IN_ALL

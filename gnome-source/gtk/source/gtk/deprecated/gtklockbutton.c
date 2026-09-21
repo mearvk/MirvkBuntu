@@ -36,10 +36,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * `GtkLockButton` is a widget to obtain and revoke authorizations
  * needed to operate the controls.
  *
- * <picture>
- *   <source srcset="lockbutton-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkLockButton" src="lockbutton.png">
- * </picture>
+ * ![An example GtkLockButton](lock-button.png)
  *
  * It is typically used in preference dialogs or control panels.
  *
@@ -51,28 +48,19 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * If the user is not currently allowed to perform the action, but can
  * obtain the permission, the widget looks like this:
  *
- * <picture>
- *   <source srcset="lockbutton-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An locked GtkLockButton" src="lockbutton.png">
- * </picture>
+ * ![](lockbutton-locked.png)
  *
  * and the user can click the button to request the permission. Depending
  * on the platform, this may pop up an authentication dialog or ask the user
  * to authenticate in some other way. Once the user has obtained the permission,
  * the widget changes to this:
  *
- * <picture>
- *   <source srcset="lockbutton-unlocked-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An unlocked GtkLockButton" src="lockbutton-unlocked.png">
- * </picture>
+ * ![](lockbutton-unlocked.png)
  *
  * and the permission can be dropped again by clicking the button. If the user
  * is not able to obtain the permission at all, the widget looks like this:
  *
- * <picture>
- *   <source srcset="lockbutton-sorry-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An unobtainable GtkLockButton" src="lockbutton-sorry.png">
- * </picture>
+ * ![](lockbutton-sorry.png)
  *
  * If the user has the permission and cannot drop it, the button is hidden.
  *
@@ -120,11 +108,8 @@ enum
   PROP_TEXT_UNLOCK,
   PROP_TOOLTIP_LOCK,
   PROP_TOOLTIP_UNLOCK,
-  PROP_TOOLTIP_NOT_AUTHORIZED,
-  N_PROPS
+  PROP_TOOLTIP_NOT_AUTHORIZED
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void update_state (GtkLockButton *button);
 static void gtk_lock_button_clicked (GtkButton *button);
@@ -285,16 +270,17 @@ gtk_lock_button_class_init (GtkLockButtonClass *klass)
   button_class->clicked = gtk_lock_button_clicked;
 
   /**
-   * GtkLockButton:permission:
+   * GtkLockButton:permission: (attributes org.gtk.Property.get=gtk_lock_button_get_permission org.gtk.Property.set=gtk_lock_button_set_permission)
    *
    * The `GPermission object controlling this button.
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_PERMISSION] = g_param_spec_object ("permission", NULL, NULL,
-                                                G_TYPE_PERMISSION,
-                                                G_PARAM_READWRITE |
-                                                G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class, PROP_PERMISSION,
+    g_param_spec_object ("permission", NULL, NULL,
+                         G_TYPE_PERMISSION,
+                         G_PARAM_READWRITE |
+                         G_PARAM_STATIC_STRINGS));
 
   /**
    * GtkLockButton:text-lock:
@@ -303,11 +289,12 @@ gtk_lock_button_class_init (GtkLockButtonClass *klass)
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_TEXT_LOCK] = g_param_spec_string ("text-lock", NULL, NULL,
-                                               _("Lock"),
-                                               G_PARAM_READWRITE |
-                                               G_PARAM_CONSTRUCT |
-                                               G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class, PROP_TEXT_LOCK,
+    g_param_spec_string ("text-lock", NULL, NULL,
+                         _("Lock"),
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT |
+                         G_PARAM_STATIC_STRINGS));
 
   /**
    * GtkLockButton:text-unlock:
@@ -316,11 +303,12 @@ gtk_lock_button_class_init (GtkLockButtonClass *klass)
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_TEXT_UNLOCK] = g_param_spec_string ("text-unlock", NULL, NULL,
-                                                 _("Unlock"),
-                                                 G_PARAM_READWRITE |
-                                                 G_PARAM_CONSTRUCT |
-                                                 G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class, PROP_TEXT_UNLOCK,
+    g_param_spec_string ("text-unlock", NULL, NULL,
+                         _("Unlock"),
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT |
+                         G_PARAM_STATIC_STRINGS));
 
   /**
    * GtkLockButton:tooltip-lock:
@@ -329,11 +317,12 @@ gtk_lock_button_class_init (GtkLockButtonClass *klass)
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_TOOLTIP_LOCK] = g_param_spec_string ("tooltip-lock", NULL, NULL,
-                                                  _("Dialog is unlocked.\nClick to prevent further changes"),
-                                                  G_PARAM_READWRITE |
-                                                  G_PARAM_CONSTRUCT |
-                                                  G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class, PROP_TOOLTIP_LOCK,
+    g_param_spec_string ("tooltip-lock", NULL, NULL,
+                         _("Dialog is unlocked.\nClick to prevent further changes"),
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT |
+                         G_PARAM_STATIC_STRINGS));
 
   /**
    * GtkLockButton:tooltip-unlock:
@@ -342,11 +331,12 @@ gtk_lock_button_class_init (GtkLockButtonClass *klass)
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_TOOLTIP_UNLOCK] = g_param_spec_string ("tooltip-unlock", NULL, NULL,
-                                                    _("Dialog is locked.\nClick to make changes"),
-                                                    G_PARAM_READWRITE |
-                                                    G_PARAM_CONSTRUCT |
-                                                    G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class, PROP_TOOLTIP_UNLOCK,
+    g_param_spec_string ("tooltip-unlock", NULL, NULL,
+                         _("Dialog is locked.\nClick to make changes"),
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT |
+                         G_PARAM_STATIC_STRINGS));
 
   /**
    * GtkLockButton:tooltip-not-authorized:
@@ -355,13 +345,12 @@ gtk_lock_button_class_init (GtkLockButtonClass *klass)
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_TOOLTIP_NOT_AUTHORIZED] = g_param_spec_string ("tooltip-not-authorized", NULL, NULL,
-                                                            _("System policy prevents changes.\nContact your system administrator"),
-                                                            G_PARAM_READWRITE |
-                                                            G_PARAM_CONSTRUCT |
-                                                            G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class, PROP_TOOLTIP_NOT_AUTHORIZED,
+    g_param_spec_string ("tooltip-not-authorized", NULL, NULL,
+                         _("System policy prevents changes.\nContact your system administrator"),
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT |
+                         G_PARAM_STATIC_STRINGS));
 
   /* Bind class to template
    */
@@ -465,7 +454,8 @@ acquire_cb (GObject      *source,
       g_error_free (error);
     }
 
-  g_clear_object (&button->cancellable);
+  g_object_unref (button->cancellable);
+  button->cancellable = NULL;
 
   update_state (button);
 }
@@ -485,7 +475,8 @@ release_cb (GObject      *source,
       g_error_free (error);
     }
 
-  g_clear_object (&button->cancellable);
+  g_object_unref (button->cancellable);
+  button->cancellable = NULL;
 
   update_state (button);
 }
@@ -546,7 +537,7 @@ gtk_lock_button_new (GPermission *permission)
 }
 
 /**
- * gtk_lock_button_get_permission:
+ * gtk_lock_button_get_permission: (attributes org.gtk.Method.get_property=permission)
  * @button: a `GtkLockButton`
  *
  * Obtains the `GPermission` object that controls @button.
@@ -564,7 +555,7 @@ gtk_lock_button_get_permission (GtkLockButton *button)
 }
 
 /**
- * gtk_lock_button_set_permission:
+ * gtk_lock_button_set_permission: (attributes org.gtk.Method.set_property=permission)
  * @button: a `GtkLockButton`
  * @permission: (nullable): a `GPermission` object
  *
@@ -600,7 +591,7 @@ gtk_lock_button_set_permission (GtkLockButton *button,
 
       update_state (button);
 
-      g_object_notify_by_pspec (G_OBJECT (button), props[PROP_PERMISSION]);
+      g_object_notify (G_OBJECT (button), "permission");
     }
 }
 

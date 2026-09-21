@@ -1,17 +1,8 @@
-gio_manpages = [
-  'gapplication',
-  'gdbus-codegen',
-  'gdbus',
-  'gio-querymodules',
-  'gio',
-  'glib-compile-resources',
-  'glib-compile-schemas',
-  'gresource',
-  'gsettings',
-]
-
 if get_option('man-pages').enabled()
-  foreach page: gio_manpages
+  manpages = ['gapplication', 'gio-querymodules', 'glib-compile-schemas',
+              'glib-compile-resources', 'gsettings', 'gresource', 'gdbus',
+              'gio', 'gdbus-codegen']
+  foreach page : manpages
     custom_target(page + '-man',
       input: page + '.rst',
       output: page + '.1',
@@ -23,25 +14,6 @@ if get_option('man-pages').enabled()
       capture: true,
       install: true,
       install_dir: man1_dir,
-      install_tag: 'doc',
-    )
-  endforeach
-endif
-
-if get_option('documentation')
-  man_html_path = docs_dir / 'gio-2.0'
-
-  foreach page: gio_manpages
-    custom_target(
-      input: page + '.rst',
-      output: page + '.html',
-      command: [
-        rst2html5,
-        '@INPUT@',
-      ],
-      capture: true,
-      install: true,
-      install_dir: man_html_path,
       install_tag: 'doc',
     )
   endforeach
@@ -66,7 +38,6 @@ if get_option('documentation') and enable_gir
     'overview.md',
     'pollable-utils.md',
     'tls-overview.md',
-    'content-types.md',
   ]
   expand_content_unix_files = [
     'unix-mounts.md',

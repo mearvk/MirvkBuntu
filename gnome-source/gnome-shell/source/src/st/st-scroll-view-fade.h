@@ -18,7 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef __ST_SCROLL_VIEW_FADE_H__
+#define __ST_SCROLL_VIEW_FADE_H__
 
 #include <clutter/clutter.h>
 
@@ -30,16 +31,6 @@ G_DECLARE_FINAL_TYPE (StScrollViewFade, st_scroll_view_fade,
 
 ClutterEffect *st_scroll_view_fade_new (void);
 
-void st_scroll_view_fade_set_fade_margins (StScrollViewFade *fade,
-                                           ClutterMargin    *margins);
-ClutterMargin * st_scroll_view_fade_get_fade_margins (StScrollViewFade *fade);
-
-void st_scroll_view_fade_set_fade_edges (StScrollViewFade *fade,
-                                         gboolean          fade_edges);
-gboolean st_scroll_view_fade_get_fade_edges (StScrollViewFade *fade);
-
-void st_scroll_view_fade_set_extend_fade_area (StScrollViewFade *fade,
-                                               gboolean          extend_fade_area);
-gboolean st_scroll_view_fade_get_extend_fade_area (StScrollViewFade *fade);
-
 G_END_DECLS
+
+#endif /* __ST_SCROLL_VIEW_FADE_H__ */

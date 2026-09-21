@@ -273,7 +273,7 @@ cr_rgb_to_string (CRRgb const * a_this)
         }
 
         if (str_buf) {
-                result = (guchar *) g_string_free_and_steal (str_buf);
+                result = (guchar *) g_string_free (str_buf, FALSE);
         }
 
         return result;
@@ -398,7 +398,7 @@ enum CRStatus
 cr_rgb_set_from_name (CRRgb * a_this, const guchar * a_color_name)
 {
         enum CRStatus status = CR_OK;
-        const CRRgb *result;
+        CRRgb *result;
 
         g_return_val_if_fail (a_this && a_color_name, CR_BAD_PARAM_ERROR);
 
@@ -555,13 +555,15 @@ cr_rgb_destroy (CRRgb * a_this)
 /**
  * cr_rgb_parse_from_buf:
  *@a_str: a string that contains a color description
+ *@a_enc: the encoding of a_str
  *
  *Parses a text buffer that contains a rgb color
  *
  *Returns the parsed color, or NULL in case of error
  */
 CRRgb *
-cr_rgb_parse_from_buf (const guchar *a_str)
+cr_rgb_parse_from_buf (const guchar *a_str,
+                              enum CREncoding a_enc)
 {
 	enum CRStatus status = CR_OK ;
 	CRTerm *value = NULL ;
@@ -570,7 +572,7 @@ cr_rgb_parse_from_buf (const guchar *a_str)
 	
 	g_return_val_if_fail (a_str, NULL);
 	
-	parser = cr_parser_new_from_buf ((guchar *) a_str, strlen ((const char *) a_str), FALSE);
+	parser = cr_parser_new_from_buf ((guchar *) a_str, strlen ((const char *) a_str), a_enc, FALSE);
 
 	g_return_val_if_fail (parser, NULL);
 

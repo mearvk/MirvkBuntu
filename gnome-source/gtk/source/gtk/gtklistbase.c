@@ -243,17 +243,12 @@ gtk_list_base_adjustment_value_changed_cb (GtkAdjustment *adjustment,
   else
     side_along = GTK_PACK_START;
 
-  /* Compute the align based on side to keep the values identical.
-   * The viewport can be empty, so avoid dividing by zero. */
-  if (area.width == 0)
-    align_across = 0;
-  else if (side_across == GTK_PACK_START)
+  /* Compute the align based on side to keep the values identical */
+  if (side_across == GTK_PACK_START)
     align_across = (double) (cell_area.x - area.x) / area.width;
   else
     align_across = (double) (cell_area.x + cell_area.width - area.x) / area.width;
-  if (area.height == 0)
-    align_along = 0;
-  else if (side_along == GTK_PACK_START)
+  if (side_along == GTK_PACK_START)
     align_along = (double) (cell_area.y - area.y) / area.height;
   else
     align_along = (double) (cell_area.y + cell_area.height - area.y) / area.height;
@@ -453,23 +448,6 @@ gtk_list_base_select_item (GtkListBase *self,
                                       0, 0);
 }
 
-static void
-activate_listitem_select_action (GtkListBasePrivate *priv,
-                                 guint               pos,
-                                 gboolean            modify,
-                                 gboolean            extend)
-{
-  GtkListTile *tile;
-
-  tile = gtk_list_item_manager_get_nth (priv->item_manager, pos, NULL);
-
-  /* We do this convoluted calling into the widget because that way
-   * GtkListItem::selectable gets respected, which is what one would expect.
-   */
-  g_assert (tile->widget);
-  gtk_widget_activate_action (tile->widget, "listitem.select", "(bb)", modify, extend);
-}
-
 /*
  * gtk_list_base_grab_focus_on_item:
  * @self: a `GtkListBase`
@@ -528,7 +506,13 @@ gtk_list_base_grab_focus_on_item (GtkListBase *self,
 
   if (select)
     {
-      activate_listitem_select_action (priv, pos, modify, extend);
+      tile = gtk_list_item_manager_get_nth (priv->item_manager, pos, NULL);
+
+      /* We do this convoluted calling into the widget because that way
+       * GtkListItem::selectable gets respected, which is what one would expect.
+       */
+      g_assert (tile->widget);
+      gtk_widget_activate_action (tile->widget, "listitem.select", "(bb)", modify, extend);
     }
 
   return TRUE;
@@ -849,20 +833,9 @@ gtk_list_base_compute_scroll_align (int            cell_start,
   visible_end = visible_start + visible_size;
   cell_end = cell_start + cell_size;
 
-  if (visible_size == 0)
+  if (cell_size <= visible_size)
     {
-      /* Avoid division by 0 */
-      *new_align = current_align;
-      *new_side = current_side;
-    }
-  else if (cell_size <= visible_size)
-    {
-      if (visible_size <= 0)
-        {
-          *new_align = current_align;
-          *new_side = current_side;
-        }
-      else if (cell_start < visible_start)
+      if (cell_start < visible_start)
         {
           *new_align = 0.0;
           *new_side = GTK_PACK_START;
@@ -1159,35 +1132,6 @@ gtk_list_base_move_cursor_to_end (GtkWidget *widget,
 }
 
 static gboolean
-handle_selecting_unselected_cursor (GtkListBase *self,
-                                    guint        position,
-                                    gboolean     select,
-                                    gboolean     modify,
-                                    gboolean     extend)
-{
-  GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
-  GtkSelectionModel *model;
-
-  /* If Ctrl is pressed, we don't want to reset the selection. */
-  if (!select || modify)
-    return FALSE;
-
-  model = gtk_list_item_manager_get_model (priv->item_manager);
-
-  /* Selection of current position is not needed if it's already selected or if
-   * there is nothing to select, or the position is invalid.
-   */
-  if (model == NULL || position == GTK_INVALID_LIST_POSITION || gtk_selection_model_is_selected (model, position))
-    return FALSE;
-
-  /* Reset cursor to current position trying to select it as well. */
-  activate_listitem_select_action (priv, position, FALSE, extend);
-
-  /* Report whether the model allowed the selection change. */
-  return gtk_selection_model_is_selected (model, position);
-}
-
-static gboolean
 gtk_list_base_move_cursor (GtkWidget *widget,
                            GVariant  *args,
                            gpointer   unused)
@@ -1201,13 +1145,6 @@ gtk_list_base_move_cursor (GtkWidget *widget,
   g_variant_get (args, "(ubbbi)", &orientation, &select, &modify, &extend, &amount);
 
   old_pos = gtk_list_base_get_focus_position (self);
-
-  /* When the focus is on an unselected item while we're selecting, we want to
-   * not move focus but select the focused item instead if we can.
-   */
-  if (handle_selecting_unselected_cursor (self, old_pos, select, modify, extend))
-    return TRUE;
-
   new_pos = gtk_list_base_move_focus (self, old_pos, orientation, amount);
 
   if (old_pos != new_pos)
@@ -1224,7 +1161,7 @@ gtk_list_base_add_move_binding (GtkWidgetClass *widget_class,
 {
   gtk_widget_class_add_binding (widget_class,
                                 keyval,
-                                GDK_NO_MODIFIER_MASK,
+                                0,
                                 gtk_list_base_move_cursor,
                                 "(ubbbi)", orientation, TRUE, FALSE, FALSE, amount);
   gtk_widget_class_add_binding (widget_class,
@@ -1251,7 +1188,7 @@ gtk_list_base_add_custom_move_binding (GtkWidgetClass  *widget_class,
 {
   gtk_widget_class_add_binding (widget_class,
                                 keyval,
-                                GDK_NO_MODIFIER_MASK,
+                                0,
                                 callback,
                                 "(bbb)", TRUE, FALSE, FALSE);
   gtk_widget_class_add_binding (widget_class,
@@ -1311,7 +1248,7 @@ gtk_list_base_class_init (GtkListBaseClass *klass)
     g_param_spec_enum ("orientation", NULL, NULL,
                        GTK_TYPE_ORIENTATION,
                        GTK_ORIENTATION_VERTICAL,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 
@@ -1373,24 +1310,27 @@ gtk_list_base_class_init (GtkListBaseClass *klass)
                                    gtk_list_base_unselect_all);
 
   gtk_list_base_add_move_binding (widget_class, GDK_KEY_Up, GTK_ORIENTATION_VERTICAL, -1);
+  gtk_list_base_add_move_binding (widget_class, GDK_KEY_KP_Up, GTK_ORIENTATION_VERTICAL, -1);
   gtk_list_base_add_move_binding (widget_class, GDK_KEY_Down, GTK_ORIENTATION_VERTICAL, 1);
+  gtk_list_base_add_move_binding (widget_class, GDK_KEY_KP_Down, GTK_ORIENTATION_VERTICAL, 1);
   gtk_list_base_add_move_binding (widget_class, GDK_KEY_Left, GTK_ORIENTATION_HORIZONTAL, -1);
+  gtk_list_base_add_move_binding (widget_class, GDK_KEY_KP_Left, GTK_ORIENTATION_HORIZONTAL, -1);
   gtk_list_base_add_move_binding (widget_class, GDK_KEY_Right, GTK_ORIENTATION_HORIZONTAL, 1);
+  gtk_list_base_add_move_binding (widget_class, GDK_KEY_KP_Right, GTK_ORIENTATION_HORIZONTAL, 1);
 
   gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_Home, gtk_list_base_move_cursor_to_start);
+  gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_KP_Home, gtk_list_base_move_cursor_to_start);
   gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_End, gtk_list_base_move_cursor_to_end);
+  gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_KP_End, gtk_list_base_move_cursor_to_end);
   gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_Page_Up, gtk_list_base_move_cursor_page_up);
+  gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_KP_Page_Up, gtk_list_base_move_cursor_page_up);
   gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_Page_Down, gtk_list_base_move_cursor_page_down);
+  gtk_list_base_add_custom_move_binding (widget_class, GDK_KEY_KP_Page_Down, gtk_list_base_move_cursor_page_down);
 
-#ifdef __APPLE__
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_a, GDK_META_MASK, "list.select-all", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_A, GDK_META_MASK | GDK_SHIFT_MASK, "list.unselect-all", NULL);
-#else
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_a, GDK_CONTROL_MASK, "list.select-all", NULL);
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_slash, GDK_CONTROL_MASK, "list.select-all", NULL);
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_A, GDK_CONTROL_MASK | GDK_SHIFT_MASK, "list.unselect-all", NULL);
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_backslash, GDK_CONTROL_MASK, "list.unselect-all", NULL);
-#endif
 }
 
 static gboolean
@@ -1555,8 +1495,8 @@ gtk_list_base_size_allocate_child (GtkListBase *self,
 
   if (!graphene_rect_intersection (gtk_css_boxes_get_padding_rect (boxes),
                                    &GRAPHENE_RECT_INIT(
-                                     child_allocation.x - GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
-                                     child_allocation.y - GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
+                                     child_allocation.x + GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
+                                     child_allocation.y + GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
                                      child_allocation.width + 2 * GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
                                      child_allocation.height + 2 * GTK_LIST_BASE_CHILD_MAX_OVERDRAW
                                    ),
@@ -1762,7 +1702,7 @@ gtk_list_base_apply_rubberband_selection (GtkListBase *self,
   model = gtk_list_item_manager_get_model (priv->item_manager);
   if (model != NULL)
     {
-      GtkBitset *selected, *mask, *result;
+      GtkBitset *selected, *mask;
       GdkRectangle rect;
       GtkBitset *rubberband_selection;
 
@@ -1815,14 +1755,8 @@ gtk_list_base_apply_rubberband_selection (GtkListBase *self,
 
       gtk_selection_model_set_selection (model, selected, mask);
 
-      result = gtk_selection_model_get_selection (model);
-
-      if (gtk_bitset_get_size (result) == 1)
-        gtk_list_base_grab_focus_on_item (self, gtk_bitset_get_minimum (result), TRUE, FALSE, FALSE);
-
       gtk_bitset_unref (selected);
       gtk_bitset_unref (mask);
-      gtk_bitset_unref (result);
       gtk_bitset_unref (rubberband_selection);
     }
 }
@@ -1846,7 +1780,8 @@ gtk_list_base_stop_rubberband (GtkListBase *self)
 
   gtk_list_item_tracker_free (priv->item_manager, priv->rubberband->start_tracker);
   g_clear_pointer (&priv->rubberband->widget, gtk_widget_unparent);
-  g_clear_pointer (&priv->rubberband, g_free);
+  g_free (priv->rubberband);
+  priv->rubberband = NULL;
 
   remove_autoscroll (self);
 }
@@ -1923,11 +1858,6 @@ get_selection_modifiers (GtkGesture *gesture,
     *modify = TRUE;
   if ((state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
     *extend = TRUE;
-
-#ifdef __APPLE__
-  if ((state & GDK_META_MASK) == GDK_META_MASK)
-    *modify = TRUE;
-#endif
 }
 
 static void
@@ -2296,9 +2226,6 @@ gtk_list_base_set_anchor (GtkListBase *self,
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
   guint items_before;
 
-  g_return_if_fail (isfinite (anchor_align_across));
-  g_return_if_fail (isfinite (anchor_align_along));
-
   items_before = round (priv->center_widgets * CLAMP (anchor_align_along, 0, 1));
   gtk_list_item_tracker_set_position (priv->item_manager,
                                       priv->anchor,
@@ -2442,3 +2369,4 @@ gtk_list_base_scroll_to (GtkListBase        *self,
 
   gtk_list_base_scroll_to_item (self, pos, scroll);
 }
+

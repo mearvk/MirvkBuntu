@@ -16,7 +16,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
  * USA
- *
+ * 
  * See COPYRIGHTS file for copyrights information.
  */
 
@@ -62,11 +62,11 @@ cr_attr_sel_append_attr_sel (CRAttrSel * a_this, CRAttrSel * a_attr_sel)
 {
         CRAttrSel *cur_sel = NULL;
 
-        g_return_val_if_fail (a_this && a_attr_sel,
+        g_return_val_if_fail (a_this && a_attr_sel, 
                               CR_BAD_PARAM_ERROR);
 
-        for (cur_sel = a_this;
-             cur_sel->next;
+        for (cur_sel = a_this; 
+             cur_sel->next; 
              cur_sel = cur_sel->next) ;
 
         cur_sel->next = a_attr_sel;
@@ -85,10 +85,10 @@ cr_attr_sel_append_attr_sel (CRAttrSel * a_this, CRAttrSel * a_attr_sel)
  *Returns CR_OK upon successful completion, an error code otherwise.
  */
 enum CRStatus
-cr_attr_sel_prepend_attr_sel (CRAttrSel * a_this,
+cr_attr_sel_prepend_attr_sel (CRAttrSel * a_this, 
                               CRAttrSel * a_attr_sel)
 {
-        g_return_val_if_fail (a_this && a_attr_sel,
+        g_return_val_if_fail (a_this && a_attr_sel, 
                               CR_BAD_PARAM_ERROR);
 
         a_attr_sel->next = a_this;
@@ -123,7 +123,7 @@ cr_attr_sel_to_string (CRAttrSel const * a_this)
                 if (cur->name) {
                         guchar *name = NULL;
 
-                        name = (guchar *) g_strndup (cur->name->stryng->str,
+                        name = (guchar *) g_strndup (cur->name->stryng->str, 
                                           cur->name->stryng->len);
                         if (name) {
                                 g_string_append (str_buf, (const gchar *) name);
@@ -135,7 +135,7 @@ cr_attr_sel_to_string (CRAttrSel const * a_this)
                 if (cur->value) {
                         guchar *value = NULL;
 
-                        value = (guchar *) g_strndup (cur->value->stryng->str,
+                        value = (guchar *) g_strndup (cur->value->stryng->str, 
                                            cur->value->stryng->len);
                         if (value) {
                                 switch (cur->match_way) {
@@ -168,7 +168,7 @@ cr_attr_sel_to_string (CRAttrSel const * a_this)
         }
 
         if (str_buf) {
-                result = (guchar *) g_string_free_and_steal (str_buf);
+                result = (guchar *) g_string_free (str_buf, FALSE);
         }
 
         return result;
@@ -226,6 +226,9 @@ cr_attr_sel_destroy (CRAttrSel * a_this)
                 a_this->next = NULL;
         }
 
-        g_clear_pointer (&a_this, g_free);
+        if (a_this) {
+                g_free (a_this);
+                a_this = NULL;
+        }
 }
 

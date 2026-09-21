@@ -44,9 +44,9 @@ G_BEGIN_DECLS
  *
  * Flags affecting how a search is done.
  *
- * If neither `GTK_TEXT_SEARCH_VISIBLE_ONLY` nor `GTK_TEXT_SEARCH_TEXT_ONLY`
- * are enabled, the match must be exact; the special 0xFFFC character will
- * match embedded paintables or child widgets.
+ * If neither %GTK_TEXT_SEARCH_VISIBLE_ONLY nor %GTK_TEXT_SEARCH_TEXT_ONLY are
+ * enabled, the match must be exact; the special 0xFFFC character will match
+ * embedded paintables or child widgets.
  */
 typedef enum {
   GTK_TEXT_SEARCH_VISIBLE_ONLY     = 1 << 0,
@@ -107,7 +107,7 @@ void         gtk_text_iter_assign   (GtkTextIter       *iter,
                                      const GtkTextIter *other);
 
 GDK_AVAILABLE_IN_ALL
-GType        gtk_text_iter_get_type (void);
+GType        gtk_text_iter_get_type (void) G_GNUC_CONST;
 
 /*
  * Convert to different kinds of index

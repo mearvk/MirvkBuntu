@@ -41,11 +41,9 @@ typedef struct _GdkWaylandSeatClass GdkWaylandSeatClass;
 #define GDK_IS_WAYLAND_SEAT(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), GDK_TYPE_WAYLAND_SEAT))
 
 GDK_AVAILABLE_IN_ALL
-GType gdk_wayland_seat_get_type (void);
+GType gdk_wayland_seat_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 struct wl_seat *        gdk_wayland_seat_get_wl_seat    (GdkSeat *seat);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkWaylandSeat, g_object_unref)
 
 G_END_DECLS

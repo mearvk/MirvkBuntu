@@ -53,7 +53,7 @@ static gboolean
 write_out_typelib (gchar     *prefix,
                    GITypelib *typelib)
 {
-  FILE *file, *file_owned = NULL;
+  FILE *file;
   gsize written;
   GFile *file_obj;
   gchar *filename;
@@ -86,7 +86,7 @@ write_out_typelib (gchar     *prefix,
       file_obj = g_file_new_for_path (filename);
       tmp_filename = g_strdup_printf ("%s.tmp", filename);
       tmp_file_obj = g_file_new_for_path (tmp_filename);
-      file = file_owned = g_fopen (tmp_filename, "wbe");
+      file = g_fopen (tmp_filename, "wb");
 
       if (file == NULL)
         {
@@ -106,8 +106,8 @@ write_out_typelib (gchar     *prefix,
       goto out;
     }
 
-  if (file_owned != NULL)
-    fclose (g_steal_pointer (&file_owned));
+  if (output != NULL)
+    fclose (file);
   if (tmp_filename != NULL)
     {
       if (!g_file_move (tmp_file_obj, file_obj, G_FILE_COPY_OVERWRITE, NULL, NULL, NULL, &error))
@@ -218,8 +218,6 @@ main (int argc, char **argv)
       char *message = g_strdup_printf (_("Error parsing file ‘%s’: %s"), input[0], error->message);
       g_fprintf (stderr, "%s\n", message);
       g_free (message);
-      gi_ir_parser_free (parser);
-      g_error_free (error);
 
       return 1;
     }
@@ -230,7 +228,6 @@ main (int argc, char **argv)
 
   {
     GITypelib *typelib = NULL;
-    int write_successful;
 
     if (shlibs)
       {
@@ -248,19 +245,18 @@ main (int argc, char **argv)
       g_error (_("Invalid typelib for module ‘%s’: %s"),
                module->name, error->message);
 
-    write_successful = write_out_typelib (NULL, typelib);
-    g_clear_pointer (&typelib, gi_typelib_unref);
+    if (!write_out_typelib (NULL, typelib))
+      return 1;
 
-    if (!write_successful)
-      {
-        gi_ir_parser_free (parser);
-        return 1;
-      }
+    g_clear_pointer (&typelib, gi_typelib_unref);
   }
 
   g_debug ("[building] done");
 
+#if 0
+  /* No point */
   gi_ir_parser_free (parser);
+#endif
 
   return 0;
 }

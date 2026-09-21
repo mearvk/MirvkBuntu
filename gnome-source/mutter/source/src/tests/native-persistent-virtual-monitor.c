@@ -18,7 +18,7 @@
 
 #include "config.h"
 
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "backends/meta-monitor-manager-private.h"
 #include "meta/meta-context.h"
 #include "meta/meta-backend.h"
@@ -35,7 +35,7 @@ wait_for_paint (gpointer user_data)
   ClutterActor *stage = meta_backend_get_stage (backend);
   MetaMonitorManager *monitor_manager =
     meta_backend_get_monitor_manager (backend);
-  g_autoptr (GMainLoop) loop = NULL;
+  GMainLoop *loop;
   GList *monitors;
   GList *logical_monitors;
   MetaLogicalMonitor *logical_monitor;
@@ -55,7 +55,7 @@ wait_for_paint (gpointer user_data)
   g_assert_cmpint (g_list_length (logical_monitors), ==, 1);
 
   logical_monitor = logical_monitors->data;
-  g_assert_true (meta_logical_monitor_get_monitors (logical_monitor)->data ==
+  g_assert (meta_logical_monitor_get_monitors (logical_monitor)->data ==
             monitors->data);
 
   layout = meta_logical_monitor_get_layout (logical_monitor);
@@ -88,16 +88,16 @@ main (int    argc,
   g_autoptr (GError) error = NULL;
 
   context = meta_create_context ("Persistent virtual monitor test");
-  g_assert_true (meta_context_configure (context, &fake_argc, &fake_argv, &error));
+  g_assert (meta_context_configure (context, &fake_argc, &fake_argv, &error));
   meta_context_set_plugin_gtype (context, META_TYPE_TEST_SHELL);
-  g_assert_true (meta_context_setup (context, &error));
-  g_assert_true (meta_context_start (context, &error));
+  g_assert (meta_context_setup (context, &error));
+  g_assert (meta_context_start (context, &error));
 
   g_idle_add (wait_for_paint, context);
 
   test_context = context;
 
-  g_assert_true (meta_context_run_main_loop (context, &error));
+  g_assert (meta_context_run_main_loop (context, &error));
 
   return EXIT_SUCCESS;
 }

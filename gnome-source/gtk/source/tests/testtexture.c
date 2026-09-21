@@ -20,7 +20,7 @@ struct _GtkTextureViewClass
   GtkWidgetClass parent_class;
 };
 
-GType gtk_texture_view_get_type (void);
+GType gtk_texture_view_get_type (void) G_GNUC_CONST;
 
 
 G_DEFINE_TYPE(GtkTextureView, gtk_texture_view, GTK_TYPE_WIDGET)

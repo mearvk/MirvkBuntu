@@ -43,7 +43,6 @@ struct _MetaWaylandTabletPad
   GList *groups;
   GList *rings;
   GList *strips;
-  GList *dials;
 
   GHashTable *feedback;
 

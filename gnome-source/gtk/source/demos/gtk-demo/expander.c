@@ -12,13 +12,11 @@
 
 static GtkWidget *window = NULL;
 
-static gboolean
-close_request_cb (GtkWidget *win, gpointer user_data)
+static void
+response_cb (GtkDialog *dialog, int response_id)
 {
-  g_assert (window == win);
-  gtk_window_destroy ((GtkWindow *)window);
+  gtk_window_destroy (GTK_WINDOW (window));
   window = NULL;
-  return TRUE;
 }
 
 static void
@@ -119,7 +117,7 @@ do_expander (GtkWidget *do_widget)
       g_signal_connect (expander, "notify::expanded",
                         G_CALLBACK (expander_cb), window);
 
-      g_signal_connect (window, "close-request", G_CALLBACK (close_request_cb), NULL);
+      g_signal_connect (window, "response", G_CALLBACK (response_cb), NULL);
   }
 
   if (!gtk_widget_get_visible (window))

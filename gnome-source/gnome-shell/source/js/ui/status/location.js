@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -30,7 +32,7 @@ const GeoclueAccuracyLevel = {
 };
 
 function accuracyLevelToString(accuracyLevel) {
-    for (const key in GeoclueAccuracyLevel) {
+    for (let key in GeoclueAccuracyLevel) {
         if (GeoclueAccuracyLevel[key] === accuracyLevel)
             return key;
     }
@@ -57,15 +59,15 @@ export function getGeoclueAgent() {
 const GeoclueAgent = GObject.registerClass({
     Properties: {
         'enabled': GObject.ParamSpec.boolean(
-            'enabled', null, null,
+            'enabled', 'Enabled', 'Enabled',
             GObject.ParamFlags.READWRITE,
             false),
         'in-use': GObject.ParamSpec.boolean(
-            'in-use', null, null,
+            'in-use', 'In use', 'In use',
             GObject.ParamFlags.READABLE,
             false),
         'max-accuracy-level': GObject.ParamSpec.int(
-            'max-accuracy-level', null, null,
+            'max-accuracy-level', 'Max accuracy level', 'Max accuracy level',
             GObject.ParamFlags.READABLE,
             0, 8, 0),
     },
@@ -108,7 +110,7 @@ const GeoclueAgent = GObject.registerClass({
 
     get maxAccuracyLevel() {
         if (this.enabled) {
-            const level = this._settings.get_string(MAX_ACCURACY_LEVEL);
+            let level = this._settings.get_string(MAX_ACCURACY_LEVEL);
 
             return GeoclueAccuracyLevel[level.toUpperCase()] ||
                    GeoclueAccuracyLevel.NONE;
@@ -118,9 +120,9 @@ const GeoclueAgent = GObject.registerClass({
     }
 
     async AuthorizeAppAsync(params, invocation) {
-        const [desktopId, reqAccuracyLevel] = params;
+        let [desktopId, reqAccuracyLevel] = params;
 
-        const authorizer = new AppAuthorizer(desktopId,
+        let authorizer = new AppAuthorizer(desktopId,
             reqAccuracyLevel, this._permStoreProxy, this.maxAccuracyLevel);
 
         const accuracyLevel = await authorizer.authorize();
@@ -183,7 +185,7 @@ const GeoclueAgent = GObject.registerClass({
     }
 
     _notifyMaxAccuracyLevel() {
-        const variant = new GLib.Variant('u', this.maxAccuracyLevel);
+        let variant = new GLib.Variant('u', this.maxAccuracyLevel);
         this._agent.emit_property_changed('MaxAccuracyLevel', variant);
     }
 
@@ -236,7 +238,7 @@ class AppAuthorizer {
     }
 
     async authorize() {
-        const appSystem = Shell.AppSystem.get_default();
+        let appSystem = Shell.AppSystem.get_default();
         this._app = appSystem.lookup_app(`${this.desktopId}.desktop`);
         if (this._app == null || this._permStoreProxy == null)
             return this._completeAuth();
@@ -261,12 +263,12 @@ class AppAuthorizer {
             }
         }
 
-        const permission = this._permissions[this.desktopId];
+        let permission = this._permissions[this.desktopId];
 
         if (permission == null) {
             await this._userAuthorizeApp();
         } else {
-            const [levelStr] = permission || ['NONE'];
+            let [levelStr] = permission || ['NONE'];
             this._accuracyLevel = GeoclueAccuracyLevel[levelStr] ||
                                   GeoclueAccuracyLevel.NONE;
         }
@@ -275,9 +277,9 @@ class AppAuthorizer {
     }
 
     _userAuthorizeApp() {
-        const name = this._app.get_name();
-        const appInfo = this._app.get_app_info();
-        const reason = appInfo.get_locale_string('X-Geoclue-Reason');
+        let name = this._app.get_name();
+        let appInfo = this._app.get_app_info();
+        let reason = appInfo.get_locale_string('X-Geoclue-Reason');
 
         this._dialog =
             new GeolocationDialog(name, reason, this.reqAccuracyLevel);
@@ -307,11 +309,11 @@ class AppAuthorizer {
         if (this._permStoreProxy == null)
             return;
 
-        const levelStr = accuracyLevelToString(this._accuracyLevel);
-        const dateStr = Math.round(Date.now() / 1000).toString();
+        let levelStr = accuracyLevelToString(this._accuracyLevel);
+        let dateStr = Math.round(Date.now() / 1000).toString();
         this._permissions[this.desktopId] = [levelStr, dateStr];
 
-        const data = GLib.Variant.new('av', {});
+        let data = GLib.Variant.new('av', {});
 
         try {
             await this._permStoreProxy.SetAsync(
@@ -333,20 +335,20 @@ export const GeolocationDialog = GObject.registerClass({
         super._init({styleClass: 'geolocation-dialog'});
         this.reqAccuracyLevel = reqAccuracyLevel;
 
-        const content = new Dialog.MessageDialogContent({
+        let content = new Dialog.MessageDialogContent({
             title: _('Allow location access'),
             /* Translators: %s is an application name */
             description: _('The app %s wants to access your location').format(name),
         });
 
-        const reasonLabel = new St.Label({
+        let reasonLabel = new St.Label({
             text: reason,
             style_class: 'message-dialog-description',
         });
         content.add_child(reasonLabel);
 
-        const infoLabel = new St.Label({
-            text: _('Location access can be changed at any time from the privacy settings'),
+        let infoLabel = new St.Label({
+            text: _('Location access can be changed at any time from the privacy settings.'),
             style_class: 'message-dialog-description',
         });
         content.add_child(infoLabel);

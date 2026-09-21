@@ -44,7 +44,6 @@
 #include "misc-info.h"
 #include "magnifier.h"
 #include "recorder.h"
-#include "svg.h"
 #include "tree-data.h"
 #include "visual.h"
 #include "general.h"
@@ -116,7 +115,6 @@ set_selected_object (GtkInspectorWindow *iw,
   gtk_inspector_controllers_set_object (GTK_INSPECTOR_CONTROLLERS (iw->controllers), selected);
   gtk_inspector_magnifier_set_object (GTK_INSPECTOR_MAGNIFIER (iw->magnifier), selected);
   gtk_inspector_a11y_set_object (GTK_INSPECTOR_A11Y (iw->a11y), selected);
-  gtk_inspector_svg_set_object (GTK_INSPECTOR_SVG (iw->svg), selected);
 
   for (l = iw->extra_pages; l != NULL; l = l->next)
     g_object_set (l->data, "object", selected, NULL);
@@ -205,7 +203,7 @@ translate_visible_child_name (GBinding     *binding,
   if (gtk_stack_get_child_by_name (GTK_STACK (iw->object_start_stack), name))
     g_value_set_string (to, name);
   else
-    g_value_set_static_string (to, "empty");
+    g_value_set_string (to, "empty");
 
   return TRUE;
 }
@@ -630,7 +628,7 @@ gtk_inspector_window_class_init (GtkInspectorWindowClass *klass)
   properties[PROP_INSPECTED_DISPLAY] =
       g_param_spec_object ("inspected-display", NULL, NULL,
                            GDK_TYPE_DISPLAY,
-                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
   signals[EVENT] = g_signal_new (g_intern_static_string ("event"),
@@ -674,7 +672,6 @@ gtk_inspector_window_class_init (GtkInspectorWindowClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, controllers);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, magnifier);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, a11y);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, svg);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, sidebar_revealer);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, css_editor);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, visual);
@@ -728,10 +725,19 @@ get_inspector_display (void)
 
   if (display)
     {
+      GdkDebugFlags flags;
+
       name = g_getenv ("GTK_INSPECTOR_RENDERER");
 
       g_object_set_data_full (G_OBJECT (display), "gsk-renderer",
                               g_strdup (name), g_free);
+
+      flags = gdk_display_get_debug_flags (gdk_display_get_default ());
+
+      gdk_display_set_debug_flags (display, flags & (GDK_DEBUG_GL_DISABLE_GL |
+                                                     GDK_DEBUG_GL_DISABLE_GLES |
+                                                     GDK_DEBUG_GL_GLX));
+      gtk_set_display_debug_flags (display, 0);
     }
 
   if (!display)
@@ -887,29 +893,6 @@ gtk_inspector_handle_event (GdkEvent *event)
   if (iw == NULL)
     return FALSE;
 
-  if (GDK_IS_EVENT_TYPE (event, GDK_KEY_PRESS))
-    {
-      GtkInspectorRecorder *recorder = GTK_INSPECTOR_RECORDER (iw->widget_recorder);
-
-      if (gdk_key_event_matches (event, GDK_KEY_r, GDK_SUPER_MASK) == GDK_KEY_MATCH_EXACT)
-        {
-          gboolean recording = gtk_inspector_recorder_is_recording (recorder);
-
-          gtk_inspector_recorder_set_recording (recorder, !recording);
-          return TRUE;
-        }
-      else if (gdk_key_event_matches (event, GDK_KEY_c, GDK_SUPER_MASK) == GDK_KEY_MATCH_EXACT)
-        {
-          gtk_inspector_recorder_record_single_frame (recorder, FALSE);
-          return TRUE;
-        }
-      else if (gdk_key_event_matches (event, GDK_KEY_f, GDK_SUPER_MASK) == GDK_KEY_MATCH_EXACT)
-        {
-          gtk_inspector_recorder_record_single_frame (recorder, TRUE);
-          return TRUE;
-        }
-    }
-
   gtk_inspector_recorder_record_event (GTK_INSPECTOR_RECORDER (iw->widget_recorder),
                                        gtk_get_event_widget (event),
                                        event);
@@ -917,27 +900,6 @@ gtk_inspector_handle_event (GdkEvent *event)
   g_signal_emit (iw, signals[EVENT], 0, event, &handled);
 
   return handled;
-}
-
-void
-gtk_inspector_trace_event (GdkEvent            *event,
-                           GtkPropagationPhase  phase,
-                           GtkWidget           *widget,
-                           GtkEventController  *controller,
-                           GtkWidget           *target,
-                           gboolean             handled)
-{
-  GtkInspectorWindow *iw;
-
-  if (!any_inspector_window_constructed)
-    return;
-
-  iw = gtk_inspector_window_get_for_display (gdk_event_get_display (event));
-  if (iw == NULL)
-    return;
-
-  gtk_inspector_recorder_trace_event (GTK_INSPECTOR_RECORDER (iw->widget_recorder),
-                                      event, phase, widget, controller, target, handled);
 }
 
 GdkDisplay *
@@ -1124,23 +1086,5 @@ gtk_inspector_window_set_object (GtkInspectorWindow *iw,
   update_go_buttons (iw);
 }
 
-void
-gtk_inspector_add_profile_node (GdkDisplay    *display,
-                                GskRenderNode *node,
-                                GskRenderNode *profile_node)
-{
-  GtkInspectorWindow *iw;
-
-  if (!any_inspector_window_constructed)
-    return;
-
-  iw = gtk_inspector_window_get_for_display (display);
-  if (iw == NULL)
-    return;
-
-  gtk_inspector_recorder_add_profile_node (GTK_INSPECTOR_RECORDER (iw->widget_recorder),
-                                           node,
-                                           profile_node);
-}
-
 // vim: set et sw=2 ts=2:
+

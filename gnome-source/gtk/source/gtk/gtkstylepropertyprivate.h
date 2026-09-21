@@ -54,7 +54,7 @@ struct _GtkStylePropertyClass
   GHashTable   *properties;
 };
 
-GType               _gtk_style_property_get_type             (void);
+GType               _gtk_style_property_get_type             (void) G_GNUC_CONST;
 
 void                _gtk_style_property_init_properties      (void);
 

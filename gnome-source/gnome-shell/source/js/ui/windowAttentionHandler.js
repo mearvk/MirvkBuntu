@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import GObject from 'gi://GObject';
 import Shell from 'gi://Shell';
 
@@ -14,8 +16,8 @@ export class WindowAttentionHandler {
     }
 
     _getTitleAndBanner(app, window) {
-        const title = app.get_name();
-        const banner = _('“%s” is ready').format(window.get_title());
+        let title = app.get_name();
+        let banner = _('“%s” is ready').format(window.get_title());
         return [title, banner];
     }
 
@@ -31,13 +33,13 @@ export class WindowAttentionHandler {
         if (!window || window.has_focus() || window.is_skip_taskbar())
             return;
 
-        const app = this._tracker.get_window_app(window);
-        const source = new WindowAttentionSource(app, window);
+        let app = this._tracker.get_window_app(window);
+        let source = new WindowAttentionSource(app, window);
         Main.messageTray.add(source);
 
         let [title, body] = this._getTitleAndBanner(app, window);
 
-        const notification = new MessageTray.Notification({
+        let notification = new MessageTray.Notification({
             source,
             title,
             body,

@@ -209,9 +209,8 @@ gtk_fishbowl_finalize (GObject *object)
   GtkFishbowl *fishbowl = GTK_FISHBOWL (object);
   GtkFishbowlPrivate *priv = gtk_fishbowl_get_instance_private (fishbowl);
 
-  g_clear_pointer (&priv->children, g_hash_table_destroy);
-
-  G_OBJECT_CLASS (gtk_fishbowl_parent_class)->finalize (object);
+  g_hash_table_destroy (priv->children);
+  priv->children = NULL;
 }
 
 static void
@@ -309,36 +308,41 @@ gtk_fishbowl_class_init (GtkFishbowlClass *klass)
 
   props[PROP_ANIMATING] =
       g_param_spec_boolean ("animating",
-                            NULL, NULL,
+                            "animating",
+                            "Whether children are moving around",
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE);
 
   props[PROP_BENCHMARK] =
       g_param_spec_boolean ("benchmark",
-                            NULL, NULL,
+                            "Benchmark",
+                            "Adapt the count property to hit the maximum framerate",
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE);
 
   props[PROP_COUNT] =
       g_param_spec_uint ("count",
-                         NULL, NULL,
+                         "Count",
+                         "Number of widgets",
                          0, G_MAXUINT,
                          0,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
 
   props[PROP_FRAMERATE] =
       g_param_spec_double ("framerate",
-                           NULL, NULL,
+                           "Framerate",
+                           "Framerate of this widget in frames per second",
                            0, G_MAXDOUBLE,
                            0,
-                           G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                           G_PARAM_READABLE);
 
   props[PROP_UPDATE_DELAY] =
       g_param_spec_int64 ("update-delay",
-                          NULL, NULL,
+                          "Update delay",
+                          "Number of usecs between updates",
                           0, G_MAXINT64,
                           G_USEC_PER_SEC,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, props);
 

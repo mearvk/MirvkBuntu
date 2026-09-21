@@ -57,18 +57,18 @@ struct _GdkDeviceWintabClass
   GdkDeviceClass parent_class;
 };
 
-GType gdk_device_wintab_get_type (void);
+GType gdk_device_wintab_get_type (void) G_GNUC_CONST;
 
 void         _gdk_device_wintab_translate_axes (GdkDeviceWintab *device,
-                                                GdkSurface      *surface,
+                                                GdkSurface       *window,
                                                 double          *axes,
                                                 double          *x,
                                                 double          *y);
 
 void
 gdk_device_wintab_query_state (GdkDevice        *device,
-                               GdkSurface       *surface,
-                               GdkSurface      **child_surface,
+                               GdkSurface       *window,
+                               GdkSurface      **child_window,
                                double           *win_x,
                                double           *win_y,
                                GdkModifierType  *mask);

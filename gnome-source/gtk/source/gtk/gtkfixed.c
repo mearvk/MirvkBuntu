@@ -25,7 +25,7 @@
 /**
  * GtkFixed:
  *
- * Places its child widgets at fixed positions and with fixed sizes.
+ * `GtkFixed` places its child widgets at fixed positions and with fixed sizes.
  *
  * `GtkFixed` performs no automatic layout management.
  *

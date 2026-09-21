@@ -24,7 +24,7 @@
 #include "tests/meta-monitor-manager-test.h"
 #include "tests/meta-test-utils.h"
 #include "backends/meta-crtc.h"
-#include "backends/meta-monitor-private.h"
+#include "backends/meta-monitor.h"
 #include "backends/meta-output.h"
 
 #define MAX_N_MODES 25
@@ -103,32 +103,24 @@ typedef struct _MonitorTestCaseOutput
   int width_mm;
   int height_mm;
   MetaTileInfo tile_info;
-  gboolean dynamic_scale;
   float scale;
-  MetaConnectorType connector_type;
-  int connector_number;
+  gboolean is_laptop_panel;
   gboolean is_underscanning;
   unsigned int max_bpc;
   MetaOutputRGBRange rgb_range;
   const char *serial;
-  MtkMonitorTransform panel_orientation_transform;
+  MetaMonitorTransform panel_orientation_transform;
   gboolean hotplug_mode;
   int suggested_x;
   int suggested_y;
-  int backlight_min;
-  int backlight_max;
-  const char *sysfs_backlight;
   gboolean has_edid_info;
   MetaEdidInfo edid_info;
-  uint64_t supported_color_spaces;
-  uint64_t supported_hdr_eotfs;
 } MonitorTestCaseOutput;
 
 typedef struct _MonitorTestCaseCrtc
 {
   int current_mode;
   gboolean disable_gamma_lut;
-  gboolean enable_ctm;
 } MonitorTestCaseCrtc;
 
 typedef struct _MonitorTestCaseSetup
@@ -181,12 +173,12 @@ typedef struct _MonitorTestCaseLogicalMonitor
   float scale;
   int monitors[MAX_N_MONITORS];
   int n_monitors;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
 } MonitorTestCaseLogicalMonitor;
 
 typedef struct _MonitorTestCaseCrtcExpect
 {
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   int current_mode;
   float x;
   float y;
@@ -245,8 +237,10 @@ META_EXPORT
 const char * meta_orientation_to_string (MetaOrientation orientation);
 
 META_EXPORT
-void meta_wait_for_possible_orientation_change (MetaOrientationManager *orientation_manager,
-                                                unsigned int           *times_signalled_out);
+void meta_wait_for_orientation (MetaOrientationManager *orientation_manager,
+                                MetaOrientation         orientation,
+                                unsigned int           *times_signalled_out);
 
 META_EXPORT
-void meta_fake_hotplug (MetaContext *context);
+void meta_wait_for_possible_orientation_change (MetaOrientationManager *orientation_manager,
+                                                unsigned int           *times_signalled_out);

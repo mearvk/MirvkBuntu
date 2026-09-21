@@ -21,7 +21,8 @@
 #error "Only <st/st.h> can be included directly.h"
 #endif
 
-#pragma once
+#ifndef __ST_ENTRY_H__
+#define __ST_ENTRY_H__
 
 G_BEGIN_DECLS
 
@@ -43,7 +44,7 @@ StWidget       *st_entry_new                (const gchar    *text);
 const gchar    *st_entry_get_text           (StEntry        *entry);
 void            st_entry_set_text           (StEntry        *entry,
                                              const gchar    *text);
-ClutterText    *st_entry_get_clutter_text   (StEntry        *entry);
+ClutterActor   *st_entry_get_clutter_text   (StEntry        *entry);
 
 void            st_entry_set_hint_text      (StEntry        *entry,
                                              const gchar    *text);
@@ -69,4 +70,10 @@ void            st_entry_set_hint_actor    (StEntry      *entry,
                                             ClutterActor *hint_actor);
 ClutterActor *  st_entry_get_hint_actor    (StEntry      *entry);
 
+typedef void (*StEntryCursorFunc) (StEntry *entry, gboolean use_ibeam, gpointer data);
+void            st_entry_set_cursor_func    (StEntryCursorFunc func,
+                                             gpointer          user_data);
+
 G_END_DECLS
+
+#endif /* __ST_ENTRY_H__ */

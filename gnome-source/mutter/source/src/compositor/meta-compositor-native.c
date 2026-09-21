@@ -32,21 +32,22 @@ G_DEFINE_TYPE (MetaCompositorNative, meta_compositor_native,
 
 static void
 meta_compositor_native_before_paint (MetaCompositor     *compositor,
-                                     MetaCompositorView *compositor_view,
-                                     ClutterFrame       *frame)
+                                     MetaCompositorView *compositor_view)
 {
   MetaCompositorViewNative *compositor_view_native =
     META_COMPOSITOR_VIEW_NATIVE (compositor_view);
   MetaCompositorClass *parent_class;
 
+#ifdef HAVE_WAYLAND
   meta_compositor_view_native_maybe_assign_scanout (compositor_view_native,
                                                     compositor);
+#endif
 
-  meta_compositor_view_native_maybe_update_fullscreen_actor (compositor_view_native,
-                                                             compositor);
+  meta_compositor_view_native_maybe_update_frame_sync_surface (compositor_view_native,
+                                                               compositor);
 
   parent_class = META_COMPOSITOR_CLASS (meta_compositor_native_parent_class);
-  parent_class->before_paint (compositor, compositor_view, frame);
+  parent_class->before_paint (compositor, compositor_view);
 }
 
 static MetaCompositorView *

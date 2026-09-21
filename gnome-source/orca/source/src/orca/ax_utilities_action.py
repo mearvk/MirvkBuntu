@@ -20,8 +20,6 @@
 
 """Utilities for accessible actions."""
 
-from __future__ import annotations
-
 import gi
 
 gi.require_version("Atspi", "2.0")
@@ -41,9 +39,8 @@ class AXUtilitiesAction:
         """Returns the list of actions supported on obj."""
 
         results = []
-        n_actions = AXAction.get_n_actions(obj)
-        for i in range(n_actions):
-            name = AXAction.get_action_name(obj, i, n_actions)
+        for i in range(AXAction.get_n_actions(obj)):
+            name = AXAction.get_action_name(obj, i)
             if name:
                 results.append(name)
         return results
@@ -53,9 +50,8 @@ class AXUtilitiesAction:
         """Returns the index of the named action or -1 if unsupported."""
 
         action_name = AXAction.normalize_action_name(action_name)
-        n_actions = AXAction.get_n_actions(obj)
-        for i in range(n_actions):
-            if action_name == AXAction.get_action_name(obj, i, n_actions):
+        for i in range(AXAction.get_n_actions(obj)):
+            if action_name == AXAction.get_action_name(obj, i):
                 return i
 
         return -1
@@ -87,9 +83,8 @@ class AXUtilitiesAction:
         if not key:
             return False
 
-        n_actions = AXAction.get_n_actions(obj)
-        for i in range(n_actions):
-            shortcuts = AXAction.get_action_key_binding(obj, i, n_actions).split(";")
+        for i in range(AXAction.get_n_actions(obj)):
+            shortcuts = AXAction.get_action_key_binding(obj, i).split(";")
             if any(s.endswith(key.upper()) for s in shortcuts):
                 return True
         return False
@@ -98,9 +93,8 @@ class AXUtilitiesAction:
     def _find_first_action_with_keybinding(obj: Atspi.Accessible) -> int:
         """Returns the index of the first action with a keybinding on obj."""
 
-        n_actions = AXAction.get_n_actions(obj)
-        for i in range(n_actions):
-            if AXAction.get_action_key_binding(obj, i, n_actions):
+        for i in range(AXAction.get_n_actions(obj)):
+            if AXAction.get_action_key_binding(obj, i):
                 return i
         return -1
 
@@ -121,8 +115,8 @@ class AXUtilitiesAction:
             key, mods = Gtk.accelerator_parse(sequence)
             result = Gtk.accelerator_get_label(key, mods)
         except GLib.GError as error:
-            tokens = ["AXUtilitiesAction: Exception in _get_label_for_key_sequence:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXUtilitiesAction: Exception in _get_label_for_key_sequence: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             sequence = sequence.replace("<", "").replace(">", " ").strip()
         else:
             if result and not result.endswith("+"):

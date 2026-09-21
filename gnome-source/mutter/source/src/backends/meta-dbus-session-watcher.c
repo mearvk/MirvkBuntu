@@ -25,7 +25,6 @@
 #include <gio/gio.h>
 
 #include "backends/meta-dbus-session-manager.h"
-#include "mtk/mtk.h"
 
 enum
 {
@@ -270,48 +269,24 @@ meta_dbus_session_close (MetaDbusSession *session)
   META_DBUS_SESSION_GET_IFACE (session)->close (session);
 }
 
-typedef struct _CloseClosure
+MetaDbusSessionManager *
+meta_dbus_session_manager (MetaDbusSessionManager *session)
 {
-  MetaDbusSession *session;
-  glong stopped_handler_id;
-  guint callback_id;
-} CloseClosure;
+  MetaDbusSessionManager *manager;
 
-static void
-close_cb (gpointer user_data)
-{
-  CloseClosure *closure = user_data;
+  g_object_get (session, "session-manager", &manager, NULL);
 
-  g_signal_handler_disconnect (closure->session,
-                               closure->stopped_handler_id);
-
-  meta_dbus_session_close (closure->session);
-
-  g_free (closure);
+  return manager;
 }
 
-static void
-on_session_stopped (MetaDbusSession *session,
-                    CloseClosure    *closure)
+char *
+meta_dbus_session_get_peer_name (MetaDbusSession *session)
 {
-  mtk_source_remove (closure->callback_id);
-  g_free (closure);
-}
+  char *peer_name;
 
-void
-meta_dbus_session_queue_close (MetaDbusSession *session)
-{
-  CloseClosure *closure;
+  g_object_get (session, "peer-name", &peer_name, NULL);
 
-  closure = g_new0 (CloseClosure, 1);
-  closure->session = session;
-  closure->stopped_handler_id = g_signal_connect (session,
-                                                  "session-closed",
-                                                  G_CALLBACK (on_session_stopped),
-                                                  closure);
-  closure->callback_id = mtk_idle_add_once (close_cb, closure);
-  mtk_source_set_name_by_id (closure->callback_id,
-                             "[mutter] close_cb [dbus session watcher]");
+  return peer_name;
 }
 
 char *

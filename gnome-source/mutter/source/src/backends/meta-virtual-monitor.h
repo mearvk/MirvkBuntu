@@ -28,13 +28,11 @@ struct _MetaVirtualModeInfo
   int width;
   int height;
   float refresh_rate;
-  gboolean has_preferred_scale;
-  float preferred_scale;
 };
 
 struct _MetaVirtualMonitorInfo
 {
-  GList *mode_infos;
+  MetaVirtualModeInfo mode_info;
 
   char *vendor;
   char *product;
@@ -50,46 +48,19 @@ struct _MetaVirtualMonitorClass
 {
   GObjectClass parent_class;
 
-  void (* set_modes) (MetaVirtualMonitor *virtual_monitor,
-                      GList              *mode_infos);
+  void (* set_mode) (MetaVirtualMonitor *virtual_monitor,
+                     int                 width,
+                     int                 height,
+                     float               refresh_rate);
 };
 
 META_EXPORT_TEST
-MetaVirtualModeInfo * meta_virtual_mode_info_new (int   width,
-                                                  int   height,
-                                                  float refresh_rate);
-
-MetaVirtualModeInfo * meta_virtual_mode_info_dup (const MetaVirtualModeInfo *mode_info);
-
-META_EXPORT_TEST
-void meta_virtual_mode_info_free (MetaVirtualModeInfo *mode_info);
-
-void meta_virtual_mode_info_set_preferred_scale (MetaVirtualModeInfo *mode_info,
-                                                 float                scale);
-
-MetaVirtualMonitorInfo * meta_virtual_monitor_info_new (const char *vendor,
+MetaVirtualMonitorInfo * meta_virtual_monitor_info_new (int         width,
+                                                        int         height,
+                                                        float       refresh_rate,
+                                                        const char *vendor,
                                                         const char *product,
-                                                        const char *serial,
-                                                        GList      *mode_infos);
-
-META_EXPORT_TEST
-MetaVirtualMonitorInfo * meta_virtual_monitor_info_new_simple (int         width,
-                                                               int         height,
-                                                               float       refresh_rate,
-                                                               const char *vendor,
-                                                               const char *product,
-                                                               const char *serial);
-
-META_EXPORT_TEST
-MetaVirtualMonitorInfo * meta_virtual_monitor_info_new_inactive (const char *vendor,
-                                                                 const char *product,
-                                                                 const char *serial);
-
-static inline gboolean
-meta_virtual_mode_info_is_valid (const MetaVirtualModeInfo *mode_info)
-{
-  return mode_info->width > 0 && mode_info->height > 0;
-}
+                                                        const char *serial);
 
 META_EXPORT_TEST
 void meta_virtual_monitor_info_free (MetaVirtualMonitorInfo *info);
@@ -103,10 +74,10 @@ META_EXPORT_TEST
 MetaOutput * meta_virtual_monitor_get_output (MetaVirtualMonitor *virtual_monitor);
 
 META_EXPORT_TEST
-void meta_virtual_monitor_set_modes (MetaVirtualMonitor *virtual_monitor,
-                                     GList              *mode_infos);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaVirtualModeInfo, meta_virtual_mode_info_free)
+void meta_virtual_monitor_set_mode (MetaVirtualMonitor *virtual_monitor,
+                                    int                 width,
+                                    int                 height,
+                                    float               refresh_rate);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaVirtualMonitorInfo,
                                meta_virtual_monitor_info_free)

@@ -39,11 +39,21 @@ struct _ClutterStageViewClass
 {
   GObjectClass parent_class;
 
+  void (* setup_offscreen_transform) (ClutterStageView *view,
+                                      CoglPipeline     *pipeline);
+
+  void (* get_offscreen_transformation_matrix) (ClutterStageView  *view,
+                                                graphene_matrix_t *matrix);
+
+  void (* transform_rect_to_onscreen) (ClutterStageView   *view,
+                                       const MtkRectangle *src_rect,
+                                       int                 dst_width,
+                                       int                 dst_height,
+                                       MtkRectangle       *dst_rect);
+
   ClutterFrame * (* new_frame) (ClutterStageView *view);
 
   ClutterPaintFlag (* get_default_paint_flags) (ClutterStageView *view);
-
-  void (* schedule_update) (ClutterStageView *view);
 };
 
 CLUTTER_EXPORT
@@ -57,6 +67,8 @@ CLUTTER_EXPORT
 CoglFramebuffer *clutter_stage_view_get_framebuffer (ClutterStageView *view);
 CLUTTER_EXPORT
 CoglFramebuffer *clutter_stage_view_get_onscreen (ClutterStageView *view);
+CLUTTER_EXPORT
+void             clutter_stage_view_invalidate_offscreen_blit_pipeline (ClutterStageView *view);
 
 CLUTTER_EXPORT
 float clutter_stage_view_get_scale (ClutterStageView *view);
@@ -82,15 +94,3 @@ void clutter_stage_view_schedule_update_now (ClutterStageView *view);
 
 CLUTTER_EXPORT
 ClutterPaintFlag clutter_stage_view_get_default_paint_flags (ClutterStageView *view);
-
-CLUTTER_EXPORT
-ClutterColorState * clutter_stage_view_get_color_state (ClutterStageView *view);
-
-CLUTTER_EXPORT
-ClutterColorState * clutter_stage_view_get_output_color_state (ClutterStageView *view);
-
-CLUTTER_EXPORT
-MtkMonitorTransform clutter_stage_view_get_transform (ClutterStageView *view);
-
-CLUTTER_EXPORT
-int clutter_stage_view_get_priority (ClutterStageView *view);

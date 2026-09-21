@@ -1014,8 +1014,6 @@ setup_input_stream (GFile *file, FileHandle *fh)
   return result;
 }
 
-#define _g_file_edit(file, flags, cancellable, error) g_file_append_to(file, flags | (1 << 15), cancellable, error)
-
 static gint
 setup_output_stream (GFile *file, FileHandle *fh, int flags)
 {
@@ -1045,7 +1043,7 @@ setup_output_stream (GFile *file, FileHandle *fh, int flags)
       else if (flags & O_APPEND)
         fh->stream = g_file_append_to (file, 0, NULL, &error);
       else
-        fh->stream = _g_file_edit (file, 0, NULL, &error);
+        result = -ENOTSUP;
       if (fh->stream)
         fh->pos = g_seekable_tell (G_SEEKABLE (fh->stream));
     }
@@ -1074,10 +1072,9 @@ open_common (const gchar *path, struct fuse_file_info *fi, GFile *file, int outp
 
   SET_FILE_HANDLE (fi, fh);
 
-  g_debug ("open_common: flags=%o (%s%s%s%s%s)\n",
+  g_debug ("open_common: flags=%o (%s%s%s%s)\n",
            fi->flags,
-           fi->flags & O_RDONLY ? "O_RDONLY " : "",
-           fi->flags & O_WRONLY ? "O_WRONLY " : "",
+           fi->flags & O_WRONLY ? "O_WRONLY " : "O_RDONLY ",
            fi->flags & O_RDWR   ? "O_RDWR "   : "",
            fi->flags & O_APPEND ? "O_APPEND " : "",
            fi->flags & O_TRUNC  ? "O_TRUNC "  : "");
@@ -1485,6 +1482,12 @@ vfs_write (const gchar *path, const gchar *buf, size_t len, off_t offset,
   gint   result = 0;
 
   g_debug ("vfs_write: %s\n", path);
+  g_debug ("vfs_write: flags=%o (%s%s%s%s)\n",
+           fi->flags,
+           fi->flags & O_WRONLY ? "O_WRONLY " : "O_RDONLY ",
+           fi->flags & O_RDWR   ? "O_RDWR "   : "",
+           fi->flags & O_APPEND ? "O_APPEND " : "",
+           fi->flags & O_TRUNC  ? "O_TRUNC "  : "");
 
   if ((file = file_from_full_path (path)))
     {
@@ -2474,17 +2477,11 @@ vfs_init (struct fuse_conn_info *conn, struct fuse_config *cfg)
   subthread_main_loop = g_main_loop_new (NULL, FALSE);
   subthread = g_thread_new ("gvfs-fuse-sub", (GThreadFunc) subthread_main, NULL);
 
-#ifdef HAVE_FUSE_FEATURE_FLAG_FUNCS
   /* Indicate O_TRUNC support for open() */
-  fuse_set_feature_flag(conn, FUSE_CAP_ATOMIC_O_TRUNC);
+  conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
 
   /* Prevent out-of-order readahead */
-  fuse_unset_feature_flag(conn, FUSE_CAP_ASYNC_READ);
-#else
-  /* Same as above for libfuse <3.17 */
-  conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
   conn->want &= ~FUSE_CAP_ASYNC_READ;
-#endif
 
   return NULL;
 }

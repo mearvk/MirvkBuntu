@@ -32,10 +32,10 @@
 /**
  * GtkNativeDialog:
  *
- * Base class for platform dialogs that don't use `GtkDialog`.
+ * Native dialogs are platform dialogs that don't use `GtkDialog`.
  *
- * Native dialogs are used in order to integrate better with a platform,
- * by looking the same as other native applications and supporting
+ * They are used in order to integrate better with a platform, by
+ * looking the same as other native applications and supporting
  * platform specific features.
  *
  * The [class@Gtk.Dialog] functions cannot be used on such objects,
@@ -69,7 +69,7 @@ enum {
   PROP_MODAL,
   PROP_TRANSIENT_FOR,
 
-  N_PROPS,
+  LAST_ARG,
 };
 
 enum {
@@ -78,7 +78,7 @@ enum {
   LAST_SIGNAL
 };
 
-static GParamSpec *native_props[N_PROPS] = { NULL, };
+static GParamSpec *native_props[LAST_ARG] = { NULL, };
 static guint native_signals[LAST_SIGNAL];
 
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GtkNativeDialog, gtk_native_dialog, G_TYPE_OBJECT,
@@ -197,46 +197,46 @@ gtk_native_dialog_class_init (GtkNativeDialogClass *class)
   gobject_class->dispose = gtk_native_dialog_dispose;
 
   /**
-   * GtkNativeDialog:title:
+   * GtkNativeDialog:title: (attributes org.gtk.Property.get=gtk_native_dialog_get_title org.gtk.Property.set=gtk_native_dialog_set_title)
    *
    * The title of the dialog window
    */
   native_props[PROP_TITLE] =
     g_param_spec_string ("title", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READWRITE);
 
   /**
-   * GtkNativeDialog:modal:
+   * GtkNativeDialog:modal: (attributes org.gtk.Property.get=gtk_native_dialog_get_modal org.gtk.Property.set=gtk_native_dialog_set_modal)
    *
    * Whether the window should be modal with respect to its transient parent.
    */
   native_props[PROP_MODAL] =
     g_param_spec_boolean ("modal", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkNativeDialog:visible:
+   * GtkNativeDialog:visible: (attributes org.gtk.Property.get=gtk_native_dialog_get_visible)
    *
    * Whether the window is currently visible.
    */
   native_props[PROP_VISIBLE] =
     g_param_spec_boolean ("visible", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkNativeDialog:transient-for:
+   * GtkNativeDialog:transient-for: (attributes org.gtk.Property.get=gtk_native_dialog_get_transient_for org.gtk.Property.set=gtk_native_dialog_set_transient_for)
    *
    * The transient parent of the dialog, or %NULL for none.
    */
   native_props[PROP_TRANSIENT_FOR] =
     g_param_spec_object ("transient-for", NULL, NULL,
                          GTK_TYPE_WINDOW,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
 
-  g_object_class_install_properties (gobject_class, N_PROPS, native_props);
+  g_object_class_install_properties (gobject_class, LAST_ARG, native_props);
 
   /**
    * GtkNativeDialog::response:
@@ -369,7 +369,7 @@ _gtk_native_dialog_emit_response (GtkNativeDialog *self,
 }
 
 /**
- * gtk_native_dialog_get_visible:
+ * gtk_native_dialog_get_visible: (attributes org.gtk.Method.get_property=visible)
  * @self: a `GtkNativeDialog`
  *
  * Determines whether the dialog is visible.
@@ -387,7 +387,7 @@ gtk_native_dialog_get_visible (GtkNativeDialog *self)
 }
 
 /**
- * gtk_native_dialog_set_modal:
+ * gtk_native_dialog_set_modal: (attributes org.gtk.Method.set_property=modal)
  * @self: a `GtkNativeDialog`
  * @modal: whether the window is modal
  *
@@ -417,7 +417,7 @@ gtk_native_dialog_set_modal (GtkNativeDialog *self,
 }
 
 /**
- * gtk_native_dialog_get_modal:
+ * gtk_native_dialog_get_modal: (attributes org.gtk.Method.get_property=modal)
  * @self: a `GtkNativeDialog`
  *
  * Returns whether the dialog is modal.
@@ -435,7 +435,7 @@ gtk_native_dialog_get_modal (GtkNativeDialog *self)
 }
 
 /**
- * gtk_native_dialog_set_title:
+ * gtk_native_dialog_set_title: (attributes org.gtk.Method.set_property=title)
  * @self: a `GtkNativeDialog`
  * @title: title of the dialog
  *
@@ -456,7 +456,7 @@ gtk_native_dialog_set_title (GtkNativeDialog *self,
 }
 
 /**
- * gtk_native_dialog_get_title:
+ * gtk_native_dialog_get_title: (attributes org.gtk.Method.get_property=title)
  * @self: a `GtkNativeDialog`
  *
  * Gets the title of the `GtkNativeDialog`.
@@ -485,7 +485,7 @@ parent_destroyed (GtkWidget       *parent,
 }
 
 /**
- * gtk_native_dialog_set_transient_for:
+ * gtk_native_dialog_set_transient_for: (attributes org.gtk.Method.set_property=transient-for)
  * @self: a `GtkNativeDialog`
  * @parent: (nullable): parent window
  *
@@ -520,7 +520,7 @@ gtk_native_dialog_set_transient_for (GtkNativeDialog *self,
 }
 
 /**
- * gtk_native_dialog_get_transient_for:
+ * gtk_native_dialog_get_transient_for: (attributes org.gtk.Method.get_property=transient-for)
  * @self: a `GtkNativeDialog`
  *
  * Fetches the transient parent for this window.

@@ -532,7 +532,8 @@ gtk_tree_store_finalize (GObject *object)
       GDestroyNotify d = priv->default_sort_destroy;
 
       priv->default_sort_destroy = NULL;
-      g_clear_pointer (&priv->default_sort_data, d);
+      d (priv->default_sort_data);
+      priv->default_sort_data = NULL;
     }
 
   /* must chain up */
@@ -2201,7 +2202,8 @@ gtk_tree_store_drag_data_received (GtkTreeDragDest *drag_dest,
                                        parent);
               dest_parent_p = &dest_parent;
             }
-          g_clear_pointer (&parent, gtk_tree_path_free);
+          gtk_tree_path_free (parent);
+          parent = NULL;
 
           gtk_tree_store_prepend (tree_store,
                                   &dest_iter,
@@ -2395,7 +2397,11 @@ gtk_tree_store_reorder (GtkTreeStore *tree_store,
       node = node->next;
     }
 
-  g_sort_array (sort_array, length, sizeof (SortTuple), gtk_tree_store_reorder_func, NULL);
+  g_qsort_with_data (sort_array,
+		     length,
+		     sizeof (SortTuple),
+		     gtk_tree_store_reorder_func,
+		     NULL);
 
   /* fix up level */
   for (i = 0; i < length - 1; i++)

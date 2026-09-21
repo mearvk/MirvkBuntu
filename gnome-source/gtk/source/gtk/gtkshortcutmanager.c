@@ -26,7 +26,8 @@
 /**
  * GtkShortcutManager:
  *
- * An interface that is used to implement shortcut scopes.
+ * The `GtkShortcutManager` interface is used to implement
+ * shortcut scopes.
  *
  * This is important for [iface@Gtk.Native] widgets that have their
  * own surface, since the event controllers that are used to implement
@@ -36,7 +37,7 @@
  * [class@Gtk.Window] and [class@Gtk.Popover].
  *
  * Every widget that implements `GtkShortcutManager` will be used as a
- * `GTK_SHORTCUT_SCOPE_MANAGED`.
+ * %GTK_SHORTCUT_SCOPE_MANAGED.
  */
 
 G_DEFINE_INTERFACE (GtkShortcutManager, gtk_shortcut_manager, G_TYPE_OBJECT)

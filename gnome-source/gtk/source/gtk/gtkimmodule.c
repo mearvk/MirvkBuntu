@@ -44,26 +44,22 @@
 
 #ifdef GDK_WINDOWING_WAYLAND
 #include "wayland/gdkwayland.h"
-#include "gtkimcontextwaylandprivate.h"
+#include "gtkimcontextwayland.h"
 #endif
 
 #ifdef GDK_WINDOWING_BROADWAY
 #include "broadway/gdkbroadway.h"
-#include "gtkimcontextbroadwayprivate.h"
+#include "gtkimcontextbroadway.h"
 #endif
 
 #ifdef GDK_WINDOWING_WIN32
 #include "win32/gdkwin32.h"
-#include "gtkimcontextimeprivate.h"
+#include "gtkimcontextime.h"
 #endif
 
 #ifdef GDK_WINDOWING_MACOS
 #include "macos/gdkmacos.h"
-#include "gtkimcontextquartzprivate.h"
-#endif
-
-#ifdef GDK_WINDOWING_ANDROID
-#include "gtkimcontextandroidprivate.h"
+#include "gtkimcontextquartz.h"
 #endif
 
 #ifdef G_OS_WIN32
@@ -139,13 +135,6 @@ match_backend (GdkDisplay *display,
   if (g_strcmp0 (context_id, "quartz") == 0)
 #ifdef GDK_WINDOWING_MACOS
     return GDK_IS_MACOS_DISPLAY (display);
-#else
-    return FALSE;
-#endif
-
-  if (g_strcmp0 (context_id, "android") == 0)
-#ifdef GDK_WINDOWING_ANDROID
-    return GDK_IS_ANDROID_DISPLAY (display);
 #else
     return FALSE;
 #endif
@@ -295,9 +284,6 @@ gtk_im_modules_init (void)
 #endif
 #ifdef GDK_WINDOWING_MACOS
   g_type_ensure (gtk_im_context_quartz_get_type ());
-#endif
-#ifdef GDK_WINDOWING_ANDROID
-  g_type_ensure (gtk_im_context_android_get_type ());
 #endif
 
   scope = g_io_module_scope_new (G_IO_MODULE_SCOPE_BLOCK_DUPLICATES);

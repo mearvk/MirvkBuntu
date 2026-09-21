@@ -172,7 +172,6 @@ G_BEGIN_DECLS
  * @COGL_PIXEL_FORMAT_RGBA_FP_32323232_PRE: Premultiplied RGBA floating point, 128 bit
  * @COGL_PIXEL_FORMAT_R_16: Single luminance component, 16 bits
  * @COGL_PIXEL_FORMAT_RG_1616: RG, 32 bits
- * @COGL_PIXEL_FORMAT_RGBX_16161616: RGBX, 64 bits, 16bpc
  * @COGL_PIXEL_FORMAT_RGBA_16161616: RGBA, 64 bits, 16bpc
  *
  * Pixel formats used by Cogl. For the formats with a byte per
@@ -256,7 +255,6 @@ typedef enum /*< prefix=COGL_PIXEL_FORMAT >*/
 
   COGL_PIXEL_FORMAT_R_16          = 14,
   COGL_PIXEL_FORMAT_RG_1616       = 15,
-  COGL_PIXEL_FORMAT_RGBX_16161616 = 10,
   COGL_PIXEL_FORMAT_RGBA_16161616 = (10 | COGL_A_BIT),
   COGL_PIXEL_FORMAT_RGBA_16161616_PRE = (10 | COGL_A_BIT | COGL_PREMULT_BIT),
 
@@ -266,14 +264,14 @@ typedef enum /*< prefix=COGL_PIXEL_FORMAT >*/
 } CoglPixelFormat;
 
 /**
- * COGL_PIXEL_FORMAT_ARGB32_NATIVE:
- *
+ * COGL_PIXEL_FORMAT_CAIRO_ARGB32_COMPAT:
+ * 
  * Architecture dependant format, similar to CAIRO_ARGB32.
 */
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
-#define COGL_PIXEL_FORMAT_ARGB32_NATIVE COGL_PIXEL_FORMAT_BGRA_8888_PRE
+#define COGL_PIXEL_FORMAT_CAIRO_ARGB32_COMPAT COGL_PIXEL_FORMAT_BGRA_8888_PRE
 #else
-#define COGL_PIXEL_FORMAT_ARGB32_NATIVE COGL_PIXEL_FORMAT_ARGB_8888_PRE
+#define COGL_PIXEL_FORMAT_CAIRO_ARGB32_COMPAT COGL_PIXEL_FORMAT_ARGB_8888_PRE
 #endif
 
 /**
@@ -326,7 +324,7 @@ gboolean
 _cogl_pixel_format_is_endian_dependant (CoglPixelFormat format);
 
 /*
- * _cogl_pixel_format_can_have_premult:
+ * COGL_PIXEL_FORMAT_CAN_HAVE_PREMULT(format):
  * @format: a #CoglPixelFormat
  *
  * Returns TRUE if the pixel format can take a premult bit. This is
@@ -334,11 +332,8 @@ _cogl_pixel_format_is_endian_dependant (CoglPixelFormat format);
  * COGL_PIXEL_FORMAT_A_8 (because that doesn't have any other
  * components to multiply by the alpha).
  */
-static inline gboolean
-_cogl_pixel_format_can_have_premult (CoglPixelFormat format)
-{
-    return (((format) & COGL_A_BIT) && (format) != COGL_PIXEL_FORMAT_A_8);
-}
+#define COGL_PIXEL_FORMAT_CAN_HAVE_PREMULT(format) \
+  (((format) & COGL_A_BIT) && (format) != COGL_PIXEL_FORMAT_A_8)
 
 /**
  * cogl_pixel_format_get_n_planes:

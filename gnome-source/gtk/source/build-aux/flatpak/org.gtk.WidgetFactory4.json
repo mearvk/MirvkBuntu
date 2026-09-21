@@ -115,7 +115,7 @@
             "config-opts" : [
                 "--libdir=/app/lib",
                 "-Dbuildtype=debugoptimized",
-                "-Dprofile=devel"
+                "-Ddemo-profile=devel"
             ],
             "sources" : [
                 {
@@ -129,6 +129,7 @@
     "build-options" : {
         "env" : {
             "DBUS_SESSION_BUS_ADDRESS" : "''",
+            "GSK_RENDERER" : "opengl",
             "G_ENABLE_DEBUG" : "true"
         }
     }

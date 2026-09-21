@@ -485,7 +485,7 @@ apply_edge_resistance_to_each_side (MetaEdgeResistanceData  *edge_data,
   auto_snap = flags & META_EDGE_RESISTANCE_SNAP;
   keyboard_op = flags & META_EDGE_RESISTANCE_KEYBOARD_OP;
 
-  if (auto_snap && !meta_window_is_tiled_side_by_side (window))
+  if (auto_snap && !META_WINDOW_TILED_SIDE_BY_SIDE (window))
     {
       /* Do the auto snapping instead of normal edge resistance; in all
        * cases, we allow snapping to opposite kinds of edges (e.g. left
@@ -520,18 +520,18 @@ apply_edge_resistance_to_each_side (MetaEdgeResistanceData  *edge_data,
                                         FALSE,
                                         keyboard_op);
     }
-  else if (auto_snap && meta_window_is_tiled_side_by_side (window))
+  else if (auto_snap && META_WINDOW_TILED_SIDE_BY_SIDE (window))
     {
       MtkRectangle workarea;
       guint i;
 
       const gfloat tile_edges[] =
         {
-          1.0f / 4.0f,
-          1.0f / 3.0f,
-          1.0f / 2.0f,
-          2.0f / 3.0f,
-          3.0f / 4.0f,
+          1./4.,
+          1./3.,
+          1./2.,
+          2./3.,
+          3./4.,
         };
 
       meta_window_get_work_area_current_monitor (window, &workarea);
@@ -550,7 +550,7 @@ apply_edge_resistance_to_each_side (MetaEdgeResistanceData  *edge_data,
        */
       for (i = 0; i < G_N_ELEMENTS (tile_edges); i++)
         {
-          guint horizontal_point = workarea.x + (int) floorf (workarea.width * tile_edges[i]);
+          guint horizontal_point = workarea.x + floor (workarea.width * tile_edges[i]);
 
           if (ABS (horizontal_point - new_left) < 16)
             {
@@ -905,21 +905,17 @@ compute_resistance_and_snapping_edges (MetaWindowDrag *window_drag)
   MetaWindow *window = meta_window_drag_get_window (window_drag);
   MetaDisplay *display = window->display;
   MetaWorkspaceManager *workspace_manager = display->workspace_manager;
-  MetaWorkspace *active_workspace = workspace_manager->active_workspace;
 
   meta_topic (META_DEBUG_WINDOW_OPS,
               "Computing edges to resist-movement or snap-to for %s.",
               meta_window_drag_get_window (window_drag)->desc);
 
-  /* Ensure workspace edge caches are rebuilt if workareas were invalidated
-   * during the ongoing drag.
-   */
-  meta_workspace_ensure_work_areas_validated (active_workspace);
-
   /*
    * 1st: Get the list of relevant windows, from bottom to top
    */
-  stacked_windows = meta_stack_list_windows (display->stack, active_workspace);
+  stacked_windows =
+    meta_stack_list_windows (display->stack,
+                             workspace_manager->active_workspace);
 
   /*
    * 2nd: we need to separate that stacked list into a list of windows that
@@ -1064,8 +1060,8 @@ compute_resistance_and_snapping_edges (MetaWindowDrag *window_drag)
    */
   edge_data = cache_edges (display,
                            edges,
-                           active_workspace->monitor_edges,
-                           active_workspace->screen_edges);
+                           workspace_manager->active_workspace->monitor_edges,
+                           workspace_manager->active_workspace->screen_edges);
 
   return edge_data;
 }

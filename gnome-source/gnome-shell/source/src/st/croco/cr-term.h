@@ -28,7 +28,8 @@
 #include "cr-num.h"
 #include "cr-string.h"
 
-#pragma once
+#ifndef __CR_TERM_H__
+#define __CR_TERM_H__
 
 G_BEGIN_DECLS
 
@@ -144,7 +145,8 @@ struct _CRTerm
         CRParsingLocation location ;
 } ;
 
-CRTerm * cr_term_parse_expression_from_buf (const guchar *a_buf) ;
+CRTerm * cr_term_parse_expression_from_buf (const guchar *a_buf, 
+                                            enum CREncoding a_encoding) ;
 CRTerm * cr_term_new (void) ;
 
 enum CRStatus cr_term_set_number (CRTerm *a_this, CRNum *a_num) ;
@@ -184,3 +186,5 @@ gboolean cr_term_unref (CRTerm *a_this) ;
 void cr_term_destroy (CRTerm * a_term) ;
 
 G_END_DECLS
+
+#endif /*__CR_TERM_H__*/

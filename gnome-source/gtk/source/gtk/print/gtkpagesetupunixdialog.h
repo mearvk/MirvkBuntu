@@ -34,7 +34,7 @@ typedef struct _GtkPageSetupUnixDialog GtkPageSetupUnixDialog;
 
 
 GDK_AVAILABLE_IN_ALL
-GType 		  gtk_page_setup_unix_dialog_get_type	        (void);
+GType 		  gtk_page_setup_unix_dialog_get_type	        (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget *       gtk_page_setup_unix_dialog_new                (const char             *title,
 								 GtkWindow              *parent);
@@ -48,8 +48,6 @@ void              gtk_page_setup_unix_dialog_set_print_settings (GtkPageSetupUni
 								 GtkPrintSettings       *print_settings);
 GDK_AVAILABLE_IN_ALL
 GtkPrintSettings *gtk_page_setup_unix_dialog_get_print_settings (GtkPageSetupUnixDialog *dialog);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GtkPageSetupUnixDialog, g_object_unref)
 
 G_END_DECLS
 

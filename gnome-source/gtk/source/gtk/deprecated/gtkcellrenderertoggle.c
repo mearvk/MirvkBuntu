@@ -88,11 +88,8 @@ enum {
   PROP_ACTIVATABLE,
   PROP_ACTIVE,
   PROP_RADIO,
-  PROP_INCONSISTENT,
-  N_PROPS
+  PROP_INCONSISTENT
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static guint toggle_cell_signals[LAST_SIGNAL] = { 0 };
 
@@ -197,23 +194,29 @@ gtk_cell_renderer_toggle_class_init (GtkCellRendererToggleClass *class)
   cell_class->snapshot = gtk_cell_renderer_toggle_snapshot;
   cell_class->activate = gtk_cell_renderer_toggle_activate;
 
-  props[PROP_ACTIVE] = g_param_spec_boolean ("active", NULL, NULL,
-                                             FALSE,
-                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_ACTIVE,
+				   g_param_spec_boolean ("active", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_INCONSISTENT] = g_param_spec_boolean ("inconsistent", NULL, NULL,
-                                                   FALSE,
-                                                   G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+		                   PROP_INCONSISTENT,
+				   g_param_spec_boolean ("inconsistent", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_ACTIVATABLE] = g_param_spec_boolean ("activatable", NULL, NULL,
-                                                  TRUE,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_ACTIVATABLE,
+				   g_param_spec_boolean ("activatable", NULL, NULL,
+							 TRUE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_RADIO] = g_param_spec_boolean ("radio", NULL, NULL,
-                                            FALSE,
-                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+				   PROP_RADIO,
+				   g_param_spec_boolean ("radio", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 
   /**
@@ -367,7 +370,7 @@ static int
 calc_indicator_size (GtkStyleContext *context)
 {
   GtkCssStyle *style = gtk_style_context_lookup_style (context);
-  return gtk_css_number_value_get (style->icon->icon_size, 100);
+  return _gtk_css_number_value_get (style->icon->icon_size, 100);
 }
 
 static void
@@ -503,7 +506,7 @@ gtk_cell_renderer_toggle_snapshot (GtkCellRenderer      *cell,
   gtk_snapshot_pop (snapshot);
 }
 
-static gboolean
+static int
 gtk_cell_renderer_toggle_activate (GtkCellRenderer      *cell,
 				   GdkEvent             *event,
 				   GtkWidget            *widget,
@@ -650,6 +653,6 @@ gtk_cell_renderer_toggle_set_activatable (GtkCellRendererToggle *toggle,
   if (priv->activatable != setting)
     {
       priv->activatable = setting ? TRUE : FALSE;
-      g_object_notify_by_pspec (G_OBJECT (toggle), props[PROP_ACTIVATABLE]);
+      g_object_notify (G_OBJECT (toggle), "activatable");
     }
 }

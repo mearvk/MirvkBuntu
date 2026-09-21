@@ -40,8 +40,8 @@ struct _CoglOffscreen
   int texture_level;
 };
 
-G_DEFINE_FINAL_TYPE (CoglOffscreen, cogl_offscreen,
-                     COGL_TYPE_FRAMEBUFFER)
+G_DEFINE_TYPE (CoglOffscreen, cogl_offscreen,
+               COGL_TYPE_FRAMEBUFFER)
 
 CoglOffscreen *
 _cogl_offscreen_new_with_texture_full (CoglTexture       *texture,
@@ -122,7 +122,7 @@ cogl_offscreen_allocate (CoglFramebuffer  *framebuffer,
   height = cogl_texture_get_height (offscreen->texture);
   cogl_framebuffer_update_size (framebuffer, width, height);
 
-  texture_format = cogl_texture_get_format (offscreen->texture);
+  texture_format = _cogl_texture_get_format (offscreen->texture);
   _cogl_framebuffer_set_internal_format (framebuffer, texture_format);
 
   return TRUE;
@@ -132,66 +132,6 @@ static gboolean
 cogl_offscreen_is_y_flipped (CoglFramebuffer *framebuffer)
 {
   return TRUE;
-}
-
-static CoglOffscreen *
-create_offscreen (CoglContext      *context,
-                  CoglPixelFormat   format,
-                  int               width,
-                  int               height,
-                  GError          **error)
-{
-  g_autoptr (CoglOffscreen) framebuffer = NULL;
-  g_autoptr (CoglTexture) texture = NULL;
-
-  if (format == COGL_PIXEL_FORMAT_ANY)
-    {
-      texture = cogl_texture_2d_new_with_size (context, width, height);
-    }
-  else
-    {
-      texture = cogl_texture_2d_new_with_format (context,
-                                                 width, height, format);
-    }
-
-  cogl_texture_2d_set_auto_mipmap (COGL_TEXTURE_2D (texture), FALSE);
-
-  if (!cogl_texture_allocate (texture, error))
-    return FALSE;
-
-  framebuffer = cogl_offscreen_new_with_texture (texture);
-
-  if (!cogl_framebuffer_allocate (COGL_FRAMEBUFFER (framebuffer), error))
-    return FALSE;
-
-  return g_steal_pointer (&framebuffer);
-}
-
-CoglOffscreen *
-cogl_offscreen_new_from_formats (CoglContext      *context,
-                                 CoglPixelFormat  *formats,
-                                 size_t            n_formats,
-                                 int               width,
-                                 int               height,
-                                 GError          **error)
-{
-  size_t i;
-
-  g_return_val_if_fail (n_formats > 0, NULL);
-
-  for (i = 0; i < n_formats; i++)
-    {
-      CoglOffscreen *offscreen;
-
-      g_clear_error (error);
-
-      offscreen = create_offscreen (context, formats[i],
-                                    width, height, error);
-      if (offscreen)
-        return offscreen;
-    }
-
-  return NULL;
 }
 
 static void

@@ -1,5 +1,5 @@
 <!-- 
-Please read https://handbook.gnome.org/issues/reporting.html
+Please read https://wiki.gnome.org/Community/GettingInTouch/BugReportingGuidelines
 first to ensure that you create a clear and specific issue.
 -->
 
@@ -47,7 +47,7 @@ screenshots or screencasts related, please provide them here.
 If the bug is a crash, please obtain a stack trace with installed debug
 symbols (at least for GNOME Shell and Mutter) and attach it to
 this issue following the instructions on
-https://handbook.gnome.org/issues/stack-traces.html.
+https://wiki.gnome.org/Community/GettingInTouch/Bugzilla/GettingTraces.
 -->
 
 

@@ -34,13 +34,10 @@
 /**
  * GtkPageSetupUnixDialog:
  *
- * Presents a page setup dialog for platforms which don’t provide
- * a native page setup dialog, like Unix.
+ * `GtkPageSetupUnixDialog` implements a page setup dialog for platforms
+ * which don’t provide a native page setup dialog, like Unix.
  *
- * <picture>
- *   <source srcset="pagesetupdialog-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkPageSetupUnixDialog" src="pagesetupdialog.png">
- * </picture>
+ * ![An example GtkPageSetupUnixDialog](pagesetupdialog.png)
  *
  * It can be used very much like any other GTK dialog, at the
  * cost of the portability offered by the high-level printing
@@ -355,7 +352,8 @@ gtk_page_setup_unix_dialog_finalize (GObject *object)
     {
       g_signal_handler_disconnect (dialog->request_details_printer,
                                    dialog->request_details_tag);
-      g_clear_object (&dialog->request_details_printer);
+      g_object_unref (dialog->request_details_printer);
+      dialog->request_details_printer = NULL;
       dialog->request_details_tag = 0;
     }
 
@@ -364,11 +362,16 @@ gtk_page_setup_unix_dialog_finalize (GObject *object)
   g_clear_object (&dialog->custom_paper_list);
   g_clear_object (&dialog->manage_papers_list);
 
-  g_clear_object (&dialog->print_settings);
+  if (dialog->print_settings)
+    {
+      g_object_unref (dialog->print_settings);
+      dialog->print_settings = NULL;
+    }
 
   for (node = dialog->print_backends; node != NULL; node = node->next)
     gtk_print_backend_destroy (GTK_PRINT_BACKEND (node->data));
-  g_clear_list (&dialog->print_backends, g_object_unref);
+  g_list_free_full (dialog->print_backends, g_object_unref);
+  dialog->print_backends = NULL;
 
   G_OBJECT_CLASS (gtk_page_setup_unix_dialog_parent_class)->finalize (object);
 }
@@ -552,7 +555,8 @@ printer_changed_callback (GtkDropDown            *combo_box,
     {
       g_signal_handler_disconnect (dialog->request_details_printer,
                                    dialog->request_details_tag);
-      g_clear_object (&dialog->request_details_printer);
+      g_object_unref (dialog->request_details_printer);
+      dialog->request_details_printer = NULL;
       dialog->request_details_tag = 0;
     }
 

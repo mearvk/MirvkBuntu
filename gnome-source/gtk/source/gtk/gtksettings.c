@@ -28,7 +28,6 @@
 #include "gtktypebuiltins.h"
 #include "gtkversion.h"
 #include "gtkwidgetprivate.h"
-#include "gtkcsscolorvalueprivate.h"
 
 #include "gdk/gdkdisplayprivate.h"
 
@@ -65,17 +64,16 @@
 /**
  * GtkSettings:
  *
- * Provides a mechanism to share global settings between applications.
- *
- * GTK relies on the platform-specific API for getting desktop-wide
- * settings.
- *
- * On Wayland, the settings are obtained via a settings portal that
- * is part of the Linux desktop APIs for application.
+ * `GtkSettings` provides a mechanism to share global settings between
+ * applications.
  *
  * On the X window system, this sharing is realized by an
  * [XSettings](http://www.freedesktop.org/wiki/Specifications/xsettings-spec)
- * manager.
+ * manager that is usually part of the desktop environment, along with
+ * utilities that let the user change these settings.
+ *
+ * On Wayland, the settings are obtained either via a settings portal,
+ * or by reading desktop settings from [class@Gio.Settings].
  *
  * On macOS, the settings are obtained from `NSUserDefaults`.
  *
@@ -102,13 +100,13 @@ typedef struct _GtkSettingsValue GtkSettingsValue;
 /*< private >
  * GtkSettingsValue:
  * @origin: Origin should be something like “filename:linenumber” for
- *    ini files, or e.g. “XProperty” for other sources.
+ *    rc files, or e.g. “XProperty” for other sources.
  * @value: Valid types are LONG, DOUBLE and STRING corresponding to
  *    the token parsed, or a GSTRING holding an unparsed statement
  */
 struct _GtkSettingsValue
 {
-  /* origin should be something like "filename:linenumber" for ini files,
+  /* origin should be something like "filename:linenumber" for rc files,
    * or e.g. "XProperty" for other sources
    */
   char *origin;
@@ -204,12 +202,6 @@ enum {
   PROP_LONG_PRESS_TIME,
   PROP_KEYNAV_USE_CARET,
   PROP_OVERLAY_SCROLLING,
-  PROP_FONT_RENDERING,
-  PROP_INTERFACE_COLOR_SCHEME,
-  PROP_INTERFACE_CONTRAST,
-  PROP_INTERFACE_REDUCED_MOTION,
-  PROP_KEYBOARD_FOCUS_VISIBLE_TIMEOUT,
-  PROP_ACCENT_COLOR,
 
   NUM_PROPERTIES
 };
@@ -268,6 +260,9 @@ gtk_settings_init (GtkSettings *settings)
   const char * const *config_dirs;
 
   g_datalist_init (&settings->queued_settings);
+
+  settings->style_cascades = g_slist_prepend (NULL, _gtk_style_cascade_new ());
+  settings->theme_provider = gtk_css_provider_new ();
 
   settings->property_values = g_new0 (GtkSettingsPropertyValue, NUM_PROPERTIES - 1);
   g_object_freeze_notify (G_OBJECT (settings));
@@ -332,7 +327,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_DOUBLE_CLICK_TIME] = g_param_spec_int ("gtk-double-click-time", NULL, NULL,
                                                      0, G_MAXINT, 400,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-double-click-distance:
@@ -342,7 +337,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_DOUBLE_CLICK_DISTANCE] = g_param_spec_int ("gtk-double-click-distance", NULL, NULL,
                                                          0, G_MAXINT, 5,
-                                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                         GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-cursor-blink:
@@ -354,7 +349,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_CURSOR_BLINK] = g_param_spec_boolean ("gtk-cursor-blink", NULL, NULL,
                                                     TRUE,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                    GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-cursor-blink-time:
@@ -363,7 +358,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_CURSOR_BLINK_TIME] = g_param_spec_int ("gtk-cursor-blink-time", NULL, NULL,
                                                      100, G_MAXINT, 1200,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-cursor-blink-timeout:
@@ -377,7 +372,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_CURSOR_BLINK_TIMEOUT] = g_param_spec_int ("gtk-cursor-blink-timeout", NULL, NULL,
                                                         1, G_MAXINT, 10,
-                                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                        GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-split-cursor:
@@ -387,7 +382,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_SPLIT_CURSOR] = g_param_spec_boolean ("gtk-split-cursor", NULL, NULL,
                                                     FALSE,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                    GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-cursor-aspect-ratio:
@@ -396,7 +391,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_CURSOR_ASPECT_RATIO] = g_param_spec_double ("gtk-cursor-aspect-ratio", NULL, NULL,
                                                           0.0, 1.0, 0.04,
-                                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                          GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-theme-name:
@@ -408,7 +403,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_THEME_NAME] = g_param_spec_string ("gtk-theme-name", NULL, NULL,
                                                  DEFAULT_THEME_NAME,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                 GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-icon-theme-name:
@@ -420,7 +415,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ICON_THEME_NAME] = g_param_spec_string ("gtk-icon-theme-name", NULL, NULL,
                                                       DEFAULT_ICON_THEME,
-                                                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                      GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-dnd-drag-threshold:
@@ -429,7 +424,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_DND_DRAG_THRESHOLD] = g_param_spec_int ("gtk-dnd-drag-threshold", NULL, NULL,
                                                       1, G_MAXINT, 8,
-                                                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                      GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-font-name:
@@ -440,7 +435,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_FONT_NAME] = g_param_spec_string ("gtk-font-name", NULL, NULL,
                                                 "Sans 10",
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-xft-antialias:
@@ -451,7 +446,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_XFT_ANTIALIAS] = g_param_spec_int ("gtk-xft-antialias", NULL, NULL,
                                                  -1, 1, -1,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                 GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-xft-hinting:
@@ -462,7 +457,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_XFT_HINTING] = g_param_spec_int ("gtk-xft-hinting", NULL, NULL,
                                                -1, 1, -1,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                               GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-xft-hintstyle:
@@ -474,7 +469,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_XFT_HINTSTYLE] = g_param_spec_string ("gtk-xft-hintstyle", NULL, NULL,
                                                     NULL,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                    GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-xft-rgba:
@@ -488,7 +483,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_XFT_RGBA] = g_param_spec_string ("gtk-xft-rgba", NULL, NULL,
                                                NULL,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                               GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-xft-dpi:
@@ -499,7 +494,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_XFT_DPI] = g_param_spec_int ("gtk-xft-dpi", NULL, NULL,
                                            -1, 1024*1024, -1,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                           GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-hint-font-metrics:
@@ -512,8 +507,8 @@ gtk_settings_class_init (GtkSettingsClass *class)
    * Since: 4.6
    */
   pspecs[PROP_HINT_FONT_METRICS] = g_param_spec_boolean ("gtk-hint-font-metrics", NULL, NULL,
-                                                         TRUE,
-                                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-cursor-theme-name:
@@ -524,7 +519,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_CURSOR_THEME_NAME] = g_param_spec_string ("gtk-cursor-theme-name", NULL, NULL,
                                                         NULL,
-                                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                        GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-cursor-theme-size:
@@ -535,7 +530,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_CURSOR_THEME_SIZE] = g_param_spec_int ("gtk-cursor-theme-size", NULL, NULL,
                                                      0, 128, 0,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-alternative-button-order:
@@ -544,7 +539,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ALTERNATIVE_BUTTON_ORDER] = g_param_spec_boolean ("gtk-alternative-button-order", NULL, NULL,
                                                                 FALSE,
-                                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                                GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-alternative-sort-arrows:
@@ -557,7 +552,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ALTERNATIVE_SORT_ARROWS] = g_param_spec_boolean ("gtk-alternative-sort-arrows", NULL, NULL,
                                                                FALSE,
-                                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                               GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-enable-animations:
@@ -566,7 +561,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ENABLE_ANIMATIONS] = g_param_spec_boolean ("gtk-enable-animations", NULL, NULL,
                                                          TRUE,
-                                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                         GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-error-bell:
@@ -580,7 +575,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ERROR_BELL] = g_param_spec_boolean ("gtk-error-bell", NULL, NULL,
                                                   TRUE,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                  GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-show-status-shapes:
@@ -591,7 +586,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_STATUS_SHAPES] = g_param_spec_boolean ("gtk-show-status-shapes", NULL, NULL,
                                                      FALSE,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-print-backends:
@@ -604,7 +599,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_PRINT_BACKENDS] = g_param_spec_string ("gtk-print-backends", NULL, NULL,
                                                      GTK_PRINT_BACKENDS,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-print-preview-command:
@@ -622,7 +617,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_PRINT_PREVIEW_COMMAND] = g_param_spec_string ("gtk-print-preview-command", NULL, NULL,
                                                             PRINT_PREVIEW_COMMAND,
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                            GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-enable-accels:
@@ -632,7 +627,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ENABLE_ACCELS] = g_param_spec_boolean ("gtk-enable-accels", NULL, NULL,
                                                      TRUE,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-im-module:
@@ -648,7 +643,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_IM_MODULE] = g_param_spec_string ("gtk-im-module", NULL, NULL,
                                                 NULL,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-recent-files-max-age:
@@ -663,7 +658,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
   pspecs[PROP_RECENT_FILES_MAX_AGE] = g_param_spec_int ("gtk-recent-files-max-age", NULL, NULL,
                                                         -1, G_MAXINT,
                                                         30,
-                                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                        GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-fontconfig-timestamp:
@@ -672,7 +667,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_FONTCONFIG_TIMESTAMP] = g_param_spec_uint ("gtk-fontconfig-timestamp", NULL, NULL,
                                                          0, G_MAXUINT, 0,
-                                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                         GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-sound-theme-name:
@@ -687,7 +682,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_SOUND_THEME_NAME] = g_param_spec_string ("gtk-sound-theme-name", NULL, NULL,
                                                        "freedesktop",
-                                                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                       GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-enable-input-feedback-sounds:
@@ -702,7 +697,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ENABLE_INPUT_FEEDBACK_SOUNDS] = g_param_spec_boolean ("gtk-enable-input-feedback-sounds", NULL, NULL,
                                                                     TRUE,
-                                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                                    GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-enable-event-sounds:
@@ -717,7 +712,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ENABLE_EVENT_SOUNDS] = g_param_spec_boolean ("gtk-enable-event-sounds", NULL, NULL,
                                                            TRUE,
-                                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                           GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-primary-button-warps-slider:
@@ -735,7 +730,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_PRIMARY_BUTTON_WARPS_SLIDER] = g_param_spec_boolean ("gtk-primary-button-warps-slider", NULL, NULL,
                                                                    TRUE,
-                                                                   G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                                   GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-application-prefer-dark-theme:
@@ -754,12 +749,10 @@ gtk_settings_class_init (GtkSettingsClass *class)
    * Dark themes should not be used for documents, where large spaces
    * are white/light and the dark chrome creates too much contrast
    * (web browser, text editor...).
-   *
-   * Deprecated: 4.20: Use `GtkCssProvider` properties instead
    */
   pspecs[PROP_APPLICATION_PREFER_DARK_THEME] = g_param_spec_boolean ("gtk-application-prefer-dark-theme", NULL, NULL,
                                                                      FALSE,
-                                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_DEPRECATED);
+                                                                     GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-entry-select-on-focus:
@@ -768,7 +761,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ENTRY_SELECT_ON_FOCUS] = g_param_spec_boolean ("gtk-entry-select-on-focus", NULL, NULL,
                                                              TRUE,
-                                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                             GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-entry-password-hint-timeout:
@@ -782,7 +775,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
   pspecs[PROP_ENTRY_PASSWORD_HINT_TIMEOUT] = g_param_spec_uint ("gtk-entry-password-hint-timeout", NULL, NULL,
                                                                 0, G_MAXUINT,
                                                                 0,
-                                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                                GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-label-select-on-focus:
@@ -792,43 +785,37 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_LABEL_SELECT_ON_FOCUS] = g_param_spec_boolean ("gtk-label-select-on-focus", NULL, NULL,
                                                              TRUE,
-                                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                             GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-shell-shows-app-menu:
    *
    * Set to %TRUE if the desktop environment is displaying
    * the app menu, %FALSE if the app should display it itself.
-   *
-   * Deprecated: 4.20: This setting is not relevant anymore
    */
   pspecs[PROP_SHELL_SHOWS_APP_MENU] = g_param_spec_boolean ("gtk-shell-shows-app-menu", NULL, NULL,
                                                             FALSE,
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                            GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-shell-shows-menubar:
    *
    * Set to %TRUE if the desktop environment is displaying
    * the menubar, %FALSE if the app should display it itself.
-   *
-   * Deprecated: 4.20: This setting is not relevant anymore
    */
   pspecs[PROP_SHELL_SHOWS_MENUBAR] = g_param_spec_boolean ("gtk-shell-shows-menubar", NULL, NULL,
                                                            FALSE,
-                                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                           GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-shell-shows-desktop:
    *
    * Set to %TRUE if the desktop environment is displaying
    * the desktop folder, %FALSE if not.
-   *
-   * Deprecated: 4.20: This setting is not relevant anymore
    */
   pspecs[PROP_SHELL_SHOWS_DESKTOP] = g_param_spec_boolean ("gtk-shell-shows-desktop", NULL, NULL,
                                                            TRUE,
-                                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                           GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-decoration-layout:
@@ -856,7 +843,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_DECORATION_LAYOUT] = g_param_spec_string ("gtk-decoration-layout", NULL, NULL,
                                                         "menu:minimize,maximize,close",
-                                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                        GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-titlebar-double-click:
@@ -869,7 +856,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_TITLEBAR_DOUBLE_CLICK] = g_param_spec_string ("gtk-titlebar-double-click", NULL, NULL,
                                                             "toggle-maximize",
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                            GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-titlebar-middle-click:
@@ -882,7 +869,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_TITLEBAR_MIDDLE_CLICK] = g_param_spec_string ("gtk-titlebar-middle-click", NULL, NULL,
                                                             "none",
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                            GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-titlebar-right-click:
@@ -895,7 +882,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_TITLEBAR_RIGHT_CLICK] = g_param_spec_string ("gtk-titlebar-right-click", NULL, NULL,
                                                            "menu",
-                                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                           GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-dialogs-use-header:
@@ -909,7 +896,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_DIALOGS_USE_HEADER] = g_param_spec_boolean ("gtk-dialogs-use-header", NULL, NULL,
                                                           FALSE,
-                                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                          GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-enable-primary-paste:
@@ -919,7 +906,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_ENABLE_PRIMARY_PASTE] = g_param_spec_boolean ("gtk-enable-primary-paste", NULL, NULL,
                                                             TRUE,
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                            GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-recent-files-enabled:
@@ -931,7 +918,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_RECENT_FILES_ENABLED] = g_param_spec_boolean ("gtk-recent-files-enabled", NULL, NULL,
                                                             TRUE,
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                            GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-long-press-time:
@@ -942,7 +929,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_LONG_PRESS_TIME] = g_param_spec_uint ("gtk-long-press-time", NULL, NULL,
                                                     0, G_MAXINT, 500,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                    GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-keynav-use-caret:
@@ -954,19 +941,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_KEYNAV_USE_CARET] = g_param_spec_boolean ("gtk-keynav-use-caret", NULL, NULL,
                                                         FALSE,
-                                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GtkSettings:gtk-keyboard-focus-visible-timeout:
-   *
-   * Time in seconds that the focus is visible when using keyboard navigation. A zero value means "forever", and a negative
-   * value means "toolkit default timeout".
-   *
-   * Since: 4.24
-   */
-  pspecs[PROP_KEYBOARD_FOCUS_VISIBLE_TIMEOUT] = g_param_spec_int ("gtk-keyboard-focus-visible-timeout", NULL, NULL,
-                                                                  -1, G_MAXINT, -1,
-                                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                        GTK_PARAM_READWRITE);
 
   /**
    * GtkSettings:gtk-overlay-scrolling:
@@ -978,93 +953,7 @@ gtk_settings_class_init (GtkSettingsClass *class)
    */
   pspecs[PROP_OVERLAY_SCROLLING] = g_param_spec_boolean ("gtk-overlay-scrolling", NULL, NULL,
                                                          TRUE,
-                                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GtkSettings:gtk-font-rendering:
-   *
-   * How GTK font rendering is set up.
-   *
-   * When set to [enum@Gtk.FontRendering.MANUAL], GTK respects the low-level
-   * font-related settings ([property@Gtk.Settings:gtk-hint-font-metrics],
-   * [property@Gtk.Settings:gtk-xft-antialias], [property@Gtk.Settings:gtk-xft-hinting],
-   * [property@Gtk.Settings:gtk-xft-hintstyle] and [property@Gtk.Settings:gtk-xft-rgba])
-   * as much as practical.
-   *
-   * When set to [enum@Gtk.FontRendering.AUTOMATIC], GTK will consider factors such
-   * as screen resolution and scale in deciding how to render fonts.
-   *
-   * Since: 4.16
-   */
-  pspecs[PROP_FONT_RENDERING] = g_param_spec_enum ("gtk-font-rendering", NULL, NULL,
-                                                   GTK_TYPE_FONT_RENDERING,
-                                                   GTK_FONT_RENDERING_AUTOMATIC,
-                                                   G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GtkSettings:gtk-interface-color-scheme:
-   *
-   * The color scheme used for rendering the user interface.
-   *
-   * This setting communicates the system-wide preference.
-   * The color scheme that is actually used when applying CSS
-   * styles can be set with the [property@Gtk.CssProvider:prefers-color-scheme]
-   * property.
-   *
-   * Since: 4.20
-   */
-  pspecs[PROP_INTERFACE_COLOR_SCHEME] = g_param_spec_enum ("gtk-interface-color-scheme", NULL, NULL,
-                                                           GTK_TYPE_INTERFACE_COLOR_SCHEME,
-                                                           GTK_INTERFACE_COLOR_SCHEME_UNSUPPORTED,
-                                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GtkSettings:gtk-interface-contrast:
-   *
-   * The level of contrast to use for the user interface.
-   *
-   * This setting communicates the system-wide preference.
-   * The contrast level that is actually used when applying CSS
-   * styles can be set with the [property@Gtk.CssProvider:prefers-contrast]
-   * property.
-   *
-   * Since: 4.20
-   */
-  pspecs[PROP_INTERFACE_CONTRAST] = g_param_spec_enum ("gtk-interface-contrast", NULL, NULL,
-                                                       GTK_TYPE_INTERFACE_CONTRAST,
-                                                       GTK_INTERFACE_CONTRAST_UNSUPPORTED,
-                                                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GtkSettings:gtk-interface-reduced-motion:
-   *
-   * Whether animations should be reduced to essential motions.
-   *
-   * This setting communicates the system-wide preference.
-   * The motion level that is actually used when applying CSS
-   * styles can be set with the [property@Gtk.CssProvider:prefers-reduced-motion]
-   * property.
-   *
-   * Since: 4.22
-   */
-  pspecs[PROP_INTERFACE_REDUCED_MOTION] = g_param_spec_enum ("gtk-interface-reduced-motion", NULL, NULL,
-                                                             GTK_TYPE_REDUCED_MOTION,
-                                                             GTK_REDUCED_MOTION_NO_PREFERENCE,
-                                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GtkSettings:gtk-accent-color:
-   *
-   * The desktop accent color (if available).
-   *
-   * GTK provides this value to the CSS stylesheet as a named color
-   * under the name "accent_color".
-   *
-   * Since: 4.24
-   */
-  pspecs[PROP_ACCENT_COLOR] = g_param_spec_boxed ("gtk-accent-color", NULL, NULL,
-                                                  GDK_TYPE_RGBA,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                         GTK_PARAM_READWRITE);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, pspecs);
 }
@@ -1075,33 +964,9 @@ gtk_settings_style_provider_get_settings (GtkStyleProvider *provider)
   return GTK_SETTINGS (provider);
 }
 
-static GtkCssValue *
-gtk_settings_style_provider_get_color (GtkStyleProvider *provider,
-                                       const char       *name)
-{
-  GtkSettings *settings = GTK_SETTINGS (provider);
-  GdkRGBA *rgba;
-  GtkCssValue *value;
-
-  if (strcmp (name, "accent_color") != 0)
-    return NULL;
-
-  if (_gtk_settings_get_setting_source (settings, "gtk-accent-color") == GTK_SETTINGS_SOURCE_DEFAULT)
-    return NULL;
-
-  g_object_get (G_OBJECT (settings), "gtk-accent-color", &rgba, NULL);
-
-  value = gtk_css_color_value_new_from_rgba (rgba);
-
-  gdk_rgba_free (rgba);
-
-  return value;
-}
-
 static void
 gtk_settings_provider_iface_init (GtkStyleProviderInterface *iface)
 {
-  iface->get_color = gtk_settings_style_provider_get_color;
   iface->get_settings = gtk_settings_style_provider_get_settings;
 }
 
@@ -1125,7 +990,7 @@ gtk_settings_finalize (GObject *object)
 
   g_free (settings->font_family);
 
-  g_clear_object (&settings->theme_provider);
+  g_object_unref (settings->theme_provider);
 
   G_OBJECT_CLASS (gtk_settings_parent_class)->finalize (object);
 }
@@ -1165,38 +1030,12 @@ settings_init_style (GtkSettings *settings)
   static GtkCssProvider *css_provider = NULL;
   GtkStyleCascade *cascade;
 
-  cascade = _gtk_style_cascade_new ();
-
-  settings->style_cascades = g_slist_prepend (NULL, cascade);
-  settings->theme_provider = gtk_css_provider_new ();
-
-  g_object_bind_property (settings, "gtk-interface-color-scheme",
-                          settings->theme_provider, "prefers-color-scheme",
-                          G_BINDING_SYNC_CREATE);
-  g_object_bind_property (settings, "gtk-interface-contrast",
-                          settings->theme_provider, "prefers-contrast",
-                          G_BINDING_SYNC_CREATE);
-  g_object_bind_property (settings, "gtk-interface-reduced-motion",
-                          settings->theme_provider, "prefers-reduced-motion",
-                          G_BINDING_SYNC_CREATE);
-
   /* Add provider for user file */
   if (G_UNLIKELY (!css_provider))
     {
       char *css_path;
 
       css_provider = gtk_css_provider_new ();
-
-      g_object_bind_property (settings, "gtk-interface-color-scheme",
-                              css_provider, "prefers-color-scheme",
-                              G_BINDING_SYNC_CREATE);
-      g_object_bind_property (settings, "gtk-interface-contrast",
-                              css_provider, "prefers-contrast",
-                              G_BINDING_SYNC_CREATE);
-      g_object_bind_property (settings, "gtk-interface-reduced-motion",
-                              css_provider, "prefers-reduced-motion",
-                              G_BINDING_SYNC_CREATE);
-
       css_path = g_build_filename (g_get_user_config_dir (),
                                    "gtk-4.0",
                                    "gtk.css",
@@ -1209,6 +1048,7 @@ settings_init_style (GtkSettings *settings)
       g_free (css_path);
     }
 
+  cascade = _gtk_settings_get_style_cascade (settings, 1);
   _gtk_style_cascade_add_provider (cascade,
                                    GTK_STYLE_PROVIDER (css_provider),
                                    GTK_STYLE_PROVIDER_PRIORITY_USER);
@@ -1258,7 +1098,7 @@ gtk_settings_create_for_display (GdkDisplay *display)
 
   settings->display = display;
 
-  g_signal_connect_object (display, "setting-changed", G_CALLBACK (setting_changed), settings, G_CONNECT_DEFAULT);
+  g_signal_connect_object (display, "setting-changed", G_CALLBACK (setting_changed), settings, 0);
 
   g_ptr_array_add (display_settings, settings);
 
@@ -1334,16 +1174,6 @@ gtk_settings_set_property (GObject      *object,
 
   g_value_copy (value, &settings->property_values[property_id - 1].value);
   settings->property_values[property_id - 1].source = GTK_SETTINGS_SOURCE_APPLICATION;
-
-  if (property_id == PROP_APPLICATION_PREFER_DARK_THEME)
-    {
-      g_warning ("Use GtkSettings:gtk-interface-color-scheme instead");
-      g_value_set_enum (&settings->property_values[PROP_INTERFACE_COLOR_SCHEME - 1].value,
-                        g_value_get_boolean (value) ? GTK_INTERFACE_COLOR_SCHEME_DARK
-                                                    : GTK_INTERFACE_COLOR_SCHEME_LIGHT);
-      settings->property_values[PROP_INTERFACE_COLOR_SCHEME - 1].source = GTK_SETTINGS_SOURCE_APPLICATION;
-      g_object_notify_by_pspec (object, pspecs[PROP_INTERFACE_COLOR_SCHEME]);
-    }
 }
 
 static void
@@ -1430,18 +1260,12 @@ gtk_settings_notify (GObject    *object,
       if (settings_update_fontconfig (settings))
         gtk_system_setting_changed (settings->display, GTK_SYSTEM_SETTING_FONT_CONFIG);
       break;
-    case PROP_FONT_RENDERING:
-      gtk_system_setting_changed (settings->display, GTK_SYSTEM_SETTING_FONT_CONFIG);
-      break;
     case PROP_ENABLE_ANIMATIONS:
       settings_invalidate_style (settings);
       break;
     case PROP_CURSOR_THEME_NAME:
     case PROP_CURSOR_THEME_SIZE:
       settings_update_cursor_theme (settings);
-      break;
-    case PROP_ACCENT_COLOR:
-      settings_invalidate_style (settings);
       break;
     default:
       break;
@@ -1496,7 +1320,7 @@ apply_queued_setting (GtkSettings      *settings,
     {
       char *debug = g_strdup_value_contents (&qvalue->value);
 
-      g_message ("%s: failed to retrieve property '%s' of type '%s' from ini file value \"%s\" of type '%s'",
+      g_message ("%s: failed to retrieve property '%s' of type '%s' from rc file value \"%s\" of type '%s'",
                  qvalue->origin ? qvalue->origin : "(for origin information, set GTK_DEBUG)",
                  pspec->name,
                  g_type_name (G_PARAM_SPEC_VALUE_TYPE (pspec)),
@@ -1530,7 +1354,6 @@ gtk_settings_set_property_value_internal (GtkSettings            *settings,
 
   if (!G_VALUE_HOLDS_LONG (&new_value->value) &&
       !G_VALUE_HOLDS_DOUBLE (&new_value->value) &&
-      !G_VALUE_HOLDS_ENUM (&new_value->value) &&
       !G_VALUE_HOLDS_STRING (&new_value->value) &&
       !G_VALUE_HOLDS (&new_value->value, G_TYPE_GSTRING))
     {
@@ -1704,7 +1527,8 @@ settings_update_provider (GdkDisplay      *display,
         {
           gtk_style_context_remove_provider_for_display (display,
                                                          GTK_STYLE_PROVIDER (*old));
-          g_clear_object (old);
+          g_object_unref (*old);
+          *old = NULL;
         }
 
       if (new)
@@ -1722,8 +1546,6 @@ get_theme_name (GtkSettings  *settings,
                 char        **theme_name,
                 char        **theme_variant)
 {
-  GtkInterfaceContrast prefers_contrast;
-  GtkInterfaceColorScheme prefers_color_scheme;
   gboolean prefer_dark;
 
   *theme_name = NULL;
@@ -1736,39 +1558,23 @@ get_theme_name (GtkSettings  *settings,
     {
       char *p;
       p = strrchr (*theme_name, ':');
-      if (p)
-        {
-          *p = '\0';
-          p++;
-          *theme_variant = g_strdup (p);
-        }
-      else
-        {
-          *theme_variant = g_strdup ("");
-        }
+      if (p) {
+        *p = '\0';
+        p++;
+        *theme_variant = g_strdup (p);
+      }
 
       return;
     }
 
   g_free (*theme_name);
 
-  g_object_get (settings, "gtk-theme-name", theme_name, NULL);
-
-  g_object_get (settings->theme_provider,
-                "prefers-contrast", &prefers_contrast,
-                "prefers-color-scheme", &prefers_color_scheme,
+  g_object_get (settings,
+                "gtk-theme-name", theme_name,
+                "gtk-application-prefer-dark-theme", &prefer_dark,
                 NULL);
 
-  prefer_dark = prefers_color_scheme == GTK_INTERFACE_COLOR_SCHEME_DARK;
-
-  if (prefers_contrast == GTK_INTERFACE_CONTRAST_MORE)
-    {
-      if (prefer_dark)
-        *theme_variant = g_strdup ("hc-dark");
-      else
-        *theme_variant = g_strdup ("hc");
-    }
-  else if (prefer_dark)
+  if (prefer_dark)
     *theme_variant = g_strdup ("dark");
 
   if (*theme_name && **theme_name)
@@ -1881,7 +1687,7 @@ gtk_settings_load_from_key_file (GtkSettings       *settings,
         continue;
 
       value_type = G_PARAM_SPEC_VALUE_TYPE (pspec);
-      switch (G_TYPE_FUNDAMENTAL (value_type))
+      switch (value_type)
         {
         case G_TYPE_BOOLEAN:
           {
@@ -1917,35 +1723,6 @@ gtk_settings_load_from_key_file (GtkSettings       *settings,
             break;
           }
 
-        case G_TYPE_ENUM:
-          {
-            char *s_val;
-
-            g_value_init (&svalue.value, value_type);
-            s_val = g_key_file_get_string (keyfile, "Settings", key, &error);
-            if (!error)
-              {
-                GEnumClass *eclass;
-                GEnumValue *ev;
-
-                eclass = g_type_class_ref (value_type);
-                ev = g_enum_get_value_by_nick (eclass, s_val);
-
-                if (ev)
-                  g_value_set_enum (&svalue.value, ev->value);
-                else
-                  g_set_error (&error, G_KEY_FILE_ERROR,
-                               G_KEY_FILE_ERROR_INVALID_VALUE,
-                               "Key file contains key “%s” "
-                               "which has a value that cannot be interpreted.",
-                               key);
-
-                g_type_class_unref (eclass);
-              }
-            g_free (s_val);
-            break;
-          }
-
         default:
           {
             char *s_val;
@@ -1961,7 +1738,8 @@ gtk_settings_load_from_key_file (GtkSettings       *settings,
       if (error)
         {
           g_warning ("Error setting %s in %s: %s", key, path, error->message);
-          g_clear_error (&error);
+          g_error_free (error);
+          error = NULL;
         }
       else
         {
@@ -1995,6 +1773,7 @@ settings_update_xsetting (GtkSettings *settings,
                           gboolean     force)
 {
   GType value_type;
+  GType fundamental_type;
   gboolean retval = FALSE;
 
   if (settings->property_values[pspec->param_id - 1].source == GTK_SETTINGS_SOURCE_APPLICATION)
@@ -2004,8 +1783,10 @@ settings_update_xsetting (GtkSettings *settings,
     return FALSE;
 
   value_type = G_PARAM_SPEC_VALUE_TYPE (pspec);
+  fundamental_type = G_TYPE_FUNDAMENTAL (value_type);
 
-  if (g_value_type_transformable (G_TYPE_INT, value_type) ||
+  if ((g_value_type_transformable (G_TYPE_INT, value_type) &&
+       !(fundamental_type == G_TYPE_ENUM || fundamental_type == G_TYPE_FLAGS)) ||
       g_value_type_transformable (G_TYPE_STRING, value_type) ||
       g_value_type_transformable (GDK_TYPE_RGBA, value_type))
     {
@@ -2037,7 +1818,7 @@ settings_update_xsettings (GtkSettings *settings)
 {
   int i;
 
-  for (i = 1; i < NUM_PROPERTIES; i++)
+  for (i = 0; pspecs[i]; i++)
     settings_update_xsetting (settings, pspecs[i], FALSE);
 }
 
@@ -2097,7 +1878,6 @@ gtk_settings_reset_property (GtkSettings *settings,
     g_value_copy (&tmp_value, &settings->property_values[pspec->param_id - 1].value);
   else
     g_param_value_set_default (pspec, &settings->property_values[pspec->param_id - 1].value);
-  g_value_unset (&tmp_value);
 
   settings->property_values[pspec->param_id - 1].source = GTK_SETTINGS_SOURCE_DEFAULT;
   g_object_notify_by_pspec (G_OBJECT (settings), pspec);

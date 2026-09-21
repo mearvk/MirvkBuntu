@@ -38,15 +38,6 @@ typedef struct _ClutterKeymapPrivate
 {
   gboolean caps_lock_state;
   gboolean num_lock_state;
-
-  xkb_mod_mask_t depressed_mods;
-  xkb_mod_mask_t latched_mods;
-  xkb_mod_mask_t locked_mods;
-
-  xkb_layout_index_t effective_layout_group;
-
-  GStrv display_names;
-  GStrv short_names;
 } ClutterKeymapPrivate;
 
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (ClutterKeymap, clutter_keymap,
@@ -107,25 +98,12 @@ clutter_keymap_set_property (GObject      *object,
 }
 
 static void
-clutter_keymap_finalize (GObject *object)
-{
-  ClutterKeymap *keymap = CLUTTER_KEYMAP (object);
-  ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
-
-  g_clear_pointer (&priv->display_names, g_strfreev);
-  g_clear_pointer (&priv->short_names, g_strfreev);
-
-  G_OBJECT_CLASS (clutter_keymap_parent_class)->finalize (object);
-}
-
-static void
 clutter_keymap_class_init (ClutterKeymapClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->get_property = clutter_keymap_get_property;
   object_class->set_property = clutter_keymap_set_property;
-  object_class->finalize = clutter_keymap_finalize;
 
   obj_props[PROP_CAPS_LOCK_STATE] =
     g_param_spec_boolean ("caps-lock-state", NULL, NULL,
@@ -175,30 +153,16 @@ clutter_keymap_get_direction (ClutterKeymap *keymap)
   return CLUTTER_KEYMAP_GET_CLASS (keymap)->get_direction (keymap);
 }
 
-gboolean
-clutter_keymap_update_state (ClutterKeymap      *keymap,
-                             gboolean            caps_lock_state,
-                             gboolean            num_lock_state,
-                             xkb_layout_index_t  effective_layout_group,
-                             xkb_mod_mask_t      depressed_mods,
-                             xkb_mod_mask_t      latched_mods,
-                             xkb_mod_mask_t      locked_mods,
-                             gboolean            emit_signal)
+void
+clutter_keymap_set_lock_modifier_state (ClutterKeymap *keymap,
+                                        gboolean       caps_lock_state,
+                                        gboolean       num_lock_state)
 {
   ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
 
   if (priv->caps_lock_state == caps_lock_state &&
-      priv->num_lock_state == num_lock_state &&
-      priv->effective_layout_group == effective_layout_group &&
-      priv->depressed_mods == depressed_mods &&
-      priv->latched_mods == latched_mods &&
-      priv->locked_mods == locked_mods)
-    return FALSE;
-
-  priv->effective_layout_group = effective_layout_group;
-  priv->depressed_mods = depressed_mods;
-  priv->latched_mods = latched_mods;
-  priv->locked_mods = locked_mods;
+      priv->num_lock_state == num_lock_state)
+    return;
 
   if (priv->caps_lock_state != caps_lock_state)
     {
@@ -218,80 +182,5 @@ clutter_keymap_update_state (ClutterKeymap      *keymap,
            priv->num_lock_state ? "set" : "unset",
            priv->caps_lock_state ? "set" : "unset");
 
-  if (emit_signal)
-    g_signal_emit (keymap, signals[STATE_CHANGED], 0);
-
-  return TRUE;
-}
-
-void
-clutter_keymap_update_keymap_names (ClutterKeymap *keymap,
-                                    GStrv          display_names,
-                                    GStrv          short_names)
-{
-  ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
-
-  g_clear_pointer (&priv->display_names, g_strfreev);
-  g_clear_pointer (&priv->short_names, g_strfreev);
-  priv->display_names = g_steal_pointer (&display_names);
-  priv->short_names = g_steal_pointer (&short_names);
-}
-
-void
-clutter_keymap_get_modifier_state (ClutterKeymap  *keymap,
-                                   xkb_mod_mask_t *depressed_mods,
-                                   xkb_mod_mask_t *latched_mods,
-                                   xkb_mod_mask_t *locked_mods)
-{
-  ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
-
-  *depressed_mods = priv->depressed_mods;
-  *latched_mods = priv->latched_mods;
-  *locked_mods = priv->locked_mods;
-}
-
-xkb_layout_index_t
-clutter_keymap_get_layout_index (ClutterKeymap *keymap)
-{
-  ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
-
-  return priv->effective_layout_group;
-}
-
-const char *
-clutter_keymap_get_current_display_name (ClutterKeymap *keymap)
-{
-  ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
-  char *display_name;
-
-  if (!priv->display_names)
-    return NULL;
-
-  if (g_strv_length (priv->display_names) <= priv->effective_layout_group)
-    return NULL;
-
-  display_name = priv->display_names[priv->effective_layout_group];
-  if (g_strcmp0 (display_name, "") == 0)
-    return NULL;
-  else
-    return display_name;
-}
-
-const char *
-clutter_keymap_get_current_short_name (ClutterKeymap *keymap)
-{
-  ClutterKeymapPrivate *priv = clutter_keymap_get_instance_private (keymap);
-  char *short_name;
-
-  if (!priv->short_names)
-    return NULL;
-
-  if (g_strv_length (priv->display_names) <= priv->effective_layout_group)
-    return NULL;
-
-  short_name = priv->short_names[priv->effective_layout_group];
-  if (g_strcmp0 (short_name, "") == 0)
-    return NULL;
-  else
-    return short_name;
+  g_signal_emit (keymap, signals[STATE_CHANGED], 0);
 }

@@ -47,7 +47,7 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkSnapshot, g_object_unref)
 
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_snapshot_get_type                   (void);
+GType           gtk_snapshot_get_type                   (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkSnapshot *   gtk_snapshot_new                        (void);
@@ -70,9 +70,6 @@ void            gtk_snapshot_push_debug                 (GtkSnapshot            
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_push_opacity               (GtkSnapshot            *snapshot,
                                                          double                  opacity);
-GDK_AVAILABLE_IN_4_22
-void            gtk_snapshot_push_isolation             (GtkSnapshot            *snapshot,
-                                                         GskIsolation            features);
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_push_blur                  (GtkSnapshot            *snapshot,
                                                          double                  radius);
@@ -80,14 +77,6 @@ GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_push_color_matrix          (GtkSnapshot            *snapshot,
                                                          const graphene_matrix_t*color_matrix,
                                                          const graphene_vec4_t  *color_offset);
-
-GDK_AVAILABLE_IN_4_20
-void            gtk_snapshot_push_component_transfer   (GtkSnapshot                *snapshot,
-                                                        const GskComponentTransfer *red,
-                                                        const GskComponentTransfer *green,
-                                                        const GskComponentTransfer *blue,
-                                                        const GskComponentTransfer *alpha);
-
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_push_repeat                (GtkSnapshot            *snapshot,
                                                          const graphene_rect_t  *bounds,
@@ -116,35 +105,23 @@ void            gtk_snapshot_push_blend                 (GtkSnapshot            
 GDK_AVAILABLE_IN_4_10
 void            gtk_snapshot_push_mask                  (GtkSnapshot            *snapshot,
                                                          GskMaskMode             mask_mode);
-GDK_AVAILABLE_IN_4_22
-void            gtk_snapshot_push_copy                  (GtkSnapshot            *snapshot);
-GDK_AVAILABLE_IN_4_22
-void            gtk_snapshot_push_composite             (GtkSnapshot            *snapshot,
-                                                         GskPorterDuff           op);
-
 
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_push_cross_fade            (GtkSnapshot            *snapshot,
                                                          double                  progress);
-
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-GDK_DEPRECATED_IN_4_16_FOR(GtkGLArea)
+GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_push_gl_shader             (GtkSnapshot            *snapshot,
                                                          GskGLShader            *shader,
                                                          const graphene_rect_t  *bounds,
                                                          GBytes                 *take_args);
-GDK_DEPRECATED_IN_4_16_FOR(GtkGLArea)
+GDK_AVAILABLE_IN_ALL
 void           gtk_snapshot_gl_shader_pop_texture       (GtkSnapshot            *snapshot);
-G_GNUC_END_IGNORE_DEPRECATIONS
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_pop                        (GtkSnapshot            *snapshot);
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_save                       (GtkSnapshot            *snapshot);
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_restore                    (GtkSnapshot            *snapshot);
-GDK_AVAILABLE_IN_4_24
-void            gtk_snapshot_set_snap                   (GtkSnapshot            *self,
-                                                         GskRectSnap             snap);
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_transform                  (GtkSnapshot            *snapshot,
                                                          GskTransform           *transform);
@@ -273,10 +250,6 @@ void            gtk_snapshot_append_stroke              (GtkSnapshot            
                                                          GskPath                *path,
                                                          const GskStroke        *stroke,
                                                          const GdkRGBA          *color);
-GDK_AVAILABLE_IN_4_22
-void            gtk_snapshot_append_paste               (GtkSnapshot            *snapshot,
-                                                         const graphene_rect_t  *bounds,
-                                                         gsize                   nth);
 
 G_END_DECLS
 

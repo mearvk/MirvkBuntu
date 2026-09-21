@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -14,7 +16,9 @@ export const ANIMATION_TIME = 250;
 import * as DND from './dnd.js';
 import * as LayoutManager from './layout.js';
 import * as Main from './main.js';
+import * as MessageTray from './messageTray.js';
 import * as OverviewControls from './overviewControls.js';
+import * as Params from '../misc/params.js';
 import * as SwipeTracker from './swipeTracker.js';
 import * as WindowManager from './windowManager.js';
 import * as WorkspaceThumbnail from './workspaceThumbnail.js';
@@ -22,6 +26,36 @@ import * as WorkspaceThumbnail from './workspaceThumbnail.js';
 const DND_WINDOW_SWITCH_TIMEOUT = 750;
 
 const OVERVIEW_ACTIVATION_TIMEOUT = 0.5;
+
+class ShellInfo {
+    setMessage(title, options) {
+        options = Params.parse(options, {
+            undoCallback: null,
+            forFeedback: false,
+        });
+
+        const source = MessageTray.getSystemSource();
+        let undoCallback = options.undoCallback;
+        let forFeedback = options.forFeedback;
+
+        if (!this._notification) {
+            this._notification = new MessageTray.Notification({
+                source,
+                isTransient: true,
+                forFeedback,
+            });
+            this._notification.connect('destroy', () => delete this._notification);
+        }
+        this._notification.set({title});
+
+        this._notification.clearActions();
+
+        if (undoCallback)
+            this._notification.addAction(_('Undo'), () => undoCallback());
+
+        source.addNotification(this._notification);
+    }
+}
 
 const OverviewActor = GObject.registerClass(
 class OverviewActor extends St.BoxLayout {
@@ -31,7 +65,7 @@ class OverviewActor extends St.BoxLayout {
             /* Translators: This is the main view to select
                 activities. See also note for "Activities" string. */
             accessible_name: _('Overview'),
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         this.add_constraint(new LayoutManager.MonitorConstraint({primary: true}));
@@ -166,6 +200,11 @@ export class Overview extends Signals.EventEmitter {
             reactive: true,
         });
         Main.layoutManager.overviewGroup.add_child(this._coverPane);
+        this._coverPane.connect('event', (_actor, event) => {
+            return event.type() === Clutter.EventType.ENTER ||
+                event.type() === Clutter.EventType.LEAVE
+                ? Clutter.EVENT_PROPAGATE : Clutter.EVENT_STOP;
+        });
         this._coverPane.hide();
 
         // XDND
@@ -213,6 +252,8 @@ export class Overview extends Signals.EventEmitter {
         this._overview._delegate = this;
         Main.layoutManager.overviewGroup.add_child(this._overview);
 
+        this._shellInfo = new ShellInfo();
+
         Main.layoutManager.connect('monitors-changed', this._relayout.bind(this));
         this._relayout();
 
@@ -226,17 +267,24 @@ export class Overview extends Signals.EventEmitter {
         const swipeTracker = new SwipeTracker.SwipeTracker(global.stage,
             Clutter.Orientation.VERTICAL,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-            {
-                allowDrag: false,
-                allowScroll: false,
-                name: 'Overview swipe tracker',
-                phase: Clutter.EventPhase.CAPTURE,
-            });
+            {allowDrag: false, allowScroll: false});
         swipeTracker.orientation = Clutter.Orientation.VERTICAL;
         swipeTracker.connect('begin', this._gestureBegin.bind(this));
         swipeTracker.connect('update', this._gestureUpdate.bind(this));
         swipeTracker.connect('end', this._gestureEnd.bind(this));
         this._swipeTracker = swipeTracker;
+    }
+
+    //
+    // options:
+    //  - undoCallback (function): the callback to be called if undo support is needed
+    //  - forFeedback (boolean): whether the message is for direct feedback of a user action
+    //
+    setMessage(text, options) {
+        if (this.isDummy)
+            return;
+
+        this._shellInfo.setMessage(text, options);
     }
 
     _changeShownState(state) {
@@ -249,9 +297,9 @@ export class Overview extends Signals.EventEmitter {
         }
 
         if (this._shownState === OverviewShownState.HIDDEN)
-            global.compositor.disable_unredirect();
+            Meta.disable_unredirect_for_display(global.display);
         else if (state === OverviewShownState.HIDDEN)
-            global.compositor.enable_unredirect();
+            Meta.enable_unredirect_for_display(global.display);
 
         this._shownState = state;
         this.emit(OVERVIEW_SHOWN_TRANSITIONS[state].signal);
@@ -262,7 +310,7 @@ export class Overview extends Signals.EventEmitter {
 
         DND.addDragMonitor(this._dragMonitor);
         // Remember the workspace we started from
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
         this._lastActiveWorkspaceIndex = workspaceManager.get_active_workspace_index();
     }
 
@@ -273,7 +321,7 @@ export class Overview extends Signals.EventEmitter {
         // we have to go back to where we started and hide
         // the overview
         if (this._shown) {
-            const workspaceManager = global.workspace_manager;
+            let workspaceManager = global.workspace_manager;
             workspaceManager.get_workspace_by_index(this._lastActiveWorkspaceIndex)
                 .activate(global.get_current_time());
             this.hide();
@@ -292,7 +340,7 @@ export class Overview extends Signals.EventEmitter {
     }
 
     _onDragMotion(dragEvent) {
-        const targetIsWindow = dragEvent.targetActor &&
+        let targetIsWindow = dragEvent.targetActor &&
                              dragEvent.targetActor._delegate &&
                              dragEvent.targetActor._delegate.metaWindow &&
                              !(dragEvent.targetActor._delegate instanceof WorkspaceThumbnail.WindowClone);
@@ -309,7 +357,7 @@ export class Overview extends Signals.EventEmitter {
 
         if (targetIsWindow) {
             this._lastHoveredWindow = dragEvent.targetActor._delegate.metaWindow;
-            this._windowSwitchTimeoutId = GLib.timeout_add_once(
+            this._windowSwitchTimeoutId = GLib.timeout_add(
                 GLib.PRIORITY_DEFAULT,
                 DND_WINDOW_SWITCH_TIMEOUT,
                 () => {
@@ -318,6 +366,7 @@ export class Overview extends Signals.EventEmitter {
                         this._windowSwitchTimestamp);
                     this.hide();
                     this._lastHoveredWindow = null;
+                    return GLib.SOURCE_REMOVE;
                 });
             GLib.Source.set_name_by_id(this._windowSwitchTimeoutId, '[gnome-shell] Main.activateWindow');
         }
@@ -341,8 +390,8 @@ export class Overview extends Signals.EventEmitter {
     }
 
     _onRestacked() {
-        const stack = global.get_window_actors();
-        const stackIndices = {};
+        let stack = global.get_window_actors();
+        let stackIndices = {};
 
         for (let i = 0; i < stack.length; i++) {
             // Use the stable sequence for an integer to use as a hash key
@@ -357,13 +406,11 @@ export class Overview extends Signals.EventEmitter {
     }
 
     _gestureUpdate(tracker, progress) {
-        if (progress === 0)
-            return;
-
         if (!this._shown) {
             this._shown = true;
             this._visible = true;
             this._visibleTarget = true;
+            this._animationInProgress = true;
 
             Main.layoutManager.overviewGroup.set_child_above_sibling(
                 this._coverPane, null);
@@ -372,8 +419,6 @@ export class Overview extends Signals.EventEmitter {
 
             Main.layoutManager.showOverview();
             this._syncGrab();
-
-            this._animationInProgress = true;
         }
 
         this._overview.controls.gestureProgress(progress);
@@ -456,7 +501,7 @@ export class Overview extends Signals.EventEmitter {
             return true;
 
         if (this._shown) {
-            const shouldBeModal = !this._inXdndDrag;
+            let shouldBeModal = !this._inXdndDrag;
             if (shouldBeModal && !this._modal) {
                 if (global.display.is_grabbed()) {
                     this.hide();
@@ -466,6 +511,12 @@ export class Overview extends Signals.EventEmitter {
                 const grab = Main.pushModal(global.stage, {
                     actionMode: Shell.ActionMode.OVERVIEW,
                 });
+                if (grab.get_seat_state() !== Clutter.GrabState.ALL) {
+                    Main.popModal(grab);
+                    this.hide();
+                    return false;
+                }
+
                 this._grab = grab;
                 this._modal = true;
             }
@@ -543,13 +594,13 @@ export class Overview extends Signals.EventEmitter {
         if (!this._shown)
             return;
 
-        const event = Clutter.get_current_event();
+        let event = Clutter.get_current_event();
         if (event) {
-            const type = event.type();
+            let type = event.type();
             const button =
                 type === Clutter.EventType.BUTTON_PRESS ||
                 type === Clutter.EventType.BUTTON_RELEASE;
-            const ctrl = (event.get_state() & Clutter.ModifierType.CONTROL_MASK) !== 0;
+            let ctrl = (event.get_state() & Clutter.ModifierType.CONTROL_MASK) !== 0;
             if (button && ctrl)
                 return;
         }

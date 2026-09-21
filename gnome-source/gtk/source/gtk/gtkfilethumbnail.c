@@ -4,7 +4,7 @@
  *
  * This file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as
- * published by the Free Software Foundation; either version 2.1 of the
+ * published by the Free Software Foundation; either version 3 of the
  * License, or (at your option) any later version.
  *
  * This file is distributed in the hope that it will be useful, but
@@ -15,12 +15,12 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- * SPDX-License-Identifier: LGPL-2.1-or-later
+ * SPDX-License-Identifier: LGPL-2.0-or-later
  */
 
 #include "config.h"
 
-#include "gtkfilethumbnailprivate.h"
+#include "gtkfilethumbnail.h"
 
 #include "gtkbinlayout.h"
 #include "gtkfilechooserutils.h"
@@ -239,12 +239,12 @@ _gtk_file_thumbnail_class_init (GtkFileThumbnailClass *klass)
   properties[PROP_ICON_SIZE] =
     g_param_spec_int ("icon-size", NULL, NULL,
                       -1, G_MAXINT, -1,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_INFO] =
     g_param_spec_object ("file-info", NULL, NULL,
                          G_TYPE_FILE_INFO,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 

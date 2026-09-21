@@ -74,7 +74,7 @@ struct _GtkButtonClass
 
 
 GDK_AVAILABLE_IN_ALL
-GType          gtk_button_get_type          (void);
+GType          gtk_button_get_type          (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget*     gtk_button_new               (void);
 GDK_AVAILABLE_IN_ALL

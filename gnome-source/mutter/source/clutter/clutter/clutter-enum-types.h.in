@@ -16,7 +16,7 @@ G_BEGIN_DECLS
 /*** END file-production ***/
 
 /*** BEGIN value-header ***/
-CLUTTER_EXPORT GType @enum_name@_get_type (void);
+CLUTTER_EXPORT GType @enum_name@_get_type (void) G_GNUC_CONST;
 #define CLUTTER_TYPE_@ENUMSHORT@ (@enum_name@_get_type())
 
 /*** END value-header ***/

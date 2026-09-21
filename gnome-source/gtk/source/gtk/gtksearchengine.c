@@ -59,7 +59,7 @@ enum
 
 static guint signals[LAST_SIGNAL];
 
-G_DEFINE_TYPE_WITH_PRIVATE (GtkSearchEngine, gtk_search_engine, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_PRIVATE (GtkSearchEngine, _gtk_search_engine, G_TYPE_OBJECT);
 
 static void
 set_query (GtkSearchEngine *engine,
@@ -131,11 +131,11 @@ finalize (GObject *object)
 
   g_clear_object (&engine->priv->query);
 
-  G_OBJECT_CLASS (gtk_search_engine_parent_class)->finalize (object);
+  G_OBJECT_CLASS (_gtk_search_engine_parent_class)->finalize (object);
 }
 
 static void
-gtk_search_engine_class_init (GtkSearchEngineClass *class)
+_gtk_search_engine_class_init (GtkSearchEngineClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
 
@@ -176,9 +176,9 @@ gtk_search_engine_class_init (GtkSearchEngineClass *class)
 }
 
 static void
-gtk_search_engine_init (GtkSearchEngine *engine)
+_gtk_search_engine_init (GtkSearchEngine *engine)
 {
-  engine->priv = gtk_search_engine_get_instance_private (engine);
+  engine->priv = _gtk_search_engine_get_instance_private (engine);
 }
 
 static void
@@ -320,9 +320,9 @@ static void
 connect_engine_signals (GtkSearchEngine *engine,
                         gpointer         data)
 {
-  g_signal_connect_object (engine, "hits-added", G_CALLBACK (hits_added), data, G_CONNECT_DEFAULT);
-  g_signal_connect_object (engine, "finished", G_CALLBACK (finished), data, G_CONNECT_DEFAULT);
-  g_signal_connect_object (engine, "error", G_CALLBACK (error), data, G_CONNECT_DEFAULT);
+  g_signal_connect_object (engine, "hits-added", G_CALLBACK (hits_added), data, 0);
+  g_signal_connect_object (engine, "finished", G_CALLBACK (finished), data, 0);
+  g_signal_connect_object (engine, "error", G_CALLBACK (error), data, 0);
 }
 
 GtkSearchEngine *

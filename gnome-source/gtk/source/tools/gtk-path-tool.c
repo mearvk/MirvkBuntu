@@ -45,7 +45,23 @@ usage (void)
              "  render       Render the path as an image\n"
              "  info         Print information about the path\n"
              "\n"));
-  exit (0);
+  exit (1);
+}
+
+/* A simplified version of g_log_writer_default_would_drop(), to avoid
+ * bumping up the required version of GLib to 2.68
+ */
+static gboolean
+would_drop (GLogLevelFlags  level,
+            const char     *domain)
+{
+#if GLIB_CHECK_VERSION (2, 68, 0)
+  return g_log_writer_default_would_drop (level, domain);
+#else
+  return (level & (G_LOG_LEVEL_ERROR |
+                   G_LOG_LEVEL_CRITICAL |
+                   G_LOG_LEVEL_WARNING)) == 0;
+#endif
 }
 
 static GLogWriterOutput
@@ -66,7 +82,7 @@ log_writer_func (GLogLevelFlags   level,
         message = fields[i].value;
     }
 
-  if (message != NULL && !g_log_writer_default_would_drop (level, domain))
+  if (message != NULL && !would_drop (level, domain))
     {
       const char *prefix;
       switch (level & G_LOG_LEVEL_MASK)
@@ -98,6 +114,8 @@ main (int argc, const char *argv[])
   g_log_set_writer_func (log_writer_func, NULL, NULL);
 
   gtk_init_check ();
+
+  gtk_test_register_all_types ();
 
   if (argc < 2)
     usage ();

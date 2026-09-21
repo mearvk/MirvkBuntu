@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import GLib from 'gi://GLib';
 import * as Signals from '../misc/signals.js';
 
@@ -59,7 +61,7 @@ const _modes = {
         panel: {
             left: [],
             center: ['dateMenu'],
-            right: ['dwellClick', 'keyboard', 'quickSettings'],
+            right: ['dwellClick', 'a11y', 'keyboard', 'quickSettings'],
         },
         panelStyle: 'login-screen',
     },
@@ -67,9 +69,7 @@ const _modes = {
     'unlock-dialog': {
         isLocked: true,
         unlockDialog: undefined,
-        components: Config.HAVE_NETWORKMANAGER
-            ? ['networkAgent', 'polkitAgent']
-            : ['polkitAgent'],
+        components: ['polkitAgent'],
         panel: {
             left: [],
             center: [],
@@ -102,9 +102,9 @@ const _modes = {
 };
 
 function _loadMode(file, info) {
-    const name = info.get_name();
-    const suffix = name.indexOf('.json');
-    const modeName = suffix === -1 ? name : name.slice(0, suffix);
+    let name = info.get_name();
+    let suffix = name.indexOf('.json');
+    let modeName = suffix === -1 ? name : name.slice(name, suffix);
 
     if (Object.prototype.hasOwnProperty.call(_modes, modeName))
         return;
@@ -114,13 +114,13 @@ function _loadMode(file, info) {
         [success_, fileContent] = file.load_contents(null);
         const decoder = new TextDecoder();
         newMode = JSON.parse(decoder.decode(fileContent));
-    } catch {
+    } catch (e) {
         return;
     }
 
     _modes[modeName] = {};
     const  excludedProps = ['unlockDialog'];
-    for (const prop in _modes[DEFAULT_MODE]) {
+    for (let prop in _modes[DEFAULT_MODE]) {
         if (newMode[prop] !== undefined &&
             !excludedProps.includes(prop))
             _modes[modeName][prop] = newMode[prop];
@@ -132,15 +132,15 @@ function _loadMode(file, info) {
  * Loads external session modes from the system data directories.
  */
 function _loadModes() {
-    for (const {file, info} of FileUtils.collectFromDatadirs('modes', false))
-        _loadMode(file, info);
+    for (const {dir, info} of FileUtils.collectFromDatadirs('modes', false))
+        _loadMode(dir, info);
 }
 
 export function listModes() {
     _loadModes();
-    const loop = new GLib.MainLoop(null, false);
-    const id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-        const names = Object.getOwnPropertyNames(_modes);
+    let loop = new GLib.MainLoop(null, false);
+    let id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        let names = Object.getOwnPropertyNames(_modes);
         for (let i = 0; i < names.length; i++) {
             if (_modes[names[i]].isPrimary)
                 print(names[i]);
@@ -156,9 +156,9 @@ export class SessionMode extends Signals.EventEmitter {
         super();
 
         _loadModes();
-        const isPrimary = _modes[global.session_mode] &&
+        let isPrimary = _modes[global.session_mode] &&
                          _modes[global.session_mode].isPrimary;
-        const mode = isPrimary ? global.session_mode : 'user';
+        let mode = isPrimary ? global.session_mode : 'user';
         this._modeStack = [mode];
         this._sync();
     }
@@ -199,7 +199,7 @@ export class SessionMode extends Signals.EventEmitter {
 
         // A simplified version of Lang.copyProperties, handles
         // undefined as a special case for "no change / inherit from previous mode"
-        for (const prop in params) {
+        for (let prop in params) {
             if (params[prop] !== undefined)
                 this[prop] = params[prop];
         }

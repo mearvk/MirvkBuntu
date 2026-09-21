@@ -1,7 +1,7 @@
 project('gnome-shell', 'c',
-  version: '51.0',
-  meson_version: '>= 1.3.0',
-  license: 'GPL-2.0-or-later',
+  version: '46.4',
+  meson_version: '>= 0.58.0',
+  license: 'GPLv2+'
 )
 
 split_version = meson.project_version().split('.')
@@ -10,10 +10,11 @@ split_version = meson.project_version().split('.')
 # the Cogl and Clutter libraries also use this API version.
 # The API version is increased each development cycle,
 # starting with 0 in 3.23.x
-mutter_api_version = '51'
+mutter_api_version = '14'
 
 clutter_pc = 'mutter-clutter-' + mutter_api_version
 cogl_pc = 'mutter-cogl-' + mutter_api_version
+cogl_pango_pc = 'mutter-cogl-pango-' + mutter_api_version
 mtk_pc = 'mutter-mtk-' + mutter_api_version
 libmutter_pc = 'libmutter-' + mutter_api_version
 libmutter_test_pc = 'libmutter-test-' + mutter_api_version
@@ -21,21 +22,19 @@ libmutter_test_pc = 'libmutter-test-' + mutter_api_version
 ecal_req = '>= 3.33.1'
 eds_req = '>= 3.33.1'
 gcr_req = '>= 3.90.0'
-gio_req = '>= 2.86.0'
-gjs_req = '>= 1.87.1'
+gio_req = '>= 2.79.2'
+gi_req = '>= 1.49.1'
+gjs_req = '>= 1.73.1'
 gtk_req = '>= 4.0'
-mutter_req = '>= 51.0'
+mutter_req = '>= 46.0'
 polkit_req = '>= 0.100'
-schemas_req = '>= 50.alpha'
+schemas_req = '>= 46.beta'
 systemd_req = '>= 246'
+ibus_req = '>= 1.5.19'
 gnome_desktop_req = '>= 40'
 pipewire_req = '>= 0.3.49'
-pango_req = '>= 1.46.0'
-json_glib_req = '>= 1.6'
-rsvg_req = '>= 2.46'
-glycin_req = '>= 2.0'
 
-nm_req = '>= 1.24'
+nm_req = '>= 1.10.4'
 secret_req = '>= 0.18'
 
 fs = import('fs')
@@ -71,12 +70,11 @@ else
 endif
 
 atk_bridge_dep = dependency('atk-bridge-2.0')
-cairo_dep = dependency('cairo')
 ecal_dep = dependency('libecal-2.0', version: ecal_req)
 eds_dep = dependency('libedataserver-1.2', version: eds_req)
 gcr_dep = dependency('gcr-4', version: gcr_req)
 gdk_pixbuf_dep = dependency('gdk-pixbuf-2.0')
-gi_dep = dependency('girepository-2.0', version: gio_req)
+gi_dep = dependency('gobject-introspection-1.0', version: gi_req)
 gio_dep = dependency('gio-2.0', version: gio_req)
 gio_unix_dep = dependency('gio-unix-2.0', version: gio_req)
 gjs_dep = dependency('gjs-1.0', version: gjs_req)
@@ -85,27 +83,13 @@ libxml_dep = dependency('libxml-2.0')
 clutter_dep = dependency(clutter_pc, version: mutter_req)
 mtk_dep = dependency(mtk_pc, version: mutter_req)
 cogl_dep = dependency(cogl_pc, version: mutter_req)
+cogl_pango_dep = dependency(cogl_pango_pc, version: mutter_req)
 mutter_dep = dependency(libmutter_pc, version: mutter_req)
 polkit_dep = dependency('polkit-agent-1', version: polkit_req)
+ibus_dep = dependency('ibus-1.0', version: ibus_req)
+x11_dep = dependency('x11')
 schemas_dep = dependency('gsettings-desktop-schemas', version: schemas_req)
 gnome_desktop_dep = dependency('gnome-desktop-4', version: gnome_desktop_req)
-pango_dep = dependency('pango', version: pango_req)
-json_glib_dep = dependency('json-glib-1.0', version: json_glib_req)
-rsvg_dep = dependency('librsvg-2.0', version: rsvg_req)
-glycin_dep = dependency('glycin-2', version: glycin_req)
-
-have_fonts = mutter_dep.get_variable('have_fonts') == 'true'
-have_xwayland = mutter_dep.get_variable('have_xwayland') == 'true'
-if have_xwayland
-  x11_dep = dependency('x11')
-  xext_dep = dependency('xext')
-  xfixes_dep = dependency('xfixes')
-endif
-
-if not have_fonts
-  error('Shell requires mutter to be built with fonts rendering support')
-endif
-
 
 nm_deps = []
 if get_option('networkmanager')
@@ -117,11 +101,6 @@ else
   have_networkmanager = false
 endif
 
-have_portal_helper = get_option('portal_helper')
-if have_portal_helper and not have_networkmanager
-  error('Portal helper requires networkmanager support')
-endif
-
 if get_option('camera_monitor')
   libpipewire_dep = dependency('libpipewire-0.3', version: pipewire_req)
   have_pipewire = true
@@ -130,41 +109,29 @@ else
   have_pipewire = false
 endif
 
-libsystemd_dep = dependency('libsystemd', version: systemd_req, required: false)
-
-if not libsystemd_dep.found()
-  libsystemd_dep = dependency('libelogind', required: false)
-endif
-
-if not libsystemd_dep.found()
-  error('No libsystemd provider found: tried libsystemd and libelogind')
-endif
-
 if get_option('systemd')
-  if libsystemd_dep.name() == 'libelogind'
-    error('systemd option conflicts with elogind libsystemd provider')
-  endif
-
+  libsystemd_dep = dependency('libsystemd', version: systemd_req)
   systemd_dep = dependency('systemd', version: systemd_req)
   systemduserunitdir = systemd_dep.get_variable('systemduserunitdir',
     pkgconfig_define: ['prefix', prefix])
   have_systemd = true
 else
+  libsystemd_dep = []
   have_systemd = false
 endif
 
 if get_option('man')
-  rst2man = find_program('rst2man')
-  subdir('man')
+  if fs.exists('man/gnome-shell.1')
+    install_man('man/gnome-shell.1')
+  else
+    a2x = find_program('a2x')
+    subdir('man')
+  endif
 endif
 
-have_asan_tests = get_option('b_sanitize') == 'address'
-
 mutter_typelibdir = mutter_dep.get_variable('typelibdir')
-mutter_pkglibdir = mutter_dep.get_variable('pkglibdir')
 python = find_program('python3')
 gjs = find_program('gjs')
-generate_app_list = find_program('build-aux/generate-app-list.py')
 
 cc = meson.get_compiler('c')
 
@@ -178,17 +145,13 @@ cdata.set_quoted('PACKAGE_VERSION', meson.project_version())
 cdata.set('HAVE_NETWORKMANAGER', have_networkmanager)
 cdata.set('HAVE_PIPEWIRE', have_pipewire)
 cdata.set('HAVE_SYSTEMD', have_systemd)
-cdata.set('HAVE_XWAYLAND', have_xwayland)
 
 cdata.set('HAVE_FDWALK', cc.has_function('fdwalk'))
 cdata.set('HAVE_MALLINFO', cc.has_function('mallinfo'))
 cdata.set('HAVE_MALLINFO2', cc.has_function('mallinfo2'))
 cdata.set('HAVE_SYS_RESOURCE_H', cc.has_header('sys/resource.h'))
 cdata.set('HAVE_EXE_INTROSPECTION',
-  cc.has_header('elf.h') and
-  cc.has_header('link.h') and
-  cc.has_define('__GLIBC__', prefix: '#include <link.h>')
-)
+  cc.has_header('elf.h') and cc.has_header('link.h'))
 cdata.set('HAVE__NL_TIME_FIRST_WEEKDAY',
   cc.has_header_symbol('langinfo.h', '_NL_TIME_FIRST_WEEKDAY')
 )
@@ -253,11 +216,6 @@ if buildtype != 'plain'
     gs_c_args += [
       '-DG_ENABLE_DEBUG',
     ]
-  else
-    gs_c_args += [
-      '-DG_DISABLE_ASSERT',
-      '-DG_DISABLE_CAST_CHECKS',
-    ]
   endif
 
   supported_gs_c_args = cc.get_supported_arguments(gs_c_args)
@@ -285,11 +243,15 @@ libgvc = subproject('gvc',
 )
 libgvc_gir = libgvc.get_variable('libgvc_gir')
 
-libshew = dependency('libshew',
+libshew = subproject('shew',
   default_options: [
     'package_name=@0@'.format(meson.project_name()),
   ]
 )
+
+libshew_version = libshew.get_variable('package_version')
+assert(libshew_version == meson.project_version(),
+  'shew version does not match project version')
 
 if get_option('extensions_tool')
   extension_tool = subproject('extensions-tool',
@@ -304,23 +266,24 @@ if get_option('extensions_tool')
   )
 endif
 
+if get_option('extensions_app')
+  extensions_app = subproject('extensions-app',
+    default_options: [
+      'package_name=@0@'.format(meson.project_name()),
+    ]
+  )
+
+  extensions_app_version = extensions_app.get_variable('package_version')
+  assert(extensions_app_version == meson.project_version(),
+    'Extensions app version does not match project version'
+  )
+endif
+
 if get_option('tests')
   common_test_env = environment()
   common_test_env.set('GSETTINGS_SCHEMA_DIR', meson.project_build_root() / 'data')
   common_test_env.set('GSETTINGS_BACKEND', 'memory')
   common_test_env.set('XDG_CURRENT_DESKTOP', '')
-  if have_asan_tests
-    asan_options = [
-      'halt_on_error=1',
-      'abort_on_error=1',
-      'detect_leaks=0',
-      'verify_asan_link_order=0',
-    ]
-    common_test_env.set('ASAN_OPTIONS', ':'.join(asan_options))
-    common_test_env.set('LD_PRELOAD', mutter_pkglibdir / 'libasan-preloader.so')
-  endif
-
-  jasmine = find_program('jasmine')
 
   add_test_setup('default',
     is_default: true,
@@ -330,12 +293,12 @@ endif
 
 po_dir = join_paths(meson.current_source_dir(), 'po')
 
-subdir('data')
 subdir('js')
 subdir('src')
 subdir('po')
+subdir('data')
 
-if get_option('tests') and have_xwayland
+if get_option('tests')
   subdir('tests')
 endif
 
@@ -348,14 +311,15 @@ gnome.post_install(
   gtk_update_icon_cache: true
 )
 
-meson.add_dist_script('build-aux/generate-stylesheets.py')
-meson.add_dist_script('build-aux/check-version.py', meson.project_version(), 'NEWS')
+meson.add_dist_script('meson/generate-manpages.py')
+meson.add_dist_script('meson/generate-stylesheets.py')
+meson.add_dist_script('meson/check-version.py', meson.project_version(), 'NEWS')
 
 summary_options = {
-  'have_xwayland': have_xwayland,
   'camera_monitor': get_option('camera_monitor'),
   'networkmanager': get_option('networkmanager'),
   'systemd': get_option('systemd'),
+  'extensions_app': get_option('extensions_app'),
   'extensions_tool': get_option('extensions_tool'),
   'man': get_option('man'),
   'gtk_doc': get_option('gtk_doc'),

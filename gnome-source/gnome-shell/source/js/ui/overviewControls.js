@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -8,22 +10,17 @@ import St from 'gi://St';
 
 import * as AppDisplay from './appDisplay.js';
 import * as Dash from './dash.js';
+import * as Layout from './layout.js';
 import * as Main from './main.js';
 import * as Overview from './overview.js';
-import * as Search from './search.js';
 import * as SearchController from './searchController.js';
 import * as Util from '../misc/util.js';
 import * as WindowManager from './windowManager.js';
 import * as WorkspaceThumbnail from './workspaceThumbnail.js';
 import * as WorkspacesView from './workspacesView.js';
 
-import {STARTUP_ANIMATION_TIME} from './layout.js';
-
 export const SMALL_WORKSPACE_RATIO = 0.15;
-const DASH_MAX_HEIGHT_RATIO = 0.16;
-const VERTICAL_SPACING_RATIO = 0.02;
-const THUMBNAILS_SPACING_ADJUSTMENT_TOP = 0.6;
-const THUMBNAILS_SPACING_ADJUSTMENT_BOTTOM = 0.4;
+const DASH_MAX_HEIGHT_RATIO = 0.15;
 
 const A11Y_SCHEMA = 'org.gnome.desktop.a11y.keyboard';
 
@@ -50,11 +47,12 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         this._searchController = searchController;
         this._dash = dash;
 
+        this._spacing = 0;
+
         this._cachedWorkspaceBoxes = new Map();
         this._postAllocationCallbacks = [];
 
-        stateAdjustment.connectObject('notify::value',
-            () => this.layout_changed(), this);
+        stateAdjustment.connect('notify::value', () => this.layout_changed());
 
         this._workAreaBox = new Clutter.ActorBox();
         global.display.connectObject(
@@ -78,7 +76,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         this._workAreaBox.set_size(workArea.width, workArea.height);
     }
 
-    _computeWorkspacesBoxForState(state, box, searchHeight, dashHeight, thumbnailsHeight, spacing) {
+    _computeWorkspacesBoxForState(state, box, searchHeight, dashHeight, thumbnailsHeight) {
         const workspaceBox = box.copy();
         const [width, height] = workspaceBox.get_size();
         const {y1: startY} = this._workAreaBox;
@@ -91,16 +89,16 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
             break;
         case ControlsState.WINDOW_PICKER:
             workspaceBox.set_origin(0,
-                startY + searchHeight + Math.round(spacing * THUMBNAILS_SPACING_ADJUSTMENT_TOP) +
-                thumbnailsHeight + Math.round(spacing * THUMBNAILS_SPACING_ADJUSTMENT_BOTTOM) * expandFraction);
+                startY + searchHeight + this._spacing +
+                thumbnailsHeight + this._spacing * expandFraction);
             workspaceBox.set_size(width,
                 height -
-                dashHeight - spacing -
-                searchHeight - Math.round(spacing * THUMBNAILS_SPACING_ADJUSTMENT_TOP) -
-                thumbnailsHeight - Math.round(spacing * THUMBNAILS_SPACING_ADJUSTMENT_BOTTOM) * expandFraction);
+                dashHeight - this._spacing -
+                searchHeight - this._spacing -
+                thumbnailsHeight - this._spacing * expandFraction);
             break;
         case ControlsState.APP_GRID:
-            workspaceBox.set_origin(0, startY + searchHeight + spacing);
+            workspaceBox.set_origin(0, startY + searchHeight + this._spacing);
             workspaceBox.set_size(
                 width,
                 Math.round(height * SMALL_WORKSPACE_RATIO));
@@ -110,7 +108,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         return workspaceBox;
     }
 
-    _getAppDisplayBoxForState(state, box, searchHeight, dashHeight, workspacesBox, spacing) {
+    _getAppDisplayBoxForState(state, box, searchHeight, dashHeight, appGridBox) {
         const [width, height] = box.get_size();
         const {y1: startY} = this._workAreaBox;
         const appDisplayBox = new Clutter.ActorBox();
@@ -122,15 +120,15 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
             break;
         case ControlsState.APP_GRID:
             appDisplayBox.set_origin(0,
-                startY + searchHeight + spacing + workspacesBox.get_height() + spacing);
+                startY + searchHeight + this._spacing + appGridBox.get_height());
             break;
         }
 
         appDisplayBox.set_size(width,
             height -
-            searchHeight - spacing -
-            workspacesBox.get_height() - spacing -
-            dashHeight - spacing);
+            searchHeight - this._spacing -
+            appGridBox.get_height() - this._spacing -
+            dashHeight);
 
         return appDisplayBox;
     }
@@ -141,6 +139,20 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
 
         this._postAllocationCallbacks.forEach(cb => cb());
         this._postAllocationCallbacks = [];
+    }
+
+    vfunc_set_container(container) {
+        this._container?.disconnectObject(this);
+        this._container = container;
+        this._container?.connectObject('style-changed',
+            () => {
+                const node = this._container.get_theme_node();
+                const spacing = node.get_length('spacing');
+                if (this._spacing !== spacing) {
+                    this._spacing = spacing;
+                    this.layout_changed();
+                }
+            }, this);
     }
 
     vfunc_get_preferred_width(_container, _forHeight) {
@@ -159,16 +171,15 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         const startY = this._workAreaBox.y1;
         box.y1 += startY;
         const [width, height] = box.get_size();
-        const spacing = Math.round(height * VERTICAL_SPACING_RATIO);
         let availableHeight = height;
 
         // Search entry
-        const [searchHeight] = this._searchEntry.get_preferred_height(width);
+        let [searchHeight] = this._searchEntry.get_preferred_height(width);
         childBox.set_origin(0, startY);
         childBox.set_size(width, searchHeight);
         this._searchEntry.allocate(childBox);
 
-        availableHeight -= searchHeight + spacing;
+        availableHeight -= searchHeight + this._spacing;
 
         // Dash
         const maxDashHeight = Math.round(box.get_height() * DASH_MAX_HEIGHT_RATIO);
@@ -180,7 +191,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         childBox.set_size(width, dashHeight);
         this._dash.allocate(childBox);
 
-        availableHeight -= dashHeight + spacing;
+        availableHeight -= dashHeight + this._spacing;
 
         // Workspace Thumbnails
         let thumbnailsHeight = 0;
@@ -191,13 +202,13 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
             thumbnailsHeight = Math.min(
                 thumbnailsHeight * expandFraction,
                 height * this._workspacesThumbnails.maxThumbnailScale);
-            childBox.set_origin(0, startY + searchHeight + Math.round(spacing * THUMBNAILS_SPACING_ADJUSTMENT_TOP));
+            childBox.set_origin(0, startY + searchHeight + this._spacing);
             childBox.set_size(width, thumbnailsHeight);
             this._workspacesThumbnails.allocate(childBox);
         }
 
         // Workspaces
-        let params = [box, searchHeight, dashHeight, thumbnailsHeight, spacing];
+        let params = [box, searchHeight, dashHeight, thumbnailsHeight];
         const transitionParams = this._stateAdjustment.getStateTransitionParams();
 
         // Update cached boxes
@@ -222,7 +233,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
             const workspaceAppGridBox =
                 this._cachedWorkspaceBoxes.get(ControlsState.APP_GRID);
 
-            params = [box, searchHeight, dashHeight, workspaceAppGridBox, spacing];
+            params = [box, searchHeight, dashHeight, workspaceAppGridBox];
             let appDisplayBox;
             if (!transitionParams.transitioning) {
                 appDisplayBox =
@@ -240,7 +251,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         }
 
         // Search
-        childBox.set_origin(0, startY + searchHeight + spacing);
+        childBox.set_origin(0, startY + searchHeight + this._spacing);
         childBox.set_size(width, availableHeight);
 
         this._searchController.allocate(childBox);
@@ -262,7 +273,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
 export const OverviewAdjustment = GObject.registerClass({
     Properties: {
         'gesture-in-progress': GObject.ParamSpec.boolean(
-            'gesture-in-progress', null, null,
+            'gesture-in-progress', 'Gesture in progress', 'Gesture in progress',
             GObject.ParamFlags.READWRITE,
             false),
     },
@@ -318,12 +329,11 @@ class ControlsManager extends St.Widget {
             x_expand: true,
             y_expand: true,
             clip_to_allocation: true,
-            reactive: true,
         });
 
         this._ignoreShowAppsButtonToggle = false;
 
-        this._searchEntry = new Search.SearchEntry({
+        this._searchEntry = new St.Entry({
             style_class: 'search-entry',
             /* Translators: this is the text displayed
                in the search entry when no search is
@@ -344,20 +354,19 @@ class ControlsManager extends St.Widget {
         this._workspaceAdjustment = Main.createWorkspacesAdjustment(this);
 
         this._stateAdjustment = new OverviewAdjustment(this);
-        this._stateAdjustment.connectObject('notify::value',
-            () => this._update(), this);
+        this._stateAdjustment.connect('notify::value', this._update.bind(this));
 
         this._searchController = new SearchController.SearchController(
             this._searchEntry,
             this.dash.showAppsButton);
-        this._searchController.connectObject('notify::search-active',
-            () => this._onSearchChanged(), this);
+        this._searchController.connect('notify::search-active', this._onSearchChanged.bind(this));
 
-        Main.layoutManager.connectObject('monitors-changed', () =>
-            this._thumbnailsBox.setMonitorIndex(Main.layoutManager.primaryIndex), this);
+        Main.layoutManager.connect('monitors-changed', () => {
+            this._thumbnailsBox.setMonitorIndex(Main.layoutManager.primaryIndex);
+        });
         this._thumbnailsBox = new WorkspaceThumbnail.ThumbnailsBox(
             this._workspaceAdjustment, Main.layoutManager.primaryIndex);
-        this._thumbnailsBox.connectObject('notify::should-show', () => {
+        this._thumbnailsBox.connect('notify::should-show', () => {
             this._thumbnailsBox.show();
             this._thumbnailsBox.ease_property('expand-fraction',
                 this._thumbnailsBox.should_show ? 1 : 0, {
@@ -365,7 +374,7 @@ class ControlsManager extends St.Widget {
                     mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                     onComplete: () => this._updateThumbnailsBox(),
                 });
-        }, this);
+        });
 
         this._workspacesDisplay = new WorkspacesView.WorkspacesDisplay(
             this,
@@ -380,8 +389,6 @@ class ControlsManager extends St.Widget {
         this.add_child(this._thumbnailsBox);
         this.add_child(this._workspacesDisplay);
 
-        global.focus_manager.add_group(this);
-
         this.layout_manager = new ControlsManagerLayout(
             this._searchEntryBin,
             this._appDisplay,
@@ -391,8 +398,8 @@ class ControlsManager extends St.Widget {
             this.dash,
             this._stateAdjustment);
 
-        this.dash.showAppsButton.connectObject('notify::checked',
-            () => this._onShowAppsButtonToggled(), this);
+        this.dash.showAppsButton.connect('notify::checked',
+            this._onShowAppsButtonToggled.bind(this));
 
         Main.ctrlAltTabManager.addGroup(
             this.appDisplay,
@@ -421,7 +428,7 @@ class ControlsManager extends St.Widget {
         this._a11ySettings = new Gio.Settings({schema_id: A11Y_SCHEMA});
 
         this._lastOverlayKeyTime = 0;
-        global.display.connectObject('overlay-key', () => {
+        global.display.connect('overlay-key', () => {
             if (this._a11ySettings.get_boolean('stickykeys-enable'))
                 return;
 
@@ -440,7 +447,42 @@ class ControlsManager extends St.Widget {
                 this._shiftState(Meta.MotionDirection.UP);
             else
                 Main.overview.toggle();
-        }, this);
+        });
+
+        // connect_after to give search controller first dibs on the event
+        global.stage.connect_after('key-press-event', (actor, event) => {
+            if (this._searchController.searchActive)
+                return Clutter.EVENT_PROPAGATE;
+
+            if (global.stage.key_focus &&
+                !this.contains(global.stage.key_focus))
+                return Clutter.EVENT_PROPAGATE;
+
+            const {finalState} =
+                this._stateAdjustment.getStateTransitionParams();
+            let keynavDisplay;
+
+            if (finalState === ControlsState.WINDOW_PICKER)
+                keynavDisplay = this._workspacesDisplay;
+            else if (finalState === ControlsState.APP_GRID)
+                keynavDisplay = this._appDisplay;
+
+            if (!keynavDisplay)
+                return Clutter.EVENT_PROPAGATE;
+
+            const symbol = event.get_key_symbol();
+            if (symbol === Clutter.KEY_Tab || symbol === Clutter.KEY_Down) {
+                keynavDisplay.navigate_focus(
+                    null, St.DirectionType.TAB_FORWARD, false);
+                return Clutter.EVENT_STOP;
+            } else if (symbol === Clutter.KEY_ISO_Left_Tab) {
+                keynavDisplay.navigate_focus(
+                    null, St.DirectionType.TAB_BACKWARD, false);
+                return Clutter.EVENT_STOP;
+            }
+
+            return Clutter.EVENT_PROPAGATE;
+        });
 
         Main.wm.addKeybinding(
             'toggle-application-view',
@@ -464,31 +506,6 @@ class ControlsManager extends St.Widget {
         this._update();
 
         this.connect('destroy', this._onDestroy.bind(this));
-    }
-
-    vfunc_navigate_focus(from, _direction) {
-        if (from === null) {
-            const {finalState} =
-                  this._stateAdjustment.getStateTransitionParams();
-            let keynavDisplay;
-
-            if (finalState === ControlsState.WINDOW_PICKER)
-                keynavDisplay = this._workspacesDisplay;
-            else if (finalState === ControlsState.APP_GRID)
-                keynavDisplay = this._appDisplay;
-            else
-                return false;
-
-            keynavDisplay.grab_key_focus();
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    vfunc_key_focus_in() {
-        super.vfunc_key_focus_in();
-        this.navigate_focus(null, St.DirectionType.TAB_FORWARD, false);
     }
 
     _getFitModeForState(state) {
@@ -550,18 +567,13 @@ class ControlsManager extends St.Widget {
         if (thumbnailsBoxVisible) {
             this._thumbnailsBox.opacity = 0;
             this._thumbnailsBox.visible = thumbnailsBoxVisible;
-            this._thumbnailsBox.expandFraction = 1.0;
         }
 
         const params = {
             opacity: searchActive ? 0 : opacity,
             duration: animate ? SIDE_CONTROLS_ANIMATION_TIME : 0,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            onComplete: () => {
-                this._thumbnailsBox.visible = thumbnailsBoxVisible;
-                if (!thumbnailsBoxVisible)
-                    this._thumbnailsBox.expandFraction = 0.0;
-            },
+            onComplete: () => (this._thumbnailsBox.visible = thumbnailsBoxVisible),
         };
 
         if (!searchActive) {
@@ -598,9 +610,6 @@ class ControlsManager extends St.Widget {
 
         this._updateThumbnailsBox();
         this._updateAppDisplayVisibility(params);
-
-        if (params.progress === 1.0)
-            this.grab_key_focus();
     }
 
     _onSearchChanged() {
@@ -650,7 +659,7 @@ class ControlsManager extends St.Widget {
         this._stateAdjustment.remove_transition('value');
         this._stateAdjustment.ease(value, {
             duration: SIDE_CONTROLS_ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_SINE,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
     }
 
@@ -721,7 +730,7 @@ class ControlsManager extends St.Widget {
         this._stateAdjustment.value = ControlsState.HIDDEN;
         this._stateAdjustment.ease(state, {
             duration: Overview.ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_SINE,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onStopped: () => {
                 if (callback)
                     callback();
@@ -800,14 +809,11 @@ class ControlsManager extends St.Widget {
 
         this.prepareToEnterOverview();
 
-        const startupPromises = [];
-
         this._stateAdjustment.value = ControlsState.HIDDEN;
-        startupPromises.push(
-            this._stateAdjustment.easeAsync(ControlsState.WINDOW_PICKER, {
-                duration: Overview.ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            }));
+        this._stateAdjustment.ease(ControlsState.WINDOW_PICKER, {
+            duration: Overview.ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
 
         this.dash.showAppsButton.checked = false;
         this._ignoreShowAppsButtonToggle = false;
@@ -818,13 +824,14 @@ class ControlsManager extends St.Widget {
         // We can't run the animation before the first allocation happens
         await this.layout_manager.ensureAllocation();
 
+        const {STARTUP_ANIMATION_TIME} = Layout;
+
         // Opacity
-        startupPromises.push(
-            this.easeAsync({
-                opacity: 255,
-                duration: STARTUP_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            }));
+        this.ease({
+            opacity: 255,
+            duration: STARTUP_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.LINEAR,
+        });
 
         // Search bar falls from the ceiling
         const {primaryMonitor} = Main.layoutManager;
@@ -832,25 +839,24 @@ class ControlsManager extends St.Widget {
         const yOffset = y - primaryMonitor.y;
 
         this._searchEntryBin.translation_y = -(yOffset + this._searchEntryBin.height);
-        startupPromises.push(
-            this._searchEntryBin.easeAsync({
-                translation_y: 0,
-                duration: STARTUP_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            }));
+        this._searchEntryBin.ease({
+            translation_y: 0,
+            duration: STARTUP_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
 
         // The Dash rises from the bottom. This is the last animation to finish,
         // so resolve the promise there.
         this.dash.translation_y = this.dash.height + this.dash.margin_bottom;
-        startupPromises.push(
-            this.dash.easeAsync({
+        return new Promise(resolve => {
+            this.dash.ease({
                 translation_y: 0,
                 delay: STARTUP_ANIMATION_TIME,
                 duration: STARTUP_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            }));
-
-        return Promise.allSettled(startupPromises);
+                onStopped: () => resolve(),
+            });
+        });
     }
 
     get searchController() {

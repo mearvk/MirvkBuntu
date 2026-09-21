@@ -21,56 +21,19 @@
 
 """Utilities for accessible applications."""
 
-from __future__ import annotations
+import subprocess
 
 import gi
 
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, GLib
 
-from . import ax_cache_manager, debug
+from . import debug
 from .ax_object import AXObject
-from .ax_utilities_object import AXUtilitiesObject
-
-
-class _AXUtilitiesApplicationCache:
-    """Provides application-specific access to manager-backed cached values."""
-
-    APP_FOR_OBJECT = "AXUtilitiesApplication.app-for-object"
-    _CACHE_CLEAR_INTERVAL_SECONDS = 120
-
-    def __init__(self) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        self._manager.register_cache(
-            self,
-            self.APP_FOR_OBJECT,
-            lifetime=ax_cache_manager.Lifetime.PROCESS,
-            clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-            clear_interval_seconds=self._CACHE_CLEAR_INTERVAL_SECONDS,
-        )
-        self._apps_for_objects = self._manager.get_cache(self, self.APP_FOR_OBJECT)
-
-    def get_application(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
-        """Returns the cached application for obj."""
-
-        if self._apps_for_objects is None:
-            return None
-        return self._apps_for_objects.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_application(self, obj: Atspi.Accessible, app: Atspi.Accessible) -> None:
-        """Stores the application for obj."""
-
-        if self._apps_for_objects is not None:
-            self._apps_for_objects.put(ax_cache_manager.get_object_key(obj), app)
 
 
 class AXUtilitiesApplication:
     """Utilities for accessible applications."""
-
-    _CACHE = _AXUtilitiesApplicationCache()
-
-    _mutter_x11_frames: Atspi.Accessible | None = None
-    _mutter_x11_frames_checked: bool = False
 
     @staticmethod
     def application_as_string(obj: Atspi.Accessible) -> str:
@@ -88,29 +51,6 @@ class AXUtilitiesApplication:
         return string
 
     @staticmethod
-    def find_window_with_descendant(child: Atspi.Accessible) -> Atspi.Accessible | None:
-        """A terrible, non-performant workaround for broken ancestry."""
-
-        if not AXObject.is_valid(child):
-            return None
-
-        app = AXUtilitiesApplication.get_application(child)
-        if app is None:
-            return None
-
-        for i in range(AXObject.get_child_count(app)):
-            window = AXObject.get_child(app, i)
-            if AXUtilitiesObject.find_descendant(window, lambda x: x == child) is not None:
-                tokens = ["AXUtilitiesApplication:", window, "contains", child]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                return window
-
-            tokens = ["AXUtilitiesApplication:", window, "does not contain", child]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        return None
-
-    @staticmethod
     def get_all_applications(
         must_have_window: bool = False,
         exclude_unresponsive: bool = False,
@@ -125,50 +65,27 @@ class AXUtilitiesApplication:
         def pred(obj: Atspi.Accessible) -> bool:
             if exclude_unresponsive and AXUtilitiesApplication.is_application_unresponsive(obj):
                 return False
-            if AXUtilitiesApplication.is_mutter_x11_frames(obj):
+            if AXObject.get_name(obj) == "mutter-x11-frames":
                 return is_debug
             if must_have_window:
                 return AXObject.get_child_count(obj) > 0
             return True
 
-        result = list(AXObject.iter_children(desktop, pred))
-        if not AXUtilitiesApplication._mutter_x11_frames_checked:
-            AXUtilitiesApplication._mutter_x11_frames_checked = True
-            if AXUtilitiesApplication._mutter_x11_frames is None:
-                msg = "AXUtilitiesApplication: mutter-x11-frames not found on this desktop"
-                debug.print_message(debug.LEVEL_INFO, msg, True)
-        return result
+        return list(AXObject.iter_children(desktop, pred))
 
     @staticmethod
     def get_application(obj: Atspi.Accessible) -> Atspi.Accessible | None:
         """Returns the accessible application associated with obj"""
 
-        if not AXObject.is_valid(obj):
+        if obj is None:
             return None
-
-        cached = AXUtilitiesApplication._CACHE.get_application(obj)
-        if cached is not None:
-            return cached
-
-        parent = None
-        if AXObject.get_role(obj) != Atspi.Role.APPLICATION:
-            parent = AXObject.get_parent(obj)
-        if parent is not None:
-            cached = AXUtilitiesApplication._CACHE.get_application(parent)
-            if cached is not None:
-                AXUtilitiesApplication._CACHE.set_application(obj, cached)
-                return cached
 
         try:
             app = Atspi.Accessible.get_application(obj)
         except GLib.GError as error:
-            tokens = ["AXUtilitiesApplication: Exception in get_application:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXUtilitiesApplication: Exception in get_application: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return None
-        if app is not None:
-            AXUtilitiesApplication._CACHE.set_application(obj, app)
-            if parent is not None:
-                AXUtilitiesApplication._CACHE.set_application(parent, app)
         return app
 
     @staticmethod
@@ -182,11 +99,11 @@ class AXUtilitiesApplication:
         try:
             name = Atspi.Accessible.get_toolkit_name(app)
         except GLib.GError as error:
-            tokens = ["AXUtilitiesApplication: Exception in get_application_toolkit_name:", error]
-            AXObject.handle_error(app, error, tokens)
+            msg = f"AXUtilitiesApplication: Exception in get_application_toolkit_name: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return ""
 
-        return name or ""
+        return name
 
     @staticmethod
     def get_application_toolkit_version(obj: Atspi.Accessible) -> str:
@@ -199,14 +116,11 @@ class AXUtilitiesApplication:
         try:
             version = Atspi.Accessible.get_toolkit_version(app)
         except GLib.GError as error:
-            tokens = [
-                "AXUtilitiesApplication: Exception in get_application_toolkit_version:",
-                error,
-            ]
-            AXObject.handle_error(app, error, tokens)
+            msg = f"AXUtilitiesApplication: Exception in get_application_toolkit_version: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return ""
 
-        return version or ""
+        return version
 
     @staticmethod
     def get_application_with_pid(pid: int) -> Atspi.Accessible | None:
@@ -241,55 +155,23 @@ class AXUtilitiesApplication:
         try:
             pid = Atspi.Accessible.get_process_id(obj)
         except GLib.GError as error:
-            tokens = ["AXUtilitiesApplication: Exception in get_process_id:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXUtilitiesApplication: Exception in get_process_id: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1
 
         return pid
 
     @staticmethod
-    def is_mutter_x11_frames(app: Atspi.Accessible) -> bool:
-        """Returns True if app is the mutter-x11-frames application."""
-
-        if app is None:
-            return False
-        if AXUtilitiesApplication._mutter_x11_frames is not None:
-            return app == AXUtilitiesApplication._mutter_x11_frames
-        if AXUtilitiesApplication._mutter_x11_frames_checked:
-            return False
-        if AXObject.get_name(app) == "mutter-x11-frames":
-            tokens = ["AXUtilitiesApplication: Caching mutter-x11-frames app:", app]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            AXUtilitiesApplication._mutter_x11_frames = app
-            return True
-        return False
-
-    @staticmethod
     def is_application_in_desktop(app: Atspi.Accessible) -> bool:
         """Returns true if app is known to Atspi"""
 
-        desktop = AXUtilitiesApplication.get_desktop()
-        parent = AXObject.get_parent(app)
-        if desktop is not None and parent == desktop:
-            return True
-
-        tokens = ["WARNING:", app, "with parent", parent, "is not in the accessible desktop."]
-        if debug.debugLevel <= debug.LEVEL_INFO:
-            tokens.append(AXUtilitiesApplication.application_as_string(app))
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        # Qt 5/6 and GTK 4 apps can fail to report their parent even though the desktop lists them
-        # among its children, so for them fall back to the slower scan of the desktop's children.
-        if parent is None:
-            toolkit = AXUtilitiesApplication.get_application_toolkit_name(app).lower()
-            major = AXUtilitiesApplication.get_application_toolkit_version(app).split(".")[0]
-            if (toolkit, major) in (
-                ("qt", "5"),
-                ("qt", "6"),
-                ("gtk", "4"),
-            ) and app in AXUtilitiesApplication.get_all_applications():
+        applications = AXUtilitiesApplication.get_all_applications()
+        for child in applications:
+            if child == app:
                 return True
 
+        tokens = ["WARNING:", app, "is not in the accessible desktop"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return False
 
     @staticmethod
@@ -298,24 +180,20 @@ class AXUtilitiesApplication:
 
         pid = AXUtilitiesApplication.get_process_id(app)
         try:
-            with open(f"/proc/{pid}/status", encoding="utf-8") as f:
-                state = ""
-                for line in f:
-                    if line.startswith("State:"):
-                        state = line.split()[1]
-                        break
-        except (OSError, IndexError) as error:
-            tokens = ["AXUtilitiesApplication: Exception checking state of pid", pid, ":", error]
+            state = subprocess.getoutput(f"cat /proc/{pid}/status | grep State")
+            state = state.split()[1]
+        except (GLib.GError, IndexError) as error:
+            tokens = [f"AXUtilitiesApplication: Exception checking state of pid {pid}: {error}"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return False
 
         if state == "Z":
-            tokens = ["AXUtilitiesApplication: pid", pid, "is zombie process"]
+            tokens = [f"AXUtilitiesApplication: pid {pid} is zombie process"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return True
 
         if state == "T":
-            tokens = ["AXUtilitiesApplication: pid", pid, "is suspended/stopped process"]
+            tokens = [f"AXUtilitiesApplication: pid {pid} is suspended/stopped process"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return True
 

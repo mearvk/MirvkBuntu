@@ -71,10 +71,10 @@ struct _NaTrayManager
   Atom message_data_atom;
 
   Window window;
-  CoglColor fg;
-  CoglColor error;
-  CoglColor warning;
-  CoglColor success;
+  ClutterColor fg;
+  ClutterColor error;
+  ClutterColor warning;
+  ClutterColor success;
 
   unsigned int event_func_id;
 
@@ -175,9 +175,12 @@ na_tray_manager_class_init (NaTrayManagerClass *klass)
                   G_TYPE_NONE, 0);
 
   props[PROP_X11_DISPLAY] =
-    g_param_spec_object ("x11-display", NULL, NULL,
+    g_param_spec_object ("x11-display",
+                         "x11-display",
+                         "x11-display",
                          META_TYPE_X11_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, props);
 }
@@ -243,7 +246,7 @@ na_tray_manager_new (MetaX11Display *x11_display)
                        NULL);
 }
 
-static void
+static gboolean
 na_tray_manager_plug_removed (NaTrayChild   *tray_child,
                               NaTrayManager *manager)
 {
@@ -254,6 +257,9 @@ na_tray_manager_plug_removed (NaTrayChild   *tray_child,
   g_hash_table_remove (manager->children,
                        GINT_TO_POINTER (icon_window));
   g_signal_emit (manager, manager_signals[TRAY_ICON_REMOVED], 0, tray_child);
+
+  /* This destroys the socket. */
+  return FALSE;
 }
 
 static void
@@ -664,17 +670,17 @@ na_tray_manager_manage (NaTrayManager *manager)
 
 void
 na_tray_manager_set_colors (NaTrayManager *manager,
-                            CoglColor     *fg,
-                            CoglColor     *error,
-                            CoglColor     *warning,
-                            CoglColor     *success)
+                            ClutterColor  *fg,
+                            ClutterColor  *error,
+                            ClutterColor  *warning,
+                            ClutterColor  *success)
 {
   g_return_if_fail (NA_IS_TRAY_MANAGER (manager));
 
-  if (!cogl_color_equal (&manager->fg, fg) ||
-      !cogl_color_equal (&manager->error, error) ||
-      !cogl_color_equal (&manager->warning, warning) ||
-      !cogl_color_equal (&manager->success, success))
+  if (!clutter_color_equal (&manager->fg, fg) ||
+      !clutter_color_equal (&manager->error, error) ||
+      !clutter_color_equal (&manager->warning, warning) ||
+      !clutter_color_equal (&manager->success, success))
     {
       manager->fg = *fg;
       manager->error = *error;

@@ -7,9 +7,9 @@
 #include "shell-global-private.h"
 
 /**
- * ShellAppCache:
- *
- * Application information cache
+ * SECTION:shell-app-cache
+ * @title: ShellAppCache
+ * @short_description: application information cache
  *
  * The #ShellAppCache is responsible for caching information about #GAppInfo
  * to ensure that the compositor thread never needs to perform disk reads to
@@ -194,7 +194,7 @@ apply_update_cb (GObject      *object,
   cache_state_free (state);
 }
 
-static void
+static gboolean
 shell_app_cache_do_update (gpointer user_data)
 {
   ShellAppCache *cache = user_data;
@@ -213,6 +213,8 @@ shell_app_cache_do_update (gpointer user_data)
   task = g_task_new (cache, cache->cancellable, apply_update_cb, NULL);
   g_task_set_source_tag (task, shell_app_cache_do_update);
   g_task_run_in_thread (task, shell_app_cache_worker);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -223,9 +225,9 @@ shell_app_cache_queue_update (ShellAppCache *self)
   if (self->queued_update != 0)
     g_source_remove (self->queued_update);
 
-  self->queued_update = g_timeout_add_seconds_once (DEFAULT_TIMEOUT_SECONDS,
-                                                    shell_app_cache_do_update,
-                                                    self);
+  self->queued_update = g_timeout_add_seconds (DEFAULT_TIMEOUT_SECONDS,
+                                               shell_app_cache_do_update,
+                                               self);
 }
 
 static void
@@ -264,7 +266,11 @@ shell_app_cache_finalize (GObject *object)
 
   g_clear_object (&self->monitor);
 
-  g_clear_handle_id (&self->queued_update, g_source_remove);
+  if (self->queued_update)
+    {
+      g_source_remove (self->queued_update);
+      self->queued_update = 0;
+    }
 
   g_clear_pointer (&self->dir_monitors, g_ptr_array_unref);
   g_clear_pointer (&self->folders, g_hash_table_unref);

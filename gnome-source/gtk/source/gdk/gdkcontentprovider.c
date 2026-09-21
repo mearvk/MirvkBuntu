@@ -28,8 +28,8 @@
 /**
  * GdkContentProvider:
  *
- * Provides content for the clipboard or for drag-and-drop operations
- * in a number of formats.
+ * A `GdkContentProvider` is used to provide content for the clipboard or
+ * for drag-and-drop operations in a number of formats.
  *
  * To create a `GdkContentProvider`, use [ctor@Gdk.ContentProvider.new_for_value]
  * or [ctor@Gdk.ContentProvider.new_for_bytes].
@@ -169,7 +169,7 @@ gdk_content_provider_class_init (GdkContentProviderClass *class)
   class->get_value = gdk_content_provider_real_get_value;
 
   /**
-   * GdkContentProvider:formats: (getter ref_formats)
+   * GdkContentProvider:formats: (attributes org.gtk.Property.get=gdk_content_provider_ref_formats)
    *
    * The possible formats that the provider can provide its data in.
    */
@@ -177,11 +177,11 @@ gdk_content_provider_class_init (GdkContentProviderClass *class)
     g_param_spec_boxed ("formats", NULL, NULL,
                         GDK_TYPE_CONTENT_FORMATS,
                         G_PARAM_READABLE |
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkContentProvider:storable-formats: (getter ref_storable_formats)
+   * GdkContentProvider:storable-formats: (attributes org.gtk.Property.get=gdk_content_provider_ref_storable_formats)
    *
    * The subset of formats that clipboard managers should store this provider's data in.
    */
@@ -189,7 +189,7 @@ gdk_content_provider_class_init (GdkContentProviderClass *class)
     g_param_spec_boxed ("storable-formats", NULL, NULL,
                         GDK_TYPE_CONTENT_FORMATS,
                         G_PARAM_READABLE |
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -214,7 +214,7 @@ gdk_content_provider_init (GdkContentProvider *provider)
 }
 
 /**
- * gdk_content_provider_ref_formats: (get-property formats)
+ * gdk_content_provider_ref_formats: (attributes org.gtk.Method.get_property=formats)
  * @provider: a `GdkContentProvider`
  *
  * Gets the formats that the provider can provide its current contents in.
@@ -230,7 +230,7 @@ gdk_content_provider_ref_formats (GdkContentProvider *provider)
 }
 
 /**
- * gdk_content_provider_ref_storable_formats: (get-property storable-formats)
+ * gdk_content_provider_ref_storable_formats: (attributes org.gtk.Method.get_property=storable-formats)
  * @provider: a `GdkContentProvider`
  *
  * Gets the formats that the provider suggests other applications to store
@@ -273,11 +273,15 @@ gdk_content_provider_content_changed (GdkContentProvider *provider)
  * @stream: the `GOutputStream` to write to
  * @io_priority: I/O priority of the request.
  * @cancellable: (nullable): optional `GCancellable` object, %NULL to ignore.
- * @callback: (scope async) (closure user_data): callback to call when the request is satisfied
- * @user_data: the data to pass to callback function
+ * @callback: (scope async): callback to call when the request is satisfied
+ * @user_data: (closure): the data to pass to callback function
  *
  * Asynchronously writes the contents of @provider to @stream in the given
  * @mime_type.
+ *
+ * When the operation is finished @callback will be called. You must then call
+ * [method@Gdk.ContentProvider.write_mime_type_finish] to get the result
+ * of the operation.
  *
  * The given mime type does not need to be listed in the formats returned by
  * [method@Gdk.ContentProvider.ref_formats]. However, if the given `GType` is

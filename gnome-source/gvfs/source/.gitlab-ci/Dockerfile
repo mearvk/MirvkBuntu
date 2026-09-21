@@ -1,28 +1,18 @@
-FROM fedora:rawhide
+FROM fedora:latest
 
-RUN dnf install -y --allowerasing dnf-plugins-core git gnome-desktop-testing dbus-daemon python3-twisted python3-gobject procps-ng bzip2 httpd mod_ssl openssh-server passwd gcc-c++ gcr-devel \
- && dnf builddep -y gvfs \
+RUN dnf install --nogpg -y dnf-plugins-core git gnome-desktop-testing dbus-daemon python3-twisted python3-gobject procps-ng bzip2 httpd mod_ssl openssh-server passwd gcc-c++ gcr-devel \
+ && dnf builddep --nogpg -y gvfs \
  && dnf clean all
 
-RUN dnf install -y rest0.7-devel uhttpmock-devel gobject-introspection-devel \
+RUN dnf install --nogpg -y rest0.7-devel uhttpmock-devel gobject-introspection-devel \
  && dnf clean all \
- && git clone --depth 1 https://gitlab.gnome.org/GNOME/msgraph \
+ && git clone --depth 1 https://gitlab.gnome.org/jbrummer/msgraph \
  && cd msgraph \
  && meson . _msgraph --prefix=/usr -Dgtk_doc=false \
  && ninja -C _msgraph \
  && ninja -C _msgraph install \
  && cd .. \
  && rm -rf msgraph
-
-RUN dnf install -y rest-devel \
- && dnf clean all \
- && git clone --depth 1 https://gitlab.gnome.org/GNOME/gnome-online-accounts \
- && cd gnome-online-accounts \
- && meson . build --prefix=/usr -Dgtk_doc=false \
- && ninja -C build \
- && ninja -C build install \
- && cd .. \
- && rm -rf gnome-online-accounts
 
 RUN sed -i -e 's/# %wheel/%wheel/' /etc/sudoers
 RUN useradd -G wheel -m user

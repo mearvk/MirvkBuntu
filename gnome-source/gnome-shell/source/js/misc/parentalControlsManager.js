@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 //
 // Copyright (C) 2018, 2019, 2020 Endless Mobile, Inc.
 //
@@ -32,12 +33,7 @@ let Malcontent = null;
 if (HAVE_MALCONTENT) {
     ({default: Malcontent} = await import('gi://Malcontent?version=0'));
     Gio._promisify(Malcontent.Manager.prototype, 'get_app_filter_async');
-    Gio._promisify(Malcontent.Manager.prototype, 'get_session_limits_async');
 }
-
-// We require libmalcontent ≥ 0.14.0 for session limits
-const HAVE_MALCONTENT_0_14 = Malcontent &&
-    GObject.signal_lookup('session-limits-changed', Malcontent.Manager) > 0;
 
 let _singleton = null;
 
@@ -58,13 +54,6 @@ export function getDefault() {
 const ParentalControlsManager = GObject.registerClass({
     Signals: {
         'app-filter-changed': {},
-        'session-limits-changed': {},
-    },
-    Properties: {
-        'any-parental-controls-enabled': GObject.ParamSpec.boolean(
-            'any-parental-controls-enabled', null, null,
-            GObject.ParamFlags.READABLE,
-            false),
     },
 }, class ParentalControlsManager extends GObject.Object {
     _init() {
@@ -73,7 +62,6 @@ const ParentalControlsManager = GObject.registerClass({
         this._initialized = false;
         this._disabled = false;
         this._appFilter = null;
-        this._sessionLimits = null;
 
         this._initializeManager();
     }
@@ -83,8 +71,6 @@ const ParentalControlsManager = GObject.registerClass({
             console.debug('Skipping parental controls support, malcontent not found');
             this._initialized = true;
             this.emit('app-filter-changed');
-            this.emit('session-limits-changed');
-            this.notify('any-parental-controls-enabled');
             return;
         }
 
@@ -92,23 +78,16 @@ const ParentalControlsManager = GObject.registerClass({
             const connection = await Gio.DBus.get(Gio.BusType.SYSTEM, null);
             this._manager = new Malcontent.Manager({connection});
             this._appFilter = await this._getAppFilter();
-
-            if (HAVE_MALCONTENT_0_14)
-                this._sessionLimits = await this._getSessionLimits();
         } catch (e) {
             logError(e, 'Failed to get parental controls settings');
             return;
         }
 
         this._manager.connect('app-filter-changed', this._onAppFilterChanged.bind(this));
-        if (HAVE_MALCONTENT_0_14)
-            this._manager.connect('session-limits-changed', this._onSessionLimitsChanged.bind(this));
 
         // Signal initialisation is complete.
         this._initialized = true;
         this.emit('app-filter-changed');
-        this.emit('session-limits-changed');
-        this.notify('any-parental-controls-enabled');
     }
 
     async _getAppFilter() {
@@ -132,52 +111,16 @@ const ParentalControlsManager = GObject.registerClass({
 
     async _onAppFilterChanged(manager, uid) {
         // Emit 'changed' signal only if app-filter is changed for currently logged-in user.
-        const currentUid = Shell.util_get_uid();
+        let currentUid = Shell.util_get_uid();
         if (currentUid !== uid)
             return;
 
         try {
             this._appFilter = await this._getAppFilter();
             this.emit('app-filter-changed');
-            this.notify('any-parental-controls-enabled');
         } catch (e) {
             // Log an error and keep the old app filter.
             logError(e, `Failed to get new MctAppFilter for uid ${Shell.util_get_uid()} on app-filter-changed`);
-        }
-    }
-
-    async _getSessionLimits() {
-        let sessionLimits = null;
-
-        try {
-            sessionLimits = await this._manager.get_session_limits_async(
-                Shell.util_get_uid(),
-                Malcontent.ManagerGetValueFlags.NONE,
-                null);
-        } catch (e) {
-            if (!e.matches(Malcontent.ManagerError, Malcontent.ManagerError.DISABLED))
-                throw e;
-
-            console.debug('Parental controls globally disabled');
-            this._disabled = true;
-        }
-
-        return sessionLimits;
-    }
-
-    async _onSessionLimitsChanged(manager, uid) {
-        // Emit 'changed' signal only if session-limits are changed for currently logged-in user
-        const currentUid = Shell.util_get_uid();
-        if (currentUid !== uid)
-            return;
-
-        try {
-            this._sessionLimits = await this._getSessionLimits();
-            this.emit('session-limits-changed');
-            this.notify('any-parental-controls-enabled');
-        } catch (e) {
-            // Keep the old session limits
-            logError(e, `Failed to get new MctSessionLimits for uid ${Shell.util_get_uid()} on session-limits-changed`);
         }
     }
 
@@ -185,7 +128,7 @@ const ParentalControlsManager = GObject.registerClass({
         return this._initialized;
     }
 
-    // Calculate whether the given app (a GioUnix.DesktopAppInfo) should be shown
+    // Calculate whether the given app (a Gio.DesktopAppInfo) should be shown
     // on the desktop, in search results, etc. The app should be shown if:
     //  - The .desktop file doesn’t say it should be hidden.
     //  - The executable from the .desktop file’s Exec line isn’t denied in
@@ -209,59 +152,5 @@ const ParentalControlsManager = GObject.registerClass({
         }
 
         return this._appFilter.is_appinfo_allowed(appInfo);
-    }
-
-    /**
-     * Check whether parental controls app filtering is enabled for the account,
-     * and if the library supports the features required for the functionality.
-     *
-     * Typically you should check whether a certain app is filtered
-     * (shouldShowApp()), rather than checking whether filtering is enabled at
-     * all.
-     *
-     * @returns {bool} whether app filtering is supported and enabled.
-     */
-    appFilterEnabled() {
-        // Are latest parental controls enabled (at configure or runtime)?
-        if (!HAVE_MALCONTENT_0_14 || this._disabled)
-            return false;
-
-        // Have we finished initialising yet?
-        if (!this.initialized) {
-            console.debug('Ignoring app filter because parental controls not yet initialised');
-            return false;
-        }
-
-        return this._appFilter.is_enabled();
-    }
-
-    /**
-     * Check whether parental controls session limits are enabled for the account,
-     * and if the library supports the features required for the functionality.
-     *
-     * @returns {bool} whether session limits are supported and enabled.
-     */
-    sessionLimitsEnabled() {
-        // Are latest parental controls enabled (at configure or runtime)?
-        if (!HAVE_MALCONTENT_0_14 || this._disabled)
-            return false;
-
-        // Have we finished initialising yet?
-        if (!this.initialized) {
-            console.debug('Ignoring session limits because parental controls not yet initialised');
-            return false;
-        }
-
-        return this._sessionLimits.is_enabled();
-    }
-
-    /**
-     * Whether any parental controls are supported and enabled for the current
-     * user.
-     *
-     * @type {bool}
-     */
-    get anyParentalControlsEnabled() {
-        return this.appFilterEnabled() || this.sessionLimitsEnabled();
     }
 });

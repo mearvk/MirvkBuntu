@@ -48,7 +48,7 @@ static void
 event_delivery_consecutive_touch_begin_end (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   gboolean was_updated;
@@ -121,18 +121,11 @@ test_action_handle_event (ClutterAction      *action,
       if (action_claim_sequence)
         {
           ClutterActor *actor;
-          ClutterContext *context;
-          ClutterBackend *backend;
-          ClutterStage *stage;
-          ClutterSprite *sprite;
 
           actor = clutter_actor_meta_get_actor (CLUTTER_ACTOR_META (action));
-          context = clutter_actor_get_context (actor);
-          backend = clutter_context_get_backend (context);
-          stage = CLUTTER_STAGE (clutter_actor_get_stage (actor));
-          sprite = clutter_backend_get_sprite (backend, stage, event);
           clutter_stage_notify_action_implicit_grab (CLUTTER_STAGE (clutter_actor_get_stage (actor)),
-                                                     sprite);
+                                                     clutter_event_get_device (event),
+                                                     clutter_event_get_event_sequence (event));
         }
     }
 
@@ -140,8 +133,9 @@ test_action_handle_event (ClutterAction      *action,
 }
 
 static void
-test_action_sequence_cancelled (ClutterAction *action,
-                                ClutterSprite *sprite)
+test_action_sequence_cancelled (ClutterAction        *action,
+                                ClutterInputDevice   *device,
+                                ClutterEventSequence *sequence)
 {
   n_action_sequences_cancelled++;
 }
@@ -164,7 +158,8 @@ static void
 event_delivery_implicit_grabbing (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterActor *child;
@@ -254,7 +249,8 @@ static void
 event_delivery_implicit_grab_cancelled (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterActor *child_1, *child_2;
@@ -370,7 +366,8 @@ static void
 event_delivery_implicit_grab_existing_clutter_grab (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterActor *child_1, *child_2;
@@ -492,7 +489,6 @@ event_delivery_implicit_grab_existing_clutter_grab (void)
   n_child_1_enter_events = n_child_2_enter_events = n_stage_enter_events = 0;
   n_child_1_leave_events = n_child_2_leave_events = n_stage_leave_events = 0;
   clutter_grab_dismiss (grab_2);
-  g_object_unref (grab_2);
   g_assert_cmpint (n_child_1_enter_events, ==, 1);
   g_assert_cmpint (n_child_1_leave_events, ==, 0);
   g_assert_cmpint (n_child_2_enter_events, ==, 0);
@@ -503,7 +499,6 @@ event_delivery_implicit_grab_existing_clutter_grab (void)
   n_child_1_enter_events = n_child_2_enter_events = n_stage_enter_events = 0;
   n_child_1_leave_events = n_child_2_leave_events = n_stage_leave_events = 0;
   clutter_grab_dismiss (grab_1);
-  g_object_unref (grab_1);
   g_assert_cmpint (n_child_1_enter_events, ==, 0);
   g_assert_cmpint (n_child_1_leave_events, ==, 0);
   g_assert_cmpint (n_child_2_enter_events, ==, 0);
@@ -542,7 +537,8 @@ static void
 event_delivery_stop_discrete_event (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   TestAction *test_action;
@@ -598,7 +594,8 @@ static void
 event_delivery_actor_stop_sequence_event (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   TestAction *test_action;

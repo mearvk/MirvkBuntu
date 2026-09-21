@@ -21,13 +21,11 @@
 
 #include "gtkrendericonprivate.h"
 
-#include "gtkcsscolorvalueprivate.h"
 #include "gtkcssfiltervalueprivate.h"
 #include "gtkcssimagevalueprivate.h"
 #include "gtkcssshadowvalueprivate.h"
 #include "gtkcssstyleprivate.h"
 #include "gtkcsstransformvalueprivate.h"
-#include "gtkcssnumbervalueprivate.h"
 #include "gtkiconthemeprivate.h"
 #include "gtksnapshot.h"
 #include "gtksymbolicpaintable.h"
@@ -36,22 +34,22 @@
 #include <math.h>
 
 void
-gtk_css_style_snapshot_icon (GtkCssStyle *style,
-                             GtkSnapshot *snapshot,
-                             double       width,
-                             double       height)
+gtk_css_style_snapshot_icon (GtkCssStyle            *style,
+                             GtkSnapshot            *snapshot,
+                             double                  width,
+                             double                  height)
 {
   GskTransform *transform;
   GtkCssImage *image;
   gboolean has_shadow;
 
-  g_return_if_fail (style != NULL);
+  g_return_if_fail (GTK_IS_CSS_STYLE (style));
   g_return_if_fail (snapshot != NULL);
 
   if (width == 0.0 || height == 0.0)
     return;
 
-  image = _gtk_css_image_value_get_image (style->used->icon_source);
+  image = _gtk_css_image_value_get_image (style->other->icon_source);
   if (image == NULL)
     return;
 
@@ -61,7 +59,7 @@ gtk_css_style_snapshot_icon (GtkCssStyle *style,
 
   gtk_css_filter_value_push_snapshot (style->other->icon_filter, snapshot);
 
-  has_shadow = gtk_css_shadow_value_push_snapshot (style->used->icon_shadow, snapshot);
+  has_shadow = gtk_css_shadow_value_push_snapshot (style->icon->icon_shadow, snapshot);
 
   if (transform == NULL)
     {
@@ -84,9 +82,7 @@ gtk_css_style_snapshot_icon (GtkCssStyle *style,
   if (has_shadow)
     gtk_snapshot_pop (snapshot);
 
-  gtk_css_filter_value_pop_snapshot (style->other->icon_filter,
-                                     &GRAPHENE_RECT_INIT (0, 0, width, height),
-                                     snapshot);
+  gtk_css_filter_value_pop_snapshot (style->other->icon_filter, snapshot);
 
   gtk_snapshot_pop (snapshot);
 
@@ -103,10 +99,9 @@ gtk_css_style_snapshot_icon_paintable (GtkCssStyle  *style,
   GskTransform *transform;
   gboolean has_shadow;
   gboolean is_symbolic_paintable;
-  GdkRGBA colors[5];
-  double weight = 400;
+  GdkRGBA colors[4];
 
-  g_return_if_fail (style != NULL);
+  g_return_if_fail (GTK_IS_CSS_STYLE (style));
   g_return_if_fail (snapshot != NULL);
   g_return_if_fail (GDK_IS_PAINTABLE (paintable));
   g_return_if_fail (width > 0);
@@ -116,17 +111,12 @@ gtk_css_style_snapshot_icon_paintable (GtkCssStyle  *style,
 
   gtk_css_filter_value_push_snapshot (style->other->icon_filter, snapshot);
 
-  has_shadow = gtk_css_shadow_value_push_snapshot (style->used->icon_shadow, snapshot);
+  has_shadow = gtk_css_shadow_value_push_snapshot (style->icon->icon_shadow, snapshot);
 
   is_symbolic_paintable = GTK_IS_SYMBOLIC_PAINTABLE (paintable);
   if (is_symbolic_paintable)
     {
-      GtkCssValue *value;
-
-      value = gtk_css_style_get_value (style, GTK_CSS_PROPERTY_ICON_WEIGHT);
-      weight = gtk_css_number_value_get (value, 100);
-
-      gtk_css_style_lookup_symbolic_colors (style, colors);
+      gtk_icon_theme_lookup_symbolic_colors (style, colors);
 
       if (gdk_rgba_is_clear (&colors[0]))
         goto transparent;
@@ -135,7 +125,7 @@ gtk_css_style_snapshot_icon_paintable (GtkCssStyle  *style,
   if (transform == NULL)
     {
       if (is_symbolic_paintable)
-        gtk_symbolic_paintable_snapshot_with_weight (GTK_SYMBOLIC_PAINTABLE (paintable), snapshot, width, height, colors, G_N_ELEMENTS (colors), weight);
+        gtk_symbolic_paintable_snapshot_symbolic (GTK_SYMBOLIC_PAINTABLE (paintable), snapshot, width, height, colors, G_N_ELEMENTS (colors));
       else
         gdk_paintable_snapshot (paintable, snapshot, width, height);
     }
@@ -149,7 +139,7 @@ gtk_css_style_snapshot_icon_paintable (GtkCssStyle  *style,
       gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (- width / 2.0, - height / 2.0));
 
       if (is_symbolic_paintable)
-        gtk_symbolic_paintable_snapshot_with_weight (GTK_SYMBOLIC_PAINTABLE (paintable), snapshot, width, height, colors, G_N_ELEMENTS (colors), weight);
+        gtk_symbolic_paintable_snapshot_symbolic (GTK_SYMBOLIC_PAINTABLE (paintable), snapshot, width, height, colors, G_N_ELEMENTS (colors));
       else
         gdk_paintable_snapshot (paintable, snapshot, width, height);
 
@@ -160,9 +150,7 @@ transparent:
   if (has_shadow)
     gtk_snapshot_pop (snapshot);
 
-  gtk_css_filter_value_pop_snapshot (style->other->icon_filter,
-                                     &GRAPHENE_RECT_INIT (0, 0, width, height),
-                                     snapshot);
+  gtk_css_filter_value_pop_snapshot (style->other->icon_filter, snapshot);
 
   gsk_transform_unref (transform);
 }

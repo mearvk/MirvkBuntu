@@ -53,6 +53,7 @@ install_extra_packages() {
 create_builder_config() {
   local container_id=$(podman container inspect --format='{{.Id}}' $NAME)
   local top_srcdir=$(realpath $(dirname $0)/../..)
+  local wayland_display=builder-wayland-0
 
   cat >> $top_srcdir/.buildconfig <<-EOF
 
@@ -60,9 +61,10 @@ create_builder_config() {
 	name=$NAME Toolbox
 	runtime=podman:$container_id
 	prefix=/usr
-	run-command=dbus-run-session gnome-shell --devkit
+	run-command=dbus-run-session gnome-shell --nested --wayland-display=$wayland_display
 
 	[toolbox-$NAME.runtime_environment]
+	WAYLAND_DISPLAY=$wayland_display
 	G_MESSAGES_DEBUG=GNOME Shell
 	XDG_DATA_DIRS=${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
 	EOF

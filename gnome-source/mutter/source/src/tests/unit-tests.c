@@ -33,6 +33,7 @@
 #include "meta/compositor.h"
 #include "meta/meta-context.h"
 #include "tests/boxes-tests.h"
+#include "tests/monitor-config-migration-unit-tests.h"
 #include "tests/monitor-store-unit-tests.h"
 #include "tests/monitor-transform-tests.h"
 #include "tests/meta-test-utils.h"
@@ -207,6 +208,7 @@ init_tests (void)
                    meta_test_util_later_schedule_from_later);
 
   init_monitor_store_tests ();
+  init_monitor_config_migration_tests ();
   init_boxes_tests ();
   init_monitor_transform_tests ();
   init_orientation_manager_tests ();
@@ -220,7 +222,7 @@ main (int argc, char *argv[])
   g_autoptr (MetaContext) context = NULL;
   g_autoptr (GError) error = NULL;
 
-  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_TEST,
+  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_NESTED,
                                       META_CONTEXT_TEST_FLAG_TEST_CLIENT);
   if (!meta_context_configure (context, &argc, &argv, &error))
     g_error ("Failed to configure test context: %s", error->message);

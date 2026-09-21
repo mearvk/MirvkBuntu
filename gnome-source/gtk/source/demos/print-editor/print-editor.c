@@ -2,7 +2,6 @@
 #include <math.h>
 #include <pango/pangocairo.h>
 #include <glib/gi18n.h>
-#include <gmodule.h>
 #include <gtk/gtk.h>
 
 #include "profile_conf.h"
@@ -114,10 +113,7 @@ load_file (GFile *open_filename)
 	}
       else
 	{
-          GFileInfo *info = g_file_query_info (open_filename, "standard::display-name",
-                                               G_FILE_QUERY_INFO_NONE,
-                                               NULL,
-                                               &error);
+          GFileInfo *info = g_file_query_info (open_filename, "standard::display-name", 0, NULL, &error);
           const char *display_name = g_file_info_get_display_name (info);
           GtkAlertDialog *alert;
 
@@ -130,10 +126,7 @@ load_file (GFile *open_filename)
     }
   else
     {
-      GFileInfo *info = g_file_query_info (open_filename, "standard::display-name",
-                                           G_FILE_QUERY_INFO_NONE,
-                                           NULL,
-                                           &error);
+      GFileInfo *info = g_file_query_info (open_filename, "standard::display-name", 0, NULL, &error);
       const char *display_name = g_file_info_get_display_name (info);
       GtkAlertDialog *alert;
 
@@ -174,10 +167,7 @@ save_file (GFile *save_filename)
     }
   else
     {
-      GFileInfo *info = g_file_query_info (save_filename, "standard::display-name",
-                                           G_FILE_QUERY_INFO_NONE,
-                                           NULL,
-                                           NULL);
+      GFileInfo *info = g_file_query_info (save_filename, "standard::display-name", 0, NULL, NULL);
       const char *display_name = g_file_info_get_display_name (info);
       GtkAlertDialog *alert;
 
@@ -383,10 +373,7 @@ print_done (GtkPrintOperation *op,
 
       alert = gtk_alert_dialog_new ("Error printing file");
       if (error)
-        {
-          gtk_alert_dialog_set_detail (alert, error->message);
-          g_clear_error (&error);
-        }
+        gtk_alert_dialog_set_detail (alert, error->message);
       gtk_alert_dialog_show (alert, GTK_WINDOW (main_window));
       g_object_unref (alert);
     }
@@ -408,7 +395,7 @@ print_done (GtkPrintOperation *op,
       update_statusbar ();
 
       /* This ref is unref:ed when we get the final state change */
-      g_signal_connect (op, "status-changed",
+      g_signal_connect (op, "status_changed",
 			G_CALLBACK (status_changed_cb), NULL);
     }
 }
@@ -416,8 +403,10 @@ print_done (GtkPrintOperation *op,
 static void
 end_print (GtkPrintOperation *op, GtkPrintContext *context, PrintData *print_data)
 {
-  g_clear_list (&print_data->page_breaks, NULL);
-  g_clear_object (&print_data->layout);
+  g_list_free (print_data->page_breaks);
+  print_data->page_breaks = NULL;
+  g_object_unref (print_data->layout);
+  print_data->layout = NULL;
 }
 
 static void
@@ -441,11 +430,11 @@ print_or_preview (GSimpleAction *action, GtkPrintOperationAction print_action)
   if (page_setup != NULL)
     gtk_print_operation_set_default_page_setup (print, page_setup);
 
-  g_signal_connect (print, "begin-print", G_CALLBACK (begin_print), print_data);
+  g_signal_connect (print, "begin_print", G_CALLBACK (begin_print), print_data);
   g_signal_connect (print, "end-print", G_CALLBACK (end_print), print_data);
-  g_signal_connect (print, "draw-page", G_CALLBACK (draw_page), print_data);
-  g_signal_connect (print, "create-custom-widget", G_CALLBACK (create_custom_widget), print_data);
-  g_signal_connect (print, "custom-widget-apply", G_CALLBACK (custom_widget_apply), print_data);
+  g_signal_connect (print, "draw_page", G_CALLBACK (draw_page), print_data);
+  g_signal_connect (print, "create_custom_widget", G_CALLBACK (create_custom_widget), print_data);
+  g_signal_connect (print, "custom_widget_apply", G_CALLBACK (custom_widget_apply), print_data);
 
   g_signal_connect (print, "done", G_CALLBACK (print_done), print_data);
 
@@ -587,9 +576,19 @@ activate_about (GSimpleAction *action,
   int i;
   char *os_name;
   char *os_version;
+  const char *authors[] = {
+    "Alexander Larsson",
+    NULL
+  };
+  const char *artists[] = {
+    "Jakub Steiner",
+    NULL
+  };
+  const char *maintainers[] = {
+    "The GTK Team",
+    NULL
+  };
   GtkWidget *dialog;
-  GFile *logo_file;
-  GtkIconPaintable *logo;
 
   os_name = g_get_os_info (G_OS_INFO_KEY_NAME);
   os_version = g_get_os_info (G_OS_INFO_KEY_VERSION_ID);
@@ -626,31 +625,25 @@ activate_about (GSimpleAction *action,
                              gtk_get_minor_version (),
                              gtk_get_micro_version ());
 
-  logo_file = g_file_new_for_uri ("resource:///org/gtk/gtk4/print-editor/icons/apps/org.gtk.PrintEditor4.svg");
-  logo = gtk_icon_paintable_new_for_file (logo_file, 64, 1);
   dialog = g_object_new (GTK_TYPE_ABOUT_DIALOG,
                          "transient-for", main_window,
                          "program-name", g_strcmp0 (PROFILE, "devel") == 0
                                          ? "GTK Print Editor (Development)"
                                          : "GTK Print Editor",
                          "version", version,
-                         "copyright", "© 2006-2024 Red Hat, Inc",
+                         "copyright", "© 2006-2021 Red Hat, Inc",
                          "license-type", GTK_LICENSE_LGPL_2_1,
                          "website", "http://www.gtk.org",
                          "comments", "Program to demonstrate GTK printing",
-                         "authors", (const char *[]) { "Alexander Larsson", NULL },
-                         "logo", logo,
+                         "authors", authors,
+                         "logo-icon-name", "org.gtk.PrintEditor4",
                          "title", "About GTK Print Editor",
                          "system-information", sysinfo->str,
                          NULL);
-  g_object_unref (logo);
-  g_object_unref (logo_file);
-
   gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG (dialog),
-                                       _("Artwork by"), (const char *[]) { "Jakub Steiner", NULL });
-
+                                       _("Artwork by"), artists);
   gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG (dialog),
-                                       _("Maintained by"), (const char *[]) { "The GTK Team", NULL });
+                                       _("Maintained by"), maintainers);
 
   gtk_window_present (GTK_WINDOW (dialog));
 
@@ -796,22 +789,16 @@ startup (GApplication *app)
 static void
 activate (GApplication *app)
 {
-  GList *list;
   GtkWidget *box;
   GtkWidget *sw;
   GtkWidget *contents;
-
-  if ((list = gtk_application_get_windows (GTK_APPLICATION (app))) != NULL)
-    {
-      gtk_window_present (GTK_WINDOW (list->data));
-      return;
-    }
 
   main_window = gtk_application_window_new (GTK_APPLICATION (app));
 
   if (g_strcmp0 (PROFILE, "devel") == 0)
     gtk_widget_add_css_class (GTK_WIDGET (main_window), "devel");
 
+  gtk_window_set_icon_name (GTK_WINDOW (main_window), "text-editor");
   gtk_window_set_default_size (GTK_WINDOW (main_window), 400, 600);
   gtk_application_window_set_show_menubar (GTK_APPLICATION_WINDOW (main_window), TRUE);
   update_title (GTK_WINDOW (main_window));
@@ -853,10 +840,10 @@ activate (GApplication *app)
                            "changed",
                            G_CALLBACK (buffer_changed_callback),
                            NULL,
-                           G_CONNECT_DEFAULT);
+                           0);
 
   g_signal_connect_object (buffer,
-                           "mark-set", /* cursor moved */
+                           "mark_set", /* cursor moved */
                            G_CALLBACK (mark_set_callback),
                            NULL,
                            0);
@@ -880,13 +867,11 @@ open (GApplication  *application,
   load_file (files[0]);
 }
 
-G_MODULE_EXPORT
 int
 main (int argc, char **argv)
 {
   GtkApplication *app;
   GError *error = NULL;
-  char version[80];
 
   gtk_init ();
 
@@ -906,13 +891,6 @@ main (int argc, char **argv)
   }
 
   app = gtk_application_new ("org.gtk.PrintEditor4", G_APPLICATION_HANDLES_OPEN);
-
-  g_snprintf (version, sizeof (version), "%s%s%s\n",
-              PACKAGE_VERSION,
-              g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
-              g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
-
-  g_application_set_version (G_APPLICATION (app), version);
 
   g_action_map_add_action_entries (G_ACTION_MAP (app),
                                    app_entries, G_N_ELEMENTS (app_entries),

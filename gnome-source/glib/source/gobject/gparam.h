@@ -120,10 +120,8 @@ G_BEGIN_DECLS
  * @G_PARAM_READABLE: the parameter is readable
  * @G_PARAM_WRITABLE: the parameter is writable
  * @G_PARAM_READWRITE: alias for %G_PARAM_READABLE | %G_PARAM_WRITABLE
- * @G_PARAM_CONSTRUCT: the parameter will be set upon object construction.
- *   See [vfunc@Object.constructed] for more details
- * @G_PARAM_CONSTRUCT_ONLY: the parameter can only be set upon object construction.
- *   See [vfunc@Object.constructed] for more details
+ * @G_PARAM_CONSTRUCT: the parameter will be set upon object construction
+ * @G_PARAM_CONSTRUCT_ONLY: the parameter can only be set upon object construction
  * @G_PARAM_LAX_VALIDATION: upon parameter conversion (see g_param_value_convert())
  *  strict validation is not required
  * @G_PARAM_STATIC_NAME: the string used as name when constructing the 
@@ -169,7 +167,7 @@ typedef enum
   G_PARAM_EXPLICIT_NOTIFY     = 1 << 30,
   /* Avoid warning with -Wpedantic for gcc6 */
   G_PARAM_DEPRECATED          = (gint)(1u << 31)
-} G_GNUC_FLAG_ENUM GParamFlags;
+} GParamFlags;
 
 /**
  * G_PARAM_STATIC_STRINGS:
@@ -411,7 +409,7 @@ GType	g_param_type_register_static	(const gchar		  *name,
 GOBJECT_AVAILABLE_IN_2_66
 gboolean g_param_spec_is_valid_name    (const gchar              *name);
 
-/* For registering builtin types */
+/* For registering builting types */
 GType  _g_param_type_register_static_constant (const gchar              *name,
 					       const GParamSpecTypeInfo *pspec_info,
 					       GType                     opt_type);

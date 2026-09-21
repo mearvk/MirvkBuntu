@@ -29,7 +29,6 @@ typedef struct _MetaCrtcModeVirtual MetaCrtcModeVirtual;
 typedef struct _MetaDevicePool MetaDevicePool;
 typedef struct _MetaDeviceFile MetaDeviceFile;
 typedef struct _MetaDrmBuffer MetaDrmBuffer;
-typedef struct _MetaDrmLeaseManager MetaDrmLeaseManager;
 typedef struct _MetaRenderDevice MetaRenderDevice;
 
 typedef enum _MetaSeatNativeFlag
@@ -42,6 +41,5 @@ typedef enum _MetaBackendNativeMode
 {
   META_BACKEND_NATIVE_MODE_DEFAULT = 0,
   META_BACKEND_NATIVE_MODE_HEADLESS,
-  META_BACKEND_NATIVE_MODE_TEST_VKMS,
-  META_BACKEND_NATIVE_MODE_TEST_HEADLESS,
+  META_BACKEND_NATIVE_MODE_TEST,
 } MetaBackendNativeMode;

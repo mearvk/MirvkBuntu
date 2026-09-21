@@ -1,14 +1,16 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as Dialog from './dialog.js';
 import * as Main from './main.js';
 import * as ModalDialog from './modalDialog.js';
-import * as ParentalControlsManager from '../misc/parentalControlsManager.js';
 import * as ShellEntry from './shellEntry.js';
 import * as Util from '../misc/util.js';
 import * as History from '../misc/history.js';
@@ -22,41 +24,28 @@ const TERMINAL_SCHEMA = 'org.gnome.desktop.default-applications.terminal';
 const EXEC_KEY = 'exec';
 const EXEC_ARG_KEY = 'exec-arg';
 
-export class RunDialog extends ModalDialog.ModalDialog {
-    static {
-        GObject.registerClass(this);
-
-        const bindingPool = this.get_binding_pool();
-
-        bindingPool.install_closure(
-            'close', Clutter.KEY_Escape, Clutter.RELEASE_MASK,
-            obj => {
-                obj.close();
-                return Clutter.EVENT_STOP;
-            }
-        );
-    }
-
+export const RunDialog = GObject.registerClass(
+class RunDialog extends ModalDialog.ModalDialog {
     _init() {
         super._init({
             styleClass: 'run-dialog',
             destroyOnClose: false,
         });
 
-        this._parentalControlsManager = ParentalControlsManager.getDefault();
-        this._parentalControlsManager.connect('notify::any-parental-controls-enabled', () => {
-            this._updateEnableInternalCommands();
-        });
-
         this._lockdownSettings = new Gio.Settings({schema_id: LOCKDOWN_SCHEMA});
         this._terminalSettings = new Gio.Settings({schema_id: TERMINAL_SCHEMA});
         global.settings.connect('changed::development-tools', () => {
-            this._updateEnableInternalCommands();
+            this._enableInternalCommands = global.settings.get_boolean('development-tools');
         });
-        this._updateEnableInternalCommands();
+        this._enableInternalCommands = global.settings.get_boolean('development-tools');
 
         this._internalCommands = {
             'lg': () => Main.createLookingGlass().open(),
+
+            'r': this._restart.bind(this),
+
+            // Developer brain backwards compatibility
+            'restart': this._restart.bind(this),
 
             'debugexit': () => global.context.terminate(),
 
@@ -71,26 +60,22 @@ export class RunDialog extends ModalDialog.ModalDialog {
             },
         };
 
-        const title = _('Run a Command');
+        let title = _('Run a Command');
 
-        const content = new Dialog.MessageDialogContent({title});
+        let content = new Dialog.MessageDialogContent({title});
         this.contentLayout.add_child(content);
-        const [labelActor] = content;
 
-        const entry = new St.Entry({
+        let entry = new St.Entry({
             style_class: 'run-dialog-entry',
-            input_purpose: Clutter.InputContentPurpose.TERMINAL,
-            labelActor,
             can_focus: true,
         });
         ShellEntry.addContextMenu(entry);
 
         this._entryText = entry.clutter_text;
-        this._entryText.activatable = false;
         content.add_child(entry);
         this.setInitialKeyFocus(this._entryText);
 
-        const defaultDescriptionText = _('Press ESC to close');
+        let defaultDescriptionText = _('Press ESC to close');
 
         this._descriptionLabel = new St.Label({
             style_class: 'run-dialog-description',
@@ -106,48 +91,44 @@ export class RunDialog extends ModalDialog.ModalDialog {
             gsettingsKey: HISTORY_KEY,
             entry: this._entryText,
         });
-
-        const entryKeyController = new Clutter.KeyController();
-        entryKeyController.connect('key-press', () => {
-            const [, symbol] = entryKeyController.get_key();
-            const [, pressed, latched, locked] = entryKeyController.get_state();
-            const state = pressed | latched | locked;
-
+        this._entryText.connect('activate', o => {
+            this.popModal();
+            this._run(o.get_text(),
+                Clutter.get_current_event().get_state() & Clutter.ModifierType.CONTROL_MASK);
+            if (!this._commandError ||
+                !this.pushModal())
+                this.close();
+        });
+        this._entryText.connect('key-press-event', (o, e) => {
+            let symbol = e.get_key_symbol();
             if (symbol === Clutter.KEY_Tab) {
-                const text = this._entryText.get_text();
+                let text = o.get_text();
                 let prefix;
                 if (text.lastIndexOf(' ') === -1)
                     prefix = text;
                 else
                     prefix = text.substring(text.lastIndexOf(' ') + 1);
-                const postfix = this._getCompletion(prefix);
+                let postfix = this._getCompletion(prefix);
                 if (postfix != null && postfix.length > 0) {
-                    this._entryText.insert_text(postfix, -1);
-                    this._entryText.set_cursor_position(text.length + postfix.length);
+                    o.insert_text(postfix, -1);
+                    o.set_cursor_position(text.length + postfix.length);
                 }
-                return Clutter.EVENT_STOP;
-            } else if ([Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_ISO_Enter].includes(symbol)) {
-                this.popModal();
-                this._run(this._entryText.get_text(),
-                    state & Clutter.ModifierType.CONTROL_MASK);
-                if (!this._commandError ||
-                    !this.pushModal())
-                    this.close();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
         });
-        this._entryText.add_action(entryKeyController);
-
         this._entryText.connect('text-changed', () => {
             this._descriptionLabel.set_text(defaultDescriptionText);
         });
     }
 
-    _updateEnableInternalCommands() {
-        this._enableInternalCommands =
-            !this._parentalControlsManager.anyParentalControlsEnabled &&
-            global.settings.get_boolean('development-tools');
+    vfunc_key_release_event(event) {
+        if (event.get_key_symbol() === Clutter.KEY_Escape) {
+            this.close();
+            return Clutter.EVENT_STOP;
+        }
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _getCommandCompletion(text) {
@@ -165,16 +146,16 @@ export class RunDialog extends ModalDialog.ModalDialog {
             return s1.substring(0, k);
         }
 
-        const paths = GLib.getenv('PATH').split(':');
+        let paths = GLib.getenv('PATH').split(':');
         paths.push(GLib.get_home_dir());
-        const someResults = paths.map(path => {
-            const results = [];
+        let someResults = paths.map(path => {
+            let results = [];
             try {
-                const file = Gio.File.new_for_path(path);
-                const fileEnum = file.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+                let file = Gio.File.new_for_path(path);
+                let fileEnum = file.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
                 let info;
                 while ((info = fileEnum.next_file(null))) {
-                    const name = info.get_name();
+                    let name = info.get_name();
                     if (name.slice(0, text.length) === text)
                         results.push(name);
                 }
@@ -185,12 +166,12 @@ export class RunDialog extends ModalDialog.ModalDialog {
             }
             return results;
         });
-        const results = someResults.reduce((a, b) => a.concat(b), []);
+        let results = someResults.reduce((a, b) => a.concat(b), []);
 
         if (!results.length)
             return null;
 
-        const common = results.reduce(_getCommon, null);
+        let common = results.reduce(_getCommon, null);
         return common.substring(text.length);
     }
 
@@ -216,8 +197,8 @@ export class RunDialog extends ModalDialog.ModalDialog {
         } else {
             try {
                 if (inTerminal) {
-                    const exec = this._terminalSettings.get_string(EXEC_KEY);
-                    const execArg = this._terminalSettings.get_string(EXEC_ARG_KEY);
+                    let exec = this._terminalSettings.get_string(EXEC_KEY);
+                    let execArg = this._terminalSettings.get_string(EXEC_ARG_KEY);
                     command = `${exec} ${execArg} ${input}`;
                 }
                 Util.trySpawnCommandLine(command);
@@ -233,7 +214,7 @@ export class RunDialog extends ModalDialog.ModalDialog {
                 }
 
                 if (path && GLib.file_test(path, GLib.FileTest.EXISTS)) {
-                    const file = Gio.file_new_for_path(path);
+                    let file = Gio.file_new_for_path(path);
                     try {
                         Gio.app_info_launch_default_for_uri(file.get_uri(),
                             global.create_app_launch_context(0, -1));
@@ -242,7 +223,7 @@ export class RunDialog extends ModalDialog.ModalDialog {
                         //     Error invoking Gio.app_info_launch_default_for_uri: No application
                         //     is registered as handling this file
                         // We are only interested in the part after the first colon.
-                        const message = err.message.replace(/[^:]*: *(.+)/, '$1');
+                        let message = err.message.replace(/[^:]*: *(.+)/, '$1');
                         this._showError(message);
                     }
                 } else {
@@ -257,6 +238,15 @@ export class RunDialog extends ModalDialog.ModalDialog {
         this._descriptionLabel.set_text(message);
     }
 
+    _restart() {
+        if (Meta.is_wayland_compositor()) {
+            this._showError(_('Restart is not available on Wayland'));
+            return;
+        }
+        this._shouldFadeOut = false;
+        this.close();
+        Meta.restart(_('Restarting…'), global.context);
+    }
 
     open() {
         this._history.lastItem();
@@ -268,4 +258,4 @@ export class RunDialog extends ModalDialog.ModalDialog {
 
         return super.open();
     }
-}
+});

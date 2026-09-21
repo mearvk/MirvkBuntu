@@ -42,6 +42,10 @@ if TYPE_CHECKING:
     from .orca_test_context import OrcaTestContext
 
 
+class Fake:
+    """Stub used as a stand-in for objects that need an identity."""
+
+
 @pytest.mark.unit
 class TestNotificationPresenter:
     """Test NotificationPresenter class methods."""
@@ -62,6 +66,14 @@ class TestNotificationPresenter:
 
         gi_mock = essential_modules["gi"]
         gi_mock.require_version = test_context.Mock()
+
+        gi_repository_mock = essential_modules["gi.repository"]
+        atspi_mock = essential_modules["gi.repository.Atspi"]
+        atspi_mock.Role = Fake
+        atspi_mock.Accessible = Fake
+        atspi_mock.MatchRule = Fake
+        atspi_mock.Relation = Fake
+        gi_repository_mock.Atspi = atspi_mock
 
         gobject_mock = essential_modules["gi.repository.GObject"]
         gobject_mock.TYPE_STRING = str
@@ -621,6 +633,133 @@ class TestNotificationPresenter:
 
 
 @pytest.mark.unit
+class TestNotificationListGUI:
+    """Test NotificationListGUI class methods."""
+
+    def _setup_dependencies(self, test_context: OrcaTestContext):
+        """Returns all dependencies needed for NotificationPresenter testing."""
+
+        additional_modules = [
+            "gi",
+            "gi.repository",
+            "gi.repository.Atspi",
+            "gi.repository.GObject",
+            "gi.repository.Gtk",
+            "orca.braille_presenter",
+            "orca.presentation_manager",
+        ]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
+
+        gi_mock = essential_modules["gi"]
+        gi_mock.require_version = test_context.Mock()
+
+        gi_repository_mock = essential_modules["gi.repository"]
+        atspi_mock = essential_modules["gi.repository.Atspi"]
+        atspi_mock.Role = Fake
+        atspi_mock.Accessible = Fake
+        atspi_mock.MatchRule = Fake
+        atspi_mock.Relation = Fake
+        gi_repository_mock.Atspi = atspi_mock
+
+        gobject_mock = essential_modules["gi.repository.GObject"]
+        gobject_mock.TYPE_STRING = str
+
+        gtk_mock = essential_modules["gi.repository.Gtk"]
+
+        gtk_mock.DialogFlags = test_context.Mock()
+        gtk_mock.DialogFlags.MODAL = 1
+        gtk_mock.ResponseType = test_context.Mock()
+        gtk_mock.ResponseType.APPLY = -10
+        gtk_mock.ResponseType.CLOSE = -7
+        gtk_mock.STOCK_CLEAR = "gtk-clear"
+        gtk_mock.STOCK_CLOSE = "gtk-close"
+
+        dialog_mock = test_context.Mock()
+        dialog_mock.set_default_size = test_context.Mock()
+        dialog_mock.get_content_area = test_context.Mock()
+        dialog_mock.connect = test_context.Mock()
+        dialog_mock.show_all = test_context.Mock()
+        dialog_mock.present_with_time = test_context.Mock()
+        dialog_mock.destroy = test_context.Mock()
+
+        content_area_mock = test_context.Mock()
+        content_area_mock.add = test_context.Mock()
+        dialog_mock.get_content_area.return_value = content_area_mock
+
+        grid_mock = test_context.Mock()
+        scrolled_window_mock = test_context.Mock()
+        scrolled_window_mock.add = test_context.Mock()
+
+        tree_view_mock = test_context.Mock()
+        tree_view_mock.set_hexpand = test_context.Mock()
+        tree_view_mock.set_vexpand = test_context.Mock()
+        tree_view_mock.append_column = test_context.Mock()
+        tree_view_mock.set_model = test_context.Mock()
+
+        list_store_mock = test_context.Mock()
+        list_store_mock.clear = test_context.Mock()
+        list_store_mock.append = test_context.Mock()
+
+        tree_view_column_mock = test_context.Mock()
+        cell_renderer_text_mock = test_context.Mock()
+
+        gtk_mock.Dialog = test_context.Mock(return_value=dialog_mock)
+        gtk_mock.Grid = test_context.Mock(return_value=grid_mock)
+        gtk_mock.ScrolledWindow = test_context.Mock(return_value=scrolled_window_mock)
+        gtk_mock.TreeView = test_context.Mock(return_value=tree_view_mock)
+        gtk_mock.ListStore = test_context.Mock(return_value=list_store_mock)
+        gtk_mock.TreeViewColumn = test_context.Mock(return_value=tree_view_column_mock)
+        gtk_mock.CellRendererText = test_context.Mock(return_value=cell_renderer_text_mock)
+
+        focus_manager_instance = test_context.Mock()
+        focus_manager_instance.get_locus_of_focus = test_context.Mock(return_value=None)
+        essential_modules["orca.focus_manager"].get_manager = test_context.Mock(
+            return_value=focus_manager_instance,
+        )
+
+        script_manager_instance = test_context.Mock()
+        script_instance = test_context.Mock()
+        script_manager_instance.get_active_script = test_context.Mock(return_value=script_instance)
+        essential_modules["orca.script_manager"].get_manager = test_context.Mock(
+            return_value=script_manager_instance,
+        )
+
+        input_event_handler_mock = test_context.Mock()
+        essential_modules["orca.input_event"].InputEventHandler = test_context.Mock(
+            return_value=input_event_handler_mock,
+        )
+
+        essential_modules[
+            "orca.messages"
+        ].NOTIFICATION_PRESENTER_MESSAGE_NOT_FOUND = "No notification message found"
+        essential_modules[
+            "orca.messages"
+        ].NOTIFICATION_PRESENTER_MESSAGE_DUPLICATE = "Duplicate notification"
+
+        essential_modules["orca.guilabels"].NOTIFICATION_LIST_TITLE = "Notification List"
+        essential_modules["dialog"] = dialog_mock
+        essential_modules["list_store"] = list_store_mock
+        essential_modules["tree_view"] = tree_view_mock
+
+        return essential_modules
+
+    def test_notification_list_gui_constructor_validation(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test NotificationListGUI class can be imported and instantiated."""
+
+        self._setup_dependencies(test_context)
+        orca_i18n_mock = test_context.Mock()
+        orca_i18n_mock._ = lambda x: x
+        test_context.patch_module("orca.orca_i18n", orca_i18n_mock)
+
+        from orca.notification_presenter import NotificationListGUI
+
+        assert NotificationListGUI is not None
+
+
+@pytest.mark.unit
 class TestNotificationPresenterModule:
     """Test module-level functions."""
 
@@ -640,6 +779,14 @@ class TestNotificationPresenterModule:
 
         gi_mock = essential_modules["gi"]
         gi_mock.require_version = test_context.Mock()
+
+        gi_repository_mock = essential_modules["gi.repository"]
+        atspi_mock = essential_modules["gi.repository.Atspi"]
+        atspi_mock.Role = Fake
+        atspi_mock.Accessible = Fake
+        atspi_mock.MatchRule = Fake
+        atspi_mock.Relation = Fake
+        gi_repository_mock.Atspi = atspi_mock
 
         gobject_mock = essential_modules["gi.repository.GObject"]
         gobject_mock.TYPE_STRING = str

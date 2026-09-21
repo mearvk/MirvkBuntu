@@ -248,7 +248,7 @@ shell_keyring_prompt_get_property (GObject    *obj,
     g_value_set_int (value, self->password_strength);
     break;
   case PROP_CALLER_WINDOW:
-    g_value_set_static_string (value, "");
+    g_value_set_string (value, "");
     break;
   case PROP_CONTINUE_LABEL:
     g_value_set_string (value, self->continue_label);
@@ -257,16 +257,17 @@ shell_keyring_prompt_get_property (GObject    *obj,
     g_value_set_string (value, self->cancel_label);
     break;
   case PROP_PASSWORD_VISIBLE:
-    g_value_set_boolean (value, shell_keyring_prompt_get_password_visible (self));
+    g_value_set_boolean (value, self->mode == PROMPTING_FOR_PASSWORD);
     break;
   case PROP_CONFIRM_VISIBLE:
-    g_value_set_boolean (value, shell_keyring_prompt_get_confirm_visible (self));
+    g_value_set_boolean (value, self->password_new &&
+                                self->mode == PROMPTING_FOR_PASSWORD);
     break;
   case PROP_WARNING_VISIBLE:
-    g_value_set_boolean (value, shell_keyring_prompt_get_warning_visible (self));
+    g_value_set_boolean (value, self->warning && self->warning[0]);
     break;
   case PROP_CHOICE_VISIBLE:
-    g_value_set_boolean (value, shell_keyring_prompt_get_choice_visible (self));
+    g_value_set_boolean (value, self->choice_label && self->choice_label[0]);
     break;
   case PROP_PASSWORD_ACTOR:
     g_value_set_object (value, shell_keyring_prompt_get_password_actor (self));
@@ -352,7 +353,9 @@ shell_keyring_prompt_class_init (ShellKeyringPromptClass *klass)
    * Whether the password entry is visible or not.
    */
   props[PROP_PASSWORD_VISIBLE] =
-    g_param_spec_boolean ("password-visible", NULL, NULL,
+    g_param_spec_boolean ("password-visible",
+                          "Password visible",
+                          "Password field is visible",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -362,7 +365,9 @@ shell_keyring_prompt_class_init (ShellKeyringPromptClass *klass)
     * Whether the password confirm entry is visible or not.
     */
   props[PROP_CONFIRM_VISIBLE] =
-    g_param_spec_boolean ("confirm-visible", NULL, NULL,
+    g_param_spec_boolean ("confirm-visible",
+                          "Confirm visible",
+                          "Confirm field is visible",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -372,7 +377,9 @@ shell_keyring_prompt_class_init (ShellKeyringPromptClass *klass)
    * Whether the warning label is visible or not.
    */
   props[PROP_WARNING_VISIBLE] =
-    g_param_spec_boolean ("warning-visible", NULL, NULL,
+    g_param_spec_boolean ("warning-visible",
+                          "Warning visible",
+                          "Warning is visible",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -382,7 +389,9 @@ shell_keyring_prompt_class_init (ShellKeyringPromptClass *klass)
    * Whether the choice check box is visible or not.
    */
   props[PROP_CHOICE_VISIBLE] =
-    g_param_spec_boolean ("choice-visible", NULL, NULL,
+    g_param_spec_boolean ("choice-visible",
+                          "Choice visible",
+                          "Choice is visible",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -392,7 +401,9 @@ shell_keyring_prompt_class_init (ShellKeyringPromptClass *klass)
    * Text field for password
    */
   props[PROP_PASSWORD_ACTOR] =
-    g_param_spec_object ("password-actor", NULL, NULL,
+    g_param_spec_object ("password-actor",
+                         "Password actor",
+                         "Text field for password",
                          CLUTTER_TYPE_TEXT,
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -402,7 +413,9 @@ shell_keyring_prompt_class_init (ShellKeyringPromptClass *klass)
    * Text field for confirmation password
    */
   props[PROP_CONFIRM_ACTOR] =
-    g_param_spec_object ("confirm-actor", NULL, NULL,
+    g_param_spec_object ("confirm-actor",
+                         "Confirm actor",
+                         "Text field for confirming password",
                          CLUTTER_TYPE_TEXT,
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -540,34 +553,6 @@ shell_keyring_prompt_new (void)
 	return g_object_new (SHELL_TYPE_KEYRING_PROMPT, NULL);
 }
 
-gboolean
-shell_keyring_prompt_get_password_visible (ShellKeyringPrompt *self)
-{
-  g_return_val_if_fail (SHELL_IS_KEYRING_PROMPT (self), FALSE);
-  return self->mode == PROMPTING_FOR_PASSWORD;
-}
-
-gboolean
-shell_keyring_prompt_get_confirm_visible (ShellKeyringPrompt *self)
-{
-  g_return_val_if_fail (SHELL_IS_KEYRING_PROMPT (self), FALSE);
-  return self->password_new && self->mode == PROMPTING_FOR_PASSWORD;
-}
-
-gboolean
-shell_keyring_prompt_get_warning_visible (ShellKeyringPrompt *self)
-{
-  g_return_val_if_fail (SHELL_IS_KEYRING_PROMPT (self), FALSE);
-  return self->warning && self->warning[0];
-}
-
-gboolean
-shell_keyring_prompt_get_choice_visible (ShellKeyringPrompt *self)
-{
-  g_return_val_if_fail (SHELL_IS_KEYRING_PROMPT (self), FALSE);
-  return self->choice_label && self->choice_label[0];
-}
-
 /**
  * shell_keyring_prompt_get_password_actor:
  * @self: the internal prompt
@@ -601,7 +586,7 @@ shell_keyring_prompt_get_confirm_actor (ShellKeyringPrompt *self)
 static guint
 calculate_password_strength (const gchar *password)
 {
-  int upper, digit, misc;
+  int upper, lower, digit, misc;
   gdouble pwstrength;
   int length, i;
 
@@ -619,6 +604,7 @@ calculate_password_strength (const gchar *password)
     return 0;
 
   upper = 0;
+  lower = 0;
   digit = 0;
   misc = 0;
 
@@ -626,9 +612,11 @@ calculate_password_strength (const gchar *password)
     {
       if (g_ascii_isdigit (password[i]))
         digit++;
+      else if (g_ascii_islower (password[i]))
+        lower++;
       else if (g_ascii_isupper (password[i]))
         upper++;
-      else if (!g_ascii_islower (password[i]))
+      else
         misc++;
     }
 
@@ -773,7 +761,7 @@ shell_keyring_prompt_complete (ShellKeyringPrompt *self)
           /* Do the passwords match? */
           if (!g_str_equal (password, confirm))
             {
-              gcr_prompt_set_warning (GCR_PROMPT (self), _("Passwords do not match"));
+              gcr_prompt_set_warning (GCR_PROMPT (self), _("Passwords do not match."));
               return FALSE;
           }
 

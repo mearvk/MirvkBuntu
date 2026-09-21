@@ -26,8 +26,6 @@
 #include "gtkstack.h"
 #include "gtkbinlayout.h"
 #include "gtkaccessibleprivate.h"
-#include "gtkaccessibletext.h"
-#include "gtkaccessiblerange.h"
 #include "gtkaccessiblevalueprivate.h"
 #include "gtkatcontextprivate.h"
 #include "gtkcolumnview.h"
@@ -69,11 +67,8 @@ enum {
   PROP_ATTRIBUTE,
   PROP_NAME,
   PROP_IS_DEFAULT,
-  PROP_VALUE,
-  N_PROPS
+  PROP_VALUE
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static GType accessible_attribute_get_type (void);
 
@@ -176,23 +171,26 @@ accessible_attribute_class_init (AccessibleAttributeClass *class)
   object_class->set_property = accessible_attribute_set_property;
   object_class->get_property = accessible_attribute_get_property;
 
-  props[PROP_KIND] = g_param_spec_uint ("kind", NULL, NULL,
-                                        0, 2, 0,
-                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_ATTRIBUTE] = g_param_spec_uint ("attribute", NULL, NULL,
-                                             0, G_MAXUINT, 0,
-                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_NAME] = g_param_spec_string ("name", NULL, NULL,
-                                          NULL,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_IS_DEFAULT] = g_param_spec_boolean ("is-default", NULL, NULL,
-                                                 FALSE,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_VALUE] = g_param_spec_boxed ("value", NULL, NULL,
-                                          GTK_TYPE_ACCESSIBLE_VALUE,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_KIND,
+      g_param_spec_uint ("kind", NULL, NULL,
+                         0, 2, 0,
+                         G_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_ATTRIBUTE,
+      g_param_spec_uint ("attribute", NULL, NULL,
+                         0, G_MAXUINT, 0,
+                         G_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_NAME,
+      g_param_spec_string ("name", NULL, NULL,
+                           NULL,
+                           G_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_IS_DEFAULT,
+      g_param_spec_boolean ("is-default", NULL, NULL,
+                            FALSE,
+                            G_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_VALUE,
+      g_param_spec_boxed ("value", NULL, NULL,
+                          GTK_TYPE_ACCESSIBLE_VALUE,
+                          G_PARAM_READWRITE));
 }
 
 struct _GtkInspectorA11y
@@ -208,8 +206,6 @@ struct _GtkInspectorA11y
   GtkWidget *bounds;
   GtkWidget *path_label;
   GtkWidget *path;
-  GtkWidget *interface_label;
-  GtkWidget *interface;
   GtkWidget *attributes;
 };
 
@@ -304,22 +300,6 @@ update_bounds (GtkInspectorA11y *sl)
       gtk_label_set_label (GTK_LABEL (sl->bounds), size_label);
       g_free (size_label);
     }
-}
-
-static void
-update_interface (GtkInspectorA11y *sl)
-{
-  const char *interface = NULL;
-
-  if (GTK_IS_ACCESSIBLE_TEXT (sl->object))
-    interface = "GtkAccessibleText";
-  else if (GTK_IS_ACCESSIBLE_RANGE (sl->object))
-    interface = "GtkAccessibleRange";
-
-  gtk_label_set_label (GTK_LABEL (sl->interface), interface ? interface : "");
-
-  gtk_widget_set_visible (sl->interface, interface != NULL);
-  gtk_widget_set_visible (sl->interface_label, interface != NULL);
 }
 
 extern GType gtk_string_pair_get_type (void);
@@ -485,7 +465,6 @@ refresh_all (GtkInspectorA11y *sl)
   update_name (sl);
   update_description (sl);
   update_path (sl);
-  update_interface (sl);
   update_attributes (sl);
 }
 
@@ -525,7 +504,6 @@ gtk_inspector_a11y_set_object (GtkInspectorA11y *sl,
       gtk_stack_page_set_visible (page, TRUE);
       refresh_all (sl);
       update_bounds (sl);
-      update_interface (sl);
     }
   else
     {
@@ -542,9 +520,6 @@ gtk_inspector_a11y_init (GtkInspectorA11y *sl)
   gtk_widget_set_visible (sl->path, FALSE);
   gtk_widget_set_visible (sl->path_label, FALSE);
 #endif
-
-  gtk_widget_set_visible (sl->interface, FALSE);
-  gtk_widget_set_visible (sl->interface_label, FALSE);
 }
 
 static void
@@ -587,8 +562,6 @@ gtk_inspector_a11y_class_init (GtkInspectorA11yClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorA11y, bounds);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorA11y, path_label);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorA11y, path);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorA11y, interface_label);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorA11y, interface);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorA11y, attributes);
 
   gtk_widget_class_bind_template_callback (widget_class, setup_cell_cb);

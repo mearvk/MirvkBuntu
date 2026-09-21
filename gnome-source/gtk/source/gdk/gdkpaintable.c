@@ -38,7 +38,8 @@ GdkPaintable *  gtk_snapshot_free_to_paintable          (GdkSnapshot            
 /**
  * GdkPaintable:
  *
- * An interface for content that can be painted.
+ * `GdkPaintable` is a simple interface used by GTK to represent content that
+ * can be painted.
  *
  * The content of a `GdkPaintable` can be painted anywhere at any size
  * without requiring any sort of layout. The interface is inspired by

@@ -1,53 +1,37 @@
-# Orca Tests
+# Orca Tests: Work in Progress
+
+This is the beginning of Orca's new unit test and integration test support.
+
+## Status
+
+* Basic test coverage for the D-Bus Remote Controller: DONE
+* Advanced test coverage for the D-Bus Remote Controller: TODO
+  * Needed: A means to load document content, apps with UI for the navigators and presenters
+* Unit test coverage of the AX* utilities: DONE
+* Unit test coverage of the "Managers": DONE
+* Unit test coverage of the "Presenters": DONE
+* Unit test coverage of the "Navigators": DONE
+* Unit test coverage of generators: TODO
+* Unit test coverage of scripts: TODO
+* Integration/advanced test coverage of all of the above: TODO
+  * Needed: Real AT-SPI2 objects
+* Meson support: DONE
+* Integration into Orca's Gitlab CI: TODO
 
 ## Dependencies
-
-The unit tests need:
 
 * [pytest](https://pytest.org)
 * [pytest-mock](https://pytest-mock.readthedocs.io/) - Mock plugin for pytest
 
-The integration tests additionally need the following, on top of what Orca itself requires.
-Some missing dependencies cause skips; others cause import or setup failures. Tests which
-launch Orca need an installed build of the version being tested.
-
-* Xvfb
-* `dbus-run-session`, `gdbus`, and `dbus-update-activation-environment`
-* AT-SPI's `at-spi-bus-launcher` and `at-spi2-registryd`
-* `pgrep` (from procps) and `fusermount` (for sandbox FUSE cleanup)
-* Python GObject introspection and Cairo bindings, with the AT-SPI, GTK3, and PangoCairo typelibs
-* `glib-compile-schemas` for the GSettings tests
-* The DejaVu Serif, DejaVu Sans, and DejaVu Sans Mono fonts for consistent line wrapping
-* VTE 2.91 (GTK3), including its typelib, Python curses, xterm terminfo, bash, less, nano, vim,
-  and `seq` (from coreutils), for the terminal tests
-* liblouis's Python bindings and en-us-g1/en-us-g2 tables for the braille tests. Its pkg-config
-  metadata must be available when building Orca so it can locate the tables (in Fedora and
-  openSUSE, install `liblouis-devel`).
-* MathCAT enabled in the installed Orca build for the math tests.
-* Chrome (beta preferred) or Chromium for the web tests, with accessibility enabled in the
-  environment before running the tests:
-
-  ```bash
-  export ACCESSIBILITY_ENABLED=1
-  ```
-
 ## Running Tests
 
-These tests, especially the new integration tests, are currently intended for
-use by the maintainer. Documenting all expected dependencies and versions and
-ensuring compatibility with multiple distros are still pending. For this reason,
-the integration tests are currently disabled by default.
+### Using Meson
 
-In addition, the Chromium web tests have unresolved browser-version and
-cross-distribution rendering compatibility issues. They are not yet ready for
-non-maintainer use and are not run in CI.
-
-The integration tests cannot run while Orca is already active on the user's
-session because each test launches and drives its own Orca. It was decided
-that the test harness should not first kill any running instance of Orca
-because doing so might be unexpected. If you rely on Orca in your active
-session, you can still run the tests by signing in as a second local user
-(via `su` or `ssh`) and running them from there.
+```bash
+meson test -C _build                     # All tests
+meson test -C _build --suite unit        # Unit tests only
+meson test -C _build --suite integration # Integration tests only
+```
 
 ### Using Pytest
 
@@ -57,23 +41,7 @@ coverage run -m pytest tests/unit_tests # Unit tests with coverage
 python3 -m pytest tests/unit_tests/test_ax_text.py -v # Specific file
 ```
 
-### Using Meson
-
-Orca's tests are grouped into the following named suites:
-
-* unit (the only suite run by default)
-* integration (all integration tests)
-* core (infrastructure such as GSettings and D-Bus support)
-* gtk3 (non-terminal GTK3 UI tests)
-* gtk3-terminal (for terminal applications using VTE for GTK3)
-* chromium (for web content using Chrome or Chromium)
-
-```bash
-meson test -C _build
-meson test -C _build --suite <suite name>
-```
-
-## Adding New Unit Tests
+## Adding New Tests
 
 ### 1. Create Test File
 
@@ -206,8 +174,14 @@ test_context.patch_env(
 
 #### Shared Dependencies
 
-Most tests should use `test_context.setup_shared_dependencies()` which provides
-common modules.
+Most tests should use `test_context.setup_shared_dependencies()` which provides common modules like:
+
+* `orca.debug` - Debugging and logging
+* `orca.messages` - User messages
+* `orca.input_event` - Event handling
+* `orca.settings` - Configuration
+* `orca.keybindings` - Keyboard shortcuts
+* And many others with pre-configured behaviors
 
 ### 4. Parameterized Tests
 

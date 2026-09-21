@@ -87,7 +87,7 @@ get_dir_entry_checked (GITypelib *typelib,
       return FALSE;
     }
 
-  offset = header->directory + (index - 1u) * header->entry_blob_size;
+  offset = header->directory + (index - 1) * header->entry_blob_size;
 
   if (typelib->len < offset + sizeof (DirEntry))
     {
@@ -161,8 +161,7 @@ gi_typelib_get_dir_entry (GITypelib *typelib,
 {
   Header *header = (Header *)typelib->data;
 
-  /* this deliberately doesn’t check for underflow of @index; see get_dir_entry_checked() for that */
-  return (DirEntry *)&typelib->data[header->directory + (index - 1u) * header->entry_blob_size];
+  return (DirEntry *)&typelib->data[header->directory + (index - 1) * header->entry_blob_size];
 }
 
 static Section *
@@ -304,7 +303,7 @@ strsplit_iter_next (StrSplitIter  *iter,
   if (next)
     {
       iter->s = next + iter->sep_len;
-      len = (size_t) (next - s);
+      len = next - s;
     }
   else
     {
@@ -727,7 +726,7 @@ validate_param_type_blob (GITypelib     *typelib,
       g_set_error (error,
                    GI_TYPELIB_ERROR,
                    GI_TYPELIB_ERROR_INVALID_BLOB,
-                   "Pointer type expected for tag %d", blob->tag);
+                   "Pointer type exected for tag %d", blob->tag);
       return FALSE;
     }
 
@@ -768,7 +767,7 @@ validate_error_type_blob (GITypelib     *typelib,
       g_set_error (error,
                    GI_TYPELIB_ERROR,
                    GI_TYPELIB_ERROR_INVALID_BLOB,
-                   "Pointer type expected for tag %d", blob->tag);
+                   "Pointer type exected for tag %d", blob->tag);
       return FALSE;
     }
 
@@ -806,7 +805,7 @@ validate_type_blob (GITypelib     *typelib,
           g_set_error (error,
                        GI_TYPELIB_ERROR,
                        GI_TYPELIB_ERROR_INVALID_BLOB,
-                       "Pointer type expected for tag %d", simple->flags.tag);
+                       "Pointer type exected for tag %d", simple->flags.tag);
           return FALSE;
         }
 
@@ -1719,7 +1718,7 @@ validate_object_blob (ValidateContext *ctx,
     }
 
   if (typelib->len < offset + sizeof (ObjectBlob) +
-            (blob->n_interfaces + blob->n_interfaces % 2u) * 2u +
+            (blob->n_interfaces + blob->n_interfaces % 2) * 2 +
             blob->n_fields * sizeof (FieldBlob) +
             blob->n_properties * sizeof (PropertyBlob) +
             blob->n_methods * sizeof (FunctionBlob) +
@@ -1876,7 +1875,7 @@ validate_interface_blob (ValidateContext *ctx,
     return FALSE;
 
   if (typelib->len < offset + sizeof (InterfaceBlob) +
-            (blob->n_prerequisites + blob->n_prerequisites % 2u) * 2u +
+            (blob->n_prerequisites + blob->n_prerequisites % 2) * 2 +
             blob->n_properties * sizeof (PropertyBlob) +
             blob->n_methods * sizeof (FunctionBlob) +
             blob->n_signals * sizeof (SignalBlob) +

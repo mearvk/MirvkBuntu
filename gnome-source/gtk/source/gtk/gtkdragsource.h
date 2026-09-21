@@ -46,7 +46,7 @@ typedef struct _GtkDragSource GtkDragSource;
 typedef struct _GtkDragSourceClass GtkDragSourceClass;
 
 GDK_AVAILABLE_IN_ALL
-GType              gtk_drag_source_get_type  (void);
+GType              gtk_drag_source_get_type  (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkDragSource      *gtk_drag_source_new        (void);
@@ -81,7 +81,6 @@ gboolean           gtk_drag_check_threshold    (GtkWidget         *widget,
                                                 int                current_x,
                                                 int                current_y);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkDragSource, g_object_unref)
 
 G_END_DECLS
 

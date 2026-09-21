@@ -30,7 +30,6 @@
 #include "clutter/clutter-frame-private.h"
 #include "clutter/clutter-main.h"
 #include "clutter/clutter-private.h"
-#include "clutter/clutter-timeline.h"
 #include "clutter/clutter-timeline-private.h"
 #include "cogl/cogl-trace.h"
 
@@ -43,23 +42,15 @@ enum
 
 static guint signals[N_SIGNALS];
 
-#define SYNC_DELAY_FALLBACK_FRACTION 0.875f
+#define SYNC_DELAY_FALLBACK_FRACTION 0.875
 
 #define MINIMUM_REFRESH_RATE 30.f
-
-G_DEFINE_ABSTRACT_TYPE (ClutterFrameClockDriver, clutter_frame_clock_driver,
-                        G_TYPE_OBJECT)
 
 typedef struct _ClutterFrameListener
 {
   const ClutterFrameListenerIface *iface;
   gpointer user_data;
 } ClutterFrameListener;
-
-typedef struct _DeferredTime
-{
-  int64_t target_time_us;
-} DeferredTime;
 
 typedef struct _ClutterClockSource
 {
@@ -79,40 +70,19 @@ typedef enum _ClutterFrameClockState
   CLUTTER_FRAME_CLOCK_STATE_IDLE,
   CLUTTER_FRAME_CLOCK_STATE_SCHEDULED,
   CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW,
-  CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER,
-  CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE,
-  CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED,
-  CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW,
-  CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER,
-  CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO,
+  CLUTTER_FRAME_CLOCK_STATE_DISPATCHING,
+  CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED,
 } ClutterFrameClockState;
-
-typedef struct _Frame
-{
-  int use_count;
-  int64_t dispatch_time_us;
-  int64_t dispatch_lateness_us;
-  int64_t presentation_time_us;
-  int64_t target_presentation_time_us;
-  int64_t flip_time_us;
-  int64_t dispatch_interval_us;
-  ClutterFrameInfoFlag presentation_flags;
-  gboolean got_measurements;
-} Frame;
 
 struct _ClutterFrameClock
 {
   GObject parent;
 
-  gboolean destroy_emitted;
-
   float refresh_rate;
   int64_t refresh_interval_us;
-  int64_t maximum_refresh_interval_us;
+  int64_t minimum_refresh_interval_us;
 
   ClutterFrameListener listener;
-
-  ClutterFrameClockDriver *driver;
 
   GSource *source;
 
@@ -121,126 +91,57 @@ struct _ClutterFrameClock
   ClutterFrameClockState state;
   ClutterFrameClockMode mode;
 
+  int64_t last_dispatch_time_us;
+  int64_t last_dispatch_lateness_us;
+  int64_t last_presentation_time_us;
   int64_t next_update_time_us;
 
-  Frame frame_pool[3];
-  Frame *prev_dispatch;
-  Frame *next_presentation;
-  Frame *next_next_presentation;
-  Frame *prev_presentation;
+  ClutterFrameInfoFlag last_presentation_flags;
 
   gboolean is_next_presentation_time_valid;
-  gboolean is_target_presentation_time;
   int64_t next_presentation_time_us;
 
   gboolean has_next_frame_deadline;
   int64_t next_frame_deadline_us;
 
+  gboolean has_last_next_presentation_time;
+  int64_t last_next_presentation_time_us;
+
   /* Buffer must be submitted to KMS and GPU rendering must be finished
    * this amount of time before the next presentation time.
    */
   int64_t vblank_duration_us;
+  /* Last KMS buffer submission time. */
+  int64_t last_flip_time_us;
 
-  /* Maximum update duration estimate */
-  int64_t max_update_duration_us;
-  /* Minimum update duration estimate */
-  int64_t min_update_duration_us;
+  /* Last time we promoted short-term maximum to long-term one */
+  int64_t longterm_promotion_us;
+  /* Long-term maximum update duration */
+  int64_t longterm_max_update_duration_us;
+  /* Short-term maximum update duration */
+  int64_t shortterm_max_update_duration_us;
 
-  struct {
-    /* Current margin for maximum update duration estimate */
-    int64_t current_us;
-    /* Target margin for maximum update duration estimate */
-    int64_t target_us;
-    /* Last time the current margin was updated */
-    int64_t set_time_us;
-  } max_update_margin;
-
+  /* If we got new measurements last frame. */
+  gboolean got_measurements_last_frame;
   gboolean ever_got_measurements;
 
   gboolean pending_reschedule;
   gboolean pending_reschedule_now;
-  gboolean throttle_timelines;
 
   int inhibit_count;
 
   GList *timelines;
-  int64_t timeline_target_us;
-  int64_t timeline_time_us;
-  gboolean timelines_playing;
 
   int n_missed_frames;
   int64_t missed_frame_report_time_us;
 
-  int64_t deadline_evasion_us;
-  int64_t fullscreen_update_time_us;
+  int64_t last_dispatch_interval_us;
 
   char *output_name;
-
-  GQueue *deferred_times;
 };
 
 G_DEFINE_TYPE (ClutterFrameClock, clutter_frame_clock,
                G_TYPE_OBJECT)
-
-static void
-clutter_frame_clock_schedule_update_later (ClutterFrameClock *frame_clock,
-                                           int64_t            target_us);
-
-static const char *
-clutter_frame_clock_state_to_string (ClutterFrameClockState state)
-{
-  switch (state)
-    {
-    case CLUTTER_FRAME_CLOCK_STATE_INIT:
-      return "init";
-    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
-      return "idle";
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-      return "scheduled";
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-      return "scheduled-now";
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
-      return "scheduled-later";
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-      return "dispatched-one";
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-      return "dispatched-one-and-scheduled";
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-      return "dispatched-one-and-scheduled-now";
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      return "dispatched-one-and-scheduled-later";
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
-      return "dispatched-two";
-    }
-  g_assert_not_reached ();
-}
-
-static void
-clutter_frame_clock_set_state (ClutterFrameClock      *frame_clock,
-                               ClutterFrameClockState  state)
-{
-  CLUTTER_NOTE (FRAME_CLOCK, "Frame clock %s state transition: %s => %s",
-                frame_clock->output_name,
-                clutter_frame_clock_state_to_string (frame_clock->state),
-                clutter_frame_clock_state_to_string (state));
-  frame_clock->state = state;
-}
-
-static void
-clutter_frame_clock_driver_class_init (ClutterFrameClockDriverClass *klass)
-{
-}
-
-static void
-clutter_frame_clock_driver_init (ClutterFrameClockDriver *driver)
-{
-}
-
-static void
-clutter_frame_clock_driver_schedule_update (ClutterFrameClockDriver *driver)
-{
-  CLUTTER_FRAME_CLOCK_DRIVER_GET_CLASS (driver)->schedule_update (driver);
-}
 
 float
 clutter_frame_clock_get_refresh_rate (ClutterFrameClock *frame_clock)
@@ -255,49 +156,6 @@ clutter_frame_clock_set_refresh_rate (ClutterFrameClock *frame_clock,
   frame_clock->refresh_rate = refresh_rate;
   frame_clock->refresh_interval_us =
     (int64_t) (0.5 + G_USEC_PER_SEC / refresh_rate);
-}
-
-static Frame *
-clutter_frame_clock_new_frame (ClutterFrameClock *frame_clock)
-{
-  for (int i = 0; i < G_N_ELEMENTS (frame_clock->frame_pool); i++)
-    {
-      Frame *frame = &frame_clock->frame_pool[i];
-
-      if (frame->use_count == 0)
-        {
-          memset (frame, 0, sizeof (*frame));
-          frame->use_count = 1;
-          return frame;
-        }
-    }
-
-  g_assert_not_reached ();
-  return NULL;
-}
-
-static Frame *
-ref_frame (Frame *frame)
-{
-  frame->use_count++;
-  return frame;
-}
-
-static void
-unref_frame (Frame *frame)
-{
-  g_return_if_fail (frame->use_count > 0);
-  frame->use_count--;
-}
-
-static void
-clear_frame (Frame **frame)
-{
-  if (frame && *frame)
-    {
-      unref_frame (*frame);
-      *frame = NULL;
-    }
 }
 
 void
@@ -328,8 +186,7 @@ static void
 advance_timelines (ClutterFrameClock *frame_clock,
                    int64_t            time_us)
 {
-  gboolean any_playing = FALSE;
-  GList *timelines = NULL;
+  GList *timelines;
   GList *l;
 
   /* we protect ourselves from timelines being removed during
@@ -353,65 +210,8 @@ advance_timelines (ClutterFrameClock *frame_clock,
    * and leaving a dangling pointer behind.
    */
 
-  for (l = frame_clock->timelines; l; l = l->next)
-    {
-      ClutterTimeline *timeline = l->data;
-
-      timelines = g_list_prepend (timelines, g_object_ref (timeline));
-
-      if (clutter_timeline_is_playing (timeline))
-        any_playing = TRUE;
-    }
-
-  if (frame_clock->is_next_presentation_time_valid)
-    {
-      if (any_playing &&
-          frame_clock->timelines_playing &&
-          frame_clock->timeline_time_us > 0)
-        {
-          if (frame_clock->timeline_target_us <
-              frame_clock->next_presentation_time_us)
-            {
-              int64_t refresh_interval_us = frame_clock->refresh_interval_us;
-              int64_t delta_us;
-
-              frame_clock->timeline_time_us += refresh_interval_us;
-              delta_us = frame_clock->next_presentation_time_us -
-                         frame_clock->timeline_time_us;
-
-              if (delta_us > ms2us (100))
-                {
-                  CLUTTER_NOTE (FRAME_TIMINGS,
-                                "%s timelines lagging by %ld µs, resetting",
-                                frame_clock->output_name,
-                                delta_us);
-
-                  frame_clock->timeline_time_us =
-                    frame_clock->next_presentation_time_us;
-                }
-              else if (delta_us > 0)
-                {
-                  CLUTTER_NOTE (FRAME_TIMINGS,
-                                "%s timelines lagging by %ld µs, catching up",
-                                frame_clock->output_name,
-                                delta_us);
-
-                  frame_clock->timeline_time_us +=
-                    MIN (delta_us, refresh_interval_us / 32);
-                }
-
-              frame_clock->timeline_target_us =
-                frame_clock->next_presentation_time_us;
-            }
-        }
-      else
-        {
-          frame_clock->timeline_time_us =
-            frame_clock->next_presentation_time_us;
-        }
-
-      time_us = frame_clock->timeline_time_us;
-    }
+  timelines = g_list_copy (frame_clock->timelines);
+  g_list_foreach (timelines, (GFunc) g_object_ref, NULL);
 
   for (l = timelines; l; l = l->next)
     {
@@ -424,253 +224,86 @@ advance_timelines (ClutterFrameClock *frame_clock,
 }
 
 static void
-update_timelines_playing (ClutterFrameClock *frame_clock)
-{
-  GList *l;
-
-  frame_clock->timelines_playing = FALSE;
-
-  for (l = frame_clock->timelines; l; l = l->next)
-    {
-      ClutterTimeline *timeline = l->data;
-
-      if (!clutter_timeline_is_playing (timeline))
-        continue;
-
-      frame_clock->timelines_playing = TRUE;
-      frame_clock->throttle_timelines = FALSE;
-      return;
-    }
-}
-
-static gboolean
-clean_deferred_times (ClutterFrameClock *frame_clock)
-{
-  DeferredTime *head;
-  gboolean cleaned_times = FALSE;
-  int64_t current_time_us;
-
-  if (frame_clock->is_next_presentation_time_valid)
-    current_time_us = frame_clock->next_presentation_time_us;
-  else
-    current_time_us = g_get_monotonic_time ();
-
-  while ((head = g_queue_peek_head (frame_clock->deferred_times)))
-    {
-      if (current_time_us < head->target_time_us)
-         break;
-
-      g_free (g_queue_pop_head (frame_clock->deferred_times));
-      cleaned_times = TRUE;
-    }
-  return cleaned_times;
-}
-
-static void
 maybe_reschedule_update (ClutterFrameClock *frame_clock)
 {
-  DeferredTime *head;
-  gboolean cleaned;
-
   if (frame_clock->pending_reschedule ||
       frame_clock->timelines)
     {
+      frame_clock->pending_reschedule = FALSE;
+
       if (frame_clock->pending_reschedule_now)
         {
-          frame_clock->pending_reschedule = FALSE;
           frame_clock->pending_reschedule_now = FALSE;
           clutter_frame_clock_schedule_update_now (frame_clock);
         }
-      else if (frame_clock->pending_reschedule ||
-               !frame_clock->throttle_timelines)
-        {
-          frame_clock->pending_reschedule = FALSE;
-          frame_clock->throttle_timelines = TRUE;
-          clutter_frame_clock_schedule_update (frame_clock);
-        }
       else
         {
-          clutter_frame_clock_schedule_update_throttled (frame_clock);
+          clutter_frame_clock_schedule_update (frame_clock);
         }
-
-      return;
     }
-
-  cleaned = clean_deferred_times (frame_clock);
-  head = g_queue_peek_head (frame_clock->deferred_times);
-
-  if (head)
-    {
-      clutter_frame_clock_schedule_update_later (frame_clock,
-                                                 head->target_time_us);
-    }
-  else if (cleaned)
-    {
-      clutter_frame_clock_schedule_update (frame_clock);
-    }
-}
-
-static int64_t
-get_max_update_time_margin_us (ClutterFrameClock *frame_clock)
-{
-  return clutter_max_render_time_constant_us +
-         frame_clock->max_update_margin.current_us;
 }
 
 static void
-adjust_update_duration_estimates (ClutterFrameClock *frame_clock,
-                                  int64_t            update_duration_us,
-                                  int64_t            dispatch_lateness_us)
+maybe_update_longterm_max_duration_us (ClutterFrameClock *frame_clock,
+                                       ClutterFrameInfo  *frame_info)
 {
-  int64_t refresh_interval_us = frame_clock->refresh_interval_us;
-  float refresh_rate = frame_clock->refresh_rate;
-  int64_t delta_us, adjustment_us;
-  int64_t target_margin_us;
-  int64_t now_us;
-
-  if (frame_clock->max_update_duration_us == 0)
-    {
-      frame_clock->max_update_duration_us = update_duration_us;
-      frame_clock->min_update_duration_us = update_duration_us;
-      return;
-    }
-
-  delta_us = update_duration_us - frame_clock->max_update_duration_us;
-
-  target_margin_us =
-    CLAMP (delta_us + dispatch_lateness_us -
-           clutter_max_render_time_constant_us,
-           frame_clock->max_update_margin.target_us,
-           refresh_interval_us / 4);
-  frame_clock->max_update_margin.target_us = target_margin_us;
-
-  /* Adjust the estimates by a fraction of the delta such that it'll take at
-   * least seconds for the estimate to catch up to the latest measurement
-   */
-  if (delta_us < 0)
-    adjustment_us = (int64_t) roundf ((float) delta_us / (refresh_rate * 4));
-  else if (delta_us < get_max_update_time_margin_us (frame_clock))
-    adjustment_us = (int64_t) roundf ((float) delta_us / refresh_rate);
-  else
-    adjustment_us = delta_us;
-
-  if (adjustment_us != 0)
-    {
-      CLUTTER_NOTE (FRAME_TIMINGS,
-                    "%s maximum update duration updated: %ld → %ld µs",
-                    frame_clock->output_name,
-                    frame_clock->max_update_duration_us,
-                    frame_clock->max_update_duration_us + adjustment_us);
-      frame_clock->max_update_duration_us += adjustment_us;
-    }
-
-  delta_us = update_duration_us - frame_clock->min_update_duration_us;
-  if (delta_us > 0)
-    adjustment_us = (int64_t) roundf ((float) delta_us / (refresh_rate * 2));
-  else if (delta_us < 0)
-    adjustment_us = (int64_t) roundf ((float) delta_us / refresh_rate);
-  else
-    adjustment_us = delta_us;
-
-  if (adjustment_us != 0)
-    {
-      CLUTTER_NOTE (FRAME_TIMINGS,
-                    "%s minimum update duration updated: %ld → %ld µs",
-                    frame_clock->output_name,
-                    frame_clock->min_update_duration_us,
-                    frame_clock->min_update_duration_us + adjustment_us);
-      frame_clock->min_update_duration_us += adjustment_us;
-    }
-
-  now_us = g_get_monotonic_time ();
-  delta_us = target_margin_us - frame_clock->max_update_margin.current_us;
-
-  if (delta_us <= 0)
-    {
-      if (now_us - frame_clock->max_update_margin.set_time_us < G_USEC_PER_SEC)
-        return;
-
-      /* Lower dynamic margin by a fraction of the delta such that it'll take
-       * at least a minute for the margin to drop to the latest measurement
-       */
-      adjustment_us = delta_us / 60;
-      frame_clock->max_update_margin.target_us = 0;
-    }
-  else if (delta_us < clutter_max_render_time_constant_us)
-    {
-      /* Raise dynamic margin half way toward the latest measurement */
-      adjustment_us = MAX (delta_us / 2, 1);
-    }
-  else
-    {
-      adjustment_us = delta_us;
-    }
-
-  if (adjustment_us == 0)
+  /* Do not update long-term max if there has been no measurement */
+  if (!frame_clock->shortterm_max_update_duration_us)
     return;
 
-  CLUTTER_NOTE (FRAME_TIMINGS,
-                "%s update duration margin updated: %ld → %ld µs",
-                frame_clock->output_name,
-                frame_clock->max_update_margin.current_us,
-                frame_clock->max_update_margin.current_us + adjustment_us);
+  if ((frame_info->presentation_time - frame_clock->longterm_promotion_us) <
+      G_USEC_PER_SEC)
+    return;
 
-  frame_clock->max_update_margin.current_us += adjustment_us;
-  frame_clock->max_update_margin.set_time_us = now_us;
+  if (frame_clock->longterm_max_update_duration_us >
+      frame_clock->shortterm_max_update_duration_us)
+    {
+      /* Exponential drop-off toward the short-term max */
+      frame_clock->longterm_max_update_duration_us -=
+        (frame_clock->longterm_max_update_duration_us -
+         frame_clock->shortterm_max_update_duration_us) / 2;
+    }
+  else
+    {
+      frame_clock->longterm_max_update_duration_us =
+        frame_clock->shortterm_max_update_duration_us;
+    }
+
+  frame_clock->shortterm_max_update_duration_us = 0;
+  frame_clock->longterm_promotion_us = frame_info->presentation_time;
 }
 
 void
 clutter_frame_clock_notify_presented (ClutterFrameClock *frame_clock,
                                       ClutterFrameInfo  *frame_info)
 {
-  Frame *presented_frame;
-  const char *frr_or_vrr =
-    frame_clock->mode == CLUTTER_FRAME_CLOCK_MODE_VARIABLE ? "VRR" : "FRR";
-  const char *double_or_triple =
-    frame_clock->state == CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO ?
-    "triple" : "double";
-  int64_t last_presentation_time_us = 0;
-  int64_t dispatch_time_us;
-
   COGL_TRACE_BEGIN_SCOPED (ClutterFrameClockNotifyPresented,
                            "Clutter::FrameClock::presented()");
   COGL_TRACE_DESCRIBE (ClutterFrameClockNotifyPresented,
                        frame_clock->output_name);
 
-  CLUTTER_NOTE (FRAME_CLOCK, "Frame %ld for %s presented",
-                frame_info->view_frame_counter,
-                frame_clock->output_name);
-
-  g_return_if_fail (frame_clock->next_presentation);
-
-  if (frame_clock->prev_presentation)
-    {
-      last_presentation_time_us =
-        frame_clock->prev_presentation->presentation_time_us;
-    }
-
-  clear_frame (&frame_clock->prev_presentation);
-  presented_frame = frame_clock->prev_presentation =
-    g_steal_pointer (&frame_clock->next_presentation);
-  frame_clock->next_presentation =
-    g_steal_pointer (&frame_clock->next_next_presentation);
+  frame_clock->last_next_presentation_time_us =
+    frame_clock->next_presentation_time_us;
+  frame_clock->has_last_next_presentation_time =
+    frame_clock->is_next_presentation_time_valid;
 
   if (G_UNLIKELY (CLUTTER_HAS_DEBUG (FRAME_CLOCK)))
     {
       int64_t now_us;
 
-      if (frame_info->presentation_time > 0 &&
-          presented_frame->target_presentation_time_us > 0 &&
-          frame_info->presentation_time !=
-          presented_frame->target_presentation_time_us)
+      if (frame_clock->has_last_next_presentation_time &&
+          frame_info->presentation_time != 0)
         {
           int64_t diff_us;
+          int n_missed_frames;
 
           diff_us = llabs (frame_info->presentation_time -
-                           presented_frame->target_presentation_time_us);
-          frame_clock->n_missed_frames +=
+                           frame_clock->last_next_presentation_time_us);
+          n_missed_frames =
             (int) roundf ((float) diff_us /
                           (float) frame_clock->refresh_interval_us);
+
+          frame_clock->n_missed_frames = n_missed_frames;
         }
 
       now_us = g_get_monotonic_time ();
@@ -711,14 +344,14 @@ clutter_frame_clock_notify_presented (ClutterFrameClock *frame_clock,
             }
         }
 
-      if (frame_info->kms_ready_time_us != 0)
+      if (frame_info->gpu_rendering_duration_ns != 0)
         {
           if (description->len > 0)
             g_string_append (description, ", ");
 
           g_string_append_printf (description,
-                                  "KMS update ready at %ld µs",
-                                  frame_info->kms_ready_time_us);
+                                  "buffer swap to GPU done: %ld µs",
+                                  ns2us (frame_info->gpu_rendering_duration_ns));
         }
 
       COGL_TRACE_DESCRIBE (ClutterFrameClockNotifyPresented, description->str);
@@ -727,163 +360,48 @@ clutter_frame_clock_notify_presented (ClutterFrameClock *frame_clock,
 
   if (frame_info->presentation_time > 0)
     {
-      presented_frame->presentation_time_us = frame_info->presentation_time;
-      presented_frame->presentation_flags = frame_info->flags;
+      frame_clock->last_presentation_time_us = frame_info->presentation_time;
+      frame_clock->last_presentation_flags = frame_info->flags;
     }
 
-  presented_frame->got_measurements = FALSE;
-  dispatch_time_us = presented_frame->dispatch_time_us;
+  frame_clock->got_measurements_last_frame = FALSE;
 
-  if (frame_info->kms_ready_time_us ||
-      frame_clock->ever_got_measurements)
+  if (frame_info->cpu_time_before_buffer_swap_us != 0 &&
+      frame_info->has_valid_gpu_rendering_duration)
     {
-      int64_t to_flip_us, to_kms_ready_us = 0, update_duration_us;
-      int64_t kms_ready_time_us = frame_info->kms_ready_time_us;
-      const char *ready_name = "(no ready time)";
+      int64_t dispatch_to_swap_us, swap_to_rendering_done_us, swap_to_flip_us;
 
-      to_flip_us = presented_frame->flip_time_us - dispatch_time_us;
-
-      if (kms_ready_time_us)
-        {
-          to_kms_ready_us = kms_ready_time_us - dispatch_time_us;
-          ready_name = "to KMS ready";
-        }
+      dispatch_to_swap_us =
+        frame_info->cpu_time_before_buffer_swap_us -
+        frame_clock->last_dispatch_time_us;
+      swap_to_rendering_done_us =
+        frame_info->gpu_rendering_duration_ns / 1000;
+      swap_to_flip_us =
+        frame_clock->last_flip_time_us -
+        frame_info->cpu_time_before_buffer_swap_us;
 
       CLUTTER_NOTE (FRAME_TIMINGS,
-                    "%s %s %s buffering: Frame %ld dispatch %ld%+04ld µs, "
-                    "%3ld µs to flip / %4ld µs %s",
-                    frame_clock->output_name,
-                    frr_or_vrr, double_or_triple,
-                    frame_info->view_frame_counter,
-                    dispatch_time_us - presented_frame->dispatch_lateness_us,
-                    presented_frame->dispatch_lateness_us,
-                    to_flip_us, to_kms_ready_us, ready_name);
+                    "update2dispatch %ld µs, dispatch2swap %ld µs, swap2render %ld µs, swap2flip %ld µs",
+                    frame_clock->last_dispatch_lateness_us,
+                    dispatch_to_swap_us,
+                    swap_to_rendering_done_us,
+                    swap_to_flip_us);
 
-      update_duration_us = MIN (MAX (to_kms_ready_us, to_flip_us),
-                                3 * frame_clock->refresh_interval_us);
+      frame_clock->shortterm_max_update_duration_us =
+        CLAMP (frame_clock->last_dispatch_lateness_us + dispatch_to_swap_us +
+               MAX (swap_to_rendering_done_us, swap_to_flip_us),
+               frame_clock->shortterm_max_update_duration_us,
+               frame_clock->refresh_interval_us);
 
-      adjust_update_duration_estimates (frame_clock,
-                                        update_duration_us,
-                                        presented_frame->dispatch_lateness_us);
+      maybe_update_longterm_max_duration_us (frame_clock, frame_info);
 
-      presented_frame->got_measurements = TRUE;
+      frame_clock->got_measurements_last_frame = TRUE;
       frame_clock->ever_got_measurements = TRUE;
     }
   else
     {
-      CLUTTER_NOTE (FRAME_TIMINGS,
-                    "%s %s %s buffering: Frame %ld dispatch %ld%+04ld µs",
-                    frame_clock->output_name,
-                    frr_or_vrr, double_or_triple,
-                    frame_info->view_frame_counter,
-                    dispatch_time_us - presented_frame->dispatch_lateness_us,
-                    presented_frame->dispatch_lateness_us);
-    }
-
-  if (G_UNLIKELY (CLUTTER_HAS_DEBUG (FRAME_TIMINGS)) &&
-      frame_info->presentation_time > 0)
-    {
-      gboolean logged = FALSE;
-
-      if (presented_frame->target_presentation_time_us > 0 &&
-          presented_frame->target_presentation_time_us !=
-          frame_info->presentation_time)
-        {
-          int64_t diff_us;
-
-          diff_us = frame_info->presentation_time -
-                    presented_frame->target_presentation_time_us;
-
-          if (frame_clock->mode == CLUTTER_FRAME_CLOCK_MODE_VARIABLE)
-            {
-              if (last_presentation_time_us > 0)
-                {
-                  CLUTTER_NOTE (FRAME_TIMINGS,
-                                "%s frame %ld presented after %ld µs at %ld"
-                                ", %4ld µs %s",
-                                frame_clock->output_name,
-                                frame_info->view_frame_counter,
-                                frame_info->presentation_time -
-                                last_presentation_time_us,
-                                frame_info->presentation_time,
-                                (int64_t)llabs (diff_us),
-                                diff_us > 0 ? "late" : "early");
-                }
-              else
-                {
-                  CLUTTER_NOTE (FRAME_TIMINGS,
-                                "%s frame %ld presented at %ld, %4ld µs %s",
-                                frame_clock->output_name,
-                                frame_info->view_frame_counter,
-                                frame_info->presentation_time,
-                                (int64_t)llabs (diff_us),
-                                diff_us > 0 ? "late" : "early");
-                }
-
-              logged = TRUE;
-            }
-          else
-            {
-              int n_missed_cycles;
-
-              n_missed_cycles = (int) roundf ((float) llabs (diff_us) /
-                                              (float) frame_clock->refresh_interval_us);
-
-              if (n_missed_cycles)
-                {
-                  if (last_presentation_time_us > 0)
-                    {
-                      CLUTTER_NOTE (FRAME_TIMINGS,
-                                    "%s frame %ld presented after %ld µs at %ld"
-                                    ", %4ld µs (%d refresh cycle%s) %s",
-                                    frame_clock->output_name,
-                                    frame_info->view_frame_counter,
-                                    frame_info->presentation_time -
-                                    last_presentation_time_us,
-                                    frame_info->presentation_time,
-                                    (int64_t)llabs (diff_us), n_missed_cycles,
-                                    n_missed_cycles > 1 ? "s" : "",
-                                    diff_us > 0 ? "late" : "early");
-                    }
-                  else
-                    {
-                      CLUTTER_NOTE (FRAME_TIMINGS,
-                                    "%s frame %ld presented at %ld"
-                                    ", %4ld µs (%d refresh cycle%s) %s",
-                                    frame_clock->output_name,
-                                    frame_info->view_frame_counter,
-                                    frame_info->presentation_time,
-                                    (int64_t)llabs (diff_us), n_missed_cycles,
-                                    n_missed_cycles > 1 ? "s" : "",
-                                    diff_us > 0 ? "late" : "early");
-                    }
-
-                  logged = TRUE;
-                }
-            }
-        }
-
-      if (!logged)
-        {
-          if (last_presentation_time_us > 0)
-            {
-              CLUTTER_NOTE (FRAME_TIMINGS,
-                            "%s frame %ld presented after %ld µs at %ld",
-                            frame_clock->output_name,
-                            frame_info->view_frame_counter,
-                            frame_info->presentation_time -
-                            last_presentation_time_us,
-                            frame_info->presentation_time);
-            }
-          else
-            {
-              CLUTTER_NOTE (FRAME_TIMINGS,
-                            "%s frame %ld presented at %ld",
-                            frame_clock->output_name,
-                            frame_info->view_frame_counter,
-                            frame_info->presentation_time);
-            }
-        }
+      CLUTTER_NOTE (FRAME_TIMINGS, "update2dispatch %ld µs",
+                    frame_clock->last_dispatch_lateness_us);
     }
 
   if (frame_info->refresh_rate > 1.0)
@@ -898,32 +416,11 @@ clutter_frame_clock_notify_presented (ClutterFrameClock *frame_clock,
     case CLUTTER_FRAME_CLOCK_STATE_IDLE:
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
       g_warn_if_reached ();
       break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_IDLE);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
+    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+    case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
+      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
       maybe_reschedule_update (frame_clock);
       break;
     }
@@ -935,108 +432,34 @@ clutter_frame_clock_notify_ready (ClutterFrameClock *frame_clock)
   COGL_TRACE_BEGIN_SCOPED (ClutterFrameClockNotifyReady, "Clutter::FrameClock::ready()");
   COGL_TRACE_DESCRIBE (ClutterFrameClockNotifyReady, frame_clock->output_name);
 
-  CLUTTER_NOTE (FRAME_CLOCK, "Frame for %s ready",
-                frame_clock->output_name);
-
-  if (frame_clock->next_next_presentation)
-    clear_frame (&frame_clock->next_next_presentation);
-  else
-    clear_frame (&frame_clock->next_presentation);
-
   switch (frame_clock->state)
     {
     case CLUTTER_FRAME_CLOCK_STATE_INIT:
     case CLUTTER_FRAME_CLOCK_STATE_IDLE:
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
       g_warn_if_reached ();
       break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_IDLE);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER);
-      maybe_reschedule_update (frame_clock);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
+    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+    case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
+      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
       maybe_reschedule_update (frame_clock);
       break;
     }
 }
 
-static gboolean
-maybe_want_triple_buffering (ClutterFrameClock *frame_clock)
+static int64_t
+clutter_frame_clock_compute_max_render_time_us (ClutterFrameClock *frame_clock)
 {
-  if (G_UNLIKELY (clutter_paint_debug_flags &
-                  CLUTTER_DEBUG_DISABLE_TRIPLE_BUFFERING))
-    return FALSE;
+  int64_t refresh_interval_us;
+  int64_t max_render_time_us;
 
-  switch (frame_clock->mode)
-    {
-    case CLUTTER_FRAME_CLOCK_MODE_FIXED:
-    case CLUTTER_FRAME_CLOCK_MODE_VARIABLE:
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_PASSIVE:
-      return FALSE;
-    };
-
-  if (frame_clock->prev_presentation &&
-      frame_clock->prev_presentation->presentation_flags &
-      CLUTTER_FRAME_INFO_FLAG_ZERO_COPY)
-    return FALSE;
-
-  return TRUE;
-}
-
-static gboolean
-clutter_frame_clock_estimate_min_update_time_us (ClutterFrameClock *frame_clock,
-                                                 int64_t           *min_update_time_estimate_us)
-{
-  if (!frame_clock->ever_got_measurements ||
-      G_UNLIKELY (clutter_paint_debug_flags &
-                  CLUTTER_DEBUG_DISABLE_DYNAMIC_MAX_RENDER_TIME))
-    return FALSE;
-
-  /* Estimate the minimum total update duration */
-  *min_update_time_estimate_us =
-    frame_clock->min_update_duration_us +
-    frame_clock->deadline_evasion_us +
-    frame_clock->vblank_duration_us;
-
-  return TRUE;
-}
-
-static gboolean
-clutter_frame_clock_estimate_max_update_time_us (ClutterFrameClock *frame_clock,
-                                                 int64_t           *max_update_time_estimate_us)
-{
-  int64_t maximum_us;
-
-  if (maybe_want_triple_buffering (frame_clock))
-    maximum_us = 3 * frame_clock->refresh_interval_us;
-  else
-    maximum_us = 2 * frame_clock->refresh_interval_us;
+  refresh_interval_us = frame_clock->refresh_interval_us;
 
   if (!frame_clock->ever_got_measurements ||
       G_UNLIKELY (clutter_paint_debug_flags &
                   CLUTTER_DEBUG_DISABLE_DYNAMIC_MAX_RENDER_TIME))
-    return FALSE;
+    return refresh_interval_us * SYNC_DELAY_FALLBACK_FRACTION;
 
   /* Max render time shows how early the frame clock needs to be dispatched
    * to make it to the predicted next presentation time. It is an estimate of
@@ -1048,91 +471,56 @@ clutter_frame_clock_estimate_max_update_time_us (ClutterFrameClock *frame_clock,
    *   both of these things need to happen before the vblank, and they are done
    *   in parallel.
    * - The duration of vertical blank.
-   * - A margin to account for variations in the above estimates.
+   * - A constant to account for variations in the above estimates.
    */
-  *max_update_time_estimate_us =
-    frame_clock->max_update_duration_us +
-    frame_clock->deadline_evasion_us +
+  max_render_time_us =
+    MAX (frame_clock->longterm_max_update_duration_us,
+         frame_clock->shortterm_max_update_duration_us) +
     frame_clock->vblank_duration_us +
-    get_max_update_time_margin_us (frame_clock);
+    clutter_max_render_time_constant_us;
 
-  *max_update_time_estimate_us = CLAMP (*max_update_time_estimate_us, 0,
-                                        maximum_us);
+  max_render_time_us = CLAMP (max_render_time_us, 0, refresh_interval_us);
 
-  return TRUE;
-}
-
-static gboolean
-should_update_now (ClutterFrameClock *frame_clock,
-                   int64_t            next_presentation_time_us,
-                   int64_t            next_smooth_presentation_time_us)
-{
-  /* There's no "idle period" if a frame was dispatched but not presented yet */
-  if (frame_clock->state >= CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE)
-    return FALSE;
-
-  /* Next check is meaningful only for a page flip with timestamp */
-  if (!(frame_clock->prev_presentation->presentation_flags &
-        CLUTTER_FRAME_INFO_FLAG_VSYNC))
-    return FALSE;
-
-  /* Do not update now if we may hit the next refresh cycle after the previous
-   * frame
-   */
-  if (next_presentation_time_us == next_smooth_presentation_time_us)
-    return FALSE;
-
-  /* There was an idle period since the last presentation, so there seems
-   * be no constantly updating actor. In this case it's best to start
-   * working on the next update ASAP, this results in lowest average latency
-   * for sporadic user input.
-   */
-  return TRUE;
+  return max_render_time_us;
 }
 
 static void
 calculate_next_update_time_us (ClutterFrameClock *frame_clock,
-                               gboolean           throttle,
                                int64_t           *out_next_update_time_us,
                                int64_t           *out_next_presentation_time_us,
-                               gboolean          *out_is_target_presentation_time,
                                int64_t           *out_next_frame_deadline_us)
 {
-  const Frame *last_presentation = frame_clock->prev_presentation;
   int64_t last_presentation_time_us;
   int64_t now_us;
   int64_t refresh_interval_us;
-  int64_t max_update_time_estimate_us;
+  int64_t min_render_time_allowed_us;
+  int64_t max_render_time_allowed_us;
   int64_t next_presentation_time_us;
-  int64_t next_smooth_presentation_time_us = 0;
   int64_t next_update_time_us;
-  gboolean have_max_update_time_estimate;
 
   now_us = g_get_monotonic_time ();
 
   refresh_interval_us = frame_clock->refresh_interval_us;
 
-  have_max_update_time_estimate =
-    clutter_frame_clock_estimate_max_update_time_us (frame_clock,
-                                                     &max_update_time_estimate_us);
-
-  if (!last_presentation ||
-      !have_max_update_time_estimate ||
-      last_presentation->presentation_time_us == 0 ||
-      !(last_presentation->presentation_flags & CLUTTER_FRAME_INFO_FLAG_VSYNC))
+  if (frame_clock->last_presentation_time_us == 0)
     {
-      const Frame *last_dispatch = frame_clock->prev_dispatch;
-
       *out_next_update_time_us =
-        last_dispatch && last_dispatch->dispatch_time_us ?
-        ((last_dispatch->dispatch_time_us -
-          last_dispatch->dispatch_lateness_us) + refresh_interval_us) :
+        frame_clock->last_dispatch_time_us ?
+        ((frame_clock->last_dispatch_time_us -
+          frame_clock->last_dispatch_lateness_us) + refresh_interval_us) :
         now_us;
 
       *out_next_presentation_time_us = 0;
       *out_next_frame_deadline_us = 0;
       return;
     }
+
+  min_render_time_allowed_us = refresh_interval_us / 2;
+  max_render_time_allowed_us =
+    clutter_frame_clock_compute_max_render_time_us (frame_clock);
+
+  if (min_render_time_allowed_us > max_render_time_allowed_us)
+    min_render_time_allowed_us = max_render_time_allowed_us;
 
   /*
    * The common case is that the next presentation happens 1 refresh interval
@@ -1151,113 +539,97 @@ calculate_next_update_time_us (ClutterFrameClock *frame_clock,
    * 0
    *
    */
-  last_presentation_time_us = last_presentation->presentation_time_us;
-  switch (frame_clock->state)
-    {
-    case CLUTTER_FRAME_CLOCK_STATE_INIT:
-    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
-      next_smooth_presentation_time_us = last_presentation_time_us +
-                                         refresh_interval_us;
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      next_smooth_presentation_time_us =
-        MAX (frame_clock->next_presentation->target_presentation_time_us +
-             refresh_interval_us,
-             last_presentation_time_us + 2 * refresh_interval_us);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
-      g_warn_if_reached ();  /* quad buffering would be a bug */
-      next_smooth_presentation_time_us =
-        MAX (frame_clock->next_next_presentation->target_presentation_time_us +
-             refresh_interval_us,
-             frame_clock->next_presentation->target_presentation_time_us +
-             2 * refresh_interval_us);
-      next_smooth_presentation_time_us =
-        MAX (next_smooth_presentation_time_us,
-             last_presentation_time_us + 3 * refresh_interval_us);
-      break;
-    }
+  last_presentation_time_us = frame_clock->last_presentation_time_us;
+  next_presentation_time_us = last_presentation_time_us + refresh_interval_us;
 
   /*
-   * The last presentation could have happened more than a frame ago.
+   * However, the last presentation could have happened more than a frame ago.
    * For example, due to idling (nothing on screen changed, so no need to
    * redraw) or due to frames missing deadlines (GPU busy with heavy rendering).
    * The following code adjusts next_presentation_time_us to be in the future,
    * but still aligned to display presentation times. Instead of
-   * next presentation = last presentation + 1/2/3 * refresh interval, it will be
+   * next presentation = last presentation + 1 * refresh interval, it will be
    * next presentation = last presentation + N * refresh interval.
    */
-  next_presentation_time_us =
-    mtk_extrapolate_next_interval_boundary (last_presentation_time_us,
-                                            MAX (next_smooth_presentation_time_us -
-                                                 refresh_interval_us / 2,
-                                                 now_us),
-                                            refresh_interval_us);
-
-  if (!throttle &&
-      should_update_now (frame_clock,
-                         next_presentation_time_us,
-                         next_smooth_presentation_time_us))
+  if (next_presentation_time_us < now_us)
     {
-      *out_next_update_time_us = now_us;
-      *out_next_presentation_time_us = next_presentation_time_us;
-      if (out_is_target_presentation_time)
-        *out_is_target_presentation_time = FALSE;
+      int64_t current_phase_us;
+
+      /*
+       * Let's say we're just past next_presentation_time_us.
+       *
+       * First, we calculate current_phase_us, corresponding to the time since
+       * the last integer multiple of the refresh interval passed after the last
+       * presentation time. Subtracting this phase from now_us and adding a
+       * refresh interval gets us the next possible presentation time after
+       * now_us.
+       *
+       *     last_presentation_time_us
+       *    /       next_presentation_time_us
+       *   /       /   now_us
+       *  /       /   /    new next_presentation_time_us
+       * |-------|---o---|-------|--> possible presentation times
+       *          \_/     \_____/
+       *          /           \
+       * current_phase_us      refresh_interval_us
+       */
+
+      current_phase_us = (now_us - last_presentation_time_us) % refresh_interval_us;
+      next_presentation_time_us = now_us - current_phase_us + refresh_interval_us;
+    }
+
+  if (frame_clock->has_last_next_presentation_time)
+    {
+      int64_t time_since_last_next_presentation_time_us;
+
+      /*
+       * Skip one interval if we got an early presented event.
+       *
+       *        last frame this was last_presentation_time
+       *       /       frame_clock->next_presentation_time_us
+       *      /       /
+       * |---|-o-----|-x----->
+       *       |       \
+       *       \        next_presentation_time_us is thus right after the last one
+       *        but got an unexpected early presentation
+       *             \_/
+       *             time_since_last_next_presentation_time_us
+       *
+       */
+      time_since_last_next_presentation_time_us =
+        next_presentation_time_us - frame_clock->last_next_presentation_time_us;
+      if (time_since_last_next_presentation_time_us > 0 &&
+          time_since_last_next_presentation_time_us < (refresh_interval_us / 2))
+        {
+          next_presentation_time_us =
+            frame_clock->next_presentation_time_us + refresh_interval_us;
+        }
+    }
+
+  if (frame_clock->last_presentation_flags & CLUTTER_FRAME_INFO_FLAG_VSYNC &&
+      next_presentation_time_us != last_presentation_time_us + refresh_interval_us)
+    {
+      /* There was an idle period since the last presentation, so there seems
+       * be no constantly updating actor. In this case it's best to start
+       * working on the next update ASAP, this results in lowest average latency
+       * for sporadic user input.
+       */
+      next_update_time_us = now_us;
+      min_render_time_allowed_us = 0;
     }
   else
     {
-      next_update_time_us =
-        next_presentation_time_us - max_update_time_estimate_us;
+      while (next_presentation_time_us - min_render_time_allowed_us < now_us)
+        next_presentation_time_us += refresh_interval_us;
 
+      next_update_time_us = next_presentation_time_us - max_render_time_allowed_us;
       if (next_update_time_us < now_us)
-        {
-          int64_t min_update_time_estimate_us;
-
-          if (!throttle &&
-              clutter_frame_clock_estimate_min_update_time_us (frame_clock,
-                                                               &min_update_time_estimate_us))
-            {
-              next_update_time_us =
-                next_presentation_time_us - min_update_time_estimate_us;
-
-              if (next_update_time_us < now_us)
-                {
-                  next_update_time_us =
-                    mtk_extrapolate_next_interval_boundary (next_update_time_us,
-                                                            now_us,
-                                                            refresh_interval_us);
-                  next_presentation_time_us =
-                    next_update_time_us + min_update_time_estimate_us;
-                }
-
-              if (next_presentation_time_us - max_update_time_estimate_us < now_us)
-                next_update_time_us = now_us;
-            }
-          else
-            {
-              next_update_time_us =
-                mtk_extrapolate_next_interval_boundary (next_update_time_us,
-                                                        now_us,
-                                                        refresh_interval_us);
-              next_presentation_time_us =
-                next_update_time_us + max_update_time_estimate_us;
-            }
-        }
-
-      *out_next_update_time_us = next_update_time_us;
-      *out_next_presentation_time_us = next_presentation_time_us;
-      if (out_is_target_presentation_time)
-        *out_is_target_presentation_time = TRUE;
+        next_update_time_us = now_us;
     }
 
-  *out_next_frame_deadline_us =
-    next_presentation_time_us - frame_clock->vblank_duration_us;
+  *out_next_update_time_us = next_update_time_us;
+  *out_next_presentation_time_us = next_presentation_time_us;
+  *out_next_frame_deadline_us = next_presentation_time_us - min_render_time_allowed_us;
 }
 
 static void
@@ -1266,11 +638,10 @@ calculate_next_variable_update_time_us (ClutterFrameClock *frame_clock,
                                         int64_t           *out_next_presentation_time_us,
                                         int64_t           *out_next_frame_deadline_us)
 {
-  const Frame *last_presentation = frame_clock->prev_presentation;
   int64_t last_presentation_time_us;
   int64_t now_us;
   int64_t refresh_interval_us;
-  int64_t max_update_time_estimate_us;
+  int64_t max_render_time_allowed_us;
   int64_t next_presentation_time_us;
   int64_t next_update_time_us;
   int64_t next_frame_deadline_us;
@@ -1279,17 +650,12 @@ calculate_next_variable_update_time_us (ClutterFrameClock *frame_clock,
 
   refresh_interval_us = frame_clock->refresh_interval_us;
 
-  if (!last_presentation ||
-      last_presentation->presentation_time_us == 0 ||
-      !clutter_frame_clock_estimate_max_update_time_us (frame_clock,
-                                                        &max_update_time_estimate_us))
+  if (frame_clock->last_presentation_time_us == 0)
     {
-      const Frame *last_dispatch = frame_clock->prev_dispatch;
-
       *out_next_update_time_us =
-        last_dispatch && last_dispatch->dispatch_time_us ?
-        ((last_dispatch->dispatch_time_us -
-          last_dispatch->dispatch_lateness_us) + refresh_interval_us) :
+        frame_clock->last_dispatch_time_us ?
+        ((frame_clock->last_dispatch_time_us -
+          frame_clock->last_dispatch_lateness_us) + refresh_interval_us) :
         now_us;
 
       *out_next_presentation_time_us = 0;
@@ -1297,15 +663,18 @@ calculate_next_variable_update_time_us (ClutterFrameClock *frame_clock,
       return;
     }
 
-  last_presentation_time_us = last_presentation->presentation_time_us;
+  max_render_time_allowed_us =
+    clutter_frame_clock_compute_max_render_time_us (frame_clock);
+
+  last_presentation_time_us = frame_clock->last_presentation_time_us;
   next_presentation_time_us = last_presentation_time_us + refresh_interval_us;
 
-  next_update_time_us = next_presentation_time_us - max_update_time_estimate_us;
+  next_update_time_us = next_presentation_time_us - max_render_time_allowed_us;
   if (next_update_time_us < now_us)
-    {
-      next_presentation_time_us = now_us + max_update_time_estimate_us;
-      next_update_time_us = now_us;
-    }
+    next_update_time_us = now_us;
+
+  if (next_presentation_time_us < next_update_time_us)
+    next_presentation_time_us = 0;
 
   next_frame_deadline_us = next_update_time_us;
   if (next_frame_deadline_us == now_us)
@@ -1314,6 +683,39 @@ calculate_next_variable_update_time_us (ClutterFrameClock *frame_clock,
   *out_next_update_time_us = next_update_time_us;
   *out_next_presentation_time_us = next_presentation_time_us;
   *out_next_frame_deadline_us = next_frame_deadline_us;
+}
+
+static void
+calculate_next_variable_update_timeout_us (ClutterFrameClock *frame_clock,
+                                           int64_t           *out_next_update_time_us)
+{
+  int64_t now_us;
+  int64_t last_presentation_time_us;
+  int64_t next_presentation_time_us;
+  int64_t timeout_interval_us;
+
+  now_us = g_get_monotonic_time ();
+
+  last_presentation_time_us = frame_clock->last_presentation_time_us;
+
+  timeout_interval_us = frame_clock->minimum_refresh_interval_us;
+
+  if (last_presentation_time_us == 0)
+    {
+      *out_next_update_time_us =
+        frame_clock->last_dispatch_time_us ?
+        ((frame_clock->last_dispatch_time_us -
+          frame_clock->last_dispatch_lateness_us) + timeout_interval_us) :
+        now_us;
+      return;
+    }
+
+  next_presentation_time_us = last_presentation_time_us + timeout_interval_us;
+
+  while (next_presentation_time_us < now_us)
+    next_presentation_time_us += timeout_interval_us;
+
+  *out_next_update_time_us = next_presentation_time_us;
 }
 
 void
@@ -1329,40 +731,20 @@ clutter_frame_clock_inhibit (ClutterFrameClock *frame_clock)
         case CLUTTER_FRAME_CLOCK_STATE_IDLE:
           break;
         case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-        case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
           frame_clock->pending_reschedule = TRUE;
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_IDLE);
+          frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
           break;
         case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
           frame_clock->pending_reschedule = TRUE;
           frame_clock->pending_reschedule_now = TRUE;
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_IDLE);
+          frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
           break;
-        case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-          frame_clock->pending_reschedule = TRUE;
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
-          break;
-        case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-          frame_clock->pending_reschedule = TRUE;
-          frame_clock->pending_reschedule_now = TRUE;
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
-          break;
-        case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-          frame_clock->pending_reschedule = TRUE;
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
-          break;
-        case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-        case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
+        case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+        case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
           break;
         }
 
-      if (frame_clock->source)
-        g_source_set_ready_time (frame_clock->source, -1);
+      g_source_set_ready_time (frame_clock->source, -1);
     }
 }
 
@@ -1375,22 +757,6 @@ clutter_frame_clock_uninhibit (ClutterFrameClock *frame_clock)
 
   if (frame_clock->inhibit_count == 0)
     maybe_reschedule_update (frame_clock);
-}
-
-static gboolean
-want_triple_buffering (ClutterFrameClock *frame_clock)
-{
-  int64_t max_update_time_estimate_us;
-
-  if (!maybe_want_triple_buffering (frame_clock))
-    return FALSE;
-
-  if (clutter_frame_clock_estimate_max_update_time_us (frame_clock,
-                                                       &max_update_time_estimate_us) &&
-      max_update_time_estimate_us < frame_clock->refresh_interval_us)
-    return FALSE;
-
-  return TRUE;
 }
 
 void
@@ -1410,27 +776,11 @@ clutter_frame_clock_schedule_update_now (ClutterFrameClock *frame_clock)
     case CLUTTER_FRAME_CLOCK_STATE_INIT:
     case CLUTTER_FRAME_CLOCK_STATE_IDLE:
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW);
       break;
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
       return;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-      if (want_triple_buffering (frame_clock))
-        {
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW);
-          break;
-        }
-      G_GNUC_FALLTHROUGH;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
+    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+    case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
       frame_clock->pending_reschedule = TRUE;
       frame_clock->pending_reschedule_now = TRUE;
       return;
@@ -1441,7 +791,6 @@ clutter_frame_clock_schedule_update_now (ClutterFrameClock *frame_clock)
     case CLUTTER_FRAME_CLOCK_MODE_FIXED:
       next_update_time_us = g_get_monotonic_time ();
       frame_clock->is_next_presentation_time_valid = FALSE;
-      frame_clock->is_target_presentation_time = FALSE;
       frame_clock->has_next_frame_deadline = FALSE;
       break;
     case CLUTTER_FRAME_CLOCK_MODE_VARIABLE:
@@ -1451,103 +800,8 @@ clutter_frame_clock_schedule_update_now (ClutterFrameClock *frame_clock)
                                               &frame_clock->next_frame_deadline_us);
       frame_clock->is_next_presentation_time_valid =
         (frame_clock->next_presentation_time_us != 0);
-      frame_clock->is_target_presentation_time = FALSE;
       frame_clock->has_next_frame_deadline =
         (frame_clock->next_frame_deadline_us != 0);
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_PASSIVE:
-      clutter_frame_clock_driver_schedule_update (frame_clock->driver);
-      break;
-    }
-
-  if (next_update_time_us != -1)
-    {
-      frame_clock->next_update_time_us = next_update_time_us;
-      g_source_set_ready_time (frame_clock->source, next_update_time_us);
-    }
-}
-
-static void
-schedule_update (ClutterFrameClock *frame_clock,
-                 gboolean           throttle)
-{
-  int64_t next_update_time_us = -1;
-
-  if (frame_clock->inhibit_count > 0)
-    {
-      frame_clock->pending_reschedule = TRUE;
-      return;
-    }
-
-  switch (frame_clock->mode)
-    {
-    case CLUTTER_FRAME_CLOCK_MODE_FIXED:
-    case CLUTTER_FRAME_CLOCK_MODE_VARIABLE:
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_PASSIVE:
-      clutter_frame_clock_driver_schedule_update (frame_clock->driver);
-      return;
-    };
-
-  switch (frame_clock->state)
-    {
-    case CLUTTER_FRAME_CLOCK_STATE_INIT:
-      next_update_time_us = g_get_monotonic_time ();
-      g_source_set_ready_time (frame_clock->source, next_update_time_us);
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED);
-      return;
-    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_SCHEDULED);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-      return;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      if (want_triple_buffering (frame_clock))
-        {
-          clutter_frame_clock_set_state (frame_clock,
-                                         CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED);
-          break;
-        }
-      G_GNUC_FALLTHROUGH;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
-      frame_clock->pending_reschedule = TRUE;
-      return;
-    }
-
-  switch (frame_clock->mode)
-    {
-    case CLUTTER_FRAME_CLOCK_MODE_FIXED:
-      calculate_next_update_time_us (frame_clock,
-                                     throttle,
-                                     &next_update_time_us,
-                                     &frame_clock->next_presentation_time_us,
-                                     &frame_clock->is_target_presentation_time,
-                                     &frame_clock->next_frame_deadline_us);
-      frame_clock->is_next_presentation_time_valid =
-        (frame_clock->next_presentation_time_us != 0);
-      frame_clock->has_next_frame_deadline =
-        (frame_clock->next_frame_deadline_us != 0);
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_VARIABLE:
-      calculate_next_variable_update_time_us (frame_clock,
-                                              &next_update_time_us,
-                                              &frame_clock->next_presentation_time_us,
-                                              &frame_clock->next_frame_deadline_us);
-      frame_clock->is_next_presentation_time_valid =
-        (frame_clock->next_presentation_time_us != 0);
-      frame_clock->is_target_presentation_time = FALSE;
-      frame_clock->has_next_frame_deadline =
-        (frame_clock->next_frame_deadline_us != 0);
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_PASSIVE:
-      g_assert_not_reached ();
       break;
     }
 
@@ -1555,43 +809,13 @@ schedule_update (ClutterFrameClock *frame_clock,
 
   frame_clock->next_update_time_us = next_update_time_us;
   g_source_set_ready_time (frame_clock->source, next_update_time_us);
+  frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW;
 }
 
 void
 clutter_frame_clock_schedule_update (ClutterFrameClock *frame_clock)
 {
-  schedule_update (frame_clock, FALSE);
-}
-
-/**
- * clutter_frame_clock_schedule_update_throttled:
- * @frame_clock: A #ClutterFrameClock
- *
- * This is a variant of clutter_frame_clock_schedule_update which doesn't allow
- * starting dispatch ASAP to try and hit the earliest possible next presentation
- * time.
- *
- * It should only be used in cases where starting dispatch ASAP could result
- * in pathological behaviour such as dispatch running over and over multiple
- * times in the same display refresh cycle.
- */
-void
-clutter_frame_clock_schedule_update_throttled (ClutterFrameClock *frame_clock)
-{
-  schedule_update (frame_clock, TRUE);
-}
-
-static void
-clutter_frame_clock_schedule_update_later (ClutterFrameClock *frame_clock,
-                                           int64_t            target_us)
-{
   int64_t next_update_time_us = -1;
-  int64_t next_presentation_time_us = 0;
-  int64_t next_frame_deadline_us;
-  int64_t ready_time_us = 0, extrapolated_presentation_time_us;
-  int64_t max_update_time_estimate_us;
-  int64_t cycles;
-  ClutterFrameClockState next_state = frame_clock->state;
 
   if (frame_clock->inhibit_count > 0)
     {
@@ -1599,41 +823,21 @@ clutter_frame_clock_schedule_update_later (ClutterFrameClock *frame_clock,
       return;
     }
 
-  switch (frame_clock->mode)
-    {
-    case CLUTTER_FRAME_CLOCK_MODE_FIXED:
-    case CLUTTER_FRAME_CLOCK_MODE_VARIABLE:
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_PASSIVE:
-      clutter_frame_clock_driver_schedule_update (frame_clock->driver);
-      return;
-    };
-
   switch (frame_clock->state)
     {
     case CLUTTER_FRAME_CLOCK_STATE_INIT:
-    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
-      next_state = CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER;
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
+      next_update_time_us = g_get_monotonic_time ();
+      g_source_set_ready_time (frame_clock->source, next_update_time_us);
+      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_SCHEDULED;
       return;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
+    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
       break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-      if (want_triple_buffering (frame_clock))
-        {
-          next_state =
-            CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER;
-          break;
-        }
-      G_GNUC_FALLTHROUGH;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
+    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
+    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
+      return;
+    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+    case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
       frame_clock->pending_reschedule = TRUE;
-      frame_clock->pending_reschedule_now = TRUE;
       return;
     }
 
@@ -1641,128 +845,27 @@ clutter_frame_clock_schedule_update_later (ClutterFrameClock *frame_clock,
     {
     case CLUTTER_FRAME_CLOCK_MODE_FIXED:
       calculate_next_update_time_us (frame_clock,
-                                     FALSE,
                                      &next_update_time_us,
-                                     &next_presentation_time_us,
-                                     NULL,
-                                     &next_frame_deadline_us);
-
-      g_warn_if_fail (next_presentation_time_us != -1);
-
-      if (next_presentation_time_us >= target_us)
-        {
-          clutter_frame_clock_schedule_update (frame_clock);
-          return;
-        }
-
-      cycles =
-        (target_us - next_presentation_time_us +
-         frame_clock->refresh_interval_us - 1) /
-        frame_clock->refresh_interval_us;
-      extrapolated_presentation_time_us =
-        next_presentation_time_us + frame_clock->refresh_interval_us * cycles;
-      max_update_time_estimate_us = next_presentation_time_us - next_update_time_us;
-      ready_time_us = extrapolated_presentation_time_us - max_update_time_estimate_us;
+                                     &frame_clock->next_presentation_time_us,
+                                     &frame_clock->next_frame_deadline_us);
+      frame_clock->is_next_presentation_time_valid =
+        (frame_clock->next_presentation_time_us != 0);
+      frame_clock->has_next_frame_deadline =
+        (frame_clock->next_frame_deadline_us != 0);
       break;
     case CLUTTER_FRAME_CLOCK_MODE_VARIABLE:
-      if (!clutter_frame_clock_estimate_max_update_time_us (frame_clock,
-                                                            &max_update_time_estimate_us))
-        {
-          max_update_time_estimate_us = (int64_t) (frame_clock->refresh_interval_us *
-                                                   SYNC_DELAY_FALLBACK_FRACTION);
-        }
-      ready_time_us = target_us - max_update_time_estimate_us;
-      frame_clock->is_target_presentation_time = TRUE;
-      frame_clock->is_next_presentation_time_valid = TRUE;
-      frame_clock->next_presentation_time_us = target_us;
-      break;
-    case CLUTTER_FRAME_CLOCK_MODE_PASSIVE:
-      g_assert_not_reached ();
+      calculate_next_variable_update_timeout_us (frame_clock,
+                                                 &next_update_time_us);
+      frame_clock->is_next_presentation_time_valid = FALSE;
+      frame_clock->has_next_frame_deadline = FALSE;
       break;
     }
 
-  g_source_set_ready_time (frame_clock->source, ready_time_us);
-  frame_clock->pending_reschedule = TRUE;
-  clutter_frame_clock_set_state (frame_clock, next_state);
-}
+  g_warn_if_fail (next_update_time_us != -1);
 
-void
-clutter_frame_clock_schedule_flush_update (ClutterFrameClock *frame_clock)
-{
-  const Frame *last_presentation = frame_clock->prev_presentation;
-  int64_t now_us, timeout_interval_us, target_time_us;
-
-  if (frame_clock->mode != CLUTTER_FRAME_CLOCK_MODE_VARIABLE)
-    {
-      clutter_frame_clock_schedule_update (frame_clock);
-      return;
-    }
-
-  if (frame_clock->inhibit_count > 0)
-    {
-      frame_clock->pending_reschedule = TRUE;
-      return;
-    }
-
-  now_us = g_get_monotonic_time ();
-  if (now_us - frame_clock->fullscreen_update_time_us >=
-      frame_clock->maximum_refresh_interval_us)
-    timeout_interval_us = frame_clock->refresh_interval_us;
-  else
-    timeout_interval_us = frame_clock->maximum_refresh_interval_us;
-
-  if (!last_presentation || last_presentation->presentation_time_us == 0)
-    {
-      const Frame *last_dispatch = frame_clock->prev_dispatch;
-
-      target_time_us =
-        last_dispatch && last_dispatch->dispatch_time_us ?
-        ((last_dispatch->dispatch_time_us -
-          last_dispatch->dispatch_lateness_us) + timeout_interval_us) :
-        now_us;
-    }
-  else
-    {
-      target_time_us =
-        mtk_extrapolate_next_interval_boundary (last_presentation->presentation_time_us,
-                                                now_us,
-                                                timeout_interval_us);
-    }
-
-  clutter_frame_clock_schedule_update_later (frame_clock, target_time_us);
-}
-
-void
-clutter_frame_clock_set_fullscreen_update_time (ClutterFrameClock *frame_clock,
-                                                int64_t            update_time_us)
-{
-  frame_clock->fullscreen_update_time_us = update_time_us;
-}
-
-static int
-compare_times (const DeferredTime *a,
-               const DeferredTime *b,
-               void               *data)
-{
-  if (a->target_time_us > b->target_time_us)
-    return 1;
-
-  if (a->target_time_us < b->target_time_us)
-    return -1;
-
-  return 0;
-}
-
-void
-clutter_frame_clock_add_future_time (ClutterFrameClock *frame_clock,
-                                     int64_t            when_us)
-{
-  DeferredTime *time = g_new (DeferredTime, 1);
-  time->target_time_us = when_us;
-  g_queue_insert_sorted (frame_clock->deferred_times, time,
-                         (GCompareDataFunc)compare_times, NULL);
-
-  maybe_reschedule_update (frame_clock);
+  frame_clock->next_update_time_us = next_update_time_us;
+  g_source_set_ready_time (frame_clock->source, next_update_time_us);
+  frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_SCHEDULED;
 }
 
 void
@@ -1772,47 +875,31 @@ clutter_frame_clock_set_mode (ClutterFrameClock     *frame_clock,
   if (frame_clock->mode == mode)
     return;
 
-  g_assert (frame_clock->mode != CLUTTER_FRAME_CLOCK_MODE_PASSIVE);
-
   frame_clock->mode = mode;
 
   switch (frame_clock->state)
     {
     case CLUTTER_FRAME_CLOCK_STATE_INIT:
     case CLUTTER_FRAME_CLOCK_STATE_IDLE:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
       break;
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
       frame_clock->pending_reschedule = TRUE;
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_IDLE);
+      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
       break;
     case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
       frame_clock->pending_reschedule = TRUE;
       frame_clock->pending_reschedule_now = TRUE;
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_IDLE);
+      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
       break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      frame_clock->pending_reschedule = TRUE;
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-      frame_clock->pending_reschedule = TRUE;
-      frame_clock->pending_reschedule_now = TRUE;
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
+    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+    case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
       break;
     }
 
   maybe_reschedule_update (frame_clock);
 }
 
-ClutterFrameResult
+static void
 clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
                               int64_t            time_us)
 {
@@ -1821,10 +908,6 @@ clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
   int64_t frame_count;
   ClutterFrameResult result;
   int64_t ideal_dispatch_time_us, lateness_us;
-  Frame *this_dispatch;
-  int64_t prev_dispatch_time_us = 0;
-  int64_t prev_dispatch_interval_us = 0;
-  int64_t prev_dispatch_lateness_us = 0;
 
 #ifdef HAVE_PROFILER
   int64_t this_dispatch_ready_time_us;
@@ -1833,95 +916,43 @@ clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
   COGL_TRACE_BEGIN_SCOPED (ClutterFrameClockDispatch, "Clutter::FrameClock::dispatch()");
   COGL_TRACE_DESCRIBE (ClutterFrameClockDispatch, frame_clock->output_name);
 
-  if (frame_clock->source)
-    this_dispatch_ready_time_us = g_source_get_ready_time (frame_clock->source);
-  else
-    this_dispatch_ready_time_us = time_us;
+  this_dispatch_ready_time_us = g_source_get_ready_time (frame_clock->source);
   this_dispatch_time_us = time_us;
 #endif
-
-  switch (frame_clock->state)
-    {
-    case CLUTTER_FRAME_CLOCK_STATE_INIT:
-    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
-      g_warn_if_fail (frame_clock->mode == CLUTTER_FRAME_CLOCK_MODE_PASSIVE);
-      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE;
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO:
-      g_warning ("Frame clock dispatched in an unscheduled state %d",
-                 frame_clock->state);
-      return CLUTTER_FRAME_RESULT_PENDING_PRESENTED;
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE);
-      break;
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_NOW:
-    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_ONE_AND_SCHEDULED_LATER:
-      clutter_frame_clock_set_state (frame_clock,
-                                     CLUTTER_FRAME_CLOCK_STATE_DISPATCHED_TWO);
-      break;
-    }
-
-  /* Discarding the old prev_dispatch early here allows us to keep the
-   * frame_pool size equal to nbuffers instead of nbuffers+1.
-   */
-  if (frame_clock->prev_dispatch)
-    {
-      prev_dispatch_time_us = frame_clock->prev_dispatch->dispatch_time_us;
-      prev_dispatch_interval_us = frame_clock->prev_dispatch->dispatch_interval_us;
-      prev_dispatch_lateness_us = frame_clock->prev_dispatch->dispatch_lateness_us;
-    }
-
-  clear_frame (&frame_clock->prev_dispatch);
-  this_dispatch = frame_clock->prev_dispatch =
-    clutter_frame_clock_new_frame (frame_clock);
-
-  if (frame_clock->next_presentation == NULL)
-    {
-      frame_clock->next_presentation = ref_frame (this_dispatch);
-    }
-  else
-    {
-      g_warn_if_fail (frame_clock->next_next_presentation == NULL);
-      frame_clock->next_next_presentation =
-        ref_frame (this_dispatch);
-    }
 
   ideal_dispatch_time_us = frame_clock->next_update_time_us;
 
   if (ideal_dispatch_time_us <= 0)
-    ideal_dispatch_time_us = (prev_dispatch_time_us -
-                              prev_dispatch_lateness_us) +
+    ideal_dispatch_time_us = (frame_clock->last_dispatch_time_us -
+                              frame_clock->last_dispatch_lateness_us) +
                              frame_clock->refresh_interval_us;
 
   lateness_us = time_us - ideal_dispatch_time_us;
-  if (lateness_us < 0 || lateness_us >= frame_clock->refresh_interval_us / 4)
-    this_dispatch->dispatch_lateness_us = 0;
+  if (lateness_us < 0 || lateness_us >= frame_clock->refresh_interval_us)
+    frame_clock->last_dispatch_lateness_us = 0;
   else
-    this_dispatch->dispatch_lateness_us = lateness_us;
+    frame_clock->last_dispatch_lateness_us = lateness_us;
 
-  if (G_UNLIKELY (CLUTTER_HAS_DEBUG (FRAME_CLOCK)))
+#ifdef CLUTTER_ENABLE_DEBUG
+  if (G_UNLIKELY (CLUTTER_HAS_DEBUG (FRAME_TIMINGS)))
     {
       int64_t dispatch_interval_us, jitter_us;
 
-      dispatch_interval_us = time_us - prev_dispatch_time_us;
+      dispatch_interval_us = time_us - frame_clock->last_dispatch_time_us;
       jitter_us = llabs (dispatch_interval_us -
-                         prev_dispatch_interval_us) %
+                         frame_clock->last_dispatch_interval_us) %
                   frame_clock->refresh_interval_us;
-      this_dispatch->dispatch_interval_us = dispatch_interval_us;
-      CLUTTER_NOTE (FRAME_CLOCK, "dispatch jitter %5ldµs (%3ld%%)",
+      frame_clock->last_dispatch_interval_us = dispatch_interval_us;
+      CLUTTER_NOTE (FRAME_TIMINGS, "dispatch jitter %5ldµs (%3ld%%)",
                     jitter_us,
                     jitter_us * 100 / frame_clock->refresh_interval_us);
     }
+#endif
 
-  this_dispatch->dispatch_time_us = time_us;
+  frame_clock->last_dispatch_time_us = time_us;
+  g_source_set_ready_time (frame_clock->source, -1);
 
-  if (frame_clock->source)
-    g_source_set_ready_time (frame_clock->source, -1);
+  frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_DISPATCHING;
 
   frame_count = frame_clock->frame_count++;
 
@@ -1931,29 +962,11 @@ clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
     frame = clutter_frame_new (ClutterFrame, NULL);
 
   frame->frame_count = frame_count;
-  frame->has_expected_presentation_time =
-    frame_clock->is_next_presentation_time_valid;
-  frame->expected_presentation_time_us =
-    frame_clock->next_presentation_time_us;
-  frame->is_target_presentation_time =
-    frame_clock->is_target_presentation_time;
-
-  if (frame->is_target_presentation_time)
-    {
-      this_dispatch->target_presentation_time_us =
-        frame->expected_presentation_time_us;
-    }
-  else
-    {
-      this_dispatch->target_presentation_time_us = 0;
-    }
+  frame->has_target_presentation_time = frame_clock->is_next_presentation_time_valid;
+  frame->target_presentation_time_us = frame_clock->next_presentation_time_us;
 
   frame->has_frame_deadline = frame_clock->has_next_frame_deadline;
   frame->frame_deadline_us = frame_clock->next_frame_deadline_us;
-
-  CLUTTER_NOTE (FRAME_CLOCK, "Dispatching frame %ld for %s",
-                frame->frame_count,
-                frame_clock->output_name);
 
   COGL_TRACE_BEGIN_SCOPED (ClutterFrameClockEvents, "Clutter::FrameListener::before_frame()");
   if (iface->before_frame)
@@ -1961,6 +974,8 @@ clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
   COGL_TRACE_END (ClutterFrameClockEvents);
 
   COGL_TRACE_BEGIN_SCOPED (ClutterFrameClockTimelines, "Clutter::FrameClock::advance_timelines()");
+  if (frame_clock->is_next_presentation_time_valid)
+    time_us = frame_clock->next_presentation_time_us;
   advance_timelines (frame_clock, time_us);
   COGL_TRACE_END (ClutterFrameClockTimelines);
 
@@ -1968,19 +983,27 @@ clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
   result = iface->frame (frame_clock, frame, frame_clock->listener.user_data);
   COGL_TRACE_END (ClutterFrameClockFrame);
 
-  switch (result)
+  switch (frame_clock->state)
     {
-    case CLUTTER_FRAME_RESULT_PENDING_PRESENTED:
-      update_timelines_playing (frame_clock);
+    case CLUTTER_FRAME_CLOCK_STATE_INIT:
+    case CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED:
+      g_warn_if_reached ();
       break;
-    case CLUTTER_FRAME_RESULT_IDLE:
-      /* The frame was aborted; nothing to paint/present */
-      clutter_frame_clock_notify_ready (frame_clock);
+    case CLUTTER_FRAME_CLOCK_STATE_IDLE:
+    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED:
+    case CLUTTER_FRAME_CLOCK_STATE_SCHEDULED_NOW:
       break;
-    case CLUTTER_FRAME_RESULT_IGNORED:
-      frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
-      clear_frame (&frame_clock->next_presentation);
-      maybe_reschedule_update (frame_clock);
+    case CLUTTER_FRAME_CLOCK_STATE_DISPATCHING:
+      switch (result)
+        {
+        case CLUTTER_FRAME_RESULT_PENDING_PRESENTED:
+          frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_PENDING_PRESENTED;
+          break;
+        case CLUTTER_FRAME_RESULT_IDLE:
+          frame_clock->state = CLUTTER_FRAME_CLOCK_STATE_IDLE;
+          maybe_reschedule_update (frame_clock);
+          break;
+        }
       break;
     }
 
@@ -1994,8 +1017,6 @@ clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
       COGL_TRACE_DESCRIBE (ClutterFrameClockDispatch, description);
     }
 #endif
-
-  return result;
 }
 
 static gboolean
@@ -2017,43 +1038,34 @@ void
 clutter_frame_clock_record_flip_time (ClutterFrameClock *frame_clock,
                                       int64_t            flip_time_us)
 {
-  Frame *new_frame = frame_clock->prev_dispatch;
-
-  new_frame->flip_time_us = flip_time_us;
+  frame_clock->last_flip_time_us = flip_time_us;
 }
 
 GString *
 clutter_frame_clock_get_max_render_time_debug_info (ClutterFrameClock *frame_clock)
 {
-  const Frame *last_presentation = frame_clock->prev_presentation;
-  int64_t max_update_time_estimate_us;
+  int64_t max_update_duration_us;
   GString *string;
 
-  string = g_string_new ("Max update time estimate: ");
-  if (!clutter_frame_clock_estimate_max_update_time_us (frame_clock,
-                                                        &max_update_time_estimate_us))
-    {
-      g_string_append (string, "unknown");
-      return string;
-    }
+  string = g_string_new (NULL);
+  g_string_append_printf (string, "Max render time: %ld µs",
+                          clutter_frame_clock_compute_max_render_time_us (frame_clock));
 
-  g_string_append_printf (string, "%ld µs", max_update_time_estimate_us);
-
-  if (last_presentation && last_presentation->got_measurements)
+  if (frame_clock->got_measurements_last_frame)
     g_string_append_printf (string, " =");
   else
     g_string_append_printf (string, " (no measurements last frame)");
 
+  max_update_duration_us =
+    MAX (frame_clock->longterm_max_update_duration_us,
+         frame_clock->shortterm_max_update_duration_us);
+
   g_string_append_printf (string, "\nVblank duration: %ld µs +",
                           frame_clock->vblank_duration_us);
-  g_string_append_printf (string, "\nDeadline evasion: %ld µs +",
-                          frame_clock->deadline_evasion_us);
-  g_string_append_printf (string, "\nMaximum update duration: %ld µs +",
-                          frame_clock->max_update_duration_us);
-  g_string_append_printf (string, "\nMinimum update duration: %ld µs +",
-                          frame_clock->min_update_duration_us);
-  g_string_append_printf (string, "\nMargin: %ld µs",
-                          get_max_update_time_margin_us (frame_clock));
+  g_string_append_printf (string, "\nUpdate duration: %ld µs +",
+                          max_update_duration_us);
+  g_string_append_printf (string, "\nConstant: %d µs",
+                          clutter_max_render_time_constant_us);
 
   return string;
 }
@@ -2138,7 +1150,6 @@ static GSourceFuncs frame_clock_source_funcs = {
 static void
 init_frame_clock_source (ClutterFrameClock *frame_clock)
 {
-  g_autoptr (GMainContext) main_context = NULL;
   GSource *source;
   ClutterClockSource *clock_source;
   g_autofree char *name = NULL;
@@ -2160,8 +1171,7 @@ init_frame_clock_source (ClutterFrameClock *frame_clock)
   clock_source->frame_clock = frame_clock;
 
   frame_clock->source = source;
-  main_context = g_main_context_ref_thread_default ();
-  g_source_attach (source, main_context);
+  g_source_attach (source, NULL);
 }
 
 ClutterFrameClock *
@@ -2173,7 +1183,7 @@ clutter_frame_clock_new (float                            refresh_rate,
 {
   ClutterFrameClock *frame_clock;
 
-  g_assert (refresh_rate >= 0.0f);
+  g_assert_cmpfloat (refresh_rate, >, 0.0);
 
   frame_clock = g_object_new (CLUTTER_TYPE_FRAME_CLOCK, NULL);
 
@@ -2184,14 +1194,12 @@ clutter_frame_clock_new (float                            refresh_rate,
 
   clutter_frame_clock_set_refresh_rate (frame_clock, refresh_rate);
 
-  frame_clock->maximum_refresh_interval_us =
+  frame_clock->minimum_refresh_interval_us =
     (int64_t) (0.5 + G_USEC_PER_SEC / MINIMUM_REFRESH_RATE);
 
   frame_clock->vblank_duration_us = vblank_duration_us;
 
   frame_clock->output_name = g_strdup (output_name);
-
-  frame_clock->deferred_times = g_queue_new ();
 
   return frame_clock;
 }
@@ -2203,42 +1211,21 @@ clutter_frame_clock_destroy (ClutterFrameClock *frame_clock)
   g_object_unref (frame_clock);
 }
 
-int
-clutter_frame_clock_get_priority (ClutterFrameClock *frame_clock)
-{
-  return (int) roundf (frame_clock->refresh_rate * 1000.0f);
-}
-
-static void
-clear_source (ClutterFrameClock *frame_clock)
-{
-  if (frame_clock->source)
-    {
-      g_source_destroy (frame_clock->source);
-      g_clear_pointer (&frame_clock->source, g_source_unref);
-    }
-}
-
 static void
 clutter_frame_clock_dispose (GObject *object)
 {
   ClutterFrameClock *frame_clock = CLUTTER_FRAME_CLOCK (object);
 
-  if (!frame_clock->destroy_emitted)
+  g_warn_if_fail (frame_clock->state != CLUTTER_FRAME_CLOCK_STATE_DISPATCHING);
+
+  if (frame_clock->source)
     {
       g_signal_emit (frame_clock, signals[DESTROY], 0);
-      frame_clock->destroy_emitted = TRUE;
+      g_source_destroy (frame_clock->source);
+      g_clear_pointer (&frame_clock->source, g_source_unref);
     }
 
-  clear_source (frame_clock);
-
   g_clear_pointer (&frame_clock->output_name, g_free);
-
-  if (frame_clock->deferred_times)
-    g_queue_free_full (g_steal_pointer (&frame_clock->deferred_times), g_free);
-  frame_clock->deferred_times = NULL;
-
-  g_clear_object (&frame_clock->driver);
 
   G_OBJECT_CLASS (clutter_frame_clock_parent_class)->dispose (object);
 }
@@ -2265,27 +1252,4 @@ clutter_frame_clock_class_init (ClutterFrameClockClass *klass)
                   NULL, NULL, NULL,
                   G_TYPE_NONE,
                   0);
-}
-
-void
-clutter_frame_clock_set_deadline_evasion (ClutterFrameClock *frame_clock,
-                                          int64_t            deadline_evasion_us)
-{
-  frame_clock->deadline_evasion_us = deadline_evasion_us;
-}
-
-void
-clutter_frame_clock_set_passive (ClutterFrameClock       *frame_clock,
-                                 ClutterFrameClockDriver *driver)
-{
-  CLUTTER_NOTE (FRAME_CLOCK, "Making frame clock for %s passive",
-                frame_clock->output_name);
-  frame_clock->mode = CLUTTER_FRAME_CLOCK_MODE_PASSIVE;
-  frame_clock->is_next_presentation_time_valid = FALSE;
-  frame_clock->is_target_presentation_time = FALSE;
-  frame_clock->has_next_frame_deadline = FALSE;
-
-  g_set_object (&frame_clock->driver, driver);
-
-  clear_source (frame_clock);
 }

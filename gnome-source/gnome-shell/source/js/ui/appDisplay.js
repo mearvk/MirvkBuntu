@@ -1,6 +1,6 @@
-import Atk from 'gi://Atk';
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
-import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
@@ -11,6 +11,7 @@ import St from 'gi://St';
 
 import * as AppFavorites from './appFavorites.js';
 import {AppMenu} from './appMenu.js';
+import * as BoxPointer from './boxpointer.js';
 import * as DND from './dnd.js';
 import * as GrabHelper from './grabHelper.js';
 import * as IconGrid from './iconGrid.js';
@@ -24,8 +25,7 @@ import * as SystemActions from '../misc/systemActions.js';
 
 import * as Main from './main.js';
 
-import * as Config from '../misc/config.js';
-
+const MENU_POPUP_TIMEOUT = 600;
 const POPDOWN_DIALOG_TIMEOUT = 500;
 
 const FOLDER_SUBICON_FRACTION = .4;
@@ -54,17 +54,31 @@ const DRAG_PAGE_SWITCH_REPEAT_TIMEOUT = 1000;
 
 const DELAYED_MOVE_TIMEOUT = 200;
 
-const DIALOG_SHADE_NORMAL = new Cogl.Color({red: 0, green: 0, blue: 0, alpha: 204});
-const DIALOG_SHADE_HIGHLIGHT = new Cogl.Color({red: 0, green: 0, blue: 0, alpha: 85});
+const DIALOG_SHADE_NORMAL = Clutter.Color.from_pixel(0x000000cc);
+const DIALOG_SHADE_HIGHLIGHT = Clutter.Color.from_pixel(0x00000055);
 
 const DEFAULT_FOLDERS = {
-    'System': {
-        name: 'X-GNOME-Shell-System.directory',
-        apps: Config.SYSTEM_FOLDER_APPS,
-    },
     'Utilities': {
-        name: 'X-GNOME-Shell-Utilities.directory',
-        apps: Config.UTILITIES_FOLDER_APPS,
+        name: 'X-GNOME-Utilities.directory',
+        categories: ['X-GNOME-Utilities'],
+        apps: [
+            'gnome-abrt.desktop',
+            'gnome-system-log.desktop',
+            'nm-connection-editor.desktop',
+            'org.gnome.baobab.desktop',
+            'org.gnome.Connections.desktop',
+            'org.gnome.DejaDup.desktop',
+            'org.gnome.Dictionary.desktop',
+            'org.gnome.DiskUtility.desktop',
+            'org.gnome.Evince.desktop',
+            'org.gnome.FileRoller.desktop',
+            'org.gnome.fonts.desktop',
+            'org.gnome.Loupe.desktop',
+            'org.gnome.seahorse.Application.desktop',
+            'org.gnome.tweaks.desktop',
+            'org.gnome.Usage.desktop',
+            'vinagre.desktop',
+        ],
     },
     'YaST': {
         name: 'suse-yast.directory',
@@ -77,14 +91,14 @@ const DEFAULT_FOLDERS = {
 };
 
 function _getCategories(info) {
-    const categoriesStr = info.get_categories();
+    let categoriesStr = info.get_categories();
     if (!categoriesStr)
         return [];
     return categoriesStr.split(';');
 }
 
 function _listsIntersect(a, b) {
-    for (const itemA of a) {
+    for (let itemA of a) {
         if (b.includes(itemA))
             return true;
     }
@@ -92,10 +106,10 @@ function _listsIntersect(a, b) {
 }
 
 function _getFolderName(folder) {
-    const name = folder.get_string('name');
+    let name = folder.get_string('name');
 
     if (folder.get_boolean('translate')) {
-        const translated = Shell.util_get_translated_folder_name(name);
+        let translated = Shell.util_get_translated_folder_name(name);
         if (translated !== null)
             return translated;
     }
@@ -112,13 +126,13 @@ function _getViewFromIcon(icon) {
 }
 
 function _findBestFolderName(apps) {
-    const appInfos = apps.map(app => app.get_app_info());
+    let appInfos = apps.map(app => app.get_app_info());
 
-    const categoryCounter = {};
-    const commonCategories = [];
+    let categoryCounter = {};
+    let commonCategories = [];
 
     appInfos.reduce((categories, appInfo) => {
-        for (const category of _getCategories(appInfo)) {
+        for (let category of _getCategories(appInfo)) {
             if (!(category in categoryCounter))
                 categoryCounter[category] = 0;
 
@@ -133,7 +147,7 @@ function _findBestFolderName(apps) {
         return categories;
     }, commonCategories);
 
-    for (const category of commonCategories) {
+    for (let category of commonCategories) {
         const directory = `${category}.directory`;
         const translated = Shell.util_get_translated_folder_name(directory);
         if (translated !== null)
@@ -146,7 +160,7 @@ function _findBestFolderName(apps) {
 export const AppGrid = GObject.registerClass({
     Properties: {
         'indicators-padding': GObject.ParamSpec.boxed('indicators-padding',
-            null, null,
+            'Indicators padding', 'Indicators padding',
             GObject.ParamFlags.READWRITE,
             Clutter.Margin.$gtype),
     },
@@ -155,14 +169,17 @@ export const AppGrid = GObject.registerClass({
         super._init(layoutParams);
 
         this._indicatorsPadding = new Clutter.Margin();
-        this.set_accessible_name(_('App grid'));
-        this.set_accessible_role(Atk.Role.GROUPING);
     }
 
     _updatePadding() {
         const node = this.get_theme_node();
+        const {rowSpacing, columnSpacing} = this.layoutManager;
 
         const padding = this._indicatorsPadding.copy();
+        padding.left += rowSpacing;
+        padding.right += rowSpacing;
+        padding.top += columnSpacing;
+        padding.bottom += columnSpacing;
         ['top', 'right', 'bottom', 'left'].forEach(side => {
             padding[side] += node.get_length(`page-padding-${side}`);
         });
@@ -471,6 +488,12 @@ class BaseAppViewGridLayout extends Clutter.BinLayout {
 
 var BaseAppView = GObject.registerClass({
     GTypeFlags: GObject.TypeFlags.ABSTRACT,
+    Properties: {
+        'gesture-modes': GObject.ParamSpec.flags(
+            'gesture-modes', 'gesture-modes', 'gesture-modes',
+            GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
+            Shell.ActionMode, Shell.ActionMode.OVERVIEW),
+    },
     Signals: {
         'view-loaded': {},
     },
@@ -496,7 +519,6 @@ var BaseAppView = GObject.registerClass({
             y_expand: true,
             reactive: true,
             enable_mouse_scrolling: false,
-            enable_touch_scrolling: false,
             hscrollbar_policy: St.PolicyType.EXTERNAL,
             vscrollbar_policy: St.PolicyType.NEVER,
             child: this._grid,
@@ -504,13 +526,7 @@ var BaseAppView = GObject.registerClass({
 
         this._canScroll = true; // limiting scrolling speed
         this._scrollTimeoutId = 0;
-
-        const scrollController = new Clutter.ScrollController({
-            flags: Clutter.ScrollControllerFlags.DISCRETE |
-                Clutter.ScrollControllerFlags.SCROLL_VERTICAL,
-        });
-        scrollController.connect('scroll', this._onScroll.bind(this));
-        this._scrollView.add_action(scrollController);
+        this._scrollView.connect('scroll-event', this._onScroll.bind(this));
 
         this._adjustment = this._scrollView.hadjustment;
         this._adjustment.connect('notify::value', adj => {
@@ -527,13 +543,9 @@ var BaseAppView = GObject.registerClass({
             (indicators, pageIndex) => {
                 this.goToPage(pageIndex);
             });
-
-        const indicatorScrollController = new Clutter.ScrollController({
-            flags: Clutter.ScrollControllerFlags.DISCRETE |
-                Clutter.ScrollControllerFlags.SCROLL_VERTICAL,
+        this._pageIndicators.connect('scroll-event', (actor, event) => {
+            this._scrollView.event(event, false);
         });
-        indicatorScrollController.connect('scroll', this._onScroll.bind(this));
-        this._pageIndicators.add_action(indicatorScrollController);
 
         // Navigation indicators
         this._nextPageIndicator = new St.Widget({
@@ -604,7 +616,7 @@ var BaseAppView = GObject.registerClass({
         scrollContainer._delegate = this;
 
         this._box = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
             y_expand: true,
         });
@@ -613,11 +625,7 @@ var BaseAppView = GObject.registerClass({
 
         // Swipe
         this._swipeTracker = new SwipeTracker.SwipeTracker(this._scrollView,
-            Clutter.Orientation.HORIZONTAL,
-            Shell.ActionMode.ALL,
-            {
-                name: 'AppDisplay swipe tracker',
-            });
+            Clutter.Orientation.HORIZONTAL, this.gestureModes);
         this._swipeTracker.orientation = Clutter.Orientation.HORIZONTAL;
         this._swipeTracker.connect('begin', this._swipeBegin.bind(this));
         this._swipeTracker.connect('update', this._swipeUpdate.bind(this));
@@ -665,43 +673,63 @@ var BaseAppView = GObject.registerClass({
         return new AppGrid({allow_incomplete_pages: true});
     }
 
-    _onScroll(controller, sprite, source, dx, dy) {
+    _onScroll(actor, event) {
+        if (this._swipeTracker.canHandleScrollEvent(event))
+            return Clutter.EVENT_PROPAGATE;
+
         if (!this._canScroll)
-            return;
+            return Clutter.EVENT_STOP;
 
         const rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
         const vertical = this._orientation === Clutter.Orientation.VERTICAL;
 
         let nextPage = this._grid.currentPage;
-        if (dy < 0) {
+        switch (event.get_scroll_direction()) {
+        case Clutter.ScrollDirection.UP:
             nextPage -= 1;
-        } else if (dy > 0) {
+            break;
+
+        case Clutter.ScrollDirection.DOWN:
             nextPage += 1;
-        } else if (dx < 0) {
+            break;
+
+        case Clutter.ScrollDirection.LEFT:
             if (vertical)
-                return;
+                return Clutter.EVENT_STOP;
             nextPage += rtl ? 1 : -1;
-        } else if (dx > 0) {
+            break;
+
+        case Clutter.ScrollDirection.RIGHT:
             if (vertical)
-                return;
+                return Clutter.EVENT_STOP;
             nextPage += rtl ? -1 : 1;
-        } else {
-            return;
+            break;
+
+        default:
+            return Clutter.EVENT_STOP;
         }
 
         this.goToPage(nextPage);
 
         this._canScroll = false;
-        this._scrollTimeoutId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT,
+        this._scrollTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
             SCROLL_TIMEOUT_TIME, () => {
                 this._canScroll = true;
                 this._scrollTimeoutId = 0;
+                return GLib.SOURCE_REMOVE;
             });
+
+        return Clutter.EVENT_STOP;
     }
 
     _swipeBegin(tracker, monitor) {
         if (monitor !== Main.layoutManager.primaryIndex)
             return;
+
+        if (this._dragFocus) {
+            this._dragFocus.cancelActions();
+            this._dragFocus = null;
+        }
 
         const adjustment = this._adjustment;
         adjustment.remove_transition('value');
@@ -795,11 +823,12 @@ var BaseAppView = GObject.registerClass({
                 position,
                 source,
                 destroyId: source.connect('destroy', () => this._removeDelayedMove()),
-                timeoutId: GLib.timeout_add_once(GLib.PRIORITY_DEFAULT,
+                timeoutId: GLib.timeout_add(GLib.PRIORITY_DEFAULT,
                     DELAYED_MOVE_TIMEOUT, () => {
                         this._moveItem(source, page, position);
                         this._delayedMoveData.timeoutId = 0;
                         this._removeDelayedMove();
+                        return GLib.SOURCE_REMOVE;
                     }),
             };
         }
@@ -906,13 +935,14 @@ var BaseAppView = GObject.registerClass({
         const {targetActor} = dragEvent;
 
         this._dragPageSwitchInitialTimeoutId =
-            GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, DRAG_PAGE_SWITCH_INITIAL_TIMEOUT, () => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, DRAG_PAGE_SWITCH_INITIAL_TIMEOUT, () => {
                 const direction = targetActor === this._prevPageIndicator ? -1 : 1;
 
                 this.goToPage(this._grid.currentPage + direction);
                 this._setupDragPageSwitchRepeat(direction);
 
                 delete this._dragPageSwitchInitialTimeoutId;
+                return GLib.SOURCE_REMOVE;
             });
     }
 
@@ -923,6 +953,8 @@ var BaseAppView = GObject.registerClass({
         };
         DND.addDragMonitor(this._dragMonitor);
         this._appGridLayout.showPageIndicators();
+        this._dragFocus = null;
+        this._swipeTracker.enabled = false;
     }
 
     _onDragMotion(dragEvent) {
@@ -970,6 +1002,7 @@ var BaseAppView = GObject.registerClass({
         this._resetDragPageSwitch();
 
         this._appGridLayout.hidePageIndicators();
+        this._swipeTracker.enabled = true;
     }
 
     _onDragCancelled() {
@@ -977,6 +1010,7 @@ var BaseAppView = GObject.registerClass({
         // will move all items to their original positions
         this._redisplay();
         this._appGridLayout.hidePageIndicators();
+        this._swipeTracker.enabled = true;
     }
 
     _canAccept(source) {
@@ -1005,8 +1039,7 @@ var BaseAppView = GObject.registerClass({
             const position = page < nPages ? -1 : 0;
 
             this._moveItem(source, page, position);
-            const realPage = this._grid.getItemPage(source); // could be the next page, if the requested one was full
-            this.goToPage(realPage);
+            this.goToPage(page);
         } else if (this._delayedMoveData) {
             // Dropped before the icon was moved
             const {page, position} = this._delayedMoveData;
@@ -1076,14 +1109,14 @@ var BaseAppView = GObject.registerClass({
     }
 
     _redisplay() {
-        const oldApps = this._orderedItems.slice();
-        const oldAppIds = oldApps.map(icon => icon.id);
+        let oldApps = this._orderedItems.slice();
+        let oldAppIds = oldApps.map(icon => icon.id);
 
-        const newApps = this._loadApps().sort(this._compareItems.bind(this));
-        const newAppIds = newApps.map(icon => icon.id);
+        let newApps = this._loadApps().sort(this._compareItems.bind(this));
+        let newAppIds = newApps.map(icon => icon.id);
 
-        const addedApps = newApps.filter(icon => !oldAppIds.includes(icon.id));
-        const removedApps = oldApps.filter(icon => !newAppIds.includes(icon.id));
+        let addedApps = newApps.filter(icon => !oldAppIds.includes(icon.id));
+        let removedApps = oldApps.filter(icon => !newAppIds.includes(icon.id));
 
         // Remove old app icons
         removedApps.forEach(icon => {
@@ -1128,13 +1161,13 @@ var BaseAppView = GObject.registerClass({
 
     selectApp(id) {
         if (this._items.has(id)) {
-            const item = this._items.get(id);
+            let item = this._items.get(id);
 
             if (item.mapped) {
                 this._selectAppInternal(id);
             } else {
                 // Need to wait until the view is mapped
-                const signalId = item.connect('notify::mapped', actor => {
+                let signalId = item.connect('notify::mapped', actor => {
                     if (actor.mapped) {
                         actor.disconnect(signalId);
                         this._selectAppInternal(id);
@@ -1143,7 +1176,7 @@ var BaseAppView = GObject.registerClass({
             }
         } else {
             // Need to wait until the view is built
-            const signalId = this.connect('view-loaded', () => {
+            let signalId = this.connect('view-loaded', () => {
                 this.disconnect(signalId);
                 this.selectApp(id);
             });
@@ -1221,7 +1254,7 @@ var BaseAppView = GObject.registerClass({
         this.remove_all_transitions();
         this._grid.remove_all_transitions();
 
-        const params = {
+        let params = {
             duration: VIEWS_SWITCH_TIME,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         };
@@ -1246,6 +1279,10 @@ var BaseAppView = GObject.registerClass({
 
         this._appGridLayout.goToPage(pageNumber, animate);
         this._grid.goToPage(pageNumber, animate);
+    }
+
+    updateDragFocus(dragFocus) {
+        this._dragFocus = dragFocus;
     }
 });
 
@@ -1310,44 +1347,13 @@ const PageManager = GObject.registerClass({
     }
 });
 
-export class AppDisplay extends BaseAppView {
-    static {
-        GObject.registerClass(this);
-
-        const bindingPool = this.get_binding_pool();
-
-        bindingPool.install_closure(
-            'next', Clutter.KEY_Page_Down, 0,
-            obj => {
-                obj.goToPage(obj._grid.currentPage + 1);
-                return Clutter.EVENT_STOP;
-            });
-        bindingPool.install_closure(
-            'prev', Clutter.KEY_Page_Up, 0,
-            obj => {
-                obj.goToPage(obj._grid.currentPage - 1);
-                return Clutter.EVENT_STOP;
-            });
-        bindingPool.install_closure(
-            'first', Clutter.KEY_Home, 0,
-            obj => {
-                obj.goToPage(0);
-                return Clutter.EVENT_STOP;
-            });
-        bindingPool.install_closure(
-            'last', Clutter.KEY_End, 0,
-            obj => {
-                obj.goToPage(obj._grid.nPages - 1);
-                return Clutter.EVENT_STOP;
-            });
-    }
-
+export const AppDisplay = GObject.registerClass(
+class AppDisplay extends BaseAppView {
     _init() {
         super._init({
             layout_manager: new Clutter.BinLayout(),
             x_expand: true,
             y_expand: true,
-            reactive: true,
         });
 
         this._pageManager = new PageManager();
@@ -1388,13 +1394,19 @@ export class AppDisplay extends BaseAppView {
         }
     }
 
-    vfunc_navigate_focus(from, direction) {
-        if (from === this && direction === St.DirectionType.DOWN) {
-            return super.vfunc_navigate_focus(
-                null, St.DirectionType.TAB_FORWARD);
-        } else {
-            return super.vfunc_navigate_focus(from, direction);
+    vfunc_map() {
+        this._keyPressEventId =
+            global.stage.connect('key-press-event',
+                this._onKeyPressEvent.bind(this));
+        super.vfunc_map();
+    }
+
+    vfunc_unmap() {
+        if (this._keyPressEventId) {
+            global.stage.disconnect(this._keyPressEventId);
+            this._keyPressEventId = 0;
         }
+        super.vfunc_unmap();
     }
 
     _redisplay() {
@@ -1425,30 +1437,24 @@ export class AppDisplay extends BaseAppView {
     }
 
     _ensureDefaultFolders() {
-        if (this._folderSettings.get_user_value('folder-children') !== null ||
-            this._folderSettings.get_strv('folder-children').length > 0)
+        if (this._folderSettings.get_strv('folder-children').length > 0)
             return;
 
-        const appSys = Shell.AppSystem.get_default();
         const folders = Object.keys(DEFAULT_FOLDERS);
         this._folderSettings.set_strv('folder-children', folders);
 
         const {path} = this._folderSettings;
         for (const folder of folders) {
             const {name, categories, apps} = DEFAULT_FOLDERS[folder];
-            const filteredApps = apps
-                ? apps.filter(id => appSys.lookup_app(id) != null)
-                : [];
             const child = new Gio.Settings({
                 schema_id: 'org.gnome.desktop.app-folders.folder',
                 path: `${path}folders/${folder}/`,
             });
             child.set_string('name', name);
             child.set_boolean('translate', true);
-            if (categories)
-                child.set_strv('categories', categories);
-            if (filteredApps.length > 0)
-                child.set_strv('apps', filteredApps);
+            child.set_strv('categories', categories);
+            if (apps)
+                child.set_strv('apps', apps);
         }
     }
 
@@ -1464,6 +1470,10 @@ export class AppDisplay extends BaseAppView {
             global.settings.is_writable('app-picker-layout');
 
         this._placeholder = new AppIcon(app, {isDraggable});
+        this._placeholder.connect('notify::pressed', icon => {
+            if (icon.pressed)
+                this.updateDragFocus(icon);
+        });
         this._placeholder.scaleAndFade();
         this._redisplay();
     }
@@ -1511,33 +1521,37 @@ export class AppDisplay extends BaseAppView {
     }
 
     _loadApps() {
-        const appIcons = [];
+        let appIcons = [];
         this._appInfoList = Shell.AppSystem.get_default().get_installed().filter(appInfo => {
             try {
                 appInfo.get_id(); // catch invalid file encodings
-            } catch {
+            } catch (e) {
                 return false;
             }
             return !this._appFavorites.isFavorite(appInfo.get_id()) &&
                 this._parentalControlsManager.shouldShowApp(appInfo);
         });
 
-        const apps = this._appInfoList.map(app => app.get_id());
+        let apps = this._appInfoList.map(app => app.get_id());
 
-        const appSys = Shell.AppSystem.get_default();
+        let appSys = Shell.AppSystem.get_default();
 
         const appsInsideFolders = new Set();
         this._folderIcons = [];
 
-        const folders = this._folderSettings.get_strv('folder-children');
+        let folders = this._folderSettings.get_strv('folder-children');
         folders.forEach(id => {
-            const path = `${this._folderSettings.path}folders/${id}/`;
+            let path = `${this._folderSettings.path}folders/${id}/`;
             let icon = this._items.get(id);
             if (!icon) {
                 icon = new FolderIcon(id, path, this);
                 icon.connect('apps-changed', () => {
                     this._redisplay();
                     this._savePages();
+                });
+                icon.connect('notify::pressed', () => {
+                    if (icon.pressed)
+                        this.updateDragFocus(icon);
                 });
             }
 
@@ -1569,9 +1583,13 @@ export class AppDisplay extends BaseAppView {
 
             let icon = this._items.get(appId);
             if (!icon) {
-                const app = appSys.lookup_app(appId);
+                let app = appSys.lookup_app(appId);
 
                 icon = new AppIcon(app, {isDraggable});
+                icon.connect('notify::pressed', () => {
+                    if (icon.pressed)
+                        this.updateDragFocus(icon);
+                });
             }
 
             appIcons.push(icon);
@@ -1611,11 +1629,32 @@ export class AppDisplay extends BaseAppView {
         super.goToPage(pageNumber, animate);
     }
 
-    _onScroll(controller, sprite, source, dx, dy) {
+    _onScroll(actor, event) {
         if (this._displayingDialog || !this._scrollView.reactive)
             return Clutter.EVENT_STOP;
 
-        return super._onScroll(controller, sprite, source, dx, dy);
+        return super._onScroll(actor, event);
+    }
+
+    _onKeyPressEvent(actor, event) {
+        if (this._displayingDialog)
+            return Clutter.EVENT_STOP;
+
+        if (event.get_key_symbol() === Clutter.KEY_Page_Up) {
+            this.goToPage(this._grid.currentPage - 1);
+            return Clutter.EVENT_STOP;
+        } else if (event.get_key_symbol() === Clutter.KEY_Page_Down) {
+            this.goToPage(this._grid.currentPage + 1);
+            return Clutter.EVENT_STOP;
+        } else if (event.get_key_symbol() === Clutter.KEY_Home) {
+            this.goToPage(0);
+            return Clutter.EVENT_STOP;
+        } else if (event.get_key_symbol() === Clutter.KEY_End) {
+            this.goToPage(this._grid.nPages - 1);
+            return Clutter.EVENT_STOP;
+        }
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     addFolderDialog(dialog) {
@@ -1683,7 +1722,7 @@ export class AppDisplay extends BaseAppView {
 
         this._savePages();
 
-        const view = _getViewFromIcon(source);
+        let view = _getViewFromIcon(source);
         if (view instanceof FolderView)
             view.removeApp(source.app);
 
@@ -1697,21 +1736,21 @@ export class AppDisplay extends BaseAppView {
     }
 
     createFolder(apps) {
-        const newFolderId = GLib.uuid_string_random();
+        let newFolderId = GLib.uuid_string_random();
 
-        const folders = this._folderSettings.get_strv('folder-children');
+        let folders = this._folderSettings.get_strv('folder-children');
         folders.push(newFolderId);
         this._folderSettings.set_strv('folder-children', folders);
 
         // Create the new folder
-        const newFolderPath = this._folderSettings.path.concat('folders/', newFolderId, '/');
+        let newFolderPath = this._folderSettings.path.concat('folders/', newFolderId, '/');
         let newFolderSettings;
         try {
             newFolderSettings = new Gio.Settings({
                 schema_id: 'org.gnome.desktop.app-folders.folder',
                 path: newFolderPath,
             });
-        } catch {
+        } catch (e) {
             log('Error creating new folder');
             return false;
         }
@@ -1730,7 +1769,7 @@ export class AppDisplay extends BaseAppView {
             return counter;
         }, 0);
 
-        const appItems = apps.map(id => this._items.get(id).app);
+        let appItems = apps.map(id => this._items.get(id).app);
         let folderName = _findBestFolderName(appItems);
         if (!folderName)
             folderName = _('Unnamed Folder');
@@ -1749,7 +1788,7 @@ export class AppDisplay extends BaseAppView {
 
         return true;
     }
-}
+});
 
 export class AppSearchProvider {
     constructor() {
@@ -1766,10 +1805,10 @@ export class AppSearchProvider {
 
     getResultMetas(apps) {
         const {scaleFactor} = St.ThemeContext.get_for_stage(global.stage);
-        const metas = [];
-        for (const id of apps) {
+        let metas = [];
+        for (let id of apps) {
             if (id.endsWith('.desktop')) {
-                const app = this._appSys.lookup_app(id);
+                let app = this._appSys.lookup_app(id);
 
                 metas.push({
                     id: app.get_id(),
@@ -1777,8 +1816,8 @@ export class AppSearchProvider {
                     createIcon: size => app.create_icon_texture(size),
                 });
             } else {
-                const name = this._systemActions.getName(id);
-                const iconName = this._systemActions.getIconName(id);
+                let name = this._systemActions.getName(id);
+                let iconName = this._systemActions.getIconName(id);
 
                 const createIcon = size => new St.Icon({
                     icon_name: iconName,
@@ -1803,7 +1842,7 @@ export class AppSearchProvider {
         // results can be filtered correctly.
         if (!this._parentalControlsManager.initialized) {
             return new Promise(resolve => {
-                const initializedId = this._parentalControlsManager.connect('app-filter-changed', async () => {
+                let initializedId = this._parentalControlsManager.connect('app-filter-changed', async () => {
                     if (this._parentalControlsManager.initialized) {
                         this._parentalControlsManager.disconnect(initializedId);
                         resolve(await this.getInitialResultSet(terms, cancellable));
@@ -1812,9 +1851,9 @@ export class AppSearchProvider {
             });
         }
 
-        const query = terms.join(' ');
-        const groups = Shell.AppSystem.search(query);
-        const usage = Shell.AppUsage.get_default();
+        let query = terms.join(' ');
+        let groups = Shell.AppSystem.search(query);
+        let usage = Shell.AppUsage.get_default();
         let results = [];
 
         groups.forEach(group => {
@@ -1851,7 +1890,7 @@ class AppViewItem extends St.Button {
         super._init({
             pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
             reactive: true,
-            button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.MIDDLE,
+            button_mask: St.ButtonMask.ONE | St.ButtonMask.TWO,
             can_focus: true,
             ...params,
         });
@@ -1860,11 +1899,10 @@ class AppViewItem extends St.Button {
 
         if (isDraggable) {
             this._draggable = DND.makeDraggable(this, {timeoutThreshold: 200});
-            this._draggable.connectObject(
-                'drag-begin', this._onDragBegin.bind(this),
-                'drag-cancelled', this._onDragCancelled.bind(this),
-                'drag-end', this._onDragEnd.bind(this),
-                this);
+
+            this._draggable.connect('drag-begin', this._onDragBegin.bind(this));
+            this._draggable.connect('drag-cancelled', this._onDragCancelled.bind(this));
+            this._draggable.connect('drag-end', this._onDragEnd.bind(this));
         }
 
         this._otherIconIsHovering = false;
@@ -1898,22 +1936,16 @@ class AppViewItem extends St.Button {
         if (!layout.is_wrapped() && !layout.is_ellipsized())
             return;
 
-        const expand = this._forcedHighlight || this.hover || this.has_key_focus();
-        if (this._expand === expand)
-            return;
-        this._expand = expand;
+        label.remove_transition('allocation');
 
-        const leader = expand ? this : label;
-        leader.remove_transition('allocation');
-
-        const id = leader.connect('notify::allocation', () => {
-            leader.restore_easing_state();
-            leader.disconnect(id);
+        const id = label.connect('notify::allocation', () => {
+            label.restore_easing_state();
+            label.disconnect(id);
         });
 
-        this.icon.clip_to_allocation = expand;
-        leader.save_easing_state();
-        leader.set_easing_duration(expand
+        const expand = this._forcedHighlight || this.hover || this.has_key_focus();
+        label.save_easing_state();
+        label.set_easing_duration(expand
             ? APP_ICON_TITLE_EXPAND_TIME
             : APP_ICON_TITLE_COLLAPSE_TIME);
         clutterText.set({
@@ -2046,6 +2078,12 @@ class AppViewItem extends St.Button {
         return true;
     }
 
+    cancelActions() {
+        if (this._draggable)
+            this._draggable.fakeRelease();
+        this.fake_release();
+    }
+
     get id() {
         return this._id;
     }
@@ -2090,6 +2128,7 @@ class FolderView extends BaseAppView {
             layout_manager: new Clutter.BinLayout(),
             x_expand: true,
             y_expand: true,
+            gesture_modes: Shell.ActionMode.POPUP,
         });
 
         // If it not expand, the parent doesn't take into account its preferred_width when allocating
@@ -2140,19 +2179,19 @@ class FolderView extends BaseAppView {
             row_homogeneous: true,
             column_homogeneous: true,
         });
-        const icon = new St.Widget({
+        let icon = new St.Widget({
             layout_manager: layout,
             x_align: Clutter.ActorAlign.CENTER,
             style: `width: ${size}px; height: ${size}px;`,
         });
 
-        const subSize = Math.floor(FOLDER_SUBICON_FRACTION * size);
+        let subSize = Math.floor(FOLDER_SUBICON_FRACTION * size);
 
-        const numItems = this._orderedItems.length;
-        const rtl = icon.get_text_direction() === Clutter.TextDirection.RTL;
+        let numItems = this._orderedItems.length;
+        let rtl = icon.get_text_direction() === Clutter.TextDirection.RTL;
         for (let i = 0; i < 4; i++) {
             const style = `width: ${subSize}px; height: ${subSize}px;`;
-            const bin = new St.Bin({style});
+            let bin = new St.Bin({style});
             if (i < numItems)
                 bin.child = this._orderedItems[i].app.create_icon_texture(subSize);
             layout.attach(bin, rtl ? (i + 1) % 2 : i % 2, Math.floor(i / 2), 1, 1);
@@ -2191,14 +2230,14 @@ class FolderView extends BaseAppView {
         const folderCategories = this._folder.get_strv('categories');
         const appInfos = this._parentView.getAppInfos();
         appInfos.forEach(appInfo => {
-            const appCategories = _getCategories(appInfo);
+            let appCategories = _getCategories(appInfo);
             if (!_listsIntersect(folderCategories, appCategories))
                 return;
 
             addAppId(appInfo.get_id());
         });
 
-        const items = [];
+        let items = [];
         this._apps.forEach(app => {
             let icon = this._items.get(app.get_id());
             if (!icon)
@@ -2221,15 +2260,15 @@ class FolderView extends BaseAppView {
     }
 
     addApp(app) {
-        const folderApps = this._folder.get_strv('apps');
+        let folderApps = this._folder.get_strv('apps');
         folderApps.push(app.id);
 
         this._folder.set_strv('apps', folderApps);
 
         // Also remove from 'excluded-apps' if the app id is listed
         // there. This is only possible on categories-based folders.
-        const excludedApps = this._folder.get_strv('excluded-apps');
-        const index = excludedApps.indexOf(app.id);
+        let excludedApps = this._folder.get_strv('excluded-apps');
+        let index = excludedApps.indexOf(app.id);
         if (index >= 0) {
             excludedApps.splice(index, 1);
             this._folder.set_strv('excluded-apps', excludedApps);
@@ -2237,8 +2276,8 @@ class FolderView extends BaseAppView {
     }
 
     removeApp(app) {
-        const folderApps = this._folder.get_strv('apps');
-        const index = folderApps.indexOf(app.id);
+        let folderApps = this._folder.get_strv('apps');
+        let index = folderApps.indexOf(app.id);
         if (index >= 0)
             folderApps.splice(index, 1);
 
@@ -2248,12 +2287,12 @@ class FolderView extends BaseAppView {
             this._deletingFolder = true;
 
             // Resetting all keys deletes the relocatable schema
-            const keys = this._folder.settings_schema.list_keys();
+            let keys = this._folder.settings_schema.list_keys();
             for (const key of keys)
                 this._folder.reset(key);
 
-            const settings = new Gio.Settings({schema_id: 'org.gnome.desktop.app-folders'});
-            const folders = settings.get_strv('folder-children');
+            let settings = new Gio.Settings({schema_id: 'org.gnome.desktop.app-folders'});
+            let folders = settings.get_strv('folder-children');
             folders.splice(folders.indexOf(this._id), 1);
             settings.set_strv('folder-children', folders);
 
@@ -2285,12 +2324,10 @@ export const FolderIcon = GObject.registerClass({
     _init(id, path, parentView) {
         super._init({
             style_class: 'overview-tile app-folder',
-            button_mask: St.ButtonMask.PRIMARY,
+            button_mask: St.ButtonMask.ONE,
+            toggle_mode: true,
             can_focus: true,
         }, global.settings.is_writable('app-picker-layout'));
-
-        this.add_accessible_state(Atk.StateType.EXPANDABLE);
-
         this._id = id;
         this._name = '';
         this._parentView = parentView;
@@ -2310,9 +2347,6 @@ export const FolderIcon = GObject.registerClass({
         this.view = new FolderView(this._folder, id, parentView);
 
         this._folder.connectObject(
-            'changed', this._sync.bind(this), this);
-        const appFavorites = AppFavorites.getAppFavorites();
-        appFavorites.connectObject(
             'changed', this._sync.bind(this), this);
         this._sync();
     }
@@ -2387,7 +2421,7 @@ export const FolderIcon = GObject.registerClass({
         if (!(source instanceof AppIcon))
             return false;
 
-        const view = _getViewFromIcon(source);
+        let view = _getViewFromIcon(source);
         if (!view || !(view instanceof AppDisplay))
             return false;
 
@@ -2409,7 +2443,7 @@ export const FolderIcon = GObject.registerClass({
     }
 
     _updateName() {
-        const name = _getFolderName(this._folder);
+        let name = _getFolderName(this._folder);
         if (this.name === name)
             return;
 
@@ -2451,10 +2485,8 @@ export const FolderIcon = GObject.registerClass({
                     delay: isOpen ? 0 : FOLDER_DIALOG_ANIMATION_TIME - duration,
                 });
 
-                if (isOpen)
-                    this.add_accessible_state(Atk.StateType.EXPANDED);
-                else
-                    this.remove_accessible_state(Atk.StateType.EXPANDED);
+                if (!isOpen)
+                    this.checked = false;
             });
         }
     }
@@ -2471,20 +2503,20 @@ export const AppFolderDialog = GObject.registerClass({
             x_expand: true,
             y_expand: true,
             reactive: true,
-            accessible_name: source.name,
-            accessible_role: Atk.Role.PANEL,
         });
 
         this.add_constraint(new Layout.MonitorConstraint({primary: true}));
 
-        const clickGesture = new Clutter.ClickGesture();
-        clickGesture.connect('may-recognize', () => {
-            const coords = clickGesture.get_coords_abs();
-            const [, x, y] = this.child.transform_stage_point(coords.x, coords.y);
-            return !this._viewBox.allocation.contains(x, y);
+        const clickAction = new Clutter.ClickAction();
+        clickAction.connect('clicked', () => {
+            const [x, y] = clickAction.get_coords();
+            const actor =
+                global.stage.get_actor_at_pos(Clutter.PickMode.ALL, x, y);
+
+            if (actor === this)
+                this.popdown();
         });
-        clickGesture.connect('recognize', () => this.popdown());
-        this.add_action(clickGesture);
+        this.add_action(clickAction);
 
         this._source = source;
         this._folder = folder;
@@ -2500,7 +2532,7 @@ export const AppFolderDialog = GObject.registerClass({
             y_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         this.child = new St.Bin({
@@ -2535,10 +2567,10 @@ export const AppFolderDialog = GObject.registerClass({
         this._viewBox.add_child(this._entryBox);
 
         // Empty actor to center the title
-        const ghostButton = new Clutter.Actor();
+        let ghostButton = new Clutter.Actor();
         this._entryBox.add_child(ghostButton);
 
-        const stack = new Shell.Stack({
+        let stack = new Shell.Stack({
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
         });
@@ -2560,7 +2592,6 @@ export const AppFolderDialog = GObject.registerClass({
             style_class: 'folder-name-entry',
             opacity: 0,
             reactive: false,
-            accessible_name: _('Folder name'),
         });
         this._entry.clutter_text.set({
             x_expand: true,
@@ -2576,14 +2607,13 @@ export const AppFolderDialog = GObject.registerClass({
         // Edit button
         this._editButton = new St.Button({
             style_class: 'icon-button',
-            button_mask: St.ButtonMask.PRIMARY,
+            button_mask: St.ButtonMask.ONE,
             toggle_mode: true,
             reactive: true,
             can_focus: true,
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.CENTER,
             icon_name: 'document-edit-symbolic',
-            accessible_name: _('Edit folder name'),
         });
 
         this._editButton.connect('notify::checked', () => {
@@ -2605,21 +2635,20 @@ export const AppFolderDialog = GObject.registerClass({
     }
 
     _syncFolderName() {
-        const newName = _getFolderName(this._folder);
+        let newName = _getFolderName(this._folder);
 
         this._folderNameLabel.text = newName;
         this._entry.text = newName;
     }
 
     _switchActor(from, to) {
-        to.reactive = to.can_focus = true;
+        to.reactive = true;
         to.ease({
             opacity: 255,
             duration: 300,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
 
-        from.can_focus = false;
         from.ease({
             opacity: 0,
             duration: 300,
@@ -2647,8 +2676,8 @@ export const AppFolderDialog = GObject.registerClass({
     }
 
     _maybeUpdateFolderName() {
-        const folderName = _getFolderName(this._folder);
-        const newFolderName = this._entry.text.trim();
+        let folderName = _getFolderName(this._folder);
+        let newFolderName = this._entry.text.trim();
 
         if (newFolderName.length === 0 || newFolderName === folderName)
             return;
@@ -2658,9 +2687,9 @@ export const AppFolderDialog = GObject.registerClass({
     }
 
     _zoomAndFadeIn() {
-        const [sourceX, sourceY] =
+        let [sourceX, sourceY] =
             this._source.get_transformed_position();
-        const [dialogX, dialogY] =
+        let [dialogX, dialogY] =
             this.child.get_transformed_position();
 
         this.child.set({
@@ -2683,7 +2712,7 @@ export const AppFolderDialog = GObject.registerClass({
             scale_y: 1,
             opacity: 255,
             duration: FOLDER_DIALOG_ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_EXPO,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
 
         this._needsZoomAndFade = false;
@@ -2703,19 +2732,13 @@ export const AppFolderDialog = GObject.registerClass({
             return;
         }
 
-        const [sourceX, sourceY] =
+        let [sourceX, sourceY] =
             this._source.get_transformed_position();
-        const [dialogX, dialogY] =
+        let [dialogX, dialogY] =
             this.child.get_transformed_position();
 
         this.ease({
-            background_color: new Cogl.Color({red: 0, green: 0, blue: 0, alpha: 0}),
-            duration: FOLDER_DIALOG_ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
-
-        this.child.ease({
-            opacity: 0,
+            background_color: Clutter.Color.from_pixel(0x00000000),
             duration: FOLDER_DIALOG_ANIMATION_TIME,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
@@ -2725,8 +2748,9 @@ export const AppFolderDialog = GObject.registerClass({
             translation_y: sourceY - dialogY,
             scale_x: this._source.width / this.child.width,
             scale_y: this._source.height / this.child.height,
+            opacity: 0,
             duration: FOLDER_DIALOG_ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_EXPO,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onComplete: () => {
                 this.child.set({
                     translation_x: 0,
@@ -2785,6 +2809,13 @@ export const AppFolderDialog = GObject.registerClass({
             this._zoomAndFadeIn();
     }
 
+    vfunc_key_press_event(event) {
+        if (global.focus_manager.navigate_from_event(event))
+            return Clutter.EVENT_STOP;
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
     _setLighterBackground(lighter) {
         const backgroundColor = lighter
             ? DIALOG_SHADE_HIGHLIGHT
@@ -2828,9 +2859,10 @@ export const AppFolderDialog = GObject.registerClass({
             return;
 
         this._popdownTimeoutId =
-            GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, POPDOWN_DIALOG_TIMEOUT, () => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, POPDOWN_DIALOG_TIMEOUT, () => {
                 this._popdownTimeoutId = 0;
                 this.popdown();
+                return GLib.SOURCE_REMOVE;
             });
     }
 
@@ -2915,11 +2947,9 @@ export const AppIcon = GObject.registerClass({
     },
 }, class AppIcon extends AppViewItem {
     _init(app, iconParams = {}) {
-        // Get properties without passing them on to the BaseIcon:
+        // Get the isDraggable property without passing it on to the BaseIcon:
         const isDraggable = iconParams['isDraggable'] ?? true;
         delete iconParams['isDraggable'];
-        const popupMenuSide = iconParams['popupMenuSide'] ?? St.Side.LEFT;
-        delete iconParams['popupMenuSide'];
         const expandTitleOnHover = iconParams['expandTitleOnHover'];
         delete iconParams['expandTitleOnHover'];
 
@@ -2928,7 +2958,6 @@ export const AppIcon = GObject.registerClass({
         this.app = app;
         this._id = app.get_id();
         this._name = app.get_name();
-        this._popupMenuSide = popupMenuSide;
 
         this._iconContainer = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
@@ -2963,20 +2992,10 @@ export const AppIcon = GObject.registerClass({
         this._menu = null;
         this._menuManager = new PopupMenu.PopupMenuManager(this);
 
+        this._menuTimeoutId = 0;
         this.app.connectObject('notify::state',
             () => this._updateRunningStyle(), this);
         this._updateRunningStyle();
-
-        const longPressGesture = new Clutter.LongPressGesture();
-        longPressGesture.connect('recognize', () => this.popupMenu());
-        this.add_action(longPressGesture);
-
-        const rightClickGesture = new Clutter.ClickGesture({
-            required_button: Clutter.BUTTON_SECONDARY,
-            recognize_on_press: true,
-        });
-        rightClickGesture.connect('recognize', () => this.popupMenu());
-        this.add_action(rightClickGesture);
     }
 
     _onDestroy() {
@@ -2986,10 +3005,26 @@ export const AppIcon = GObject.registerClass({
             GLib.source_remove(this._folderPreviewId);
             this._folderPreviewId = 0;
         }
+
+        this._removeMenuTimeout();
+    }
+
+    _onDragBegin() {
+        if (this._menu)
+            this._menu.close(true);
+        this._removeMenuTimeout();
+        super._onDragBegin();
     }
 
     _createIcon(iconSize) {
         return this.app.create_icon_texture(iconSize);
+    }
+
+    _removeMenuTimeout() {
+        if (this._menuTimeoutId > 0) {
+            GLib.source_remove(this._menuTimeoutId);
+            this._menuTimeoutId = 0;
+        }
     }
 
     _updateDotStyle() {
@@ -3004,7 +3039,46 @@ export const AppIcon = GObject.registerClass({
             this._dot.hide();
     }
 
+    _setPopupTimeout() {
+        this._removeMenuTimeout();
+        this._menuTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MENU_POPUP_TIMEOUT, () => {
+            this._menuTimeoutId = 0;
+            this.popupMenu();
+            return GLib.SOURCE_REMOVE;
+        });
+        GLib.Source.set_name_by_id(this._menuTimeoutId, '[gnome-shell] this.popupMenu');
+    }
+
+    vfunc_leave_event(event) {
+        const ret = super.vfunc_leave_event(event);
+
+        this.fake_release();
+        this._removeMenuTimeout();
+        return ret;
+    }
+
+    vfunc_button_press_event(event) {
+        const ret = super.vfunc_button_press_event(event);
+        const button = event.get_button();
+        if (button === 1) {
+            this._setPopupTimeout();
+        } else if (button === 3) {
+            this.popupMenu();
+            return Clutter.EVENT_STOP;
+        }
+        return ret;
+    }
+
+    vfunc_touch_event(event) {
+        const ret = super.vfunc_touch_event(event);
+        if (event.type() === Clutter.EventType.TOUCH_BEGIN)
+            this._setPopupTimeout();
+
+        return ret;
+    }
+
     vfunc_clicked(button) {
+        this._removeMenuTimeout();
         this.activate(button);
     }
 
@@ -3017,11 +3091,13 @@ export const AppIcon = GObject.registerClass({
         return this.app.get_id();
     }
 
-    popupMenu() {
+    popupMenu(side = St.Side.LEFT) {
         this.setForcedHighlight(true);
+        this._removeMenuTimeout();
+        this.fake_release();
 
         if (!this._menu) {
-            this._menu = new AppMenu(this, this._popupMenuSide, {
+            this._menu = new AppMenu(this, side, {
                 favoritesSection: true,
                 showSingleWindows: true,
             });
@@ -3031,7 +3107,7 @@ export const AppIcon = GObject.registerClass({
                     this._onMenuPoppedDown();
             });
             Main.overview.connectObject('hiding',
-                () => this._menu.close({animate: false}), this);
+                () => this._menu.close(), this);
 
             Main.uiGroup.add_child(this._menu.actor);
             this._menuManager.addMenu(this._menu);
@@ -3039,7 +3115,8 @@ export const AppIcon = GObject.registerClass({
 
         this.emit('menu-state-changed', true);
 
-        this._menu.open();
+        this._menu.open(BoxPointer.PopupAnimation.FULL);
+        this._menuManager.ignoreRelease();
         this.emit('sync-tooltip');
 
         return false;
@@ -3051,11 +3128,11 @@ export const AppIcon = GObject.registerClass({
     }
 
     activate(button) {
-        const event = Clutter.get_current_event();
-        const modifiers = event ? event.get_state() : 0;
-        const isMiddleButton = button && button === Clutter.BUTTON_MIDDLE;
-        const isCtrlPressed = (modifiers & Clutter.ModifierType.CONTROL_MASK) !== 0;
-        const openNewWindow = this.app.can_open_new_window() &&
+        let event = Clutter.get_current_event();
+        let modifiers = event ? event.get_state() : 0;
+        let isMiddleButton = button && button === Clutter.BUTTON_MIDDLE;
+        let isCtrlPressed = (modifiers & Clutter.ModifierType.CONTROL_MASK) !== 0;
+        let openNewWindow = this.app.can_open_new_window() &&
                             this.app.state === Shell.AppState.RUNNING &&
                             (isCtrlPressed || isMiddleButton);
 
@@ -3109,7 +3186,7 @@ export const AppIcon = GObject.registerClass({
     }
 
     _canAccept(source) {
-        const view = _getViewFromIcon(source);
+        let view = _getViewFromIcon(source);
 
         return source !== this &&
                (source instanceof this.constructor) &&
@@ -3127,10 +3204,11 @@ export const AppIcon = GObject.registerClass({
                 return;
 
             this._folderPreviewId =
-                GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, 500, () => {
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
                     this.add_style_pseudo_class('drop');
                     this._showFolderPreview();
                     this._folderPreviewId = 0;
+                    return GLib.SOURCE_REMOVE;
                 });
         } else {
             if (this._folderPreviewId > 0) {
@@ -3147,10 +3225,17 @@ export const AppIcon = GObject.registerClass({
         if (!accepted)
             return false;
 
-        const view = _getViewFromIcon(this);
-        const apps = [this.id, source.id];
+        let view = _getViewFromIcon(this);
+        let apps = [this.id, source.id];
 
         return view?.createFolder(apps);
+    }
+
+    cancelActions() {
+        if (this._menu)
+            this._menu.close(true);
+        this._removeMenuTimeout();
+        super.cancelActions();
     }
 });
 

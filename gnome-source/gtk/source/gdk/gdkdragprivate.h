@@ -21,6 +21,14 @@
 
 G_BEGIN_DECLS
 
+
+#define GDK_DRAG_CLASS(klass)      (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_DRAG, GdkDragClass))
+#define GDK_IS_DRAG_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_DRAG))
+#define GDK_DRAG_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_DRAG, GdkDragClass))
+
+typedef struct _GdkDragClass GdkDragClass;
+
+
 struct _GdkDragClass {
   GObjectClass parent_class;
 
@@ -31,10 +39,12 @@ struct _GdkDragClass {
   void        (*drop_done)     (GdkDrag   *drag,
                                 gboolean          success);
 
-  void        (*update_cursor)  (GdkDrag      *drag);
+  void        (*set_cursor)     (GdkDrag  *drag,
+                                 GdkCursor       *cursor);
   void        (*cancel)         (GdkDrag      *drag,
                                  GdkDragCancelReason  reason);
-  void        (*drop_performed) (GdkDrag  *drag);
+  void        (*drop_performed) (GdkDrag  *drag,
+                                 guint32          time);
   void        (*dnd_finished)   (GdkDrag  *drag);
 
   gboolean    (*handle_event)   (GdkDrag  *drag,
@@ -45,7 +55,8 @@ struct _GdkDrag {
   GObject parent_instance;
 };
 
-void     gdk_drag_update_cursor       (GdkDrag        *drag);
+void     gdk_drag_set_cursor          (GdkDrag        *drag,
+                                       GdkCursor      *cursor);
 void     gdk_drag_set_actions         (GdkDrag        *drag,
                                        GdkDragAction   actions);
 void     gdk_drag_set_selected_action (GdkDrag        *drag,
@@ -68,4 +79,6 @@ gboolean gdk_drag_write_finish        (GdkDrag             *drag,
                                        GAsyncResult        *result,
                                        GError             **error);
 
+
 G_END_DECLS
+

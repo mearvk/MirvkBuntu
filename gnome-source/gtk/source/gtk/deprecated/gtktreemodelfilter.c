@@ -302,11 +302,8 @@ enum
 {
   PROP_0,
   PROP_CHILD_MODEL,
-  PROP_VIRTUAL_ROOT,
-  N_PROPS
+  PROP_VIRTUAL_ROOT
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 /* Set this to 0 to disable caching of child iterators.  This
  * allows for more stringent testing.  It is recommended to set this
@@ -530,25 +527,17 @@ gtk_tree_model_filter_class_init (GtkTreeModelFilterClass *filter_class)
   filter_class->visible = gtk_tree_model_filter_real_visible;
   filter_class->modify  = gtk_tree_model_filter_real_modify;
 
-  /**
-   * GtkTreeModelFilter:child-model:
-   *
-   * The child model of the tree model filter.
-   */
-  props[PROP_CHILD_MODEL] = g_param_spec_object ("child-model", NULL, NULL,
-                                                 GTK_TYPE_TREE_MODEL,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class,
+                                   PROP_CHILD_MODEL,
+                                   g_param_spec_object ("child-model", NULL, NULL,
+                                                        GTK_TYPE_TREE_MODEL,
+                                                        GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
-  /**
-   * GtkTreeModelFilter:virtual-root:
-   *
-   * The virtual root of the tree model filter.
-   */
-  props[PROP_VIRTUAL_ROOT] = g_param_spec_boxed ("virtual-root", NULL, NULL,
-                                                 GTK_TYPE_TREE_PATH,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_VIRTUAL_ROOT,
+                                   g_param_spec_boxed ("virtual-root", NULL, NULL,
+                                                       GTK_TYPE_TREE_PATH,
+                                                       GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 }
 
 static void
@@ -1074,7 +1063,11 @@ gtk_tree_model_filter_prune_level (GtkTreeModelFilter *filter,
     gtk_tree_model_filter_real_unref_node (GTK_TREE_MODEL (filter),
                                            &f_iter, TRUE, TRUE);
 
-  g_clear_pointer (&elt->visible_siter, g_sequence_remove);
+  if (elt->visible_siter)
+    {
+      g_sequence_remove (elt->visible_siter);
+      elt->visible_siter = NULL;
+    }
 
   /* Remove the other elts */
   end_siter = g_sequence_get_end_iter (level->seq);
@@ -1098,7 +1091,11 @@ gtk_tree_model_filter_prune_level (GtkTreeModelFilter *filter,
         gtk_tree_model_filter_real_unref_node (GTK_TREE_MODEL (filter),
                                                &f_iter, FALSE, TRUE);
 
-      g_clear_pointer (&elt->visible_siter, g_sequence_remove);
+      if (elt->visible_siter)
+        {
+          g_sequence_remove (elt->visible_siter);
+          elt->visible_siter = NULL;
+        }
     }
 
   /* Remove [begin + 1, end] */
@@ -1657,7 +1654,8 @@ gtk_tree_model_filter_remove_elt_from_level (GtkTreeModelFilter *filter,
   length = g_sequence_get_length (level->seq);
 
   /* first register the node to be invisible */
-  g_clear_pointer (&elt->visible_siter, g_sequence_remove);
+  g_sequence_remove (elt->visible_siter);
+  elt->visible_siter = NULL;
 
   /*
    * If level != root level and the number of visible nodes is 0 (ie. this
@@ -2039,10 +2037,7 @@ gtk_tree_model_filter_row_changed (GtkTreeModel *c_model,
       current_state = FILTER_ELT (iter.user_data2)->visible_siter != NULL;
     }
   else
-    {
-      iter = (GtkTreeIter) { 0, }; /* MSVC... */
-      current_state = FALSE;
-    }
+    current_state = FALSE;
 
   if (current_state == FALSE && requested_state == FALSE)
     /* no changes required */
@@ -3818,7 +3813,7 @@ gtk_tree_model_filter_get_model (GtkTreeModelFilter *filter)
  * be empty. The visible function should therefore take special care of empty
  * rows, like in the example below.
  *
- * ```c
+ * |[<!-- language="C" -->
  * static gboolean
  * visible_func (GtkTreeModel *model,
  *               GtkTreeIter  *iter,
@@ -3835,7 +3830,7 @@ gtk_tree_model_filter_get_model (GtkTreeModelFilter *filter)
  *
  *   return visible;
  * }
- * ```
+ * ]|
  *
  * Note that gtk_tree_model_filter_set_visible_func() or
  * gtk_tree_model_filter_set_visible_column() can only be called

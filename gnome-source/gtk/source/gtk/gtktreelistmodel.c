@@ -27,7 +27,7 @@
 /**
  * GtkTreeListModel:
  *
- * A list model that can create child models on demand.
+ * `GtkTreeListModel` is a list model that can create child models on demand.
  */
 
 enum {
@@ -175,7 +175,7 @@ tree_node_get_position (TreeNode *node)
   TreeNode *left, *parent;
   TreeAugment *left_aug;
   guint n;
-
+  
   for (n = 0;
        !node->is_root;
        node = node->parent, n++)
@@ -495,7 +495,7 @@ gtk_tree_list_model_expand_node (GtkTreeListModel *self,
 
   if (node->empty)
     return 0;
-
+  
   if (node->model != NULL)
     return 0;
 
@@ -503,18 +503,18 @@ gtk_tree_list_model_expand_node (GtkTreeListModel *self,
 
   if (model == NULL)
     return 0;
-
+  
   gtk_tree_list_model_init_node (self, node, model);
 
   tree_node_mark_dirty (node);
-
+  
   return tree_node_get_n_children (node);
 }
 
 static guint
 gtk_tree_list_model_collapse_node (GtkTreeListModel *self,
                                    TreeNode         *node)
-{
+{      
   guint n_items;
 
   if (node->model == NULL)
@@ -605,7 +605,7 @@ gtk_tree_list_model_set_property (GObject      *object,
     }
 }
 
-static void
+static void 
 gtk_tree_list_model_get_property (GObject     *object,
                                   guint        prop_id,
                                   GValue      *value,
@@ -663,14 +663,14 @@ gtk_tree_list_model_class_init (GtkTreeListModelClass *class)
   gobject_class->finalize = gtk_tree_list_model_finalize;
 
   /**
-   * GtkTreeListModel:autoexpand:
+   * GtkTreeListModel:autoexpand: (attributes org.gtk.Property.get=gtk_tree_list_model_get_autoexpand org.gtk.Property.set=gtk_tree_list_model_set_autoexpand)
    *
    * If all rows should be expanded by default.
    */
   properties[PROP_AUTOEXPAND] =
       g_param_spec_boolean ("autoexpand", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkTreeListModel:item-type:
@@ -682,17 +682,17 @@ gtk_tree_list_model_class_init (GtkTreeListModelClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkTreeListModel:model:
+   * GtkTreeListModel:model: (attributes org.gtk.Property.get=gtk_tree_list_model_get_model)
    *
    * The root model displayed.
    */
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkTreeListModel:n-items:
@@ -704,10 +704,10 @@ gtk_tree_list_model_class_init (GtkTreeListModelClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkTreeListModel:passthrough:
+   * GtkTreeListModel:passthrough: (attributes org.gtk.Property.get=gtk_tree_list_model_get_passthrough)
    *
    * Gets whether the model is in passthrough mode.
    *
@@ -718,7 +718,7 @@ gtk_tree_list_model_class_init (GtkTreeListModelClass *class)
   properties[PROP_PASSTHROUGH] =
       g_param_spec_boolean ("passthrough", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -735,9 +735,9 @@ gtk_tree_list_model_init (GtkTreeListModel *self)
  * @root: (transfer full): The `GListModel` to use as root
  * @passthrough: %TRUE to pass through items from the models
  * @autoexpand: %TRUE to set the autoexpand property and expand the @root model
- * @create_func: (scope notified) (closure user_data) (destroy user_destroy): function to
- *   call to create the `GListModel` for the children of an item
- * @user_data: Data to pass to @create_func
+ * @create_func: Function to call to create the `GListModel` for the children
+ *   of an item
+ * @user_data: (closure): Data to pass to @create_func
  * @user_destroy: Function to call to free @user_data
  *
  * Creates a new empty `GtkTreeListModel` displaying @root
@@ -773,7 +773,7 @@ gtk_tree_list_model_new (GListModel                      *root,
 }
 
 /**
- * gtk_tree_list_model_get_model:
+ * gtk_tree_list_model_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkTreeListModel`
  *
  * Gets the root model that @self was created with.
@@ -789,7 +789,7 @@ gtk_tree_list_model_get_model (GtkTreeListModel *self)
 }
 
 /**
- * gtk_tree_list_model_get_passthrough:
+ * gtk_tree_list_model_get_passthrough: (attributes org.gtk.Method.get_property=passthrough)
  * @self: a `GtkTreeListModel`
  *
  * Gets whether the model is passing through original row items.
@@ -814,7 +814,7 @@ gtk_tree_list_model_get_passthrough (GtkTreeListModel *self)
 }
 
 /**
- * gtk_tree_list_model_set_autoexpand:
+ * gtk_tree_list_model_set_autoexpand: (attributes org.gtk.Method.set_property=autoexpand)
  * @self: a `GtkTreeListModel`
  * @autoexpand: %TRUE to make the model autoexpand its rows
  *
@@ -839,7 +839,7 @@ gtk_tree_list_model_set_autoexpand (GtkTreeListModel *self,
 }
 
 /**
- * gtk_tree_list_model_get_autoexpand:
+ * gtk_tree_list_model_get_autoexpand: (attributes org.gtk.Method.get_property=autoexpand)
  * @self: a `GtkTreeListModel`
  *
  * Gets whether the model is set to automatically expand new rows
@@ -931,7 +931,7 @@ gtk_tree_list_model_get_child_row (GtkTreeListModel *self,
 /**
  * GtkTreeListRow:
  *
- * The type of item used by `GtkTreeListModel`.
+ * `GtkTreeListRow` is used by `GtkTreeListModel` to represent items.
  *
  * It allows navigating the model as a tree and modify the state of rows.
  *
@@ -951,10 +951,10 @@ enum {
   ROW_PROP_EXPANDABLE,
   ROW_PROP_EXPANDED,
   ROW_PROP_ITEM,
-  ROW_NUM_PROPERTIES
+  NUM_ROW_PROPERTIES
 };
 
-static GParamSpec *row_properties[ROW_NUM_PROPERTIES] = { NULL, };
+static GParamSpec *row_properties[NUM_ROW_PROPERTIES] = { NULL, };
 
 G_DEFINE_TYPE (GtkTreeListRow, gtk_tree_list_row, G_TYPE_OBJECT)
 
@@ -989,7 +989,7 @@ gtk_tree_list_row_set_property (GObject      *object,
     }
 }
 
-static void
+static void 
 gtk_tree_list_row_get_property (GObject     *object,
                                 guint        prop_id,
                                 GValue      *value,
@@ -1048,56 +1048,56 @@ gtk_tree_list_row_class_init (GtkTreeListRowClass *class)
   gobject_class->dispose = gtk_tree_list_row_dispose;
 
   /**
-   * GtkTreeListRow:children:
+   * GtkTreeListRow:children: (attributes org.gtk.Property.get=gtk_tree_list_row_get_children)
    *
    * The model holding the row's children.
    */
   row_properties[ROW_PROP_CHILDREN] =
       g_param_spec_object ("children", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READABLE);
 
   /**
-   * GtkTreeListRow:depth:
+   * GtkTreeListRow:depth: (attributes org.gtk.Property.get=gtk_tree_list_row_get_depth)
    *
    * The depth in the tree of this row.
    */
   row_properties[ROW_PROP_DEPTH] =
       g_param_spec_uint ("depth", NULL, NULL,
                          0, G_MAXUINT, 0,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READABLE);
 
   /**
-   * GtkTreeListRow:expandable: (getter is_expandable)
+   * GtkTreeListRow:expandable: (attributes org.gtk.Property.get=gtk_tree_list_row_is_expandable)
    *
    * If this row can ever be expanded.
    */
   row_properties[ROW_PROP_EXPANDABLE] =
       g_param_spec_boolean ("expandable", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            GTK_PARAM_READABLE);
 
   /**
-   * GtkTreeListRow:expanded:
+   * GtkTreeListRow:expanded: (attributes org.gtk.Property.get=gtk_tree_list_row_get_expanded org.gtk.Property.set=gtk_tree_list_row_set_expanded)
    *
    * If this row is currently expanded.
    */
   row_properties[ROW_PROP_EXPANDED] =
       g_param_spec_boolean ("expanded", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkTreeListRow:item:
+   * GtkTreeListRow:item: (attributes org.gtk.Property.get=gtk_tree_list_row_get_item)
    *
    * The item held in this row.
    */
   row_properties[ROW_PROP_ITEM] =
       g_param_spec_object ("item", NULL, NULL,
                            G_TYPE_OBJECT,
-                           G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READABLE);
 
-  g_object_class_install_properties (gobject_class, ROW_NUM_PROPERTIES, row_properties);
+  g_object_class_install_properties (gobject_class, NUM_ROW_PROPERTIES, row_properties);
 }
 
 static void
@@ -1126,7 +1126,7 @@ gtk_tree_list_row_get_position (GtkTreeListRow *self)
 }
 
 /**
- * gtk_tree_list_row_get_depth:
+ * gtk_tree_list_row_get_depth: (attributes org.gtk.Method.get_property=depth)
  * @self: a `GtkTreeListRow`
  *
  * Gets the depth of this row.
@@ -1161,7 +1161,7 @@ gtk_tree_list_row_get_depth (GtkTreeListRow *self)
 }
 
 /**
- * gtk_tree_list_row_set_expanded:
+ * gtk_tree_list_row_set_expanded: (attributes org.gtk.Method.set_property=expanded)
  * @self: a `GtkTreeListRow`
  * @expanded: %TRUE if the row should be expanded
  *
@@ -1219,7 +1219,7 @@ gtk_tree_list_row_set_expanded (GtkTreeListRow *self,
 }
 
 /**
- * gtk_tree_list_row_get_expanded:
+ * gtk_tree_list_row_get_expanded: (attributes org.gtk.Method.get_property=expanded)
  * @self: a `GtkTreeListRow`
  *
  * Gets if a row is currently expanded.
@@ -1238,7 +1238,7 @@ gtk_tree_list_row_get_expanded (GtkTreeListRow *self)
 }
 
 /**
- * gtk_tree_list_row_is_expandable: (get-property expandable)
+ * gtk_tree_list_row_is_expandable: (attributes org.gtk.Method.get_property=expandable)
  * @self: a `GtkTreeListRow`
  *
  * Checks if a row can be expanded.
@@ -1283,7 +1283,7 @@ gtk_tree_list_row_is_expandable (GtkTreeListRow *self)
 }
 
 /**
- * gtk_tree_list_row_get_item:
+ * gtk_tree_list_row_get_item: (attributes org.gtk.Method.get_property=item)
  * @self: a `GtkTreeListRow`
  *
  * Gets the item corresponding to this row,
@@ -1301,7 +1301,7 @@ gtk_tree_list_row_get_item (GtkTreeListRow *self)
 }
 
 /**
- * gtk_tree_list_row_get_children:
+ * gtk_tree_list_row_get_children: (attributes org.gtk.Method.get_property=children)
  * @self: a `GtkTreeListRow`
  *
  * If the row is expanded, gets the model holding the children of @self.

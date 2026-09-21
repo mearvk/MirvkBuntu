@@ -40,12 +40,23 @@
 #include <imm.h>
 
 /* Whether GDK initialized COM */
+static gboolean co_initialized = FALSE;
+
+/* Whether GDK initialized OLE */
+static gboolean ole_initialized = FALSE;
+
+void
+_gdk_win32_surfaceing_init (void)
+{
+  _gdk_win32_clipdrop_init ();
+
+  gdk_dmanipulation_initialize ();
+}
+
 gboolean
 gdk_win32_ensure_com (void)
 {
-  static gsize co_initialized = 0;
-
-  if (g_once_init_enter (&co_initialized))
+  if (!co_initialized)
     {
       /* UI thread should only use STA model. See
        * -> https://devblogs.microsoft.com/oldnewthing/20080424-00/?p=22603
@@ -53,64 +64,44 @@ gdk_win32_ensure_com (void)
        */
       const DWORD flags = COINIT_APARTMENTTHREADED |
                           COINIT_DISABLE_OLE1DDE;
-      gboolean init_result = FALSE;
       HRESULT hr;
 
       hr = CoInitializeEx (NULL, flags);
       if (SUCCEEDED (hr))
+        co_initialized = TRUE;
+      else switch (hr)
         {
-          init_result = TRUE;
+        case RPC_E_CHANGED_MODE:
+          g_warning ("COM runtime already initialized on the main "
+                     "thread with an incompatible apartment model");
+        break;
+        default:
+          HR_LOG (hr);
+        break;
         }
-      else
-        {
-          switch (hr)
-          {
-            case RPC_E_CHANGED_MODE:
-              g_warning ("COM runtime already initialized on the main "
-                         "thread with an incompatible apartment model");
-              break;
-            default:
-              hr_warn (hr);
-              break;
-          }
-        }
-
-      g_once_init_leave (&co_initialized, init_result);
     }
 
   return co_initialized;
 }
 
-/* Whether GDK initialized OLE */
 gboolean
 gdk_win32_ensure_ole (void)
 {
-  static gsize ole_initialized = 0;
-
-  if (g_once_init_enter (&ole_initialized))
+  if (!ole_initialized)
     {
-      gboolean init_result = FALSE;
       HRESULT hr = OleInitialize (NULL);
-
       if (SUCCEEDED (hr))
+        ole_initialized = TRUE;
+      else switch (hr)
         {
-          init_result = TRUE;
+        case RPC_E_CHANGED_MODE:
+          g_warning ("Failed to initialize the OLE2 runtime because "
+                     "the thread has an incompatible apartment model");
+        break;
+        default:
+          HR_LOG (hr);
+        break;
         }
-      else
-        {
-          switch (hr)
-          {
-            case RPC_E_CHANGED_MODE:
-              g_warning ("Failed to initialize the OLE2 runtime because "
-                         "the thread has an incompatible apartment model");
-              break;
-            default:
-              hr_warn (hr);
-              break;
-          }
-        }
-
-       g_once_init_leave (&ole_initialized, init_result);
     }
 
   return ole_initialized;
@@ -133,63 +124,6 @@ _gdk_other_api_failed (const char *where,
   g_warning ("%s: %s failed", where, api);
 }
 
-G_DEFINE_QUARK (gdk-win32-hresult-error-quark, gdk_win32_hresult_error)
-
-/*<private>
- * gdk_win32_check_hresult:
- * @hr: HRESULT to check
- * @error: error to set on failure
- * @format: (optional): format string for an optional
- *   prefix message
- * ...: arguments for the format string
- *
- * Checks a HRESULT with `SUCCEEDED(hr)` and if it didn't
- * succeed, sets a GError. The code of the error will be the
- * `hr` and the message will contain the formatted string if
- * provided and the HRESULT error message as given by
- * g_win32_error_message().
- *
- * Returns: TRUE if `SUCCEEDED(hr)`, FALSE otherwise
- */
-gboolean
-gdk_win32_check_hresult (HRESULT     hr,
-                         GError    **error,
-                         const char *format,
-                         ...)
-{
-  g_assert (error == NULL || *error == NULL);
-
-  if (SUCCEEDED (hr))
-    return TRUE;
-
-  if (error == NULL)
-    {
-      /* skip */
-    }
-  else if (format)
-    {
-      va_list args;
-      char *err_msg, *prefix;
-
-      va_start (args, format);
-      prefix = g_strdup_vprintf (format, args);
-      va_end (args);
-
-      err_msg = g_win32_error_message (hr);
-      g_set_error (error, GDK_WIN32_HRESULT_ERROR, hr, "%s: %s", prefix, err_msg);
-      g_free (err_msg);
-    }
-  else
-    {
-      char *err_msg;
-
-      err_msg = g_win32_error_message (hr);
-      g_set_error_literal (error, GDK_WIN32_HRESULT_ERROR, hr, err_msg);
-      g_free (err_msg);
-    }
-
-  return FALSE;
-}
 
 /*
  * Like g_strdup_printf, but to a static buffer. Return value does not
@@ -204,30 +138,24 @@ static_printf (const char *format,
 	       ...)
 {
   static char buf[10000];
+  char *msg;
   static char *bufp = buf;
   char *retval;
-  int len;
-  gulong used;
   va_list args;
 
-  used = bufp - buf;
-  /* 8000以上だ…! */
-  if (used > 9000)
-    {
-      bufp = buf;
-      used = 0;
-    }
   va_start (args, format);
-  len = g_vsnprintf (bufp, sizeof (buf) - used, format, args);
-  if (len < 0)
-    {
-      bufp[0] = 0;
-      len = 1;
-    }
+  msg = g_strdup_vprintf (format, args);
   va_end (args);
 
+  g_assert (strlen (msg) < sizeof (buf));
+
+  if (bufp + strlen (msg) + 1 > buf + sizeof (buf))
+    bufp = buf;
   retval = bufp;
-  bufp += len;
+
+  strcpy (bufp, msg);
+  bufp += strlen (msg) + 1;
+  g_free (msg);
 
   return retval;
 }
@@ -315,6 +243,9 @@ _gdk_win32_surface_exstyle_to_string (LONG style)
   BIT (ACCEPTFILES);
   BIT (APPWINDOW);
   BIT (CLIENTEDGE);
+#ifndef WS_EX_COMPOSITED
+#  define WS_EX_COMPOSITED 0x02000000L
+#endif
   BIT (COMPOSITED);
   BIT (CONTEXTHELP);
   BIT (CONTROLPARENT);
@@ -799,7 +730,7 @@ _gdk_win32_key_to_string (LONG lParam)
   char buf[100];
   char *keyname_utf8;
 
-  if (GetKeyNameTextA (lParam, buf, sizeof (buf)) &&
+  if (GetKeyNameText (lParam, buf, sizeof (buf)) &&
       (keyname_utf8 = g_locale_to_utf8 (buf, -1, NULL, NULL, NULL)) != NULL)
     {
       char *retval = static_printf ("%s", keyname_utf8);
@@ -849,7 +780,7 @@ _gdk_win32_cf_to_string (UINT format)
       if (format >= CF_PRIVATEFIRST &&
 	  format <= CF_PRIVATELAST)
 	return static_printf ("CF_PRIVATE%d", format - CF_PRIVATEFIRST);
-      if (GetClipboardFormatNameA (format, buf, sizeof (buf)))
+      if (GetClipboardFormatName (format, buf, sizeof (buf)))
 	return static_printf ("'%s'", buf);
       else
 	return static_printf ("unk-%#lx", format);

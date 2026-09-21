@@ -24,7 +24,7 @@
 
 /**
  * ClutterActorMeta:
- *
+ * 
  * Base class of actor modifiers
  *
  * #ClutterActorMeta is an abstract class providing a common API for
@@ -78,7 +78,10 @@ static void
 on_actor_destroy (ClutterActor     *actor,
                   ClutterActorMeta *meta)
 {
-  CLUTTER_ACTOR_META_GET_CLASS (meta)->set_actor (meta, NULL);
+  ClutterActorMetaPrivate *priv =
+    clutter_actor_meta_get_instance_private (meta);
+
+  priv->actor = NULL;
 }
 
 static void
@@ -268,8 +271,13 @@ clutter_actor_meta_set_name (ClutterActorMeta *meta,
 
   priv = clutter_actor_meta_get_instance_private (meta);
 
-  if (g_set_str (&priv->name, name))
-    g_object_notify_by_pspec (G_OBJECT (meta), obj_props[PROP_NAME]);
+  if (g_strcmp0 (priv->name, name) == 0)
+    return;
+
+  g_free (priv->name);
+  priv->name = g_strdup (name);
+
+  g_object_notify_by_pspec (G_OBJECT (meta), obj_props[PROP_NAME]);
 }
 
 /**

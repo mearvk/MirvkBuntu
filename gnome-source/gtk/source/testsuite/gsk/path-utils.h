@@ -19,8 +19,6 @@
 
 #pragma once
 
-#include <gsk/gsk.h>
-
 void assert_path_equal_func (const char *domain,
                              const char *file,
                              int         line,

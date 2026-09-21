@@ -30,10 +30,12 @@
 #include "gtkbuilderprivate.h"
 #include "gtk-builder-tool.h"
 
-static void
+static gboolean
 quit_when_idle (gpointer loop)
 {
   g_main_loop_quit (loop);
+
+  return G_SOURCE_REMOVE;
 }
 
 static GMainLoop *loop;
@@ -93,7 +95,7 @@ draw_paintable (GdkPaintable *paintable,
 
   *(GdkTexture **) out_texture = texture;
 
-  g_idle_add_once (quit_when_idle, loop);
+  g_idle_add (quit_when_idle, loop);
 }
 
 static GdkTexture *

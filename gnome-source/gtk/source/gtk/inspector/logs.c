@@ -62,9 +62,9 @@ struct _GtkInspectorLogs
 
   GtkWidget *renderer;
   GtkWidget *cairo;
+  GtkWidget *vulkan_gsk;
   GtkWidget *shaders;
-  GtkWidget *cache;
-  GtkWidget *fallback;
+  GtkWidget *glyphcache;
   GtkWidget *verbose;
 
   GtkWidget *actions;
@@ -141,9 +141,9 @@ flag_toggled (GtkWidget        *button,
   flags = gsk_get_debug_flags ();
   update_flag (logs->renderer, &flags, GSK_DEBUG_RENDERER);
   update_flag (logs->cairo, &flags, GSK_DEBUG_CAIRO);
+  update_flag (logs->vulkan_gsk, &flags, GSK_DEBUG_VULKAN);
   update_flag (logs->shaders, &flags, GSK_DEBUG_SHADERS);
-  update_flag (logs->cache, &flags, GSK_DEBUG_CACHE);
-  update_flag (logs->fallback, &flags, GSK_DEBUG_FALLBACK);
+  update_flag (logs->glyphcache, &flags, GSK_DEBUG_GLYPH_CACHE);
   update_flag (logs->verbose, &flags, GSK_DEBUG_VERBOSE);
   gsk_set_debug_flags (flags);
 
@@ -203,9 +203,9 @@ gtk_inspector_logs_class_init (GtkInspectorLogsClass *klass)
 
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, renderer);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, cairo);
+  gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, vulkan_gsk);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, shaders);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, cache);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, fallback);
+  gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, glyphcache);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, verbose);
 
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorLogs, actions);

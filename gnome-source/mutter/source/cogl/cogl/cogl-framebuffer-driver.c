@@ -28,7 +28,6 @@
 #include "config.h"
 
 #include "cogl/cogl-framebuffer-driver.h"
-#include "cogl/cogl-framebuffer-private.h"
 
 enum
 {
@@ -160,25 +159,6 @@ cogl_framebuffer_driver_read_pixels_into_bitmap (CoglFramebufferDriver  *driver,
   return klass->read_pixels_into_bitmap (driver, x, y, source, bitmap, error);
 }
 
-CoglRenderbuffers *
-cogl_framebuffer_driver_peek_renderbuffers (CoglFramebufferDriver *driver)
-{
-  CoglFramebufferDriverClass *klass =
-    COGL_FRAMEBUFFER_DRIVER_GET_CLASS (driver);
-
-  return klass->peek_renderbuffers (driver);
-}
-
-void
-cogl_framebuffer_driver_bind_renderbuffers (CoglFramebufferDriver *driver,
-                                            CoglRenderbuffers     *renderbuffers)
-{
-  CoglFramebufferDriverClass *klass =
-    COGL_FRAMEBUFFER_DRIVER_GET_CLASS (driver);
-
-  klass->bind_renderbuffers (driver, renderbuffers);
-}
-
 static void
 cogl_framebuffer_driver_get_property (GObject    *object,
                                       guint       prop_id,
@@ -220,87 +200,6 @@ cogl_framebuffer_driver_set_property (GObject      *object,
 }
 
 static void
-cogl_framebuffer_real_query_bits (CoglFramebufferDriver *driver,
-                                  CoglFramebufferBits   *bits)
-{
-  memset (bits, 0, sizeof (CoglFramebufferBits));
-}
-
-static void
-cogl_framebuffer_real_clear (CoglFramebufferDriver *driver,
-                             unsigned long          buffers,
-                             float                  red,
-                             float                  green,
-                             float                  blue,
-                             float                  alpha)
-{
-}
-
-static void
-cogl_framebuffer_real_finish (CoglFramebufferDriver *driver)
-{
-}
-
-static void
-cogl_framebuffer_real_flush (CoglFramebufferDriver *driver)
-{
-}
-
-static void
-cogl_framebuffer_real_discard_buffers (CoglFramebufferDriver *driver,
-                                       unsigned long          buffers)
-{
-}
-
-static void
-cogl_framebuffer_real_draw_attributes (CoglFramebufferDriver  *driver,
-                                       CoglPipeline           *pipeline,
-                                       CoglVerticesMode        mode,
-                                       int                     first_vertex,
-                                       int                     n_vertices,
-                                       CoglAttribute         **attributes,
-                                       int                     n_attributes,
-                                       CoglDrawFlags           flags)
-{
-}
-
-static void
-cogl_framebuffer_real_draw_indexed_attributes (CoglFramebufferDriver *driver,
-                                               CoglPipeline          *pipeline,
-                                               CoglVerticesMode       mode,
-                                               int                    first_vertex,
-                                               int                    n_vertices,
-                                               CoglIndices           *indices,
-                                               CoglAttribute        **attributes,
-                                               int                    n_attributes,
-                                               CoglDrawFlags          flags)
-{
-}
-
-static gboolean
-cogl_framebuffer_real_read_pixels_into_bitmap (CoglFramebufferDriver  *framebuffer,
-                                               int                     x,
-                                               int                     y,
-                                               CoglReadPixelsFlags     source,
-                                               CoglBitmap             *bitmap,
-                                               GError                **error)
-{
-  return TRUE;
-}
-
-static CoglRenderbuffers *
-cogl_framebuffer_real_peek_renderbuffers (CoglFramebufferDriver *driver)
-{
-  return NULL;
-}
-
-static void
-cogl_framebuffer_real_bind_renderbuffers (CoglFramebufferDriver *driver,
-                                          CoglRenderbuffers     *renderbuffers)
-{
-}
-
-static void
 cogl_framebuffer_driver_init (CoglFramebufferDriver *driver)
 {
 }
@@ -320,17 +219,4 @@ cogl_framebuffer_driver_class_init (CoglFramebufferDriverClass *klass)
                          G_PARAM_CONSTRUCT_ONLY |
                          G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (object_class, N_PROPS, obj_props);
-
-  klass->query_bits = cogl_framebuffer_real_query_bits;
-  klass->clear = cogl_framebuffer_real_clear;
-  klass->finish = cogl_framebuffer_real_finish;
-  klass->flush = cogl_framebuffer_real_flush;
-  klass->discard_buffers = cogl_framebuffer_real_discard_buffers;
-  klass->draw_attributes = cogl_framebuffer_real_draw_attributes;
-  klass->draw_indexed_attributes =
-    cogl_framebuffer_real_draw_indexed_attributes;
-  klass->read_pixels_into_bitmap =
-    cogl_framebuffer_real_read_pixels_into_bitmap;
-  klass->bind_renderbuffers = cogl_framebuffer_real_bind_renderbuffers;
-  klass->peek_renderbuffers = cogl_framebuffer_real_peek_renderbuffers;
 }

@@ -34,6 +34,12 @@
 
 G_BEGIN_DECLS
 
+#define GDK_VULKAN_CONTEXT_CLASS(klass) 	(G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_VULKAN_CONTEXT, GdkVulkanContextClass))
+#define GDK_IS_VULKAN_CONTEXT_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_VULKAN_CONTEXT))
+#define GDK_VULKAN_CONTEXT_GET_CLASS(obj)	(G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_VULKAN_CONTEXT, GdkVulkanContextClass))
+
+typedef struct _GdkVulkanContextClass GdkVulkanContextClass;
+
 struct _GdkVulkanContext
 {
   GdkDrawContext parent_instance;
@@ -44,14 +50,14 @@ struct _GdkVulkanContextClass
   GdkDrawContextClass parent_class;
 
 #ifdef GDK_RENDERING_VULKAN
-  VkResult              (* create_surface)                              (GdkVulkanContext      *context,
-                                                                         VkSurfaceKHR          *surface);
+  VkResult     (* create_surface)       (GdkVulkanContext       *context,
+                                         VkSurfaceKHR           *surface);
 #endif
 };
 
 #ifdef GDK_RENDERING_VULKAN
 
-const char *            gdk_vulkan_strerror                             (VkResult               result);
+const char *            gdk_vulkan_strerror                         (VkResult           result);
 
 static inline VkResult
 gdk_vulkan_handle_result (VkResult    res,
@@ -59,7 +65,7 @@ gdk_vulkan_handle_result (VkResult    res,
 {
   if (res != VK_SUCCESS)
     {
-      g_warning ("%s(): %s (%d)", called_function, gdk_vulkan_strerror (res), res);
+      GDK_DEBUG (VULKAN, "%s(): %s (%d)", called_function, gdk_vulkan_strerror (res), res);
     }
 
   return res;
@@ -67,11 +73,15 @@ gdk_vulkan_handle_result (VkResult    res,
 
 #define GDK_VK_CHECK(func, ...) gdk_vulkan_handle_result (func (__VA_ARGS__), G_STRINGIFY (func))
 
-gboolean                gdk_display_create_vulkan_instance              (GdkDisplay            *display,
+gboolean                gdk_display_init_vulkan                         (GdkDisplay            *display,
                                                                          GError               **error);
-void                    gdk_display_destroy_vulkan_instance             (GdkDisplay            *display);
+void                    gdk_display_ref_vulkan                          (GdkDisplay            *display);
+void                    gdk_display_unref_vulkan                        (GdkDisplay            *display);
 
-void                    gdk_vulkan_init_dmabuf                          (GdkDisplay            *display);
+#ifdef HAVE_DMABUF
+GdkDmabufDownloader *   gdk_vulkan_get_dmabuf_downloader                (GdkDisplay            *display,
+                                                                         GdkDmabufFormatsBuilder *builder);
+#endif
 
 VkShaderModule          gdk_display_get_vk_shader_module                (GdkDisplay            *display,
                                                                          const char            *resource_name);
@@ -84,12 +94,14 @@ VkDevice                gdk_vulkan_context_get_device                   (GdkVulk
 VkQueue                 gdk_vulkan_context_get_queue                    (GdkVulkanContext      *context);
 uint32_t                gdk_vulkan_context_get_queue_family_index       (GdkVulkanContext      *context);
 VkFormat                gdk_vulkan_context_get_image_format             (GdkVulkanContext      *context);
-GdkMemoryFormat         gdk_vulkan_context_get_memory_format            (GdkVulkanContext      *context);
 uint32_t                gdk_vulkan_context_get_n_images                 (GdkVulkanContext      *context);
 VkImage                 gdk_vulkan_context_get_image                    (GdkVulkanContext      *context,
                                                                          guint                  id);
 uint32_t                gdk_vulkan_context_get_draw_index               (GdkVulkanContext      *context);
-VkSemaphore             gdk_vulkan_context_get_present_semaphore        (GdkVulkanContext      *context);
+VkSemaphore             gdk_vulkan_context_get_draw_semaphore           (GdkVulkanContext      *context);
+
+GdkMemoryFormat         gdk_vulkan_context_get_offscreen_format         (GdkVulkanContext      *context,
+                                                                         GdkMemoryDepth         depth);
 
 #else /* !GDK_RENDERING_VULKAN */
 
@@ -108,3 +120,4 @@ gdk_display_ref_vulkan (GdkDisplay  *display,
 #endif /* !GDK_RENDERING_VULKAN */
 
 G_END_DECLS
+

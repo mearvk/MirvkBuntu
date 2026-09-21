@@ -28,7 +28,7 @@
 /**
  * GtkStringList:
  *
- * A list model that wraps an array of strings.
+ * `GtkStringList` is a list model that wraps an array of strings.
  *
  * The objects in the model are of type [class@Gtk.StringObject] and have
  * a "string" property that can be used inside expressions.
@@ -62,7 +62,7 @@
 /**
  * GtkStringObject:
  *
- * The type of items in a `GtkStringList`.
+ * `GtkStringObject` is the type of items in a `GtkStringList`.
  *
  * A `GtkStringObject` is a wrapper around a `const char*`; it has
  * a [property@Gtk.StringObject:string] property that can be used
@@ -85,8 +85,6 @@ enum {
   PROP_STRING = 1,
   PROP_NUM_PROPERTIES
 };
-
-static GParamSpec *props[PROP_NUM_PROPERTIES] = { NULL, };
 
 G_DEFINE_TYPE (GtkStringObject, gtk_string_object, G_TYPE_OBJECT);
 
@@ -129,22 +127,22 @@ static void
 gtk_string_object_class_init (GtkStringObjectClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
+  GParamSpec *pspec;
 
   object_class->finalize = gtk_string_object_finalize;
   object_class->get_property = gtk_string_object_get_property;
 
   /**
-   * GtkStringObject:string:
+   * GtkStringObject:string: (attributes org.gtk.Property.get=gtk_string_object_get_string)
    *
    * The string.
    */
-  props[PROP_STRING] = g_param_spec_string ("string", NULL, NULL,
-                                            NULL,
-                                            G_PARAM_READABLE |
-                                            G_PARAM_STATIC_NAME);
+  pspec = g_param_spec_string ("string", NULL, NULL,
+                               NULL,
+                               G_PARAM_READABLE |
+                               G_PARAM_STATIC_STRINGS);
 
-
-  g_object_class_install_properties (object_class, PROP_NUM_PROPERTIES, props);
+  g_object_class_install_property (object_class, PROP_STRING, pspec);
 
 }
 
@@ -174,7 +172,7 @@ gtk_string_object_new (const char *string)
 }
 
 /**
- * gtk_string_object_get_string:
+ * gtk_string_object_get_string: (attributes org.gtk.Method.get_property=string)
  * @self: a `GtkStringObject`
  *
  * Returns the string contained in a `GtkStringObject`.
@@ -365,8 +363,6 @@ gtk_string_list_buildable_custom_tag_start (GtkBuildable       *buildable,
     {
       ItemParserData *data;
 
-      gtk_buildable_tag_deprecation_warning (buildable, builder, "items", "strings");
-
       data = g_new0 (ItemParserData, 1);
       data->builder = g_object_ref (builder);
       data->list = g_object_ref (GTK_STRING_LIST (buildable));
@@ -501,7 +497,7 @@ gtk_string_list_class_init (GtkStringListClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkStringList:n-items:
@@ -513,19 +509,17 @@ gtk_string_list_class_init (GtkStringListClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkStringList:strings:
-   *
-   * The strings in the model.
    *
    * Since: 4.10
    */
   properties[PROP_STRINGS] =
       g_param_spec_boxed ("strings", NULL, NULL,
                           G_TYPE_STRV,
-                          G_PARAM_WRITABLE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+                          G_PARAM_WRITABLE|G_PARAM_STATIC_STRINGS|G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -700,42 +694,5 @@ gtk_string_list_get_string (GtkStringList *self,
   return objects_get (&self->items, position)->string;
 }
 
-/**
- * gtk_string_list_find:
- * @self: a `GtkStringList`
- * @string: the string to find
- *
- * Gets the position of the @string in @self.
- *
- * If @self does not contain @string item, `G_MAXUINT` is returned.
- *
- * Returns: the position of the string
- *
- * Since: 4.18
- */
-guint
-gtk_string_list_find (GtkStringList *self,
-                      const char    *string)
-{
-  guint position;
-  guint items_size;
-
-  g_return_val_if_fail (GTK_IS_STRING_LIST (self), G_MAXUINT);
-
-  position = G_MAXUINT;
-  items_size = objects_get_size (&self->items);
-  for (guint i = 0; i < items_size; i++)
-  {
-    if (strcmp (string, objects_get (&self->items, i)->string) == 0)
-    {
-      position = i;
-      break;
-    }
-  }
-
-  return position;
-}
-
 /* }}} */
-
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

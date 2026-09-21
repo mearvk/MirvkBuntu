@@ -184,7 +184,7 @@ struct _GVolumeIface
 };
 
 GIO_AVAILABLE_IN_ALL
-GType    g_volume_get_type              (void);
+GType    g_volume_get_type              (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 char *   g_volume_get_name              (GVolume              *volume);

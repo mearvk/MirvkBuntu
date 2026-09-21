@@ -1,6 +1,5 @@
 #include <cogl/cogl.h>
 
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -28,7 +27,7 @@ test_journal_unref_flush (void)
   g_object_add_weak_pointer (G_OBJECT (offscreen), (gpointer *) &offscreen);
 
   pipeline = cogl_pipeline_new (test_ctx);
-  cogl_color_init_from_4f (&color, 0.2f, 0.2f, 0.2f, 0.2f);
+  cogl_color_init_from_4f (&color, 0.2, 0.2, 0.2, 0.2);
   cogl_pipeline_set_color (pipeline, &color);
   cogl_framebuffer_draw_rectangle (COGL_FRAMEBUFFER (offscreen),
                                    pipeline,
@@ -41,20 +40,8 @@ test_journal_unref_flush (void)
   cogl_texture_get_data (texture,
                          COGL_PIXEL_FORMAT_RGBA_8888_PRE,
                          stride, data);
-
-  if (g_test_verbose () || cogl_test_verbose ())
-    {
-      g_printerr ("Texture data is ");
-      for (int i = 0; i < G_N_ELEMENTS (data); ++i)
-        {
-          g_printerr ("0x%x, ", data[i]);
-          if ((i + 1) % 4 == 0)
-            g_printerr ("\n");
-        }
-      g_printerr ("\n");
-    }
-
-  g_assert_cmpmem (data, sizeof (data), reference_data, sizeof (reference_data));
+  g_assert_cmpmem (data, sizeof (data),
+                   reference_data, sizeof (reference_data));
 
   g_object_unref (texture);
 }

@@ -19,7 +19,8 @@
 /**
  * GskRenderNode: (ref-func gsk_render_node_ref) (unref-func gsk_render_node_unref) (set-value-func gsk_value_set_render_node) (get-value-func gsk_value_get_render_node)
  *
- * The basic block in a scene graph to be rendered using [class@Gsk.Renderer].
+ * `GskRenderNode` is the basic block in a scene graph to be
+ * rendered using [class@Gsk.Renderer].
  *
  * Each node has a parent, except the top-level node; each node may have
  * children nodes.
@@ -37,17 +38,9 @@
 
 #include "gskrendernodeprivate.h"
 
-#include "gskcontainernodeprivate.h"
-#include "gskcopypasteutilsprivate.h"
 #include "gskdebugprivate.h"
-#include "gskrectprivate.h"
 #include "gskrendererprivate.h"
 #include "gskrendernodeparserprivate.h"
-
-#include "gpu/gskgpuocclusionprivate.h"
-
-#include "gdk/gdkcairoprivate.h"
-#include "gdk/gdkcolorstateprivate.h"
 
 #include <graphene-gobject.h>
 
@@ -55,14 +48,9 @@
 
 #include <gobject/gvaluecollector.h>
 
-/**
- * gsk_serialization_error_quark:
- *
- * Registers an error quark for [class@Gsk.RenderNode] errors.
- *
- * Returns: the error quark
- **/
 G_DEFINE_QUARK (gsk-serialization-error-quark, gsk_serialization_error)
+
+#define GSK_RENDER_NODE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GSK_TYPE_RENDER_NODE, GskRenderNodeClass))
 
 
 static void
@@ -150,6 +138,12 @@ gsk_render_node_finalize (GskRenderNode *self)
   g_type_free_instance ((GTypeInstance *) self);
 }
 
+static void
+gsk_render_node_real_draw (GskRenderNode *node,
+                           cairo_t       *cr)
+{
+}
+
 static gboolean
 gsk_render_node_real_can_diff (const GskRenderNode *node1,
                                const GskRenderNode *node2)
@@ -165,48 +159,20 @@ gsk_render_node_real_diff (GskRenderNode  *node1,
   gsk_render_node_diff_impossible (node1, node2, data);
 }
 
-static GskRenderNode **
-gsk_render_node_real_get_children (GskRenderNode *node,
-                                   gsize         *n_children)
-{
-  *n_children = 0;
-
-  return NULL;
-}
-
-static GskRenderNode *
-gsk_render_node_real_replay (GskRenderNode   *node,
-                             GskRenderReplay *replay)
-{
-  g_warning_once ("FIXME: implement replay vfunc for %s", g_type_name_from_instance ((GTypeInstance *) node));
-
-  return gsk_render_node_ref (node);
-}
-
-static void
-gsk_render_node_real_render_opacity (GskRenderNode  *node,
-                                     GskOpacityData *data)
-{
-}
-
 static void
 gsk_render_node_class_init (GskRenderNodeClass *klass)
 {
   klass->node_type = GSK_NOT_A_RENDER_NODE;
   klass->finalize = gsk_render_node_finalize;
+  klass->draw = gsk_render_node_real_draw;
   klass->can_diff = gsk_render_node_real_can_diff;
   klass->diff = gsk_render_node_real_diff;
-  klass->get_children = gsk_render_node_real_get_children;
-  klass->replay = gsk_render_node_real_replay;
-  klass->render_opacity = gsk_render_node_real_render_opacity;
-  klass->occlusion = gsk_render_node_default_occlusion;
 }
 
 static void
 gsk_render_node_init (GskRenderNode *self)
 {
   g_atomic_ref_count_init (&self->ref_count);
-  self->preferred_depth = GDK_N_DEPTHS; /* illegal value */
 }
 
 GType
@@ -296,25 +262,29 @@ gsk_render_node_type_register_static (const char     *node_name,
 
 /*< private >
  * gsk_render_node_alloc:
- * @node_type: the `GType to instantiate
+ * @node_type: the `GskRenderNode`Type to instantiate
  *
  * Instantiates a new `GskRenderNode` for the given @node_type.
  *
  * Returns: (transfer full) (type GskRenderNode): the newly created `GskRenderNode`
  */
 gpointer
-gsk_render_node_alloc (GType node_type)
+gsk_render_node_alloc (GskRenderNodeType node_type)
 {
-  return g_type_create_instance (node_type);
+  g_return_val_if_fail (node_type > GSK_NOT_A_RENDER_NODE, NULL);
+  g_return_val_if_fail (node_type < GSK_RENDER_NODE_TYPE_N_TYPES, NULL);
+
+  g_assert (gsk_render_node_types[node_type] != G_TYPE_INVALID);
+  return g_type_create_instance (gsk_render_node_types[node_type]);
 }
 
 /**
  * gsk_render_node_ref:
- * @node: a render node
+ * @node: a `GskRenderNode`
  *
  * Acquires a reference on the given `GskRenderNode`.
  *
- * Returns: (transfer full): the render node with an additional reference
+ * Returns: (transfer full): the `GskRenderNode` with an additional reference
  */
 GskRenderNode *
 (gsk_render_node_ref) (GskRenderNode *node)
@@ -334,7 +304,7 @@ _gsk_render_node_unref (GskRenderNode *node)
 
 /**
  * gsk_render_node_unref:
- * @node: (transfer full): a render node
+ * @node: (transfer full): a `GskRenderNode`
  *
  * Releases a reference on the given `GskRenderNode`.
  *
@@ -352,23 +322,30 @@ void
 
 /**
  * gsk_render_node_get_node_type:
- * @node: a render node
+ * @node: a `GskRenderNode`
  *
- * Returns the type of the render node.
+ * Returns the type of the @node.
  *
- * Returns: the type of @node
+ * Returns: the type of the `GskRenderNode`
  */
 GskRenderNodeType
-(gsk_render_node_get_node_type) (const GskRenderNode *node)
+gsk_render_node_get_node_type (const GskRenderNode *node)
 {
   g_return_val_if_fail (GSK_IS_RENDER_NODE (node), GSK_NOT_A_RENDER_NODE);
 
   return GSK_RENDER_NODE_GET_CLASS (node)->node_type;
 }
 
+G_GNUC_PURE static inline
+GskRenderNodeType
+_gsk_render_node_get_node_type (const GskRenderNode *node)
+{
+  return GSK_RENDER_NODE_GET_CLASS (node)->node_type;
+}
+
 /**
  * gsk_render_node_get_bounds:
- * @node: a render node
+ * @node: a `GskRenderNode`
  * @bounds: (out caller-allocates): return location for the boundaries
  *
  * Retrieves the boundaries of the @node.
@@ -385,17 +362,31 @@ gsk_render_node_get_bounds (GskRenderNode   *node,
   graphene_rect_init_from_rect (bounds, &node->bounds);
 }
 
+/**
+ * gsk_render_node_draw:
+ * @node: a `GskRenderNode`
+ * @cr: cairo context to draw to
+ *
+ * Draw the contents of @node to the given cairo context.
+ *
+ * Typically, you'll use this function to implement fallback rendering
+ * of `GskRenderNode`s on an intermediate Cairo context, instead of using
+ * the drawing context associated to a [class@Gdk.Surface]'s rendering buffer.
+ *
+ * For advanced nodes that cannot be supported using Cairo, in particular
+ * for nodes doing 3D operations, this function may fail.
+ **/
 void
-gsk_render_node_draw_full (GskRenderNode *node,
-                           cairo_t       *cr,
-                           GskCairoData  *data)
+gsk_render_node_draw (GskRenderNode *node,
+                      cairo_t       *cr)
 {
-  /* Check that the calling function did pass a correct color state */
-  g_assert (data->ccs == gdk_color_state_get_rendering_color_state (data->ccs));
+  g_return_if_fail (GSK_IS_RENDER_NODE (node));
+  g_return_if_fail (cr != NULL);
+  g_return_if_fail (cairo_status (cr) == CAIRO_STATUS_SUCCESS);
 
   cairo_save (cr);
 
-  GSK_RENDER_NODE_GET_CLASS (node)->draw (node, cr, data);
+  GSK_RENDER_NODE_GET_CLASS (node)->draw (node, cr);
 
   if (GSK_DEBUG_CHECK (GEOMETRY))
     {
@@ -417,76 +408,18 @@ gsk_render_node_draw_full (GskRenderNode *node,
     }
 }
 
-void
-gsk_render_node_draw_with_color_state (GskRenderNode *node,
-                                       cairo_t       *cr,
-                                       GdkColorState *color_state)
-{
-  GskCairoData data;
-
-  data.ccs = gdk_color_state_get_rendering_color_state (color_state);
-
-  node = gsk_render_node_replace_copy_paste (gsk_render_node_ref (node));
-
-  if (gdk_color_state_equal (color_state, data.ccs))
-    {
-      gsk_render_node_draw_full (node, cr, &data);
-    }
-  else
-    {
-      cairo_save (cr);
-      gdk_cairo_rect (cr, &node->bounds);
-      cairo_clip (cr);
-      cairo_push_group (cr);
-
-      gsk_render_node_draw_full (node, cr, &data);
-      gdk_cairo_surface_convert_color_state (cairo_get_group_target (cr),
-                                             data.ccs,
-                                             color_state);
-      cairo_pop_group_to_source (cr);
-      cairo_paint (cr);
-      cairo_restore (cr);
-    }
-
-  gsk_render_node_unref (node);
-}
-
-/**
- * gsk_render_node_draw:
- * @node: a render node
- * @cr: cairo context to draw to
- *
- * Draws the contents of a render node on a cairo context.
- *
- * Typically, you'll use this function to implement fallback rendering
- * of render nodes on an intermediate Cairo context, instead of using
- * the drawing context associated to a [class@Gdk.Surface]'s rendering buffer.
- *
- * For advanced nodes that cannot be supported using Cairo, in particular
- * for nodes doing 3D operations, this function may fail.
- **/
-void
-gsk_render_node_draw (GskRenderNode *node,
-                      cairo_t       *cr)
-{
-  g_return_if_fail (GSK_IS_RENDER_NODE (node));
-  g_return_if_fail (cr != NULL);
-  g_return_if_fail (cairo_status (cr) == CAIRO_STATUS_SUCCESS);
-
-  gsk_render_node_draw_with_color_state (node, cr, GDK_COLOR_STATE_SRGB);
-}
-
 /*
  * gsk_render_node_draw_fallback:
- * @node: a render node
+ * @node: a `GskRenderNode`
  * @cr: cairo context to draw to
  *
- * Like [method@Gsk.RenderNode.draw], but will overlay an error pattern
- * if `GSK_DEBUG=cairo` is enabled.
+ * Like gsk_render_node_draw(), but will overlay an error pattern if
+ * GSK_DEBUG=cairo is enabled.
  *
- * This has two purposes:
- * 1. It allows detecting fallbacks in GPU renderers
- * 2. Application code can use it to detect where it is using Cairo drawing
+ * This has 2 purposes:
+ * 1. It allows detecting fallbacks in GPU renderers.
+ * 2. Application code can use it to detect where it is using Cairo
+ *    drawing.
  *
  * So use this function whenever either of those cases should be detected.
  */
@@ -527,41 +460,20 @@ gsk_render_node_draw_fallback (GskRenderNode *node,
     }
 }
 
-/**
- * gsk_render_node_get_children:
- * @self: the render node
- * @n_children: (out): the number of items in the returned array 
- *
- * Gets a list of all children nodes of the rendernode.
- *
- * Keep in mind that for various rendernodes, their children have different
- * semantics, like the mask vs the source of a mask node. If you care about
- * thse semantics, don't use this function, use the specific getters instead.
- *
- * Returns: (transfer none) (nullable) (array length=n_children): The children
- * Since: 4.22
- **/
-GskRenderNode **
-gsk_render_node_get_children (GskRenderNode *self,
-                              gsize         *n_children)
-{
-  return GSK_RENDER_NODE_GET_CLASS (self)->get_children (self, n_children);
-}
-
 /*
  * gsk_render_node_can_diff:
- * @node1: a render node
- * @node2: the render onde to compare with
+ * @node1: a `GskRenderNode`
+ * @node2: the `GskRenderNode` to compare with
  *
  * Checks if two render nodes can be expected to be compared via
- * [method@Gsk.RenderNode.diff].
+ * gsk_render_node_diff().
  *
  * The node diffing algorithm uses this function to match up similar
  * nodes to compare when trying to minimize the resulting region.
  *
- * Nodes of different type always return false here.
+ * Nodes of different type always return %FALSE here.
  *
- * Returns: true if @node1 and @node2 can be expected to be compared
+ * Returns: %TRUE if @node1 and @node2 can be expected to be compared
  **/
 gboolean
 gsk_render_node_can_diff (const GskRenderNode *node1,
@@ -570,11 +482,11 @@ gsk_render_node_can_diff (const GskRenderNode *node1,
   if (node1 == node2)
     return TRUE;
 
-  if (gsk_render_node_get_node_type (node1) == gsk_render_node_get_node_type (node2))
+  if (_gsk_render_node_get_node_type (node1) == _gsk_render_node_get_node_type (node2))
     return GSK_RENDER_NODE_GET_CLASS (node1)->can_diff (node1, node2);
 
-  if (gsk_render_node_get_node_type (node1) == GSK_CONTAINER_NODE ||
-      gsk_render_node_get_node_type (node2) == GSK_CONTAINER_NODE)
+  if (_gsk_render_node_get_node_type (node1) == GSK_CONTAINER_NODE ||
+      _gsk_render_node_get_node_type (node2) == GSK_CONTAINER_NODE)
     return TRUE;
 
   return FALSE;
@@ -605,11 +517,11 @@ gsk_render_node_diff_impossible (GskRenderNode  *node1,
 
 /**
  * gsk_render_node_diff:
- * @node1: a render node
- * @node2: the render node to compare with
- * @data: diff data to use
+ * @node1: a `GskRenderNode`
+ * @node2: the `GskRenderNode` to compare with
+ * @data: the diff data to use
  *
- * Compares two nodes, trying to compute the minimal region of changes.
+ * Compares @node1 and @node2 trying to compute the minimal region of changes.
  *
  * In the worst case, this is the union of the bounds of @node1 and @node2.
  *
@@ -626,22 +538,18 @@ gsk_render_node_diff (GskRenderNode  *node1,
                       GskRenderNode  *node2,
                       GskDiffData    *data)
 {
-  static guint depth = 0;
-
   if (node1 == node2)
     return;
 
-  depth++;
-
-  if (gsk_render_node_get_node_type (node1) == gsk_render_node_get_node_type (node2))
+  if (_gsk_render_node_get_node_type (node1) == _gsk_render_node_get_node_type (node2))
     {
       GSK_RENDER_NODE_GET_CLASS (node1)->diff (node1, node2, data);
     }
-  else if (gsk_render_node_get_node_type (node1) == GSK_CONTAINER_NODE)
+  else if (_gsk_render_node_get_node_type (node1) == GSK_CONTAINER_NODE)
     {
       gsk_container_node_diff_with (node1, node2, data);
     }
-  else if (gsk_render_node_get_node_type (node2) == GSK_CONTAINER_NODE)
+  else if (_gsk_render_node_get_node_type (node2) == GSK_CONTAINER_NODE)
     {
       gsk_container_node_diff_with (node2, node1, data);
     }
@@ -649,115 +557,13 @@ gsk_render_node_diff (GskRenderNode  *node1,
     {
       gsk_render_node_diff_impossible (node1, node2, data);
     }
-
-  depth--;
-
-  if (GSK_DEBUG_CHECK (DIFF))
-    {
-      cairo_rectangle_int_t extents;
-
-      cairo_region_get_extents (data->region, &extents);
-      if (extents.width > 0 && extents.height > 0)
-        {
-          gsize i, n, pixels;
-
-          pixels = 0;
-          n = cairo_region_num_rectangles (data->region);
-          for (i = 0; i < n; i++)
-            {
-              cairo_rectangle_int_t rect;
-              cairo_region_get_rectangle (data->region, i, &rect);
-              pixels += rect.width * rect.height;
-            }
-          gdk_debug_message ("%*s%zu rects, %zu pixels, bounds %d %d %d %d %s", 2 * depth, "",
-                             n,
-                             pixels,
-                             extents.x, extents.y,
-                             extents.width, extents.height,
-                             g_type_name_from_instance ((GTypeInstance *) node1));
-        }
-    }
-}
-
-/**
- * gsk_render_node_get_opaque_rect:
- * @self: a render node
- * @out_opaque: (out): return location for the opaque rect
- *
- * Gets an opaque rectangle inside the node that GTK can determine to
- * be fully opaque.
- *
- * There is no guarantee that this is indeed the largest opaque rectangle or
- * that regions outside the rectangle are not opaque. This function is a best
- * effort with that goal.
- *
- * The rectangle will be fully contained in the bounds of the node.
- *
- * Returns: true if part or all of the rendernode is opaque, false if no
- *   opaque region could be found.
- *
- * Since: 4.16
- **/
-gboolean
-gsk_render_node_get_opaque_rect (GskRenderNode   *self,
-                                 graphene_rect_t *out_opaque)
-{
-  GskOpacityData data = GSK_OPACITY_DATA_INIT_EMPTY (NULL);
-  gboolean result;
-
-  g_return_val_if_fail (GSK_IS_RENDER_NODE (self), FALSE);
-  g_return_val_if_fail (out_opaque != NULL, FALSE);
-
-  if (self->fully_opaque)
-    {
-      *out_opaque = self->bounds;
-      return TRUE;
-    }
-
-  gsk_render_node_render_opacity (self, &data);
-  result = !gsk_rect_is_empty (&data.opaque);
-  if (result)
-    *out_opaque = data.opaque;
-
-  return result;
-}
-
-void
-gsk_render_node_render_opacity (GskRenderNode  *self,
-                                GskOpacityData *data)
-{
-  static guint depth = 0;
-
-  depth++;
-
-  if (self->fully_opaque)
-    {
-      if (gsk_rect_is_empty (&data->opaque))
-        data->opaque = self->bounds;
-      else
-        gsk_rect_coverage (&data->opaque, &self->bounds, &data->opaque);
-    }
-  else
-    {
-      GSK_RENDER_NODE_GET_CLASS (self)->render_opacity (self, data);
-    }
-
-  depth--;
-
-  if (GSK_DEBUG_CHECK (OPACITY))
-    {
-      gdk_debug_message ("%*s%g %g %g %g %s", 2 * depth, "",
-                         data->opaque.origin.x, data->opaque.origin.y,
-                         data->opaque.size.width, data->opaque.size.height,
-                         g_type_name_from_instance ((GTypeInstance *) self));
-    }
 }
 
 /**
  * gsk_render_node_write_to_file:
- * @node: a render node
- * @filename: (type filename): the file to save it to
- * @error: return location for an error
+ * @node: a `GskRenderNode`
+ * @filename: (type filename): the file to save it to.
+ * @error: Return location for a potential error
  *
  * This function is equivalent to calling [method@Gsk.RenderNode.serialize]
  * followed by [func@GLib.file_set_contents].
@@ -767,7 +573,7 @@ gsk_render_node_render_opacity (GskRenderNode  *self,
  * It is mostly intended for use inside a debugger to quickly dump a render
  * node to a file for later inspection.
  *
- * Returns: true if saving was successful
+ * Returns: %TRUE if saving was successful
  **/
 gboolean
 gsk_render_node_write_to_file (GskRenderNode *node,
@@ -794,14 +600,14 @@ gsk_render_node_write_to_file (GskRenderNode *node,
 /**
  * gsk_render_node_deserialize:
  * @bytes: the bytes containing the data
- * @error_func: (nullable) (scope call) (closure user_data): callback on parsing errors
- * @user_data: user_data for @error_func
+ * @error_func: (nullable) (scope call): Callback on parsing errors
+ * @user_data: (closure error_func): user_data for @error_func
  *
  * Loads data previously created via [method@Gsk.RenderNode.serialize].
  *
  * For a discussion of the supported format, see that function.
  *
- * Returns: (nullable) (transfer full): a new render node
+ * Returns: (nullable) (transfer full): a new `GskRenderNode`
  */
 GskRenderNode *
 gsk_render_node_deserialize (GBytes            *bytes,
@@ -818,12 +624,11 @@ gsk_render_node_deserialize (GBytes            *bytes,
 /**
  * gsk_value_set_render_node:
  * @value: a [struct@GObject.Value] initialized with type `GSK_TYPE_RENDER_NODE`
- * @node: a render node
+ * @node: a `GskRenderNode`
  *
- * Stores the given render node inside a `GValue`.
+ * Stores the given `GskRenderNode` inside `value`.
  *
- * The [struct@GObject.Value] will acquire a reference
- * to the render node.
+ * The [struct@GObject.Value] will acquire a reference to the `node`.
  *
  * Since: 4.6
  */
@@ -855,12 +660,11 @@ gsk_value_set_render_node (GValue        *value,
 /**
  * gsk_value_take_render_node:
  * @value: a [struct@GObject.Value] initialized with type `GSK_TYPE_RENDER_NODE`
- * @node: (transfer full) (nullable): a render node
+ * @node: (transfer full) (nullable): a `GskRenderNode`
  *
- * Stores the given render node inside a `GValue`.
+ * Stores the given `GskRenderNode` inside `value`.
  *
- * This function transfers the ownership of the
- * render node to the `GValue`.
+ * This function transfers the ownership of the `node` to the `GValue`.
  *
  * Since: 4.6
  */
@@ -893,9 +697,9 @@ gsk_value_take_render_node (GValue        *value,
  * gsk_value_get_render_node:
  * @value: a `GValue` initialized with type `GSK_TYPE_RENDER_NODE`
  *
- * Retrieves the render node stored inside a `GValue`.
+ * Retrieves the `GskRenderNode` stored inside the given `value`.
  *
- * Returns: (transfer none) (nullable): the render node
+ * Returns: (transfer none) (nullable): a `GskRenderNode`
  *
  * Since: 4.6
  */
@@ -911,10 +715,10 @@ gsk_value_get_render_node (const GValue *value)
  * gsk_value_dup_render_node:
  * @value: a [struct@GObject.Value] initialized with type `GSK_TYPE_RENDER_NODE`
  *
- * Retrieves the render node stored inside a `GValue`,
- * and acquires a reference to it.
+ * Retrieves the `GskRenderNode` stored inside the given `value`, and acquires
+ * a reference to it.
  *
- * Returns: (transfer full) (nullable): the render node
+ * Returns: (transfer full) (nullable): a `GskRenderNode`
  *
  * Since: 4.6
  */
@@ -935,67 +739,15 @@ gsk_render_node_get_preferred_depth (const GskRenderNode *node)
   return node->preferred_depth;
 }
 
-gboolean
-gsk_render_node_is_hdr (const GskRenderNode *node)
-{
-  return node->is_hdr;
-}
-
-gboolean
-gsk_render_node_is_fully_opaque (const GskRenderNode *node)
-{
-  return node->fully_opaque;
-}
-
-gboolean
-gsk_render_node_is_bilevel_opacity (const GskRenderNode *node)
-{
-  return node->bilevel_opacity;
-}
-
-gboolean
-gsk_render_node_isolates_background (const GskRenderNode *node)
-{
-  return node->isolates_background;
-}
-
-gboolean
-gsk_render_node_clears_background (const GskRenderNode *node)
-{
-  return node->clears_background;
-}
-
-GskCopyMode
-gsk_render_node_get_copy_mode (const GskRenderNode *node)
-{
-  return node->copy_mode;
-}
-
-gboolean
-gsk_render_node_contains_subsurface_node (const GskRenderNode *node)
-{
-  return node->contains_subsurface_node;
-}
-
-gboolean
-gsk_render_node_contains_paste_node (const GskRenderNode *node)
-{
-  return node->contains_paste_node;
-}
-
-/*<private>
- * gsk_render_node_needs_blending:
- * @node: the node
+/* Whether we need an offscreen to handle opacity correctly for this node.
+ * We don't if there is only one drawing node inside (could be child
+ * node, or grandchild, or...).
  *
- * Checks if the node can be drawn without any blending. This means
- * that glDisable(GL_BLEND) can be called by renderers when drawing
- * this node and the node's background can be left unitialized if
- * the node also doesn
- *
- * Returns: true if the node needs to be blended
- **/
+ * For containers with multiple children, we can avoid the offscreen if
+ * the children are known not to overlap.
+ */
 gboolean
-gsk_render_node_needs_blending (const GskRenderNode *node)
+gsk_render_node_use_offscreen_for_opacity (const GskRenderNode *node)
 {
-  return node->needs_blending;
+  return node->offscreen_for_opacity;
 }

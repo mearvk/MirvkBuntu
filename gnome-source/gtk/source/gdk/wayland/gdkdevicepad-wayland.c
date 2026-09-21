@@ -20,7 +20,7 @@
 #include "gdkwaylanddevice.h"
 #include "gdkdevice-wayland-private.h"
 
-#include "tablet-v2-client-protocol.h"
+#include "tablet-unstable-v2-client-protocol.h"
 
 #include <gdk/gdkdevicepadprivate.h>
 
@@ -217,7 +217,7 @@ tablet_pad_lookup_button_group (GdkWaylandTabletPadData *pad,
 void
 gdk_wayland_device_pad_set_feedback (GdkDevice           *device,
                                      GdkDevicePadFeature  feature,
-                                     uint32_t             feature_idx,
+                                     guint                feature_idx,
                                      const char          *label)
 {
   GdkWaylandTabletPadData *pad;

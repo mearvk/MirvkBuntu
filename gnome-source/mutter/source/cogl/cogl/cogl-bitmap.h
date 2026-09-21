@@ -34,6 +34,10 @@
 #error "Only <cogl/cogl.h> can be included directly."
 #endif
 
+/* XXX: We forward declare CoglBitmap here to allow for circular
+ * dependencies between some headers */
+typedef struct _CoglBitmap CoglBitmap;
+
 #include "cogl/cogl-types.h"
 #include "cogl/cogl-buffer.h"
 #include "cogl/cogl-context.h"
@@ -61,28 +65,6 @@ G_DECLARE_FINAL_TYPE (CoglBitmap,
                       COGL,
                       BITMAP,
                       GObject)
-
-/**
- * cogl_bitmap_new_with_malloc_buffer:
- * @context: A #CoglContext
- * @width: width of the bitmap in pixels
- * @height: height of the bitmap in pixels
- * @format: the format of the pixels the array will store
- * @error: A #GError for catching exceptional errors or %NULL
- *
- * This is equivalent to cogl_bitmap_new_with_size() except that it
- * allocated the buffer using g_malloc() instead of creating a
- * #CoglPixelBuffer. The buffer will be automatically destroyed when
- * the bitmap is freed.
- *
- * Return value: (transfer full): a #CoglBitmap
- */
-COGL_EXPORT CoglBitmap *
-cogl_bitmap_new_with_malloc_buffer (CoglContext      *context,
-                                    unsigned int      width,
-                                    unsigned int      height,
-                                    CoglPixelFormat   format,
-                                    GError          **error);
 
 /**
  * cogl_bitmap_new_from_buffer:
@@ -216,37 +198,30 @@ COGL_EXPORT CoglPixelBuffer *
 cogl_bitmap_get_buffer (CoglBitmap *bitmap);
 
 /**
- * cogl_bitmap_map:
- * @bitmap: A #CoglBitmap
- * @access: How the mapped buffer will be used by the caller
- * @hints: A mask of `CoglBufferMapHint`s
- * @error: A #GError
+ * COGL_BITMAP_ERROR:
  *
- * Maps the bitmap's underlying data for direct access.
- *
- * The bitmap will be automatically unmapped when disposed, so explicit
- * unmapping is not required.
- *
- * Return value: (transfer none) (nullable): A pointer to the mapped
- *   data or %NULL if the map failed.
+ * #GError domain for bitmap errors.
  */
-COGL_EXPORT uint8_t *
-cogl_bitmap_map (CoglBitmap         *bitmap,
-                 CoglBufferAccess    access,
-                 CoglBufferMapHint   hints,
-                 GError            **error);
+#define COGL_BITMAP_ERROR (cogl_bitmap_error_quark ())
 
 /**
- * cogl_bitmap_unmap:
- * @bitmap: A #CoglBitmap
+ * CoglBitmapError:
+ * @COGL_BITMAP_ERROR_FAILED: Generic failure code, something went
+ *   wrong.
+ * @COGL_BITMAP_ERROR_UNKNOWN_TYPE: Unknown image type.
+ * @COGL_BITMAP_ERROR_CORRUPT_IMAGE: An image file was broken somehow.
  *
- * Unmaps the bitmap's underlying data that was previously mapped with
- * cogl_bitmap_map().
- *
- * Calling this is optional — bitmaps are automatically unmapped when
- * disposed.
+ * Error codes that can be thrown when performing bitmap
+ * operations.
  */
-COGL_EXPORT void
-cogl_bitmap_unmap (CoglBitmap *bitmap);
+typedef enum
+{
+  COGL_BITMAP_ERROR_FAILED,
+  COGL_BITMAP_ERROR_UNKNOWN_TYPE,
+  COGL_BITMAP_ERROR_CORRUPT_IMAGE
+} CoglBitmapError;
+
+COGL_EXPORT
+uint32_t cogl_bitmap_error_quark (void);
 
 G_END_DECLS

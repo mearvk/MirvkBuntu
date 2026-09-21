@@ -1,41 +1,43 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
 export {loadInterfaceXML} from './dbusUtils.js';
 
 /**
- * @typedef {object} ChildInfo
- * @property {Gio.File} file the file object for the child
- * @property {Gio.FileInfo} info the file descriptor for the child
+ * @typedef {object} SubdirInfo
+ * @property {Gio.File} dir the file object for the subdir
+ * @property {Gio.FileInfo} info the file descriptor for the subdir
  */
 
 /**
  * @param {string} subdir the subdirectory to search within the data directories
  * @param {boolean} includeUserDir whether the user's data directory should also be searched in addition
  *                                 to the system data directories
- * @returns {Generator<ChildInfo, void, void>} a generator which yields child infos for subdirectories named
+ * @returns {Generator<SubdirInfo, void, void>} a generator which yields file info for subdirectories named
  *                                              `subdir` within data directories
  */
 export function* collectFromDatadirs(subdir, includeUserDir) {
-    const dataDirs = GLib.get_system_data_dirs();
+    let dataDirs = GLib.get_system_data_dirs();
     if (includeUserDir)
         dataDirs.unshift(GLib.get_user_data_dir());
 
     for (let i = 0; i < dataDirs.length; i++) {
-        const path = GLib.build_filenamev([dataDirs[i], 'gnome-shell', subdir]);
-        const dir = Gio.File.new_for_path(path);
+        let path = GLib.build_filenamev([dataDirs[i], 'gnome-shell', subdir]);
+        let dir = Gio.File.new_for_path(path);
 
         let fileEnum;
         try {
             fileEnum = dir.enumerate_children('standard::name,standard::type',
                 Gio.FileQueryInfoFlags.NONE, null);
-        } catch {
+        } catch (e) {
             fileEnum = null;
         }
         if (fileEnum != null) {
             let info;
             while ((info = fileEnum.next_file(null)))
-                yield {file: fileEnum.get_child(info), info};
+                yield {dir: fileEnum.get_child(info), info};
         }
     }
 }
@@ -45,14 +47,14 @@ export function* collectFromDatadirs(subdir, includeUserDir) {
  * @param {boolean} deleteParent
  */
 export function recursivelyDeleteDir(dir, deleteParent) {
-    const children = dir.enumerate_children('standard::name,standard::type',
+    let children = dir.enumerate_children('standard::name,standard::type',
         Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
 
     let info;
     while ((info = children.next_file(null)) != null) {
-        const type = info.get_file_type();
-        const child = dir.get_child(info.get_name());
-        if (type === Gio.FileType.REGULAR || type === Gio.FileType.SYMBOLIC_LINK)
+        let type = info.get_file_type();
+        let child = dir.get_child(info.get_name());
+        if (type === Gio.FileType.REGULAR)
             child.delete(null);
         else if (type === Gio.FileType.DIRECTORY)
             recursivelyDeleteDir(child, true);
@@ -67,7 +69,7 @@ export function recursivelyDeleteDir(dir, deleteParent) {
  * @param {Gio.File} destDir
  */
 export function recursivelyMoveDir(srcDir, destDir) {
-    const children = srcDir.enumerate_children('standard::name,standard::type',
+    let children = srcDir.enumerate_children('standard::name,standard::type',
         Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
 
     if (!destDir.query_exists(null))
@@ -75,10 +77,10 @@ export function recursivelyMoveDir(srcDir, destDir) {
 
     let info;
     while ((info = children.next_file(null)) != null) {
-        const type = info.get_file_type();
-        const srcChild = srcDir.get_child(info.get_name());
-        const destChild = destDir.get_child(info.get_name());
-        if (type === Gio.FileType.REGULAR || type === Gio.FileType.SYMBOLIC_LINK)
+        let type = info.get_file_type();
+        let srcChild = srcDir.get_child(info.get_name());
+        let destChild = destDir.get_child(info.get_name());
+        if (type === Gio.FileType.REGULAR)
             srcChild.move(destChild, Gio.FileCopyFlags.NONE, null, null);
         else if (type === Gio.FileType.DIRECTORY)
             recursivelyMoveDir(srcChild, destChild);

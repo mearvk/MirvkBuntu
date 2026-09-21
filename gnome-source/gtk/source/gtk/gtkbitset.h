@@ -31,7 +31,7 @@ G_BEGIN_DECLS
 #define GTK_TYPE_BITSET (gtk_bitset_get_type ())
 
 GDK_AVAILABLE_IN_ALL
-GType                   gtk_bitset_get_type                     (void);
+GType                   gtk_bitset_get_type                     (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkBitset *             gtk_bitset_ref                          (GtkBitset              *self);
@@ -133,9 +133,8 @@ void                    gtk_bitset_splice                       (GtkBitset      
 /**
  * GtkBitsetIter:
  *
- * Iterates over the elements of a [struct@Gtk.Bitset].
- *
- * `GtkBitSetIter is an opaque, stack-allocated struct.
+ * An opaque, stack-allocated struct for iterating
+ * over the elements of a `GtkBitset`.
  *
  * Before a `GtkBitsetIter` can be used, it needs to be initialized with
  * [func@Gtk.BitsetIter.init_first], [func@Gtk.BitsetIter.init_last]
@@ -150,7 +149,7 @@ struct _GtkBitsetIter
 };
 
 GDK_AVAILABLE_IN_4_6
-GType                   gtk_bitset_iter_get_type                (void);
+GType                   gtk_bitset_iter_get_type                (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 gboolean                gtk_bitset_iter_init_first              (GtkBitsetIter          *iter,

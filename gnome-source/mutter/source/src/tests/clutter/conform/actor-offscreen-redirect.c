@@ -1,4 +1,4 @@
-#include <clutter/clutter-mutter.h>
+#include <clutter/clutter.h>
 
 #include "tests/clutter-test-utils.h"
 
@@ -29,7 +29,7 @@ typedef struct
   gboolean was_painted;
 } Data;
 
-GType foo_actor_get_type (void);
+GType foo_actor_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE (FooActor, foo_actor, CLUTTER_TYPE_ACTOR);
 
@@ -40,7 +40,7 @@ foo_actor_paint (ClutterActor        *actor,
                  ClutterPaintContext *paint_context)
 {
   CoglContext *ctx =
-    clutter_backend_get_cogl_context (clutter_test_get_backend ());
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
   FooActor *foo_actor = (FooActor *) actor;
   ClutterActorBox allocation;
   CoglPipeline *pipeline;
@@ -54,8 +54,8 @@ foo_actor_paint (ClutterActor        *actor,
 
   /* Paint a red rectangle with the right opacity */
   pipeline = cogl_pipeline_new (ctx);
-  cogl_color_init_from_4f (&color, 1.0f, 0.0f, 0.0f,
-                           foo_actor->last_paint_opacity / 255.0f);
+  cogl_color_init_from_4f (&color, 1.0, 0.0, 0.0,
+                           foo_actor->last_paint_opacity / 255.);
   cogl_pipeline_set_color (pipeline, &color);
 
   framebuffer = clutter_paint_context_get_framebuffer (paint_context);
@@ -165,10 +165,8 @@ verify_results (Data *data,
 static void
 verify_redraw (Data *data, int expected_paint_count)
 {
-  g_autoptr (GMainLoop) main_loop = NULL;
+  GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
   gulong paint_handler;
-
-  main_loop = g_main_loop_new (NULL, TRUE);
 
   paint_handler = g_signal_connect_data (CLUTTER_STAGE (data->stage),
                                          "after-paint",
@@ -211,9 +209,6 @@ verify_redraws (gpointer user_data)
      any transformation. */
   clutter_actor_set_translation (data->parent_container, 0.f, -1.f, 0.f);
   verify_redraw (data, 0);
-
-  clutter_actor_invalidate_paint_cache (data->child);
-  verify_redraw (data, 1);
 
   /* Redrawing an unrelated actor shouldn't cause a redraw */
   clutter_actor_set_position (data->unrelated_actor, 0, 1);
@@ -420,7 +415,7 @@ actor_offscreen_redirect (void)
   data.stage = clutter_test_get_stage ();
   data.parent_container = clutter_actor_new ();
   clutter_actor_set_background_color (data.parent_container,
-                                      &(CoglColor) { 255, 255, 255, 255 });
+                                      &(ClutterColor) { 255, 255, 255, 255 });
 
   data.container = g_object_new (foo_group_get_type (), NULL);
   data.foo_actor = g_object_new (foo_actor_get_type (), NULL);
@@ -440,10 +435,10 @@ actor_offscreen_redirect (void)
 
   clutter_actor_show (data.stage);
 
-  clutter_threads_add_repaint_func (CLUTTER_REPAINT_FLAGS_POST_PAINT,
-                                    run_verify,
-                                    &data,
-                                    NULL);
+  clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_POST_PAINT,
+                                         run_verify,
+                                         &data,
+                                         NULL);
 
   while (!data.was_painted)
     g_main_context_iteration (NULL, FALSE);

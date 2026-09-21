@@ -36,9 +36,7 @@ struct _MetaTextureMipmap
   MetaMultiTexture *mipmap_texture;
   CoglPipeline *pipeline;
   CoglFramebuffer *fb;
-  CoglContext *cogl_context;
   gboolean invalid;
-  MetaMultiTextureCoefficients coeffs;
 };
 
 /**
@@ -50,13 +48,11 @@ struct _MetaTextureMipmap
  * Return value: the new texture mipmap handler. Free with meta_texture_mipmap_free()
  */
 MetaTextureMipmap *
-meta_texture_mipmap_new (CoglContext *cogl_context)
+meta_texture_mipmap_new (void)
 {
   MetaTextureMipmap *mipmap;
 
   mipmap = g_new0 (MetaTextureMipmap, 1);
-  mipmap->cogl_context = cogl_context;
-  mipmap->coeffs = META_MULTI_TEXTURE_COEFFICIENTS_IDENTITY_FULL;
 
   return mipmap;
 }
@@ -111,19 +107,6 @@ meta_texture_mipmap_set_base_texture (MetaTextureMipmap *mipmap,
 }
 
 void
-meta_texture_mipmap_set_coeffs (MetaTextureMipmap            *mipmap,
-                                MetaMultiTextureCoefficients  coeffs)
-{
-  g_return_if_fail (mipmap != NULL);
-
-  if (coeffs == mipmap->coeffs)
-    return;
-
-  mipmap->coeffs = coeffs;
-  mipmap->invalid = TRUE;
-}
-
-void
 meta_texture_mipmap_invalidate (MetaTextureMipmap *mipmap)
 {
   g_return_if_fail (mipmap != NULL);
@@ -149,6 +132,8 @@ meta_texture_mipmap_clear (MetaTextureMipmap *mipmap)
 static void
 ensure_mipmap_texture (MetaTextureMipmap *mipmap)
 {
+  CoglContext *ctx =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
   int width, height;
 
   /* Let's avoid spending any texture memory copying the base level texture
@@ -187,7 +172,7 @@ ensure_mipmap_texture (MetaTextureMipmap *mipmap)
 
       free_mipmaps (mipmap);
 
-      tex = cogl_texture_2d_new_with_size (mipmap->cogl_context, width, height);
+      tex = cogl_texture_2d_new_with_size (ctx, width, height);
       if (!tex)
         return;
 
@@ -222,7 +207,12 @@ ensure_mipmap_texture (MetaTextureMipmap *mipmap)
 
       if (!mipmap->pipeline)
         {
-          mipmap->pipeline = cogl_pipeline_new (mipmap->cogl_context);
+          MetaMultiTextureFormat format =
+            meta_multi_texture_get_format (mipmap->base_texture);
+          CoglSnippet *fragment_globals_snippet;
+          CoglSnippet *fragment_snippet;
+
+          mipmap->pipeline = cogl_pipeline_new (ctx);
           cogl_pipeline_set_blend (mipmap->pipeline,
                                    "RGBA = ADD (SRC_COLOR, 0)",
                                    NULL);
@@ -237,10 +227,14 @@ ensure_mipmap_texture (MetaTextureMipmap *mipmap)
                                                NULL);
             }
 
-          meta_multi_texture_add_pipeline_sampling (mipmap->base_texture,
-                                                    mipmap->coeffs,
-                                                    META_MULTI_TEXTURE_ALPHA_MODE_PREMULT_ELECTRICAL,
-                                                    mipmap->pipeline);
+          meta_multi_texture_format_get_snippets (format,
+                                                  &fragment_globals_snippet,
+                                                  &fragment_snippet);
+          cogl_pipeline_add_snippet (mipmap->pipeline, fragment_globals_snippet);
+          cogl_pipeline_add_snippet (mipmap->pipeline, fragment_snippet);
+
+          g_clear_object (&fragment_globals_snippet);
+          g_clear_object (&fragment_snippet);
         }
 
       for (i = 0; i < n_planes; i++)

@@ -51,8 +51,6 @@ typedef struct _GtkCellAreaContext       GtkCellAreaContext;
  *
  * This macro should be used to emit a standard warning about unexpected
  * properties in set_cell_property() and get_cell_property() implementations.
- *
- * Deprecated: 4.20: There is no replacement
  */
 #define GTK_CELL_AREA_WARN_INVALID_CELL_PROPERTY_ID(object, property_id, pspec) \
   G_OBJECT_WARN_INVALID_PSPEC ((object), "cell property id", (property_id), (pspec))
@@ -66,8 +64,6 @@ typedef struct _GtkCellAreaContext       GtkCellAreaContext;
  * the cell renderers of a `GtkCellArea`, see gtk_cell_area_foreach().
  *
  * Returns: %TRUE to stop iterating over cells.
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef gboolean    (*GtkCellCallback) (GtkCellRenderer  *renderer,
                                         gpointer          data);
@@ -86,8 +82,6 @@ typedef gboolean    (*GtkCellCallback) (GtkCellRenderer  *renderer,
  * see gtk_cell_area_foreach_alloc().
  *
  * Returns: %TRUE to stop iterating over cells.
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef gboolean    (*GtkCellAllocCallback) (GtkCellRenderer    *renderer,
                                              const GdkRectangle *cell_area,
@@ -271,7 +265,7 @@ struct _GtkCellAreaClass
 };
 
 GDK_AVAILABLE_IN_ALL
-GType                 gtk_cell_area_get_type                       (void);
+GType                 gtk_cell_area_get_type                       (void) G_GNUC_CONST;
 
 /* Basic methods */
 GDK_DEPRECATED_IN_4_10
@@ -509,6 +503,19 @@ void                  gtk_cell_area_request_renderer               (GtkCellArea 
                                                                     int                 for_size,
                                                                     int                *minimum_size,
                                                                     int                *natural_size);
+
+/* For api stability, this is called from gtkcelllayout.c in order to ensure the correct
+ * object is passed to the user function in gtk_cell_layout_set_cell_data_func.
+ *
+ * This private api takes gpointer & GFunc arguments to circumvent circular header file
+ * dependencies.
+ */
+void                 _gtk_cell_area_set_cell_data_func_with_proxy  (GtkCellArea           *area,
+								    GtkCellRenderer       *cell,
+								    GFunc                  func,
+								    gpointer               func_data,
+								    GDestroyNotify         destroy,
+								    gpointer               proxy);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkCellArea, g_object_unref)
 

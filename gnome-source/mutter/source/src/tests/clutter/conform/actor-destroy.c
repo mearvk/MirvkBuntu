@@ -9,10 +9,10 @@ struct _TestDestroy
 {
   ClutterActor parent_instance;
 
-  gboolean destroyed;
-
   ClutterActor *bg;
   ClutterActor *label;
+
+  GList *children;
 };
 
 G_DEFINE_TYPE (TestDestroy, test_destroy, CLUTTER_TYPE_ACTOR)
@@ -22,11 +22,6 @@ test_destroy_destroy (ClutterActor *self)
 {
   TestDestroy *test = TEST_DESTROY (self);
   GList *children;
-
-  if (test->destroyed)
-    return;
-
-  test->destroyed = TRUE;
 
   children = clutter_actor_get_children (self);
   g_assert_cmpuint (g_list_length (children), ==, 3);
@@ -81,7 +76,7 @@ test_destroy_init (TestDestroy *self)
   clutter_actor_add_child (CLUTTER_ACTOR (self), self->bg);
   clutter_actor_set_name (self->bg, "Background");
 
-  self->label = clutter_actor_new ();
+  self->label = clutter_text_new ();
   clutter_actor_add_child (CLUTTER_ACTOR (self), self->label);
   clutter_actor_set_name (self->label, "Label");
 }
@@ -120,18 +115,13 @@ on_notify (ClutterActor *actor,
 static void
 actor_destruction (void)
 {
-  ClutterActor *test;
-  ClutterActor *child;
-  g_autoptr (ClutterActor) to_cleanup = NULL;
+  ClutterActor *test = g_object_new (TEST_TYPE_DESTROY, NULL);
+  ClutterActor *child = clutter_actor_new ();
   gboolean destroy_called = FALSE;
   gboolean parent_set_called = FALSE;
   gboolean property_changed = FALSE;
 
-  test = g_object_new (TEST_TYPE_DESTROY, NULL);
   g_object_ref_sink (test);
-  to_cleanup = test;
-
-  child = clutter_actor_new ();
 
   g_object_add_weak_pointer (G_OBJECT (test), (gpointer *) &test);
   g_object_add_weak_pointer (G_OBJECT (child), (gpointer *) &child);
@@ -150,7 +140,7 @@ actor_destruction (void)
     g_print ("Calling destroy()...\n");
 
   clutter_actor_destroy (test);
-  g_assert_true (destroy_called);
+  g_assert (destroy_called);
   g_assert_false (parent_set_called);
   g_assert_false (property_changed);
   g_assert_null (child);

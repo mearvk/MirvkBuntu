@@ -26,7 +26,7 @@
 /**
  * GtkDirectoryList:
  *
- * A list model that wraps [method@Gio.File.enumerate_children_async].
+ * `GtkDirectoryList` is a list model that wraps g_file_enumerate_children_async().
  *
  * It presents a `GListModel` and fills it asynchronously with the `GFileInfo`s
  * returned from that function.
@@ -283,44 +283,44 @@ gtk_directory_list_class_init (GtkDirectoryListClass *class)
   gobject_class->dispose = gtk_directory_list_dispose;
 
   /**
-   * GtkDirectoryList:attributes:
+   * GtkDirectoryList:attributes: (attributes org.gtk.Property.get=gtk_directory_list_get_attributes org.gtk.Property.set=gtk_directory_list_set_attributes)
    *
    * The attributes to query.
    */
   properties[PROP_ATTRIBUTES] =
       g_param_spec_string ("attributes", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkDirectoryList:error:
+   * GtkDirectoryList:error: (attributes org.gtk.Property.get=gtk_directory_list_get_error)
    *
    * Error encountered while loading files.
    */
   properties[PROP_ERROR] =
       g_param_spec_boxed ("error", NULL, NULL,
                           G_TYPE_ERROR,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkDirectoryList:file:
+   * GtkDirectoryList:file: (attributes org.gtk.Property.get=gtk_directory_list_get_file org.gtk.Property.set=gtk_directory_list_set_file)
    *
    * File to query.
    */
   properties[PROP_FILE] =
       g_param_spec_object ("file", NULL, NULL,
                            G_TYPE_FILE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkDirectoryList:io-priority:
+   * GtkDirectoryList:io-priority: (attributes org.gtk.Property.get=gtk_directory_list_get_io_priority org.gtk.Property.set=gtk_directory_list_set_io_priority)
    *
    * Priority used when loading.
    */
   properties[PROP_IO_PRIORITY] =
       g_param_spec_int ("io-priority", NULL, NULL,
                         -G_MAXINT, G_MAXINT, G_PRIORITY_DEFAULT,
-                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkDirectoryList:item-type:
@@ -332,27 +332,27 @@ gtk_directory_list_class_init (GtkDirectoryListClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_FILE_INFO,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkDirectoryList:loading: (getter is_loading)
+   * GtkDirectoryList:loading: (attributes org.gtk.Property.get=gtk_directory_list_is_loading)
    *
    * %TRUE if files are being loaded.
    */
   properties[PROP_LOADING] =
       g_param_spec_boolean ("loading", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkDirectoryList:monitored:
+   * GtkDirectoryList:monitored: (attributes org.gtk.Property.get=gtk_directory_list_get_monitored org.gtk.Property.set=gtk_directory_list_set_monitored)
    *
    * %TRUE if the directory is monitored for changed.
    */
   properties[PROP_MONITORED] =
       g_param_spec_boolean ("monitored", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkDirectoryList:n-items:
@@ -364,7 +364,7 @@ gtk_directory_list_class_init (GtkDirectoryListClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -798,8 +798,7 @@ gtk_directory_list_start_monitoring (GtkDirectoryList *self)
 {
   g_assert (self->monitor == NULL);
   self->monitor = g_file_monitor_directory (self->file, G_FILE_MONITOR_WATCH_MOVES, NULL, NULL);
-  if (self->monitor)
-    g_signal_connect (self->monitor, "changed", G_CALLBACK (directory_changed), self);
+  g_signal_connect (self->monitor, "changed", G_CALLBACK (directory_changed), self);
 }
 
 static void
@@ -811,7 +810,7 @@ gtk_directory_list_update_monitoring (GtkDirectoryList *self)
 }
 
 /**
- * gtk_directory_list_set_file:
+ * gtk_directory_list_set_file: (attributes org.gtk.Method.set_property=file)
  * @self: a `GtkDirectoryList`
  * @file: (nullable): the `GFile` to be enumerated
  *
@@ -843,7 +842,7 @@ gtk_directory_list_set_file (GtkDirectoryList *self,
 }
 
 /**
- * gtk_directory_list_get_file:
+ * gtk_directory_list_get_file: (attributes org.gtk.Method.get_property=file)
  * @self: a `GtkDirectoryList`
  *
  * Gets the file whose children are currently enumerated.
@@ -859,7 +858,7 @@ gtk_directory_list_get_file (GtkDirectoryList *self)
 }
 
 /**
- * gtk_directory_list_set_attributes:
+ * gtk_directory_list_set_attributes: (attributes org.gtk.Method.set_property=attributes)
  * @self: a `GtkDirectoryList`
  * @attributes: (nullable): the attributes to enumerate
  *
@@ -890,7 +889,7 @@ gtk_directory_list_set_attributes (GtkDirectoryList *self,
 }
 
 /**
- * gtk_directory_list_get_attributes:
+ * gtk_directory_list_get_attributes: (attributes org.gtk.Method.get_property=attributes)
  * @self: a `GtkDirectoryList`
  *
  * Gets the attributes queried on the children.
@@ -906,7 +905,7 @@ gtk_directory_list_get_attributes (GtkDirectoryList *self)
 }
 
 /**
- * gtk_directory_list_set_io_priority:
+ * gtk_directory_list_set_io_priority: (attributes org.gtk.Method.set_property=io-priority)
  * @self: a `GtkDirectoryList`
  * @io_priority: IO priority to use
  *
@@ -935,7 +934,7 @@ gtk_directory_list_set_io_priority (GtkDirectoryList *self,
 }
 
 /**
- * gtk_directory_list_get_io_priority:
+ * gtk_directory_list_get_io_priority: (attributes org.gtk.Method.get_property=io-priority)
  * @self: a `GtkDirectoryList`
  *
  * Gets the IO priority set via gtk_directory_list_set_io_priority().
@@ -951,7 +950,7 @@ gtk_directory_list_get_io_priority (GtkDirectoryList *self)
 }
 
 /**
- * gtk_directory_list_is_loading: (get-property loading)
+ * gtk_directory_list_is_loading: (attributes org.gtk.Method.get_property=loading)
  * @self: a `GtkDirectoryList`
  *
  * Returns %TRUE if the children enumeration is currently in
@@ -972,7 +971,7 @@ gtk_directory_list_is_loading (GtkDirectoryList *self)
 }
 
 /**
- * gtk_directory_list_get_error:
+ * gtk_directory_list_get_error: (attributes org.gtk.Method.get_property=error)
  * @self: a `GtkDirectoryList`
  *
  * Gets the loading error, if any.
@@ -996,7 +995,7 @@ gtk_directory_list_get_error (GtkDirectoryList *self)
 }
 
 /**
- * gtk_directory_list_set_monitored:
+ * gtk_directory_list_set_monitored: (attributes org.gtk.Method.set_property=monitored)
  * @self: a `GtkDirectoryList`
  * @monitored: %TRUE to monitor the directory for changes
  *
@@ -1031,7 +1030,7 @@ gtk_directory_list_set_monitored (GtkDirectoryList *self,
 }
 
 /**
- * gtk_directory_list_get_monitored:
+ * gtk_directory_list_get_monitored: (attributes org.gtk.Method.get_property=monitored)
  * @self: a `GtkDirectoryList`
  *
  * Returns whether the directory list is monitoring

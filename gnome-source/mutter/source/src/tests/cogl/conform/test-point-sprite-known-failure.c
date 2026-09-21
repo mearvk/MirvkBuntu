@@ -25,7 +25,7 @@ do_test (gboolean check_orientation,
   int fb_width = cogl_framebuffer_get_width (test_fb);
   int fb_height = cogl_framebuffer_get_height (test_fb);
   CoglPrimitive *prim;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   CoglTexture *tex_2d;
   CoglPipeline *pipeline, *solid_pipeline;
   int tex_height;
@@ -54,8 +54,8 @@ do_test (gboolean check_orientation,
                                           6, /* row stride */
                                           tex_data,
                                           &error);
-  g_assert_nonnull (tex_2d);
-  g_assert_null (error);
+  g_assert (tex_2d != NULL);
+  g_assert (error == NULL);
 
   pipeline = cogl_pipeline_new (test_ctx);
   cogl_pipeline_set_layer_texture (pipeline, 0, tex_2d);
@@ -98,8 +98,8 @@ do_test (gboolean check_orientation,
                                                              /* enable */
                                                              TRUE,
                                                              &error);
-      g_assert_true (res);
-      g_assert_null (error);
+      g_assert (res == TRUE);
+      g_assert (error == NULL);
 
       solid_pipeline = cogl_pipeline_copy (pipeline);
 
@@ -111,8 +111,8 @@ do_test (gboolean check_orientation,
                                                              FALSE,
                                                              &error);
 
-      g_assert_true (res);
-      g_assert_null (error);
+      g_assert (res == TRUE);
+      g_assert (error == NULL);
     }
 
   prim = cogl_primitive_new_p2t2 (test_ctx,
@@ -138,34 +138,26 @@ do_test (gboolean check_orientation,
   g_object_unref (pipeline);
   g_object_unref (tex_2d);
 
-  if (!g_test_undefined ())
-    {
-      /* This test case is always considered failing */
-      g_test_skip_printf ("This test is a well known failure");
-    }
-  else
-    {
-      test_utils_check_pixel (test_fb,
-                              POINT_SIZE - POINT_SIZE / 4,
-                              POINT_SIZE - POINT_SIZE / 4,
-                              0x0000ffff);
-      test_utils_check_pixel (test_fb,
-                              POINT_SIZE + POINT_SIZE / 4,
-                              POINT_SIZE - POINT_SIZE / 4,
-                              0x00ff00ff);
-      test_utils_check_pixel (test_fb,
-                              POINT_SIZE - POINT_SIZE / 4,
-                              POINT_SIZE + POINT_SIZE / 4,
-                              check_orientation ?
-                              0x00ffffff :
-                              0x0000ffff);
-      test_utils_check_pixel (test_fb,
-                              POINT_SIZE + POINT_SIZE / 4,
-                              POINT_SIZE + POINT_SIZE / 4,
-                              check_orientation ?
-                              0xff0000ff :
-                              0x00ff00ff);
-    }
+  test_utils_check_pixel (test_fb,
+                          POINT_SIZE - POINT_SIZE / 4,
+                          POINT_SIZE - POINT_SIZE / 4,
+                          0x0000ffff);
+  test_utils_check_pixel (test_fb,
+                          POINT_SIZE + POINT_SIZE / 4,
+                          POINT_SIZE - POINT_SIZE / 4,
+                          0x00ff00ff);
+  test_utils_check_pixel (test_fb,
+                          POINT_SIZE - POINT_SIZE / 4,
+                          POINT_SIZE + POINT_SIZE / 4,
+                          check_orientation ?
+                          0x00ffffff :
+                          0x0000ffff);
+  test_utils_check_pixel (test_fb,
+                          POINT_SIZE + POINT_SIZE / 4,
+                          POINT_SIZE + POINT_SIZE / 4,
+                          check_orientation ?
+                          0xff0000ff :
+                          0x00ff00ff);
 
   /* When rendering without the point sprites all of the texture
      coordinates should be 0,0 so it should get the top-left texel

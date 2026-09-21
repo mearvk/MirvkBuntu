@@ -87,8 +87,6 @@ struct _GskCurveClass
   float                         (* get_at_length)       (const GskCurve         *curve,
                                                          float                   distance,
                                                          float                   epsilon);
-  int                           (* get_extrema)         (const GskCurve         *curve,
-                                                         float                   t[4]);
 };
 
 /* {{{ Utilities */
@@ -159,30 +157,30 @@ gsk_curve_elevate (const GskCurve *curve,
 {
   if (curve->op == GSK_PATH_LINE)
     {
-      GskAlignedPoint p[3];
+      graphene_point_t p[3];
 
-      p[0].pt = curve->line.points[0];
+      p[0] = curve->line.points[0];
       graphene_point_interpolate (&curve->line.points[0],
                                   &curve->line.points[1],
                                   0.5,
-                                  &p[1].pt);
-      p[2].pt = curve->line.points[1];
+                                  &p[1]);
+      p[2] = curve->line.points[1];
       gsk_curve_init (elevated, gsk_pathop_encode (GSK_PATH_QUAD, p));
     }
   else if (curve->op == GSK_PATH_QUAD)
     {
-      GskAlignedPoint p[4];
+      graphene_point_t p[4];
 
-      p[0].pt = curve->quad.points[0];
+      p[0] = curve->quad.points[0];
       graphene_point_interpolate (&curve->quad.points[0],
                                   &curve->quad.points[1],
                                   2/3.,
-                                  &p[1].pt);
+                                  &p[1]);
       graphene_point_interpolate (&curve->quad.points[2],
                                   &curve->quad.points[1],
                                   2/3.,
-                                  &p[2].pt);
-      p[3].pt = curve->quad.points[2];
+                                  &p[2]);
+      p[3] = curve->quad.points[2];
       gsk_curve_init (elevated, gsk_pathop_encode (GSK_PATH_CUBIC, p));
     }
   else
@@ -302,7 +300,7 @@ gsk_line_curve_pathop (const GskCurve *curve)
 {
   const GskLineCurve *self = &curve->line;
 
-  return gsk_pathop_encode (self->op, self->aligned_points);
+  return gsk_pathop_encode (self->op, self->points);
 }
 
 static const graphene_point_t *
@@ -484,13 +482,6 @@ gsk_line_curve_get_at_length (const GskCurve *curve,
   return CLAMP (distance / length, 0, 1);
 }
 
-static int
-gsk_line_curve_get_extrema (const GskCurve *curve,
-                            float          t[4])
-{
-  return 0;
-}
-
 static const GskCurveClass GSK_LINE_CURVE_CLASS = {
   gsk_line_curve_init,
   gsk_line_curve_init_foreach,
@@ -514,7 +505,6 @@ static const GskCurveClass GSK_LINE_CURVE_CLASS = {
   gsk_line_curve_get_crossing,
   gsk_line_curve_get_length_to,
   gsk_line_curve_get_at_length,
-  gsk_line_curve_get_extrema,
 };
 
 /* }}} */
@@ -577,8 +567,8 @@ gsk_quad_curve_print (const GskCurve *curve,
   g_string_append_printf (string,
                           "M %g %g Q %g %g %g %g",
                           curve->quad.points[0].x, curve->quad.points[0].y,
-                          curve->quad.points[1].x, curve->quad.points[1].y,
-                          curve->quad.points[2].x, curve->quad.points[2].y);
+                          curve->quad.points[1].x, curve->cubic.points[1].y,
+                          curve->quad.points[2].x, curve->cubic.points[2].y);
 }
 
 static gskpathop
@@ -586,7 +576,7 @@ gsk_quad_curve_pathop (const GskCurve *curve)
 {
   const GskQuadCurve *self = &curve->quad;
 
-  return gsk_pathop_encode (self->op, self->aligned_points);
+  return gsk_pathop_encode (self->op, self->points);
 }
 
 static const graphene_point_t *
@@ -916,16 +906,6 @@ gsk_quad_curve_get_at_length (const GskCurve *curve,
   return get_t_by_bisection (curve, t, epsilon);
 }
 
-static int
-gsk_quad_curve_get_extrema (const GskCurve *curve,
-                            float           t[4])
-{
-  const GskQuadCurve *self = &curve->quad;
-  const graphene_point_t *pts = self->points;
-
-  return get_quadratic_extrema (pts[0].y, pts[1].y, pts[2].y, t);
-}
-
 static const GskCurveClass GSK_QUAD_CURVE_CLASS = {
   gsk_quad_curve_init,
   gsk_quad_curve_init_foreach,
@@ -949,7 +929,6 @@ static const GskCurveClass GSK_QUAD_CURVE_CLASS = {
   gsk_quad_curve_get_crossing,
   gsk_quad_curve_get_length_to,
   gsk_quad_curve_get_at_length,
-  gsk_quad_curve_get_extrema,
 };
 
 /* }}} */
@@ -1024,7 +1003,7 @@ gsk_cubic_curve_pathop (const GskCurve *curve)
 {
   const GskCubicCurve *self = &curve->cubic;
 
-  return gsk_pathop_encode (self->op, self->aligned_points);
+  return gsk_pathop_encode (self->op, self->points);
 }
 
 static const graphene_point_t *
@@ -1406,16 +1385,6 @@ gsk_cubic_curve_get_at_length (const GskCurve *curve,
   return get_t_by_bisection (curve, t, epsilon);
 }
 
-static int
-gsk_cubic_curve_get_extrema (const GskCurve *curve,
-                             float           t[4])
-{
-  const GskCubicCurve *self = &curve->cubic;
-  const graphene_point_t *pts = self->points;
-
-  return get_cubic_extrema (pts[0].y, pts[1].y, pts[2].y, pts[3].y, t);
-}
-
 static const GskCurveClass GSK_CUBIC_CURVE_CLASS = {
   gsk_cubic_curve_init,
   gsk_cubic_curve_init_foreach,
@@ -1439,7 +1408,6 @@ static const GskCurveClass GSK_CUBIC_CURVE_CLASS = {
   gsk_cubic_curve_get_crossing,
   gsk_cubic_curve_get_length_to,
   gsk_cubic_curve_get_at_length,
-  gsk_cubic_curve_get_extrema,
 };
 
  /*  }}} */
@@ -1531,7 +1499,7 @@ gsk_conic_curve_pathop (const GskCurve *curve)
 {
   const GskConicCurve *self = &curve->conic;
 
-  return gsk_pathop_encode (self->op, self->aligned_points);
+  return gsk_pathop_encode (self->op, self->points);
 }
 
 static const graphene_point_t *
@@ -1758,7 +1726,7 @@ gsk_conic_curve_split (const GskCurve   *curve,
   const GskConicCurve *self = &curve->conic;
   graphene_point3d_t p[3];
   graphene_point3d_t l[3], r[3];
-  GskAlignedPoint left[4], right[4];
+  graphene_point_t left[4], right[4];
   float w;
 
   /* do de Casteljau in homogeneous coordinates... */
@@ -1770,13 +1738,13 @@ gsk_conic_curve_split (const GskCurve   *curve,
   split_bezier3d (p, 3, progress, l, r);
 
   /* then project the control points down */
-  left[0].pt = GRAPHENE_POINT_INIT (l[0].x / l[0].z, l[0].y / l[0].z);
-  left[1].pt = GRAPHENE_POINT_INIT (l[1].x / l[1].z, l[1].y / l[1].z);
-  left[3].pt = GRAPHENE_POINT_INIT (l[2].x / l[2].z, l[2].y / l[2].z);
+  left[0] = GRAPHENE_POINT_INIT (l[0].x / l[0].z, l[0].y / l[0].z);
+  left[1] = GRAPHENE_POINT_INIT (l[1].x / l[1].z, l[1].y / l[1].z);
+  left[3] = GRAPHENE_POINT_INIT (l[2].x / l[2].z, l[2].y / l[2].z);
 
-  right[0].pt = GRAPHENE_POINT_INIT (r[0].x / r[0].z, r[0].y / r[0].z);
-  right[1].pt = GRAPHENE_POINT_INIT (r[1].x / r[1].z, r[1].y / r[1].z);
-  right[3].pt = GRAPHENE_POINT_INIT (r[2].x / r[2].z, r[2].y / r[2].z);
+  right[0] = GRAPHENE_POINT_INIT (r[0].x / r[0].z, r[0].y / r[0].z);
+  right[1] = GRAPHENE_POINT_INIT (r[1].x / r[1].z, r[1].y / r[1].z);
+  right[3] = GRAPHENE_POINT_INIT (r[2].x / r[2].z, r[2].y / r[2].z);
 
   /* normalize the outer weights to be 1 by using
    * the fact that weights w_i and c*w_i are equivalent
@@ -1792,8 +1760,8 @@ gsk_conic_curve_split (const GskCurve   *curve,
    * the fact that w_0*w_2/w_1^2 is a constant for
    * all equivalent weights.
    */
-  left[2].pt = GRAPHENE_POINT_INIT (l[1].z / sqrt (l[2].z), 0);
-  right[2].pt = GRAPHENE_POINT_INIT (r[1].z / sqrt (r[0].z), 0);
+  left[2] = GRAPHENE_POINT_INIT (l[1].z / sqrt (l[2].z), 0);
+  right[2] = GRAPHENE_POINT_INIT (r[1].z / sqrt (r[0].z), 0);
 
   if (start)
     gsk_curve_init (start, gsk_pathop_encode (GSK_PATH_CONIC, left));
@@ -1931,17 +1899,17 @@ cubic_approximation (const GskCurve *curve,
                      GskCurve       *cubic)
 {
   const GskConicCurve *self = &curve->conic;
-  GskAlignedPoint p[4];
+  graphene_point_t p[4];
   float w = self->points[2].x;
   float w2 = w*w;
   float lambda;
 
   lambda = 2 * (6*w2 + 1 - sqrt (3*w2 + 1)) / (12*w2 + 3);
 
-  p[0].pt = self->points[0];
-  p[3].pt = self->points[3];
-  graphene_point_interpolate (&self->points[0], &self->points[1], lambda, &p[1].pt);
-  graphene_point_interpolate (&self->points[3], &self->points[1], lambda, &p[2].pt);
+  p[0] = self->points[0];
+  p[3] = self->points[3];
+  graphene_point_interpolate (&self->points[0], &self->points[1], lambda, &p[1]);
+  graphene_point_interpolate (&self->points[3], &self->points[1], lambda, &p[2]);
 
   gsk_curve_init (cubic, gsk_pathop_encode (GSK_PATH_CUBIC, p));
 }
@@ -1978,8 +1946,6 @@ gsk_conic_curve_decompose_or_add (const GskCurve       *curve,
                                   GskCurveAddCurveFunc  add_curve_func,
                                   gpointer              user_data)
 {
-  static int level = 0;
-
   if (graphene_point_equal (&curve->conic.points[0], &curve->conic.points[1]) ||
       graphene_point_equal (&curve->conic.points[1], &curve->conic.points[3]))
     {
@@ -1993,30 +1959,20 @@ gsk_conic_curve_decompose_or_add (const GskCurve       *curve,
       else
         return TRUE;
     }
-  else if (gsk_conic_is_close_to_cubic (curve, cubic, tolerance) ||
-           level == 20)
-    {
-      return add_curve_func (GSK_PATH_CUBIC, cubic->cubic.points, 4, 0.f, user_data);
-    }
+  else if (gsk_conic_is_close_to_cubic (curve, cubic, tolerance))
+    return add_curve_func (GSK_PATH_CUBIC, cubic->cubic.points, 4, 0.f, user_data);
   else
     {
       GskCurve c1, c2;
       GskCurve cc1, cc2;
-      gboolean ret;
 
       gsk_conic_curve_split (curve, 0.5, &c1, &c2);
 
       cubic_approximation (&c1, &cc1);
       cubic_approximation (&c2, &cc2);
 
-      level++;
-
-      ret = gsk_conic_curve_decompose_or_add (&c1, &cc1, tolerance, add_curve_func, user_data) &&
-            gsk_conic_curve_decompose_or_add (&c2, &cc2, tolerance, add_curve_func, user_data);
-
-      level--;
-
-      return ret;
+      return gsk_conic_curve_decompose_or_add (&c1, &cc1, tolerance, add_curve_func, user_data) &&
+             gsk_conic_curve_decompose_or_add (&c2, &cc2, tolerance, add_curve_func, user_data);
     }
 }
 
@@ -2150,17 +2106,6 @@ gsk_conic_curve_get_at_length (const GskCurve *curve,
   return get_t_by_bisection (curve, t, epsilon);
 }
 
-static int
-gsk_conic_curve_get_extrema (const GskCurve *curve,
-                             float           t[4])
-{
-  const GskConicCurve *self = &curve->conic;
-  float w = gsk_conic_curve_get_weight (self);
-  const graphene_point_t *pts = self->points;
-
-  return get_conic_extrema (pts[0].y, pts[1].y, pts[3].y, w, t);
-}
-
 static const GskCurveClass GSK_CONIC_CURVE_CLASS = {
   gsk_conic_curve_init,
   gsk_conic_curve_init_foreach,
@@ -2184,7 +2129,6 @@ static const GskCurveClass GSK_CONIC_CURVE_CLASS = {
   gsk_conic_curve_get_crossing,
   gsk_conic_curve_get_length_to,
   gsk_conic_curve_get_at_length,
-  gsk_conic_curve_get_extrema,
 };
 
 /*  }}} */
@@ -2392,39 +2336,6 @@ gsk_curve_get_crossing (const GskCurve         *curve,
   return get_class (curve->op)->get_crossing (curve, point);
 }
 
-float
-gsk_curve_get_length_to (const GskCurve *curve,
-                         float           t)
-{
-  return get_class (curve->op)->get_length_to (curve, t);
-}
-
-float
-gsk_curve_get_length (const GskCurve *curve)
-{
-  return gsk_curve_get_length_to (curve, 1);
-}
-
-float
-gsk_curve_at_length (const GskCurve *curve,
-                     float           length,
-                     float           epsilon)
-{
-  return get_class (curve->op)->get_at_length (curve, length, epsilon);
-}
-
-/* Note: this is just about local minima/maxima, excluding 0/1.
- * To get x extrema, x/y flip the curve */
-int
-gsk_curve_get_extrema (const GskCurve *curve,
-                       float           t[4])
-{
-  return get_class (curve->op)->get_extrema (curve, t);
-}
-
-/* }}} */
-/* {{{ Closest point */
-
 static gboolean
 project_point_onto_line (const GskCurve         *curve,
                          const graphene_point_t *point,
@@ -2546,6 +2457,187 @@ gsk_curve_get_closest_point (const GskCurve         *curve,
     return find_closest_point (curve, point, threshold, 0, 1, out_dist, out_t);
 }
 
+float
+gsk_curve_get_length_to (const GskCurve *curve,
+                         float           t)
+{
+  return get_class (curve->op)->get_length_to (curve, t);
+}
+
+float
+gsk_curve_get_length (const GskCurve *curve)
+{
+  return gsk_curve_get_length_to (curve, 1);
+}
+
+/* Compute the inverse of the arclength using bisection,
+ * to a given precision
+ */
+float
+gsk_curve_at_length (const GskCurve *curve,
+                     float           length,
+                     float           epsilon)
+{
+  return get_class (curve->op)->get_at_length (curve, length, epsilon);
+}
+
+static inline void
+_sincosf (float  angle,
+          float *out_s,
+          float *out_c)
+{
+#ifdef HAVE_SINCOSF
+      sincosf (angle, out_s, out_c);
+#else
+      *out_s = sinf (angle);
+      *out_c = cosf (angle);
+#endif
+}
+
+static void
+align_points (const graphene_point_t *p,
+              const graphene_point_t *a,
+              const graphene_point_t *b,
+              graphene_point_t       *q,
+              int                     n)
+{
+  graphene_vec2_t n1;
+  float angle;
+  float s, c;
+
+  get_tangent (a, b, &n1);
+  angle = - atan2f (graphene_vec2_get_y (&n1), graphene_vec2_get_x (&n1));
+  _sincosf (angle, &s, &c);
+
+  for (int i = 0; i < n; i++)
+    {
+      q[i].x = (p[i].x - a->x) * c - (p[i].y - a->y) * s;
+      q[i].y = (p[i].x - a->x) * s + (p[i].y - a->y) * c;
+    }
+}
+
+static int
+filter_allowable (float t[3],
+                  int   n)
+{
+  float g[3];
+  int j = 0;
+
+  for (int i = 0; i < n; i++)
+    if (0 < t[i] && t[i] < 1)
+      g[j++] = t[i];
+  for (int i = 0; i < j; i++)
+    t[i] = g[i];
+  return j;
+}
+
+/* find solutions for at^2 + bt + c = 0 */
+static int
+solve_quadratic (float a, float b, float c, float t[2])
+{
+  float d;
+  int n = 0;
+
+  if (fabsf (a) > 0.0001)
+    {
+      if (b*b > 4*a*c)
+        {
+          d = sqrtf (b*b - 4*a*c);
+          t[n++] = (-b + d)/(2*a);
+          t[n++] = (-b - d)/(2*a);
+        }
+      else
+        {
+          t[n++] = -b / (2*a);
+        }
+    }
+  else if (fabsf (b) > 0.0001)
+    {
+      t[n++] = -c / b;
+    }
+
+  return n;
+}
+
+int
+gsk_curve_get_curvature_points (const GskCurve *curve,
+                                float           t[3])
+{
+  const graphene_point_t *pts = curve->cubic.points;
+  graphene_point_t p[4];
+  float a, b, c, d;
+  float x, y, z;
+  int n;
+
+  if (curve->op != GSK_PATH_CUBIC)
+    return 0; /* FIXME */
+
+  align_points (pts, &pts[0], &pts[3], p, 4);
+
+  a = p[2].x * p[1].y;
+  b = p[3].x * p[1].y;
+  c = p[1].x * p[2].y;
+  d = p[3].x * p[2].y;
+
+  x = - 3*a + 2*b + 3*c - d;
+  y = 3*a - b - 3*c;
+  z = c - a;
+
+  n = solve_quadratic (x, y, z, t);
+  return filter_allowable (t, n);
+}
+
+/* Find cusps inside the open interval from 0 to 1.
+ *
+ * According to Stone & deRose, A Geometric Characterization
+ * of Parametric Cubic curves, a necessary and sufficient
+ * condition is that the first derivative vanishes.
+ */
+int
+gsk_curve_get_cusps (const GskCurve *curve,
+                     float           t[2])
+{
+  const graphene_point_t *pts = curve->cubic.points;
+  graphene_point_t p[3];
+  float ax, bx, cx;
+  float ay, by, cy;
+  float tx[3];
+  int nx;
+  int n = 0;
+
+  if (curve->op != GSK_PATH_CUBIC)
+    return 0;
+
+  p[0].x = 3 * (pts[1].x - pts[0].x);
+  p[0].y = 3 * (pts[1].y - pts[0].y);
+  p[1].x = 3 * (pts[2].x - pts[1].x);
+  p[1].y = 3 * (pts[2].y - pts[1].y);
+  p[2].x = 3 * (pts[3].x - pts[2].x);
+  p[2].y = 3 * (pts[3].y - pts[2].y);
+
+  ax = p[0].x - 2 * p[1].x + p[2].x;
+  bx = - 2 * p[0].x + 2 * p[1].x;
+  cx = p[0].x;
+
+  nx = solve_quadratic (ax, bx, cx, tx);
+  nx = filter_allowable (tx, nx);
+
+  ay = p[0].y - 2 * p[1].y + p[2].y;
+  by = - 2 * p[0].y + 2 * p[1].y;
+  cy = p[0].y;
+
+  for (int i = 0; i < nx; i++)
+    {
+      float ti = tx[i];
+
+      if (0 < ti && ti < 1 &&
+          fabsf (ay * ti * ti + by * ti + cy) < 0.001)
+        t[n++] = ti;
+    }
+
+  return n;
+}
+
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

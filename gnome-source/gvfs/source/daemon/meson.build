@@ -191,7 +191,6 @@ cflags = [
   '-DBACKEND_HEADER=gvfsbackendtrash.h',
   '-DDEFAULT_BACKEND_TYPE=trash',
   '-DBACKEND_TYPES="trash", G_VFS_TYPE_BACKEND_TRASH,',
-  '-DBACKEND_USES_GVFS=1',
   '-DMAX_JOB_THREADS=10',
 ]
 
@@ -230,6 +229,18 @@ cflags = [
 
 programs += {'gvfsd-network': {'sources': files('gvfsbackendnetwork.c'), 'c_args': cflags}}
 mounts += ['network']
+
+if enable_burn
+  cflags = [
+    '-DBACKEND_HEADER=gvfsbackendburn.h',
+    '-DDEFAULT_BACKEND_TYPE=burn',
+    '-DBACKEND_TYPES="burn", G_VFS_TYPE_BACKEND_BURN,',
+    '-DMAX_JOB_THREADS=1',
+  ]
+
+  programs += {'gvfsd-burn': {'sources': files('gvfsbackendburn.c'), 'dependencies': [gio_unix_dep], 'c_args': cflags}}
+  mounts += ['burn']
+endif
 
 if enable_sftp
   sources = files(

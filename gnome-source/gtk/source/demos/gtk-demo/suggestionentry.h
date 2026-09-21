@@ -11,7 +11,7 @@ G_BEGIN_DECLS
 
 typedef struct _MatchObject MatchObject;
 
-GType            match_object_get_type (void);
+GType            match_object_get_type (void) G_GNUC_CONST;
 
 gpointer         match_object_get_item        (MatchObject *object);
 const char *     match_object_get_string      (MatchObject *object);
@@ -29,7 +29,7 @@ void             match_object_set_match       (MatchObject *object,
 
 typedef struct _SuggestionEntry       SuggestionEntry;
 
-GType           suggestion_entry_get_type (void);
+GType           suggestion_entry_get_type (void) G_GNUC_CONST;
 
 GtkWidget*      suggestion_entry_new                (void);
 
@@ -43,7 +43,7 @@ GtkListItemFactory *
                 suggestion_entry_get_factory        (SuggestionEntry     *self);
 
 void            suggestion_entry_set_use_filter     (SuggestionEntry     *self,
-                                                     gboolean             use_filter);
+                                                     gboolean             use_ilter);
 gboolean        suggestion_entry_get_use_filter     (SuggestionEntry     *self);
 
 void            suggestion_entry_set_expression     (SuggestionEntry     *self,

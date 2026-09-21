@@ -48,6 +48,8 @@ typedef struct
   unsigned long flags;
   unsigned long functions;
   unsigned long decorations;
+  long input_mode;
+  unsigned long status;
 } MotifWmHints;
 
 #define MWM_HINTS_FUNCTIONS (1L << 0)
@@ -72,8 +74,6 @@ client_window_has_wm_protocol (MetaFrame *frame,
   unsigned long i, nitems, bytes_after;
   gboolean found = FALSE;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   gdk_x11_display_error_trap_push (display);
 
   wm_protocols_atom =
@@ -94,8 +94,6 @@ client_window_has_wm_protocol (MetaFrame *frame,
 
   if (gdk_x11_display_error_trap_pop (display))
     return FALSE;
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   for (i = 0; i < nitems; i++)
     {
@@ -128,8 +126,6 @@ on_frame_close_request (GtkWindow *window,
   client_xwindow =
     meta_frame_content_get_window (META_FRAME_CONTENT (content));
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   delete_window_atom =
     gdk_x11_get_xatom_by_name_for_display (display, "WM_DELETE_WINDOW");
 
@@ -158,8 +154,6 @@ on_frame_close_request (GtkWindow *window,
 
   gdk_x11_display_error_trap_pop_ignored (display);
 
-  G_GNUC_END_IGNORE_DEPRECATIONS
-
   return TRUE;
 }
 
@@ -182,8 +176,6 @@ update_extents (MetaFrame *frame,
   data[2] = border.top;
   data[3] = border.bottom;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   xframe = gdk_x11_surface_get_xid (surface);
 
   gdk_x11_display_error_trap_push (display);
@@ -197,8 +189,6 @@ update_extents (MetaFrame *frame,
                    (guchar *) &data, 4);
 
   gdk_x11_display_error_trap_pop_ignored (display);
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   frame->extents = border;
 }
@@ -214,8 +204,6 @@ get_utf8_string_prop (GtkWindow *window,
   int format;
   Atom type;
   unsigned long nitems, bytes_after;
-
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
   display = gtk_widget_get_display (GTK_WIDGET (frame));
 
@@ -237,8 +225,6 @@ get_utf8_string_prop (GtkWindow *window,
 
   if (gdk_x11_display_error_trap_pop (display))
     return NULL;
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   return str;
 }
@@ -294,9 +280,7 @@ text_property_to_utf8 (GdkDisplay          *display,
   int count = 0;
   int res;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   xdisplay = gdk_x11_display_get_xdisplay (display);
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   res = XmbTextPropertyToTextList (xdisplay, prop,
                                    &local_list, &count);
@@ -327,8 +311,6 @@ frame_sync_wm_name (GtkWindow *window,
 
   display = gtk_widget_get_display (GTK_WIDGET (frame));
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   gdk_x11_display_error_trap_push (display);
 
   retval = XGetWMName (gdk_x11_display_get_xdisplay (display),
@@ -337,9 +319,6 @@ frame_sync_wm_name (GtkWindow *window,
 
   if (gdk_x11_display_error_trap_pop (display))
     return;
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
-
   if (retval == 0)
     return;
 
@@ -362,8 +341,6 @@ frame_sync_motif_wm_hints (GtkWindow *window,
 
   display = gtk_widget_get_display (GTK_WIDGET (frame));
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   gdk_x11_display_error_trap_push (display);
 
   if (XGetWindowProperty (gdk_x11_display_get_xdisplay (display),
@@ -381,8 +358,6 @@ frame_sync_motif_wm_hints (GtkWindow *window,
 
   if (gdk_x11_display_error_trap_pop (display))
     return;
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   if (mwm_hints &&
       (mwm_hints->flags & MWM_HINTS_FUNCTIONS) != 0)
@@ -408,8 +383,6 @@ frame_sync_wm_normal_hints (GtkWindow *frame,
 
   display = gtk_widget_get_display (GTK_WIDGET (frame));
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   gdk_x11_display_error_trap_push (display);
 
   if (!XGetWMNormalHints (gdk_x11_display_get_xdisplay (display),
@@ -423,8 +396,6 @@ frame_sync_wm_normal_hints (GtkWindow *frame,
 
   if (gdk_x11_display_error_trap_pop (display))
     return;
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   if (nitems > 0)
     {
@@ -442,14 +413,11 @@ frame_sync_wm_state (MetaFrame *frame,
                      Window     client_window)
 {
   GdkDisplay *display = gtk_widget_get_display (GTK_WIDGET (frame));
-  Display *xdisplay;
+  Display *xdisplay = gdk_x11_display_get_xdisplay (display);
   Atom *data = NULL, type;
   int format;
   unsigned long i, nitems, bytes_after;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
-  xdisplay = gdk_x11_display_get_xdisplay (display);
   gdk_x11_display_error_trap_push (display);
 
   XGetWindowProperty (xdisplay,
@@ -469,8 +437,6 @@ frame_sync_wm_state (MetaFrame *frame,
 
   gdk_x11_display_error_trap_pop_ignored (display);
 
-  G_GNUC_END_IGNORE_DEPRECATIONS
-
   XFree (data);
 }
 
@@ -482,8 +448,6 @@ meta_frame_constructed (GObject *object)
 
   display = gtk_widget_get_display (GTK_WIDGET (object));
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   frame->atom__NET_WM_VISIBLE_NAME =
     gdk_x11_get_xatom_by_name_for_display (display, "_NET_WM_VISIBLE_NAME");
   frame->atom__NET_WM_NAME =
@@ -494,8 +458,6 @@ meta_frame_constructed (GObject *object)
     gdk_x11_get_xatom_by_name_for_display (display, "_NET_WM_STATE");
   frame->atom__NET_WM_STATE_FULLSCREEN =
     gdk_x11_get_xatom_by_name_for_display (display, "_NET_WM_STATE_FULLSCREEN");
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   G_OBJECT_CLASS (meta_frame_parent_class)->constructed (object);
 }
@@ -535,12 +497,7 @@ meta_frame_size_allocate (GtkWidget *widget,
 
   scale = gdk_surface_get_scale_factor (gtk_native_get_surface (GTK_NATIVE (widget)));
   /* FIXME: right/bottom are broken, if they are ever other than 0. */
-  extents = (GtkBorder) {
-    (int16_t) (point.x * scale),
-    0,
-    (int16_t) (point.y * scale),
-    0
-  };
+  extents = (GtkBorder) { point.x * scale, 0, point.y * scale, 0 };
 
   if (frame->extents.left == extents.left &&
       frame->extents.right == extents.right &&
@@ -565,8 +522,6 @@ meta_frame_class_init (MetaFrameClass *klass)
 static void
 meta_frame_init (MetaFrame *frame)
 {
-  gtk_widget_add_css_class (GTK_WIDGET (frame), "ssd-frame");
-
   g_signal_connect (frame, "close-request",
                     G_CALLBACK (on_frame_close_request), NULL);
 }
@@ -591,9 +546,7 @@ meta_frame_new (Window window)
 
   gtk_widget_realize (GTK_WIDGET (frame));
   surface = gtk_native_get_surface (GTK_NATIVE (frame));
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gdk_x11_surface_set_frame_sync_enabled (surface, TRUE);
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   frame_sync_wm_state (META_FRAME (frame), window);
 
@@ -608,7 +561,7 @@ meta_frame_new (Window window)
   scale = gdk_surface_get_scale_factor (gtk_native_get_surface (GTK_NATIVE (frame)));
 
   update_extents (META_FRAME (frame),
-                  (GtkBorder) { 0, 0, (int16_t) (frame_height * scale), 0 });
+                  (GtkBorder) { 0, 0, frame_height * scale, 0 });
 
   frame_sync_net_wm_visible_name (GTK_WINDOW (frame), window);
   frame_sync_net_wm_name (GTK_WINDOW (frame), window);
@@ -619,11 +572,9 @@ meta_frame_new (Window window)
   /* Disable XDND support on the frame window, because it can cause some clients
    * to try use it instead of the client window as drop target */
   display = gtk_widget_get_display (GTK_WIDGET (frame));
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   XDeleteProperty (gdk_x11_display_get_xdisplay (display),
                    gdk_x11_surface_get_xid (surface),
                    gdk_x11_get_xatom_by_name_for_display (display, "XdndAware"));
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   return frame;
 }
@@ -645,9 +596,7 @@ meta_frame_handle_xevent (MetaFrame *frame,
   if (!content)
     return;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   is_frame = window == gdk_x11_surface_get_xid (surface);
-  G_GNUC_END_IGNORE_DEPRECATIONS
   is_content =
     window == meta_frame_content_get_window (META_FRAME_CONTENT (content));
 

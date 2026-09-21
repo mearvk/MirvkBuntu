@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -9,16 +10,18 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Signals from '../misc/signals.js';
 
-import * as BoxPointer from './boxpointer.js';
+import * as EdgeDragAction from './edgeDragAction.js';
 import * as InputSourceManager from './status/keyboard.js';
 import * as IBusManager from '../misc/ibusManager.js';
+import * as BoxPointer from './boxpointer.js';
 import * as Main from './main.js';
 import * as PageIndicators from './pageIndicators.js';
 import * as PopupMenu from './popupMenu.js';
 import * as SwipeTracker from './swipeTracker.js';
 
-export const KEYBOARD_ANIMATION_TIME = 150;
+const KEYBOARD_ANIMATION_TIME = 150;
 const KEYBOARD_REST_TIME = KEYBOARD_ANIMATION_TIME * 2;
+const KEY_LONG_PRESS_TIME = 250;
 
 const A11Y_APPLICATIONS_SCHEMA = 'org.gnome.desktop.a11y.applications';
 const SHOW_KEYBOARD = 'screen-keyboard-enabled';
@@ -62,11 +65,11 @@ class AspectContainer extends St.Widget {
 
     vfunc_allocate(box) {
         if (box.get_width() > 0 && box.get_height() > 0) {
-            const sizeRatio = box.get_width() / box.get_height();
+            let sizeRatio = box.get_width() / box.get_height();
             if (sizeRatio >= this._ratio) {
                 /* Restrict horizontally */
-                const width = box.get_height() * this._ratio;
-                const diff = box.get_width() - width;
+                let width = box.get_height() * this._ratio;
+                let diff = box.get_width() - width;
 
                 box.x1 += Math.floor(diff / 2);
                 box.x2 -= Math.ceil(diff / 2);
@@ -76,57 +79,6 @@ class AspectContainer extends St.Widget {
         super.vfunc_allocate(box);
     }
 });
-
-class NoGrabPopup extends PopupMenu.PopupMenu {
-    constructor(actor, arrowSide) {
-        super(actor, 0.5, arrowSide);
-
-        actor.connectObject(
-            'destroy', () => this.close(BoxPointer.PopupAnimation.FULL),
-            'notify::mapped', () => {
-                if (!actor.is_mapped())
-                    this.close(BoxPointer.PopupAnimation.FULL);
-            },
-            this);
-
-        this._clickGesture = new Clutter.ClickGesture();
-        this._clickGesture.connect(
-            'may-recognize', this._onMayRecognize.bind(this));
-        this._clickGesture.connect(
-            'recognize', () => this.close(BoxPointer.PopupAnimation.FULL));
-    }
-
-    _onMayRecognize(gesture) {
-        const {x, y} = gesture.get_coords_abs();
-        const targetActor = global.stage.get_actor_at_pos(Clutter.PickMode.ALL, x, y);
-
-        return targetActor !== this.actor && !this.actor.contains(targetActor);
-    }
-
-    open(params = {}) {
-        if (!super.open(params))
-            return false;
-
-        global.stage.add_action_full(
-            'close-popup-gesture',
-            Clutter.EventPhase.CAPTURE,
-            this._clickGesture);
-        return true;
-    }
-
-    close(params = {}) {
-        if (!super.close(params))
-            return false;
-        global.stage.remove_action(this._clickGesture);
-        return true;
-    }
-
-    destroy() {
-        global.stage.remove_action(this._clickGesture);
-        this.sourceActor.disconnectObject(this);
-        super.destroy();
-    }
-};
 
 const KeyContainer = GObject.registerClass(
 class KeyContainer extends St.Widget {
@@ -173,15 +125,25 @@ class Suggestions extends St.BoxLayout {
     _init() {
         super._init({
             style_class: 'word-suggestions',
-            orientation: Clutter.Orientation.HORIZONTAL,
+            vertical: false,
             x_align: Clutter.ActorAlign.CENTER,
         });
         this.show();
     }
 
     add(word, callback) {
-        const button = new St.Button({label: word});
-        button.connect('clicked', () => callback());
+        let button = new St.Button({label: word});
+        button.connect('button-press-event', () => {
+            callback();
+            return Clutter.EVENT_STOP;
+        });
+        button.connect('touch-event', (actor, event) => {
+            if (event.type() !== Clutter.EventType.TOUCH_BEGIN)
+                return Clutter.EVENT_PROPAGATE;
+
+            callback();
+            return Clutter.EVENT_STOP;
+        });
         this.add_child(button);
     }
 
@@ -195,16 +157,16 @@ class Suggestions extends St.BoxLayout {
     }
 });
 
-class LanguageSelectionPopup extends NoGrabPopup {
+class LanguageSelectionPopup extends PopupMenu.PopupMenu {
     constructor(actor) {
-        super(actor, St.Side.BOTTOM);
+        super(actor, 0.5, St.Side.BOTTOM);
 
-        const inputSourceManager = InputSourceManager.getInputSourceManager();
-        const inputSources = inputSourceManager.inputSources;
+        let inputSourceManager = InputSourceManager.getInputSourceManager();
+        let inputSources = inputSourceManager.inputSources;
 
         let item;
-        for (const i in inputSources) {
-            const is = inputSources[i];
+        for (let i in inputSources) {
+            let is = inputSources[i];
 
             item = this.addAction(is.displayName, () => {
                 inputSourceManager.activateInputSource(is, true);
@@ -218,19 +180,55 @@ class LanguageSelectionPopup extends NoGrabPopup {
         this.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         item = this.addSettingsAction(_('Keyboard Settings'), 'gnome-keyboard-panel.desktop');
         item.can_focus = false;
+
+        actor.connectObject('notify::mapped', () => {
+            if (!actor.is_mapped())
+                this.close(true);
+        }, this);
+    }
+
+    _onCapturedEvent(actor, event) {
+        const targetActor = global.stage.get_event_actor(event);
+
+        if (targetActor === this.actor ||
+            this.actor.contains(targetActor))
+            return Clutter.EVENT_PROPAGATE;
+
+        if (event.type() === Clutter.EventType.BUTTON_RELEASE || event.type() === Clutter.EventType.TOUCH_END)
+            this.close(true);
+
+        return Clutter.EVENT_STOP;
+    }
+
+    open(animate) {
+        super.open(animate);
+        global.stage.connectObject(
+            'captured-event', this._onCapturedEvent.bind(this), this);
+    }
+
+    close(animate) {
+        super.close(animate);
+        global.stage.disconnectObject(this);
+    }
+
+    destroy() {
+        global.stage.disconnectObject(this);
+        this.sourceActor.disconnectObject(this);
+        super.destroy();
     }
 }
 
 const Key = GObject.registerClass({
     Signals: {
         'long-press': {},
+        'pressed': {},
         'released': {},
         'keyval': {param_types: [GObject.TYPE_UINT]},
         'commit': {param_types: [GObject.TYPE_STRING]},
     },
 }, class Key extends St.BoxLayout {
     _init(params, extendedKeys = []) {
-        const {label, iconName, commitString, keyval, hasAction} = {keyval: 0, ...params};
+        const {label, iconName, commitString, keyval} = {keyval: 0, ...params};
         super._init({style_class: 'key-container'});
 
         this._keyval = parseInt(keyval, 16);
@@ -244,7 +242,8 @@ const Key = GObject.registerClass({
 
         this._extendedKeys = extendedKeys;
         this._extendedKeyboard = null;
-        this._hasAction = hasAction;
+        this._pressTimeoutId = 0;
+        this._capturedPress = false;
     }
 
     get iconName() {
@@ -256,45 +255,125 @@ const Key = GObject.registerClass({
     }
 
     _onDestroy() {
-        if (this._menu) {
-            this._menu.destroy();
-            this._menu = null;
+        if (this._boxPointer) {
+            this._boxPointer.destroy();
+            this._boxPointer = null;
         }
+
+        this.cancel();
     }
 
     _ensureExtendedKeysPopup() {
         if (this._extendedKeys.length === 0)
             return;
 
-        if (this._menu)
+        if (this._boxPointer)
             return;
 
-        this._menu = new NoGrabPopup(this.keyButton, St.Side.BOTTOM);
-        this._menu.actor.add_style_class_name('keyboard-subkeys-boxpointer');
-        this._menu.box.orientation = Clutter.Orientation.HORIZONTAL;
-        this._menu.box.style_class = 'key-container';
+        this._boxPointer = new BoxPointer.BoxPointer(St.Side.BOTTOM);
+        this._boxPointer.hide();
+        Main.layoutManager.addTopChrome(this._boxPointer);
+        this._boxPointer.setPosition(this.keyButton, 0.5);
 
-        for (const extendedKey of this._extendedKeys) {
-            const key = this._makeKey(extendedKey);
-            key.extendedKey = extendedKey;
-            this._menu.box.add_child(key);
-            key.set_size(...this.keyButton.allocation.get_size());
+        // Adds style to existing keyboard style to avoid repetition
+        this._boxPointer.add_style_class_name('keyboard-subkeys');
+        this._getExtendedKeys();
+        this.keyButton._extendedKeys = this._extendedKeyboard;
+    }
+
+    _press(button) {
+        if (button === this.keyButton) {
+            this._pressTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+                KEY_LONG_PRESS_TIME,
+                () => {
+                    this._pressTimeoutId = 0;
+
+                    this.emit('long-press');
+
+                    if (this._extendedKeys.length > 0) {
+                        this._touchPressSlot = null;
+                        this._ensureExtendedKeysPopup();
+                        this.keyButton.set_hover(false);
+                        this.keyButton.fake_release();
+                        this._showSubkeys();
+                    }
+
+                    return GLib.SOURCE_REMOVE;
+                });
         }
 
-        this.keyButton._extendedKeys = this._extendedKeyboard;
-        Main.layoutManager.addTopChrome(this._menu.actor);
+        this.emit('pressed');
+        this._pressed = true;
+    }
+
+    _release(button, commitString) {
+        if (this._pressTimeoutId !== 0) {
+            GLib.source_remove(this._pressTimeoutId);
+            this._pressTimeoutId = 0;
+        }
+
+        if (this._pressed) {
+            if (this._keyval && button === this.keyButton)
+                this.emit('keyval', this._keyval);
+            else if (commitString)
+                this.emit('commit', commitString);
+            else
+                console.error('Need keyval or commitString');
+        }
+
+        this.emit('released');
+        this._hideSubkeys();
+        this._pressed = false;
+    }
+
+    cancel() {
+        if (this._pressTimeoutId !== 0) {
+            GLib.source_remove(this._pressTimeoutId);
+            this._pressTimeoutId = 0;
+        }
+        this._touchPressSlot = null;
+        this.keyButton.set_hover(false);
+        this.keyButton.fake_release();
+    }
+
+    _onCapturedEvent(actor, event) {
+        let type = event.type();
+        let press = type === Clutter.EventType.BUTTON_PRESS || type === Clutter.EventType.TOUCH_BEGIN;
+        let release = type === Clutter.EventType.BUTTON_RELEASE || type === Clutter.EventType.TOUCH_END;
+        const targetActor = global.stage.get_event_actor(event);
+
+        if (targetActor === this._boxPointer.bin ||
+            this._boxPointer.bin.contains(targetActor))
+            return Clutter.EVENT_PROPAGATE;
+
+        if (press)
+            this._capturedPress = true;
+        else if (release && this._capturedPress)
+            this._hideSubkeys();
+
+        return Clutter.EVENT_STOP;
     }
 
     _showSubkeys() {
-        this._menu.open(BoxPointer.PopupAnimation.FULL);
+        this._boxPointer.open(BoxPointer.PopupAnimation.FULL);
+        global.stage.connectObject(
+            'captured-event', this._onCapturedEvent.bind(this), this);
+        this.keyButton.connectObject('notify::mapped', () => {
+            if (!this.keyButton.is_mapped())
+                this._hideSubkeys();
+        }, this);
     }
 
     _hideSubkeys() {
-        this._menu?.close(BoxPointer.PopupAnimation.FULL);
+        if (this._boxPointer)
+            this._boxPointer.close(BoxPointer.PopupAnimation.FULL);
+        global.stage.disconnectObject(this);
+        this.keyButton.disconnectObject(this);
+        this._capturedPress = false;
     }
 
     _makeKey(commitString, label, icon) {
-        const button = new St.Button({
+        let button = new St.Button({
             style_class: 'keyboard-key',
             x_expand: true,
         });
@@ -309,29 +388,71 @@ const Key = GObject.registerClass({
             button.set_label(commitString);
         }
 
-        const longPressGesture = new Clutter.LongPressGesture();
-        longPressGesture.connect('recognize', () => {
-            this.emit('long-press');
-            if (this._extendedKeys.length > 0) {
-                this._ensureExtendedKeysPopup();
-                this._showSubkeys();
-            }
+        button.connect('button-press-event', () => {
+            this._press(button, commitString);
+            button.add_style_pseudo_class('active');
+            return Clutter.EVENT_STOP;
         });
-        button.add_action(longPressGesture);
+        button.connect('button-release-event', () => {
+            this._release(button, commitString);
+            button.remove_style_pseudo_class('active');
+            return Clutter.EVENT_STOP;
+        });
+        button.connect('touch-event', (actor, event) => {
+            // We only handle touch events here on wayland. On X11
+            // we do get emulated pointer events, which already works
+            // for single-touch cases. Besides, the X11 passive touch grab
+            // set up by Mutter will make us see first the touch events
+            // and later the pointer events, so it will look like two
+            // unrelated series of events, we want to avoid double handling
+            // in these cases.
+            if (!Meta.is_wayland_compositor())
+                return Clutter.EVENT_PROPAGATE;
 
-        button.connect('clicked', () => {
-            if (this._keyval && button === this.keyButton)
-                this.emit('keyval', this._keyval);
-            else if (commitString)
-                this.emit('commit', commitString);
-            else if (!this._hasAction)
-                console.error('Need keyval, commitString or an action');
+            const slot = event.get_event_sequence().get_slot();
 
-            this.emit('released');
-            this._hideSubkeys();
+            if (!this._touchPressSlot &&
+                event.type() === Clutter.EventType.TOUCH_BEGIN) {
+                this._touchPressSlot = slot;
+                this._press(button, commitString);
+                button.add_style_pseudo_class('active');
+            } else if (event.type() === Clutter.EventType.TOUCH_END) {
+                if (!this._touchPressSlot ||
+                    this._touchPressSlot === slot) {
+                    this._release(button, commitString);
+                    button.remove_style_pseudo_class('active');
+                }
+
+                if (this._touchPressSlot === slot)
+                    this._touchPressSlot = null;
+            }
+            return Clutter.EVENT_STOP;
         });
 
         return button;
+    }
+
+    _getExtendedKeys() {
+        this._extendedKeyboard = new St.BoxLayout({
+            style_class: 'key-container',
+            vertical: false,
+        });
+        for (let i = 0; i < this._extendedKeys.length; ++i) {
+            let extendedKey = this._extendedKeys[i];
+            let key = this._makeKey(extendedKey);
+
+            key.extendedKey = extendedKey;
+            this._extendedKeyboard.add_child(key);
+
+            key.set_size(...this.keyButton.allocation.get_size());
+            this.keyButton.connect('notify::allocation',
+                () => key.set_size(...this.keyButton.allocation.get_size()));
+        }
+        this._boxPointer.bin.add_child(this._extendedKeyboard);
+    }
+
+    get subkeys() {
+        return this._boxPointer;
     }
 
     setLatched(latched) {
@@ -350,7 +471,7 @@ class KeyboardModel {
     _loadModel(groupName) {
         const file = Gio.File.new_for_uri(
             `resource:///org/gnome/shell/osk-layouts/${groupName}.json`);
-        const [success_, contents] = file.load_contents(null);
+        let [success_, contents] = file.load_contents(null);
 
         const decoder = new TextDecoder();
         return JSON.parse(decoder.decode(contents));
@@ -376,7 +497,7 @@ class FocusTracker extends Signals.EventEmitter {
                 this._setCurrentWindow(global.display.focus_window);
                 this.emit('window-changed', this._currentWindow);
             },
-            'grab-op-begin', (display, window, op, _sprite) => {
+            'grab-op-begin', (display, window, op) => {
                 if (window === this._currentWindow &&
                     (op === Meta.GrabOp.MOVING || op === Meta.GrabOp.KEYBOARD_MOVING))
                     this.emit('window-grabbed');
@@ -467,7 +588,7 @@ class FocusTracker extends Signals.EventEmitter {
 const EmojiPager = GObject.registerClass({
     Properties: {
         'delta': GObject.ParamSpec.int(
-            'delta', null, null,
+            'delta', 'delta', 'delta',
             GObject.ParamFlags.READWRITE,
             GLib.MININT32, GLib.MAXINT32, 0),
     },
@@ -492,17 +613,14 @@ const EmojiPager = GObject.registerClass({
         this._curPage = null;
         this._followingPage = null;
         this._followingPanel = null;
+        this._currentKey = null;
         this._delta = 0;
         this._width = null;
 
         const swipeTracker = new SwipeTracker.SwipeTracker(this,
             Clutter.Orientation.HORIZONTAL,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-            {
-                allowDrag: true,
-                allowScroll: true,
-                name: 'EmojiPager swipe tracker',
-            });
+            {allowDrag: true, allowScroll: true});
         swipeTracker.connect('begin', this._onSwipeBegin.bind(this));
         swipeTracker.connect('update', this._onSwipeUpdate.bind(this));
         swipeTracker.connect('end', this._onSwipeEnd.bind(this));
@@ -533,7 +651,7 @@ const EmojiPager = GObject.registerClass({
         this._delta = value;
         this.notify('delta');
 
-        const followingPage = this.getFollowingPage();
+        let followingPage = this.getFollowingPage();
 
         if (this._followingPage !== followingPage) {
             if (this._followingPanel) {
@@ -583,6 +701,12 @@ const EmojiPager = GObject.registerClass({
 
     _onSwipeUpdate(tracker, progress) {
         this.delta = -progress * this._width;
+
+        if (this._currentKey != null) {
+            this._currentKey.cancel();
+            this._currentKey = null;
+        }
+
         return false;
     }
 
@@ -613,9 +737,9 @@ const EmojiPager = GObject.registerClass({
         this._pages = [];
 
         for (let i = 0; i < this._sections.length; i++) {
-            const section = this._sections[i];
-            const itemsPerPage = this._nCols * this._nRows;
-            const nPages = Math.ceil(section.keys.length / itemsPerPage);
+            let section = this._sections[i];
+            let itemsPerPage = this._nCols * this._nRows;
+            let nPages = Math.ceil(section.keys.length / itemsPerPage);
             let page = -1;
             let pageKeys;
 
@@ -633,7 +757,7 @@ const EmojiPager = GObject.registerClass({
 
     _lookupSection(section, nPage) {
         for (let i = 0; i < this._pages.length; i++) {
-            const page = this._pages[i];
+            let page = this._pages[i];
 
             if (page.section === section && page.page === nPage)
                 return i;
@@ -658,18 +782,26 @@ const EmojiPager = GObject.registerClass({
         /* Set an expander actor so all proportions are right despite the panel
          * not having all rows/cols filled in.
          */
-        const expander = new Clutter.Actor();
+        let expander = new Clutter.Actor();
         gridLayout.attach(expander, 0, 0, this._nCols, this._nRows);
 
-        const page = this._pages[nPage];
+        let page = this._pages[nPage];
         let col = 0;
         let row = 0;
 
         for (let i = 0; i < page.pageKeys.length; i++) {
-            const modelKey = page.pageKeys[i];
-            const key = new Key({commitString: modelKey.label}, modelKey.variants);
+            let modelKey = page.pageKeys[i];
+            let key = new Key({commitString: modelKey.label}, modelKey.variants);
 
+            key.keyButton.set_button_mask(0);
+
+            key.connect('pressed', () => {
+                this._currentKey = key;
+            });
             key.connect('commit', (actor, str) => {
+                if (this._currentKey !== key)
+                    return;
+                this._currentKey = null;
                 this.emit('emoji', str);
             });
 
@@ -714,13 +846,13 @@ const EmojiPager = GObject.registerClass({
             this.add_child(this._panel);
         }
 
-        const page = this._pages[nPage];
+        let page = this._pages[nPage];
         this.emit('page-changed', page.section.label, page.page, page.nPages);
     }
 
     setCurrentSection(section, nPage) {
         for (let i = 0; i < this._pages.length; i++) {
-            const page = this._pages[i];
+            let page = this._pages[i];
 
             if (page.section === section && page.page === nPage) {
                 this.setCurrentPage(i);
@@ -814,7 +946,7 @@ const EmojiSelection = GObject.registerClass({
         this._updateIndicatorPosition();
 
         for (let i = 0; i < this._sections.length; i++) {
-            const sect = this._sections[i];
+            let sect = this._sections[i];
             sect.button.setLatched(sectionLabel === sect.label);
         }
     }
@@ -834,10 +966,10 @@ const EmojiSelection = GObject.registerClass({
     }
 
     _populateSections() {
-        const file = Gio.File.new_for_uri('resource:///org/gnome/shell/osk-layouts/emoji.json');
-        const [success_, contents] = file.load_contents(null);
+        let file = Gio.File.new_for_uri('resource:///org/gnome/shell/osk-layouts/emoji.json');
+        let [success_, contents] = file.load_contents(null);
 
-        const emoji = JSON.parse(new TextDecoder().decode(contents));
+        let emoji = JSON.parse(new TextDecoder().decode(contents));
 
         let variants = [];
         let currentKey = 0;
@@ -851,14 +983,14 @@ const EmojiSelection = GObject.registerClass({
                     continue;
             }
 
-            const newSection = this._findSection(emoji[currentKey].name);
+            let newSection = this._findSection(emoji[currentKey].name);
             if (newSection != null) {
                 currentSection = newSection;
                 currentSection.keys = [];
             }
 
             /* Create the key */
-            const label = emoji[currentKey].char + String.fromCharCode(0xFE0F);
+            let label = emoji[currentKey].char + String.fromCharCode(0xFE0F);
             currentSection.keys.push({label, variants});
             currentKey = i;
             variants = [];
@@ -866,18 +998,18 @@ const EmojiSelection = GObject.registerClass({
     }
 
     _createBottomRow() {
-        const row = new KeyContainer();
+        let row = new KeyContainer();
         let key;
 
         row.appendRow();
 
-        key = new Key({label: 'ABC', hasAction: true}, []);
+        key = new Key({label: 'ABC'}, []);
         key.keyButton.add_style_class_name('default-key');
         key.connect('released', () => this.emit('toggle'));
         row.appendKey(key, 1.5);
 
         for (let i = 0; i < this._sections.length; i++) {
-            const section = this._sections[i];
+            let section = this._sections[i];
 
             key = new Key({label: section.label}, []);
             key.connect('released', () => this._emojiPager.setCurrentSection(section, 0));
@@ -886,7 +1018,7 @@ const EmojiSelection = GObject.registerClass({
             section.button = key;
         }
 
-        key = new Key({iconName: 'osk-hide-symbolic', hasAction: true});
+        key = new Key({iconName: 'keyboard-hide-symbolic'});
         key.keyButton.add_style_class_name('default-key');
         key.keyButton.add_style_class_name('hide-key');
         key.connect('released', () => {
@@ -928,7 +1060,7 @@ export class KeyboardManager extends Signals.EventEmitter {
         this._a11yApplicationsSettings = new Gio.Settings({schema_id: A11Y_APPLICATIONS_SCHEMA});
         this._a11yApplicationsSettings.connect('changed', this._syncEnabled.bind(this));
 
-        this._seat = global.stage.context.get_backend().get_default_seat();
+        this._seat = Clutter.get_default_backend().get_default_seat();
         this._seat.connect('notify::touch-mode', this._syncEnabled.bind(this));
 
         this._lastDevice = null;
@@ -940,25 +1072,22 @@ export class KeyboardManager extends Signals.EventEmitter {
             this._syncEnabled();
         });
 
-        const allowedModes = Shell.ActionMode.ALL & ~Shell.ActionMode.LOCK_SCREEN;
-        const bottomDragGesture = new Shell.EdgeDragGesture({
-            name: 'OSK show bottom drag',
-            side: St.Side.BOTTOM,
+        const mode = Shell.ActionMode.ALL & ~Shell.ActionMode.LOCK_SCREEN;
+        const bottomDragAction = new EdgeDragAction.EdgeDragAction(St.Side.BOTTOM, mode);
+        bottomDragAction.connect('activated', () => {
+            if (this._keyboard)
+                this._keyboard.gestureActivate(Main.layoutManager.bottomIndex);
         });
-        bottomDragGesture.connect('may-recognize', () => {
-            return allowedModes & Main.actionMode;
+        bottomDragAction.connect('progress', (_action, progress) => {
+            if (this._keyboard)
+                this._keyboard.gestureProgress(progress);
         });
-        bottomDragGesture.connect('progress', (_action, progress) => {
-            this._keyboard?.gestureProgress(progress);
+        bottomDragAction.connect('gesture-cancel', () => {
+            if (this._keyboard)
+                this._keyboard.gestureCancel();
         });
-        bottomDragGesture.connect('end', () => {
-            this._keyboard?.gestureActivate(Main.layoutManager.bottomIndex);
-        });
-        bottomDragGesture.connect('cancel', () => {
-            this._keyboard?.gestureCancel();
-        });
-        global.stage.add_action(bottomDragGesture);
-        this._bottomDragGesture = bottomDragGesture;
+        global.stage.add_action_full('osk', Clutter.EventPhase.CAPTURE, bottomDragAction);
+        this._bottomDragAction = bottomDragAction;
 
         this._syncEnabled();
     }
@@ -967,14 +1096,14 @@ export class KeyboardManager extends Signals.EventEmitter {
         if (!this._lastDevice)
             return false;
 
-        const deviceType = this._lastDevice.get_device_type();
+        let deviceType = this._lastDevice.get_device_type();
         return deviceType === Clutter.InputDeviceType.TOUCHSCREEN_DEVICE;
     }
 
     _syncEnabled() {
-        const enableKeyboard = this._a11yApplicationsSettings.get_boolean(SHOW_KEYBOARD);
-        const autoEnabled = this._seat.get_touch_mode() && this._lastDeviceIsTouchscreen();
-        const enabled = enableKeyboard || autoEnabled;
+        let enableKeyboard = this._a11yApplicationsSettings.get_boolean(SHOW_KEYBOARD);
+        let autoEnabled = this._seat.get_touch_mode() && this._lastDeviceIsTouchscreen();
+        let enabled = enableKeyboard || autoEnabled;
 
         if (!enabled && !this._keyboard)
             return;
@@ -983,13 +1112,13 @@ export class KeyboardManager extends Signals.EventEmitter {
             this._keyboard = new Keyboard();
             this._keyboard.connect('visibility-changed', () => {
                 this.emit('visibility-changed');
-                this._bottomDragGesture.enabled = !this._keyboard.visible;
+                this._bottomDragAction.enabled = !this._keyboard.visible;
             });
         } else if (!enabled && this._keyboard) {
             this._keyboard.setCursorLocation(null);
             this._keyboard.destroy();
             this._keyboard = null;
-            this._bottomDragGesture.enabled = true;
+            this._bottomDragAction.enabled = true;
         }
     }
 
@@ -1026,6 +1155,22 @@ export class KeyboardManager extends Signals.EventEmitter {
     setSuggestionsVisible(visible) {
         this._keyboard?.setSuggestionsVisible(visible);
     }
+
+    maybeHandleEvent(event) {
+        if (!this._keyboard)
+            return false;
+
+        const actor = global.stage.get_event_actor(event);
+
+        if (Main.layoutManager.keyboardBox.contains(actor) ||
+            !!actor._extendedKeys || !!actor.extendedKey) {
+            actor.event(event, true);
+            actor.event(event, false);
+            return true;
+        }
+
+        return false;
+    }
 }
 
 export const Keyboard = GObject.registerClass({
@@ -1041,7 +1186,7 @@ export const Keyboard = GObject.registerClass({
             // the locale setting in order to avoid flipping the
             // keyboard on RTL locales.
             text_direction: Clutter.TextDirection.LTR,
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
         this._focusInExtendedKeys = false;
         this._emojiActive = false;
@@ -1063,6 +1208,16 @@ export const Keyboard = GObject.registerClass({
 
         this._windowMovedId = this._focusTracker.connect('window-moved',
             this._onFocusWindowMoving.bind(this));
+
+        // Valid only for X11
+        if (!Meta.is_wayland_compositor()) {
+            this._focusTracker.connectObject('focus-changed', (_tracker, focused) => {
+                if (focused)
+                    this.open(Main.layoutManager.focusIndex);
+                else
+                    this.close();
+            }, this);
+        }
 
         this._showIdleId = 0;
 
@@ -1087,9 +1242,9 @@ export const Keyboard = GObject.registerClass({
     }
 
     _onFocusPositionChanged(focusTracker) {
-        const rect = focusTracker.getCurrentRect();
+        let rect = focusTracker.getCurrentRect();
         this.setCursorLocation(focusTracker.currentWindow, rect.x, rect.y, rect.width, rect.height);
-        this._updateLevelFromHints(true);
+        this._updateLevelFromHints();
     }
 
     _onDestroy() {
@@ -1105,7 +1260,7 @@ export const Keyboard = GObject.registerClass({
 
         this._clearShowIdle();
 
-        this._keyboardController.setOskCompletion(false);
+        this._keyboardController.oskCompletion = false;
         this._keyboardController.destroy();
 
         Main.layoutManager.untrackChrome(this);
@@ -1150,7 +1305,7 @@ export const Keyboard = GObject.registerClass({
         this._keyboardController.connectObject(
             'group-changed', this._onGroupChanged.bind(this),
             'panel-state', this._onKeyboardStateChanged.bind(this),
-            'purpose-changed', () => this._updateKeys(),
+            'purpose-changed', this._onPurposeChanged.bind(this),
             'content-hints-changed', this._onContentHintsChanged.bind(this),
             this);
         global.stage.connectObject('notify::key-focus',
@@ -1159,37 +1314,22 @@ export const Keyboard = GObject.registerClass({
         this._relayout();
     }
 
-    _shouldShowEmoji() {
-        if ((this._contentHints & Clutter.InputContentHintFlags.NO_EMOJI) !== 0)
-            return false;
-
-        return this._purpose === Clutter.InputContentPurpose.NORMAL ||
-            this._purpose === Clutter.InputContentPurpose.ALPHA ||
-            this._purpose === Clutter.InputContentPurpose.PASSWORD ||
-            this._purpose === Clutter.InputContentPurpose.TERMINAL;
+    _onPurposeChanged(controller, purpose) {
+        this._purpose = purpose;
+        this._updateKeys();
     }
 
-    _onContentHintsChanged(controller, contentHints) {
-        this._contentHints = contentHints;
-
-        if (this.visible &&
-            (contentHints & Clutter.InputContentHintFlags.INHIBIT_OSK) !== 0) {
-            this.close();
-        } else {
-            const emojiVisible = this._shouldShowEmoji();
-            if (emojiVisible !== this._emojiVisible)
-                this._updateKeys();
-            else
-                this._updateLevelFromHints(false);
-        }
+    _onContentHintsChanged(controller, contentHint) {
+        this._contentHint = contentHint;
+        this._updateLevelFromHints();
     }
 
-    _updateLevelFromHints(userInputHappened) {
+    _updateLevelFromHints() {
         // If the latch is enabled, avoid level changes
         if (this._latched)
             return;
 
-        if ((this._contentHints & Clutter.InputContentHintFlags.LOWERCASE) !== 0) {
+        if ((this._contentHint & Clutter.InputContentHintFlags.LOWERCASE) !== 0) {
             this._setActiveLevel('default');
             return;
         }
@@ -1197,17 +1337,12 @@ export const Keyboard = GObject.registerClass({
         if (!this._layers['shift'])
             return;
 
-        if ((this._contentHints & Clutter.InputContentHintFlags.UPPERCASE) !== 0) {
+        if ((this._contentHint & Clutter.InputContentHintFlags.UPPERCASE) !== 0) {
             this._setActiveLevel('shift');
-            return;
-        }
-
-        if ((this._contentHints &
-             (Clutter.InputContentHintFlags.AUTO_CAPITALIZATION |
-              Clutter.InputContentHintFlags.TITLECASE)) !== 0) {
-            if (this._surroundingTextId)
-                return;
-
+        } else if (!this._surroundingTextId &&
+                   (this._contentHint &
+                    (Clutter.InputContentHintFlags.AUTO_CAPITALIZATION |
+                     Clutter.InputContentHintFlags.TITLECASE)) !== 0) {
             this._surroundingTextId =
                 Main.inputMethod.connect('surrounding-text-set', () => {
                     const [text, cursor] = Main.inputMethod.getSurroundingText();
@@ -1219,12 +1354,12 @@ export const Keyboard = GObject.registerClass({
 
                     const beforeCursor = GLib.utf8_substring(text, 0, cursor);
 
-                    if ((this._contentHints & Clutter.InputContentHintFlags.TITLECASE) !== 0) {
+                    if ((this._contentHint & Clutter.InputContentHintFlags.TITLECASE) !== 0) {
                         if (beforeCursor.charAt(beforeCursor.length - 1) === ' ')
                             this._setActiveLevel('shift');
                         else
                             this._setActiveLevel('default');
-                    } else if ((this._contentHints & Clutter.InputContentHintFlags.AUTO_CAPITALIZATION) !== 0) {
+                    } else if ((this._contentHint & Clutter.InputContentHintFlags.AUTO_CAPITALIZATION) !== 0) {
                         if (beforeCursor.charAt(beforeCursor.trimEnd().length - 1) === '.')
                             this._setActiveLevel('shift');
                         else
@@ -1235,19 +1370,15 @@ export const Keyboard = GObject.registerClass({
                     this._surroundingTextId = 0;
                 });
             Main.inputMethod.request_surrounding();
-            return;
         }
-
-        if (userInputHappened && this._currentPage === this._layers['shift'])
-            this._setActiveLevel('default');
     }
 
     _onKeyFocusChanged() {
-        const focus = global.stage.key_focus;
+        let focus = global.stage.key_focus;
 
         // Showing an extended key popup and clicking a key from the extended keys
         // will grab focus, but ignore that
-        const extendedKeysWereFocused = this._focusInExtendedKeys;
+        let extendedKeysWereFocused = this._focusInExtendedKeys;
         this._focusInExtendedKeys = focus && (focus._extendedKeys || focus.extendedKey);
         if (this._focusInExtendedKeys || extendedKeysWereFocused)
             return;
@@ -1258,9 +1389,10 @@ export const Keyboard = GObject.registerClass({
         }
 
         if (!this._showIdleId) {
-            this._showIdleId = GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._showIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                 this.open(Main.layoutManager.focusIndex);
                 this._showIdleId = 0;
+                return GLib.SOURCE_REMOVE;
             });
             GLib.Source.set_name_by_id(this._showIdleId, '[gnome-shell] this.open');
         }
@@ -1268,8 +1400,8 @@ export const Keyboard = GObject.registerClass({
 
     _updateLayout(groupName, purpose) {
         let keyboardModel = null;
-        const layers = {};
-        const layout = new Clutter.Actor({
+        let layers = {};
+        let layout = new Clutter.Actor({
             layout_manager: new Clutter.BinLayout(),
             x_expand: true,
             y_expand: true,
@@ -1298,7 +1430,7 @@ export const Keyboard = GObject.registerClass({
                 try {
                     keyboardModel = new KeyboardModel(group);
                     break;
-                } catch {
+                } catch (e) {
                     // Ignore this error and fall back to next model
                 }
             }
@@ -1307,19 +1439,21 @@ export const Keyboard = GObject.registerClass({
                 return;
         }
 
-        this._emojiVisible = this._shouldShowEmoji();
-        this._modifiers.clear();
-        this._modifierKeys.clear();
+        const emojiVisible = Meta.is_wayland_compositor() &&
+            (purpose === Clutter.InputContentPurpose.NORMAL ||
+             purpose === Clutter.InputContentPurpose.ALPHA ||
+             purpose === Clutter.InputContentPurpose.PASSWORD ||
+             purpose === Clutter.InputContentPurpose.TERMINAL);
 
         keyboardModel.getLevels().forEach(currentLevel => {
-            const levelLayout = new KeyContainer();
+            let levelLayout = new KeyContainer();
             levelLayout.shiftKeys = [];
             levelLayout.mode = currentLevel.mode;
 
             const rows = currentLevel.rows;
             rows.forEach(row => {
                 levelLayout.appendRow();
-                this._addRowKeys(row, levelLayout, this._emojiVisible);
+                this._addRowKeys(row, levelLayout, emojiVisible);
             });
 
             layers[currentLevel.level] = levelLayout;
@@ -1351,19 +1485,39 @@ export const Keyboard = GObject.registerClass({
                 accumulatedWidth = 0;
             }
 
-            const button = new Key({
+            let button = new Key({
                 commitString,
                 label: key.label,
                 iconName: key.iconName,
                 keyval: key.keyval,
-                hasAction: !!key.action,
             }, strings);
 
-            if (key.action) {
+            if (key.keyval) {
+                button.connect('keyval', (_actor, keyval) => {
+                    this._keyboardController.keyvalPress(keyval);
+                    this._keyboardController.keyvalRelease(keyval);
+                });
+            }
+
+            if (key.action !== 'modifier') {
+                button.connect('commit', (_actor, str) => {
+                    this._keyboardController.commit(str, this._modifiers).then(() => {
+                        this._disableAllModifiers();
+                        if (layout.mode === 'default' ||
+                            (layout.mode === 'latched' && !this._latched)) {
+                            if (this._contentHint !== 0)
+                                this._updateLevelFromHints();
+                            else
+                                this._setActiveLevel('default');
+                        }
+                    }).catch(console.error);
+                });
+            }
+
+            if (key.action !== null) {
                 button.connect('released', () => {
                     if (key.action === 'hide') {
                         this.close(true);
-                        this._updateLevelFromHints(true);
                     } else if (key.action === 'languageMenu') {
                         this._popupLanguageMenu(button);
                     } else if (key.action === 'emoji') {
@@ -1373,33 +1527,19 @@ export const Keyboard = GObject.registerClass({
                     } else if (key.action === 'delete') {
                         this._keyboardController.toggleDelete(true);
                         this._keyboardController.toggleDelete(false);
-                        this._updateLevelFromHints(true);
                     } else if (!this._longPressed && key.action === 'levelSwitch') {
                         this._setActiveLevel(key.level);
                         this._setLatched(
                             key.level === 1 &&
-                                key.iconName === 'osk-caps-lock-symbolic');
+                                key.iconName === 'keyboard-caps-lock-symbolic');
                     }
 
                     this._longPressed = false;
                 });
-            } else if (key.keyval) {
-                button.connect('keyval', (_actor, keyval) => {
-                    this._keyboardController.keyvalPress(keyval);
-                    this._keyboardController.keyvalRelease(keyval);
-                    this._updateLevelFromHints(true);
-                });
-            } else {
-                button.connect('commit', (_actor, str) => {
-                    this._keyboardController.commit(str, this._modifiers).then(() => {
-                        this._disableAllModifiers();
-                        this._updateLevelFromHints(true);
-                    }).catch(console.error);
-                });
             }
 
             if (key.action === 'levelSwitch' &&
-                key.iconName === 'osk-shift-symbolic') {
+                key.iconName === 'keyboard-shift-symbolic') {
                 layout.shiftKeys.push(button);
                 if (key.level === 'shift') {
                     button.connect('long-press', () => {
@@ -1416,9 +1556,9 @@ export const Keyboard = GObject.registerClass({
             }
 
             if (key.action === 'modifier') {
-                const modifierKeys = this._modifierKeys.get(key.keyval) ?? [];
+                let modifierKeys = this._modifierKeys[key.keyval] || [];
                 modifierKeys.push(button);
-                this._modifierKeys.set(key.keyval, modifierKeys);
+                this._modifierKeys[key.keyval] = modifierKeys;
             }
 
             if (key.action || key.keyval)
@@ -1439,7 +1579,7 @@ export const Keyboard = GObject.registerClass({
         else
             this._modifiers.delete(keyval);
 
-        for (const key of this._modifierKeys.get(keyval))
+        for (const key of this._modifierKeys[keyval])
             key.setLatched(enabled);
     }
 
@@ -1459,7 +1599,7 @@ export const Keyboard = GObject.registerClass({
 
         this._languagePopup = new LanguageSelectionPopup(keyActor);
         Main.layoutManager.addTopChrome(this._languagePopup.actor);
-        this._languagePopup.open(BoxPointer.PopupAnimation.FULL);
+        this._languagePopup.open(true);
     }
 
     _updateCurrentPageVisible() {
@@ -1479,21 +1619,21 @@ export const Keyboard = GObject.registerClass({
 
     _setCurrentLevelLatched(layout, latched) {
         for (let i = 0; i < layout.shiftKeys.length; i++) {
-            const key = layout.shiftKeys[i];
+            let key = layout.shiftKeys[i];
             key.setLatched(latched);
             key.iconName = latched
-                ? 'osk-caps-lock-symbolic' : 'osk-shift-symbolic';
+                ? 'keyboard-caps-lock-symbolic' : 'keyboard-shift-symbolic';
         }
     }
 
     _getGridSlots() {
-        let numOfHorizSlots = 0;
-        const rows = this._currentPage.get_children();
-        const numOfVertSlots = rows.length;
+        let numOfHorizSlots = 0, numOfVertSlots;
+        let rows = this._currentPage.get_children();
+        numOfVertSlots = rows.length;
 
         for (let i = 0; i < rows.length; ++i) {
-            const keyboardRow = rows[i];
-            const keys = keyboardRow.get_children();
+            let keyboardRow = rows[i];
+            let keys = keyboardRow.get_children();
 
             numOfHorizSlots = Math.max(numOfHorizSlots, keys.length);
         }
@@ -1502,8 +1642,7 @@ export const Keyboard = GObject.registerClass({
     }
 
     _relayout() {
-        const monitor = Main.layoutManager.keyboardMonitor;
-        const [minHeight] = this.get_preferred_height(-1);
+        let monitor = Main.layoutManager.keyboardMonitor;
 
         if (!monitor)
             return;
@@ -1514,14 +1653,11 @@ export const Keyboard = GObject.registerClass({
             this.height = monitor.height / 3;
         else
             this.height = monitor.height / 4;
-
-        this.height = Math.clamp(this.height, minHeight, monitor.height / 2);
     }
 
     _updateKeys() {
         const group = this._keyboardController.getCurrentGroup();
-        const {purpose} = this._keyboardController;
-        this._updateLayout(group, purpose);
+        this._updateLayout(group, this._purpose);
         this._setActiveLevel('default');
     }
 
@@ -1540,9 +1676,6 @@ export const Keyboard = GObject.registerClass({
         else
             return;
 
-        if ((this._contentHints & Clutter.InputContentHintFlags.INHIBIT_OSK) !== 0)
-            enabled = false;
-
         if (enabled)
             this.open(Main.layoutManager.focusIndex);
         else
@@ -1551,7 +1684,7 @@ export const Keyboard = GObject.registerClass({
 
     _setActiveLevel(activeLevel) {
         const layers = this._layers;
-        const currentPage = layers[activeLevel];
+        let currentPage = layers[activeLevel];
 
         if (this._currentPage === currentPage) {
             this._updateCurrentPageVisible();
@@ -1591,7 +1724,7 @@ export const Keyboard = GObject.registerClass({
             return;
         }
 
-        this._keyboardController.setOskCompletion(true);
+        this._keyboardController.oskCompletion = true;
         this._clearKeyboardRestTimer();
 
         if (immediate) {
@@ -1599,11 +1732,12 @@ export const Keyboard = GObject.registerClass({
             return;
         }
 
-        this._keyboardRestingId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT,
+        this._keyboardRestingId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
             KEYBOARD_REST_TIME,
             () => {
                 this._clearKeyboardRestTimer();
                 this._open();
+                return GLib.SOURCE_REMOVE;
             });
         GLib.Source.set_name_by_id(this._keyboardRestingId, '[gnome-shell] this._clearKeyboardRestTimer');
     }
@@ -1625,7 +1759,7 @@ export const Keyboard = GObject.registerClass({
         if (!this._keyboardVisible)
             return;
 
-        this._keyboardController.setOskCompletion(false);
+        this._keyboardController.oskCompletion = false;
         this._clearKeyboardRestTimer();
 
         if (immediate) {
@@ -1633,11 +1767,12 @@ export const Keyboard = GObject.registerClass({
             return;
         }
 
-        this._keyboardRestingId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT,
+        this._keyboardRestingId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
             KEYBOARD_REST_TIME,
             () => {
                 this._clearKeyboardRestTimer();
                 this._close();
+                return GLib.SOURCE_REMOVE;
             });
         GLib.Source.set_name_by_id(this._keyboardRestingId, '[gnome-shell] this._clearKeyboardRestTimer');
     }
@@ -1652,8 +1787,6 @@ export const Keyboard = GObject.registerClass({
     }
 
     _animateShow() {
-        global.compositor.disable_unredirect();
-
         if (this._focusWindow)
             this._animateWindow(this._focusWindow, true);
 
@@ -1672,10 +1805,16 @@ export const Keyboard = GObject.registerClass({
     }
 
     _animateShowComplete() {
-        const keyboardBox = Main.layoutManager.keyboardBox;
+        let keyboardBox = Main.layoutManager.keyboardBox;
         this._keyboardHeightNotifyId = keyboardBox.connect('notify::height', () => {
             this.translation_y = -this.height;
         });
+
+        // Toggle visibility so the keyboardBox can update its chrome region.
+        if (!Meta.is_wayland_compositor()) {
+            keyboardBox.hide();
+            keyboardBox.show();
+        }
     }
 
     _animateHide() {
@@ -1702,13 +1841,12 @@ export const Keyboard = GObject.registerClass({
 
     _animateHideComplete() {
         Main.layoutManager.keyboardBox.hide();
-        global.compositor.enable_unredirect();
     }
 
     gestureProgress(delta) {
         this._gestureInProgress = true;
         Main.layoutManager.keyboardBox.show();
-        const progress = Math.min(delta, this.height) / this.height;
+        let progress = Math.min(delta, this.height) / this.height;
         this.translation_y = -this.height * progress;
         this.opacity = 255 * progress;
         const windowActor = this._focusWindow?.get_compositor_private();
@@ -1766,7 +1904,7 @@ export const Keyboard = GObject.registerClass({
     }
 
     _animateWindow(window, show) {
-        const windowActor = window.get_compositor_private();
+        let windowActor = window.get_compositor_private();
         if (!windowActor)
             return;
 
@@ -1774,21 +1912,11 @@ export const Keyboard = GObject.registerClass({
             ? this._focusWindowStartY - Main.layoutManager.keyboardBox.height
             : this._focusWindowStartY;
 
-        let unmanaged = false;
-        const winUnmanagedId = window.connect('unmanaged', () => {
-            unmanaged = true;
-        });
-
         windowActor.ease({
             y: finalY,
             duration: KEYBOARD_ANIMATION_TIME,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onStopped: () => {
-                window.disconnect(winUnmanagedId);
-
-                if (unmanaged)
-                    return;
-
                 windowActor.y = finalY;
                 this._windowSlideAnimationComplete(window, finalY);
             },
@@ -1825,7 +1953,7 @@ export const Keyboard = GObject.registerClass({
     }
 
     setCursorLocation(window, x, y, w, h) {
-        const monitor = Main.layoutManager.keyboardMonitor;
+        let monitor = Main.layoutManager.keyboardMonitor;
 
         if (window && monitor) {
             const keyboardHeight = Main.layoutManager.keyboardBox.height;
@@ -1852,7 +1980,7 @@ class KeyboardController extends Signals.EventEmitter {
     constructor() {
         super();
 
-        const seat = global.stage.context.get_backend().get_default_seat();
+        let seat = Clutter.get_default_backend().get_default_seat();
         this._virtualDevice = seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
 
         this._inputSourceManager = InputSourceManager.getInputSourceManager();
@@ -1860,16 +1988,11 @@ class KeyboardController extends Signals.EventEmitter {
             'current-source-changed', this._onSourceChanged.bind(this),
             'sources-changed', this._onSourcesModified.bind(this), this);
         this._currentSource = this._inputSourceManager.currentSource;
-        this._purpose = Main.inputMethod.contentPurpose;
 
         Main.inputMethod.connectObject(
             'notify::content-purpose', this._onPurposeHintsChanged.bind(this),
             'notify::content-hints', this._onContentHintsChanged.bind(this),
             'input-panel-state', (o, state) => this.emit('panel-state', state), this);
-    }
-
-    get purpose() {
-        return this._purpose;
     }
 
     destroy() {
@@ -1886,7 +2009,7 @@ class KeyboardController extends Signals.EventEmitter {
     }
 
     _onSourceChanged(inputSourceManager, _oldSource) {
-        const source = inputSourceManager.currentSource;
+        let source = inputSourceManager.currentSource;
         this._currentSource = source;
         this.emit('group-changed');
     }
@@ -1980,14 +2103,12 @@ class KeyboardController extends Signals.EventEmitter {
         Main.inputMethod.commit(str);
     }
 
-    async setOskCompletion(enabled) {
+    set oskCompletion(enabled) {
         if (this._oskCompletionEnabled === enabled)
             return;
 
         this._oskCompletionEnabled =
-            await IBusManager.getIBusManager().setCompletionEnabled(enabled);
-
-        Main.inputMethod.update();
+            IBusManager.getIBusManager().setCompletionEnabled(enabled, () => Main.inputMethod.update());
     }
 
     keyvalPress(keyval) {
@@ -2032,7 +2153,7 @@ class KeyboardController extends Signals.EventEmitter {
         }
 
         if (enabled) {
-            const func = (text, cursor, anchor) => {
+            let func = (text, cursor, anchor) => {
                 if (cursor === 0 && anchor === 0)
                     return;
 
@@ -2058,7 +2179,7 @@ class KeyboardController extends Signals.EventEmitter {
 
             this._surroundingUpdateId = Main.inputMethod.connect(
                 'surrounding-text-set', () => {
-                    const [text, cursor, anchor] = Main.inputMethod.getSurroundingText();
+                    let [text, cursor, anchor] = Main.inputMethod.getSurroundingText();
                     if (this._timesDeleted === 0) {
                         func(text, cursor, anchor);
                     } else {
@@ -2067,14 +2188,15 @@ class KeyboardController extends Signals.EventEmitter {
                             this._surroundingUpdateTimeoutId = 0;
                         }
                         this._surroundingUpdateTimeoutId =
-                            GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, KEY_RELEASE_TIMEOUT, () => {
+                            GLib.timeout_add(GLib.PRIORITY_DEFAULT, KEY_RELEASE_TIMEOUT, () => {
                                 func(text, cursor, cursor);
                                 this._surroundingUpdateTimeoutId = 0;
+                                return GLib.SOURCE_REMOVE;
                             });
                     }
                 });
 
-            const [text, cursor, anchor] = Main.inputMethod.getSurroundingText();
+            let [text, cursor, anchor] = Main.inputMethod.getSurroundingText();
             if (text)
                 func(text, cursor, anchor);
             else

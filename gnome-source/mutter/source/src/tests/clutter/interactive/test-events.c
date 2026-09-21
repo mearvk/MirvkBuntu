@@ -1,6 +1,5 @@
 #include <gmodule.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-mutter.h>
 #include <string.h>
 
 #include "tests/clutter-test-utils.h"
@@ -191,8 +190,6 @@ input_cb (ClutterActor *actor,
           gpointer      data)
 {
   ClutterActor *stage = clutter_actor_get_stage (actor);
-  ClutterContext *context = clutter_actor_get_context (actor);
-  ClutterBackend *backend = clutter_context_get_backend (context);
   ClutterActor *source_actor;
   graphene_point_t position;
   gchar *state;
@@ -200,9 +197,8 @@ input_cb (ClutterActor *actor,
   ClutterInputDevice *device, *source;
   const gchar *device_name, *source_name = NULL;
   ClutterEventType event_type;
-  ClutterSprite *sprite;
 
-  device = clutter_event_get_source_device (event);
+  device = clutter_event_get_device (event);
   device_name = clutter_input_device_get_device_name (device);
   event_type = clutter_event_type (event);
 
@@ -210,13 +206,12 @@ input_cb (ClutterActor *actor,
       event_type == CLUTTER_KEY_RELEASE)
     {
       source_actor = clutter_stage_get_key_focus (CLUTTER_STAGE (stage));
-      if (source_actor == NULL)
-        source_actor = stage;
     }
   else
     {
-      sprite = clutter_backend_get_sprite (backend, CLUTTER_STAGE (stage), event);
-      source_actor = clutter_focus_get_current_actor (CLUTTER_FOCUS (sprite));
+      source_actor = clutter_stage_get_device_actor (CLUTTER_STAGE (stage),
+                                                     device,
+                                                     clutter_event_get_event_sequence (event));
     }
 
   source = clutter_event_get_source_device (event);
@@ -365,9 +360,6 @@ input_cb (ClutterActor *actor,
     case CLUTTER_PAD_RING:
       g_print ("[%s] PAD RING", clutter_actor_get_name (source_actor));
       break;
-    case CLUTTER_PAD_DIAL:
-      g_print ("[%s] PAD DIAL", clutter_actor_get_name (source_actor));
-      break;
     case CLUTTER_NOTHING:
     default:
       return FALSE;
@@ -391,18 +383,22 @@ test_events_main (int argc, char *argv[])
   clutter_test_init (&argc, &argv);
 
   stage = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Events");
   clutter_actor_set_name (stage, "Stage");
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_test_quit), NULL);
   g_signal_connect (stage, "event", G_CALLBACK (input_cb), (char *) "stage");
 
   focus_box = clutter_actor_new ();
-  clutter_actor_set_background_color (focus_box, &COGL_COLOR_INIT (0, 0, 0, 255));
+  clutter_actor_set_background_color (focus_box, &CLUTTER_COLOR_INIT (0, 0, 0, 255));
   clutter_actor_set_name (focus_box, "Focus Box");
   clutter_actor_add_child (stage, focus_box);
 
   actor = clutter_actor_new ();
-  clutter_actor_set_background_color (actor, &COGL_COLOR_INIT (0, 255, 0, 255));
+  clutter_actor_set_background_color (actor, &CLUTTER_COLOR_INIT (0, 255, 0, 255));
   clutter_actor_set_name (actor, "Green Box");
+  clutter_actor_set_size (actor, 100, 100);
+  clutter_actor_set_position (actor, 250, 100);
+  clutter_actor_set_reactive (actor, TRUE);
   clutter_actor_add_child (stage, actor);
   g_signal_connect (actor, "event", G_CALLBACK (input_cb), (char *) "green box");
   g_signal_connect (actor, "key-focus-in", G_CALLBACK (key_focus_in_cb),
@@ -413,7 +409,7 @@ test_events_main (int argc, char *argv[])
 
   /* non reactive */
   actor = clutter_actor_new ();
-  clutter_actor_set_background_color (actor, &COGL_COLOR_INIT (0, 0, 0, 255));
+  clutter_actor_set_background_color (actor, &CLUTTER_COLOR_INIT (0, 0, 0, 255));
   clutter_actor_set_name (actor, "Black Box");
   clutter_actor_set_size (actor, 400, 50);
   clutter_actor_set_position (actor, 100, 250);
@@ -426,7 +422,7 @@ test_events_main (int argc, char *argv[])
 
   /* non reactive group, with reactive child */
   actor = clutter_actor_new ();
-  clutter_actor_set_background_color (actor, &COGL_COLOR_INIT (255, 255, 0, 255));
+  clutter_actor_set_background_color (actor, &CLUTTER_COLOR_INIT (255, 255, 0, 255));
   clutter_actor_set_name (actor, "Yellow Box");
   clutter_actor_set_size (actor, 100, 100);
   clutter_actor_set_reactive (actor, TRUE);
@@ -441,7 +437,7 @@ test_events_main (int argc, char *argv[])
 
   /* border actor */
   actor = clutter_actor_new ();
-  clutter_actor_set_background_color (actor, &COGL_COLOR_INIT (255, 0, 255, 255));
+  clutter_actor_set_background_color (actor, &CLUTTER_COLOR_INIT (255, 0, 255, 255));
   clutter_actor_set_name (actor, "Border Box");
   clutter_actor_set_size (actor, 100, 100);
   clutter_actor_set_position (actor,

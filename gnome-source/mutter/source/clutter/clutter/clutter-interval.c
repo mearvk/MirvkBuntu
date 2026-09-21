@@ -24,7 +24,7 @@
 
 /**
  * ClutterInterval:
- *
+ * 
  * An object holding an interval of two values
  *
  * #ClutterInterval is a simple object that can hold two values
@@ -51,6 +51,7 @@
 #include <glib-object.h>
 #include <gobject/gvaluecollector.h>
 
+#include "clutter/clutter-color.h"
 #include "clutter/clutter-interval.h"
 #include "clutter/clutter-private.h"
 
@@ -262,7 +263,7 @@ clutter_interval_real_compute_value (ClutterInterval *interval,
         ia = g_value_get_int (initial);
         ib = g_value_get_int (final);
 
-        res = (int) ((factor * (ib - ia)) + ia);
+        res = (factor * (ib - ia)) + ia;
 
         g_value_set_int (value, res);
 
@@ -277,7 +278,7 @@ clutter_interval_real_compute_value (ClutterInterval *interval,
         ia = g_value_get_schar (initial);
         ib = g_value_get_schar (final);
 
-        res = (int) ((factor * (ib - (gdouble) ia)) + ia);
+        res = (factor * (ib - (gdouble) ia)) + ia;
 
         g_value_set_schar (value, res);
 
@@ -292,7 +293,7 @@ clutter_interval_real_compute_value (ClutterInterval *interval,
         ia = g_value_get_uint (initial);
         ib = g_value_get_uint (final);
 
-        res = (unsigned int) ((factor * (ib - (gdouble) ia)) + ia);
+        res = (factor * (ib - (gdouble) ia)) + ia;
 
         g_value_set_uint (value, res);
 
@@ -307,7 +308,7 @@ clutter_interval_real_compute_value (ClutterInterval *interval,
         ia = g_value_get_uchar (initial);
         ib = g_value_get_uchar (final);
 
-        res = (unsigned int) ((factor * (ib - (gdouble) ia)) + ia);
+        res = (factor * (ib - (gdouble) ia)) + ia;
 
         g_value_set_uchar (value, res);
 
@@ -336,7 +337,7 @@ clutter_interval_real_compute_value (ClutterInterval *interval,
         if (value_type == G_TYPE_DOUBLE)
           g_value_set_double (value, res);
         else
-          g_value_set_float (value, (float) res);
+          g_value_set_float (value, res);
 
         retval = TRUE;
       }
@@ -466,7 +467,7 @@ clutter_interval_class_init (ClutterIntervalClass *klass)
   klass->validate = clutter_interval_real_validate;
   klass->compute_value = clutter_interval_real_compute_value;
 
-  gobject_class->set_property = clutter_interval_set_property;
+  gobject_class->set_property = clutter_interval_set_property,
   gobject_class->get_property = clutter_interval_get_property;
   gobject_class->finalize = clutter_interval_finalize;
 

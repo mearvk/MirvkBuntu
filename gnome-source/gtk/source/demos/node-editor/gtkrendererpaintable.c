@@ -55,7 +55,6 @@ gtk_renderer_paintable_paintable_snapshot (GdkPaintable *paintable,
   GtkSnapshot *node_snapshot;
   GskRenderNode *node;
   GdkTexture *texture;
-  gsize node_width, node_height;
 
   if (self->paintable == NULL)
     return;
@@ -67,18 +66,15 @@ gtk_renderer_paintable_paintable_snapshot (GdkPaintable *paintable,
       return;
     }
 
-  node_width = gdk_paintable_get_intrinsic_width (self->paintable);
-  node_height = gdk_paintable_get_intrinsic_height (self->paintable);
-
   node_snapshot = gtk_snapshot_new ();
-  gdk_paintable_snapshot (self->paintable, node_snapshot, node_width, node_height);
+  gdk_paintable_snapshot (self->paintable, node_snapshot, width, height);
   node = gtk_snapshot_free_to_node (node_snapshot);
   if (node == NULL)
     return;
 
   texture = gsk_renderer_render_texture (self->renderer,
                                          node,
-                                         NULL);
+                                         &GRAPHENE_RECT_INIT (0, 0, width, height));
 
   gdk_paintable_snapshot (GDK_PAINTABLE (texture), snapshot, width, height);
   g_object_unref (texture);
@@ -226,15 +222,17 @@ gtk_renderer_paintable_class_init (GtkRendererPaintableClass *klass)
 
   properties[PROP_PAINTABLE] =
     g_param_spec_object ("paintable",
-                         NULL, NULL,
+                         "Paintable",
+                         "The paintable to be shown",
                          GDK_TYPE_PAINTABLE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   properties[PROP_RENDERER] =
     g_param_spec_object ("renderer",
-                         NULL, NULL,
+                         "Renderer",
+                         "Renderer used to render the paintable",
                          GSK_TYPE_RENDERER,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }

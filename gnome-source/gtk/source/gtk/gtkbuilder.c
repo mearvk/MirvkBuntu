@@ -21,7 +21,8 @@
 /**
  * GtkBuilder:
  *
- * Reads XML descriptions of a user interface and instantiates the described objects.
+ * A `GtkBuilder` reads XML descriptions of a user interface and
+ * instantiates the described objects.
  *
  * To create a `GtkBuilder` from a user interface description, call
  * [ctor@Gtk.Builder.new_from_file], [ctor@Gtk.Builder.new_from_resource]
@@ -70,7 +71,7 @@
  * For example:
  *
  * ```xml
- * <?xml version="1.0" encoding="UTF-8"?>
+ * <?xml version="1.0" encoding="UTF-8">
  * <interface domain="your-app">
  *   ...
  * </interface>
@@ -85,7 +86,7 @@
  * error out if the version requirements are not met. For example:
  *
  * ```xml
- * <?xml version="1.0" encoding="UTF-8"?>
+ * <?xml version="1.0" encoding="UTF-8">
  * <interface domain="your-app">
  *   <requires lib="gtk" version="4.0" />
  * </interface>
@@ -138,15 +139,9 @@
  *
  * ```xml
  * <object class="GtkButton">
- *   <property name="label"
- *             translatable="yes"
- *             context="button"
- *             comments="A classic">Hello, world</property>
+ *   <property name="label" translatable="yes" context="button">Hello, world</property>
  * </object>
  * ```
- *
- * The xgettext tool that is part of gettext can extract these strings,
- * but note that it only looks for translatable="yes".
  *
  * `GtkBuilder` can parse textual representations for the most common
  * property types:
@@ -158,20 +153,15 @@
  * - booleans (strings like “TRUE”, “t”, “yes”, “y”, “1” are interpreted
  *   as true values, strings like “FALSE”, “f”, “no”, “n”, “0” are interpreted
  *   as false values)
- * - string lists (separated by newlines)
  * - enumeration types (can be specified by their full C identifier their short
  *   name used when registering the enumeration type, or their integer value)
- * - flag types (can be specified by their C identifier or short name,
- *   optionally combined with “|” for bitwise OR, or a single integer value
- *   e.g., “GTK_INPUT_HINT_EMOJI|GTK_INPUT_HINT_LOWERCASE”, or “emoji|lowercase” or 520).
- * - colors (in the format understood by [method@Gdk.RGBA.parse])
- * - transforms (in the format understood by [func@Gsk.Transform.parse])
- * - Pango attribute lists (in the format understood by [method@Pango.AttrList.to_string])
- * - Pango tab arrays (in the format understood by [method@Pango.TabArray.to_string])
- * - Pango font descriptions (in the format understood by [func@Pango.FontDescription.from_string])
- * - `GVariant` (in the format understood by [func@GLib.Variant.parse])
- * - textures (can be specified as an object id, a resource path or a filename of an image file to load relative to the Builder file or the CWD if [method@Gtk.Builder.add_from_string] was used)
- * - GFile (like textures, can be specified as an object id, a URI or a filename of a file to load relative to the Builder file or the CWD if [method@Gtk.Builder.add_from_string] was used)
+ * - flag types (can be specified by their C identifier, short name, integer
+ *   value, and optionally combined with “|” for bitwise OR, e.g.
+ *   “GTK_INPUT_HINT_EMOJI|GTK_INPUT_HINT_LOWERCASE”, or “emoji|lowercase”)
+ * - colors (in a format understood by [method@Gdk.RGBA.parse])
+ * - `GVariant` (can be specified in the format understood by
+ *    [func@GLib.Variant.parse])
+ * - pixbufs (can be specified as a filename of an image file to load)
  *
  * Objects can be referred to by their name and by default refer to
  * objects declared in the local XML fragment and objects exposed via
@@ -361,14 +351,6 @@
  * elements and attributes to the XML. Typically, any extension will be
  * documented in each type that implements the interface.
  *
- * ## Menus
- *
- * In addition to objects with properties that are created with `<object>` and
- * `<property>` elements, `GtkBuilder` also allows to parse XML menu definitions
- * as used by [class@Gio.Menu] when exporting menu models over D-Bus, and as
- * described in the [class@Gtk.PopoverMenu] documentation. Menus can be defined
- * as toplevel elements, or as property values for properties of type `GMenuModel`.
- *
  * ## Templates
  *
  * When describing a [class@Gtk.Widget], you can use the `<template>` tag to
@@ -470,7 +452,7 @@ gtk_builder_class_init (GtkBuilderClass *klass)
   gobject_class->get_property = gtk_builder_get_property;
 
  /**
-  * GtkBuilder:translation-domain:
+  * GtkBuilder:translation-domain: (attributes org.gtk.Property.get=gtk_builder_get_translation_domain org.gtk.Property.set=gtk_builder_set_translation_domain)
   *
   * The translation domain used when translating property values that
   * have been marked as translatable.
@@ -481,27 +463,27 @@ gtk_builder_class_init (GtkBuilderClass *klass)
   builder_props[PROP_TRANSLATION_DOMAIN] =
       g_param_spec_string ("translation-domain", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
  /**
-  * GtkBuilder:current-object:
+  * GtkBuilder:current-object: (attributes org.gtk.Property.get=gtk_builder_get_current_object org.gtk.Property.set=gtk_builder_set_current_object)
   *
   * The object the builder is evaluating for.
   */
   builder_props[PROP_CURRENT_OBJECT] =
       g_param_spec_object ("current-object", NULL, NULL,
                            G_TYPE_OBJECT,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
  /**
-  * GtkBuilder:scope:
+  * GtkBuilder:scope: (attributes org.gtk.Property.get=gtk_builder_get_scope org.gtk.Property.set=gtk_builder_set_scope)
   *
   * The scope the builder is operating in
   */
   builder_props[PROP_SCOPE] =
       g_param_spec_object ("scope", NULL, NULL,
                            GTK_TYPE_BUILDER_SCOPE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT);
+                           GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 
   g_object_class_install_properties (gobject_class, LAST_PROP, builder_props);
 }
@@ -696,7 +678,6 @@ gtk_builder_get_parameters (GtkBuilder         *builder,
   GtkBuilderPrivate *priv = gtk_builder_get_instance_private (builder);
   DelayedProperty *property;
   GError *error = NULL;
-  GObject *object;
 
   if (!properties)
     return;
@@ -738,22 +719,20 @@ gtk_builder_get_parameters (GtkBuilder         *builder,
       else if (G_IS_PARAM_SPEC_OBJECT (prop->pspec) &&
                (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GDK_TYPE_PIXBUF) &&
                (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GDK_TYPE_TEXTURE) &&
+               (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GDK_TYPE_PAINTABLE) &&
                (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GTK_TYPE_SHORTCUT_TRIGGER) &&
                (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GTK_TYPE_SHORTCUT_ACTION) &&
                (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != G_TYPE_FILE))
         {
-          object = g_hash_table_lookup (priv->objects,
-                                        g_strstrip (prop->text->str));
+          GObject *object = g_hash_table_lookup (priv->objects,
+                                                 g_strstrip (prop->text->str));
 
           if (object)
             {
               g_value_init (&property_value, G_OBJECT_TYPE (object));
               g_value_set_object (&property_value, object);
             }
-          else if (!gtk_builder_value_from_string (builder, prop->pspec,
-                                                   prop->text->str,
-                                                   &property_value,
-                                                   NULL))
+          else
             {
               if (prop->pspec->flags & G_PARAM_CONSTRUCT_ONLY)
                 {
@@ -782,12 +761,11 @@ gtk_builder_get_parameters (GtkBuilder         *builder,
                                                &property_value,
                                                &error))
         {
-
           g_warning ("Failed to set property %s.%s to %s: %s",
                      g_type_name (object_type), prop->pspec->name, prop->text->str,
                      error->message);
-
-          g_clear_error (&error);
+          g_error_free (error);
+          error = NULL;
           continue;
         }
 
@@ -826,8 +804,8 @@ gtk_builder_get_internal_child (GtkBuilder   *builder,
       if (!info)
         break;
 
-      GTK_DEBUG (BUILDER_TRACE, "Trying to get internal child %s from %s",
-                                childname, object_get_id (info->object));
+      GTK_DEBUG (BUILDER, "Trying to get internal child %s from %s",
+                          childname, object_get_id (info->object));
 
       if (GTK_IS_BUILDABLE (info->object))
           obj = gtk_buildable_get_internal_child (GTK_BUILDABLE (info->object),
@@ -1032,7 +1010,7 @@ _gtk_builder_construct (GtkBuilder  *builder,
       if (G_IS_INITIALLY_UNOWNED (obj))
         g_object_ref_sink (obj);
 
-      GTK_DEBUG (BUILDER_TRACE, "created %s of type %s", info->id, g_type_name (info->type));
+      GTK_DEBUG (BUILDER, "created %s of type %s", info->id, g_type_name (info->type));
     }
   object_properties_destroy (&construct_parameters);
 
@@ -1058,7 +1036,7 @@ _gtk_builder_construct (GtkBuilder  *builder,
               const GValue *value = object_properties_get_value (&parameters, i);
 
               iface->set_buildable_property (buildable, builder, name, value);
-              if (GTK_DEBUG_CHECK (BUILDER_TRACE))
+              if (GTK_DEBUG_CHECK (BUILDER))
                 {
                   char *str = g_strdup_value_contents (value);
                   g_message ("set %s: %s = %s", info->id, name, str);
@@ -1072,7 +1050,7 @@ _gtk_builder_construct (GtkBuilder  *builder,
                          parameters.names->len,
                          (const char **) parameters.names->pdata,
                          (GValue *) parameters.values->data);
-          if (GTK_DEBUG_CHECK (BUILDER_TRACE))
+          if (GTK_DEBUG_CHECK (BUILDER))
             {
               for (i = 0; i < parameters.names->len; i++)
                 {
@@ -1138,7 +1116,7 @@ _gtk_builder_apply_properties (GtkBuilder  *builder,
               const char *name = object_properties_get_name (&parameters, i);
               const GValue *value = object_properties_get_value (&parameters, i);
               iface->set_buildable_property (buildable, builder, name, value);
-              if (GTK_DEBUG_CHECK (BUILDER_TRACE))
+              if (GTK_DEBUG_CHECK (BUILDER))
                 {
                   char *str = g_strdup_value_contents (value);
                   g_message ("set %s: %s = %s", info->id, name, str);
@@ -1152,7 +1130,7 @@ _gtk_builder_apply_properties (GtkBuilder  *builder,
                          parameters.names->len,
                          (const char **) parameters.names->pdata,
                          (GValue *) parameters.values->data);
-          if (GTK_DEBUG_CHECK (BUILDER_TRACE))
+          if (GTK_DEBUG_CHECK (BUILDER))
             {
               for (i = 0; i < parameters.names->len; i++)
                 {
@@ -1198,7 +1176,7 @@ _gtk_builder_add (GtkBuilder *builder,
 
   parent = ((ObjectInfo*)child_info->parent)->object;
 
-  GTK_DEBUG (BUILDER_TRACE, "adding %s to %s", object_get_id (object), object_get_id (parent));
+  GTK_DEBUG (BUILDER, "adding %s to %s", object_get_id (object), object_get_id (parent));
 
   if (G_IS_LIST_STORE (parent))
     {
@@ -1328,7 +1306,7 @@ gtk_builder_create_bindings (GtkBuilder  *builder,
 
           if (object)
             {
-              expression = expression_info_construct (builder, priv->domain, info->expr, error);
+              expression = expression_info_construct (builder, info->expr, error);
               if (expression == NULL)
                 {
                   g_prefix_error (error, "%s:%d:%d: ", priv->filename, info->line, info->col);
@@ -1347,7 +1325,8 @@ gtk_builder_create_bindings (GtkBuilder  *builder,
         g_assert_not_reached ();
     }
 
-  g_clear_slist (&priv->bindings, NULL);
+  g_slist_free (priv->bindings);
+  priv->bindings = NULL;
   return result;
 }
 
@@ -1627,7 +1606,7 @@ gtk_builder_add_from_resource (GtkBuilder   *builder,
   GError *tmp_error;
   GBytes *data;
   char *filename_for_errors;
-  const char *slash;
+  char *slash;
 
   g_return_val_if_fail (GTK_IS_BUILDER (builder), 0);
   g_return_val_if_fail (resource_path != NULL, 0);
@@ -1702,7 +1681,7 @@ gtk_builder_add_objects_from_resource (GtkBuilder   *builder,
   GError *tmp_error;
   GBytes *data;
   char *filename_for_errors;
-  const char *slash;
+  char *slash;
 
   g_return_val_if_fail (GTK_IS_BUILDER (builder), 0);
   g_return_val_if_fail (resource_path != NULL, 0);
@@ -1917,7 +1896,7 @@ gtk_builder_get_objects (GtkBuilder *builder)
 }
 
 /**
- * gtk_builder_set_translation_domain:
+ * gtk_builder_set_translation_domain: (attributes org.gtk.Method.set_property=translation-domain)
  * @builder: a `GtkBuilder`
  * @domain: (nullable): the translation domain
  *
@@ -1940,7 +1919,7 @@ gtk_builder_set_translation_domain (GtkBuilder  *builder,
 }
 
 /**
- * gtk_builder_get_translation_domain:
+ * gtk_builder_get_translation_domain: (attributes org.gtk.Method.get_property=translation-domain)
  * @builder: a `GtkBuilder`
  *
  * Gets the translation domain of @builder.
@@ -1989,7 +1968,7 @@ gtk_builder_expose_object (GtkBuilder    *builder,
 }
 
 /**
- * gtk_builder_get_current_object:
+ * gtk_builder_get_current_object: (attributes org.gtk.Method.get_property=current-object)
  * @builder: a `GtkBuilder`
  *
  * Gets the current object set via gtk_builder_set_current_object().
@@ -2007,7 +1986,7 @@ gtk_builder_get_current_object (GtkBuilder *builder)
 }
 
 /**
- * gtk_builder_set_current_object:
+ * gtk_builder_set_current_object: (attributes org.gtk.Method.set_property=current-object)
  * @builder: a `GtkBuilder`
  * @current_object: (nullable) (transfer none): the new current object
  *
@@ -2028,7 +2007,7 @@ gtk_builder_set_current_object (GtkBuilder *builder,
   GtkBuilderPrivate *priv = gtk_builder_get_instance_private (builder);
 
   g_return_if_fail (GTK_IS_BUILDER (builder));
-  g_return_if_fail (current_object == NULL || G_IS_OBJECT (current_object));
+  g_return_if_fail (current_object || G_IS_OBJECT (current_object));
 
   if (!g_set_object (&priv->current_object, current_object))
     return;
@@ -2037,7 +2016,7 @@ gtk_builder_set_current_object (GtkBuilder *builder,
 }
 
 /**
- * gtk_builder_get_scope:
+ * gtk_builder_get_scope: (attributes org.gtk.Method.get_property=scope)
  * @builder: a `GtkBuilder`
  *
  * Gets the scope in use that was set via gtk_builder_set_scope().
@@ -2055,7 +2034,7 @@ gtk_builder_get_scope (GtkBuilder *builder)
 }
 
 /**
- * gtk_builder_set_scope:
+ * gtk_builder_set_scope: (attributes org.gtk.Method.set_property=scope)
  * @builder: a `GtkBuilder`
  * @scope: (nullable) (transfer none): the scope to use
  *
@@ -2285,19 +2264,6 @@ error:
   return FALSE;
 }
 
-gboolean
-gtk_builder_parse_translatable (const char  *string,
-                                gboolean    *value,
-                                GError     **error)
-{
-  if (!_gtk_builder_boolean_from_string (string, value, error))
-    return FALSE;
-
-  if (*value && strcmp (string, "yes") != 0)
-    GTK_DEBUG (BUILDER, "Useless translatable attribute: '%s' (xgettext only recognizes 'yes')", string);
-
-  return TRUE;
-}
 
 /**
  * gtk_builder_value_from_string_type:
@@ -2533,53 +2499,13 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
 
           attrs = pango_attr_list_from_string (string);
           if (attrs)
-            {
-              g_value_take_boxed (value, attrs);
-            }
+            g_value_take_boxed (value, attrs);
           else
             {
               g_set_error (error,
                            GTK_BUILDER_ERROR,
                            GTK_BUILDER_ERROR_INVALID_VALUE,
                            "Could not parse PangoAttrList '%s'",
-                           string);
-              ret = FALSE;
-            }
-        }
-      else if (G_VALUE_HOLDS (value, PANGO_TYPE_TAB_ARRAY))
-        {
-          PangoTabArray *tabs;
-
-          tabs = pango_tab_array_from_string (string);
-          if (tabs)
-            {
-              g_value_take_boxed (value, tabs);
-            }
-          else
-            {
-              g_set_error (error,
-                           GTK_BUILDER_ERROR,
-                           GTK_BUILDER_ERROR_INVALID_VALUE,
-                           "Could not parse PangoTabArray '%s'",
-                           string);
-              ret = FALSE;
-            }
-        }
-      else if (G_VALUE_HOLDS (value, PANGO_TYPE_FONT_DESCRIPTION))
-        {
-          PangoFontDescription *desc;
-
-          desc = pango_font_description_from_string (string);
-          if (desc)
-            {
-              g_value_take_boxed (value, desc);
-            }
-          else
-            {
-              g_set_error (error,
-                           GTK_BUILDER_ERROR,
-                           GTK_BUILDER_ERROR_INVALID_VALUE,
-                           "Could not parse PangoFontDescription '%s'",
                            string);
               ret = FALSE;
             }
@@ -2730,49 +2656,20 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
         }
       else if (G_VALUE_HOLDS (value, G_TYPE_FILE))
         {
-          GObject *object = g_hash_table_lookup (priv->objects, string);
           GFile *file;
 
-          if (object)
+          if (g_hash_table_contains (priv->objects, string))
             {
-              if (g_type_is_a (G_OBJECT_TYPE (object), G_VALUE_TYPE (value)))
-                {
-                  g_value_set_object (value, object);
-                  return TRUE;
-                }
-              else
-                {
-                  g_set_error (error,
-                               GTK_BUILDER_ERROR,
-                               GTK_BUILDER_ERROR_INVALID_VALUE,
-                               "Could not create file '%s': "
-                               " '%s' is already used as object id",
-                               string, string);
-                  return FALSE;
-                }
+              g_set_error (error,
+                           GTK_BUILDER_ERROR,
+                           GTK_BUILDER_ERROR_INVALID_VALUE,
+                           "Could not create file '%s': "
+                           " '%s' is already used as object id",
+                           string, string);
+              return FALSE;
             }
 
-          if (!g_uri_is_valid (string, G_URI_FLAGS_NONE, NULL))
-            {
-              gchar *fullpath = _gtk_builder_get_absolute_filename (builder, string);
-              file = g_file_new_for_path (fullpath);
-              g_free (fullpath);
-            }
-          else if (g_str_has_prefix (string, "file://"))
-            {
-              gchar *path = g_uri_unescape_string (string + strlen ("file://"), "/");
-              gchar *fullpath = _gtk_builder_get_absolute_filename (builder, path);
-
-              file = g_file_new_for_path (fullpath);
-
-              g_free (fullpath);
-              g_free (path);
-            }
-          else
-            {
-              file = g_file_new_for_uri (string);
-            }
-
+          file = g_file_new_for_uri (string);
           g_value_set_object (value, file);
           g_object_unref (G_OBJECT (file));
 
@@ -3056,13 +2953,6 @@ gtk_builder_get_type_from_name (GtkBuilder  *builder,
   return type;
 }
 
-/**
- * gtk_builder_error_quark:
- *
- * Registers an error quark for [class@Gtk.Builder] errors.
- *
- * Returns: the error quark
- **/
 GQuark
 gtk_builder_error_quark (void)
 {
@@ -3142,7 +3032,7 @@ gtk_builder_get_template_type (GtkBuilder *builder,
  * If no closure could be created, %NULL will be returned and @error
  * will be set.
  *
- * Returns: (transfer floating) (nullable): A new closure for invoking @function_name
+ * Returns: (nullable): A new closure for invoking @function_name
  */
 GClosure *
 gtk_builder_create_closure (GtkBuilder             *builder,
@@ -3455,28 +3345,4 @@ _gtk_builder_lookup_failed (GtkBuilder  *builder,
     }
 
   return FALSE;
-}
-
-void
-gtk_buildable_child_deprecation_warning (GtkBuildable *buildable,
-                                         GtkBuilder   *builder,
-                                         const char   *type,
-                                         const char   *prop)
-{
-  if (type)
-    GTK_DEBUG (BUILDER, "<child type=\"%s\"> in %s is deprecated, just set the %s property",
-               type, G_OBJECT_TYPE_NAME (buildable), prop);
-  else
-    GTK_DEBUG (BUILDER, "<child> in %s is deprecated, just set the %s property",
-               G_OBJECT_TYPE_NAME (buildable), prop);
-}
-
-void
-gtk_buildable_tag_deprecation_warning (GtkBuildable *buildable,
-                                       GtkBuilder   *builder,
-                                       const char   *tag,
-                                       const char   *prop)
-{
-  GTK_DEBUG (BUILDER, "<%s> in %s is deprecated, just set the %s property",
-             tag, G_OBJECT_TYPE_NAME (buildable), prop);
 }

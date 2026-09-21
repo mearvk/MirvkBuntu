@@ -65,7 +65,7 @@ typedef struct _GtkNotebook GtkNotebook;
  ***********************************************************/
 
 GDK_AVAILABLE_IN_ALL
-GType   gtk_notebook_get_type       (void);
+GType   gtk_notebook_get_type       (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget * gtk_notebook_new        (void);
 GDK_AVAILABLE_IN_ALL
@@ -232,7 +232,7 @@ void       gtk_notebook_set_action_widget (GtkNotebook *notebook,
                                            GtkPackType  pack_type);
 
 GDK_AVAILABLE_IN_ALL
-GType   gtk_notebook_page_get_type  (void);
+GType   gtk_notebook_page_get_type  (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkNotebookPage *gtk_notebook_get_page (GtkNotebook *notebook,
@@ -243,7 +243,6 @@ GDK_AVAILABLE_IN_ALL
 GListModel *gtk_notebook_get_pages (GtkNotebook *notebook);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkNotebook, g_object_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkNotebookPage, g_object_unref)
 
 G_END_DECLS
 

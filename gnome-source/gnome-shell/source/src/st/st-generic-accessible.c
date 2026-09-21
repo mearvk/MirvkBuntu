@@ -18,9 +18,9 @@
  */
 
 /**
- * StGenericAccessible:
- *
- * An accessible class with signals for implementing specific Atk interfaces
+ * SECTION:st-generic-accessible
+ * @short_description: An accessible class with signals for
+ * implementing specific Atk interfaces
  *
  * #StGenericAccessible is mainly a workaround for the current lack of
  * of a proper support for GValue at javascript. See bug#703412 for
@@ -30,22 +30,19 @@
  * #StGenericAccessible is an #StWidgetAccessible
  */
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #include "st-generic-accessible.h"
 
 static void atk_value_iface_init (AtkValueIface *iface);
 
-typedef struct _StGenericAccessible
-{
-  StWidgetAccessible parent_class;
-} StGenericAccessible;
-
-G_DEFINE_FINAL_TYPE_WITH_CODE (StGenericAccessible,
-                               st_generic_accessible,
-                               ST_TYPE_WIDGET_ACCESSIBLE,
-                               G_IMPLEMENT_INTERFACE (ATK_TYPE_VALUE,
-                                                      atk_value_iface_init));
+G_DEFINE_TYPE_WITH_CODE(StGenericAccessible,
+                        st_generic_accessible,
+                        ST_TYPE_WIDGET_ACCESSIBLE,
+                        G_IMPLEMENT_INTERFACE (ATK_TYPE_VALUE,
+                                               atk_value_iface_init));
 /* Signals */
 enum
 {

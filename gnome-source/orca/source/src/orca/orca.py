@@ -35,6 +35,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import (
     Atspi,
     Gdk,  # pylint: disable=no-name-in-module
+    Gio,
     GLib,
 )
 
@@ -46,10 +47,10 @@ from . import (
     debug,
     debugging_tools_manager,
     event_manager,
-    extension_loader,
     focus_manager,
+    gsettings_registry,
     messages,
-    mouse_presenter,
+    mouse_review,
     orca_modifier_manager,
     presentation_manager,
     script_manager,
@@ -65,7 +66,7 @@ def load_user_settings(script=None, skip_reload_message=False, is_reload=True):
 
     if is_reload:
         presentation_manager.get_manager().shutdown_presenters()
-        mouse_presenter.get_presenter().deactivate()
+        mouse_review.get_reviewer().deactivate()
 
     event_manager.get_manager().pause_queuing(True, True, "Loading user settings.")
 
@@ -79,9 +80,9 @@ def load_user_settings(script=None, skip_reload_message=False, is_reload=True):
         presentation_manager.get_manager().speak_message(messages.SETTINGS_RELOADED)
 
     # TODO - JD: This ultimately belongs in an extension manager.
-    presenter = mouse_presenter.get_presenter()
-    if presenter.get_is_enabled():
-        presenter.activate()
+    mouse_reviewer = mouse_review.get_reviewer()
+    if mouse_reviewer.get_is_enabled():
+        mouse_reviewer.activate()
 
     # Handle the case where a change was made in the Orca Preferences dialog.
     orca_modifier_manager.get_manager().refresh_orca_modifiers("Loading user settings.")
@@ -106,6 +107,7 @@ def shutdown(_event=None, _signum=None):
     def _timeout(_signum=None, _frame=None):
         msg = "TIMEOUT: something has hung. Aborting."
         debug.print_message(debug.LEVEL_SEVERE, msg, True)
+        debugging_tools_manager.get_manager().print_running_applications(force=True)
         os.kill(os.getpid(), signal.SIGKILL)
 
     debug.print_message(debug.LEVEL_INFO, "ORCA: Shutting down", True)
@@ -116,7 +118,6 @@ def shutdown(_event=None, _signum=None):
     manager.interrupt_presentation()
     manager.present_message(messages.STOP_ORCA)
 
-    extension_loader.get_loader().shutdown_user_extensions()
     dbus_service.get_remote_controller().shutdown()
     orca_modifier_manager.get_manager().unset_orca_modifiers("Shutting down.")
 
@@ -130,14 +131,9 @@ def shutdown(_event=None, _signum=None):
 
     # TODO - JD: This ultimately belongs in an extension manager.
     clipboard.get_presenter().deactivate()
-    mouse_presenter.get_presenter().deactivate()
+    mouse_review.get_reviewer().deactivate()
 
     presentation_manager.get_manager().shutdown_presenters()
-
-    # pylint: disable-next=import-outside-toplevel
-    from . import preferences_window
-
-    preferences_window.close_preferences_gui_for_shutdown()
 
     ax_device_manager.get_manager().deactivate()
     systemd.get_manager().notify_stopping()
@@ -145,12 +141,40 @@ def shutdown(_event=None, _signum=None):
     debug.print_message(debug.LEVEL_INFO, "ORCA: Quitting Atspi main event loop", True)
     Atspi.event_quit()  # pylint: disable=no-value-for-parameter
     debug.print_message(debug.LEVEL_INFO, "ORCA: Shutdown complete", True)
-    debug.shutdown()
     return True
 
 
 def _setup_signal_handlers():
     """Sets up signal handlers for reload, shutdown, and preferences."""
+
+    def _reload_on_signal(signum, frame):
+        signal_string = f"({signal.strsignal(signum)})"
+        tokens = [f"ORCA: Reloading due to signal={signum} {signal_string}", frame]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        systemd.get_manager().notify_reloading()
+        load_user_settings()
+        systemd.get_manager().notify_ready()
+
+    def _shutdown_on_signal(signum, frame):
+        signal_string = f"({signal.strsignal(signum)})"
+        tokens = [f"ORCA: Shutting down and exiting due to signal={signum} {signal_string}", frame]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        shutdown()
+
+    def _show_preferences_on_signal(signum, frame):
+        signal_string = f"({signal.strsignal(signum)})"
+        tokens = [f"ORCA: Showing preferences due to signal={signum} {signal_string}", frame]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        manager = script_manager.get_manager()
+        script = manager.get_active_script() or manager.get_default_script()
+        if script:
+            script.show_preferences_gui()
+
+    signal.signal(signal.SIGHUP, _reload_on_signal)
+    signal.signal(signal.SIGINT, _shutdown_on_signal)
+    signal.signal(signal.SIGTERM, _shutdown_on_signal)
+    signal.signal(signal.SIGQUIT, _shutdown_on_signal)
+    signal.signal(signal.SIGUSR1, _show_preferences_on_signal)
 
     def _glib_shutdown_handler():
         msg = "ORCA: GLib handler received shutdown signal"
@@ -164,31 +188,11 @@ def _setup_signal_handlers():
         systemd.get_manager().notify_reloading()
         load_user_settings()
         systemd.get_manager().notify_ready()
-        return GLib.SOURCE_CONTINUE
+        return GLib.SOURCE_REMOVE
 
-    def _glib_show_preferences_handler():
-        msg = "ORCA: GLib handler received show-preferences signal"
-        debug.print_message(debug.LEVEL_INFO, msg, True)
-        from . import screen_reader_manager  # pylint: disable=import-outside-toplevel
-
-        screen_reader_manager.get_manager().show_preferences_gui()
-        return GLib.SOURCE_CONTINUE
-
-    for signum, handler in (
-        (signal.SIGINT, _glib_shutdown_handler),
-        (signal.SIGTERM, _glib_shutdown_handler),
-        (signal.SIGHUP, _glib_reload_handler),
-        (signal.SIGUSR1, _glib_show_preferences_handler),
-    ):
-        GLib.unix_signal_add(GLib.PRIORITY_HIGH, signum, handler)
-
-    # We have historically shut down gracefully on SIGQUIT and want to continue doing so.
-    # But GLib.unix_signal_add only supports SIGHUP/SIGINT/SIGTERM/SIGUSR1/SIGUSR2/SIGWINCH,
-    # so SIGQUIT uses a raw handler that defers the shutdown to the main loop.
-    def _quit_on_signal(_signum, _frame):
-        GLib.idle_add(_glib_shutdown_handler, priority=GLib.PRIORITY_HIGH)
-
-    signal.signal(signal.SIGQUIT, _quit_on_signal)
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, _glib_shutdown_handler)
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, _glib_shutdown_handler)
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGHUP, _glib_reload_handler)
 
 
 def _ensure_accessibility_enabled() -> int | None:
@@ -198,17 +202,42 @@ def _ensure_accessibility_enabled() -> int | None:
         bus = SessionMessageBus()
         proxy = bus.get_proxy("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties")
         enabled = proxy.Get("org.a11y.Status", "IsEnabled")
-        tokens = ["ORCA: Accessibility enabled:", enabled]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"ORCA: Accessibility enabled: {enabled}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         if not enabled:
             msg = "ORCA: Enabling accessibility."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             proxy.Set("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))
     except GLib.GError as error:
-        tokens = ["ORCA: Could not connect to D-Bus session bus:", error]
-        debug.print_tokens(debug.LEVEL_SEVERE, tokens, True)
+        msg = f"ORCA: Could not connect to D-Bus session bus: {error}"
+        debug.print_message(debug.LEVEL_SEVERE, msg, True)
         print(msg, file=sys.stderr)  # noqa: T201
         return 1
+    return None
+
+
+def _setup_legacy_gsettings_monitoring() -> Gio.Settings | None:
+    """Sets up legacy GSettings monitoring for non-systemd environments."""
+
+    def _on_enabled_changed(gsetting, key):
+        enabled = gsetting.get_boolean(key)
+        msg = f"ORCA: {key} changed to {enabled}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        if key == "screen-reader-enabled" and not enabled:
+            shutdown()
+
+    try:
+        gsetting = Gio.Settings(schema_id="org.gnome.desktop.a11y.applications")
+        connection = gsetting.connect("changed", _on_enabled_changed)
+        msg = f"ORCA: Connected to a11y applications gsetting: {bool(connection)}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return gsetting
+    except GLib.Error as error:
+        msg = f"ORCA: EXCEPTION connecting to a11y applications (schema may be missing): {error}"
+        debug.print_message(debug.LEVEL_SEVERE, msg, True)
+    except (AttributeError, TypeError) as error:
+        msg = f"ORCA: EXCEPTION connecting to a11y applications (version incompatibility):{error}"
+        debug.print_message(debug.LEVEL_SEVERE, msg, True)
     return None
 
 
@@ -238,10 +267,9 @@ def _activate_services():
     clipboard.get_presenter().activate()
     Gdk.notify_startup_complete()  # pylint: disable=no-value-for-parameter
     systemd.get_manager().notify_ready()
-    extension_loader.get_loader().notify_user_extensions_ready()
 
 
-def main():
+def main(import_dir: str | None = None, prefs_dir: str = ""):
     """The main entry point for Orca."""
 
     _setup_signal_handlers()
@@ -251,12 +279,23 @@ def main():
     if error is not None:
         return error
 
-    ax_device_manager.get_manager().activate()
+    # TODO - JD: Delete -i/--import-dir support in v52.
+    registry = gsettings_registry.get_registry()
+    if import_dir:
+        registry.import_from_dir(import_dir)
+    else:
+        registry.migrate_all(prefs_dir)  # TODO - JD: Delete this in v51.
+
     load_user_settings(is_reload=False)
 
     is_systemd_managed = systemd.get_manager().is_systemd_managed()
-    tokens = ["ORCA: Running under systemd:", is_systemd_managed]
-    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+    msg = f"ORCA: Running under systemd: {is_systemd_managed}"
+    debug.print_message(debug.LEVEL_INFO, msg, True)
+
+    # Keep a reference to prevent garbage collection of the GSettings connection.
+    _gsettings_ref = None
+    if not is_systemd_managed:
+        _gsettings_ref = _setup_legacy_gsettings_monitoring()
 
     dbus_service.get_remote_controller().start()
     presentation_manager.get_manager().present_message(messages.START_ORCA)
@@ -266,8 +305,8 @@ def main():
         debug.print_message(debug.LEVEL_INFO, "ORCA: Starting Atspi main event loop", True)
         Atspi.event_main()  # pylint: disable=no-value-for-parameter
     except GLib.Error as error:
-        tokens = ["ORCA: Exception starting ATSPI registry:", error]
-        debug.print_tokens(debug.LEVEL_SEVERE, tokens, True)
+        msg = f"ORCA: Exception starting ATSPI registry: {error}"
+        debug.print_message(debug.LEVEL_SEVERE, msg, True)
         os.kill(os.getpid(), signal.SIGKILL)
     return 0
 

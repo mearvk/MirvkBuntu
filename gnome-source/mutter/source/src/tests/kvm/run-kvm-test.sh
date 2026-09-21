@@ -1,12 +1,10 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -e
 
-DIRNAME="$(dirname "$0")"
-TEST_ENV="$1"
-WRAPPER="$2"
-WRAPPER_ARGS="$3"
-TEST_RESULT="$4"
+WRAPPER="$1"
+WRAPPER_ARGS="$2"
+TEST_RESULT="$3"
 
 export XDG_RUNTIME_DIR="/tmp/sub-runtime-dir-$UID"
 export GSETTINGS_SCHEMA_DIR="$PWD/build/data"
@@ -19,9 +17,8 @@ export MALLOC_PERTURB_="123"
 mkdir -p -m 700 $XDG_RUNTIME_DIR
 
 glib-compile-schemas $GSETTINGS_SCHEMA_DIR
-$DIRNAME/install-udev-rules.sh
 
 status=0
-"$WRAPPER" $WRAPPER_ARGS env $TEST_ENV "${@:5}" || status=$?
+"$WRAPPER" $WRAPPER_ARGS "${@:4}" || status=$?
 
 echo $status > $TEST_RESULT

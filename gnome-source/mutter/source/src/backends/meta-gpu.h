@@ -21,8 +21,7 @@
 
 #include <glib-object.h>
 
-#include "backends/meta-backend-types.h"
-#include "core/util-private.h"
+#include "backends/meta-monitor-manager-private.h"
 
 #define META_TYPE_GPU (meta_gpu_get_type ())
 META_EXPORT_TEST
@@ -66,6 +65,3 @@ void meta_gpu_take_crtcs (MetaGpu *gpu,
 META_EXPORT_TEST
 void meta_gpu_take_modes (MetaGpu *gpu,
                           GList   *modes);
-
-MetaOutput * meta_gpu_find_output (MetaGpu    *gpu,
-                                   MetaOutput *old_output);

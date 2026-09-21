@@ -26,25 +26,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "backends/meta-backlight-sysfs-private.h"
-#include "backends/meta-backlight-ref-white-private.h"
-#include "backends/meta-color-device.h"
-#include "backends/meta-color-manager.h"
 #include "backends/meta-crtc.h"
-#include "backends/meta-monitor-private.h"
-#include "backends/meta-output.h"
-#include "backends/native/meta-crtc-kms.h"
-#include "backends/native/meta-crtc-mode-kms.h"
 #include "backends/native/meta-kms.h"
 #include "backends/native/meta-kms-connector.h"
-#include "backends/native/meta-kms-crtc-private.h"
 #include "backends/native/meta-kms-device.h"
 #include "backends/native/meta-kms-mode.h"
 #include "backends/native/meta-kms-update.h"
 #include "backends/native/meta-kms-utils.h"
+#include "backends/native/meta-crtc-kms.h"
+#include "backends/native/meta-crtc-mode-kms.h"
 
-#define SYNC_TOLERANCE_HZ 0.001f
-#define REFRESH_MATCH_TOLERANCE_HZ 0.5f
+#define SYNC_TOLERANCE_HZ 0.001
 
 struct _MetaOutputKms
 {
@@ -54,8 +46,6 @@ struct _MetaOutputKms
 };
 
 G_DEFINE_TYPE (MetaOutputKms, meta_output_kms, META_TYPE_OUTPUT_NATIVE)
-
-static GQuark kms_connector_output_kms_quark;
 
 MetaKmsConnector *
 meta_output_kms_get_kms_connector (MetaOutputKms *output_kms)
@@ -71,9 +61,6 @@ meta_output_kms_get_privacy_screen_state (MetaOutput *output)
 
   connector_state =
     meta_kms_connector_get_current_state (output_kms->kms_connector);
-
-  if (!connector_state)
-    return META_PRIVACY_SCREEN_UNAVAILABLE;
 
   return connector_state->privacy_screen_state;
 }
@@ -101,24 +88,6 @@ meta_output_kms_can_clone (MetaOutputKms *output_kms,
     return FALSE;
 
   return TRUE;
-}
-
-MetaOutputKms *
-meta_output_kms_from_kms_connector (MetaKmsConnector *connector)
-{
-  return g_object_get_qdata (G_OBJECT (connector),
-                             kms_connector_output_kms_quark);
-}
-
-void
-meta_unlink_kms_connector (MetaKmsConnector *connector)
-{
-  if (!kms_connector_output_kms_quark)
-    return;
-
-  g_object_set_qdata (G_OBJECT (connector),
-                      kms_connector_output_kms_quark,
-                      NULL);
 }
 
 static GBytes *
@@ -164,7 +133,7 @@ add_common_modes (MetaOutputInfo *output_info,
       max_pixel_clock = MAX (max_pixel_clock, crtc_mode_info->pixel_clock_khz);
     }
 
-  max_refresh_rate = MAX (max_refresh_rate, 60.0f);
+  max_refresh_rate = MAX (max_refresh_rate, 60.0);
   max_refresh_rate += SYNC_TOLERANCE_HZ;
 
   kms_device = meta_gpu_kms_get_kms_device (gpu_kms);
@@ -182,7 +151,6 @@ add_common_modes (MetaOutputInfo *output_info,
       const drmModeModeInfo *drm_mode;
       float refresh_rate;
       gboolean is_duplicate = FALSE;
-      gboolean has_matching_refresh_rate = FALSE;
 
       if (!(meta_kms_mode_get_flags (fallback_mode) & flag_filter))
         continue;
@@ -208,28 +176,22 @@ add_common_modes (MetaOutputInfo *output_info,
               is_duplicate = TRUE;
               break;
             }
-
-          if (!has_matching_refresh_rate &&
-              fabs (refresh_rate - crtc_mode_info->refresh_rate) <
-              REFRESH_MATCH_TOLERANCE_HZ)
-            has_matching_refresh_rate = TRUE;
         }
-
-      if (is_duplicate || !has_matching_refresh_rate)
+      if (is_duplicate)
         continue;
-
-      crtc_mode = meta_gpu_kms_get_mode_from_kms_mode (gpu_kms,
-                                                       fallback_mode,
-                                                       META_CRTC_REFRESH_RATE_MODE_FIXED);
-      g_ptr_array_add (array, g_object_ref (crtc_mode));
 
       if (add_vrr_modes)
         {
           crtc_mode = meta_gpu_kms_get_mode_from_kms_mode (gpu_kms,
                                                            fallback_mode,
                                                            META_CRTC_REFRESH_RATE_MODE_VARIABLE);
-          g_ptr_array_add (array, g_object_ref (crtc_mode));
+          g_ptr_array_add (array, crtc_mode);
         }
+
+      crtc_mode = meta_gpu_kms_get_mode_from_kms_mode (gpu_kms,
+                                                       fallback_mode,
+                                                       META_CRTC_REFRESH_RATE_MODE_FIXED);
+      g_ptr_array_add (array, crtc_mode);
     }
 
   output_info->modes = g_renew (MetaCrtcMode *, output_info->modes,
@@ -261,7 +223,7 @@ compare_modes (const void *one,
             ? -1 : 1);
   if (crtc_mode_info_one->refresh_rate_mode != crtc_mode_info_two->refresh_rate_mode)
     return (crtc_mode_info_one->refresh_rate_mode >
-            crtc_mode_info_two->refresh_rate_mode) ? 1 : -1;
+            crtc_mode_info_two->refresh_rate_mode) ? -1 : 1;
 
   return g_strcmp0 (meta_crtc_mode_get_name (crtc_mode_one),
                     meta_crtc_mode_get_name (crtc_mode_two));
@@ -298,11 +260,6 @@ maybe_add_fallback_modes (const MetaKmsConnectorState *connector_state,
     return;
 
   if (!connector_state->has_scaling)
-    return;
-
-  /* Do not add fallback modes to connectors in tile groups, as tiles require
-   * native timings and synthetic modes can skew representative output selection. */
-  if (connector_state->tile_info.group_id)
     return;
 
   if (output_info->connector_type == DRM_MODE_CONNECTOR_eDP &&
@@ -346,23 +303,23 @@ init_output_modes (MetaOutputInfo    *output_info,
       MetaKmsMode *kms_mode = l->data;
       MetaCrtcMode *crtc_mode;
 
-      crtc_mode = meta_gpu_kms_get_mode_from_kms_mode (gpu_kms,
-                                                       kms_mode,
-                                                       META_CRTC_REFRESH_RATE_MODE_FIXED);
-      output_info->modes[i++] = g_object_ref (crtc_mode);
-      if (!output_info->preferred_mode && kms_mode == kms_preferred_mode)
-        output_info->preferred_mode = crtc_mode;
-
       if (add_vrr_modes)
         {
           crtc_mode =
             meta_gpu_kms_get_mode_from_kms_mode (gpu_kms,
                                                  kms_mode,
                                                  META_CRTC_REFRESH_RATE_MODE_VARIABLE);
-          output_info->modes[i++] = g_object_ref (crtc_mode);
+          output_info->modes[i++] = crtc_mode;
           if (!output_info->preferred_mode && kms_mode == kms_preferred_mode)
             output_info->preferred_mode = crtc_mode;
         }
+
+      crtc_mode = meta_gpu_kms_get_mode_from_kms_mode (gpu_kms,
+                                                       kms_mode,
+                                                       META_CRTC_REFRESH_RATE_MODE_FIXED);
+      output_info->modes[i++] = crtc_mode;
+      if (!output_info->preferred_mode && kms_mode == kms_preferred_mode)
+        output_info->preferred_mode = crtc_mode;
     }
 
   maybe_add_fallback_modes (connector_state,
@@ -394,69 +351,6 @@ meta_kms_connector_type_from_drm (uint32_t drm_connector_type)
   return (MetaConnectorType) drm_connector_type;
 }
 
-static MetaBacklight *
-meta_output_kms_create_backlight (MetaOutput  *output,
-                                  GError     **error)
-{
-  MetaMonitor *monitor = meta_output_get_monitor (output);
-  MetaBackend *backend = meta_monitor_get_backend (monitor);
-  MetaColorManager *color_manager = meta_backend_get_color_manager (backend);
-  MetaColorDevice *color_device =
-    meta_color_manager_get_color_device (color_manager, monitor);
-  const MetaOutputInfo *output_info = meta_output_get_info (output);
-  MetaColorMode color_mode = meta_output_get_color_mode (output);
-  g_autoptr (MetaBacklightSysfs) backlight_sysfs = NULL;
-  g_autoptr (GError) local_error = NULL;
-
-  meta_color_device_set_reference_luminance_factor (color_device, 1.0);
-
-  /* Unfortunately we don't know if a sysfs backlight actually works in
-   * HDR modes. Ideally a new KMS backlight API would allow us to get this
-   * information and react accordingly. Until then, we force the ref-white
-   * backlight.
-   */
-  if (color_mode == META_COLOR_MODE_BT2100)
-    {
-      g_autoptr (MetaBacklightRefWhite) backlight_ref_white = NULL;
-
-      backlight_ref_white = meta_backlight_ref_white_new (backend, monitor);
-
-      /* Even more unfortunately, this also means we have to reset the sysfs
-       * based backlight to 100% because in case it actually does work, we could
-       * never reach 100% with the ref-white alone.
-       */
-      backlight_sysfs = meta_backlight_sysfs_new (backend, output_info, NULL);
-      if (backlight_sysfs)
-        {
-          MetaBacklight *bl = META_BACKLIGHT (backlight_sysfs);
-          int brightness_max;
-
-          meta_backlight_get_brightness_info (bl, NULL, &brightness_max);
-          meta_backlight_set_brightness (bl, brightness_max);
-
-          /* and because this is all async, we need to keep it alive */
-          g_object_set_data_full (G_OBJECT (backlight_ref_white),
-                                  "-mutter-output-kms-sysfs",
-                                  g_steal_pointer (&backlight_sysfs),
-                                  g_object_unref);
-        }
-
-      return META_BACKLIGHT (g_steal_pointer (&backlight_ref_white));
-    }
-
-  backlight_sysfs = meta_backlight_sysfs_new (backend,
-                                              output_info,
-                                              &local_error);
-
-  if (!backlight_sysfs)
-    {
-      g_propagate_error (error, g_steal_pointer (&local_error));
-      return NULL;
-    }
-
-  return META_BACKLIGHT (g_steal_pointer (&backlight_sysfs));
-}
-
 MetaOutputKms *
 meta_output_kms_new (MetaGpuKms        *gpu_kms,
                      MetaKmsConnector  *kms_connector,
@@ -464,8 +358,6 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
                      GError           **error)
 {
   MetaGpu *gpu = META_GPU (gpu_kms);
-  MetaKmsDevice *device = meta_kms_connector_get_device (kms_connector);
-  MetaKmsDeviceFlag device_flags = meta_kms_device_get_flags (device);
   uint32_t connector_id;
   uint32_t gpu_id;
   g_autoptr (MetaOutputInfo) output_info = NULL;
@@ -473,6 +365,7 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
   MetaOutputKms *output_kms;
   uint32_t drm_connector_type;
   const MetaKmsConnectorState *connector_state;
+  const MetaKmsCrtcState *crtc_state;
   GArray *crtcs;
   GList *l;
 
@@ -486,7 +379,7 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
 
   output_info->panel_orientation_transform =
     connector_state->panel_orientation_transform;
-  if (mtk_monitor_transform_is_rotated (output_info->panel_orientation_transform))
+  if (meta_monitor_transform_is_rotated (output_info->panel_orientation_transform))
     {
       output_info->width_mm = connector_state->height_mm;
       output_info->height_mm = connector_state->width_mm;
@@ -501,7 +394,8 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
   output_info->connector_type =
     meta_kms_connector_type_from_drm (drm_connector_type);
 
-  output_info->supports_vrr = connector_state->vrr_capable;
+  output_info->supports_vrr = connector_state->vrr_capable &&
+                              !meta_gpu_kms_disable_vrr (gpu_kms);
 
   crtcs = g_array_new (FALSE, FALSE, sizeof (MetaCrtc *));
 
@@ -516,19 +410,14 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
         {
           g_array_append_val (crtcs, crtc_kms);
 
-          if (output_info->supports_vrr)
+          crtc_state = meta_kms_crtc_get_current_state (kms_crtc);
+          if (!crtc_state->vrr.supported)
             {
-              const MetaKmsCrtcState *crtc_state;
-
-              crtc_state = meta_kms_crtc_get_current_state (kms_crtc);
-              if (!crtc_state->vrr.supported)
-                {
-                  meta_topic (META_DEBUG_KMS,
-                              "Output is VRR capable, but a possible CRTC for "
-                              "the output does not support VRR. Disabling "
-                              "support for VRR on the output.");
-                  output_info->supports_vrr = FALSE;
-                }
+              meta_topic (META_DEBUG_KMS,
+                          "Output is VRR capable, but a possible CRTC for the "
+                          "output does not support VRR. Disabling support for "
+                          "VRR on the output.");
+              output_info->supports_vrr = FALSE;
             }
         }
     }
@@ -555,45 +444,44 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
 
   output_info->tile_info = connector_state->tile_info;
 
-  if ((device_flags & META_KMS_DEVICE_FLAG_SUPPORTS_COLOR_MODES) &&
-      output_info->edid_info)
+  if (output_info->edid_info)
     {
-      struct di_supported_signal_colorimetry *edid_colorimetry =
-        &output_info->edid_info->colorimetry;
+      MetaEdidColorimetry edid_colorimetry =
+        output_info->edid_info->colorimetry;
       uint64_t connector_colorimetry = connector_state->colorspace.supported;
 
       if (connector_colorimetry & (1 << META_OUTPUT_COLORSPACE_DEFAULT))
         output_info->supported_color_spaces |= (1 << META_OUTPUT_COLORSPACE_DEFAULT);
 
-      if ((edid_colorimetry->bt2020_rgb) &&
+      if ((edid_colorimetry & META_EDID_COLORIMETRY_BT2020RGB) &&
           (connector_colorimetry & (1 << META_OUTPUT_COLORSPACE_BT2020)))
         output_info->supported_color_spaces |= (1 << META_OUTPUT_COLORSPACE_BT2020);
     }
 
-  if ((device_flags & META_KMS_DEVICE_FLAG_SUPPORTS_COLOR_MODES) &&
-      connector_state->hdr.supported &&
+  if (connector_state->hdr.supported &&
       output_info->edid_info &&
-      output_info->edid_info->hdr_static_metadata.type1)
+      (output_info->edid_info->hdr_static_metadata.sm &
+       META_EDID_STATIC_METADATA_TYPE1))
     {
-      struct di_hdr_static_metadata *edid_hdr =
-        &output_info->edid_info->hdr_static_metadata;
+      MetaEdidTransferFunction edid_tf =
+        output_info->edid_info->hdr_static_metadata.tf;
 
-      if (edid_hdr->traditional_sdr)
+      if (edid_tf & META_EDID_TF_TRADITIONAL_GAMMA_SDR)
         {
           output_info->supported_hdr_eotfs |=
             (1 << META_OUTPUT_HDR_METADATA_EOTF_TRADITIONAL_GAMMA_SDR);
         }
-      if (edid_hdr->traditional_hdr)
+      if (edid_tf & META_EDID_TF_TRADITIONAL_GAMMA_HDR)
         {
           output_info->supported_hdr_eotfs |=
             (1 << META_OUTPUT_HDR_METADATA_EOTF_TRADITIONAL_GAMMA_HDR);
         }
-      if (edid_hdr->pq)
+      if (edid_tf & META_EDID_TF_PQ)
         {
           output_info->supported_hdr_eotfs |=
             (1 << META_OUTPUT_HDR_METADATA_EOTF_PQ);
         }
-      if (edid_hdr->hlg)
+      if (edid_tf & META_EDID_TF_HLG)
         {
           output_info->supported_hdr_eotfs |=
             (1 << META_OUTPUT_HDR_METADATA_EOTF_HLG);
@@ -638,21 +526,6 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
                   };
                 }
               meta_output_assign_crtc (output, crtc, &output_assignment);
-
-              if (connector_state->edid_data)
-                {
-                  MetaCrtcKms *crtc_kms = META_CRTC_KMS (crtc);
-                  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
-                  int32_t min_refresh_rate;
-
-                  if (!meta_output_info_get_min_refresh_rate (output_info,
-                                                              &min_refresh_rate))
-                    min_refresh_rate = 0;
-
-                  meta_kms_crtc_set_min_refresh_rate (kms_crtc,
-                                                      min_refresh_rate);
-                }
-
               break;
             }
         }
@@ -661,10 +534,6 @@ meta_output_kms_new (MetaGpuKms        *gpu_kms,
     {
       meta_output_unassign_crtc (output);
     }
-
-  g_object_set_qdata (G_OBJECT (kms_connector),
-                      kms_connector_output_kms_quark,
-                      output_kms);
 
   return output_kms;
 }
@@ -682,10 +551,6 @@ meta_output_kms_class_init (MetaOutputKmsClass *klass)
 
   output_class->get_privacy_screen_state =
     meta_output_kms_get_privacy_screen_state;
-  output_class->create_backlight = meta_output_kms_create_backlight;
 
   output_native_class->read_edid = meta_output_kms_read_edid;
-
-  kms_connector_output_kms_quark =
-    g_quark_from_static_string ("kms-connector-output-kms-quark");
 }

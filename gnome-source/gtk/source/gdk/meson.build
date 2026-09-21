@@ -5,10 +5,7 @@ gdk_public_sources = files([
   'gdkapplaunchcontext.c',
   'gdkcairo.c',
   'gdkcairocontext.c',
-  'gdkcicpparams.c',
   'gdkclipboard.c',
-  'gdkcolor.c',
-  'gdkcolorstate.c',
   'gdkcontentdeserializer.c',
   'gdkcontentformats.c',
   'gdkcontentprovider.c',
@@ -18,7 +15,6 @@ gdk_public_sources = files([
   'gdkdevice.c',
   'gdkdevicepad.c',
   'gdkdevicetool.c',
-  'gdkdihedral.c',
   'gdkdisplay.c',
   'gdkdisplaymanager.c',
   'gdkdmabuf.c',
@@ -47,29 +43,27 @@ gdk_public_sources = files([
   'gdkkeys.c',
   'gdkkeyuni.c',
   'gdkmemoryformat.c',
-  'gdkmemorylayout.c',
   'gdkmemorytexture.c',
-  'gdkmemorytexturebuilder.c',
   'gdkmonitor.c',
   'gdkpaintable.c',
   'gdkpango.c',
-  'gdkparalleltask.c',
   'gdkpipeiostream.c',
-  'gdkpopup.c',
-  'gdkpopuplayout.c',
-  'gdkprofiler.c',
   'gdkrectangle.c',
   'gdkrgba.c',
   'gdkseat.c',
+  'gdkseatdefault.c',
   'gdksnapshot.c',
-  'gdksubsurface.c',
-  'gdksurface.c',
   'gdktexture.c',
   'gdktexturedownloader.c',
+  'gdkvulkancontext.c',
+  'gdksubsurface.c',
+  'gdksurface.c',
+  'gdkpopuplayout.c',
+  'gdkprofiler.c',
+  'gdkpopup.c',
   'gdktoplevellayout.c',
   'gdktoplevelsize.c',
   'gdktoplevel.c',
-  'gdkvulkancontext.c',
   'loaders/gdkpng.c',
   'loaders/gdktiff.c',
   'loaders/gdkjpeg.c',
@@ -80,9 +74,7 @@ gdk_public_headers = files([
   'gdkapplaunchcontext.h',
   'gdkcairo.h',
   'gdkcairocontext.h',
-  'gdkcicpparams.h',
   'gdkclipboard.h',
-  'gdkcolorstate.h',
   'gdkcontentdeserializer.h',
   'gdkcontentformats.h',
   'gdkcontentprovider.h',
@@ -111,7 +103,6 @@ gdk_public_headers = files([
   'gdkkeys.h',
   'gdkkeysyms.h',
   'gdkmemorytexture.h',
-  'gdkmemorytexturebuilder.h',
   'gdkmonitor.h',
   'gdkpaintable.h',
   'gdkpango.h',
@@ -137,10 +128,11 @@ install_headers(gdk_deprecated_headers, subdir: 'gtk-4.0/gdk/deprecated')
 gdk_sources = gdk_public_sources + gdk_deprecated_sources
 
 gdk_private_h_sources = files([
-  'gdkdevicetoolprivate.h',
   'gdkeventsprivate.h',
+  'gdkdevicetoolprivate.h',
   'gdkhslaprivate.h',
   'gdkmonitorprivate.h',
+  'gdkseatdefaultprivate.h',
   'gdktoplevelsizeprivate.h',
 ])
 
@@ -183,7 +175,6 @@ gdkmarshal_h = gdk_marshalers[1]
 
 gdkconfig_cdata = configuration_data()
 gdkconfig_cdata.set('GDK_WINDOWING_X11', x11_enabled)
-gdkconfig_cdata.set('GDK_WINDOWING_ANDROID', android_enabled)
 gdkconfig_cdata.set('GDK_WINDOWING_WAYLAND', wayland_enabled)
 gdkconfig_cdata.set('GDK_WINDOWING_WIN32', win32_enabled)
 gdkconfig_cdata.set('GDK_WINDOWING_BROADWAY', broadway_enabled)
@@ -238,7 +229,6 @@ gdk_deps = [
   png_dep,
   tiff_dep,
   jpeg_dep,
-  gst_deps,
 ]
 
 if profiler_enabled
@@ -276,7 +266,7 @@ libgdk_c_args = [
 
 gdk_backends = []
 gdk_backends_gen_headers = []  # non-public generated headers
-foreach backend : ['android', 'broadway', 'wayland', 'win32', 'x11', 'macos']
+foreach backend : ['broadway', 'wayland', 'win32', 'x11', 'macos']
   if get_variable('@0@_enabled'.format(backend))
     subdir(backend)
     gdk_deps += get_variable('gdk_@0@_deps'.format(backend))
@@ -300,7 +290,6 @@ libgdk = static_library('gdk',
   include_directories: [confinc, gdkx11_inc, wlinc],
   c_args: libgdk_c_args + common_cflags,
   link_whole: gdk_backends,
-  gnu_symbol_visibility: symbol_visibility,
 )
 
 # We don't have link_with: to internal static libs here on purpose, just

@@ -60,7 +60,7 @@ struct _GtkColorChooserInterface
 };
 
 GDK_AVAILABLE_IN_ALL
-GType    gtk_color_chooser_get_type        (void);
+GType    gtk_color_chooser_get_type        (void) G_GNUC_CONST;
 
 GDK_DEPRECATED_IN_4_10
 void     gtk_color_chooser_get_rgba       (GtkColorChooser *chooser,

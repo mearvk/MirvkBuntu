@@ -20,6 +20,15 @@
 
 /* {{{ */
 
+#ifdef WINVER
+#undef WINVER
+#endif
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#endif
+#define WINVER 0x0603
+#define _WIN32_WINNT 0x0603
+#define COBJMACROS
 #include "config.h"
 
 #include <gdk/gdk.h>
@@ -28,9 +37,9 @@
 #include "gdkdevicemanager-win32.h"
 #include "gdkdevice-virtual.h"
 #include "gdkdeviceprivate.h"
-#include "gdkdisplay-win32.h"
-#include "gdkprivate-win32.h"
+#include "gdkdisplayprivate.h"
 #include "gdkeventsprivate.h"
+#include "gdkseatdefaultprivate.h"
 #include "gdkinput-dmanipulation.h"
 #include "winpointer.h"
 
@@ -39,6 +48,9 @@
 
 typedef BOOL
 (WINAPI *getPointerType_t)(UINT32 pointerId, POINTER_INPUT_TYPE *pointerType);
+static getPointerType_t getPointerType;
+
+static IDirectManipulationManager *dmanipulation_manager;
 
 typedef struct
 {
@@ -63,11 +75,13 @@ typedef struct
 DManipEventHandler;
 
 static void dmanip_event_handler_running_state_clear (DManipEventHandler *handler);
+static void dmanip_event_handler_free (DManipEventHandler *handler);
 
 static void reset_viewport (IDirectManipulationViewport *viewport);
 
 static gpointer util_get_next_sequence (void);
 static GdkModifierType util_get_modifier_state (void);
+static gboolean util_handler_free (gpointer);
 
 /* }}} */
 /* {{{ ViewportEventHandler */
@@ -78,12 +92,6 @@ DManipEventHandler_AddRef (IDirectManipulationViewportEventHandler *self_)
   DManipEventHandler *self = (DManipEventHandler*) self_;
 
   return (ULONG) InterlockedIncrement (&self->reference_count);
-}
-
-static void
-dmanip_event_handler_free (DManipEventHandler *handler)
-{
-  g_free (handler);
 }
 
 static STDMETHODIMP_ (ULONG)
@@ -97,7 +105,10 @@ DManipEventHandler_Release (IDirectManipulationViewportEventHandler *self_)
 
   if (new_reference_count <= 0)
     {
-      dmanip_event_handler_free (self);
+      /* For safety, schedule the cleanup to be executed
+       * on the main thread */
+      g_idle_add (util_handler_free, self);
+
       return 0;
     }
 
@@ -150,8 +161,7 @@ DManipEventHandler_OnContentUpdated (IDirectManipulationViewportEventHandler *se
 
   hr = IDirectManipulationContent_GetContentTransform (content, transform,
                                                        G_N_ELEMENTS (transform));
-  if G_UNLIKELY (FAILED (hr))
-    return E_FAIL;
+  HR_CHECK_RETURN_VAL (hr, E_FAIL);
 
   switch (self->gesture)
     {
@@ -179,8 +189,7 @@ DManipEventHandler_OnContentUpdated (IDirectManipulationViewportEventHandler *se
                                       (self->pan_x - pan_x) / scale,
                                       (self->pan_y - pan_y) / scale,
                                       FALSE,
-                                      GDK_SCROLL_UNIT_SURFACE,
-                                      GDK_SCROLL_RELATIVE_DIRECTION_UNKNOWN);
+                                      GDK_SCROLL_UNIT_SURFACE);
         _gdk_win32_append_event (event);
 
         self->pan_x = pan_x;
@@ -194,13 +203,12 @@ DManipEventHandler_OnContentUpdated (IDirectManipulationViewportEventHandler *se
         POINT cursor = {0, 0};
         float scale;
         GdkEvent *event;
-        GdkDisplay *display = gdk_surface_get_display (self->surface);
 
         scale = transform[0];
 
         state = util_get_modifier_state ();
         time = (uint32_t) GetMessageTime ();
-        _gdk_win32_get_cursor_pos (display, &cursor);
+        _gdk_win32_get_cursor_pos (&cursor);
 
         ScreenToClient (GDK_SURFACE_HWND (self->surface), &cursor);
 
@@ -248,8 +256,7 @@ DManipEventHandler_OnViewportStatusChanged (IDirectManipulationViewportEventHand
             event = gdk_scroll_event_new (self->surface, self->device,
                                           NULL, time, state,
                                           0.0, 0.0, TRUE,
-                                          GDK_SCROLL_UNIT_SURFACE,
-                                          GDK_SCROLL_RELATIVE_DIRECTION_UNKNOWN);
+                                          GDK_SCROLL_UNIT_SURFACE);
             _gdk_win32_append_event (event);
           }
         break;
@@ -259,14 +266,13 @@ DManipEventHandler_OnViewportStatusChanged (IDirectManipulationViewportEventHand
             uint32_t time;
             POINT cursor = {0, 0};
             GdkEvent *event;
-            GdkDisplay *display = gdk_surface_get_display (self->surface);
 
             if (self->phase == GDK_TOUCHPAD_GESTURE_PHASE_BEGIN)
               break;
 
             state = util_get_modifier_state ();
             time = (uint32_t) GetMessageTime ();
-            _gdk_win32_get_cursor_pos (display, &cursor);
+            _gdk_win32_get_cursor_pos (&cursor);
 
             ScreenToClient (GDK_SURFACE_HWND (self->surface), &cursor);
 
@@ -321,12 +327,19 @@ dmanip_event_handler_new (GdkSurface *surface,
   handler->gesture = gesture;
 
   handler->surface = surface;
-  handler->device = GDK_WIN32_DISPLAY (gdk_surface_get_display (surface))->device_manager->core_pointer;
+  handler->device = _gdk_device_manager->core_pointer;
 
   dmanip_event_handler_running_state_clear (handler);
 
   return handler;
 }
+
+static void
+dmanip_event_handler_free (DManipEventHandler *handler)
+{
+  g_free (handler);
+}
+
 
 /* }}} */
 /* {{{ Viewport utils */
@@ -341,16 +354,14 @@ reset_viewport (IDirectManipulationViewport *viewport)
   HRESULT hr;
 
   hr = IDirectManipulationViewport_GetPrimaryContent (viewport, iid, (void**)&content);
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
+  HR_CHECK_GOTO (hr, failed);
 
   hr = IDirectManipulationContent_SyncContentTransform (content, identity,
                                                         G_N_ELEMENTS (identity));
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
+  HR_CHECK_GOTO (hr, failed);
 
 failed:
-  gdk_win32_com_clear (&content);
+  IUnknown_Release (content);
 }
 
 static void
@@ -367,27 +378,6 @@ close_viewport (IDirectManipulationViewport **p_viewport)
     }
 }
 
-#define GDK_DISPLAY_GET_DMANIP_MANAGER(d) GDK_WIN32_DISPLAY(d)->dmanip_items != NULL ? \
-  (IDirectManipulationManager *) ((dmanip_items *)(GDK_WIN32_DISPLAY(d)->dmanip_items)->manager) : \
-  NULL
-
-#define GDK_DISPLAY_GET_GET_POINTER_TYPE(d) GDK_WIN32_DISPLAY(d)->dmanip_items != NULL ? \
-  (getPointerType_t) ((dmanip_items *)(GDK_WIN32_DISPLAY(d)->dmanip_items)->getPointerType) : \
-  NULL
-
-void
-gdk_win32_display_close_dmanip_manager (GdkDisplay *display)
-{
-  if (GDK_WIN32_DISPLAY (display)->dmanip_items != NULL)
-    {
-      IDirectManipulationManager *manager = GDK_DISPLAY_GET_DMANIP_MANAGER (display);
-
-      gdk_win32_com_clear (&manager);
-
-      g_clear_pointer (&GDK_WIN32_DISPLAY (display)->dmanip_items, g_free);
-    }
-}
-
 static void
 create_viewport (GdkSurface *surface,
                  int gesture,
@@ -398,13 +388,11 @@ create_viewport (GdkSurface *surface,
   IDirectManipulationViewportEventHandler *handler = NULL;
   DWORD cookie = 0;
   HRESULT hr;
-  IDirectManipulationManager *dmanipulation_manager = GDK_DISPLAY_GET_DMANIP_MANAGER (gdk_surface_get_display (surface));
 
   hr = IDirectManipulationManager_CreateViewport (dmanipulation_manager, NULL, hwnd,
                                                   &IID_IDirectManipulationViewport,
                                                   (void**) pViewport);
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
+  HR_CHECK_GOTO (hr, failed);
 
   switch (gesture)
     {
@@ -426,28 +414,24 @@ create_viewport (GdkSurface *surface,
     dmanip_event_handler_new (surface, gesture);
 
   hr = IDirectManipulationViewport_AddEventHandler (*pViewport, hwnd, handler, &cookie);
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
+  HR_CHECK_GOTO (hr, failed);
 
   hr = IDirectManipulationViewport_ActivateConfiguration (*pViewport, configuration);
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
+  HR_CHECK_GOTO (hr, failed);
 
   hr = IDirectManipulationViewport_SetViewportOptions (*pViewport,
          DIRECTMANIPULATION_VIEWPORT_OPTIONS_DISABLEPIXELSNAPPING);
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
 
   hr = IDirectManipulationViewport_Enable (*pViewport);
-  if (G_UNLIKELY (FAILED (hr)))
-    goto failed;
+  HR_CHECK_GOTO (hr, failed);
 
   // drop our initial reference
   IUnknown_Release (handler);
   return;
 
 failed:
-  gdk_win32_com_clear (&handler);
+  if (handler)
+    IUnknown_Release (handler);
 
   close_viewport (pViewport);
 }
@@ -457,14 +441,11 @@ failed:
 /* {{{ Public */
 
 
-void gdk_dmanipulation_initialize (GdkWin32Display *display)
+void gdk_dmanipulation_initialize (void)
 {
-  if (display->dmanip_items == NULL)
+  if (!getPointerType)
     {
-      IDirectManipulationManager *dmanipulation_manager;
-      getPointerType_t getPointerType;
       HMODULE user32_mod;
-      HRESULT hr;
 
       user32_mod = LoadLibraryW (L"user32.dll");
       if (!user32_mod)
@@ -478,33 +459,26 @@ void gdk_dmanipulation_initialize (GdkWin32Display *display)
 
       if (!getPointerType)
         return;
+    }
 
-      if (!gdk_win32_ensure_com ())
+  if (!gdk_win32_ensure_com ())
         return;
 
-      display->dmanip_items = g_new0 (dmanip_items, 1);
-      display->dmanip_items->getPointerType = getPointerType;
+  if (dmanipulation_manager == NULL)
+    {
+      HRESULT hr;
 
       hr = CoCreateInstance (&CLSID_DirectManipulationManager,
                              NULL,
                              CLSCTX_INPROC_SERVER,
                              &IID_IDirectManipulationManager,
                              (LPVOID*)&dmanipulation_manager);
-
-      if (SUCCEEDED (hr))
-        display->dmanip_items->manager = dmanipulation_manager;
-
       if (FAILED (hr))
         {
-          if (hr == REGDB_E_CLASSNOTREG || hr == E_NOINTERFACE)
-            {
-              /* Not an error,
-               * DirectManipulation is not available */
-            }
-          else
-            {
-              hr_warn (hr);
-            }
+          if (hr == REGDB_E_CLASSNOTREG || hr == E_NOINTERFACE);
+            /* Not an error,
+             * DirectManipulation is not available */
+          else HR_LOG (hr);
         }
     }
 }
@@ -512,7 +486,7 @@ void gdk_dmanipulation_initialize (GdkWin32Display *display)
 void gdk_dmanipulation_initialize_surface (GdkSurface *surface)
 {
   GdkWin32Surface *surface_win32;
-  IDirectManipulationManager *dmanipulation_manager = GDK_DISPLAY_GET_DMANIP_MANAGER (gdk_surface_get_display (surface));
+  HRESULT hr;
 
   if (!dmanipulation_manager)
     return;
@@ -525,16 +499,15 @@ void gdk_dmanipulation_initialize_surface (GdkSurface *surface)
   create_viewport (surface, GESTURE_ZOOM,
                    &surface_win32->dmanipulation_viewport_zoom);
 
-  IDirectManipulationManager_Activate (dmanipulation_manager,
-                                       GDK_SURFACE_HWND (surface));
+  hr = IDirectManipulationManager_Activate (dmanipulation_manager,
+                                            GDK_SURFACE_HWND (surface));
+  HR_CHECK_RETURN (hr);
 }
 
 void gdk_dmanipulation_finalize_surface (GdkSurface *surface)
 {
   GdkWin32Surface *surface_win32 = GDK_WIN32_SURFACE (surface);
 
-  IDirectManipulationManager_Deactivate (GDK_DISPLAY_GET_DMANIP_MANAGER (gdk_surface_get_display (surface)),
-                                         GDK_SURFACE_HWND (surface));
   close_viewport (&surface_win32->dmanipulation_viewport_zoom);
   close_viewport (&surface_win32->dmanipulation_viewport_pan);
 }
@@ -544,9 +517,6 @@ void gdk_dmanipulation_maybe_add_contact (GdkSurface *surface,
 {
   POINTER_INPUT_TYPE type = PT_POINTER;
   UINT32 pointer_id = GET_POINTERID_WPARAM (msg->wParam);
-  GdkDisplay *display = gdk_surface_get_display (surface);
-  IDirectManipulationManager *dmanipulation_manager = GDK_DISPLAY_GET_DMANIP_MANAGER (display);
-  getPointerType_t getPointerType = GDK_DISPLAY_GET_GET_POINTER_TYPE (display);
 
   if (!dmanipulation_manager)
     return;
@@ -563,11 +533,15 @@ void gdk_dmanipulation_maybe_add_contact (GdkSurface *surface,
   if (type == PT_TOUCHPAD)
     {
       GdkWin32Surface *surface_win32 = GDK_WIN32_SURFACE (surface);
+      HRESULT hr;
 
-      IDirectManipulationViewport_SetContact (surface_win32->dmanipulation_viewport_pan,
-                                              pointer_id);
-      IDirectManipulationViewport_SetContact (surface_win32->dmanipulation_viewport_zoom,
-                                              pointer_id);
+      hr = IDirectManipulationViewport_SetContact (surface_win32->dmanipulation_viewport_pan,
+                                                   pointer_id);
+      HR_CHECK_RETURN (hr);
+
+      hr = IDirectManipulationViewport_SetContact (surface_win32->dmanipulation_viewport_zoom,
+                                                   pointer_id);
+      HR_CHECK_RETURN (hr);
     }
 }
 
@@ -606,5 +580,14 @@ util_get_modifier_state (void)
 
   return mask;
 }
+
+static gboolean
+util_handler_free (gpointer handler)
+{
+  dmanip_event_handler_free ((DManipEventHandler*)handler);
+
+  return G_SOURCE_REMOVE;
+}
+
 
 /* }}} */

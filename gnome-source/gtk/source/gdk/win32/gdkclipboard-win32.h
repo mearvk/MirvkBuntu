@@ -18,7 +18,6 @@
 #pragma once
 
 #include "gdk/gdkclipboard.h"
-#include "gdkprivate-win32.h"
 
 G_BEGIN_DECLS
 
@@ -28,13 +27,11 @@ G_BEGIN_DECLS
 
 typedef struct _GdkWin32Clipboard GdkWin32Clipboard;
 
-GType                   gdk_win32_clipboard_get_type            (void);
+GType                   gdk_win32_clipboard_get_type            (void) G_GNUC_CONST;
 
 GdkClipboard *          gdk_win32_clipboard_new                 (GdkDisplay *display);
 
 void                    gdk_win32_clipboard_claim_remote        (GdkWin32Clipboard *cb);
-
-GdkWin32Clipdrop *      gdk_win32_clipboard_get_clipdrop        (GdkClipboard *cb);
 
 G_END_DECLS
 

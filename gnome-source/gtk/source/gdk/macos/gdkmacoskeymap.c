@@ -115,11 +115,7 @@ const static struct {
   { 105, GDK_KEY_F13 },
   { 107, GDK_KEY_F14 },
   { 113, GDK_KEY_F15 },
-  { 106, GDK_KEY_F16 },
-  {  64, GDK_KEY_F17 },
-  {  79, GDK_KEY_F18 },
-  {  80, GDK_KEY_F19 },
-  {  90, GDK_KEY_F20 }
+  { 106, GDK_KEY_F16 }
 };
 
 const static struct {
@@ -338,6 +334,8 @@ gdk_macos_keymap_update (GdkMacosKeymap *self)
 
       if (p[3] == p[2])
         p[3] = 0;
+      if (p[2] == p[1])
+        p[2] = 0;
       if (p[1] == p[0])
         p[1] = 0;
       if (p[0] == p[2] &&
@@ -580,7 +578,7 @@ gdk_macos_keymap_translate_keyboard_state (GdkKeymap       *keymap,
   if (hardware_keycode < 0 || hardware_keycode >= NUM_KEYCODES)
     return FALSE;
 
-  tmp_keyval = translate_keysym (hardware_keycode, group, state, effective_group, level);
+  tmp_keyval = translate_keysym (hardware_keycode, group, state, level, effective_group);
 
   /* Check if modifiers modify the keyval */
   if (consumed_modifiers)

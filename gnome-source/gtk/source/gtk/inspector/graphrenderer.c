@@ -27,11 +27,8 @@ enum {
   PROP_0,
   PROP_DATA,
   PROP_MINIMUM,
-  PROP_MAXIMUM,
-  N_PROPS
+  PROP_MAXIMUM
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 struct _GraphRenderer
 {
@@ -214,19 +211,23 @@ graph_renderer_class_init (GraphRendererClass *klass)
   widget_class->measure = graph_renderer_measure;
   widget_class->snapshot = graph_renderer_snapshot;
 
-  props[PROP_DATA] = g_param_spec_object ("data", NULL, NULL,
-                                          graph_data_get_type (),
-                                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_DATA,
+                                   g_param_spec_object ("data", NULL, NULL,
+                                                        graph_data_get_type (),
+                                                        G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_MINIMUM] = g_param_spec_double ("minimum", NULL, NULL,
-                                             -G_MAXDOUBLE, G_MAXDOUBLE, -G_MAXDOUBLE,
-                                             G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_MINIMUM,
+                                   g_param_spec_double ("minimum", NULL, NULL,
+                                                        -G_MAXDOUBLE, G_MAXDOUBLE, -G_MAXDOUBLE,
+                                                        G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_MAXIMUM] = g_param_spec_double ("maximum", NULL, NULL,
-                                             -G_MAXDOUBLE, G_MAXDOUBLE, G_MAXDOUBLE,
-                                             G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_MINIMUM,
+                                   g_param_spec_double ("maximum", NULL, NULL,
+                                                        -G_MAXDOUBLE, G_MAXDOUBLE, G_MAXDOUBLE,
+                                                        G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 }
 
 static void
@@ -247,7 +248,7 @@ graph_renderer_set_data (GraphRenderer *self,
                          GraphData     *data)
 {
   if (g_set_object (&self->data, data))
-    g_object_notify_by_pspec (G_OBJECT (self), props[PROP_DATA]);
+    g_object_notify (G_OBJECT (self), "data");
 
   gtk_widget_queue_draw (GTK_WIDGET (self));
 }

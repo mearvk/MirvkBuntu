@@ -9,6 +9,7 @@ G_BEGIN_DECLS
 
 #define TEST_TYPE_GESTURE test_gesture_get_type()
 
+static
 G_DECLARE_FINAL_TYPE (TestGesture, test_gesture, TEST, GESTURE, ClutterGesture)
 
 struct _TestGesture
@@ -77,7 +78,8 @@ static void
 gesture_disposed_while_active (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterActor *second_actor = clutter_actor_new ();
@@ -126,7 +128,8 @@ static void
 gesture_state_machine_move_to_waiting (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterGesture *gesture = CLUTTER_GESTURE (g_object_new (TEST_TYPE_GESTURE, NULL));
@@ -185,7 +188,8 @@ static void
 gesture_state_machine_move_to_cancelled_while_possible (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterGesture *gesture = CLUTTER_GESTURE (g_object_new (TEST_TYPE_GESTURE, NULL));
@@ -231,14 +235,14 @@ static void
 gesture_state_machine_move_to_cancelled_on_sequence_cancel (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterActor *second_actor = clutter_actor_new ();
   ClutterGesture *gesture = CLUTTER_GESTURE (g_object_new (TEST_TYPE_GESTURE, NULL));
   gboolean was_updated;
   ClutterGestureState gesture_state_change;
-  g_autoptr (ClutterGrab) grab = NULL;
 
   virtual_pointer = clutter_seat_create_virtual_device (seat, CLUTTER_POINTER_DEVICE);
   now_us = g_get_monotonic_time ();
@@ -272,7 +276,7 @@ gesture_state_machine_move_to_cancelled_on_sequence_cancel (void)
   /* Take a grab on the second_actor so that the sequence for the button press
    * gets cancelled.
    */
-  grab = clutter_stage_grab (CLUTTER_STAGE (stage), second_actor);
+  clutter_stage_grab (CLUTTER_STAGE (stage), second_actor);
   g_assert_true (gesture_state_change == CLUTTER_GESTURE_STATE_CANCELLED);
   g_assert_true (clutter_gesture_get_state (gesture) == CLUTTER_GESTURE_STATE_WAITING);
   g_assert_cmpint (clutter_gesture_get_n_points (gesture), ==, 0);
@@ -291,7 +295,8 @@ static void
 gesture_multiple_mouse_buttons (void)
 {
   ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
+  ClutterSeat *seat =
+    clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   int64_t now_us;
   ClutterGesture *gesture = CLUTTER_GESTURE (g_object_new (TEST_TYPE_GESTURE, NULL));
@@ -342,206 +347,10 @@ gesture_multiple_mouse_buttons (void)
   g_signal_handlers_disconnect_by_func (stage, on_after_update, &was_updated);
 }
 
-static void
-gesture_event_order (void)
-{
-  ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
-  g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  int64_t now_us;
-  ClutterActor *second_actor;
-  ClutterGesture *gesture_1, *gesture_2, *gesture_3;
-  gboolean was_updated;
-
-  virtual_pointer = clutter_seat_create_virtual_device (seat, CLUTTER_POINTER_DEVICE);
-  now_us = g_get_monotonic_time ();
-
-  second_actor = clutter_actor_new ();
-
-  gesture_1 = g_object_new (CLUTTER_TYPE_PAN_GESTURE,
-                            "name", "pan-gesture-1",
-                            "begin-threshold", 0,
-                            NULL);
-  gesture_2 = g_object_new (CLUTTER_TYPE_PAN_GESTURE,
-                            "name", "pan-gesture-2",
-                            "begin-threshold", 0,
-                            NULL);
-  gesture_3 = g_object_new (CLUTTER_TYPE_PAN_GESTURE,
-                            "name", "pan-gesture-3",
-                            "begin-threshold", 0,
-                            NULL);
-
-  g_signal_connect (stage, "after-update", G_CALLBACK (on_after_update),
-                    &was_updated);
-
-  clutter_actor_set_size (second_actor, 200, 200);
-  clutter_actor_set_reactive (second_actor, true);
-  clutter_actor_add_child (stage, second_actor);
-
-  clutter_actor_show (stage);
-  wait_stage_updated (&was_updated);
-
-  /* Default phase is BUBBLE */
-  clutter_actor_add_action (stage, CLUTTER_ACTION (gesture_1));
-  clutter_actor_add_action (stage, CLUTTER_ACTION (gesture_2));
-  clutter_actor_add_action (second_actor, CLUTTER_ACTION (gesture_3));
-
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer, now_us, 15, 15);
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_PRESSED);
-  wait_stage_updated (&was_updated);
-  g_assert_true (clutter_gesture_get_state (gesture_1) == CLUTTER_GESTURE_STATE_CANCELLED);
-  g_assert_true (clutter_gesture_get_state (gesture_2) == CLUTTER_GESTURE_STATE_CANCELLED);
-  g_assert_true (clutter_gesture_get_state (gesture_3) == CLUTTER_GESTURE_STATE_RECOGNIZING);
-
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_RELEASED);
-  wait_stage_updated (&was_updated);
-  g_assert_true (clutter_gesture_get_state (gesture_1) == CLUTTER_GESTURE_STATE_WAITING);
-  g_assert_true (clutter_gesture_get_state (gesture_2) == CLUTTER_GESTURE_STATE_WAITING);
-  g_assert_true (clutter_gesture_get_state (gesture_3) == CLUTTER_GESTURE_STATE_WAITING);
-
-  clutter_actor_destroy (second_actor);
-
-  clutter_actor_remove_action (stage, CLUTTER_ACTION (gesture_1));
-  clutter_actor_remove_action (stage, CLUTTER_ACTION (gesture_2));
-  g_signal_handlers_disconnect_by_func (stage, on_after_update, &was_updated);
-}
-
-static void
-gesture_event_order_2 (void)
-{
-  ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
-  g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  int64_t now_us;
-  ClutterActor *second_actor;
-  ClutterGesture *gesture_1, *gesture_2;
-  gboolean was_updated;
-
-  virtual_pointer = clutter_seat_create_virtual_device (seat, CLUTTER_POINTER_DEVICE);
-  now_us = g_get_monotonic_time ();
-
-  second_actor = clutter_actor_new ();
-
-  gesture_1 = g_object_new (CLUTTER_TYPE_PAN_GESTURE,
-                            "name", "pan-gesture-1",
-                            "begin-threshold", 0,
-                            NULL);
-  gesture_2 = g_object_new (CLUTTER_TYPE_PAN_GESTURE,
-                            "begin-threshold", 0,
-                            NULL);
-
-  g_signal_connect (stage, "after-update", G_CALLBACK (on_after_update),
-                    &was_updated);
-
-  clutter_actor_set_size (second_actor, 200, 200);
-  clutter_actor_set_reactive (second_actor, true);
-  clutter_actor_add_child (stage, second_actor);
-
-  clutter_actor_show (stage);
-
-  clutter_actor_add_action (stage, CLUTTER_ACTION (gesture_1));
-  clutter_actor_add_action_full (stage, "pan-gesture-2", CLUTTER_PHASE_CAPTURE, CLUTTER_ACTION (gesture_2));
-
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer, now_us, 15, 15);
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_PRESSED);
-  wait_stage_updated (&was_updated);
-  g_assert_true (clutter_gesture_get_state (gesture_1) == CLUTTER_GESTURE_STATE_CANCELLED);
-  g_assert_true (clutter_gesture_get_state (gesture_2) == CLUTTER_GESTURE_STATE_RECOGNIZING);
-
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_RELEASED);
-  wait_stage_updated (&was_updated);
-  g_assert_true (clutter_gesture_get_state (gesture_1) == CLUTTER_GESTURE_STATE_WAITING);
-  g_assert_true (clutter_gesture_get_state (gesture_2) == CLUTTER_GESTURE_STATE_WAITING);
-
-  clutter_actor_destroy (second_actor);
-
-  clutter_actor_remove_action (stage, CLUTTER_ACTION (gesture_1));
-  clutter_actor_remove_action (stage, CLUTTER_ACTION (gesture_2));
-  g_signal_handlers_disconnect_by_func (stage, on_after_update, &was_updated);
-}
-
-static void
-gesture_press_gesture_n_presses (void)
-{
-  ClutterActor *stage = clutter_test_get_stage ();
-  ClutterSeat *seat = clutter_test_get_default_seat ();
-  g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  int64_t now_us;
-  ClutterGesture *gesture;
-  gboolean was_updated;
-
-  virtual_pointer = clutter_seat_create_virtual_device (seat, CLUTTER_POINTER_DEVICE);
-  now_us = g_get_monotonic_time ();
-
-  gesture = g_object_new (CLUTTER_TYPE_CLICK_GESTURE,
-                          "name", "press-gesture",
-                          NULL);
-
-  g_signal_connect (stage, "after-update", G_CALLBACK (on_after_update),
-                    &was_updated);
-
-  clutter_actor_show (stage);
-
-  clutter_actor_add_action (stage, CLUTTER_ACTION (gesture));
-
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer, now_us, 15, 15);
-
-  /* First press */
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_PRESSED);
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_RELEASED);
-
-  wait_stage_updated (&was_updated);
-
-  g_assert_cmpint (clutter_press_gesture_get_n_presses (CLUTTER_PRESS_GESTURE (gesture)), ==, 1);
-
-  /* Second press */
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_PRESSED);
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_RELEASED);
-
-  wait_stage_updated (&was_updated);
-
-  g_assert_cmpint (clutter_press_gesture_get_n_presses (CLUTTER_PRESS_GESTURE (gesture)), ==, 2);
-
-  /* Third press after motion, should cancel */
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer, now_us, 150, 150);
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_PRESSED);
-  clutter_virtual_input_device_notify_button (virtual_pointer, now_us,
-                                              CLUTTER_BUTTON_PRIMARY,
-                                              CLUTTER_BUTTON_STATE_RELEASED);
-
-  wait_stage_updated (&was_updated);
-
-  g_assert_cmpint (clutter_press_gesture_get_n_presses (CLUTTER_PRESS_GESTURE (gesture)), ==, 1);
-
-  clutter_actor_remove_action (stage, CLUTTER_ACTION (gesture));
-  g_signal_handlers_disconnect_by_func (stage, on_after_update, &was_updated);
-}
-
 CLUTTER_TEST_SUITE (
   CLUTTER_TEST_UNIT ("/gesture/disposed-while-active", gesture_disposed_while_active);
   CLUTTER_TEST_UNIT ("/gesture/state-machine-move-to-waiting", gesture_state_machine_move_to_waiting);
   CLUTTER_TEST_UNIT ("/gesture/state-machine-move-to-cancelled-while-possible", gesture_state_machine_move_to_cancelled_while_possible);
   CLUTTER_TEST_UNIT ("/gesture/state-machine-move-to-cancelled-on-sequence-cancel", gesture_state_machine_move_to_cancelled_on_sequence_cancel);
   CLUTTER_TEST_UNIT ("/gesture/multiple-mouse-buttons", gesture_multiple_mouse_buttons);
-  CLUTTER_TEST_UNIT ("/gesture/event-order", gesture_event_order);
-  CLUTTER_TEST_UNIT ("/gesture/event-order-2", gesture_event_order_2);
-  CLUTTER_TEST_UNIT ("/gesture/press-gesture-n-presses", gesture_press_gesture_n_presses);
 )

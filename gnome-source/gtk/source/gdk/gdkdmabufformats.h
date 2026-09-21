@@ -29,7 +29,7 @@ G_BEGIN_DECLS
 #define GDK_TYPE_DMABUF_FORMATS (gdk_dmabuf_formats_get_type ())
 
 GDK_AVAILABLE_IN_4_14
-GType              gdk_dmabuf_formats_get_type        (void);
+GType              gdk_dmabuf_formats_get_type        (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_4_14
 GdkDmabufFormats * gdk_dmabuf_formats_ref             (GdkDmabufFormats *formats);
@@ -55,6 +55,6 @@ GDK_AVAILABLE_IN_4_14
 gboolean           gdk_dmabuf_formats_equal           (const GdkDmabufFormats *formats1,
                                                        const GdkDmabufFormats *formats2);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkDmabufFormats, gdk_dmabuf_formats_unref)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkDmabufFormats, gdk_dmabuf_formats_unref);
 
 G_END_DECLS

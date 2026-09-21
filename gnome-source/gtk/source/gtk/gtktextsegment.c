@@ -431,10 +431,6 @@ _gtk_toggle_segment_new (GtkTextTagInfo *info, gboolean on)
      for limited types and the additional space is not needed.  */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
-#if defined (__clang_major__) && __clang_major__ >= 22
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Walloc-size"
-#endif
   GtkTextLineSegment *seg;
 
   seg = g_malloc (TSEG_SIZE);
@@ -450,9 +446,6 @@ _gtk_toggle_segment_new (GtkTextTagInfo *info, gboolean on)
   seg->body.toggle.inNodeCounts = 0;
 
   return seg;
-#if defined (__clang_major__) && __clang_major__ >= 22
-#pragma clang diagnostic pop
-#endif
 #pragma GCC diagnostic pop
 }
 

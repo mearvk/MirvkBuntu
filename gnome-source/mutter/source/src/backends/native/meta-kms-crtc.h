@@ -37,19 +37,7 @@ typedef struct _MetaKmsCrtcState
   struct {
     gboolean enabled;
     gboolean supported;
-    int32_t max_refresh_interval_us;
   } vrr;
-
-  struct {
-    MetaGammaLut *value;
-    int size;
-    gboolean supported;
-  } degamma;
-
-  struct {
-    MetaCtm *value;
-    gboolean supported;
-  } ctm;
 
   struct {
     MetaGammaLut *value;
@@ -77,17 +65,3 @@ int meta_kms_crtc_get_idx (MetaKmsCrtc *crtc);
 
 META_EXPORT_TEST
 gboolean meta_kms_crtc_is_active (MetaKmsCrtc *crtc);
-
-gboolean meta_kms_crtc_is_leased (MetaKmsCrtc *crtc);
-
-void meta_kms_crtc_set_presentation_time (MetaKmsCrtc *crtc,
-                                          int64_t      presentation_us);
-
-void meta_kms_crtc_set_vrr_presentation_time (MetaKmsCrtc *crtc,
-                                              int64_t      presentation_us);
-
-void meta_kms_crtc_adjust_deadline_evasion (MetaKmsCrtc *crtc,
-                                            int64_t      duration_us,
-                                            int64_t      lateness_us);
-
-int64_t meta_kms_crtc_get_deadline_evasion (MetaKmsCrtc *crtc);

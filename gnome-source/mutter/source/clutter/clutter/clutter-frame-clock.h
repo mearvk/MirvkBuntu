@@ -31,21 +31,7 @@ typedef enum _ClutterFrameResult
 {
   CLUTTER_FRAME_RESULT_PENDING_PRESENTED,
   CLUTTER_FRAME_RESULT_IDLE,
-  CLUTTER_FRAME_RESULT_IGNORED,
 } ClutterFrameResult;
-
-#define CLUTTER_TYPE_FRAME_CLOCK_DRIVER (clutter_frame_clock_driver_get_type ())
-CLUTTER_EXPORT
-G_DECLARE_DERIVABLE_TYPE (ClutterFrameClockDriver, clutter_frame_clock_driver,
-                          CLUTTER, FRAME_CLOCK_DRIVER,
-                          GObject)
-
-struct _ClutterFrameClockDriverClass
-{
-  GObjectClass parent_class;
-
-  void (* schedule_update) (ClutterFrameClockDriver *driver);
-};
 
 #define CLUTTER_TYPE_FRAME_CLOCK (clutter_frame_clock_get_type ())
 CLUTTER_EXPORT
@@ -72,7 +58,6 @@ typedef enum _ClutterFrameClockMode
 {
   CLUTTER_FRAME_CLOCK_MODE_FIXED,
   CLUTTER_FRAME_CLOCK_MODE_VARIABLE,
-  CLUTTER_FRAME_CLOCK_MODE_PASSIVE,
 } ClutterFrameClockMode;
 
 CLUTTER_EXPORT
@@ -100,21 +85,7 @@ CLUTTER_EXPORT
 void clutter_frame_clock_schedule_update (ClutterFrameClock *frame_clock);
 
 CLUTTER_EXPORT
-void clutter_frame_clock_schedule_update_throttled (ClutterFrameClock *frame_clock);
-
-CLUTTER_EXPORT
-void clutter_frame_clock_schedule_flush_update (ClutterFrameClock *frame_clock);
-
-CLUTTER_EXPORT
 void clutter_frame_clock_schedule_update_now (ClutterFrameClock *frame_clock);
-
-CLUTTER_EXPORT
-void clutter_frame_clock_set_fullscreen_update_time (ClutterFrameClock *frame_clock,
-                                                     int64_t            update_time_us);
-
-CLUTTER_EXPORT
-void clutter_frame_clock_add_future_time (ClutterFrameClock *frame_clock,
-                                          int64_t            when_us);
 
 CLUTTER_EXPORT
 void clutter_frame_clock_inhibit (ClutterFrameClock *frame_clock);
@@ -135,18 +106,3 @@ void clutter_frame_clock_record_flip_time (ClutterFrameClock *frame_clock,
                                            int64_t            flip_time_us);
 
 GString * clutter_frame_clock_get_max_render_time_debug_info (ClutterFrameClock *frame_clock);
-
-CLUTTER_EXPORT
-void clutter_frame_clock_set_deadline_evasion (ClutterFrameClock *frame_clock,
-                                               int64_t            deadline_evasion_us);
-
-CLUTTER_EXPORT
-int clutter_frame_clock_get_priority (ClutterFrameClock *frame_clock);
-
-CLUTTER_EXPORT
-void clutter_frame_clock_set_passive (ClutterFrameClock       *frame_clock,
-                                      ClutterFrameClockDriver *driver);
-
-CLUTTER_EXPORT
-ClutterFrameResult clutter_frame_clock_dispatch (ClutterFrameClock *frame_clock,
-                                                 int64_t            time_us);

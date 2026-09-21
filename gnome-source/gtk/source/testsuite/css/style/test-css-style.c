@@ -129,7 +129,7 @@ load_ui_file (GFile *file, gboolean generate)
   reference_file = test_get_other_file (ui_file, ".nodes");
   g_assert_nonnull (reference_file);
 
-  diff = diff_string_with_file (reference_file, output, -1, &error);
+  diff = diff_with_file (reference_file, output, -1, &error);
   g_assert_no_error (error);
 
   if (diff && diff[0])
@@ -148,7 +148,6 @@ out:
   g_free (output);
   g_free (ui_file);
   g_free (css_file);
-  g_object_unref (builder);
 }
 
 static void

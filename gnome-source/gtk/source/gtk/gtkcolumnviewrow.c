@@ -26,7 +26,8 @@
 /**
  * GtkColumnViewRow:
  *
- * Configures how rows are displayed in a [class@Gtk.ColumnView].
+ * `GtkColumnViewRow` is used by [class@Gtk.ColumnView] to allow configuring
+ * how rows are displayed.
  *
  * It is not used to set the widgets displayed in the individual cells. For that
  * see [method@GtkColumnViewColumn.set_factory] and [class@GtkColumnViewCell].
@@ -170,7 +171,7 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   gobject_class->set_property = gtk_column_view_row_set_property;
 
   /**
-   * GtkColumnViewRow:accessible-description:
+   * GtkColumnViewRow:accessible-description: (attributes org.gtk.Property.get=gtk_column_view_row_get_accessible_description org.gtk.Property.set=gtk_column_view_row_set_accessible_description)
    *
    * The accessible description to set on the row.
    *
@@ -179,10 +180,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_ACCESSIBLE_DESCRIPTION] =
     g_param_spec_string ("accessible-description", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:accessible-label:
+   * GtkColumnViewRow:accessible-label: (attributes org.gtk.Property.get=gtk_column_view_row_get_accessible_label org.gtk.Property.set=gtk_column_view_row_set_accessible_label)
    *
    * The accessible label to set on the row.
    *
@@ -191,10 +192,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_ACCESSIBLE_LABEL] =
     g_param_spec_string ("accessible-label", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:activatable:
+   * GtkColumnViewRow:activatable: (attributes org.gtk.Property.get=gtk_column_view_row_get_activatable org.gtk.Property.set=gtk_column_view_row_set_activatable)
    *
    * If the row can be activated by the user.
    * 
@@ -203,10 +204,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_ACTIVATABLE] =
     g_param_spec_boolean ("activatable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:focusable:
+   * GtkColumnViewRow:focusable: (attributes org.gtk.Property.get=gtk_column_view_row_get_focusable org.gtk.Property.set=gtk_column_view_row_set_focusable)
    *
    * If the row can be focused with the keyboard.
    *
@@ -215,10 +216,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_FOCUSABLE] =
     g_param_spec_boolean ("focusable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:item:
+   * GtkColumnViewRow:item: (attributes org.gtk.Property.get=gtk_column_view_row_get_item)
    *
    * The item for this row.
    *
@@ -227,10 +228,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_ITEM] =
     g_param_spec_object ("item", NULL, NULL,
                          G_TYPE_OBJECT,
-                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:position:
+   * GtkColumnViewRow:position: (attributes org.gtk.Property.get=gtk_column_view_row_get_position)
    *
    * Position of the row.
    *
@@ -239,10 +240,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_POSITION] =
     g_param_spec_uint ("position", NULL, NULL,
                        0, G_MAXUINT, GTK_INVALID_LIST_POSITION,
-                       G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:selectable:
+   * GtkColumnViewRow:selectable: (attributes org.gtk.Property.get=gtk_column_view_row_get_selectable org.gtk.Property.set=gtk_column_view_row_set_selectable)
    *
    * If the row can be selected by the user.
    *
@@ -251,10 +252,10 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_SELECTABLE] =
     g_param_spec_boolean ("selectable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewRow:selected:
+   * GtkColumnViewRow:selected: (attributes org.gtk.Property.get=gtk_column_view_row_get_selected)
    *
    * If the item in the row is currently selected.
    *
@@ -263,7 +264,7 @@ gtk_column_view_row_class_init (GtkColumnViewRowClass *klass)
   properties[PROP_SELECTED] =
     g_param_spec_boolean ("selected", NULL, NULL,
                           FALSE,
-                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -299,7 +300,7 @@ gtk_column_view_row_do_notify (GtkColumnViewRow *column_view_row,
 }
 
 /**
- * gtk_column_view_row_get_item:
+ * gtk_column_view_row_get_item: (attributes org.gtk.Method.get_property=item)
  * @self: a `GtkColumnViewRow`
  *
  * Gets the model item that associated with @self.
@@ -322,7 +323,7 @@ gtk_column_view_row_get_item (GtkColumnViewRow *self)
 }
 
 /**
- * gtk_column_view_row_get_position:
+ * gtk_column_view_row_get_position: (attributes org.gtk.Method.get_property=position)
  * @self: a `GtkColumnViewRow`
  *
  * Gets the position in the model that @self currently displays.
@@ -345,7 +346,7 @@ gtk_column_view_row_get_position (GtkColumnViewRow *self)
 }
 
 /**
- * gtk_column_view_row_get_selected:
+ * gtk_column_view_row_get_selected: (attributes org.gtk.Method.get_property=selected)
  * @self: a `GtkColumnViewRow`
  *
  * Checks if the item is selected that this row corresponds to.
@@ -369,7 +370,7 @@ gtk_column_view_row_get_selected (GtkColumnViewRow *self)
 }
 
 /**
- * gtk_column_view_row_get_selectable:
+ * gtk_column_view_row_get_selectable: (attributes org.gtk.Method.get_property=selectable)
  * @self: a `GtkColumnViewRow`
  *
  * Checks if the row has been set to be selectable via
@@ -390,7 +391,7 @@ gtk_column_view_row_get_selectable (GtkColumnViewRow *self)
 }
 
 /**
- * gtk_column_view_row_set_selectable:
+ * gtk_column_view_row_set_selectable: (attributes org.gtk.Method.set_property=selectable)
  * @self: a `GtkColumnViewRow`
  * @selectable: if the row should be selectable
  *
@@ -426,7 +427,7 @@ gtk_column_view_row_set_selectable (GtkColumnViewRow *self,
 }
 
 /**
- * gtk_column_view_row_get_activatable:
+ * gtk_column_view_row_get_activatable: (attributes org.gtk.Method.get_property=activatable)
  * @self: a `GtkColumnViewRow`
  *
  * Checks if the row has been set to be activatable via
@@ -445,7 +446,7 @@ gtk_column_view_row_get_activatable (GtkColumnViewRow *self)
 }
 
 /**
- * gtk_column_view_row_set_activatable:
+ * gtk_column_view_row_set_activatable: (attributes org.gtk.Method.set_property=activatable)
  * @self: a `GtkColumnViewRow`
  * @activatable: if the row should be activatable
  *
@@ -478,7 +479,7 @@ gtk_column_view_row_set_activatable (GtkColumnViewRow *self,
 }
 
 /**
- * gtk_column_view_row_get_focusable:
+ * gtk_column_view_row_get_focusable: (attributes org.gtk.Method.get_property=focusable)
  * @self: a `GtkColumnViewRow`
  *
  * Checks if a row item has been set to be focusable via
@@ -497,7 +498,7 @@ gtk_column_view_row_get_focusable (GtkColumnViewRow *self)
 }
 
 /**
- * gtk_column_view_row_set_focusable:
+ * gtk_column_view_row_set_focusable: (attributes org.gtk.Method.set_property=focusable)
  * @self: a `GtkColumnViewRow`
  * @focusable: if the row should be focusable
  *

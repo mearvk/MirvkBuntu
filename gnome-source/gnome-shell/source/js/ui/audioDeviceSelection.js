@@ -10,7 +10,6 @@ import * as Dialog from './dialog.js';
 import * as ModalDialog from './modalDialog.js';
 
 import * as Main from './main.js';
-import {emitSignalToDestination} from '../misc/dbusUtils.js';
 import {loadInterfaceXML} from '../misc/fileUtils.js';
 
 const AudioDevice = {
@@ -43,7 +42,7 @@ const AudioDeviceSelectionDialog = GObject.registerClass({
     }
 
     _buildLayout() {
-        const content = new Dialog.MessageDialogContent({
+        let content = new Dialog.MessageDialogContent({
             title: _('Select Audio Device'),
         });
 
@@ -56,18 +55,17 @@ const AudioDeviceSelectionDialog = GObject.registerClass({
 
         this.contentLayout.add_child(content);
 
-        this.addButton({
-            action: () => this.close(),
-            label: _('Cancel'),
-            key: Clutter.KEY_Escape,
-        });
-
         if (Main.sessionMode.allowSettings) {
             this.addButton({
                 action: this._openSettings.bind(this),
                 label: _('Sound Settings'),
             });
         }
+        this.addButton({
+            action: () => this.close(),
+            label: _('Cancel'),
+            key: Clutter.KEY_Escape,
+        });
     }
 
     _getDeviceLabel(device) {
@@ -99,7 +97,7 @@ const AudioDeviceSelectionDialog = GObject.registerClass({
     _addDevice(device) {
         const box = new St.BoxLayout({
             style_class: 'audio-selection-device-box',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
         box.connect('notify::height', () => {
             const laters = global.compositor.get_laters();
@@ -137,8 +135,8 @@ const AudioDeviceSelectionDialog = GObject.registerClass({
     }
 
     _openSettings() {
-        const desktopFile = 'gnome-sound-panel.desktop';
-        const app = Shell.AppSystem.get_default().lookup_app(desktopFile);
+        let desktopFile = 'gnome-sound-panel.desktop';
+        let app = Shell.AppSystem.get_default().lookup_app(desktopFile);
 
         if (!app) {
             log(`Settings panel for desktop file ${desktopFile} could not be loaded!`);
@@ -166,11 +164,15 @@ export class AudioDeviceSelectionDBus {
     }
 
     _onDeviceSelected(dialog, device) {
+        let connection = this._dbusImpl.get_connection();
+        let info = this._dbusImpl.get_info();
         const deviceName = Object.keys(AudioDevice)
             .filter(dev => AudioDevice[dev] === device)[0].toLowerCase();
-
-        emitSignalToDestination(this._dbusImpl,
-            this._audioSelectionDialog._sender, 'DeviceSelected',
+        connection.emit_signal(
+            this._audioSelectionDialog._sender,
+            this._dbusImpl.get_object_path(),
+            info ? info.name : null,
+            'DeviceSelected',
             GLib.Variant.new('(s)', [deviceName]));
     }
 
@@ -180,14 +182,14 @@ export class AudioDeviceSelectionDBus {
             return;
         }
 
-        const [deviceNames] = params;
+        let [deviceNames] = params;
         let devices = 0;
         deviceNames.forEach(n => (devices |= AudioDevice[n.toUpperCase()]));
 
         let dialog;
         try {
             dialog = new AudioDeviceSelectionDialog(devices);
-        } catch {
+        } catch (e) {
             invocation.return_value(null);
             return;
         }

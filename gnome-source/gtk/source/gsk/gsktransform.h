@@ -32,7 +32,7 @@ G_BEGIN_DECLS
 #define GSK_TYPE_TRANSFORM (gsk_transform_get_type ())
 
 GDK_AVAILABLE_IN_ALL
-GType                   gsk_transform_get_type                  (void);
+GType                   gsk_transform_get_type                  (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GskTransform *          gsk_transform_ref                       (GskTransform                   *self);
@@ -94,15 +94,6 @@ GskTransform *          gsk_transform_invert                    (GskTransform   
 GDK_AVAILABLE_IN_ALL
 GskTransform *          gsk_transform_matrix                    (GskTransform                   *next,
                                                                  const graphene_matrix_t        *matrix) G_GNUC_WARN_UNUSED_RESULT;
-GDK_AVAILABLE_IN_4_20
-GskTransform *          gsk_transform_matrix_2d                 (GskTransform *next,
-                                                                 float         xx,
-                                                                 float         yx,
-                                                                 float         xy,
-                                                                 float         yy,
-                                                                 float         dx,
-                                                                 float         dy) G_GNUC_WARN_UNUSED_RESULT;
-
 GDK_AVAILABLE_IN_ALL
 GskTransform *          gsk_transform_translate                 (GskTransform                   *next,
                                                                  const graphene_point_t         *point) G_GNUC_WARN_UNUSED_RESULT;

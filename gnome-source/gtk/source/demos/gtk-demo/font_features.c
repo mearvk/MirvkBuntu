@@ -202,7 +202,7 @@ typedef struct {
   GtkEntry *entry;
 } BasicData;
 
-static void
+static gboolean
 update_in_idle (gpointer data)
 {
   BasicData *bd = data;
@@ -215,6 +215,8 @@ update_in_idle (gpointer data)
   update_display ();
 
   g_free (bd);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -227,7 +229,7 @@ basic_value_changed (GtkAdjustment *adjustment,
   bd->adjustment = adjustment;
   bd->entry = GTK_ENTRY (data);
 
-  g_idle_add_once (update_in_idle, bd);
+  g_idle_add (update_in_idle, bd);
 }
 
 static void
@@ -809,7 +811,7 @@ tag_pair_equal (gconstpointer a, gconstpointer b)
 }
 
 
-static int
+static GtkOrdering
 script_sort (const void *item1,
              const void *item2,
              void       *data)
@@ -992,6 +994,8 @@ update_features (void)
   pango_font = get_pango_font ();
   hb_font = pango_font_get_hb_font (pango_font);
 
+  g_print ("language %s\n", selected->langname);
+
   if (hb_font)
     {
       hb_tag_t tables[2] = { HB_OT_TAG_GSUB, HB_OT_TAG_GPOS };
@@ -1093,7 +1097,7 @@ update_features (void)
             {
               FeatureItem *item = l->data;
               char buf[5];
-              const char *p;
+              char *p;
 
               hb_tag_to_string (item->tag, buf);
               buf[4] = 0;
@@ -1620,7 +1624,8 @@ font_features_reset_features (void)
 
   gtk_label_select_region (GTK_LABEL (demo->the_label), 0, 0);
 
-  g_clear_list (&demo->ranges, free_range);
+  g_list_free_full (demo->ranges, free_range);
+  demo->ranges = NULL;
 
   for (l = demo->feature_items; l; l = l->next)
     {
@@ -1864,4 +1869,4 @@ do_font_features (GtkWidget *do_widget)
   return window;
 }
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

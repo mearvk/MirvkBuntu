@@ -4,13 +4,12 @@
     <accessibility>
       <property name="has-popup">1</property>
       <relation name="labelled-by">button_item</relation>
-      <relation name="controls">popup</relation>
       <state name="expanded">0</state>
     </accessibility>
     <child>
       <object class="GtkToggleButton" id="button">
         <signal name="toggled" handler="button_toggled"/>
-        <property name="child">
+        <child>
           <object class="GtkBox">
             <property name="can-focus">0</property>
             <child>
@@ -48,7 +47,7 @@
               </object>
             </child>
           </object>
-        </property>
+        </child>
       </object>
     </child>
     <child>
@@ -60,7 +59,7 @@
         <style>
           <class name="menu"/>
         </style>
-        <property name="child">
+        <child>
           <object class="GtkBox">
             <property name="orientation">1</property>
             <child>
@@ -86,16 +85,16 @@
                 <property name="hscrollbar-policy">2</property>
                 <property name="max-content-height">400</property>
                 <property name="propagate-natural-height">1</property>
-                <property name="child">
+                <child>
                   <object class="GtkListView" id="popup_list">
                     <signal name="activate" handler="row_activated"/>
                     <property name="single-click-activate">1</property>
                   </object>
-                </property>
+                </child>
               </object>
             </child>
           </object>
-        </property>
+        </child>
       </object>
     </child>
   </template>

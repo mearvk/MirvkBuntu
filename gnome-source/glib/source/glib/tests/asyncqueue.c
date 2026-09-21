@@ -40,8 +40,8 @@ compare_func (gconstpointer d1, gconstpointer d2, gpointer data)
   return i1 - i2;
 }
 
-static void
-test_async_queue_sort (void)
+static
+void test_async_queue_sort (void)
 {
   GAsyncQueue *q;
 
@@ -136,8 +136,9 @@ test_async_queue_destroy (void)
 static GAsyncQueue *global_queue;
 
 static GThread *threads[10];
-static gint counts[10];  /* (atomic) */
-static gint sums[10];  /* (atomic) */
+static gint counts[10];
+static gint sums[10];
+static gint total;
 
 static gpointer
 thread_func (gpointer data)
@@ -152,8 +153,8 @@ thread_func (gpointer data)
       if (value == -1)
         break;
 
-      g_atomic_int_inc (&counts[pos]);
-      g_atomic_int_add (&sums[pos], value);
+      counts[pos]++;
+      sums[pos] += value;
 
       g_usleep (1000);
     }
@@ -167,7 +168,6 @@ test_async_queue_threads (void)
   gint i, j;
   gint s, c;
   gint value;
-  int total = 0;
 
   global_queue = g_async_queue_new ();
 
@@ -200,13 +200,10 @@ test_async_queue_threads (void)
 
   for (i = 0; i < 10; i++)
     {
-      int sums_i = g_atomic_int_get (&sums[i]);
-      int counts_i = g_atomic_int_get (&counts[i]);
-
-      g_assert_cmpint (sums_i, >, 0);
-      g_assert_cmpint (counts_i, >, 0);
-      s += sums_i;
-      c += counts_i;
+      g_assert_cmpint (sums[i], >, 0);
+      g_assert_cmpint (counts[i], >, 0);
+      s += sums[i];
+      c += counts[i];
     }
 
   g_assert_cmpint (s, ==, total);

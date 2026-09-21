@@ -23,7 +23,7 @@
 
 /**
  * ClutterTimeline:
- *
+ * 
  * A class for time-based events
  *
  * #ClutterTimeline is a base class for managing time-based event that cause
@@ -35,7 +35,8 @@
  *
  * It is important to note that #ClutterTimeline is not a generic API for
  * calling closures after an interval; each Timeline is tied into a frame
- * clock used to drive the frame cycle.
+ * clock used to drive the frame cycle. If you need to schedule a closure
+ * after an interval, see [func@threads_add_timeout] instead.
  *
  * Users of #ClutterTimeline should connect to the [signal@Timeline::new-frame]
  * signal, which is emitted each time a timeline is advanced during the maste
@@ -87,7 +88,6 @@
 #include "clutter/clutter-mutter.h"
 #include "clutter/clutter-private.h"
 #include "clutter/clutter-timeline-private.h"
-#include "mtk/mtk.h"
 
 typedef struct _ClutterTimelinePrivate
 {
@@ -270,7 +270,7 @@ clutter_timeline_add_marker_internal (ClutterTimeline *timeline,
       guint msecs;
 
       if (old_marker->is_relative)
-        msecs = (unsigned int) (old_marker->data.progress * priv->duration);
+        msecs = old_marker->data.progress * priv->duration;
       else
         msecs = old_marker->data.msecs;
 
@@ -489,7 +489,7 @@ clutter_timeline_cancel_delay (ClutterTimeline *timeline)
   ClutterTimelinePrivate *priv =
     clutter_timeline_get_instance_private (timeline);
 
-  g_clear_handle_id (&priv->delay_id, mtk_source_remove);
+  g_clear_handle_id (&priv->delay_id, g_source_remove);
 }
 
 /* Object */
@@ -836,9 +836,9 @@ clutter_timeline_class_init (ClutterTimelineClass *klass)
    *
    * The signal is emitted each time a timeline
    * reaches a marker set with [method@Timeline.add_marker_at_time].
-   *
+   * 
    * This signal is detailed with the name of the marker as well,
-   * so it is possible to connect a callback to the [signal@Timeline::marker-reached]
+   * so it is possible to connect a callback to the [signal@Timeline::marker-reached] 
    * signal for a specific marker with:
    *
    * ```c
@@ -966,7 +966,7 @@ check_if_marker_hit (const gchar *name,
   gint msecs;
 
   if (marker->is_relative)
-    msecs = (int) ((double) data->duration * marker->data.progress);
+    msecs = (gdouble) data->duration * marker->data.progress;
   else
     msecs = marker->data.msecs;
 
@@ -1259,13 +1259,9 @@ clutter_timeline_start (ClutterTimeline *timeline)
                   priv->frame_clock);
 
   if (priv->delay)
-    {
-      priv->delay_id = mtk_timeout_add (priv->delay,
-                                        delay_timeout_func,
-                                        timeline);
-      mtk_source_set_name_by_id (priv->delay_id,
-                                 "[clutter] delay_timeout_func [timeline]");
-    }
+    priv->delay_id = clutter_threads_add_timeout (priv->delay,
+                                                  delay_timeout_func,
+                                                  timeline);
   else
     {
       priv->msecs_delta = 0;
@@ -1698,7 +1694,7 @@ clutter_timeline_get_delta (ClutterTimeline *timeline)
 
 void
 _clutter_timeline_advance (ClutterTimeline *timeline,
-                           int64_t          tick_time)
+                           gint64           tick_time)
 {
   ClutterTimelinePrivate *priv =
     clutter_timeline_get_instance_private (timeline);
@@ -1737,7 +1733,7 @@ _clutter_timeline_advance (ClutterTimeline *timeline,
  */
 void
 _clutter_timeline_do_tick (ClutterTimeline *timeline,
-                           int64_t          tick_time)
+                           gint64           tick_time)
 {
   ClutterTimelinePrivate *priv;
 
@@ -1879,7 +1875,7 @@ collect_markers (const gchar *key,
   guint msecs;
 
   if (marker->is_relative)
-    msecs = (unsigned int) (marker->data.progress * data->duration);
+    msecs = marker->data.progress * data->duration;
   else
     msecs = marker->data.msecs;
 
@@ -1998,7 +1994,7 @@ clutter_timeline_advance_to_marker (ClutterTimeline *timeline,
     }
 
   if (marker->is_relative)
-    msecs = (unsigned int) (marker->data.progress * priv->duration);
+    msecs = marker->data.progress * priv->duration;
   else
     msecs = marker->data.msecs;
 
@@ -2206,9 +2202,8 @@ clutter_timeline_get_repeat_count (ClutterTimeline *timeline)
 /**
  * clutter_timeline_set_progress_func:
  * @timeline: a #ClutterTimeline
- * @func: (scope notified) (allow-none) (closure data): a progress function,
- *        or %NULL
- * @data: data to pass to @func
+ * @func: (scope notified) (allow-none): a progress function, or %NULL
+ * @data: (closure): data to pass to @func
  * @notify: a function to be called when the progress function is removed
  *    or the timeline is disposed
  *

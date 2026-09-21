@@ -79,7 +79,6 @@ get_x11_interop (WaylandDisplay *display)
   registry = wl_display_get_registry (display->display);
   wl_registry_add_listener (registry, &registry_listener, &x11_interop);
   wl_display_roundtrip (display->display);
-  wl_registry_destroy (registry);
 
   return x11_interop;
 }
@@ -90,10 +89,6 @@ regular_client_thread_func (gpointer user_data)
   gboolean *client_terminated = user_data;
   WaylandDisplay *display;
   struct mutter_x11_interop *x11_interop = NULL;
-  g_autoptr (GMainContext) thread_main_context = NULL;
-
-  thread_main_context = g_main_context_new ();
-  g_main_context_push_thread_default (thread_main_context);
 
   display = wayland_display_new (WAYLAND_DISPLAY_CAPABILITY_NONE);
 
@@ -122,7 +117,7 @@ meta_test_wayland_client_x11_interop_hidden_by_default (void)
     g_main_context_iteration (NULL, TRUE);
 
   g_debug ("Waiting for thread to terminate");
-  g_thread_join (g_steal_pointer (&thread));
+  g_thread_join (thread);
 }
 
 typedef struct
@@ -135,7 +130,6 @@ static gpointer
 service_client_thread_func (gpointer user_data)
 {
   X11ParentTestdata *data = user_data;
-  g_autoptr (GMainContext) thread_main_context = NULL;
   g_autoptr (GError) error = NULL;
   g_autoptr (GDBusProxy) service_channel = NULL;
   GVariant *service_client_type_variant;
@@ -147,9 +141,6 @@ service_client_thread_func (gpointer user_data)
   WaylandDisplay *display;
   WaylandSurface *surface;
   struct mutter_x11_interop *x11_interop;
-
-  thread_main_context = g_main_context_new ();
-  g_main_context_push_thread_default (thread_main_context);
 
   service_channel = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
                                                    G_DBUS_PROXY_FLAGS_NONE,
@@ -201,9 +192,6 @@ service_client_thread_func (gpointer user_data)
 
   g_atomic_int_set (&data->client_terminated, TRUE);
 
-  g_clear_object (&service_channel);
-  while (g_main_context_iteration (thread_main_context, FALSE));
-
   return NULL;
 }
 
@@ -252,7 +240,7 @@ meta_test_wayland_client_x11_interop_x11_parent (void)
   meta_test_client_destroy (x11_client);
 
   g_debug ("Waiting for thread to terminate");
-  g_thread_join (g_steal_pointer (&thread));
+  g_thread_join (thread);
 }
 
 static void
@@ -287,10 +275,11 @@ main (int    argc,
       char **argv)
 {
   g_autoptr (MetaContext) context = NULL;
+  g_autoptr (GError) error = NULL;
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_TEST_CLIENT);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   test_context = context;
 

@@ -93,13 +93,6 @@
  */
 #define MAX_BUFFER_SIZE 32768
 
-/* Limit on SFTP reply packet size to prevent OOM from buggy servers.
- * Matches MAX_PACKET_LEN used by OpenSSH and libssh2.  Note that SSH
- * transport already caps individual packets, but an SFTP message can
- * span multiple SSH packets, so this provides an additional safeguard.
- */
-#define MAX_REPLY_SIZE (256 * 1024)
-
 static GQuark id_q;
 
 typedef enum {
@@ -729,23 +722,13 @@ read_reply_sync (Connection *conn, gsize *len_out, GError **error)
     }
   
   len = GUINT32_FROM_BE (len);
-  if (len > MAX_REPLY_SIZE)
-    {
-      g_debug ("Server sent oversized packet (%u bytes)", len);
-      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                           _("Invalid reply received"));
-      return NULL;
-    }
-
+  
   array = g_byte_array_sized_new (len);
 
   if (!g_input_stream_read_all (conn->reply_stream,
 				array->data, len,
-				&bytes_read, NULL, NULL) ||
-      bytes_read != len)
+				&bytes_read, NULL, error))
     {
-      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                           _("Invalid reply received"));
       g_byte_array_free (array, TRUE);
       return NULL;
     }
@@ -782,7 +765,6 @@ read_string (GDataInputStream *stream, gsize *len_out)
   guint32 len;
   char *data;
   GError *error;
-  gsize bytes_read;
 
   error = NULL;
   len = g_data_input_stream_read_uint32 (stream, NULL, &error);
@@ -794,8 +776,7 @@ read_string (GDataInputStream *stream, gsize *len_out)
   
   data = g_malloc (len + 1);
 
-  if (!g_input_stream_read_all (G_INPUT_STREAM (stream), data, len, &bytes_read, NULL, NULL) ||
-      bytes_read != len)
+  if (!g_input_stream_read_all (G_INPUT_STREAM (stream), data, len, NULL, NULL, NULL))
     {
       g_free (data);
       return NULL;
@@ -824,8 +805,8 @@ static gboolean
 get_hostname_from_line (const gchar *buffer,
                         gchar **hostname_out)
 {
-  const gchar *startpos;
-  const gchar *endpos;
+  gchar *startpos;
+  gchar *endpos;
 
   /* Parse a line that looks like: "username@hostname's password:". */
 
@@ -847,9 +828,9 @@ get_hostname_and_fingerprint_from_line (const gchar *buffer,
                                         gchar      **hostname_out,
                                         gchar      **fingerprint_out)
 {
-  const gchar *pos;
-  const gchar *startpos;
-  const gchar *endpos;
+  gchar *pos;
+  gchar *startpos;
+  gchar *endpos;
   gchar *hostname = NULL;
   gchar *fingerprint = NULL;
   
@@ -905,8 +886,7 @@ get_hostname_and_ip_address (const gchar *buffer,
                              gchar      **hostname_out,
                              gchar      **ip_address_out)
 {
-  const char *startpos, *endpos;
-  char *hostname;
+  char *startpos, *endpos, *hostname;
 
   /* Parse a line that looks like:
    * Warning: the ECDSA/RSA host key for 'hostname' differs from the key for the IP address '...'
@@ -1002,8 +982,7 @@ get_authtype_from_password_line (const char *password_line)
 static char *
 get_object_from_password_line (const char *password_line)
 {
-  const char *chr, *ptr;
-  char *object = NULL;
+  char *chr, *ptr, *object = NULL;
 
   if (g_str_has_prefix (password_line, "Enter passphrase for key"))
     {
@@ -1244,7 +1223,7 @@ handle_login (GVfsBackend *backend,
 
 	      op_backend->user_specified = TRUE;
 	      
-	      gvfs_free_password (op_backend->tmp_password);
+	      g_free (op_backend->tmp_password);
 	      op_backend->tmp_password = new_password;
 	      new_password = NULL;
 	      
@@ -1420,7 +1399,7 @@ handle_login (GVfsBackend *backend,
   g_debug ("handle_login #%d - ret_val: %d\n", i, ret_val);
 
   g_free (object);
-  gvfs_free_password (new_password);
+  g_free (new_password);
   g_object_unref (prompt_stream);
   g_object_unref (reply_stream);
   return ret_val;
@@ -1571,16 +1550,6 @@ read_reply_async_got_len  (GObject *source_object,
       return;
     }
   conn->reply_size = GUINT32_FROM_BE (conn->reply_size);
-  if (conn->reply_size > MAX_REPLY_SIZE)
-    {
-      GError *error = NULL;
-
-      g_debug ("Server sent oversized packet (%u bytes)", conn->reply_size);
-      g_set_error_literal (&error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                           _("Invalid reply received"));
-      fail_jobs_and_unmount (conn->op_backend, error);
-      return;
-    }
 
   conn->reply_size_read = 0;
   conn->reply = g_malloc (conn->reply_size);
@@ -2079,7 +2048,7 @@ do_mount (GVfsBackend *backend,
       destroy_connection (&op_backend->data_connection);
     }
 
-  g_clear_pointer (&op_backend->tmp_password, gvfs_free_password);
+  g_clear_pointer (&op_backend->tmp_password, g_free);
 
   sftp_mount_spec = g_mount_spec_new ("sftp");
   if (op_backend->user_specified_in_uri)
@@ -2874,8 +2843,7 @@ read_reply (GVfsBackendSftp *backend,
 {
   SftpHandle *handle;
   guint32 count;
-  gsize bytes_read;
-
+  
   handle = user_data;
   
   if (reply_type == SSH_FXP_STATUS)
@@ -2892,23 +2860,16 @@ read_reply (GVfsBackendSftp *backend,
     }
   
   count = g_data_input_stream_read_uint32 (reply, NULL, NULL);
-  if (count > G_VFS_JOB_READ (job)->bytes_requested)
-    {
-      g_vfs_job_failed (job, G_IO_ERROR, G_IO_ERROR_FAILED,
-                        _("Invalid reply received"));
-      return;
-    }
 
   if (!g_input_stream_read_all (G_INPUT_STREAM (reply),
                                 G_VFS_JOB_READ (job)->buffer, count,
-                                &bytes_read, NULL, NULL) ||
-      bytes_read != count)
+                                NULL, NULL, NULL))
     {
       g_vfs_job_failed (job, G_IO_ERROR, G_IO_ERROR_FAILED,
                         _("Invalid reply received"));
       return;
     }
-
+  
   handle->offset += count;
 
   g_vfs_job_read_set_size (G_VFS_JOB_READ (job), count);
@@ -3462,33 +3423,13 @@ not_dir_or_not_exist_error (GVfsBackendSftp *backend,
 }
 
 static void
-open_for_write_error (GVfsBackendSftp *backend,
-                      GVfsJob *job,
-                      gint original_error,
-                      gint stat_error,
-                      GFileInfo *info,
-                      gpointer user_data)
+create_reply (GVfsBackendSftp *backend,
+              int reply_type,
+              GDataInputStream *reply,
+              guint32 len,
+              GVfsJob *job,
+              gpointer user_data)
 {
-  if (info != NULL &&
-      g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
-    {
-      g_vfs_job_failed (job, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY,
-                        _("File is directory"));
-      return;
-    }
-
-  result_from_status_code (job, original_error, -1, -1);
-}
-
-static void
-open_for_write_reply (GVfsBackendSftp *backend,
-                      int reply_type,
-                      GDataInputStream *reply,
-                      guint32 len,
-                      GVfsJob *job,
-                      gpointer user_data)
-{
-  GVfsJobOpenForWrite *op_job = G_VFS_JOB_OPEN_FOR_WRITE (job);
   SftpHandle *handle;
   guint32 code;
   
@@ -3505,13 +3446,6 @@ open_for_write_reply (GVfsBackendSftp *backend,
 	  return;
 	}
       
-      if (code == SSH_FX_FAILURE && op_job->mode != OPEN_FOR_WRITE_CREATE)
-        {
-          error_from_lstat (backend, job, code, op_job->filename,
-                            open_for_write_error, NULL);
-          return;
-        }
-
       result_from_status_code (job, code, G_IO_ERROR_EXISTS, -1);
       return;
     }
@@ -3531,12 +3465,11 @@ open_for_write_reply (GVfsBackendSftp *backend,
   g_vfs_job_succeeded (job);
 }
 
-static void
-open_for_write (GVfsBackend *backend,
-                GVfsJobOpenForWrite *job,
-                const char *filename,
-                GFileCreateFlags flags,
-                int open_flags)
+static gboolean
+try_create (GVfsBackend *backend,
+            GVfsJobOpenForWrite *job,
+            const char *filename,
+            GFileCreateFlags flags)
 {
   GVfsBackendSftp *op_backend = G_VFS_BACKEND_SFTP (backend);
   GDataOutputStream *command;
@@ -3544,27 +3477,76 @@ open_for_write (GVfsBackend *backend,
   command = new_command_stream (op_backend,
                                 SSH_FXP_OPEN);
   put_string (command, filename);
-  g_data_output_stream_put_uint32 (command, open_flags, NULL, NULL); /* open flags */
+  g_data_output_stream_put_uint32 (command, SSH_FXF_WRITE|SSH_FXF_CREAT|SSH_FXF_EXCL,  NULL, NULL); /* open flags */
   put_mode (command, flags);
   
   queue_command_stream_and_free (&op_backend->command_connection, command,
-                                 open_for_write_reply,
+                                 create_reply,
                                  G_VFS_JOB (job), NULL);
-}
-
-static gboolean
-try_create (GVfsBackend *backend,
-            GVfsJobOpenForWrite *job,
-            const char *filename,
-            GFileCreateFlags flags)
-{
-  open_for_write (backend,
-                  job,
-                  filename,
-                  flags,
-                  SSH_FXF_WRITE|SSH_FXF_CREAT|SSH_FXF_EXCL);
 
   return TRUE;
+}
+
+static void
+append_to_error (GVfsBackendSftp *backend,
+		 GVfsJob *job,
+		 gint original_error,
+		 gint stat_error,
+		 GFileInfo *info,
+		 gpointer user_data)
+{
+  if ((original_error == SSH_FX_FAILURE) &&
+      info != NULL &&
+      g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
+    {
+      g_vfs_job_failed (job, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY,
+			_("File is directory"));
+      return;
+    }
+
+  if (original_error == SSH_FX_NO_SUCH_FILE)
+    {
+      not_dir_or_not_exist_error (backend, job,
+				  G_VFS_JOB_OPEN_FOR_WRITE (job)->filename);
+      return;
+    }
+  
+
+  result_from_status_code (job, original_error, -1, -1);
+}
+
+static void
+append_to_reply (GVfsBackendSftp *backend,
+                 int reply_type,
+                 GDataInputStream *reply,
+                 guint32 len,
+                 GVfsJob *job,
+                 gpointer user_data)
+{
+  SftpHandle *handle;
+  
+  if (reply_type == SSH_FXP_STATUS)
+    {
+      error_from_lstat (backend, job, read_status_code (reply),
+			G_VFS_JOB_OPEN_FOR_WRITE (job)->filename,
+			append_to_error,
+			NULL);
+      return;
+    }
+
+  if (reply_type != SSH_FXP_HANDLE)
+    {
+      g_vfs_job_failed (job, G_IO_ERROR, G_IO_ERROR_FAILED,
+                        _("Invalid reply received"));
+      return;
+    }
+
+  handle = sftp_handle_new (reply);
+  
+  g_vfs_job_open_for_write_set_handle (G_VFS_JOB_OPEN_FOR_WRITE (job), handle);
+  g_vfs_job_open_for_write_set_can_seek (G_VFS_JOB_OPEN_FOR_WRITE (job), TRUE);
+  g_vfs_job_open_for_write_set_can_truncate (G_VFS_JOB_OPEN_FOR_WRITE (job), TRUE);
+  g_vfs_job_succeeded (job);
 }
 
 static gboolean
@@ -3573,26 +3555,18 @@ try_append_to (GVfsBackend *backend,
                const char *filename,
                GFileCreateFlags flags)
 {
-  open_for_write (backend,
-                  job,
-                  filename,
-                  flags,
-                  SSH_FXF_WRITE|SSH_FXF_CREAT|SSH_FXF_APPEND);
+  GVfsBackendSftp *op_backend = G_VFS_BACKEND_SFTP (backend);
+  GDataOutputStream *command;
 
-  return TRUE;
-}
-
-static gboolean
-try_edit (GVfsBackend *backend,
-          GVfsJobOpenForWrite *job,
-          const char *filename,
-          GFileCreateFlags flags)
-{
-  open_for_write (backend,
-                  job,
-                  filename,
-                  flags,
-                  SSH_FXF_WRITE|SSH_FXF_CREAT);
+  command = new_command_stream (op_backend,
+                                SSH_FXP_OPEN);
+  put_string (command, filename);
+  g_data_output_stream_put_uint32 (command, SSH_FXF_WRITE|SSH_FXF_CREAT|SSH_FXF_APPEND,  NULL, NULL); /* open flags */
+  put_mode (command, flags);
+  
+  queue_command_stream_and_free (&op_backend->command_connection, command,
+                                 append_to_reply,
+                                 G_VFS_JOB (job), NULL);
 
   return TRUE;
 }
@@ -6661,15 +6635,12 @@ pull_read_reply (GVfsBackendSftp *backend,
     }
   else
     {
-      gsize bytes_read;
-
       request->response_len = g_data_input_stream_read_uint32 (reply, NULL, NULL);
       request->buffer = g_slice_alloc (request->response_len);
 
       if (g_input_stream_read_all (G_INPUT_STREAM (reply),
                                    request->buffer, request->response_len,
-                                   &bytes_read, NULL, NULL) &&
-          bytes_read == request->response_len)
+                                   NULL, NULL, NULL))
         {
           handle->queued_writes = g_list_append (handle->queued_writes, request);
           pull_try_start_write (handle);
@@ -6935,7 +6906,6 @@ g_vfs_backend_sftp_class_init (GVfsBackendSftpClass *klass)
   backend_class->try_enumerate = try_enumerate;
   backend_class->try_create = try_create;
   backend_class->try_append_to = try_append_to;
-  backend_class->try_edit = try_edit;
   backend_class->try_replace = try_replace;
   backend_class->try_write = try_write;
   backend_class->try_seek_on_write = try_seek_on_write;

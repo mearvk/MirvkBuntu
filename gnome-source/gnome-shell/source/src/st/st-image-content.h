@@ -18,41 +18,16 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef __ST_IMAGE_CONTENT_H__
+#define __ST_IMAGE_CONTENT_H__
 
 #include <clutter/clutter.h>
 
 #define ST_TYPE_IMAGE_CONTENT (st_image_content_get_type ())
 G_DECLARE_FINAL_TYPE (StImageContent, st_image_content,
-                      ST, IMAGE_CONTENT, GObject)
+                      ST, IMAGE_CONTENT, ClutterImage)
 
 ClutterContent *st_image_content_new_with_preferred_size (int width,
                                                           int height);
 
-void st_image_content_set_preferred_width (StImageContent *content,
-                                           int             width);
-int  st_image_content_get_preferred_width (StImageContent *content);
-
-void st_image_content_set_preferred_height (StImageContent *content,
-                                            int             height);
-int  st_image_content_get_preferred_height (StImageContent *content);
-
-gboolean st_image_content_set_data (StImageContent  *content,
-                                    CoglContext     *cogl_context,
-                                    const guint8    *data,
-                                    CoglPixelFormat  pixel_format,
-                                    guint            width,
-                                    guint            height,
-                                    guint            row_stride,
-                                    GError         **error);
-
-gboolean st_image_content_set_bytes (StImageContent  *content,
-                                     CoglContext     *cogl_context,
-                                     GBytes          *data,
-                                     CoglPixelFormat  pixel_format,
-                                     guint            width,
-                                     guint            height,
-                                     guint            row_stride,
-                                     GError         **error);
-
-CoglTexture * st_image_content_get_texture (StImageContent *content);
+#endif /* __ST_IMAGE_CONTENT_H__ */

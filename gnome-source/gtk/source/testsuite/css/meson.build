@@ -3,6 +3,9 @@ csstest_env.set('GTK_A11Y', 'test')
 csstest_env.set('GSK_RENDERER', 'cairo')
 csstest_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 csstest_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
+csstest_env.set('GSETTINGS_BACKEND', 'memory')
+csstest_env.set('G_ENABLE_DIAGNOSTIC', '0')
+csstest_env.set('GDK_DEBUG', 'default-settings')
 
 subdir('parser')
 subdir('nodes')
@@ -26,7 +29,7 @@ test_data = executable('data',
   sources: ['data.c'],
   c_args: common_cflags + ['-DGTK_COMPILATION'],
   include_directories: [confinc, ],
-  dependencies: libgtk_private_dep,
+  dependencies: libgtk_static_dep,
 )
 
 test('data', test_data,
@@ -39,7 +42,7 @@ test('data', test_data,
 transition = executable('transition',
   sources: ['transition.c'],
   c_args: common_cflags + ['-DGTK_COMPILATION'],
-  dependencies: libgtk_private_dep,
+  dependencies: libgtk_static_dep,
 )
 
 test('transition', transition,
@@ -49,28 +52,31 @@ test('transition', transition,
      suite: 'css'
 )
 
-color = executable('color',
-  sources: ['color.c'],
-  c_args: common_cflags + ['-DGTK_COMPILATION'],
-  dependencies: libgtk_private_dep,
-)
+if false and get_option ('profiler')
 
-test('color', color,
-     args: [ '--tap', '-k'],
-     protocol: 'tap',
-     env: csstest_env,
-     suite: 'css'
-)
+  adwaita_env = csstest_env
+  adwaita_env.set('GTK_THEME', 'Adwaita')
+  test('performance-adwaita', test_performance,
+    args: [
+      '--mark', 'css validation',
+      '--name', 'performance-adwaita',
+      '--output', join_paths(meson.current_build_dir(), 'output'),
+      join_paths(meson.current_build_dir(), '../../demos/widget-factory/gtk4-widget-factory'),
+    ],
+    env: adwaita_env,
+    suite: [ 'css' ],
+  )
 
-compute = executable('compute',
-  sources: ['compute.c'],
-  c_args: common_cflags + ['-DGTK_COMPILATION'],
-  dependencies: libgtk_private_dep
-)
-
-test('compute', compute,
-  args: [ '--tap', '-k'],
-  protocol: 'tap',
-  env: csstest_env,
-  suite: 'css'
-)
+  empty_env = csstest_env
+  empty_env.set('GTK_THEME', 'Empty')
+  test('performance-empty', test_performance,
+    args: [
+      '--mark', 'css validation',
+      '--name', 'performance-empty',
+      '--output', join_paths(meson.current_build_dir(), 'output'),
+      join_paths(meson.current_build_dir(), '../../demos/widget-factory/gtk4-widget-factory'),
+    ],
+    env: empty_env,
+    suite: [ 'css' ],
+  )
+endif

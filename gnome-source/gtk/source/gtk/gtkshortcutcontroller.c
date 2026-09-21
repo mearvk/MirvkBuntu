@@ -21,7 +21,7 @@
 /**
  * GtkShortcutController:
  *
- * Manages keyboard shortcuts and their activation.
+ * `GtkShortcutController` is an event controller that manages shortcuts.
  *
  * Most common shortcuts are using this controller implicitly, e.g. by
  * adding a mnemonic underline to a [class@Gtk.Label], or by installing a key
@@ -493,21 +493,6 @@ update_accel (GtkShortcut    *shortcut,
     return;
 
   trigger = gtk_shortcut_get_trigger (shortcut);
-  while (GTK_IS_ALTERNATIVE_TRIGGER (trigger))
-    {
-      for (unsigned int i = 0; i < g_list_model_get_n_items (G_LIST_MODEL (trigger)); i++)
-        {
-          GtkShortcutTrigger *child = g_list_model_get_item (G_LIST_MODEL (trigger), i);
-
-          g_object_unref (child);
-          if (GTK_IS_KEYVAL_TRIGGER (child) || GTK_IS_ALTERNATIVE_TRIGGER (child))
-            {
-              trigger = child;
-              break;
-            }
-        }
-    }
-
   if (!GTK_IS_KEYVAL_TRIGGER (trigger))
     return;
 
@@ -606,10 +591,10 @@ gtk_shortcut_controller_class_init (GtkShortcutControllerClass *klass)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkShortcutController:mnemonic-modifiers: (getter get_mnemonics_modifiers) (setter set_mnemonics_modifiers)
+   * GtkShortcutController:mnemonic-modifiers: (attributes org.gtk.Property.get=gtk_shortcut_controller_get_mnemonics_modifiers org.gtk.Property.set=gtk_shortcut_controller_set_mnemonics_modifiers)
    *
    * The modifiers that need to be pressed to allow mnemonics activation.
    */
@@ -617,7 +602,7 @@ gtk_shortcut_controller_class_init (GtkShortcutControllerClass *klass)
       g_param_spec_flags ("mnemonic-modifiers", NULL, NULL,
                           GDK_TYPE_MODIFIER_TYPE,
                           GDK_ALT_MASK,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkShortcutController:model:
@@ -627,7 +612,7 @@ gtk_shortcut_controller_class_init (GtkShortcutControllerClass *klass)
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                           G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkShortcutController:n-items:
@@ -639,10 +624,10 @@ gtk_shortcut_controller_class_init (GtkShortcutControllerClass *klass)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkShortcutController:scope:
+   * GtkShortcutController:scope: (attributes org.gtk.Property.get=gtk_shortcut_controller_get_scope org.gtk.Property.set=gtk_shortcut_controller_set_scope)
    *
    * What scope the shortcuts will be handled in.
    */
@@ -650,7 +635,7 @@ gtk_shortcut_controller_class_init (GtkShortcutControllerClass *klass)
       g_param_spec_enum ("scope", NULL, NULL,
                          GTK_TYPE_SHORTCUT_SCOPE,
                          GTK_SHORTCUT_SCOPE_LOCAL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
@@ -872,7 +857,7 @@ gtk_shortcut_controller_remove_shortcut (GtkShortcutController  *self,
 }
 
 /**
- * gtk_shortcut_controller_set_scope:
+ * gtk_shortcut_controller_set_scope: (attributes org.gtk.Method.set_property=scope)
  * @self: a `GtkShortcutController`
  * @scope: the new scope to use
  *
@@ -911,7 +896,7 @@ gtk_shortcut_controller_set_scope (GtkShortcutController *self,
 }
 
 /**
- * gtk_shortcut_controller_get_scope:
+ * gtk_shortcut_controller_get_scope: (attributes org.gtk.Method.get_property=scope)
  * @self: a `GtkShortcutController`
  *
  * Gets the scope for when this controller activates its shortcuts.
@@ -929,7 +914,7 @@ gtk_shortcut_controller_get_scope (GtkShortcutController *self)
 }
 
 /**
- * gtk_shortcut_controller_set_mnemonics_modifiers: (set-property mnemonic-modifiers)
+ * gtk_shortcut_controller_set_mnemonics_modifiers: (attributes org.gtk.Method.set_property=mnemonic-modifiers)
  * @self: a `GtkShortcutController`
  * @modifiers: the new mnemonics_modifiers to use
  *
@@ -962,7 +947,7 @@ gtk_shortcut_controller_set_mnemonics_modifiers (GtkShortcutController *self,
 }
 
 /**
- * gtk_shortcut_controller_get_mnemonics_modifiers: (get-property mnemonic-modifiers)
+ * gtk_shortcut_controller_get_mnemonics_modifiers: (attributes org.gtk.Method.get_property=mnemonic-modifiers)
  * @self: a `GtkShortcutController`
  *
  * Gets the mnemonics modifiers for when this controller activates its shortcuts.

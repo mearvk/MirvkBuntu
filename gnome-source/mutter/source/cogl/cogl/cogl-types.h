@@ -56,8 +56,24 @@ G_BEGIN_DECLS
 #define COGL_PRIVATE(x) private_member_ ## x
 #endif
 
-typedef struct _CoglColor CoglColor;
+#ifndef __GI_SCANNER__
+/* To help catch accidental changes to public structs that should
+ * be stack allocated we use this macro to compile time assert that
+ * a struct size is as expected.
+ */
+#define COGL_STRUCT_SIZE_ASSERT(TYPE, SIZE) \
+typedef struct { \
+          char compile_time_assert_ ## TYPE ## _size[ \
+              (sizeof (TYPE) == (SIZE)) ? 1 : -1]; \
+        } _ ## TYPE ## SizeCheck
+#else
+#define COGL_STRUCT_SIZE_ASSERT(TYPE, SIZE)
+#endif
+
 typedef struct _CoglFramebuffer CoglFramebuffer;
+
+typedef struct _CoglColor               CoglColor;
+typedef struct _CoglTextureVertex       CoglTextureVertex;
 
 /**
  * CoglDmaBufHandle: (free-func cogl_dma_buf_handle_free)
@@ -66,6 +82,88 @@ typedef struct _CoglFramebuffer CoglFramebuffer;
  * with cogl_dma_buf_handle_free().
  */
 typedef struct _CoglDmaBufHandle CoglDmaBufHandle;
+
+/* Enum declarations */
+
+#define COGL_A_BIT              (1 << 4)
+#define COGL_BGR_BIT            (1 << 5)
+#define COGL_AFIRST_BIT         (1 << 6)
+#define COGL_PREMULT_BIT        (1 << 7)
+#define COGL_DEPTH_BIT          (1 << 8)
+#define COGL_STENCIL_BIT        (1 << 9)
+
+/**
+ * CoglBufferTarget:
+ * @COGL_WINDOW_BUFFER: FIXME
+ * @COGL_OFFSCREEN_BUFFER: FIXME
+ *
+ * Target flags for FBOs.
+ */
+typedef enum
+{
+  COGL_WINDOW_BUFFER      = (1 << 1),
+  COGL_OFFSCREEN_BUFFER   = (1 << 2)
+} CoglBufferTarget;
+
+struct _CoglColor
+{
+  /*< private >*/
+  uint8_t COGL_PRIVATE (red);
+  uint8_t COGL_PRIVATE (green);
+  uint8_t COGL_PRIVATE (blue);
+
+  uint8_t COGL_PRIVATE (alpha);
+};
+COGL_STRUCT_SIZE_ASSERT (CoglColor, 4);
+
+/**
+ * CoglTextureVertex:
+ * @x: Model x-coordinate
+ * @y: Model y-coordinate
+ * @z: Model z-coordinate
+ * @tx: Texture x-coordinate
+ * @ty: Texture y-coordinate
+ * @color: The color to use at this vertex. This is ignored if
+ *   use_color is %FALSE when calling cogl_polygon()
+ *
+ * Used to specify vertex information when calling cogl_polygon()
+ */
+struct _CoglTextureVertex
+{
+  float x, y, z;
+  float tx, ty;
+
+  CoglColor color;
+};
+COGL_STRUCT_SIZE_ASSERT (CoglTextureVertex, 24);
+
+/**
+ * COGL_BLEND_STRING_ERROR:
+ *
+ * #GError domain for blend string parser errors
+ */
+#define COGL_BLEND_STRING_ERROR (cogl_blend_string_error_quark ())
+
+/**
+ * CoglBlendStringError:
+ * @COGL_BLEND_STRING_ERROR_PARSE_ERROR: Generic parse error
+ * @COGL_BLEND_STRING_ERROR_ARGUMENT_PARSE_ERROR: Argument parse error
+ * @COGL_BLEND_STRING_ERROR_INVALID_ERROR: Internal parser error
+ * @COGL_BLEND_STRING_ERROR_GPU_UNSUPPORTED_ERROR: Blend string not
+ *   supported by the GPU
+ *
+ * Error enumeration for the blend strings parser
+ */
+typedef enum /*< prefix=COGL_BLEND_STRING_ERROR >*/
+{
+  COGL_BLEND_STRING_ERROR_PARSE_ERROR,
+  COGL_BLEND_STRING_ERROR_ARGUMENT_PARSE_ERROR,
+  COGL_BLEND_STRING_ERROR_INVALID_ERROR,
+  COGL_BLEND_STRING_ERROR_GPU_UNSUPPORTED_ERROR
+} CoglBlendStringError;
+
+COGL_EXPORT uint32_t
+cogl_blend_string_error_quark (void);
 
 #define COGL_SYSTEM_ERROR (_cogl_system_error_quark ())
 
@@ -82,7 +180,7 @@ typedef struct _CoglDmaBufHandle CoglDmaBufHandle;
  * variety of reasons. For example:
  *
  * - You've tried to use a feature that is not advertised by
- *   [method@Cogl.Driver.has_feature].
+ *   [func@Cogl.has_feature].
  * - The GPU can not handle the configuration you have requested.
  *   An example might be if you try to use too many texture
  *   layers in a single #CoglPipeline
@@ -153,7 +251,7 @@ typedef enum
  * @COGL_VERTICES_MODE_TRIANGLES: FIXME, equivalent to `GL_TRIANGLES`
  * @COGL_VERTICES_MODE_TRIANGLE_STRIP: FIXME, equivalent to `GL_TRIANGLE_STRIP`
  * @COGL_VERTICES_MODE_TRIANGLE_FAN: FIXME, equivalent to `GL_TRIANGLE_FAN`
- *
+ * 
  * Different ways of interpreting vertices when drawing.
  */
 typedef enum
@@ -170,9 +268,9 @@ typedef enum
 /* NB: The above definitions are taken from gl.h equivalents */
 
 
-/* XXX: should this be CoglPipelineDepthTestFunction?
+/* XXX: should this be CoglMaterialDepthTestFunction?
  * It makes it very verbose but would be consistent with
- * CoglPipelineWrapMode */
+ * CoglMaterialWrapMode */
 
 /**
  * CoglDepthTestFunction:
@@ -218,17 +316,54 @@ typedef enum /*< prefix=COGL_RENDERER_ERROR >*/
   COGL_RENDERER_ERROR_BAD_CONSTRAINT
 } CoglRendererError;
 
+/**
+ * CoglFilterReturn:
+ * @COGL_FILTER_CONTINUE: The event was not handled, continues the
+ *                        processing
+ * @COGL_FILTER_REMOVE: Remove the event, stops the processing
+ *
+ * Return values for the #CoglXlibFilterFunc and #CoglWin32FilterFunc functions.
+ */
+typedef enum _CoglFilterReturn { /*< prefix=COGL_FILTER >*/
+  COGL_FILTER_CONTINUE,
+  COGL_FILTER_REMOVE
+} CoglFilterReturn;
+
 typedef enum _CoglWinsysFeature
 {
+  /* Available if its possible to query a counter that
+   * increments at each vblank. */
+  COGL_WINSYS_FEATURE_VBLANK_COUNTER,
+
+  /* Available if its possible to wait until the next vertical
+   * blank period */
+  COGL_WINSYS_FEATURE_VBLANK_WAIT,
+
+  /* Available if the window system supports mapping native
+   * pixmaps to textures. */
+  COGL_WINSYS_FEATURE_TEXTURE_FROM_PIXMAP,
+
+  /* Available if the window system supports reporting an event
+   * for swap buffer completions. */
+  COGL_WINSYS_FEATURE_SWAP_BUFFERS_EVENT,
+
   /* Available if it's possible to swap a list of sub rectangles
    * from the back buffer to the front buffer */
   COGL_WINSYS_FEATURE_SWAP_REGION,
 
+  /* Available if swap_region requests can be automatically throttled
+   * to the vblank frequency. */
+  COGL_WINSYS_FEATURE_SWAP_REGION_THROTTLE,
+
+  /* Available if the swap region implementation won't tear and thus
+   * only needs to be throttled to the framerate */
+  COGL_WINSYS_FEATURE_SWAP_REGION_SYNCHRONIZED,
+
   /* Available if the age of the back buffer can be queried */
   COGL_WINSYS_FEATURE_BUFFER_AGE,
 
-  /* cogl_renderer_get_latest_sync_fd() is supported */
-  COGL_WINSYS_FEATURE_SYNC_FD,
+  /* Available if the winsys directly handles _SYNC and _COMPLETE events */
+  COGL_WINSYS_FEATURE_SYNC_AND_COMPLETE_EVENT,
 
   COGL_WINSYS_FEATURE_N_FEATURES
 } CoglWinsysFeature;
@@ -274,32 +409,24 @@ typedef enum /*< prefix=COGL_READ_PIXELS >*/
   COGL_READ_PIXELS_COLOR_BUFFER = 1L << 0
 } CoglReadPixelsFlags;
 
-typedef enum _CoglFramebufferState CoglFramebufferState;
+/**
+ * CoglStereoMode:
+ * @COGL_STEREO_BOTH: draw to both stereo buffers
+ * @COGL_STEREO_LEFT: draw only to the left stereo buffer
+ * @COGL_STEREO_RIGHT: draw only to the left stereo buffer
+ *
+ * Represents how draw should affect the two buffers
+ * of a stereo framebuffer. See cogl_framebuffer_set_stereo_mode().
+ */
+typedef enum
+{
+  COGL_STEREO_BOTH,
+  COGL_STEREO_LEFT,
+  COGL_STEREO_RIGHT
+} CoglStereoMode;
 
-typedef struct _CoglAttribute CoglAttribute;
-typedef struct _CoglAttributeBuffer CoglAttributeBuffer;
-typedef struct _CoglAtlas CoglAtlas;
-typedef struct _CoglAtlasTexture CoglAtlasTexture;
-typedef struct _CoglBitmap CoglBitmap;
-typedef struct _CoglBuffer CoglBuffer;
-typedef struct _CoglContext CoglContext;
-typedef struct _CoglDisplay CoglDisplay;
-typedef struct _CoglFrameInfo CoglFrameInfo;
-typedef struct _CoglIndices CoglIndices;
-typedef struct _CoglOnscreen CoglOnscreen;
-typedef struct _CoglParamSpecColor CoglParamSpecColor;
-typedef struct _CoglPipeline CoglPipeline;
-typedef struct _CoglPixelBuffer CoglPixelBuffer;
-typedef struct _CoglPrimitive CoglPrimitive;
-typedef struct _CoglRenderbuffers CoglRenderbuffers;
-typedef struct _CoglRenderer CoglRenderer;
 typedef struct _CoglScanout CoglScanout;
 typedef struct _CoglScanoutBuffer CoglScanoutBuffer;
-typedef struct _CoglSnippet CoglSnippet;
-typedef struct _CoglSubTexture CoglSubTexture;
-typedef struct _CoglTexture CoglTexture;
-typedef struct _CoglTexture2D CoglTexture2D;
-typedef struct _CoglTexture2DSliced CoglTexture2DSliced;
 
 #define COGL_SCANOUT_ERROR (cogl_scanout_error_quark ())
 

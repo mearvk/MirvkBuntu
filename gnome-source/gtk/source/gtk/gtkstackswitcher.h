@@ -35,7 +35,7 @@ typedef struct _GtkStackSwitcher              GtkStackSwitcher;
 
 
 GDK_AVAILABLE_IN_ALL
-GType        gtk_stack_switcher_get_type          (void);
+GType        gtk_stack_switcher_get_type          (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget *  gtk_stack_switcher_new               (void);
 GDK_AVAILABLE_IN_ALL

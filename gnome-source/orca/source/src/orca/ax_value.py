@@ -46,11 +46,11 @@ class AXValue:
         try:
             value = Atspi.Value.get_current_value(obj)
         except GLib.GError as error:
-            tokens = ["AXValue: Exception in get_current_value:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXValue: Exception in get_current_value: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return 0.0
 
-        tokens = ["AXValue: Current value of", obj, "is", value]
+        tokens = ["AXValue: Current value of", obj, f"is {value}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return value
 
@@ -60,7 +60,7 @@ class AXValue:
 
         text = AXObject.get_attribute(obj, "valuetext", False) or ""
         if text:
-            tokens = ["AXValue: valuetext attribute for", obj, "is '", text, "'"]
+            tokens = ["AXValue: valuetext attribute for", obj, f"is '{text}'"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return text
 
@@ -70,11 +70,11 @@ class AXValue:
         try:
             value = Atspi.Value.get_text(obj)
         except GLib.GError as error:
-            tokens = ["AXValue: Exception in get_current_value_text:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXValue: Exception in get_current_value_text: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             value = ""
 
-        tokens = ["AXValue: Value text of", obj, "is '", value, "'"]
+        tokens = ["AXValue: Value text of", obj, f"is '{value}'"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         if value:
             return value
@@ -95,7 +95,8 @@ class AXValue:
         if not AXObject.supports_value(obj):
             return None
 
-        if AXUtilitiesState.is_indeterminate(obj):
+        value = AXValue.get_current_value(obj)
+        if AXUtilitiesState.is_indeterminate(obj) and value <= 0:
             tokens = ["AXValue:", obj, "has state indeterminate"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return None
@@ -105,9 +106,8 @@ class AXValue:
         if minimum == maximum:
             return None
 
-        value = AXValue.get_current_value(obj)
-        result = int(((value - minimum) / (maximum - minimum)) * 100)
-        tokens = ["AXValue: Current value of", obj, "as percent is", result]
+        result = int((value / (maximum - minimum)) * 100)
+        tokens = ["AXValue: Current value of", obj, f"as percent is is {result}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
 
@@ -121,11 +121,11 @@ class AXValue:
         try:
             value = Atspi.Value.get_minimum_value(obj)
         except GLib.GError as error:
-            tokens = ["AXValue: Exception in get_minimum_value:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXValue: Exception in get_minimum_value: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return 0.0
 
-        tokens = ["AXValue: Minimum value of", obj, "is", value]
+        tokens = ["AXValue: Minimum value of", obj, f"is {value}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return value
 
@@ -139,10 +139,10 @@ class AXValue:
         try:
             value = Atspi.Value.get_maximum_value(obj)
         except GLib.GError as error:
-            tokens = ["AXValue: Exception in get_maximum_value:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXValue: Exception in get_maximum_value: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return 0.0
 
-        tokens = ["AXValue: Maximum value of", obj, "is", value]
+        tokens = ["AXValue: Maximum value of", obj, f"is {value}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return value

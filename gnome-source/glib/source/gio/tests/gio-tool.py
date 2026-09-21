@@ -23,19 +23,21 @@
 
 """Integration tests for the gio utility."""
 
-import platform
+import collections
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 
-from pathlib import Path
-
 import taptestrunner
-import testprogramrunner
 
 
-class TestGioTool(testprogramrunner.TestProgramRunner):
+Result = collections.namedtuple("Result", ("info", "out", "err"))
+
+
+class TestGioTool(unittest.TestCase):
     """Integration test for running the gio tool.
 
     This can be run when installed or uninstalled. When uninstalled, it
@@ -46,23 +48,69 @@ class TestGioTool(testprogramrunner.TestProgramRunner):
     effects on the file system.
     """
 
-    PROGRAM_NAME = "gio"
-    PROGRAM_TYPE = testprogramrunner.ProgramType.NATIVE
+    # Track the cwd, we want to back out to that to clean up our tempdir
+    cwd = ""
 
-    def runGio(self, *args, **kwargs):
-        return self.runTestProgram(args, **kwargs)
+    def setUp(self):
+        self.timeout_seconds = 6  # seconds per test
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.cwd = os.getcwd()
+        os.chdir(self.tmpdir.name)
+        print("tmpdir:", self.tmpdir.name)
+
+        ext = ""
+        if os.name == "nt":
+            ext = ".exe"
+
+        if "G_TEST_BUILDDIR" in os.environ:
+            self.__gio = os.path.join(
+                os.environ["G_TEST_BUILDDIR"],
+                "..",
+                "gio" + ext,
+            )
+        else:
+            self.__gio = shutil.which("gio" + ext)
+        print("gio:", self.__gio)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        self.tmpdir.cleanup()
+
+    def runGio(self, *args):
+        argv = [self.__gio]
+        argv.extend(args)
+        print("Running:", argv)
+
+        env = os.environ.copy()
+        env["LC_ALL"] = "C.UTF-8"
+        env["G_DEBUG"] = "fatal-warnings"
+        print("Environment:", env)
+
+        # We want to ensure consistent line endings...
+        info = subprocess.run(
+            argv,
+            timeout=self.timeout_seconds,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            universal_newlines=True,
+        )
+        info.check_returncode()
+        out = info.stdout.strip()
+        err = info.stderr.strip()
+
+        result = Result(info, out, err)
+
+        print("Output:", result.out)
+        return result
 
     def test_help(self):
         """Test the --help argument and help subcommand."""
         result = self.runGio("--help")
         result2 = self.runGio("help")
-        result3 = self.runGio("help", "help")
 
         self.assertEqual(result.out, result2.out)
         self.assertEqual(result.err, result2.err)
-
-        self.assertEqual(result2.out, result3.out)
-        self.assertEqual(result2.err, result3.err)
 
         self.assertIn("Usage:\n  gio COMMAND", result.out)
         self.assertIn("List the contents of locations", result.out)
@@ -84,83 +132,6 @@ class TestGioTool(testprogramrunner.TestProgramRunner):
                 self.assertIn(
                     "standard::content-type: application/x-zerosize", result.out
                 )
-
-    @unittest.skipUnless(platform.system() == "Darwin", "macOS-specific trash behavior")
-    def test_trash_unsupported_modes_on_macos(self):
-        """Test macOS-specific unsupported trash sub-modes."""
-        for option in ("--restore", "--list", "--empty"):
-            result = self.runGio("trash", option, should_fail=True)
-            self.assertIn("not supported on macOS", result.err)
-
-
-@unittest.skipIf(platform.system() == "Darwin", "gio launch not supported on darwin")
-class TestGioLaunchExpandsDesktopEntry(testprogramrunner.TestProgramRunner):
-    """Integration test for `gio launch` with field code %k in the Exec line.
-
-    This can be run when installed or uninstalled. When uninstalled, it
-    requires G_TEST_BUILDDIR and G_TEST_SRCDIR to be set.
-
-    The idea with this test harness is to test that the `gio launch` command
-    expands the `%k` field code in a desktop entry's Exec line to its location,
-    i.e. its absolute path.
-    """
-
-    PROGRAM_NAME = "gio"
-    PROGRAM_TYPE = testprogramrunner.ProgramType.NATIVE
-
-    TEMPLATE = """
-[Desktop Entry]
-Type = Application
-Name = Test
-Exec = {python} -c 'print("%k")'
-"""
-
-    def setUp(self):
-        super().setUp()
-
-        self.parent = Path(self.tmpdir.name).resolve()
-
-        self.folder = self.parent / "folder"
-        self.entry = self.folder / "desktop.entry"
-
-        self.sibling = self.parent / "sibling"
-
-        self.folder.mkdir(exist_ok=True, parents=True)
-        self.sibling.mkdir(exist_ok=True, parents=True)
-
-        with self.entry.open("w", encoding="utf-8") as fd:
-            fd.write(self.TEMPLATE.format(python=sys.executable))
-
-    def launchAndCheck(self, entry: Path, cwd: Path = None):
-        result = self.runTestProgram(["launch", str(entry)], cwd=str(cwd))
-
-        self.assertIn(str(self.entry), result.out)
-
-    def test_absolute_from_folder(self):
-        """Test with absolute path, with changing working directory to folder."""
-        self.launchAndCheck(self.entry, cwd=self.folder)
-
-    def test_absolute_from_parent(self):
-        """Test with absolute path, with changing working directory to parent."""
-        self.launchAndCheck(self.entry, cwd=self.parent)
-
-    def test_absolute_from_sibling(self):
-        """Test with absolute path, with changing working directory to sibling."""
-        self.launchAndCheck(self.entry, cwd=self.sibling)
-
-    def test_relative_from_folder(self):
-        """Test with relative path, with changing working directory to folder."""
-        self.launchAndCheck(self.entry.relative_to(self.folder), cwd=self.folder)
-
-    def test_relative_from_parent(self):
-        """Test with relative path, with changing working directory to parent."""
-        self.launchAndCheck(self.entry.relative_to(self.parent), cwd=self.parent)
-
-    def test_relative_from_sibling(self):
-        """Test with relative path, with changing working directory to sibling."""
-        self.launchAndCheck(
-            Path("..") / self.entry.relative_to(self.parent), cwd=self.sibling
-        )
 
 
 if __name__ == "__main__":

@@ -126,7 +126,7 @@ cr_parsing_location_to_string (CRParsingLocation const *a_this,
 					a_this->byte_offset) ;
 	}
 	if (result->len) {
-		str = g_string_free_and_steal (result) ;
+		str = g_string_free (result, FALSE) ;
 	} else {
 		g_string_free (result, TRUE) ;
 	}

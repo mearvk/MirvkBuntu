@@ -46,7 +46,7 @@ struct _GtkCssImageUrlClass
   GtkCssImageClass parent_class;
 };
 
-GType          _gtk_css_image_url_get_type             (void);
+GType          _gtk_css_image_url_get_type             (void) G_GNUC_CONST;
 
 G_END_DECLS
 

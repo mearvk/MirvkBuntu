@@ -9,6 +9,7 @@
 
 #include "gtkfishbowl.h"
 #include "gtkgears.h"
+#include "gskshaderpaintable.h"
 
 #include "nodewidget.h"
 #include "graphwidget.h"
@@ -32,39 +33,27 @@ init_icon_names (GtkIconTheme *theme)
   n_icon_names = g_strv_length (icon_names);
 }
 
+static const char *
+get_random_icon_name (GtkIconTheme *theme)
+{
+  init_icon_names (theme);
+
+  return icon_names[g_random_int_range(0, n_icon_names)];
+}
+
 /* Can't be static because it's also used in iconscroll.c */
 GtkWidget *
-create_icon_by_id (gsize icon_index)
+create_icon (void)
 {
   GtkWidget *image;
 
   image = gtk_image_new ();
-
-  init_icon_names (gtk_icon_theme_get_for_display (gtk_widget_get_display (image)));
-
-  icon_index %= n_icon_names;
-
   gtk_image_set_icon_size (GTK_IMAGE (image), GTK_ICON_SIZE_LARGE);
-  gtk_image_set_from_icon_name (GTK_IMAGE (image), icon_names[icon_index]);
+  gtk_image_set_from_icon_name (GTK_IMAGE (image),
+                                get_random_icon_name (gtk_icon_theme_get_for_display (gtk_widget_get_display (image))));
 
   return image;
 }
-
-static GtkWidget *
-create_icon (void)
-{
-  gsize n;
-
-  if (n_icon_names == 0)
-    n = 0;
-  else
-    n = g_random_int_range (0, n_icon_names);
-
-  return create_icon_by_id (n);
-}
-
-extern GtkWidget *create_symbolic (void);
-extern GtkWidget *create_svg (void);
 
 static GtkWidget *
 create_button (void)
@@ -122,7 +111,7 @@ create_spinbutton (void)
 static GtkWidget *
 create_label (void)
 {
-  GtkWidget *w = gtk_label_new ("Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.");
+  GtkWidget *w = gtk_label_new ("pLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.");
 
   gtk_label_set_wrap (GTK_LABEL (w), TRUE);
   gtk_label_set_max_width_chars (GTK_LABEL (w), 100);
@@ -161,6 +150,44 @@ create_switch (void)
   gtk_switch_set_state (GTK_SWITCH (w), TRUE);
 
   return w;
+}
+
+static gboolean
+update_paintable (GtkWidget     *widget,
+                  GdkFrameClock *frame_clock,
+                  gpointer       user_data)
+{
+  GskShaderPaintable *paintable;
+  gint64 frame_time;
+
+  paintable = GSK_SHADER_PAINTABLE (gtk_picture_get_paintable (GTK_PICTURE (widget)));
+  frame_time = gdk_frame_clock_get_frame_time (frame_clock);
+  gsk_shader_paintable_update_time (paintable, 0, frame_time);
+
+  return G_SOURCE_CONTINUE;
+}
+
+static GtkWidget *
+create_cogs (void)
+{
+  GtkWidget *picture;
+  static GskGLShader *cog_shader = NULL;
+  GdkPaintable *paintable;
+
+ if (cog_shader == NULL)
+    cog_shader = gsk_gl_shader_new_from_resource ("/gltransition/cogs2.glsl");
+  paintable = gsk_shader_paintable_new (g_object_ref (cog_shader), NULL);
+  picture = gtk_picture_new_for_paintable (paintable);
+  gtk_widget_set_size_request (picture, 150, 75);
+  gtk_widget_add_tick_callback (picture, update_paintable, NULL, NULL);
+
+  return picture;
+}
+
+static gboolean
+check_cogs (GtkFishbowl *fb)
+{
+  return GSK_IS_GL_RENDERER (gtk_native_get_renderer (gtk_widget_get_native (GTK_WIDGET (fb))));
 }
 
 static void
@@ -212,10 +239,9 @@ static const struct {
   { "Gears",      create_gears,          NULL },
   { "Switch",     create_switch,         NULL },
   { "Menubutton", create_menu_button,    NULL },
+  { "Shader",     create_cogs,           check_cogs },
   { "Tiger",      create_tiger,          NULL },
   { "Graph",      create_graph,          NULL },
-  { "Symbolic",   create_symbolic,       NULL },
-  { "SVG",        create_svg,            NULL },
 };
 
 static int selected_widget_type = -1;
@@ -287,20 +313,10 @@ G_MODULE_EXPORT void
 fishbowl_changes_toggled_cb (GtkToggleButton *button,
                              gpointer         user_data)
 {
-  GFile *file;
-  GdkPaintable *paintable;
-  GtkWidget *image;
-
   if (gtk_toggle_button_get_active (button))
-    file = g_file_new_for_uri ("resource:///org/gtk/libgtk/icons/changes-prevent-symbolic.svg");
+    gtk_button_set_icon_name (GTK_BUTTON (button), "changes-prevent");
   else
-    file = g_file_new_for_uri ("resource:///org/gtk/libgtk/icons/changes-allow-symbolic.svg");
-
-  paintable = GDK_PAINTABLE (gtk_icon_paintable_new_for_file (file, 16, 1));
-  image = gtk_button_get_child (GTK_BUTTON (button));
-  gtk_image_set_from_paintable (GTK_IMAGE (image), paintable);
-  g_object_unref (paintable);
-  g_object_unref (file);
+    gtk_button_set_icon_name (GTK_BUTTON (button), "changes-allow");
 }
 
 G_MODULE_EXPORT char *

@@ -41,19 +41,19 @@
 /**
  * GdkEvent: (ref-func gdk_event_ref) (unref-func gdk_event_unref)
  *
- * Represents windowing system events.
+ * `GdkEvent`s are immutable data structures, created by GDK to
+ * represent windowing system events.
  *
  * In GTK applications the events are handled automatically by toplevel
  * widgets and passed on to the event controllers of appropriate widgets,
  * so using `GdkEvent` and its related API is rarely needed.
- *
- * `GdkEvent` structs are immutable.
  */
 
 /**
  * GdkEventSequence:
  *
- * An opaque type representing a sequence of related events.
+ * `GdkEventSequence` is an opaque type representing a sequence
+ * of related touch events.
  */
 
 static void
@@ -718,8 +718,7 @@ gdk_event_queue_handle_scroll_compression (GdkDisplay *display)
                                     dx,
                                     dy,
                                     gdk_scroll_event_is_stop (old_event),
-                                    scroll_unit,
-                                    gdk_scroll_event_get_relative_direction (old_event));
+                                    scroll_unit);
 
       ((GdkScrollEvent *)event)->history = history;
 
@@ -827,7 +826,13 @@ _gdk_event_queue_handle_motion_compression (GdkDisplay *display)
       GList *next = pending_motions->next;
 
       if (last_motion != NULL)
-        gdk_motion_event_push_history (last_motion, pending_motions->data);
+        {
+          if ((gdk_event_get_modifier_state (last_motion) &
+               (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK |
+                GDK_BUTTON4_MASK | GDK_BUTTON5_MASK)) ||
+               gdk_event_get_device_tool (last_motion) != NULL)
+            gdk_motion_event_push_history (last_motion, pending_motions->data);
+        }
 
       gdk_event_unref (pending_motions->data);
       g_queue_delete_link (&display->queued_events, pending_motions);
@@ -973,13 +978,9 @@ gdk_event_get_axis (GdkEvent   *event,
  * according to platform conventions.
  *
  * The right mouse button typically triggers context menus.
- * On macOS, Control+left mouse button also triggers.
  *
  * This function should always be used instead of simply checking for
- *
- * ```c
- * event->button == GDK_BUTTON_SECONDARY
- * ```
+ * event->button == %GDK_BUTTON_SECONDARY.
  *
  * Returns: %TRUE if the event should trigger a context menu.
  */
@@ -997,13 +998,6 @@ gdk_event_triggers_context_menu (GdkEvent *event)
       if (bevent->button == GDK_BUTTON_SECONDARY &&
           ! (bevent->state & (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK)))
         return TRUE;
-
-#ifdef __APPLE__
-      if (bevent->button == GDK_BUTTON_PRIMARY &&
-          (bevent->state & GDK_CONTROL_MASK) &&
-          ! (bevent->state & (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK)))
-        return TRUE;
-#endif
     }
 
   return FALSE;
@@ -1377,8 +1371,6 @@ gdk_event_get_modifier_state (GdkEvent *event)
  * Extract the event surface relative x/y coordinates from an event.
  *
  * This position is in [surface coordinates](coordinates.html).
- *
- * Returns: whether the positions were set
  */
 gboolean
 gdk_event_get_position (GdkEvent *event,
@@ -2396,16 +2388,15 @@ GDK_DEFINE_EVENT_TYPE (GdkScrollEvent, gdk_scroll_event,
                        GDK_EVENT_TYPE_SLOT (GDK_SCROLL))
 
 GdkEvent *
-gdk_scroll_event_new (GdkSurface                 *surface,
-                      GdkDevice                  *device,
-                      GdkDeviceTool              *tool,
-                      guint32                     time,
-                      GdkModifierType             state,
-                      double                      delta_x,
-                      double                      delta_y,
-                      gboolean                    is_stop,
-                      GdkScrollUnit               unit,
-                      GdkScrollRelativeDirection  rel_dir)
+gdk_scroll_event_new (GdkSurface      *surface,
+                      GdkDevice       *device,
+                      GdkDeviceTool   *tool,
+                      guint32          time,
+                      GdkModifierType  state,
+                      double           delta_x,
+                      double           delta_y,
+                      gboolean         is_stop,
+                      GdkScrollUnit    unit)
 {
   GdkScrollEvent *self = gdk_event_alloc (GDK_SCROLL, surface, device, time);
 
@@ -2416,19 +2407,17 @@ gdk_scroll_event_new (GdkSurface                 *surface,
   self->delta_y = delta_y;
   self->is_stop = is_stop;
   self->unit = unit;
-  self->relative_direction = rel_dir;
 
   return (GdkEvent *) self;
 }
 
 GdkEvent *
-gdk_scroll_event_new_discrete (GdkSurface                 *surface,
-                               GdkDevice                  *device,
-                               GdkDeviceTool              *tool,
-                               guint32                     time,
-                               GdkModifierType             state,
-                               GdkScrollDirection          direction,
-                               GdkScrollRelativeDirection  rel_dir)
+gdk_scroll_event_new_discrete (GdkSurface         *surface,
+                               GdkDevice          *device,
+                               GdkDeviceTool      *tool,
+                               guint32             time,
+                               GdkModifierType     state,
+                               GdkScrollDirection  direction)
 {
   GdkScrollEvent *self = gdk_event_alloc (GDK_SCROLL, surface, device, time);
   double delta_x = 0, delta_y = 0;
@@ -2459,7 +2448,6 @@ gdk_scroll_event_new_discrete (GdkSurface                 *surface,
   self->delta_x = delta_x;
   self->delta_y = delta_y;
   self->unit = GDK_SCROLL_UNIT_WHEEL;
-  self->relative_direction = rel_dir;
 
   return (GdkEvent *) self;
 }
@@ -2475,7 +2463,6 @@ gdk_scroll_event_new_discrete (GdkSurface                 *surface,
  * @direction: scroll direction.
  * @delta_x: delta on the X axis in the 120.0 scale
  * @delta_x: delta on the Y axis in the 120.0 scale
- * @rel_dir: relative direction hints about the deltas
  *
  * Creates a new discrete GdkScrollEvent for high resolution mouse wheels.
  *
@@ -2486,15 +2473,14 @@ gdk_scroll_event_new_discrete (GdkSurface                 *surface,
  * Returns: the newly created scroll event
  */
 GdkEvent *
-gdk_scroll_event_new_value120 (GdkSurface                 *surface,
-                               GdkDevice                  *device,
-                               GdkDeviceTool              *tool,
-                               guint32                     time,
-                               GdkModifierType             state,
-                               GdkScrollDirection          direction,
-                               double                      delta_x,
-                               double                      delta_y,
-                               GdkScrollRelativeDirection  rel_dir)
+gdk_scroll_event_new_value120 (GdkSurface         *surface,
+                               GdkDevice          *device,
+                               GdkDeviceTool      *tool,
+                               guint32             time,
+                               GdkModifierType     state,
+                               GdkScrollDirection  direction,
+                               double              delta_x,
+                               double              delta_y)
 {
   GdkScrollEvent *self = gdk_event_alloc (GDK_SCROLL, surface, device, time);
 
@@ -2504,7 +2490,6 @@ gdk_scroll_event_new_value120 (GdkSurface                 *surface,
   self->delta_x = delta_x / 120.0;
   self->delta_y = delta_y / 120.0;
   self->unit = GDK_SCROLL_UNIT_WHEEL;
-  self->relative_direction = rel_dir;
 
   return (GdkEvent *) self;
 }
@@ -2606,29 +2591,6 @@ gdk_scroll_event_get_unit (GdkEvent *event)
                         GDK_SCROLL_UNIT_WHEEL);
 
   return self->unit;
-}
-
-/**
- * gdk_scroll_event_get_relative_direction:
- * @event: (type GdkScrollEvent): a relative scroll direction.
- *
- * Extracts the scroll direction relative to the physical motion.
- *
- * Returns: the relative scroll direction.
- *
- * Since: 4.20
- */
-GdkScrollRelativeDirection
-gdk_scroll_event_get_relative_direction (GdkEvent *event)
-{
-  GdkScrollEvent *self = (GdkScrollEvent *) event;
-
-  g_return_val_if_fail (GDK_IS_EVENT (event),
-                        GDK_SCROLL_RELATIVE_DIRECTION_UNKNOWN);
-  g_return_val_if_fail (GDK_IS_EVENT_TYPE (event, GDK_SCROLL),
-                        GDK_SCROLL_RELATIVE_DIRECTION_UNKNOWN);
-
-  return self->relative_direction;
 }
 
 /* }}} */
@@ -2915,7 +2877,6 @@ GDK_DEFINE_EVENT_TYPE (GdkPadEvent, gdk_pad_event,
                        GDK_EVENT_TYPE_SLOT (GDK_PAD_BUTTON_RELEASE)
                        GDK_EVENT_TYPE_SLOT (GDK_PAD_RING)
                        GDK_EVENT_TYPE_SLOT (GDK_PAD_STRIP)
-                       GDK_EVENT_TYPE_SLOT (GDK_PAD_DIAL)
                        GDK_EVENT_TYPE_SLOT (GDK_PAD_GROUP_MODE))
 
 GdkEvent *
@@ -2947,25 +2908,6 @@ gdk_pad_event_new_strip (GdkSurface *surface,
                          double      value)
 {
   GdkPadEvent *self = gdk_event_alloc (GDK_PAD_STRIP, surface, device, time);
-
-  self->group = group;
-  self->index = index;
-  self->mode = mode;
-  self->value = value;
-
-  return (GdkEvent *) self;
-}
-
-GdkEvent *
-gdk_pad_event_new_dial (GdkSurface *surface,
-                        GdkDevice  *device,
-                        guint32     time,
-                        guint       group,
-                        guint       index,
-                        guint       mode,
-                        double      value)
-{
-  GdkPadEvent *self = gdk_event_alloc (GDK_PAD_DIAL, surface, device, time);
 
   self->group = group;
   self->index = index;
@@ -3050,8 +2992,7 @@ gdk_pad_event_get_axis_value (GdkEvent *event,
 
   g_return_if_fail (GDK_IS_EVENT (event));
   g_return_if_fail (GDK_IS_EVENT_TYPE (event, GDK_PAD_RING) ||
-                    GDK_IS_EVENT_TYPE (event, GDK_PAD_STRIP) ||
-                    GDK_IS_EVENT_TYPE (event, GDK_PAD_DIAL));
+                    GDK_IS_EVENT_TYPE (event, GDK_PAD_STRIP));
 
   *index = self->index;
   *value = self->value;
@@ -3077,8 +3018,7 @@ gdk_pad_event_get_group_mode (GdkEvent *event,
                     GDK_IS_EVENT_TYPE (event, GDK_PAD_BUTTON_PRESS) ||
                     GDK_IS_EVENT_TYPE (event, GDK_PAD_BUTTON_RELEASE) ||
                     GDK_IS_EVENT_TYPE (event, GDK_PAD_RING) ||
-                    GDK_IS_EVENT_TYPE (event, GDK_PAD_STRIP) ||
-                    GDK_IS_EVENT_TYPE (event, GDK_PAD_DIAL));
+                    GDK_IS_EVENT_TYPE (event, GDK_PAD_STRIP));
 
   *group = self->group;
   *mode = self->mode;
@@ -3491,4 +3431,4 @@ gdk_grab_broken_event_get_implicit (GdkEvent *event)
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

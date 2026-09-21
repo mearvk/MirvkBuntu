@@ -1,42 +1,42 @@
-#ifdef GSK_PREAMBLE
-textures = 2;
-acs_equals_ccs = true;
-acs_premultiplied = true;
+#include "common.glsl"
 
-graphene_rect_t bounds;
-graphene_rect_t source_rect;
-graphene_rect_t mask_rect;
-float opacity;
-
-variation: GskMaskMode mask_mode;
-#endif /* GSK_PREAMBLE */
-
-#include "gskgpumaskinstance.glsl"
+#define VARIATION_MASK_MODE GSK_VARIATION
 
 PASS(0) vec2 _pos;
 PASS_FLAT(1) Rect _source_rect;
 PASS_FLAT(2) Rect _mask_rect;
 PASS(3) vec2 _source_coord;
 PASS(4) vec2 _mask_coord;
+PASS_FLAT(5) uint _source_id;
+PASS_FLAT(6) uint _mask_id;
 PASS_FLAT(7) float _opacity;
 
 
 #ifdef GSK_VERTEX_SHADER
 
+IN(0) vec4 in_rect;
+IN(1) vec4 in_source_rect;
+IN(2) uint in_source_id;
+IN(3) vec4 in_mask_rect;
+IN(4) uint in_mask_id;
+IN(5) float in_opacity;
+
 void
 run (out vec2 pos)
 {
-  Rect b = rect_from_gsk (in_bounds);
+  Rect r = rect_from_gsk (in_rect);
   
-  pos = rect_get_position (b);
+  pos = rect_get_position (r);
 
   _pos = pos;
   Rect source_rect = rect_from_gsk (in_source_rect);
   _source_rect = source_rect;
   _source_coord = rect_get_coord (source_rect, pos);
+  _source_id = in_source_id;
   Rect mask_rect = rect_from_gsk (in_mask_rect);
   _mask_rect = mask_rect;
   _mask_coord = rect_get_coord (mask_rect, pos);
+  _mask_id = in_mask_id;
   _opacity = in_opacity;
 }
 
@@ -50,10 +50,10 @@ void
 run (out vec4 color,
      out vec2 position)
 {
-  vec4 source = texture (GSK_TEXTURE0, _source_coord);
-  source = output_color_alpha (source, rect_coverage (_source_rect, _pos));
-  vec4 mask = texture (GSK_TEXTURE1, _mask_coord);
-  mask = output_color_alpha (mask, rect_coverage (_mask_rect, _pos));
+  vec4 source = gsk_texture (_source_id, _source_coord) *
+                rect_coverage (_source_rect, _pos);
+  vec4 mask = gsk_texture (_mask_id, _mask_coord) *
+              rect_coverage (_mask_rect, _pos);
 
   float alpha = _opacity;
   switch (VARIATION_MASK_MODE)
@@ -78,7 +78,7 @@ run (out vec4 color,
       break;
   }
 
-  color = output_color_alpha (source, alpha);
+  color = source * alpha;
   position = _pos;
 }
 

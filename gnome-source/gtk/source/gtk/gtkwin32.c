@@ -28,8 +28,10 @@
 
 #include "gtkprivate.h"
 
+#define STRICT
 #include <windows.h>
 #include <commctrl.h>
+#undef STRICT
 
 extern IMAGE_DOS_HEADER __ImageBase;
 
@@ -44,52 +46,35 @@ this_module (void)
  */
 #define EMPIRIC_MANIFEST_RESOURCE_INDEX 2
 
-static wchar_t *
-g_wcsdup (const wchar_t *wcs)
-{
-  wchar_t *new_wcs = NULL;
-  gsize length;
-
-  if G_LIKELY (wcs)
-    {
-      length = wcslen (wcs) + 1;
-      new_wcs = g_new (wchar_t, length);
-      wcscpy (new_wcs, wcs);
-      new_wcs[length - 1] = L'\0';
-    }
-
-  return new_wcs;
-}
-
 static BOOL CALLBACK
 find_first_manifest (HMODULE  module_handle,
-                     LPCWSTR  resource_type,
-                     LPWSTR   resource_name,
+                     LPCSTR   resource_type,
+                     LPSTR    resource_name,
                      LONG_PTR user_data)
 {
-  LPWSTR *result_name = (LPWSTR *) user_data;
+  LPSTR *result_name = (LPSTR *) user_data;
 
   if (resource_type == RT_MANIFEST)
     {
       if (IS_INTRESOURCE (resource_name))
         *result_name = resource_name;
       else
-        *result_name = g_wcsdup (resource_name);
+        *result_name = g_strdup (resource_name);
       return FALSE;
     }
   return TRUE;
 }
 
 /*
- * Grabs the first manifest it finds in libgtk (which is expected to be the
+ * Grabs the first manifest it finds in libgtk3 (which is expected to be the
  * common-controls-6.0.0.0 manifest we embedded to enable visual styles),
  * uses it to create a process-default activation context, activates that
  * context, loads up the library passed in @dllname, then deactivates and
  * releases the context.
  *
  * In practice this is used to force system DLLs (like comdlg32) to be
- * loaded as if the application had the same manifest as libgtk
- * (otherwise libgtk3 manifest only affests libgtk itself).
+ * loaded as if the application had the same manifest as libgtk3
+ * (otherwise libgtk3 manifest only affests libgtk3 itself).
  * This way application does not need to have a manifest or to link
  * against comctl32.
  *
@@ -97,12 +82,12 @@ find_first_manifest (HMODULE  module_handle,
  * g_once_init_enter (leaking once is OK, Windows will clean up after us).
  */
 void
-_gtk_load_dll_with_libgtk3_manifest (const wchar_t *dll_name)
+_gtk_load_dll_with_libgtk3_manifest (const char *dll_name)
 {
   HANDLE activation_ctx_handle;
-  ACTCTX activation_ctx_descriptor;
+  ACTCTXA activation_ctx_descriptor;
   ULONG_PTR activation_cookie;
-  LPWSTR resource_name;
+  LPSTR resource_name;
   BOOL activated;
   DWORD error_code;
 
@@ -111,7 +96,7 @@ _gtk_load_dll_with_libgtk3_manifest (const wchar_t *dll_name)
                      (LONG_PTR) &resource_name);
 
   if (resource_name == NULL)
-    resource_name = MAKEINTRESOURCE (EMPIRIC_MANIFEST_RESOURCE_INDEX);
+    resource_name = MAKEINTRESOURCEA (EMPIRIC_MANIFEST_RESOURCE_INDEX);
 
   memset (&activation_ctx_descriptor, 0, sizeof (activation_ctx_descriptor));
   activation_ctx_descriptor.cbSize = sizeof (activation_ctx_descriptor);
@@ -135,7 +120,7 @@ _gtk_load_dll_with_libgtk3_manifest (const wchar_t *dll_name)
       if (!activated)
         g_warning ("Failed to ActivateActCtx: %lu", GetLastError ());
 
-      LoadLibrary (dll_name);
+      LoadLibraryA (dll_name);
 
       if (activated && !DeactivateActCtx (0, activation_cookie))
         g_warning ("Failed to DeactivateActCtx: %lu", GetLastError ());
@@ -178,8 +163,7 @@ _gtk_get_localedir (void)
       /* GTK_LOCALEDIR ends in either /lib/locale or
        * /share/locale. Scan for that slash.
        */
-      p = GTK_LOCALEDIR;
-      p += strlen (GTK_LOCALEDIR);
+      p = GTK_LOCALEDIR + strlen (GTK_LOCALEDIR);
       while (*--p != '/')
         ;
       while (*--p != '/')

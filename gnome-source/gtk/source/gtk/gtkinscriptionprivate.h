@@ -27,10 +27,5 @@ G_BEGIN_DECLS
 
 PangoLayout *           gtk_inscription_get_layout              (GtkInscription *self);
 
-void
-gtk_inscription_get_layout_location (GtkInscription *self,
-                                     float          *x_out,
-                                     float          *y_out);
-
 G_END_DECLS
 

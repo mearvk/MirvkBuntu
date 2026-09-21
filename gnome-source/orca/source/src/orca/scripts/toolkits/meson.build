@@ -2,7 +2,6 @@ subdir('Chromium')
 subdir('Gecko')
 subdir('gtk')
 subdir('Qt')
-subdir('Servo')
 subdir('WebKitGTK')
 
 lib_sources = [

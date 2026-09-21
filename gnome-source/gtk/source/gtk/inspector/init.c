@@ -46,7 +46,6 @@
 #include "shortcuts.h"
 #include "size-groups.h"
 #include "statistics.h"
-#include "svg.h"
 #include "tree-data.h"
 #include "visual.h"
 #include "window.h"
@@ -90,7 +89,6 @@ gtk_inspector_init (void)
   g_type_ensure (GTK_TYPE_INSPECTOR_SHORTCUTS);
   g_type_ensure (GTK_TYPE_INSPECTOR_SIZE_GROUPS);
   g_type_ensure (GTK_TYPE_INSPECTOR_STATISTICS);
-  g_type_ensure (GTK_TYPE_INSPECTOR_SVG);
   g_type_ensure (GTK_TYPE_INSPECTOR_TREE_DATA);
   g_type_ensure (GTK_TYPE_INSPECTOR_VISUAL);
   g_type_ensure (GTK_TYPE_INSPECTOR_WINDOW);

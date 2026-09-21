@@ -40,6 +40,7 @@
 #include "cogl/cogl-private.h"
 #include "cogl/cogl-meta-texture.h"
 #include "cogl/cogl-framebuffer-private.h"
+#include "cogl/cogl1-context.h"
 #include "cogl/cogl-primitives-private.h"
 
 #include <string.h>
@@ -245,16 +246,16 @@ _cogl_texture_quad_multiple_primitives (CoglFramebuffer *framebuffer,
   /* We use the _len_AXIS naming here instead of _width and _height because
    * log_quad_slice_cb uses a macro with symbol concatenation to handle both
    * axis, so this is more convenient... */
-  state.quad_len_x = fabsf (position[X1] - position[X0]);
-  state.quad_len_y = fabsf (position[Y1] - position[Y0]);
+  state.quad_len_x = fabs (position[X1] - position[X0]);
+  state.quad_len_y = fabs (position[Y1] - position[Y0]);
 
 #undef X0
 #undef Y0
 #undef X1
 #undef Y1
 
-  state.v_to_q_scale_x = fabsf (state.quad_len_x / (tx_2 - tx_1));
-  state.v_to_q_scale_y = fabsf (state.quad_len_y / (ty_2 - ty_1));
+  state.v_to_q_scale_x = fabs (state.quad_len_x / (tx_2 - tx_1));
+  state.v_to_q_scale_y = fabs (state.quad_len_y / (ty_2 - ty_1));
 
   /* For backwards compatibility the default wrap mode for cogl_rectangle() is
    * _REPEAT... */
@@ -263,12 +264,12 @@ _cogl_texture_quad_multiple_primitives (CoglFramebuffer *framebuffer,
   if (wrap_t == COGL_PIPELINE_WRAP_MODE_AUTOMATIC)
     wrap_t = COGL_PIPELINE_WRAP_MODE_REPEAT;
 
-  cogl_texture_foreach_in_region (texture,
-                                  tx_1, ty_1, tx_2, ty_2,
-                                  wrap_s,
-                                  wrap_t,
-                                  log_quad_sub_textures_cb,
-                                  &state);
+  cogl_meta_texture_foreach_in_region (texture,
+                                       tx_1, ty_1, tx_2, ty_2,
+                                       wrap_s,
+                                       wrap_t,
+                                       log_quad_sub_textures_cb,
+                                       &state);
 
   if (validate_first_layer_state.override_pipeline)
     g_object_unref (validate_first_layer_state.override_pipeline);
@@ -327,8 +328,8 @@ validate_tex_coords_cb (CoglPipeline *pipeline,
   /* Convert the texture coordinates to GL.
    */
   transform_result =
-    COGL_TEXTURE_GET_CLASS (texture)->transform_quad_coords (texture,
-                                                             out_tex_coords);
+    _cogl_texture_transform_quad_coords_to_gl (texture,
+                                               out_tex_coords);
   /* If the texture has waste or we are using GL_TEXTURE_RECT we
    * can't handle texture repeating so we can't use the layer if
    * repeating is required.
@@ -344,7 +345,7 @@ validate_tex_coords_cb (CoglPipeline *pipeline,
             {
               static gboolean warning_seen = FALSE;
               if (!warning_seen)
-                g_warning ("Skipping layers 1..n of your pipeline since "
+                g_warning ("Skipping layers 1..n of your material since "
                            "the first layer doesn't support hardware "
                            "repeat (e.g. because of waste or use of "
                            "GL_TEXTURE_RECTANGLE_ARB) and you supplied "
@@ -363,7 +364,7 @@ validate_tex_coords_cb (CoglPipeline *pipeline,
         {
           static gboolean warning_seen = FALSE;
           if (!warning_seen)
-            g_warning ("Skipping layer %d of your pipeline "
+            g_warning ("Skipping layer %d of your material "
                        "since you have supplied texture coords "
                        "outside the range [0,1] but the texture "
                        "doesn't support hardware repeat (e.g. "
@@ -580,7 +581,7 @@ _cogl_rectangles_validate_layer_cb (CoglPipeline *pipeline,
           warning_seen = TRUE;
 
           /* Note: currently only 2D textures can be sliced. */
-          tex_2d = cogl_context_get_default_2d_texture (state->ctx);
+          tex_2d = state->ctx->default_gl_texture_2d_tex;
           cogl_pipeline_set_layer_texture (pipeline, layer_index, tex_2d);
           return TRUE;
         }

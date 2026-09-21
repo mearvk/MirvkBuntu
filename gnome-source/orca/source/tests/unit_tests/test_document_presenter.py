@@ -702,7 +702,7 @@ class TestDocumentPresenter:
         ax_object.AXObject.is_dead.return_value = False
 
         ax_utilities = mocks["orca.ax_utilities"]
-        ax_utilities.AXUtilities.is_tool_tip_descendant.return_value = False
+        ax_utilities.AXUtilities.find_ancestor_inclusive.return_value = None
 
         presenter = module.get_presenter()
         result = presenter.use_focus_mode(MagicMock(), MagicMock())
@@ -768,17 +768,13 @@ class TestDocumentPresenter:
         ax_utilities = mocks["orca.ax_utilities"]
         ax_utilities.AXUtilities.is_link.return_value = False
         ax_utilities.AXUtilities.is_radio_button.return_value = False
+        ax_utilities.AXUtilities.is_embedded = MagicMock()
 
         # prev_obj not in app, obj in app
-        ax_utilities.AXUtilities.is_embedded_descendant.side_effect = [False, True]
+        ax_utilities.AXUtilities.find_ancestor.side_effect = [None, MagicMock()]
 
         presenter = module.get_presenter()
-        with (
-            patch.object(presenter, "is_focus_mode_widget", return_value=False),
-            patch.object(
-                presenter, "_force_browse_mode_for_web_app_descendant", return_value=False
-            ),
-        ):
+        with patch.object(presenter, "is_focus_mode_widget", return_value=False):
             result = presenter.use_focus_mode(MagicMock(), MagicMock())
 
         assert result is True
@@ -811,7 +807,9 @@ class TestDocumentPresenter:
         ax_utilities = mocks["orca.ax_utilities"]
         ax_utilities.AXUtilities.is_link.return_value = False
         ax_utilities.AXUtilities.is_radio_button.return_value = False
-        ax_utilities.AXUtilities.is_embedded_descendant.return_value = False
+        ax_utilities.AXUtilities.is_embedded = MagicMock()
+
+        ax_utilities.AXUtilities.find_ancestor.return_value = None
 
         presenter = module.get_presenter()
         with patch.object(presenter, "is_focus_mode_widget", return_value=False):
@@ -1300,38 +1298,6 @@ class TestDocumentPresenter:
         assert result is True
         assert presenter.in_focus_mode(mock_app) is True
 
-    def test_toggle_presentation_mode_override_requires_a_user_command(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test only a user command counts as changing the mode Orca made sticky."""
-
-        from unittest.mock import MagicMock
-
-        module, mocks = self._setup_presenter(test_context)
-
-        mock_app = MagicMock()
-        mock_script = MagicMock()
-        mock_script.app = mock_app
-        mock_script.utilities.in_document_content.return_value = True
-        mock_script.utilities.get_caret_context.return_value = (MagicMock(), 0)
-
-        for name in ("orca.caret_navigator", "orca.structural_navigator", "orca.table_navigator"):
-            nav_mock = mocks[name].get_navigator.return_value
-            nav_mock.last_input_event_was_navigation_command.return_value = False
-
-        presenter = module.get_presenter()
-        presenter._app_states[hash(mock_app)] = module._AppModeState(
-            in_focus_mode=False,
-            focus_mode_is_sticky=False,
-            browse_mode_is_sticky=False,
-        )
-
-        presenter.toggle_presentation_mode(mock_script)
-        assert presenter.user_has_overridden_auto_sticky_focus_mode(mock_app) is False
-
-        presenter.toggle_presentation_mode(mock_script, event=MagicMock())
-        assert presenter.user_has_overridden_auto_sticky_focus_mode(mock_app) is True
-
     def test_restore_mode_for_script_no_app(self, test_context: OrcaTestContext) -> None:
         """Test restore_mode_for_script with no app does nothing."""
 
@@ -1665,7 +1631,8 @@ class TestDocumentPresenter:
         ax_utilities = mocks["orca.ax_utilities"]
         ax_utilities.AXUtilities.is_embedded.return_value = True
 
-        ax_utilities.AXUtilities.get_uri.return_value = "https://docs.google.com/document"
+        ax_document = mocks["orca.ax_document"]
+        ax_document.AXDocument.get_uri.return_value = "https://docs.google.com/document"
 
         presenter = module.get_presenter()
 
@@ -1687,7 +1654,8 @@ class TestDocumentPresenter:
         ax_utilities = mocks["orca.ax_utilities"]
         ax_utilities.AXUtilities.is_embedded.return_value = True
 
-        ax_utilities.AXUtilities.get_uri.return_value = "file:///home/user/doc.html"
+        ax_document = mocks["orca.ax_document"]
+        ax_document.AXDocument.get_uri.return_value = "file:///home/user/doc.html"
 
         presenter = module.get_presenter()
 
@@ -1843,13 +1811,13 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_link.return_value = True
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = False
-        ax_utilities.AXUtilities.is_menu_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tool_bar_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tree_or_tree_table_descendant.return_value = False
+        ax_utilities.AXUtilities.is_grid = MagicMock()
+        ax_utilities.AXUtilities.is_menu = MagicMock()
+        ax_utilities.AXUtilities.is_tool_bar = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.LINK
+        ax_utilities.AXUtilities.find_ancestor.return_value = None
 
         mock_script = MagicMock()
         mock_script.utilities.is_content_editable_with_embedded_objects.return_value = False
@@ -2005,7 +1973,8 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.get_table.return_value = MagicMock()
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
-        ax_utilities.AXUtilities.is_pdf.return_value = False
+        ax_document = mocks["orca.ax_document"]
+        ax_document.AXDocument.is_pdf.return_value = False
 
         mock_script = MagicMock()
         mock_script.utilities.is_text_block_element.return_value = False
@@ -2034,10 +2003,11 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_expandable.return_value = False
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = True
+        ax_utilities.AXUtilities.is_grid = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.PARAGRAPH
+        ax_utilities.AXUtilities.find_ancestor.return_value = MagicMock()
 
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
@@ -2067,11 +2037,12 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_expandable.return_value = False
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = False
-        ax_utilities.AXUtilities.is_menu_descendant.return_value = True
+        ax_utilities.AXUtilities.is_grid = MagicMock()
+        ax_utilities.AXUtilities.is_menu = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.PARAGRAPH
+        ax_utilities.AXUtilities.find_ancestor.side_effect = [None, MagicMock()]
 
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
@@ -2101,12 +2072,13 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_expandable.return_value = False
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = False
-        ax_utilities.AXUtilities.is_menu_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tool_bar_descendant.return_value = True
+        ax_utilities.AXUtilities.is_grid = MagicMock()
+        ax_utilities.AXUtilities.is_menu = MagicMock()
+        ax_utilities.AXUtilities.is_tool_bar = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.PARAGRAPH
+        ax_utilities.AXUtilities.find_ancestor.side_effect = [None, None, MagicMock()]
 
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
@@ -2136,13 +2108,13 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_expandable.return_value = False
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = False
-        ax_utilities.AXUtilities.is_menu_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tool_bar_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tree_or_tree_table_descendant.return_value = False
+        ax_utilities.AXUtilities.is_grid = MagicMock()
+        ax_utilities.AXUtilities.is_menu = MagicMock()
+        ax_utilities.AXUtilities.is_tool_bar = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.PARAGRAPH
+        ax_utilities.AXUtilities.find_ancestor.return_value = None
 
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
@@ -2173,13 +2145,13 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_expandable.return_value = False
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = False
-        ax_utilities.AXUtilities.is_menu_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tool_bar_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tree_or_tree_table_descendant.return_value = False
+        ax_utilities.AXUtilities.is_grid = MagicMock()
+        ax_utilities.AXUtilities.is_menu = MagicMock()
+        ax_utilities.AXUtilities.is_tool_bar = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.PARAGRAPH
+        ax_utilities.AXUtilities.find_ancestor.return_value = None
 
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
@@ -2210,18 +2182,19 @@ class TestDocumentPresenter:
         ax_utilities.AXUtilities.is_expandable.return_value = False
         ax_utilities.AXUtilities.is_list_box_item.return_value = False
         ax_utilities.AXUtilities.is_button_with_popup.return_value = False
-        ax_utilities.AXUtilities.is_grid_descendant.return_value = False
-        ax_utilities.AXUtilities.is_menu_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tool_bar_descendant.return_value = False
-        ax_utilities.AXUtilities.is_tree_or_tree_table_descendant.return_value = False
+        ax_utilities.AXUtilities.is_grid = MagicMock()
+        ax_utilities.AXUtilities.is_menu = MagicMock()
+        ax_utilities.AXUtilities.is_tool_bar = MagicMock()
 
         ax_object = mocks["orca.ax_object"]
         ax_object.AXObject.get_role.return_value = Atspi.Role.TABLE_CELL
+        ax_utilities.AXUtilities.find_ancestor.return_value = None
 
         ax_utilities.AXUtilities.get_table.return_value = MagicMock()
         ax_utilities.AXUtilities.is_layout_table.return_value = False
 
-        ax_utilities.AXUtilities.is_pdf.return_value = True
+        ax_document = mocks["orca.ax_document"]
+        ax_document.AXDocument.is_pdf.return_value = True
 
         mock_script = MagicMock()
         mock_script.utilities.is_text_block_element.return_value = False

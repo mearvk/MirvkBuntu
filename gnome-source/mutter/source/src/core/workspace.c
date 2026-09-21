@@ -39,7 +39,7 @@
 
 #include "backends/meta-backend-private.h"
 #include "backends/meta-cursor-tracker-private.h"
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "cogl/cogl.h"
 #include "compositor/compositor-private.h"
 #include "core/boxes-private.h"
@@ -262,7 +262,8 @@ workspace_free_all_struts (MetaWorkspace *workspace)
   if (workspace->all_struts == NULL)
     return;
 
-  g_clear_slist (&workspace->all_struts, g_free);
+  g_slist_free_full (workspace->all_struts, g_free);
+  workspace->all_struts = NULL;
 }
 
 /**
@@ -277,7 +278,8 @@ workspace_free_builtin_struts (MetaWorkspace *workspace)
   if (workspace->builtin_struts == NULL)
     return;
 
-  g_clear_slist (&workspace->builtin_struts, g_free);
+  g_slist_free_full (workspace->builtin_struts, g_free);
+  workspace->builtin_struts = NULL;
 }
 
 /* Ensure that the workspace is empty by making sure that
@@ -285,20 +287,18 @@ workspace_free_builtin_struts (MetaWorkspace *workspace)
 static void
 assert_workspace_empty (MetaWorkspace *workspace)
 {
-#ifndef G_DISABLE_ASSERT
   GList *l;
   for (l = workspace->windows; l != NULL; l = l->next)
     {
       MetaWindow *window = l->data;
       g_assert (window->on_all_workspaces);
     }
-#endif
 }
 
 void
 meta_workspace_remove (MetaWorkspace *workspace)
 {
-  MetaWorkspaceManager *manager = workspace->manager;
+  MetaWorkspaceManager *manager = workspace->display->workspace_manager;
 
   g_return_if_fail (workspace != manager->active_workspace);
 
@@ -412,7 +412,7 @@ meta_workspace_remove_window (MetaWorkspace *workspace,
     update_workspace_default_focus (workspace, window);
 
   g_signal_emit (workspace, signals[WINDOW_REMOVED], 0, window);
-  g_object_notify_by_pspec (G_OBJECT (workspace), obj_props[PROP_N_WINDOWS]);
+  g_object_notify (G_OBJECT (workspace), "n-windows");
 }
 
 void
@@ -514,26 +514,6 @@ workspace_switch_sound (MetaWorkspace *from,
   meta_workspace_manager_free_workspace_layout (&layout);
 }
 
-static void
-workspace_a11y_notification (MetaWorkspace *workspace)
-{
-  MetaContext *context = meta_display_get_context (workspace->display);
-  MetaBackend *backend = meta_context_get_backend (context);
-  ClutterActor *stage = meta_backend_get_stage (backend);
-  AtkObject *stage_accessible = clutter_actor_get_accessible (stage);
-  int index;
-
-  if (!stage_accessible)
-    return;
-
-  index = meta_workspace_index (workspace);
-  g_signal_emit_by_name (stage_accessible,
-                         "notification",
-                         meta_prefs_get_workspace_name (index),
-                         ATK_LIVE_POLITE,
-                         NULL);
-}
-
 /**
  * meta_workspace_activate_with_focus:
  * @workspace: a #MetaWorkspace
@@ -569,9 +549,8 @@ meta_workspace_activate_with_focus (MetaWorkspace *workspace,
   g_return_if_fail (META_IS_WORKSPACE (workspace));
   g_return_if_fail (meta_workspace_index (workspace) != -1);
 
-  meta_topic (META_DEBUG_WORKSPACES,
-              "Activating workspace %d",
-              meta_workspace_index (workspace));
+  meta_verbose ("Activating workspace %d",
+                meta_workspace_index (workspace));
 
   if (workspace->manager->active_workspace == workspace)
     {
@@ -599,8 +578,6 @@ meta_workspace_activate_with_focus (MetaWorkspace *workspace,
   g_signal_emit_by_name (workspace->manager, "active-workspace-changed");
 
   g_object_notify_by_pspec (G_OBJECT (workspace), obj_props[PROP_ACTIVE]);
-
-  workspace_a11y_notification (workspace);
 
   if (old == NULL)
     return;
@@ -650,7 +627,7 @@ meta_workspace_activate_with_focus (MetaWorkspace *workspace,
    meta_workspace_manager_calc_workspace_layout (workspace->manager, num_workspaces,
                                                  new_space, &layout2);
 
-   if (clutter_get_text_direction () == CLUTTER_TEXT_DIRECTION_RTL)
+   if (meta_get_locale_direction () == META_LOCALE_DIRECTION_RTL)
      {
        if (layout1.current_col > layout2.current_col)
          direction = META_MOTION_RIGHT;
@@ -852,8 +829,8 @@ copy_strut_list(GSList *original)
   return g_slist_reverse (result);
 }
 
-void
-meta_workspace_ensure_work_areas_validated (MetaWorkspace *workspace)
+static void
+ensure_work_areas_validated (MetaWorkspace *workspace)
 {
   MetaContext *context = meta_display_get_context (workspace->display);
   MetaBackend *backend = meta_context_get_backend (context);
@@ -938,9 +915,9 @@ meta_workspace_ensure_work_areas_validated (MetaWorkspace *workspace)
   if (work_area.width < MIN_SANE_AREA &&
       work_area.width != display_rect.width)
     {
-      g_warning ("struts occupy an unusually large percentage of the screen; "
-                 "available remaining width = %d < %d",
-                 work_area.width, MIN_SANE_AREA);
+      meta_warning ("struts occupy an unusually large percentage of the screen; "
+                    "available remaining width = %d < %d",
+                    work_area.width, MIN_SANE_AREA);
       if (work_area.width < 1)
         {
           work_area.x = (display_rect.width - MIN_SANE_AREA)/2;
@@ -956,9 +933,9 @@ meta_workspace_ensure_work_areas_validated (MetaWorkspace *workspace)
   if (work_area.height < MIN_SANE_AREA &&
       work_area.height != display_rect.height)
     {
-      g_warning ("struts occupy an unusually large percentage of the screen; "
-                 "available remaining height = %d < %d",
-                 work_area.height, MIN_SANE_AREA);
+      meta_warning ("struts occupy an unusually large percentage of the screen; "
+                    "available remaining height = %d < %d",
+                    work_area.height, MIN_SANE_AREA);
       if (work_area.height < 1)
         {
           work_area.y = (display_rect.height - MIN_SANE_AREA)/2;
@@ -1146,12 +1123,6 @@ meta_workspace_set_builtin_struts (MetaWorkspace *workspace,
   meta_workspace_invalidate_work_area (workspace);
 }
 
-GSList *
-meta_workspace_get_builtin_struts (MetaWorkspace *workspace)
-{
-  return copy_strut_list (workspace->builtin_struts);
-}
-
 void
 meta_workspace_get_work_area_for_logical_monitor (MetaWorkspace      *workspace,
                                                   MetaLogicalMonitor *logical_monitor,
@@ -1188,7 +1159,7 @@ meta_workspace_get_work_area_for_monitor (MetaWorkspace *workspace,
                                                           which_monitor);
   g_return_if_fail (logical_monitor != NULL);
 
-  meta_workspace_ensure_work_areas_validated (workspace);
+  ensure_work_areas_validated (workspace);
   data = meta_workspace_get_logical_monitor_data (workspace, logical_monitor);
 
   g_return_if_fail (data != NULL);
@@ -1207,7 +1178,7 @@ void
 meta_workspace_get_work_area_all_monitors (MetaWorkspace *workspace,
                                            MtkRectangle  *area)
 {
-  meta_workspace_ensure_work_areas_validated (workspace);
+  ensure_work_areas_validated (workspace);
 
   *area = workspace->work_area_screen;
 }
@@ -1215,7 +1186,7 @@ meta_workspace_get_work_area_all_monitors (MetaWorkspace *workspace,
 GList*
 meta_workspace_get_onscreen_region (MetaWorkspace *workspace)
 {
-  meta_workspace_ensure_work_areas_validated (workspace);
+  ensure_work_areas_validated (workspace);
 
   return workspace->screen_region;
 }
@@ -1226,7 +1197,7 @@ meta_workspace_get_onmonitor_region (MetaWorkspace      *workspace,
 {
   MetaWorkspaceLogicalMonitorData *data;
 
-  meta_workspace_ensure_work_areas_validated (workspace);
+  ensure_work_areas_validated (workspace);
 
   data = meta_workspace_get_logical_monitor_data (workspace, logical_monitor);
 
@@ -1286,11 +1257,10 @@ meta_workspace_get_neighbor (MetaWorkspace      *workspace,
   meta_workspace_manager_calc_workspace_layout (workspace->manager, num_workspaces,
                                                 current_space, &layout);
 
-  meta_topic (META_DEBUG_WORKSPACES,
-              "Getting neighbor of %d in direction %s",
-              current_space, meta_motion_direction_to_string (direction));
+  meta_verbose ("Getting neighbor of %d in direction %s",
+                current_space, meta_motion_direction_to_string (direction));
 
-  ltr = (clutter_get_text_direction () == CLUTTER_TEXT_DIRECTION_LTR);
+  ltr = (meta_get_locale_direction () == META_LOCALE_DIRECTION_LTR);
 
   switch (direction)
     {
@@ -1327,9 +1297,8 @@ meta_workspace_get_neighbor (MetaWorkspace      *workspace,
     meta_bug ("calc_workspace_layout left an invalid (too-high) workspace number %d in the grid",
               i);
 
-  meta_topic (META_DEBUG_WORKSPACES,
-              "Neighbor workspace is %d at row %d col %d",
-              i, layout.current_row, layout.current_col);
+  meta_verbose ("Neighbor workspace is %d at row %d col %d",
+                i, layout.current_row, layout.current_col);
 
   meta_workspace_manager_free_workspace_layout (&layout);
 
@@ -1361,11 +1330,8 @@ meta_workspace_focus_default_window (MetaWorkspace *workspace,
   MetaWindow *current_focus_window = NULL;
 
   if (timestamp == META_CURRENT_TIME)
-    {
-      meta_topic (META_DEBUG_FOCUS,
-                  "META_CURRENT_TIME used to choose focus window; "
+    meta_warning ("META_CURRENT_TIME used to choose focus window; "
                   "focus window may not be correct.");
-    }
 
   current_focus_window = workspace_find_focused_window (workspace);
 
@@ -1441,28 +1407,6 @@ is_focusable (MetaWindow    *window,
          meta_window_should_be_showing_on_workspace (window, workspace);
 }
 
-typedef enum _MetaFocusCandidatePriority
-{
-  META_FOCUS_CANDIDATE_INVALID,
-  META_FOCUS_CANDIDATE_PRIMARY,
-  META_FOCUS_CANDIDATE_FALLBACK,
-} MetaFocusCandidatePriority;
-
-static MetaFocusCandidatePriority
-get_focus_candidate_priority (MetaWindow    *window,
-                              MetaWorkspace *workspace,
-                              MetaWindow    *not_this_one)
-{
-  if (window == not_this_one ||
-      !is_focusable (window, workspace))
-    return META_FOCUS_CANDIDATE_INVALID;
-
-  if (window->type == META_WINDOW_DESKTOP)
-    return META_FOCUS_CANDIDATE_FALLBACK;
-
-  return META_FOCUS_CANDIDATE_PRIMARY;
-}
-
 static gboolean
 find_focusable_ancestor (MetaWindow *window,
                          gpointer    user_data)
@@ -1482,28 +1426,21 @@ GList *
 meta_workspace_get_default_focus_candidates (MetaWorkspace *workspace)
 {
   GList *l;
-  GList *fallback_candidates = NULL;
-  GList *primary_candidates = NULL;
+  GList *candidates = NULL;
 
   for (l = workspace->mru_list; l; l = l->next)
     {
       MetaWindow *window = l->data;
-      MetaFocusCandidatePriority priority;
 
       g_assert (window);
 
-      priority = get_focus_candidate_priority (window, workspace, NULL);
-      if (priority == META_FOCUS_CANDIDATE_INVALID)
+      if (!is_focusable (window, workspace))
         continue;
 
-      if (priority == META_FOCUS_CANDIDATE_FALLBACK)
-        fallback_candidates = g_list_prepend (fallback_candidates, window);
-      else
-        primary_candidates = g_list_prepend (primary_candidates, window);
+      candidates = g_list_prepend (candidates, window);
     }
 
-  /* Keep fallback before primary: candidates are built in reverse order */
-  return g_list_concat (fallback_candidates, primary_candidates);
+  return candidates;
 }
 
 static gboolean
@@ -1515,7 +1452,7 @@ window_contains_point (MetaWindow *window,
 
   meta_window_get_frame_rect (window, &rect);
 
-  return mtk_rectangle_contains_point (&rect, root_x, root_y);
+  return META_POINT_IN_RECT (root_x, root_y, rect);
 }
 
 MetaWindow *
@@ -1527,7 +1464,6 @@ meta_workspace_get_default_focus_window_at_point (MetaWorkspace *workspace,
   g_autoptr (GList) sorted = NULL;
   GList *l;
   MetaStack *stack;
-  MetaWindow *fallback_window = NULL;
 
   g_return_val_if_fail (META_IS_WORKSPACE (workspace), NULL);
   g_return_val_if_fail (!not_this_one || META_IS_WINDOW (not_this_one), NULL);
@@ -1545,28 +1481,22 @@ meta_workspace_get_default_focus_window_at_point (MetaWorkspace *workspace,
   for (l = sorted; l != NULL; l = l->next)
     {
       MetaWindow *window = l->data;
-      MetaFocusCandidatePriority priority;
 
       g_assert (window);
 
-      priority = get_focus_candidate_priority (window, workspace, not_this_one);
-      if (priority == META_FOCUS_CANDIDATE_INVALID)
+      if (window == not_this_one)
+        continue;
+
+      if (!is_focusable (window, workspace))
         continue;
 
       if (!window_contains_point (window, root_x, root_y))
         continue;
 
-      if (priority == META_FOCUS_CANDIDATE_FALLBACK)
-        {
-          if (!fallback_window)
-            fallback_window = window;
-          continue;
-        }
-
       return window;
     }
 
-  return fallback_window;
+  return NULL;
 }
 
 MetaWindow *
@@ -1574,7 +1504,6 @@ meta_workspace_get_default_focus_window (MetaWorkspace *workspace,
                                          MetaWindow    *not_this_one)
 {
   GList *l;
-  MetaWindow *fallback_window = NULL;
 
   g_return_val_if_fail (META_IS_WORKSPACE (workspace), NULL);
   g_return_val_if_fail (!not_this_one || META_IS_WINDOW (not_this_one), NULL);
@@ -1582,21 +1511,19 @@ meta_workspace_get_default_focus_window (MetaWorkspace *workspace,
   for (l = workspace->mru_list; l; l = l->next)
     {
       MetaWindow *window = l->data;
-      MetaFocusCandidatePriority priority;
 
       g_assert (window);
 
-      priority = get_focus_candidate_priority (window, workspace, not_this_one);
-      if (priority == META_FOCUS_CANDIDATE_PRIMARY)
-        return window;
+      if (window == not_this_one)
+        continue;
 
-      if (priority == META_FOCUS_CANDIDATE_FALLBACK && !fallback_window)
-        fallback_window = window;
+      if (!is_focusable (window, workspace))
+        continue;
 
-      continue;
+      return window;
     }
 
-  return fallback_window;
+  return NULL;
 }
 
 static MetaWindow *
@@ -1616,8 +1543,7 @@ get_pointer_window (MetaWorkspace *workspace,
 
   return meta_workspace_get_default_focus_window_at_point (workspace,
                                                            not_this_one,
-                                                           (int) point.x,
-                                                           (int) point.y);
+                                                           point.x, point.y);
 }
 
 static gboolean
@@ -1643,9 +1569,8 @@ try_to_set_focus_and_check (MetaWindow *window,
   if (not_this_one &&
       meta_display_get_focus_window (window->display) == not_this_one)
     {
-      meta_topic (META_DEBUG_FOCUS,
-                  "Failed to focus window %s while avoiding %s",
-                  window->desc, not_this_one->desc);
+      meta_warning ("Failed to focus window %s while avoiding %s",
+                    window->desc, not_this_one->desc);
 
       return FALSE;
     }

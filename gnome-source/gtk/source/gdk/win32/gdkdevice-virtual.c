@@ -61,44 +61,97 @@ _gdk_device_virtual_set_active (GdkDevice *device,
 
 static void
 gdk_device_virtual_set_surface_cursor (GdkDevice  *device,
-                                       GdkSurface *surface,
+                                       GdkSurface *window,
                                        GdkCursor  *cursor)
 {
-  GdkDisplay *display = gdk_surface_get_display (surface);
+  GdkDisplay *display = gdk_surface_get_display (window);
   GdkWin32HCursor *win32_hcursor = NULL;
 
   if (cursor == NULL)
     cursor = gdk_cursor_new_from_name ("default", NULL);
 
   if (display != NULL)
-    win32_hcursor = _gdk_win32_display_get_win32hcursor_with_scale (GDK_WIN32_DISPLAY (display),
-                                                                    cursor,
-                                                                    gdk_surface_get_scale (surface));
+    win32_hcursor = gdk_win32_display_get_win32hcursor (GDK_WIN32_DISPLAY (display), cursor);
 
   /* This is correct because the code up the stack already
-   * checked that cursor is currently inside this surface,
+   * checked that cursor is currently inside this window,
    * and wouldn't have called this function otherwise.
    */
   if (win32_hcursor != NULL)
     SetCursor (gdk_win32_hcursor_get_handle (win32_hcursor));
 
-  g_set_object (&GDK_WIN32_SURFACE (surface)->cursor, win32_hcursor);
+  g_set_object (&GDK_WIN32_SURFACE (window)->cursor, win32_hcursor);
 }
 
 void
 gdk_device_virtual_query_state (GdkDevice        *device,
-                                GdkSurface       *surface,
-                                GdkSurface      **child_surface,
-                                double           *win_x,
-                                double           *win_y,
-                                GdkModifierType  *mask)
+				GdkSurface        *window,
+				GdkSurface       **child_window,
+				double           *win_x,
+				double           *win_y,
+				GdkModifierType  *mask)
 {
   GdkDeviceVirtual *virtual = GDK_DEVICE_VIRTUAL (device);
 
   _gdk_device_win32_query_state (virtual->active_device,
-                                 surface, child_surface,
+                                 window, child_window,
                                  win_x, win_y,
                                  mask);
+}
+
+static GdkGrabStatus
+gdk_device_virtual_grab (GdkDevice    *device,
+			 GdkSurface    *window,
+			 gboolean      owner_events,
+			 GdkEventMask  event_mask,
+			 GdkSurface    *confine_to,
+			 GdkCursor    *cursor,
+			 guint32       time_)
+{
+  if (gdk_device_get_source (device) != GDK_SOURCE_KEYBOARD)
+    {
+      GdkWin32HCursor *win32_hcursor;
+      GdkWin32Display *display = GDK_WIN32_DISPLAY (gdk_device_get_display (device));
+      win32_hcursor = NULL;
+
+      if (cursor != NULL)
+        win32_hcursor = gdk_win32_display_get_win32hcursor (display, cursor);
+
+      g_set_object (&display->grab_cursor, win32_hcursor);
+
+      if (display->grab_cursor != NULL)
+        SetCursor (gdk_win32_hcursor_get_handle (display->grab_cursor));
+      else
+        SetCursor (LoadCursor (NULL, IDC_ARROW));
+
+      SetCapture (GDK_SURFACE_HWND (window));
+    }
+
+  return GDK_GRAB_SUCCESS;
+}
+
+static void
+gdk_device_virtual_ungrab (GdkDevice *device,
+                           guint32    time_)
+{
+  GdkDeviceGrabInfo *info;
+  GdkDisplay *display;
+  GdkWin32Display *win32_display;
+
+  display = gdk_device_get_display (device);
+  win32_display = GDK_WIN32_DISPLAY (display);
+  info = _gdk_display_get_last_device_grab (display, device);
+
+  if (info)
+    info->serial_end = 0;
+
+  if (gdk_device_get_source (device) != GDK_SOURCE_KEYBOARD)
+    {
+      g_clear_object (&win32_display->grab_cursor);
+      ReleaseCapture ();
+    }
+
+  _gdk_display_device_grab_update (display, device, 0);
 }
 
 static void
@@ -107,6 +160,8 @@ gdk_device_virtual_class_init (GdkDeviceVirtualClass *klass)
   GdkDeviceClass *device_class = GDK_DEVICE_CLASS (klass);
 
   device_class->set_surface_cursor = gdk_device_virtual_set_surface_cursor;
+  device_class->grab = gdk_device_virtual_grab;
+  device_class->ungrab = gdk_device_virtual_ungrab;
   device_class->surface_at_position = _gdk_device_win32_surface_at_position;
 }
 

@@ -1,3 +1,4 @@
+/** -*- mode: js2; js2-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
  * Copyright 2012 Inclusive Design Research Centre, OCAD University.
  *

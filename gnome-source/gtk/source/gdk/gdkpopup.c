@@ -26,7 +26,7 @@
 /**
  * GdkPopup:
  *
- * A surface that is attached to another surface.
+ * A `GdkPopup` is a surface that is attached to another surface.
  *
  * The `GdkPopup` is positioned relative to its parent surface.
  *
@@ -80,24 +80,24 @@ gdk_popup_default_init (GdkPopupInterface *iface)
   iface->get_position_y = gdk_popup_default_get_position_y;
 
   /**
-   * GdkPopup:parent:
+   * GdkPopup:parent: (attributes org.gtk.Property.get=gdk_popup_get_parent)
    *
    * The parent surface.
    */
   g_object_interface_install_property (iface,
       g_param_spec_object ("parent", NULL, NULL,
                            GDK_TYPE_SURFACE,
-                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME));
+                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
   /**
-   * GdkPopup:autohide:
+   * GdkPopup:autohide: (attributes org.gtk.Property.get=gdk_popup_get_autohide)
    *
    * Whether to hide on outside clicks.
    */
   g_object_interface_install_property (iface,
       g_param_spec_boolean ("autohide", NULL, NULL,
                            FALSE,
-                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME));
+                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 }
 
 /**
@@ -109,7 +109,7 @@ gdk_popup_default_init (GdkPopupInterface *iface)
  *
  * Present @popup after having processed the `GdkPopupLayout` rules.
  *
- * If the popup was previously not showing, it will be shown,
+ * If the popup was previously now showing, it will be showed,
  * otherwise it will change position according to @layout.
  *
  * After calling this function, the result should be handled in response
@@ -178,7 +178,7 @@ gdk_popup_get_rect_anchor (GdkPopup *popup)
 }
 
 /**
- * gdk_popup_get_parent:
+ * gdk_popup_get_parent: (attributes org.gtk.Method.get_property=parent)
  * @popup: a `GdkPopup`
  *
  * Returns the parent surface of a popup.
@@ -233,7 +233,7 @@ gdk_popup_get_position_y (GdkPopup *popup)
 }
 
 /**
- * gdk_popup_get_autohide:
+ * gdk_popup_get_autohide: (attributes org.gtk.Method.get_property=autohide)
  * @popup: a `GdkPopup`
  *
  * Returns whether this popup is set to hide on outside clicks.

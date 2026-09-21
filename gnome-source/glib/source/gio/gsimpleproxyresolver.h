@@ -62,7 +62,7 @@ struct _GSimpleProxyResolverClass
 };
 
 GIO_AVAILABLE_IN_2_36
-GType           g_simple_proxy_resolver_get_type          (void);
+GType           g_simple_proxy_resolver_get_type          (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_2_36
 GProxyResolver *g_simple_proxy_resolver_new               (const gchar           *default_proxy,

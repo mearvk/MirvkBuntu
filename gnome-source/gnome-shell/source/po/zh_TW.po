@@ -5,21 +5,21 @@
 # Wei-Lun Chao <chaoweilun@gmail.com>, 2010.
 # Freddy Cheng <freddy4212@gmail.com>, 2022.
 #
-# SPDX-FileCopyrightText: 2025 Skyter Lin <linskyter@gmail.com>
 msgid ""
 msgstr ""
 "Project-Id-Version: gnome-shell 3.3.90\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gnome-shell/issues/\n"
-"POT-Creation-Date: 2026-01-20 13:00+0000\n"
-"PO-Revision-Date: 2026-01-26 22:33+0800\n"
-"Last-Translator: Cheng-Chia Tseng <zerngjia@gmail.com>\n"
-"Language-Team: Chinese (Traditional) <zh-l10n@lists.slat.org>\n"
+"POT-Creation-Date: 2024-07-05 17:13+0000\n"
+"PO-Revision-Date: 2024-07-24 10:11+0000\n"
+"Last-Translator: Chao-Hsiung Liao <pesder@mail.edu.tw>\n"
+"Language-Team: Chinese (Traditional) <http://darkbear.mercusysddns.com/"
+"projects/gnome-45/gnome-shell-po-ui-main/zh_Hant/>\n"
 "Language: zh_TW\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.8\n"
+"X-Generator: Weblate 5.6.2\n"
 
 #: data/50-gnome-shell-launchers.xml:6
 msgid "Launchers"
@@ -98,32 +98,31 @@ msgid "Open new window of pinned app 9"
 msgstr "開啟自選程式 9 的新視窗"
 
 #. Translators: name of the folder under ~/Pictures for screenshots.
-#: data/50-gnome-shell-screenshots.xml:6 js/ui/screenshot.js:2297
+#: data/50-gnome-shell-screenshots.xml:6 js/ui/screenshot.js:2276
 msgid "Screenshots"
 msgstr "螢幕快照"
 
 #: data/50-gnome-shell-screenshots.xml:9
-#: data/org.gnome.shell.gschema.xml.in:267
+#: data/org.gnome.shell.gschema.xml.in:287
 msgid "Take a screenshot interactively"
 msgstr "啟動螢幕快照工具"
 
 #: data/50-gnome-shell-screenshots.xml:12
-#: data/org.gnome.shell.gschema.xml.in:279
+#: data/org.gnome.shell.gschema.xml.in:299
 msgid "Take a screenshot"
-msgstr "擷取螢幕畫面"
+msgstr "擷取螢幕快照"
 
 #: data/50-gnome-shell-screenshots.xml:15
-#: data/org.gnome.shell.gschema.xml.in:275
+#: data/org.gnome.shell.gschema.xml.in:295
 msgid "Take a screenshot of a window"
-msgstr "擷取視窗畫面"
+msgstr "擷取視窗快照"
 
 #: data/50-gnome-shell-screenshots.xml:18
-#: data/org.gnome.shell.gschema.xml.in:271
+#: data/org.gnome.shell.gschema.xml.in:291
 msgid "Record a screencast interactively"
 msgstr "啟動螢幕錄影工具"
 
-#: data/50-gnome-shell-system.xml:6
-#: data/X-GNOME-Shell-System.directory.desktop.in:2 js/ui/messageTray.js:1314
+#: data/50-gnome-shell-system.xml:6 js/ui/messageTray.js:1300
 msgid "System"
 msgstr "系統"
 
@@ -146,6 +145,14 @@ msgstr "顯示概覽畫面"
 #: data/50-gnome-shell-system.xml:21
 msgid "Show all apps"
 msgstr "顯示所有程式"
+
+#: data/org.gnome.Shell.desktop.in.in:4
+msgid "GNOME Shell"
+msgstr "GNOME Shell"
+
+#: data/org.gnome.Shell.desktop.in.in:5
+msgid "Window management and application launching"
+msgstr "兼具視窗管理器與應用程式啟動器的使用者介面"
 
 #: data/org.gnome.shell.gschema.xml.in:6
 msgid "Enable internal tools useful for developers and testers from Alt-F2"
@@ -229,30 +236,30 @@ msgstr ""
 "《GNOME Shell》僅會載入宣稱支援目前運作版本的擴充套件。啟用該設定鍵後會停用這"
 "項檢查，並嘗試載入所有擴充套件而不去管它們所宣稱支援的版本為何。"
 
-#: data/org.gnome.shell.gschema.xml.in:67
+#: data/org.gnome.shell.gschema.xml.in:65
 msgid "List of desktop file IDs for favorite applications"
 msgstr "喜好應用程式之 Desktop 檔的 ID 列表"
 
-#: data/org.gnome.shell.gschema.xml.in:68
+#: data/org.gnome.shell.gschema.xml.in:66
 msgid ""
 "The applications corresponding to these identifiers will be displayed in the "
 "favorites area."
 msgstr "辨識碼所對應的應用程式會顯示於「喜好」中。"
 
-#: data/org.gnome.shell.gschema.xml.in:75
+#: data/org.gnome.shell.gschema.xml.in:73
 msgid "History for command (Alt-F2) dialog"
 msgstr "命令 (Alt-F2) 的歷史紀錄"
 
 #. Translators: looking glass is a debugger and inspector tool, see https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/docs/looking-glass.md
-#: data/org.gnome.shell.gschema.xml.in:80
+#: data/org.gnome.shell.gschema.xml.in:78
 msgid "History for the looking glass dialog"
 msgstr "Looking glass 對話框的歷史紀錄"
 
-#: data/org.gnome.shell.gschema.xml.in:84
+#: data/org.gnome.shell.gschema.xml.in:82
 msgid "Always show the “Log Out” action in the system menu"
 msgstr "永遠在系統選單顯示「登出」操作"
 
-#: data/org.gnome.shell.gschema.xml.in:85
+#: data/org.gnome.shell.gschema.xml.in:83
 msgid ""
 "This key overrides the automatic hiding of the “Log out” action in the "
 "system menu for logged-in situations where there is a single, local, non-"
@@ -261,12 +268,12 @@ msgstr ""
 "該設定鍵會覆寫系統選單對「登出」項目的自動隱藏，主要是在登入情況下， 且使用者"
 "為單一、本機、非系統層級，又只有單一作業階段類型(如 GNOME 使用 Wayland)。"
 
-#: data/org.gnome.shell.gschema.xml.in:94
+#: data/org.gnome.shell.gschema.xml.in:92
 msgid ""
 "Whether to remember password for mounting encrypted or remote filesystems"
 msgstr "是否要記住已掛載之加密或遠端檔案系統的密碼"
 
-#: data/org.gnome.shell.gschema.xml.in:95
+#: data/org.gnome.shell.gschema.xml.in:93
 msgid ""
 "The shell will request a password when an encrypted device or a remote "
 "filesystem is mounted. If the password can be saved for future use a "
@@ -276,11 +283,11 @@ msgstr ""
 "當掛載加密裝置或遠端檔案系統時會要求密碼。若密碼可儲存供未來使用時，會顯示"
 "「記住密碼」勾選框；這個設定鍵用來設定勾選框的預設狀態。"
 
-#: data/org.gnome.shell.gschema.xml.in:104
+#: data/org.gnome.shell.gschema.xml.in:102
 msgid "The last selected non-default power profile"
 msgstr "此前所使用的非預設電源設定檔"
 
-#: data/org.gnome.shell.gschema.xml.in:105
+#: data/org.gnome.shell.gschema.xml.in:103
 msgid ""
 "Some systems support more than two power profiles. In order to still support "
 "toggling between two profiles, this key records the last selected non-"
@@ -289,11 +296,11 @@ msgstr ""
 "某些系統支援兩種以上的電源設定檔（省電與平衡之外的模式）。為了做到在兩種電源"
 "模式間切換，本設定鍵會紀錄此前所使用之非預設的電源設定檔為何。"
 
-#: data/org.gnome.shell.gschema.xml.in:113
+#: data/org.gnome.shell.gschema.xml.in:111
 msgid "The last version the “Welcome to GNOME” dialog was shown for"
 msgstr "「歡迎使用 GNOME」對話框顯示的最新版本"
 
-#: data/org.gnome.shell.gschema.xml.in:114
+#: data/org.gnome.shell.gschema.xml.in:112
 msgid ""
 "This key determines for which version the “Welcome to GNOME” dialog was last "
 "shown. An empty string represents the oldest possible version, and a huge "
@@ -303,11 +310,11 @@ msgstr ""
 "此設定鍵為「歡迎使用 GNOME」所顯示的最新版本。空白字串代表可能為舊版本，或是"
 "由過大的數字代表尚未存在的版本。過大的數字可用於停用對話框。"
 
-#: data/org.gnome.shell.gschema.xml.in:125
+#: data/org.gnome.shell.gschema.xml.in:145
 msgid "Layout of the app picker"
 msgstr "應用程式列表的排列順序"
 
-#: data/org.gnome.shell.gschema.xml.in:126
+#: data/org.gnome.shell.gschema.xml.in:146
 msgid ""
 "Layout of the app picker. Each entry in the array is a page. Pages are "
 "stored in the order they appear in GNOME Shell. Each page contains an "
@@ -316,164 +323,140 @@ msgid ""
 msgstr ""
 "應用程式列表的排列順序。陣列中的每個元素為一頁，並會以指定順序順序出現在"
 "《GNOME Shell》中。每一頁包含 'application id' → 'data' pair' 鍵值對。下列值"
-"以 'data': • “position” 方式儲存：應用程式圖示位於頁面上的位置"
+"以 'data': • “position” 方式儲存：應用程式圖示位於頁面上的位置。"
 
-#: data/org.gnome.shell.gschema.xml.in:145
-#: data/org.gnome.shell.gschema.xml.in:152
+#: data/org.gnome.shell.gschema.xml.in:165
+#: data/org.gnome.shell.gschema.xml.in:172
 msgid "Keybinding to shift between overview states"
 msgstr "在兩種概覽畫面之間切換的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:146
+#: data/org.gnome.shell.gschema.xml.in:166
 msgid "Keybinding to shift between session, window picker and app grid"
 msgstr "在作業階段、視窗概覽與應用程式列表之間切換的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:153
+#: data/org.gnome.shell.gschema.xml.in:173
 msgid "Keybinding to shift between app grid, window picker and session"
 msgstr "在應用程式列表、視窗概覽與作業階段之間切換的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:159
+#: data/org.gnome.shell.gschema.xml.in:179
 msgid "Keybinding to open the “Show Applications” view"
 msgstr "開啟「顯示應用程式」的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:160
+#: data/org.gnome.shell.gschema.xml.in:180
 msgid ""
 "Keybinding to open the “Show Applications” view of the Activities Overview."
 msgstr "開啟概覽中「顯示應用程式」的組合鍵。"
 
-#: data/org.gnome.shell.gschema.xml.in:167
+#: data/org.gnome.shell.gschema.xml.in:187
 msgid "Keybinding to open the overview"
 msgstr "開啟概覽畫面的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:168
+#: data/org.gnome.shell.gschema.xml.in:188
 msgid "Keybinding to open the Activities Overview."
 msgstr "用於開啟概覽畫面的組合鍵。"
 
-#: data/org.gnome.shell.gschema.xml.in:174
+#: data/org.gnome.shell.gschema.xml.in:194
 msgid "Keybinding to toggle the visibility of the notification list"
 msgstr "切換訊息列表顯示的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:175
+#: data/org.gnome.shell.gschema.xml.in:195
 msgid "Keybinding to toggle the visibility of the notification list."
 msgstr "用於切換訊息列表顯示的組合鍵。"
 
-#: data/org.gnome.shell.gschema.xml.in:181
+#: data/org.gnome.shell.gschema.xml.in:201
 msgid "Keybinding to toggle the quick settings menu"
 msgstr "切換快速設定選單的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:182
+#: data/org.gnome.shell.gschema.xml.in:202
 msgid "Keybinding to toggle the quick settings menu."
 msgstr "切換快速設定選單的組合鍵。"
 
-#: data/org.gnome.shell.gschema.xml.in:188
+#: data/org.gnome.shell.gschema.xml.in:208
 msgid "Keybinding to focus the active notification"
 msgstr "聚焦至彈出通知的組合鍵"
 
-#: data/org.gnome.shell.gschema.xml.in:189
+#: data/org.gnome.shell.gschema.xml.in:209
 msgid "Keybinding to focus the active notification."
 msgstr "用於聚焦至彈出通知的組合鍵。"
 
-#: data/org.gnome.shell.gschema.xml.in:195
+#: data/org.gnome.shell.gschema.xml.in:215
 msgid "Switch to application 1"
 msgstr "切換至應用程式 1"
 
-#: data/org.gnome.shell.gschema.xml.in:199
+#: data/org.gnome.shell.gschema.xml.in:219
 msgid "Switch to application 2"
 msgstr "切換至應用程式 2"
 
-#: data/org.gnome.shell.gschema.xml.in:203
+#: data/org.gnome.shell.gschema.xml.in:223
 msgid "Switch to application 3"
 msgstr "切換至應用程式 3"
 
-#: data/org.gnome.shell.gschema.xml.in:207
+#: data/org.gnome.shell.gschema.xml.in:227
 msgid "Switch to application 4"
 msgstr "切換至應用程式 4"
 
-#: data/org.gnome.shell.gschema.xml.in:211
+#: data/org.gnome.shell.gschema.xml.in:231
 msgid "Switch to application 5"
 msgstr "切換至應用程式 5"
 
-#: data/org.gnome.shell.gschema.xml.in:215
+#: data/org.gnome.shell.gschema.xml.in:235
 msgid "Switch to application 6"
 msgstr "切換至應用程式 6"
 
-#: data/org.gnome.shell.gschema.xml.in:219
+#: data/org.gnome.shell.gschema.xml.in:239
 msgid "Switch to application 7"
 msgstr "切換至應用程式 7"
 
-#: data/org.gnome.shell.gschema.xml.in:223
+#: data/org.gnome.shell.gschema.xml.in:243
 msgid "Switch to application 8"
 msgstr "切換至應用程式 8"
 
-#: data/org.gnome.shell.gschema.xml.in:227
+#: data/org.gnome.shell.gschema.xml.in:247
 msgid "Switch to application 9"
 msgstr "切換至應用程式 9"
 
-#: data/org.gnome.shell.gschema.xml.in:231
+#: data/org.gnome.shell.gschema.xml.in:251
 msgid "Open a new instance of application 1"
 msgstr "開啟應用程式 1 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:235
+#: data/org.gnome.shell.gschema.xml.in:255
 msgid "Open a new instance of application 2"
 msgstr "開啟應用程式 2 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:239
+#: data/org.gnome.shell.gschema.xml.in:259
 msgid "Open a new instance of application 3"
 msgstr "開啟應用程式 3 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:243
+#: data/org.gnome.shell.gschema.xml.in:263
 msgid "Open a new instance of application 4"
 msgstr "開啟應用程式 4 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:247
+#: data/org.gnome.shell.gschema.xml.in:267
 msgid "Open a new instance of application 5"
 msgstr "開啟應用程式 5 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:251
+#: data/org.gnome.shell.gschema.xml.in:271
 msgid "Open a new instance of application 6"
 msgstr "開啟應用程式 6 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:255
+#: data/org.gnome.shell.gschema.xml.in:275
 msgid "Open a new instance of application 7"
 msgstr "開啟應用程式 7 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:259
+#: data/org.gnome.shell.gschema.xml.in:279
 msgid "Open a new instance of application 8"
 msgstr "開啟應用程式 8 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:263
+#: data/org.gnome.shell.gschema.xml.in:283
 msgid "Open a new instance of application 9"
 msgstr "開啟應用程式 9 的實體"
 
-#: data/org.gnome.shell.gschema.xml.in:283
-msgid "Screen brightness up"
-msgstr "提高螢幕亮度"
-
-#: data/org.gnome.shell.gschema.xml.in:287
-msgid "Screen brightness up on current monitor"
-msgstr "提高目前顯示器的螢幕亮度"
-
-#: data/org.gnome.shell.gschema.xml.in:291
-msgid "Screen brightness down"
-msgstr "降低螢幕亮度"
-
-#: data/org.gnome.shell.gschema.xml.in:295
-msgid "Screen brightness down on current monitor"
-msgstr "降低目前顯示器的螢幕亮度"
-
-#: data/org.gnome.shell.gschema.xml.in:299
-msgid "Screen brightness cycle"
-msgstr "循環切換螢幕亮度"
-
-#: data/org.gnome.shell.gschema.xml.in:303
-msgid "Screen brightness cycle on current monitor"
-msgstr "在目前顯示器循環切換螢幕亮度"
-
-#: data/org.gnome.shell.gschema.xml.in:312
-#: data/org.gnome.shell.gschema.xml.in:339
+#: data/org.gnome.shell.gschema.xml.in:308
+#: data/org.gnome.shell.gschema.xml.in:335
 msgid "Limit switcher to current workspace."
-msgstr "限制視窗切換器使用目前的工作區。"
+msgstr "限制視窗切換器使用目前的工作區"
 
-#: data/org.gnome.shell.gschema.xml.in:313
+#: data/org.gnome.shell.gschema.xml.in:309
 msgid ""
 "If true, only applications that have windows on the current workspace are "
 "shown in the switcher. Otherwise, all applications are included."
@@ -481,11 +464,11 @@ msgstr ""
 "若設為「true」，切換器將僅顯示目前工作區中的應用程式視窗，否則所有的應用程式"
 "都會包含在內。"
 
-#: data/org.gnome.shell.gschema.xml.in:330
+#: data/org.gnome.shell.gschema.xml.in:326
 msgid "The application icon mode."
-msgstr "應用程式圖示模式。"
+msgstr "應用程式圖示模式"
 
-#: data/org.gnome.shell.gschema.xml.in:331
+#: data/org.gnome.shell.gschema.xml.in:327
 msgid ""
 "Configures how the windows are shown in the switcher. Valid possibilities "
 "are “thumbnail-only” (shows a thumbnail of the window), “app-icon-only” "
@@ -494,7 +477,7 @@ msgstr ""
 "設定視窗在視窗切換器中如何顯示。有效的數值為「thumbnail-only」（顯示視窗縮"
 "圖）、「app-icon-only」（只顯示應用程式圖示）或「both」。"
 
-#: data/org.gnome.shell.gschema.xml.in:340
+#: data/org.gnome.shell.gschema.xml.in:336
 msgid ""
 "If true, only windows from the current workspace are shown in the switcher. "
 "Otherwise, all windows are included."
@@ -502,105 +485,81 @@ msgstr ""
 "若設為「true」，切換器將僅顯示目前工作區中的視窗，否則所有的視窗都會包含在"
 "內。"
 
-#: data/org.gnome.shell.gschema.xml.in:350
+#: data/org.gnome.shell.gschema.xml.in:346
 msgid "Locations"
 msgstr "位置"
 
-#: data/org.gnome.shell.gschema.xml.in:351
+#: data/org.gnome.shell.gschema.xml.in:347
 msgid "The locations to show in world clocks"
-msgstr "在世界時鐘顯示的位置"
+msgstr "在世界時鐘顯示的位置。"
 
-#: data/org.gnome.shell.gschema.xml.in:361
+#: data/org.gnome.shell.gschema.xml.in:357
 msgid "Automatic location"
 msgstr "自動位置"
 
-#: data/org.gnome.shell.gschema.xml.in:362
+#: data/org.gnome.shell.gschema.xml.in:358
 msgid "Whether to fetch the current location or not"
-msgstr "是否取得目前所在地"
+msgstr "是否取得目前所在地。"
 
-#: data/org.gnome.shell.gschema.xml.in:369
+#: data/org.gnome.shell.gschema.xml.in:365
 msgid "Location"
 msgstr "位置"
 
-#: data/org.gnome.shell.gschema.xml.in:370
+#: data/org.gnome.shell.gschema.xml.in:366
 msgid "The location for which to show a forecast"
-msgstr "顯示預報的位置"
+msgstr "要顯示哪個區域的天氣預報。"
 
 #. Keep in sync with subprojects/extensions-app
-#: data/org.gnome.Shell.Extensions.desktop.in:4
+#: data/org.gnome.Shell.Extensions.desktop.in.in:5
 #: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:5
-#: subprojects/extensions-app/data/org.gnome.Extensions.desktop.in.in:3
+#: subprojects/extensions-app/data/org.gnome.Extensions.desktop.in.in:4
 #: subprojects/extensions-app/data/ui/extensions-window.ui:57
 msgid "Extensions"
 msgstr "擴充套件"
 
-#: data/org.gnome.Shell.PortalHelper.desktop.in:2
+#: data/org.gnome.Shell.PortalHelper.desktop.in.in:3
 msgid "Network Login"
 msgstr "網路登入"
 
-#: data/X-GNOME-Shell-Utilities.directory.desktop.in:2
-msgid "Utilities"
-msgstr "公用程式"
+#: js/dbusServices/extensions/ui/extension-error-page.ui:15
+#: subprojects/extensions-app/data/ui/extensions-window.ui:275
+msgid "Something’s gone wrong"
+msgstr "有些地方出錯了"
 
-#: js/dbusServices/extensions/extensionPrefsDialog.js:71
-msgid "Extension Error"
-msgstr "擴充套件錯誤"
-
-#. Translators: %s is an extension name
-#: js/dbusServices/extensions/extensionPrefsDialog.js:104
-#, javascript-format
-msgid "Unable to display the settings for “%s”."
-msgstr "無法顯示「%s」的設定。"
-
-#. Translators: Link label in the phrase "Information about this
-#. problem may be available on the extension website"
-#: js/dbusServices/extensions/extensionPrefsDialog.js:110
-msgid "extension website"
-msgstr "擴充套件網站"
-
-#. Translators: %s is "extension website"
-#: js/dbusServices/extensions/extensionPrefsDialog.js:114
-#, javascript-format
-msgid "Information about this problem may be available on the %s."
-msgstr "關於此問題的資訊可能在 %s 上會有。"
-
-#: js/dbusServices/extensions/ui/extension-error-page.ui:19
-#: subprojects/extensions-app/data/ui/extension-row.ui:13
-msgid "Error Details"
-msgstr "錯誤詳細資訊"
-
-#: js/dbusServices/extensions/ui/extension-error-page.ui:26
-msgid "Copy Error"
-msgstr "複製錯誤"
-
-#: js/gdm/authPrompt.js:58 js/misc/timeLimitsManager.js:1428
-msgid "Screen Time Limit Reached"
-msgstr "已達螢幕使用時間限制"
-
-#: js/gdm/authPrompt.js:64
+#: js/dbusServices/extensions/ui/extension-error-page.ui:23
 msgid ""
-"Daily limit for screen time on this device has been reached. Resume tomorrow."
-msgstr "此裝置每日螢幕使用時間已達上限。請明日繼續使用。"
+"We’re very sorry, but there’s been a problem: the settings for this "
+"extension can’t be displayed. We recommend that you report the issue to the "
+"extension authors."
+msgstr ""
+"我們非常抱歉發生這個問題：無法顯示該擴充套件的設定畫面；建議將此問題回報給擴"
+"充套件的作者。"
 
-#. Translators: this is for ignoring a screen time limit for parental controls
-#: js/gdm/authPrompt.js:72
-msgid "Ignore"
-msgstr "忽略"
+#: js/dbusServices/extensions/ui/extension-error-page.ui:48
+msgid "Technical Details"
+msgstr "技術細節"
 
-#: js/gdm/authPrompt.js:256 js/gdm/loginDialog.js:514
-#: js/ui/audioDeviceSelection.js:60 js/ui/components/networkAgent.js:114
-#: js/ui/components/polkitAgent.js:144 js/ui/endSessionDialog.js:437
-#: js/ui/extensionDownloader.js:276 js/ui/shellMountOperation.js:382
-#: js/ui/shellMountOperation.js:392
+#: js/dbusServices/extensions/ui/extension-error-page.ui:90
+msgid "Homepage"
+msgstr "首頁"
+
+#: js/dbusServices/extensions/ui/extension-error-page.ui:91
+msgid "Visit extension homepage"
+msgstr "造訪擴充套件首頁"
+
+#: js/gdm/authPrompt.js:153 js/gdm/loginDialog.js:466
+#: js/ui/audioDeviceSelection.js:66 js/ui/components/networkAgent.js:115
+#: js/ui/components/polkitAgent.js:146 js/ui/endSessionDialog.js:438
+#: js/ui/extensionDownloader.js:278 js/ui/shellMountOperation.js:384
+#: js/ui/shellMountOperation.js:394
 msgid "Cancel"
 msgstr "取消"
 
-#: js/gdm/authPrompt.js:434 js/ui/components/networkAgent.js:214
-#: js/ui/components/networkAgent.js:234 js/ui/components/networkAgent.js:266
-#: js/ui/components/networkAgent.js:299 js/ui/components/networkAgent.js:338
-#: js/ui/components/networkAgent.js:351 js/ui/components/polkitAgent.js:286
-#: js/ui/shellMountOperation.js:332
-#: subprojects/extensions-tool/src/command-upload.c:252
+#: js/gdm/authPrompt.js:319 js/ui/components/networkAgent.js:215
+#: js/ui/components/networkAgent.js:235 js/ui/components/networkAgent.js:267
+#: js/ui/components/networkAgent.js:300 js/ui/components/networkAgent.js:339
+#: js/ui/components/networkAgent.js:352 js/ui/components/polkitAgent.js:288
+#: js/ui/shellMountOperation.js:334
 msgid "Password"
 msgstr "密碼"
 
@@ -608,92 +567,83 @@ msgstr "密碼"
 msgid "Choose Session"
 msgstr "選擇作業階段"
 
-#: js/gdm/loginDialog.js:420 js/ui/status/accessibility.js:35
-msgid "Accessibility"
-msgstr "無障礙輔助"
-
 #. Translators: is running for <username>
-#: js/gdm/loginDialog.js:472
+#: js/gdm/loginDialog.js:424
 #, javascript-format
 msgid ""
 "Remote login is not possible because a remote session is already running for "
 "%s. To login remotely, you must log out from the remote session or force "
 "stop it."
-msgstr ""
-"無法進行遠端登入，因為 %s 的遠端作業階段已在運行中。要遠端登入，您必須從遠端"
-"作業階段中登出或強制停止它。"
+msgstr "無法進行遠端登入，因為 %s 的遠端工作階段已在運行中。要遠端登入，您必須從遠端"
+"工作階段中登出或強制停止它。"
 
 #. Translators: is running for <username>
-#: js/gdm/loginDialog.js:475
+#: js/gdm/loginDialog.js:427
 #, javascript-format
 msgid ""
 "Login is not possible because a remote session is already running for %s. To "
 "login, you must log out from the remote session or force stop it."
-msgstr ""
-"無法進行登入，因為 %s 的遠端作業階段已在運行中。要登入，您必須從遠端作業階段"
-"中登出或強制停止它。"
+msgstr "無法進行登入，因為 %s "
+"的遠端工作階段已在運行中。要登入，您必須從遠端工作階段中登出或強制停止它。"
 
 #. Translators: is running for <username>
-#: js/gdm/loginDialog.js:478
+#: js/gdm/loginDialog.js:430
 #, javascript-format
 msgid ""
 "Remote login is not possible because a local session is already running for "
 "%s. To login remotely, you must log out from the local session or force stop "
 "it."
-msgstr ""
-"無法進行遠端登入，因為 %s 的本地作業階段已在運行中。要遠端登入，您必須從本地"
-"作業階段登出或強制停止它。"
+msgstr "無法進行遠端登入，因為 %s "
+"的本地工作階段已在運行中。要遠端登入，您必須從本地工作階段登出或強制停止它。"
 
 #. Translators: is running for <username>
-#: js/gdm/loginDialog.js:481
+#: js/gdm/loginDialog.js:433
 #, javascript-format
 msgid ""
 "Login is not possible because a session is already running for %s. To login, "
 "you must log out from the session or force stop it."
-msgstr ""
-"無法登入，因為 %s 的作業階段已在運行。要登入，您必須從作業階段中登出或強制停"
-"止它。"
+msgstr "無法登入，因為 %s "
+"的工作階段已在運行。要登入，您必須從工作階段中登出或強制停止它。"
 
-#: js/gdm/loginDialog.js:490
+#: js/gdm/loginDialog.js:442
 msgid "Session Already Running"
-msgstr "作業階段已在執行中"
+msgstr "工作階段已在執行中"
 
-#: js/gdm/loginDialog.js:502
+#: js/gdm/loginDialog.js:454
 msgid ""
 "Force stopping will quit any running apps and processes, and could result in "
-"data loss"
-msgstr "強制停止將退出任何正在運行的程式和程序，並可能導致資料遺失"
+"data loss."
+msgstr "強制停止將退出任何正在運行的程式和程序，並可能導致資料遺失。"
 
-#: js/gdm/loginDialog.js:522
+#: js/gdm/loginDialog.js:474
 msgid "Force Stop"
 msgstr "強制停止"
 
-#: js/gdm/loginDialog.js:600
+#: js/gdm/loginDialog.js:542
 msgid "Not listed?"
 msgstr "沒有列出來？"
 
 #. Translators: this message is shown below the username entry field
 #. to clue the user in on how to login to the local network realm
-#: js/gdm/loginDialog.js:1129
+#: js/gdm/loginDialog.js:1010
 #, javascript-format
 msgid "(e.g., user or %s)"
 msgstr "（例如： user 或 %s）"
 
-#: js/gdm/loginDialog.js:1134 js/ui/components/networkAgent.js:258
-#: js/ui/components/networkAgent.js:293 js/ui/components/networkAgent.js:327
-#: subprojects/extensions-tool/src/command-upload.c:234
+#: js/gdm/loginDialog.js:1015 js/ui/components/networkAgent.js:259
+#: js/ui/components/networkAgent.js:294 js/ui/components/networkAgent.js:328
 msgid "Username"
 msgstr "使用者名稱"
 
-#: js/gdm/loginDialog.js:1200
+#: js/gdm/loginDialog.js:1081
 msgid "Login Attempt Timed Out"
 msgstr "登入嘗試逾時"
 
-#: js/gdm/loginDialog.js:1201
+#: js/gdm/loginDialog.js:1082
 msgid "Login took too long, please try again"
 msgstr "登入時間過長，請再試一次"
 
-#: js/gdm/loginDialog.js:1550
+#: js/gdm/loginDialog.js:1427
 msgid "Login Window"
 msgstr "登入視窗"
 
@@ -713,297 +663,112 @@ msgstr "（或是將手指掃過指紋辨識器）"
 msgid "(or place finger on reader)"
 msgstr "（或是將手指置於指紋辨識器上）"
 
-#: js/misc/breakManager.js:770
-msgid "Break complete sound"
-msgstr "休息結束聲"
-
-#: js/misc/breakManager.js:980
-#, javascript-format
-msgid "%d second"
-msgid_plural "%d seconds"
-msgstr[0] "%d 秒"
-
-#: js/misc/breakManager.js:986
-#, javascript-format
-msgid "%d minute"
-msgid_plural "%d minutes"
-msgstr[0] "%d 分鐘"
-
-#: js/misc/breakManager.js:992
-#, javascript-format
-msgid "%d hour"
-msgid_plural "%d hours"
-msgstr[0] "%d 小時"
-
-#: js/misc/breakManager.js:998
-#, javascript-format
-msgid "%d day"
-msgid_plural "%d days"
-msgstr[0] "%d 天"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1081
-#, javascript-format
-msgid "It will be time for a break in %s"
-msgid_plural "It will be time for a break in %s"
-msgstr[0] "%s 後休息"
-
-#: js/misc/breakManager.js:1089
-msgid "Movement Break Soon"
-msgstr "即將休息活動身體"
-
-#: js/misc/breakManager.js:1092
-msgid "Eyesight Break Soon"
-msgstr "即將休息保健視力"
-
-#: js/misc/breakManager.js:1095
-msgid "Break Soon"
-msgstr "即將休息"
-
-#: js/misc/breakManager.js:1140
-msgid "Movement Break in Progress"
-msgstr "休息活動身體中"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1143
-#, javascript-format
-msgid "Continue moving around for %s"
-msgid_plural "Continue moving around for %s"
-msgstr[0] "繼續活動身體 %s"
-
-#: js/misc/breakManager.js:1149
-msgid "Eyesight Break in Progress"
-msgstr "休息保健視力中"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1152
-#, javascript-format
-msgid "Continue looking away for %s"
-msgid_plural "Continue looking away for %s"
-msgstr[0] "繼續看看別處 %s"
-
-#: js/misc/breakManager.js:1158
-msgid "Break in Progress"
-msgstr "休息中"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1161
-#, javascript-format
-msgid "%s left in your break"
-msgid_plural "%s left in your break"
-msgstr[0] "您的休息時間還有 %s"
-
-#: js/misc/breakManager.js:1200
-msgid "Time for a Movement Break"
-msgstr "身體活動休息時間"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1203
-#, javascript-format
-msgid "Take a break from the device and move around for %s"
-msgid_plural "Take a break from the device and move around for %s"
-msgstr[0] "離開裝置休息一下，並活動身體 %s"
-
-#: js/misc/breakManager.js:1209
-msgid "Time for an Eyesight Break"
-msgstr "視力保健休息時間"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1212
-#, javascript-format
-msgid ""
-"Take a break from the screen. Look at least 6 meters away for at least %s"
-msgid_plural ""
-"Take a break from the screen. Look at least 6 meters away for at least %s"
-msgstr[0] "離開螢幕休息一下。看至少 6 公尺外的地方，至少 %s"
-
-#: js/misc/breakManager.js:1218
-msgid "Time for a Break"
-msgstr "休息時間"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1221
-#, javascript-format
-msgid "It’s time to take a break. Get away from the device for %s!"
-msgid_plural "It’s time to take a break. Get away from the device for %s!"
-msgstr[0] "是時候該休息一下囉。請離開裝置 %s！"
-
-#. %s will be replaced with a string that describes a time interval, such as “2 minutes”, “40 seconds” or “1 hour”
-#: js/misc/breakManager.js:1245
-#, javascript-format
-msgid "You were due to take a break %s ago"
-msgid_plural "You were due to take a break %s ago"
-msgstr[0] "您 %s前就該休息囉"
-
-#: js/misc/breakManager.js:1251
-msgid "Break Overdue"
-msgstr "逾時未休息"
-
-#: js/misc/breakManager.js:1267
-#, javascript-format
-msgid "There is %s remaining in your break"
-msgid_plural "There are %s remaining in your break"
-msgstr[0] "您的休息時間還有 %s"
-
-#: js/misc/breakManager.js:1273
-msgid "Break Interrupted"
-msgstr "休息中斷"
-
-#. Translators: As in "Delay the break"
-#: js/misc/breakManager.js:1351
-msgid "Delay"
-msgstr "延遲"
-
-#. Translators: As in "Skip the break"
-#: js/misc/breakManager.js:1373 js/ui/welcomeDialog.js:61
-msgid "Skip"
-msgstr "略過"
-
-#. Translators: As in "Take the break"
-#: js/misc/breakManager.js:1395
-msgid "Take"
-msgstr "休息"
-
-#. Translators: This is a notification to warn the user that a
-#. screen time break will start shortly.
-#: js/misc/breakManager.js:1458
-#, javascript-format
-msgid "Break in %d second"
-msgid_plural "Break in %d seconds"
-msgstr[0] "%d 秒後休息"
-
-#: js/misc/brightnessManager.js:171 js/ui/status/brightness.js:10
-msgid "Brightness"
-msgstr "亮度"
-
 #. Translators: The name of the power-off action in search
-#: js/misc/systemActions.js:94
+#: js/misc/systemActions.js:91
 msgctxt "search-result"
 msgid "Power Off"
 msgstr "關閉電源"
 
 #. Translators: A list of keywords that match the power-off action, separated by semicolons
-#: js/misc/systemActions.js:97
+#: js/misc/systemActions.js:94
 msgid "power off;poweroff;shutdown;halt;stop"
 msgstr "power off;poweroff;shutdown;halt;stop;關機;關閉電源;中斷;停止"
 
 #. Translators: The name of the restart action in search
-#: js/misc/systemActions.js:102
+#: js/misc/systemActions.js:99
 msgctxt "search-result"
 msgid "Restart"
 msgstr "重新啟動"
 
 #. Translators: A list of keywords that match the restart action, separated by semicolons
-#: js/misc/systemActions.js:105
+#: js/misc/systemActions.js:102
 msgid "reboot;restart;"
 msgstr "reboot;restart;重新開機;重新啟動;"
 
 #. Translators: The name of the lock screen action in search
-#: js/misc/systemActions.js:110
+#: js/misc/systemActions.js:107
 msgctxt "search-result"
 msgid "Lock Screen"
 msgstr "鎖定螢幕"
 
 #. Translators: A list of keywords that match the lock screen action, separated by semicolons
-#: js/misc/systemActions.js:113
+#: js/misc/systemActions.js:110
 msgid "lock screen"
 msgstr "lock screen;螢幕鎖定"
 
 #. Translators: The name of the logout action in search
-#: js/misc/systemActions.js:118
+#: js/misc/systemActions.js:115
 msgctxt "search-result"
 msgid "Log Out"
 msgstr "登出"
 
 #. Translators: A list of keywords that match the logout action, separated by semicolons
-#: js/misc/systemActions.js:121
+#: js/misc/systemActions.js:118
 msgid "logout;log out;sign off"
 msgstr "logout;log out;sign off;登出"
 
 #. Translators: The name of the suspend action in search
-#: js/misc/systemActions.js:126
+#: js/misc/systemActions.js:123
 msgctxt "search-result"
 msgid "Suspend"
 msgstr "暫停"
 
 #. Translators: A list of keywords that match the suspend action, separated by semicolons
-#: js/misc/systemActions.js:129
+#: js/misc/systemActions.js:126
 msgid "suspend;sleep"
 msgstr "suspend;sleep;暫停;睡眠"
 
 #. Translators: The name of the switch user action in search
-#: js/misc/systemActions.js:134
+#: js/misc/systemActions.js:131
 msgctxt "search-result"
 msgid "Switch User"
 msgstr "切換使用者"
 
 #. Translators: A list of keywords that match the switch user action, separated by semicolons
-#: js/misc/systemActions.js:137
+#: js/misc/systemActions.js:134
 msgid "switch user"
 msgstr "switch user;切換使用者"
 
 #. Translators: A list of keywords that match the lock orientation action, separated by semicolons
-#: js/misc/systemActions.js:144
+#: js/misc/systemActions.js:141
 msgid "lock orientation;unlock orientation;screen;rotation"
 msgstr ""
 "lock orientation;unlock orientation;screen;rotation;鎖定方向;解鎖方向;方向鎖;"
 "螢幕;旋轉"
 
 #. Translators: The name of the screenshot UI action in search
-#: js/misc/systemActions.js:149
+#: js/misc/systemActions.js:146
 msgctxt "search-result"
 msgid "Take a Screenshot"
-msgstr "擷取螢幕畫面"
+msgstr "擷取螢幕快照"
 
 #. Translators: A list of keywords that match the screenshot UI action, separated by semicolons
-#: js/misc/systemActions.js:152
+#: js/misc/systemActions.js:149
 msgid "screenshot;screencast;snip;capture;record"
 msgstr ""
 "screenshot;screencast;snip;capture;record;螢幕快照;擷圖;截圖;螢幕錄影;抓圖"
 
-#: js/misc/systemActions.js:256
+#: js/misc/systemActions.js:249
 msgctxt "search-result"
 msgid "Unlock Screen Rotation"
 msgstr "解鎖螢幕旋轉"
 
-#: js/misc/systemActions.js:257
+#: js/misc/systemActions.js:250
 msgctxt "search-result"
 msgid "Lock Screen Rotation"
 msgstr "鎖定螢幕旋轉"
 
-#: js/misc/timeLimitsManager.js:468
-msgid "GNOME needs to save screen time data"
-msgstr "GNOME 需要儲存螢幕使用時間資料"
-
-#: js/misc/timeLimitsManager.js:1393
-msgid "Screen Time Limit is almost up"
-msgstr "螢幕使用時間限制即將結束"
-
-#: js/misc/timeLimitsManager.js:1395
-#, javascript-format
-msgid "The computer will lock in %d second."
-msgid_plural "The computer will lock in %d seconds."
-msgstr[0] "電腦將於 %d 秒後鎖定。"
-
-#: js/misc/timeLimitsManager.js:1403
-#, javascript-format
-msgid "Screen Time Limit in %d Minute"
-msgid_plural "Screen Time Limit in %d Minutes"
-msgstr[0] "螢幕使用時間限制還有 %d 分鐘"
-
-#: js/misc/timeLimitsManager.js:1407
-msgid "Your screen time limit is approaching"
-msgstr "您的螢幕使用時間限制快到囉"
-
-#: js/misc/timeLimitsManager.js:1429
-msgid "It’s time to stop using the device"
-msgstr "是時候該停止使用這個裝置囉"
-
-#: js/misc/util.js:131
+#: js/misc/util.js:132
 msgid "Command not found"
 msgstr "找不到命令"
 
-#: js/misc/util.js:169
+#. Replace "Error invoking GLib.shell_parse_argv: " with
+#. something nicer
+#: js/misc/util.js:172
+msgid "Could not parse command:"
+msgstr "無法分析命令："
+
+#: js/misc/util.js:180
 #, javascript-format
 msgid "Execution of “%s” failed:"
 msgstr "無法執行「%s」："
@@ -1024,7 +789,7 @@ msgid "%d hour ago"
 msgid_plural "%d hours ago"
 msgstr[0] "%d 小時前"
 
-#: js/misc/dateUtils.js:85 js/ui/dateMenu.js:184
+#: js/misc/dateUtils.js:85 js/ui/dateMenu.js:185
 msgid "Yesterday"
 msgstr "昨天"
 
@@ -1054,21 +819,21 @@ msgstr[0] "%d 年前"
 
 #. Translators: Time in 24h format
 #: js/misc/dateUtils.js:155
-msgid "%H:%M"
-msgstr "%H:%M"
+msgid "%H∶%M"
+msgstr "%H∶%M"
 
 #. Translators: this is the word "Yesterday" followed by a
 #. time string in 24h format. i.e. "Yesterday, 14:30"
 #: js/misc/dateUtils.js:161
 #, no-c-format
-msgid "Yesterday, %H:%M"
+msgid "Yesterday, %H∶%M"
 msgstr "昨天 %H:%M"
 
 #. Translators: this is the week day name followed by a time
 #. string in 24h format. i.e. "Monday, 14:30"
 #: js/misc/dateUtils.js:167
 #, no-c-format
-msgid "%A, %H:%M"
+msgid "%A, %H∶%M"
 msgstr "%A %H∶%M"
 
 #. Translators: this is the month name and day number
@@ -1076,7 +841,7 @@ msgstr "%A %H∶%M"
 #. i.e. "May 25, 14:30"
 #: js/misc/dateUtils.js:173
 #, no-c-format
-msgid "%B %-d, %H:%M"
+msgid "%B %-d, %H∶%M"
 msgstr "%-m月%-d日 %H∶%M"
 
 #. Translators: this is the month name, day number, year
@@ -1084,28 +849,28 @@ msgstr "%-m月%-d日 %H∶%M"
 #. i.e. "May 25 2012, 14:30"
 #: js/misc/dateUtils.js:179
 #, no-c-format
-msgid "%B %-d %Y, %H:%M"
+msgid "%B %-d %Y, %H∶%M"
 msgstr "%Y年%-m月%-d日 %H∶%M"
 
 #. Show only the time if date is on today
 #. eslint-disable-line no-lonely-if
 #. Translators: Time in 12h format
 #: js/misc/dateUtils.js:184
-msgid "%l:%M %p"
+msgid "%l∶%M %p"
 msgstr "%p %I∶%M"
 
 #. Translators: this is the word "Yesterday" followed by a
 #. time string in 12h format. i.e. "Yesterday, 2:30 pm"
 #: js/misc/dateUtils.js:190
 #, no-c-format
-msgid "Yesterday, %l:%M %p"
+msgid "Yesterday, %l∶%M %p"
 msgstr "昨天 %p %I∶%M"
 
 #. Translators: this is the week day name followed by a time
 #. string in 12h format. i.e. "Monday, 2:30 pm"
 #: js/misc/dateUtils.js:196
 #, no-c-format
-msgid "%A, %l:%M %p"
+msgid "%A, %l∶%M %p"
 msgstr "%A %p %I∶%M"
 
 #. Translators: this is the month name and day number
@@ -1113,7 +878,7 @@ msgstr "%A %p %I∶%M"
 #. i.e. "May 25, 2:30 pm"
 #: js/misc/dateUtils.js:202
 #, no-c-format
-msgid "%B %-d, %l:%M %p"
+msgid "%B %-d, %l∶%M %p"
 msgstr "%-m月%-d日 %p %I∶%M"
 
 #. Translators: this is the month name, day number, year
@@ -1121,7 +886,7 @@ msgstr "%-m月%-d日 %p %I∶%M"
 #. i.e. "May 25 2012, 2:30 pm"
 #: js/misc/dateUtils.js:208
 #, no-c-format
-msgid "%B %-d %Y, %l:%M %p"
+msgid "%B %-d %Y, %l∶%M %p"
 msgstr "%Y年%-m月%-d日 %p %I∶%M"
 
 #: js/portalHelper/main.js:98
@@ -1142,99 +907,95 @@ msgstr "登入熱點"
 
 #. No support for non-modal system dialogs, so ignore the option
 #. let modal = options['modal'] || true;
-#: js/ui/accessDialog.js:51 js/ui/inhibitShortcutsDialog.js:92
+#: js/ui/accessDialog.js:45 js/ui/inhibitShortcutsDialog.js:92
 msgid "Deny"
 msgstr "拒絕"
 
-#: js/ui/accessDialog.js:52 js/ui/inhibitShortcutsDialog.js:101
+#: js/ui/accessDialog.js:46 js/ui/inhibitShortcutsDialog.js:101
 msgid "Allow"
 msgstr "允許"
 
-#: js/ui/appDisplay.js:1734
+#: js/ui/appDisplay.js:1775
 msgid "Unnamed Folder"
 msgstr "未命名資料夾"
 
-#: js/ui/appFavorites.js:89
+#: js/ui/appFavorites.js:166
 #, javascript-format
 msgid "%s has been pinned to the dash."
 msgstr "《%s》已釘選至 Dash。"
 
-#: js/ui/appFavorites.js:120
+#: js/ui/appFavorites.js:199
 #, javascript-format
 msgid "%s has been unpinned from the dash."
 msgstr "《%s》已從 Dash 中取消釘選。"
 
-#: js/ui/appFavorites.js:134 js/ui/main.js:304
-msgid "Undo"
-msgstr "還原"
-
 #. Translators: This is the heading of a list of open windows
-#: js/ui/appMenu.js:49
+#: js/ui/appMenu.js:51
 msgid "Open Windows"
 msgstr "開啟的視窗"
 
-#: js/ui/appMenu.js:57
+#: js/ui/appMenu.js:59
 msgid "New Window"
 msgstr "新視窗"
 
-#: js/ui/appMenu.js:84
+#: js/ui/appMenu.js:86
 msgid "App Details"
 msgstr "程式詳細資訊"
 
-#: js/ui/appMenu.js:100
+#: js/ui/appMenu.js:102
 msgid "Quit"
 msgstr "退出"
 
-#: js/ui/appMenu.js:160 js/ui/dash.js:245
+#: js/ui/appMenu.js:162 js/ui/dash.js:250
 msgid "Unpin"
 msgstr "取消釘選"
 
-#: js/ui/appMenu.js:161
+#: js/ui/appMenu.js:163
 msgid "Pin to Dash"
 msgstr "釘選至 Dash"
 
-#: js/ui/appMenu.js:178
-msgid "Launch Using Integrated Graphics Card"
+#: js/ui/appMenu.js:180
+msgid "Launch using Integrated Graphics Card"
 msgstr "使用整合顯示卡啟動"
 
-#: js/ui/appMenu.js:179
-msgid "Launch Using Discrete Graphics Card"
+#: js/ui/appMenu.js:181
+msgid "Launch using Discrete Graphics Card"
 msgstr "使用獨立顯示卡啟動"
 
 #: js/ui/audioDeviceSelection.js:46
 msgid "Select Audio Device"
-msgstr "選擇音效裝置"
+msgstr "選擇音訊裝置"
 
-#: js/ui/audioDeviceSelection.js:67 js/ui/status/volume.js:81
+#: js/ui/audioDeviceSelection.js:61 js/ui/status/volume.js:83
 msgid "Sound Settings"
-msgstr "音效設定值"
+msgstr "音訊設定值"
 
-#: js/ui/audioDeviceSelection.js:75
+#: js/ui/audioDeviceSelection.js:74
 msgid "Headphones"
 msgstr "頭戴式耳機"
 
-#: js/ui/audioDeviceSelection.js:77
+#: js/ui/audioDeviceSelection.js:76
 msgid "Headset"
 msgstr "耳麥"
 
-#: js/ui/audioDeviceSelection.js:79 js/ui/status/volume.js:367
+#: js/ui/audioDeviceSelection.js:78 js/ui/status/volume.js:358
 msgid "Microphone"
 msgstr "麥克風"
 
-#: js/ui/backgroundMenu.js:13
+#: js/ui/backgroundMenu.js:15
 msgid "Change Background…"
 msgstr "更改背景…"
 
-#: js/ui/backgroundMenu.js:15
+#: js/ui/backgroundMenu.js:17
 msgid "Display Settings"
 msgstr "顯示器設定值"
 
-#: js/ui/backgroundMenu.js:16
+#: js/ui/backgroundMenu.js:18
 msgid "Settings"
-msgstr "設定"
+msgstr "設定值"
 
 #. Translators: Enter 0-6 (Sunday-Saturday) for non-work days. Examples: "0" (Sunday) "6" (Saturday) "06" (Sunday and Saturday).
-#: js/ui/calendar.js:34
+#: js/ui/calendar.js:39
 msgctxt "calendar-no-work"
 msgid "06"
 msgstr "06"
@@ -1244,43 +1005,43 @@ msgstr "06"
 #. * NOTE: These grid abbreviations are always shown together
 #. * and in order, e.g. "S M T W T F S".
 #.
-#: js/ui/calendar.js:60
+#: js/ui/calendar.js:65
 msgctxt "grid sunday"
 msgid "S"
 msgstr "日"
 
 #. Translators: Calendar grid abbreviation for Monday
-#: js/ui/calendar.js:62
+#: js/ui/calendar.js:67
 msgctxt "grid monday"
 msgid "M"
 msgstr "一"
 
 #. Translators: Calendar grid abbreviation for Tuesday
-#: js/ui/calendar.js:64
+#: js/ui/calendar.js:69
 msgctxt "grid tuesday"
 msgid "T"
 msgstr "二"
 
 #. Translators: Calendar grid abbreviation for Wednesday
-#: js/ui/calendar.js:66
+#: js/ui/calendar.js:71
 msgctxt "grid wednesday"
 msgid "W"
 msgstr "三"
 
 #. Translators: Calendar grid abbreviation for Thursday
-#: js/ui/calendar.js:68
+#: js/ui/calendar.js:73
 msgctxt "grid thursday"
 msgid "T"
 msgstr "四"
 
 #. Translators: Calendar grid abbreviation for Friday
-#: js/ui/calendar.js:70
+#: js/ui/calendar.js:75
 msgctxt "grid friday"
 msgid "F"
 msgstr "五"
 
 #. Translators: Calendar grid abbreviation for Saturday
-#: js/ui/calendar.js:72
+#: js/ui/calendar.js:77
 msgctxt "grid saturday"
 msgid "S"
 msgstr "六"
@@ -1291,7 +1052,7 @@ msgstr "六"
 #. * "%OB" is the new format specifier introduced in glibc 2.27,
 #. * in most cases you should not change it.
 #.
-#: js/ui/calendar.js:425
+#: js/ui/calendar.js:428
 msgid "%OB"
 msgstr "%OB"
 
@@ -1304,173 +1065,168 @@ msgstr "%OB"
 #. * in most cases you should not use the old "%B" here unless you
 #. * absolutely know what you are doing.
 #.
-#: js/ui/calendar.js:435
+#: js/ui/calendar.js:438
 msgid "%OB %Y"
 msgstr "%Y年%OB"
 
-#: js/ui/calendar.js:505
+#: js/ui/calendar.js:500
 msgid "Previous month"
 msgstr "上個月"
 
-#: js/ui/calendar.js:523
+#: js/ui/calendar.js:518
 msgid "Next month"
 msgstr "下個月"
 
-#: js/ui/calendar.js:675
+#: js/ui/calendar.js:669
 #, no-javascript-format
 msgctxt "date day number format"
 msgid "%d"
 msgstr "%d"
 
-#: js/ui/calendar.js:734
+#: js/ui/calendar.js:728
 msgid "Week %V"
 msgstr "第 %V 週"
 
-#: js/ui/calendar.js:787
+#: js/ui/calendar.js:920
 msgid "No Notifications"
 msgstr "沒有通知"
 
-#: js/ui/calendar.js:828
+#: js/ui/calendar.js:976
+msgid "Do Not Disturb"
+msgstr "不要打擾"
+
+#: js/ui/calendar.js:997
 msgid "Clear"
 msgstr "清除"
 
-#: js/ui/calendar.js:832
+#: js/ui/calendar.js:1001
 msgctxt "action"
 msgid "Clear all notifications"
 msgstr "清除所有的通知"
 
 #. Translators: %s is an application name
-#: js/ui/closeDialog.js:40
+#: js/ui/closeDialog.js:44
 #, javascript-format
-msgid "“%s” Is Not Responding"
-msgstr "《%s》沒有回應"
+msgid "“%s” is not responding."
+msgstr "《%s》沒有回應。"
 
-#: js/ui/closeDialog.js:41
+#: js/ui/closeDialog.js:45
 msgid ""
 "You may choose to wait a short while for it to continue or force the app to "
-"quit entirely"
-msgstr "您可以選擇等待讓程式繼續執行，或強制它立即退出"
+"quit entirely."
+msgstr "您可以選擇等待讓程式繼續執行，或強制它立即退出。"
 
-#: js/ui/closeDialog.js:69
+#: js/ui/closeDialog.js:73
 msgid "Force Quit"
 msgstr "強制退出"
 
-#: js/ui/closeDialog.js:74
+#: js/ui/closeDialog.js:78
 msgid "Wait"
 msgstr "等待"
 
-#: js/ui/components/automountManager.js:82
+#: js/ui/components/automountManager.js:84
 msgid "External drive connected"
 msgstr "外部裝置已連接"
 
-#: js/ui/components/automountManager.js:94
+#: js/ui/components/automountManager.js:96
 msgid "External drive disconnected"
 msgstr "外部裝置已拔除"
 
-#: js/ui/components/automountManager.js:208
+#: js/ui/components/automountManager.js:210
 msgid "Unable to unlock volume"
 msgstr "無法解鎖磁碟區"
 
-#: js/ui/components/automountManager.js:209
+#: js/ui/components/automountManager.js:211
 msgid "The installed udisks version does not support the PIM setting"
 msgstr "系統所安裝的《udisks》版本無法設定 PIM"
 
-#. Translators: %s is the name of a partition on a external drive
-#: js/ui/components/autorunManager.js:189
-#, javascript-format
-msgid "“%s” connected"
-msgstr "「%s」已連接"
-
-#: js/ui/components/autorunManager.js:190
-msgid "Disk can now be used"
-msgstr "磁碟現在可以使用"
-
-#: js/ui/components/autorunManager.js:202
+#: js/ui/components/autorunManager.js:200
 #, javascript-format
 msgid "Open with %s"
 msgstr "使用《%s》開啟"
 
-#: js/ui/components/networkAgent.js:96
+#: js/ui/components/networkAgent.js:97
 msgid ""
-"Alternatively you can connect by pushing the “WPS” button on your router"
-msgstr "您也可以按下路由器的「WPS」按鈕來連接"
+"Alternatively you can connect by pushing the “WPS” button on your router."
+msgstr "您也可以按下路由器的「WPS」按鈕來連接。"
 
-#: js/ui/components/networkAgent.js:108 js/ui/status/bluetooth.js:246
+#: js/ui/components/networkAgent.js:109 js/ui/status/bluetooth.js:246
 #: js/ui/status/network.js:360 js/ui/status/network.js:444
 msgid "Connect"
 msgstr "連接"
 
-#: js/ui/components/networkAgent.js:223
+#: js/ui/components/networkAgent.js:224
 msgid "Key"
 msgstr "金鑰"
 
-#: js/ui/components/networkAgent.js:274 js/ui/components/networkAgent.js:313
+#: js/ui/components/networkAgent.js:275 js/ui/components/networkAgent.js:314
 msgid "Private key password"
 msgstr "私密金鑰密碼"
 
-#: js/ui/components/networkAgent.js:307
+#: js/ui/components/networkAgent.js:308
 msgid "Identity"
 msgstr "身份識別"
 
-#: js/ui/components/networkAgent.js:333
+#: js/ui/components/networkAgent.js:334
 msgid "Service"
 msgstr "服務"
 
-#: js/ui/components/networkAgent.js:371 js/ui/components/networkAgent.js:407
-#: js/ui/components/networkAgent.js:744 js/ui/components/networkAgent.js:765
+#: js/ui/components/networkAgent.js:372 js/ui/components/networkAgent.js:408
+#: js/ui/components/networkAgent.js:745 js/ui/components/networkAgent.js:766
 msgid "Authentication required"
 msgstr "需要核對身分"
 
-#: js/ui/components/networkAgent.js:372 js/ui/components/networkAgent.js:745
+#: js/ui/components/networkAgent.js:373 js/ui/components/networkAgent.js:746
 #, javascript-format
 msgid ""
-"Passwords or encryption keys are required to access the wireless network “%s”"
-msgstr "需要密碼或加密金鑰才能存取無線網路「%s」"
+"Passwords or encryption keys are required to access the wireless network "
+"“%s”."
+msgstr "需要密碼或加密金鑰才能存取無線網路「%s」。"
 
-#: js/ui/components/networkAgent.js:376 js/ui/components/networkAgent.js:749
+#: js/ui/components/networkAgent.js:377 js/ui/components/networkAgent.js:750
 msgid "Wired 802.1X authentication"
 msgstr "有線 802.1X 驗證"
 
-#: js/ui/components/networkAgent.js:379
+#: js/ui/components/networkAgent.js:380
 msgid "Network name"
 msgstr "網路名稱"
 
-#: js/ui/components/networkAgent.js:387 js/ui/components/networkAgent.js:753
+#: js/ui/components/networkAgent.js:388 js/ui/components/networkAgent.js:754
 msgid "DSL authentication"
 msgstr "DSL 驗證"
 
-#: js/ui/components/networkAgent.js:394 js/ui/components/networkAgent.js:758
+#: js/ui/components/networkAgent.js:395 js/ui/components/networkAgent.js:759
 msgid "PIN code required"
 msgstr "需要 PIN 碼"
 
-#: js/ui/components/networkAgent.js:395 js/ui/components/networkAgent.js:759
+#: js/ui/components/networkAgent.js:396 js/ui/components/networkAgent.js:760
 msgid "PIN code is needed for the mobile broadband device"
 msgstr "行動寬頻裝置要求輸入 PIN 碼"
 
-#: js/ui/components/networkAgent.js:397
+#: js/ui/components/networkAgent.js:398
 msgid "PIN"
 msgstr "PIN 碼"
 
-#: js/ui/components/networkAgent.js:408 js/ui/components/networkAgent.js:750
-#: js/ui/components/networkAgent.js:754 js/ui/components/networkAgent.js:766
-#: js/ui/components/networkAgent.js:770
+#: js/ui/components/networkAgent.js:409 js/ui/components/networkAgent.js:751
+#: js/ui/components/networkAgent.js:755 js/ui/components/networkAgent.js:767
+#: js/ui/components/networkAgent.js:771
 #, javascript-format
-msgid "A password is required to connect to “%s”"
-msgstr "需要密碼才能連接「%s」"
+msgid "A password is required to connect to “%s”."
+msgstr "需要密碼才能連接「%s」。"
 
-#: js/ui/components/networkAgent.js:769
+#: js/ui/components/networkAgent.js:770
 msgid "VPN password"
 msgstr "VPN 密碼"
 
-#: js/ui/components/polkitAgent.js:44
+#: js/ui/components/polkitAgent.js:46
 msgid "Authentication Required"
 msgstr "需要核對身分"
 
-#: js/ui/components/polkitAgent.js:84
+#: js/ui/components/polkitAgent.js:86
 msgid "Administrator"
 msgstr "管理員"
 
-#: js/ui/components/polkitAgent.js:149
+#: js/ui/components/polkitAgent.js:151
 msgid "Authenticate"
 msgstr "驗證"
 
@@ -1478,21 +1234,21 @@ msgstr "驗證"
 #. * requested authentication was not gained; this can happen
 #. * because of an authentication error (like invalid password),
 #. * for instance.
-#: js/ui/components/polkitAgent.js:263 js/ui/shellMountOperation.js:415
+#: js/ui/components/polkitAgent.js:265 js/ui/shellMountOperation.js:417
 msgid "Sorry, that didn’t work. Please try again."
 msgstr "抱歉，那沒有作用。請再試一次。"
 
-#: js/ui/ctrlAltTab.js:23 js/ui/overviewControls.js:407
+#: js/ui/ctrlAltTab.js:25 js/ui/overviewControls.js:418
 msgid "Windows"
 msgstr "視窗"
 
-#: js/ui/dash.js:201 js/ui/dash.js:247
+#: js/ui/dash.js:206 js/ui/dash.js:252
 msgid "Show Apps"
 msgstr "顯示程式"
 
 #. Translators: this is the name of the dock/favorites area on
 #. the bottom of the overview
-#: js/ui/dash.js:405
+#: js/ui/dash.js:410
 msgid "Dash"
 msgstr "Dash"
 
@@ -1501,7 +1257,7 @@ msgstr "Dash"
 #. * "Tue 9:29 AM").  The string itself should become a full date, e.g.,
 #. * "February 17 2015".
 #.
-#: js/ui/dateMenu.js:99
+#: js/ui/dateMenu.js:101
 msgid "%B %-d %Y"
 msgstr "%Y年%-m月%-d日"
 
@@ -1509,34 +1265,34 @@ msgstr "%Y年%-m月%-d日"
 #. * below the time in the shell; it should combine the weekday and the
 #. * date, e.g. "Tuesday February 17 2015".
 #.
-#: js/ui/dateMenu.js:106
+#: js/ui/dateMenu.js:108
 msgid "%A %B %e %Y"
 msgstr "%Y年%-m月%-d日 %A"
 
 #. Translators: Shown on calendar heading when selected day occurs on current year
-#: js/ui/dateMenu.js:173
+#: js/ui/dateMenu.js:174
 msgctxt "calendar heading"
 msgid "%B %-d"
 msgstr "%-m月%-d日"
 
 #. Translators: Shown on calendar heading when selected day occurs on different year
-#: js/ui/dateMenu.js:176
+#: js/ui/dateMenu.js:177
 msgctxt "calendar heading"
 msgid "%B %-d %Y"
 msgstr "%Y年%-m月%-d日"
 
-#: js/ui/dateMenu.js:182
+#: js/ui/dateMenu.js:183
 msgid "Today"
 msgstr "今天"
 
-#: js/ui/dateMenu.js:186
+#: js/ui/dateMenu.js:187
 msgid "Tomorrow"
 msgstr "明天"
 
 #. Translators: Shown in calendar event list for all day events
 #. * Keep it short, best if you can use less then 10 characters
 #.
-#: js/ui/dateMenu.js:217
+#: js/ui/dateMenu.js:218
 msgctxt "event list time"
 msgid "All Day"
 msgstr "全天"
@@ -1544,19 +1300,19 @@ msgstr "全天"
 #. Translators: Shown in calendar event list as the start/end of events
 #. * that only show day and month
 #.
-#: js/ui/dateMenu.js:239
+#: js/ui/dateMenu.js:240
 msgid "%m/%d"
 msgstr "%m/%d"
 
-#: js/ui/dateMenu.js:290
+#: js/ui/dateMenu.js:291
 msgid "No Events"
 msgstr "沒有行程"
 
-#: js/ui/dateMenu.js:412
-msgid "Add World Clocks…"
+#: js/ui/dateMenu.js:413
+msgid "Add world clocks…"
 msgstr "加入世界時鐘…"
 
-#: js/ui/dateMenu.js:413
+#: js/ui/dateMenu.js:414
 msgid "World Clocks"
 msgstr "世界時鐘"
 
@@ -1565,124 +1321,124 @@ msgid "Loading…"
 msgstr "正在載入…"
 
 #: js/ui/dateMenu.js:714
-msgid "Go Online for Weather Information"
-msgstr "連上網路取得天氣資訊"
+msgid "Go online for weather information"
+msgstr "連接網路以取得天氣資訊"
 
 #: js/ui/dateMenu.js:716
-msgid "Weather Information Unavailable"
-msgstr "無法取得天氣資訊"
+msgid "Weather information is currently unavailable"
+msgstr "目前無法使用天氣資訊"
 
 #: js/ui/dateMenu.js:726
 msgid "Weather"
 msgstr "天氣"
 
 #: js/ui/dateMenu.js:728
-msgid "Select Weather Location…"
-msgstr "選取天氣位置…"
+msgid "Select weather location…"
+msgstr "選擇天氣位置…"
 
-#: js/ui/endSessionDialog.js:47
+#: js/ui/endSessionDialog.js:48
 #, javascript-format
 msgctxt "title"
 msgid "Log Out %s"
 msgstr "登出「%s」"
 
-#: js/ui/endSessionDialog.js:48
+#: js/ui/endSessionDialog.js:49
 msgctxt "title"
 msgid "Log Out"
 msgstr "登出"
 
-#: js/ui/endSessionDialog.js:51
+#: js/ui/endSessionDialog.js:52
 #, javascript-format
-msgid "%s will be logged out automatically in %d second"
-msgid_plural "%s will be logged out automatically in %d seconds"
-msgstr[0] "%s 會在 %d 秒後自動登出"
+msgid "%s will be logged out automatically in %d second."
+msgid_plural "%s will be logged out automatically in %d seconds."
+msgstr[0] "「%s」會在 %d 秒後自動登出。"
 
-#: js/ui/endSessionDialog.js:57
+#: js/ui/endSessionDialog.js:58
 #, javascript-format
-msgid "You will be logged out automatically in %d second"
-msgid_plural "You will be logged out automatically in %d seconds"
-msgstr[0] "您會在 %d 秒後自動登出"
+msgid "You will be logged out automatically in %d second."
+msgid_plural "You will be logged out automatically in %d seconds."
+msgstr[0] "您會在 %d 秒後自動登出。"
 
-#: js/ui/endSessionDialog.js:64
+#: js/ui/endSessionDialog.js:65
 msgctxt "button"
 msgid "Log Out"
 msgstr "登出"
 
-#: js/ui/endSessionDialog.js:70 js/ui/status/system.js:181
+#: js/ui/endSessionDialog.js:71 js/ui/status/system.js:176
 msgctxt "title"
 msgid "Power Off"
 msgstr "關閉電源"
 
-#: js/ui/endSessionDialog.js:71
+#: js/ui/endSessionDialog.js:72
 msgctxt "title"
 msgid "Install Updates & Power Off"
 msgstr "安裝更新並關閉電源"
 
-#: js/ui/endSessionDialog.js:74
+#: js/ui/endSessionDialog.js:75
 #, javascript-format
-msgid "The system will power off automatically in %d second"
-msgid_plural "The system will power off automatically in %d seconds"
-msgstr[0] "系統會在 %d 秒後關閉電源"
+msgid "The system will power off automatically in %d second."
+msgid_plural "The system will power off automatically in %d seconds."
+msgstr[0] "系統會在 %d 秒後關閉電源。"
 
-#: js/ui/endSessionDialog.js:78 js/ui/endSessionDialog.js:97
+#: js/ui/endSessionDialog.js:79 js/ui/endSessionDialog.js:98
 msgctxt "checkbox"
 msgid "Install pending software updates"
 msgstr "安裝擱置的軟體更新"
 
-#: js/ui/endSessionDialog.js:82
+#: js/ui/endSessionDialog.js:83
 msgctxt "button"
 msgid "Power Off"
 msgstr "關閉電源"
 
-#: js/ui/endSessionDialog.js:89
+#: js/ui/endSessionDialog.js:90
 msgctxt "title"
 msgid "Restart"
 msgstr "重新啟動"
 
-#: js/ui/endSessionDialog.js:90
+#: js/ui/endSessionDialog.js:91
 msgctxt "title"
 msgid "Install Updates & Restart"
 msgstr "安裝更新並重新啟動"
 
-#: js/ui/endSessionDialog.js:93
+#: js/ui/endSessionDialog.js:94
 #, javascript-format
-msgid "The system will restart automatically in %d second"
-msgid_plural "The system will restart automatically in %d seconds"
-msgstr[0] "系統會在 %d 秒後重新啟動"
+msgid "The system will restart automatically in %d second."
+msgid_plural "The system will restart automatically in %d seconds."
+msgstr[0] "系統會在 %d 秒後重新啟動。"
 
-#: js/ui/endSessionDialog.js:101
+#: js/ui/endSessionDialog.js:102
 msgctxt "button"
 msgid "Restart"
 msgstr "重新啟動"
 
-#: js/ui/endSessionDialog.js:109
+#: js/ui/endSessionDialog.js:110
 msgctxt "title"
 msgid "Restart & Install Updates"
 msgstr "重新啟動並安裝更新"
 
-#: js/ui/endSessionDialog.js:112
+#: js/ui/endSessionDialog.js:113
 #, javascript-format
-msgid "The system will automatically restart and install updates in %d second"
+msgid "The system will automatically restart and install updates in %d second."
 msgid_plural ""
-"The system will automatically restart and install updates in %d seconds"
-msgstr[0] "系統會在 %d 秒後重新啟動並安裝更新"
+"The system will automatically restart and install updates in %d seconds."
+msgstr[0] "系統會在 %d 秒後重新啟動並安裝更新。"
 
-#: js/ui/endSessionDialog.js:119 js/ui/endSessionDialog.js:140
+#: js/ui/endSessionDialog.js:120 js/ui/endSessionDialog.js:141
 msgctxt "button"
 msgid "Restart & Install"
-msgstr "重新啟動並安裝"
-
-#: js/ui/endSessionDialog.js:121
-msgctxt "button"
-msgid "Install & Power Off"
-msgstr "安裝並關機"
+msgstr "重新啟動 & 安裝"
 
 #: js/ui/endSessionDialog.js:122
+msgctxt "button"
+msgid "Install & Power Off"
+msgstr "安裝 & 關機"
+
+#: js/ui/endSessionDialog.js:123
 msgctxt "checkbox"
 msgid "Power off after updates are installed"
 msgstr "安裝完更新後關機"
 
-#: js/ui/endSessionDialog.js:129
+#: js/ui/endSessionDialog.js:130
 msgctxt "title"
 msgid "Restart & Install Upgrade"
 msgstr "重新啟動並升級系統"
@@ -1690,7 +1446,7 @@ msgstr "重新啟動並升級系統"
 #. Translators: This is the text displayed for system upgrades in the
 #. shut down dialog. First %s gets replaced with the distro name and
 #. second %s with the distro version to upgrade to
-#: js/ui/endSessionDialog.js:134
+#: js/ui/endSessionDialog.js:135
 #, javascript-format
 msgid ""
 "%s %s will be installed after restart. Upgrade installation can take a long "
@@ -1699,44 +1455,44 @@ msgstr ""
 "重新啟動後便會開始升級 %s %s。升級過程會花上一段時間：請確保已將電腦完成備份"
 "並接上交流電源。"
 
-#: js/ui/endSessionDialog.js:283
-msgid "Low battery power: please plug in before installing updates"
-msgstr "低電量：請於安裝更新前接上電源"
+#: js/ui/endSessionDialog.js:284
+msgid "Low battery power: please plug in before installing updates."
+msgstr "低電量：請於安裝更新前接上交流電源。"
 
-#: js/ui/endSessionDialog.js:292
+#: js/ui/endSessionDialog.js:293
 msgid "Some applications are busy or have unsaved work"
 msgstr "仍有應用程式處於忙碌狀態或有工作尚未儲存"
 
-#: js/ui/endSessionDialog.js:297
+#: js/ui/endSessionDialog.js:298
 msgid "Other users are logged in"
 msgstr "已有其他登入的使用者"
 
-#: js/ui/endSessionDialog.js:467
+#: js/ui/endSessionDialog.js:468
 msgctxt "button"
 msgid "Boot Options"
 msgstr "開機選項"
 
 #. Translators: Remote here refers to a remote session, like a ssh login
-#: js/ui/endSessionDialog.js:672
+#: js/ui/endSessionDialog.js:673
 #, javascript-format
 msgid "%s (remote)"
 msgstr "%s（遠端）"
 
 #. Translators: Console here refers to a tty like a VT console
-#: js/ui/endSessionDialog.js:675
+#: js/ui/endSessionDialog.js:676
 #, javascript-format
 msgid "%s (console)"
 msgstr "%s（主控臺）"
 
-#: js/ui/extensionDownloader.js:280
+#: js/ui/extensionDownloader.js:282
 msgid "Install"
 msgstr "安裝"
 
-#: js/ui/extensionDownloader.js:286
+#: js/ui/extensionDownloader.js:288
 msgid "Install Extension"
 msgstr "安裝擴充套件"
 
-#: js/ui/extensionDownloader.js:287
+#: js/ui/extensionDownloader.js:289
 #, javascript-format
 msgid "Download and install “%s” from extensions.gnome.org?"
 msgstr "是否自 extensions.gnome.org 下載並安裝「%s」？"
@@ -1746,8 +1502,8 @@ msgid "Extension Updates Available"
 msgstr "擴充套件已有更新"
 
 #: js/ui/extensionSystem.js:355
-msgid "Extension updates are ready to be installed"
-msgstr "擴充套件更新已準備好安裝"
+msgid "Extension updates are ready to be installed."
+msgstr "擴充套件更新已準備好安裝。"
 
 #: js/ui/inhibitShortcutsDialog.js:70
 msgid "Allow inhibiting shortcuts"
@@ -1766,8 +1522,8 @@ msgstr "程式請求暫時停用快捷鍵"
 #. Translators: %s is a keyboard shortcut like "Super+x"
 #: js/ui/inhibitShortcutsDialog.js:81
 #, javascript-format
-msgid "You can restore shortcuts by pressing %s"
-msgstr "您可以按下 %s 鍵來還原快捷鍵"
+msgid "You can restore shortcuts by pressing %s."
+msgstr "您可以按下 %s 鍵來還原快捷鍵。"
 
 #: js/ui/kbdA11yDialog.js:34
 msgid "Slow Keys Turned On"
@@ -1826,77 +1582,81 @@ msgstr "關閉"
 msgid "Leave Off"
 msgstr "保持關閉"
 
-#: js/ui/keyboard.js:179 js/ui/status/keyboard.js:882
+#: js/ui/keyboard.js:181 js/ui/status/keyboard.js:899
 msgid "Keyboard Settings"
 msgstr "鍵盤設定值"
 
-#: js/ui/lookingGlass.js:737
+#: js/ui/lookingGlass.js:724
 msgid "No extensions installed"
 msgstr "沒有已安裝的擴充套件"
 
 #. Translators: argument is an extension UUID.
-#: js/ui/lookingGlass.js:800
+#: js/ui/lookingGlass.js:785
 #, javascript-format
-msgid "%s has not emitted any errors"
-msgstr "%s 沒有發出任何錯誤"
+msgid "%s has not emitted any errors."
+msgstr "%s 沒有發出任何錯誤。"
 
-#: js/ui/lookingGlass.js:806
+#: js/ui/lookingGlass.js:791
 msgid "Hide Errors"
 msgstr "隱藏錯誤"
 
-#: js/ui/lookingGlass.js:810 js/ui/lookingGlass.js:890
+#: js/ui/lookingGlass.js:795 js/ui/lookingGlass.js:872
 msgid "Show Errors"
 msgstr "顯示錯誤"
 
-#: js/ui/lookingGlass.js:819
+#: js/ui/lookingGlass.js:804
 msgid "Active"
 msgstr "使用中"
 
-#: js/ui/lookingGlass.js:822
+#: js/ui/lookingGlass.js:807
 msgid "Inactive"
 msgstr "不使用"
 
-#: js/ui/lookingGlass.js:824
+#: js/ui/lookingGlass.js:809
 msgid "Error"
 msgstr "錯誤"
 
-#: js/ui/lookingGlass.js:826
+#: js/ui/lookingGlass.js:811
 msgid "Out of date"
 msgstr "過時的"
 
-#: js/ui/lookingGlass.js:828
+#: js/ui/lookingGlass.js:813
 msgid "Downloading"
 msgstr "正在下載"
 
-#: js/ui/lookingGlass.js:830
+#: js/ui/lookingGlass.js:815
 msgid "Deactivating"
 msgstr "正在停用"
 
-#: js/ui/lookingGlass.js:832
+#: js/ui/lookingGlass.js:817
 msgid "Activating"
 msgstr "正在啟動"
 
-#: js/ui/lookingGlass.js:868
+#: js/ui/lookingGlass.js:850
 msgid "View Source"
 msgstr "檢示來源"
 
-#: js/ui/lookingGlass.js:879
+#: js/ui/lookingGlass.js:861
 msgid "Web Page"
 msgstr "網頁"
 
-#: js/ui/main.js:300
+#: js/ui/main.js:279
 msgid "System was put in unsafe mode"
 msgstr "系統曾處於不安全模式"
 
-#: js/ui/main.js:301
+#: js/ui/main.js:280
 msgid "Apps now have unrestricted access"
 msgstr "程式可以不受限制的存取"
 
-#: js/ui/main.js:363
+#: js/ui/main.js:283 js/ui/overview.js:54
+msgid "Undo"
+msgstr "還原"
+
+#: js/ui/main.js:340
 msgid "Logged in as a privileged user"
 msgstr "以超級使用者身份登入"
 
-#: js/ui/main.js:364
+#: js/ui/main.js:341
 msgid ""
 "Running a session as a privileged user should be avoided for security "
 "reasons. If possible, you should log in as a normal user."
@@ -1904,372 +1664,393 @@ msgstr ""
 "基於安全考量，應避免以超級使用者身份執行作業階段；允許的情況下請以一般使用者"
 "身份登入。"
 
-#: js/ui/main.js:410
+#: js/ui/main.js:389
 msgid "Screen Lock disabled"
 msgstr "已停用鎖定螢幕"
 
-#: js/ui/main.js:411
-msgid "Screen Locking requires the GNOME display manager"
-msgstr "鎖定螢幕需使用《GNOME 顯示管理器》"
+#: js/ui/main.js:390
+msgid "Screen Locking requires the GNOME display manager."
+msgstr "鎖定螢幕需使用《GNOME 顯示管理器》。"
 
 #. Translators: this is the string displayed in the header when a message
 #. source doesn't have a name
-#: js/ui/messageList.js:403
+#: js/ui/messageList.js:400
 msgid "Unknown App"
-msgstr "未知的應用程式"
+msgstr "不明程式"
 
-#: js/ui/messageTray.js:325 js/ui/messageTray.js:327
+#: js/ui/messageTray.js:328 js/ui/messageTray.js:330
 msgid "Notification sound"
 msgstr "通知音效"
 
-#: js/ui/mpris.js:144
+#: js/ui/mpris.js:198
 msgid "Unknown artist"
-msgstr "未知的演出者"
+msgstr "不明演出者"
 
-#: js/ui/mpris.js:154
+#: js/ui/mpris.js:208
 msgid "Unknown title"
-msgstr "未知的歌曲"
+msgstr "不明歌曲"
 
 #. Translators: this is the text displayed
 #. in the search entry when no search is
 #. active; it should not exceed ~30
 #. characters.
-#: js/ui/overviewControls.js:330
+#: js/ui/overviewControls.js:342
 msgid "Type to search"
 msgstr "輸入以搜尋"
 
-#: js/ui/overviewControls.js:395
+#: js/ui/overviewControls.js:406
 msgid "Apps"
-msgstr "應用程式"
+msgstr "程式"
 
 #. Translators: This is the main view to select
 #. activities. See also note for "Activities" string.
-#: js/ui/overview.js:33
+#: js/ui/overview.js:67
 msgid "Overview"
 msgstr "概覽"
 
-#: js/ui/padOsd.js:98
+#: js/ui/padOsd.js:100
 msgid "New shortcut…"
 msgstr "輸入新快捷鍵…"
 
-#: js/ui/padOsd.js:151
+#: js/ui/padOsd.js:153
 msgid "App defined"
 msgstr "程式定義"
 
-#: js/ui/padOsd.js:152
+#: js/ui/padOsd.js:154
 msgid "Show on-screen help"
 msgstr "在螢幕上顯示按鍵功能"
 
-#: js/ui/padOsd.js:153
+#: js/ui/padOsd.js:155
 msgid "Switch monitor"
 msgstr "切換顯示器"
 
-#: js/ui/padOsd.js:154
+#: js/ui/padOsd.js:156
 msgid "Assign keystroke"
 msgstr "指定的鍵盤按鍵"
 
-#: js/ui/padOsd.js:223
+#: js/ui/padOsd.js:225
 msgid "Done"
 msgstr "完成"
 
-#: js/ui/padOsd.js:743
+#: js/ui/padOsd.js:728
 msgid "Edit…"
 msgstr "編輯…"
 
-#: js/ui/padOsd.js:791
+#: js/ui/padOsd.js:775
 msgid "None"
 msgstr "無"
 
-#: js/ui/padOsd.js:868
+#: js/ui/padOsd.js:846
 msgid "Press a button to configure"
 msgstr "按下個別按鍵進行設定"
 
-#: js/ui/padOsd.js:869
+#: js/ui/padOsd.js:847
 msgid "Press Esc to exit"
 msgstr "按下 Esc 鍵離開"
 
-#: js/ui/padOsd.js:872
+#: js/ui/padOsd.js:850
 msgid "Press any key to exit"
 msgstr "按下任意鍵離開"
 
 #. Translators: If there is no suitable word for "Activities"
 #. in your language, you can use the word for "Overview".
-#: js/ui/panel.js:208
+#: js/ui/panel.js:425
 msgid "Activities"
 msgstr "概覽"
 
-#: js/ui/panel.js:290
+#: js/ui/panel.js:506
 msgctxt "System menu in the top bar"
 msgid "System"
 msgstr "系統"
 
-#: js/ui/panel.js:471
+#: js/ui/panel.js:680
 msgid "Top Bar"
 msgstr "頂端列"
 
-#: js/ui/quickSettings.js:164 js/ui/quickSettings.js:263
+#: js/ui/quickSettings.js:187
 msgid "Open menu"
 msgstr "開啟選單"
 
-#: js/ui/runDialog.js:61
+#: js/ui/runDialog.js:63
 msgid "Run a Command"
 msgstr "執行命令"
 
-#: js/ui/runDialog.js:79
+#: js/ui/runDialog.js:78
 msgid "Press ESC to close"
 msgstr "按下 ESC 鍵關閉"
 
-#: js/ui/screenShield.js:220
+#: js/ui/runDialog.js:243
+msgid "Restart is not available on Wayland"
+msgstr "使用《Wayland》時無法重新啟動"
+
+#: js/ui/runDialog.js:248
+msgid "Restarting…"
+msgstr "重新啟動…"
+
+#: js/ui/screenShield.js:235
 msgid "GNOME needs to lock the screen"
 msgstr "《GNOME》需將螢幕鎖定"
 
-#. Translators: notification source name for screenshots and recordings.
-#: js/ui/screenshot.js:40
-msgid "Screen Capture"
-msgstr "擷取螢幕畫面"
+#: js/ui/screenShield.js:276 js/ui/screenShield.js:669
+msgid "Unable to lock"
+msgstr "無法鎖定"
 
-#: js/ui/screenshot.js:1268
+#: js/ui/screenShield.js:277 js/ui/screenShield.js:670
+msgid "Lock was blocked by an app"
+msgstr "鎖定的動作遭程式阻擋"
+
+#: js/ui/screenshot.js:1254
 msgid "Selection"
 msgstr "選取"
 
-#: js/ui/screenshot.js:1278
+#: js/ui/screenshot.js:1264
 msgid "Area Selection"
 msgstr "擷取所選的範圍"
 
-#: js/ui/screenshot.js:1283
+#: js/ui/screenshot.js:1269
 msgid "Screen"
 msgstr "螢幕"
 
-#: js/ui/screenshot.js:1293
+#: js/ui/screenshot.js:1279
 msgid "Screen Selection"
 msgstr "擷取整個螢幕"
 
-#: js/ui/screenshot.js:1298
+#: js/ui/screenshot.js:1284
 msgid "Window"
 msgstr "視窗"
 
-#: js/ui/screenshot.js:1308
+#: js/ui/screenshot.js:1294
 msgid "Window Selection"
 msgstr "擷取視窗"
 
-#: js/ui/screenshot.js:1333 js/ui/status/system.js:118
+#. Translators: entry in the window right click menu.
+#: js/ui/screenshot.js:1319 js/ui/status/system.js:113 js/ui/windowMenu.js:30
 msgid "Take Screenshot"
-msgstr "擷取螢幕畫面"
+msgstr "擷取視窗快照"
 
-#: js/ui/screenshot.js:1349
+#: js/ui/screenshot.js:1335
 msgid "Record Screen"
 msgstr "錄製螢幕"
 
 #. Translators: since this string refers to an action,
 #. it needs to be phrased as a verb.
-#: js/ui/screenshot.js:1366
+#: js/ui/screenshot.js:1352
 msgid "Capture"
 msgstr "擷取"
 
-#: js/ui/screenshot.js:1388
+#: js/ui/screenshot.js:1374
 msgid "Show Pointer"
 msgstr "顯示滑鼠指標"
 
 #. Translators: this is the folder where recorded
 #. screencasts are stored.
-#: js/ui/screenshot.js:2021
+#: js/ui/screenshot.js:1998
 msgid "Screencasts"
 msgstr "螢幕錄影"
 
 #. Translators: this is a filename used for screencast
 #. * recording, where "%d" and "%t" date and time, e.g.
-#. * "Screencast From 07-17-2013 10:00:46 PM"
-#: js/ui/screenshot.js:2026
+#. * "Screencast from 07-17-2013 10:00:46 PM"
+#: js/ui/screenshot.js:2003
 #, no-c-format
-msgid "Screencast From %d %t"
+msgid "Screencast from %d %t"
 msgstr "螢幕錄影 %d %t"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2072
+#: js/ui/screenshot.js:2049
 msgid "Screencast recorded"
 msgstr "已錄製螢幕錄影"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2085
+#: js/ui/screenshot.js:2062
 msgid "Screencast failed to start"
 msgstr "螢幕錄影無法啟動"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2091
+#: js/ui/screenshot.js:2068
 msgid "Screencast ended: Out of disk space"
 msgstr "螢幕錄影中止：磁碟空間不足"
 
 #. We can encourage user to try again on service crashes since the
 #. recorder will auto-blocklist the pipeline that crashed.
 #. Translators: notification title.
-#: js/ui/screenshot.js:2097
+#: js/ui/screenshot.js:2074
 msgid "Screencast ended unexpectedly, please try again"
 msgstr "螢幕錄影未預期的結束，請再試一次"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2100
+#: js/ui/screenshot.js:2077
 msgid "Screencast ended unexpectedly"
 msgstr "螢幕錄影未預期的結束"
 
+#. Translators: notification source name.
+#: js/ui/screenshot.js:2087 js/ui/screenshot.js:2329
+msgid "Screenshot"
+msgstr "螢幕快照"
+
 #. Translators: notification body when a screencast was recorded.
-#: js/ui/screenshot.js:2113
-msgid "Click here to view the video"
-msgstr "點擊此處檢視影片"
+#: js/ui/screenshot.js:2094
+msgid "Click here to view the video."
+msgstr "點擊此處檢視影片。"
 
 #. Translators: button on the screencast notification.
 #. Translators: button on the screenshot notification.
-#: js/ui/screenshot.js:2121 js/ui/screenshot.js:2364
+#: js/ui/screenshot.js:2102 js/ui/screenshot.js:2345
 msgid "Show in Files"
 msgstr "使用《檔案》開啟"
 
 #. Translators: this is the name of the file that the screenshot is
 #. saved to. The placeholder is a timestamp, e.g. "2017-05-21 12-24-03".
-#: js/ui/screenshot.js:2310
+#: js/ui/screenshot.js:2289
 #, javascript-format
-msgid "Screenshot From %s"
+msgid "Screenshot from %s"
 msgstr "螢幕快照 %s"
 
 #. Translators: notification title.
-#: js/ui/screenshot.js:2354
+#: js/ui/screenshot.js:2335
 msgid "Screenshot captured"
-msgstr "已擷取螢幕畫面"
+msgstr "已擷取螢幕快照"
 
 #. Translators: notification body when a screenshot was captured.
-#: js/ui/screenshot.js:2356
-msgid "You can paste the image from the clipboard"
-msgstr "您可以自剪貼簿中貼上螢幕快照"
+#: js/ui/screenshot.js:2337
+msgid "You can paste the image from the clipboard."
+msgstr "您可以自剪貼簿中貼上螢幕快照。"
 
-#: js/ui/screenshot.js:2414 js/ui/screenshot.js:2576
+#: js/ui/screenshot.js:2393 js/ui/screenshot.js:2557
 msgid "Screenshot taken"
-msgstr "已擷取螢幕畫面"
+msgstr "已擷取螢幕快照"
 
-#: js/ui/search.js:847
-msgid "Searching"
-msgstr "正在搜尋"
+#: js/ui/search.js:831
+msgid "Searching…"
+msgstr "正在搜尋…"
 
-#: js/ui/search.js:850
-msgid "No results"
-msgstr "沒有結果"
+#: js/ui/search.js:833
+msgid "No results."
+msgstr "沒有結果。"
 
-#: js/ui/search.js:985
+#: js/ui/search.js:964
 #, javascript-format
 msgid "%d more"
 msgid_plural "%d more"
 msgstr[0] "其他 %d 項"
 
-#: js/ui/searchController.js:86
+#: js/ui/searchController.js:89
 #: subprojects/extensions-app/data/ui/extensions-window.ui:73
 msgid "Search"
 msgstr "搜尋"
 
-#: js/ui/shellEntry.js:22
+#: js/ui/shellEntry.js:23
 msgid "Copy"
 msgstr "複製"
 
-#: js/ui/shellEntry.js:27
+#: js/ui/shellEntry.js:28
 msgid "Paste"
 msgstr "貼上"
 
-#: js/ui/shellEntry.js:79
+#: js/ui/shellEntry.js:80
 msgid "Show Text"
 msgstr "顯示文字"
 
-#: js/ui/shellEntry.js:81
+#: js/ui/shellEntry.js:82
 msgid "Hide Text"
 msgstr "隱藏文字"
 
-#: js/ui/shellEntry.js:170
-msgid "Caps lock is on"
-msgstr "Caps Lock 已開啟"
+#: js/ui/shellEntry.js:176
+msgid "Caps lock is on."
+msgstr "Caps Lock 已開啟。"
 
-#: js/ui/shellMountOperation.js:286
+#: js/ui/shellMountOperation.js:288
 msgid "Hidden Volume"
 msgstr "隱藏的儲存區"
 
-#: js/ui/shellMountOperation.js:289
+#: js/ui/shellMountOperation.js:291
 msgid "Windows System Volume"
 msgstr "Windows 系統儲存區"
 
-#: js/ui/shellMountOperation.js:292
+#: js/ui/shellMountOperation.js:294
 msgid "Uses Keyfiles"
-msgstr "使用密鑰檔案"
+msgstr "使用密鑰文件"
 
 #. Translators: %s is the Disks application
-#: js/ui/shellMountOperation.js:300
+#: js/ui/shellMountOperation.js:302
 #, javascript-format
 msgid ""
-"To unlock a volume that uses keyfiles, use the <i>%s</i> utility instead"
-msgstr "要解鎖使用密鑰檔案的儲存區，請改用《<i>%s</i>》工具"
+"To unlock a volume that uses keyfiles, use the <i>%s</i> utility instead."
+msgstr "要解鎖使用密鑰文件的儲存區，請改用《%s》工具。"
 
-#: js/ui/shellMountOperation.js:304
+#: js/ui/shellMountOperation.js:306
 msgid ""
 "You need an external utility like <i>Disks</i> to unlock a volume that uses "
-"keyfiles"
-msgstr "您需要像《<i>磁碟</i>》這樣的外部公用程式，來解鎖使用密鑰檔案的儲存區"
+"keyfiles."
+msgstr "您需要 像<i>磁碟</i> 這樣的外部公用程式來解鎖使用金鑰檔案的儲存區。"
 
-#: js/ui/shellMountOperation.js:312
+#: js/ui/shellMountOperation.js:314
 msgid "PIM Number"
 msgstr "PIM 碼"
 
-#: js/ui/shellMountOperation.js:371
+#: js/ui/shellMountOperation.js:373
 msgid "Remember Password"
 msgstr "記住密碼"
 
-#: js/ui/shellMountOperation.js:386
+#: js/ui/shellMountOperation.js:388
 msgid "Unlock"
 msgstr "解鎖"
 
 #. Translators: %s is the Disks application
-#: js/ui/shellMountOperation.js:400
+#: js/ui/shellMountOperation.js:402
 #, javascript-format
 msgid "Open %s"
 msgstr "開啟《%s》"
 
-#: js/ui/shellMountOperation.js:436
-msgid "The PIM must be a number or empty"
-msgstr "PIM 必須是數字或為空白"
+#: js/ui/shellMountOperation.js:438
+msgid "The PIM must be a number or empty."
+msgstr "PIM 必須是數字或為空白。"
 
-#: js/ui/status/accessibility.js:45 js/ui/status/accessibility.js:155
+#: js/ui/status/accessibility.js:36
+msgid "Accessibility"
+msgstr "無障礙功能"
+
+#: js/ui/status/accessibility.js:46
 msgid "High Contrast"
 msgstr "高反差"
 
-#: js/ui/status/accessibility.js:48 js/ui/status/accessibility.js:171
+#: js/ui/status/accessibility.js:49
 msgid "Zoom"
 msgstr "縮放"
 
-#: js/ui/status/accessibility.js:55 js/ui/status/accessibility.js:223
+#: js/ui/status/accessibility.js:56
 msgid "Screen Reader"
 msgstr "螢幕閱讀器"
 
-#: js/ui/status/accessibility.js:59 js/ui/status/accessibility.js:239
+#: js/ui/status/accessibility.js:60
 msgid "Screen Keyboard"
 msgstr "螢幕鍵盤"
 
-#: js/ui/status/accessibility.js:63 js/ui/status/accessibility.js:255
+#: js/ui/status/accessibility.js:64
 msgid "Visual Alerts"
 msgstr "鈴響視覺化"
 
-#: js/ui/status/accessibility.js:67 js/ui/status/accessibility.js:271
+#: js/ui/status/accessibility.js:68
 msgid "Sticky Keys"
 msgstr "相黏按鍵"
 
-#: js/ui/status/accessibility.js:71 js/ui/status/accessibility.js:287
+#: js/ui/status/accessibility.js:72
 msgid "Slow Keys"
 msgstr "遲緩按鍵"
 
-#: js/ui/status/accessibility.js:75 js/ui/status/accessibility.js:303
+#: js/ui/status/accessibility.js:76
 msgid "Bounce Keys"
 msgstr "反彈按鍵"
 
-#: js/ui/status/accessibility.js:79 js/ui/status/accessibility.js:319
+#: js/ui/status/accessibility.js:80
 msgid "Mouse Keys"
 msgstr "滑鼠鍵"
 
-#: js/ui/status/accessibility.js:84
+#: js/ui/status/accessibility.js:85
 msgid "Accessibility Settings"
-msgstr "無障礙設定"
+msgstr "無障礙設定值"
 
-#: js/ui/status/accessibility.js:124 js/ui/status/accessibility.js:187
+#: js/ui/status/accessibility.js:142
 msgid "Large Text"
 msgstr "大型文字"
 
@@ -2288,7 +2069,7 @@ msgstr "已知不需視窗執行的程式"
 
 #: js/ui/status/backgroundApps.js:182
 msgid "App Settings"
-msgstr "應用程式設定"
+msgstr "程式設定值"
 
 #: js/ui/status/backgroundApps.js:239
 msgid "No Background Apps"
@@ -2300,474 +2081,420 @@ msgid "%d Background App"
 msgid_plural "%d Background Apps"
 msgstr[0] "%d 背景程式"
 
-#: js/ui/status/backlight.js:39
+#: js/ui/status/backlight.js:40
 msgid "Keyboard Brightness"
 msgstr "鍵盤亮度"
 
-#: js/ui/status/backlight.js:87
+#: js/ui/status/backlight.js:80
 msgid "Off"
 msgstr "關閉"
 
-#: js/ui/status/backlight.js:88
+#: js/ui/status/backlight.js:81
 msgid "Low"
 msgstr "低"
 
-#: js/ui/status/backlight.js:89
+#: js/ui/status/backlight.js:82
 msgid "High"
 msgstr "高"
 
-#: js/ui/status/backlight.js:162 js/ui/status/keyboard.js:864
+#: js/ui/status/backlight.js:148 js/ui/status/keyboard.js:881
 msgid "Keyboard"
 msgstr "鍵盤"
 
-#: js/ui/status/backlight.js:164
-msgid "Open keyboard brightness menu"
-msgstr "開啟鍵盤亮度選單"
-
 #: js/ui/status/bluetooth.js:246 js/ui/status/network.js:360
 msgid "Disconnect"
-msgstr "中斷"
+msgstr "中斷連接"
 
-#. Translators: %s is a device name like "MyPhone"
-#: js/ui/status/bluetooth.js:267 js/ui/status/network.js:354
-#, javascript-format
-msgid "Disconnect %s"
-msgstr "中斷「%s」連線"
-
-#. Translators: %s is a device name like "MyPhone"
-#: js/ui/status/bluetooth.js:269 js/ui/status/network.js:356
-#, javascript-format
-msgid "Connect to %s"
-msgstr "連線至「%s」"
-
-#: js/ui/status/bluetooth.js:277 js/ui/status/bluetooth.js:281
+#: js/ui/status/bluetooth.js:263 js/ui/status/bluetooth.js:265
 msgid "Bluetooth"
 msgstr "藍牙"
 
-#: js/ui/status/bluetooth.js:278
-msgid "Open Bluetooth menu"
-msgstr "開啟藍牙選單"
-
-#: js/ui/status/bluetooth.js:304 js/ui/status/network.js:1925
+#: js/ui/status/bluetooth.js:288 js/ui/status/network.js:1900
 msgid "Bluetooth Settings"
-msgstr "藍牙設定"
+msgstr "藍牙設定值"
 
-#: js/ui/status/bluetooth.js:351
+#: js/ui/status/bluetooth.js:335
 msgid "No available or connected devices"
-msgstr "沒有可用或連線的裝置"
+msgstr "沒有可用或連接的裝置"
 
-#: js/ui/status/bluetooth.js:352
+#: js/ui/status/bluetooth.js:336
 msgid "Turn on Bluetooth to connect to devices"
-msgstr "開啟藍牙以連線至裝置"
+msgstr "開啟藍牙以連接到裝置"
 
 #. Translators: This is the number of connected bluetooth devices
-#: js/ui/status/bluetooth.js:416
+#: js/ui/status/bluetooth.js:390
 #, javascript-format
 msgid "%d Connected"
 msgid_plural "%d Connected"
-msgstr[0] "已連線 %d 個"
+msgstr[0] "%d 個裝置已連接"
 
-#: js/ui/status/brightness.js:42
-msgid "Open brightness menu"
-msgstr "開啟亮度選單"
+#: js/ui/status/brightness.js:34
+msgid "Brightness"
+msgstr "亮度"
 
 #: js/ui/status/darkMode.js:12
 msgid "Dark Style"
 msgstr "深色模式"
 
-#: js/ui/status/doNotDisturb.js:10
-msgid "Do Not Disturb"
-msgstr "不要打擾"
-
-#: js/ui/status/dwellClick.js:14
+#: js/ui/status/dwellClick.js:15
 msgid "Single Click"
 msgstr "點一下"
 
-#: js/ui/status/dwellClick.js:19
+#: js/ui/status/dwellClick.js:20
 msgid "Double Click"
 msgstr "點兩下"
 
-#: js/ui/status/dwellClick.js:24
+#: js/ui/status/dwellClick.js:25
 msgid "Drag"
 msgstr "拖動"
 
-#: js/ui/status/dwellClick.js:29
+#: js/ui/status/dwellClick.js:30
 msgid "Secondary Click"
 msgstr "次要按鍵"
 
-#: js/ui/status/dwellClick.js:38
+#: js/ui/status/dwellClick.js:39
 msgid "Dwell Click"
 msgstr "替代點擊"
 
-#: js/ui/status/keyboard.js:881
+#: js/ui/status/keyboard.js:898
 msgid "Show Keyboard Layout"
 msgstr "顯示鍵盤配置"
 
-#: js/ui/status/location.js:337
+#: js/ui/status/location.js:339
 msgid "Allow location access"
 msgstr "允許取用位置資訊"
 
 #. Translators: %s is an application name
-#: js/ui/status/location.js:339
+#: js/ui/status/location.js:341
 #, javascript-format
 msgid "The app %s wants to access your location"
 msgstr "《%s》欲取用您的位置資訊"
 
-#: js/ui/status/location.js:349
-msgid "Location access can be changed at any time from the privacy settings"
-msgstr "位置資訊取用權可隨時從隱私設定中更改"
+#: js/ui/status/location.js:351
+msgid "Location access can be changed at any time from the privacy settings."
+msgstr "位置資訊取用權可隨時從隱私設定中更改。"
 
-#: js/ui/status/location.js:357
+#: js/ui/status/location.js:359
 msgid "Deny Access"
 msgstr "禁止存取"
 
-#: js/ui/status/location.js:362
+#: js/ui/status/location.js:364
 msgid "Grant Access"
 msgstr "允許存取"
 
 #: js/ui/status/network.js:62
 msgid "<unknown>"
-msgstr "<未知>"
+msgstr "<不明>"
 
-#: js/ui/status/network.js:1060
+#. Translators: %s is a device name like "MyPhone"
+#: js/ui/status/network.js:354
+#, javascript-format
+msgid "Disconnect %s"
+msgstr "中斷連接%s"
+
+#. Translators: %s is a device name like "MyPhone"
+#: js/ui/status/network.js:356
+#, javascript-format
+msgid "Connect to %s"
+msgstr "連接%s"
+
+#: js/ui/status/network.js:1050
 msgid "Secure"
 msgstr "安全"
 
-#: js/ui/status/network.js:1060
+#: js/ui/status/network.js:1050
 msgid "Not secure"
 msgstr "不安全"
 
-#: js/ui/status/network.js:1061
+#: js/ui/status/network.js:1051
 #, javascript-format
 msgid "Signal strength %s%%"
 msgstr "訊號強度 %s%%"
 
 #. translators: The first placeholder is the network name, the second and indication whether it is secure, and the last the signal strength indication
-#: js/ui/status/network.js:1063
+#: js/ui/status/network.js:1053
 #, javascript-format
 msgid "%s, %s, %s"
 msgstr "%s，%s，%s"
 
 #. Translators: %s is a network identifier
-#: js/ui/status/network.js:1166
+#: js/ui/status/network.js:1155
 #, javascript-format
 msgid "%s Hotspot"
 msgstr "%s熱點"
 
-#: js/ui/status/network.js:1447
+#: js/ui/status/network.js:1426
 #, javascript-format
 msgid "%d connected"
 msgid_plural "%d connected"
-msgstr[0] "已連線 %d 個"
+msgstr[0] "%d 個已連接"
 
-#: js/ui/status/network.js:1545 js/ui/status/network.js:1562
+#: js/ui/status/network.js:1524 js/ui/status/network.js:1540
 msgid "VPN"
 msgstr "VPN 網路"
 
-#: js/ui/status/network.js:1546
-msgid "Open VPN menu"
-msgstr "開啟 VPN 選單"
-
-#: js/ui/status/network.js:1547
+#: js/ui/status/network.js:1525
 msgid "VPN Settings"
 msgstr "VPN 設定值"
 
-#: js/ui/status/network.js:1807
+#: js/ui/status/network.js:1785
 msgid "Wi–Fi"
 msgstr "Wi–Fi"
 
-#: js/ui/status/network.js:1808
-msgid "Open Wi–Fi menu"
-msgstr "開啟 Wi-Fi 選單"
-
-#: js/ui/status/network.js:1810
+#: js/ui/status/network.js:1787
 msgid "All Networks"
 msgstr "所有的網路"
 
-#: js/ui/status/network.js:1907
+#: js/ui/status/network.js:1884
 msgid "Wired Connections"
 msgstr "有線網路連線"
 
-#: js/ui/status/network.js:1908
-msgid "Open wired connections menu"
-msgstr "開啟有線網路連線選單"
-
-#: js/ui/status/network.js:1909
+#: js/ui/status/network.js:1885
 msgid "Wired Settings"
 msgstr "有線網路設定值"
 
-#: js/ui/status/network.js:1923
+#: js/ui/status/network.js:1899
 msgid "Bluetooth Tethers"
 msgstr "藍牙分享網路"
 
-#: js/ui/status/network.js:1924
-msgid "Open Bluetooth tethers menu"
-msgstr "開啟藍牙分享網路選單"
-
 #. Translators: "Tether" from "Bluetooth Tether"
-#: js/ui/status/network.js:1931
+#: js/ui/status/network.js:1906
 msgid "Tether"
 msgstr "分享網路"
 
-#: js/ui/status/network.js:1944
+#: js/ui/status/network.js:1919
 msgid "Mobile Connections"
 msgstr "行動網路連線"
 
-#: js/ui/status/network.js:1945
-msgid "Open mobile connections menu"
-msgstr "開啟行動網路連線選單"
-
-#: js/ui/status/network.js:1947
+#: js/ui/status/network.js:1921
 msgid "Mobile Broadband Settings"
-msgstr "行動寬頻設定"
+msgstr "行動寬頻設定值"
 
 #. Translators: "Mobile" from "Mobile Broadband"
-#: js/ui/status/network.js:1956
+#: js/ui/status/network.js:1930
 msgid "Mobile"
 msgstr "行動網路"
 
-#: js/ui/status/network.js:1990
-msgid "Sign in to Network"
-msgstr "登入 Wi-Fi 網路"
-
-#: js/ui/status/network.js:2177
+#: js/ui/status/network.js:2035
 msgid "Connection failed"
-msgstr "連線失敗"
+msgstr "連接失敗"
 
-#: js/ui/status/network.js:2178
+#: js/ui/status/network.js:2036
 msgid "Activation of network connection failed"
-msgstr "啟動網路連線失敗"
+msgstr "啟動網路連接失敗"
 
-#: js/ui/status/nightLight.js:19
+#: js/ui/status/nightLight.js:21
 msgid "Night Light"
 msgstr "夜光模式"
 
-#: js/ui/status/powerProfiles.js:19
+#: js/ui/status/powerProfiles.js:21
 msgctxt "Power profile"
 msgid "Performance"
-msgstr "效能"
+msgstr "效能模式"
 
-#: js/ui/status/powerProfiles.js:24
+#: js/ui/status/powerProfiles.js:26
 msgctxt "Power profile"
 msgid "Balanced"
-msgstr "平衡"
+msgstr "平衡模式"
 
-#: js/ui/status/powerProfiles.js:29
+#: js/ui/status/powerProfiles.js:31
 msgctxt "Power profile"
 msgid "Power Saver"
-msgstr "省電"
+msgstr "省電模式"
 
-#: js/ui/status/powerProfiles.js:35
-msgctxt "Power profile"
-msgid "Custom"
-msgstr "自訂"
-
-#: js/ui/status/powerProfiles.js:45
-msgctxt "Quick settings button title"
+#: js/ui/status/powerProfiles.js:41 js/ui/status/powerProfiles.js:71
 msgid "Power Mode"
 msgstr "電源模式"
 
-#: js/ui/status/powerProfiles.js:46
-msgid "Open power profiles menu"
-msgstr "開啟電源設定檔選單"
-
-#: js/ui/status/powerProfiles.js:77
-msgctxt "Quick settings menu header"
-msgid "Power Mode"
-msgstr "電源模式"
-
-#: js/ui/status/powerProfiles.js:79
+#: js/ui/status/powerProfiles.js:73
 msgid "Power Settings"
-msgstr "電源設定"
+msgstr "電源設定值"
 
-#: js/ui/status/remoteAccess.js:73
+#: js/ui/status/remoteAccess.js:76
 msgid "Stop Screencast"
 msgstr "停止螢幕錄影"
 
-#: js/ui/status/remoteAccess.js:141
+#: js/ui/status/remoteAccess.js:146
 msgid "Stop Screen Sharing"
 msgstr "停止螢幕分享"
 
-#: js/ui/status/rfkill.js:97
+#: js/ui/status/rfkill.js:101
 msgid "Airplane Mode"
-msgstr "飛航模式"
+msgstr "飛安模式"
 
-#: js/ui/status/system.js:175
+#: js/ui/status/system.js:170
 msgid "Power Off Menu"
 msgstr "關閉電源選單"
 
-#: js/ui/status/system.js:183
+#: js/ui/status/system.js:178
 msgid "Suspend"
 msgstr "暫停"
 
-#: js/ui/status/system.js:188
+#: js/ui/status/system.js:183
 msgid "Restart…"
 msgstr "重新啟動…"
 
-#: js/ui/status/system.js:193
+#: js/ui/status/system.js:188
 msgid "Power Off…"
 msgstr "關閉電源…"
 
-#: js/ui/status/system.js:200
+#: js/ui/status/system.js:195
+#: subprojects/extensions-app/data/ui/extensions-window.ui:124
 msgid "Log Out…"
 msgstr "登出…"
 
-#: js/ui/status/system.js:205
+#: js/ui/status/system.js:200
 msgid "Switch User…"
 msgstr "切換使用者…"
 
-#: js/ui/status/system.js:249
+#: js/ui/status/system.js:244
 msgctxt "action"
 msgid "Lock Screen"
 msgstr "鎖定螢幕"
 
-#: js/ui/status/thunderbolt.js:311
+#: js/ui/status/thunderbolt.js:310
 msgid "Unknown Thunderbolt device"
-msgstr "未知的 Thunderbolt 裝置"
+msgstr "不明的 Thunderbolt 裝置"
 
-#: js/ui/status/thunderbolt.js:312
+#: js/ui/status/thunderbolt.js:311
 msgid ""
 "New device has been detected while you were away. Please disconnect and "
 "reconnect the device to start using it."
 msgstr "您離開後有偵測到新裝置。請中斷並重新連接該裝置便能開始使用。"
 
-#: js/ui/status/thunderbolt.js:315
+#: js/ui/status/thunderbolt.js:314
 msgid "Unauthorized Thunderbolt device"
 msgstr "未經授權的 Thunderbolt 裝置"
 
-#: js/ui/status/thunderbolt.js:316
+#: js/ui/status/thunderbolt.js:315
 msgid ""
-"New device has been detected and needs to be authorized by an administrator"
-msgstr "偵測到新裝置，需由系統管理員授權"
+"New device has been detected and needs to be authorized by an administrator."
+msgstr "偵測到新裝置，需由系統管理員授權。"
 
-#: js/ui/status/thunderbolt.js:322
+#: js/ui/status/thunderbolt.js:321
 msgid "Thunderbolt authorization error"
 msgstr "Thunderbolt 授權錯誤"
 
-#: js/ui/status/thunderbolt.js:323
+#: js/ui/status/thunderbolt.js:322
 #, javascript-format
 msgid "Could not authorize the Thunderbolt device: %s"
 msgstr "無法授權該 Thunderbolt 裝置：%s"
 
-#: js/ui/status/volume.js:218
+#: js/ui/status/volume.js:220
 msgid "Volume changed"
 msgstr "音量已更改"
 
-#: js/ui/status/volume.js:231
+#: js/ui/status/volume.js:233
 msgid "Unmute"
 msgstr "取消靜音"
 
-#: js/ui/status/volume.js:231
+#: js/ui/status/volume.js:233
 msgid "Mute"
 msgstr "靜音"
 
-#: js/ui/status/volume.js:293
+#: js/ui/status/volume.js:288
 msgid "Volume"
 msgstr "音量"
 
-#: js/ui/status/volume.js:309
+#: js/ui/status/volume.js:304
 msgid "Sound Output"
-msgstr "音效輸出"
+msgstr "音訊輸出"
 
-#: js/ui/status/volume.js:310
-msgid "Open sound output menu"
-msgstr "開啟音效輸出選單"
-
-#: js/ui/status/volume.js:385
+#: js/ui/status/volume.js:376
 msgid "Sound Input"
-msgstr "音效輸入"
-
-#: js/ui/status/volume.js:386
-msgid "Open sound input menu"
-msgstr "開啟音效輸入選單"
+msgstr "音訊輸入"
 
 #. Translators: this is for display mirroring i.e. cloning.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:20
+#: js/ui/switchMonitor.js:22
 msgid "Mirror"
 msgstr "鏡像顯示"
 
 #. Translators: this is for the desktop spanning displays.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:29
+#: js/ui/switchMonitor.js:31
 msgid "Join Displays"
 msgstr "銜接顯示"
 
 #. Translators: this is for using only external displays.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:39
+#: js/ui/switchMonitor.js:41
 msgid "External Only"
 msgstr "僅外接"
 
 #. Translators: this is for using only the laptop display.
 #. * Try to keep it under around 15 characters.
 #.
-#: js/ui/switchMonitor.js:47
+#: js/ui/switchMonitor.js:49
 msgid "Built-in Only"
 msgstr "僅內建"
 
 #. Translators: This is a time format for a date in
 #. long format
-#: js/ui/unlockDialog.js:415
+#: js/ui/unlockDialog.js:380
 msgid "%A %B %-d"
 msgstr "%-m月%-d日 %A"
 
-#: js/ui/unlockDialog.js:421
+#: js/ui/unlockDialog.js:386
 msgid "Swipe up to unlock"
 msgstr "向上滑動解鎖"
 
-#: js/ui/unlockDialog.js:422
+#: js/ui/unlockDialog.js:387
 msgid "Click or press a key to unlock"
 msgstr "按下滑鼠按鍵或是鍵盤任意鍵解鎖"
 
-#: js/ui/unlockDialog.js:610
+#: js/ui/unlockDialog.js:570
 msgid "Unlock Window"
 msgstr "解鎖視窗"
 
-#: js/ui/unlockDialog.js:619
+#: js/ui/unlockDialog.js:579
 msgid "Log in as another user"
 msgstr "以其他使用者身份登入"
 
-#: js/ui/welcomeDialog.js:47
+#: js/ui/welcomeDialog.js:49
 #, javascript-format
 msgid "GNOME %s"
 msgstr "GNOME %s"
 
-#: js/ui/welcomeDialog.js:51
+#: js/ui/welcomeDialog.js:53
 #, javascript-format
 msgid "Welcome to %s"
 msgstr "歡迎使用 %s"
 
-#: js/ui/welcomeDialog.js:52
-msgid "If you want to learn your way around, check out the tour"
-msgstr "您要不要四處看一下？讓我們帶領您走一趟"
+#: js/ui/welcomeDialog.js:54
+msgid "If you want to learn your way around, check out the tour."
+msgstr "您要不要四處看一下？讓我們帶領你走一趟。"
 
-#: js/ui/welcomeDialog.js:66
+#: js/ui/welcomeDialog.js:63
+msgid "Skip"
+msgstr "略過"
+
+#: js/ui/welcomeDialog.js:68
 msgid "Take Tour"
 msgstr "踏上旅程"
 
-#: js/ui/windowAttentionHandler.js:18
+#: js/ui/windowAttentionHandler.js:20
 #, javascript-format
 msgid "“%s” is ready"
 msgstr "「%s」視窗已就緒"
 
 #. Translators: This string should be shorter than 30 characters
-#: js/ui/windowManager.js:60
+#: js/ui/windowManager.js:69
 msgid "Keep these display settings?"
 msgstr "要保留顯示器設定值嗎？"
 
-#: js/ui/windowManager.js:70
+#: js/ui/windowManager.js:79
 msgid "Revert Settings"
-msgstr "還原設定"
+msgstr "還原"
 
-#: js/ui/windowManager.js:75
+#: js/ui/windowManager.js:84
 msgid "Keep Changes"
 msgstr "保留"
 
-#: js/ui/windowManager.js:95
+#: js/ui/windowManager.js:104
 #, javascript-format
 msgid "Settings changes will revert in %d second"
 msgid_plural "Settings changes will revert in %d seconds"
@@ -2775,116 +2502,114 @@ msgstr[0] "更改的設定值會在 %d 秒內還原"
 
 #. Translators: This represents the size of a window. The first number is
 #. * the width of the window and the second is the height.
-#: js/ui/windowManager.js:492
+#: js/ui/windowManager.js:496
 #, javascript-format
 msgid "%d × %d"
 msgstr "%d × %d"
 
-#. Translators: entry in the window right click menu.
-#: js/ui/windowMenu.js:28
-msgctxt "window-menu"
-msgid "Take Screenshot"
-msgstr "擷取視窗畫面"
-
-#: js/ui/windowMenu.js:40
+#: js/ui/windowMenu.js:42
 msgid "Hide"
 msgstr "隱藏"
 
-#: js/ui/windowMenu.js:47
+#: js/ui/windowMenu.js:49
 msgid "Restore"
 msgstr "還原"
 
-#: js/ui/windowMenu.js:51
+#: js/ui/windowMenu.js:53
 msgid "Maximize"
 msgstr "最大化"
 
-#: js/ui/windowMenu.js:58
+#: js/ui/windowMenu.js:60
 msgid "Move"
 msgstr "移動"
 
-#: js/ui/windowMenu.js:72
+#: js/ui/windowMenu.js:80
 msgid "Resize"
 msgstr "重設大小"
 
-#: js/ui/windowMenu.js:86
+#: js/ui/windowMenu.js:101
+msgid "Move Titlebar Onscreen"
+msgstr "移動螢幕標題列"
+
+#: js/ui/windowMenu.js:106
 msgid "Always on Top"
 msgstr "永遠置頂顯示"
 
-#: js/ui/windowMenu.js:105
+#: js/ui/windowMenu.js:125
 msgid "Always on Visible Workspace"
 msgstr "永遠顯示在目前的工作區"
 
-#: js/ui/windowMenu.js:119
+#: js/ui/windowMenu.js:139
 msgid "Move to Workspace Left"
 msgstr "移至左方工作區"
 
-#: js/ui/windowMenu.js:125
+#: js/ui/windowMenu.js:145
 msgid "Move to Workspace Right"
 msgstr "移至右方工作區"
 
-#: js/ui/windowMenu.js:131
+#: js/ui/windowMenu.js:151
 msgid "Move to Workspace Up"
 msgstr "移至上方工作區"
 
-#: js/ui/windowMenu.js:137
+#: js/ui/windowMenu.js:157
 msgid "Move to Workspace Down"
 msgstr "移至下方工作區"
 
-#: js/ui/windowMenu.js:155
+#: js/ui/windowMenu.js:175
 msgid "Move to Monitor Up"
 msgstr "移至上方顯示器"
 
-#: js/ui/windowMenu.js:164
+#: js/ui/windowMenu.js:184
 msgid "Move to Monitor Down"
 msgstr "移至下方顯示器"
 
-#: js/ui/windowMenu.js:173
+#: js/ui/windowMenu.js:193
 msgid "Move to Monitor Left"
 msgstr "移至左方顯示器"
 
-#: js/ui/windowMenu.js:182
+#: js/ui/windowMenu.js:202
 msgid "Move to Monitor Right"
 msgstr "移至右方顯示器"
 
-#: js/ui/windowMenu.js:190
+#: js/ui/windowMenu.js:210
 msgid "Close"
 msgstr "關閉視窗"
 
-#: src/main.c:513 subprojects/extensions-tool/src/main.c:336
+#: src/main.c:529 subprojects/extensions-tool/src/main.c:336
 msgid "Print version"
 msgstr "輸出版本資訊"
 
-#: src/main.c:519
+#: src/main.c:535
 msgid "Mode used by GDM for login screen"
 msgstr "《GDM》於登入畫面中所使用的模式"
 
-#: src/main.c:525
+#: src/main.c:541
 msgid "Use a specific mode, e.g. “gdm” for login screen"
 msgstr "使用指定的模式，例如「gdm」為登入畫面"
 
-#: src/main.c:531
+#: src/main.c:547
 msgid "List possible modes"
 msgstr "列出可能的模式"
 
-#: src/main.c:537
+#: src/main.c:553
 msgid "Force animations to be enabled"
 msgstr "強制啟用動畫"
 
-#: src/shell-app.c:267
+#: src/shell-app.c:252
 msgctxt "program"
 msgid "Unknown"
-msgstr "未知"
+msgstr "不明"
 
-#: src/shell-app.c:518
+#: src/shell-app.c:503
 #, c-format
 msgid "Failed to launch “%s”"
 msgstr "無法啟動《%s》"
 
-#: src/shell-keyring-prompt.c:779
-msgid "Passwords do not match"
-msgstr "密碼不相符"
+#: src/shell-keyring-prompt.c:764
+msgid "Passwords do not match."
+msgstr "密碼不相符。"
 
-#: src/shell-keyring-prompt.c:787
+#: src/shell-keyring-prompt.c:772
 msgid "Password cannot be blank"
 msgstr "密碼不能為空白"
 
@@ -2892,12 +2617,12 @@ msgstr "密碼不能為空白"
 msgid "Authentication dialog was dismissed by the user"
 msgstr "身分核對對話框遭使用者關閉"
 
-#: src/st/st-icon-theme.c:1859
+#: src/st/st-icon-theme.c:1865
 #, c-format
 msgid "Icon '%s' not present in theme %s"
 msgstr "圖示「%s」不存在主題 %s 中"
 
-#: src/st/st-icon-theme.c:3452 src/st/st-icon-theme.c:3755
+#: src/st/st-icon-theme.c:3454 src/st/st-icon-theme.c:3757
 msgid "Failed to load icon"
 msgstr "無法載入圖示"
 
@@ -2906,11 +2631,11 @@ msgid "Manage your GNOME Extensions"
 msgstr "管理《GNOME Shell》的擴充套件"
 
 #. developer_name tag deprecated with Appstream 1.0
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:20
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:19
 msgid "The GNOME Project"
 msgstr "GNOME 專案"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:52
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:51
 msgid ""
 "GNOME Extensions handles updating extensions, configuring extension "
 "preferences and removing or disabling unwanted extensions."
@@ -2918,19 +2643,19 @@ msgstr ""
 "《GNOME 擴充套件》能管理擴充套件更新、調整擴充套件偏好設定、移除或停用不想用"
 "的擴充套件等。"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:64
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:79
 msgid "Main Window"
 msgstr "主視窗"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:68
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:83
 msgid "Available Updates"
 msgstr "可用的更新"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:72
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:87
 msgid "Search View"
 msgstr "搜尋檢視"
 
-#: subprojects/extensions-app/data/org.gnome.Extensions.desktop.in.in:6
+#: subprojects/extensions-app/data/org.gnome.Extensions.desktop.in.in:7
 msgid "Configure GNOME Shell Extensions"
 msgstr "設定《GNOME Shell》的擴充套件"
 
@@ -2968,62 +2693,65 @@ msgstr "錯誤詳細資訊："
 msgid "Version %s"
 msgstr "版本 %s"
 
-#: subprojects/extensions-app/js/extensionsWindow.js:108
+#: subprojects/extensions-app/js/extensionsWindow.js:113
 #, javascript-format
 msgid "Remove “%s”?"
 msgstr "移除「%s」？"
 
-#: subprojects/extensions-app/js/extensionsWindow.js:109
+#: subprojects/extensions-app/js/extensionsWindow.js:114
 msgid ""
 "If you remove the extension, you need to return to download it if you want "
 "to enable it again"
 msgstr "若將該擴充套件移除，欲再次啟用必需重新下載"
 
-#: subprojects/extensions-app/js/extensionsWindow.js:112
+#: subprojects/extensions-app/js/extensionsWindow.js:117
 msgid "_Cancel"
 msgstr "取消(_C)"
 
-#: subprojects/extensions-app/js/extensionsWindow.js:113
+#: subprojects/extensions-app/js/extensionsWindow.js:118
 msgid "_Remove"
 msgstr "移除(_R)"
 
-#: subprojects/extensions-app/js/extensionsWindow.js:153
+#: subprojects/extensions-app/js/extensionsWindow.js:158
 msgid "translator-credits"
 msgstr ""
 "Chao-Hsiung Liao <j_h_liau@yahoo.com.tw>, 2010.\n"
 "Wei-Lun Chao <chaoweilun@gmail.com>, 2010.\n"
-"Cheng-Chia Tseng <pswo10680@gmail.com>, 2020-2025.\n"
-"Freddy Cheng <freddy4212@gmail.com>, 2022.\n"
-"Taijuin Lee <aijuin@gmail.com>, 2025."
+"Cheng-Chia Tseng <pswo10680@gmail.com>, 2020-2022, 2023.\n"
+"Freddy Cheng <freddy4212@gmail.com>, 2022."
 
-#: subprojects/extensions-app/js/extensionsWindow.js:198
+#: subprojects/extensions-app/js/extensionsWindow.js:203
 #, javascript-format
 msgid "%d extension will be updated on next login."
 msgid_plural "%d extensions will be updated on next login."
 msgstr[0] "%d 個擴充套件會在下次登入時更新。"
 
-#: subprojects/extensions-app/data/ui/extension-row.ui:51
+#: subprojects/extensions-app/data/ui/extension-row.ui:22
+msgid "Error Details"
+msgstr "錯誤詳細資訊"
+
+#: subprojects/extensions-app/data/ui/extension-row.ui:62
 msgid "Updates Details"
 msgstr "更新詳細資訊"
 
-#: subprojects/extensions-app/data/ui/extension-row.ui:68
+#: subprojects/extensions-app/data/ui/extension-row.ui:72
 msgid ""
 "A new version of this extension is ready and will be loaded on next login."
 msgstr "擴充套件的新版本已備妥，會在下次登入時更新。"
 
-#: subprojects/extensions-app/data/ui/extension-row.ui:100
+#: subprojects/extensions-app/data/ui/extension-row.ui:104
 msgid "Extension Details"
 msgstr "擴充套件詳細資訊"
 
-#: subprojects/extensions-app/data/ui/extension-row.ui:188
+#: subprojects/extensions-app/data/ui/extension-row.ui:192
 msgid "_Website"
 msgstr "網站(_W)"
 
-#: subprojects/extensions-app/data/ui/extension-row.ui:215
+#: subprojects/extensions-app/data/ui/extension-row.ui:219
 msgid "_Settings"
 msgstr "設定(_S)"
 
-#: subprojects/extensions-app/data/ui/extension-row.ui:242
+#: subprojects/extensions-app/data/ui/extension-row.ui:246
 msgid "_Remove…"
 msgstr "移除(_R)…"
 
@@ -3043,19 +2771,15 @@ msgstr "主選單"
 msgid "Search extensions"
 msgstr "搜尋擴充套件"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:123
-msgid "_Log Out…"
-msgstr "登出(_L)…"
-
-#: subprojects/extensions-app/data/ui/extensions-window.ui:131
+#: subprojects/extensions-app/data/ui/extensions-window.ui:134
 msgid "_Extensions"
 msgstr "擴充套件(_E)"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:136
+#: subprojects/extensions-app/data/ui/extensions-window.ui:139
 msgid "More Information"
 msgstr "更多資訊"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:148
+#: subprojects/extensions-app/data/ui/extensions-window.ui:151
 msgid ""
 "Extensions can cause performance and stability issues. It is recommended to "
 "disable all extensions if you experience problems with your system."
@@ -3063,43 +2787,39 @@ msgstr ""
 "擴充套件可能導致效能與穩定性問題。若您的系統遭遇問題，則建議停用全部的擴充套"
 "件。"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:175
+#: subprojects/extensions-app/data/ui/extensions-window.ui:178
 msgid "User Extensions"
 msgstr "使用者擴充套件"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:184
+#: subprojects/extensions-app/data/ui/extensions-window.ui:198
 msgid "System Extensions"
 msgstr "系統擴充套件"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:203
+#: subprojects/extensions-app/data/ui/extensions-window.ui:233
 msgid "Search Results"
 msgstr "搜尋結果"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:217
+#: subprojects/extensions-app/data/ui/extensions-window.ui:252
 msgid "No Results Found"
 msgstr "找不到結果"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:218
-msgid "Try a different search"
-msgstr "嘗試不同的搜尋內容"
+#: subprojects/extensions-app/data/ui/extensions-window.ui:253
+msgid "Try a different search."
+msgstr "嘗試不同的搜尋內容。"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:229
+#: subprojects/extensions-app/data/ui/extensions-window.ui:264
 msgid "No Installed Extensions"
 msgstr "沒有已安裝的擴充套件"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:230
+#: subprojects/extensions-app/data/ui/extensions-window.ui:265
 msgid ""
-"To find and add extensions, visit <a href=\"https://"
-"extensions.gnome.org\">extensions.gnome.org</a>."
+"To find and add extensions, visit <a href=\"https://extensions.gnome."
+"org\">extensions.gnome.org</a>."
 msgstr ""
-"要尋找並加入擴充套件，可以造訪 <a href=\"https://"
-"extensions.gnome.org\">extensions.gnome.org</a>。"
+"要尋找並加入擴充套件，可以造訪 <a href=\"https://extensions.gnome."
+"org\">extensions.gnome.org</a>。"
 
-#: subprojects/extensions-app/data/ui/extensions-window.ui:240
-msgid "Something’s gone wrong"
-msgstr "有些地方出錯了"
-
-#: subprojects/extensions-app/data/ui/extensions-window.ui:241
+#: subprojects/extensions-app/data/ui/extensions-window.ui:276
 msgid ""
 "We’re very sorry, but it was not possible to get the list of installed "
 "extensions. Make sure you are logged into GNOME and try again."
@@ -3107,27 +2827,27 @@ msgstr ""
 "非常抱歉，我們無法取得已安裝的擴充套件列表。請確認您已登入 GNOME 之後並重試看"
 "看。"
 
-#: subprojects/extensions-app/data/ui/shortcuts-dialog.ui:6
+#: subprojects/extensions-app/data/ui/help-overlay.ui:9
 msgctxt "shortcut window"
 msgid "General"
 msgstr "一般"
 
-#: subprojects/extensions-app/data/ui/shortcuts-dialog.ui:9
+#: subprojects/extensions-app/data/ui/help-overlay.ui:12
 msgctxt "shortcut window"
 msgid "Open Menu"
 msgstr "開啟選單"
 
-#: subprojects/extensions-app/data/ui/shortcuts-dialog.ui:15
+#: subprojects/extensions-app/data/ui/help-overlay.ui:18
 msgctxt "shortcut window"
 msgid "Toggle Search"
 msgstr "切換搜尋"
 
-#: subprojects/extensions-app/data/ui/shortcuts-dialog.ui:21
+#: subprojects/extensions-app/data/ui/help-overlay.ui:24
 msgctxt "shortcut window"
 msgid "Show Shortcuts"
 msgstr "顯示快捷鍵"
 
-#: subprojects/extensions-app/data/ui/shortcuts-dialog.ui:27
+#: subprojects/extensions-app/data/ui/help-overlay.ui:30
 msgctxt "shortcut window"
 msgid "Quit"
 msgstr "退出"
@@ -3167,17 +2887,15 @@ msgid "Description"
 msgstr "描述"
 
 #: subprojects/extensions-tool/src/command-create.c:416
-#, c-format
 msgid ""
 "UUID is a globally-unique identifier for your extension.\n"
-"This should be in the format of an email address "
-"(clicktofocus@janedoe.example.com)\n"
+"This should be in the format of an email address (clicktofocus@janedoe."
+"example.com)\n"
 msgstr ""
 "UUID 是您擴充套件的全域唯一識別碼。\n"
 "格式應該要像電子信箱位址 (clicktofocus@janedoe.example.com)\n"
 
 #: subprojects/extensions-tool/src/command-create.c:443
-#, c-format
 msgid "Choose one of the available templates:\n"
 msgstr "選擇其中一種可用的模本：\n"
 
@@ -3229,7 +2947,7 @@ msgstr "TEMPLATE"
 
 #: subprojects/extensions-tool/src/command-create.c:535
 msgid "The template to use for the new extension"
-msgstr "新擴充套件使用的模本"
+msgstr "新擴充套件所要使用的模本"
 
 #: subprojects/extensions-tool/src/command-create.c:538
 msgid "Include prefs.js template"
@@ -3246,7 +2964,7 @@ msgstr "建立新的擴充套件"
 #: subprojects/extensions-tool/src/command-create.c:570
 #: subprojects/extensions-tool/src/command-list.c:190
 msgid "Unknown arguments"
-msgstr "未知的引數"
+msgstr "未知參數"
 
 #: subprojects/extensions-tool/src/command-create.c:595
 msgid "UUID, name and description are required"
@@ -3287,7 +3005,6 @@ msgstr "啟用擴充套件"
 #: subprojects/extensions-tool/src/command-info.c:50
 #: subprojects/extensions-tool/src/command-list.c:66
 #: subprojects/extensions-tool/src/main.c:150
-#, c-format
 msgid "Failed to connect to GNOME Shell\n"
 msgstr "無法連接至《GNOME Shell》\n"
 
@@ -3301,29 +3018,25 @@ msgstr "「%s」擴充套件不存在\n"
 msgid "Show extensions info"
 msgstr "顯示擴充套件資訊"
 
-#: subprojects/extensions-tool/src/command-install.c:195
+#: subprojects/extensions-tool/src/command-install.c:190
 msgid "Overwrite an existing extension"
 msgstr "覆蓋既存的擴充套件"
 
-#: subprojects/extensions-tool/src/command-install.c:198
-msgid "Print extension UUID on success"
-msgstr "成功時列印擴充套件的 UUID"
-
-#: subprojects/extensions-tool/src/command-install.c:200
+#: subprojects/extensions-tool/src/command-install.c:192
 msgid "EXTENSION_BUNDLE"
 msgstr "EXTENSION_BUNDLE"
 
-#: subprojects/extensions-tool/src/command-install.c:209
+#: subprojects/extensions-tool/src/command-install.c:201
 msgid "Install an extension bundle"
-msgstr "安裝擴充套件組"
+msgstr "安裝擴充套件組合"
 
-#: subprojects/extensions-tool/src/command-install.c:227
+#: subprojects/extensions-tool/src/command-install.c:219
 msgid "No extension bundle specified"
-msgstr "未指定擴充套件組"
+msgstr "未指定擴充套件組合"
 
-#: subprojects/extensions-tool/src/command-install.c:233
+#: subprojects/extensions-tool/src/command-install.c:225
 msgid "More than one extension bundle specified"
-msgstr "指定多於一個擴充套件組"
+msgstr "指定多於一個擴充套件組合"
 
 #: subprojects/extensions-tool/src/command-list.c:140
 msgid "Show user-installed extensions"
@@ -3366,13 +3079,12 @@ msgid "List installed extensions"
 msgstr "列出已安裝的擴充套件"
 
 #: subprojects/extensions-tool/src/command-pack.c:444
-#: subprojects/extensions-tool/src/command-upload.c:427
 msgid "FILE"
 msgstr "FILE"
 
 #: subprojects/extensions-tool/src/command-pack.c:445
 msgid "Additional source to include in the bundle"
-msgstr "包含在套組中的其他來源"
+msgstr "要加入至擴充套件組合的其他來源"
 
 #: subprojects/extensions-tool/src/command-pack.c:449
 msgid "A GSettings schema that should be included"
@@ -3405,7 +3117,7 @@ msgstr "SOURCE_DIRECTORY"
 
 #: subprojects/extensions-tool/src/command-pack.c:475
 msgid "Create an extension bundle"
-msgstr "建立擴充套件組"
+msgstr "建立擴充套件組合"
 
 #: subprojects/extensions-tool/src/command-pack.c:495
 msgid "More than one source directory specified"
@@ -3430,7 +3142,6 @@ msgid "Reset an extension"
 msgstr "重設擴充套件"
 
 #: subprojects/extensions-tool/src/command-uninstall.c:49
-#, c-format
 msgid "Cannot uninstall system extensions\n"
 msgstr "無法解除安裝系統的擴充套件\n"
 
@@ -3442,61 +3153,6 @@ msgstr "無法解除安裝「%s」\n"
 #: subprojects/extensions-tool/src/command-uninstall.c:86
 msgid "Uninstall an extension"
 msgstr "解除安裝擴充套件"
-
-#: subprojects/extensions-tool/src/command-upload.c:226
-#, c-format
-msgid "Login to extensions.gnome.org\n"
-msgstr "登入 extensions.gnome.org\n"
-
-#: subprojects/extensions-tool/src/command-upload.c:256
-#, c-format
-msgid "Warning! Password will be echoed"
-msgstr "警告！密碼將會以明文顯示"
-
-#: subprojects/extensions-tool/src/command-upload.c:419
-msgid "USERNAME"
-msgstr "USERNAME"
-
-#: subprojects/extensions-tool/src/command-upload.c:421
-msgid "Username to log into https://extensions.gnome.org"
-msgstr "登入 https://extensions.gnome.org 的使用者名稱"
-
-#: subprojects/extensions-tool/src/command-upload.c:423
-msgid "PASSWORD"
-msgstr "PASSWORD"
-
-#: subprojects/extensions-tool/src/command-upload.c:425
-msgid "Password to log into https://extensions.gnome.org"
-msgstr "登入 https://extensions.gnome.org 的密碼"
-
-#: subprojects/extensions-tool/src/command-upload.c:429
-msgid ""
-"Read https://extensions.gnome.org password from file, use \"-\" for stdin"
-msgstr "從 https://extensions.gnome.org 的檔案讀取密碼，對標準輸入請使用 \"-\""
-
-#: subprojects/extensions-tool/src/command-upload.c:432
-msgid "Accept the terms of service at https://extensions.gnome.org/upload/"
-msgstr "接受 https://extensions.gnome.org/upload/ 的服務條款"
-
-#: subprojects/extensions-tool/src/command-upload.c:434
-msgid "FILE…"
-msgstr "FILE…"
-
-#: subprojects/extensions-tool/src/command-upload.c:443
-msgid "Upload new extension versions"
-msgstr "上傳新擴充套件版本"
-
-#: subprojects/extensions-tool/src/command-upload.c:461
-msgid "Only one of --password and --password-file can be used"
-msgstr "只能使用 --password 或 --password-file 其中之一"
-
-#: subprojects/extensions-tool/src/command-upload.c:467
-msgid "You must accept the terms of service to upload extensions"
-msgstr "您必須接受服務條款才能上傳擴充套件"
-
-#: subprojects/extensions-tool/src/command-upload.c:473
-msgid "No files given"
-msgstr "未提供檔案"
 
 #: subprojects/extensions-tool/src/main.c:76
 msgid "Do not print error messages"
@@ -3556,7 +3212,7 @@ msgstr "命令"
 
 #: subprojects/extensions-tool/src/main.c:332
 msgid "[ARGS…]"
-msgstr "[引數…]"
+msgstr "[參數…]"
 
 #: subprojects/extensions-tool/src/main.c:334
 msgid "Commands:"
@@ -3605,34 +3261,34 @@ msgstr "打包擴充套件"
 
 #: subprojects/extensions-tool/src/main.c:347
 msgid "Install extension bundle"
-msgstr "安裝擴充套件組"
+msgstr "安裝擴充套件組合"
 
 #: subprojects/extensions-tool/src/main.c:349
 #, c-format
 msgid "Use “%s” to get detailed help.\n"
 msgstr "使用「%s」以取得詳細說明。\n"
 
-#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:3
+#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:4
 msgid "Plain"
 msgstr "空白"
 
-#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:4
+#: subprojects/extensions-tool/src/templates/00-plain.desktop.in:5
 msgid "An empty extension"
 msgstr "空白的擴充套件"
 
-#: subprojects/extensions-tool/src/templates/indicator.desktop.in:3
+#: subprojects/extensions-tool/src/templates/indicator.desktop.in:4
 msgid "Indicator"
 msgstr "指示器"
 
-#: subprojects/extensions-tool/src/templates/indicator.desktop.in:4
+#: subprojects/extensions-tool/src/templates/indicator.desktop.in:5
 msgid "Add an icon to the top bar"
 msgstr "在頂端列加入一個圖示"
 
-#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:3
+#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:4
 msgid "Quick Settings Item"
 msgstr "快速設定項目"
 
-#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:4
+#: subprojects/extensions-tool/src/templates/quick-settings.desktop.in:5
 msgid "Add an item to quick settings"
 msgstr "將項目加入快速設定"
 
@@ -3662,53 +3318,7 @@ msgstr[0] "%u 個輸入"
 msgid "System Sounds"
 msgstr "系統音效"
 
-#~ msgid "Restart is not available on Wayland"
-#~ msgstr "使用《Wayland》時無法重新啟動"
-
-#~ msgid "Restarting…"
-#~ msgstr "重新啟動…"
-
-#~ msgid "Unable to lock"
-#~ msgstr "無法鎖定"
-
-#~ msgid "Lock was blocked by an app"
-#~ msgstr "鎖定的動作遭程式阻擋"
-
-#~ msgid "GNOME Shell"
-#~ msgstr "GNOME Shell"
-
-#~ msgid "Window management and application launching"
-#~ msgstr "兼具視窗管理器與應用程式啟動器的使用者介面"
-
-#~ msgid ""
-#~ "We’re very sorry, but there’s been a problem: the settings for this "
-#~ "extension can’t be displayed. We recommend that you report the issue to "
-#~ "the extension authors."
-#~ msgstr ""
-#~ "我們非常抱歉發生這個問題：無法顯示該擴充套件的設定畫面；建議將此問題回報給"
-#~ "擴充套件的作者。"
-
-#~ msgid "Technical Details"
-#~ msgstr "技術細節"
-
-#~ msgid "Homepage"
-#~ msgstr "首頁"
-
-#~ msgid "Visit extension homepage"
-#~ msgstr "造訪擴充套件首頁"
-
-#~ msgid "%H∶%M"
-#~ msgstr "%H∶%M"
-
-#~ msgid "Screenshot"
-#~ msgstr "螢幕快照"
-
-#~ msgid "Could not parse command:"
-#~ msgstr "無法分析命令："
-
-#~ msgid "Move Titlebar Onscreen"
-#~ msgstr "移動螢幕標題列"
-
+#, javascript-format
 #~ msgid "%s is now known as %s"
 #~ msgstr "《%s》現為《%s》"
 
@@ -3731,26 +3341,30 @@ msgstr "系統音效"
 #~ msgstr "沒有相符的項目"
 
 #~ msgid "The extension had an error"
-#~ msgstr "該擴充功能存在錯誤"
+#~ msgstr "該擴充套件存在錯誤"
 
 #~ msgid "The extension can be updated"
-#~ msgstr "該擴充功能已可更新"
+#~ msgstr "該擴充套件已可更新"
 
 #~ msgid "Help"
 #~ msgstr "求助"
 
 #~ msgid "Manually Installed"
-#~ msgstr "手動安裝的擴充功能"
+#~ msgstr "手動安裝的擴充套件"
 
 #~ msgid "Built-In"
-#~ msgstr "內建的擴充功能"
+#~ msgstr "內建的擴充套件"
 
 #~ msgid "Extension Updates Ready"
-#~ msgstr "擴充功能更新已準備就緒"
+#~ msgstr "擴充套件更新已準備就緒"
 
 #~ msgid "Screenshot / Screencast"
 #~ msgstr "螢幕快照/螢幕錄影"
 
+#~ msgid "Power Profiles"
+#~ msgstr "電源設定檔"
+
+#, javascript-format
 #~ msgid "%d %%"
 #~ msgstr "%d %%"
 
@@ -3779,9 +3393,11 @@ msgstr "系統音效"
 #~ msgid "Applications"
 #~ msgstr "應用程式"
 
+#, javascript-format
 #~ msgid "Unable to start %s"
 #~ msgstr "無法啟動《%s》"
 
+#, javascript-format
 #~ msgid "Couldn’t find the %s application"
 #~ msgstr "找不到應用程式《%s》"
 
@@ -3804,36 +3420,47 @@ msgstr "系統音效"
 #~ msgid "Log Out"
 #~ msgstr "登出"
 
+#, javascript-format
 #~ msgid "%s Off"
 #~ msgstr "%s已關閉"
 
+#, javascript-format
 #~ msgid "%s Connected"
 #~ msgstr "%s已連接"
 
+#, javascript-format
 #~ msgid "%s Unmanaged"
 #~ msgstr "%s不受管理"
 
+#, javascript-format
 #~ msgid "%s Disconnecting"
 #~ msgstr "正在中斷%s連接"
 
+#, javascript-format
 #~ msgid "%s Connecting"
 #~ msgstr "正在連接%s"
 
+#, javascript-format
 #~ msgid "%s Requires Authentication"
 #~ msgstr "%s要求核對身分"
 
+#, javascript-format
 #~ msgid "Firmware Missing For %s"
 #~ msgstr "%s缺少韌體"
 
+#, javascript-format
 #~ msgid "%s Unavailable"
 #~ msgstr "%s無法使用"
 
+#, javascript-format
 #~ msgid "%s Connection Failed"
 #~ msgstr "%s無法連接"
 
+#, javascript-format
 #~ msgid "%s Hardware Disabled"
 #~ msgstr "%s硬體已停用"
 
+#, javascript-format
 #~ msgid "%s Disabled"
 #~ msgstr "%s已停用"
 
@@ -3858,6 +3485,9 @@ msgstr "系統音效"
 #~ msgid "Turn On Wi-Fi"
 #~ msgstr "開啟 Wi-Fi"
 
+#~ msgid "Wi-Fi Networks"
+#~ msgstr "Wi-Fi 網路"
+
 #~ msgid "Select a network"
 #~ msgstr "選擇一個網路"
 
@@ -3870,6 +3500,7 @@ msgstr "系統音效"
 #~ msgid "Wi-Fi Settings"
 #~ msgstr "Wi-Fi 設定值"
 
+#, javascript-format
 #~ msgid "%s Not Connected"
 #~ msgstr "%s未連接"
 
@@ -3888,6 +3519,7 @@ msgstr "系統音效"
 #~ msgid "VPN Off"
 #~ msgstr "VPN 關閉"
 
+#, javascript-format
 #~ msgid "%s Wi-Fi Connection"
 #~ msgid_plural "%s Wi-Fi Connections"
 #~ msgstr[0] "%s 個 Wi-Fi 連接"
@@ -3897,6 +3529,9 @@ msgstr "系統音效"
 
 #~ msgid "Power Off / Log Out"
 #~ msgstr "關閉電源/登出"
+
+#~ msgid "Bluetooth On"
+#~ msgstr "藍牙已開啟"
 
 #~ msgid "Bluetooth Off"
 #~ msgstr "藍牙已關閉"
@@ -3925,9 +3560,11 @@ msgstr "系統音效"
 #~ msgid "Estimating…"
 #~ msgstr "正在評估…"
 
+#, javascript-format
 #~ msgid "%d∶%02d Remaining (%d %%)"
 #~ msgstr "還能使用 %d∶%02d (%d%%)"
 
+#, javascript-format
 #~ msgid "%d∶%02d Until Full (%d %%)"
 #~ msgstr "充飽仍需 %d∶%02d (%d%%)"
 
@@ -3971,8 +3608,8 @@ msgstr "系統音效"
 #~ "you encounter problems with your system, it is recommended to disable all "
 #~ "extensions."
 #~ msgstr ""
-#~ "擴充功能可能會造成系統問題，包含效能問題。如果您遇到系統問題，建議您先停用"
-#~ "所有的擴充功能。"
+#~ "擴充套件可能會造成系統問題，包含效能問題。如果您遇到系統問題，建議您先停用"
+#~ "所有的擴充套件。"
 
 #~ msgid "Failed to connect to GNOME Shell"
 #~ msgstr "無法連接至 GNOME Shell"
@@ -4002,6 +3639,9 @@ msgstr "系統音效"
 
 #~ msgid "On"
 #~ msgstr "開啟"
+
+#~ msgid "Copy Error"
+#~ msgstr "複製錯誤"
 
 #~ msgid "Browse in Software"
 #~ msgstr "在《軟體》中瀏覽"

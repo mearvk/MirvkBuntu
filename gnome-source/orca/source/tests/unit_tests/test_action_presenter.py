@@ -152,19 +152,19 @@ class TestActionPresenter:
             ax_object_mock = test_context.Mock()
             ax_object_mock.get_n_actions = test_context.Mock(return_value=n_actions)
             ax_object_mock.get_action_name = test_context.Mock(
-                side_effect=lambda obj, i, n_actions=None: (
-                    ["click", "activate"][i] if i < len(["click", "activate"]) else f"action{i}"
-                ),
+                side_effect=lambda obj, i: ["click", "activate"][i]
+                if i < len(["click", "activate"])
+                else f"action{i}",
             )
             ax_object_mock.get_action_localized_name = test_context.Mock(
-                side_effect=lambda obj, i, n_actions=None: (
-                    ["click", "activate"][i] if i < len(["click", "activate"]) else f"action{i}"
-                ),
+                side_effect=lambda obj, i: ["click", "activate"][i]
+                if i < len(["click", "activate"])
+                else f"action{i}",
             )
             ax_object_mock.get_action_description = test_context.Mock(
-                side_effect=lambda obj, i, n_actions=None: (
-                    action_descriptions[i] if i < len(action_descriptions) else f"desc{i}"
-                ),
+                side_effect=lambda obj, i: action_descriptions[i]
+                if i < len(action_descriptions)
+                else f"desc{i}",
             )
             ax_object_mock.get_name = test_context.Mock(return_value="Test Button")
 
@@ -264,7 +264,7 @@ class TestActionPresenter:
     ) -> None:
         """Test ActionPresenter._perform_action with various scenarios."""
 
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.action_presenter import ActionPresenter
 
         presenter = ActionPresenter()
@@ -285,6 +285,9 @@ class TestActionPresenter:
         presenter._perform_action("click")
 
         if gui_state is None:
+            essential_modules["orca.debug"].print_message.assert_called()
+            debug_call = essential_modules["orca.debug"].print_message.call_args[0][1]
+            assert "_perform_action called when self._gui is None" in debug_call
             mock_do_action.assert_not_called()
         else:
             assert presenter._gui is not None

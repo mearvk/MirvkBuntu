@@ -46,8 +46,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "clutter/clutter.h"
-#include "core/util-private.h"
-#include "wayland/meta-wayland-input-device.h"
+#include "core/meta-anonymous-file.h"
 #include "wayland/meta-wayland-types.h"
 
 #define META_TYPE_WAYLAND_KEYBOARD (meta_wayland_keyboard_get_type ())
@@ -64,6 +63,10 @@ void meta_wayland_keyboard_update (MetaWaylandKeyboard *keyboard,
 
 gboolean meta_wayland_keyboard_handle_event (MetaWaylandKeyboard *keyboard,
                                              const ClutterKeyEvent *event);
+void meta_wayland_keyboard_update_key_state (MetaWaylandKeyboard *compositor,
+                                             char                *key_vector,
+                                             int                  key_vector_len,
+                                             int                  offset);
 
 void meta_wayland_keyboard_set_focus (MetaWaylandKeyboard *keyboard,
                                       MetaWaylandSurface *surface);
@@ -78,6 +81,3 @@ gboolean meta_wayland_keyboard_can_grab_surface (MetaWaylandKeyboard *keyboard,
                                                  uint32_t             serial);
 gboolean meta_wayland_keyboard_can_popup (MetaWaylandKeyboard *keyboard,
                                           uint32_t             serial);
-
-META_EXPORT_TEST
-MetaWaylandSurface * meta_wayland_keyboard_get_focus_surface (MetaWaylandKeyboard *keyboard);

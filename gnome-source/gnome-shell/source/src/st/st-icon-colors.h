@@ -1,5 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
-#pragma once
+#ifndef __ST_ICON_COLORS__
+#define __ST_ICON_COLORS__
 
 #include <clutter/clutter.h>
 
@@ -20,13 +21,13 @@ typedef struct _StIconColors StIconColors;
  * icon.
  */
 struct _StIconColors {
-  CoglColor foreground;
-  CoglColor warning;
-  CoglColor error;
-  CoglColor success;
+  ClutterColor foreground;
+  ClutterColor warning;
+  ClutterColor error;
+  ClutterColor success;
 };
 
-GType     st_icon_colors_get_type (void);
+GType     st_icon_colors_get_type (void) G_GNUC_CONST;
 
 StIconColors *st_icon_colors_new   (void);
 StIconColors *st_icon_colors_ref   (StIconColors *colors);
@@ -36,3 +37,5 @@ gboolean      st_icon_colors_equal (StIconColors *colors,
                                     StIconColors *other);
 
 G_END_DECLS
+
+#endif /* __ST_ICON_COLORS__ */

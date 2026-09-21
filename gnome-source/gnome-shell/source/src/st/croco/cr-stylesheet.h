@@ -21,7 +21,8 @@
  */
 
 
-#pragma once
+#ifndef __CR_STYLESHEET_H__
+#define __CR_STYLESHEET_H__
 
 #include "cr-utils.h"
 #include "cr-statement.h"
@@ -97,3 +98,5 @@ gboolean cr_stylesheet_unref (CRStyleSheet *a_this) ;
 void cr_stylesheet_destroy (CRStyleSheet *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_STYLESHEET_H__*/

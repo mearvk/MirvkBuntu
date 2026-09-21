@@ -417,7 +417,9 @@ shell_camera_monitor_class_init (ShellCameraMonitorClass *klass)
   object_class->get_property = shell_camera_monitor_get_property;
 
   obj_props[PROP_CAMERAS_IN_USE] =
-    g_param_spec_boolean ("cameras-in-use", NULL, NULL,
+    g_param_spec_boolean ("cameras-in-use",
+                          "Cameras in use",
+                          "Whether any camera is currently used by an app",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -455,11 +457,4 @@ shell_camera_monitor_init (ShellCameraMonitor *monitor)
 error:
     g_message ("Failed to start camera monitor");
 #endif
-}
-
-gboolean
-shell_camera_monitor_get_cameras_in_use (ShellCameraMonitor *monitor)
-{
-  g_return_val_if_fail (SHELL_IS_CAMERA_MONITOR (monitor), FALSE);
-  return monitor->cameras_in_use;
 }

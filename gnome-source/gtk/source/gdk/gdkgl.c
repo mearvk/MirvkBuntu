@@ -42,7 +42,7 @@
  * @width: The width of the region to draw
  * @height: The height of the region to draw
  *
- * Draws GL content onto a cairo context.
+ * The main way to not draw GL content in GTK.
  *
  * It takes a render buffer ID (@source_type == GL_RENDERBUFFER) or a texture
  * id (@source_type == GL_TEXTURE) and draws it onto @cr with an OVER operation,
@@ -68,20 +68,21 @@
  *   image surface.
  */
 void
-gdk_cairo_draw_from_gl (cairo_t    *cr,
-                        GdkSurface *surface,
-                        int         source,
-                        int         source_type,
-                        int         buffer_scale,
-                        int         x,
-                        int         y,
-                        int         width,
-                        int         height)
+gdk_cairo_draw_from_gl (cairo_t              *cr,
+                        GdkSurface            *surface,
+                        int                   source,
+                        int                   source_type,
+                        int                   buffer_scale,
+                        int                   x,
+                        int                   y,
+                        int                   width,
+                        int                   height)
 {
   GdkGLContext *paint_context;
   cairo_surface_t *image;
   guint framebuffer;
   int alpha_size = 0;
+  int major, minor, version;
   gboolean es_use_bgra = FALSE;
 
   paint_context = gdk_surface_get_paint_gl_context (surface, NULL);
@@ -116,6 +117,16 @@ gdk_cairo_draw_from_gl (cairo_t    *cr,
       g_warning ("Unsupported gl source type %d\n", source_type);
       return;
     }
+
+  gdk_gl_context_get_version (paint_context, &major, &minor);
+  version = major * 100 + minor;
+
+  /* TODO: Use glTexSubImage2D() and do a row-by-row copy to replace
+   * the GL_UNPACK_ROW_LENGTH support
+   */
+  if (gdk_gl_context_get_use_es (paint_context) &&
+      !(version >= 300 || gdk_gl_context_has_feature (paint_context, GDK_GL_FEATURE_UNPACK_SUBIMAGE)))
+    return;
 
   /* TODO: avoid reading back non-required data due to dest clip */
   image = cairo_surface_create_similar_image (cairo_get_target (cr),

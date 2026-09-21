@@ -32,15 +32,9 @@
 typedef struct _MetaGpuKms MetaGpuKms;
 
 #define META_TYPE_MONITOR_MANAGER_NATIVE (meta_monitor_manager_native_get_type ())
-META_EXPORT_TEST
-G_DECLARE_DERIVABLE_TYPE (MetaMonitorManagerNative, meta_monitor_manager_native,
-                          META, MONITOR_MANAGER_NATIVE,
-                          MetaMonitorManager)
-
-struct _MetaMonitorManagerNativeClass
-{
-  MetaMonitorManagerClass parent_class;
-};
+G_DECLARE_FINAL_TYPE (MetaMonitorManagerNative, meta_monitor_manager_native,
+                      META, MONITOR_MANAGER_NATIVE,
+                      MetaMonitorManager)
 
 void meta_monitor_manager_native_pause (MetaMonitorManagerNative *manager_native);
 
@@ -52,10 +46,3 @@ MetaGammaLut * meta_monitor_manager_native_get_cached_crtc_gamma (MetaMonitorMan
 void meta_monitor_manager_native_update_cached_crtc_gamma (MetaMonitorManagerNative *manager_native,
                                                            MetaCrtcKms              *crtc_kms,
                                                            MetaGammaLut             *gamma);
-
-MetaCtm * meta_monitor_manager_native_get_cached_crtc_ctm (MetaMonitorManagerNative *manager_native,
-                                                           MetaCrtcKms              *crtc_kms);
-
-void meta_monitor_manager_native_update_cached_crtc_ctm (MetaMonitorManagerNative *manager_native,
-                                                         MetaCrtcKms              *crtc_kms,
-                                                         MetaCtm                  *ctm);

@@ -25,8 +25,8 @@
 
 #include <X11/Xatom.h>
 
+#include "x11/group-private.h"
 #include "x11/meta-x11-display-private.h"
-#include "x11/meta-x11-group-private.h"
 #include "x11/xprops.h"
 
 typedef void (* InitValueFunc)   (MetaX11Display *x11_display,
@@ -134,14 +134,14 @@ static void
 reload_wm_client_machine (MetaGroup     *group,
                           MetaPropValue *value)
 {
-  g_clear_pointer (&group->wm_client_machine, g_free);
+  g_free (group->wm_client_machine);
+  group->wm_client_machine = NULL;
 
   if (value->type != META_PROP_VALUE_INVALID)
     group->wm_client_machine = g_strdup (value->v.str);
 
-  meta_topic (META_DEBUG_X11,
-              "Group has client machine \"%s\"",
-              group->wm_client_machine ? group->wm_client_machine : "unset");
+  meta_verbose ("Group has client machine \"%s\"",
+                group->wm_client_machine ? group->wm_client_machine : "unset");
 }
 
 static void
@@ -157,14 +157,14 @@ static void
 reload_net_startup_id (MetaGroup     *group,
                        MetaPropValue *value)
 {
-  g_clear_pointer (&group->startup_id, g_free);
+  g_free (group->startup_id);
+  group->startup_id = NULL;
 
   if (value->type != META_PROP_VALUE_INVALID)
     group->startup_id = g_strdup (value->v.str);
 
-  meta_topic (META_DEBUG_X11,
-              "Group has startup id \"%s\"",
-              group->startup_id ? group->startup_id : "unset");
+  meta_verbose ("Group has startup id \"%s\"",
+                group->startup_id ? group->startup_id : "unset");
 }
 
 #define N_HOOKS 3
@@ -208,7 +208,8 @@ meta_x11_display_free_group_prop_hooks (MetaX11Display *x11_display)
 {
   g_assert (x11_display->group_prop_hooks != NULL);
 
-  g_clear_pointer (&x11_display->group_prop_hooks, g_free);
+  g_free (x11_display->group_prop_hooks);
+  x11_display->group_prop_hooks = NULL;
 }
 
 static MetaGroupPropHooks*

@@ -9,18 +9,22 @@ G_BEGIN_DECLS
 #define CLUTTER_TYPE_STAGE_WINDOW (clutter_stage_window_get_type ())
 
 CLUTTER_EXPORT
-G_DECLARE_DERIVABLE_TYPE (ClutterStageWindow, clutter_stage_window,
-                          CLUTTER, STAGE_WINDOW,
-                          GObject)
+G_DECLARE_INTERFACE (ClutterStageWindow, clutter_stage_window,
+                     CLUTTER, STAGE_WINDOW,
+                     GObject)
 
 /*
- * ClutterStageWindowClass: (skip)
+ * ClutterStageWindowInterface: (skip)
  *
- * The parent class for for stage windows
+ * The interface implemented by backends for stage windows
  */
-struct _ClutterStageWindowClass
+struct _ClutterStageWindowInterface
 {
-  GObjectClass parent_class;
+  /*< private >*/
+  GTypeInterface parent_iface;
+
+  void              (* set_title)               (ClutterStageWindow *stage_window,
+                                                 const gchar        *title);
 
   gboolean          (* realize)                 (ClutterStageWindow *stage_window);
   void              (* unrealize)               (ClutterStageWindow *stage_window);
@@ -51,6 +55,9 @@ struct _ClutterStageWindowClass
                                                  ClutterFrame       *frame);
 };
 
+void              _clutter_stage_window_set_cursor_visible (ClutterStageWindow *window,
+                                                            gboolean            is_visible);
+
 gboolean          _clutter_stage_window_realize                 (ClutterStageWindow *window);
 void              _clutter_stage_window_unrealize               (ClutterStageWindow *window);
 
@@ -64,6 +71,9 @@ void              _clutter_stage_window_resize                  (ClutterStageWin
 CLUTTER_EXPORT
 void              _clutter_stage_window_get_geometry            (ClutterStageWindow *window,
                                                                  MtkRectangle       *geometry);
+
+void              _clutter_stage_window_set_accept_focus        (ClutterStageWindow *window,
+                                                                 gboolean            accept_focus);
 
 void               _clutter_stage_window_redraw_view            (ClutterStageWindow *window,
                                                                  ClutterStageView   *view,

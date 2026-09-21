@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from . import braille_presenter, debug, script_manager
 from .ax_object import AXObject
@@ -36,8 +36,6 @@ from .ax_text import AXText
 from .ax_utilities import AXUtilities
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     import gi
 
     gi.require_version("Atspi", "2.0")
@@ -47,7 +45,6 @@ CARET_TRACKING = "caret-tracking"
 CARET_NAVIGATOR = "caret-navigator"
 FOCUS_TRACKING = "focus-tracking"
 FLAT_REVIEW = "flat-review"
-MATH_NAVIGATOR = "math-navigator"
 MOUSE_REVIEW = "mouse-review"
 OBJECT_NAVIGATOR = "object-navigator"
 SAY_ALL = "say-all"
@@ -66,35 +63,16 @@ class FocusManager:
         self._active_mode: str | None = None
         self._last_cursor_position: tuple[Atspi.Accessible | None, int] = (None, -1)
         self._penultimate_cursor_position: tuple[Atspi.Accessible | None, int] = (None, -1)
-        self._preferences_window: Atspi.Accessible | None = None
-        self._preferences_window_pending: bool = False
+        self._in_preferences_window: bool = False
         self._old_focus_was_dead: bool = False
-        self._region_changed_listeners: list[Callable[[Atspi.Accessible, str], None]] = []
-
-    def add_region_changed_listener(
-        self,
-        callback: Callable[[Atspi.Accessible, str], None],
-    ) -> None:
-        """Registers a callback to be called when the region of interest changes."""
-
-        self._region_changed_listeners.append(callback)
-
-    def remove_region_changed_listener(
-        self,
-        callback: Callable[[Atspi.Accessible, str], None],
-    ) -> None:
-        """Unregisters a previously-registered region-changed callback."""
-
-        if callback in self._region_changed_listeners:
-            self._region_changed_listeners.remove(callback)
 
     def clear_state(self, reason: str = "") -> None:
         """Clears everything we're tracking."""
 
-        tokens = ["FOCUS MANAGER: Clearing all state"]
+        msg = "FOCUS MANAGER: Clearing all state"
         if reason:
-            tokens += [":", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg += f": {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         self._focus = None
         self._window = None
         self._object_of_interest = None
@@ -102,24 +80,14 @@ class FocusManager:
         self._old_focus_was_dead = False
 
     def is_in_preferences_window(self) -> bool:
-        """Returns True if the Orca preferences window is the active window."""
+        """Returns True if the Orca preferences window is open."""
 
-        if self._preferences_window is None:
-            return False
-        return self._window == self._preferences_window
+        return self._in_preferences_window
 
     def set_in_preferences_window(self, in_prefs: bool) -> None:
-        """Tracks the Orca preferences window accessible for active-window comparison."""
+        """Sets whether the Orca preferences window is open."""
 
-        if not in_prefs:
-            self._preferences_window = None
-            self._preferences_window_pending = False
-            return
-
-        # The prefs window may not be the active window yet at this point, so defer
-        # capture until set_active_window sees it become active.
-        self._preferences_window = None
-        self._preferences_window_pending = True
+        self._in_preferences_window = in_prefs
 
     def find_focused_object(self) -> Atspi.Accessible | None:
         """Returns the focused object in the active window."""
@@ -182,12 +150,7 @@ class FocusManager:
             obj.emit("mode-changed::" + mode, 1, "")
 
         if mode != self._active_mode:
-            tokens: list[Any] = [
-                "FOCUS MANAGER: Switching mode from",
-                self._active_mode,
-                "to",
-                mode,
-            ]
+            tokens = ["FOCUS MANAGER: Switching mode from", self._active_mode, "to", mode]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             self._active_mode = mode
             if mode == FLAT_REVIEW:
@@ -195,15 +158,7 @@ class FocusManager:
             else:
                 braille_presenter.get_presenter().set_brlapi_priority()
 
-        tokens = [
-            "FOCUS MANAGER: Region of interest:",
-            obj,
-            "(",
-            start_offset,
-            ",",
-            end_offset,
-            ")",
-        ]
+        tokens = ["FOCUS MANAGER: Region of interest:", obj, f"({start_offset}, {end_offset})"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         if obj is not None:
             obj.emit("region-changed", start_offset, end_offset)
@@ -218,9 +173,6 @@ class FocusManager:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             self._object_of_interest = obj
 
-        for listener in self._region_changed_listeners:
-            listener(obj, mode)
-
     def in_say_all(self) -> bool:
         """Returns True if we are in say-all mode."""
 
@@ -229,10 +181,10 @@ class FocusManager:
     def reset_active_mode(self, reason: str = "") -> None:
         """Resets the active mode."""
 
-        tokens = ["FOCUS MANAGER: Resetting active mode"]
+        msg = "FOCUS MANAGER: Resetting active mode"
         if reason:
-            tokens += [":", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg += f": {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         if self._focus is not None:
             self._active_mode = FOCUS_TRACKING
             self._focus.emit("mode-changed::" + FOCUS_TRACKING, 1, reason)
@@ -296,7 +248,6 @@ class FocusManager:
         # before doing so.
         self.set_last_cursor_position(obj, AXText.get_caret_offset(obj))
         AXUtilities.update_cached_selected_text(obj)
-        AXUtilities.update_cached_text_attributes(obj)
 
         # We save additional information about the object for events that were received at the same
         # time as the prioritized focus-change event so we don't double-present aspects about obj.
@@ -405,27 +356,11 @@ class FocusManager:
             tokens.extend(["in", app])
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
-        # Because Chromium-based browsers have Omnibox popup issues.
-        if frame is None and AXObject.has_broken_popup_ancestry(self._focus):
-            tokens = [
-                "FOCUS MANAGER: Not clearing active window; focus",
-                self._focus,
-                "is in popup with broken ancestry",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return
-
         if frame == self._window:
             msg = "FOCUS MANAGER: Setting active window to existing active window"
             debug.print_message(debug.LEVEL_INFO, msg, True)
         else:
             self._window = frame
-
-        if self._preferences_window_pending and frame is not None:
-            self._preferences_window = frame
-            self._preferences_window_pending = False
-            tokens = ["FOCUS MANAGER: Preferences window captured as", frame]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         if set_window_as_focus:
             self.set_locus_of_focus(None, self._window, notify_script)

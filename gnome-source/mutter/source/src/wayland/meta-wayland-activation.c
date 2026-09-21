@@ -37,7 +37,6 @@ struct _MetaWaylandActivation
   struct wl_list resource_list;
   struct wl_list token_list;
   GHashTable *tokens;
-  GHashTable *pending_activations;
 };
 
 struct _MetaXdgActivationToken
@@ -90,7 +89,8 @@ token_set_app_id (struct wl_client   *client,
 {
   MetaXdgActivationToken *token = wl_resource_get_user_data (resource);
 
-  g_set_str (&token->app_id, app_id);
+  g_clear_pointer (&token->app_id, g_free);
+  token->app_id = g_strdup (app_id);
 }
 
 static void
@@ -307,7 +307,7 @@ token_can_activate (MetaXdgActivationToken *token)
                                           token->surface,
                                           token->serial,
                                           FALSE,
-                                          NULL, NULL, NULL);
+                                          NULL, NULL, NULL, NULL);
 }
 
 static gboolean
@@ -322,20 +322,22 @@ startup_sequence_is_recent (MetaDisplay         *display,
   return seq_timestamp_ms >= last_user_time_ms;
 }
 
-static gboolean
-maybe_activate (MetaWaylandActivation *activation,
-                MetaWindow            *window,
-                const char            *token_str)
+static void
+activation_activate (struct wl_client   *client,
+                     struct wl_resource *resource,
+                     const char         *token_str,
+                     struct wl_resource *surface_resource)
 {
+  MetaWaylandActivation *activation = wl_resource_get_user_data (resource);
+  MetaWaylandSurface *surface = wl_resource_get_user_data (surface_resource);
   MetaDisplay *display = display_from_activation (activation);
   MetaXdgActivationToken *token;
   MetaStartupSequence *sequence;
+  MetaWindow *window;
 
-  if (!window || window->unmanaging)
-    return TRUE;
-
-  if (!window->mapped)
-    return FALSE;
+  window = meta_wayland_surface_get_window (surface);
+  if (!window)
+    return;
 
   token = g_hash_table_lookup (activation->tokens, token_str);
   if (token)
@@ -349,7 +351,7 @@ maybe_activate (MetaWaylandActivation *activation,
     }
 
   if (!sequence)
-    return TRUE;
+    return;
 
   if ((token && token_can_activate (token)) ||
       (!token && startup_sequence_is_recent (display, sequence)))
@@ -372,95 +374,6 @@ maybe_activate (MetaWaylandActivation *activation,
     }
 
   meta_startup_sequence_complete (sequence);
-
-  return TRUE;
-}
-
-static void
-complete_pending_activate (MetaWaylandActivation *activation,
-                           MetaWindow            *window)
-{
-  g_autoptr (GPtrArray) requests = NULL;
-  size_t i;
-
-  g_assert (window != NULL);
-
-  g_signal_handlers_disconnect_by_data (window, activation);
-
-  if (!g_hash_table_steal_extended (activation->pending_activations,
-                                    window,
-                                    NULL,
-                                    (gpointer *) &requests))
-    return;
-
-  for (i = 0; i < requests->len; i++)
-    maybe_activate (activation, window, requests->pdata[i]);
-}
-
-static void
-on_window_mapped_notify (MetaWindow            *window,
-                         GParamSpec            *pspec,
-                         MetaWaylandActivation *activation)
-{
-  complete_pending_activate (activation, window);
-}
-
-static void
-on_window_unmanaged (MetaWindow            *window,
-                     MetaWaylandActivation *activation)
-{
-  complete_pending_activate (activation, window);
-}
-
-static void
-add_pending_activate (MetaWaylandActivation *activation,
-                      MetaWindow            *window,
-                      const char            *token_str)
-{
-  g_autoptr (GPtrArray) requests = NULL;
-
-  if (window->unmanaging)
-    return;
-
-  if (!g_hash_table_steal_extended (activation->pending_activations,
-                                    window,
-                                    NULL,
-                                    (gpointer *) &requests))
-    {
-      requests = g_ptr_array_new_null_terminated (0, g_free, TRUE);
-
-      g_signal_connect (window, "notify::mapped",
-                        G_CALLBACK (on_window_mapped_notify),
-                        activation);
-      g_signal_connect (window, "unmanaged",
-                        G_CALLBACK (on_window_unmanaged),
-                        activation);
-    }
-
-  g_assert (requests != NULL);
-
-  g_ptr_array_add (requests, g_strdup (token_str));
-
-  g_hash_table_insert (activation->pending_activations,
-                       window, g_steal_pointer (&requests));
-}
-
-static void
-activation_activate (struct wl_client   *client,
-                     struct wl_resource *resource,
-                     const char         *token_str,
-                     struct wl_resource *surface_resource)
-{
-  MetaWaylandActivation *activation = wl_resource_get_user_data (resource);
-  MetaWaylandSurface *surface = wl_resource_get_user_data (surface_resource);
-  MetaWindow *window = meta_wayland_surface_get_window (surface);
-
-  if (maybe_activate (activation, window, token_str))
-    return;
-
-  g_assert (window != NULL);
-
-  add_pending_activate (activation, window, token_str);
 }
 
 static const struct xdg_activation_v1_interface activation_interface = {
@@ -493,7 +406,6 @@ void
 meta_wayland_activation_finalize (MetaWaylandCompositor *compositor)
 {
   g_hash_table_destroy (compositor->activation->tokens);
-  g_hash_table_destroy (compositor->activation->pending_activations);
   g_clear_pointer (&compositor->activation, g_free);
 }
 
@@ -511,9 +423,6 @@ meta_wayland_activation_init (MetaWaylandCompositor *compositor)
     g_hash_table_new_full (g_str_hash, g_str_equal,
                            NULL,
                            (GDestroyNotify) meta_xdg_activation_token_free);
-
-  activation->pending_activations =
-    g_hash_table_new_full (NULL, NULL, NULL, (GDestroyNotify) g_ptr_array_unref);
 
   wl_global_create (compositor->wayland_display,
                     &xdg_activation_v1_interface,

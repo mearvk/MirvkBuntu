@@ -22,24 +22,12 @@
 
 #include "gskoffloadprivate.h"
 
-#include "gskclipnode.h"
-#include "gskcolornodeprivate.h"
-#include "gskcontainernodeprivate.h"
-#include "gskdebugnode.h"
-#include "gskdebugprivate.h"
-#include "gskisolationnode.h"
-#include "gskopacitynode.h"
 #include "gskrendernode.h"
 #include "gskrectprivate.h"
-#include "gskrendernodeprivate.h"
-#include "gskroundedclipnode.h"
 #include "gskroundedrectprivate.h"
-#include "gsksubsurfacenode.h"
-#include "gsktexturenode.h"
-#include "gsktransformnode.h"
-#include "gsktransformprivate.h"
-
-#include "gdkrgbaprivate.h"
+#include "gsktransform.h"
+#include "gskdebugprivate.h"
+#include "gskrendernodeprivate.h"
 #include "gdksurfaceprivate.h"
 
 #include <graphene.h>
@@ -63,115 +51,50 @@ struct _GskOffload
   GSList *clips;
 
   Clip *current_clip;
-  const char *offload_impossible;
 
   GskOffloadInfo *last_info;
 };
 
-static GdkDihedral
-find_texture_transform (GskTransform *transform)
-{
-  GdkDihedral dihedral;
-  float sx, sy, dx, dy;
-
-  g_assert (gsk_transform_get_fine_category (transform) >= GSK_FINE_TRANSFORM_CATEGORY_2D_DIHEDRAL);
-
-  gsk_transform_to_dihedral (transform, &dihedral, &sx, &sy, &dx, &dy);
-
-  return dihedral;
-}
-
-static gboolean
-color_is_black (const GdkColor *color)
-{
-  return color->red < 255.f / 65535.f &&
-         color->green < 255.f / 65535.f &&
-         color->blue < 255.f / 65535.f &&
-         color->alpha > 65280.f / 65535.f;
-}
-
 static GdkTexture *
 find_texture_to_attach (GskOffload          *self,
-                        const GskRenderNode *subsurface_node,
-                        graphene_rect_t     *out_texture_rect,
-                        graphene_rect_t     *out_source_rect,
-                        gboolean            *has_background,
-                        GdkDihedral         *out_texture_transform)
+                        GdkSubsurface       *subsurface,
+                        const GskRenderNode *node,
+                        graphene_rect_t     *out_clip)
 {
-  GdkSubsurface *subsurface;
-  const GskRenderNode *node;
   gboolean has_clip = FALSE;
   graphene_rect_t clip;
-  GskTransform *transform = NULL;
-  GdkTexture *ret = NULL;
-
-  *has_background = FALSE;
-  *out_texture_transform = GDK_DIHEDRAL_NORMAL;
-
-  subsurface = gsk_subsurface_node_get_subsurface (subsurface_node);
-  node = subsurface_node;
 
   for (;;)
     {
-      switch ((int) GSK_RENDER_NODE_TYPE (node))
+      switch ((int)GSK_RENDER_NODE_TYPE (node))
         {
         case GSK_DEBUG_NODE:
           node = gsk_debug_node_get_child (node);
           break;
 
-        case GSK_SUBSURFACE_NODE:
-          node = gsk_subsurface_node_get_child (node);
-          break;
-
-        case GSK_OPACITY_NODE:
-          if (gsk_opacity_node_get_opacity (node) < 1.0)
-            goto out;
-          node = gsk_opacity_node_get_child (node);
-          break;
-
-        case GSK_ISOLATION_NODE:
-          node = gsk_isolation_node_get_child (node);
-          break;
-
         case GSK_CONTAINER_NODE:
-          if (gsk_container_node_get_n_children (node) == 1)
+          if (gsk_container_node_get_n_children (node) != 1)
             {
-              node = gsk_container_node_get_child (node, 0);
-              break;
+              GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
+                                 "Can't offload subsurface %p: too much content, container with %d children",
+                                 subsurface, gsk_container_node_get_n_children (node));
+              return NULL;
             }
-          else if (gsk_container_node_get_n_children (node) == 2)
-            {
-              GskRenderNode *child = gsk_container_node_get_child (node, 0);
-              graphene_rect_t bounds;
-
-              gsk_transform_transform_bounds (transform, &child->bounds, &bounds);
-              if (GSK_RENDER_NODE_TYPE (child) == GSK_COLOR_NODE &&
-                  gsk_rect_equal (&bounds, &subsurface_node->bounds) &&
-                  color_is_black (gsk_color_node_get_gdk_color (child)))
-                {
-                  *has_background = TRUE;
-                  node = gsk_container_node_get_child (node, 1);
-                  break;
-                }
-            }
-
-          GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                             "[%p] 🗙 Too much content, container with %d children",
-                             subsurface, gsk_container_node_get_n_children (node));
-          goto out;
+          node = gsk_container_node_get_child (node, 0);
+          break;
 
         case GSK_TRANSFORM_NODE:
           {
             GskTransform *t = gsk_transform_node_get_transform (node);
 
-            if (gsk_transform_get_fine_category (t) < GSK_FINE_TRANSFORM_CATEGORY_2D_DIHEDRAL)
+            if (gsk_transform_get_category (t) < GSK_TRANSFORM_CATEGORY_2D_AFFINE)
               {
                 char *s = gsk_transform_to_string (t);
                 GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                   "[%p] 🗙 Transform %s is not dihedral",
+                                   "Can't offload subsurface %p: transform %s is not just scale/translate",
                                    subsurface, s);
                 g_free (s);
-                goto out;
+                return NULL;
               }
 
             if (has_clip)
@@ -180,8 +103,6 @@ find_texture_to_attach (GskOffload          *self,
                 gsk_transform_transform_bounds (inv, &clip, &clip);
                 gsk_transform_unref (inv);
               }
-
-            transform = gsk_transform_transform (transform, gsk_transform_ref (t));
 
             node = gsk_transform_node_get_child (node);
           }
@@ -196,13 +117,12 @@ find_texture_to_attach (GskOffload          *self,
                 if (!gsk_rect_intersection (c, &clip, &clip))
                   {
                     GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                       "[%p] 🗙 Empty clip", subsurface);
-                    goto out;
+                                      "Can't offload subsurface %p: empty clip", subsurface);
+                    return NULL;
                   }
               }
             else
               {
-                gsk_transform_transform_bounds (transform, &node->bounds, out_texture_rect);
                 clip = *c;
                 has_clip = TRUE;
               }
@@ -214,83 +134,39 @@ find_texture_to_attach (GskOffload          *self,
         case GSK_TEXTURE_NODE:
           {
             GdkTexture *texture = gsk_texture_node_get_texture (node);
-            int width, height;
-
-            if (GDK_IS_MEMORY_TEXTURE (texture) &&
-                !GDK_DISPLAY_DEBUG_CHECK (gdk_surface_get_display (self->surface),
-                                          FORCE_OFFLOAD))
-              {
-                GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                   "[%p] 🗙 Memory texture", subsurface);
-                goto out;
-              }
-
-            if (gsk_transform_get_fine_category (transform) < GSK_FINE_TRANSFORM_CATEGORY_2D_DIHEDRAL)
-              {
-                char *s = gsk_transform_to_string (transform);
-                GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                   "[%p] 🗙 Transform %s is not dihedral",
-                                   subsurface, s);
-                g_free (s);
-                goto out;
-              }
-
-            width = gdk_texture_get_width (texture);
-            height = gdk_texture_get_height (texture);
-
-            *out_texture_transform = find_texture_transform (transform);
-
-            if (gdk_dihedral_swaps_xy (*out_texture_transform))
-              {
-                int tmp = width;
-                width = height;
-                height = tmp;
-              }
 
             if (has_clip)
               {
                 float dx = node->bounds.origin.x;
                 float dy = node->bounds.origin.y;
-                float sx = width / node->bounds.size.width;
-                float sy = height / node->bounds.size.height;
+                float sx = gdk_texture_get_width (texture) / node->bounds.size.width;
+                float sy = gdk_texture_get_height (texture) / node->bounds.size.height;
 
-                if (!gsk_rect_intersection (&node->bounds, &clip, &clip))
-                  {
-                    GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                       "[%p] 🗙 Empty clip", subsurface);
-                    goto out;
-                  }
+                gsk_rect_intersection (&node->bounds, &clip, &clip);
 
-                out_source_rect->origin.x = (clip.origin.x - dx) * sx;
-                out_source_rect->origin.y = (clip.origin.y - dy) * sy;
-                out_source_rect->size.width = clip.size.width * sx;
-                out_source_rect->size.height = clip.size.height * sy;
+                out_clip->origin.x = (clip.origin.x - dx) * sx;
+                out_clip->origin.y = (clip.origin.y - dy) * sy;
+                out_clip->size.width = clip.size.width * sx;
+                out_clip->size.height = clip.size.height * sy;
               }
             else
               {
-                gsk_transform_transform_bounds (transform, &node->bounds, out_texture_rect);
-                out_source_rect->origin.x = 0;
-                out_source_rect->origin.y = 0;
-                out_source_rect->size.width = width;
-                out_source_rect->size.height = height;
+                out_clip->origin.x = 0;
+                out_clip->origin.y = 0;
+                out_clip->size.width = gdk_texture_get_width (texture);
+                out_clip->size.height = gdk_texture_get_height (texture);
               }
 
-            ret = texture;
-            goto out;
+            return texture;
           }
 
         default:
           GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                             "[%p] 🗙 Only textures supported (found %s)",
+                             "Can't offload subsurface %p: Only textures supported but found %s",
                              subsurface, g_type_name_from_instance ((GTypeInstance *) node));
-          goto out;
+          return NULL;
         }
     }
-
-out:
-  g_clear_pointer (&transform, gsk_transform_unref);
-
-  return ret;
 }
 
 static void
@@ -331,24 +207,18 @@ transform_bounds (GskOffload            *self,
   gsk_transform_transform_bounds (t, bounds, rect);
 }
 
-static inline gboolean
+static inline void
 transform_rounded_rect (GskOffload       *self,
                         const GskRoundedRect *rect,
                         GskRoundedRect       *out_rect)
 {
   GskTransform *t = self->transforms ? self->transforms->data : NULL;
-  GdkDihedral dihedral;
   float sx, sy, dx, dy;
-  GskRoundedRect tmp;
 
-  if (gsk_transform_get_fine_category (t) < GSK_FINE_TRANSFORM_CATEGORY_2D_DIHEDRAL)
-    return FALSE;
+  g_assert (gsk_transform_get_category (t) >= GSK_TRANSFORM_CATEGORY_2D_AFFINE);
 
-  gsk_transform_to_dihedral (t, &dihedral, &sx, &sy, &dx, &dy);
-  gsk_rounded_rect_dihedral (&tmp, rect, dihedral);
-  gsk_rounded_rect_scale_affine (out_rect, &tmp, sx, sy, dx, dy);
-
-  return TRUE;
+  gsk_transform_to_affine (t, &sx, &sy, &dx, &dy);
+  gsk_rounded_rect_scale_affine (out_rect, rect, sx, sy, dx, dy);
 }
 
 static void
@@ -499,10 +369,8 @@ update_clip (GskOffload            *self,
 
       /* The clip gets simpler for this node */
 
-      if (gsk_rect_intersection (&self->current_clip->rect.bounds, transformed_bounds, &rect))
-        push_rect_clip (self, &GSK_ROUNDED_RECT_INIT_FROM_RECT (rect));
-      else
-        push_empty_clip (self);
+      gsk_rect_intersection (&self->current_clip->rect.bounds, transformed_bounds, &rect);
+      push_rect_clip (self, &GSK_ROUNDED_RECT_INIT_FROM_RECT (rect));
       return TRUE;
     }
 
@@ -525,25 +393,6 @@ find_subsurface_info (GskOffload    *self,
 
 static void
 visit_node (GskOffload    *self,
-            GskRenderNode *node);
-
-static void
-visit_children (GskOffload    *self,
-                GskRenderNode *node)
-{
-  GskRenderNode **children;
-  gsize i, n_children;
-
-  children = gsk_render_node_get_children (node, &n_children);
-
-  for (i = 0; i < n_children; i++)
-    {
-      visit_node (self, children[i]);
-    }
-}
-
-static void
-visit_node (GskOffload    *self,
             GskRenderNode *node)
 {
   gboolean has_clip;
@@ -555,49 +404,34 @@ visit_node (GskOffload    *self,
     {
       GskOffloadInfo *info = &self->subsurfaces[i];
 
-      if (info->can_offload && info->can_raise)
+      if (info->can_raise)
         {
-          if (gsk_rect_intersects (&transformed_bounds, &info->texture_rect) ||
-              gsk_rect_intersects (&transformed_bounds, &info->background_rect))
+          if (gsk_rect_intersects (&transformed_bounds, &info->dest))
             {
               GskRenderNodeType type = GSK_RENDER_NODE_TYPE (node);
 
-              if (!gsk_render_node_contains_subsurface_node (node) ||
-                  (type != GSK_CONTAINER_NODE &&
-                   type != GSK_TRANSFORM_NODE &&
-                   type != GSK_CLIP_NODE &&
-                   type != GSK_ROUNDED_CLIP_NODE &&
-                   type != GSK_DEBUG_NODE))
+              if (type != GSK_CONTAINER_NODE &&
+                  type != GSK_TRANSFORM_NODE &&
+                  type != GSK_CLIP_NODE &&
+                  type != GSK_ROUNDED_CLIP_NODE &&
+                  type != GSK_DEBUG_NODE)
                 {
-                  if (gsk_render_node_clears_background (node))
-                    {
-                      GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                         "[%p]   Disabling because a %s clears the background",
-                                         info->subsurface,
-                                         g_type_name_from_instance ((GTypeInstance *) node));
-                      info->can_offload = FALSE;
-                    }
-                  else
-                    {
-                      GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                         "[%p]   Lowering because a %s overlaps",
-                                         info->subsurface,
-                                         g_type_name_from_instance ((GTypeInstance *) node));
-                      info->can_raise = FALSE;
-                    }
+                  GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
+                                     "Can't raise subsurface %p because a %s overlaps",
+                                     info->subsurface,
+                                     g_type_name_from_instance ((GTypeInstance *) node));
+                  info->can_raise = FALSE;
                 }
             }
         }
     }
-
-  if (!gsk_render_node_contains_subsurface_node (node))
-    return;
 
   has_clip = update_clip (self, &transformed_bounds);
 
   switch (GSK_RENDER_NODE_TYPE (node))
     {
     case GSK_BORDER_NODE:
+    case GSK_COLOR_NODE:
     case GSK_CONIC_GRADIENT_NODE:
     case GSK_LINEAR_GRADIENT_NODE:
     case GSK_REPEATING_LINEAR_GRADIENT_NODE:
@@ -607,62 +441,8 @@ visit_node (GskOffload    *self,
     case GSK_TEXTURE_NODE:
     case GSK_TEXTURE_SCALE_NODE:
     case GSK_CAIRO_NODE:
-    case GSK_COLOR_NODE:
     case GSK_INSET_SHADOW_NODE:
     case GSK_OUTSET_SHADOW_NODE:
-    case GSK_PASTE_NODE:
-    case GSK_TURBULENCE_NODE:
-      /* no children */
-      break;
-
-    case GSK_CONTAINER_NODE:
-      {
-        GskRenderNode **children;
-        gsize i, okay, n_children;
-        const char *was_impossible = self->offload_impossible;
-
-        children = gsk_render_node_get_children (node, &n_children);
-
-        if (!was_impossible &&
-            (gsk_render_node_clears_background (node) ||
-             gsk_render_node_get_copy_mode (node) != GSK_COPY_NONE))
-          {
-            for (okay = n_children; okay > 0; okay--)
-              {
-                if (gsk_render_node_clears_background (children[okay - 1]))
-                  {
-                    self->offload_impossible = "Composite operations";
-                    break;
-                  }
-
-                if (gsk_render_node_get_copy_mode (children[okay - 1]) != GSK_COPY_NONE)
-                  {
-                    self->offload_impossible = "Copied contents";
-                    okay--;
-                    break;
-                  }
-              }
-          }
-        else
-          okay = 0;
-
-        for (i = 0; i < n_children ; i++)
-          {
-            if (i == okay)
-              self->offload_impossible = was_impossible;
-
-            visit_node (self, children[i]);
-          }
-      }
-      break;
-
-    case GSK_DEBUG_NODE:
-    case GSK_COPY_NODE:
-    case GSK_ISOLATION_NODE:
-      /* keep going */
-      visit_children (self, node);
-      break;
-
     case GSK_GL_SHADER_NODE:
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
@@ -674,18 +454,7 @@ visit_node (GskOffload    *self,
     case GSK_MASK_NODE:
     case GSK_FILL_NODE:
     case GSK_STROKE_NODE:
-    case GSK_COMPONENT_TRANSFER_NODE:
-    case GSK_COMPOSITE_NODE:
-    case GSK_DISPLACEMENT_NODE:
-    case GSK_ARITHMETIC_NODE:
-      /* cannot offload */
-      {
-        const char *was_impossible = self->offload_impossible;
-        self->offload_impossible = g_type_name_from_instance ((GTypeInstance *) node);
-        visit_children (self, node);
-        self->offload_impossible = was_impossible;
-      }
-      break;
+    break;
 
     case GSK_CLIP_NODE:
       {
@@ -698,26 +467,25 @@ visit_node (GskOffload    *self,
         if (self->current_clip->is_rectilinear)
           {
             memset (&intersection.corner, 0, sizeof intersection.corner);
-            if (gsk_rect_intersection (&transformed_clip,
-                                       &self->current_clip->rect.bounds,
-                                       &intersection.bounds))
-              push_rect_clip (self, &intersection);
-            else
-              push_empty_clip (self);
+            gsk_rect_intersection (&transformed_clip,
+                                   &self->current_clip->rect.bounds,
+                                   &intersection.bounds);
+
+            push_rect_clip (self, &intersection);
             visit_node (self, gsk_clip_node_get_child (node));
             pop_clip (self);
           }
         else
           {
-            GskRoundedRectIntersection intersect;
+            GskRoundedRectIntersection result;
 
-            intersect = gsk_rounded_rect_intersect_with_rect (&self->current_clip->rect,
-                                                              &transformed_clip,
-                                                              &intersection);
+            result = gsk_rounded_rect_intersect_with_rect (&self->current_clip->rect,
+                                                           &transformed_clip,
+                                                           &intersection);
 
-            if (intersect == GSK_INTERSECTION_EMPTY)
+            if (result == GSK_INTERSECTION_EMPTY)
               push_empty_clip (self);
-            else if (intersect == GSK_INTERSECTION_NONEMPTY)
+            else if (result == GSK_INTERSECTION_NONEMPTY)
               push_rect_clip (self, &intersection);
             else
               push_complex_clip (self);
@@ -732,25 +500,20 @@ visit_node (GskOffload    *self,
         const GskRoundedRect *clip = gsk_rounded_clip_node_get_clip (node);
         GskRoundedRect transformed_clip;
 
-        if (!transform_rounded_rect (self, clip, &transformed_clip))
-          {
-            const char *was_impossible = self->offload_impossible;
-            self->offload_impossible = "Non-dihedral transform";
-            visit_node (self, gsk_rounded_clip_node_get_child (node));
-            self->offload_impossible = was_impossible;
-          }
-        else if (self->current_clip->is_rectilinear)
+        transform_rounded_rect (self, clip, &transformed_clip);
+
+        if (self->current_clip->is_rectilinear)
           {
             GskRoundedRect intersection;
-            GskRoundedRectIntersection intersect;
+            GskRoundedRectIntersection result;
 
-            intersect = gsk_rounded_rect_intersect_with_rect (&transformed_clip,
-                                                              &self->current_clip->rect.bounds,
-                                                              &intersection);
+            result = gsk_rounded_rect_intersect_with_rect (&transformed_clip,
+                                                           &self->current_clip->rect.bounds,
+                                                           &intersection);
 
-            if (intersect == GSK_INTERSECTION_EMPTY)
+            if (result == GSK_INTERSECTION_EMPTY)
               push_empty_clip (self);
-            else if (intersect == GSK_INTERSECTION_NONEMPTY)
+            else if (result == GSK_INTERSECTION_NONEMPTY)
               push_rect_clip (self, &intersection);
             else
               goto complex_clip;
@@ -776,80 +539,53 @@ complex_clip:
       pop_transform (self);
       break;
 
+    case GSK_CONTAINER_NODE:
+      for (gsize i = 0; i < gsk_container_node_get_n_children (node); i++)
+        visit_node (self, gsk_container_node_get_child (node, i));
+      break;
+
+    case GSK_DEBUG_NODE:
+      visit_node (self, gsk_debug_node_get_child (node));
+      break;
+
     case GSK_SUBSURFACE_NODE:
       {
         GdkSubsurface *subsurface = gsk_subsurface_node_get_subsurface (node);
-        GskTransform *transform;
 
         GskOffloadInfo *info = find_subsurface_info (self, subsurface);
-
-        transform = self->transforms ? (GskTransform *) self->transforms->data : NULL;
 
         if (info == NULL)
           {
             GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                               "[%p] 🗙 Unknown subsurface",
+                               "Can't offload: unknown subsurface %p",
+                               subsurface);
+          }
+        else if (!self->current_clip->is_fully_contained)
+          {
+            GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
+                               "Can't offload subsurface %p: clipped",
+                               subsurface);
+          }
+        else if (self->transforms &&
+                 gsk_transform_get_category ((GskTransform *)self->transforms->data) < GSK_TRANSFORM_CATEGORY_2D_AFFINE)
+          {
+            GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
+                               "Can't offload subsurface %p: non-affine transform",
                                subsurface);
           }
         else
           {
-            info->n_nodes++;
+            graphene_rect_t clip;
 
-            if (info->n_nodes > 1)
+            info->texture = find_texture_to_attach (self, subsurface, gsk_subsurface_node_get_child (node), &clip);
+            if (info->texture)
               {
-                /* only print this message once, not once per node */
-                if (info->n_nodes == 2)
-                  GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                     "[%p] 🗙 Multiple nodes referring to subsurface",
-                                     subsurface);
-                if (info->can_offload)
-                  {
-                    info->can_offload = FALSE;
-                    info->can_raise = FALSE;
-                  }
-              }
-            else if (self->offload_impossible)
-              {
-                GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                   "[%p] 🗙 %s",
-                                   subsurface, self->offload_impossible);
-              }
-            else if (!self->current_clip->is_fully_contained)
-              {
-                GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                   "[%p] 🗙 Clipped",
-                                   subsurface);
-              }
-            else if (gsk_transform_get_fine_category (transform) < GSK_FINE_TRANSFORM_CATEGORY_2D_DIHEDRAL)
-              {
-                GDK_DISPLAY_DEBUG (gdk_surface_get_display (self->surface), OFFLOAD,
-                                   "[%p] 🗙 Non-dihedral transform",
-                                   subsurface);
-              }
-            else
-              {
-                gboolean has_background;
-                float sx, sy, dx, dy;
-                GdkDihedral context_transform;
-                GdkDihedral inner_transform;
-
-                gsk_transform_to_dihedral (transform, &context_transform, &sx, &sy, &dx, &dy);
-
-                info->texture = find_texture_to_attach (self, node, &info->texture_rect, &info->source_rect, &has_background, &inner_transform);
-                if (info->texture)
-                  {
-                    info->transform = gdk_dihedral_combine (context_transform, inner_transform);
-                    info->can_offload = TRUE;
-                    info->can_raise = TRUE;
-                    transform_bounds (self, &info->texture_rect, &info->texture_rect);
-                    info->has_background = has_background;
-                    transform_bounds (self, &node->bounds, &info->background_rect);
-                    if (self->last_info && self->last_info->subsurface != info->subsurface)
-                      info->place_above = self->last_info->subsurface;
-                    else
-                      info->place_above = NULL;
-                    self->last_info = info;
-                  }
+                info->can_offload = TRUE;
+                info->can_raise = TRUE;
+                info->source = clip;
+                transform_bounds (self, &node->bounds, &info->dest);
+                info->place_above = self->last_info ? self->last_info->subsurface : NULL;
+                self->last_info = info;
               }
           }
       }
@@ -870,6 +606,7 @@ gsk_offload_new (GdkSurface     *surface,
                  GskRenderNode  *root,
                  cairo_region_t *diff)
 {
+  GdkDisplay *display = gdk_surface_get_display (surface);
   GskOffload *self;
 
   self = g_new0 (GskOffload, 1);
@@ -886,48 +623,42 @@ gsk_offload_new (GdkSurface     *surface,
   for (gsize i = 0; i < self->n_subsurfaces; i++)
     {
       GskOffloadInfo *info = &self->subsurfaces[i];
-      graphene_rect_t rect;
-
       info->subsurface = gdk_surface_get_subsurface (self->surface, i);
       info->was_offloaded = gdk_subsurface_get_texture (info->subsurface) != NULL;
       info->was_above = gdk_subsurface_is_above_parent (info->subsurface);
-      info->had_background = gdk_subsurface_get_background_rect (info->subsurface, &rect);
     }
 
-  if (self->n_subsurfaces > 0 && gsk_render_node_contains_subsurface_node (root))
+  if (self->n_subsurfaces > 0)
     {
       push_rect_clip (self, &GSK_ROUNDED_RECT_INIT (0, 0,
                                                     gdk_surface_get_width (surface),
                                                     gdk_surface_get_height (surface)));
+
       visit_node (self, root);
+
       pop_clip (self);
     }
 
   for (gsize i = 0; i < self->n_subsurfaces; i++)
     {
       GskOffloadInfo *info = &self->subsurfaces[i];
-      graphene_rect_t old_bounds;
-      graphene_rect_t bounds;
+      graphene_rect_t old_dest;
 
-      gdk_subsurface_get_bounds (info->subsurface, &old_bounds);
+      gdk_subsurface_get_dest (info->subsurface, &old_dest);
 
       if (info->can_offload)
         {
           if (info->can_raise)
             info->is_offloaded = gdk_subsurface_attach (info->subsurface,
                                                         info->texture,
-                                                        &info->source_rect,
-                                                        &info->texture_rect,
-                                                        info->transform,
-                                                        info->has_background ? &info->background_rect : NULL,
+                                                        &info->source,
+                                                        &info->dest,
                                                         TRUE, NULL);
           else
             info->is_offloaded = gdk_subsurface_attach (info->subsurface,
                                                         info->texture,
-                                                        &info->source_rect,
-                                                        &info->texture_rect,
-                                                        info->transform,
-                                                        info->has_background ? &info->background_rect : NULL,
+                                                        &info->source,
+                                                        &info->dest,
                                                         info->place_above != NULL,
                                                         info->place_above);
         }
@@ -935,29 +666,34 @@ gsk_offload_new (GdkSurface     *surface,
         {
           info->is_offloaded = FALSE;
           if (info->was_offloaded)
-            gdk_subsurface_detach (info->subsurface);
+            {
+              GDK_DISPLAY_DEBUG (display, OFFLOAD, "Hiding subsurface %p", info->subsurface);
+              gdk_subsurface_detach (info->subsurface);
+            }
         }
 
-      info->is_above = info->is_offloaded && gdk_subsurface_is_above_parent (info->subsurface);
-
-      gdk_subsurface_get_bounds (info->subsurface, &bounds);
+      if (info->is_offloaded && gdk_subsurface_is_above_parent (info->subsurface))
+        {
+          GDK_DISPLAY_DEBUG (display, OFFLOAD, "Raising subsurface %p", info->subsurface);
+          info->is_above = TRUE;
+        }
 
       if (info->is_offloaded != info->was_offloaded ||
           info->is_above != info->was_above ||
-          (info->is_offloaded && !gsk_rect_equal (&bounds, &old_bounds)))
+          (info->is_offloaded && !gsk_rect_equal (&info->dest, &old_dest)))
         {
           /* We changed things, need to invalidate everything */
-          cairo_rectangle_int_t rect;
+          cairo_rectangle_int_t int_dest;
 
           if (info->is_offloaded)
             {
-              gsk_rect_to_cairo_grow (&bounds, &rect);
-              cairo_region_union_rectangle (diff, &rect);
+              gsk_rect_to_cairo_grow (&info->dest, &int_dest);
+              cairo_region_union_rectangle (diff, &int_dest);
             }
           if (info->was_offloaded)
             {
-              gsk_rect_to_cairo_grow (&old_bounds, &rect);
-              cairo_region_union_rectangle (diff, &rect);
+              gsk_rect_to_cairo_grow (&old_dest, &int_dest);
+              cairo_region_union_rectangle (diff, &int_dest);
             }
         }
 

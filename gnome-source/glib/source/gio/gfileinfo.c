@@ -29,8 +29,8 @@
  * implements methods for getting information that all files should
  * contain, and allows for manipulation of extended attributes.
  *
- * See the [file attributes](file-attributes.html) document for more
- * information on how GIO handles file attributes.
+ * See [file-attributes.html](file attributes) for more information on how GIO
+ * handles file attributes.
  *
  * To obtain a `GFileInfo` for a [iface@Gio.File], use
  * [method@Gio.File.query_info] (or its async variant). To obtain a `GFileInfo`
@@ -395,8 +395,8 @@ g_file_info_new (void)
  * @src_info: source to copy attributes from.
  * @dest_info: destination to copy attributes to.
  *
- * First clears all of the [GFileAttribute](file-attributes.html#file-attributes) of
- * @dest_info, and then copies all of the file attributes from @src_info to @dest_info.
+ * First clears all of the [GFileAttribute][gio-GFileAttribute] of @dest_info,
+ * and then copies all of the file attributes from @src_info to @dest_info.
  **/
 void
 g_file_info_copy_into (GFileInfo *src_info,
@@ -873,24 +873,9 @@ _g_file_info_get_attribute_value (GFileInfo  *info,
  * @info: a #GFileInfo.
  * @attribute: a file attribute key.
  *
- * Gets the value of an attribute, formatted as a human readable string.
- *
- * This escapes things as needed to make the string valid UTF-8 and readable by
- * humans. It’s not meant to be a machine readable or reversible escaping
- * format.
- *
- * To format file name attributes of type
- * [enum@Gio.FileAttributeType.BYTE_STRING] for output as UTF-8, use
- * [func@GLib.filename_to_utf8] instead:
- * ```c
- * const char *trash_orig_path_byte_string;
- * g_autofree char *trash_orig_path_utf8 = NULL;
- *
- * trash_orig_path_byte_string = g_file_info_get_attribute_byte_string (info, G_FILE_ATTRIBUTE_TRASH_ORIG_PATH);
- * trash_orig_path_utf8 = g_filename_to_utf8 (trash_orig_path_byte_string, -1, NULL, NULL, NULL);
- * if (trash_orig_path_utf8 != NULL)
- *   g_message ("Some larger UTF-8 string with filename embedded as %s", trash_orig_path_utf8);
- * ```
+ * Gets the value of an attribute, formatted as a string.
+ * This escapes things as needed to make the string valid
+ * UTF-8.
  *
  * Returns: (nullable): a UTF-8 string associated with the given @attribute, or
  *    %NULL if the attribute wasn’t set.
@@ -1654,11 +1639,6 @@ g_file_info_get_is_hidden (GFileInfo *info)
  *
  * Checks if a file is a backup file.
  *
- * The exact semantics of what constitutes a backup file are
- * backend-specific. For local files, a file is considered a backup
- * if its name ends with `~` and it is a regular file. This follows
- * the POSIX convention used by text editors such as Emacs.
- *
  * It is an error to call this if the #GFileInfo does not contain
  * %G_FILE_ATTRIBUTE_STANDARD_IS_BACKUP.
  *
@@ -2086,7 +2066,7 @@ g_file_info_get_symlink_target (GFileInfo *info)
  * g_file_info_get_etag:
  * @info: a #GFileInfo.
  *
- * Gets the [entity tag][iface@Gio.File#entity-tags] for a given
+ * Gets the [entity tag](iface.File.html#entity-tags) for a given
  * #GFileInfo. See %G_FILE_ATTRIBUTE_ETAG_VALUE.
  *
  * It is an error to call this if the #GFileInfo does not contain
@@ -2339,7 +2319,7 @@ g_file_info_set_symbolic_icon (GFileInfo *info,
 /**
  * g_file_info_set_content_type:
  * @info: a #GFileInfo.
- * @content_type: a [content type](content-types.html#content-types).
+ * @content_type: a content type. See [GContentType][gio-GContentType]
  *
  * Sets the content type attribute for a given #GFileInfo.
  * See %G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE.
@@ -2709,16 +2689,16 @@ matcher_optimize (GFileAttributeMatcher *matcher)
  * @attributes: an attribute string to match.
  *
  * Creates a new file attribute matcher, which matches attributes
- * against a given string. [GFileAttributeMatchers][struct@FileAttributeMatcher] are reference
+ * against a given string. #GFileAttributeMatchers are reference
  * counted structures, and are created with a reference count of 1. If
- * the number of references falls to 0, the [struct@FileAttributeMatcher] is
+ * the number of references falls to 0, the #GFileAttributeMatcher is
  * automatically destroyed.
  *
  * The @attributes string should be formatted with specific keys separated
- * from namespaces with a double colon. Several `"namespace::key"` strings may be
- * concatenated with a single comma (e.g. `"standard::type,standard::is-hidden"`).
- * The wildcard `"*"` may be used to match all keys and namespaces, or
- * `"namespace::*"` will match all keys in a given namespace.
+ * from namespaces with a double colon. Several "namespace::key" strings may be
+ * concatenated with a single comma (e.g. "standard::type,standard::is-hidden").
+ * The wildcard "*" may be used to match all keys and namespaces, or
+ * "namespace::*" will match all keys in a given namespace.
  *
  * ## Examples of file attribute matcher strings and results
  *
@@ -3002,7 +2982,7 @@ g_file_attribute_matcher_matches (GFileAttributeMatcher *matcher,
  *
  * Checks if the matcher will match all of the keys in a given namespace.
  * This will always return %TRUE if a wildcard character is in use (e.g. if
- * matcher was created with "standard::\*" and @ns is "standard", or if matcher was created
+ * matcher was created with "standard::*" and @ns is "standard", or if matcher was created
  * using "*" and namespace is anything.)
  *
  * TODO: this is awkwardly worded.

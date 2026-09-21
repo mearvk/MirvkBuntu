@@ -214,6 +214,8 @@ validate_blend_statements (CoglBlendStringStatement *statements,
   const char *error_string;
   CoglBlendStringError detail = COGL_BLEND_STRING_ERROR_INVALID_ERROR;
 
+  _COGL_GET_CONTEXT (ctx, 0);
+
   for (i = 0; i < n_statements; i++)
     for (j = 0; j < statements[i].function->argc; j++)
       {
@@ -940,11 +942,10 @@ _cogl_blend_string_test (void)
   };
   int i;
 
+  GError *error = NULL;
   for (i = 0; strings[i].string; i++)
     {
       CoglBlendStringStatement statements[2];
-      g_autoptr (GError) error = NULL;
-
       int count = _cogl_blend_string_compile (strings[i].string,
                                               strings[i].context,
                                               statements,
@@ -954,6 +955,8 @@ _cogl_blend_string_test (void)
           g_print ("Failed to parse string:\n%s\n%s\n",
                    strings[i].string,
                    error->message);
+          g_error_free (error);
+          error = NULL;
           continue;
         }
       g_print ("Original:\n");
@@ -966,3 +969,4 @@ _cogl_blend_string_test (void)
 
   return 0;
 }
+

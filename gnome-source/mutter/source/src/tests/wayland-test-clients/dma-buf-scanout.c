@@ -63,9 +63,6 @@ static int prev_width;
 static int prev_height;
 static WindowState window_state;
 
-static gboolean reuse_buffer;
-static WaylandBuffer *reused_buffer;
-
 static gboolean running;
 
 static void
@@ -96,32 +93,21 @@ draw_main (WaylandDisplay *display,
            int             height)
 {
   WaylandBuffer *buffer;
+  DmaBufFormat *format;
 
-  if (reuse_buffer && reused_buffer)
-    {
-      buffer = g_object_ref (reused_buffer);
-    }
-  else
-    {
-      DmaBufFormat *format;
+  format = g_hash_table_lookup (display->formats,
+                                GUINT_TO_POINTER (DRM_FORMAT_XRGB8888));
+  g_assert_nonnull (format);
 
-      format = g_hash_table_lookup (display->formats,
-                                    GUINT_TO_POINTER (DRM_FORMAT_XRGB8888));
-      g_assert_nonnull (format);
-
-      buffer = wayland_buffer_create (display,
-                                      &buffer_listener,
-                                      width, height,
-                                      format->format,
-                                      format->modifiers,
-                                      format->n_modifiers,
-                                      GBM_BO_USE_RENDERING |
-                                      GBM_BO_USE_SCANOUT);
-      g_assert_nonnull (buffer);
-
-      if (reuse_buffer)
-        reused_buffer = g_object_ref (buffer);
-    }
+  buffer = wayland_buffer_create (display,
+                                  &buffer_listener,
+                                  width, height,
+                                  format->format,
+                                  format->modifiers,
+                                  format->n_modifiers,
+                                  GBM_BO_USE_RENDERING |
+                                  GBM_BO_USE_SCANOUT);
+  g_assert_nonnull (buffer);
 
   active_buffers = g_list_prepend (active_buffers, buffer);
 
@@ -152,8 +138,8 @@ handle_xdg_toplevel_configure (void                *user_data,
                                struct wl_array     *states)
 {
   WaylandDisplay *display;
-  g_assert_true (width > 0 || prev_width > 0);
-  g_assert_true (height > 0 || prev_width > 0);
+  g_assert (width > 0 || prev_width > 0);
+  g_assert (height > 0 || prev_width > 0);
 
   display = user_data;
   if (width > 0 && height > 0)
@@ -228,20 +214,9 @@ static void
 on_sync_event (WaylandDisplay *display,
                uint32_t        serial)
 {
-  if (serial == 0)
-    {
-      running = FALSE;
-    }
-  else if (serial == 1)
-    {
-      draw_main (display, prev_width, prev_height);
-      wl_surface_damage_buffer (surface, 0, 0, prev_width, prev_height);
-      wl_surface_commit (surface);
-    }
-  else
-    {
-      g_assert_not_reached ();
-    }
+  g_assert (serial == 0);
+
+  running = FALSE;
 }
 
 int
@@ -251,10 +226,6 @@ main (int    argc,
   g_autoptr (WaylandDisplay) display = NULL;
   struct xdg_toplevel *xdg_toplevel;
   struct xdg_surface *xdg_surface;
-
-  if (argc == 2 &&
-      strcmp (argv[1], "reuse-buffer") == 0)
-    reuse_buffer = TRUE;
 
   display = wayland_display_new (WAYLAND_DISPLAY_CAPABILITY_TEST_DRIVER);
   g_signal_connect (display, "sync-event", G_CALLBACK (on_sync_event), NULL);

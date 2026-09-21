@@ -28,7 +28,7 @@
 /**
  * GtkExpression: (ref-func gtk_expression_ref) (unref-func gtk_expression_unref) (set-value-func gtk_value_set_expression) (get-value-func gtk_value_get_expression)
  *
- * Provides a way to describe references to values.
+ * `GtkExpression` provides a way to describe references to values.
  *
  * An important aspect of expressions is that the value can be obtained
  * from a source that is several steps away. For example, an expression
@@ -98,7 +98,7 @@
  *                              "Expression",
  *                              "The expression used by the widget",
  *                              G_PARAM_READWRITE |
- *                              G_PARAM_STATIC_NAME |
+ *                              G_PARAM_STATIC_STRINGS |
  *                              G_PARAM_EXPLICIT_NOTIFY);
  * ```
  *
@@ -127,9 +127,8 @@
  *
  * To create a property expression, use the `<lookup>` element. It can have a `type`
  * attribute to specify the object type, and a `name` attribute to specify the property
- * to look up. The content of `<lookup>` can either be a string that specifies the name
- * of the object to use, an element specifying an expression to provide an object, or
- * empty to use the `this` object.
+ * to look up. The content of `<lookup>` can either be an element specifying the expression
+ * to use the object, or a string that specifies the name of the object to use.
  *
  * Example:
  *
@@ -143,32 +142,12 @@
  * [class@Gtk.BuilderListItemFactory] for an example of this technique.
  *
  * To create a constant expression, use the `<constant>` element. If the type attribute
- * is specified, the element content is interpreted as a value of that type, and the
- * initial attribute can be specified to get the initial value for that type. Otherwise,
+ * is specified, the element content is interpreted as a value of that type. Otherwise,
  * it is assumed to be an object. For instance:
  *
  * ```xml
  *   <constant>string_filter</constant>
  *   <constant type='gchararray'>Hello, world</constant>
- *   <constant type='gchararray' initial='true' /> <!-- NULL -->
- * ```
- *
- * String (`type='gchararray'`) constants can be marked for translation with the
- * `translatable=` attribute, and will then be looked up in the
- * [property@Gtk.Builder:translation-domain] when the expression is constructed.
- *
- * ```xml
- *   <constant type='gchararray' translatable='yes'>I'm translatable!</constant>
- * ```
- *
- * As with other translatable strings in [type@Gtk.Builder], constants can
- * also have a context and/or translation comment:
- *
- * ```xml
- *   <constant type='gchararray'
- *             translatable='yes'
- *             context='example'
- *             comments='A sample string'>I'm translatable!</constant>
  * ```
  *
  * To create a closure expression, use the `<closure>` element. The `function`
@@ -181,19 +160,6 @@
  *     <constant type='gchararray'>File size:</constant>
  *     <lookup type='GFile' name='size'>myfile</lookup>
  *   </closure>
- * ```
- *
- * If an expression can fail, a `<try>` element can be used to provide fallbacks.
- * The expressions are tried from top to bottom until one of them succeeds.
- * If none of the expressions succeed, the expression fails as normal:
- *
- * ```xml
- *   <try>
- *     <lookup type='GtkWindow' name='title'>
- *       <lookup type='GtkLabel' name='root'></lookup>
- *     </lookup>
- *     <constant type='gchararray'>Hello World</constant>
- *   </try>
  * ```
  *
  * To create a property binding, use the `<binding>` element in place of where a
@@ -1297,7 +1263,8 @@ gtk_property_expression_watch_destroy_closure (GtkPropertyExpressionWatch *pwatc
     return;
 
   g_closure_invalidate (pwatch->closure);
-  g_clear_pointer (&pwatch->closure, g_closure_unref);
+  g_closure_unref (pwatch->closure);
+  pwatch->closure = NULL;
 }
 
 static void
@@ -1860,220 +1827,6 @@ gtk_cclosure_expression_new (GType                value_type,
 
 /* }}} */
 
-/* {{{ GtkTryExpression */
-
-/**
- * GtkTryExpression:
- *
- * A `GtkExpression` that tries to evaluate each of its expressions until it succeeds.
-
- * If all expressions fail to evaluate, the `GtkTryExpression`'s evaluation fails as well.
- *
- * Since: 4.22
- */
-struct _GtkTryExpression
-{
-  GtkExpression parent;
-
-  guint n_expressions;
-  GtkExpression **expressions;
-};
-
-static void
-gtk_try_expression_finalize (GtkExpression *expr)
-{
-  GtkTryExpression *self = (GtkTryExpression *) expr;
-  guint i;
-
-  for (i = 0; i < self->n_expressions; i++)
-    {
-      gtk_expression_unref (self->expressions[i]);
-    }
-  g_free (self->expressions);
-
-  GTK_EXPRESSION_SUPER (expr)->finalize (expr);
-}
-
-static gboolean
-gtk_try_expression_is_static (GtkExpression *expr)
-{
-  GtkTryExpression *self = (GtkTryExpression *) expr;
-  guint i;
-
-  for (i = 0; i < self->n_expressions; i++)
-    {
-      if (!gtk_expression_is_static (self->expressions[i]))
-        return FALSE;
-    }
-
-  return TRUE;
-}
-
-static gboolean
-gtk_try_expression_evaluate (GtkExpression *expr,
-                             gpointer       this,
-                             GValue        *value)
-{
-  GtkTryExpression *self = (GtkTryExpression *) expr;
-  guint i;
-
-  for (i = 0; i < self->n_expressions; i++)
-    {
-      if (gtk_expression_evaluate (self->expressions[i], this, value))
-        return TRUE;
-    }
-
-  return FALSE;
-}
-
-typedef struct _GtkTryExpressionWatch GtkTryExpressionWatch;
-struct _GtkTryExpressionWatch
-{
-  GtkExpressionNotify    notify;
-  gpointer               user_data;
-
-  guchar                 sub[0];
-};
-
-static void
-gtk_try_expression_watch_notify_cb (gpointer data)
-{
-  GtkTryExpressionWatch *twatch = data;
-
-  twatch->notify (twatch->user_data);
-}
-
-static gsize
-gtk_try_expression_watch_size (GtkExpression *expr)
-{
-  GtkTryExpression *self = (GtkTryExpression *) expr;
-  gsize size;
-  guint i;
-
-  size = sizeof (GtkTryExpressionWatch);
-
-  for (i = 0; i < self->n_expressions; i++)
-    {
-      if (gtk_expression_is_static (self->expressions[i]))
-        continue;
-
-      size += gtk_expression_watch_size (self->expressions[i]);
-    }
-
-  return size;
-}
-
-static void
-gtk_try_expression_watch (GtkExpression         *expr,
-                          GtkExpressionSubWatch *watch,
-                          gpointer               this_,
-                          GtkExpressionNotify    notify,
-                          gpointer               user_data)
-{
-  GtkTryExpressionWatch *twatch = (GtkTryExpressionWatch *) watch;
-  GtkTryExpression *self = (GtkTryExpression *) expr;
-  guchar *sub;
-  guint i;
-
-  twatch->notify = notify;
-  twatch->user_data = user_data;
-
-  sub = twatch->sub;
-  for (i = 0; i < self->n_expressions; i++)
-    {
-      if (gtk_expression_is_static (self->expressions[i]))
-        continue;
-
-      gtk_expression_subwatch_init (self->expressions[i],
-                                    (GtkExpressionSubWatch *) sub,
-                                    this_,
-                                    gtk_try_expression_watch_notify_cb,
-                                    watch);
-      sub += gtk_expression_watch_size (self->expressions[i]);
-    }
-}
-
-static void
-gtk_try_expression_unwatch (GtkExpression         *expr,
-                            GtkExpressionSubWatch *watch)
-{
-  GtkTryExpressionWatch *twatch = (GtkTryExpressionWatch *) watch;
-  GtkTryExpression *self = (GtkTryExpression *) expr;
-  guchar *sub;
-  guint i;
-
-  sub = twatch->sub;
-  for (i = 0; i < self->n_expressions; i++)
-    {
-      if (gtk_expression_is_static (self->expressions[i]))
-        continue;
-
-      gtk_expression_subwatch_finish (self->expressions[i],
-                                      (GtkExpressionSubWatch *) sub);
-      sub += gtk_expression_watch_size (self->expressions[i]);
-    }
-}
-
-static const GtkExpressionTypeInfo gtk_try_expression_info =
-{
-  sizeof (GtkTryExpression),
-  NULL,
-  gtk_try_expression_finalize,
-  gtk_try_expression_is_static,
-  gtk_try_expression_evaluate,
-  gtk_try_expression_watch_size,
-  gtk_try_expression_watch,
-  gtk_try_expression_unwatch
-};
-
-GTK_DEFINE_EXPRESSION_TYPE (GtkTryExpression,
-                            gtk_try_expression,
-                            &gtk_try_expression_info)
-
-/**
- * gtk_try_expression_new: (constructor)
- * @n_expressions: The number of expressions
- * @expressions: (array length=n_expressions) (transfer full): The array of expressions
- *
- * Creates a `GtkExpression` with an array of expressions.
- *
- * When evaluated, the `GtkTryExpression` tries to evaluate each of its expressions until it succeeds.
- * If all expressions fail to evaluate, the `GtkTryExpression`'s evaluation fails as well.
- *
- * The value type of the expressions in the array must match.
- *
- * Returns: (type GtkTryExpression) (transfer full): a new `GtkExpression`
- *
- * Since: 4.22
- */
-GtkExpression *
-gtk_try_expression_new (guint           n_expressions,
-                        GtkExpression **expressions)
-{
-  GtkExpression *result;
-  GtkTryExpression *self;
-  GType value_type;
-  guint i;
-
-  g_return_val_if_fail (n_expressions != 0, NULL);
-
-  value_type = gtk_expression_get_value_type (expressions[0]);
-  for (i = 1; i < n_expressions; i++)
-    g_return_val_if_fail (g_type_is_a (gtk_expression_get_value_type (expressions[i]), value_type), NULL);
-
-  result = gtk_expression_alloc (GTK_TYPE_TRY_EXPRESSION, value_type);
-  self = (GtkTryExpression *) result;
-
-  self->n_expressions = n_expressions;
-  self->expressions = g_new (GtkExpression *, n_expressions);
-  for (i = 0; i < n_expressions; i++)
-    self->expressions[i] = expressions[i];
-
-  return result;
-}
-
-/* }}} */
-
 /* {{{ GtkExpression public API */
 
 /**
@@ -2509,7 +2262,8 @@ gtk_expression_bind_notify (gpointer data)
  * the object's property stays synchronized with `self`.
  *
  * If `self`'s evaluation fails, `target`'s `property` is not updated.
- * Use a [class@Gtk.TryExpression] to provide a fallback for this case.
+ * You can ensure that this doesn't happen by using a fallback
+ * expression.
  *
  * Note that this function takes ownership of `self`. If you want
  * to keep it around, you should [method@Gtk.Expression.ref] it beforehand.

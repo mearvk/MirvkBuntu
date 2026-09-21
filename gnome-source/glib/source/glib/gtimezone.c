@@ -46,6 +46,8 @@
 #endif
 
 #ifdef G_OS_WIN32
+
+#define STRICT
 #include <windows.h>
 #include <wchar.h>
 #endif
@@ -278,7 +280,6 @@ again:
 GTimeZone *
 g_time_zone_ref (GTimeZone *tz)
 {
-  g_return_val_if_fail (tz != NULL, NULL);
   g_assert (tz->ref_count > 0);
 
   g_atomic_int_inc (&tz->ref_count);
@@ -504,68 +505,16 @@ zone_identifier_illumos (void)
 #endif /* defined(__sun) && defined(__SRVR) */
 
 #ifdef G_OS_UNIX
-#define MAX_SYMLINKS 20
-
-/*
- * Recursively resolve symlinks from @initial_path,
- * returning the first target that is in a subtree of @zoneinfo
- * or the first target that is a regular file,
- * or NULL.
- */
-static gchar *
-resolve_symlink_to_zoneinfo (const char *initial_path, const char *zoneinfo)
-{
-  char *current_path = g_strdup (initial_path);
-
-  for (int i = 0; i < MAX_SYMLINKS; i++)
-    {
-      char *link_target;
-      char *parent_dir;
-      char *next_path;
-      GError *error = NULL;
-
-      link_target = g_file_read_link (current_path, &error);
-      if (!link_target)
-        {
-          gboolean not_a_symlink = g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_INVAL);
-
-          g_clear_error (&error);
-          if (not_a_symlink)
-            return current_path;
-          break;
-        }
-
-      parent_dir = g_path_get_dirname (current_path);
-      next_path = g_canonicalize_filename (link_target, parent_dir);
-
-      g_free (parent_dir);
-      g_free (link_target);
-      g_free (current_path);
-      current_path = next_path;
-
-      if (g_str_has_prefix (current_path, zoneinfo))
-        return current_path;
-    }
-
-  g_free (current_path);
-  return NULL;
-}
-#undef MAX_SYMLINKS
-
 /*
  * returns the path to the top of the Olson zoneinfo timezone hierarchy.
  */
 static const gchar *
 zone_info_base_dir (void)
 {
-  GStatBuf buf;
-
-  if (g_lstat ("/usr/share/zoneinfo", &buf) == 0 && S_ISDIR (buf.st_mode))
+  if (g_file_test ("/usr/share/zoneinfo", G_FILE_TEST_IS_DIR))
     return "/usr/share/zoneinfo";     /* Most distros */
   else if (g_file_test ("/usr/share/lib/zoneinfo", G_FILE_TEST_IS_DIR))
     return "/usr/share/lib/zoneinfo"; /* Illumos distros */
-  else if (g_file_test ("/var/db/timezone/zoneinfo", G_FILE_TEST_IS_DIR))
-    return "/var/db/timezone/zoneinfo"; /* macOS */
 
   /* need a better fallback case */
   return "/usr/share/zoneinfo";
@@ -576,16 +525,50 @@ zone_identifier_unix (void)
 {
   gchar *resolved_identifier = NULL;
   gsize prefix_len = 0;
+  gchar *canonical_path = NULL;
+  GError *read_link_err = NULL;
   const gchar *tzdir;
-  GStatBuf buf;
-
-  tzdir = g_getenv ("TZDIR");
-  if (tzdir == NULL)
-    tzdir = zone_info_base_dir ();
+  gboolean not_a_symlink_to_zoneinfo = FALSE;
+  struct stat file_status;
 
   /* Resolve the actual timezone pointed to by /etc/localtime. */
-  if (g_lstat ("/etc/localtime", &buf) == 0 && S_ISLNK (buf.st_mode))
-    resolved_identifier = resolve_symlink_to_zoneinfo ("/etc/localtime", tzdir);
+  resolved_identifier = g_file_read_link ("/etc/localtime", &read_link_err);
+
+  if (resolved_identifier != NULL)
+    {
+      if (!g_path_is_absolute (resolved_identifier))
+        {
+          gchar *absolute_resolved_identifier = g_build_filename ("/etc", resolved_identifier, NULL);
+          g_free (resolved_identifier);
+          resolved_identifier = g_steal_pointer (&absolute_resolved_identifier);
+        }
+
+      if (g_lstat (resolved_identifier, &file_status) == 0)
+        {
+          if ((file_status.st_mode & S_IFMT) != S_IFREG)
+            {
+              /* Some systems (e.g. toolbox containers) make /etc/localtime be a symlink
+               * to a symlink.
+               *
+               * Rather than try to cope with that, just ignore /etc/localtime and use
+               * the fallback code to read timezone from /etc/timezone
+               */
+              g_clear_pointer (&resolved_identifier, g_free);
+              not_a_symlink_to_zoneinfo = TRUE;
+            }
+        }
+      else
+        {
+          g_clear_pointer (&resolved_identifier, g_free);
+        }
+    }
+  else
+    {
+      not_a_symlink_to_zoneinfo = g_error_matches (read_link_err,
+                                                   G_FILE_ERROR,
+                                                   G_FILE_ERROR_INVAL);
+      g_clear_error (&read_link_err);
+    }
 
   if (resolved_identifier == NULL)
     {
@@ -598,24 +581,36 @@ zone_identifier_unix (void)
        *    as a last-ditch effort to parse the TZ= setting from within
        *    /etc/default/init
        */
-      if (g_file_get_contents ("/var/db/zoneinfo",
-                               &resolved_identifier,
-                               NULL, NULL) ||
-          g_file_get_contents ("/etc/timezone",
-                               &resolved_identifier,
-                               NULL, NULL)
+      if (not_a_symlink_to_zoneinfo && (g_file_get_contents ("/var/db/zoneinfo",
+                                                             &resolved_identifier,
+                                                             NULL, NULL) ||
+                                        g_file_get_contents ("/etc/timezone",
+                                                             &resolved_identifier,
+                                                             NULL, NULL)
 #if defined(__sun) && defined(__SVR4)
-          || (resolved_identifier = zone_identifier_illumos ())
+                                        ||
+                                        (resolved_identifier = zone_identifier_illumos ())
 #endif
-      )
+                                            ))
         g_strchomp (resolved_identifier);
       else
         {
           /* Error */
           g_assert (resolved_identifier == NULL);
-          return NULL;
+          goto out;
         }
     }
+  else
+    {
+      /* Resolve relative path */
+      canonical_path = g_canonicalize_filename (resolved_identifier, "/etc");
+      g_free (resolved_identifier);
+      resolved_identifier = g_steal_pointer (&canonical_path);
+    }
+
+  tzdir = g_getenv ("TZDIR");
+  if (tzdir == NULL)
+    tzdir = zone_info_base_dir ();
 
   /* Strip the prefix and slashes if possible. */
   if (g_str_has_prefix (resolved_identifier, tzdir))
@@ -630,6 +625,10 @@ zone_identifier_unix (void)
              strlen (resolved_identifier) - prefix_len + 1  /* nul terminator */);
 
   g_assert (resolved_identifier != NULL);
+
+out:
+  g_free (canonical_path);
+
   return resolved_identifier;
 }
 

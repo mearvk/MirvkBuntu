@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -175,8 +177,8 @@ export class AppMenu extends PopupMenu.PopupMenu {
 
         const launchGpu = this._getNonDefaultLaunchGpu();
         this._onGpuMenuItem.label.text = launchGpu === Shell.AppLaunchGpu.DEFAULT
-            ? _('Launch Using Integrated Graphics Card')
-            : _('Launch Using Discrete Graphics Card');
+            ? _('Launch using Integrated Graphics Card')
+            : _('Launch using Discrete Graphics Card');
     }
 
     _updateDetailsVisibility() {

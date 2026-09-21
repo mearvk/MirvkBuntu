@@ -47,20 +47,15 @@ if enable_devel_utils
     'benchmark-posix-big-files',
     'benchmark-posix-small-files',
     'test-query-info-stream',
+    'google'
   ]
 
   deps = [
     gio_dep,
     glib_dep,
+    libgdata_dep,
+    goa_dep
   ]
-
-  if enable_google
-    tests += [ 'google' ]
-    deps += [
-      libgdata_dep,
-      goa_dep,
-    ]
-  endif
 
   foreach test: tests
     executable(
@@ -71,8 +66,4 @@ if enable_devel_utils
       dependencies: deps,
     )
   endforeach
-endif
-
-if enable_unit_tests
-  subdir('unit')
 endif

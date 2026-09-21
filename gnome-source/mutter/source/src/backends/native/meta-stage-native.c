@@ -28,7 +28,6 @@
 #include "backends/native/meta-crtc-virtual.h"
 #include "backends/native/meta-cursor-renderer-native.h"
 #include "backends/native/meta-renderer-native.h"
-#include "backends/native/meta-seat-native.h"
 #include "meta/meta-backend.h"
 #include "meta/meta-monitor-manager.h"
 #include "meta/util.h"
@@ -38,9 +37,34 @@ static GQuark quark_view_frame_closure  = 0;
 struct _MetaStageNative
 {
   MetaStageImpl parent;
+
+  CoglClosure *frame_closure;
+
+  int64_t presented_frame_counter_sync;
+  int64_t presented_frame_counter_complete;
 };
 
-G_DEFINE_FINAL_TYPE (MetaStageNative, meta_stage_native, META_TYPE_STAGE_IMPL)
+static ClutterStageWindowInterface *clutter_stage_window_parent_iface = NULL;
+
+static void
+clutter_stage_window_iface_init (ClutterStageWindowInterface *iface);
+
+G_DEFINE_TYPE_WITH_CODE (MetaStageNative, meta_stage_native,
+                         META_TYPE_STAGE_IMPL,
+                         G_IMPLEMENT_INTERFACE (CLUTTER_TYPE_STAGE_WINDOW,
+                                                clutter_stage_window_iface_init))
+
+void
+meta_stage_native_rebuild_views (MetaStageNative *stage_native)
+{
+  MetaStageImpl *stage_impl = META_STAGE_IMPL (stage_native);
+  MetaBackend *backend = meta_stage_impl_get_backend (stage_impl);
+  MetaRenderer *renderer = meta_backend_get_renderer (backend);
+  ClutterActor *stage = meta_backend_get_stage (backend);
+
+  meta_renderer_rebuild_views (renderer);
+  clutter_stage_clear_stage_views (CLUTTER_STAGE (stage));
+}
 
 static gboolean
 meta_stage_native_can_clip_redraws (ClutterStageWindow *stage_window)
@@ -95,25 +119,17 @@ meta_stage_native_prepare_frame (ClutterStageWindow *stage_window,
   MetaBackend *backend = meta_stage_impl_get_backend (stage_impl);
   MetaRenderer *renderer = meta_backend_get_renderer (backend);
   MetaRendererNative *renderer_native = META_RENDERER_NATIVE (renderer);
-  MetaSeatNative *seat_native =
-    META_SEAT_NATIVE (meta_backend_get_default_seat (backend));
-  MetaCursorRenderer *cursor_renderer;
-
-  cursor_renderer = seat_native->cursor_renderer;
+  MetaCursorRenderer *cursor_renderer =
+    meta_backend_get_cursor_renderer (backend);
+  MetaCursorRendererNative *cursor_renderer_native =
+    META_CURSOR_RENDERER_NATIVE (cursor_renderer);
 
   meta_renderer_native_prepare_frame (renderer_native,
                                       META_RENDERER_VIEW (stage_view),
                                       frame);
-
-  if (cursor_renderer)
-    {
-      MetaCursorRendererNative *cursor_renderer_native =
-        META_CURSOR_RENDERER_NATIVE (cursor_renderer);
-
-      meta_cursor_renderer_native_prepare_frame (cursor_renderer_native,
-                                                 META_RENDERER_VIEW (stage_view),
-                                                 frame);
-    }
+  meta_cursor_renderer_native_prepare_frame (cursor_renderer_native,
+                                             META_RENDERER_VIEW (stage_view),
+                                             frame);
 }
 
 static void
@@ -129,14 +145,12 @@ meta_stage_native_redraw_view (ClutterStageWindow *stage_window,
   meta_renderer_native_before_redraw (META_RENDERER_NATIVE (renderer),
                                       META_RENDERER_VIEW (view), frame);
 
-  CLUTTER_STAGE_WINDOW_CLASS (meta_stage_native_parent_class)->
-      redraw_view (stage_window, view, frame);
+  clutter_stage_window_parent_iface->redraw_view (stage_window, view, frame);
 
   crtc = meta_renderer_view_get_crtc (META_RENDERER_VIEW (view));
-
-  if (!clutter_frame_has_result (frame))
+  if (META_IS_CRTC_VIRTUAL (crtc))
     {
-      g_warn_if_fail (!META_IS_CRTC_KMS (crtc));
+      g_warn_if_fail (!clutter_frame_has_result (frame));
 
       clutter_frame_set_result (frame, CLUTTER_FRAME_RESULT_PENDING_PRESENTED);
     }
@@ -162,20 +176,26 @@ meta_stage_native_finish_frame (ClutterStageWindow *stage_window,
 static void
 meta_stage_native_init (MetaStageNative *stage_native)
 {
+  stage_native->presented_frame_counter_sync = -1;
+  stage_native->presented_frame_counter_complete = -1;
 }
 
 static void
 meta_stage_native_class_init (MetaStageNativeClass *klass)
 {
-  ClutterStageWindowClass *window_class = CLUTTER_STAGE_WINDOW_CLASS (klass);
-
   quark_view_frame_closure =
     g_quark_from_static_string ("-meta-native-stage-view-frame-closure");
+}
 
-  window_class->can_clip_redraws = meta_stage_native_can_clip_redraws;
-  window_class->get_geometry = meta_stage_native_get_geometry;
-  window_class->get_views = meta_stage_native_get_views;
-  window_class->prepare_frame = meta_stage_native_prepare_frame;
-  window_class->redraw_view = meta_stage_native_redraw_view;
-  window_class->finish_frame = meta_stage_native_finish_frame;
+static void
+clutter_stage_window_iface_init (ClutterStageWindowInterface *iface)
+{
+  clutter_stage_window_parent_iface = g_type_interface_peek_parent (iface);
+
+  iface->can_clip_redraws = meta_stage_native_can_clip_redraws;
+  iface->get_geometry = meta_stage_native_get_geometry;
+  iface->get_views = meta_stage_native_get_views;
+  iface->prepare_frame = meta_stage_native_prepare_frame;
+  iface->redraw_view = meta_stage_native_redraw_view;
+  iface->finish_frame = meta_stage_native_finish_frame;
 }

@@ -27,7 +27,7 @@ from orca import debug, messages, speech_generator, table_navigator
 from orca.ax_object import AXObject
 from orca.ax_text import AXText
 from orca.ax_utilities import AXUtilities
-from orca.generator import PresentationReason
+from orca.generator import WhereAmI
 
 if TYPE_CHECKING:
     import gi
@@ -50,21 +50,21 @@ class SpeechGenerator(speech_generator.SpeechGenerator):
 
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
-            tokens = ["SOFFICE SPEECH GENERATOR:", func.__name__, ":", result]
+            tokens = [f"SOFFICE SPEECH GENERATOR: {func.__name__}:", result]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return result
 
         return wrapper
 
     @log_generator_output
-    def _generate_accessible_name(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_accessible_name(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if AXUtilities.is_spreadsheet_cell(obj):
             # Currently the coordinates of the cell are exposed as the name.
             return []
-        return super()._generate_accessible_name(obj)
+        return super()._generate_accessible_name(obj, **args)
 
     @log_generator_output
-    def _generate_text_line(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_text_line(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if AXUtilities.is_combo_box(obj):
             if entry := AXUtilities.get_text_input(obj):
                 return super()._generate_text_line(entry)
@@ -77,30 +77,30 @@ class SpeechGenerator(speech_generator.SpeechGenerator):
             text = AXText.get_line_at_offset(obj)[0]
             if not text:
                 result: list[Any] = [messages.BLANK]
-                result.extend(self.voice(string=text, obj=obj))
+                result.extend(self.voice(string=text, obj=obj, **args))
                 return result
 
-        return super()._generate_text_line(obj)
+        return super()._generate_text_line(obj, **args)
 
     @log_generator_output
-    def _generate_state_pressed(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_state_pressed(self, obj: Atspi.Accessible, **args) -> list[Any]:
         """Treat toggle buttons in the toolbar specially. This is so we can
         have more natural sounding speech such as "bold on", "bold off", etc."""
 
-        if not AXUtilities.is_toggle_button(obj, self._get_resolved_role()):
+        if not AXUtilities.is_toggle_button(obj, args.get("role")):
             return []
 
         if not AXUtilities.is_tool_bar(AXObject.get_parent(obj)):
-            return super()._generate_state_pressed(obj)
+            return super()._generate_state_pressed(obj, **args)
 
         if AXUtilities.is_checked(obj):
             result: list[Any] = [messages.ON]
         else:
             result = [messages.OFF]
-        result.extend(self.voice(speech_generator.SYSTEM, obj=obj))
+        result.extend(self.voice(speech_generator.SYSTEM, obj=obj, **args))
         return result
 
-    def _generate_too_long(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_too_long(self, obj: Atspi.Accessible, **args) -> list[Any]:
         """Returns speech for characters that extend beyond the cell's rect."""
 
         if self._only_speak_displayed_text():
@@ -111,15 +111,15 @@ class SpeechGenerator(speech_generator.SpeechGenerator):
             return []
 
         result: list[Any] = [messages.characters_too_long(too_long_count)]
-        result.extend(self.voice(speech_generator.SYSTEM, obj=obj))
+        result.extend(self.voice(speech_generator.SYSTEM, obj=obj, **args))
         return result
 
     @log_generator_output
-    def _generate_table_cell_contents(self, obj: Atspi.Accessible) -> list[Any]:
-        if self._is_say_all():
+    def _generate_real_table_cell(self, obj: Atspi.Accessible, **args) -> list[Any]:
+        if self._context.in_say_all:
             return []
 
-        result = super()._generate_table_cell_contents(obj)
+        result = super()._generate_real_table_cell(obj, **args)
 
         if not AXUtilities.is_spreadsheet_cell(obj):
             if table_navigator.get_navigator().last_input_event_was_navigation_command():
@@ -131,40 +131,40 @@ class SpeechGenerator(speech_generator.SpeechGenerator):
 
         if (
             self._context.announce_spreadsheet_cell_coordinates
-            or self._get_reason() == PresentationReason.WHERE_AM_I_BASIC
+            or self._context.where_am_i_type == WhereAmI.BASIC
         ):
             label = AXUtilities.get_label_for_cell_coordinates(
                 obj,
             ) or AXObject.get_name(obj)
             result.append(label)
 
-        if self._script.utilities.should_read_full_row(obj, self._get_prior_obj()):
+        if self._script.utilities.should_read_full_row(obj, args.get("priorObj")):
             if AXUtilities.cell_row_changed(obj):
                 return result
 
-        too_long = self._generate_too_long(obj)
+        too_long = self._generate_too_long(obj, **args)
         if too_long:
-            result.extend(self._generate_pause(obj))
+            result.extend(self._generate_pause(obj, **args))
             result.extend(too_long)
 
         if result == speech_generator.PAUSE:
             result = [messages.BLANK]
-            result.extend(self.voice(speech_generator.DEFAULT, obj=obj))
+            result.extend(self.voice(speech_generator.DEFAULT, obj=obj, **args))
 
         return result
 
     @log_generator_output
-    def _generate_new_ancestors(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_new_ancestors(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if AXUtilities.is_spreadsheet_cell(
             obj,
-        ) and AXUtilities.is_document_panel(AXObject.get_parent(self._get_prior_obj())):
+        ) and AXUtilities.is_document_panel(AXObject.get_parent(args.get("priorObj"))):
             return []
 
-        return super()._generate_new_ancestors(obj)
+        return super()._generate_new_ancestors(obj, **args)
 
     @log_generator_output
-    def _generate_old_ancestors(self, obj: Atspi.Accessible) -> list[Any]:
-        if AXUtilities.is_spreadsheet_cell(self._get_prior_obj()):
+    def _generate_old_ancestors(self, obj: Atspi.Accessible, **args) -> list[Any]:
+        if AXUtilities.is_spreadsheet_cell(args.get("priorObj")):
             return []
 
-        return super()._generate_old_ancestors(obj)
+        return super()._generate_old_ancestors(obj, **args)

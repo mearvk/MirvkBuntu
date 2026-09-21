@@ -28,7 +28,7 @@
 /**
  * GtkSorter:
  *
- * Describes sorting criteria for a [class@Gtk.SortListModel].
+ * `GtkSorter` is an object to describe sorting criteria.
  *
  * Its primary user is [class@Gtk.SortListModel]
  *
@@ -379,6 +379,8 @@ gtk_sorter_changed_with_keys (GtkSorter       *self,
  * `GtkOrdering` value.
  *
  * Returns: the corresponding `GtkOrdering`
+ *
+ * Since: 4.2
  **/
 GtkOrdering
 gtk_ordering_from_cmpfunc (int cmpfunc_result)

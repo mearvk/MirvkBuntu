@@ -1,6 +1,5 @@
 text {
-  font: "text-mixed-color 10px" url("data:font/ttf;base64,\
-AAEAAAAKAIAAAwAgQ09MUgATAEEAAAJ8AAAALENQQUwB/wATAAACqAAAABpjbWFwAHcAPQAAATwA\
+  font: "text-mixed-color 10px" url("data:font/ttf;base64,AAEAAAAKAIAAAwAgQ09MUgATAEEAAAJ8AAAALENQQUwB/wATAAACqAAAABpjbWFwAHcAPQAAATwA\
 AAA0Z2x5Zu8g4kAAAAGEAAAA0mhlYWQmofyJAAAArAAAADZoaGVhDAEEAgAAAOQAAAAkaG10eAQA\
 AQAAAAEoAAAAFGxvY2EAyAD5AAABcAAAABRtYXhwAAwACQAAAQgAAAAgbmFtZX7VdrQAAAJYAAAA\
 IgABAAAAARmajs74k18PPPUAAggAAAAAAOHCPQAAAAAA4cpY+QAAAAAEAAgAAAAAAQACAAAAAAAA\
@@ -21,11 +20,15 @@ text {
   glyphs: 7 10;
 }
 text {
+  font: "text-mixed-color 10px";
+  glyphs: 7 10;
+}
+text {
   font: "Cantarell 15px";
   glyphs: "Hello";
 }
 text {
-  font: "Cantarell 15px";
+  font: "Noto Sans 15px";
   glyphs: "Hello";
 }
 text {

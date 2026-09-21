@@ -42,7 +42,7 @@
 /**
  * GtkListView:
  *
- * Presents a large dynamic list of items.
+ * `GtkListView` presents a large dynamic list of items.
  *
  * `GtkListView` uses its factory to generate one row widget for each visible
  * item and shows them in a linear display, either vertically or horizontally.
@@ -112,13 +112,6 @@
  *   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sw), list);
  * ```
  *
- * # Actions
- *
- * `GtkListView` defines a set of built-in actions:
- *
- * - `list.activate-item` activates the item at given position by emitting
- *   the [signal@Gtk.ListView::activate] signal.
- *
  * # CSS nodes
  *
  * ```
@@ -139,13 +132,13 @@
  * rubberband selection, a node with name `rubberband` is used.
  *
  * The main listview node may also carry style classes to select
- * the style of [list presentation](section-list-widget.html#list-styles):
+ * the style of [list presentation](ListContainers.html#list-styles):
  * .rich-list, .navigation-sidebar or .data-table.
  *
  * # Accessibility
  *
- * `GtkListView` uses the [enum@Gtk.AccessibleRole.list] role, and the list
- * items use the [enum@Gtk.AccessibleRole.list_item] role.
+ * `GtkListView` uses the %GTK_ACCESSIBLE_ROLE_LIST role, and the list
+ * items use the %GTK_ACCESSIBLE_ROLE_LIST_ITEM role.
  */
 
 enum
@@ -579,20 +572,6 @@ gtk_list_view_measure_list (GtkWidget      *widget,
   *natural = nat + spacing * (n_items - 1);
 }
 
-static GtkSizeRequestMode
-gtk_list_view_get_request_mode (GtkWidget *widget)
-{
-  GtkListView *self = GTK_LIST_VIEW (widget);
-  GtkOrientation orientation;
-
-  orientation = gtk_list_base_get_orientation (GTK_LIST_BASE (self));
-
-  if (orientation == GTK_ORIENTATION_VERTICAL)
-    return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
-  else
-    return GTK_SIZE_REQUEST_WIDTH_FOR_HEIGHT;
-}
-
 static void
 gtk_list_view_measure (GtkWidget      *widget,
                        GtkOrientation  orientation,
@@ -877,7 +856,6 @@ gtk_list_view_class_init (GtkListViewClass *klass)
   list_base_class->move_focus_along = gtk_list_view_move_focus_along;
   list_base_class->move_focus_across = gtk_list_view_move_focus_across;
 
-  widget_class->get_request_mode = gtk_list_view_get_request_mode;
   widget_class->measure = gtk_list_view_measure;
   widget_class->size_allocate = gtk_list_view_size_allocate;
   widget_class->root = gtk_list_view_root;
@@ -890,73 +868,69 @@ gtk_list_view_class_init (GtkListViewClass *klass)
   gobject_class->set_property = gtk_list_view_set_property;
 
   /**
-   * GtkListView:enable-rubberband:
+   * GtkListView:enable-rubberband: (attributes org.gtk.Property.get=gtk_list_view_get_enable_rubberband org.gtk.Property.set=gtk_list_view_set_enable_rubberband)
    *
    * Allow rubberband selection.
    */
   properties[PROP_ENABLE_RUBBERBAND] =
     g_param_spec_boolean ("enable-rubberband", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkListView:factory:
+   * GtkListView:factory: (attributes org.gtk.Property.get=gtk_list_view_get_factory org.gtk.Property.set=gtk_list_view_set_factory)
    *
    * Factory for populating list items.
-   *
-   * The factory must be for configuring [class@Gtk.ListItem] objects.
    */
   properties[PROP_FACTORY] =
     g_param_spec_object ("factory", NULL, NULL,
                          GTK_TYPE_LIST_ITEM_FACTORY,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListView:header-factory:
+   * GtkListView:header-factory: (attributes org.gtk.Property.get=gtk_list_view_get_header_factory org.gtk.Property.set=gtk_list_view_set_header_factory)
    *
    * Factory for creating header widgets.
-   *
-   * The factory must be for configuring [class@Gtk.ListHeader] objects.
    *
    * Since: 4.12
    */
   properties[PROP_HEADER_FACTORY] =
     g_param_spec_object ("header-factory", NULL, NULL,
                          GTK_TYPE_LIST_ITEM_FACTORY,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListView:model:
+   * GtkListView:model: (attributes org.gtk.Property.get=gtk_list_view_get_model org.gtk.Property.set=gtk_list_view_set_model)
    *
    * Model for the items displayed.
    */
   properties[PROP_MODEL] =
     g_param_spec_object ("model", NULL, NULL,
                          GTK_TYPE_SELECTION_MODEL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListView:show-separators:
+   * GtkListView:show-separators: (attributes org.gtk.Property.get=gtk_list_view_get_show_separators org.gtk.Property.set=gtk_list_view_set_show_separators)
    *
    * Show separators between rows.
    */
   properties[PROP_SHOW_SEPARATORS] =
     g_param_spec_boolean ("show-separators", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkListView:single-click-activate:
+   * GtkListView:single-click-activate: (attributes org.gtk.Property.get=gtk_list_view_get_single_click_activate org.gtk.Property.set=gtk_list_view_set_single_click_activate)
    *
    * Activate rows on single click and select them on hover.
    */
   properties[PROP_SINGLE_CLICK_ACTIVATE] =
     g_param_spec_boolean ("single-click-activate", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkListView:tab-behavior:
+   * GtkListView:tab-behavior: (attributes org.gtk.Property.get=gtk_list_view_get_tab_behavior org.gtk.Property.set=gtk_list_view_set_tab_behavior)
    *
    * Behavior of the <kbd>Tab</kbd> key
    *
@@ -966,19 +940,17 @@ gtk_list_view_class_init (GtkListViewClass *klass)
     g_param_spec_enum ("tab-behavior", NULL, NULL,
                        GTK_TYPE_LIST_TAB_BEHAVIOR,
                        GTK_LIST_TAB_ALL,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 
   /**
    * GtkListView::activate:
-   * @self: the listview
+   * @self: The `GtkListView`
    * @position: position of item to activate
    *
-   * Emitted when a row has been activated by the user.
-   *
-   * Activation usually happens via the list.activate-item action of
-   * the `GtkListView`.
+   * Emitted when a row has been activated by the user,
+   * usually via activating the GtkListView|list.activate-item action.
    *
    * This allows for a convenient way to handle activation in a listview.
    * See [method@Gtk.ListItem.set_activatable] for details on how to use
@@ -1064,8 +1036,8 @@ gtk_list_view_new (GtkSelectionModel  *model,
 }
 
 /**
- * gtk_list_view_get_model:
- * @self: a listview
+ * gtk_list_view_get_model: (attributes org.gtk.Method.get_property=model)
+ * @self: a `GtkListView`
  *
  * Gets the model that's currently used to read the items displayed.
  *
@@ -1080,8 +1052,8 @@ gtk_list_view_get_model (GtkListView *self)
 }
 
 /**
- * gtk_list_view_set_model:
- * @self: a listview
+ * gtk_list_view_set_model: (attributes org.gtk.Method.set_property=model)
+ * @self: a `GtkListView`
  * @model: (nullable) (transfer none): the model to use
  *
  * Sets the model to use.
@@ -1106,8 +1078,8 @@ gtk_list_view_set_model (GtkListView       *self,
 }
 
 /**
- * gtk_list_view_get_factory:
- * @self: a listview
+ * gtk_list_view_get_factory: (attributes org.gtk.Method.get_property=factory)
+ * @self: a `GtkListView`
  *
  * Gets the factory that's currently used to populate list items.
  *
@@ -1122,8 +1094,8 @@ gtk_list_view_get_factory (GtkListView *self)
 }
 
 /**
- * gtk_list_view_set_factory:
- * @self: a listview
+ * gtk_list_view_set_factory: (attributes org.gtk.Method.set_property=factory)
+ * @self: a `GtkListView`
  * @factory: (nullable) (transfer none): the factory to use
  *
  * Sets the `GtkListItemFactory` to use for populating list items.
@@ -1144,8 +1116,8 @@ gtk_list_view_set_factory (GtkListView        *self,
 }
 
 /**
- * gtk_list_view_get_header_factory:
- * @self: a listview
+ * gtk_list_view_get_header_factory: (attributes org.gtk.Method.get_property=header-factory)
+ * @self: a `GtkListView`
  *
  * Gets the factory that's currently used to populate section headers.
  *
@@ -1162,15 +1134,14 @@ gtk_list_view_get_header_factory (GtkListView *self)
 }
 
 /**
- * gtk_list_view_set_header_factory:
- * @self: a listview
+ * gtk_list_view_set_header_factory: (attributes org.gtk.Method.set_property=header-factory)
+ * @self: a `GtkListView`
  * @factory: (nullable) (transfer none): the factory to use
  *
  * Sets the `GtkListItemFactory` to use for populating the
  * [class@Gtk.ListHeader] objects used in section headers.
  *
- * If this factory is set to `NULL`, the list will not show
- * section headers.
+ * If this factory is set to %NULL, the list will not show section headers.
  *
  * Since: 4.12
  */
@@ -1208,11 +1179,11 @@ gtk_list_view_set_header_factory (GtkListView        *self,
 }
 
 /**
- * gtk_list_view_set_show_separators:
- * @self: a listview
- * @show_separators: whether to show separators
+ * gtk_list_view_set_show_separators: (attributes org.gtk.Method.set_property=show-separators)
+ * @self: a `GtkListView`
+ * @show_separators: %TRUE to show separators
  *
- * Sets whether the listview should show separators
+ * Sets whether the list box should show separators
  * between rows.
  */
 void
@@ -1235,13 +1206,13 @@ gtk_list_view_set_show_separators (GtkListView *self,
 }
 
 /**
- * gtk_list_view_get_show_separators:
- * @self: a listview
+ * gtk_list_view_get_show_separators: (attributes org.gtk.Method.get_property=show-separators)
+ * @self: a `GtkListView`
  *
- * Returns whether the listview should show separators
+ * Returns whether the list box should show separators
  * between rows.
  *
- * Returns: true if the listview shows separators
+ * Returns: %TRUE if the list box shows separators
  */
 gboolean
 gtk_list_view_get_show_separators (GtkListView *self)
@@ -1252,9 +1223,9 @@ gtk_list_view_get_show_separators (GtkListView *self)
 }
 
 /**
- * gtk_list_view_set_single_click_activate:
- * @self: a listview
- * @single_click_activate: whether to activate items on single click
+ * gtk_list_view_set_single_click_activate: (attributes org.gtk.Method.set_property=single-click-activate)
+ * @self: a `GtkListView`
+ * @single_click_activate: %TRUE to activate items on single click
  *
  * Sets whether rows should be activated on single click and
  * selected on hover.
@@ -1284,13 +1255,13 @@ gtk_list_view_set_single_click_activate (GtkListView *self,
 }
 
 /**
- * gtk_list_view_get_single_click_activate:
- * @self: a listview
+ * gtk_list_view_get_single_click_activate: (attributes org.gtk.Method.set_property=single-click-activate)
+ * @self: a `GtkListView`
  *
  * Returns whether rows will be activated on single click and
  * selected on hover.
  *
- * Returns: true if rows are activated on single click
+ * Returns: %TRUE if rows are activated on single click
  */
 gboolean
 gtk_list_view_get_single_click_activate (GtkListView *self)
@@ -1301,9 +1272,9 @@ gtk_list_view_get_single_click_activate (GtkListView *self)
 }
 
 /**
- * gtk_list_view_set_enable_rubberband:
- * @self: a listview
- * @enable_rubberband: whether to enable rubberband selection
+ * gtk_list_view_set_enable_rubberband: (attributes org.gtk.Method.set_property=enable-rubberband)
+ * @self: a `GtkListView`
+ * @enable_rubberband: %TRUE to enable rubberband selection
  *
  * Sets whether selections can be changed by dragging with the mouse.
  */
@@ -1322,12 +1293,12 @@ gtk_list_view_set_enable_rubberband (GtkListView *self,
 }
 
 /**
- * gtk_list_view_get_enable_rubberband:
- * @self: a listview
+ * gtk_list_view_get_enable_rubberband: (attributes org.gtk.Method.get_property=enable-rubberband)
+ * @self: a `GtkListView`
  *
  * Returns whether rows can be selected by dragging with the mouse.
  *
- * Returns: true if rubberband selection is enabled
+ * Returns: %TRUE if rubberband selection is enabled
  */
 gboolean
 gtk_list_view_get_enable_rubberband (GtkListView *self)
@@ -1338,15 +1309,11 @@ gtk_list_view_get_enable_rubberband (GtkListView *self)
 }
 
 /**
- * gtk_list_view_set_tab_behavior:
- * @self: a listview
+ * gtk_list_view_set_tab_behavior: (attributes org.gtk.Method.set_property=tab-behavior)
+ * @self: a `GtkListView`
  * @tab_behavior: The desired tab behavior
  *
- * Sets the <kbd>Tab</kbd> key behavior.
- *
- * This influences how the <kbd>Tab</kbd> and
- * <kbd>Shift</kbd>+<kbd>Tab</kbd> keys move the
- * focus in the listview.
+ * Sets the behavior of the <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> keys.
  *
  * Since: 4.12
  */
@@ -1365,8 +1332,8 @@ gtk_list_view_set_tab_behavior (GtkListView        *self,
 }
 
 /**
- * gtk_list_view_get_tab_behavior:
- * @self: a listview
+ * gtk_list_view_get_tab_behavior: (attributes org.gtk.Method.get_property=tab-behavior)
+ * @self: a `GtkListView`
  *
  * Gets the behavior set for the <kbd>Tab</kbd> key.
  *
@@ -1384,12 +1351,12 @@ gtk_list_view_get_tab_behavior (GtkListView *self)
 
 /**
  * gtk_list_view_scroll_to:
- * @self: a listview
+ * @self: The listview to scroll in
  * @pos: position of the item. Must be less than the number of
  *   items in the view.
  * @flags: actions to perform
  * @scroll: (nullable) (transfer full): details of how to perform
- *   the scroll operation or %NULL to scroll into view
+ *   the scroll operation or %NULL to scroll into view 
  *
  * Scrolls to the item at the given position and performs the actions
  * specified in @flags.
@@ -1410,3 +1377,4 @@ gtk_list_view_scroll_to (GtkListView        *self,
 
   gtk_list_base_scroll_to (GTK_LIST_BASE (self), pos, flags, scroll);
 }
+

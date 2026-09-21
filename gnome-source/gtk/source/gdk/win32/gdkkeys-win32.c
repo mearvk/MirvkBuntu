@@ -29,7 +29,7 @@
 
 #include "gdkprivate-win32.h"
 #include "gdkdebugprivate.h"
-#include "gdkdisplay-win32.h"
+#include "gdkdisplayprivate.h"
 #include "gdkkeysyms.h"
 #include "gdkkeysprivate.h"
 #include "gdkkeys-win32.h"
@@ -77,7 +77,9 @@ struct _GdkWin32Keymap
 
 G_DEFINE_TYPE (GdkWin32Keymap, gdk_win32_keymap, GDK_TYPE_KEYMAP)
 
-/* forward declarations */
+guint _gdk_keymap_serial = 0;
+static GdkKeymap *default_keymap = NULL;
+
 static void update_keymap              (GdkWin32Keymap *gdk_keymap);
 static void clear_keyboard_layout_info (gpointer        data);
 
@@ -105,16 +107,7 @@ gdk_win32_keymap_init (GdkWin32Keymap *keymap)
   if (_gdk_win32_check_processor (GDK_WIN32_WOW64))
     keymap->gdkwin32_keymap_impl = &gdkwin32_keymap_impl_wow64;
 #endif
-}
 
-static void
-gdk_win32_keymap_constructed (GObject *object)
-{
-  GdkWin32Keymap *keymap;
-
-  G_OBJECT_CLASS (gdk_win32_keymap_parent_class)->constructed (object);
-
-  keymap = GDK_WIN32_KEYMAP (object);
   update_keymap (keymap);
 }
 
@@ -256,15 +249,11 @@ _get_keyboard_layout_file (const char *layout_name)
 
   status = RegOpenKeyExA (HKEY_LOCAL_MACHINE, (LPCSTR) kbdKeyPath, 0,
                           KEY_QUERY_VALUE, &hkey);
-  if (status == ERROR_FILE_NOT_FOUND)
-    {
-      return NULL;
-    }
-  else if (status != ERROR_SUCCESS)
+  if (status != ERROR_SUCCESS)
     {
       g_warning("Could not open registry key '%s'. Error code: %d",
                 kbdKeyPath, (int)status);
-      return NULL;
+      goto fail1;
     }
 
   /* Get sizes */
@@ -274,14 +263,14 @@ _get_keyboard_layout_file (const char *layout_name)
     {
       g_warning("Could not query registry key '%s\\Layout File'. Error code: %d",
                 kbdKeyPath, (int)status);
-      goto fail_close_key;
+      goto fail2;
     }
 
   dir_len = GetSystemDirectoryA (0, 0); /* includes \0 */
   if (dir_len == 0)
     {
       g_warning("GetSystemDirectoryA failed. Error: %d", (int)GetLastError());
-      goto fail_close_key;
+      goto fail2;
     }
 
   /* Allocate buffer */
@@ -290,7 +279,7 @@ _get_keyboard_layout_file (const char *layout_name)
 
   /* Append system directory. The -1 is because dir_len includes \0 */
   if (GetSystemDirectoryA (&result[0], dir_len) != dir_len - 1)
-    goto fail_free_result;
+    goto fail3;
 
   /* Append directory separator */
   result[dir_len - 1] = '\\';
@@ -299,17 +288,20 @@ _get_keyboard_layout_file (const char *layout_name)
   status = RegQueryValueExA (hkey, "Layout File", 0, &var_type,
                              (LPBYTE) &result[dir_len], &file_name_len);
   if (status != ERROR_SUCCESS)
-    goto fail_free_result;
+    {
+      goto fail3;
+    }
 
   result[dir_len + file_name_len] = '\0';
 
   RegCloseKey (hkey);
   return result;
 
-fail_free_result:
+fail3:
   g_free (result);
-fail_close_key:
+fail2:
   RegCloseKey (hkey);
+fail1:
   return NULL;
 }
 
@@ -591,10 +583,8 @@ update_keymap (GdkWin32Keymap *keymap)
   BOOL changed = FALSE;
   int  n_layouts;
   int  i;
-  GdkWin32Display *display = GDK_WIN32_DISPLAY (GDK_KEYMAP (keymap)->display);
 
-
-  if (keymap->current_serial == gdk_win32_display_get_keymap_serial (display) &&
+  if (keymap->current_serial == _gdk_keymap_serial &&
       keymap->layout_handles->len > 0)
     {
       return;
@@ -651,19 +641,9 @@ update_keymap (GdkWin32Keymap *keymap)
     }
 
   if (changed)
-    {
-      GdkSeat *seat;
-      GdkDevice *device;
+    ActivateKeyboardLayout (current_layout, 0);
 
-      ActivateKeyboardLayout (current_layout, 0);
-
-      seat = gdk_display_get_default_seat (GDK_DISPLAY (display));
-      device = gdk_seat_get_keyboard (seat);
-      g_object_notify (G_OBJECT (device), "active-layout-index");
-      g_object_notify (G_OBJECT (device), "layout-names");
-    }
-
-  keymap->current_serial = gdk_win32_display_get_keymap_serial (display);
+  keymap->current_serial = _gdk_keymap_serial;
 }
 
 guint8
@@ -683,17 +663,7 @@ _gdk_win32_keymap_set_active_layout (GdkWin32Keymap *keymap,
 
       for (group = 0; group < keymap->layout_handles->len; group++)
         if (g_array_index (keymap->layout_handles, HKL, group) == hkl)
-          if (keymap->active_layout != group)
-            {
-              GdkSeat *seat;
-              GdkDevice *device;
-
-              keymap->active_layout = group;
-
-              seat = gdk_display_get_default_seat (GDK_KEYMAP (keymap)->display);
-              device = gdk_seat_get_keyboard (seat);
-              g_object_notify (G_OBJECT (device), "active-layout-index");
-            }
+          keymap->active_layout = group;
     }
 }
 
@@ -705,6 +675,17 @@ _gdk_win32_keymap_get_active_group (GdkWin32Keymap *keymap)
     return keymap->active_layout;
 
   return 0;
+}
+
+GdkKeymap*
+_gdk_win32_display_get_keymap (GdkDisplay *display)
+{
+  g_return_val_if_fail (display == gdk_display_get_default (), NULL);
+
+  if (default_keymap == NULL)
+    default_keymap = g_object_new (gdk_win32_keymap_get_type (), NULL);
+
+  return default_keymap;
 }
 
 GdkModifierType
@@ -1084,76 +1065,12 @@ gdk_win32_keymap_translate_keyboard_state (GdkKeymap       *gdk_keymap,
   return tmp_keyval != GDK_KEY_VoidSymbol;
 }
 
-static char **
-gdk_win32_keymap_get_layout_names (GdkKeymap *gdk_keymap)
-{
-  GdkWin32Keymap *keymap = GDK_WIN32_KEYMAP (gdk_keymap);
-
-  update_keymap (keymap);
-
-  if (keymap->layout_infos)
-    {
-      GStrvBuilder *names_builder;
-      char **layout_names;
-      int i;
-
-      names_builder = g_strv_builder_new ();
-
-      for (i = 0; i < keymap->layout_infos->len; ++i)
-        {
-          LCID lcid;
-          char *endptr;
-          GdkWin32KeymapLayoutInfo *info;
-
-          info = &g_array_index (keymap->layout_infos, GdkWin32KeymapLayoutInfo, i);
-          lcid = strtoul (info->name, &endptr, 16);
-
-          if (info->name != endptr)
-            {
-              wchar_t *locale_name_w;
-              int locale_size = GetLocaleInfoW (lcid, LOCALE_SLOCALIZEDDISPLAYNAME, NULL, 0);
-
-              locale_name_w = g_new0 (wchar_t, locale_size);
-
-              if (GetLocaleInfoW (lcid, LOCALE_SLOCALIZEDDISPLAYNAME, locale_name_w, locale_size))
-                {
-                  gchar *locale_name = g_utf16_to_utf8 (locale_name_w, -1, NULL, NULL, NULL);
-                  g_strv_builder_add (names_builder, locale_name);
-                }
-
-              g_free (locale_name_w);
-            }
-        }
-
-      layout_names = g_strv_builder_end (names_builder);
-      g_strv_builder_unref (names_builder);
-
-      return layout_names;
-    }
-
-  return NULL;
-}
-
-static int
-gdk_win32_keymap_get_active_layout_index (GdkKeymap *gdk_keymap)
-{
-  GdkWin32Keymap *keymap = GDK_WIN32_KEYMAP (gdk_keymap);
-
-  update_keymap (keymap);
-
-  if (keymap->layout_infos)
-    return (int) keymap->active_layout;
-
-  return -1;
-}
-
 static void
 gdk_win32_keymap_class_init (GdkWin32KeymapClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GdkKeymapClass *keymap_class = GDK_KEYMAP_CLASS (klass);
 
-  object_class->constructed = gdk_win32_keymap_constructed;
   object_class->finalize = gdk_win32_keymap_finalize;
 
   keymap_class->get_direction = gdk_win32_keymap_get_direction;
@@ -1165,6 +1082,4 @@ gdk_win32_keymap_class_init (GdkWin32KeymapClass *klass)
   keymap_class->get_entries_for_keycode = gdk_win32_keymap_get_entries_for_keycode;
   keymap_class->lookup_key = gdk_win32_keymap_lookup_key;
   keymap_class->translate_keyboard_state = gdk_win32_keymap_translate_keyboard_state;
-  keymap_class->get_active_layout_index = gdk_win32_keymap_get_active_layout_index;
-  keymap_class->get_layout_names = gdk_win32_keymap_get_layout_names;
 }

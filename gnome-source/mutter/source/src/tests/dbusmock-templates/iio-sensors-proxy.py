@@ -74,17 +74,6 @@ def emit_properties_changed(mock, interface=MAIN_IFACE, properties=None,
                                'sa{sv}as', destination, interface, properties, [])
 
 
-@dbus.service.method(dbus.PROPERTIES_IFACE, in_signature='ss',
-                     out_signature='v')
-def Get(self, interface, prop):
-    if interface == MAIN_IFACE:
-        if prop == 'HasAccelerometer':
-            return dbus.Boolean(self.has_accelerometer)
-        if prop == 'AccelerometerOrientation':
-            return dbus.String(self.accelerometer_orientation)
-
-    raise TypeError('Tried to get property {} on interface {}'.format(prop, interface))
-
 @dbus.service.method(dbus.PROPERTIES_IFACE, in_signature='s',
                      out_signature='a{sv}')
 def GetAll(self, interface):
@@ -108,23 +97,20 @@ def GetAll(self, interface):
 
 def register_owner(self, owners_dict, name):
     if name in owners_dict:
-        owners_dict[name][1] += 1
         return
 
     def name_cb(unique_name):
         if unique_name:
             return
-        owners_dict.pop(name)[0].cancel()
+        owners_dict.pop(name).cancel()
 
-    owners_dict[name] = [self.connection.watch_name_owner(name, name_cb), 1]
+    owners_dict[name] = self.connection.watch_name_owner(name, name_cb)
 
 
 def unregister_owner(owners_dict, name):
-    owners_dict[name][1] -= 1
-
-    if owners_dict[name][1] == 0:
-        watcher = owners_dict.pop(name, None)
-        watcher[0].cancel()
+    watcher = owners_dict.pop(name, None)
+    if watcher:
+        watcher.cancel()
 
 
 @dbus.service.method(MAIN_IFACE, sender_keyword='sender')

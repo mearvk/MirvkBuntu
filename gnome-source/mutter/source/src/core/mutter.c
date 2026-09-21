@@ -26,7 +26,6 @@
 
 #include "compositor/meta-plugin-manager.h"
 #include "meta/main.h"
-#include "meta/meta-backend.h"
 #include "meta/meta-context.h"
 #include "meta/util.h"
 
@@ -51,7 +50,7 @@ command_exited_cb (GPid     command_pid,
 
   if (status)
     {
-      GError *error = NULL;
+      GError *error;
 
       error = g_error_new (G_IO_ERROR, G_IO_ERROR_FAILED,
                            "The command exited with a nonzero status: %d\n",
@@ -121,41 +120,11 @@ init_signal_handlers (MetaContext *context)
   g_unix_signal_add (SIGTERM, on_sigterm, context);
 }
 
-static void
-maybe_spawn_child_command (MetaMonitorManager *monitor_manager,
-                           gpointer            user_data)
-{
-  MetaBackend *backend = meta_monitor_manager_get_backend (monitor_manager);
-  MetaContext *context = meta_backend_get_context (backend);
-  GStrv command_argv = user_data;
-  GPid command_pid;
-  GError *error = NULL;
-
-  if (!meta_monitor_manager_get_logical_monitors (monitor_manager))
-    return;
-
-  g_signal_handlers_disconnect_by_func (monitor_manager,
-                                        maybe_spawn_child_command,
-                                        user_data);
-
-  if (!g_spawn_async (NULL, command_argv, NULL,
-                      G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH,
-                      NULL, NULL, &command_pid, &error))
-    {
-      g_prefix_error (&error, "Failed to run the command: ");
-      meta_context_terminate_with_error (context, error);
-      return;
-    }
-
-  g_child_watch_add (command_pid, command_exited_cb, context);
-}
-
 int
 main (int argc, char **argv)
 {
   g_autoptr (MetaContext) context = NULL;
   g_autoptr (GError) error = NULL;
-  g_auto (GStrv) command_argv = NULL;
 
   context = meta_create_context ("Mutter");
 
@@ -165,8 +134,6 @@ main (int argc, char **argv)
       g_printerr ("Failed to configure: %s\n", error->message);
       return EXIT_FAILURE;
     }
-
-  command_argv = g_steal_pointer (&argv_ignored);
 
   meta_context_set_plugin_name (context, plugin);
 
@@ -185,20 +152,26 @@ main (int argc, char **argv)
     }
 
   meta_context_notify_ready (context);
-
-  if (command_argv)
+  if (argv_ignored)
     {
-      MetaBackend *backend = meta_context_get_backend (context);
-      MetaMonitorManager *monitor_manager =
-        meta_backend_get_monitor_manager (backend);
+      GPid command_pid;
+      g_auto (GStrv) command_argv = NULL;
 
-      g_signal_connect (monitor_manager, "monitors-changed",
-                        G_CALLBACK (maybe_spawn_child_command),
-                        command_argv);
-      maybe_spawn_child_command (monitor_manager, command_argv);
+      command_argv = g_steal_pointer (&argv_ignored);
+
+      if (!g_spawn_async (NULL, command_argv, NULL,
+                          G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH,
+                          NULL, NULL, &command_pid, &error))
+        {
+          g_printerr ("Failed to run the command: %s\n", error->message);
+          return EXIT_FAILURE;
+        }
+
+      g_child_watch_add (command_pid, command_exited_cb, context);
     }
 
-  meta_context_raise_rlimit_nofile (context, NULL);
+  if (meta_context_get_compositor_type (context) == META_COMPOSITOR_TYPE_WAYLAND)
+    meta_context_raise_rlimit_nofile (context, NULL);
 
   if (!meta_context_run_main_loop (context, &error))
     {

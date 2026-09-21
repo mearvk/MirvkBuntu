@@ -50,7 +50,7 @@ export var METRICS = {
 function waitAndDraw(milliseconds) {
     let cb;
 
-    const timeline = new Clutter.Timeline({duration: milliseconds});
+    let timeline = new Clutter.Timeline({duration: milliseconds});
     timeline.start();
 
     timeline.connect('new-frame', (_timeline, _frame) => {
@@ -74,7 +74,7 @@ function waitAndDraw(milliseconds) {
 function waitSignal(object, signal) {
     let cb;
 
-    const id = object.connect(signal, () => {
+    let id = object.connect(signal, () => {
         object.disconnect(id);
         if (cb)
             cb();
@@ -96,13 +96,13 @@ function extractBootTimestamp() {
     ], Gio.SubprocessFlags.STDOUT_PIPE);
     let result = null;
 
-    const datastream = Gio.DataInputStream.new(sp.get_stdout_pipe());
-    while (true) {
-        const [line, length_] = datastream.read_line_utf8(null);
+    let datastream = Gio.DataInputStream.new(sp.get_stdout_pipe());
+    while (true) { // eslint-disable-line no-constant-condition
+        let [line, length_] = datastream.read_line_utf8(null);
         if (line === null)
             break;
 
-        const fields = JSON.parse(line);
+        let fields = JSON.parse(line);
         result = Number(fields['__MONOTONIC_TIMESTAMP']);
     }
     datastream.close(null);
@@ -130,7 +130,7 @@ export async function run() {
     await Scripting.waitLeisure();
     Scripting.scriptEvent('desktopShown');
 
-    const interfaceSettings = new Gio.Settings({
+    let interfaceSettings = new Gio.Settings({
         schema_id: 'org.gnome.desktop.interface',
     });
     interfaceSettings.set_boolean('enable-animations', false);
@@ -143,6 +143,7 @@ export async function run() {
     await Scripting.sleep(1000);
 
     Scripting.scriptEvent('applicationsShowStart');
+    // eslint-disable-next-line require-atomic-updates
     Main.overview.dash.showAppsButton.checked = true;
 
     await Scripting.waitLeisure();
@@ -204,8 +205,8 @@ export async function run() {
 
     await Scripting.sleep(1000);
 
-    const appSys = Shell.AppSystem.get_default();
-    const app = appSys.lookup_app('org.gnome.gedit.desktop');
+    let appSys = Shell.AppSystem.get_default();
+    let app = appSys.lookup_app('org.gnome.gedit.desktop');
 
     Scripting.scriptEvent('geditLaunch');
     app.activate();
@@ -219,7 +220,7 @@ export async function run() {
         windows = app.get_windows();
     }
 
-    const actor = windows[0].get_compositor_private();
+    let actor = windows[0].get_compositor_private();
     await waitSignal(actor, 'first-frame');
     Scripting.scriptEvent('geditFirstFrame');
 
@@ -237,7 +238,7 @@ let overviewShowStart;
 let applicationsShowStart;
 let stagePaintStart;
 let redrawTiming;
-const redrawTimes = {};
+let redrawTimes = {};
 let geditLaunchTime;
 
 /**
@@ -245,7 +246,7 @@ let geditLaunchTime;
  * @returns {void}
  */
 export function script_desktopShown(time) {
-    const bootTimestamp = extractBootTimestamp();
+    let bootTimestamp = extractBootTimestamp();
     METRICS.timeToDesktop.value = time - bootTimestamp;
 }
 
@@ -334,11 +335,11 @@ export function script_redrawTestDone(_time) {
  * @returns {void}
  */
 export function script_collectTimings(_time) {
-    for (const timing in redrawTimes) {
-        const times = redrawTimes[timing];
+    for (let timing in redrawTimes) {
+        let times = redrawTimes[timing];
         times.sort((a, b) => a - b);
 
-        const len = times.length;
+        let len = times.length;
         let median;
 
         if (len === 0)

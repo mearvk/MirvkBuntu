@@ -26,38 +26,6 @@
 
 G_BEGIN_DECLS
 
-/*
- * Auxiliary define, in order to get the clutter actor from the AtkObject using
- * AtkGObject methods
- *
- */
-#define CLUTTER_ACTOR_FROM_ACCESSIBLE(accessible) \
-(CLUTTER_ACTOR (atk_gobject_accessible_get_object (ATK_GOBJECT_ACCESSIBLE (accessible))))
-
-/**
- * ClutterActorFlags:
- * @CLUTTER_ACTOR_MAPPED: the actor will be painted (is visible, and inside
- *   a toplevel, and all parents visible)
- * @CLUTTER_ACTOR_REALIZED: the resources associated to the actor have been
- *   allocated
- * @CLUTTER_ACTOR_REACTIVE: the actor 'reacts' to mouse events emitting event
- *   signals
- * @CLUTTER_ACTOR_VISIBLE: the actor has been shown by the application program
- * @CLUTTER_ACTOR_NO_LAYOUT: the actor provides an explicit layout management
- *   policy for its children; this flag will prevent Clutter from automatic
- *   queueing of relayout and will defer all layouting to the actor itself
- *
- * Flags used to signal the state of an actor.
- */
-typedef enum /*< prefix=CLUTTER_ACTOR >*/
-{
-  CLUTTER_ACTOR_MAPPED    = 1 << 1,
-  CLUTTER_ACTOR_REALIZED  = 1 << 2,
-  CLUTTER_ACTOR_REACTIVE  = 1 << 3,
-  CLUTTER_ACTOR_VISIBLE   = 1 << 4,
-  CLUTTER_ACTOR_NO_LAYOUT = 1 << 5
-} ClutterActorFlags;
-
 /*< private >
  * ClutterActorTraverseFlags:
  * CLUTTER_ACTOR_TRAVERSE_DEPTH_FIRST: Traverse the graph in
@@ -264,6 +232,9 @@ gboolean                        _clutter_actor_set_default_paint_volume         
 
 const char *                    _clutter_actor_get_debug_name                           (ClutterActor *self);
 
+void                            _clutter_actor_push_clone_paint                         (void);
+void                            _clutter_actor_pop_clone_paint                          (void);
+
 ClutterActorAlign               _clutter_actor_get_effective_x_align                    (ClutterActor *self);
 
 void                            _clutter_actor_attach_clone                             (ClutterActor *actor,
@@ -296,10 +267,5 @@ const GList * clutter_actor_peek_actions (ClutterActor *self);
 
 void clutter_actor_set_implicitly_grabbed (ClutterActor *actor,
                                            gboolean      is_implicitly_grabbed);
-
-AtkStateSet * clutter_actor_get_accessible_state (ClutterActor *actor);
-
-ClutterCursor * clutter_actor_get_cursor_for_sprite (ClutterActor  *actor,
-                                                     ClutterSprite *sprite);
 
 G_END_DECLS

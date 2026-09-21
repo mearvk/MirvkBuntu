@@ -33,7 +33,7 @@
 /**
  * GtkWindowGroup:
  *
- * Creates groups of windows that behave like separate applications.
+ * `GtkWindowGroup` makes group of windows behave like separate applications.
  *
  * It achieves this by limiting the effect of GTK grabs and modality
  * to windows in the same group.

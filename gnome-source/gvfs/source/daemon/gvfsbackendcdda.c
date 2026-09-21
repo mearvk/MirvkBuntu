@@ -53,7 +53,6 @@
   #include <cdio/paranoia.h>
 #endif
 #include <cdio/cdio.h>
-#include <cdio/util.h>
 
 /* TODO:
  *
@@ -204,25 +203,10 @@ fetch_metadata (GVfsBackendCdda *cdda_backend)
       track->artist = cdtext_string_to_utf8 (cdtext_get_const (CDTEXT_PERFORMER, cdtext));
 #endif /* LIBCDIO_VERSION_NUM >= 84 */
     }
+    track->duration = cdio_get_track_sec_count (cdio, cdtrack) / CDIO_CD_FRAMES_PER_SEC;
 
-    if (cdtrack != last_cdtrack - 1) {
-      track->duration = cdio_get_track_sec_count (cdio, cdtrack) / CDIO_CD_FRAMES_PER_SEC;
-    } else {
-      msf_t start_msf, leadout_msf;
-
-      if (cdio_get_track_msf (cdio, cdtrack, &start_msf) &&
-          cdio_get_track_msf (cdio, CDIO_CDROM_LEADOUT_TRACK, &leadout_msf)) {
-        track->duration = (cdio_from_bcd8 (leadout_msf.m) * 60 + cdio_from_bcd8 (leadout_msf.s)) -
-                (cdio_from_bcd8 (start_msf.m) * 60 + cdio_from_bcd8 (start_msf.s));
-      } else {
-        track->duration = 0;
-      }
-    }
-
-    cdda_backend->tracks = g_list_prepend (cdda_backend->tracks, track);
+    cdda_backend->tracks = g_list_append (cdda_backend->tracks, track);
   }
-
-  cdda_backend->tracks = g_list_reverse (cdda_backend->tracks);
 
   cdio_destroy (cdio);
 }
@@ -396,7 +380,7 @@ try_mount (GVfsBackend *backend,
    */
   host = g_mount_spec_get (mount_spec, "host");
   //g_warning ("tm host=%s", host);
-  if (host == NULL || strstr (host, "..") != NULL)
+  if (host == NULL)
     {
       g_set_error_literal (&error, G_IO_ERROR, G_IO_ERROR_FAILED, _("No drive specified"));
       g_vfs_job_failed_from_error (G_VFS_JOB (job), error);

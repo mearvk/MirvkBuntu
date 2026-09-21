@@ -450,22 +450,6 @@ dav_message_connect_signals (SoupMessage *message, GVfsBackend *backend)
                     &dav_backend->auth_info);
 }
 
-/* Matches SOUP_SESSION_MAX_RESEND_COUNT from libsoup. */
-#define MAX_REDIRECTS 20
-
-typedef struct {
-  SoupMessage *msg;
-  guint redirect_count;
-} RedirectData;
-
-static void
-redirect_data_free (gpointer p)
-{
-  RedirectData *data = p;
-  g_object_unref (data->msg);
-  g_slice_free (RedirectData, p);
-}
-
 static void
 dav_send_async_with_redir_cb (GObject *source, GAsyncResult *ret, gpointer user_data)
 {
@@ -512,18 +496,6 @@ dav_send_async_with_redir_cb (GObject *source, GAsyncResult *ret, gpointer user_
                            SOUP_URI_NONE);
   g_uri_unref (tmp);
 
-  /* Prevent HTTPS downgrade redirect to HTTP on the same host */
-  if (g_ascii_strcasecmp (g_uri_get_scheme (old_uri), "https") == 0 &&
-      g_ascii_strcasecmp (g_uri_get_scheme (new_uri), "http") == 0 &&
-      g_ascii_strcasecmp (g_uri_get_host (old_uri), g_uri_get_host (new_uri)) == 0)
-    {
-      tmp = new_uri;
-      new_uri = soup_uri_copy (new_uri,
-                               SOUP_URI_SCHEME, "https",
-                               SOUP_URI_NONE);
-      g_uri_unref (tmp);
-    }
-
   /* Check if this is a trailing slash redirect (i.e. /a/b to /a/b/),
    * redirect it right away
    */
@@ -546,15 +518,14 @@ dav_send_async_with_redir_cb (GObject *source, GAsyncResult *ret, gpointer user_
   else if (message_should_apply_redir_ref (msg))
     {
       if (status == SOUP_STATUS_MOVED_PERMANENTLY ||
-          status == SOUP_STATUS_TEMPORARY_REDIRECT ||
-          status == SOUP_STATUS_PERMANENT_REDIRECT)
+          status == SOUP_STATUS_TEMPORARY_REDIRECT)
         {
           const char *method = soup_message_get_method (msg);
 
           /* Only cross-site redirect safe methods */
-          if (method == SOUP_METHOD_GET ||
-              method == SOUP_METHOD_HEAD ||
-              method == SOUP_METHOD_OPTIONS ||
+          if (method == SOUP_METHOD_GET &&
+              method == SOUP_METHOD_HEAD &&
+              method == SOUP_METHOD_OPTIONS &&
               method == SOUP_METHOD_PROPFIND)
             redirect = TRUE;
         }
@@ -563,7 +534,7 @@ dav_send_async_with_redir_cb (GObject *source, GAsyncResult *ret, gpointer user_
          *
          *   1) It's a non-redirecty 3xx response (300, 304,
          *      305, 306)
-         *   2) It's some newly-defined 3xx response (309+)
+         *   2) It's some newly-defined 3xx response (308+)
          *
          * We ignore both of these cases. In the first,
          * redirecting would be explicitly wrong, and in the
@@ -572,7 +543,7 @@ dav_send_async_with_redir_cb (GObject *source, GAsyncResult *ret, gpointer user_
          * 2616 says unrecognized status codes should be
          * treated as the equivalent to the x00 code, and we
          * don't redirect on 300, so therefore we shouldn't
-         * redirect on 309+ either.
+         * redirect on 308+ either.
          */
     }
 
@@ -590,17 +561,6 @@ dav_send_async_with_redir_cb (GObject *source, GAsyncResult *ret, gpointer user_
 
   g_object_unref (body);
 
-  RedirectData *data = g_task_get_task_data (task);
-  if (data->redirect_count >= MAX_REDIRECTS)
-    {
-      g_uri_unref (new_uri);
-      error = g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED,
-                                   _("Unexpected reply from server"));
-      goto return_error;
-    }
-  data->redirect_count++;
-
-  soup_message_headers_remove (soup_message_get_request_headers (msg), "Authorization");
   soup_message_set_uri (msg, new_uri);
   g_uri_unref (new_uri);
 
@@ -628,12 +588,9 @@ g_vfs_backend_dav_send_async (GVfsBackend *backend,
 {
   SoupSession *session = G_VFS_BACKEND_HTTP (backend)->session;
   GTask *task = g_task_new (backend, NULL, callback, user_data);
-  RedirectData *data = g_slice_new0 (RedirectData);
-
-  data->msg = g_object_ref (message);
 
   g_task_set_source_tag (task, g_vfs_backend_dav_send_async);
-  g_task_set_task_data (task, data, redirect_data_free);
+  g_task_set_task_data (task, g_object_ref (message), g_object_unref);
 
   soup_message_set_flags (message, SOUP_MESSAGE_NO_REDIRECT);
 
@@ -659,15 +616,11 @@ static SoupMessage *
 g_vfs_backend_dav_get_async_result_message (GVfsBackend  *backend,
                                             GAsyncResult *result)
 {
-  RedirectData *data;
-
   g_return_val_if_fail (G_VFS_IS_BACKEND (backend), NULL);
   g_return_val_if_fail (G_IS_ASYNC_RESULT (result), NULL);
   g_return_val_if_fail (g_task_is_valid (result, backend), NULL);
 
-  data = g_task_get_task_data (G_TASK (result));
-
-  return data->msg;
+  return g_task_get_task_data (G_TASK (result));
 }
 
 /* ************************************************************************* */
@@ -2330,7 +2283,6 @@ try_mount_opts_cb (GObject *source, GAsyncResult *result, gpointer user_data)
       dav_message_connect_signals (msg_opts, backend);
 
       g_vfs_backend_dav_send_async (backend, msg_opts, try_mount_opts_cb, job);
-      g_object_unref (body);
       return;
     }
 
@@ -2371,6 +2323,8 @@ try_mount_opts_cb (GObject *source, GAsyncResult *result, gpointer user_data)
       goto clear_msgs;
     }
 
+  g_object_unref (body);
+
   cur_uri = soup_message_get_uri (msg_opts);
 
   /* The count_children parameter is intentionally set to TRUE to be sure that
@@ -2382,7 +2336,6 @@ try_mount_opts_cb (GObject *source, GAsyncResult *result, gpointer user_data)
   g_vfs_backend_dav_send_async (backend, msg_stat, try_mount_stat_cb, job);
 
 clear_msgs:
-  g_clear_object (&body);
   g_object_unref (msg_opts);
 }
 
@@ -3537,7 +3490,6 @@ try_move_do_cb (GObject *source, GAsyncResult *result, gpointer user_data)
   else
     http_job_failed (data->job, data->msg);
 
-  g_object_unref (body);
   copy_data_free (data);
 }
 
@@ -3575,7 +3527,6 @@ try_move_target_delete_cb (GObject *source, GAsyncResult *result,
   if (!SOUP_STATUS_IS_SUCCESSFUL (status))
     {
       http_job_failed (data->job, msg);
-      g_object_unref (body);
       g_object_unref (msg);
       copy_data_free (data);
       return;
@@ -3922,7 +3873,6 @@ typedef struct {
 
   /* Local file */
   GInputStream *in;
-  GDateTime *modified;
   goffset size;
 
   /* Remote file */
@@ -3938,10 +3888,6 @@ push_handle_free (PushHandle *handle)
     {
       g_input_stream_close_async (handle->in, 0, NULL, NULL, NULL);
       g_object_unref (handle->in);
-    }
-  if (handle->modified)
-    {
-      g_date_time_unref (handle->modified);
     }
   g_object_unref (handle->backend);
   g_object_unref (handle->job);
@@ -4067,20 +4013,6 @@ push_stat_dest_cb (GObject *source, GAsyncResult *result, gpointer user_data)
   handle->msg = soup_message_new_from_uri (SOUP_METHOD_PUT, handle->uri);
   push_setup_message (handle);
 
-  if (handle->modified)
-    {
-      /* For servers that support it, use the X-OC-Mtime header to preserve
-       * the last modified time of the file */
-      gchar *string;
-
-      string = g_strdup_printf ("%" G_GINT64_FORMAT, g_date_time_to_unix (handle->modified));
-      soup_message_headers_append (soup_message_get_request_headers (handle->msg),
-                                   "X-OC-Mtime",
-                                   string);
-
-      g_free (string);
-    }
-
   soup_message_set_request_body (handle->msg, NULL, handle->in, handle->size);
 
   g_signal_connect (handle->msg, "restarted",
@@ -4108,7 +4040,6 @@ push_source_fstat_cb (GObject *source, GAsyncResult *res, gpointer user_data)
   info = g_file_input_stream_query_info_finish (fin, res, &error);
   if (info)
     {
-      handle->modified = g_file_info_get_modification_date_time (info);
       handle->size = g_file_info_get_size (info);
       g_object_unref (info);
 
@@ -4142,7 +4073,7 @@ push_source_open_cb (GObject *source, GAsyncResult *res, gpointer user_data)
       handle->in = G_INPUT_STREAM (fin);
 
       g_file_input_stream_query_info_async (fin,
-                                            G_FILE_ATTRIBUTE_STANDARD_SIZE "," G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                            G_FILE_ATTRIBUTE_STANDARD_SIZE,
                                             0, handle->job->cancellable,
                                             push_source_fstat_cb, handle);
     }

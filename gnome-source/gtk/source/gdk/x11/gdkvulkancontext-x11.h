@@ -51,7 +51,7 @@ struct _GdkX11VulkanContextClass
 };
 
 GDK_AVAILABLE_IN_ALL
-GType gdk_x11_vulkan_context_get_type (void);
+GType gdk_x11_vulkan_context_get_type (void) G_GNUC_CONST;
 
 G_END_DECLS
 

@@ -84,7 +84,7 @@ fetch_request_mode (GtkWidget *widget)
 static int
 get_number (GtkCssValue *value)
 {
-  double d = gtk_css_number_value_get (value, 100);
+  double d = _gtk_css_number_value_get (value, 100);
 
   if (d < 1)
     return ceil (d);
@@ -96,7 +96,7 @@ get_number (GtkCssValue *value)
 static int
 get_number_ceil (GtkCssValue *value)
 {
-  return ceil (gtk_css_number_value_get (value, 100));
+  return ceil (_gtk_css_number_value_get (value, 100));
 }
 
 static void
@@ -145,7 +145,7 @@ gtk_widget_query_size_for_orientation (GtkWidget        *widget,
   int nat_baseline = -1;
   gboolean found_in_cache;
 
-  gtk_widget_clear_resize_queued (widget);
+  gtk_widget_ensure_resize (widget);
 
   /* We check the request mode first, to determine whether the widget even does
    * any wfh/hfw handling. If it doesn't, we reset for_size to -1 and ensure
@@ -493,13 +493,7 @@ gtk_widget_measure (GtkWidget        *widget,
       int min_opposite_size;
       gtk_widget_measure (widget, OPPOSITE_ORIENTATION (orientation), -1, &min_opposite_size, NULL, NULL, NULL);
       if (for_size < min_opposite_size)
-        {
-          g_warning ("Trying to measure %s %p for %s of %d, but it needs at least %d",
-                     gtk_widget_get_name (widget), widget,
-                     (orientation == GTK_ORIENTATION_VERTICAL) ? "width" : "height",
-                     for_size, min_opposite_size);
-          for_size = min_opposite_size;
-        }
+        for_size = min_opposite_size;
     }
 
   /* This is the main function that checks for a cached size and
@@ -526,34 +520,27 @@ gtk_widget_measure (GtkWidget        *widget,
     }
   else
     {
-      GHashTable *peers, *peers_for_both;
+      GHashTable *widgets;
       GHashTableIter iter;
       gpointer key;
       int min_result = 0, nat_result = 0;
 
-      _gtk_size_group_get_widget_peers (widget, orientation,
-                                        &peers, &peers_for_both);
+      widgets = _gtk_size_group_get_widget_peers (widget, orientation);
 
-      g_hash_table_iter_init (&iter, peers);
+      g_hash_table_iter_init (&iter, widgets);
       while (g_hash_table_iter_next (&iter, &key, NULL))
         {
-          GtkWidget *peer_widget = key;
-          int peer_for_size, peer_min, peer_nat;
+          GtkWidget *tmp_widget = key;
+          int min_dimension, nat_dimension;
 
-          if (g_hash_table_lookup (peers_for_both, peer_widget))
-            peer_for_size = for_size;
-          else
-            peer_for_size = -1;
+          gtk_widget_query_size_for_orientation (tmp_widget, orientation, for_size,
+                                                 &min_dimension, &nat_dimension, NULL, NULL);
 
-          gtk_widget_query_size_for_orientation (peer_widget, orientation, peer_for_size,
-                                                 &peer_min, &peer_nat, NULL, NULL);
-
-          min_result = MAX (min_result, peer_min);
-          nat_result = MAX (nat_result, peer_nat);
+          min_result = MAX (min_result, min_dimension);
+          nat_result = MAX (nat_result, nat_dimension);
         }
 
-      g_hash_table_destroy (peers);
-      g_hash_table_destroy (peers_for_both);
+      g_hash_table_destroy (widgets);
 
       /* Baselines make no sense with sizegroups really */
       if (minimum_baseline)
@@ -589,66 +576,12 @@ gtk_widget_get_request_mode (GtkWidget *widget)
 {
   SizeRequestCache *cache;
 
-  gtk_widget_clear_resize_queued (widget);
   cache = _gtk_widget_peek_request_cache (widget);
 
   if (G_UNLIKELY (!cache->request_mode_valid))
     {
       cache->request_mode = fetch_request_mode (widget);
       cache->request_mode_valid = TRUE;
-    }
-
-  /* Constant-size widgets in a size group with GTK_SIZE_GROUP_BOTH mode
-   * cannot just report constant-size, since their size request as seen
-   * by the parent may depend on the available size in the other
-   * orientation. So look at our peers and pick a common request mode
-   * among them.
-   */
-  if (cache->request_mode == GTK_SIZE_REQUEST_CONSTANT_SIZE &&
-      G_UNLIKELY (_gtk_widget_get_sizegroups (widget)))
-    {
-      GHashTable *peers, *peers_for_both;
-      GHashTableIter iter;
-      gpointer key;
-      int wfh = 0, hfw = 0;
-
-      _gtk_size_group_get_widget_peers (widget, GTK_ORIENTATION_VERTICAL,
-                                        &peers, &peers_for_both);
-      g_hash_table_destroy (peers);
-      g_hash_table_iter_init (&iter, peers_for_both);
-      while (g_hash_table_iter_next (&iter, &key, NULL))
-        {
-          GtkWidget *peer_widget = key;
-          SizeRequestCache *peer_cache;
-
-          gtk_widget_clear_resize_queued (peer_widget);
-          peer_cache = _gtk_widget_peek_request_cache (peer_widget);
-          if (G_UNLIKELY (!peer_cache->request_mode_valid))
-            {
-              peer_cache->request_mode = fetch_request_mode (peer_widget);
-              peer_cache->request_mode_valid = TRUE;
-            }
-
-          switch (peer_cache->request_mode)
-            {
-            case GTK_SIZE_REQUEST_WIDTH_FOR_HEIGHT:
-              wfh++;
-              break;
-            case GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH:
-              hfw++;
-              break;
-            case GTK_SIZE_REQUEST_CONSTANT_SIZE:
-            default:
-              break;
-            }
-        }
-      g_hash_table_destroy (peers_for_both);
-
-      if (hfw == 0 && wfh == 0)
-        return GTK_SIZE_REQUEST_CONSTANT_SIZE;
-      if (wfh > hfw)
-        return GTK_SIZE_REQUEST_WIDTH_FOR_HEIGHT;
-      return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
     }
 
   return cache->request_mode;
@@ -779,7 +712,7 @@ gtk_distribute_natural_allocation (int               extra_space,
 
   g_return_val_if_fail (extra_space >= 0, 0);
 
-  if (n_requested_sizes == 0 || extra_space == 0)
+  if (n_requested_sizes == 0)
     return extra_space;
 
   spreading = g_newa (guint, n_requested_sizes);
@@ -805,7 +738,9 @@ gtk_distribute_natural_allocation (int               extra_space,
    */
 
   /* Sort descending by gap and position. */
-  g_sort_array (spreading, n_requested_sizes, sizeof (guint), compare_gap, sizes);
+  g_qsort_with_data (spreading,
+		     n_requested_sizes, sizeof (guint),
+		     compare_gap, sizes);
 
   /* Distribute available space.
    * This masterpiece of a loop was conceived by Behdad Esfahbod.

@@ -28,13 +28,15 @@
 #include "backends/meta-remote-desktop-session.h"
 #include "backends/meta-screen-cast-session.h"
 
-#include "backends/native/meta-device-pool.h"
+#ifdef HAVE_NATIVE_BACKEND
 #include "backends/native/meta-drm-buffer.h"
 #include "backends/native/meta-render-device.h"
-#include "backends/native/meta-renderer-egl.h"
 #include "backends/native/meta-renderer-native-private.h"
 
+#include "cogl/cogl-egl.h"
+
 #include "common/meta-cogl-drm-formats.h"
+#endif
 
 #define META_SCREEN_CAST_DBUS_SERVICE "org.gnome.Mutter.ScreenCast"
 #define META_SCREEN_CAST_DBUS_PATH "/org/gnome/Mutter/ScreenCast"
@@ -43,8 +45,6 @@
 struct _MetaScreenCast
 {
   MetaDbusSessionManager parent;
-
-  MetaRenderDevice *screen_cast_device;
 };
 
 G_DEFINE_TYPE (MetaScreenCast, meta_screen_cast,
@@ -58,23 +58,6 @@ meta_screen_cast_get_backend (MetaScreenCast *screen_cast)
   return meta_dbus_session_manager_get_backend (session_manager);
 }
 
-static MetaRenderDevice *
-get_render_device (MetaScreenCast *screen_cast)
-{
-  MetaBackend *backend =
-    meta_screen_cast_get_backend (screen_cast);
-  ClutterBackend *clutter_backend =
-    meta_backend_get_clutter_backend (backend);
-  CoglContext *cogl_context =
-    clutter_backend_get_cogl_context (clutter_backend);
-  CoglRenderer *cogl_renderer =
-    cogl_context_get_renderer (cogl_context);
-  MetaRendererNativeGpuData *renderer_gpu_data =
-    meta_renderer_egl_get_renderer_gpu_data (META_RENDERER_EGL (cogl_renderer));
-
-  return renderer_gpu_data->render_device;
-}
-
 gboolean
 meta_screen_cast_get_preferred_modifier (MetaScreenCast  *screen_cast,
                                          CoglPixelFormat  format,
@@ -83,23 +66,31 @@ meta_screen_cast_get_preferred_modifier (MetaScreenCast  *screen_cast,
                                          int              height,
                                          uint64_t        *preferred_modifier)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaBackend *backend =
     meta_screen_cast_get_backend (screen_cast);
-  MetaRenderer *renderer = meta_backend_get_renderer (backend);
-  MetaRendererNative *renderer_native = META_RENDERER_NATIVE (renderer);
+  ClutterBackend *clutter_backend =
+    meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context =
-    meta_renderer_native_get_cogl_context (renderer_native);
-  CoglDisplay *cogl_display = cogl_context_get_display (cogl_context);
+    clutter_backend_get_cogl_context (clutter_backend);
   CoglRenderer *cogl_renderer =
-    cogl_display_get_renderer (cogl_display);
+    cogl_context_get_renderer (cogl_context);
+  CoglRendererEGL *cogl_renderer_egl =
+    cogl_renderer->winsys;
+  MetaRendererNativeGpuData *renderer_gpu_data =
+    cogl_renderer_egl->platform;
   MetaRenderDevice *render_device =
-    get_render_device (screen_cast);
+    renderer_gpu_data->render_device;
+  MetaRendererNative *renderer_native =
+    renderer_gpu_data->renderer_native;
   int dmabuf_fd;
   uint32_t stride;
   uint32_t offset;
   g_autoptr (GError) error = NULL;
   const MetaFormatInfo *format_info;
   gboolean use_implicit_modifier;
+
+  g_assert (cogl_renderer_is_dma_buf_supported (cogl_renderer));
 
   format_info = meta_format_info_from_cogl_format (format);
   g_assert (format_info);
@@ -126,7 +117,7 @@ meta_screen_cast_get_preferred_modifier (MetaScreenCast  *screen_cast,
         break;
 
       stride = meta_drm_buffer_get_stride (dmabuf);
-      offset = meta_drm_buffer_get_offset_for_plane (dmabuf, 0);
+      offset = meta_drm_buffer_get_offset (dmabuf, 0);
 
       dmabuf_fd = meta_drm_buffer_export_fd (dmabuf, &error);
       if (dmabuf_fd == -1)
@@ -135,32 +126,26 @@ meta_screen_cast_get_preferred_modifier (MetaScreenCast  *screen_cast,
       if (use_implicit_modifier)
         {
           *preferred_modifier = DRM_FORMAT_MOD_INVALID;
-          fb = cogl_renderer_create_dma_buf_framebuffer (cogl_renderer,
-                                                         cogl_context,
-                                                         width, height,
-                                                         format_info->drm_format,
-                                                         format,
-                                                         1,
-                                                         &dmabuf_fd,
-                                                         &stride,
-                                                         &offset,
-                                                         NULL,
-                                                         &error);
+          fb = meta_renderer_native_create_dma_buf_framebuffer (renderer_native,
+                                                                dmabuf_fd,
+                                                                width, height,
+                                                                stride,
+                                                                offset,
+                                                                NULL,
+                                                                format_info->drm_format,
+                                                                &error);
         }
       else
         {
           *preferred_modifier = meta_drm_buffer_get_modifier (dmabuf);
-          fb = cogl_renderer_create_dma_buf_framebuffer (cogl_renderer,
-                                                         cogl_context,
-                                                         width, height,
-                                                         format_info->drm_format,
-                                                         format,
-                                                         1,
-                                                         &dmabuf_fd,
-                                                         &stride,
-                                                         &offset,
-                                                         preferred_modifier,
-                                                         &error);
+          fb = meta_renderer_native_create_dma_buf_framebuffer (renderer_native,
+                                                                dmabuf_fd,
+                                                                width, height,
+                                                                stride,
+                                                                offset,
+                                                                preferred_modifier,
+                                                                format_info->drm_format,
+                                                                &error);
         }
       close (dmabuf_fd);
 
@@ -184,6 +169,7 @@ meta_screen_cast_get_preferred_modifier (MetaScreenCast  *screen_cast,
           return TRUE;
         }
     }
+#endif
 
   g_array_set_size (modifiers, 0);
   return FALSE;
@@ -193,6 +179,7 @@ GArray *
 meta_screen_cast_query_modifiers (MetaScreenCast  *screen_cast,
                                   CoglPixelFormat  format)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaBackend *backend =
     meta_screen_cast_get_backend (screen_cast);
   ClutterBackend *clutter_backend =
@@ -201,30 +188,118 @@ meta_screen_cast_query_modifiers (MetaScreenCast  *screen_cast,
     clutter_backend_get_cogl_context (clutter_backend);
   CoglRenderer *cogl_renderer =
     cogl_context_get_renderer (cogl_context);
+  EGLDisplay egl_display =
+    cogl_egl_context_get_egl_display (cogl_context);
+  MetaEgl *egl =
+    meta_backend_get_egl (backend);
+  EGLint num_modifiers;
+  g_autofree EGLuint64KHR *all_modifiers = NULL;
+  g_autofree EGLBoolean *external_only = NULL;
   g_autoptr (GError) error = NULL;
-  GArray *modifiers;
+  GArray *modifiers = NULL;
+  gboolean ret;
+  const MetaFormatInfo *format_info;
   uint64_t modifier;
+  int i;
 
   if (!cogl_renderer_is_dma_buf_supported (cogl_renderer))
     return g_array_new (FALSE, FALSE, sizeof (uint64_t));
 
-  modifiers =
-    cogl_renderer_query_drm_modifiers (cogl_renderer,
-                                       format,
-                                       COGL_DRM_MODIFIER_FILTER_SINGLE_PLANE |
-                                       COGL_DRM_MODIFIER_FILTER_NOT_EXTERNAL_ONLY,
-                                       &error);
+  format_info = meta_format_info_from_cogl_format (format);
+  g_assert (format_info);
+
+  // TODO: query cogl_renderer for modifiers
+  ret = meta_egl_query_dma_buf_modifiers (egl,
+                                          egl_display,
+                                          format_info->drm_format,
+                                          0,
+                                          NULL,
+                                          NULL,
+                                          &num_modifiers,
+                                          &error);
+  if (!ret || num_modifiers == 0)
+    {
+      if (error)
+        g_warning ("Failed to query DMA-BUF modifiers: %s", error->message);
+      goto add_implicit_modifier;
+    }
+
+  all_modifiers = g_new (uint64_t, num_modifiers);
+  external_only = g_new (EGLBoolean, num_modifiers);
+
+  ret = meta_egl_query_dma_buf_modifiers (egl,
+                                          egl_display,
+                                          format_info->drm_format,
+                                          num_modifiers,
+                                          all_modifiers,
+                                          external_only,
+                                          &num_modifiers,
+                                          &error);
+  if (!ret)
+    {
+      g_warning ("Failed to query DMA-BUF modifiers: %s", error->message);
+      goto add_implicit_modifier;
+    }
+
+  modifiers = g_array_sized_new (FALSE, FALSE, sizeof (uint64_t),
+                                 num_modifiers + 1);
+
+  for (i = 0; i < num_modifiers; i++)
+    {
+      if (!external_only[i])
+        {
+          modifier = all_modifiers[i];
+          g_array_append_vals (modifiers, &modifier, 1);
+        }
+    }
+
+add_implicit_modifier:
   if (!modifiers)
     {
-      meta_topic (META_DEBUG_SCREEN_CAST,
-                  "Failed to query drm buffer modifiers: %s", error->message);
+      g_warning ("Couldn't retrieve the supported modifiers");
       modifiers = g_array_new (FALSE, FALSE, sizeof (uint64_t));
     }
 
-  modifier = cogl_renderer_get_implicit_drm_modifier (cogl_renderer);
-  g_array_append_val (modifiers, modifier);
+  modifier = DRM_FORMAT_MOD_INVALID;
+  g_array_append_vals (modifiers, &modifier, 1);
 
   return modifiers;
+#else
+  return g_array_new (FALSE, FALSE, sizeof (uint64_t));
+#endif
+}
+
+CoglDmaBufHandle *
+meta_screen_cast_create_dma_buf_handle (MetaScreenCast  *screen_cast,
+                                        CoglPixelFormat  format,
+                                        uint64_t         modifier,
+                                        int              width,
+                                        int              height)
+{
+#ifdef HAVE_NATIVE_BACKEND
+  MetaBackend *backend =
+    meta_screen_cast_get_backend (screen_cast);
+  ClutterBackend *clutter_backend =
+    meta_backend_get_clutter_backend (backend);
+  CoglContext *cogl_context =
+    clutter_backend_get_cogl_context (clutter_backend);
+  CoglRenderer *cogl_renderer = cogl_context_get_renderer (cogl_context);
+  g_autoptr (GError) error = NULL;
+  CoglDmaBufHandle *dmabuf_handle;
+  int n_modifiers;
+
+  n_modifiers = (modifier == DRM_FORMAT_MOD_INVALID) ? 0
+                                                     : 1;
+
+  dmabuf_handle = cogl_renderer_create_dma_buf (cogl_renderer,
+                                                format,
+                                                &modifier, n_modifiers,
+                                                width, height,
+                                                &error);
+  return dmabuf_handle;
+#else
+  return NULL;
+#endif
 }
 
 static MetaRemoteDesktopSession *
@@ -260,7 +335,7 @@ handle_create_session (MetaDBusScreenCast    *skeleton,
 {
   MetaDbusSessionManager *session_manager =
     META_DBUS_SESSION_MANAGER (screen_cast);
-  const char *remote_desktop_session_id = NULL;
+  char *remote_desktop_session_id = NULL;
   MetaRemoteDesktopSession *remote_desktop_session = NULL;
   MetaDbusSession *dbus_session;
   MetaScreenCastSession *session;
@@ -268,7 +343,7 @@ handle_create_session (MetaDBusScreenCast    *skeleton,
   gboolean disable_animations;
   const char *session_path;
 
-  g_variant_lookup (properties, "remote-desktop-session-id", "&s",
+  g_variant_lookup (properties, "remote-desktop-session-id", "s",
                     &remote_desktop_session_id);
 
   if (remote_desktop_session_id)
@@ -322,16 +397,11 @@ meta_screen_cast_constructed (GObject *object)
   GDBusInterfaceSkeleton *interface_skeleton =
     meta_dbus_session_manager_get_interface_skeleton (session_manager);
   MetaDBusScreenCast *skeleton = META_DBUS_SCREEN_CAST (interface_skeleton);
-  MetaRenderDevice *render_device;
 
   g_signal_connect (interface_skeleton, "handle-create-session",
                     G_CALLBACK (handle_create_session), screen_cast);
 
   meta_dbus_screen_cast_set_version (skeleton, META_SCREEN_CAST_API_VERSION);
-
-  render_device = get_render_device (screen_cast);
-  if (meta_render_device_is_hardware_accelerated (render_device))
-    screen_cast->screen_cast_device = render_device;
 
   G_OBJECT_CLASS (meta_screen_cast_parent_class)->constructed (object);
 }
@@ -373,28 +443,4 @@ meta_screen_cast_class_init (MetaScreenCastClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->constructed = meta_screen_cast_constructed;
-}
-
-gboolean
-meta_screen_cast_is_enabled (MetaScreenCast *screen_cast)
-{
-  MetaDbusSessionManager *session_manager =
-    META_DBUS_SESSION_MANAGER (screen_cast);
-
-  return meta_dbus_session_manager_is_enabled (session_manager);
-}
-
-dev_t
-meta_screen_cast_get_device_id (MetaScreenCast *screen_cast)
-{
-  MetaDeviceFile *device_file;
-
-  if (!screen_cast->screen_cast_device)
-    return DEVICE_ID_INVALID;
-
-  device_file = meta_render_device_get_device_file (screen_cast->screen_cast_device);
-  if (device_file)
-    return meta_device_file_get_device_id (device_file);
-  else
-    return DEVICE_ID_INVALID;
 }

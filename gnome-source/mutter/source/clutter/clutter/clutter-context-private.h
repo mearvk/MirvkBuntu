@@ -19,12 +19,7 @@
 
 #pragma once
 
-#ifdef HAVE_FONTS
-#include <pango/pango.h>
-#endif
-
 #include "clutter/clutter-context.h"
-#include "clutter-stage-manager-private.h"
 
 struct _ClutterContext
 {
@@ -39,10 +34,7 @@ struct _ClutterContext
    * ordered from least recently added to most recently added */
   GList *event_filters;
 
-#ifdef HAVE_FONTS
-  PangoRenderer *font_renderer;
-  PangoFontMap *font_map;
-#endif
+  CoglPangoFontMap *font_map;
 
   GSList *current_event;
 
@@ -51,18 +43,6 @@ struct _ClutterContext
 
   ClutterSettings *settings;
 
+  gboolean is_initialized;
   gboolean show_fps;
 };
-
-ClutterStageManager * clutter_context_get_stage_manager (ClutterContext *context);
-
-gboolean clutter_context_get_show_fps (ClutterContext *context);
-
-#ifdef HAVE_FONTS
-PangoRenderer * clutter_context_get_font_renderer (ClutterContext *context);
-
-/**
- * clutter_context_get_pango_fontmap: (skip)
- */
-PangoFontMap * clutter_context_get_pango_fontmap (ClutterContext *context);
-#endif

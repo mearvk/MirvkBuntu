@@ -22,10 +22,9 @@
 #include "backends/meta-settings-private.h"
 
 #include <gio/gio.h>
-#include <gio/gsettingsschema.h>
 
 #include "backends/meta-backend-private.h"
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "backends/meta-monitor-manager-private.h"
 
 #ifndef XWAYLAND_GRAB_DEFAULT_ACCESS_RULES
@@ -40,14 +39,8 @@ enum
   FONT_DPI_CHANGED,
   EXPERIMENTAL_FEATURES_CHANGED,
   PRIVACY_SCREEN_CHANGED,
-  XWAYLAND_SCALING_FACTOR_CHANGED,
 
   N_SIGNALS
-};
-
-static GDebugKey experimental_feature_keys[] = {
-  { "kms-modifiers", META_EXPERIMENTAL_FEATURE_KMS_MODIFIERS },
-  { "autoclose-xwayland", META_EXPERIMENTAL_FEATURE_AUTOCLOSE_XWAYLAND },
 };
 
 static guint signals[N_SIGNALS];
@@ -59,9 +52,9 @@ struct _MetaSettings
   MetaBackend *backend;
 
   GSettings *interface_settings;
+  GSettings *mutter_settings;
   GSettings *privacy_settings;
   GSettings *wayland_settings;
-  GSettings *experimental_settings;
 
   int ui_scaling_factor;
   int global_scaling_factor;
@@ -82,8 +75,6 @@ struct _MetaSettings
 
   /* Whether Xwayland should allow X11 clients from different endianness */
   gboolean xwayland_allow_byte_swapped_clients;
-
-  float xwayland_scaling_factor;
 };
 
 G_DEFINE_TYPE (MetaSettings, meta_settings, G_TYPE_OBJECT)
@@ -173,8 +164,6 @@ meta_settings_get_global_scaling_factor (MetaSettings *settings,
 static gboolean
 update_font_dpi (MetaSettings *settings)
 {
-  ClutterContext *clutter_context;
-  ClutterSettings *clutter_settings;
   double text_scaling_factor;
   /* Number of logical pixels on an inch when unscaled */
   const double dots_per_inch = 96;
@@ -192,10 +181,8 @@ update_font_dpi (MetaSettings *settings)
   if (font_dpi != settings->font_dpi)
     {
       settings->font_dpi = font_dpi;
-      clutter_context = meta_backend_get_clutter_context (settings->backend);
-      clutter_settings = clutter_context_get_settings (clutter_context);
 
-      g_object_set (clutter_settings,
+      g_object_set (clutter_settings_get_default (),
                     "font-dpi", font_dpi,
                     NULL);
 
@@ -280,47 +267,78 @@ meta_settings_enable_experimental_feature (MetaSettings           *settings,
   settings->experimental_features |= feature;
 }
 
-static void
-update_experimental_feature (MetaSettings *settings,
-                             const char   *key)
+static gboolean
+experimental_features_handler (GVariant *features_variant,
+                               gpointer *result,
+                               gpointer  data)
 {
-  GSettings *experimental_settings = settings->experimental_settings;
-  MetaExperimentalFeature feature = META_EXPERIMENTAL_FEATURE_NONE;
-  gboolean enabled;
+  MetaSettings *settings = data;
+  GVariantIter features_iter;
+  char *feature_str;
+  MetaExperimentalFeature features = META_EXPERIMENTAL_FEATURE_NONE;
 
   if (settings->experimental_features_overridden)
-    return;
-
-  if (g_str_equal (key, "kms-modifiers"))
-    feature = META_EXPERIMENTAL_FEATURE_KMS_MODIFIERS;
-  else if (g_str_equal (key, "autoclose-xwayland"))
-    feature = META_EXPERIMENTAL_FEATURE_AUTOCLOSE_XWAYLAND;
-
-  if (!feature)
     {
-      g_warning ("Unknown experimental feature '%s'", key);
-      return;
+      *result = GINT_TO_POINTER (FALSE);
+      return TRUE;
     }
 
-  enabled = g_settings_get_boolean (experimental_settings, key);
-  if (enabled)
-    settings->experimental_features |= feature;
+  g_variant_iter_init (&features_iter, features_variant);
+  while (g_variant_iter_loop (&features_iter, "s", &feature_str))
+    {
+      MetaExperimentalFeature feature = META_EXPERIMENTAL_FEATURE_NONE;
+
+      if (g_str_equal (feature_str, "scale-monitor-framebuffer"))
+        feature = META_EXPERIMENTAL_FEATURE_SCALE_MONITOR_FRAMEBUFFER;
+      else if (g_str_equal (feature_str, "kms-modifiers"))
+        feature = META_EXPERIMENTAL_FEATURE_KMS_MODIFIERS;
+      else if (g_str_equal (feature_str, "autoclose-xwayland"))
+        feature = META_EXPERIMENTAL_FEATURE_AUTOCLOSE_XWAYLAND;
+      else if (g_str_equal (feature_str, "variable-refresh-rate"))
+        feature = META_EXPERIMENTAL_FEATURE_VARIABLE_REFRESH_RATE;
+
+      if (feature)
+        g_message ("Enabling experimental feature '%s'", feature_str);
+      else
+        g_warning ("Unknown experimental feature '%s'", feature_str);
+
+      features |= feature;
+    }
+
+  if (features != settings->experimental_features)
+    {
+      settings->experimental_features = features;
+      *result = GINT_TO_POINTER (TRUE);
+    }
   else
-    settings->experimental_features &= ~feature;
+    {
+      *result = GINT_TO_POINTER (FALSE);
+    }
+
+  return TRUE;
+}
+
+static gboolean
+update_experimental_features (MetaSettings *settings)
+{
+  return GPOINTER_TO_INT (g_settings_get_mapped (settings->mutter_settings,
+                                                 "experimental-features",
+                                                 experimental_features_handler,
+                                                 settings));
 }
 
 static void
-experimental_settings_changed (GSettings    *experimental_settings,
-                               const char   *key,
-                               MetaSettings *settings)
+mutter_settings_changed (GSettings    *mutter_settings,
+                         gchar        *key,
+                         MetaSettings *settings)
 {
   MetaExperimentalFeature old_experimental_features;
 
+  if (!g_str_equal (key, "experimental-features"))
+    return;
+
   old_experimental_features = settings->experimental_features;
-
-  update_experimental_feature (settings, key);
-
-  if (settings->experimental_features != old_experimental_features)
+  if (update_experimental_features (settings))
     g_signal_emit (settings, signals[EXPERIMENTAL_FEATURES_CHANGED], 0,
                    (unsigned int) old_experimental_features);
 }
@@ -414,17 +432,10 @@ update_privacy_settings (MetaSettings *settings)
 static void
 update_xwayland_allow_byte_swapped_clients (MetaSettings *settings)
 {
+
   settings->xwayland_allow_byte_swapped_clients =
     g_settings_get_boolean (settings->wayland_settings,
                             "xwayland-allow-byte-swapped-clients");
-}
-
-static void
-update_xwayland_scaling_factor (MetaSettings *settings)
-{
-  settings->xwayland_scaling_factor =
-    (float) g_settings_get_double (settings->wayland_settings,
-                                   "xwayland-scaling-factor");
 }
 
 static void
@@ -448,11 +459,6 @@ wayland_settings_changed (GSettings    *wayland_settings,
   else if (g_str_equal (key, "xwayland-allow-byte-swapped-clients"))
     {
       update_xwayland_allow_byte_swapped_clients (settings);
-    }
-  else if (g_str_equal (key, "xwayland-scaling-factor"))
-    {
-      update_xwayland_scaling_factor (settings);
-      g_signal_emit (settings, signals[XWAYLAND_SCALING_FACTOR_CHANGED], 0);
     }
 }
 
@@ -481,21 +487,6 @@ gboolean
 meta_settings_are_xwayland_byte_swapped_clients_allowed (MetaSettings *settings)
 {
   return settings->xwayland_allow_byte_swapped_clients;
-}
-
-gboolean
-meta_settings_get_xwayland_scaling_factor (MetaSettings *settings,
-                                           float        *scaling_factor)
-{
-  if (G_APPROX_VALUE (settings->xwayland_scaling_factor, 0.0f, FLT_EPSILON))
-    {
-      return FALSE;
-    }
-  else
-    {
-      *scaling_factor = settings->xwayland_scaling_factor;
-      return TRUE;
-    }
 }
 
 gboolean
@@ -532,10 +523,10 @@ meta_settings_dispose (GObject *object)
 {
   MetaSettings *settings = META_SETTINGS (object);
 
+  g_clear_object (&settings->mutter_settings);
   g_clear_object (&settings->interface_settings);
   g_clear_object (&settings->privacy_settings);
   g_clear_object (&settings->wayland_settings);
-  g_clear_object (&settings->experimental_settings);
   g_clear_pointer (&settings->xwayland_grab_allow_list_patterns,
                    g_ptr_array_unref);
   g_clear_pointer (&settings->xwayland_grab_deny_list_patterns,
@@ -547,11 +538,6 @@ meta_settings_dispose (GObject *object)
 static void
 meta_settings_init (MetaSettings *settings)
 {
-  g_autoptr (GSettingsSchema) experimental_schema = NULL;
-  g_auto (GStrv) experimental_keys = NULL;
-  const char *experimental_features_env;
-  int i;
-
   settings->interface_settings = g_settings_new ("org.gnome.desktop.interface");
   g_signal_connect (settings->interface_settings, "changed",
                     G_CALLBACK (interface_settings_changed),
@@ -560,17 +546,13 @@ meta_settings_init (MetaSettings *settings)
   g_signal_connect (settings->privacy_settings, "changed",
                     G_CALLBACK (privacy_settings_changed),
                     settings);
+  settings->mutter_settings = g_settings_new ("org.gnome.mutter");
+  g_signal_connect (settings->mutter_settings, "changed",
+                    G_CALLBACK (mutter_settings_changed),
+                    settings);
   settings->wayland_settings = g_settings_new ("org.gnome.mutter.wayland");
   g_signal_connect (settings->wayland_settings, "changed",
                     G_CALLBACK (wayland_settings_changed),
-                    settings);
-  experimental_schema =
-    g_settings_schema_source_lookup (g_settings_schema_source_get_default (),
-                                     "org.gnome.mutter.experimental", TRUE);
-  settings->experimental_settings =
-    g_settings_new_full (experimental_schema, NULL, NULL);
-  g_signal_connect (settings->experimental_settings, "changed",
-                    G_CALLBACK (experimental_settings_changed),
                     settings);
 
   /* Chain up inter-dependent settings. */
@@ -579,32 +561,13 @@ meta_settings_init (MetaSettings *settings)
   g_signal_connect (settings, "ui-scaling-factor-changed",
                     G_CALLBACK (meta_settings_update_font_dpi), NULL);
 
-  experimental_features_env = getenv ("MUTTER_DEBUG_EXPERIMENTAL_FEATURES");
-  if (experimental_features_env)
-    {
-      MetaExperimentalFeature experimental_features;
-
-      experimental_features =
-        g_parse_debug_string (experimental_features_env,
-                              experimental_feature_keys,
-                              G_N_ELEMENTS (experimental_feature_keys));
-
-      meta_settings_override_experimental_features (settings);
-      meta_settings_enable_experimental_feature (settings,
-                                                 experimental_features);
-    }
-
-  experimental_keys = g_settings_schema_list_keys (experimental_schema);
-  for (i = 0; experimental_keys[i]; i++)
-    update_experimental_feature (settings, experimental_keys[i]);
-
   update_global_scaling_factor (settings);
+  update_experimental_features (settings);
   update_xwayland_grab_access_rules (settings);
   update_xwayland_allow_grabs (settings);
   update_xwayland_disable_extensions (settings);
   update_privacy_settings (settings);
   update_xwayland_allow_byte_swapped_clients (settings);
-  update_xwayland_scaling_factor (settings);
 }
 
 static void
@@ -669,14 +632,6 @@ meta_settings_class_init (MetaSettingsClass *klass)
 
   signals[PRIVACY_SCREEN_CHANGED] =
     g_signal_new ("privacy-screen-changed",
-                  G_TYPE_FROM_CLASS (object_class),
-                  G_SIGNAL_RUN_LAST,
-                  0,
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
-
-  signals[XWAYLAND_SCALING_FACTOR_CHANGED] =
-    g_signal_new ("xwayland-scaling-factor-changed",
                   G_TYPE_FROM_CLASS (object_class),
                   G_SIGNAL_RUN_LAST,
                   0,

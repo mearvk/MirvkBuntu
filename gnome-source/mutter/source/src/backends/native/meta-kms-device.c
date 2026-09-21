@@ -99,6 +99,12 @@ meta_kms_device_get_driver_name (MetaKmsDevice *device)
   return device->driver_name;
 }
 
+const char *
+meta_kms_device_get_driver_description (MetaKmsDevice *device)
+{
+  return device->driver_description;
+}
+
 MetaKmsDeviceFlag
 meta_kms_device_get_flags (MetaKmsDevice *device)
 {
@@ -417,139 +423,6 @@ meta_kms_device_handle_flush (MetaKmsDevice *device,
   return needs_flush;
 }
 
-typedef struct
-{
-  MetaKmsDevice *device;
-  GList *connectors;
-  GList *crtcs;
-  GList *planes;
-
-  int fd;
-  uint32_t lessee_id;
-} LeaseRequestData;
-
-static gpointer
-lease_objects_in_impl (MetaThreadImpl  *thread_impl,
-                       gpointer         user_data,
-                       GError         **error)
-{
-  LeaseRequestData *data = user_data;
-  MetaKmsImplDevice *impl_device =
-    meta_kms_device_get_impl_device (data->device);
-  uint32_t lessee_id;
-  int fd;
-
-  if (!meta_kms_impl_device_lease_objects (impl_device,
-                                           data->connectors,
-                                           data->crtcs,
-                                           data->planes,
-                                           &fd,
-                                           &lessee_id,
-                                           error))
-    return GINT_TO_POINTER (FALSE);
-
-  data->fd = fd;
-  data->lessee_id = lessee_id;
-
-  return GINT_TO_POINTER (TRUE);
-}
-
-gboolean
-meta_kms_device_lease_objects (MetaKmsDevice  *device,
-                               GList          *connectors,
-                               GList          *crtcs,
-                               GList          *planes,
-                               int            *out_fd,
-                               uint32_t       *out_lessee_id,
-                               GError        **error)
-{
-  LeaseRequestData data = {};
-
-  data.device = device;
-  data.connectors = connectors;
-  data.crtcs = crtcs;
-  data.planes = planes;
-
-  if (!meta_kms_run_impl_task_sync (device->kms, lease_objects_in_impl, &data,
-                                    error))
-    return FALSE;
-
-  *out_fd = data.fd;
-  *out_lessee_id = data.lessee_id;
-  return TRUE;
-}
-
-static gpointer
-revoke_lease_in_impl (MetaThreadImpl  *thread_impl,
-                      gpointer         user_data,
-                      GError         **error)
-{
-  LeaseRequestData *data = user_data;
-  MetaKmsImplDevice *impl_device =
-    meta_kms_device_get_impl_device (data->device);
-
-  if (!meta_kms_impl_device_revoke_lease (impl_device, data->lessee_id, error))
-    return GINT_TO_POINTER (FALSE);
-  else
-    return GINT_TO_POINTER (TRUE);
-}
-
-gboolean
-meta_kms_device_revoke_lease (MetaKmsDevice  *device,
-                              uint32_t        lessee_id,
-                              GError        **error)
-{
-  LeaseRequestData data = {};
-
-  data.device = device;
-  data.lessee_id = lessee_id;
-
-  return !!meta_kms_run_impl_task_sync (device->kms, revoke_lease_in_impl, &data,
-                                        error);
-}
-
-typedef struct
-{
-  MetaKmsDevice *device;
-  uint32_t **out_lessee_ids;
-  int *out_num_lessee_ids;
-} ListLesseesData;
-
-static gpointer
-list_lessees_in_impl (MetaThreadImpl  *thread_impl,
-                      gpointer         user_data,
-                      GError         **error)
-{
-  ListLesseesData *data = user_data;
-  MetaKmsImplDevice *impl_device = meta_kms_device_get_impl_device (data->device);
-
-  if (!meta_kms_impl_device_list_lessees (impl_device,
-                                          data->out_lessee_ids,
-                                          data->out_num_lessee_ids,
-                                          error))
-    return GINT_TO_POINTER (FALSE);
-  else
-    return GINT_TO_POINTER (TRUE);
-}
-
-gboolean
-meta_kms_device_list_lessees (MetaKmsDevice  *device,
-                              uint32_t      **out_lessee_ids,
-                              int            *out_num_lessee_ids,
-                              GError        **error)
-{
-  ListLesseesData data = {};
-
-  data.device = device;
-  data.out_lessee_ids = out_lessee_ids;
-  data.out_num_lessee_ids = out_num_lessee_ids;
-
-  return !!meta_kms_run_impl_task_sync (device->kms,
-                                        list_lessees_in_impl,
-                                        &data,
-                                        error);
-}
-
 typedef struct _CreateImplDeviceData
 {
   MetaKmsDevice *device;
@@ -628,6 +501,8 @@ meta_create_kms_impl_device (MetaKmsDevice      *device,
     {
       if (flags & META_KMS_DEVICE_FLAG_NO_MODE_SETTING)
         kms_mode = KMS_MODE_HEADLESS;
+      else if (flags & META_KMS_DEVICE_FLAG_FORCE_LEGACY)
+        kms_mode = KMS_MODE_SIMPLE;
       else
         kms_mode = KMS_MODE_AUTO;
     }
@@ -771,9 +646,6 @@ meta_kms_device_new (MetaKms            *kms,
   if (device->caps.addfb2_modifiers)
     device->flags |= META_KMS_DEVICE_FLAG_HAS_ADDFB2;
 
-  if (device->caps.supports_color_modes)
-    device->flags |= META_KMS_DEVICE_FLAG_SUPPORTS_COLOR_MODES;
-
   return device;
 }
 
@@ -837,28 +709,4 @@ meta_kms_device_class_init (MetaKmsDeviceClass *klass)
                   NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   META_TYPE_KMS_CRTC);
-}
-
-gboolean
-meta_kms_device_has_connected_builtin_panel (MetaKmsDevice *device)
-{
-  GList *l;
-
-  for (l = device->connectors; l; l = l->next)
-    {
-      MetaKmsConnector *connector = META_KMS_CONNECTOR (l->data);
-
-      if (!meta_kms_connector_get_current_state (connector))
-        continue;
-
-      switch (meta_kms_connector_get_connector_type (connector))
-        {
-        case DRM_MODE_CONNECTOR_LVDS:
-        case DRM_MODE_CONNECTOR_eDP:
-        case DRM_MODE_CONNECTOR_DSI:
-          return TRUE;
-        }
-    }
-
-  return FALSE;
 }

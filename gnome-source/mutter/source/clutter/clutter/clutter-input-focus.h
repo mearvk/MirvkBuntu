@@ -27,21 +27,6 @@ CLUTTER_EXPORT
 G_DECLARE_DERIVABLE_TYPE (ClutterInputFocus, clutter_input_focus,
                           CLUTTER, INPUT_FOCUS, GObject)
 
-/**
- * ClutterPreeditAttribute:
- * @hint: the preedit hint
- * @start: the start index, in characters
- * @end: the end index, in characters
- *
- * Holds the span affected by a style hint within the pre-edit string
- */
-struct _ClutterPreeditAttribute
-{
-  ClutterPreeditStyleHint hint;
-  unsigned int start;
-  unsigned int end;
-};
-
 struct _ClutterInputFocusClass
 {
   GObjectClass parent_class;
@@ -58,15 +43,10 @@ struct _ClutterInputFocusClass
   void (* commit_text) (ClutterInputFocus *focus,
                         const gchar       *text);
 
-  void (* set_preedit_text) (ClutterInputFocus       *focus,
-                             const gchar             *preedit,
-                             guint                    cursor,
-                             guint                    anchor,
-                             ClutterPreeditAttribute *style_hints,
-                             unsigned int             n_style_hints);
-
-  void (* action) (ClutterInputFocus  *focus,
-                   ClutterInputAction  action);
+  void (* set_preedit_text) (ClutterInputFocus *focus,
+                             const gchar       *preedit,
+                             guint              cursor,
+                             guint              anchor);
 };
 
 CLUTTER_EXPORT
@@ -103,7 +83,3 @@ void clutter_input_focus_set_can_show_preedit (ClutterInputFocus *focus,
 CLUTTER_EXPORT
 void clutter_input_focus_set_input_panel_state (ClutterInputFocus      *focus,
                                                 ClutterInputPanelState  state);
-
-CLUTTER_EXPORT
-void clutter_input_focus_set_handled_actions (ClutterInputFocus       *focus,
-                                              ClutterInputActionFlags  actions);

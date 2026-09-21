@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "backends/meta-monitor-private.h"
+#include "backends/meta-monitor.h"
 #include "backends/meta-monitor-manager-private.h"
 
 #define META_TYPE_MONITOR_CONFIG_MANAGER (meta_monitor_config_manager_get_type ())
@@ -34,14 +34,13 @@ typedef struct _MetaMonitorConfig
   gboolean has_max_bpc;
   unsigned int max_bpc;
   MetaOutputRGBRange rgb_range;
-  MetaColorMode color_mode;
 } MetaMonitorConfig;
 
 typedef struct _MetaLogicalMonitorConfig
 {
   MtkRectangle layout;
   GList *monitor_configs;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   float scale;
   gboolean is_primary;
   gboolean is_presentation;
@@ -50,13 +49,13 @@ typedef struct _MetaLogicalMonitorConfig
 typedef struct _MetaMonitorsConfigKey
 {
   GList *monitor_specs;
-  MetaLogicalMonitorLayoutMode layout_mode;
 } MetaMonitorsConfigKey;
 
 enum _MetaMonitorsConfigFlag
 {
   META_MONITORS_CONFIG_FLAG_NONE = 0,
-  META_MONITORS_CONFIG_FLAG_SYSTEM_CONFIG = (1 << 0),
+  META_MONITORS_CONFIG_FLAG_MIGRATED = (1 << 0),
+  META_MONITORS_CONFIG_FLAG_SYSTEM_CONFIG = (1 << 1),
 };
 
 struct _MetaMonitorsConfig
@@ -68,7 +67,6 @@ struct _MetaMonitorsConfig
   GList *logical_monitor_configs;
 
   GList *disabled_monitor_specs;
-  GList *for_lease_monitor_specs;
 
   MetaMonitorsConfigFlag flags;
 
@@ -109,7 +107,7 @@ MetaMonitorsConfig * meta_monitor_config_manager_create_suggested (MetaMonitorCo
 META_EXPORT_TEST
 MetaMonitorsConfig * meta_monitor_config_manager_create_for_orientation (MetaMonitorConfigManager *config_manager,
                                                                          MetaMonitorsConfig       *base_config,
-                                                                         MtkMonitorTransform       transform);
+                                                                         MetaMonitorTransform      transform);
 
 META_EXPORT_TEST
 MetaMonitorsConfig * meta_monitor_config_manager_create_for_builtin_orientation (MetaMonitorConfigManager *config_manager,
@@ -144,7 +142,6 @@ void meta_monitor_config_manager_save_current (MetaMonitorConfigManager *config_
 META_EXPORT_TEST
 MetaMonitorsConfig * meta_monitors_config_new_full (GList                        *logical_monitor_configs,
                                                     GList                        *disabled_monitors,
-                                                    GList                        *for_lease_monitors,
                                                     MetaLogicalMonitorLayoutMode  layout_mode,
                                                     MetaMonitorsConfigFlag        flags);
 
@@ -188,10 +185,6 @@ META_EXPORT_TEST
 gboolean meta_logical_monitor_configs_have_monitor (GList           *logical_monitor_configs,
                                                     MetaMonitorSpec *monitor_spec);
 
-gboolean meta_logical_monitor_configs_have_visible_monitor (MetaMonitorManager *monitor_manager,
-                                                            GList              *logical_monitor_configs,
-                                                            MetaMonitor        *monitor);
-
 META_EXPORT_TEST
 gboolean meta_verify_monitor_mode_spec (MetaMonitorModeSpec *monitor_mode_spec,
                                         GError             **error);
@@ -214,6 +207,7 @@ META_EXPORT_TEST
 gboolean meta_verify_monitors_config (MetaMonitorsConfig *config,
                                       MetaMonitorManager *monitor_manager,
                                       GError            **error);
+
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaMonitorConfig, meta_monitor_config_free)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaLogicalMonitorConfig,

@@ -21,7 +21,7 @@
 
 #include "gdkcontentdeserializer.h"
 
-#include "gdkcontentformatsprivate.h"
+#include "gdkcontentformats.h"
 #include "filetransferportalprivate.h"
 #include "gdktexture.h"
 #include "gdkrgbaprivate.h"
@@ -35,7 +35,8 @@
 /**
  * GdkContentDeserializer:
  *
- * Deserializes content received via inter-application data transfers.
+ * A `GdkContentDeserializer` is used to deserialize content received via
+ * inter-application data transfers.
  *
  * The `GdkContentDeserializer` transforms serialized content that is
  * identified by a mime type into an object identified by a GType.
@@ -59,6 +60,14 @@ struct _Deserializer
 };
 
 GQueue deserializers = G_QUEUE_INIT;
+
+static void init (void);
+
+#define GDK_CONTENT_DESERIALIZER_CLASS(klass)      (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_CONTENT_DESERIALIZER, GdkContentDeserializerClass))
+#define GDK_IS_CONTENT_DESERIALIZER_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_CONTENT_DESERIALIZER))
+#define GDK_CONTENT_DESERIALIZER_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_CONTENT_DESERIALIZER, GdkContentDeserializerClass))
+
+typedef struct _GdkContentDeserializerClass GdkContentDeserializerClass;
 
 struct _GdkContentDeserializer
 {
@@ -344,27 +353,16 @@ gdk_content_deserializer_emit_callback (gpointer data)
 void
 gdk_content_deserializer_return_success (GdkContentDeserializer *deserializer)
 {
-  GSource *idle_source;
-
   g_return_if_fail (GDK_IS_CONTENT_DESERIALIZER (deserializer));
   g_return_if_fail (!deserializer->returned);
+  guint source_id;
 
   deserializer->returned = TRUE;
-
-  idle_source = g_idle_source_new ();
-  g_source_set_priority (idle_source, deserializer->priority);
-  g_source_set_callback (idle_source,
-                         gdk_content_deserializer_emit_callback,
-                         deserializer,
-                         g_object_unref);
-  g_source_set_static_name (idle_source, "[gtk] gdk_content_deserializer_emit_callback");
-
-  /* If we're in a sub-context (like on macOS), attach the idle function
-   * to the thread-default context, default to the global context.
-   */
-  g_source_attach (idle_source, g_main_context_get_thread_default ());
-
-  g_source_unref (idle_source);
+  source_id = g_idle_add_full (deserializer->priority,
+                               gdk_content_deserializer_emit_callback,
+                               deserializer,
+                               g_object_unref);
+  gdk_source_set_static_name_by_id (source_id, "[gtk] gdk_content_deserializer_emit_callback");
   /* NB: the idle will destroy our reference */
 }
 
@@ -399,10 +397,6 @@ gdk_content_deserializer_return_error (GdkContentDeserializer *deserializer,
  * @notify: destroy notify for @data
  *
  * Registers a function to deserialize object of a given type.
- *
- * Since 4.20, when looking up a deserializer to use, GTK will
- * use the last registered deserializer for a given mime type,
- * so applications can override the built-in deserializers.
  */
 void
 gdk_content_register_deserializer (const char                *mime_type,
@@ -435,9 +429,11 @@ lookup_deserializer (const char *mime_type,
 
   g_return_val_if_fail (mime_type != NULL, NULL);
 
+  init ();
+
   mime_type = g_intern_string (mime_type);
 
-  for (l = g_queue_peek_tail_link (&deserializers); l; l = l->prev)
+  for (l = g_queue_peek_head_link (&deserializers); l; l = l->next)
     {
       Deserializer *deserializer = l->data;
 
@@ -466,18 +462,17 @@ gdk_content_formats_union_deserialize_gtypes (GdkContentFormats *formats)
 
   g_return_val_if_fail (formats != NULL, NULL);
 
+  init ();
+
   builder = gdk_content_formats_builder_new ();
   gdk_content_formats_builder_add_formats (builder, formats);
 
-  if (!gdk_content_formats_is_empty (formats))
+  for (l = g_queue_peek_head_link (&deserializers); l; l = l->next)
     {
-      for (l = g_queue_peek_head_link (&deserializers); l; l = l->next)
-        {
-          Deserializer *deserializer = l->data;
+      Deserializer *deserializer = l->data;
 
-          if (gdk_content_formats_contain_mime_type (formats, deserializer->mime_type))
-            gdk_content_formats_builder_add_gtype (builder, deserializer->type);
-        }
+      if (gdk_content_formats_contain_mime_type (formats, deserializer->mime_type))
+        gdk_content_formats_builder_add_gtype (builder, deserializer->type);
     }
 
   gdk_content_formats_unref (formats);
@@ -502,18 +497,17 @@ gdk_content_formats_union_deserialize_mime_types (GdkContentFormats *formats)
 
   g_return_val_if_fail (formats != NULL, NULL);
 
+  init ();
+
   builder = gdk_content_formats_builder_new ();
   gdk_content_formats_builder_add_formats (builder, formats);
 
-  if (!gdk_content_formats_is_empty (formats))
+  for (l = g_queue_peek_head_link (&deserializers); l; l = l->next)
     {
-      for (l = g_queue_peek_head_link (&deserializers); l; l = l->next)
-        {
-          Deserializer *deserializer = l->data;
+      Deserializer *deserializer = l->data;
 
-          if (gdk_content_formats_contain_gtype (formats, deserializer->type))
-            gdk_content_formats_builder_add_mime_type (builder, deserializer->mime_type);
-        }
+      if (gdk_content_formats_contain_gtype (formats, deserializer->type))
+        gdk_content_formats_builder_add_mime_type (builder, deserializer->mime_type);
     }
 
   gdk_content_formats_unref (formats);
@@ -539,13 +533,16 @@ deserialize_not_found (GdkContentDeserializer *deserializer)
  * @type: the GType to deserialize from
  * @io_priority: the I/O priority of the operation
  * @cancellable: (nullable): optional `GCancellable` object
- * @callback: (scope async) (closure user_data): callback to call when the operation is done
- * @user_data: data to pass to the callback function
+ * @callback: (scope async): callback to call when the operation is done
+ * @user_data: (closure): data to pass to the callback function
  *
- * Reads content from the given input stream and deserialize it, asynchronously.
+ * Read content from the given input stream and deserialize it, asynchronously.
  *
- * The default I/O priority is `G_PRIORITY_DEFAULT` (i.e. 0), and lower numbers
+ * The default I/O priority is %G_PRIORITY_DEFAULT (i.e. 0), and lower numbers
  * indicate a higher priority.
+ *
+ * When the operation is finished, @callback will be called. You must then
+ * call [func@Gdk.content_deserialize_finish] to get the result of the operation.
  */
 void
 gdk_content_deserialize_async (GInputStream        *stream,
@@ -641,9 +638,7 @@ pixbuf_deserializer_finish (GObject      *source,
   else if (G_VALUE_HOLDS (value, GDK_TYPE_TEXTURE))
     {
       GdkTexture *texture;
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       texture = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
       g_object_unref (pixbuf);
       g_value_take_object (value, texture);
     }
@@ -731,7 +726,7 @@ string_deserializer_finish (GObject      *source,
   else if (written == 0)
     {
       /* Never return NULL, we only return that on error */
-      g_value_set_static_string (gdk_content_deserializer_get_value (deserializer), "");
+      g_value_set_string (gdk_content_deserializer_get_value (deserializer), "");
     }
   else
     {
@@ -909,8 +904,8 @@ color_deserializer (GdkContentDeserializer *deserializer)
   g_object_unref (output);
 }
 
-void
-gdk_content_init_deserializers (void)
+static void
+init (void)
 {
   static gboolean initialized = FALSE;
   GSList *formats, *f;
@@ -920,8 +915,6 @@ gdk_content_init_deserializers (void)
     return;
 
   initialized = TRUE;
-
-  /* Textures */
 
   gdk_content_register_deserializer ("image/png",
                                      GDK_TYPE_TEXTURE,
@@ -973,7 +966,9 @@ gdk_content_init_deserializers (void)
 
   g_slist_free (formats);
 
-  /* Files */
+#if defined(G_OS_UNIX) && !defined(__APPLE__)
+  file_transfer_portal_register ();
+#endif
 
   gdk_content_register_deserializer ("text/uri-list",
                                      GDK_TYPE_FILE_LIST,
@@ -987,18 +982,11 @@ gdk_content_init_deserializers (void)
                                      NULL,
                                      NULL);
 
-#if defined(G_OS_UNIX) && !defined(__APPLE__)
-  file_transfer_portal_register ();
-#endif
-
-  /* Strings */
-
   gdk_content_register_deserializer ("text/plain;charset=utf-8",
                                      G_TYPE_STRING,
                                      string_deserializer,
                                      (gpointer) "utf-8",
                                      NULL);
-
   if (!g_get_charset (&charset))
     {
       char *mime = g_strdup_printf ("text/plain;charset=%s", charset);
@@ -1016,11 +1004,10 @@ gdk_content_init_deserializers (void)
                                      (gpointer) "ASCII",
                                      NULL);
 
-  /* Colors */
-
   gdk_content_register_deserializer ("application/x-color",
                                      GDK_TYPE_RGBA,
                                      color_deserializer,
                                      NULL,
                                      NULL);
 }
+

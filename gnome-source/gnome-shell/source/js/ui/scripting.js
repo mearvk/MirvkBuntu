@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
@@ -37,8 +39,9 @@ import {loadInterfaceXML} from '../misc/fileUtils.js';
  */
 export function sleep(milliseconds) {
     return new Promise(resolve => {
-        const id = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, milliseconds, () => {
+        let id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, milliseconds, () => {
             resolve();
+            return GLib.SOURCE_REMOVE;
         });
         GLib.Source.set_name_by_id(id, '[gnome-shell] sleep');
     });
@@ -77,8 +80,8 @@ export async function _getPerfHelper() {
 
 /** @private */
 export function _spawnPerfHelper() {
-    const path = GLib.getenv('GNOME_SHELL_BUILDDIR') || Config.LIBEXECDIR;
-    const command = `${path}/gnome-shell-perf-helper`;
+    let path = GLib.getenv('GNOME_SHELL_BUILDDIR') || Config.LIBEXECDIR;
+    let command = `${path}/gnome-shell-perf-helper`;
     Util.trySpawnCommandLine(command);
 }
 
@@ -109,7 +112,7 @@ export async function createTestWindow(params) {
         textInput: false,
     });
 
-    const perfHelper = await _getPerfHelper();
+    let perfHelper = await _getPerfHelper();
     perfHelper.CreateWindowAsync(
         params.width, params.height,
         params.alpha, params.maximized,
@@ -125,7 +128,7 @@ export async function createTestWindow(params) {
  * created with createTestWindow have been mapped and exposed.
  */
 export async function waitTestWindows() {
-    const perfHelper = await _getPerfHelper();
+    let perfHelper = await _getPerfHelper();
     return perfHelper.WaitWindowsAsync().catch(logError);
 }
 
@@ -141,7 +144,7 @@ export async function waitTestWindows() {
  * process because of normal X asynchronicity.
  */
 export async function destroyTestWindows() {
-    const perfHelper = await _getPerfHelper();
+    let perfHelper = await _getPerfHelper();
     return perfHelper.DestroyWindowsAsync().catch(logError);
 }
 
@@ -152,7 +155,7 @@ export async function destroyTestWindows() {
  * running until something else makes it exit, e.g. the Wayland socket closing.
  */
 export async function disableHelperAutoExit() {
-    const perfHelper = await _getPerfHelper();
+    let perfHelper = await _getPerfHelper();
     perfHelper._autoExit = false;
 }
 
@@ -193,10 +196,10 @@ export function collectStatistics() {
 }
 
 function _collect(scriptModule, outputFile) {
-    const eventHandlers = {};
+    let eventHandlers = {};
 
-    for (const f in scriptModule) {
-        const m = /([A-Za-z]+)_([A-Za-z]+)/.exec(f);
+    for (let f in scriptModule) {
+        let m = /([A-Za-z]+)_([A-Za-z]+)/.exec(f);
         if (m)
             eventHandlers[`${m[1]}.${m[2]}`] = scriptModule[f];
     }
@@ -211,22 +214,22 @@ function _collect(scriptModule, outputFile) {
         scriptModule.finish();
 
     if (outputFile) {
-        const f = Gio.file_new_for_path(outputFile);
-        const raw = f.replace(null,
+        let f = Gio.file_new_for_path(outputFile);
+        let raw = f.replace(null,
             false,
             Gio.FileCreateFlags.NONE,
             null);
-        const out = Gio.BufferedOutputStream.new_sized(raw, 4096);
+        let out = Gio.BufferedOutputStream.new_sized(raw, 4096);
         Shell.write_string_to_stream(out, '{\n');
 
         Shell.write_string_to_stream(out, '"events":\n');
         Shell.PerfLog.get_default().dump_events(out);
 
-        const monitors = Main.layoutManager.monitors;
-        const primary = Main.layoutManager.primaryIndex;
+        let monitors = Main.layoutManager.monitors;
+        let primary = Main.layoutManager.primaryIndex;
         Shell.write_string_to_stream(out, ',\n"monitors":\n[');
         for (let i = 0; i < monitors.length; i++) {
-            const monitor = monitors[i];
+            let monitor = monitors[i];
             if (i !== 0)
                 Shell.write_string_to_stream(out, ', ');
             const prefix = i === primary ? '*' : '';
@@ -237,8 +240,8 @@ function _collect(scriptModule, outputFile) {
 
         Shell.write_string_to_stream(out, ',\n"metrics":\n[ ');
         let first = true;
-        for (const name in scriptModule.METRICS) {
-            const metric = scriptModule.METRICS[name];
+        for (let name in scriptModule.METRICS) {
+            let metric = scriptModule.METRICS[name];
             // Extra checks here because JSON.stringify generates
             // invalid JSON for undefined values
             if (metric.description == null) {
@@ -272,15 +275,15 @@ function _collect(scriptModule, outputFile) {
         Shell.write_string_to_stream(out, '\n}\n');
         out.close(null);
     } else {
-        const metrics = [];
-        for (const metric in scriptModule.METRICS)
+        let metrics = [];
+        for (let metric in scriptModule.METRICS)
             metrics.push(metric);
 
         metrics.sort();
 
         print('------------------------------------------------------------');
         for (let i = 0; i < metrics.length; i++) {
-            const metric = metrics[i];
+            let metric = metrics[i];
             print(`# ${scriptModule.METRICS[metric].description}`);
             print(`${metric}: ${scriptModule.METRICS[metric].value}${scriptModule.METRICS[metric].units}`);
         }

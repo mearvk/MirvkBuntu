@@ -604,7 +604,8 @@ gtk_list_store_finalize (GObject *object)
       GDestroyNotify d = priv->default_sort_destroy;
 
       priv->default_sort_destroy = NULL;
-      g_clear_pointer (&priv->default_sort_data, d);
+      d (priv->default_sort_data);
+      priv->default_sort_data = NULL;
     }
 
   G_OBJECT_CLASS (gtk_list_store_parent_class)->finalize (object);
@@ -2215,7 +2216,7 @@ gtk_list_store_has_default_sort_func (GtkTreeSortable *sortable)
  * `gtk_list_store_insert_with_values (list_store, iter, position...)`
  * has the same effect as calling:
  *
- * ```c
+ * |[<!-- language="C" -->
  * static void
  * insert_value (GtkListStore *list_store,
  *               GtkTreeIter  *iter,
@@ -2227,7 +2228,7 @@ gtk_list_store_has_default_sort_func (GtkTreeSortable *sortable)
  *                       // ...
  *                       );
  * }
- * ```
+ * ]|
  *
  * with the difference that the former will only emit `GtkTreeModel`::row-inserted
  * once, while the latter will emit `GtkTreeModel`::row-inserted,

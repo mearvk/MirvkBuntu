@@ -31,7 +31,6 @@
 #include <X11/Xatom.h>
 #include <string.h>
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
 /**
  * gdk_x11_display_text_property_to_text_list:
@@ -53,8 +52,6 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  *
  * Returns: the number of strings stored in list, or 0,
  *   if the conversion failed
- *
- * Deprecated: 4.18
  */
 int
 gdk_x11_display_text_property_to_text_list (GdkDisplay   *display,
@@ -102,8 +99,6 @@ gdk_x11_display_text_property_to_text_list (GdkDisplay   *display,
  *
  * Frees the array of strings created by
  * gdk_x11_display_text_property_to_text_list().
- *
- * Deprecated: 4.18
  */
 void
 gdk_x11_free_text_list (char **list)
@@ -154,7 +149,8 @@ make_list (const char   *text,
           if (!g_utf8_validate (str, -1, NULL))
             {
               g_warning ("Error converting selection from UTF8_STRING");
-              g_clear_pointer (&str, g_free);
+              g_free (str);
+              str = NULL;
             }
         }
 
@@ -247,7 +243,8 @@ _gdk_x11_display_text_property_to_utf8_list (GdkDisplay    *display,
                 {
                   g_warning ("Error converting to UTF-8 from '%s': %s",
                              charset, error->message);
-                  g_clear_error (&error);
+                  g_error_free (error);
+                  error = NULL;
                 }
             }
           else
@@ -287,8 +284,6 @@ _gdk_x11_display_text_property_to_utf8_list (GdkDisplay    *display,
  * locale into a form suitable for storing in a window property.
  *
  * Returns: 0 upon success, non-zero upon failure
- *
- * Deprecated: 4.18
  */
 int
 gdk_x11_display_string_to_compound_text (GdkDisplay  *display,
@@ -341,8 +336,6 @@ gdk_x11_display_string_to_compound_text (GdkDisplay  *display,
  * Converts from UTF-8 to compound text.
  *
  * Returns: %TRUE if the conversion succeeded, otherwise %FALSE
- *
- * Deprecated: 4.18
  */
 gboolean
 gdk_x11_display_utf8_to_compound_text (GdkDisplay  *display,
@@ -412,8 +405,6 @@ gdk_x11_display_utf8_to_compound_text (GdkDisplay  *display,
  *   gdk_x11_display_string_to_compound_text().
  *
  * Frees the data returned from gdk_x11_display_string_to_compound_text().
- *
- * Deprecated: 4.18
  */
 void
 gdk_x11_free_compound_text (guchar *ctext)

@@ -105,7 +105,10 @@ void            clutter_test_quit               (void);
 CLUTTER_EXPORT
 void            clutter_test_add                (const char     *test_path,
                                                  GTestFunc       test_func);
-
+CLUTTER_EXPORT
+void            clutter_test_add_data           (const char     *test_path,
+                                                 GTestDataFunc   test_func,
+                                                 gpointer        test_data);
 CLUTTER_EXPORT
 void            clutter_test_add_data_full      (const char     *test_path,
                                                  GTestDataFunc   test_func,
@@ -117,15 +120,6 @@ void            clutter_test_flush_input        (void);
 
 CLUTTER_EXPORT
 ClutterActor *  clutter_test_get_stage          (void);
-
-CLUTTER_EXPORT
-ClutterContext * clutter_test_get_context       (void);
-
-CLUTTER_EXPORT
-ClutterBackend * clutter_test_get_backend       (void);
-
-CLUTTER_EXPORT
-ClutterSeat    * clutter_test_get_default_seat  (void);
 
 #define clutter_test_assert_actor_at_point(stage,point,actor) \
 G_STMT_START { \

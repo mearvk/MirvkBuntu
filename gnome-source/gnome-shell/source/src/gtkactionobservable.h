@@ -17,7 +17,8 @@
  * Authors: Ryan Lortie <desrt@desrt.ca>
  */
 
-#pragma once
+#ifndef __GTK_ACTION_OBSERVABLE_H__
+#define __GTK_ACTION_OBSERVABLE_H__
 
 #include "gtkactionobserver.h"
 
@@ -55,3 +56,5 @@ void                    gtk_action_observable_unregister_observer       (GtkActi
                                                                          GtkActionObserver   *observer);
 
 G_END_DECLS
+
+#endif /* __GTK_ACTION_OBSERVABLE_H__ */

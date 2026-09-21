@@ -100,11 +100,8 @@ enum {
   PROP_0,
   PROP_ADJUSTMENT,
   PROP_CLIMB_RATE,
-  PROP_DIGITS,
-  N_PROPS
+  PROP_DIGITS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 #define GTK_CELL_RENDERER_SPIN_PATH "gtk-cell-renderer-spin-path"
 
@@ -129,9 +126,11 @@ gtk_cell_renderer_spin_class_init (GtkCellRendererSpinClass *klass)
    * The adjustment that holds the value of the spinbutton.
    * This must be non-%NULL for the cell renderer to be editable.
    */
-  props[PROP_ADJUSTMENT] = g_param_spec_object ("adjustment", NULL, NULL,
-                                                GTK_TYPE_ADJUSTMENT,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+				   PROP_ADJUSTMENT,
+				   g_param_spec_object ("adjustment", NULL, NULL,
+							GTK_TYPE_ADJUSTMENT,
+							GTK_PARAM_READWRITE));
 
 
   /**
@@ -139,19 +138,21 @@ gtk_cell_renderer_spin_class_init (GtkCellRendererSpinClass *klass)
    *
    * The acceleration rate when you hold down a button.
    */
-  props[PROP_CLIMB_RATE] = g_param_spec_double ("climb-rate", NULL, NULL,
-                                                0.0, G_MAXDOUBLE, 0.0,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+				   PROP_CLIMB_RATE,
+				   g_param_spec_double ("climb-rate", NULL, NULL,
+							0.0, G_MAXDOUBLE, 0.0,
+							GTK_PARAM_READWRITE));
   /**
    * GtkCellRendererSpin:digits:
    *
    * The number of decimal places to display.
    */
-  props[PROP_DIGITS] = g_param_spec_uint ("digits", NULL, NULL,
-                                          0, 20, 0,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+				   PROP_DIGITS,
+				   g_param_spec_uint ("digits", NULL, NULL,
+						      0, 20, 0,
+						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 }
 
 static void
@@ -214,7 +215,11 @@ gtk_cell_renderer_spin_set_property (GObject      *object,
     case PROP_ADJUSTMENT:
       obj = g_value_get_object (value);
 
-      g_clear_object (&priv->adjustment);
+      if (priv->adjustment)
+	{
+	  g_object_unref (priv->adjustment);
+	  priv->adjustment = NULL;
+	}
 
       if (obj)
 	priv->adjustment = GTK_ADJUSTMENT (g_object_ref_sink (obj));

@@ -2,7 +2,7 @@
 #include "tests/clutter-test-utils.h"
 
 static const float refresh_rate = 60.0;
-static const int64_t refresh_interval_us = (int64_t) (G_USEC_PER_SEC / refresh_rate);
+static const int64_t refresh_interval_us = G_USEC_PER_SEC / refresh_rate;
 
 static ClutterFrameResult
 timeline_frame_clock_frame (ClutterFrameClock *frame_clock,
@@ -17,8 +17,8 @@ timeline_frame_clock_frame (ClutterFrameClock *frame_clock,
     .sequence = 0,
   };
 
-  if (!clutter_frame_get_expected_presentation_time (frame,
-                                                     &frame_info.presentation_time))
+  if (!clutter_frame_get_target_presentation_time (frame,
+                                                   &frame_info.presentation_time))
     frame_info.presentation_time = g_get_monotonic_time ();
 
   clutter_frame_clock_notify_presented (frame_clock, &frame_info);
@@ -202,7 +202,7 @@ frame_clock_timeline_switch (void)
    */
   g_assert_cmpint (lateness_us, >, -2 * refresh_interval_us);
 
-  g_assert_true (clutter_timeline_get_frame_clock (timeline) == frame_clock2);
+  g_assert (clutter_timeline_get_frame_clock (timeline) == frame_clock2);
 
   /* The duration is 1s, with a 60hz clock, and we switch after 0.5s. To verify
    * we continued to get frames, check that we have a bit more than half of the

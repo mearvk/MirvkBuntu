@@ -81,10 +81,9 @@ struct _GtkWidgetPrivate
   guint has_grab              : 1;
   guint child_visible         : 1;
   guint can_target            : 1;
-  guint limit_events          : 1;
 
   /* Queue-resize related flags */
-  guint resize_queued         : 1; /* queue_resize() has been called but no get_preferred_size() yet */
+  guint resize_needed         : 1; /* queue_resize() has been called but no get_preferred_size() yet */
   guint alloc_needed          : 1; /* this widget needs a size_allocate() call */
   guint alloc_needed_on_child : 1; /* 0 or more children - or this widget - need a size_allocate() call */
 
@@ -120,7 +119,7 @@ struct _GtkWidgetPrivate
   int height_request;
 
   /* Animations and other things to update on clock ticks */
-  gulong clock_tick_id;
+  guint clock_tick_id;
   guint8 n_active;
   GList *tick_callbacks;
 
@@ -226,12 +225,15 @@ void         _gtk_widget_set_visible_flag   (GtkWidget *widget,
                                              gboolean   visible);
 gboolean     _gtk_widget_get_alloc_needed   (GtkWidget *widget);
 gboolean     gtk_widget_needs_allocate      (GtkWidget *widget);
-void         gtk_widget_clear_resize_queued (GtkWidget *widget);
+void         gtk_widget_ensure_resize       (GtkWidget *widget);
 void         gtk_widget_ensure_allocate     (GtkWidget *widget);
 void          _gtk_widget_scale_changed     (GtkWidget *widget);
-void         gtk_widget_monitor_changed     (GtkWidget *widget);
 
 GdkSurface * gtk_widget_get_surface         (GtkWidget *widget);
+
+void         gtk_widget_render              (GtkWidget            *widget,
+                                             GdkSurface           *surface,
+                                             const cairo_region_t *region);
 
 void         _gtk_widget_add_sizegroup         (GtkWidget    *widget,
 						gpointer      group);
@@ -239,13 +241,19 @@ void         _gtk_widget_remove_sizegroup      (GtkWidget    *widget,
 						gpointer      group);
 GSList      *_gtk_widget_get_sizegroups        (GtkWidget    *widget);
 
-void              gtk_widget_set_has_default               (GtkWidget *widget,
+void              _gtk_widget_set_has_default              (GtkWidget *widget,
                                                             gboolean   has_default);
 void              _gtk_widget_set_has_grab                 (GtkWidget *widget,
                                                             gboolean   has_grab);
 
 gboolean          gtk_widget_has_grab                      (GtkWidget *widget);
 
+void              _gtk_widget_propagate_display_changed    (GtkWidget  *widget,
+                                                            GdkDisplay *previous_display);
+
+void              _gtk_widget_set_device_surface           (GtkWidget *widget,
+                                                            GdkDevice *device,
+                                                            GdkSurface *pointer_window);
 void              _gtk_widget_synthesize_crossing          (GtkWidget       *from,
                                                             GtkWidget       *to,
                                                             GdkDevice       *device,
@@ -315,10 +323,10 @@ GtkWidget *       gtk_widget_common_ancestor               (GtkWidget *widget_a,
 void              gtk_widget_set_active_state              (GtkWidget *widget,
                                                             gboolean   active);
 
-void              gtk_widget_propagate_event_sequence_state (GtkWidget             *widget,
-                                                             GtkGesture            *gesture,
-                                                             GdkEventSequence      *sequence,
-                                                             GtkEventSequenceState  state);
+void              gtk_widget_cancel_event_sequence         (GtkWidget             *widget,
+                                                            GtkGesture            *gesture,
+                                                            GdkEventSequence      *sequence,
+                                                            GtkEventSequenceState  state);
 gboolean          gtk_widget_event                         (GtkWidget           *widget,
                                                             GdkEvent            *event,
                                                             GtkWidget           *target);
@@ -471,7 +479,5 @@ _gtk_widget_is_sensitive (GtkWidget *widget)
   return !(widget->priv->state_flags & GTK_STATE_FLAG_INSENSITIVE);
 }
 
-void gtk_widget_set_accessible_role (GtkWidget        *self,
-                                     GtkAccessibleRole role);
-
 G_END_DECLS
+

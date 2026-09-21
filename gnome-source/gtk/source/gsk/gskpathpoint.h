@@ -47,7 +47,7 @@ G_GNUC_EXTENSION struct _GskPathPoint
 };
 
 GDK_AVAILABLE_IN_4_14
-GType                   gsk_path_point_get_type        (void);
+GType                   gsk_path_point_get_type        (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_4_14
 GskPathPoint *          gsk_path_point_copy            (GskPathPoint       *point);
@@ -88,7 +88,5 @@ float                   gsk_path_point_get_curvature   (const GskPathPoint *poin
 GDK_AVAILABLE_IN_4_14
 float                   gsk_path_point_get_distance    (const GskPathPoint *point,
                                                         GskPathMeasure     *measure);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskPathPoint, gsk_path_point_free)
 
 G_END_DECLS

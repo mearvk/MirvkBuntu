@@ -28,7 +28,7 @@
 G_BEGIN_DECLS
 
 GskContour *            gsk_standard_contour_new                (GskPathFlags            flags,
-                                                                 const GskAlignedPoint  *points,
+                                                                 const graphene_point_t *points,
                                                                  gsize                   n_points,
                                                                  const gskpathop        *ops,
                                                                  gsize                   n_ops,
@@ -36,23 +36,8 @@ GskContour *            gsk_standard_contour_new                (GskPathFlags   
 
 GskContour *            gsk_circle_contour_new                  (const graphene_point_t *center,
                                                                  float                   radius);
-gboolean                gsk_contour_get_circle                  (const GskContour       *contour,
-                                                                 graphene_point_t       *center,
-                                                                 float                  *radius,
-                                                                 gboolean               *ccw);
 GskContour *            gsk_rect_contour_new                    (const graphene_rect_t  *rect);
-gboolean                gsk_contour_get_rect                    (const GskContour       *contour,
-                                                                 graphene_rect_t        *rect);
 GskContour *            gsk_rounded_rect_contour_new            (const GskRoundedRect   *rounded_rect);
-gboolean                gsk_contour_get_rounded_rect            (const GskContour       *contour,
-                                                                 GskRoundedRect         *rect);
-
-size_t                  gsk_contour_get_standard_ops            (const GskContour       *self,
-                                                                 size_t                  n_ops,
-                                                                 GskPathOperation       *ops);
-size_t                  gsk_contour_get_standard_points         (const GskContour       *self,
-                                                                 size_t                  n_points,
-                                                                 graphene_point_t       *points);
 
 const char *            gsk_contour_get_type_name               (const GskContour       *self);
 void                    gsk_contour_copy                        (GskContour *            dest,
@@ -65,8 +50,6 @@ GskPathFlags            gsk_contour_get_flags                   (const GskContou
 void                    gsk_contour_print                       (const GskContour       *self,
                                                                  GString                *string);
 gboolean                gsk_contour_get_bounds                  (const GskContour       *self,
-                                                                 GskBoundingBox         *bounds);
-gboolean                gsk_contour_get_tight_bounds            (const GskContour       *self,
                                                                  GskBoundingBox         *bounds);
 gboolean                gsk_contour_get_stroke_bounds           (const GskContour       *self,
                                                                  const GskStroke        *stroke,
@@ -111,7 +94,5 @@ void                    gsk_contour_get_point                   (const GskContou
 float                   gsk_contour_get_distance                (const GskContour       *self,
                                                                  const GskPathPoint     *point,
                                                                  gpointer                measure_data);
-gboolean                gsk_contour_equal                       (const GskContour *contour1,
-                                                                 const GskContour *contour2);
 
 G_END_DECLS

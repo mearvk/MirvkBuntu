@@ -1,32 +1,29 @@
-#ifdef GSK_PREAMBLE
-textures = 1;
-acs_equals_ccs = true;
-acs_premultiplied = true;
-opacity = false;
-
-graphene_rect_t bounds;
-graphene_rect_t tex_rect;
-#endif /* GSK_PREAMBLE */
-
-#include "gskgputextureinstance.glsl"
+#include "common.glsl"
 
 PASS(0) vec2 _pos;
-PASS_FLAT(1) Rect _bounds;
+PASS_FLAT(1) Rect _rect;
 PASS(2) vec2 _tex_coord;
+PASS_FLAT(3) uint _tex_id;
+
 
 
 #ifdef GSK_VERTEX_SHADER
 
+IN(0) vec4 in_rect;
+IN(1) vec4 in_tex_rect;
+IN(2) uint in_tex_id;
+
 void
 run (out vec2 pos)
 {
-  Rect b = rect_from_gsk (in_bounds);
+  Rect r = rect_from_gsk (in_rect);
   
-  pos = rect_get_position (b);
+  pos = rect_get_position (r);
 
   _pos = pos;
-  _bounds = b;
+  _rect = r;
   _tex_coord = rect_get_coord (rect_from_gsk (in_tex_rect), pos);
+  _tex_id = in_tex_id;
 }
 
 #endif
@@ -39,8 +36,8 @@ void
 run (out vec4 color,
      out vec2 position)
 {
-  color = texture (GSK_TEXTURE0, _tex_coord) *
-          rect_coverage (_bounds, _pos);
+  color = gsk_texture (_tex_id, _tex_coord) *
+          rect_coverage (_rect, _pos);
   position = _pos;
 }
 

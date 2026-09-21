@@ -38,7 +38,7 @@
 /**
  * GtkTooltip:
  *
- * Represents a widget tooltip.
+ * `GtkTooltip` is an object representing a widget tooltip.
  *
  * Basic tooltips can be realized simply by using
  * [method@Gtk.Widget.set_tooltip_text] or
@@ -168,9 +168,17 @@ gtk_tooltip_dispose (GObject *object)
 {
   GtkTooltip *tooltip = GTK_TOOLTIP (object);
 
-  g_clear_handle_id (&tooltip->timeout_id, g_source_remove);
+  if (tooltip->timeout_id)
+    {
+      g_source_remove (tooltip->timeout_id);
+      tooltip->timeout_id = 0;
+    }
 
-  g_clear_handle_id (&tooltip->browse_mode_timeout_id, g_source_remove);
+  if (tooltip->browse_mode_timeout_id)
+    {
+      g_source_remove (tooltip->browse_mode_timeout_id);
+      tooltip->browse_mode_timeout_id = 0;
+    }
 
   gtk_tooltip_set_custom (tooltip, NULL);
   gtk_tooltip_set_surface (tooltip, NULL);
@@ -369,18 +377,19 @@ gtk_tooltip_trigger_tooltip_query (GtkWidget *widget)
 
   /* Trigger logic as if the mouse moved */
   seat = gdk_display_get_default_seat (display);
-  if (!seat)
-    return;
-
-  device = gdk_seat_get_pointer (seat);
-  if (!device)
-    return;
-
-  surface = gdk_device_get_surface_at_position (device, &px, &py);
+  if (seat)
+    device = gdk_seat_get_pointer (seat);
+  else
+    device = NULL;
+  if (device)
+    surface = gdk_device_get_surface_at_position (device, &px, &py);
+  else
+    surface = NULL;
   if (!surface)
     return;
 
   toplevel = GTK_WIDGET (gtk_widget_get_root (widget));
+
   if (toplevel == NULL)
     return;
 
@@ -457,13 +466,17 @@ tooltip_browse_mode_expired (gpointer data)
   tooltip->browse_mode_enabled = FALSE;
   tooltip->browse_mode_timeout_id = 0;
 
-  g_clear_handle_id (&tooltip->timeout_id, g_source_remove);
+  if (tooltip->timeout_id)
+    {
+      g_source_remove (tooltip->timeout_id);
+      tooltip->timeout_id = 0;
+    }
 
   /* destroy tooltip */
   display = gtk_widget_get_display (tooltip->window);
   g_object_set_qdata (G_OBJECT (display), quark_current_tooltip, NULL);
 
-  return G_SOURCE_REMOVE;
+  return FALSE;
 }
 
 static void
@@ -471,7 +484,11 @@ gtk_tooltip_display_closed (GdkDisplay *display,
 			    gboolean    was_error,
 			    GtkTooltip *tooltip)
 {
-  g_clear_handle_id (&tooltip->timeout_id, g_source_remove);
+  if (tooltip->timeout_id)
+    {
+      g_source_remove (tooltip->timeout_id);
+      tooltip->timeout_id = 0;
+    }
 
   g_object_set_qdata (G_OBJECT (display), quark_current_tooltip, NULL);
 }
@@ -646,10 +663,10 @@ gtk_tooltip_position (GtkTooltip *tooltip,
        *
        * If the anchor rectangle is too tall (meaning if we'd be constrained
        * and flip, it'd flip too far away), rely only on the pointer position
-       * to position the tooltip. The approximate pointer cursor rectangle is
+       * to position the tooltip. The approximate pointer cursorrectangle is
        * used as an anchor rectangle.
        *
-       * If the anchor rectangle isn't too tall, make sure the tooltip isn't too
+       * If the anchor rectangle isn't to tall, make sure the tooltip isn't too
        * far away from the pointer position.
        */
       effective_toplevel = gtk_native_get_surface (GTK_NATIVE (toplevel));
@@ -750,7 +767,11 @@ gtk_tooltip_show_tooltip (GdkDisplay *display)
    * mode is enabled.
    */
   tooltip->browse_mode_enabled = TRUE;
-  g_clear_handle_id (&tooltip->browse_mode_timeout_id, g_source_remove);
+  if (tooltip->browse_mode_timeout_id)
+    {
+      g_source_remove (tooltip->browse_mode_timeout_id);
+      tooltip->browse_mode_timeout_id = 0;
+    }
 }
 
 static void
@@ -761,7 +782,11 @@ gtk_tooltip_hide_tooltip (GtkTooltip *tooltip)
   if (!tooltip)
     return;
 
-  g_clear_handle_id (&tooltip->timeout_id, g_source_remove);
+  if (tooltip->timeout_id)
+    {
+      g_source_remove (tooltip->timeout_id);
+      tooltip->timeout_id = 0;
+    }
 
   if (!GTK_TOOLTIP_VISIBLE (tooltip))
     return;
@@ -798,13 +823,13 @@ tooltip_popup_timeout (gpointer data)
    * bindings were reference counting of objects behaves differently.
    */
   if (!tooltip)
-    return G_SOURCE_REMOVE;
+    return FALSE;
 
   gtk_tooltip_show_tooltip (display);
 
   tooltip->timeout_id = 0;
 
-  return G_SOURCE_REMOVE;
+  return FALSE;
 }
 
 static void
@@ -1045,3 +1070,4 @@ gtk_tooltip_unset_surface (GtkNative *native)
 
   gtk_tooltip_set_surface (tooltip, NULL);
 }
+

@@ -96,10 +96,6 @@ meta_workspace_manager_finalize (GObject *object)
 
   meta_prefs_remove_listener (prefs_changed_callback, workspace_manager);
 
-  workspace_manager->active_workspace = NULL;
-  while (workspace_manager->workspaces)
-    meta_workspace_remove (workspace_manager->workspaces->data);
-
   G_OBJECT_CLASS (meta_workspace_manager_parent_class)->finalize (object);
 }
 
@@ -185,7 +181,7 @@ meta_workspace_manager_class_init (MetaWorkspaceManagerClass *klass)
                                    PROP_N_WORKSPACES,
                                    g_param_spec_int ("n-workspaces", NULL, NULL,
                                                      1, G_MAXINT, 1,
-                                                     G_PARAM_READABLE | G_PARAM_STATIC_NAME));
+                                                     G_PARAM_READABLE));
 }
 
 static void
@@ -485,10 +481,10 @@ meta_workspace_manager_update_num_workspaces (MetaWorkspaceManager *workspace_ma
  * the "active-workspace-changed" signal will be emitted.
  * If the workspace's index is the same as @new_index or the workspace
  * will not be found in the list, this function will return.
- *
+ * 
  * Calling this function will also emit the "workspaces-reordered" signal.
  */
-void
+void 
 meta_workspace_manager_reorder_workspace (MetaWorkspaceManager *workspace_manager,
                                           MetaWorkspace        *workspace,
                                           int                   new_index)
@@ -510,7 +506,7 @@ meta_workspace_manager_reorder_workspace (MetaWorkspaceManager *workspace_manage
   if (new_index == index)
     return;
 
-  active_index =
+  active_index = 
     meta_workspace_manager_get_active_workspace_index (workspace_manager);
 
   workspace_manager->workspaces =
@@ -562,12 +558,11 @@ meta_workspace_manager_update_workspace_layout (MetaWorkspaceManager *workspace_
   workspace_manager->rows_of_workspaces = n_rows;
   workspace_manager->columns_of_workspaces = n_columns;
 
-  meta_topic (META_DEBUG_WORKSPACES,
-              "Workspace layout rows = %d cols = %d orientation = %d starting corner = %u",
-              workspace_manager->rows_of_workspaces,
-              workspace_manager->columns_of_workspaces,
-              workspace_manager->vertical_workspaces,
-              workspace_manager->starting_corner);
+  meta_verbose ("Workspace layout rows = %d cols = %d orientation = %d starting corner = %u",
+                workspace_manager->rows_of_workspaces,
+                workspace_manager->columns_of_workspaces,
+                workspace_manager->vertical_workspaces,
+                workspace_manager->starting_corner);
   g_object_notify (G_OBJECT (workspace_manager), "layout-columns");
   g_object_notify (G_OBJECT (workspace_manager), "layout-rows");
 }
@@ -655,12 +650,11 @@ meta_workspace_manager_calc_workspace_layout (MetaWorkspaceManager *workspace_ma
 
   grid_area = rows * cols;
 
-  meta_topic (META_DEBUG_WORKSPACES,
-              "Getting layout rows = %d cols = %d current = %d "
-              "num_spaces = %d vertical = %s corner = %s",
-              rows, cols, current_space, num_workspaces,
-              workspace_manager->vertical_workspaces ? "(true)" : "(false)",
-              meta_workspace_manager_corner_to_string (workspace_manager->starting_corner));
+  meta_verbose ("Getting layout rows = %d cols = %d current = %d "
+                "num_spaces = %d vertical = %s corner = %s",
+                rows, cols, current_space, num_workspaces,
+                workspace_manager->vertical_workspaces ? "(true)" : "(false)",
+                meta_workspace_manager_corner_to_string (workspace_manager->starting_corner));
 
   /* ok, we want to setup the distances in the workspace array to go
    * in each direction. Remember, there are many ways that a workspace
@@ -866,7 +860,7 @@ meta_workspace_manager_calc_workspace_layout (MetaWorkspaceManager *workspace_ma
   layout->current_col = current_col;
 
 #ifdef WITH_VERBOSE_MODE
-  if (meta_is_topic_enabled (META_DEBUG_WORKSPACES))
+  if (meta_is_verbose ())
     {
       g_autoptr (GString) str = NULL;
 
@@ -893,8 +887,7 @@ meta_workspace_manager_calc_workspace_layout (MetaWorkspaceManager *workspace_ma
             }
           ++r;
         }
-      meta_topic (META_DEBUG_WORKSPACES,
-                  "%s", str->str);
+      meta_verbose ("%s", str->str);
     }
 #endif /* WITH_VERBOSE_MODE */
 }
@@ -1023,7 +1016,7 @@ meta_workspace_manager_get_active_workspace (MetaWorkspaceManager *workspace_man
   return workspace_manager->active_workspace;
 }
 
-void
+void 
 meta_workspace_manager_workspace_switched (MetaWorkspaceManager *workspace_manager,
                                            int                   from,
                                            int                   to,

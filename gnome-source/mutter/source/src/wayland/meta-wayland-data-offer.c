@@ -76,10 +76,13 @@ transfer_cb (MetaSelection *selection,
              GAsyncResult  *res,
              GOutputStream *stream)
 {
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
 
   if (!meta_selection_transfer_finish (selection, res, &error))
-    g_warning ("Could not fetch selection data: %s", error->message);
+    {
+      g_warning ("Could not fetch selection data: %s", error->message);
+      g_error_free (error);
+    }
 
   g_output_stream_close (stream, NULL, NULL);
   g_object_unref (stream);
@@ -228,7 +231,9 @@ destroy_data_offer (struct wl_resource *resource)
             }
         }
 
-      g_clear_weak_pointer (&offer->source);
+      g_object_remove_weak_pointer (G_OBJECT (offer->source),
+                                    (gpointer *)&offer->source);
+      offer->source = NULL;
     }
 
   g_free (offer);
@@ -306,7 +311,7 @@ meta_wayland_data_offer_update_action (MetaWaylandDataOffer *offer)
   current_action = meta_wayland_data_source_get_current_action (source);
   action = data_offer_choose_action (offer);
 
-  if (offer->action_sent && current_action == action)
+  if (current_action == action)
     return;
 
   meta_wayland_data_source_set_current_action (source, action);

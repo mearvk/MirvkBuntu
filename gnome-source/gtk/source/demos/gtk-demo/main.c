@@ -19,7 +19,6 @@
 
 #include "config.h"
 #include <gtk/gtk.h>
-#include <gmodule.h>
 #include <glib/gstdio.h>
 #include <glib/gi18n.h>
 
@@ -36,8 +35,6 @@ static char *current_file = NULL;
 static GtkWidget *notebook;
 static GtkSingleSelection *selection;
 static GtkWidget *toplevel;
-static GtkWidget *search_bar;
-static GtkWidget *search_entry;
 static char **search_needle;
 
 typedef struct _GtkDemo GtkDemo;
@@ -109,24 +106,28 @@ static void gtk_demo_class_init (GtkDemoClass *klass)
 
   properties[PROP_FILENAME] =
     g_param_spec_string ("filename",
-                         NULL, NULL,
+                         "filename",
+                         "filename",
                          NULL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE);
   properties[PROP_NAME] =
     g_param_spec_string ("name",
-                         NULL, NULL,
+                         "name",
+                         "name",
                          NULL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE);
   properties[PROP_TITLE] =
     g_param_spec_string ("title",
-                         NULL, NULL,
+                         "title",
+                         "title",
                          NULL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE);
   properties[PROP_KEYWORDS] =
     g_param_spec_string ("keywords",
-                         NULL, NULL,
+                         "keywords",
+                         "keywords",
                          NULL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -155,6 +156,11 @@ gtk_demo_run (GtkDemo   *self,
   if (result == NULL)
     return FALSE;
 
+  if (GTK_IS_WINDOW (result))
+    {
+      gtk_window_set_transient_for (GTK_WINDOW (result), GTK_WINDOW (window));
+      gtk_window_set_modal (GTK_WINDOW (result), TRUE);
+    }
   return TRUE;
 }
 
@@ -164,12 +170,14 @@ activate_about (GSimpleAction *action,
                 gpointer       user_data)
 {
   GtkApplication *app = user_data;
+  const char *authors[] = {
+    "The GTK Team",
+    NULL
+  };
   char *version;
   char *os_name;
   char *os_version;
   GString *s;
-  GFile *logo_file;
-  GtkIconPaintable *logo;
 
   s = g_string_new ("");
 
@@ -198,24 +206,20 @@ activate_about (GSimpleAction *action,
                              gtk_get_minor_version (),
                              gtk_get_micro_version ());
 
-  logo_file = g_file_new_for_uri ("resource:///org/gtk/Demo4/icons/scalable/apps/org.gtk.Demo4.svg");
-  logo = gtk_icon_paintable_new_for_file (logo_file, 64, 1);
   gtk_show_about_dialog (GTK_WINDOW (gtk_application_get_active_window (app)),
                          "program-name", g_strcmp0 (PROFILE, "devel") == 0
                                          ? "GTK Demo (Development)"
                                          : "GTK Demo",
                          "version", version,
-                         "copyright", "© 1997—2024 The GTK Team",
+                         "copyright", "© 1997—2021 The GTK Team",
                          "license-type", GTK_LICENSE_LGPL_2_1,
                          "website", "http://www.gtk.org",
                          "comments", "Program to demonstrate GTK widgets",
-                         "authors", (const char *[]) { "The GTK Team", NULL },
-                         "logo", logo,
+                         "authors", authors,
+                         "logo-icon-name", "org.gtk.Demo4",
                          "title", "About GTK Demo",
                          "system-information", s->str,
                          NULL);
-  g_object_unref (logo);
-  g_object_unref (logo_file);
 
   g_string_free (s, TRUE);
   g_free (version);
@@ -510,7 +514,7 @@ load_file (const char *demoname,
   GBytes *bytes;
   int i;
 
-  if (g_strcmp0 (current_file, filename) == 0)
+  if (!g_strcmp0 (current_file, filename))
     return;
 
   remove_data_tabs ();
@@ -809,12 +813,12 @@ static void
 demo_search_changed_cb (GtkSearchEntry *entry,
                         GtkFilter      *filter)
 {
-  char *text;
+  const char *text;
 
   g_assert (GTK_IS_SEARCH_ENTRY (entry));
   g_assert (GTK_IS_FILTER (filter));
 
-  text = gtk_editable_get_complete_text (GTK_EDITABLE (entry));
+  text = gtk_editable_get_text (GTK_EDITABLE (entry));
 
   g_clear_pointer (&search_needle, g_strfreev);
 
@@ -822,13 +826,15 @@ demo_search_changed_cb (GtkSearchEntry *entry,
     search_needle = g_str_tokenize_and_fold (text, NULL, NULL);
 
   gtk_filter_changed (filter, GTK_FILTER_CHANGE_DIFFERENT);
-  g_free (text);
 }
 
 static gboolean
 demo_can_run (GtkWidget  *window,
               const char *name)
 {
+  if (name != NULL && strcmp (name, "gltransition") == 0)
+    return GSK_IS_GL_RENDERER (gtk_native_get_renderer (GTK_NATIVE (window)));
+
   return TRUE;
 }
 
@@ -930,7 +936,7 @@ search_results_update (GObject    *filter_model,
       char *text;
 
       if (n_items > 0)
-        text = g_strdup_printf (ngettext ("%ld search result", "%ld search results", (long) n_items), (long) n_items);
+        text = g_strdup_printf (ngettext ("%ld search result", "%ld search results", n_items), n_items);
       else
         text = g_strdup (_("No search results"));
 
@@ -946,22 +952,21 @@ search_results_update (GObject    *filter_model,
     }
 }
 
-static GtkWindow *
-create_window (GtkApplication *app)
+static void
+activate (GApplication *app)
 {
   GtkBuilder *builder;
   GListModel *listmodel;
   GtkTreeListModel *treemodel;
-  GtkWidget *window, *listview;
+  GtkWidget *window, *listview, *search_entry, *search_bar;
   GtkFilterListModel *filter_model;
   GtkFilter *filter;
   GSimpleAction *action;
 
   builder = gtk_builder_new_from_resource ("/ui/main.ui");
 
-  window = (GtkWidget *) gtk_builder_get_object (builder, "window");
-
-  gtk_application_add_window (app, GTK_WINDOW (window));
+  window = (GtkWidget *)gtk_builder_get_object (builder, "window");
+  gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (window));
 
   if (g_strcmp0 (PROFILE, "devel") == 0)
     gtk_widget_add_css_class (window, "devel");
@@ -970,7 +975,6 @@ create_window (GtkApplication *app)
   g_signal_connect (action, "activate", G_CALLBACK (activate_run), window);
   g_action_map_add_action (G_ACTION_MAP (window), G_ACTION (action));
 
-  g_clear_pointer (&current_file, g_free);
   notebook = GTK_WIDGET (gtk_builder_get_object (builder, "notebook"));
 
   info_view = GTK_WIDGET (gtk_builder_get_object (builder, "info-textview"));
@@ -1005,30 +1009,13 @@ create_window (GtkApplication *app)
   g_object_unref (selection);
 
   g_object_unref (builder);
-
-  return GTK_WINDOW (window);
 }
 
-static void
-activate (GApplication *gapp)
-{
-  GtkApplication *app = GTK_APPLICATION (gapp);
-  GList *list;
-  GtkWindow *window;
-
-  list = gtk_application_get_windows (app);
-  if (list)
-    window = list->data;
-  else
-    window = create_window (app);
-
-  gtk_window_present (window);
-}
-
-static void
+static gboolean
 auto_quit (gpointer data)
 {
   g_application_quit (G_APPLICATION (data));
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -1065,21 +1052,12 @@ command_line (GApplication            *app,
   GDoDemoFunc func = 0;
   GtkWidget *window, *demo;
 
+  activate (app);
+
   options = g_application_command_line_get_options_dict (cmdline);
   g_variant_dict_lookup (options, "run", "&s", &name);
   g_variant_dict_lookup (options, "autoquit", "b", &autoquit);
   g_variant_dict_lookup (options, "list", "b", &list);
-
-  if (autoquit)
-    g_timeout_add_seconds_once (1, auto_quit, app);
-
-  if (!name && !list)
-    {
-      g_application_activate (app);
-      return 0;
-    }
-
-  create_window (GTK_APPLICATION (app));
 
   if (list)
     {
@@ -1121,15 +1099,45 @@ out:
       demo = (func) (window);
 
       gtk_window_set_transient_for (GTK_WINDOW (demo), GTK_WINDOW (window));
-      gtk_widget_set_visible (window, FALSE);
 
       g_signal_connect_swapped (G_OBJECT (demo), "destroy", G_CALLBACK (g_application_quit), app);
     }
+  else
+    gtk_window_present (GTK_WINDOW (window));
+
+  if (autoquit)
+    g_timeout_add_seconds (1, auto_quit, app);
 
   return 0;
 }
 
-G_MODULE_EXPORT
+static void
+print_version (void)
+{
+  g_print ("gtk4-demo %s%s%s\n",
+           PACKAGE_VERSION,
+           g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
+           g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
+}
+
+static int
+local_options (GApplication *app,
+               GVariantDict *options,
+               gpointer      data)
+{
+  gboolean version = FALSE;
+
+  g_variant_dict_lookup (options, "version", "b", &version);
+
+  if (version)
+    {
+      print_version ();
+      return 0;
+    }
+
+  return -1;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1147,18 +1155,8 @@ main (int argc, char **argv)
     { "app.quit", { "<Control>q", NULL } },
   };
   int i;
-  char version[80];
-
-  gtk_init ();
 
   app = gtk_application_new ("org.gtk.Demo4", G_APPLICATION_NON_UNIQUE|G_APPLICATION_HANDLES_COMMAND_LINE);
-
-  g_snprintf (version, sizeof (version), "%s%s%s\n",
-              PACKAGE_VERSION,
-              g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
-              g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
-
-  g_application_set_version (G_APPLICATION (app), version);
 
   g_action_map_add_action_entries (G_ACTION_MAP (app),
                                    app_entries, G_N_ELEMENTS (app_entries),
@@ -1167,12 +1165,14 @@ main (int argc, char **argv)
   for (i = 0; i < G_N_ELEMENTS (accels); i++)
     gtk_application_set_accels_for_action (app, accels[i].action_and_target, accels[i].accelerators);
 
+  g_application_add_main_option (G_APPLICATION (app), "version", 0, 0, G_OPTION_ARG_NONE, "Show program version", NULL);
   g_application_add_main_option (G_APPLICATION (app), "run", 0, 0, G_OPTION_ARG_STRING, "Run an example", "EXAMPLE");
   g_application_add_main_option (G_APPLICATION (app), "list", 0, 0, G_OPTION_ARG_NONE, "List examples", NULL);
   g_application_add_main_option (G_APPLICATION (app), "autoquit", 0, 0, G_OPTION_ARG_NONE, "Quit after a delay", NULL);
 
-  g_signal_connect (app, "command-line", G_CALLBACK (command_line), NULL);
   g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
+  g_signal_connect (app, "command-line", G_CALLBACK (command_line), NULL);
+  g_signal_connect (app, "handle-local-options", G_CALLBACK (local_options), NULL);
 
   g_application_run (G_APPLICATION (app), argc, argv);
 

@@ -30,7 +30,7 @@ gi.require_version("Atspi", "2.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Atspi, Gdk
 
-from . import ax_device_manager, debug, keynames
+from . import input_event_manager, keynames
 
 _keycode_cache: dict[str, tuple[int, int]] = {}
 
@@ -50,7 +50,6 @@ ORCA_ALT_SHIFT_MODIFIER_MASK = (
 )
 SHIFT_MODIFIER_MASK = 1 << Atspi.ModifierType.SHIFT
 SHIFT_ALT_MODIFIER_MASK = 1 << Atspi.ModifierType.SHIFT | 1 << Atspi.ModifierType.ALT
-CTRL_SHIFT_MODIFIER_MASK = 1 << Atspi.ModifierType.CONTROL | 1 << Atspi.ModifierType.SHIFT
 CTRL_ALT_MODIFIER_MASK = 1 << Atspi.ModifierType.CONTROL | 1 << Atspi.ModifierType.ALT
 SHIFT_ALT_CTRL_MODIFIER_MASK = (
     1 << Atspi.ModifierType.SHIFT | 1 << Atspi.ModifierType.CONTROL | 1 << Atspi.ModifierType.ALT
@@ -188,12 +187,12 @@ class KeyBinding:
         if modifiers & ORCA_MODIFIER_MASK:
             modifier_list = []
             other_modifiers = modifiers & ~ORCA_MODIFIER_MASK
-            device_manager = ax_device_manager.get_manager()
+            manager = input_event_manager.get_manager()
             for key in orca_modifiers:
                 mod_keyval, mod_keycode = get_keycodes(key)
                 if mod_keycode == 0 and key == "Shift_Lock":
                     mod_keyval, mod_keycode = get_keycodes("Caps_Lock")
-                mod = device_manager.map_keysym_to_modifier(mod_keyval)
+                mod = manager.map_keysym_to_modifier(mod_keyval)
                 if mod:
                     modifier_list.append(mod | other_modifiers)
         else:
@@ -278,37 +277,13 @@ class KeyBinding:
     def add_grabs(self, orca_modifiers: list[str]) -> None:
         """Adds key grabs for this KeyBinding."""
 
-        if self._grab_ids:
-            tokens = ["KEYBINDINGS:", self, "already has grabs."]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return
-
-        manager = ax_device_manager.get_manager()
-        for kd in self.key_definitions(orca_modifiers):
-            grab_id = manager.add_key_grab(kd, None)
-            # When we have double/triple-click bindings, the single-click binding will be
-            # registered first, and subsequent attempts to register what is externally the
-            # same grab will fail. If we only have a double/triple-click, it succeeds.
-            # A grab id of 0 indicates failure.
-            if grab_id == 0:
-                tokens = [
-                    "KEYBINDINGS: AT-SPI returned grab id 0 for",
-                    self,
-                    "keysym=",
-                    kd.keysym,
-                    "keycode=",
-                    kd.keycode,
-                    "modifiers=",
-                    kd.modifiers,
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                continue
-            self._grab_ids.append(grab_id)
+        self._grab_ids = input_event_manager.get_manager().add_grabs_for_keybinding(
+            self,
+            orca_modifiers,
+        )
 
     def remove_grabs(self) -> None:
         """Removes key grabs for this KeyBinding."""
 
-        manager = ax_device_manager.get_manager()
-        for grab_id in self._grab_ids:
-            manager.remove_key_grab(grab_id)
+        input_event_manager.get_manager().remove_grabs_for_keybinding(self)
         self._grab_ids = []

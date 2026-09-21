@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import ax_cache_manager, debug
+from . import debug
 from .ax_component import AXComponent
 from .ax_hypertext import AXHypertext
 from .ax_object import AXObject
@@ -37,8 +37,6 @@ from .ax_text import AXText
 from .ax_utilities import AXUtilities
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable
-
     import gi
 
     gi.require_version("Atspi", "2.0")
@@ -47,115 +45,14 @@ if TYPE_CHECKING:
     from .scripts import default
 
 
-class _LabelInferenceCache:
-    """Provides label-inference access to manager-backed cached values."""
-
-    LINE_CONTENTS = "LabelInference.line-contents"
-    TEXT_EXTENTS = "LabelInference.text-extents"
-    IS_WIDGET = "LabelInference.is-widget"
-
-    def __init__(self) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        for namespace in (
-            self.LINE_CONTENTS,
-            self.TEXT_EXTENTS,
-            self.IS_WIDGET,
-        ):
-            self._manager.register_cache(
-                self,
-                namespace,
-                lifetime=ax_cache_manager.Lifetime.OWNER,
-                clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-                clear_interval_seconds=None,
-            )
-        self._line_contents_cache = self._manager.get_cache(self, self.LINE_CONTENTS)
-        self._text_extents_cache = self._manager.get_cache(self, self.TEXT_EXTENTS)
-        self._is_widget_cache = self._manager.get_cache(self, self.IS_WIDGET)
-
-    def clear(self, reason: str) -> None:
-        """Clears cached label-inference values."""
-
-        for cache in (
-            self._line_contents_cache,
-            self._text_extents_cache,
-            self._is_widget_cache,
-        ):
-            if cache is not None:
-                cache.invalidate(reason)
-
-    def get_line_contents(
-        self, obj: Atspi.Accessible
-    ) -> list[tuple[Atspi.Accessible, int, int, str]] | None:
-        """Returns cached line contents for obj."""
-
-        if self._line_contents_cache is None:
-            return None
-
-        contents = self._line_contents_cache.get(
-            ax_cache_manager.get_object_key(obj), ax_cache_manager.MISSING
-        )
-        if contents is ax_cache_manager.MISSING:
-            return None
-        return list(contents)
-
-    def set_line_contents(
-        self,
-        obj_key: Hashable,
-        contents: list[tuple[Atspi.Accessible, int, int, str]],
-    ) -> None:
-        """Stores line contents for obj."""
-
-        if self._line_contents_cache is not None:
-            self._line_contents_cache.put(obj_key, list(contents))
-
-    def get_text_extents(
-        self,
-        obj: Atspi.Accessible,
-        start_offset: int,
-        end_offset: int,
-    ) -> tuple[int, int, int, int] | None:
-        """Returns cached text extents for obj."""
-
-        key = ax_cache_manager.get_object_key(obj), start_offset, end_offset
-        if self._text_extents_cache is None:
-            return None
-
-        return self._text_extents_cache.get(key, None)
-
-    def set_text_extents(
-        self,
-        obj: Atspi.Accessible,
-        start_offset: int,
-        end_offset: int,
-        extents: tuple[int, int, int, int],
-    ) -> None:
-        """Stores text extents for obj."""
-
-        key = ax_cache_manager.get_object_key(obj), start_offset, end_offset
-        if self._text_extents_cache is not None:
-            self._text_extents_cache.put(key, extents)
-
-    def get_is_widget(self, obj: Atspi.Accessible) -> bool | None:
-        """Returns the cached widget decision for obj."""
-
-        if self._is_widget_cache is None:
-            return None
-
-        return self._is_widget_cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_is_widget(self, obj: Atspi.Accessible, is_widget: bool) -> None:
-        """Stores the widget decision for obj."""
-
-        if self._is_widget_cache is not None:
-            self._is_widget_cache.put(ax_cache_manager.get_object_key(obj), is_widget)
-
-
 class LabelInference:
     """Heuristic means to infer the functional/displayed label of a widget."""
 
     def __init__(self, script: default.Script) -> None:
         self._script = script
-        self._cache = _LabelInferenceCache()
+        self._line_cache: dict[int, list[tuple[Atspi.Accessible, int, int, str]]] = {}
+        self._extents_cache: dict[tuple[int, int, int], tuple[int, int, int, int]] = {}
+        self._is_widget_cache: dict[int, bool] = {}
 
     def infer(
         self,
@@ -178,29 +75,21 @@ class LabelInference:
         objects: list[Atspi.Accessible] = []
         if not result:
             result, objects = self._infer_from_text_left(obj)
-            debug.print_tokens(
-                debug.LEVEL_INFO, ["LABEL INFERENCE: Text Left: '", result, "'"], True
-            )
+            debug.print_message(debug.LEVEL_INFO, f"LABEL INFERENCE: Text Left: '{result}'", True)
         if not result or self._prefer_right(obj):
             temp_result = self._infer_from_text_right(obj)
             if temp_result[0] is not None:
                 result, objects = temp_result
-            debug.print_tokens(
-                debug.LEVEL_INFO, ["LABEL INFERENCE: Text Right: '", result, "'"], True
-            )
+            debug.print_message(debug.LEVEL_INFO, f"LABEL INFERENCE: Text Right: '{result}'", True)
         if not result:
             result, objects = self._infer_from_table(obj)
-            debug.print_tokens(debug.LEVEL_INFO, ["LABEL INFERENCE: Table: '", result, "'"], True)
+            debug.print_message(debug.LEVEL_INFO, f"LABEL INFERENCE: Table: '{result}'", True)
         if not result:
             result, objects = self._infer_from_text_above(obj)
-            debug.print_tokens(
-                debug.LEVEL_INFO, ["LABEL INFERENCE: Text Above: '", result, "'"], True
-            )
+            debug.print_message(debug.LEVEL_INFO, f"LABEL INFERENCE: Text Above: '{result}'", True)
         if not result:
             result, objects = self._infer_from_text_below(obj)
-            debug.print_tokens(
-                debug.LEVEL_INFO, ["LABEL INFERENCE: Text Below: '", result, "'"], True
-            )
+            debug.print_message(debug.LEVEL_INFO, f"LABEL INFERENCE: Text Below: '{result}'", True)
 
         # TODO - We probably do not wish to "infer" from these. Instead, we
         # should ensure that this content gets presented as part of the widget.
@@ -208,7 +97,7 @@ class LabelInference:
         # are each something other than a label.)
         if not result:
             result, objects = AXObject.get_name(obj), []
-            debug.print_tokens(debug.LEVEL_INFO, ["LABEL INFERENCE: Name: '", result, "'"], True)
+            debug.print_message(debug.LEVEL_INFO, f"LABEL INFERENCE: Name: '{result}'", True)
 
         if result:
             result = result.strip()
@@ -217,9 +106,9 @@ class LabelInference:
         # Desperate times call for desperate measures....
         if not result:
             result, objects = self._infer_from_text_left(obj, proximity=200)
-            debug.print_tokens(
+            debug.print_message(
                 debug.LEVEL_INFO,
-                ["LABEL INFERENCE: Text Left with proximity of 200: '", result, "'"],
+                f"LABEL INFERENCE: Text Left with proximity of 200: '{result}'",
                 True,
             )
 
@@ -227,9 +116,11 @@ class LabelInference:
         return result, objects
 
     def _clear_cache(self) -> None:
-        """Clears values stored for one label inference."""
+        """Dumps whatever we've stored for performance purposes."""
 
-        self._cache.clear("label inference complete")
+        self._line_cache = {}
+        self._extents_cache = {}
+        self._is_widget_cache = {}
 
     def _prefer_right(self, obj: Atspi.Accessible) -> bool:
         """Returns True if we should prefer text on the right."""
@@ -284,7 +175,7 @@ class LabelInference:
         if obj is None:
             return False
 
-        rv = self._cache.get_is_widget(obj)
+        rv = self._is_widget_cache.get(hash(obj))
         if rv is not None:
             return rv
 
@@ -292,7 +183,7 @@ class LabelInference:
         if not is_widget and AXUtilities.is_editable(obj):
             is_widget = True
 
-        self._cache.set_is_widget(obj, is_widget)
+        self._is_widget_cache[hash(obj)] = is_widget
         return is_widget
 
     def _get_extents(
@@ -306,7 +197,7 @@ class LabelInference:
         if obj is None:
             return 0, 0, 0, 0
 
-        rv = self._cache.get_text_extents(obj, start_offset, end_offset)
+        rv = self._extents_cache.get((hash(obj), start_offset, end_offset))
         if rv:
             return rv
 
@@ -322,7 +213,7 @@ class LabelInference:
             ext = AXComponent.get_rect(obj)
             extents = ext.x, ext.y, ext.width, ext.height
 
-        self._cache.set_text_extents(obj, start_offset, end_offset, extents)
+        self._extents_cache[(hash(obj), start_offset, end_offset)] = extents
         return extents
 
     def _create_label_from_contents(
@@ -352,11 +243,11 @@ class LabelInference:
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
         """Get the (obj, start_offset, end_offset, string) tuples for the line containing obj."""
 
-        rv = self._cache.get_line_contents(obj)
+        rv = self._line_cache.get(hash(obj))
         if rv:
             return rv
 
-        key = ax_cache_manager.get_object_key(obj)
+        key = hash(obj)
         if self._is_widget(obj):
             start = AXHypertext.get_link_start_offset(obj)
             obj = AXObject.get_parent(obj)
@@ -364,7 +255,7 @@ class LabelInference:
         rv = self._script.utilities.get_line_contents_at_offset(obj, start, True, False)
         if rv is None:
             rv = []
-        self._cache.set_line_contents(key, rv)
+        self._line_cache[key] = rv
 
         return rv
 

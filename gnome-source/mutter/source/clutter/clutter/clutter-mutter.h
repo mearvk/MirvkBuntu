@@ -26,17 +26,13 @@
 
 #include "clutter/clutter-backend.h"
 #include "clutter/clutter-backend-private.h"
-#include "clutter/clutter-cursor-private.h"
 #include "clutter/clutter-damage-history.h"
 #include "clutter/clutter-event-private.h"
-#include "clutter/clutter-focus-private.h"
 #include "clutter/clutter-frame-private.h"
 #include "clutter/clutter-input-device-private.h"
 #include "clutter/clutter-input-pointer-a11y-private.h"
 #include "clutter/clutter-macros.h"
 #include "clutter/clutter-private.h"
-#include "clutter/clutter-seat-private.h"
-#include "clutter/clutter-sprite-private.h"
 #include "clutter/clutter-stage-private.h"
 #include "clutter/clutter-stage-view.h"
 #include "clutter/clutter-stage-view-private.h"
@@ -52,7 +48,8 @@
  * clutter_create_context: (skip)
  */
 CLUTTER_EXPORT
-ClutterContext * clutter_create_context (ClutterBackendConstructor   backend_constructor,
+ClutterContext * clutter_create_context (ClutterContextFlags         flags,
+                                         ClutterBackendConstructor   backend_constructor,
                                          gpointer                    user_data,
                                          GError                    **error);
 
@@ -63,60 +60,15 @@ CLUTTER_EXPORT
 gboolean clutter_actor_is_effectively_on_stage_view (ClutterActor     *self,
                                                      ClutterStageView *view);
 
-typedef void (* ClutterActorCloneFunc) (ClutterActor *source,
-                                        ClutterActor *clone,
-                                        gpointer      user_data);
-
-/**
- * clutter_actor_foreach_mapped_clone: (skip)
- * @self: a #ClutterActor
- * @callback: function to call for each mapped clone
- * @user_data: data to pass to @callback
- *
- * Calls @callback for each mapped clone directly attached to @self or one of
- * its ancestors. The @source argument identifies the actor cloned by the
- * corresponding @clone. Nested clone paint paths are not traversed.
- */
-CLUTTER_EXPORT
-void clutter_actor_foreach_mapped_clone (ClutterActor          *self,
-                                         ClutterActorCloneFunc  callback,
-                                         gpointer               user_data);
-
-/**
- * clutter_actor_invalidate_paint_cache: (skip)
- * @self: a #ClutterActor
- *
- * Invalidates cached paint results containing @self without scheduling an
- * additional redraw.
- */
-CLUTTER_EXPORT
-void clutter_actor_invalidate_paint_cache (ClutterActor *self);
-
-/**
- * clutter_clone_get_source_transform: (skip)
- * @clone: a #ClutterClone
- * @transform: (out): return location for the source-to-clone transform
- */
-CLUTTER_EXPORT
-void clutter_clone_get_source_transform (ClutterClone      *clone,
-                                         graphene_matrix_t *transform);
-
-/**
- * clutter_actor_get_effective_eye_transformation_matrix: (skip)
- * @self: a #ClutterActor
- * @paint_context: the current #ClutterPaintContext
- * @transform: (out): return location for the effective eye transform
- *
- * Gets the transform from @self to eye coordinates along the current paint
- * path, including any active #ClutterClone transforms.
- */
-CLUTTER_EXPORT
-void clutter_actor_get_effective_eye_transformation_matrix (ClutterActor        *self,
-                                                            ClutterPaintContext *paint_context,
-                                                            graphene_matrix_t   *transform);
-
 CLUTTER_EXPORT
 int64_t clutter_stage_get_frame_counter (ClutterStage *stage);
+
+CLUTTER_EXPORT
+void clutter_stage_capture_view_into (ClutterStage     *stage,
+                                      ClutterStageView *view,
+                                      MtkRectangle     *rect,
+                                      uint8_t          *data,
+                                      int               stride);
 
 CLUTTER_EXPORT
 void clutter_stage_clear_stage_views (ClutterStage *stage);
@@ -139,21 +91,33 @@ gboolean clutter_seat_handle_event_post (ClutterSeat        *seat,
                                          const ClutterEvent *event);
 
 CLUTTER_EXPORT
+void clutter_stage_update_device (ClutterStage         *stage,
+                                  ClutterInputDevice   *device,
+                                  ClutterEventSequence *sequence,
+                                  ClutterInputDevice   *source_device,
+                                  graphene_point_t      point,
+                                  uint32_t              time,
+                                  ClutterActor         *new_actor,
+                                  MtkRegion            *region,
+                                  gboolean              emit_crossing);
+
+CLUTTER_EXPORT
+gboolean clutter_stage_get_device_coords (ClutterStage         *stage,
+                                          ClutterInputDevice   *device,
+                                          ClutterEventSequence *sequence,
+                                          graphene_point_t     *coords);
+
+CLUTTER_EXPORT
+void clutter_get_debug_flags (ClutterDebugFlag     *debug_flags,
+                              ClutterDrawDebugFlag *draw_flags,
+                              ClutterPickDebugFlag *pick_flags);
+
+CLUTTER_EXPORT
 void clutter_actor_notify_transform_invalid (ClutterActor *self);
 
 CLUTTER_EXPORT
 void clutter_actor_get_relative_transformation_matrix (ClutterActor      *self,
                                                        ClutterActor      *ancestor,
                                                        graphene_matrix_t *matrix);
-
-CLUTTER_EXPORT
-void clutter_backend_destroy_sprite (ClutterBackend *backend,
-                                     ClutterSprite  *sprite);
-
-CLUTTER_EXPORT
-gboolean clutter_seat_query_state (ClutterSeat         *seat,
-                                   ClutterSprite       *sprite,
-                                   graphene_point_t    *coords,
-                                   ClutterModifierType *modifiers);
 
 #undef __CLUTTER_H_INSIDE__

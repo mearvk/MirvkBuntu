@@ -236,25 +236,18 @@ update_accounts (GVfsGoaVolumeMonitor *self, GList **added_accounts, GList **rem
 /* ---------------------------------------------------------------------------------------------------- */
 
 static void
-update_volumes (GVfsGoaVolumeMonitor *self,
-                GList **added_volumes,
-                GList **removed_volumes,
-                GList **changed_volumes)
+update_volumes (GVfsGoaVolumeMonitor *self, GList **added_volumes, GList **removed_volumes)
 {
   GList *added;
   GList *l;
   GList *new_volumes = NULL;
   GList *removed;
-  GList *unchanged = NULL;
 
   if (added_volumes != NULL)
     *added_volumes = NULL;
 
   if (removed_volumes != NULL)
     *removed_volumes = NULL;
-
-  if (changed_volumes != NULL)
-    *changed_volumes = NULL;
 
   for (l = self->accounts; l != NULL; l = l->next)
     {
@@ -276,7 +269,7 @@ update_volumes (GVfsGoaVolumeMonitor *self,
                      (GCompareFunc) volume_compare,
                      &added,
                      &removed,
-                     &unchanged);
+                     NULL);
 
   for (l = removed; l != NULL; l = l->next)
     {
@@ -301,22 +294,10 @@ update_volumes (GVfsGoaVolumeMonitor *self,
         *added_volumes = g_list_prepend (*added_volumes, g_object_ref (volume));
     }
 
-  for (l = unchanged; l != NULL; l = l->next)
-    {
-      GVfsGoaVolume *volume = G_VFS_GOA_VOLUME (l->data);
-
-      if (g_vfs_goa_volume_update (volume))
-        {
-          if (changed_volumes != NULL)
-            *changed_volumes = g_list_prepend (*changed_volumes, g_object_ref (volume));
-        }
-    }
-
   self->volumes = g_list_sort (self->volumes, (GCompareFunc) volume_compare);
 
   g_list_free (added);
   g_list_free (removed);
-  g_list_free (unchanged);
   g_list_free_full (new_volumes, g_object_unref);
 }
 
@@ -327,18 +308,15 @@ update_all (GVfsGoaVolumeMonitor *self)
 {
   GList *added_volumes;
   GList *removed_volumes;
-  GList *changed_volumes;
 
   update_accounts (self, NULL, NULL);
-  update_volumes (self, &added_volumes, &removed_volumes, &changed_volumes);
+  update_volumes (self, &added_volumes, &removed_volumes);
 
-  object_list_emit (self, "volume-added", NULL, added_volumes);
-  object_list_emit (self, "volume-changed", "changed", changed_volumes);
   object_list_emit (self, "volume-removed", "removed", removed_volumes);
+  object_list_emit (self, "volume-added", NULL, added_volumes);
 
   g_list_free_full (added_volumes, g_object_unref);
   g_list_free_full (removed_volumes, g_object_unref);
-  g_list_free_full (changed_volumes, g_object_unref);
 }
 
 /* ---------------------------------------------------------------------------------------------------- */

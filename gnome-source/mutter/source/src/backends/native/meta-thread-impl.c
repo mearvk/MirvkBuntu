@@ -48,7 +48,7 @@ static GParamSpec *obj_props[N_PROPS];
 
 typedef struct _MetaThreadImplSource
 {
-  GSource parent;
+  GSource base;
   MetaThreadImpl *thread_impl;
 } MetaThreadImplSource;
 
@@ -64,7 +64,7 @@ typedef struct _MetaThreadImplPrivate
   GSource *impl_source;
   GAsyncQueue *task_queue;
 
-  MetaSchedulingPriority scheduling_priority;
+  gboolean is_realtime;
 } MetaThreadImplPrivate;
 
 struct _MetaThreadTask
@@ -167,12 +167,10 @@ impl_source_dispatch (GSource     *source,
 {
   MetaThreadImplSource *impl_source = (MetaThreadImplSource *) source;
   MetaThreadImpl *thread_impl = impl_source->thread_impl;
-#ifndef G_DISABLE_ASSERT
   MetaThreadImplPrivate *priv =
     meta_thread_impl_get_instance_private (thread_impl);
 
   g_assert (g_source_get_context (source) == priv->thread_context);
-#endif
 
   meta_thread_impl_dispatch (thread_impl);
 
@@ -228,6 +226,7 @@ meta_thread_impl_finalize (GObject *object)
   MetaThreadImplPrivate *priv =
     meta_thread_impl_get_instance_private (thread_impl);
 
+  g_clear_pointer (&priv->loop, g_main_loop_unref);
   g_clear_pointer (&priv->impl_source, g_source_destroy);
   g_clear_pointer (&priv->task_queue, g_async_queue_unref);
 
@@ -427,7 +426,7 @@ meta_thread_impl_fd_source_dispatch (GSource     *source,
   MetaThreadImplFdSource *impl_fd_source = (MetaThreadImplFdSource *) source;
   MetaThreadImpl *thread_impl = impl_fd_source->thread_impl;
   gpointer retval;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
 
   retval = dispatch_task_func (thread_impl,
                                impl_fd_source->dispatch,
@@ -435,7 +434,10 @@ meta_thread_impl_fd_source_dispatch (GSource     *source,
                                &error);
 
   if (!GPOINTER_TO_INT (retval))
-    g_warning ("Failed to dispatch fd source: %s", error->message);
+    {
+      g_warning ("Failed to dispatch fd source: %s", error->message);
+      g_error_free (error);
+    }
 
   return G_SOURCE_CONTINUE;
 }
@@ -567,17 +569,8 @@ meta_thread_impl_dispatch (MetaThreadImpl *thread_impl)
 }
 
 void
-meta_thread_impl_setup (MetaThreadImpl *thread_impl)
-{
-  MetaThreadImplClass *klass = META_THREAD_IMPL_GET_CLASS (thread_impl);
-
-  if (klass->setup)
-    klass->setup (thread_impl);
-}
-
-void
 meta_thread_impl_run (MetaThreadImpl         *thread_impl,
-                      MetaSchedulingPriority  scheduling_priority)
+                      MetaThreadImplRunFlags  flags)
 {
   MetaThreadImplPrivate *priv =
     meta_thread_impl_get_instance_private (thread_impl);
@@ -585,9 +578,9 @@ meta_thread_impl_run (MetaThreadImpl         *thread_impl,
   meta_assert_in_thread_impl (priv->thread);
 
   priv->loop = g_main_loop_new (priv->thread_context, FALSE);
-  priv->scheduling_priority = scheduling_priority;
+  priv->is_realtime = !!(flags & META_THREAD_IMPL_RUN_FLAG_REALTIME);
   g_main_loop_run (priv->loop);
-  g_clear_pointer (&priv->loop, g_main_loop_unref);
+  priv->is_realtime = FALSE;
 }
 
 void
@@ -597,18 +590,15 @@ meta_thread_impl_queue_task (MetaThreadImpl *thread_impl,
   MetaThreadImplPrivate *priv =
     meta_thread_impl_get_instance_private (thread_impl);
 
-  g_async_queue_lock (priv->task_queue);
-  g_async_queue_push_unlocked (priv->task_queue, task);
-  if (g_async_queue_length_unlocked (priv->task_queue) == 1)
-    g_main_context_wakeup (priv->thread_context);
-  g_async_queue_unlock (priv->task_queue);
+  g_async_queue_push (priv->task_queue, task);
+  g_main_context_wakeup (priv->thread_context);
 }
 
-MetaSchedulingPriority
-meta_thread_impl_get_scheduling_priority (MetaThreadImpl *thread_impl)
+gboolean
+meta_thread_impl_is_realtime (MetaThreadImpl *thread_impl)
 {
   MetaThreadImplPrivate *priv =
     meta_thread_impl_get_instance_private (thread_impl);
 
-  return priv->scheduling_priority;
+  return priv->is_realtime;
 }

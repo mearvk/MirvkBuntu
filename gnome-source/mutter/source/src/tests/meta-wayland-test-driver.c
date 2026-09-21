@@ -154,7 +154,7 @@ sync_effects_completed (struct wl_client   *client,
   data->callback = wl_resource_create (client, &wl_callback_interface, 1, id);
 
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
-  g_assert_cmpint (g_list_length (stage_views), >, 0);
+  g_assert (g_list_length (stage_views) > 0);
 
   g_signal_connect (CLUTTER_STAGE (stage), "after-update",
                     G_CALLBACK (check_for_pending_effects), data);
@@ -237,7 +237,7 @@ verify_view (struct wl_client   *client,
   struct wl_resource *callback;
 
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
-  g_assert_cmpint (g_list_length (stage_views), >, 0);
+  g_assert (g_list_length (stage_views) > 0);
 
   callback = wl_resource_create (client, &wl_callback_interface, 1, id);
   g_signal_connect_after (CLUTTER_STAGE (stage), "after-paint",
@@ -249,52 +249,12 @@ verify_view (struct wl_client   *client,
                              meta_ref_test_determine_ref_test_flag ());
 }
 
-static void
-move_to (struct wl_client   *client,
-         struct wl_resource *resource,
-         struct wl_resource *surface_resource,
-         int32_t             x,
-         int32_t             y)
-{
-  MetaWaylandSurface *surface = wl_resource_get_user_data (surface_resource);
-  MetaWindow *window = meta_wayland_surface_get_window (surface);
-
-  meta_window_move_frame (window, TRUE, x, y);
-}
-
-static void
-tile (struct wl_client   *client,
-      struct wl_resource *resource,
-      struct wl_resource *surface_resource,
-      uint32_t            direction_value)
-{
-  enum test_driver_direction direction = direction_value;
-  MetaWaylandSurface *surface = wl_resource_get_user_data (surface_resource);
-  MetaWindow *window = meta_wayland_surface_get_window (surface);
-
-  switch (direction)
-    {
-    case TEST_DRIVER_DIRECTION_LEFT:
-      meta_window_tile (window, META_TILE_LEFT);
-      break;
-    case TEST_DRIVER_DIRECTION_RIGHT:
-      meta_window_tile (window, META_TILE_RIGHT);
-      break;
-    default:
-      wl_client_post_implementation_error (client,
-                                           "Invalid direction");
-      break;
-    }
-}
-
 static const struct test_driver_interface meta_test_driver_interface = {
   sync_actor_destroy,
   sync_effects_completed,
   sync_window_shown,
   sync_point,
   verify_view,
-  move_to,
-  tile,
 };
 
 static void
@@ -329,29 +289,7 @@ bind_test_driver (struct wl_client *client,
 
   g_hash_table_iter_init (&iter, test_driver->properties);
   while (g_hash_table_iter_next (&iter, &key, &value))
-    {
-      GVariant *variant = value;
-
-      if (g_variant_is_of_type (value, G_VARIANT_TYPE_STRING))
-        {
-          test_driver_send_property (resource,
-                                     key,
-                                     g_variant_get_string (variant, NULL));
-        }
-      else if (g_variant_is_of_type (value, G_VARIANT_TYPE_INT32))
-        {
-          test_driver_send_property_int (resource,
-                                         key,
-                                         g_variant_get_int32 (variant));
-        }
-      else
-        {
-          g_autofree char *variant_string = NULL;
-
-          variant_string = g_variant_print (variant, TRUE);
-          g_warning ("Unhandled test driver variant '%s'", variant_string);
-        }
-    }
+    test_driver_send_property (resource, key, value);
 }
 
 static void
@@ -397,8 +335,7 @@ static void
 meta_wayland_test_driver_init (MetaWaylandTestDriver *test_driver)
 {
   test_driver->properties = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                                   g_free,
-                                                   (GDestroyNotify) g_variant_unref);
+                                                   g_free, g_free);
 }
 
 MetaWaylandTestDriver *
@@ -439,17 +376,7 @@ meta_wayland_test_driver_set_property (MetaWaylandTestDriver *test_driver,
 {
   g_hash_table_replace (test_driver->properties,
                         g_strdup (name),
-                        g_variant_new_string (value));
-}
-
-void
-meta_wayland_test_driver_set_property_int (MetaWaylandTestDriver *test_driver,
-                                           const char            *name,
-                                           int32_t                value)
-{
-  g_hash_table_replace (test_driver->properties,
-                        g_strdup (name),
-                        g_variant_new_int32 (value));
+                        g_strdup (value));
 }
 
 static void
@@ -475,17 +402,4 @@ meta_wayland_test_driver_wait_for_sync_point (MetaWaylandTestDriver *test_driver
   while (latest_sequence != sync_point)
     g_main_context_iteration (NULL, TRUE);
   g_signal_handler_disconnect (test_driver, handler_id);
-}
-
-void
-meta_wayland_test_driver_terminate (MetaWaylandTestDriver *test_driver)
-{
-  GList *l;
-
-  for (l = test_driver->resources; l; l = l->next)
-    {
-      struct wl_resource *resource = l->data;
-
-      test_driver_send_terminate (resource);
-    }
 }

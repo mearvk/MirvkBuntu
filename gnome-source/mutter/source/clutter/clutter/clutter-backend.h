@@ -27,9 +27,10 @@
 #error "Only <clutter/clutter.h> can be included directly."
 #endif
 
+#include <cairo.h>
+
 #include "cogl/cogl.h"
 
-#include "clutter/clutter-cursor.h"
 #include "clutter/clutter-keymap.h"
 #include "clutter/clutter-types.h"
 #include "clutter/clutter-seat.h"
@@ -44,10 +45,19 @@ typedef struct _ClutterBackend          ClutterBackend;
 typedef struct _ClutterBackendClass     ClutterBackendClass;
 
 CLUTTER_EXPORT
-GType clutter_backend_get_type (void);
+GType clutter_backend_get_type (void) G_GNUC_CONST;
+
+CLUTTER_EXPORT
+ClutterBackend *                clutter_get_default_backend             (void);
 
 CLUTTER_EXPORT
 gdouble                         clutter_backend_get_resolution          (ClutterBackend             *backend);
+
+CLUTTER_EXPORT
+void                            clutter_backend_set_font_options        (ClutterBackend             *backend,
+                                                                         const cairo_font_options_t *options);
+CLUTTER_EXPORT
+const cairo_font_options_t *    clutter_backend_get_font_options        (ClutterBackend             *backend);
 
 CLUTTER_EXPORT
 CoglContext *                   clutter_backend_get_cogl_context        (ClutterBackend             *backend);
@@ -60,23 +70,6 @@ void                            clutter_backend_set_input_method        (Clutter
                                                                          ClutterInputMethod         *method);
 CLUTTER_EXPORT
 ClutterSeat *                   clutter_backend_get_default_seat        (ClutterBackend             *backend);
-
-CLUTTER_EXPORT
-ClutterSprite * clutter_backend_get_sprite (ClutterBackend     *backend,
-                                            ClutterStage       *stage,
-                                            const ClutterEvent *for_event);
-
-CLUTTER_EXPORT
-ClutterSprite * clutter_backend_get_pointer_sprite (ClutterBackend *backend,
-                                                    ClutterStage   *stage);
-
-CLUTTER_EXPORT
-ClutterKeyFocus * clutter_backend_get_key_focus (ClutterBackend *backend,
-                                                 ClutterStage   *stage);
-
-CLUTTER_EXPORT
-ClutterCursor * clutter_backend_get_cursor (ClutterBackend    *backend,
-                                            ClutterCursorType  cursor_type);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (ClutterBackend, g_object_unref)
 

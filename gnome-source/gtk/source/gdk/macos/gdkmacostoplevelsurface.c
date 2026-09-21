@@ -27,7 +27,6 @@
 #include "gdkseatprivate.h"
 #include "gdktoplevelprivate.h"
 
-#include "gdkmacosdevice-private.h"
 #include "gdkmacosdisplay-private.h"
 #include "gdkmacosmonitor-private.h"
 #include "gdkmacosutils-private.h"
@@ -365,7 +364,7 @@ _gdk_macos_toplevel_surface_begin_resize (GdkToplevel    *toplevel,
 
   /* Release passive grab */
   if (button != 0)
-    gdk_macos_device_set_implicit_grab (device, NULL);
+    gdk_seat_ungrab (gdk_device_get_seat (device));
 
   if ((nswindow = _gdk_macos_surface_get_native (GDK_MACOS_SURFACE (toplevel))))
     [(GdkMacosWindow *)nswindow beginManualResize:edge];
@@ -388,7 +387,7 @@ _gdk_macos_toplevel_surface_begin_move (GdkToplevel *toplevel,
 
   /* Release passive grab */
   if (button != 0)
-    gdk_macos_device_set_implicit_grab (device, NULL);
+    gdk_seat_ungrab (gdk_device_get_seat (device));
 
   if ((nswindow = _gdk_macos_surface_get_native (GDK_MACOS_SURFACE (toplevel))))
     [(GdkMacosWindow *)nswindow beginManualMove];
@@ -493,7 +492,7 @@ _gdk_macos_toplevel_surface_get_property (GObject    *object,
       break;
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_STARTUP_ID:
-      g_value_set_static_string (value, "");
+      g_value_set_string (value, "");
       break;
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_TRANSIENT_FOR:
@@ -521,17 +520,6 @@ _gdk_macos_toplevel_surface_get_property (GObject    *object,
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_SHORTCUTS_INHIBITED:
       g_value_set_boolean (value, surface->shortcuts_inhibited);
-      break;
-
-    case LAST_PROP + GDK_TOPLEVEL_PROP_CAPABILITIES:
-      g_value_set_flags (value, GDK_TOPLEVEL_CAPABILITIES_MAXIMIZE |
-                                GDK_TOPLEVEL_CAPABILITIES_FULLSCREEN |
-                                GDK_TOPLEVEL_CAPABILITIES_MINIMIZE |
-                                GDK_TOPLEVEL_CAPABILITIES_LOWER);
-      break;
-
-    case LAST_PROP + GDK_TOPLEVEL_PROP_GRAVITY:
-      g_value_set_enum (value, GDK_GRAVITY_NORTH_EAST);
       break;
 
     default:
@@ -588,9 +576,6 @@ _gdk_macos_toplevel_surface_set_property (GObject      *object,
     case LAST_PROP + GDK_TOPLEVEL_PROP_SHORTCUTS_INHIBITED:
       break;
 
-    case LAST_PROP + GDK_TOPLEVEL_PROP_GRAVITY:
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -631,14 +616,6 @@ _gdk_macos_toplevel_surface_constructed (GObject *object)
                                                 screen:screen];
 
   _gdk_macos_surface_set_native (GDK_MACOS_SURFACE (self), window);
-
-  [window setOpaque:NO];
-
-  /* Workaround: if we use full transparency, window rendering becomes slow,
-   * because macOS tries to dynamically calculate the shadow.
-   * Instead provide a tiny bit of alpha, so shadows are drawn around the window.
-   */
-  [window setBackgroundColor:[[NSColor blackColor] colorWithAlphaComponent:0.00001]];
 
   /* Allow NSWindow to go fullscreen */
   [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];

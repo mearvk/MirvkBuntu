@@ -82,7 +82,7 @@ struct _GtkFocusWidgetClass
   GtkWidgetClass parent_class;
 };
 
-GType gtk_focus_widget_get_type (void);
+GType gtk_focus_widget_get_type (void) G_GNUC_CONST;
 
 
 G_DEFINE_TYPE(GtkFocusWidget, gtk_focus_widget, GTK_TYPE_WIDGET)

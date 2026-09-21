@@ -40,7 +40,8 @@
  * from the Berkeley SoftFloat 3e Library.
  */
 
- #pragma once
+#ifndef COGL_SOFT_FLOAT_H
+#define COGL_SOFT_FLOAT_H
 
 #include <glib.h>
 #include <stdint.h>
@@ -51,4 +52,20 @@ double cogl_double_add_rtz (double a,
 double cogl_double_sub_rtz (double a,
                             double b);
 
+double cogl_double_mul_rtz (double a,
+                            double b);
+
+double cogl_double_fma_rtz (double a,
+                            double b,
+                            double c);
+
+float cogl_float_fma_rtz (float a,
+                          float b,
+                          float c);
+
+float cogl_double_to_f32 (double   x,
+                          gboolean rtz);
+
 uint16_t cogl_float_to_half_rtz_slow (float x);
+
+#endif  /* COGL_SOFT_FLOAT_H */

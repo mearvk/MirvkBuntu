@@ -856,25 +856,25 @@
  * G_OS_WIN32:
  *
  * This macro is defined only on Windows. So you can bracket
- * Windows-specific code in `#ifdef G_OS_WIN32`.
+ * Windows-specific code in "\#ifdef G_OS_WIN32".
  */
 
 /**
  * G_OS_UNIX:
  *
  * This macro is defined only on UNIX. So you can bracket
- * UNIX-specific code in `#ifdef G_OS_UNIX`.
+ * UNIX-specific code in "\#ifdef G_OS_UNIX".
  *
  * To detect whether to compile features that require a specific kernel
  * or operating system, check for the appropriate OS-specific predefined
  * macros instead, for example:
  *
- * - Linux kernel (any libc, including glibc, musl or Android): `#ifdef __linux__`
- * - Linux kernel and GNU user-space: `#if defined(__linux__) && defined(__GLIBC__)`
- * - FreeBSD kernel (any libc, including glibc): `#ifdef __FreeBSD_kernel__`
- * - FreeBSD kernel and user-space: `#ifdef __FreeBSD__`
+ * - Linux kernel (any libc, including glibc, musl or Android): `\#ifdef __linux__`
+ * - Linux kernel and GNU user-space: `\#if defined(__linux__) && defined(__GLIBC__)`
+ * - FreeBSD kernel (any libc, including glibc): `\#ifdef __FreeBSD_kernel__`
+ * - FreeBSD kernel and user-space: `\#ifdef __FreeBSD__`
  * - Apple operating systems (macOS, iOS, tvOS), regardless of whether
- *   Cocoa/Carbon toolkits are available: `#ifdef __APPLE__`
+ *   Cocoa/Carbon toolkits are available: `\#ifdef __APPLE__`
  *
  * See <https://sourceforge.net/p/predef/wiki/OperatingSystems/> for more.
  */
@@ -883,26 +883,23 @@
  * G_DIR_SEPARATOR:
  *
  * The directory separator character.
- *
- * This is `'/'` on UNIX machines and `'\'` under Windows.
+ * This is '/' on UNIX machines and '\' under Windows.
  */
 
 /**
  * G_DIR_SEPARATOR_S:
  *
  * The directory separator as a string.
- *
- * This is `"/"` on UNIX machines and `"\"` under Windows.
+ * This is "/" on UNIX machines and "\" under Windows.
  */
 
 /**
  * G_IS_DIR_SEPARATOR:
  * @c: a character
  *
- * Checks whether a character is a directory separator.
- *
- * It returns true for `'/'` on UNIX machines and for `'\'` or `'/'` under
- * Windows.
+ * Checks whether a character is a directory
+ * separator. It returns %TRUE for '/' on UNIX
+ * machines and for '\' or '/' under Windows.
  *
  * Since: 2.6
  */
@@ -967,7 +964,6 @@
  * The absolute value is simply the number with any negative sign taken away.
  *
  * For example,
- *
  * - ABS(-10) is 10.
  * - ABS(10) is also 10.
  *
@@ -984,7 +980,6 @@
  * greater than @high the result is undefined.
  *
  * For example,
- *
  * - CLAMP(5, 10, 15) is 10.
  * - CLAMP(15, 5, 10) is 10.
  * - CLAMP(20, 15, 25) is 20.
@@ -1002,7 +997,6 @@
  * smaller than @epsilon, and to a false value otherwise.
  *
  * For example,
- *
  * - `G_APPROX_VALUE (5, 6, 2)` evaluates to true
  * - `G_APPROX_VALUE (3.14, 3.15, 0.001)` evaluates to false
  * - `G_APPROX_VALUE (n, 0.f, FLT_EPSILON)` evaluates to true if `n` is within

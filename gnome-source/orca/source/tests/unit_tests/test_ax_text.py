@@ -355,7 +355,6 @@ class TestAXText:
         additional_modules = [
             "locale",
             "orca.colornames",
-            "orca.ax_utilities_object",
             "orca.ax_utilities_role",
             "orca.ax_utilities_state",
         ]
@@ -420,358 +419,6 @@ class TestAXText:
 
         return essential_modules
 
-    def test_get_text_selection_container_finds_partially_selected_ancestor(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test nested full selections resolve to their partially selected container."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXObject, AXText, AXUtilitiesText
-
-        leaf = test_context.Mock(spec=Atspi.Accessible)
-        child = test_context.Mock(spec=Atspi.Accessible)
-        parent = test_context.Mock(spec=Atspi.Accessible)
-        document = test_context.Mock(spec=Atspi.Accessible)
-        parents = {leaf: child, child: parent, parent: document, document: None}
-        ranges = {leaf: [], child: [(0, 10)], parent: [(1, 3)], document: []}
-        lengths = {child: 10, parent: 5}
-        test_context.patch_object(AXObject, "get_parent", side_effect=parents.get)
-        test_context.patch_object(AXText, "get_selected_ranges", side_effect=ranges.get)
-        test_context.patch_object(AXText, "get_character_count", side_effect=lengths.get)
-
-        assert AXUtilitiesText.get_text_selection_container(leaf) == parent
-
-    def test_get_text_selection_elements_stops_after_non_web_end_boundary(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test selection elements include non-web text through the end boundary."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import (
-            AXObject,
-            AXUtilitiesObject,
-            AXUtilitiesRole,
-            AXUtilitiesText,
-        )
-
-        parent = test_context.Mock()
-        start = test_context.Mock()
-        start_child = test_context.Mock()
-        end_container = test_context.Mock()
-        end = test_context.Mock()
-        following_end = test_context.Mock()
-        following_container = test_context.Mock()
-        children = {
-            (parent, 0): start,
-            (parent, 1): end_container,
-            (parent, 2): following_container,
-            (end_container, 1): following_end,
-        }
-        parents = {start: parent, end: end_container}
-        indices = {start: 0, end: 0}
-        descendants = {
-            start: [start_child],
-            end_container: [end, following_end],
-        }
-        test_context.patch_object(AXObject, "is_dead", return_value=False)
-        test_context.patch_object(AXObject, "get_parent", side_effect=parents.get)
-        test_context.patch_object(AXObject, "get_index_in_parent", side_effect=indices.get)
-        test_context.patch_object(
-            AXObject,
-            "get_child_count",
-            side_effect=lambda obj: 3 if obj == parent else 2,
-        )
-        test_context.patch_object(
-            AXObject,
-            "get_child",
-            side_effect=lambda obj, index: children.get((obj, index)),
-        )
-        test_context.patch_object(AXObject, "supports_text", return_value=True)
-        test_context.patch_object(AXUtilitiesRole, "is_web_element", return_value=False)
-        test_context.patch_object(AXUtilitiesRole, "is_code", return_value=False)
-        test_context.patch_object(
-            AXUtilitiesObject,
-            "find_all_descendants",
-            side_effect=lambda obj, _include, _exclude: descendants.get(obj, []),
-        )
-
-        assert AXUtilitiesText.get_text_selection_elements(start, end) == [
-            start,
-            start_child,
-            end_container,
-            end,
-        ]
-
-    def test_get_text_selection_endpoints_resolves_embedded_object(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test an embedded-object selection resolves to its accessible child."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import (
-            AXHypertext,
-            AXObject,
-            AXText,
-            AXUtilitiesRole,
-            AXUtilitiesText,
-        )
-
-        parent = test_context.Mock(spec=Atspi.Accessible)
-        image = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(AXText, "get_selected_ranges", side_effect=[[(4, 5)], []])
-        test_context.patch_object(AXText, "get_substring", return_value="\ufffc")
-        test_context.patch_object(AXHypertext, "get_child_at_offset", return_value=image)
-        test_context.patch_object(AXUtilitiesRole, "is_image_or_canvas", return_value=True)
-        test_context.patch_object(AXObject, "get_child_count", return_value=0)
-
-        result = AXUtilitiesText._find_text_selection_endpoint(parent, False)
-
-        assert result == (image, 0)
-        AXHypertext.get_child_at_offset.assert_called_once_with(parent, 4)
-
-    def test_get_text_selection_endpoints_skips_empty_structural_child(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test an empty structural child is not treated as a selection endpoint."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import (
-            AXHypertext,
-            AXObject,
-            AXText,
-            AXUtilitiesRole,
-            AXUtilitiesText,
-        )
-
-        parent = test_context.Mock(spec=Atspi.Accessible)
-        empty_section = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(AXText, "get_selected_ranges", side_effect=[[(4, 5)], []])
-        test_context.patch_object(AXText, "get_substring", return_value="\ufffc")
-        test_context.patch_object(
-            AXHypertext,
-            "get_child_at_offset",
-            return_value=empty_section,
-        )
-        test_context.patch_object(AXUtilitiesRole, "is_image_or_canvas", return_value=False)
-        test_context.patch_object(AXObject, "get_child_count", return_value=0)
-
-        result = AXUtilitiesText._find_text_selection_endpoint(parent, False)
-
-        assert result is None
-
-    def test_get_text_selection_endpoints_searches_selected_text_children(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test endpoints are found when only children of the container have selections."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXObject, AXText, AXUtilitiesText
-
-        document = test_context.Mock(spec=Atspi.Accessible)
-        page1 = test_context.Mock(spec=Atspi.Accessible)
-        page2 = test_context.Mock(spec=Atspi.Accessible)
-        children = {document: [page1, page2], page1: [], page2: []}
-        ranges = {document: [], page1: [(0, 89)], page2: [(0, 52)]}
-        test_context.patch_object(
-            AXObject,
-            "get_child_count",
-            side_effect=lambda obj: len(children[obj]),
-        )
-        test_context.patch_object(
-            AXObject,
-            "get_child",
-            side_effect=lambda obj, index: children[obj][index],
-        )
-        test_context.patch_object(AXText, "get_selected_ranges", side_effect=ranges.get)
-        test_context.patch_object(
-            AXText,
-            "get_substring",
-            side_effect=lambda obj, _start, _end: "page 1" if obj == page1 else "page 2",
-        )
-
-        assert AXUtilitiesText.get_text_selection_endpoints(document) == (
-            (page1, 0),
-            (page2, 51),
-        )
-
-    @pytest.mark.parametrize(
-        "find_start,expected_offset",
-        [
-            pytest.param(True, 12, id="start"),
-            pytest.param(False, 74, id="end"),
-        ],
-    )
-    def test_get_text_selection_endpoint_includes_selected_character_offset(
-        self,
-        test_context: OrcaTestContext,
-        find_start: bool,
-        expected_offset: int,
-    ) -> None:
-        """Test a text selection endpoint includes its selected character offset."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXText, AXUtilitiesText
-
-        paragraph = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(AXText, "get_selected_ranges", return_value=[(12, 75)])
-        test_context.patch_object(AXText, "get_substring", return_value="selected text")
-
-        result = AXUtilitiesText._find_text_selection_endpoint(paragraph, find_start)
-
-        assert result == (paragraph, expected_offset)
-
-    @pytest.mark.parametrize(
-        "after_embedded_object,expected_offset",
-        [
-            pytest.param(False, 4, id="before_embedded_object"),
-            pytest.param(True, 5, id="after_embedded_object"),
-        ],
-    )
-    def test_get_text_selection_endpoint_for_caret_context_with_embedded_object(
-        self,
-        test_context: OrcaTestContext,
-        after_embedded_object: bool,
-        expected_offset: int,
-    ) -> None:
-        """Test a non-text object is represented by its character in a text parent."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXHypertext, AXObject, AXUtilitiesText
-
-        image = test_context.Mock(spec=Atspi.Accessible)
-        link = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(
-            AXObject,
-            "supports_text",
-            side_effect=lambda obj: obj == link,
-        )
-        test_context.patch_object(
-            AXObject,
-            "get_parent",
-            side_effect=lambda obj: link if obj == image else None,
-        )
-        get_child_offset = test_context.patch_object(
-            AXHypertext,
-            "get_character_offset_in_parent",
-            return_value=4,
-        )
-
-        result = AXUtilitiesText.get_text_selection_endpoint_for_caret_context(
-            image,
-            0,
-            after_embedded_object=after_embedded_object,
-        )
-
-        assert result == (link, expected_offset)
-        get_child_offset.assert_called_once_with(image)
-
-    def test_get_text_selection_endpoint_for_caret_context_after_embedded_text_child(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test a position after embedded text is represented by the child's end."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXHypertext, AXObject, AXText, AXUtilitiesText
-
-        parent = test_context.Mock(spec=Atspi.Accessible)
-        child = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(AXObject, "supports_text", return_value=True)
-        get_child = test_context.patch_object(
-            AXHypertext,
-            "get_child_at_offset",
-            side_effect=lambda obj, offset: child if (obj, offset) == (parent, 0) else None,
-        )
-        test_context.patch_object(
-            AXText,
-            "get_substring",
-            side_effect=lambda obj, start, end: (
-                "\ufffc" if (obj, start, end) == (parent, 0, 1) else "a"
-            ),
-        )
-        test_context.patch_object(AXText, "get_character_count", return_value=9)
-
-        result = AXUtilitiesText.get_text_selection_endpoint_for_caret_context(
-            parent,
-            1,
-            after_embedded_object=False,
-        )
-
-        assert result == (child, 9)
-        get_child.assert_called_once_with(parent, 0)
-
-    @pytest.mark.parametrize(
-        "endpoint_is_start,parent_offset,expected_child_offset",
-        [
-            pytest.param(True, 15, 0, id="selection-start"),
-            pytest.param(False, 16, 19, id="selection-end"),
-        ],
-    )
-    def test_get_caret_context_for_text_selection_endpoint_in_embedded_text_child(
-        self,
-        test_context: OrcaTestContext,
-        endpoint_is_start: bool,
-        parent_offset: int,
-        expected_child_offset: int,
-    ) -> None:
-        """Test a parent EOC selection endpoint becomes a stable child caret context."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXHypertext, AXObject, AXText, AXUtilitiesText
-
-        parent = test_context.Mock(spec=Atspi.Accessible)
-        child = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(
-            AXText,
-            "get_substring",
-            side_effect=lambda obj, start, end: (
-                "\ufffc" if obj == parent and start == 15 and end == 16 else ""
-            ),
-        )
-        get_child = test_context.patch_object(
-            AXHypertext,
-            "get_child_at_offset",
-            return_value=child,
-        )
-        test_context.patch_object(AXObject, "supports_text", return_value=True)
-        test_context.patch_object(AXText, "get_character_count", return_value=19)
-
-        result = AXUtilitiesText.get_caret_context_for_text_selection_endpoint(
-            parent,
-            parent_offset,
-            endpoint_is_start=endpoint_is_start,
-        )
-
-        assert result == (child, expected_child_offset)
-        get_child.assert_called_once_with(parent, 15)
-
-    def test_get_caret_context_for_text_selection_endpoint_without_embedded_text(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test an ordinary text-selection endpoint is already a caret context."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities_text import AXHypertext, AXText, AXUtilitiesText
-
-        obj = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(AXText, "get_substring", return_value="a")
-        get_child = test_context.patch_object(AXHypertext, "get_child_at_offset")
-
-        result = AXUtilitiesText.get_caret_context_for_text_selection_endpoint(
-            obj,
-            7,
-            endpoint_is_start=True,
-        )
-
-        assert result == (obj, 7)
-        get_child.assert_not_called()
-
     def test_is_eoc_with_embedded_object_character(self, test_context: OrcaTestContext) -> None:
         """Test AXText.is_eoc with embedded object character."""
 
@@ -780,59 +427,6 @@ class TestAXText:
 
         result = AXUtilitiesText.is_eoc("\ufffc")
         assert result is True
-
-    def test_import_registers_text_cache_namespaces(self, test_context: OrcaTestContext) -> None:
-        """Test importing text utilities registers its cache namespaces."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-
-        manager = ax_cache_manager.get_manager()
-        register = test_context.patch_object(
-            manager,
-            "register_cache",
-            wraps=manager.register_cache,
-        )
-
-        from orca.ax_utilities_text import AXUtilitiesText
-
-        expected_namespaces = {
-            AXUtilitiesText._CACHE.TEXT_ATTRIBUTES,
-            AXUtilitiesText._CACHE.SELECTED_TEXT,
-            AXUtilitiesText._CACHE.LAST_TEXT_UNIT_SPOKEN,
-        }
-        registered_namespaces = {
-            call.args[1]
-            for call in register.call_args_list
-            if call.args[0] is AXUtilitiesText._CACHE
-        }
-
-        assert registered_namespaces == expected_namespaces
-        for call in register.call_args_list:
-            if call.args[0] is AXUtilitiesText._CACHE:
-                assert call.kwargs["lifetime"] is ax_cache_manager.Lifetime.PROCESS
-                assert call.kwargs["clear_on_demand"] is ax_cache_manager.ClearPolicy.PRESERVE
-                assert call.kwargs["clear_interval_seconds"] is None
-
-    def test_manager_clear_cache_now_preserves_text_cache(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test routine manager clearing preserves text utility cached values."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-        from orca.ax_utilities_text import AXUtilitiesText, TextUnit
-
-        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
-        AXUtilitiesText._CACHE.set_text_attributes({"weight": "bold"})
-        AXUtilitiesText._CACHE.set_selected_text(mock_accessible, ("selected", 1, 9))
-        AXUtilitiesText.set_last_text_unit_spoken(TextUnit.WORD)
-
-        ax_cache_manager.get_manager().clear_cache_now("test reason")
-
-        assert AXUtilitiesText.get_cached_text_attributes() == {"weight": "bold"}
-        assert AXUtilitiesText.get_cached_selected_text(mock_accessible) == ("selected", 1, 9)
-        assert AXUtilitiesText.get_last_text_unit_spoken() is TextUnit.WORD
 
     def test_is_eoc_with_regular_character(self, test_context: OrcaTestContext) -> None:
         """Test AXText.is_eoc with regular character."""
@@ -923,11 +517,13 @@ class TestAXText:
                 "id": "successful",
                 "should_raise_error": False,
                 "expected_result": 50,
+                "expected_debug_method": "print_tokens",
             },
             {
                 "id": "glib_error",
                 "should_raise_error": True,
                 "expected_result": -1,
+                "expected_debug_method": "print_message",
             },
         ],
         ids=lambda case: case["id"],
@@ -955,6 +551,7 @@ class TestAXText:
         essential_modules["orca.debug"].print_message = test_context.Mock()
         result = AXText.get_caret_offset(test_context.Mock(spec=Atspi.Accessible))
         assert result == case["expected_result"]
+        getattr(essential_modules["orca.debug"], case["expected_debug_method"]).assert_called()
 
     def test_set_caret_offset_successful(self, test_context: OrcaTestContext) -> None:
         """Test AXText.set_caret_offset successful case."""
@@ -966,6 +563,7 @@ class TestAXText:
         essential_modules["orca.debug"].print_tokens = test_context.Mock()
         result = AXText.set_caret_offset(test_context.Mock(spec=Atspi.Accessible), 25)
         assert result is True
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_set_caret_offset_with_glib_error(self, test_context: OrcaTestContext) -> None:
         """Test AXText.set_caret_offset handles GLib.GError."""
@@ -980,18 +578,17 @@ class TestAXText:
         essential_modules["orca.debug"].print_message = test_context.Mock()
         result = AXText.set_caret_offset(test_context.Mock(spec=Atspi.Accessible), 25)
         assert result is False
+        essential_modules["orca.debug"].print_message.assert_called()
 
     def test_set_caret_offset_to_start(self, test_context: OrcaTestContext) -> None:
         """Test AXText.set_caret_offset_to_start."""
 
         self._setup_dependencies(test_context)
         from orca.ax_text import AXText
-        from orca.ax_utilities_text import AXUtilitiesText, CaretSetReason
+        from orca.ax_utilities_text import AXUtilitiesText
 
         test_context.patch_object(AXText, "set_caret_offset", return_value=True)
-        result = AXUtilitiesText.set_caret_offset_to_start(
-            test_context.Mock(spec=Atspi.Accessible), CaretSetReason.CARET_NAVIGATION
-        )
+        result = AXUtilitiesText.set_caret_offset_to_start(test_context.Mock(spec=Atspi.Accessible))
         assert result is True
 
     def test_set_caret_offset_to_end(self, test_context: OrcaTestContext) -> None:
@@ -999,13 +596,11 @@ class TestAXText:
 
         self._setup_dependencies(test_context)
         from orca.ax_text import AXText
-        from orca.ax_utilities_text import AXUtilitiesText, CaretSetReason
+        from orca.ax_utilities_text import AXUtilitiesText
 
         test_context.patch_object(AXText, "get_character_count", return_value=100)
         test_context.patch_object(AXText, "set_caret_offset", return_value=True)
-        result = AXUtilitiesText.set_caret_offset_to_end(
-            test_context.Mock(spec=Atspi.Accessible), CaretSetReason.CARET_NAVIGATION
-        )
+        result = AXUtilitiesText.set_caret_offset_to_end(test_context.Mock(spec=Atspi.Accessible))
         assert result is True
 
     def test_has_selected_text_without_selection(self, test_context: OrcaTestContext) -> None:
@@ -1029,6 +624,7 @@ class TestAXText:
         essential_modules["orca.debug"].print_tokens = test_context.Mock()
         result = AXText.get_n_selections(test_context.Mock(spec=Atspi.Accessible))
         assert result == 2
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_get_n_selections_with_glib_error(self, test_context: OrcaTestContext) -> None:
         """Test AXText.get_n_selections handles GLib.GError."""
@@ -1043,6 +639,7 @@ class TestAXText:
         essential_modules["orca.debug"].print_message = test_context.Mock()
         result = AXText.get_n_selections(test_context.Mock(spec=Atspi.Accessible))
         assert result == 0
+        essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_cached_selected_text_without_cache(self, test_context: OrcaTestContext) -> None:
         """Test AXText.get_cached_selected_text without cached data."""
@@ -1050,6 +647,8 @@ class TestAXText:
         self._setup_dependencies(test_context)
         from orca.ax_utilities_text import AXUtilitiesText
 
+        test_context.Mock(spec=Atspi.Accessible).hash = test_context.Mock(return_value=54321)
+        AXUtilitiesText.CACHED_TEXT_SELECTION.clear()
         result = AXUtilitiesText.get_cached_selected_text(test_context.Mock(spec=Atspi.Accessible))
         assert result == ("", 0, 0)
 
@@ -1285,12 +884,10 @@ class TestAXText:
         self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_text import AXText
-        from orca.ax_utilities_role import AXUtilitiesRole
         from orca.ax_utilities_text import AXUtilitiesText
 
         test_context.patch_object(AXObject, "supports_text", return_value=True)
         test_context.patch_object(AXText, "get_character_count", return_value=20)
-        test_context.patch_object(AXUtilitiesRole, "is_terminal", return_value=False)
 
         def mock_get_text_attributes_at_offset(_obj, offset) -> tuple[dict[str, str], int, int]:
             if offset < 10:
@@ -1574,6 +1171,7 @@ class TestAXText:
                 "char_count": 30,
                 "expected_result": 25,
                 "should_raise_error": False,
+                "debug_method": "print_tokens",
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1584,6 +1182,7 @@ class TestAXText:
                 "char_count": 30,
                 "expected_result": -1,
                 "should_raise_error": True,
+                "debug_method": "print_message",
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1594,6 +1193,7 @@ class TestAXText:
                 "char_count": 10,
                 "expected_result": ("a", 5, 6),
                 "should_raise_error": False,
+                "debug_method": None,
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1604,6 +1204,7 @@ class TestAXText:
                 "char_count": 10,
                 "expected_result": ("", 0, 0),
                 "should_raise_error": False,
+                "debug_method": None,
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1614,6 +1215,7 @@ class TestAXText:
                 "char_count": 10,
                 "expected_result": ("hello", 3, 8),
                 "should_raise_error": False,
+                "debug_method": None,
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1624,6 +1226,7 @@ class TestAXText:
                 "char_count": 20,
                 "expected_result": ("This is a line", 0, 14),
                 "should_raise_error": False,
+                "debug_method": None,
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1634,6 +1237,7 @@ class TestAXText:
                 "char_count": 20,
                 "expected_result": ("This is a sentence.", 0, 19),
                 "should_raise_error": False,
+                "debug_method": None,
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1644,6 +1248,7 @@ class TestAXText:
                 "char_count": 25,
                 "expected_result": ("This is a paragraph.", 0, 20),
                 "should_raise_error": False,
+                "debug_method": None,
                 "x_coord": 100,
                 "y_coord": 200,
             },
@@ -1680,6 +1285,8 @@ class TestAXText:
             essential_modules["orca.debug"].print_tokens = test_context.Mock()
             essential_modules["orca.debug"].print_message = test_context.Mock()
             result = AXText.get_offset_at_point(mock_obj, case["x_coord"], case["y_coord"])
+            if case["debug_method"]:
+                getattr(essential_modules["orca.debug"], case["debug_method"]).assert_called()
         else:
             test_context.patch_object(
                 AXText,
@@ -1985,7 +1592,7 @@ class TestAXText:
         test_context.patch_object(AXText, "get_n_selections", return_value=3)
         test_context.patch_object(AXText, "remove_selection", new=mock_remove_selection)
         AXUtilitiesText.clear_all_selected_text(test_context.Mock(spec=Atspi.Accessible))
-        assert removed_selections == [2, 1, 0]
+        assert removed_selections == [0, 1, 2]
 
     def test_remove_selection(self, test_context: OrcaTestContext) -> None:
         """Test AXText.remove_selection."""
@@ -2161,9 +1768,12 @@ class TestAXText:
         test_context.patch_object(
             AXUtilitiesText, "get_selected_text", return_value=("cached text", 5, 15)
         )
+        AXUtilitiesText.CACHED_TEXT_SELECTION.clear()
         mock_accessible = test_context.Mock(spec=Atspi.Accessible)
         AXUtilitiesText.update_cached_selected_text(mock_accessible)
-        assert AXUtilitiesText.get_cached_selected_text(mock_accessible) == ("cached text", 5, 15)
+        mock_hash = hash(mock_accessible)
+        assert mock_hash in AXUtilitiesText.CACHED_TEXT_SELECTION
+        assert AXUtilitiesText.CACHED_TEXT_SELECTION[mock_hash] == ("cached text", 5, 15)
 
     def test_get_character_rect_successful(self, test_context: OrcaTestContext) -> None:
         """Test AXText.get_character_rect successful case."""
@@ -2560,6 +2170,7 @@ class TestAXText:
         test_context.patch("gi.repository.Atspi.Text.get_character_count", return_value=10)
         result = AXText.get_character_at_offset(test_context.Mock(spec=Atspi.Accessible), 15)
         assert result == ("", 0, 0)
+        essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_substring_with_end_offset_minus_one(self, test_context: OrcaTestContext) -> None:
         """Test AXText.get_substring with end_offset=-1."""
@@ -3339,11 +2950,6 @@ class TestAXText:
             pytest.param("Hello! World?", [0, 7, 13], id="exclamation_and_question"),
             pytest.param("Hello... World.", [0, 9, 15], id="ellipsis"),
             pytest.param("Hello.  World.", [0, 8, 14], id="double_space_after_period"),
-            pytest.param(
-                "Hi all, \n\nIn Thunderbird 153.0.",
-                [0, 10, 31],
-                id="unpunctuated_paragraph_before_blank_line",
-            ),
         ],
         ids=lambda case: case if isinstance(case, str) else None,
     )
@@ -3397,62 +3003,3 @@ class TestAXText:
 
         result = AXText._find_sentence_boundaries(text)
         assert result == expected_boundaries
-
-
-_GRAPHEME_US_FLAG = "\U0001f1fa\U0001f1f8"
-_GRAPHEME_IT_FLAG = "\U0001f1ee\U0001f1f9"
-_GRAPHEME_FAMILY = "\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466"
-_GRAPHEME_US_FLAG_FEFF = "\U0001f1fa\ufeff\U0001f1f8\ufeff"
-_GRAPHEME_FAMILY_FEFF = (
-    "\U0001f468\ufeff\u200d\U0001f469\ufeff\u200d\U0001f467\ufeff\u200d\U0001f466\ufeff"
-)
-
-
-@pytest.mark.unit
-class TestAXTextWholeCharacters:
-    """Test AXText whole-character offset adjustment."""
-
-    def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
-        """Set up mocks for ax_text dependencies."""
-
-        additional_modules = [
-            "locale",
-            "orca.colornames",
-            "orca.ax_utilities_role",
-            "orca.ax_utilities_state",
-        ]
-        return test_context.setup_shared_dependencies(additional_modules)
-
-    @pytest.mark.parametrize(
-        "text, start, end, expected",
-        [
-            pytest.param("from " + _GRAPHEME_US_FLAG + " to", 5, 6, (5, 7), id="flag_first"),
-            pytest.param("from " + _GRAPHEME_US_FLAG + " to", 6, 7, (5, 7), id="flag_second"),
-            pytest.param("a " + _GRAPHEME_FAMILY + " b", 2, 3, (2, 9), id="family_first"),
-            pytest.param("a " + _GRAPHEME_FAMILY + " b", 6, 7, (2, 9), id="family_middle"),
-            pytest.param("a " + _GRAPHEME_FAMILY_FEFF + " b", 2, 3, (2, 13), id="family_feff"),
-            pytest.param(
-                "from " + _GRAPHEME_US_FLAG_FEFF + " to", 5, 6, (5, 9), id="gecko_flag_feff"
-            ),
-            pytest.param(
-                _GRAPHEME_US_FLAG + _GRAPHEME_IT_FLAG, 2, 3, (2, 4), id="adjacent_flags_separate"
-            ),
-            pytest.param("hello", 1, 3, (1, 3), id="plain_unchanged"),
-            pytest.param("\u2764\ufe0fx", 0, 1, (0, 2), id="variation_selector"),
-            pytest.param("\U0001f44d\U0001f3fd x", 0, 1, (0, 2), id="skin_tone"),
-        ],
-    )
-    def test_adjust_to_whole_characters(
-        self,
-        text: str,
-        start: int,
-        end: int,
-        expected: tuple[int, int],
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test AXText._adjust_to_whole_characters extends spans to whole characters."""
-
-        self._setup_dependencies(test_context)
-        from orca.ax_text import AXText
-
-        assert AXText._adjust_to_whole_characters(text, start, end) == expected

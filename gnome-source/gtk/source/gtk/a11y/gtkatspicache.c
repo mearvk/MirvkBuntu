@@ -37,6 +37,7 @@
  *  (so): object ref
  *  (so): application ref
  *  (so): parent ref
+ *    - parent.role == application ? desktop ref : null ref
  *  i: index in parent, or -1 for transient widgets/menu items
  *  i: child count, or -1 for defunct/menus
  *  as: interfaces
@@ -155,7 +156,7 @@ collect_root (GtkAtSpiCache   *self,
   g_variant_builder_add (builder, "@(so)", gtk_at_spi_root_to_ref (self->root));
   g_variant_builder_add (builder, "@(so)", gtk_at_spi_root_to_ref (self->root));
 
-  g_variant_builder_add (builder, "@(so)", gtk_at_spi_root_get_parent_ref (self->root));
+  g_variant_builder_add (builder, "@(so)", gtk_at_spi_null_ref ());
 
   g_variant_builder_add (builder, "i", -1);
   g_variant_builder_add (builder, "i", 0);
@@ -303,7 +304,7 @@ handle_cache_method (GDBusConnection       *connection,
 
       self->in_get_items = FALSE;
 
-      GTK_DEBUG (A11Y, "Returning %" G_GSIZE_FORMAT " items", g_variant_n_children (items));
+      GTK_DEBUG (A11Y, "Returning %lu items", g_variant_n_children (items));
 
       g_dbus_method_invocation_return_value (invocation, items);
     }
@@ -351,14 +352,6 @@ gtk_at_spi_cache_constructed (GObject *gobject)
 
   GTK_DEBUG (A11Y, "Cache registered at %s", self->cache_path);
 
-  g_dbus_connection_emit_signal (self->connection,
-                                 NULL,
-                                 self->cache_path,
-                                 "org.a11y.atspi.Cache",
-                                 "Ready",
-                                 NULL,
-                                 NULL);
-
   G_OBJECT_CLASS (gtk_at_spi_cache_parent_class)->constructed (gobject);
 }
 
@@ -376,14 +369,14 @@ gtk_at_spi_cache_class_init (GtkAtSpiCacheClass *klass)
                          NULL,
                          G_PARAM_WRITABLE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME);
+                         G_PARAM_STATIC_STRINGS);
 
   obj_props[PROP_CONNECTION] =
     g_param_spec_object ("connection", NULL, NULL,
                          G_TYPE_DBUS_CONNECTION,
                          G_PARAM_WRITABLE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME);
+                         G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, obj_props);
 }

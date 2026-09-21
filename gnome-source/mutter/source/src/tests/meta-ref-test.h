@@ -21,19 +21,18 @@
 
 #include "clutter/clutter/clutter.h"
 #include "meta/boxes.h"
-#include "tests/meta-ref-test-utils.h"
+
+typedef enum _MetaReftestFlag
+{
+  META_REFTEST_FLAG_NONE = 0,
+  META_REFTEST_FLAG_UPDATE_REF = 1 << 0,
+} MetaReftestFlag;
 
 META_EXPORT
 void meta_ref_test_verify_view (ClutterStageView *view,
                                 const char       *test_name,
                                 int               test_seq_no,
                                 MetaReftestFlag   flags);
-
-META_EXPORT
-void meta_ref_test_verify_view_undamaged (ClutterStageView *view,
-                                          const char       *test_name_unescaped,
-                                          int               test_seq_no,
-                                          MetaReftestFlag   flags);
 
 META_EXPORT
 MetaReftestFlag meta_ref_test_determine_ref_test_flag (void);

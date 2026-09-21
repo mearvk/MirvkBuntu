@@ -30,11 +30,8 @@
 
 enum {
   PROP_0,
-  PROP_NAME,
-  N_PROPS
+  PROP_NAME
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_ABSTRACT_TYPE (GtkStyleProperty, _gtk_style_property, G_TYPE_OBJECT)
 
@@ -99,11 +96,11 @@ _gtk_style_property_class_init (GtkStylePropertyClass *klass)
   object_class->set_property = gtk_style_property_set_property;
   object_class->get_property = gtk_style_property_get_property;
 
-  props[PROP_NAME] = g_param_spec_string ("name", NULL, NULL,
-                                          NULL,
-                                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_NAME,
+                                   g_param_spec_string ("name", NULL, NULL,
+                                                        NULL,
+                                                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   klass->properties = g_hash_table_new (g_str_hash, g_str_equal);
 }

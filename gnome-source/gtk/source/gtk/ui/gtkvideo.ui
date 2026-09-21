@@ -3,13 +3,12 @@
   <template class="GtkVideo" parent="GtkWidget">
     <child>
       <object class="GtkOverlay" id="box">
-        <property name="child">
+        <child>
           <object class="GtkGraphicsOffload" id="graphics_offload">
             <property name="enabled">disabled</property>
-            <property name="black-background">1</property>
             <property name="child"><object class="GtkPicture" id="video_picture"/></property>
           </object>
-        </property>
+        </child>
         <child type="overlay">
           <object class="GtkImage" id="overlay_icon">
             <style>
@@ -22,7 +21,7 @@
             <property name="icon-size">2</property>
             <property name="accessible-role">button</property>
             <accessibility>
-              <property name="label" translatable="yes">Play</property>
+              <property name="label" translatable="1">Play</property>
             </accessibility>
             <child>
               <object class="GtkGestureClick">
@@ -38,14 +37,14 @@
           <object class="GtkRevealer" id="controls_revealer">
             <property name="valign">2</property>
             <property name="transition-type">1</property>
-            <property name="child">
+            <child>
               <object class="GtkMediaControls" id="controls">
                 <style>
                   <class name="osd"/>
                   <class name="bottom"/>
                 </style>
               </object>
-            </property>
+            </child>
             <layout>
               <property name="measure">1</property>
             </layout>

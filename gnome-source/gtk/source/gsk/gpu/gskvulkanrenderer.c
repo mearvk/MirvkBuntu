@@ -4,16 +4,12 @@
 
 #include "gskgpurendererprivate.h"
 
-#include <glib/gi18n-lib.h>
-
 #ifdef GDK_RENDERING_VULKAN
 
 #include "gskvulkandeviceprivate.h"
-#include "gskvulkandebugframeprivate.h"
 #include "gskvulkanframeprivate.h"
 #include "gskvulkanimageprivate.h"
 
-#include "gdk/gdkvulkancontextprivate.h"
 #include "gdk/gdkdisplayprivate.h"
 #endif
 
@@ -55,7 +51,8 @@ gsk_vulkan_renderer_update_images_cb (GdkVulkanContext  *context,
 {
   GskVulkanDevice *device;
   GdkSurface *surface;
-  guint width, height;
+  double scale;
+  gsize width, height;
   guint i;
 
   surface = gsk_renderer_get_surface (GSK_RENDERER (self));
@@ -69,14 +66,15 @@ gsk_vulkan_renderer_update_images_cb (GdkVulkanContext  *context,
   self->n_targets = gdk_vulkan_context_get_n_images (context);
   self->targets = g_new (GskGpuImage *, self->n_targets);
 
-  gdk_draw_context_get_buffer_size (GDK_DRAW_CONTEXT (context), &width, &height);
+  scale = gdk_surface_get_scale (surface);
+  width = (gsize) ceil (gdk_surface_get_width (surface) * scale);
+  height = (gsize) ceil (gdk_surface_get_height (surface) * scale);
 
   for (i = 0; i < self->n_targets; i++)
     {
       self->targets[i] = gsk_vulkan_image_new_for_swapchain (device,
                                                              gdk_vulkan_context_get_image (context, i),
                                                              gdk_vulkan_context_get_image_format (context),
-                                                             gdk_vulkan_context_get_memory_format (context),
                                                              width, height);
     }
 }
@@ -102,28 +100,21 @@ gsk_vulkan_renderer_create_context (GskGpuRenderer       *renderer,
   gsk_vulkan_renderer_update_images_cb (context, self);
 
   *supported = -1;
-  if (!(display->vulkan_features & GDK_VULKAN_FEATURE_DUAL_SOURCE_BLEND))
-    *supported &= ~GSK_GPU_OPTIMIZE_DUAL_BLEND;
-  if (!(display->vulkan_features & GDK_VULKAN_FEATURE_PROFILE))
-    *supported &= ~GSK_GPU_OPTIMIZE_PROFILE;
+
+  /* Shader compilation takes too long when texture() and get_float() calls
+   * use if/else ladders to avoid non-uniform indexing.
+   * This is true when we use the Vulkan 1.0 shaders, but works with the Vulkan 1.2
+   * shaders.
+   */
+  if (!gdk_display_has_vulkan_feature (display, GDK_VULKAN_FEATURE_DYNAMIC_INDEXING) ||
+      !gdk_display_has_vulkan_feature (display, GDK_VULKAN_FEATURE_NONUNIFORM_INDEXING))
+    *supported &= ~GSK_GPU_OPTIMIZE_UBER;
 
   return GDK_DRAW_CONTEXT (context);
 }
 
 static void
 gsk_vulkan_renderer_make_current (GskGpuRenderer *renderer)
-{
-}
-
-static gpointer
-gsk_vulkan_renderer_save_current (GskGpuRenderer *renderer)
-{
-  return NULL;
-}
-
-static void
-gsk_vulkan_renderer_restore_current (GskGpuRenderer *renderer,
-                                     gpointer        current)
 {
 }
 
@@ -135,7 +126,15 @@ gsk_vulkan_renderer_get_backbuffer (GskGpuRenderer *renderer)
   
   context = GDK_VULKAN_CONTEXT (gsk_gpu_renderer_get_context (renderer));
 
-  return g_object_ref (self->targets[gdk_vulkan_context_get_draw_index (context)]);
+  return self->targets[gdk_vulkan_context_get_draw_index (context)];
+}
+
+static GdkDmabufFormats *
+gsk_vulkan_renderer_get_dmabuf_formats (GskGpuRenderer *renderer)
+{
+  GdkDisplay *display = GDK_DISPLAY (gdk_draw_context_get_display (gsk_gpu_renderer_get_context (renderer)));
+
+  return display->vk_dmabuf_formats;
 }
 
 static void
@@ -150,43 +149,24 @@ gsk_vulkan_renderer_unrealize (GskRenderer *renderer)
 
   GSK_RENDERER_CLASS (gsk_vulkan_renderer_parent_class)->unrealize (renderer);
 }
-
-#else /* !GDK_RENDERING_VULKAN */
-
-static gboolean
-gsk_vulkan_renderer_realize (GskRenderer  *renderer,
-                             GdkDisplay   *display,
-                             GdkSurface   *surface,
-                             gboolean      attach,
-                             GError      **error)
-{
-  g_set_error_literal (error, GDK_VULKAN_ERROR, GDK_VULKAN_ERROR_NOT_AVAILABLE,
-                       _("Vulkan support disabled during GTK build"));
-
-  return FALSE;
-}
-#endif /* GDK_RENDERING_VULKAN */
+#endif
 
 static void
 gsk_vulkan_renderer_class_init (GskVulkanRendererClass *klass)
 {
-  GskRendererClass *renderer_class = GSK_RENDERER_CLASS (klass);
 #ifdef GDK_RENDERING_VULKAN
   GskGpuRendererClass *gpu_renderer_class = GSK_GPU_RENDERER_CLASS (klass);
+  GskRendererClass *renderer_class = GSK_RENDERER_CLASS (klass);
 
   gpu_renderer_class->frame_type = GSK_TYPE_VULKAN_FRAME;
-  gpu_renderer_class->profile_frame_type = GSK_TYPE_VULKAN_DEBUG_FRAME;
 
   gpu_renderer_class->get_device = gsk_vulkan_device_get_for_display;
   gpu_renderer_class->create_context = gsk_vulkan_renderer_create_context;
   gpu_renderer_class->make_current = gsk_vulkan_renderer_make_current;
-  gpu_renderer_class->save_current = gsk_vulkan_renderer_save_current;
-  gpu_renderer_class->restore_current = gsk_vulkan_renderer_restore_current;
   gpu_renderer_class->get_backbuffer = gsk_vulkan_renderer_get_backbuffer;
+  gpu_renderer_class->get_dmabuf_formats = gsk_vulkan_renderer_get_dmabuf_formats;
 
   renderer_class->unrealize = gsk_vulkan_renderer_unrealize;
-#else
-  renderer_class->realize = gsk_vulkan_renderer_realize;
 #endif
 }
 

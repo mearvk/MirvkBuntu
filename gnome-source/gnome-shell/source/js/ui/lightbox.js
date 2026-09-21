@@ -1,6 +1,8 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
-import Cogl from 'gi://Cogl';
 import GObject from 'gi://GObject';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as Params from '../misc/params.js';
@@ -23,38 +25,37 @@ vec2 position = cogl_tex_coord_in[0].xy - 0.5;                             \n\
 float t = clamp(length(1.41421 * position), 0.0, 1.0);                     \n\
 float pixel_brightness = mix(1.0, 1.0 - vignette_sharpness, t);            \n\
 cogl_color_out.a *= 1.0 - pixel_brightness * brightness;                   \n\
-float noise = 2.0 * rand(position + 0.5) - 1.0;                            \n\
-noise = sign(noise) * (1.0 - sqrt(1.0 - abs(noise)));                      \n\
-cogl_color_out.a += noise / ((1.0 - cogl_color_out.a) * 255.0);            \n';
+cogl_color_out.a += (rand(position) - 0.5) / 100.0;                        \n';
 
 
 const RadialShaderEffect = GObject.registerClass({
     Properties: {
         'brightness': GObject.ParamSpec.float(
-            'brightness', null, null,
+            'brightness', 'brightness', 'brightness',
             GObject.ParamFlags.READWRITE,
             0, 1, 1),
         'sharpness': GObject.ParamSpec.float(
-            'sharpness', null, null,
+            'sharpness', 'sharpness', 'sharpness',
             GObject.ParamFlags.READWRITE,
             0, 1, 0),
     },
-}, class RadialShaderEffect extends Clutter.ShaderEffect {
+}, class RadialShaderEffect extends Shell.GLSLEffect {
     _init(params) {
         this._brightness = undefined;
         this._sharpness = undefined;
 
         super._init(params);
 
+        this._brightnessLocation = this.get_uniform_location('brightness');
+        this._sharpnessLocation = this.get_uniform_location('vignette_sharpness');
+
         this.brightness = 1.0;
         this.sharpness = 0.0;
     }
 
-    vfunc_get_static_snippet() {
-        const snippet = Cogl.Snippet.new(Cogl.SnippetHook.FRAGMENT,
-            VIGNETTE_DECLARATIONS, null);
-        snippet.set_replace(VIGNETTE_CODE);
-        return snippet;
+    vfunc_build_pipeline() {
+        this.add_glsl_snippet(Shell.SnippetHook.FRAGMENT,
+            VIGNETTE_DECLARATIONS, VIGNETTE_CODE, true);
     }
 
     get brightness() {
@@ -65,7 +66,7 @@ const RadialShaderEffect = GObject.registerClass({
         if (this._brightness === v)
             return;
         this._brightness = v;
-        this.set_uniform_float('brightness',
+        this.set_uniform_float(this._brightnessLocation,
             1, [this._brightness]);
         this.notify('brightness');
     }
@@ -78,7 +79,7 @@ const RadialShaderEffect = GObject.registerClass({
         if (this._sharpness === v)
             return;
         this._sharpness = v;
-        this.set_uniform_float('vignette_sharpness',
+        this.set_uniform_float(this._sharpnessLocation,
             1, [this._sharpness]);
         this.notify('sharpness');
     }
@@ -90,7 +91,7 @@ const RadialShaderEffect = GObject.registerClass({
 export const Lightbox = GObject.registerClass({
     Properties: {
         'active': GObject.ParamSpec.boolean(
-            'active', null, null, GObject.ParamFlags.READABLE, false),
+            'active', 'active', 'active', GObject.ParamFlags.READABLE, false),
     },
 }, class Lightbox extends St.Bin {
     /**
@@ -167,9 +168,9 @@ export const Lightbox = GObject.registerClass({
     }
 
     _childAdded(container, newChild) {
-        const children = this._container.get_children();
-        const myIndex = children.indexOf(this);
-        const newChildIndex = children.indexOf(newChild);
+        let children = this._container.get_children();
+        let myIndex = children.indexOf(this);
+        let newChildIndex = children.indexOf(newChild);
 
         if (newChildIndex > myIndex) {
             // The child was added above the shade (presumably it was
@@ -182,7 +183,7 @@ export const Lightbox = GObject.registerClass({
             this._children.unshift(newChild);
         } else {
             // Somewhere else; insert it into the correct spot
-            const prevChild = this._children.indexOf(children[newChildIndex - 1]);
+            let prevChild = this._children.indexOf(children[newChildIndex - 1]);
             if (prevChild !== -1) // paranoia
                 this._children.splice(prevChild + 1, 0, newChild);
         }
@@ -191,12 +192,12 @@ export const Lightbox = GObject.registerClass({
     lightOn(fadeInTime) {
         this.remove_all_transitions();
 
-        const easeProps = {
+        let easeProps = {
             duration: fadeInTime || 0,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         };
 
-        const onComplete = () => {
+        let onComplete = () => {
             this._active = true;
             this.notify('active');
         };
@@ -224,12 +225,12 @@ export const Lightbox = GObject.registerClass({
         this._active = false;
         this.notify('active');
 
-        const easeProps = {
+        let easeProps = {
             duration: fadeOutTime || 0,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         };
 
-        const onComplete = () => this.hide();
+        let onComplete = () => this.hide();
 
         if (this._radialEffect) {
             this.ease_property(
@@ -242,7 +243,7 @@ export const Lightbox = GObject.registerClass({
     }
 
     _childRemoved(container, child) {
-        const index = this._children.indexOf(child);
+        let index = this._children.indexOf(child);
         if (index !== -1) // paranoia
             this._children.splice(index, 1);
 

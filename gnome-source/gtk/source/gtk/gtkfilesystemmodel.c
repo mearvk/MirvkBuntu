@@ -600,7 +600,7 @@ thaw_func (gpointer data)
   thaw_updates (model);
   model->dir_thaw_source = 0;
 
-  return G_SOURCE_REMOVE;
+  return FALSE;
 }
 
 static void

@@ -42,7 +42,7 @@
 
 #include <stdarg.h>
 
-G_DEFINE_FINAL_TYPE (CoglIndices, cogl_indices, G_TYPE_OBJECT);
+G_DEFINE_TYPE (CoglIndices, cogl_indices, G_TYPE_OBJECT);
 
 static void
 cogl_indices_dispose (GObject *object)
@@ -67,8 +67,8 @@ cogl_indices_class_init (CoglIndicesClass *class)
   object_class->dispose = cogl_indices_dispose;
 }
 
-size_t
-cogl_indices_type_get_size (CoglIndicesType type)
+static size_t
+sizeof_indices_type (CoglIndicesType type)
 {
   switch (type)
     {
@@ -83,25 +83,48 @@ cogl_indices_type_get_size (CoglIndicesType type)
 }
 
 CoglIndices *
+cogl_indices_new_for_buffer (CoglIndicesType type,
+                             CoglIndexBuffer *buffer,
+                             size_t offset)
+{
+  CoglIndices *indices = g_object_new (COGL_TYPE_INDICES, NULL);
+
+  indices->buffer = g_object_ref (buffer);
+  indices->offset = offset;
+
+  indices->type = type;
+
+  indices->immutable_ref = 0;
+
+  return indices;
+}
+
+CoglIndices *
 cogl_indices_new (CoglContext *context,
                   CoglIndicesType type,
                   const void *indices_data,
                   int n_indices)
 {
-  size_t buffer_bytes = cogl_indices_type_get_size (type) * n_indices;
-  g_autoptr (CoglIndexBuffer) index_buffer =
-    cogl_index_buffer_new (context, buffer_bytes);
+  size_t buffer_bytes = sizeof_indices_type (type) * n_indices;
+  CoglIndexBuffer *index_buffer = cogl_index_buffer_new (context, buffer_bytes);
+  CoglBuffer *buffer = COGL_BUFFER (index_buffer);
   CoglIndices *indices;
+  GError *ignore_error = NULL;
 
-  if (!cogl_buffer_set_data (COGL_BUFFER (index_buffer),
-                             0,
-                             indices_data,
-                             buffer_bytes))
-    return NULL;
+  _cogl_buffer_set_data (buffer,
+                         0,
+                         indices_data,
+                         buffer_bytes,
+                         &ignore_error);
+  if (ignore_error)
+    {
+      g_error_free (ignore_error);
+      g_object_unref (index_buffer);
+      return NULL;
+    }
 
-  indices = g_object_new (COGL_TYPE_INDICES, NULL);
-  indices->buffer = g_steal_pointer (&index_buffer);
-  indices->type = type;
+  indices = cogl_indices_new_for_buffer (type, index_buffer, 0);
+  g_object_unref (index_buffer);
 
   return indices;
 }
@@ -120,20 +143,68 @@ cogl_indices_get_indices_type (CoglIndices *indices)
   return indices->type;
 }
 
+size_t
+cogl_indices_get_offset (CoglIndices *indices)
+{
+  g_return_val_if_fail (COGL_IS_INDICES (indices), 0);
+
+  return indices->offset;
+}
+
+static void
+warn_about_midscene_changes (void)
+{
+  static gboolean seen = FALSE;
+  if (!seen)
+    {
+      g_warning ("Mid-scene modification of indices has "
+                 "undefined results\n");
+      seen = TRUE;
+    }
+}
+
+void
+cogl_indices_set_offset (CoglIndices *indices,
+                         size_t offset)
+{
+  g_return_if_fail (COGL_IS_INDICES (indices));
+
+  if (G_UNLIKELY (indices->immutable_ref))
+    warn_about_midscene_changes ();
+
+  indices->offset = offset;
+}
+
 CoglIndices *
-cogl_context_get_rectangle_indices (CoglContext *ctx,
-                                    int          n_rectangles)
+_cogl_indices_immutable_ref (CoglIndices *indices)
+{
+  g_return_val_if_fail (COGL_IS_INDICES (indices), NULL);
+
+  indices->immutable_ref++;
+  _cogl_buffer_immutable_ref (COGL_BUFFER (indices->buffer));
+  return indices;
+}
+
+void
+_cogl_indices_immutable_unref (CoglIndices *indices)
+{
+  g_return_if_fail (COGL_IS_INDICES (indices));
+  g_return_if_fail (indices->immutable_ref > 0);
+
+  indices->immutable_ref--;
+  _cogl_buffer_immutable_unref (COGL_BUFFER (indices->buffer));
+}
+
+CoglIndices *
+cogl_get_rectangle_indices (CoglContext *ctx, int n_rectangles)
 {
   int n_indices = n_rectangles * 6;
 
   /* Check if the largest index required will fit in a byte array... */
   if (n_indices <= 256 / 4 * 6)
     {
-      CoglIndices *rectangle_byte_indices =
-        cogl_context_get_rectangle_byte_indices (ctx);
-
       /* Generate the byte array if we haven't already */
-      if (rectangle_byte_indices == NULL)
+      if (ctx->rectangle_byte_indices == NULL)
         {
           uint8_t *byte_array = g_malloc (256 / 4 * 6 * sizeof (uint8_t));
           uint8_t *p = byte_array;
@@ -150,46 +221,40 @@ cogl_context_get_rectangle_indices (CoglContext *ctx,
               vert_num += 4;
             }
 
-          rectangle_byte_indices
+          ctx->rectangle_byte_indices
             = cogl_indices_new (ctx,
                                 COGL_INDICES_TYPE_UNSIGNED_BYTE,
                                 byte_array,
                                 256 / 4 * 6);
 
-          cogl_context_set_rectangle_byte_indices (ctx, rectangle_byte_indices);
-
           g_free (byte_array);
         }
 
-      return rectangle_byte_indices;
+      return ctx->rectangle_byte_indices;
     }
   else
     {
-      int rectangle_short_indices_len =
-        cogl_context_get_rectangle_short_indices_len (ctx);
-
-      if (rectangle_short_indices_len < n_indices)
+      if (ctx->rectangle_short_indices_len < n_indices)
         {
           uint16_t *short_array;
           uint16_t *p;
           int i, vert_num = 0;
-          CoglIndices *old_indices = cogl_context_get_rectangle_short_indices (ctx);
 
-          if (old_indices != NULL)
-            g_object_unref (old_indices);
+          if (ctx->rectangle_short_indices != NULL)
+            g_object_unref (ctx->rectangle_short_indices);
           /* Pick a power of two >= MAX (512, n_indices) */
-          if (rectangle_short_indices_len == 0)
-            rectangle_short_indices_len = 512;
-          while (rectangle_short_indices_len < n_indices)
-            rectangle_short_indices_len *= 2;
+          if (ctx->rectangle_short_indices_len == 0)
+            ctx->rectangle_short_indices_len = 512;
+          while (ctx->rectangle_short_indices_len < n_indices)
+            ctx->rectangle_short_indices_len *= 2;
 
           /* Over-allocate to generate a whole number of quads */
-          p = short_array = g_malloc ((rectangle_short_indices_len
+          p = short_array = g_malloc ((ctx->rectangle_short_indices_len
                                        + 5) / 6 * 6
                                       * sizeof (uint16_t));
 
           /* Fill in the complete quads */
-          for (i = 0; i < rectangle_short_indices_len; i += 6)
+          for (i = 0; i < ctx->rectangle_short_indices_len; i += 6)
             {
               *(p++) = vert_num + 0;
               *(p++) = vert_num + 1;
@@ -200,18 +265,16 @@ cogl_context_get_rectangle_indices (CoglContext *ctx,
               vert_num += 4;
             }
 
-          CoglIndices *new_indices = cogl_indices_new (ctx,
-                                                       COGL_INDICES_TYPE_UNSIGNED_SHORT,
-                                                       short_array,
-                                                       rectangle_short_indices_len);
-          cogl_context_set_rectangle_short_indices (ctx, new_indices);
+          ctx->rectangle_short_indices
+            = cogl_indices_new (ctx,
+                                COGL_INDICES_TYPE_UNSIGNED_SHORT,
+                                short_array,
+                                ctx->rectangle_short_indices_len);
 
           g_free (short_array);
         }
 
-      cogl_context_set_rectangle_short_indices_len (ctx,
-                                                    rectangle_short_indices_len);
-
-      return cogl_context_get_rectangle_short_indices (ctx);
+      return ctx->rectangle_short_indices;
     }
 }
+

@@ -4,9 +4,13 @@
 
 #include <math.h>
 
-#include "clutter/clutter-mutter.h"
+#include "compositor/clutter-utils.h"
+#include "compositor/compositor-private.h"
 #include "compositor/meta-cullable.h"
+#include "compositor/meta-window-actor-private.h"
 #include "compositor/meta-window-group-private.h"
+#include "core/display-private.h"
+#include "core/window-private.h"
 
 struct _MetaWindowGroupClass
 {

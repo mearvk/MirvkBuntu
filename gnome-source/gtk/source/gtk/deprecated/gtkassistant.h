@@ -53,7 +53,7 @@ G_BEGIN_DECLS
  *  appropriate. No buttons will be shown, and the application must
  *  add its own buttons through gtk_assistant_add_action_widget().
  *
- * Determines the role of a page inside a `GtkAssistant`.
+ * Determines the page role inside a `GtkAssistant`.
  *
  * The role is used to handle buttons sensitivity and visibility.
  *
@@ -63,8 +63,6 @@ G_BEGIN_DECLS
  *
  * The Cancel button will only be shown if the page isn’t “committed”.
  * See gtk_assistant_commit() for details.
- *
- * Deprecated: 4.10: `GtkAssistant` will be removed in GTK 5
  */
 typedef enum
 {
@@ -101,9 +99,9 @@ typedef struct _GtkAssistantPage GtkAssistantPage;
 typedef int (*GtkAssistantPageFunc) (int current_page, gpointer data);
 
 GDK_AVAILABLE_IN_ALL
-GType                 gtk_assistant_page_get_type         (void);
+GType                 gtk_assistant_page_get_type         (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
-GType                 gtk_assistant_get_type              (void);
+GType                 gtk_assistant_get_type              (void) G_GNUC_CONST;
 GDK_DEPRECATED_IN_4_10
 GtkWidget            *gtk_assistant_new                   (void);
 GDK_DEPRECATED_IN_4_10
@@ -182,7 +180,6 @@ GDK_DEPRECATED_IN_4_10
 GListModel *          gtk_assistant_get_pages (GtkAssistant *assistant);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkAssistant, g_object_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkAssistantPage, g_object_unref)
 
 G_END_DECLS
 

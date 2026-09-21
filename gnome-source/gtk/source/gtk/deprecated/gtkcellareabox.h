@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 typedef struct _GtkCellAreaBox              GtkCellAreaBox;
 
 GDK_AVAILABLE_IN_ALL
-GType        gtk_cell_area_box_get_type    (void);
+GType        gtk_cell_area_box_get_type    (void) G_GNUC_CONST;
 
 GDK_DEPRECATED_IN_4_10
 GtkCellArea *gtk_cell_area_box_new         (void);
@@ -57,6 +57,10 @@ int          gtk_cell_area_box_get_spacing (GtkCellAreaBox  *box);
 GDK_DEPRECATED_IN_4_10
 void         gtk_cell_area_box_set_spacing (GtkCellAreaBox  *box,
                                             int              spacing);
+
+/* Private interaction with GtkCellAreaBoxContext */
+gboolean    _gtk_cell_area_box_group_visible (GtkCellAreaBox  *box,
+                                              int              group_idx);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkCellAreaBox, g_object_unref)
 

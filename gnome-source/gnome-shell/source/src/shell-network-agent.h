@@ -1,5 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
-#pragma once
+#ifndef __SHELL_NETWORK_AGENT_H__
+#define __SHELL_NETWORK_AGENT_H__
 
 #include <glib-object.h>
 #include <glib.h>
@@ -15,15 +16,32 @@ typedef enum {
 } ShellNetworkAgentResponse;
 
 typedef struct _ShellNetworkAgent         ShellNetworkAgent;
+typedef struct _ShellNetworkAgentClass    ShellNetworkAgentClass;
+typedef struct _ShellNetworkAgentPrivate  ShellNetworkAgentPrivate;
 
 #define SHELL_TYPE_NETWORK_AGENT                  (shell_network_agent_get_type ())
+#define SHELL_NETWORK_AGENT(obj)                  (G_TYPE_CHECK_INSTANCE_CAST ((obj), SHELL_TYPE_NETWORK_AGENT, ShellNetworkAgent))
+#define SHELL_IS_NETWORK_AGENT(obj)               (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SHELL_TYPE_NETWORK_AGENT))
+#define SHELL_NETWORK_AGENT_CLASS(klass)          (G_TYPE_CHECK_CLASS_CAST ((klass), SHELL_TYPE_NETWORK_AGENT, ShellNetworkAgentClass))
+#define SHELL_IS_NETWORK_AGENT_CLASS(klass)       (G_TYPE_CHECK_CLASS_TYPE ((klass), SHELL_TYPE_NETWORK_AGENT))
+#define SHELL_NETWORK_AGENT_GET_CLASS(obj)        (G_TYPE_INSTANCE_GET_CLASS ((obj), SHELL_TYPE_NETWORK_AGENT, ShellNetworkAgentClass))
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (NMSecretAgentOld, g_object_unref)
+struct _ShellNetworkAgent
+{
+  /*< private >*/
+  NMSecretAgentOld parent_instance;
 
-G_DECLARE_FINAL_TYPE (ShellNetworkAgent,
-                      shell_network_agent,
-                      SHELL, NETWORK_AGENT,
-                      NMSecretAgentOld)
+  ShellNetworkAgentPrivate *priv;
+};
+
+struct _ShellNetworkAgentClass
+{
+  /*< private >*/
+  NMSecretAgentOldClass parent_class;
+};
+
+/* used by SHELL_TYPE_NETWORK_AGENT */
+GType shell_network_agent_get_type (void);
 
 void               shell_network_agent_add_vpn_secret (ShellNetworkAgent *self,
                                                        gchar             *request_id,
@@ -51,3 +69,5 @@ NMVpnPluginInfo   *shell_network_agent_search_vpn_plugin_finish (ShellNetworkAge
 #define SHELL_KEYRING_SK_TAG "setting-key"
 
 G_END_DECLS
+
+#endif /* __SHELL_NETWORK_AGENT_H__ */

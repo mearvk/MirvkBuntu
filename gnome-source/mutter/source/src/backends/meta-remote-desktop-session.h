@@ -26,7 +26,6 @@
 #include "backends/meta-screen-cast-session.h"
 
 #define META_TYPE_REMOTE_DESKTOP_SESSION (meta_remote_desktop_session_get_type ())
-META_EXPORT_TEST
 G_DECLARE_FINAL_TYPE (MetaRemoteDesktopSession, meta_remote_desktop_session,
                       META, REMOTE_DESKTOP_SESSION,
                       MetaDBusRemoteDesktopSessionSkeleton)
@@ -43,5 +42,11 @@ gboolean meta_remote_desktop_session_register_screen_cast (MetaRemoteDesktopSess
                                                            MetaScreenCastSession     *screen_cast_session,
                                                            GError                   **error);
 
-META_EXPORT_TEST
-MetaEis * meta_remote_desktop_session_get_eis (MetaRemoteDesktopSession *session);
+const char * meta_remote_desktop_session_acquire_mapping_id (MetaRemoteDesktopSession *session);
+
+void meta_remote_desktop_session_release_mapping_id (MetaRemoteDesktopSession *session,
+                                                     const char               *mapping_id);
+
+void meta_remote_desktop_session_request_transfer (MetaRemoteDesktopSession  *session,
+                                                   const char                *mime_type,
+                                                   GTask                     *task);

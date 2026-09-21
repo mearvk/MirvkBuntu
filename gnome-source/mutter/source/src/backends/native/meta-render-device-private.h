@@ -21,6 +21,7 @@
 #include <gio/gio.h>
 #include <glib-object.h>
 
+#include "backends/meta-egl.h"
 #include "backends/native/meta-device-pool.h"
 #include "backends/native/meta-drm-buffer.h"
 #include "backends/native/meta-render-device.h"
@@ -43,9 +44,4 @@ struct _MetaRenderDeviceClass
   MetaDrmBuffer * (* import_dma_buf) (MetaRenderDevice  *render_device,
                                       MetaDrmBuffer     *buffer,
                                       GError           **error);
-
-  GArray * (* query_drm_modifiers) (MetaRenderDevice       *render_device,
-                                    uint32_t                format,
-                                    CoglDrmModifierFilter   filter,
-                                    GError                **error);
 };

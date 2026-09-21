@@ -30,7 +30,7 @@
 #include "wayland/meta-wayland-tablet-seat.h"
 #include "wayland/meta-wayland-tablet-tool.h"
 
-#include "tablet-v2-server-protocol.h"
+#include "tablet-unstable-v2-server-protocol.h"
 
 static void
 unbind_resource (struct wl_resource *resource)
@@ -76,7 +76,7 @@ bind_tablet_manager (struct wl_client *client,
   struct wl_resource *resource;
 
   resource = wl_resource_create (client, &zwp_tablet_manager_v2_interface,
-                                 MIN (version, 2), id);
+                                 MIN (version, 1), id);
   wl_resource_set_implementation (resource, &tablet_manager_interface,
                                   tablet_manager, unbind_resource);
   wl_resource_set_user_data (resource, tablet_manager);
@@ -97,7 +97,7 @@ meta_wayland_tablet_manager_new (MetaWaylandCompositor *compositor)
   wl_list_init (&tablet_manager->resource_list);
 
   wl_global_create (tablet_manager->wl_display,
-                    &zwp_tablet_manager_v2_interface, 2,
+                    &zwp_tablet_manager_v2_interface, 1,
                     compositor, bind_tablet_manager);
 
   return tablet_manager;

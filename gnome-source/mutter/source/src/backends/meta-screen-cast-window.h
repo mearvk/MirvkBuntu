@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include <glib-object.h>
 
-#include "clutter/clutter.h"
+#include "backends/meta-cursor.h"
 #include "meta/boxes.h"
 
 G_BEGIN_DECLS
@@ -44,10 +44,11 @@ struct _MetaScreenCastWindowInterface
                                        double               *y_out);
 
   gboolean (*transform_cursor_position) (MetaScreenCastWindow *screen_cast_window,
-                                         ClutterCursor        *cursor,
+                                         MetaCursorSprite     *cursor_sprite,
                                          graphene_point_t     *cursor_position,
-                                         graphene_point_t     *out_relative_cursor_position,
-                                         float                *out_view_scale);
+                                         float                *out_cursor_scale,
+                                         MetaMonitorTransform *out_cursor_transform,
+                                         graphene_point_t     *out_relative_cursor_position);
 
   void (*capture_into) (MetaScreenCastWindow *screen_cast_window,
                         MtkRectangle         *bounds,
@@ -73,10 +74,11 @@ void meta_screen_cast_window_transform_relative_position (MetaScreenCastWindow *
                                                           double               *y_out);
 
 gboolean meta_screen_cast_window_transform_cursor_position (MetaScreenCastWindow *screen_cast_window,
-                                                            ClutterCursor        *cursor,
+                                                            MetaCursorSprite     *cursor_sprite,
                                                             graphene_point_t     *cursor_position,
-                                                            graphene_point_t     *out_relative_cursor_position,
-                                                            float                *out_view_scale);
+                                                            float                *out_cursor_scale,
+                                                            MetaMonitorTransform *out_cursor_transform,
+                                                            graphene_point_t     *out_relative_cursor_position);
 
 void meta_screen_cast_window_capture_into (MetaScreenCastWindow *screen_cast_window,
                                            MtkRectangle         *bounds,
@@ -85,6 +87,8 @@ void meta_screen_cast_window_capture_into (MetaScreenCastWindow *screen_cast_win
 gboolean meta_screen_cast_window_blit_to_framebuffer (MetaScreenCastWindow *screen_cast_window,
                                                       MtkRectangle         *bounds,
                                                       CoglFramebuffer      *framebuffer);
+
+gboolean meta_screen_cast_window_has_damage (MetaScreenCastWindow *screen_cast_window);
 
 void meta_screen_cast_window_inc_usage (MetaScreenCastWindow *screen_cast_window);
 void meta_screen_cast_window_dec_usage (MetaScreenCastWindow *screen_cast_window);

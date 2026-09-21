@@ -25,6 +25,8 @@
 #include "wayland-test-client-utils.h"
 
 static struct wl_surface *surface;
+static struct xdg_surface *xdg_surface;
+static struct xdg_toplevel *xdg_toplevel;
 
 static gboolean waiting_for_configure = FALSE;
 
@@ -64,7 +66,7 @@ draw (WaylandDisplay *display,
       ShaderFunc      shader)
 {
   WaylandBuffer *buffer;
-  uint8_t *planes[4] = {};
+  uint8_t *planes[4];
   size_t strides[4];
   int x, y;
 
@@ -85,8 +87,6 @@ draw (WaylandDisplay *display,
       planes[0] = wayland_buffer_mmap_plane (buffer, 0, &strides[0]);
       break;
     case DRM_FORMAT_YUV420:
-    case DRM_FORMAT_YUV422:
-    case DRM_FORMAT_YUV444:
       planes[0] = wayland_buffer_mmap_plane (buffer, 0, &strides[0]);
       planes[1] = wayland_buffer_mmap_plane (buffer, 1, &strides[1]);
       planes[2] = wayland_buffer_mmap_plane (buffer, 2, &strides[2]);
@@ -102,8 +102,8 @@ draw (WaylandDisplay *display,
           float cb;
           float cr;
 
-          shader (x / (BUFFER_WIDTH - 1.0f),
-                  y / (BUFFER_HEIGHT - 1.0f),
+          shader (x / (BUFFER_WIDTH - 1.0),
+                  y / (BUFFER_HEIGHT - 1.0),
                   &luma,
                   &cb,
                   &cr);
@@ -113,11 +113,11 @@ draw (WaylandDisplay *display,
             case DRM_FORMAT_YUYV:
               /* packed [31:0] Cr0:Y1:Cb0:Y0 8:8:8:8 little endian */
               pixel = planes[0] + (y * strides[0]) + (x * 2);
-              pixel[0] = (uint8_t) (luma * 255);
+              pixel[0] = luma * 255;
               if (x % 2 == 0)
-                pixel[1] = (uint8_t) (cb * 255);
+                pixel[1] = cb * 255;
               else
-                pixel[1] = (uint8_t) (cr * 255);
+                pixel[1] = cr * 255;
               break;
             case DRM_FORMAT_YUV420:
               /*
@@ -127,39 +127,11 @@ draw (WaylandDisplay *display,
                index 2: Cr plane, [7:0] Cr
                2x2 subsampled Cb (1) and Cr (2) planes */
               pixel = planes[0] + (y * strides[0]) + x;
-              pixel[0] = (uint8_t) (luma * 255);
+              pixel[0] = luma * 255;
               pixel = planes[1] + (y / 2 * strides[1]) + x / 2;
-              pixel[0] = (uint8_t) (cb * 255);
+              pixel[0] = cb * 255;
               pixel = planes[2] + (y / 2 * strides[2]) + x / 2;
-              pixel[0] = (uint8_t) (cr * 255);
-              break;
-            case DRM_FORMAT_YUV422:
-              /*
-               3 plane YCbCr
-               index 0: Y plane, [7:0] Y
-               index 1: Cb plane, [7:0] Cb
-               index 2: Cr plane, [7:0] Cr
-               2x1 subsampled Cb (1) and Cr (2) planes */
-              pixel = planes[0] + (y * strides[0]) + x;
-              pixel[0] = (uint8_t) (luma * 255);
-              pixel = planes[1] + (y * strides[1]) + x / 2;
-              pixel[0] = (uint8_t) (cb * 255);
-              pixel = planes[2] + (y * strides[2]) + x / 2;
-              pixel[0] = (uint8_t) (cr * 255);
-              break;
-            case DRM_FORMAT_YUV444:
-              /*
-               3 plane YCbCr
-               index 0: Y plane, [7:0] Y
-               index 1: Cb plane, [7:0] Cb
-               index 2: Cr plane, [7:0] Cr
-               non-subsampled Cb (1) and Cr (2) planes */
-              pixel = planes[0] + (y * strides[0]) + x;
-              pixel[0] = (uint8_t) (luma * 255);
-              pixel = planes[1] + (y * strides[1]) + x;
-              pixel[0] = (uint8_t) (cb * 255);
-              pixel = planes[2] + (y * strides[2]) + x;
-              pixel[0] = (uint8_t) (cr * 255);
+              pixel[0] = cr * 255;
               break;
             default:
               g_assert_not_reached ();
@@ -219,9 +191,6 @@ main (int    argc,
       char **argv)
 {
   g_autoptr (WaylandDisplay) display = NULL;
-  struct xdg_surface *xdg_surface;
-  struct xdg_toplevel *xdg_toplevel;
-  struct wp_color_representation_surface_v1 *color_repr;
   display = wayland_display_new (WAYLAND_DISPLAY_CAPABILITY_TEST_DRIVER);
 
   surface = wl_compositor_create_surface (display->compositor);
@@ -232,10 +201,6 @@ main (int    argc,
   xdg_toplevel_set_title (xdg_toplevel, "ycbcr");
   xdg_toplevel_set_fullscreen (xdg_toplevel, NULL);
   wl_surface_commit (surface);
-
-  color_repr = wp_color_representation_manager_v1_get_surface (
-    display->color_representation,
-    surface);
 
   wait_for_configure (display);
 
@@ -250,79 +215,11 @@ main (int    argc,
 
   draw (display, DRM_FORMAT_YUV420, shader_luma_gradient);
   wl_surface_commit (surface);
-  wait_for_view_verified (display, 0);
+  wait_for_view_verified (display, 2);
 
   draw (display, DRM_FORMAT_YUV420, shader_color_gradient);
   wl_surface_commit (surface);
-  wait_for_view_verified (display, 2);
-
-  draw (display, DRM_FORMAT_YUV422, shader_luma_gradient);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 0);
-
-  draw (display, DRM_FORMAT_YUV422, shader_color_gradient);
-  wl_surface_commit (surface);
   wait_for_view_verified (display, 3);
-
-  draw (display, DRM_FORMAT_YUV444, shader_luma_gradient);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 0);
-
-  draw (display, DRM_FORMAT_YUV444, shader_color_gradient);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 4);
-
-  /* untagged should behave as bt709 limited range */
-  draw (display, DRM_FORMAT_YUYV, shader_luma_gradient);
-  wp_color_representation_surface_v1_set_coefficients_and_range (
-    color_repr,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_BT709,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_LIMITED);
-  wl_surface_commit (surface);
-  wait_for_effects_completed (display, surface);
-  wait_for_view_verified (display, 0);
-
-  /* keep the buffer the same, change to full range */
-  wp_color_representation_surface_v1_set_coefficients_and_range (
-    color_repr,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_BT709,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_FULL);
-  wl_surface_commit (surface);
-  wait_for_effects_completed (display, surface);
-  wait_for_view_verified (display, 5);
-
-  /* untagged should behave as bt709 limited range */
-  draw (display, DRM_FORMAT_YUYV, shader_color_gradient);
-  wp_color_representation_surface_v1_set_coefficients_and_range (
-    color_repr,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_BT709,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_LIMITED);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 1);
-
-  /* keep the buffer the same, change to bt601 */
-  wp_color_representation_surface_v1_set_coefficients_and_range (
-    color_repr,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_BT601,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_LIMITED);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 6);
-
-  /* keep the buffer the same, change to bt2020 */
-  wp_color_representation_surface_v1_set_coefficients_and_range (
-    color_repr,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_BT2020,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_FULL);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 7);
-
-  /* keep the buffer the same, change to bt2020 limited */
-  wp_color_representation_surface_v1_set_coefficients_and_range (
-    color_repr,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_BT2020,
-    WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_LIMITED);
-  wl_surface_commit (surface);
-  wait_for_view_verified (display, 8);
 
   g_clear_pointer (&xdg_toplevel, xdg_toplevel_destroy);
   g_clear_pointer (&xdg_surface, xdg_surface_destroy);

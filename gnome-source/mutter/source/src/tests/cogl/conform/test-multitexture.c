@@ -4,7 +4,7 @@
 
 #include "test-conform-common.h"
 
-static const CoglColor stage_color = { 0x0, 0x0, 0x0, 0xff };
+static const ClutterColor stage_color = { 0x0, 0x0, 0x0, 0xff };
 
 #define QUAD_WIDTH 20
 
@@ -38,9 +38,9 @@ assert_region_color (int x,
       {
         uint8_t *pixel = &data[y * width * 4 + x * 4];
 #if 1
-        g_assert_true (pixel[RED] == red &&
-                       pixel[GREEN] == green &&
-                       pixel[BLUE] == blue);
+        g_assert (pixel[RED] == red &&
+                  pixel[GREEN] == green &&
+                  pixel[BLUE] == blue);
 #endif
       }
   g_free (data);
@@ -107,7 +107,7 @@ on_paint (ClutterActor        *actor,
   CoglPipeline *pipeline;
   CoglColor color;
   gboolean status;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   float tex_coords[] = {
     0, 0, 0.5, 0.5, /* tex0 */
     0.5, 0.5, 1, 1 /* tex1 */

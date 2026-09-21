@@ -25,7 +25,6 @@
 #include <string.h>
 
 #include "compositor/meta-surface-actor-wayland.h"
-#include "mtk/mtk.h"
 #include "wayland/meta-wayland-private.h"
 
 G_DEFINE_TYPE (MetaWaylandTouch, meta_wayland_touch,
@@ -42,10 +41,7 @@ struct _MetaWaylandTouchSurface
 
 struct _MetaWaylandTouchInfo
 {
-  MetaWaylandTouchSurface *focus_surface;
-  MetaWaylandSurface *current_surface;
-  gulong current_surface_destroyed_handler_id;
-  ClutterSprite *sprite;
+  MetaWaylandTouchSurface *touch_surface;
   guint32 slot_serial;
   gint32 slot;
   gfloat start_x;
@@ -55,10 +51,6 @@ struct _MetaWaylandTouchInfo
   guint updated : 1;
   guint begin_delivered : 1;
 };
-
-static void
-meta_wayland_touch_info_set_current_surface (MetaWaylandTouchInfo *touch_info,
-                                             MetaWaylandSurface   *surface);
 
 static MetaBackend *
 backend_from_touch (MetaWaylandTouch *touch)
@@ -134,9 +126,7 @@ static void
 touch_handle_surface_destroy (struct wl_listener *listener, void *data)
 {
   MetaWaylandTouchSurface *touch_surface = wl_container_of (listener, touch_surface, surface_destroy_listener);
-#ifndef G_DISABLE_ASSERT
   MetaWaylandSurface *surface = touch_surface->surface;
-#endif
   MetaWaylandTouch *touch = touch_surface->touch;
   MetaWaylandTouchInfo *touch_info;
   GHashTableIter iter;
@@ -149,12 +139,12 @@ touch_handle_surface_destroy (struct wl_listener *listener, void *data)
    */
   while (g_hash_table_iter_next (&iter, NULL, (gpointer*) &touch_info))
     {
-      if (touch_info->focus_surface == touch_surface)
+      if (touch_info->touch_surface == touch_surface)
         g_hash_table_iter_remove (&iter);
     }
 
   /* Ensure the surface no longer exists */
-  g_assert (!g_hash_table_contains (touch->touch_surfaces, surface));
+  g_assert (g_hash_table_remove (touch->touch_surfaces, surface) == FALSE);
 }
 
 static MetaWaylandTouchSurface *
@@ -225,34 +215,6 @@ touch_get_relative_coordinates (MetaWaylandTouch   *touch,
                                                         x, y);
 }
 
-static void
-current_surface_destroyed (MetaWaylandSurface   *surface,
-                           MetaWaylandTouchInfo *touch_info)
-{
-  meta_wayland_touch_info_set_current_surface (touch_info, NULL);
-}
-
-static void
-meta_wayland_touch_info_set_current_surface (MetaWaylandTouchInfo *touch_info,
-                                             MetaWaylandSurface   *surface)
-{
-  if (touch_info->current_surface == surface)
-    return;
-
-  g_clear_signal_handler (&touch_info->current_surface_destroyed_handler_id,
-                          touch_info->current_surface);
-
-  touch_info->current_surface = surface;
-
-  if (touch_info->current_surface)
-    {
-      touch_info->current_surface_destroyed_handler_id =
-        g_signal_connect (touch_info->current_surface, "destroy",
-                          G_CALLBACK (current_surface_destroyed),
-                          touch_info);
-    }
-}
-
 void
 meta_wayland_touch_update (MetaWaylandTouch   *touch,
                            const ClutterEvent *event)
@@ -264,60 +226,38 @@ meta_wayland_touch_update (MetaWaylandTouch   *touch,
   sequence = clutter_event_get_event_sequence (event);
   event_type = clutter_event_type (event);
 
-  touch_info = touch_get_info (touch, sequence, FALSE);
-
-  if (event_type == CLUTTER_ENTER ||
-      event_type == CLUTTER_LEAVE)
+  if (event_type == CLUTTER_TOUCH_BEGIN)
     {
       MetaWaylandSurface *surface = NULL;
       MetaBackend *backend;
-      ClutterContext *context;
-      ClutterBackend *clutter_backend;
       ClutterStage *stage;
       ClutterActor *actor;
-      ClutterSprite *sprite;
 
       backend = backend_from_touch (touch);
-      context = meta_backend_get_clutter_context (backend);
-      clutter_backend = clutter_context_get_backend (context);
       stage = CLUTTER_STAGE (meta_backend_get_stage (backend));
 
-      sprite = clutter_backend_get_sprite (clutter_backend, stage, event);
-      actor = clutter_focus_get_current_actor (CLUTTER_FOCUS (sprite));
+      actor = clutter_stage_get_device_actor (stage,
+                                              clutter_event_get_device (event),
+                                              clutter_event_get_event_sequence (event));
 
       if (META_IS_SURFACE_ACTOR_WAYLAND (actor))
         surface = meta_surface_actor_wayland_get_surface (META_SURFACE_ACTOR_WAYLAND (actor));
 
-      if (touch_info)
-        meta_wayland_touch_info_set_current_surface (touch_info, surface);
+      if (!surface || !surface->resource)
+        return;
 
-      if (event_type == CLUTTER_ENTER &&
-          !touch_info &&
-          (clutter_event_get_flags (event) & CLUTTER_EVENT_FLAG_GRAB_NOTIFY) == 0 &&
-          surface && surface->resource)
-        {
-          touch_info = touch_get_info (touch, sequence, TRUE);
-          touch_info->current_surface = surface;
-          touch_info->focus_surface = touch_surface_get (touch, surface);
-          touch_info->sprite = sprite;
-          clutter_event_get_coords (event, &touch_info->start_x, &touch_info->start_y);
-        }
+      touch_info = touch_get_info (touch, sequence, TRUE);
+      touch_info->touch_surface = touch_surface_get (touch, surface);
+      clutter_event_get_coords (event, &touch_info->start_x, &touch_info->start_y);
     }
+  else
+    touch_info = touch_get_info (touch, sequence, FALSE);
 
   if (!touch_info)
     return;
 
-  if ((event_type == CLUTTER_TOUCH_UPDATE ||
-       event_type == CLUTTER_TOUCH_END ||
-       event_type == CLUTTER_LEAVE) &&
+  if (event_type != CLUTTER_TOUCH_BEGIN &&
       !touch_info->begin_delivered)
-    {
-      g_hash_table_remove (touch->touches, sequence);
-      return;
-    }
-
-  if (event_type == CLUTTER_TOUCH_END &&
-      !touch_info->focus_surface)
     {
       g_hash_table_remove (touch->touches, sequence);
       return;
@@ -335,10 +275,8 @@ meta_wayland_touch_update (MetaWaylandTouch   *touch,
         touch->latest_touch_down_serial = touch_info->slot_serial;
     }
 
-  if (touch_info->focus_surface)
-    touch_get_relative_coordinates (touch, touch_info->focus_surface->surface,
-                                    event, &touch_info->x, &touch_info->y);
-
+  touch_get_relative_coordinates (touch, touch_info->touch_surface->surface,
+                                  event, &touch_info->x, &touch_info->y);
   touch_info->updated = TRUE;
 }
 
@@ -354,15 +292,15 @@ handle_touch_begin (MetaWaylandTouch   *touch,
   sequence = clutter_event_get_event_sequence (event);
   touch_info = touch_get_info (touch, sequence, FALSE);
 
-  if (!touch_info || !touch_info->focus_surface)
+  if (!touch_info)
     return;
 
-  l = &touch_info->focus_surface->resource_list;
+  l = &touch_info->touch_surface->resource_list;
   wl_resource_for_each(resource, l)
     {
       wl_touch_send_down (resource, touch_info->slot_serial,
                           clutter_event_get_time (event),
-                          touch_info->focus_surface->surface->resource,
+                          touch_info->touch_surface->surface->resource,
                           touch_info->slot,
                           wl_fixed_from_double (touch_info->x),
                           wl_fixed_from_double (touch_info->y));
@@ -383,10 +321,10 @@ handle_touch_update (MetaWaylandTouch   *touch,
   sequence = clutter_event_get_event_sequence (event);
   touch_info = touch_get_info (touch, sequence, FALSE);
 
-  if (!touch_info || !touch_info->focus_surface)
+  if (!touch_info)
     return;
 
-  l = &touch_info->focus_surface->resource_list;
+  l = &touch_info->touch_surface->resource_list;
   wl_resource_for_each(resource, l)
     {
       wl_touch_send_motion (resource,
@@ -403,6 +341,8 @@ handle_touch_end (MetaWaylandTouch   *touch,
 {
   MetaWaylandTouchInfo *touch_info;
   ClutterEventSequence *sequence;
+  struct wl_resource *resource;
+  struct wl_list *l;
 
   sequence = clutter_event_get_event_sequence (event);
   touch_info = touch_get_info (touch, sequence, FALSE);
@@ -410,18 +350,12 @@ handle_touch_end (MetaWaylandTouch   *touch,
   if (!touch_info)
     return;
 
-  if (touch_info->focus_surface)
+  l = &touch_info->touch_surface->resource_list;
+  wl_resource_for_each (resource, l)
     {
-      struct wl_resource *resource;
-      struct wl_list *l;
-
-      l = &touch_info->focus_surface->resource_list;
-      wl_resource_for_each (resource, l)
-        {
-          wl_touch_send_up (resource, touch_info->slot_serial,
-                            clutter_event_get_time (event),
-                            touch_info->slot);
-        }
+      wl_touch_send_up (resource, touch_info->slot_serial,
+                        clutter_event_get_time (event),
+                        touch_info->slot);
     }
 
   g_hash_table_remove (touch->touches, sequence);
@@ -439,14 +373,12 @@ touch_get_surfaces (MetaWaylandTouch *touch,
 
   while (g_hash_table_iter_next (&iter, NULL, (gpointer*) &touch_info))
     {
-      if (!touch_info->focus_surface)
-        continue;
       if (only_updated && !touch_info->updated)
         continue;
-      if (g_list_find (surfaces, touch_info->focus_surface))
+      if (g_list_find (surfaces, touch_info->touch_surface))
         continue;
 
-      surfaces = g_list_prepend (surfaces, touch_info->focus_surface);
+      surfaces = g_list_prepend (surfaces, touch_info->touch_surface);
       touch_info->updated = FALSE;
     }
 
@@ -493,17 +425,15 @@ send_or_queue_frame_event (MetaWaylandTouch *touch)
       if (touch->queued_frame_id == 0)
         {
           touch->queued_frame_id =
-            mtk_idle_add_full (CLUTTER_PRIORITY_EVENTS + 1,
-                               (GSourceFunc) queue_frame_event_cb,
-                               touch, NULL);
-          mtk_source_set_name_by_id (touch->queued_frame_id,
-                                     "[mutter] queue_frame_event_cb [touch]");
+            g_idle_add_full (CLUTTER_PRIORITY_EVENTS + 1,
+                             (GSourceFunc) queue_frame_event_cb,
+                             touch, NULL);
         }
     }
   else
     {
       /* There's no more events */
-      g_clear_handle_id (&touch->queued_frame_id, mtk_source_remove);
+      g_clear_handle_id (&touch->queued_frame_id, g_source_remove);
       touch_send_frame_event (touch);
     }
 }
@@ -558,8 +488,7 @@ static const struct wl_touch_interface touch_interface = {
 static void
 touch_info_free (MetaWaylandTouchInfo *touch_info)
 {
-  meta_wayland_touch_info_set_current_surface (touch_info, NULL);
-  g_clear_pointer (&touch_info->focus_surface, touch_surface_decrement_touch);
+  touch_surface_decrement_touch (touch_info->touch_surface);
   g_free (touch_info);
 }
 
@@ -569,8 +498,6 @@ meta_wayland_touch_cancel (MetaWaylandTouch *touch)
   MetaWaylandInputDevice *input_device = META_WAYLAND_INPUT_DEVICE (touch);
   MetaWaylandSeat *seat = meta_wayland_input_device_get_seat (input_device);
   GList *surfaces, *s;
-  MetaWaylandTouchInfo *touch_info;
-  GHashTableIter iter;
 
   if (!meta_wayland_seat_has_touch (seat))
     return;
@@ -588,9 +515,7 @@ meta_wayland_touch_cancel (MetaWaylandTouch *touch)
         wl_touch_send_cancel (resource);
     }
 
-  g_hash_table_iter_init (&iter, touch->touches);
-  while (g_hash_table_iter_next (&iter, NULL, (gpointer*) &touch_info))
-    g_clear_pointer (&touch_info->focus_surface, touch_surface_decrement_touch);
+  g_hash_table_remove_all (touch->touches);
   g_list_free (surfaces);
 }
 
@@ -612,8 +537,8 @@ meta_wayland_touch_disable (MetaWaylandTouch *touch)
 {
   meta_wayland_touch_cancel (touch);
 
-  g_clear_pointer (&touch->touches, g_hash_table_unref);
   g_clear_pointer (&touch->touch_surfaces, g_hash_table_unref);
+  g_clear_pointer (&touch->touches, g_hash_table_unref);
 
   touch->latest_touch_down_serial = 0;
 }
@@ -659,7 +584,7 @@ touch_can_grab_surface (MetaWaylandTouchInfo *touch_info,
 {
   MetaWaylandSurface *subsurface;
 
-  if (touch_info->focus_surface->surface == surface)
+  if (touch_info->touch_surface->surface == surface)
     return TRUE;
 
   META_WAYLAND_SURFACE_FOREACH_SUBSURFACE (&surface->applied_state,
@@ -673,10 +598,9 @@ touch_can_grab_surface (MetaWaylandTouchInfo *touch_info,
 }
 
 ClutterEventSequence *
-meta_wayland_touch_find_grab_sequence (MetaWaylandTouch    *touch,
-                                       MetaWaylandSurface  *surface,
-                                       uint32_t             serial,
-                                       ClutterSprite      **sprite_out)
+meta_wayland_touch_find_grab_sequence (MetaWaylandTouch   *touch,
+                                       MetaWaylandSurface *surface,
+                                       uint32_t            serial)
 {
   MetaWaylandTouchInfo *touch_info;
   ClutterEventSequence *sequence;
@@ -692,11 +616,7 @@ meta_wayland_touch_find_grab_sequence (MetaWaylandTouch    *touch,
     {
       if (touch_info->slot_serial == serial &&
           touch_can_grab_surface (touch_info, surface))
-        {
-          if (sprite_out)
-            *sprite_out = touch_info->sprite;
-          return sequence;
-        }
+        return sequence;
     }
 
   return NULL;
@@ -727,8 +647,8 @@ meta_wayland_touch_get_press_coords (MetaWaylandTouch     *touch,
 }
 
 MetaWaylandSurface *
-meta_wayland_touch_get_focus_surface (MetaWaylandTouch     *touch,
-                                      ClutterEventSequence *sequence)
+meta_wayland_touch_get_surface (MetaWaylandTouch     *touch,
+                                ClutterEventSequence *sequence)
 {
   MetaWaylandTouchInfo *touch_info;
 
@@ -736,26 +656,10 @@ meta_wayland_touch_get_focus_surface (MetaWaylandTouch     *touch,
     return NULL;
 
   touch_info = touch_get_info (touch, sequence, FALSE);
-  if (!touch_info || !touch_info->focus_surface)
+  if (!touch_info || !touch_info->touch_surface)
     return NULL;
 
-  return touch_info->focus_surface->surface;
-}
-
-MetaWaylandSurface *
-meta_wayland_touch_get_current_surface (MetaWaylandTouch     *touch,
-                                        ClutterEventSequence *sequence)
-{
-  MetaWaylandTouchInfo *touch_info;
-
-  if (!touch->touches)
-    return NULL;
-
-  touch_info = touch_get_info (touch, sequence, FALSE);
-  if (!touch_info)
-    return NULL;
-
-  return touch_info->current_surface;
+  return touch_info->touch_surface->surface;
 }
 
 static void

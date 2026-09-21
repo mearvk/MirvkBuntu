@@ -213,14 +213,6 @@ struct _GVfsBackendClass
 				 const char *etag,
 				 gboolean make_backup,
 				 GFileCreateFlags flags);
-  gboolean (*try_edit)          (GVfsBackend *backend,
-                                 GVfsJobOpenForWrite *job,
-                                 const char *filename,
-                                 GFileCreateFlags flags);
-  void     (*edit)              (GVfsBackend *backend,
-                                 GVfsJobOpenForWrite *job,
-                                 const char *filename,
-                                 GFileCreateFlags flags);
   void     (*close_write)       (GVfsBackend *backend,
 				 GVfsJobCloseWrite *job,
 				 GVfsBackendHandle handle);
@@ -470,7 +462,7 @@ struct _GVfsBackendClass
 				    const char *filename);
 };
 
-GType g_vfs_backend_get_type (void);
+GType g_vfs_backend_get_type (void) G_GNUC_CONST;
 
 void  g_vfs_register_backend       (GType               backend_type,
 				    const char         *type);
@@ -549,12 +541,6 @@ gboolean    g_vfs_backend_invocation_first_handler       (GVfsDBusMount *object,
 
 void        g_vfs_backend_handle_readonly_lockdown       (GVfsBackend *backend);
 gboolean    g_vfs_backend_get_readonly_lockdown          (GVfsBackend *backend);
-
-void        g_vfs_backend_set_autounmount               (GVfsBackend           *backend,
-                                                         gboolean               autounmount);
-
-void        g_vfs_backend_activity_started              (GVfsBackend           *backend);
-void        g_vfs_backend_activity_finished             (GVfsBackend           *backend);
 
 G_END_DECLS
 

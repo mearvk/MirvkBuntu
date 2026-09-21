@@ -11,9 +11,7 @@ $dash_spacing: $base_margin * 0.5;
 
 // container for the dash
 #dash {
-  // a bit of spacing so that dash doesn't touch the screen edges
-  padding-left: $base_padding;
-  padding-right: $base_padding;
+  margin-top: $dash_edge_offset;
 
   // background behind item container
   .dash-background {

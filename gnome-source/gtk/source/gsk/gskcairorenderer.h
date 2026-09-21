@@ -40,7 +40,7 @@ G_BEGIN_DECLS
 /**
  * GskCairoRenderer:
  *
- * Renders a GSK rendernode tree with cairo.
+ * A GSK renderer that is using cairo.
  *
  * Since it is using cairo, this renderer cannot support
  * 3D transformations.
@@ -49,12 +49,10 @@ typedef struct _GskCairoRenderer                GskCairoRenderer;
 typedef struct _GskCairoRendererClass           GskCairoRendererClass;
 
 GDK_AVAILABLE_IN_ALL
-GType                   gsk_cairo_renderer_get_type             (void);
+GType                   gsk_cairo_renderer_get_type             (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GskRenderer *           gsk_cairo_renderer_new                  (void);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskCairoRenderer, g_object_unref)
 
 G_END_DECLS
 

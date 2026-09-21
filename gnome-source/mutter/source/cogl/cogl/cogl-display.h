@@ -37,6 +37,7 @@
 #endif
 
 #include "cogl/cogl-renderer.h"
+#include "cogl/cogl-onscreen-template.h"
 
 #include <glib-object.h>
 
@@ -57,32 +58,61 @@ G_BEGIN_DECLS
  *
  * Another aspect is that display options may constrain or affect how
  * onscreen framebuffers should later be configured. The original
- * rationale for the display object in fact was to let us handle EGLs
- * EGLs requirements that framebuffers must be "compatible" with
+ * rationale for the display object in fact was to let us handle GLX
+ * and EGLs requirements that framebuffers must be "compatible" with
  * the config associated with the current context meaning we have to
  * force the user to describe how they would like to create their
  * onscreen windows before we can choose a suitable fbconfig and
  * create a GLContext.
  */
 
+typedef struct _CoglDisplay CoglDisplay;
+
 #define COGL_TYPE_DISPLAY (cogl_display_get_type ())
 
 COGL_EXPORT
-G_DECLARE_DERIVABLE_TYPE (CoglDisplay,
-                          cogl_display,
-                          COGL,
-                          DISPLAY,
-                          GObject)
+G_DECLARE_FINAL_TYPE (CoglDisplay,
+                      cogl_display,
+                      COGL,
+                      DISPLAY,
+                      GObject)
 
-struct _CoglDisplayClass
-{
-  GObjectClass parent_class;
-
-  gboolean (*setup) (CoglDisplay  *display,
-                     GError      **error);
-
-  void (*destroy) (CoglDisplay  *display);
-};
+/**
+ * cogl_display_new:
+ * @renderer: A #CoglRenderer
+ * @onscreen_template: A #CoglOnscreenTemplate
+ *
+ * Explicitly allocates a new #CoglDisplay object to encapsulate the
+ * common state of the display pipeline that applies to the whole
+ * application.
+ *
+ * A @display can only be made for a specific choice of renderer which
+ * is why this takes the @renderer argument.
+ *
+ * A common use for explicitly allocating a display object is to
+ * define a template for allocating onscreen framebuffers which is
+ * what the @onscreen_template argument is for, or alternatively
+ * you can use cogl_display_set_onscreen_template().
+ *
+ * When a display is first allocated via cogl_display_new() it is in a
+ * mutable configuration mode. It's designed this way so we can
+ * extend the apis available for configuring a display without
+ * requiring huge numbers of constructor arguments.
+ *
+ * When you have finished configuring a display object you can
+ * optionally call cogl_display_setup() to explicitly apply the
+ * configuration and check for errors. Alternaitvely you can pass the
+ * display to cogl_context_new() and Cogl will implicitly apply your
+ * configuration but if there are errors then the application will
+ * abort with a message. For simple applications with no fallback
+ * options then relying on the implicit setup can be fine.
+ *
+ * Return value: (transfer full): A newly allocated #CoglDisplay
+ *               object in a mutable configuration mode.
+ */
+COGL_EXPORT CoglDisplay *
+cogl_display_new (CoglRenderer *renderer,
+                  CoglOnscreenTemplate *onscreen_template);
 
 /**
  * cogl_display_get_renderer:
@@ -97,6 +127,23 @@ COGL_EXPORT CoglRenderer *
 cogl_display_get_renderer (CoglDisplay *display);
 
 /**
+ * cogl_display_set_onscreen_template:
+ * @display: a #CoglDisplay
+ * @onscreen_template: A template for creating #CoglOnscreen framebuffers
+ *
+ * Specifies a template for creating #CoglOnscreen framebuffers.
+ *
+ * Depending on the system, the constraints for creating #CoglOnscreen
+ * framebuffers need to be known before setting up a #CoglDisplay because the
+ * final setup of the display may constrain how onscreen framebuffers may be
+ * allocated. If Cogl knows how an application wants to allocate onscreen
+ * framebuffers then it can try to make sure to setup the display accordingly.
+ */
+COGL_EXPORT void
+cogl_display_set_onscreen_template (CoglDisplay *display,
+                                    CoglOnscreenTemplate *onscreen_template);
+
+/**
  * cogl_display_setup:
  * @display: a #CoglDisplay
  * @error: return location for a #GError
@@ -104,6 +151,11 @@ cogl_display_get_renderer (CoglDisplay *display);
  * Explicitly sets up the given @display object. Use of this api is
  * optional since Cogl will internally setup the display if not done
  * explicitly.
+ *
+ * When a display is first allocated via cogl_display_new() it is in a
+ * mutable configuration mode. This allows us to extend the apis
+ * available for configuring a display without requiring huge numbers
+ * of constructor arguments.
  *
  * Its possible to request a configuration that might not be
  * supportable on the current system and so this api provides a means

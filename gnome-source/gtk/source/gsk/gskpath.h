@@ -46,7 +46,7 @@ G_BEGIN_DECLS
  * Since: 4.14
  */
 typedef enum
-{ /*< prefix=GSK_PATH_FOREACH >*/
+{
   GSK_PATH_FOREACH_ALLOW_ONLY_LINES = 0,
   GSK_PATH_FOREACH_ALLOW_QUAD       = (1 << 0),
   GSK_PATH_FOREACH_ALLOW_CUBIC      = (1 << 1),
@@ -56,12 +56,13 @@ typedef enum
 /**
  * GskPathForeachFunc:
  * @op: The operation
- * @pts: (array length=n_pts): The points of the operation
+ * @pts: The points of the operation
  * @n_pts: The number of points
  * @weight: The weight for conic curves, or unused if not a conic curve
  * @user_data: The user data provided with the function
  *
- * Type of the callback to iterate through the operations of a path.
+ * Prototype of the callback to iterate through the operations of
+ * a path.
  *
  * For each operation, the callback is given the @op itself, the points
  * that the operation is applied to in @pts, and a @weight for conic
@@ -83,7 +84,7 @@ typedef gboolean (* GskPathForeachFunc) (GskPathOperation        op,
 #define GSK_TYPE_PATH (gsk_path_get_type ())
 
 GDK_AVAILABLE_IN_4_14
-GType                   gsk_path_get_type                       (void);
+GType                   gsk_path_get_type                       (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_4_14
 GskPath *               gsk_path_ref                            (GskPath                *self);
@@ -111,11 +112,7 @@ gboolean                gsk_path_is_closed                      (GskPath        
 
 GDK_AVAILABLE_IN_4_14
 gboolean                gsk_path_get_bounds                     (GskPath                *self,
-                                                                 graphene_rect_t        *bounds) G_GNUC_WARN_UNUSED_RESULT;
-
-GDK_AVAILABLE_IN_4_22
-gboolean                gsk_path_get_tight_bounds               (GskPath                *self,
-                                                                 graphene_rect_t        *bounds) G_GNUC_WARN_UNUSED_RESULT;
+                                                                 graphene_rect_t        *bounds);
 
 GDK_AVAILABLE_IN_4_14
 gboolean                gsk_path_get_stroke_bounds              (GskPath                *self,
@@ -134,12 +131,6 @@ GDK_AVAILABLE_IN_4_14
 gboolean                gsk_path_get_end_point                  (GskPath                *self,
                                                                  GskPathPoint           *result);
 
-GDK_AVAILABLE_IN_4_22
-gboolean                gsk_path_get_next                       (GskPath                *self,
-                                                                 GskPathPoint           *point);
-GDK_AVAILABLE_IN_4_22
-gboolean                gsk_path_get_previous                   (GskPath                *self,
-                                                                 GskPathPoint           *point);
 GDK_AVAILABLE_IN_4_14
 gboolean                gsk_path_get_closest_point              (GskPath                *self,
                                                                  const graphene_point_t *point,
@@ -151,60 +142,6 @@ GDK_AVAILABLE_IN_4_14
 gboolean                gsk_path_foreach                        (GskPath                *self,
                                                                  GskPathForeachFlags     flags,
                                                                  GskPathForeachFunc      func,
-                                                                 gpointer                user_data);
-
-GDK_AVAILABLE_IN_4_22
-gboolean                gsk_path_equal                          (const GskPath          *path1,
-                                                                 const GskPath          *path2);
-/**
- * GskPathIntersection:
- * @GSK_PATH_INTERSECTION_NONE: No intersection
- * @GSK_PATH_INTERSECTION_NORMAL: A normal intersection, where the two paths
- *   cross each other
- * @GSK_PATH_INTERSECTION_START: The start of a segment where the two paths coincide
- * @GSK_PATH_INTERSECTION_END: The end of a segment where the two paths coincide
- *
- * The values of this enumeration classify intersections
- * between paths.
- *
- * Since: 4.20
- */
-typedef enum
-{
-  GSK_PATH_INTERSECTION_NONE,
-  GSK_PATH_INTERSECTION_NORMAL,
-  GSK_PATH_INTERSECTION_START,
-  GSK_PATH_INTERSECTION_END,
-} GskPathIntersection;
-
-/**
- * GskPathIntersectionFunc:
- * @path1: the first path
- * @point1: the intersection as point on @path1
- * @path2: the second path
- * @point2: the intersection as point on @path2
- * @kind: the nature of the intersection
- * @user_data: user data
- *
- * Prototype of the callback to iterate through the
- * intersections of two paths.
- *
- * Returns: true to continue iterating, false to
- *   stop the iteration and not call the function again
- *
- * Since: 4.20
- */
-typedef gboolean (* GskPathIntersectionFunc)                    (GskPath                *path1,
-                                                                 const GskPathPoint     *point1,
-                                                                 GskPath                *path2,
-                                                                 const GskPathPoint     *point2,
-                                                                 GskPathIntersection     kind,
-                                                                 gpointer                user_data);
-
-GDK_AVAILABLE_IN_4_20
-gboolean                gsk_path_foreach_intersection           (GskPath                *path1,
-                                                                 GskPath                *path2,
-                                                                 GskPathIntersectionFunc func,
                                                                  gpointer                user_data);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskPath, gsk_path_unref)

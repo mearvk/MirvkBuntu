@@ -28,7 +28,7 @@
 /**
  * GdkAppLaunchContext:
  *
- * Handles launching an application in a graphical context.
+ * `GdkAppLaunchContext` handles launching an application in a graphical context.
  *
  * It is an implementation of `GAppLaunchContext` that provides startup
  * notification and allows to launch applications on a specific workspace.
@@ -63,11 +63,8 @@ static void    gdk_app_launch_context_launch_failed (GAppLaunchContext *context,
 enum
 {
   PROP_0,
-  PROP_DISPLAY,
-  N_PROPS
+  PROP_DISPLAY
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE (GdkAppLaunchContext, gdk_app_launch_context, G_TYPE_APP_LAUNCH_CONTEXT)
 
@@ -123,15 +120,14 @@ gdk_app_launch_context_class_init (GdkAppLaunchContextClass *klass)
   context_class->launch_failed = gdk_app_launch_context_launch_failed;
 
   /**
-   * GdkAppLaunchContext:display:
+   * GdkAppLaunchContext:display: (attributes org.gtk.Property.get=gdk_app_launch_context_get_display)
    *
    * The display that the `GdkAppLaunchContext` is on.
    */
-  props[PROP_DISPLAY] = g_param_spec_object ("display", NULL, NULL,
-                                             GDK_TYPE_DISPLAY,
-                                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class, PROP_DISPLAY,
+    g_param_spec_object ("display", NULL, NULL,
+                         GDK_TYPE_DISPLAY,
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -173,7 +169,7 @@ gdk_app_launch_context_get_display_name (GAppLaunchContext *context,
 }
 
 /**
- * gdk_app_launch_context_get_display:
+ * gdk_app_launch_context_get_display: (attributes org.gtk.Method.get_property=display)
  * @context: a `GdkAppLaunchContext`
  *
  * Gets the `GdkDisplay` that @context is for.
@@ -197,7 +193,7 @@ gdk_app_launch_context_get_display (GdkAppLaunchContext *context)
  *
  * This only works when running under a window manager that
  * supports multiple workspaces, as described in the
- * [Extended Window Manager Hints](https://specifications.freedesktop.org/wm/latest/).
+ * [Extended Window Manager Hints](http://www.freedesktop.org/Standards/wm-spec).
  * Specifically this sets the `_NET_WM_DESKTOP` property described
  * in that spec.
  *
@@ -260,7 +256,11 @@ gdk_app_launch_context_set_icon (GdkAppLaunchContext *context,
   g_return_if_fail (GDK_IS_APP_LAUNCH_CONTEXT (context));
   g_return_if_fail (icon == NULL || G_IS_ICON (icon));
 
-  g_clear_object (&context->icon);
+  if (context->icon)
+    {
+      g_object_unref (context->icon);
+      context->icon = NULL;
+    }
 
   if (icon)
     context->icon = g_object_ref (icon);

@@ -26,14 +26,6 @@
 #include "gtkmodulesprivate.h"
 #include "gtkprivate.h"
 
-#ifdef HAVE_PRINTBACKEND_CPDB
-#include "print/backends/gtkprintbackendcpdbprivate.h"
-#endif
-#ifdef HAVE_PRINTBACKEND_CUPS
-#include "print/backends/gtkprintbackendcupsprivate.h"
-#endif
-#include "print/backends/gtkprintbackendfileprivate.h"
-
 #include "gtkprintbackendprivate.h"
 
 
@@ -74,11 +66,8 @@ static guint signals[LAST_SIGNAL] = { 0 };
 enum 
 { 
   PROP_ZERO,
-  PROP_STATUS,
-  N_PROPS
+  PROP_STATUS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static GObjectClass *backend_parent_class;
 
@@ -105,14 +94,6 @@ gtk_print_backends_init (void)
   g_io_extension_point_set_required_type (ep, GTK_TYPE_PRINT_BACKEND);
 
   scope = g_io_module_scope_new (G_IO_MODULE_SCOPE_BLOCK_DUPLICATES);
-
-#ifdef HAVE_PRINTBACKEND_CPDB
-  g_type_ensure (GTK_TYPE_PRINT_BACKEND_CPDB);
-#endif
-#ifdef HAVE_PRINTBACKEND_CUPS
-  g_type_ensure (GTK_TYPE_PRINT_BACKEND_CUPS);
-#endif
-  g_type_ensure (GTK_TYPE_PRINT_BACKEND_FILE);
 
   paths = _gtk_get_module_path ("printbackends");
   for (i = 0; paths[i]; i++)
@@ -142,7 +123,7 @@ gtk_print_backends_init (void)
 /**
  * gtk_print_backend_load_modules:
  *
- * Returns: (element-type GtkPrintBackend) (transfer full):
+ * Returns: (element-type GtkPrintBackend) (transfer container):
  */
 GList *
 gtk_print_backend_load_modules (void)
@@ -282,13 +263,13 @@ gtk_print_backend_class_init (GtkPrintBackendClass *class)
   class->printer_get_capabilities = fallback_printer_get_capabilities;
   class->request_password = request_password;
   
-  props[PROP_STATUS] = g_param_spec_int ("status", NULL, NULL,
-                                         GTK_PRINT_BACKEND_STATUS_UNKNOWN,
-                                         GTK_PRINT_BACKEND_STATUS_UNAVAILABLE,
-                                         GTK_PRINT_BACKEND_STATUS_UNKNOWN,
-                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props); 
+  g_object_class_install_property (object_class, 
+                                   PROP_STATUS,
+                                   g_param_spec_int ("status", NULL, NULL,
+                                                     GTK_PRINT_BACKEND_STATUS_UNKNOWN,
+                                                     GTK_PRINT_BACKEND_STATUS_UNAVAILABLE,
+                                                     GTK_PRINT_BACKEND_STATUS_UNKNOWN,
+                                                     GTK_PARAM_READWRITE)); 
   
   signals[PRINTER_LIST_CHANGED] =
     g_signal_new ("printer-list-changed",
@@ -479,18 +460,18 @@ gtk_print_backend_get_printer_list (GtkPrintBackend *backend)
   
   g_return_val_if_fail (GTK_IS_PRINT_BACKEND (backend), NULL);
 
-  if (!backend->priv->printer_list_requested)
-    {
-      if (GTK_PRINT_BACKEND_GET_CLASS (backend)->request_printer_list)
-	GTK_PRINT_BACKEND_GET_CLASS (backend)->request_printer_list (backend);
-      backend->priv->printer_list_requested = TRUE;
-    }
-
   for (i = 0; i < g_list_model_get_n_items (G_LIST_MODEL (backend->priv->printers)); i++)
     {
       GtkPrinter *printer = g_list_model_get_item (G_LIST_MODEL (backend->priv->printers), i);
       result = g_list_prepend (result, printer);
       g_object_unref (printer);
+    }
+
+  if (!backend->priv->printer_list_requested)
+    {
+      if (GTK_PRINT_BACKEND_GET_CLASS (backend)->request_printer_list)
+	GTK_PRINT_BACKEND_GET_CLASS (backend)->request_printer_list (backend);
+      backend->priv->printer_list_requested = TRUE;
     }
 
   return result;
@@ -613,7 +594,8 @@ password_dialog_response (GtkWidget       *dialog,
       if (priv->auth_info[i] != NULL)
         {
           memset (priv->auth_info[i], 0, strlen (priv->auth_info[i]));
-          g_clear_pointer (&priv->auth_info[i], g_free);
+          g_free (priv->auth_info[i]);
+          priv->auth_info[i] = NULL;
         }
     }
 
@@ -718,10 +700,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
           gtk_entry_set_visibility (GTK_ENTRY (entry), ai_visible[i]);
           gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
-          
-          /* Set password input purpose for hidden entries */
-          if (!ai_visible[i])
-            gtk_entry_set_input_purpose (GTK_ENTRY (entry), GTK_INPUT_PURPOSE_PASSWORD);
 
           gtk_box_append (GTK_BOX (vbox), box);
 
@@ -746,7 +724,10 @@ G_GNUC_END_IGNORE_DEPRECATIONS
     }
 
   if (focus != NULL)
-    gtk_widget_grab_focus (focus);
+    {
+      gtk_widget_grab_focus (focus);
+      focus = NULL;
+    }
 
   g_object_ref (backend);
   g_signal_connect (G_OBJECT (dialog), "response",

@@ -31,8 +31,32 @@
 #pragma once
 
 #include "cogl/cogl-onscreen.h"
+#include "cogl/cogl-framebuffer-private.h"
+#include "cogl/cogl-closure-list-private.h"
+#include "cogl/cogl-list.h"
 
 #include <glib.h>
+
+typedef struct _CoglOnscreenEvent
+{
+  CoglList link;
+
+  CoglOnscreen *onscreen;
+  CoglFrameInfo *info;
+  CoglFrameEvent type;
+} CoglOnscreenEvent;
+
+typedef struct _CoglOnscreenQueuedDirty
+{
+  CoglList link;
+
+  CoglOnscreen *onscreen;
+  CoglOnscreenDirtyInfo info;
+} CoglOnscreenQueuedDirty;
+
+void
+_cogl_framebuffer_winsys_update_size (CoglFramebuffer *framebuffer,
+                                      int width, int height);
 
 COGL_EXPORT void
 _cogl_onscreen_notify_frame_sync (CoglOnscreen *onscreen, CoglFrameInfo *info);
@@ -40,5 +64,18 @@ _cogl_onscreen_notify_frame_sync (CoglOnscreen *onscreen, CoglFrameInfo *info);
 COGL_EXPORT void
 _cogl_onscreen_notify_complete (CoglOnscreen *onscreen, CoglFrameInfo *info);
 
-COGL_EXPORT void
+void
+_cogl_onscreen_queue_dirty (CoglOnscreen *onscreen,
+                            const CoglOnscreenDirtyInfo *info);
+
+void
 cogl_onscreen_bind (CoglOnscreen *onscreen);
+
+COGL_EXPORT CoglFrameInfo *
+cogl_onscreen_peek_head_frame_info (CoglOnscreen *onscreen);
+
+COGL_EXPORT CoglFrameInfo *
+cogl_onscreen_peek_tail_frame_info (CoglOnscreen *onscreen);
+
+COGL_EXPORT CoglFrameInfo *
+cogl_onscreen_pop_head_frame_info (CoglOnscreen *onscreen);

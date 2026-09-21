@@ -24,7 +24,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "gdbusprivate.h"
 #include "gdbus-tests.h"
 
 /* all tests rely on a shared mainloop */
@@ -51,7 +50,7 @@ test_introspection (GDBusProxy *proxy)
    * Invoke Introspect(), then parse the output.
    */
   result = g_dbus_proxy_call_sync (proxy,
-                                   DBUS_INTERFACE_INTROSPECTABLE ".Introspect",
+                                   "org.freedesktop.DBus.Introspectable.Introspect",
                                    NULL,
                                    G_DBUS_CALL_FLAGS_NONE,
                                    -1,
@@ -70,7 +69,7 @@ test_introspection (GDBusProxy *proxy)
   interface_info = g_dbus_node_info_lookup_interface (node_info, "com.example.NonExistantInterface");
   g_assert (interface_info == NULL);
 
-  interface_info = g_dbus_node_info_lookup_interface (node_info, DBUS_INTERFACE_INTROSPECTABLE);
+  interface_info = g_dbus_node_info_lookup_interface (node_info, "org.freedesktop.DBus.Introspectable");
   g_assert (interface_info != NULL);
   method_info = g_dbus_interface_info_lookup_method (interface_info, "NonExistantMethod");
   g_assert (method_info == NULL);
@@ -300,38 +299,6 @@ test_extra_data (void)
   g_dbus_node_info_unref (info);
 }
 
-static void
-test_invalid (void)
-{
-  const struct
-    {
-      const char *xml;
-      GMarkupError expected_error_code;
-    }
-  vectors[] =
-    {
-      { "", G_MARKUP_ERROR_EMPTY },
-      { "<node><interface name=\"I\"><method name=\"M\"><node><interface name=\"I2\"></interface></node></method>", G_MARKUP_ERROR_INVALID_CONTENT },
-      { "<node><interface name=\"I\"><signal name=\"S\"><node><interface name=\"I2\"><signal name=\"S2\"></signal></interface></node></signal>", G_MARKUP_ERROR_INVALID_CONTENT },
-      { "<node><interface name=\"I\"><property name=\"P\" type=\"s\" access=\"read\"><node><interface name=\"I2\"></interface></node></property>", G_MARKUP_ERROR_INVALID_CONTENT },
-      { "<node><interface name=\"I\"><method name=\"M\"><arg type=\"\"><node><interface name=\"I2\"><method name=\"M2\"></method></interface></node></arg>", G_MARKUP_ERROR_INVALID_CONTENT },
-    };
-
-  for (size_t i = 0; i < G_N_ELEMENTS (vectors); i++)
-    {
-      GDBusNodeInfo *node;
-      GError *local_error = NULL;
-
-      g_test_message ("Testing parsing of %s gives an error", vectors[i].xml);
-
-      node = g_dbus_node_info_new_for_xml (vectors[i].xml, &local_error);
-      g_assert_error (local_error, G_MARKUP_ERROR, (int) vectors[i].expected_error_code);
-      g_assert_null (node);
-
-      g_clear_error (&local_error);
-    }
-}
-
 /* ---------------------------------------------------------------------------------------------------- */
 
 int
@@ -345,11 +312,10 @@ main (int   argc,
   /* all the tests rely on a shared main loop */
   loop = g_main_loop_new (NULL, FALSE);
 
-  g_test_add_func ("/gdbus/introspection/parser", test_introspection_parser);
-  g_test_add_func ("/gdbus/introspection/generate", test_generate);
-  g_test_add_func ("/gdbus/introspection/default-direction", test_default_direction);
-  g_test_add_func ("/gdbus/introspection/extra-data", test_extra_data);
-  g_test_add_func ("/gdbus/introspection/invalid", test_invalid);
+  g_test_add_func ("/gdbus/introspection-parser", test_introspection_parser);
+  g_test_add_func ("/gdbus/introspection-generate", test_generate);
+  g_test_add_func ("/gdbus/introspection-default-direction", test_default_direction);
+  g_test_add_func ("/gdbus/introspection-extra-data", test_extra_data);
 
   ret = session_bus_run ();
 

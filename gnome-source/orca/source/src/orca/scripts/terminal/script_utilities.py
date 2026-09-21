@@ -81,11 +81,7 @@ class Utilities(script_utilities.Utilities):
         if first_line != ("", 0, 0):
             start = first_line[1]
 
-        if (
-            current_line not in (("", 0, 0), first_line, last_line)
-            and first_line[1] <= current_line[1]
-            and current_line[2] <= last_line[2]
-        ):
+        if current_line not in (("", 0, 0), first_line, last_line):
             last_line = current_line
 
         if last_line != ("", 0, 0):
@@ -125,3 +121,21 @@ class Utilities(script_utilities.Utilities):
         if manager.last_event_was_printable_key():
             return len(event.any_data) > 1
         return AXText.get_caret_offset(event.source) == event.detail1 + event.detail2
+
+    def treat_event_as_noise(self, event: Atspi.Event) -> bool:
+        """Returns true if we should treat this event as noise."""
+
+        if input_event_manager.get_manager().last_event_was_command():
+            return False
+
+        if event.type.startswith("object:text-changed:delete") and event.any_data.strip():
+            manager = input_event_manager.get_manager()
+            if manager.last_event_was_return_tab_or_space():
+                return True
+            # TODO - JD: What condition specifically is this here for?
+            if manager.last_event_was_alt_modified():
+                return True
+            if len(event.any_data) > 1 and manager.last_event_was_printable_key():
+                return True
+
+        return False

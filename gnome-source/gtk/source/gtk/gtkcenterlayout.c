@@ -28,7 +28,7 @@
 /**
  * GtkCenterLayout:
  *
- * Manages up to three children.
+ * `GtkCenterLayout` is a layout manager that manages up to three children.
  *
  * The start widget is allocated at the start of the layout (left in
  * left-to-right locales and right in right-to-left ones), and the end
@@ -607,7 +607,7 @@ gtk_center_layout_class_init (GtkCenterLayoutClass *klass)
   layout_class->allocate = gtk_center_layout_allocate;
 
   /**
-   * GtkCenterLayout:shrink-center-last:
+   * GtkCenterLayout:shrink-center-last: (attributes org.gtk.Property.get=gtk_center_layout_get_shrink_center_last org.gtk.Property.set=gtk_center_layout_set_shrink_center_last)
    *
    * Whether to shrink the center widget after other children.
    *
@@ -623,7 +623,7 @@ gtk_center_layout_class_init (GtkCenterLayoutClass *klass)
   props[PROP_SHRINK_CENTER_LAST] =
       g_param_spec_boolean ("shrink-center-last", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
 }
@@ -830,7 +830,7 @@ gtk_center_layout_get_end_widget (GtkCenterLayout *self)
 }
 
 /**
- * gtk_center_layout_set_shrink_center_last:
+ * gtk_center_layout_set_shrink_center_last: (attributes org.gtk.Method.set_property=shrink-center-last)
  * @self: a `GtkCenterLayout`
  * @shrink_center_last: whether to shrink the center widget after others
  *
@@ -864,7 +864,7 @@ gtk_center_layout_set_shrink_center_last (GtkCenterLayout *self,
 }
 
 /**
- * gtk_center_layout_get_shrink_center_last:
+ * gtk_center_layout_get_shrink_center_last: (attributes org.gtk.Method.get_property=shrink-center-last)
  * @self: a `GtkCenterLayout`
  *
  * Gets whether @self shrinks the center widget after other children.

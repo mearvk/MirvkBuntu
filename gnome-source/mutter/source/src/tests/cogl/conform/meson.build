@@ -3,7 +3,7 @@ cogl_tests = [
   [ 'test-blend-strings', [] ],
   [ 'test-blend', [] ],
   [ 'test-depth-test', [] ],
-  [ 'test-color', [] ],
+  [ 'test-color-hsl', [] ],
   [ 'test-backface-culling', [] ],
   [ 'test-just-vertex-shader', [] ],
   [ 'test-pipeline-user-matrix', [] ],
@@ -33,12 +33,13 @@ cogl_tests = [
   [ 'test-alpha-textures', [] ],
   [ 'test-texture-get-set-data', [] ],
   [ 'test-framebuffer-get-bits', [] ],
-  [ 'test-framebuffer-cycles', [] ],
   [ 'test-primitive-and-journal', [] ],
   [ 'test-copy-replace-texture', [] ],
   [ 'test-pipeline-cache-unrefs-texture', [] ],
+  [ 'test-texture-no-allocate', [] ],
   [ 'test-pipeline-shader-state', [] ],
   [ 'test-texture-rg', [] ],
+  [ 'test-fence', [] ],
 ]
 
 #unported = [
@@ -46,6 +47,7 @@ cogl_tests = [
 #  "test-npot-texture",
 #  "test-readpixels",
 #  "test-texture-mipmaps",
+#  "test-texture-pixmap-x11",
 #  "test-viewport",
 #]
 
@@ -61,15 +63,10 @@ cogl_test_c_args = [
 ]
 
 test_env = environment()
-test_env.set('G_TEST_SRCDIR',  mutter_srcdir / 'src' / 'tests')
-test_env.set('G_TEST_BUILDDIR', mutter_builddir / 'src' / 'tests')
+test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
+test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 test_env.set('G_ENABLE_DIAGNOSTIC', '0')
 test_env.set('GSETTINGS_SCHEMA_DIR', locally_compiled_schemas_dir)
-test_env.set('LD_PRELOAD', ':'.join(test_ld_preload))
-
-foreach name, value: sanitizer_variables
-  test_env.set(name, value)
-endforeach
 
 cogl_test_variants = [ 'gl3', 'gles2' ]
 
@@ -93,22 +90,12 @@ foreach cogl_test: cogl_tests
   foreach variant: cogl_test_variants
     variant_test_env = test_env
     variant_test_env.set('COGL_DRIVER', variant)
-    variant_test_env.set('COGL_DEBUG', 'winsys')
 
     test(test_name + '-' + variant, test_executable,
-      args: variant in known_failures ? ['-m', 'no-undefined'] : [],
       suite: ['cogl', 'cogl/conform'],
       env: variant_test_env,
       is_parallel: false,
+      should_fail: variant in known_failures,
     )
-
-    if variant in known_failures
-      test('-'.join([test_name, 'should-fail', variant]), test_executable,
-        suite: ['cogl', 'cogl/conform', 'failing'],
-        env: variant_test_env,
-        is_parallel: false,
-        should_fail: true,
-      )
-    endif
   endforeach
 endforeach

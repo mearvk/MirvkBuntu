@@ -61,8 +61,6 @@ struct _GdkKeymapClass
                                          int             *level,
                                          GdkModifierType *consumed_modifiers);
   guint (* get_modifier_state)          (GdkKeymap *keymap);
-  gint (* get_active_layout_index)      (GdkKeymap *keymap);
-  gchar ** (* get_layout_names)         (GdkKeymap *keymap);
 
 
   /* Signals */
@@ -88,7 +86,7 @@ struct _GdkKeymap
   GHashTable *cache;
 };
 
-GType gdk_keymap_get_type (void);
+GType gdk_keymap_get_type (void) G_GNUC_CONST;
 
 guint          gdk_keymap_lookup_key               (GdkKeymap           *keymap,
                                                     const GdkKeymapKey  *key);
@@ -116,8 +114,6 @@ gboolean       gdk_keymap_get_caps_lock_state      (GdkKeymap           *keymap)
 gboolean       gdk_keymap_get_num_lock_state       (GdkKeymap           *keymap);
 gboolean       gdk_keymap_get_scroll_lock_state    (GdkKeymap           *keymap);
 guint          gdk_keymap_get_modifier_state       (GdkKeymap           *keymap);
-gchar **       gdk_keymap_get_layout_names         (GdkKeymap           *keymap);
-gint           gdk_keymap_get_active_layout_index  (GdkKeymap           *keymap);
 
 void           gdk_keymap_get_cached_entries_for_keyval (GdkKeymap     *keymap,
                                                          guint          keyval,

@@ -5,18 +5,20 @@
     <property name="default-width">600</property>
     <property name="default-height">400</property>
     <property name="title">Frames</property>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar" id="header">
         <child type="end">
           <object class="GtkLabel" id="fps">
-            <property name="attributes">0 -1 font-features "tnum=1"</property>
+            <attributes>
+              <attribute name="font-features" value="tnum=1"/>
+            </attributes>
           </object>
         </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkBox" id="box">
       </object>
-    </property>
+    </child>
   </object>
 </interface>

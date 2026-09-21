@@ -21,9 +21,6 @@
 
 #include <glib-object.h>
 
-#include "meta/common.h"
-#include "meta/types.h"
-
 typedef enum
 {
   META_MONITOR_SWITCH_CONFIG_ALL_MIRROR,
@@ -44,9 +41,6 @@ typedef struct _MetaMonitorManager         MetaMonitorManager;
 
 META_EXPORT
 GType meta_monitor_manager_get_type (void);
-
-META_EXPORT
-MetaBackend * meta_monitor_manager_get_backend (MetaMonitorManager *manager);
 
 META_EXPORT
 gint meta_monitor_manager_get_monitor_for_connector (MetaMonitorManager *manager,
@@ -70,9 +64,3 @@ int meta_monitor_manager_get_display_configuration_timeout (MetaMonitorManager *
 
 META_EXPORT
 gboolean meta_monitor_manager_get_panel_orientation_managed (MetaMonitorManager *manager);
-
-META_EXPORT
-GList * meta_monitor_manager_get_monitors (MetaMonitorManager *manager);
-
-META_EXPORT
-GList * meta_monitor_manager_get_logical_monitors (MetaMonitorManager *manager);

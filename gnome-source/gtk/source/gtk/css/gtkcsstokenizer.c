@@ -36,9 +36,6 @@ struct _GtkCssTokenizer
   const char            *end;
 
   GtkCssLocation         position;
-
-  GtkCssLocation         saved_position;
-  const char            *saved_data;
 };
 
 void
@@ -53,8 +50,8 @@ gtk_css_token_clear (GtkCssToken *token)
     case GTK_CSS_TOKEN_HASH_UNRESTRICTED:
     case GTK_CSS_TOKEN_HASH_ID:
     case GTK_CSS_TOKEN_URL:
-      if (token->string.string != token->string.buf)
-        g_free (token->string.string);
+      if (token->string.len >= 16)
+        g_free (token->string.u.string);
       break;
 
     case GTK_CSS_TOKEN_SIGNED_INTEGER_DIMENSION:
@@ -507,15 +504,11 @@ gtk_css_token_init_string (GtkCssToken     *token,
     case GTK_CSS_TOKEN_HASH_UNRESTRICTED:
     case GTK_CSS_TOKEN_HASH_ID:
     case GTK_CSS_TOKEN_URL:
-      if (string->len < G_N_ELEMENTS (token->string.buf))
-        {
-          g_strlcpy (token->string.buf, string->str, G_N_ELEMENTS (token->string.buf));
-          token->string.string = token->string.buf;
-        }
+      token->string.len = string->len;
+      if (string->len < 16)
+        g_strlcpy (token->string.u.buf, string->str, 16);
       else
-        {
-          token->string.string = g_strdup (string->str);
-        }
+        token->string.u.string = g_strdup (string->str);
       break;
     default:
       g_assert_not_reached ();
@@ -576,14 +569,6 @@ gtk_css_token_init_dimension (GtkCssToken     *token,
 GtkCssTokenizer *
 gtk_css_tokenizer_new (GBytes *bytes)
 {
-  return gtk_css_tokenizer_new_for_range (bytes, 0, g_bytes_get_size (bytes));
-}
-
-GtkCssTokenizer *
-gtk_css_tokenizer_new_for_range (GBytes *bytes,
-                                 gsize   offset,
-                                 gsize   length)
-{
   GtkCssTokenizer *tokenizer;
 
   tokenizer = g_new0 (GtkCssTokenizer, 1);
@@ -591,8 +576,8 @@ gtk_css_tokenizer_new_for_range (GBytes *bytes,
   tokenizer->bytes = g_bytes_ref (bytes);
   tokenizer->name_buffer = g_string_new (NULL);
 
-  tokenizer->data = g_bytes_get_region (bytes, 1, offset, length);
-  tokenizer->end = tokenizer->data + length;
+  tokenizer->data = g_bytes_get_data (bytes, NULL);
+  tokenizer->end = tokenizer->data + g_bytes_get_size (bytes);
 
   gtk_css_location_init (&tokenizer->position);
 
@@ -617,12 +602,6 @@ gtk_css_tokenizer_unref (GtkCssTokenizer *tokenizer)
   g_string_free (tokenizer->name_buffer, TRUE);
   g_bytes_unref (tokenizer->bytes);
   g_free (tokenizer);
-}
-
-GBytes *
-gtk_css_tokenizer_get_bytes (GtkCssTokenizer *tokenizer)
-{
-  return tokenizer->bytes;
 }
 
 const GtkCssLocation *
@@ -1065,28 +1044,6 @@ gtk_css_tokenizer_read_ident_like (GtkCssTokenizer  *tokenizer,
     }
 }
 
-static inline double
-exp10i (gint64 exp)
-{
-  switch (exp)
-    {
-    case -6: return 0.000001;
-    case -5: return 0.00001;
-    case -4: return 0.0001;
-    case -3: return 0.001;
-    case -2: return 0.01;
-    case -1: return 0.1;
-    case 0: return 1;
-    case 1: return 10;
-    case 2: return 100;
-    case 3: return 1000;
-    case 4: return 10000;
-    case 5: return 100000;
-    case 6: return 1000000;
-    default: return pow (10, exp);
-    }
-}
-
 static void
 gtk_css_tokenizer_read_numeric (GtkCssTokenizer *tokenizer,
                                 GtkCssToken     *token)
@@ -1161,7 +1118,7 @@ gtk_css_tokenizer_read_numeric (GtkCssTokenizer *tokenizer,
 
   gtk_css_tokenizer_consume (tokenizer, data - tokenizer->data, data - tokenizer->data);
 
-  value = sign * (integer + ((double) fractional / fractional_length)) * exp10i (exponent_sign * exponent);
+  value = sign * (integer + ((double) fractional / fractional_length)) * pow (10, exponent_sign * exponent);
 
   if (gtk_css_tokenizer_has_identifier (tokenizer))
     {
@@ -1248,26 +1205,6 @@ gtk_css_tokenizer_read_string (GtkCssTokenizer  *tokenizer,
 
   while (tokenizer->data < tokenizer->end)
     {
-      gsize n_characters = 0;
-      const char *data;
-
-      for (data = tokenizer->data;
-           data < tokenizer->end &&
-           *data != end &&
-           *data != '\\' &&
-           !is_newline (*data);
-           data = g_utf8_next_char (data))
-        {
-          n_characters++;
-        }
-      if (data > tokenizer->data)
-        {
-          g_string_append_len (tokenizer->name_buffer, tokenizer->data, data - tokenizer->data);
-          gtk_css_tokenizer_consume (tokenizer, data - tokenizer->data, n_characters);
-          if (tokenizer->data >= tokenizer->end)
-            break;
-        }
-
       if (*tokenizer->data == end)
         {
           gtk_css_tokenizer_consume_ascii (tokenizer);
@@ -1377,8 +1314,7 @@ gtk_css_tokenizer_read_token (GtkCssTokenizer  *tokenizer,
 
     case '#':
       gtk_css_tokenizer_consume_ascii (tokenizer);
-      if (gtk_css_tokenizer_remaining (tokenizer) > 0 &&
-          (is_name (*tokenizer->data) || gtk_css_tokenizer_has_valid_escape (tokenizer)))
+      if (is_name (*tokenizer->data) || gtk_css_tokenizer_has_valid_escape (tokenizer))
         {
           GtkCssTokenType type;
 
@@ -1548,23 +1484,3 @@ gtk_css_tokenizer_read_token (GtkCssTokenizer  *tokenizer,
     }
 }
 
-void
-gtk_css_tokenizer_save (GtkCssTokenizer *tokenizer)
-{
-  g_assert (!tokenizer->saved_data);
-
-  tokenizer->saved_position = tokenizer->position;
-  tokenizer->saved_data = tokenizer->data;
-}
-
-void
-gtk_css_tokenizer_restore (GtkCssTokenizer *tokenizer)
-{
-  g_assert (tokenizer->saved_data);
-
-  tokenizer->position = tokenizer->saved_position;
-  tokenizer->data = tokenizer->saved_data;
-
-  gtk_css_location_init (&tokenizer->saved_position);
-  tokenizer->saved_data = NULL;
-}

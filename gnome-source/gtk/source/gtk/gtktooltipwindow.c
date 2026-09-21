@@ -26,7 +26,6 @@
 
 #include "gtktooltipwindowprivate.h"
 
-#include "gtkbinlayout.h"
 #include "gtkbox.h"
 #include "gtkimage.h"
 #include "gtklabel.h"
@@ -39,7 +38,6 @@
 #include "gtkcssboxesimplprivate.h"
 
 #include "gdk/gdksurfaceprivate.h"
-#include "gsk/gskrendererprivate.h"
 
 struct _GtkTooltipWindow
 {
@@ -187,6 +185,15 @@ mapped_changed (GdkSurface *surface,
 }
 
 static gboolean
+surface_render (GdkSurface     *surface,
+                cairo_region_t *region,
+                GtkWidget      *widget)
+{
+  gtk_widget_render (widget, surface, region);
+  return TRUE;
+}
+
+static gboolean
 surface_event (GdkSurface *surface,
                GdkEvent   *event,
                GtkWidget  *widget)
@@ -206,11 +213,12 @@ gtk_tooltip_window_realize (GtkWidget *widget)
   gdk_surface_set_widget (window->surface, widget);
 
   g_signal_connect (window->surface, "notify::mapped", G_CALLBACK (mapped_changed), widget);
+  g_signal_connect (window->surface, "render", G_CALLBACK (surface_render), widget);
   g_signal_connect (window->surface, "event", G_CALLBACK (surface_event), widget);
 
   GTK_WIDGET_CLASS (gtk_tooltip_window_parent_class)->realize (widget);
 
-  window->renderer = gsk_renderer_new_for_surface_full (window->surface, TRUE);
+  window->renderer = gsk_renderer_new_for_surface (window->surface);
 
   gtk_native_realize (GTK_NATIVE (window));
 }
@@ -228,6 +236,7 @@ gtk_tooltip_window_unrealize (GtkWidget *widget)
   g_clear_object (&window->renderer);
 
   g_signal_handlers_disconnect_by_func (window->surface, mapped_changed, widget);
+  g_signal_handlers_disconnect_by_func (window->surface, surface_render, widget);
   g_signal_handlers_disconnect_by_func (window->surface, surface_event, widget);
   gdk_surface_set_widget (window->surface, NULL);
   g_clear_pointer (&window->surface, gdk_surface_destroy);
@@ -296,6 +305,36 @@ gtk_tooltip_window_unmap (GtkWidget *widget)
 }
 
 static void
+gtk_tooltip_window_measure (GtkWidget      *widget,
+                            GtkOrientation  orientation,
+                            int             for_size,
+                            int            *minimum,
+                            int            *natural,
+                            int            *minimum_baseline,
+                            int            *natural_baseline)
+{
+  GtkTooltipWindow *window = GTK_TOOLTIP_WINDOW (widget);
+
+  if (window->box)
+    gtk_widget_measure (window->box,
+                        orientation, for_size,
+                        minimum, natural,
+                        minimum_baseline, natural_baseline);
+}
+
+static void
+gtk_tooltip_window_size_allocate (GtkWidget *widget,
+                                  int        width,
+                                  int        height,
+                                  int        baseline)
+{
+  GtkTooltipWindow *window = GTK_TOOLTIP_WINDOW (widget);
+
+  if (window->box)
+    gtk_widget_allocate (window->box, width, height, baseline, NULL);
+}
+
+static void
 gtk_tooltip_window_show (GtkWidget *widget)
 {
   _gtk_widget_set_visible_flag (widget, TRUE);
@@ -335,11 +374,12 @@ gtk_tooltip_window_class_init (GtkTooltipWindowClass *klass)
   widget_class->unrealize = gtk_tooltip_window_unrealize;
   widget_class->map = gtk_tooltip_window_map;
   widget_class->unmap = gtk_tooltip_window_unmap;
+  widget_class->measure = gtk_tooltip_window_measure;
+  widget_class->size_allocate = gtk_tooltip_window_size_allocate;
   widget_class->show = gtk_tooltip_window_show;
   widget_class->hide = gtk_tooltip_window_hide;
 
   gtk_widget_class_set_css_name (widget_class, I_("tooltip"));
-  gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BIN_LAYOUT);
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gtk/libgtk/ui/gtktooltipwindow.ui");
 
   gtk_widget_class_bind_template_child (widget_class, GtkTooltipWindow, box);

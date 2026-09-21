@@ -21,7 +21,8 @@
 /*
  * GtkListListModel:
  *
- * A list model that takes a list API and provides it as a `GListModel`.
+ * `GtkListListModel` is a `GListModel` implementation that takes a list API
+ * and provides it as a `GListModel`.
  */
 
 #include "config.h"
@@ -201,12 +202,12 @@ gtk_list_list_model_class_init (GtkListListModelClass *klass)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
@@ -314,23 +315,6 @@ gtk_list_list_model_item_added_at (GtkListListModel *self,
 
   g_list_model_items_changed (G_LIST_MODEL (self), position, 0, 1);
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_N_ITEMS]);
-}
-
-void
-gtk_list_list_model_item_replaced (GtkListListModel *self,
-                                   gpointer          new_item)
-{
-  unsigned int position;
-
-  g_return_if_fail (GTK_IS_LIST_LIST_MODEL (self));
-  g_return_if_fail (new_item != NULL);
-
-  position = gtk_list_list_model_find (self, new_item);
-
-  if (position == self->cache_pos)
-    gtk_list_list_model_invalidate_cache (self);
-
-  g_list_model_items_changed (G_LIST_MODEL (self), position, 1, 1);
 }
 
 void

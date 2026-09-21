@@ -282,7 +282,7 @@ try_mount (GVfsBackend  *backend,
 {
   GVfsBackendHttp *op_backend;
   const char      *uri_str;
-  char            *path;
+  const char      *path;
   GUri            *uri;
   GMountSpec      *real_mount_spec;
 
@@ -313,14 +313,10 @@ try_mount (GVfsBackend  *backend,
       g_free (real_mount_spec->mount_prefix);
       real_mount_spec->mount_prefix = g_mount_spec_canonicalize_path (path);
     }
-  g_free (path);
 
   g_vfs_backend_set_mount_spec (backend, real_mount_spec);
-  g_mount_spec_unref (real_mount_spec);
 
   op_backend->mount_base = uri;
-
-  g_vfs_backend_set_autounmount (backend, TRUE);
 
   g_vfs_job_succeeded (G_VFS_JOB (job));
   return TRUE;

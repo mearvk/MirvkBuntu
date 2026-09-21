@@ -5,7 +5,6 @@
 #include "gtknative.h"
 #include "gdksurfaceprivate.h"
 #include "gdksubsurfaceprivate.h"
-#include "gdkrgbaprivate.h"
 
 struct _GtkSubsurfaceOverlay
 {
@@ -40,26 +39,26 @@ gtk_subsurface_overlay_snapshot (GtkInspectorOverlay *overlay,
   for (gsize i = 0; i < gdk_surface_get_n_subsurfaces (surface); i++)
     {
       GdkSubsurface *subsurface = gdk_surface_get_subsurface (surface, i);
-      graphene_rect_t rect;
+      graphene_rect_t dest;
       GdkRGBA color;
 
       if (gdk_subsurface_get_texture (subsurface) == NULL)
         continue;
 
-      gdk_subsurface_get_texture_rect (subsurface, &rect);
-
       if (gdk_subsurface_is_above_parent (subsurface))
-        color = GDK_RGBA ("DAA520"); /* goldenrod */
+        gdk_rgba_parse (&color, "goldenrod");
       else
-        color = GDK_RGBA ("FF00FF"); /* magenta */
+        gdk_rgba_parse (&color, "magenta");
+
+      gdk_subsurface_get_dest (subsurface, &dest);
 
       /* Use 4 color nodes since a border node overlaps and prevents
        * the subsurface from being raised.
        */
-      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (rect.origin.x - 2, rect.origin.y - 2, 2, rect.size.height + 4));
-      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (rect.origin.x - 2, rect.origin.y - 2, rect.size.width + 4, 2));
-      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (rect.origin.x - 2, rect.origin.y + rect.size.height, rect.size.width + 4, 2));
-      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (rect.origin.x + rect.size.width, rect.origin.y - 2, 2, rect.size.height + 4));
+      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (dest.origin.x - 2, dest.origin.y - 2, 2, dest.size.height + 4));
+      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (dest.origin.x - 2, dest.origin.y - 2, dest.size.width + 4, 2));
+      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (dest.origin.x - 2, dest.origin.y + dest.size.height, dest.size.width + 4, 2));
+      gtk_snapshot_append_color (snapshot, &color, &GRAPHENE_RECT_INIT (dest.origin.x + dest.size.width, dest.origin.y - 2, 2, dest.size.height + 4));
     }
 
   gtk_snapshot_restore (snapshot);

@@ -39,7 +39,7 @@
  * GSList:
  * @data: holds the element's data, which can be a pointer to any kind
  *        of data, or any integer value using the
- *        [Type Conversion Macros](conversion-macros.html#conversion-macros)
+ *        [Type Conversion Macros][glib-Type-Conversion-Macros]
  * @next: contains the link to the next element in the list.
  *
  * The #GSList struct is used for each element in the singly-linked
@@ -152,13 +152,13 @@ g_slist_free_full (GSList         *list,
 
 /**
  * g_slist_append:
- * @list: (nullable): a #GSList
+ * @list: a #GSList
  * @data: the data for the new element
  *
  * Adds a new element on to the end of the list.
  *
- * Note that the return value is the new start of the list
- * if @list was empty; make sure you store the new value.
+ * The return value is the new start of the list, which may
+ * have changed, so make sure you store the new value.
  *
  * Note that g_slist_append() has to traverse the entire list
  * to find the end, which is inefficient when adding multiple
@@ -178,7 +178,7 @@ g_slist_free_full (GSList         *list,
  * number_list = g_slist_append (number_list, GINT_TO_POINTER (14));
  * ]|
  *
- * Returns: either @list or the new start of the #GSList if @list was %NULL
+ * Returns: the new start of the #GSList
  */
 GSList*
 g_slist_append (GSList   *list,
@@ -205,13 +205,13 @@ g_slist_append (GSList   *list,
 
 /**
  * g_slist_prepend:
- * @list: (nullable): a #GSList
+ * @list: a #GSList
  * @data: the data for the new element
  *
  * Adds a new element on to the start of the list.
  *
- * Note that the return value is the new start of the list, 
- * which will have changed, so make sure you store the new value.
+ * The return value is the new start of the list, which
+ * may have changed, so make sure you store the new value.
  *
  * |[<!-- language="C" --> 
  * // Notice that it is initialized to the empty list.
@@ -220,8 +220,7 @@ g_slist_append (GSList   *list,
  * list = g_slist_prepend (list, "first");
  * ]|
  *
- * Returns: a pointer to the newly prepended element, 
- * which is the new start of the #GSList
+ * Returns: the new start of the #GSList
  */
 GSList*
 g_slist_prepend (GSList   *list,
@@ -238,7 +237,7 @@ g_slist_prepend (GSList   *list,
 
 /**
  * g_slist_insert:
- * @list: (nullable): a #GSList
+ * @list: a #GSList
  * @data: the data for the new element
  * @position: the position to insert the element.
  *     If this is negative, or is larger than the number
@@ -247,7 +246,7 @@ g_slist_prepend (GSList   *list,
  *
  * Inserts a new element into the list at the given position.
  *
- * Returns: the (possibly changed) start of the #GSList
+ * Returns: the new start of the #GSList
  */
 GSList*
 g_slist_insert (GSList   *list,
@@ -289,7 +288,7 @@ g_slist_insert (GSList   *list,
 
 /**
  * g_slist_insert_before:
- * @slist: (nullable): a #GSList
+ * @slist: a #GSList
  * @sibling: node to insert @data before
  * @data: data to put in the newly-inserted node
  *

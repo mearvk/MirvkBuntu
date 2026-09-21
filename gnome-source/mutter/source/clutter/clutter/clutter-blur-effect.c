@@ -167,13 +167,10 @@ clutter_blur_effect_init (ClutterBlurEffect *self)
   if (G_UNLIKELY (klass->base_pipeline == NULL))
     {
       CoglSnippet *snippet;
-      ClutterContext *context = _clutter_context_get_default ();
-      ClutterBackend *backend = clutter_context_get_backend (context);
-      CoglContext *cogl_context = clutter_backend_get_cogl_context (backend);
+      CoglContext *ctx =
+        clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
-      klass->base_pipeline = cogl_pipeline_new (cogl_context);
-      cogl_pipeline_set_static_name (klass->base_pipeline,
-                                     "ClutterBlurEffect (base pipeline)");
+      klass->base_pipeline = cogl_pipeline_new (ctx);
 
       snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_TEXTURE_LOOKUP,
                                   box_blur_glsl_declarations,

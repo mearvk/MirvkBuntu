@@ -37,10 +37,11 @@ typedef struct _GdkMacosMonitorClass GdkMacosMonitorClass;
 GDK_AVAILABLE_IN_ALL
 GType gdk_macos_monitor_get_type     (void);
 GDK_AVAILABLE_IN_ALL
-void  gdk_macos_monitor_get_workarea (GdkMonitor   *monitor,
+void  gdk_macos_monitor_get_geometry (GdkMonitor   *self,
                                       GdkRectangle *geometry);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkMacosMonitor, g_object_unref)
+GDK_AVAILABLE_IN_ALL
+void  gdk_macos_monitor_get_workarea (GdkMonitor   *self,
+                                      GdkRectangle *geometry);
 
 G_END_DECLS
 

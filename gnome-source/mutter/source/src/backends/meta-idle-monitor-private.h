@@ -33,8 +33,8 @@ typedef struct
   gpointer		    user_data;
   GDestroyNotify            notify;
   guint64                   timeout_msec;
+  int                       idle_source_id;
   GSource                  *timeout_source;
-  gboolean                  inhibitable;
 } MetaIdleMonitorWatch;
 
 struct _MetaIdleMonitorClass
@@ -46,4 +46,5 @@ void meta_idle_monitor_reset_idletime (MetaIdleMonitor *monitor);
 
 MetaIdleManager * meta_idle_monitor_get_manager (MetaIdleMonitor *monitor);
 
-MetaIdleMonitor * meta_idle_monitor_new (MetaIdleManager *idle_manager);
+MetaIdleMonitor * meta_idle_monitor_new (MetaIdleManager    *idle_manager,
+                                         ClutterInputDevice *device);

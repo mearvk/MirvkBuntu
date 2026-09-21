@@ -34,6 +34,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import call
 
 import pytest
 
@@ -46,15 +47,6 @@ if TYPE_CHECKING:
 @pytest.mark.unit
 class TestInputEventManager:
     """Test InputEventManager class methods."""
-
-    @staticmethod
-    def _frame(test_context: OrcaTestContext, filename: str, f_back=None):
-        """Return a lightweight frame mock for caller checks."""
-
-        return test_context.Mock(
-            f_code=test_context.Mock(co_filename=filename),
-            f_back=f_back,
-        )
 
     def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
         """Returns dependencies for input_event_manager module testing."""
@@ -80,6 +72,7 @@ class TestInputEventManager:
         script_mgr_instance = test_context.Mock()
         script_instance = test_context.Mock()
         script_instance.app = test_context.Mock()
+        script_instance.event_cache = {}
         script_instance.listeners = {}
         script_instance.is_activatable_event = test_context.Mock(return_value=True)
         script_instance.force_script_activation = test_context.Mock(return_value=False)
@@ -109,7 +102,6 @@ class TestInputEventManager:
                 self.get_script = test_context.Mock()
                 self.get_click_count = test_context.Mock(return_value=1)
                 self.is_printable_key = test_context.Mock(return_value=True)
-                self.is_alt_control_or_orca_modified = test_context.Mock(return_value=False)
                 self.as_single_line_string = test_context.Mock(return_value="KeyboardEvent")
                 self.pressed = pressed
                 self.keycode = keycode
@@ -233,71 +225,423 @@ class TestInputEventManager:
         input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
         assert input_event_manager._last_input_event is None
         assert input_event_manager._last_non_modifier_key_event is None
-
-    def test_get_last_input_event_refuses_call_from_outside_orca(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test code outside Orca cannot retrieve the raw last input event."""
-
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
-
-        from orca import input_event_manager as input_event_manager_module
-
-        frame = self._frame(test_context, "/home/test/.local/share/orca/extensions/demo.py")
-        test_context.patch_object(
-            input_event_manager_module.sys,
-            "_getframe",
-            return_value=frame,
-        )
-        input_event_manager._last_input_event = test_context.Mock()
-
-        with pytest.raises(PermissionError):
-            input_event_manager.get_last_input_event()
-
-    def test_get_last_input_event_allows_orca_call(self, test_context: OrcaTestContext) -> None:
-        """Test Orca code can retrieve the raw last input event."""
-
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
-
-        from orca import input_event_manager as input_event_manager_module
-
-        orca_dir = input_event_manager_module.os.path.dirname(
-            input_event_manager_module.os.path.realpath(input_event_manager_module.__file__)
-        )
-        frame = self._frame(test_context, f"{orca_dir}/flat_review_presenter.py")
-        test_context.patch_object(
-            input_event_manager_module.sys,
-            "_getframe",
-            return_value=frame,
-        )
-        input_event_manager._last_input_event = test_context.Mock()
-
-        assert input_event_manager.get_last_input_event() is input_event_manager._last_input_event
+        assert input_event_manager._device is None
+        assert not input_event_manager._mapped_keycodes
+        assert not input_event_manager._mapped_keysyms
+        assert not input_event_manager._grabbed_bindings
 
     def test_start_key_watcher(self, test_context) -> None:
         """Test InputEventManager.start_key_watcher."""
 
         input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+        mock_device = test_context.Mock()
         ax_device_mgr = essential_modules["ax_device_manager"]
+        ax_device_mgr.get_manager.return_value.get_device.return_value = mock_device
 
         input_event_manager.start_key_watcher()
 
-        ax_device_mgr.get_manager.return_value.start_key_watcher.assert_called_once_with(
-            input_event_manager._on_key_pressed,
-            input_event_manager._on_key_released,
+        ax_device_mgr.get_manager.return_value.get_device.assert_called_once()
+        mock_device.add_key_watcher.assert_called_once_with(
             input_event_manager.process_keyboard_event,
         )
+        assert input_event_manager._device is mock_device
 
     def test_stop_key_watcher(self, test_context: OrcaTestContext) -> None:
         """Test InputEventManager.stop_key_watcher."""
 
         input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
-        ax_device_mgr = essential_modules["ax_device_manager"]
-
+        input_event_manager._device = test_context.Mock()
         input_event_manager.stop_key_watcher()
+        assert input_event_manager._device is None
+        essential_modules["orca.debug"].print_message.assert_called()
 
-        ax_device_mgr.get_manager.return_value.stop_key_watcher.assert_called_once()
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "disabled",
+                "scenario": "disabled",
+                "is_enabled": False,
+                "is_bound": True,
+                "has_grabs": False,
+                "has_device": False,
+                "expected_result": [],
+                "expects_debug_call": False,
+            },
+            {
+                "id": "unbound",
+                "scenario": "unbound",
+                "is_enabled": True,
+                "is_bound": False,
+                "has_grabs": False,
+                "has_device": False,
+                "expected_result": [],
+                "expects_debug_call": False,
+            },
+            {
+                "id": "has_grabs",
+                "scenario": "has_grabs",
+                "is_enabled": True,
+                "is_bound": True,
+                "has_grabs": True,
+                "has_device": False,
+                "existing_grab_ids": [333, 444],
+                "expected_result": [333, 444],
+                "expects_debug_call": True,
+            },
+            {
+                "id": "no_device",
+                "scenario": "no_device",
+                "is_enabled": True,
+                "is_bound": True,
+                "has_grabs": False,
+                "has_device": False,
+                "expected_result": [],
+                "expects_debug_call": True,
+            },
+            {
+                "id": "success",
+                "scenario": "success",
+                "is_enabled": True,
+                "is_bound": True,
+                "has_grabs": False,
+                "has_device": True,
+                "expected_result": [111, 222],
+                "expects_debug_call": False,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_add_grabs_for_keybinding_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test InputEventManager.add_grabs_for_keybinding with various scenarios."""
+
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+
+        mock_binding = test_context.Mock()
+        mock_binding.is_enabled.return_value = case["is_enabled"]
+        mock_binding.is_bound.return_value = case["is_bound"]
+        mock_binding.has_grabs.return_value = case["has_grabs"]
+        mock_binding.get_grab_ids.return_value = case.get("existing_grab_ids", [])
+
+        if case["has_device"]:
+            mock_device = test_context.Mock()
+            mock_device.add_key_grab.side_effect = [111, 222]
+            input_event_manager._device = mock_device
+            mock_kd1 = test_context.Mock()
+            mock_kd2 = test_context.Mock()
+            mock_binding.key_definitions.return_value = [mock_kd1, mock_kd2]
+
+        result = input_event_manager.add_grabs_for_keybinding(mock_binding, ["Insert", "KP_Insert"])
+
+        if case["scenario"] == "success":
+            assert result == case["expected_result"]
+            assert input_event_manager._grabbed_bindings[111] == mock_binding
+            assert input_event_manager._grabbed_bindings[222] == mock_binding
+            mock_device.add_key_grab.assert_has_calls([call(mock_kd1, None), call(mock_kd2, None)])
+        else:
+            assert result == case["expected_result"]
+
+        if case["expects_debug_call"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "no_device",
+                "scenario": "no_device",
+                "has_device": False,
+                "grab_ids": [],
+                "has_grabbed_bindings": False,
+                "expects_debug_tokens": True,
+                "expects_debug_message": False,
+                "expects_device_calls": False,
+            },
+            {
+                "id": "no_grabs",
+                "scenario": "no_grabs",
+                "has_device": True,
+                "grab_ids": [],
+                "has_grabbed_bindings": False,
+                "expects_debug_tokens": False,
+                "expects_debug_message": False,
+                "expects_device_calls": False,
+            },
+            {
+                "id": "success",
+                "scenario": "success",
+                "has_device": True,
+                "grab_ids": [111, 222],
+                "has_grabbed_bindings": True,
+                "expects_debug_tokens": False,
+                "expects_debug_message": False,
+                "expects_device_calls": True,
+            },
+            {
+                "id": "missing_grab",
+                "scenario": "missing_grab",
+                "has_device": True,
+                "grab_ids": [999],
+                "has_grabbed_bindings": False,
+                "expects_debug_tokens": False,
+                "expects_debug_message": True,
+                "expects_device_calls": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_remove_grabs_for_keybinding_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test InputEventManager.remove_grabs_for_keybinding with various scenarios."""
+
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+
+        if case["has_device"]:
+            mock_device = test_context.Mock()
+            input_event_manager._device = mock_device
+
+        if case["has_grabbed_bindings"]:
+            input_event_manager._grabbed_bindings = {
+                111: test_context.Mock(),
+                222: test_context.Mock(),
+            }
+
+        mock_binding = test_context.Mock()
+        mock_binding.get_grab_ids.return_value = case["grab_ids"]
+
+        input_event_manager.remove_grabs_for_keybinding(mock_binding)
+
+        if case["expects_debug_tokens"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+
+        if case["expects_debug_message"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
+        if case["expects_device_calls"]:
+            if case["scenario"] == "success":
+                mock_device.remove_key_grab.assert_has_calls([call(111), call(222)])
+                assert 111 not in input_event_manager._grabbed_bindings
+                assert 222 not in input_event_manager._grabbed_bindings
+            elif case["scenario"] == "missing_grab":
+                mock_device.remove_key_grab.assert_called_once_with(999)
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "keysym_no_device",
+                "has_device": False,
+                "input_value": 0x61,
+                "expected_result": 0,
+                "device_method": None,
+                "device_return_value": None,
+                "mapped_collection": None,
+            },
+            {
+                "id": "keysym_success",
+                "has_device": True,
+                "input_value": 0x61,
+                "expected_result": 16,
+                "device_method": "map_keysym_modifier",
+                "device_return_value": 16,
+                "mapped_collection": "_mapped_keysyms",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_map_keysym_to_modifier_scenarios(
+        self,
+        test_context: OrcaTestContext,
+        case: dict,
+    ) -> None:
+        """Test InputEventManager.map_keysym_to_modifier with various scenarios."""
+
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+        if case["has_device"]:
+            mock_device = test_context.Mock()
+            if case["device_method"]:
+                getattr(mock_device, case["device_method"]).return_value = case[
+                    "device_return_value"
+                ]
+            input_event_manager._device = mock_device
+
+        result = input_event_manager.map_keysym_to_modifier(case["input_value"])
+
+        assert result == case["expected_result"]
+
+        if case["has_device"] and case["device_method"] and case["mapped_collection"]:
+            getattr(mock_device, case["device_method"]).assert_called_once_with(case["input_value"])
+            collection = getattr(input_event_manager, case["mapped_collection"])
+            assert case["input_value"] in collection
+        elif not case["has_device"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "no_device",
+                "has_device": False,
+                "expects_debug_call": True,
+                "expects_unmap_calls": False,
+            },
+            {
+                "id": "success",
+                "has_device": True,
+                "expects_debug_call": False,
+                "expects_unmap_calls": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_unmap_all_modifiers_scenarios(self, test_context, case: dict) -> None:
+        """Test InputEventManager.unmap_all_modifiers scenarios."""
+
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager._mapped_keycodes = [42, 43]
+        input_event_manager._mapped_keysyms = [0x61, 0x62]
+
+        if case["has_device"]:
+            mock_device = test_context.Mock()
+            input_event_manager._device = mock_device
+
+        input_event_manager.unmap_all_modifiers()
+
+        if case["expects_debug_call"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
+        if case["expects_unmap_calls"]:
+            mock_device.unmap_modifier.assert_has_calls([call(42), call(43)])
+            mock_device.unmap_keysym_modifier.assert_has_calls([call(0x61), call(0x62)])
+            assert not input_event_manager._mapped_keycodes
+            assert not input_event_manager._mapped_keysyms
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "add_no_device",
+                "operation": "add",
+                "scenario": "no_device",
+                "has_device": False,
+                "grab_id": None,
+                "expected_result": -1,
+                "expects_debug_call": True,
+            },
+            {
+                "id": "add_success",
+                "operation": "add",
+                "scenario": "success",
+                "has_device": True,
+                "grab_id": 789,
+                "expected_result": 789,
+                "expects_debug_call": False,
+            },
+            {
+                "id": "remove_no_device",
+                "operation": "remove",
+                "scenario": "no_device",
+                "has_device": False,
+                "grab_id": 789,
+                "expected_result": None,
+                "expects_debug_call": True,
+            },
+            {
+                "id": "remove_success",
+                "operation": "remove",
+                "scenario": "success",
+                "has_device": True,
+                "grab_id": 789,
+                "expected_result": None,
+                "expects_debug_call": True,
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_grab_for_modifier_scenarios(self, test_context, case: dict) -> None:
+        """Test InputEventManager add/remove_grab_for_modifier scenarios."""
+
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+
+        if case["has_device"]:
+            mock_device = test_context.Mock()
+            if case["operation"] == "add":
+                mock_device.add_key_grab.return_value = case["grab_id"]
+            input_event_manager._device = mock_device
+
+        if case["operation"] == "add":
+            result = input_event_manager.add_grab_for_modifier("Shift", 0xFFE1, 50)
+            if case["expected_result"] is not None:
+                assert result == case["expected_result"]
+            if case["has_device"] and case["scenario"] == "success":
+                mock_device.add_key_grab.assert_called_once()
+        else:
+            input_event_manager.remove_grab_for_modifier("Shift", case["grab_id"])
+            if case["has_device"] and case["scenario"] == "success":
+                mock_device.remove_key_grab.assert_called_once_with(case["grab_id"])
+
+        if case["expects_debug_call"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            {
+                "id": "grab_without_reason",
+                "operation": "grab",
+                "reason": None,
+                "expected_reason_text": None,
+            },
+            {
+                "id": "grab_with_reason",
+                "operation": "grab",
+                "reason": "learn mode",
+                "expected_reason_text": "learn mode",
+            },
+            {
+                "id": "ungrab_without_reason",
+                "operation": "ungrab",
+                "reason": None,
+                "expected_reason_text": None,
+            },
+            {
+                "id": "ungrab_with_reason",
+                "operation": "ungrab",
+                "reason": "exiting learn mode",
+                "expected_reason_text": "exiting learn mode",
+            },
+        ],
+        ids=lambda case: case["id"],
+    )
+    def test_keyboard_grab_scenarios(self, test_context: OrcaTestContext, case: dict) -> None:
+        """Test InputEventManager keyboard grab/ungrab operations with and without reasons."""
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+        mock_device = test_context.Mock()
+        input_event_manager._device = mock_device
+
+        if case["operation"] == "grab":
+            if case["reason"]:
+                input_event_manager.grab_keyboard(case["reason"])
+            else:
+                input_event_manager.grab_keyboard()
+            essential_modules["atspi"].Device.grab_keyboard.assert_called_once_with(mock_device)
+        else:
+            if case["reason"]:
+                input_event_manager.ungrab_keyboard(case["reason"])
+            else:
+                input_event_manager.ungrab_keyboard()
+            essential_modules["atspi"].Device.ungrab_keyboard.assert_called_once_with(mock_device)
+
+        if case["expected_reason_text"]:
+            debug_calls = essential_modules["orca.debug"].print_message.call_args_list
+            assert any(case["expected_reason_text"] in str(call) for call in debug_calls)
 
     def test_process_braille_event(self, test_context: OrcaTestContext) -> None:
         """Test InputEventManager.process_braille_event."""
@@ -424,6 +768,7 @@ class TestInputEventManager:
         input_event_manager._last_input_event = keyboard_event_instance
         result = input_event_manager.process_keyboard_event(mock_device, True, 65, 97, 0, "a")
         assert result is False
+        essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -674,11 +1019,7 @@ class TestInputEventManager:
         input_event_manager.is_release_for = test_context.Mock(return_value=True)
         result = input_event_manager.last_event_equals_or_is_release_for_event(mock_event)
         assert result is True
-        input_event_manager.is_release_for.assert_called_once_with(
-            mock_last_event,
-            mock_event,
-            ignore_modifiers=True,
-        )
+        input_event_manager.is_release_for.assert_called_once_with(mock_last_event, mock_event)
 
     @pytest.mark.parametrize(
         "case",
@@ -758,13 +1099,18 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager command detection methods."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=case["key_modifiers"],
         )
         method = getattr(input_event_manager, case["method_name"])
         result = method()
         assert result is case["expected_result"]
+
+        if case["expects_debug"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+        else:
+            essential_modules["orca.debug"].print_message.assert_not_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -806,6 +1152,8 @@ class TestInputEventManager:
         ax_utilities_class.has_matching_shortcut.return_value = case["has_shortcut"]
         result = input_event_manager.last_event_was_shortcut_for(mock_obj)
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -814,35 +1162,13 @@ class TestInputEventManager:
                 "id": "printable_key_true",
                 "is_keyboard": True,
                 "is_printable": True,
-                "is_modified": False,
-                "unmodified_only": False,
                 "expected_result": True,
                 "expects_debug": True,
-            },
-            {
-                "id": "modified_printable_key_allowed_by_default",
-                "is_keyboard": True,
-                "is_printable": True,
-                "is_modified": True,
-                "unmodified_only": False,
-                "expected_result": True,
-                "expects_debug": True,
-            },
-            {
-                "id": "modified_printable_key_excluded_when_requested",
-                "is_keyboard": True,
-                "is_printable": True,
-                "is_modified": True,
-                "unmodified_only": True,
-                "expected_result": False,
-                "expects_debug": False,
             },
             {
                 "id": "not_keyboard",
                 "is_keyboard": False,
                 "is_printable": None,
-                "is_modified": None,
-                "unmodified_only": False,
                 "expected_result": False,
                 "expects_debug": False,
             },
@@ -850,8 +1176,6 @@ class TestInputEventManager:
                 "id": "not_printable",
                 "is_keyboard": True,
                 "is_printable": False,
-                "is_modified": False,
-                "unmodified_only": False,
                 "expected_result": False,
                 "expects_debug": False,
             },
@@ -866,16 +1190,22 @@ class TestInputEventManager:
         """Test InputEventManager.last_event_was_printable_key with various scenarios."""
 
         input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager.last_event_was_keyboard = test_context.Mock(
+            return_value=case["is_keyboard"],
+        )
+
         if case["is_keyboard"] and case["is_printable"] is not None:
-            mock_last_event = essential_modules["orca.input_event"].KeyboardEvent()
+            mock_last_event = test_context.Mock()
             mock_last_event.is_printable_key.return_value = case["is_printable"]
-            mock_last_event.is_alt_control_or_orca_modified.return_value = case["is_modified"]
             input_event_manager._last_input_event = mock_last_event
 
-        result = input_event_manager.last_event_was_printable_key(
-            unmodified=case["unmodified_only"]
-        )
+        result = input_event_manager.last_event_was_printable_key()
         assert result is case["expected_result"]
+
+        if case["expects_debug"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+        else:
+            essential_modules["orca.debug"].print_message.assert_not_called()
 
     def test_last_event_was_caret_navigation(self, test_context: OrcaTestContext) -> None:
         """Test InputEventManager.last_event_was_caret_navigation."""
@@ -945,12 +1275,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_caret_selection."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_caret_selection()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -991,12 +1323,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_backward_caret_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_backward_caret_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1042,12 +1376,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_forward_caret_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_forward_caret_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1093,12 +1429,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_forward_caret_selection."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_forward_caret_selection()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1144,12 +1482,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_character_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_character_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1190,12 +1530,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_word_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_word_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1224,12 +1566,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_previous_word_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_previous_word_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1263,12 +1607,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_next_word_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_next_word_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1343,6 +1689,8 @@ class TestInputEventManager:
         ].is_widget_controlled_by_line_navigation.return_value = case["is_widget_controlled"]
         result = input_event_manager.last_event_was_line_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1382,12 +1730,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_paragraph_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_paragraph_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1422,12 +1772,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_line_boundary_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_line_boundary_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1462,12 +1814,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_file_boundary_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_file_boundary_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1542,6 +1896,8 @@ class TestInputEventManager:
         ].is_widget_controlled_by_line_navigation.return_value = case["is_widget_controlled"]
         result = input_event_manager.last_event_was_page_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1593,12 +1949,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_page_switch."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_page_switch()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1638,12 +1996,14 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_tab_navigation."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["key_string"], case["modifiers"]),
         )
         result = input_event_manager.last_event_was_tab_navigation()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1732,6 +2092,8 @@ class TestInputEventManager:
         )
         result = input_event_manager.last_event_was_table_sort()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2184,13 +2546,15 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager simple editing action methods."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["keynames"][0] if case["keynames"] else "", case["modifiers"]),
         )
         method = getattr(input_event_manager, case["method_name"])
         result = method()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2297,6 +2661,8 @@ class TestInputEventManager:
         method = getattr(input_event_manager, case["method_name"])
         result = method()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2409,13 +2775,15 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager undo/redo/select editing action methods."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         input_event_manager._last_key_and_modifiers = test_context.Mock(
             return_value=(case["keynames"][0] if case["keynames"] else "", case["modifiers"]),
         )
         method = getattr(input_event_manager, case["method_name"])
         result = method()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2494,7 +2862,7 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager primary mouse button action methods."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         mock_last_event = test_context.Mock()
         mock_last_event.button = case["button"]
         mock_last_event.pressed = case["pressed"]
@@ -2505,6 +2873,8 @@ class TestInputEventManager:
         method = getattr(input_event_manager, case["method_name"])
         result = method()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2543,7 +2913,7 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager.last_event_was_primary_click_or_release."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         mock_last_event = test_context.Mock()
         mock_last_event.button = case["button"]
         input_event_manager._last_input_event = mock_last_event
@@ -2552,6 +2922,8 @@ class TestInputEventManager:
         )
         result = input_event_manager.last_event_was_primary_click_or_release()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2694,7 +3066,7 @@ class TestInputEventManager:
     ) -> None:
         """Test InputEventManager middle and secondary mouse button action methods."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
         mock_last_event = test_context.Mock()
         mock_last_event.button = case["button"]
         mock_last_event.pressed = case["pressed"]
@@ -2705,6 +3077,8 @@ class TestInputEventManager:
         method = getattr(input_event_manager, case["method_name"])
         result = method()
         assert result == case["expected_result"]
+        if case["expected_result"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_manager(self, test_context: OrcaTestContext) -> None:
         """Test get_manager function returns singleton."""
@@ -2719,10 +3093,11 @@ class TestInputEventManager:
     def test_pause_key_watcher_with_debug_message(self, test_context: OrcaTestContext) -> None:
         """Test InputEventManager.pause_key_watcher logs debug message."""
 
-        input_event_manager, _essential_modules = self._setup_input_event_manager(test_context)
+        input_event_manager, essential_modules = self._setup_input_event_manager(test_context)
 
         input_event_manager.pause_key_watcher(True, "Testing pause functionality")
 
+        essential_modules["orca.debug"].print_message.assert_called()
         assert input_event_manager._paused is True
 
         input_event_manager.pause_key_watcher(False, "Testing unpause functionality")

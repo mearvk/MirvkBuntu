@@ -26,7 +26,7 @@
 /**
  * GtkSectionModel:
  *
- * An interface that adds support for sections to list models.
+ * `GtkSectionModel` is an interface that adds support for sections to list models.
  *
  * A `GtkSectionModel` groups successive items into so-called sections. List widgets
  * like `GtkListView` and `GtkGridView` then allow displaying section headers for
@@ -188,12 +188,12 @@ gtk_list_model_get_section (GListModel *self,
 }
 
 /**
- * gtk_section_model_sections_changed:
+ * gtk_section_model_section_changed:
  * @self: a `GtkSectionModel`
  * @position: the first changed item
  * @n_items: the number of changed items
  *
- * This function emits the [signal@Gtk.SectionModel::sections-changed]
+ * This function emits the [signal@Gtk.SectionModel::section-changed]
  * signal to notify about changes to sections.
  *
  * It must cover all positions that used to be a section start or that
@@ -201,7 +201,7 @@ gtk_list_model_get_section (GListModel *self,
  * which the section has changed.
  *
  * The [signal@Gio.ListModel::items-changed] implies the effect of the
- * [signal@Gtk.SectionModel::sections-changed] signal for all the items
+ * [signal@Gtk.SectionModel::section-changed] signal for all the items
  * it covers.
  *
  * It is recommended that when changes to the items cause section changes

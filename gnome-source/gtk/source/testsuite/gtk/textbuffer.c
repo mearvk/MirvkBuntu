@@ -604,6 +604,32 @@ run_tests (GtkTextBuffer *buffer)
   check_specific_tag (buffer, "end_tag");
 }
 
+
+static const char  *book_closed_xpm[] = {
+"16 16 6 1",
+"       c None s None",
+".      c black",
+"X      c red",
+"o      c yellow",
+"O      c #808080",
+"#      c white",
+"                ",
+"       ..       ",
+"     ..XX.      ",
+"   ..XXXXX.     ",
+" ..XXXXXXXX.    ",
+".ooXXXXXXXXX.   ",
+"..ooXXXXXXXXX.  ",
+".X.ooXXXXXXXXX. ",
+".XX.ooXXXXXX..  ",
+" .XX.ooXXX..#O  ",
+"  .XX.oo..##OO. ",
+"   .XX..##OO..  ",
+"    .X.#OO..    ",
+"     ..O..      ",
+"      ..        ",
+"                "};
+
 static void
 fill_buffer (GtkTextBuffer *buffer)
 {
@@ -612,6 +638,7 @@ fill_buffer (GtkTextBuffer *buffer)
   GdkRGBA color2;
   GtkTextIter iter;
   GtkTextIter iter2;
+  GdkPixbuf *pixbuf;
   GdkTexture *texture;
   int i;
 
@@ -626,8 +653,8 @@ fill_buffer (GtkTextBuffer *buffer)
   color2.alpha = 1.0;
 
   gtk_text_buffer_create_tag (buffer, "fg_blue",
-                              "foreground-rgba", &color,
-                              "background-rgba", &color2,
+                              "foreground_rgba", &color,
+                              "background_rgba", &color2,
                               "font", "-*-courier-bold-r-*-*-30-*-*-*-*-*-*-*",
                               NULL);
 
@@ -637,7 +664,7 @@ fill_buffer (GtkTextBuffer *buffer)
 
   gtk_text_buffer_create_tag (buffer, "fg_red",
                               "rise", -4,
-                              "foreground-rgba", &color,
+                              "foreground_rgba", &color,
                               NULL);
 
   color.red = 0.0;
@@ -645,11 +672,12 @@ fill_buffer (GtkTextBuffer *buffer)
   color.blue = 0.0;
 
   gtk_text_buffer_create_tag (buffer, "bg_green",
-                              "background-rgba", &color,
+                              "background_rgba", &color,
                               "font", "-*-courier-bold-r-*-*-10-*-*-*-*-*-*-*",
                               NULL);
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/status/image-missing.png");
+  pixbuf = gdk_pixbuf_new_from_xpm_data (book_closed_xpm);
+  texture = gdk_texture_new_for_pixbuf (pixbuf);
 
   g_assert_nonnull (texture);
 
@@ -761,6 +789,7 @@ fill_buffer (GtkTextBuffer *buffer)
 
   gtk_text_buffer_apply_tag (buffer, tag, &iter, &iter2);
 
+  g_object_unref (pixbuf);
   g_object_unref (texture);
 }
 
@@ -1924,10 +1953,10 @@ test_serialize_wrap_mode (void)
 int
 main (int argc, char** argv)
 {
-  gtk_test_init (&argc, &argv);
-
-  /* Turn on btree debugging */
+  /* First, we turn on btree debugging. */
   gtk_set_debug_flags (gtk_get_debug_flags () | GTK_DEBUG_TEXT);
+
+  gtk_test_init (&argc, &argv);
 
   g_test_add_func ("/TextBuffer/UTF8 unknown char", test_utf8);
   g_test_add_func ("/TextBuffer/Line separator", test_line_separator);

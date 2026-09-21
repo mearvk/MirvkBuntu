@@ -20,7 +20,7 @@
  * Modified by the GTK+ Team and others 1997-2000.  See the AUTHORS
  * file for a list of people on the GTK+ Team.  See the ChangeLog
  * files for a list of changes.  These files are distributed with
- * GTK+ at ftp://ftp.gtk.org/pub/gtk/.
+ * GTK+ at ftp://ftp.gtk.org/pub/gtk/. 
  */
 
 #include "config.h"
@@ -33,11 +33,9 @@
 #include "gdkdevice-broadway.h"
 #include "gdkdisplay.h"
 #include "gdkdragsurfaceprivate.h"
-#include "gdkeventsourceprivate.h"
+#include "gdkeventsource.h"
 #include "gdkframeclockidleprivate.h"
-#include "gdkframetimingsprivate.h"
 #include "gdkpopupprivate.h"
-#include "gdkprofilerprivate.h"
 #include "gdkprivate-broadway.h"
 #include "gdkseatprivate.h"
 #include "gdksurfaceprivate.h"
@@ -50,135 +48,6 @@
 #include <string.h>
 
 G_DEFINE_TYPE (GdkBroadwaySurface, gdk_broadway_surface, GDK_TYPE_SURFACE)
-
-static void
-gdk_broadway_surface_toplevel_resize (GdkSurface *surface,
-                                      int         width,
-                                      int         height);
-
-static void
-gdk_broadway_surface_set_geometry_hints (GdkSurface        *surface,
-                                         const GdkGeometry *geometry,
-                                         GdkSurfaceHints    geom_mask);
-
-static void
-gdk_broadway_surface_move_resize_internal (GdkSurface *surface,
-                                           gboolean    with_move,
-                                           int         x,
-                                           int         y,
-                                           int         width,
-                                           int         height);
-
-static void
-compute_toplevel_size (GdkSurface *surface,
-                       gboolean    resizible,
-                       int        *width,
-                       int        *height)
-{
-  GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
-  GdkDisplay *display = gdk_surface_get_display (surface);
-  GdkMonitor *monitor;
-  GdkToplevelSize size;
-  int bounds_width, bounds_height;
-  GdkGeometry geometry;
-  GdkSurfaceHints mask;
-
-  monitor = gdk_display_get_monitor_at_surface (display, surface);
-  if (monitor)
-    {
-      GdkRectangle monitor_geometry;
-
-      gdk_monitor_get_geometry (monitor, &monitor_geometry);
-      bounds_width = monitor_geometry.width;
-      bounds_height = monitor_geometry.height;
-    }
-  else
-    {
-      bounds_width = G_MAXINT;
-      bounds_height = G_MAXINT;
-    }
-
-  gdk_toplevel_size_init (&size, bounds_width, bounds_height);
-  gdk_toplevel_notify_compute_size (GDK_TOPLEVEL (surface), &size);
-  g_warn_if_fail (size.width > 0);
-  g_warn_if_fail (size.height > 0);
-  *width = size.width;
-  *height = size.height;
-  impl->resizible = (impl->resizible && resizible);
-
-  if (impl->resizible)
-    {
-      geometry.min_width = size.min_width;
-      geometry.min_height = size.min_height;
-      mask = GDK_HINT_MIN_SIZE;
-    }
-  else
-    {
-      geometry.max_width = geometry.min_width = size.width;
-      geometry.max_height = geometry.min_height = size.height;
-      mask = GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE;
-    }
-  gdk_broadway_surface_set_geometry_hints (surface, &geometry, mask);
-
-  if (!(surface->state & (GDK_TOPLEVEL_STATE_FULLSCREEN |
-                          GDK_TOPLEVEL_STATE_MAXIMIZED |
-                          GDK_TOPLEVEL_STATE_TILED |
-                          GDK_TOPLEVEL_STATE_TOP_TILED |
-                          GDK_TOPLEVEL_STATE_RIGHT_TILED |
-                          GDK_TOPLEVEL_STATE_BOTTOM_TILED |
-                          GDK_TOPLEVEL_STATE_LEFT_TILED |
-                          GDK_TOPLEVEL_STATE_MINIMIZED)))
-    {
-      gdk_surface_constrain_size (&geometry, mask,
-				  size.width, size.height,
-				  &size.width, &size.height);
-
-      if (impl->last_computed_width != size.width ||
-           impl->last_computed_height != size.height)
-        {
-          *width = size.width;
-          *height = size.height;
-          impl->last_computed_width = size.width;
-          impl->last_computed_height = size.height;
-
-	  gdk_broadway_surface_toplevel_resize (surface, *width, *height);
-        }
-    }
-
-  if (size.shadow.is_valid)
-    {
-      impl->shadow_left = size.shadow.left;
-      impl->shadow_right = size.shadow.right;
-      impl->shadow_top = size.shadow.top;
-      impl->shadow_bottom = size.shadow.bottom;
-    }
-}
-
-static gboolean
-compute_size_idle (gpointer user_data)
-{
-  GdkSurface *surface = user_data;
-  GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
-  int width, height;
-
-  impl->compute_size_source_id = 0;
-  compute_toplevel_size (surface, TRUE, &width, &height);
-
-  return G_SOURCE_REMOVE;
-}
-
-static void
-on_frame_clock_after_update (GdkFrameClock *clock,
-                             GdkSurface    *surface)
-{
-  GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
-
-  if (impl->compute_size_source_id)
-    {
-      g_clear_handle_id (&impl->compute_size_source_id, g_source_remove);
-      compute_size_idle (surface);
-    }
-}
 
 /* We need to flush in an idle rather than AFTER_PAINT, as the clock
    is frozen during e.g. surface resizes so the paint will not happen
@@ -213,12 +82,36 @@ on_frame_clock_after_paint (GdkFrameClock *clock,
 }
 
 static void
+on_frame_clock_before_paint (GdkFrameClock *clock,
+                             GdkSurface    *surface)
+{
+  GdkFrameTimings *timings = gdk_frame_clock_get_current_timings (clock);
+  gint64 presentation_time;
+  gint64 refresh_interval;
+
+  if (surface->update_freeze_count > 0)
+    return;
+
+  gdk_frame_clock_get_refresh_info (clock,
+                                    timings->frame_time,
+                                    &refresh_interval, &presentation_time);
+  if (presentation_time != 0)
+    {
+      timings->predicted_presentation_time = presentation_time + refresh_interval;
+    }
+  else
+    {
+      timings->predicted_presentation_time = timings->frame_time + refresh_interval / 2 + refresh_interval;
+    }
+}
+
+static void
 connect_frame_clock (GdkSurface *surface)
 {
   GdkFrameClock *frame_clock = gdk_surface_get_frame_clock (surface);
 
-  g_signal_connect_after (frame_clock, "update",
-			  G_CALLBACK (on_frame_clock_after_update), surface);
+  g_signal_connect (frame_clock, "before-paint",
+                    G_CALLBACK (on_frame_clock_before_paint), surface);
   g_signal_connect (frame_clock, "after-paint",
                     G_CALLBACK (on_frame_clock_after_paint), surface);
 }
@@ -229,7 +122,7 @@ disconnect_frame_clock (GdkSurface *surface)
   GdkFrameClock *frame_clock = gdk_surface_get_frame_clock (surface);
 
   g_signal_handlers_disconnect_by_func (frame_clock,
-                                        on_frame_clock_after_update, surface);
+                                        on_frame_clock_before_paint, surface);
   g_signal_handlers_disconnect_by_func (frame_clock,
                                         on_frame_clock_after_paint, surface);
 }
@@ -244,7 +137,6 @@ gdk_broadway_surface_constructed (GObject *object)
   if (!surface->parent)
     broadway_display->toplevels = g_list_prepend (broadway_display->toplevels, self);
 
-  self->resizible = TRUE;
   self->id = _gdk_broadway_server_new_surface (broadway_display->server,
                                                self->root_x,
                                                self->root_y,
@@ -282,12 +174,13 @@ gdk_broadway_surface_finalize (GObject *object)
   G_OBJECT_CLASS (gdk_broadway_surface_parent_class)->finalize (object);
 }
 
-static void
+static gboolean
 thaw_updates_cb (GdkSurface *surface)
 {
   if (!GDK_SURFACE_DESTROYED (surface))
     gdk_surface_thaw_updates (surface);
   g_object_unref (surface);
+  return G_SOURCE_REMOVE;
 }
 
 void
@@ -297,18 +190,31 @@ _gdk_broadway_roundtrip_notify (GdkSurface  *surface,
 {
   GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
   GdkFrameClock *clock = gdk_surface_get_frame_clock (surface);
+  GdkFrameTimings *timings;
+
+  timings = gdk_frame_clock_get_timings (clock, impl->pending_frame_counter);
+  impl->pending_frame_counter = 0;
 
   /* If there is no remote web client, rate limit update to once a second */
   if (local_reply)
-    g_timeout_add_seconds_once (1, (GSourceOnceFunc) thaw_updates_cb, g_object_ref (surface));
+    g_timeout_add_seconds (1, (GSourceFunc)thaw_updates_cb, g_object_ref (surface));
   else
     gdk_surface_thaw_updates (surface);
 
-  gdk_frame_clock_submitted (clock,
-                             impl->pending_frame_counter,
-                             G_NSEC_PER_SEC / 30); /* default to 1/30th of a second */
+  if (timings)
+    {
+      timings->refresh_interval = 33333; /* default to 1/30th of a second */
+      // This isn't quite right, since we've done a roundtrip back too, can we do better?
+      timings->presentation_time = g_get_monotonic_time ();
+      timings->complete = TRUE;
 
-  impl->pending_frame_counter = 0;
+
+      if ((_gdk_debug_flags & GDK_DEBUG_FRAMES) != 0)
+        _gdk_frame_clock_debug_print_timings (clock, timings);
+
+  if (GDK_PROFILER_IS_RUNNING)
+    _gdk_frame_clock_add_timings_to_profiler (clock, timings);
+    }
 }
 
 static void
@@ -406,23 +312,15 @@ gdk_broadway_surface_hide (GdkSurface *surface)
 
   /* FIXME: update state ? */
 
-  if (surface->autohide && impl->popup_grab)
-    {
-      GdkSeat *seat;
-
-      seat = gdk_display_get_default_seat (surface->display);
-      gdk_seat_ungrab (seat, surface);
-      impl->popup_grab = FALSE;
-    }
-
   broadway_display = GDK_BROADWAY_DISPLAY (gdk_surface_get_display (surface));
 
   _gdk_broadway_surface_grab_check_unmap (surface,
                                          _gdk_broadway_server_get_next_serial (broadway_display->server));
-  g_clear_handle_id (&impl->compute_size_source_id, g_source_remove);
 
   if (_gdk_broadway_server_surface_hide (broadway_display->server, impl->id))
     queue_flush (surface);
+
+  _gdk_surface_clear_update_area (surface);
 }
 
 static double
@@ -589,7 +487,6 @@ gdk_broadway_surface_layout_popup (GdkSurface     *surface,
                                    monitor,
                                    &bounds,
                                    layout,
-                                   GDK_SURFACE_LAYOUT_POPUP_HELPER_DEFAULT,
                                    &final_rect);
 
   x = final_rect.x;
@@ -618,25 +515,37 @@ show_popup (GdkSurface *surface)
   gdk_surface_invalidate_rect (surface, NULL);
 }
 
+static void
+show_grabbing_popup (GdkSeat    *seat,
+                     GdkSurface *surface,
+                     gpointer    user_data)
+{
+  show_popup (surface);
+}
+
 static gboolean
 gdk_broadway_surface_present_popup (GdkSurface     *surface,
                                     int             width,
                                     int             height,
                                     GdkPopupLayout *layout)
 {
-  GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
-
   gdk_broadway_surface_layout_popup (surface, width, height, layout);
 
   if (GDK_SURFACE_IS_MAPPED (surface))
     return TRUE;
 
-  show_popup (surface);
-
   if (surface->autohide)
     {
-      gdk_seat_grab (gdk_display_get_default_seat (surface->display), surface);
-      impl->popup_grab = TRUE;
+      gdk_seat_grab (gdk_display_get_default_seat (surface->display),
+                     surface,
+                     GDK_SEAT_CAPABILITY_ALL,
+                     TRUE,
+                     NULL, NULL,
+                     show_grabbing_popup, NULL);
+    }
+  else
+    {
+      show_popup (surface);
     }
 
   return GDK_SURFACE_IS_MAPPED (surface);
@@ -990,8 +899,10 @@ update_pos (MoveResizeData *mv_resize,
 static void
 finish_drag (MoveResizeData *mv_resize)
 {
-  g_clear_pointer (&mv_resize->moveresize_emulation_surface, gdk_surface_destroy);
-  g_clear_object (&mv_resize->moveresize_surface);
+  gdk_surface_destroy (mv_resize->moveresize_emulation_surface);
+  mv_resize->moveresize_emulation_surface = NULL;
+  g_object_unref (mv_resize->moveresize_surface);
+  mv_resize->moveresize_surface = NULL;
   g_clear_pointer (&mv_resize->moveresize_pending_event, g_free);
 }
 
@@ -1098,8 +1009,6 @@ _gdk_broadway_moveresize_configure_done (GdkDisplay *display,
   BroadwayInputMsg *tmp_event;
   MoveResizeData *mv_resize = get_move_resize_data (display, FALSE);
 
-  gdk_surface_request_layout (surface);
-
   if (!mv_resize || surface != mv_resize->moveresize_surface)
     return FALSE;
 
@@ -1126,9 +1035,9 @@ static void
 create_moveresize_surface (MoveResizeData *mv_resize,
                            guint32         timestamp)
 {
-  GdkBroadwayDisplay *broadway_display;
   GdkGrabStatus status;
-  GdkSurface *surface;
+  GdkSeat *seat;
+  GdkDevice *pointer;
 
   g_assert (mv_resize->moveresize_emulation_surface == NULL);
 
@@ -1138,11 +1047,18 @@ create_moveresize_surface (MoveResizeData *mv_resize,
   gdk_broadway_surface_move_resize_internal (mv_resize->moveresize_emulation_surface, TRUE, -100, -100, 1, 1);
   gdk_broadway_surface_show (mv_resize->moveresize_emulation_surface, FALSE);
 
-  broadway_display = GDK_BROADWAY_DISPLAY (mv_resize->display);
-  surface = mv_resize->moveresize_emulation_surface;
-  status = _gdk_broadway_server_grab_pointer (broadway_display->server,
-                                              GDK_BROADWAY_SURFACE (surface)->id,
-                                              FALSE, timestamp);
+  seat = gdk_display_get_default_seat (mv_resize->display);
+  pointer = gdk_seat_get_pointer (seat);
+
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+  status = gdk_device_grab (pointer,
+                            mv_resize->moveresize_emulation_surface,
+                            FALSE,
+                            GDK_BUTTON_RELEASE_MASK |
+                            GDK_POINTER_MOTION_MASK,
+                            NULL,
+                            timestamp);
+  G_GNUC_END_IGNORE_DEPRECATIONS;
 
   if (status != GDK_GRAB_SUCCESS)
     {
@@ -1253,43 +1169,6 @@ gdk_broadway_surface_beep (GdkSurface *surface)
 }
 
 static void
-gdk_broadway_surface_request_layout (GdkSurface *surface)
-{
-  GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
-
-  if (!impl->compute_size_source_id &&
-      GDK_IS_TOPLEVEL (surface))
-    {
-      impl->compute_size_source_id = g_idle_add_full (G_PRIORITY_HIGH - 10,
-                                                      compute_size_idle,
-                                                      surface,
-                                                      NULL);
-    }
-}
-
-static gboolean
-gdk_broadway_surface_compute_size (GdkSurface *surface)
-{
-  int width, height;
-
-  if (GDK_IS_TOPLEVEL (surface))
-    {
-      compute_toplevel_size (surface, TRUE, &width, &height);
-    }
-  else
-    {
-      width = gdk_surface_get_width(surface);
-      height = gdk_surface_get_height(surface);
-
-      gdk_broadway_surface_move_resize_internal (surface, FALSE,
-						 0, 0,
-						 width,
-						 height);
-    }
-  return FALSE;
-}
-
-static void
 gdk_broadway_surface_class_init (GdkBroadwaySurfaceClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
@@ -1308,8 +1187,6 @@ gdk_broadway_surface_class_init (GdkBroadwaySurfaceClass *klass)
   impl_class->destroy_notify = gdk_broadway_surface_destroy_notify;
   impl_class->drag_begin = _gdk_broadway_surface_drag_begin;
   impl_class->get_scale = gdk_broadway_surface_get_scale;
-  impl_class->request_layout = gdk_broadway_surface_request_layout;
-  impl_class->compute_size = gdk_broadway_surface_compute_size;
 }
 
 #define LAST_PROP 1
@@ -1535,9 +1412,6 @@ gdk_broadway_toplevel_set_property (GObject      *object,
     case LAST_PROP + GDK_TOPLEVEL_PROP_SHORTCUTS_INHIBITED:
       break;
 
-    case LAST_PROP + GDK_TOPLEVEL_PROP_GRAVITY:
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1559,11 +1433,11 @@ gdk_broadway_toplevel_get_property (GObject    *object,
       break;
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_TITLE:
-      g_value_set_static_string (value, "");
+      g_value_set_string (value, "");
       break;
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_STARTUP_ID:
-      g_value_set_static_string (value, "");
+      g_value_set_string (value, "");
       break;
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_TRANSIENT_FOR:
@@ -1586,16 +1460,6 @@ gdk_broadway_toplevel_get_property (GObject    *object,
 
     case LAST_PROP + GDK_TOPLEVEL_PROP_SHORTCUTS_INHIBITED:
       g_value_set_boolean (value, surface->shortcuts_inhibited);
-      break;
-
-    case LAST_PROP + GDK_TOPLEVEL_PROP_CAPABILITIES:
-      g_value_set_flags (value, GDK_TOPLEVEL_CAPABILITIES_MAXIMIZE |
-                                GDK_TOPLEVEL_CAPABILITIES_FULLSCREEN |
-                                GDK_TOPLEVEL_CAPABILITIES_MINIMIZE);
-      break;
-
-    case LAST_PROP + GDK_TOPLEVEL_PROP_GRAVITY:
-      g_value_set_boolean (value, GDK_GRAVITY_NORTH_EAST);
       break;
 
     default:
@@ -1640,12 +1504,55 @@ gdk_broadway_toplevel_present (GdkToplevel       *toplevel,
                                GdkToplevelLayout *layout)
 {
   GdkSurface *surface = GDK_SURFACE (toplevel);
+  GdkBroadwaySurface *impl = GDK_BROADWAY_SURFACE (surface);
+  GdkDisplay *display = gdk_surface_get_display (surface);
+  GdkMonitor *monitor;
+  GdkToplevelSize size;
+  int bounds_width, bounds_height;
   int width, height;
+  GdkGeometry geometry;
+  GdkSurfaceHints mask;
   gboolean maximize;
 
   gdk_broadway_surface_unminimize (surface);
 
-  compute_toplevel_size (surface, gdk_toplevel_layout_get_resizable (layout), &width, &height);
+  monitor = gdk_display_get_monitor_at_surface (display, surface);
+  if (monitor)
+    {
+      GdkRectangle monitor_geometry;
+
+      gdk_monitor_get_geometry (monitor, &monitor_geometry);
+      bounds_width = monitor_geometry.width;
+      bounds_height = monitor_geometry.height;
+    }
+  else
+    {
+      bounds_width = G_MAXINT;
+      bounds_height = G_MAXINT;
+    }
+
+  gdk_toplevel_size_init (&size, bounds_width, bounds_height);
+  gdk_toplevel_notify_compute_size (toplevel, &size);
+  g_warn_if_fail (size.width > 0);
+  g_warn_if_fail (size.height > 0);
+  width = size.width;
+  height = size.height;
+
+  if (gdk_toplevel_layout_get_resizable (layout))
+    {
+      geometry.min_width = size.min_width;
+      geometry.min_height = size.min_height;
+      mask = GDK_HINT_MIN_SIZE;
+    }
+  else
+    {
+      geometry.max_width = geometry.min_width = width;
+      geometry.max_height = geometry.min_height = height;
+      mask = GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE;
+    }
+  gdk_broadway_surface_set_geometry_hints (surface, &geometry, mask);
+  gdk_surface_constrain_size (&geometry, mask, width, height, &width, &height);
+  gdk_broadway_surface_toplevel_resize (surface, width, height);
 
   if (gdk_toplevel_layout_get_maximized (layout, &maximize))
     {
@@ -1655,7 +1562,14 @@ gdk_broadway_toplevel_present (GdkToplevel       *toplevel,
         gdk_broadway_surface_unmaximize (surface);
     }
 
-  gdk_surface_request_layout (surface);
+  if (size.shadow.is_valid)
+    {
+      impl->shadow_left = size.shadow.left;
+      impl->shadow_right = size.shadow.right;
+      impl->shadow_top = size.shadow.top;
+      impl->shadow_bottom = size.shadow.bottom;
+    }
+
   show_surface (surface);
 }
 
@@ -1667,6 +1581,12 @@ gdk_broadway_toplevel_minimize (GdkToplevel *toplevel)
   return TRUE;
 }
 
+static gboolean
+gdk_broadway_toplevel_lower (GdkToplevel *toplevel)
+{
+  return FALSE;
+}
+
 static void
 gdk_broadway_toplevel_focus (GdkToplevel *toplevel,
                              guint32      timestamp)
@@ -1674,12 +1594,21 @@ gdk_broadway_toplevel_focus (GdkToplevel *toplevel,
   gdk_broadway_surface_focus (GDK_SURFACE (toplevel), timestamp);
 }
 
+static gboolean
+gdk_broadway_toplevel_show_window_menu (GdkToplevel *toplevel,
+                                        GdkEvent    *event)
+{
+  return FALSE;
+}
+
 static void
 gdk_broadway_toplevel_iface_init (GdkToplevelInterface *iface)
 {
   iface->present = gdk_broadway_toplevel_present;
   iface->minimize = gdk_broadway_toplevel_minimize;
+  iface->lower = gdk_broadway_toplevel_lower;
   iface->focus = gdk_broadway_toplevel_focus;
+  iface->show_window_menu = gdk_broadway_toplevel_show_window_menu;
   iface->begin_resize = gdk_broadway_toplevel_begin_resize;
   iface->begin_move = gdk_broadway_toplevel_begin_move;
 }

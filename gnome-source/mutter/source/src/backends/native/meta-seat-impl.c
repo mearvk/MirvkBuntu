@@ -35,12 +35,10 @@
 
 #include "backends/meta-cursor-tracker-private.h"
 #include "backends/meta-fd-source.h"
-#include "backends/meta-keymap-description-private.h"
 #include "backends/native/meta-backend-native-private.h"
 #include "backends/native/meta-barrier-native.h"
 #include "backends/native/meta-device-pool.h"
 #include "backends/native/meta-input-thread.h"
-#include "backends/native/meta-keyboard-a11y-private.h"
 #include "backends/native/meta-virtual-input-device-native.h"
 #include "clutter/clutter-mutter.h"
 #include "core/bell.h"
@@ -57,9 +55,18 @@
  */
 #define INITIAL_DEVICE_ID 2
 
+/* Try to keep the pointer inside the stage. Hopefully no one is using
+ * this backend with stages smaller than this. */
+#define INITIAL_POINTER_X 16
+#define INITIAL_POINTER_Y 16
+
 #define AUTOREPEAT_VALUE 2
 
 #define DISCRETE_SCROLL_STEP 10.0
+
+#ifndef BTN_STYLUS3
+#define BTN_STYLUS3 0x149 /* Linux 4.15 */
+#endif
 
 struct _MetaEventSource
 {
@@ -86,52 +93,16 @@ enum
   KBD_A11Y_MODS_STATE_CHANGED,
   TOUCH_MODE,
   BELL,
+  MODS_STATE_CHANGED,
   POINTER_POSITION_CHANGED_IN_IMPL,
   N_SIGNALS
 };
 
 static guint signals[N_SIGNALS] = { 0 };
 
-/* Index matches libinput_led bit offsets */
-typedef enum _MetaKeyboardLed MetaKeyboardLed;
-enum _MetaKeyboardLed
-{
-  KEYBOARD_LED_NUM_LOCK,
-  KEYBOARD_LED_CAPS_LOCK,
-  KEYBOARD_LED_SCROLL_LOCK,
-#ifdef HAVE_XKBCOMMON_KANA_COMPOSE_LEDS
-  KEYBOARD_LED_COMPOSE,
-  KEYBOARD_LED_KANA,
-#endif
-  N_KEYBOARD_LEDS,
-};
-
-typedef struct
-{
-  MetaSeatImpl *seat_impl;
-
-  int seat_slot;
-  graphene_point_t coords;
-} MetaTouchState;
-
 typedef struct _MetaSeatImplPrivate
 {
   GHashTable *device_files;
-  GHashTable *touch_states;
-  GHashTable *stylus_states;
-  graphene_point_t pointer_state;
-
-  xkb_led_index_t keyboard_leds[N_KEYBOARD_LEDS];
-
-  struct {
-    GHashTable *grabbed_modifiers;
-    GHashTable *pressed_modifiers;
-    uint32_t last_keysym;
-    uint32_t last_keysym_time;
-    gboolean saw_first_release;
-  } a11y;
-
-  MetaKeymapDescription *keymap_description;
 } MetaSeatImplPrivate;
 
 static void meta_seat_impl_initable_iface_init (GInitableIface *iface);
@@ -142,17 +113,20 @@ G_DEFINE_TYPE_WITH_CODE (MetaSeatImpl, meta_seat_impl, G_TYPE_OBJECT,
                          G_ADD_PRIVATE (MetaSeatImpl))
 
 static void process_events (MetaSeatImpl *seat_impl);
-static void meta_seat_impl_constrain_pointer (MetaSeatImpl     *seat_impl,
-                                              uint64_t          time_us,
-                                              graphene_point_t  prev,
-                                              graphene_point_t *cur);
-static void meta_seat_impl_filter_relative_motion (MetaSeatImpl       *seat_impl,
-                                                   ClutterInputDevice *device,
-                                                   float               x,
-                                                   float               y,
-                                                   float              *dx,
-                                                   float              *dy);
-static void meta_seat_impl_clear_repeat_source (MetaSeatImpl *seat_impl);
+void meta_seat_impl_constrain_pointer (MetaSeatImpl       *seat_impl,
+                                       ClutterInputDevice *core_pointer,
+                                       uint64_t            time_us,
+                                       float               x,
+                                       float               y,
+                                       float              *new_x,
+                                       float              *new_y);
+void meta_seat_impl_filter_relative_motion (MetaSeatImpl       *seat_impl,
+                                            ClutterInputDevice *device,
+                                            float               x,
+                                            float               y,
+                                            float              *dx,
+                                            float              *dy);
+void meta_seat_impl_clear_repeat_source (MetaSeatImpl *seat_impl);
 
 void
 meta_seat_impl_run_input_task (MetaSeatImpl *seat_impl,
@@ -174,24 +148,24 @@ meta_seat_impl_run_input_task (MetaSeatImpl *seat_impl,
 void
 meta_seat_impl_sync_leds_in_impl (MetaSeatImpl *seat_impl)
 {
-  MetaSeatImplPrivate *priv =
-    meta_seat_impl_get_instance_private (seat_impl);
   GSList *iter;
   MetaInputDeviceNative *device_native;
+  int caps_lock, num_lock, scroll_lock;
   enum libinput_led leds = 0;
-  int i;
 
-  for (i = 0; i < N_KEYBOARD_LEDS; i++)
-    {
-      xkb_led_index_t led_idx = priv->keyboard_leds[i];
+  caps_lock = xkb_state_led_index_is_active (seat_impl->xkb,
+                                             seat_impl->caps_lock_led);
+  num_lock = xkb_state_led_index_is_active (seat_impl->xkb,
+                                            seat_impl->num_lock_led);
+  scroll_lock = xkb_state_led_index_is_active (seat_impl->xkb,
+                                               seat_impl->scroll_lock_led);
 
-      if (led_idx == XKB_LED_INVALID)
-        continue;
-      if (!xkb_state_led_index_is_active (seat_impl->xkb, led_idx))
-        continue;
-
-      leds |= 1 << i;
-    }
+  if (caps_lock)
+    leds |= LIBINPUT_LED_CAPS_LOCK;
+  if (num_lock)
+    leds |= LIBINPUT_LED_NUM_LOCK;
+  if (scroll_lock)
+    leds |= LIBINPUT_LED_SCROLL_LOCK;
 
   for (iter = seat_impl->devices; iter; iter = iter->next)
     {
@@ -200,16 +174,14 @@ meta_seat_impl_sync_leds_in_impl (MetaSeatImpl *seat_impl)
     }
 }
 
-static MetaTouchState *
-meta_seat_impl_lookup_touch_state (MetaSeatImpl *seat_impl,
-                                   int           seat_slot)
+MetaTouchState *
+meta_seat_impl_lookup_touch_state_in_impl (MetaSeatImpl *seat_impl,
+                                           int           seat_slot)
 {
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-
-  if (!priv->touch_states)
+  if (!seat_impl->touch_states)
     return NULL;
 
-  return g_hash_table_lookup (priv->touch_states,
+  return g_hash_table_lookup (seat_impl->touch_states,
                               GINT_TO_POINTER (seat_slot));
 }
 
@@ -219,21 +191,20 @@ meta_touch_state_free (MetaTouchState *state)
   g_free (state);
 }
 
-static MetaTouchState *
-meta_seat_impl_acquire_touch_state (MetaSeatImpl *seat_impl,
-                                    int           seat_slot)
+MetaTouchState *
+meta_seat_impl_acquire_touch_state_in_impl (MetaSeatImpl *seat_impl,
+                                            int           seat_slot)
 {
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
   MetaTouchState *touch_state;
 
-  if (!priv->touch_states)
+  if (!seat_impl->touch_states)
     {
-      priv->touch_states =
+      seat_impl->touch_states =
         g_hash_table_new_full (NULL, NULL, NULL,
                                (GDestroyNotify) meta_touch_state_free);
     }
 
-  g_assert (!g_hash_table_contains (priv->touch_states,
+  g_assert (!g_hash_table_contains (seat_impl->touch_states,
                                     GINT_TO_POINTER (seat_slot)));
 
   touch_state = g_new0 (MetaTouchState, 1);
@@ -242,121 +213,22 @@ meta_seat_impl_acquire_touch_state (MetaSeatImpl *seat_impl,
     .seat_slot = seat_slot,
   };
 
-  g_hash_table_insert (priv->touch_states, GINT_TO_POINTER (seat_slot),
+  g_hash_table_insert (seat_impl->touch_states, GINT_TO_POINTER (seat_slot),
                        touch_state);
 
   return touch_state;
 }
 
-static void
-meta_seat_impl_release_touch_state (MetaSeatImpl *seat_impl,
-                                    int           seat_slot)
+void
+meta_seat_impl_release_touch_state_in_impl (MetaSeatImpl *seat_impl,
+                                            int           seat_slot)
 {
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-
-  if (!priv->touch_states)
+  if (!seat_impl->touch_states)
     return;
-
-  g_hash_table_remove (priv->touch_states, GINT_TO_POINTER (seat_slot));
+  g_hash_table_remove (seat_impl->touch_states, GINT_TO_POINTER (seat_slot));
 }
 
-static gboolean
-meta_seat_impl_lookup_stylus_state (MetaSeatImpl       *seat_impl,
-                                    ClutterInputDevice *input_device,
-                                    graphene_point_t   *coords)
-{
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-  graphene_point_t *state = NULL;
-
-  g_assert (clutter_input_device_get_device_type (input_device) ==
-            CLUTTER_TABLET_DEVICE);
-
-  if (priv->stylus_states)
-    state = g_hash_table_lookup (priv->stylus_states, input_device);
-
-  if (state)
-    {
-      *coords = *state;
-      return TRUE;
-    }
-
-  *coords = GRAPHENE_POINT_INIT_ZERO;
-
-  return FALSE;
-}
-
-static void
-meta_seat_impl_update_stylus_state (MetaSeatImpl       *seat_impl,
-                                    ClutterInputDevice *input_device,
-                                    graphene_point_t    coords)
-{
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-  graphene_point_t *state;
-
-  g_assert (clutter_input_device_get_device_type (input_device) ==
-            CLUTTER_TABLET_DEVICE);
-
-  if (!priv->stylus_states)
-    {
-      priv->stylus_states = g_hash_table_new_full (NULL, NULL, NULL,
-                                                   g_free);
-    }
-
-  state = g_hash_table_lookup (priv->stylus_states, input_device);
-
-  if (!state)
-    {
-      state = g_new0 (graphene_point_t, 1);
-      g_hash_table_insert (priv->stylus_states,
-                           input_device,
-                           state);
-    }
-
-  *state = coords;
-}
-
-static void
-meta_seat_impl_release_stylus_state (MetaSeatImpl       *seat_impl,
-                                     ClutterInputDevice *input_device)
-{
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-
-  g_assert (clutter_input_device_get_device_type (input_device) ==
-            CLUTTER_TABLET_DEVICE);
-
-  if (!priv->stylus_states)
-    return;
-
-  g_hash_table_remove (priv->stylus_states, input_device);
-}
-
-static void
-meta_seat_impl_get_onscreen_coords_for_source_device (MetaSeatImpl       *seat_impl,
-                                                      ClutterInputDevice *device,
-                                                      graphene_point_t   *coords)
-{
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-
-  if (device)
-    {
-      ClutterInputDeviceType device_type =
-        clutter_input_device_get_device_type (device);
-
-      g_assert (device_type != CLUTTER_TOUCHSCREEN_DEVICE &&
-                device_type != CLUTTER_KEYBOARD_DEVICE &&
-                device_type != CLUTTER_PAD_DEVICE);
-
-      if (device_type == CLUTTER_TABLET_DEVICE)
-        {
-          meta_seat_impl_lookup_stylus_state (seat_impl, device, coords);
-          return;
-        }
-    }
-
-  *coords = priv->pointer_state;
-}
-
-static void
+void
 meta_seat_impl_clear_repeat_source (MetaSeatImpl *seat_impl)
 {
   if (seat_impl->repeat_source)
@@ -517,66 +389,6 @@ emit_signal (MetaSeatImpl *seat_impl,
                                          (GDestroyNotify) signal_data_free);
 }
 
-static gboolean
-is_a11y_modifier_first_click (MetaSeatImpl *seat_impl,
-                              uint32_t      keysym,
-                              uint32_t      event_time,
-                              uint32_t      state)
-{
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-  gboolean is_press = state == 1;
-  gboolean is_same_keysym = keysym == priv->a11y.last_keysym;
-  gboolean event_soon_enough =
-    event_time - priv->a11y.last_keysym_time < seat_impl->repeat_delay;
-  gboolean is_grabbed_modifier =
-    g_hash_table_contains (priv->a11y.grabbed_modifiers, GUINT_TO_POINTER (keysym));
-
-  priv->a11y.last_keysym = keysym;
-  priv->a11y.last_keysym_time = event_time;
-
-  /* This is not an event for a grabbed modifier */
-  if (!is_grabbed_modifier)
-    return FALSE;
-
-  if (!is_press && g_hash_table_contains (priv->a11y.pressed_modifiers,
-                                          GUINT_TO_POINTER (keysym)))
-    {
-      g_hash_table_remove (priv->a11y.pressed_modifiers,
-                           GUINT_TO_POINTER (keysym));
-      /* This is a release event for a previously pressed modifier */
-      return FALSE;
-    }
-
-  if (is_same_keysym && event_soon_enough)
-    {
-      if (is_press && priv->a11y.saw_first_release)
-        {
-          priv->a11y.saw_first_release = FALSE;
-          g_hash_table_add (priv->a11y.pressed_modifiers,
-                            GUINT_TO_POINTER (keysym));
-
-          /* This is the second press event and it is on time, process
-           * it normally
-           */
-          return FALSE;
-        }
-      else
-        {
-          priv->a11y.saw_first_release = TRUE;
-          /* This is the first release event, wait for the second press event */
-          return TRUE;
-        }
-    }
-  else
-    {
-      /* This is either a different modifier, the first press
-       * event, or not on time to progress
-       */
-      priv->a11y.saw_first_release = FALSE;
-      return TRUE;
-    }
-}
-
 void
 meta_seat_impl_notify_key_in_impl (MetaSeatImpl       *seat_impl,
                                    ClutterInputDevice *device,
@@ -586,13 +398,9 @@ meta_seat_impl_notify_key_in_impl (MetaSeatImpl       *seat_impl,
                                    gboolean            update_keys)
 {
   ClutterEvent *event = NULL;
-  ClutterEvent *rewritten_event = NULL;
   ClutterEventFlags flags = CLUTTER_EVENT_NONE;
   enum xkb_state_component changed_state;
   uint32_t keycode;
-  uint32_t keysym;
-  gboolean should_ignore;
-  gboolean event_swallowed;
 
   if (state != AUTOREPEAT_VALUE)
     {
@@ -613,60 +421,37 @@ meta_seat_impl_notify_key_in_impl (MetaSeatImpl       *seat_impl,
       flags = CLUTTER_EVENT_FLAG_REPEATED;
     }
 
-  keycode = meta_xkb_evdev_to_keycode (key);
-  keysym = xkb_state_key_get_one_sym (seat_impl->xkb, keycode);
-
-  if (state == AUTOREPEAT_VALUE)
-    should_ignore = FALSE; /* We're never ignoring autorepeat events because of the a11y double click logic */
-  else
-    should_ignore = is_a11y_modifier_first_click (seat_impl,
-                                                  keysym,
-                                                  time_us / 1000,
-                                                  state);
-  if (should_ignore)
-    flags |= CLUTTER_EVENT_FLAG_A11Y_MODIFIER_FIRST_CLICK;
-
   event = meta_key_event_new_from_evdev (device,
+                                         seat_impl->core_keyboard,
                                          flags,
                                          seat_impl->xkb,
                                          seat_impl->button_state,
                                          time_us, key, state);
 
+  keycode = meta_xkb_evdev_to_keycode (key);
+
   /* We must be careful and not pass multiple releases to xkb, otherwise it gets
      confused and locks the modifiers */
-  if (!should_ignore && state != AUTOREPEAT_VALUE)
+  if (state != AUTOREPEAT_VALUE)
     {
       changed_state = xkb_state_update_key (seat_impl->xkb, keycode,
                                             state ? XKB_KEY_DOWN : XKB_KEY_UP);
     }
 
-  event_swallowed =
-    meta_keyboard_a11y_process_event_in_impl (seat_impl->keyboard_a11y,
-                                              event,
-                                              &rewritten_event);
-
-  if (update_keys)
-    {
-      meta_keymap_native_update_in_impl (seat_impl->keymap,
-                                         seat_impl->xkb);
-    }
-
-  if (event_swallowed)
-    {
-      clutter_event_free (event);
-      if (rewritten_event)
-        queue_event (seat_impl, rewritten_event);
-    }
+  if (!meta_input_device_native_process_kbd_a11y_event_in_impl (seat_impl->core_keyboard,
+                                                                event))
+    queue_event (seat_impl, event);
   else
-    {
-      queue_event (seat_impl, event);
-    }
-
+    clutter_event_free (event);
 
   if (update_keys && (changed_state & XKB_STATE_LEDS))
     {
+      MetaInputDeviceNative *keyboard_native;
       gboolean numlock_active;
 
+      meta_keymap_native_update_in_impl (seat_impl->keymap,
+                                         seat_impl,
+                                         seat_impl->xkb);
       meta_seat_impl_sync_leds_in_impl (seat_impl);
 
       numlock_active =
@@ -676,40 +461,19 @@ meta_seat_impl_notify_key_in_impl (MetaSeatImpl       *seat_impl,
       meta_input_settings_maybe_save_numlock_state (seat_impl->input_settings,
                                                     numlock_active);
 
-      meta_keyboard_a11y_maybe_notify_toggle_keys_in_impl (seat_impl->keyboard_a11y);
+      keyboard_native = META_INPUT_DEVICE_NATIVE (seat_impl->core_keyboard);
+      meta_input_device_native_a11y_maybe_notify_toggle_keys_in_impl (keyboard_native);
     }
 
-  if (update_keys && changed_state != 0)
-    {
-      ClutterEvent *state_event;
-
-      state_event = meta_key_state_event_new (device,
-                                              flags,
-                                              seat_impl->xkb,
-                                              seat_impl->button_state,
-                                              time_us);
-      queue_event (seat_impl, state_event);
-    }
-
-  if (state == 0)              /* key release */
-    {
-      if (seat_impl->repeat_key == key)
-        {
-          seat_impl->repeat_count = 0;
-          meta_seat_impl_clear_repeat_source (seat_impl);
-        }
-      return;
-    }
-
-  if (!seat_impl->repeat)
+  if (state == 0 ||             /* key release */
+      !seat_impl->repeat ||
+      !xkb_keymap_key_repeats (xkb_state_get_keymap (seat_impl->xkb),
+                               keycode))
     {
       seat_impl->repeat_count = 0;
       meta_seat_impl_clear_repeat_source (seat_impl);
       return;
     }
-
-  if (!xkb_keymap_key_repeats (xkb_state_get_keymap (seat_impl->xkb), keycode))
-    return;
 
   if (state == 1)               /* key press */
     seat_impl->repeat_count = 0;
@@ -746,14 +510,15 @@ meta_seat_impl_notify_key_in_impl (MetaSeatImpl       *seat_impl,
 
 static void
 constrain_to_barriers (MetaSeatImpl       *seat_impl,
+                       ClutterInputDevice *device,
                        uint32_t            time,
-                       graphene_point_t    cur,
-                       graphene_point_t   *new)
+                       float              *new_x,
+                       float              *new_y)
 {
   meta_barrier_manager_native_process_in_impl (seat_impl->barrier_manager,
+                                               device,
                                                time,
-                                               cur,
-                                               new);
+                                               new_x, new_y);
 }
 
 /*
@@ -766,12 +531,16 @@ constrain_to_barriers (MetaSeatImpl       *seat_impl,
  */
 
 static void
-constrain_all_screen_monitors (MetaSeatImpl       *seat_impl,
+constrain_all_screen_monitors (ClutterInputDevice *device,
                                MetaViewportInfo   *viewports,
-                               graphene_point_t    prev,
-                               graphene_point_t   *coords)
+                               float              *x,
+                               float              *y)
 {
+  float cx, cy;
   int i, n_views;
+
+  meta_input_device_native_get_coords_in_impl (META_INPUT_DEVICE_NATIVE (device),
+                                               &cx, &cy);
 
   /* if we're trying to escape, clamp to the CRTC we're coming from */
 
@@ -789,16 +558,16 @@ constrain_all_screen_monitors (MetaSeatImpl       *seat_impl,
       top = rect.y;
       bottom = top + rect.height;
 
-      if ((prev.x >= left) && (prev.x < right) && (prev.y >= top) && (prev.y < bottom))
+      if ((cx >= left) && (cx < right) && (cy >= top) && (cy < bottom))
         {
-          if (coords->x < left)
-            coords->x = left;
-          if (coords->x >= right)
-            coords->x = right - 1;
-          if (coords->y < top)
-            coords->y = top;
-          if (coords->y >= bottom)
-            coords->y = bottom - 1;
+          if (*x < left)
+            *x = left;
+          if (*x >= right)
+            *x = right - 1;
+          if (*y < top)
+            *y = top;
+          if (*y >= bottom)
+            *y = bottom - 1;
 
           return;
         }
@@ -806,21 +575,22 @@ constrain_all_screen_monitors (MetaSeatImpl       *seat_impl,
 }
 
 static void
-constrain_to_viewports (MetaSeatImpl     *seat_impl,
-                        uint64_t          time_us,
-                        graphene_point_t  prev,
-                        graphene_point_t *coords)
+constrain_to_viewports (MetaSeatImpl       *seat_impl,
+                        ClutterInputDevice *device,
+                        uint64_t            time_us,
+                        float              *x_inout,
+                        float              *y_inout)
 {
   if (seat_impl->viewports)
     {
       /* if we're moving inside a monitor, we're fine */
       if (meta_viewport_info_get_view_at (seat_impl->viewports,
-                                          coords->x, coords->y) >= 0)
+                                          *x_inout, *y_inout) >= 0)
         return;
 
       /* if we're trying to escape, clamp to the CRTC we're coming from */
-      constrain_all_screen_monitors (seat_impl, seat_impl->viewports,
-                                     prev, coords);
+      constrain_all_screen_monitors (device, seat_impl->viewports,
+                                     x_inout, y_inout);
     }
 }
 
@@ -828,44 +598,51 @@ static void
 constrain_coordinates (MetaSeatImpl       *seat_impl,
                        ClutterInputDevice *input_device,
                        uint64_t            time_us,
-                       graphene_point_t    prev,
-                       graphene_point_t   *coords)
+                       float               x,
+                       float               y,
+                       float              *x_out,
+                       float              *y_out)
 {
   MetaInputDeviceNative *device_evdev = META_INPUT_DEVICE_NATIVE (input_device);
 
   if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
     {
-      if (device_evdev->mapping_mode == META_INPUT_DEVICE_MAPPING_RELATIVE)
-        {
-          constrain_to_barriers (seat_impl,
-                                 us2ms (time_us),
-                                 prev,
-                                 coords);
-
-          constrain_to_viewports (seat_impl,
-                                  time_us,
-                                  prev,
-                                  coords);
-        }
-      else
-        {
-          /* Viewport may be unset during startup */
-          if (seat_impl->viewports)
-            {
-              meta_input_device_native_translate_coordinates_in_impl (input_device,
-                                                                      seat_impl->viewports,
-                                                                      &coords->x,
-                                                                      &coords->y);
-            }
-        }
+        if (device_evdev->mapping_mode == META_INPUT_DEVICE_MAPPING_RELATIVE)
+          {
+            constrain_to_barriers (seat_impl, input_device,
+                                   us2ms (time_us),
+                                   &x, &y);
+            constrain_to_viewports (seat_impl,
+                                    input_device,
+                                    time_us,
+                                    &x, &y);
+          }
+        else
+          {
+            /* Viewport may be unset during startup */
+            if (seat_impl->viewports)
+              {
+                meta_input_device_native_translate_coordinates_in_impl (input_device,
+                                                                        seat_impl->viewports,
+                                                                        &x,
+                                                                        &y);
+              }
+          }
     }
   else
     {
       meta_seat_impl_constrain_pointer (seat_impl,
+                                        seat_impl->core_pointer,
                                         time_us,
-                                        prev,
-                                        coords);
+                                        seat_impl->pointer_x,
+                                        seat_impl->pointer_y,
+                                        &x, &y);
     }
+
+  if (x_out)
+    *x_out = x;
+  if (y_out)
+    *y_out = y;
 }
 
 static void
@@ -873,14 +650,23 @@ update_device_coords_in_impl (MetaSeatImpl       *seat_impl,
                               ClutterInputDevice *input_device,
                               graphene_point_t    coords)
 {
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
+  MetaInputDeviceNative *device_native;
 
   g_rw_lock_writer_lock (&seat_impl->state_lock);
 
   if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
-    meta_seat_impl_update_stylus_state (seat_impl, input_device, coords);
+    {
+      device_native = META_INPUT_DEVICE_NATIVE (input_device);
+    }
   else
-    priv->pointer_state = coords;
+    {
+      device_native = META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer);
+      seat_impl->pointer_x = coords.x;
+      seat_impl->pointer_y = coords.y;
+    }
+
+  meta_input_device_native_set_coords_in_impl (device_native,
+                                               coords.x, coords.y);
 
   g_rw_lock_writer_unlock (&seat_impl->state_lock);
 }
@@ -899,40 +685,45 @@ meta_seat_impl_notify_relative_motion_in_impl (MetaSeatImpl       *seat_impl,
     META_INPUT_DEVICE_NATIVE (input_device);
   ClutterEvent *event;
   ClutterModifierType modifiers;
-  graphene_point_t coords, new_coords;
-  float dx_constrained, dy_constrained;
+  float x, y, cur_x, cur_y;
+  double dx_constrained, dy_constrained;
 
   if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
-    modifiers = device_native->button_state;
+    {
+      meta_input_device_native_get_coords_in_impl (device_native,
+                                                   &cur_x, &cur_y);
+    }
   else
-    modifiers = seat_impl->button_state;
-
-  meta_seat_impl_get_onscreen_coords_for_source_device (seat_impl,
-                                                        input_device,
-                                                        &coords);
+    {
+      meta_input_device_native_get_coords_in_impl (META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer),
+                                                   &cur_x, &cur_y);
+    }
 
   meta_seat_impl_filter_relative_motion (seat_impl,
                                          input_device,
-                                         coords.x,
-                                         coords.y,
+                                         cur_x,
+                                         cur_y,
                                          &dx,
                                          &dy);
 
-  new_coords = GRAPHENE_POINT_INIT (coords.x + dx, coords.y + dy);
   constrain_coordinates (seat_impl, input_device,
                          time_us,
-                         coords,
-                         &new_coords);
+                         cur_x + dx,
+                         cur_y + dy,
+                         &x, &y);
 
-  modifiers |= xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE);
+  modifiers =
+    xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE) |
+    seat_impl->button_state;
 
-  dx_constrained = new_coords.x - coords.x;
-  dy_constrained = new_coords.y - coords.y;
+  dx_constrained = x - cur_x;
+  dy_constrained = y - cur_y;
 
-  update_device_coords_in_impl (seat_impl, input_device, new_coords);
+  update_device_coords_in_impl (seat_impl, input_device,
+                                GRAPHENE_POINT_INIT (x, y));
 
   g_signal_emit (seat_impl, signals[POINTER_POSITION_CHANGED_IN_IMPL], 0,
-                 &new_coords);
+                 &GRAPHENE_POINT_INIT (x, y));
 
   event =
     clutter_event_motion_new (CLUTTER_EVENT_FLAG_RELATIVE_MOTION,
@@ -940,7 +731,7 @@ meta_seat_impl_notify_relative_motion_in_impl (MetaSeatImpl       *seat_impl,
                               input_device,
                               device_native->last_tool,
                               modifiers,
-                              new_coords,
+                              GRAPHENE_POINT_INIT (x, y),
                               GRAPHENE_POINT_INIT (dx, dy),
                               GRAPHENE_POINT_INIT (dx_unaccel,
                                                    dy_unaccel),
@@ -959,43 +750,30 @@ meta_seat_impl_notify_absolute_motion_in_impl (MetaSeatImpl       *seat_impl,
                                                float               y,
                                                double             *axes)
 {
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
   MetaInputDeviceNative *device_native =
     META_INPUT_DEVICE_NATIVE (input_device);
   ClutterModifierType modifiers;
   ClutterEvent *event;
-  ClutterEventFlags event_flags;
-  graphene_point_t coords, new_coords;
 
-  meta_seat_impl_get_onscreen_coords_for_source_device (seat_impl,
-                                                        input_device,
-                                                        &coords);
+  constrain_coordinates (seat_impl, input_device, time_us, x, y, &x, &y);
+  update_device_coords_in_impl (seat_impl, input_device,
+                                GRAPHENE_POINT_INIT (x, y));
 
-  new_coords = GRAPHENE_POINT_INIT (x, y);
-  constrain_coordinates (seat_impl, input_device, time_us, coords, &new_coords);
-  update_device_coords_in_impl (seat_impl, input_device, new_coords);
-
-  if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
-    modifiers = device_native->button_state;
-  else
-    modifiers = seat_impl->button_state;
-
-  modifiers |= xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE);
+  modifiers =
+    xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE) |
+    seat_impl->button_state;
 
   g_signal_emit (seat_impl, signals[POINTER_POSITION_CHANGED_IN_IMPL], 0,
-                 &priv->pointer_state);
-
-  event_flags =
-    input_device == seat_impl->virtual_source_pointer ?
-    CLUTTER_EVENT_FLAG_SYNTHETIC : CLUTTER_EVENT_NONE;
+                 &GRAPHENE_POINT_INIT (seat_impl->pointer_x,
+                                       seat_impl->pointer_y));
 
   event =
-    clutter_event_motion_new (event_flags,
+    clutter_event_motion_new (CLUTTER_EVENT_NONE,
                               time_us,
                               input_device,
                               device_native->last_tool,
                               modifiers,
-                              new_coords,
+                              GRAPHENE_POINT_INIT (x, y),
                               GRAPHENE_POINT_INIT (0, 0),
                               GRAPHENE_POINT_INIT (0, 0),
                               GRAPHENE_POINT_INIT (0, 0),
@@ -1008,14 +786,14 @@ void
 meta_seat_impl_notify_button_in_impl (MetaSeatImpl       *seat_impl,
                                       ClutterInputDevice *input_device,
                                       uint64_t            time_us,
-                                      uint32_t            evdev_button,
+                                      uint32_t            button,
                                       uint32_t            state)
 {
   MetaInputDeviceNative *device_native = META_INPUT_DEVICE_NATIVE (input_device);
   ClutterEvent *event = NULL;
-  ClutterModifierType modifiers, *button_state;
-  uint32_t clutter_button = 0;
-  graphene_point_t coords;
+  ClutterModifierType modifiers;
+  int button_nr;
+  float x, y;
   static int maskmap[8] =
     {
       CLUTTER_BUTTON1_MASK, CLUTTER_BUTTON3_MASK, CLUTTER_BUTTON2_MASK,
@@ -1024,94 +802,88 @@ meta_seat_impl_notify_button_in_impl (MetaSeatImpl       *seat_impl,
   int button_count;
 
   /* Drop any repeated button press (for example from virtual devices. */
-  button_count = update_button_count (seat_impl, evdev_button, state);
+  button_count = update_button_count (seat_impl, button, state);
   if ((state && button_count > 1) ||
       (!state && button_count != 0))
     {
       meta_topic (META_DEBUG_INPUT,
                   "Dropping repeated %s of button 0x%x, count %d",
-                  state ? "press" : "release", evdev_button, button_count);
+                  state ? "press" : "release", button, button_count);
       return;
+    }
+
+  /* The evdev button numbers don't map sequentially to clutter button
+   * numbers (the right and middle mouse buttons are in the opposite
+   * order) so we'll map them directly with a switch statement */
+  switch (button)
+    {
+    case BTN_LEFT:
+    case BTN_TOUCH:
+      button_nr = CLUTTER_BUTTON_PRIMARY;
+      break;
+
+    case BTN_MIDDLE:
+    case BTN_STYLUS:
+      button_nr = CLUTTER_BUTTON_MIDDLE;
+      break;
+
+    case BTN_RIGHT:
+    case BTN_STYLUS2:
+      button_nr = CLUTTER_BUTTON_SECONDARY;
+      break;
+
+    case BTN_STYLUS3:
+      button_nr = 8;
+      break;
+
+    default:
+      /* For compatibility reasons, all additional buttons go after the old 4-7 scroll ones */
+      if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
+        button_nr = button - BTN_TOOL_PEN + 4;
+      else
+        button_nr = meta_evdev_button_to_clutter (button);
+      break;
+    }
+
+  if (button_nr < 1 || button_nr > 12)
+    {
+      g_warning ("Unhandled button event 0x%x", button);
+      return;
+    }
+
+  if (button_nr < G_N_ELEMENTS (maskmap))
+    {
+      /* Update the modifiers */
+      if (state)
+        seat_impl->button_state |= maskmap[button_nr - 1];
+      else
+        seat_impl->button_state &= ~maskmap[button_nr - 1];
+    }
+
+  if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
+    {
+      meta_input_device_native_get_coords_in_impl (device_native, &x, &y);
+    }
+  else
+    {
+      meta_input_device_native_get_coords_in_impl (META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer),
+                                                   &x, &y);
     }
 
   if (device_native->last_tool)
     {
-      GDesktopStylusButtonAction action;
-      ClutterInputDeviceTool *tool = device_native->last_tool;
+      /* Apply the button event code as per the tool mapping */
+      uint32_t mapped_button;
 
-      if (clutter_input_device_tool_get_eraser_button (tool) == evdev_button)
-        {
-          action = meta_input_device_tool_native_get_eraser_button_code_in_impl (tool);
-        }
-      else
-        {
-          int tool_button_nr = meta_evdev_tool_button_to_clutter (evdev_button);
-
-          /* Apply the button event code as per the tool mapping */
-          action = meta_input_device_tool_native_get_button_code_in_impl (tool, tool_button_nr);
-        }
-      switch (action)
-        {
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT:
-          evdev_button = meta_clutter_tool_button_to_evdev (CLUTTER_BUTTON_PRIMARY);
-          clutter_button = meta_evdev_tool_button_to_clutter (evdev_button);
-          break;
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_MIDDLE:
-          evdev_button = meta_clutter_tool_button_to_evdev (CLUTTER_BUTTON_MIDDLE);
-          clutter_button = meta_evdev_tool_button_to_clutter (evdev_button);
-          break;
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_RIGHT:
-          evdev_button = meta_clutter_tool_button_to_evdev (CLUTTER_BUTTON_SECONDARY);
-          clutter_button = meta_evdev_tool_button_to_clutter (evdev_button);
-          break;
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_BACK:
-          evdev_button = BTN_BACK;
-          clutter_button = meta_evdev_tool_button_to_clutter (evdev_button);
-          break;
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_FORWARD:
-          evdev_button = BTN_FORWARD;
-          clutter_button = meta_evdev_tool_button_to_clutter (evdev_button);
-          break;
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_SWITCH_MONITOR:
-        case G_DESKTOP_STYLUS_BUTTON_ACTION_KEYBINDING:
-          // button evdev code left as-is, i.e. BTN_STYLUS or whatever
-          clutter_button = 0;
-          break;
-        default:
-          g_warn_if_reached ();
-        }
+      mapped_button = meta_input_device_tool_native_get_button_code_in_impl (device_native->last_tool,
+                                                                             button_nr);
+      if (mapped_button != 0)
+        button = mapped_button;
     }
-  else
-    {
-      clutter_button = meta_evdev_button_to_clutter (evdev_button);
-      if (clutter_button < 1 || clutter_button > 12)
-        {
-          g_warning ("Unhandled evdev_button event 0x%x", evdev_button);
-          return;
-        }
-    }
-
-  if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
-    button_state = &device_native->button_state;
-  else
-    button_state = &seat_impl->button_state;
-
-  if (clutter_button > 0 && clutter_button < G_N_ELEMENTS (maskmap))
-    {
-      /* Update the modifiers */
-      if (state)
-        *button_state |= maskmap[clutter_button - 1];
-      else
-        *button_state &= ~maskmap[clutter_button - 1];
-    }
-
-  meta_seat_impl_get_onscreen_coords_for_source_device (seat_impl,
-                                                        input_device,
-                                                        &coords);
 
   modifiers =
     xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE) |
-    *button_state;
+    seat_impl->button_state;
 
   event =
     clutter_event_button_new (state ?
@@ -1122,9 +894,9 @@ meta_seat_impl_notify_button_in_impl (MetaSeatImpl       *seat_impl,
                               input_device,
                               device_native->last_tool,
                               modifiers,
-                              coords,
-                              clutter_button,
-                              evdev_button,
+                              GRAPHENE_POINT_INIT (x, y),
+                              button_nr,
+                              button,
                               NULL);
 
   queue_event (seat_impl, event);
@@ -1149,32 +921,25 @@ notify_scroll (ClutterInputDevice       *input_device,
                ClutterScrollFinishFlags  flags,
                gboolean                  emulated)
 {
-  MetaInputDeviceNative *device_native =
-    META_INPUT_DEVICE_NATIVE (input_device);
   MetaSeatImpl *seat_impl;
-  MetaSeatImplPrivate *priv;
   ClutterEvent *event = NULL;
   ClutterModifierType modifiers;
-  ClutterScrollFlags scroll_flags;
   double scroll_factor;
+  float x, y;
 
   seat_impl = seat_impl_from_device (input_device);
-  priv = meta_seat_impl_get_instance_private (seat_impl);
 
   /* libinput pointer axis events are in pointer motion coordinate space.
    * To convert to Xi2 discrete step coordinate space, multiply the factor
    * 1/10. */
   scroll_factor = 1.0 / DISCRETE_SCROLL_STEP;
 
-  modifiers = xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE);
+  x = seat_impl->pointer_x;
+  y = seat_impl->pointer_y;
 
-  if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
-    modifiers |= device_native->button_state;
-  else
-    modifiers |= seat_impl->button_state;
-
-  scroll_flags = meta_input_device_native_has_scroll_inverted (device_native) ?
-    CLUTTER_SCROLL_INVERTED : CLUTTER_SCROLL_NONE;
+  modifiers =
+    xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE) |
+    seat_impl->button_state;
 
   event =
     clutter_event_scroll_smooth_new (emulated ?
@@ -1184,10 +949,9 @@ notify_scroll (ClutterInputDevice       *input_device,
                                      input_device,
                                      NULL,
                                      modifiers,
-                                     priv->pointer_state,
-                                     GRAPHENE_POINT_INIT ((float) (scroll_factor * dx),
-                                                          (float) (scroll_factor * dy)),
-                                     scroll_flags,
+                                     GRAPHENE_POINT_INIT (x, y),
+                                     GRAPHENE_POINT_INIT (scroll_factor * dx,
+                                                          scroll_factor * dy),
                                      scroll_source,
                                      flags);
 
@@ -1196,35 +960,26 @@ notify_scroll (ClutterInputDevice       *input_device,
 
 static void
 notify_discrete_scroll (ClutterInputDevice     *input_device,
-                        ClutterInputDeviceTool *tool,
                         uint64_t                time_us,
                         ClutterScrollDirection  direction,
                         ClutterScrollSource     scroll_source,
                         gboolean                emulated)
 {
-  MetaInputDeviceNative *device_native =
-    META_INPUT_DEVICE_NATIVE (input_device);
   MetaSeatImpl *seat_impl;
-  MetaSeatImplPrivate *priv;
   ClutterEvent *event = NULL;
   ClutterModifierType modifiers;
-  ClutterScrollFlags scroll_flags;
+  float x, y;
 
   if (direction == CLUTTER_SCROLL_SMOOTH)
     return;
 
   seat_impl = seat_impl_from_device (input_device);
-  priv = meta_seat_impl_get_instance_private (seat_impl);
+  x = seat_impl->pointer_x;
+  y = seat_impl->pointer_y;
 
-  if (clutter_input_device_get_device_type (input_device) == CLUTTER_TABLET_DEVICE)
-    modifiers = device_native->button_state;
-  else
-    modifiers = seat_impl->button_state;
-
-  modifiers |= xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE);
-
-  scroll_flags = meta_input_device_native_has_scroll_inverted (device_native) ?
-    CLUTTER_SCROLL_INVERTED : CLUTTER_SCROLL_NONE;
+  modifiers =
+    xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE) |
+    seat_impl->button_state;
 
   event =
     clutter_event_scroll_discrete_new (emulated ?
@@ -1232,10 +987,9 @@ notify_discrete_scroll (ClutterInputDevice     *input_device,
                                        CLUTTER_EVENT_NONE,
                                        time_us,
                                        input_device,
-                                       tool,
+                                       NULL,
                                        modifiers,
-                                       priv->pointer_state,
-                                       scroll_flags,
+                                       GRAPHENE_POINT_INIT (x, y),
                                        scroll_source,
                                        direction);
 
@@ -1250,14 +1004,14 @@ check_notify_discrete_scroll (MetaSeatImpl       *seat_impl,
 {
   int i, n_xscrolls, n_yscrolls;
 
-  n_xscrolls = (int) floor ((fabs (seat_impl->accum_scroll_dx) + DBL_EPSILON) /
-                            DISCRETE_SCROLL_STEP);
-  n_yscrolls = (int) floor ((fabs (seat_impl->accum_scroll_dy) + DBL_EPSILON) /
-                            DISCRETE_SCROLL_STEP);
+  n_xscrolls = floor ((fabs (seat_impl->accum_scroll_dx) + DBL_EPSILON) /
+                      DISCRETE_SCROLL_STEP);
+  n_yscrolls = floor ((fabs (seat_impl->accum_scroll_dy) + DBL_EPSILON) /
+                      DISCRETE_SCROLL_STEP);
 
   for (i = 0; i < n_xscrolls; i++)
     {
-      notify_discrete_scroll (device, NULL, time_us,
+      notify_discrete_scroll (device, time_us,
                               seat_impl->accum_scroll_dx > 0 ?
                               CLUTTER_SCROLL_RIGHT : CLUTTER_SCROLL_LEFT,
                               scroll_source, TRUE);
@@ -1265,7 +1019,7 @@ check_notify_discrete_scroll (MetaSeatImpl       *seat_impl,
 
   for (i = 0; i < n_yscrolls; i++)
     {
-      notify_discrete_scroll (device, NULL, time_us,
+      notify_discrete_scroll (device, time_us,
                               seat_impl->accum_scroll_dy > 0 ?
                               CLUTTER_SCROLL_DOWN : CLUTTER_SCROLL_UP,
                               scroll_source, TRUE);
@@ -1289,12 +1043,12 @@ meta_seat_impl_notify_scroll_continuous_in_impl (MetaSeatImpl             *seat_
   if (finish_flags & CLUTTER_SCROLL_FINISHED_HORIZONTAL)
     seat_impl->accum_scroll_dx = 0;
   else
-    seat_impl->accum_scroll_dx += (float) dx;
+    seat_impl->accum_scroll_dx += dx;
 
   if (finish_flags & CLUTTER_SCROLL_FINISHED_VERTICAL)
     seat_impl->accum_scroll_dy = 0;
   else
-    seat_impl->accum_scroll_dy += (float) dy;
+    seat_impl->accum_scroll_dy += dy;
 
   notify_scroll (input_device, time_us, dx, dy, scroll_source,
                  finish_flags, FALSE);
@@ -1359,7 +1113,7 @@ meta_seat_impl_notify_discrete_scroll_in_impl (MetaSeatImpl        *seat_impl,
       if (should_reset_discrete_acc (dx_value120, evdev_device->value120.last_dx))
         evdev_device->value120.acc_dx = 0;
 
-      evdev_device->value120.last_dx = (int32_t) dx_value120;
+      evdev_device->value120.last_dx = dx_value120;
     }
 
   if (dy_value120 != 0)
@@ -1367,74 +1121,35 @@ meta_seat_impl_notify_discrete_scroll_in_impl (MetaSeatImpl        *seat_impl,
       if (should_reset_discrete_acc (dy_value120, evdev_device->value120.last_dy))
         evdev_device->value120.acc_dy = 0;
 
-      evdev_device->value120.last_dy = (int32_t) dy_value120;
+      evdev_device->value120.last_dy = dy_value120;
     }
 
-  evdev_device->value120.acc_dx += (int32_t) dx_value120;
-  evdev_device->value120.acc_dy += (int32_t) dy_value120;
+  evdev_device->value120.acc_dx += dx_value120;
+  evdev_device->value120.acc_dy += dy_value120;
 
-  if (dx_value120 != 0 && abs (evdev_device->value120.acc_dx) >= 60)
+  if (abs (evdev_device->value120.acc_dx) >= 60)
     {
       low_res_value = (evdev_device->value120.acc_dx / 120);
       if (low_res_value == 0)
         low_res_value = (dx_value120 > 0) ? 1 : -1;
 
-      notify_discrete_scroll (input_device, NULL, time_us,
+      notify_discrete_scroll (input_device, time_us,
                               discrete_to_direction (low_res_value, 0),
                               scroll_source, FALSE);
       evdev_device->value120.acc_dx -= (low_res_value * 120);
     }
 
-  if (dy_value120 != 0 && abs (evdev_device->value120.acc_dy) >= 60)
+  if (abs (evdev_device->value120.acc_dy) >= 60)
     {
       low_res_value = (evdev_device->value120.acc_dy / 120);
       if (low_res_value == 0)
         low_res_value = (dy_value120 > 0) ? 1 : -1;
 
-      notify_discrete_scroll (input_device, NULL, time_us,
+      notify_discrete_scroll (input_device, time_us,
                               discrete_to_direction (0, low_res_value),
                               scroll_source, FALSE);
       evdev_device->value120.acc_dy -= (low_res_value * 120);
     }
-}
-
-static gboolean
-update_touch_state (MetaSeatImpl     *seat_impl,
-                    ClutterEventType  evtype,
-                    int               slot,
-                    float            *x,
-                    float            *y)
-{
-  MetaTouchState *touch_state;
-  gboolean retval = FALSE;
-
-  g_rw_lock_writer_lock (&seat_impl->state_lock);
-
-  if (evtype == CLUTTER_TOUCH_BEGIN)
-    touch_state = meta_seat_impl_acquire_touch_state (seat_impl, slot);
-  else
-    touch_state = meta_seat_impl_lookup_touch_state (seat_impl, slot);
-
-  retval = touch_state != NULL;
-
-  if (touch_state)
-    {
-      if (evtype == CLUTTER_TOUCH_BEGIN || evtype == CLUTTER_TOUCH_UPDATE)
-        {
-          touch_state->coords.x = (float) *x;
-          touch_state->coords.y = (float) *y;
-        }
-      else if (evtype == CLUTTER_TOUCH_END || evtype == CLUTTER_TOUCH_CANCEL)
-        {
-          *x = touch_state->coords.x;
-          *y = touch_state->coords.y;
-          meta_seat_impl_release_touch_state (seat_impl, slot);
-        }
-    }
-
-  g_rw_lock_writer_unlock (&seat_impl->state_lock);
-
-  return retval;
 }
 
 void
@@ -1443,8 +1158,8 @@ meta_seat_impl_notify_touch_event_in_impl (MetaSeatImpl       *seat_impl,
                                            ClutterEventType    evtype,
                                            uint64_t            time_us,
                                            int                 slot,
-                                           float               x,
-                                           float               y)
+                                           double              x,
+                                           double              y)
 {
   ClutterEvent *event = NULL;
   ClutterEventSequence *sequence;
@@ -1453,10 +1168,9 @@ meta_seat_impl_notify_touch_event_in_impl (MetaSeatImpl       *seat_impl,
   /* "NULL" sequences are special cased in clutter */
   sequence = GINT_TO_POINTER (MAX (1, slot + 1));
 
-  modifiers = xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE);
-
-  if (!update_touch_state (seat_impl, evtype, slot, &x, &y))
-    return;
+  modifiers =
+    xkb_state_serialize_mods (seat_impl->xkb, XKB_STATE_MODS_EFFECTIVE) |
+    seat_impl->button_state;
 
   if (evtype == CLUTTER_TOUCH_BEGIN ||
       evtype == CLUTTER_TOUCH_UPDATE)
@@ -1478,34 +1192,37 @@ meta_seat_impl_notify_touch_event_in_impl (MetaSeatImpl       *seat_impl,
                                  input_device,
                                  sequence,
                                  modifiers,
-                                 GRAPHENE_POINT_INIT ((float) x, (float) y));
+                                 GRAPHENE_POINT_INIT (x, y));
     }
 
   queue_event (seat_impl, event);
 }
 
-static void
-meta_seat_impl_constrain_pointer (MetaSeatImpl     *seat_impl,
-                                  uint64_t          time_us,
-                                  graphene_point_t  prev,
-                                  graphene_point_t *cur)
+void
+meta_seat_impl_constrain_pointer (MetaSeatImpl       *seat_impl,
+                                  ClutterInputDevice *core_pointer,
+                                  uint64_t            time_us,
+                                  float               x,
+                                  float               y,
+                                  float              *new_x,
+                                  float              *new_y)
 {
   /* Constrain to barriers */
-  constrain_to_barriers (seat_impl,
+  constrain_to_barriers (seat_impl, core_pointer,
                          us2ms (time_us),
-                         prev,
-                         cur);
+                         new_x, new_y);
 
   /* Bar to constraints */
   if (seat_impl->pointer_constraint)
     {
       meta_pointer_constraint_impl_constrain (seat_impl->pointer_constraint,
+                                              core_pointer,
                                               us2ms (time_us),
-                                              prev.x, prev.y,
-                                              &cur->x, &cur->y);
+                                              x, y,
+                                              new_x, new_y);
     }
 
-  constrain_to_viewports (seat_impl, time_us, prev, cur);
+  constrain_to_viewports (seat_impl, core_pointer, time_us, new_x, new_y);
 }
 
 static void
@@ -1594,7 +1311,7 @@ relative_motion_across_outputs (MetaViewportInfo   *viewports,
   *dy_inout = target_y - cur_y;
 }
 
-static void
+void
 meta_seat_impl_filter_relative_motion (MetaSeatImpl       *seat_impl,
                                        ClutterInputDevice *device,
                                        float               x,
@@ -1637,6 +1354,23 @@ meta_seat_impl_filter_relative_motion (MetaSeatImpl       *seat_impl,
 }
 
 static void
+notify_absolute_motion_in_impl (ClutterInputDevice *input_device,
+                                uint64_t            time_us,
+                                float               x,
+                                float               y,
+                                double             *axes)
+{
+  MetaSeatImpl *seat_impl;
+
+  seat_impl = seat_impl_from_device (input_device);
+  meta_seat_impl_notify_absolute_motion_in_impl (seat_impl,
+                                                 input_device,
+                                                 time_us,
+                                                 x, y,
+                                                 axes);
+}
+
+static void
 notify_relative_tool_motion_in_impl (ClutterInputDevice *input_device,
                                      uint64_t            time_us,
                                      float               dx,
@@ -1668,25 +1402,24 @@ notify_pinch_gesture_event (ClutterInputDevice          *input_device,
                             uint32_t                     n_fingers)
 {
   MetaSeatImpl *seat_impl;
-  MetaSeatImplPrivate *priv;
   ClutterEvent *event = NULL;
+  float x, y;
 
   seat_impl = seat_impl_from_device (input_device);
-  priv = meta_seat_impl_get_instance_private (seat_impl);
 
+  meta_input_device_native_get_coords_in_impl (META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer),
+                                               &x, &y);
   event =
     clutter_event_touchpad_pinch_new (CLUTTER_EVENT_NONE,
                                       time_us,
                                       input_device,
                                       phase,
                                       n_fingers,
-                                      priv->pointer_state,
-                                      GRAPHENE_POINT_INIT ((float) dx,
-                                                           (float) dy),
-                                      GRAPHENE_POINT_INIT ((float) dx_unaccel,
-                                                           (float) dy_unaccel),
-                                      (float) angle_delta,
-                                      (float) scale);
+                                      GRAPHENE_POINT_INIT (x, y),
+                                      GRAPHENE_POINT_INIT (dx, dy),
+                                      GRAPHENE_POINT_INIT (dx_unaccel,
+                                                           dy_unaccel),
+                                      angle_delta, scale);
 
   queue_event (seat_impl, event);
 }
@@ -1702,23 +1435,23 @@ notify_swipe_gesture_event (ClutterInputDevice          *input_device,
                             double                       dy_unaccel)
 {
   MetaSeatImpl *seat_impl;
-  MetaSeatImplPrivate *priv;
   ClutterEvent *event = NULL;
+  float x, y;
 
   seat_impl = seat_impl_from_device (input_device);
-  priv = meta_seat_impl_get_instance_private (seat_impl);
 
+  meta_input_device_native_get_coords_in_impl (META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer),
+                                               &x, &y);
   event =
     clutter_event_touchpad_swipe_new (CLUTTER_EVENT_NONE,
                                       time_us,
                                       input_device,
                                       phase,
                                       n_fingers,
-                                      priv->pointer_state,
-                                      GRAPHENE_POINT_INIT ((float) dx,
-                                                           (float) dy),
-                                      GRAPHENE_POINT_INIT ((float) dx_unaccel,
-                                                           (float) dy_unaccel));
+                                      GRAPHENE_POINT_INIT (x, y),
+                                      GRAPHENE_POINT_INIT (dx, dy),
+                                      GRAPHENE_POINT_INIT (dx_unaccel,
+                                                           dy_unaccel));
 
   queue_event (seat_impl, event);
 }
@@ -1730,18 +1463,20 @@ notify_hold_gesture_event (ClutterInputDevice          *input_device,
                            uint32_t                     n_fingers)
 {
   MetaSeatImpl *seat_impl;
-  MetaSeatImplPrivate *priv;
   ClutterEvent *event = NULL;
+  float x, y;
 
   seat_impl = seat_impl_from_device (input_device);
-  priv = meta_seat_impl_get_instance_private (seat_impl);
+
+  meta_input_device_native_get_coords_in_impl (META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer),
+                                               &x, &y);
 
   event = clutter_event_touchpad_hold_new (CLUTTER_EVENT_NONE,
                                            time_us,
                                            input_device,
                                            phase,
                                            n_fingers,
-                                           priv->pointer_state);
+                                           GRAPHENE_POINT_INIT (x, y));
 
   queue_event (seat_impl, event);
 }
@@ -1859,30 +1594,6 @@ notify_pad_ring (ClutterInputDevice *input_device,
   queue_event (seat_impl, event);
 }
 
-static void
-notify_pad_dial (ClutterInputDevice *input_device,
-                 uint64_t            time_us,
-                 uint32_t            dial_number,
-                 uint32_t            mode_group,
-                 uint32_t            mode,
-                 double              value)
-{
-  MetaSeatImpl *seat_impl;
-  ClutterEvent *event;
-
-  seat_impl = seat_impl_from_device (input_device);
-
-  event = clutter_event_pad_dial_new (CLUTTER_EVENT_NONE,
-                                      time_us,
-                                      input_device,
-                                      dial_number,
-                                      mode_group,
-                                      value,
-                                      mode);
-
-  queue_event (seat_impl, event);
-}
-
 static gboolean
 has_touchscreen (MetaSeatImpl *seat_impl)
 {
@@ -1928,9 +1639,6 @@ has_pointer (MetaSeatImpl *seat_impl)
 static gboolean
 device_is_tablet_switch (MetaInputDeviceNative *device_native)
 {
-  if (!device_native->libinput_device)
-    return FALSE;
-
   if (libinput_device_has_capability (device_native->libinput_device,
                                       LIBINPUT_DEVICE_CAP_SWITCH) &&
       libinput_device_switch_has_switch (device_native->libinput_device,
@@ -1988,12 +1696,15 @@ update_touch_mode (MetaSeatImpl *seat_impl)
     }
 }
 
-static void
-meta_seat_impl_take_device (MetaSeatImpl       *seat_impl,
-                            ClutterInputDevice *device)
+static ClutterInputDevice *
+evdev_add_device (MetaSeatImpl           *seat_impl,
+                  struct libinput_device *libinput_device)
 {
   ClutterInputDeviceType type;
+  ClutterInputDevice *device;
   gboolean is_touchscreen, is_tablet_switch, is_pointer;
+
+  device = meta_input_device_native_new_in_impl (seat_impl, libinput_device);
 
   seat_impl->devices = g_slist_prepend (seat_impl->devices, device);
   meta_seat_impl_sync_leds_in_impl (seat_impl);
@@ -2017,23 +1728,27 @@ meta_seat_impl_take_device (MetaSeatImpl       *seat_impl,
   if (type == CLUTTER_KEYBOARD_DEVICE)
     {
       MetaKbdA11ySettings kbd_a11y_settings;
+      MetaInputDeviceNative *keyboard_native;
 
+      keyboard_native = META_INPUT_DEVICE_NATIVE (seat_impl->core_keyboard);
       meta_input_settings_get_kbd_a11y_settings (seat_impl->input_settings,
                                                  &kbd_a11y_settings);
-      meta_keyboard_a11y_apply_settings_in_impl (seat_impl->keyboard_a11y,
-                                                 &kbd_a11y_settings);
+      meta_input_device_native_apply_kbd_a11y_settings_in_impl (keyboard_native,
+                                                                &kbd_a11y_settings);
     }
+
+  return device;
 }
 
 static void
-meta_seat_impl_remove_device (MetaSeatImpl       *seat_impl,
-                              ClutterInputDevice *device)
+evdev_remove_device (MetaSeatImpl          *seat_impl,
+                     MetaInputDeviceNative *device_native)
 {
-  MetaInputDeviceNative *device_native;
+  ClutterInputDevice *device;
   ClutterInputDeviceType device_type;
-  gboolean is_touchscreen, is_tablet_switch, is_pointer, is_tablet;
+  gboolean is_touchscreen, is_tablet_switch, is_pointer;
 
-  device_native = META_INPUT_DEVICE_NATIVE (device);
+  device = CLUTTER_INPUT_DEVICE (device_native);
   seat_impl->devices = g_slist_remove (seat_impl->devices, device);
 
   device_type = clutter_input_device_get_device_type (device);
@@ -2041,7 +1756,6 @@ meta_seat_impl_remove_device (MetaSeatImpl       *seat_impl,
   is_touchscreen = device_type == CLUTTER_TOUCHSCREEN_DEVICE;
   is_tablet_switch = device_is_tablet_switch (device_native);
   is_pointer = device_type_is_pointer (device_type);
-  is_tablet = device_type == CLUTTER_TABLET_DEVICE;
 
   if (is_touchscreen)
     seat_impl->has_touchscreen = has_touchscreen (seat_impl);
@@ -2049,8 +1763,6 @@ meta_seat_impl_remove_device (MetaSeatImpl       *seat_impl,
     seat_impl->has_tablet_switch = has_tablet_switch (seat_impl);
   if (is_pointer)
     seat_impl->has_pointer = has_pointer (seat_impl);
-  if (is_tablet)
-    meta_seat_impl_release_stylus_state (seat_impl, device);
 
   if (is_touchscreen || is_tablet_switch || is_pointer)
     update_touch_mode (seat_impl);
@@ -2079,9 +1791,7 @@ process_base_event (MetaSeatImpl          *seat_impl,
     case LIBINPUT_EVENT_DEVICE_ADDED:
       libinput_device = libinput_event_get_device (event);
 
-      device = meta_input_device_native_new_in_impl (seat_impl,
-                                                     libinput_device);
-      meta_seat_impl_take_device (seat_impl, device);
+      device = evdev_add_device (seat_impl, libinput_device);
       device_event =
         clutter_event_device_notify_new (CLUTTER_DEVICE_ADDED,
                                          CLUTTER_EVENT_NONE,
@@ -2101,7 +1811,8 @@ process_base_event (MetaSeatImpl          *seat_impl,
                                          CLUTTER_CURRENT_TIME,
                                          device);
       meta_input_settings_remove_device (input_settings, device);
-      meta_seat_impl_remove_device (seat_impl, device);
+      evdev_remove_device (seat_impl,
+                           META_INPUT_DEVICE_NATIVE (device));
       break;
 
     default:
@@ -2364,42 +2075,19 @@ process_tablet_axis (MetaSeatImpl          *seat_impl,
 
   time = libinput_event_tablet_tool_get_time_usec (tablet_event);
 
-  if (evdev_device->last_tool &&
-      axes[CLUTTER_INPUT_AXIS_WHEEL] != 0.0)
-    {
-      /* Send down a scroll event as well, so Clutter widgetry does not require
-       * special handling of the wheel axis.
-       */
-      notify_discrete_scroll (device, evdev_device->last_tool,
-                              time,
-                              ((axes[CLUTTER_INPUT_AXIS_WHEEL] > 0.0) ==
-                               meta_input_device_native_has_scroll_inverted (evdev_device)) ?
-                              CLUTTER_SCROLL_UP : CLUTTER_SCROLL_DOWN,
-                              CLUTTER_SCROLL_SOURCE_WHEEL,
-                              FALSE);
-    }
-
   if (meta_input_device_native_get_mapping_mode_in_impl (device) == META_INPUT_DEVICE_MAPPING_RELATIVE ||
       clutter_input_device_tool_get_tool_type (evdev_device->last_tool) == CLUTTER_INPUT_DEVICE_TOOL_MOUSE ||
       clutter_input_device_tool_get_tool_type (evdev_device->last_tool) == CLUTTER_INPUT_DEVICE_TOOL_LENS)
     {
       dx = libinput_event_tablet_tool_get_dx (tablet_event);
       dy = libinput_event_tablet_tool_get_dy (tablet_event);
-      notify_relative_tool_motion_in_impl (device, time,
-                                           (float) dx, (float) dy,
-                                           axes);
+      notify_relative_tool_motion_in_impl (device, time, dx, dy, axes);
     }
   else
     {
-      x = libinput_event_tablet_tool_get_x_transformed (tablet_event,
-                                                        (uint32_t) stage_width);
-      y = libinput_event_tablet_tool_get_y_transformed (tablet_event,
-                                                        (uint32_t) stage_height);
-      meta_seat_impl_notify_absolute_motion_in_impl (seat_impl,
-                                                     device, time,
-                                                     (float) x,
-                                                     (float) y,
-                                                     axes);
+      x = libinput_event_tablet_tool_get_x_transformed (tablet_event, stage_width);
+      y = libinput_event_tablet_tool_get_y_transformed (tablet_event, stage_height);
+      notify_absolute_motion_in_impl (device, time, x, y, axes);
     }
 }
 
@@ -2410,6 +2098,7 @@ process_device_event (MetaSeatImpl          *seat_impl,
   gboolean handled = TRUE;
   struct libinput_device *libinput_device = libinput_event_get_device(event);
   ClutterInputDevice *device;
+  MetaInputDeviceNative *device_native;
 
   switch (libinput_event_get_type (event))
     {
@@ -2469,10 +2158,8 @@ process_device_event (MetaSeatImpl          *seat_impl,
         meta_seat_impl_notify_relative_motion_in_impl (seat_impl,
                                                        device,
                                                        time_us,
-                                                       (float) dx,
-                                                       (float) dy,
-                                                       (float) dx_unaccel,
-                                                       (float) dy_unaccel,
+                                                       dx, dy,
+                                                       dx_unaccel, dy_unaccel,
                                                        NULL);
 
         break;
@@ -2492,15 +2179,14 @@ process_device_event (MetaSeatImpl          *seat_impl,
 
         time_us = libinput_event_pointer_get_time_usec (motion_event);
         x = libinput_event_pointer_get_absolute_x_transformed (motion_event,
-                                                               (int) stage_width);
+                                                               stage_width);
         y = libinput_event_pointer_get_absolute_y_transformed (motion_event,
-                                                               (int) stage_height);
+                                                               stage_height);
 
         meta_seat_impl_notify_absolute_motion_in_impl (seat_impl,
                                                        device,
                                                        time_us,
-                                                       (float) x,
-                                                       (float) y,
+                                                       x, y,
                                                        NULL);
 
         break;
@@ -2562,29 +2248,43 @@ process_device_event (MetaSeatImpl          *seat_impl,
       {
         int seat_slot;
         uint64_t time_us;
-        float x, y;
+        double x, y;
         float stage_width, stage_height;
+        MetaTouchState *touch_state;
         struct libinput_event_touch *touch_event =
           libinput_event_get_touch_event (event);
 
         device = libinput_device_get_user_data (libinput_device);
+        device_native = META_INPUT_DEVICE_NATIVE (device);
 
         meta_viewport_info_get_extents (seat_impl->viewports,
                                         &stage_width, &stage_height);
 
         seat_slot = libinput_event_touch_get_seat_slot (touch_event);
         time_us = libinput_event_touch_get_time_usec (touch_event);
-        x = (float) libinput_event_touch_get_x_transformed (touch_event,
-                                                            (int) stage_width);
-        y = (float) libinput_event_touch_get_y_transformed (touch_event,
-                                                            (int) stage_height);
+        x = libinput_event_touch_get_x_transformed (touch_event,
+                                                    stage_width);
+        y = libinput_event_touch_get_y_transformed (touch_event,
+                                                    stage_height);
+
+        g_rw_lock_writer_lock (&seat_impl->state_lock);
+
+        touch_state = meta_seat_impl_acquire_touch_state_in_impl (seat_impl, seat_slot);
+        touch_state->coords.x = x;
+        touch_state->coords.y = y;
         meta_input_device_native_translate_coordinates_in_impl (device,
                                                                 seat_impl->viewports,
-                                                                &x, &y);
+                                                                &touch_state->coords.x,
+                                                                &touch_state->coords.y);
+
+        g_rw_lock_writer_unlock (&seat_impl->state_lock);
 
         meta_seat_impl_notify_touch_event_in_impl (seat_impl, device,
                                                    CLUTTER_TOUCH_BEGIN,
-                                                   time_us, seat_slot, x, y);
+                                                   time_us,
+                                                   touch_state->seat_slot,
+                                                   touch_state->coords.x,
+                                                   touch_state->coords.y);
         break;
       }
 
@@ -2592,17 +2292,28 @@ process_device_event (MetaSeatImpl          *seat_impl,
       {
         int seat_slot;
         uint64_t time_us;
+        MetaTouchState *touch_state;
         struct libinput_event_touch *touch_event =
           libinput_event_get_touch_event (event);
 
         device = libinput_device_get_user_data (libinput_device);
+        device_native = META_INPUT_DEVICE_NATIVE (device);
 
         seat_slot = libinput_event_touch_get_seat_slot (touch_event);
         time_us = libinput_event_touch_get_time_usec (touch_event);
+        touch_state = meta_seat_impl_lookup_touch_state_in_impl (seat_impl, seat_slot);
+        if (!touch_state)
+          break;
 
         meta_seat_impl_notify_touch_event_in_impl (seat_impl, device,
                                                    CLUTTER_TOUCH_END, time_us,
-                                                   seat_slot, -1, -1);
+                                                   touch_state->seat_slot,
+                                                   touch_state->coords.x,
+                                                   touch_state->coords.y);
+
+        g_rw_lock_writer_lock (&seat_impl->state_lock);
+        meta_seat_impl_release_touch_state_in_impl (seat_impl, seat_slot);
+        g_rw_lock_writer_unlock (&seat_impl->state_lock);
         break;
       }
 
@@ -2610,46 +2321,75 @@ process_device_event (MetaSeatImpl          *seat_impl,
       {
         int seat_slot;
         uint64_t time_us;
-        float x, y;
+        double x, y;
         float stage_width, stage_height;
+        MetaTouchState *touch_state;
         struct libinput_event_touch *touch_event =
           libinput_event_get_touch_event (event);
 
         device = libinput_device_get_user_data (libinput_device);
+        device_native = META_INPUT_DEVICE_NATIVE (device);
 
         meta_viewport_info_get_extents (seat_impl->viewports,
                                         &stage_width, &stage_height);
 
         seat_slot = libinput_event_touch_get_seat_slot (touch_event);
         time_us = libinput_event_touch_get_time_usec (touch_event);
-        x = (float) libinput_event_touch_get_x_transformed (touch_event,
-                                                            (int) stage_width);
-        y = (float) libinput_event_touch_get_y_transformed (touch_event,
-                                                            (int) stage_height);
-        meta_input_device_native_translate_coordinates_in_impl (device,
-                                                                seat_impl->viewports,
-                                                                &x, &y);
+        x = libinput_event_touch_get_x_transformed (touch_event,
+                                                    stage_width);
+        y = libinput_event_touch_get_y_transformed (touch_event,
+                                                    stage_height);
+
+        g_rw_lock_writer_lock (&seat_impl->state_lock);
+        touch_state = meta_seat_impl_lookup_touch_state_in_impl (seat_impl, seat_slot);
+        if (touch_state)
+          {
+            touch_state->coords.x = x;
+            touch_state->coords.y = y;
+            meta_input_device_native_translate_coordinates_in_impl (device,
+                                                                    seat_impl->viewports,
+                                                                    &touch_state->coords.x,
+                                                                    &touch_state->coords.y);
+          }
+        g_rw_lock_writer_unlock (&seat_impl->state_lock);
+
+        if (!touch_state)
+          break;
 
         meta_seat_impl_notify_touch_event_in_impl (seat_impl, device,
                                                    CLUTTER_TOUCH_UPDATE,
-                                                   time_us, seat_slot, x, y);
+                                                   time_us,
+                                                   touch_state->seat_slot,
+                                                   touch_state->coords.x,
+                                                   touch_state->coords.y);
         break;
       }
     case LIBINPUT_EVENT_TOUCH_CANCEL:
       {
         int seat_slot;
+        MetaTouchState *touch_state;
         uint64_t time_us;
         struct libinput_event_touch *touch_event =
           libinput_event_get_touch_event (event);
 
         device = libinput_device_get_user_data (libinput_device);
+        device_native = META_INPUT_DEVICE_NATIVE (device);
         time_us = libinput_event_touch_get_time_usec (touch_event);
 
         seat_slot = libinput_event_touch_get_seat_slot (touch_event);
+        touch_state = meta_seat_impl_lookup_touch_state_in_impl (seat_impl, seat_slot);
+        if (!touch_state)
+          break;
 
-        meta_seat_impl_notify_touch_event_in_impl (seat_impl, device,
+        meta_seat_impl_notify_touch_event_in_impl (touch_state->seat_impl,
+                                                   CLUTTER_INPUT_DEVICE (device_native),
                                                    CLUTTER_TOUCH_CANCEL,
-                                                   time_us, seat_slot, -1, -1);
+                                                   time_us,
+                                                   touch_state->seat_slot,
+                                                   touch_state->coords.x,
+                                                   touch_state->coords.y);
+
+        meta_seat_impl_release_touch_state_in_impl (seat_impl, seat_slot);
         break;
       }
     case LIBINPUT_EVENT_GESTURE_PINCH_BEGIN:
@@ -2901,27 +2641,6 @@ process_device_event (MetaSeatImpl          *seat_impl,
         notify_pad_ring (device, time, number, source, group, mode, angle);
         break;
       }
-    case LIBINPUT_EVENT_TABLET_PAD_DIAL:
-      {
-        uint64_t time;
-        uint32_t number, group, mode;
-        struct libinput_tablet_pad_mode_group *mode_group;
-        struct libinput_event_tablet_pad *pad_event =
-          libinput_event_get_tablet_pad_event (event);
-        double delta;
-
-        device = libinput_device_get_user_data (libinput_device);
-        time = libinput_event_tablet_pad_get_time_usec (pad_event);
-        number = libinput_event_tablet_pad_get_dial_number (pad_event);
-        delta = libinput_event_tablet_pad_get_dial_delta_v120 (pad_event);
-
-        mode_group = libinput_event_tablet_pad_get_mode_group (pad_event);
-        group = libinput_tablet_pad_mode_group_get_index (mode_group);
-        mode = libinput_event_tablet_pad_get_mode (pad_event);
-
-        notify_pad_dial (device, time, number, group, mode, delta);
-        break;
-      }
     case LIBINPUT_EVENT_SWITCH_TOGGLE:
       {
         struct libinput_event_switch *switch_event =
@@ -3025,7 +2744,10 @@ kbd_a11y_changed_cb (MetaInputSettings   *input_settings,
                      MetaKbdA11ySettings *a11y_settings,
                      MetaSeatImpl        *seat_impl)
 {
-  meta_keyboard_a11y_apply_settings_in_impl (seat_impl->keyboard_a11y, a11y_settings);
+  MetaInputDeviceNative *keyboard;
+
+  keyboard = META_INPUT_DEVICE_NATIVE (seat_impl->core_keyboard);
+  meta_input_device_native_apply_kbd_a11y_settings_in_impl (keyboard, a11y_settings);
 }
 
 static void
@@ -3041,7 +2763,7 @@ meta_seat_impl_set_keyboard_numlock_in_impl (MetaSeatImpl *seat_impl,
   MetaKeymapNative *keymap;
 
   keymap = seat_impl->keymap;
-  xkb_keymap = meta_keymap_native_get_xkb_keymap_in_impl (keymap);
+  xkb_keymap = meta_keymap_native_get_keyboard_map_in_impl (keymap);
 
   numlock = (1 << xkb_keymap_mod_get_index (xkb_keymap, "Mod2"));
 
@@ -3068,6 +2790,7 @@ meta_seat_impl_set_keyboard_numlock_in_impl (MetaSeatImpl *seat_impl,
 
   meta_seat_impl_sync_leds_in_impl (seat_impl);
   meta_keymap_native_update_in_impl (seat_impl->keymap,
+                                     seat_impl,
                                      seat_impl->xkb);
 }
 
@@ -3101,7 +2824,6 @@ init_libinput (MetaSeatImpl  *seat_impl,
 {
   struct udev *udev;
   struct libinput *libinput;
-  char xdg[PATH_MAX] = {0};
 
   udev = udev_new ();
   if (G_UNLIKELY (udev == NULL))
@@ -3121,12 +2843,6 @@ init_libinput (MetaSeatImpl  *seat_impl,
                    "Failed to create the libinput object.");
       return FALSE;
     }
-
-  g_snprintf (xdg, sizeof xdg, "%s/libinput/plugins", g_get_user_config_dir ());
-
-  libinput_plugin_system_append_path (libinput, xdg);
-  libinput_plugin_system_append_default_paths (libinput);
-  libinput_plugin_system_load_plugins (libinput, LIBINPUT_PLUGIN_SYSTEM_FLAG_NONE);
 
   if (libinput_udev_assign_seat (libinput, seat_impl->seat_id) == -1)
     {
@@ -3161,34 +2877,6 @@ init_libinput_source (MetaSeatImpl *seat_impl)
   g_source_unref (source);
 }
 
-static void
-update_keyboard_leds (MetaSeatImpl *seat_impl)
-{
-  MetaSeatImplPrivate *priv =
-    meta_seat_impl_get_instance_private (seat_impl);
-  struct xkb_keymap *xkb_keymap;
-  /* Index matches MetaKeyboardLed enum */
-  const char *led_map[] = {
-    XKB_LED_NAME_NUM,
-    XKB_LED_NAME_CAPS,
-    XKB_LED_NAME_SCROLL,
-#ifdef HAVE_XKBCOMMON_KANA_COMPOSE_LEDS
-    XKB_LED_NAME_COMPOSE,
-    XKB_LED_NAME_KANA,
-#endif
-  };
-  int i;
-
-  G_STATIC_ASSERT (G_N_ELEMENTS (led_map) == N_KEYBOARD_LEDS);
-
-  xkb_keymap = meta_keymap_native_get_xkb_keymap_in_impl (seat_impl->keymap);
-  if (!xkb_keymap)
-    return;
-
-  for (i = 0; i < G_N_ELEMENTS (led_map); i++)
-    priv->keyboard_leds[i] = xkb_keymap_led_get_index (xkb_keymap, led_map[i]);
-}
-
 static gpointer
 input_thread (MetaSeatImpl *seat_impl)
 {
@@ -3213,23 +2901,24 @@ input_thread (MetaSeatImpl *seat_impl)
                            NULL,
                            (GDestroyNotify) meta_device_file_release);
 
-  priv->a11y.grabbed_modifiers = g_hash_table_new (NULL, NULL);
-  priv->a11y.pressed_modifiers = g_hash_table_new (NULL, NULL);
-
   seat_impl->input_settings = meta_input_settings_native_new_in_impl (seat_impl);
   g_signal_connect_object (seat_impl->input_settings, "kbd-a11y-changed",
                            G_CALLBACK (kbd_a11y_changed_cb), seat_impl, 0);
 
-  seat_impl->keyboard_a11y = meta_keyboard_a11y_new (seat_impl);
+  seat_impl->keymap = g_object_new (META_TYPE_KEYMAP_NATIVE, NULL);
 
-  seat_impl->keymap = meta_keymap_native_new (seat_impl);
-
-  xkb_keymap = meta_keymap_native_get_xkb_keymap_in_impl (seat_impl->keymap);
+  xkb_keymap = meta_keymap_native_get_keyboard_map_in_impl (seat_impl->keymap);
 
   if (xkb_keymap)
     {
       seat_impl->xkb = xkb_state_new (xkb_keymap);
-      update_keyboard_leds (seat_impl);
+
+      seat_impl->caps_lock_led =
+        xkb_keymap_led_get_index (xkb_keymap, XKB_LED_NAME_CAPS);
+      seat_impl->num_lock_led =
+        xkb_keymap_led_get_index (xkb_keymap, XKB_LED_NAME_NUM);
+      seat_impl->scroll_lock_led =
+        xkb_keymap_led_get_index (xkb_keymap, XKB_LED_NAME_SCROLL);
     }
 
   if (meta_input_settings_maybe_restore_numlock_state (seat_impl->input_settings))
@@ -3246,10 +2935,6 @@ input_thread (MetaSeatImpl *seat_impl)
           return NULL;
         }
     }
-
-  seat_impl->virtual_source_pointer =
-    meta_input_device_native_new_virtual_in_impl (seat_impl,
-                                                  CLUTTER_POINTER_DEVICE);
 
   seat_impl->has_touchscreen = has_touchscreen (seat_impl);
   seat_impl->has_tablet_switch = has_tablet_switch (seat_impl);
@@ -3282,6 +2967,7 @@ meta_seat_impl_initable_init (GInitable     *initable,
 
   seat_impl->input_context = g_main_context_new ();
   seat_impl->main_context = g_main_context_ref_thread_default ();
+  g_assert (seat_impl->main_context == g_main_context_default ());
 
   seat_impl->input_thread =
     g_thread_try_new ("Mutter Input Thread",
@@ -3298,6 +2984,31 @@ meta_seat_impl_initable_init (GInitable     *initable,
   g_mutex_unlock (&seat_impl->init_mutex);
 
   return TRUE;
+}
+
+static void
+meta_seat_impl_constructed (GObject *object)
+{
+  MetaSeatImpl *seat_impl = META_SEAT_IMPL (object);
+  ClutterInputDevice *device;
+
+  device = meta_input_device_native_new_virtual (
+    CLUTTER_SEAT (seat_impl->seat_native), CLUTTER_POINTER_DEVICE,
+    CLUTTER_INPUT_MODE_LOGICAL);
+  seat_impl->pointer_x = INITIAL_POINTER_X;
+  seat_impl->pointer_y = INITIAL_POINTER_Y;
+  meta_input_device_native_set_coords_in_impl (META_INPUT_DEVICE_NATIVE (device),
+                                               seat_impl->pointer_x,
+                                               seat_impl->pointer_y);
+  seat_impl->core_pointer = device;
+
+  device = meta_input_device_native_new_virtual (
+    CLUTTER_SEAT (seat_impl->seat_native), CLUTTER_KEYBOARD_DEVICE,
+    CLUTTER_INPUT_MODE_LOGICAL);
+  seat_impl->core_keyboard = device;
+
+  if (G_OBJECT_CLASS (meta_seat_impl_parent_class)->constructed)
+    G_OBJECT_CLASS (meta_seat_impl_parent_class)->constructed (object);
 }
 
 static void
@@ -3346,7 +3057,7 @@ meta_seat_impl_get_property (GObject    *object,
 }
 
 static gboolean
-prepare_shutdown_in_impl (GTask *task)
+destroy_in_impl (GTask *task)
 {
   MetaSeatImpl *seat_impl = g_task_get_source_object (task);
   MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
@@ -3360,9 +3071,8 @@ prepare_shutdown_in_impl (GTask *task)
 
   g_clear_pointer (&seat_impl->libinput, libinput_unref);
   g_clear_pointer (&seat_impl->tools, g_hash_table_unref);
-  g_clear_pointer (&priv->touch_states, g_hash_table_destroy);
+  g_clear_pointer (&seat_impl->touch_states, g_hash_table_destroy);
   g_clear_pointer (&seat_impl->libinput_source, g_source_destroy);
-  g_clear_object (&seat_impl->keyboard_a11y);
 
   numlock_active =
     xkb_state_mod_name_is_active (seat_impl->xkb, XKB_MOD_NAME_NUM,
@@ -3377,11 +3087,6 @@ prepare_shutdown_in_impl (GTask *task)
 
   g_clear_pointer (&priv->device_files, g_hash_table_destroy);
 
-  g_clear_pointer (&priv->a11y.grabbed_modifiers, g_hash_table_destroy);
-  g_clear_pointer (&priv->a11y.pressed_modifiers, g_hash_table_destroy);
-
-  g_clear_object (&seat_impl->virtual_source_pointer);
-
   g_main_loop_quit (seat_impl->input_loop);
   g_task_return_boolean (task, TRUE);
 
@@ -3389,7 +3094,7 @@ prepare_shutdown_in_impl (GTask *task)
 }
 
 void
-meta_seat_impl_prepare_shutdown (MetaSeatImpl *seat_impl)
+meta_seat_impl_destroy (MetaSeatImpl *seat_impl)
 {
   if (seat_impl->input_thread)
     {
@@ -3397,20 +3102,21 @@ meta_seat_impl_prepare_shutdown (MetaSeatImpl *seat_impl)
 
       task = g_task_new (seat_impl, NULL, NULL, NULL);
       meta_seat_impl_run_input_task (seat_impl, task,
-                                     (GSourceFunc) prepare_shutdown_in_impl);
+                                     (GSourceFunc) destroy_in_impl);
       g_object_unref (task);
 
       g_thread_join (seat_impl->input_thread);
       seat_impl->input_thread = NULL;
       g_assert (!seat_impl->libinput);
     }
+
+  g_object_unref (seat_impl);
 }
 
 static void
 meta_seat_impl_finalize (GObject *object)
 {
   MetaSeatImpl *seat_impl = META_SEAT_IMPL (object);
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
 
   g_assert (!seat_impl->libinput);
   g_assert (!seat_impl->tools);
@@ -3418,12 +3124,21 @@ meta_seat_impl_finalize (GObject *object)
 
   g_free (seat_impl->seat_id);
 
-  g_clear_pointer (&priv->keymap_description,
-                   meta_keymap_description_unref);
-
   g_rw_lock_clear (&seat_impl->state_lock);
 
   G_OBJECT_CLASS (meta_seat_impl_parent_class)->finalize (object);
+}
+
+ClutterInputDevice *
+meta_seat_impl_get_pointer (MetaSeatImpl *seat_impl)
+{
+  return seat_impl->core_pointer;
+}
+
+ClutterInputDevice *
+meta_seat_impl_get_keyboard (MetaSeatImpl *seat_impl)
+{
+  return seat_impl->core_keyboard;
 }
 
 MetaKeymapNative *
@@ -3436,14 +3151,11 @@ static gboolean
 warp_pointer_in_impl (GTask *task)
 {
   MetaSeatImpl *seat_impl = g_task_get_source_object (task);
-  ClutterInputDevice *virtual_device;
   graphene_point_t *point;
 
   point = g_task_get_task_data (task);
-  virtual_device = meta_seat_impl_get_virtual_source_pointer (seat_impl);
-  meta_seat_impl_notify_absolute_motion_in_impl (seat_impl,
-                                                 virtual_device, 0,
-                                                 point->x, point->y, NULL);
+  notify_absolute_motion_in_impl (seat_impl->core_pointer, 0,
+                                  point->x, point->y, NULL);
   g_task_return_boolean (task, TRUE);
 
   return G_SOURCE_REMOVE;
@@ -3480,10 +3192,14 @@ static gboolean
 init_pointer_position_in_impl (GTask *task)
 {
   MetaSeatImpl *seat_impl = g_task_get_source_object (task);
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
   InitPointerPositionData *data = g_task_get_task_data (task);
+  MetaInputDeviceNative *core_pointer =
+    META_INPUT_DEVICE_NATIVE (seat_impl->core_pointer);
 
-  priv->pointer_state = data->position;
+  seat_impl->pointer_x = data->position.x;
+  seat_impl->pointer_y = data->position.y;
+  core_pointer->pointer_x = data->position.x;
+  core_pointer->pointer_y = data->position.y;
   g_task_return_boolean (task, TRUE);
 
   g_mutex_lock (&data->mutex);
@@ -3528,6 +3244,7 @@ meta_seat_impl_query_state (MetaSeatImpl         *seat_impl,
                             graphene_point_t     *coords,
                             ClutterModifierType  *modifiers)
 {
+  MetaInputDeviceNative *device_native = META_INPUT_DEVICE_NATIVE (device);
   gboolean retval = FALSE;
   ClutterModifierType mods = 0;
 
@@ -3539,7 +3256,7 @@ meta_seat_impl_query_state (MetaSeatImpl         *seat_impl,
       int slot;
 
       slot = clutter_event_sequence_get_slot (sequence);
-      touch_state = meta_seat_impl_lookup_touch_state (seat_impl, slot);
+      touch_state = meta_seat_impl_lookup_touch_state_in_impl (seat_impl, slot);
       if (!touch_state)
         goto out;
 
@@ -3558,19 +3275,15 @@ meta_seat_impl_query_state (MetaSeatImpl         *seat_impl,
     {
       if (coords)
         {
-          meta_seat_impl_get_onscreen_coords_for_source_device (seat_impl,
-                                                                device,
-                                                                coords);
+          coords->x = device_native->pointer_x;
+          coords->y = device_native->pointer_y;
         }
 
-      if (device &&
-          clutter_input_device_get_device_type (device) == CLUTTER_TABLET_DEVICE)
-        mods = META_INPUT_DEVICE_NATIVE (device)->button_state;
-      else
-        mods = seat_impl->button_state;
-
       if (seat_impl->xkb)
-        mods = meta_xkb_translate_modifiers (seat_impl->xkb, mods);
+        {
+          mods = meta_xkb_translate_modifiers (seat_impl->xkb,
+                                               seat_impl->button_state);
+        }
 
       retval = TRUE;
     }
@@ -3594,6 +3307,7 @@ meta_seat_impl_class_init (MetaSeatImplClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = meta_seat_impl_constructed;
   object_class->set_property = meta_seat_impl_set_property;
   object_class->get_property = meta_seat_impl_get_property;
   object_class->finalize = meta_seat_impl_finalize;
@@ -3608,13 +3322,15 @@ meta_seat_impl_class_init (MetaSeatImplClass *klass)
   props[PROP_SEAT_ID] =
     g_param_spec_string ("seat-id", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   props[PROP_FLAGS] =
     g_param_spec_flags ("flags", NULL, NULL,
                         META_TYPE_SEAT_NATIVE_FLAG,
                         META_SEAT_NATIVE_FLAG_NONE,
-                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                        G_PARAM_READWRITE |
+                        G_PARAM_CONSTRUCT_ONLY);
 
   signals[KBD_A11Y_FLAGS_CHANGED] =
     g_signal_new ("kbd-a11y-flags-changed",
@@ -3639,6 +3355,12 @@ meta_seat_impl_class_init (MetaSeatImplClass *klass)
                   G_TYPE_NONE, 1, G_TYPE_BOOLEAN);
   signals[BELL] =
     g_signal_new ("bell",
+                  G_TYPE_FROM_CLASS (object_class),
+                  G_SIGNAL_RUN_LAST,
+                  0, NULL, NULL, NULL,
+                  G_TYPE_NONE, 0);
+  signals[MODS_STATE_CHANGED] =
+    g_signal_new ("mods-state-changed",
                   G_TYPE_FROM_CLASS (object_class),
                   G_SIGNAL_RUN_LAST,
                   0, NULL, NULL, NULL,
@@ -3669,13 +3391,16 @@ meta_seat_impl_init (MetaSeatImpl *seat_impl)
   seat_impl->barrier_manager = meta_barrier_manager_native_new ();
 }
 
-static void
-meta_seat_impl_update_xkb_state_in_impl_unlocked (MetaSeatImpl       *seat_impl,
-                                                  struct xkb_keymap  *xkb_keymap,
-                                                  xkb_layout_index_t  layout_index)
+void
+meta_seat_impl_update_xkb_state_in_impl (MetaSeatImpl *seat_impl)
 {
   xkb_mod_mask_t latched_mods = 0;
   xkb_mod_mask_t locked_mods = 0;
+  struct xkb_keymap *xkb_keymap;
+
+  g_rw_lock_writer_lock (&seat_impl->state_lock);
+
+  xkb_keymap = meta_keymap_native_get_keyboard_map_in_impl (seat_impl->keymap);
 
   if (seat_impl->xkb)
     {
@@ -3692,28 +3417,20 @@ meta_seat_impl_update_xkb_state_in_impl_unlocked (MetaSeatImpl       *seat_impl,
                          0, /* depressed */
                          latched_mods,
                          locked_mods,
-                         0, 0, layout_index);
+                         0, 0, seat_impl->layout_idx);
 
-  seat_impl->layout_idx = layout_index;
-
-  update_keyboard_leds (seat_impl);
+  seat_impl->caps_lock_led =
+    xkb_keymap_led_get_index (xkb_keymap, XKB_LED_NAME_CAPS);
+  seat_impl->num_lock_led =
+    xkb_keymap_led_get_index (xkb_keymap, XKB_LED_NAME_NUM);
+  seat_impl->scroll_lock_led =
+    xkb_keymap_led_get_index (xkb_keymap, XKB_LED_NAME_SCROLL);
 
   meta_seat_impl_sync_leds_in_impl (seat_impl);
-}
-
-void
-meta_seat_impl_update_xkb_state_in_impl (MetaSeatImpl *seat_impl)
-{
-  struct xkb_keymap *xkb_keymap;
-
-  g_rw_lock_writer_lock (&seat_impl->state_lock);
-
-  xkb_keymap = meta_keymap_native_get_xkb_keymap_in_impl (seat_impl->keymap);
-  meta_seat_impl_update_xkb_state_in_impl_unlocked (seat_impl,
-                                                    xkb_keymap,
-                                                    seat_impl->layout_idx);
   meta_keymap_native_update_in_impl (seat_impl->keymap,
+                                     seat_impl,
                                      seat_impl->xkb);
+
   g_rw_lock_writer_unlock (&seat_impl->state_lock);
 }
 
@@ -3811,43 +3528,60 @@ meta_seat_impl_reclaim_devices (MetaSeatImpl *seat_impl)
   g_object_unref (task);
 }
 
-gboolean
-meta_seat_impl_set_keymap_finish (MetaSeatImpl  *seat_impl,
-                                  GAsyncResult  *result,
-                                  GError       **error)
+static gboolean
+set_keyboard_map (GTask *task)
 {
-  GTask *task = G_TASK (result);
+  MetaSeatImpl *seat_impl = g_task_get_source_object (task);
+  struct xkb_keymap *xkb_keymap = g_task_get_task_data (task);
+  MetaKeymapNative *keymap;
 
-  g_return_val_if_fail (g_task_is_valid (result, seat_impl), FALSE);
-  g_return_val_if_fail (g_task_get_source_tag (G_TASK (result)) ==
-                        meta_seat_impl_set_keymap_async, FALSE);
+  keymap = seat_impl->keymap;
+  meta_keymap_native_set_keyboard_map_in_impl (keymap, xkb_keymap);
 
-  return g_task_propagate_boolean (task, error);
+  meta_seat_impl_update_xkb_state_in_impl (seat_impl);
+  g_task_return_boolean (task, TRUE);
+
+  return G_SOURCE_REMOVE;
 }
 
-typedef struct
+/**
+ * meta_seat_impl_set_keyboard_map: (skip)
+ * @seat_impl: the #ClutterSeat created by the evdev backend
+ * @keymap: the new keymap
+ *
+ * Instructs @evdev to use the specified keyboard map. This will cause
+ * the backend to drop the state and create a new one with the new
+ * map. To avoid state being lost, callers should ensure that no key
+ * is pressed when calling this function.
+ */
+void
+meta_seat_impl_set_keyboard_map (MetaSeatImpl      *seat_impl,
+                                 struct xkb_keymap *xkb_keymap)
 {
-  MetaKeymapDescription *keymap_description;
-  xkb_layout_index_t layout_index;
-} SetKeymapData;
+  GTask *task;
 
-static void
-set_keymap_data_free (gpointer user_data)
-{
-  SetKeymapData *data = user_data;
+  g_return_if_fail (META_IS_SEAT_IMPL (seat_impl));
+  g_return_if_fail (xkb_keymap != NULL);
 
-  meta_keymap_description_unref (data->keymap_description);
-  g_free (data);
+  task = g_task_new (seat_impl, NULL, NULL, NULL);
+  g_task_set_task_data (task,
+                        xkb_keymap_ref (xkb_keymap),
+                        (GDestroyNotify) xkb_keymap_unref);
+  meta_seat_impl_run_input_task (seat_impl, task, (GSourceFunc) set_keyboard_map);
+  g_object_unref (task);
 }
 
-static void
-update_layout_index_unlocked (MetaSeatImpl       *seat_impl,
-                              xkb_layout_index_t  layout_index)
+static gboolean
+set_keyboard_layout_index (GTask *task)
 {
+  MetaSeatImpl *seat_impl = g_task_get_source_object (task);
+  xkb_layout_index_t idx = GPOINTER_TO_UINT (g_task_get_task_data (task));
   xkb_mod_mask_t depressed_mods;
   xkb_mod_mask_t latched_mods;
   xkb_mod_mask_t locked_mods;
   struct xkb_state *state;
+
+  g_rw_lock_writer_lock (&seat_impl->state_lock);
 
   state = seat_impl->xkb;
 
@@ -3855,91 +3589,14 @@ update_layout_index_unlocked (MetaSeatImpl       *seat_impl,
   latched_mods = xkb_state_serialize_mods (state, XKB_STATE_MODS_LATCHED);
   locked_mods = xkb_state_serialize_mods (state, XKB_STATE_MODS_LOCKED);
 
-  xkb_state_update_mask (state,
-                         depressed_mods,
-                         latched_mods,
-                         locked_mods,
-                         0, 0, layout_index);
+  xkb_state_update_mask (state, depressed_mods, latched_mods, locked_mods, 0, 0, idx);
+  meta_keymap_native_update_in_impl (seat_impl->keymap,
+                                     seat_impl,
+                                     seat_impl->xkb);
 
-  seat_impl->layout_idx = layout_index;
+  seat_impl->layout_idx = idx;
 
   meta_seat_impl_sync_leds_in_impl (seat_impl);
-  meta_keymap_native_update_in_impl (seat_impl->keymap,
-                                     seat_impl->xkb);
-}
-
-static gboolean
-set_keymap (GTask *task)
-{
-  MetaSeatImpl *seat_impl = g_task_get_source_object (task);
-  MetaSeatImplPrivate *priv =
-    meta_seat_impl_get_instance_private (seat_impl);
-  SetKeymapData *data = g_task_get_task_data (task);
-  MetaKeymapDescription *keymap_description = data->keymap_description;
-  MetaKeymapNative *keymap;
-
-  g_task_set_priority (task, G_PRIORITY_HIGH);
-
-  g_rw_lock_writer_lock (&seat_impl->state_lock);
-
-  if (priv->keymap_description != keymap_description)
-    {
-      g_autoptr (GError) error = NULL;
-      g_auto (GStrv) display_names = NULL;
-      g_auto (GStrv) short_names = NULL;
-      struct xkb_keymap *xkb_keymap = NULL;
-
-      if (priv->keymap_description)
-        {
-          if (meta_keymap_description_is_locked (priv->keymap_description) &&
-              meta_keymap_description_get_owner (keymap_description) !=
-              meta_keymap_description_get_owner (priv->keymap_description) &&
-              meta_keymap_description_resets_owner (keymap_description) !=
-              meta_keymap_description_get_owner (priv->keymap_description))
-            {
-              g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_FAILED,
-                                       "Keymap locked by other owner");
-              g_rw_lock_writer_unlock (&seat_impl->state_lock);
-              return G_SOURCE_REMOVE;
-            }
-        }
-
-      g_clear_pointer (&priv->keymap_description,
-                       meta_keymap_description_unref);
-      priv->keymap_description =
-        meta_keymap_description_ref (keymap_description);
-
-      xkb_keymap =
-        meta_keymap_description_create_xkb_keymap (keymap_description,
-                                                   &display_names,
-                                                   &short_names,
-                                                   &error);
-      if (!xkb_keymap)
-        {
-          g_prefix_error (&error, "Unable to load configured keymap: ");
-          g_task_return_error (task, g_steal_pointer (&error));
-          g_rw_lock_writer_unlock (&seat_impl->state_lock);
-          return G_SOURCE_REMOVE;
-        }
-
-      meta_seat_impl_update_xkb_state_in_impl_unlocked (seat_impl,
-                                                        xkb_keymap,
-                                                        data->layout_index);
-
-      keymap = seat_impl->keymap;
-      meta_keymap_native_set_keymap_in_impl (keymap,
-                                             seat_impl,
-                                             keymap_description,
-                                             xkb_keymap,
-                                             seat_impl->xkb,
-                                             g_steal_pointer (&display_names),
-                                             g_steal_pointer (&short_names));
-      xkb_keymap_unref (xkb_keymap);
-    }
-  else
-    {
-      update_layout_index_unlocked (seat_impl, data->layout_index);
-    }
 
   g_rw_lock_writer_unlock (&seat_impl->state_lock);
 
@@ -3949,40 +3606,24 @@ set_keymap (GTask *task)
 }
 
 /**
- * meta_seat_impl_set_keymap_async: (skip)
+ * meta_seat_impl_set_keyboard_layout_index: (skip)
  * @seat_impl: the #ClutterSeat created by the evdev backend
- * @keymap: the new keymap
- * @cancellable: a #GCancellable
- * @callback: callback to call when index has changed
- * @user_data: user data to pass to the callback
+ * @idx: the xkb layout index to set
  *
- * Instructs @evdev to use the specified keyboard map. This will cause
- * the backend to drop the state and create a new one with the new
- * map. To avoid state being lost, callers should ensure that no key
- * is pressed when calling this function.
+ * Sets the xkb layout index on the backend's #xkb_state .
  */
 void
-meta_seat_impl_set_keymap_async (MetaSeatImpl          *seat_impl,
-                                 MetaKeymapDescription *keymap_description,
-                                 xkb_layout_index_t     layout_index,
-                                 GCancellable          *cancellable,
-                                 GAsyncReadyCallback    callback,
-                                 gpointer               user_data)
+meta_seat_impl_set_keyboard_layout_index (MetaSeatImpl       *seat_impl,
+                                          xkb_layout_index_t  idx)
 {
   GTask *task;
-  SetKeymapData *data;
 
   g_return_if_fail (META_IS_SEAT_IMPL (seat_impl));
-  g_return_if_fail (keymap_description);
 
-  task = g_task_new (seat_impl, cancellable, callback, user_data);
-  g_task_set_source_tag (task, meta_seat_impl_set_keymap_async);
-
-  data = g_new0 (SetKeymapData, 1);
-  data->keymap_description = meta_keymap_description_ref (keymap_description);
-  data->layout_index = layout_index;
-  g_task_set_task_data (task, data, set_keymap_data_free);
-  meta_seat_impl_run_input_task (seat_impl, task, (GSourceFunc) set_keymap);
+  task = g_task_new (seat_impl, NULL, NULL, NULL);
+  g_task_set_task_data (task, GUINT_TO_POINTER (idx), NULL);
+  meta_seat_impl_run_input_task (seat_impl, task,
+                                 (GSourceFunc) set_keyboard_layout_index);
   g_object_unref (task);
 }
 
@@ -4033,7 +3674,10 @@ set_pointer_constraint (GTask *task)
     return G_SOURCE_REMOVE;
 
   if (constraint_impl)
-    meta_pointer_constraint_impl_ensure_constrained (constraint_impl);
+    {
+      meta_pointer_constraint_impl_ensure_constrained (constraint_impl,
+                                                       seat_impl->core_pointer);
+    }
 
   g_task_return_boolean (task, TRUE);
 
@@ -4063,10 +3707,9 @@ ensure_pointer_onscreen (MetaSeatImpl *seat_impl)
   int nearest_monitor_x, nearest_monitor_y, min_distance = G_MAXINT;
   MtkRectangle monitor_rect;
   graphene_point_t coords;
-  ClutterInputDevice *virtual_device;
 
   if (!meta_seat_impl_query_state (seat_impl,
-                                   NULL, NULL,
+                                   seat_impl->core_pointer, NULL,
                                    &coords, NULL))
     return;
 
@@ -4080,12 +3723,12 @@ ensure_pointer_onscreen (MetaSeatImpl *seat_impl)
     {
       meta_viewport_info_get_view_info (seat_impl->viewports, i,
                                         &monitor_rect, NULL);
-      nearest_monitor_x = (int) MIN (ABS (coords.x - monitor_rect.x),
-                                     ABS (coords.x -
-                                          monitor_rect.x + monitor_rect.width));
-      nearest_monitor_y = (int) MIN (ABS (coords.y - monitor_rect.y),
-                                     ABS (coords.y -
-                                          monitor_rect.y + monitor_rect.height));
+      nearest_monitor_x = MIN (ABS (coords.x - monitor_rect.x),
+                               ABS (coords.x -
+                                    monitor_rect.x + monitor_rect.width));
+      nearest_monitor_y = MIN (ABS (coords.y - monitor_rect.y),
+                               ABS (coords.y -
+                                    monitor_rect.y + monitor_rect.height));
       if (nearest_monitor_x < min_distance ||
           nearest_monitor_y < min_distance)
         {
@@ -4106,10 +3749,8 @@ ensure_pointer_onscreen (MetaSeatImpl *seat_impl)
   coords.y = CLAMP (coords.y, monitor_rect.y,
                     monitor_rect.y + monitor_rect.height - 1);
 
-  virtual_device = meta_seat_impl_get_virtual_source_pointer (seat_impl);
-  meta_seat_impl_notify_absolute_motion_in_impl (seat_impl,
-                                                 virtual_device, 0,
-                                                 coords.x, coords.y, NULL);
+  notify_absolute_motion_in_impl (seat_impl->core_pointer, 0,
+                                  coords.x, coords.y, NULL);
 }
 
 typedef struct
@@ -4168,66 +3809,17 @@ meta_seat_impl_set_viewports (MetaSeatImpl     *seat_impl,
   g_cond_clear (&data.cond);
 }
 
-static gboolean
-set_a11y_modifiers (GTask *task)
-{
-  MetaSeatImpl *seat_impl = g_task_get_source_object (task);
-  MetaSeatImplPrivate *priv = meta_seat_impl_get_instance_private (seat_impl);
-  GArray *modifiers = g_task_get_task_data (task);
-  int i;
-
-  g_hash_table_remove_all (priv->a11y.grabbed_modifiers);
-
-  for (i = 0; i < modifiers->len; i++)
-    {
-      uint32_t keysym;
-
-      keysym = g_array_index (modifiers, uint32_t, i);
-      g_hash_table_add (priv->a11y.grabbed_modifiers,
-                        GUINT_TO_POINTER (keysym));
-    }
-
-  g_task_return_boolean (task, TRUE);
-
-  return G_SOURCE_REMOVE;
-}
-
-void
-meta_seat_impl_set_a11y_modifiers (MetaSeatImpl   *seat_impl,
-                                   const uint32_t *modifiers,
-                                   int             n_modifiers)
-{
-  g_autoptr (GTask) task = NULL;
-  GArray *modifiers_copy;
-
-  g_return_if_fail (META_IS_SEAT_IMPL (seat_impl));
-
-  modifiers_copy = g_array_new (FALSE, FALSE, sizeof (uint32_t));
-  g_array_append_vals (modifiers_copy, modifiers, n_modifiers);
-
-  task = g_task_new (seat_impl, NULL, NULL, NULL);
-  g_task_set_task_data (task, modifiers_copy,
-                        (GDestroyNotify) g_array_unref);
-  meta_seat_impl_run_input_task (seat_impl, task,
-                                 (GSourceFunc) set_a11y_modifiers);
-}
-
 MetaSeatImpl *
 meta_seat_impl_new (MetaSeatNative     *seat_native,
                     const char         *seat_id,
                     MetaSeatNativeFlag  flags)
 {
-  return g_object_new (META_TYPE_SEAT_IMPL,
-                       "seat", seat_native,
-                       "seat-id", seat_id,
-                       "flags", flags,
-                       NULL);
-}
-
-void
-meta_seat_impl_setup (MetaSeatImpl *seat_impl)
-{
-  g_initable_init (G_INITABLE (seat_impl), NULL, NULL);
+  return g_initable_new (META_TYPE_SEAT_IMPL,
+                         NULL, NULL,
+                         "seat", seat_native,
+                         "seat-id", seat_id,
+                         "flags", flags,
+                         NULL);
 }
 
 static gboolean
@@ -4308,46 +3900,4 @@ MetaBackend *
 meta_seat_impl_get_backend (MetaSeatImpl *seat_impl)
 {
   return meta_seat_native_get_backend (seat_impl->seat_native);
-}
-
-void
-meta_seat_impl_add_virtual_input_device (MetaSeatImpl       *seat_impl,
-                                         ClutterInputDevice *device)
-{
-  ClutterEvent *device_event;
-
-  meta_seat_impl_take_device (seat_impl, g_object_ref (device));
-
-  device_event =
-    clutter_event_device_notify_new (CLUTTER_DEVICE_ADDED,
-                                     CLUTTER_EVENT_NONE,
-                                     CLUTTER_CURRENT_TIME,
-                                     device);
-  queue_event (seat_impl, device_event);
-}
-
-void
-meta_seat_impl_remove_virtual_input_device (MetaSeatImpl       *seat_impl,
-                                            ClutterInputDevice *device)
-{
-  g_autoptr (ClutterInputDevice) owned_device = NULL;
-  ClutterEvent *device_event;
-
-  g_assert (CLUTTER_IS_INPUT_DEVICE (device));
-
-  owned_device = g_object_ref (device);
-
-  meta_seat_impl_remove_device (seat_impl, device);
-
-  device_event = clutter_event_device_notify_new (CLUTTER_DEVICE_REMOVED,
-                                                  CLUTTER_EVENT_NONE,
-                                                  CLUTTER_CURRENT_TIME,
-                                                  device);
-  queue_event (seat_impl, device_event);
-}
-
-ClutterInputDevice *
-meta_seat_impl_get_virtual_source_pointer (MetaSeatImpl *seat_impl)
-{
-  return seat_impl->virtual_source_pointer;
 }

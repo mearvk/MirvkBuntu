@@ -23,7 +23,6 @@ tests = [
   { 'name': 'levelbar' },
   { 'name': 'passwordentry' },
   { 'name': 'progressbar' },
-  { 'name': 'scale' },
   { 'name': 'scrollbar' },
   { 'name': 'searchentry' },
   { 'name': 'separator' },
@@ -102,7 +101,7 @@ foreach t : internal_tests
     sources: test_srcs,
     c_args: test_cargs + test_extra_cargs + ['-DGTK_COMPILATION'],
     link_args: test_extra_ldflags,
-    dependencies: libgtk_private_dep,
+    dependencies: libgtk_static_dep,
   )
 
   if test_extra_suites.contains('slow')

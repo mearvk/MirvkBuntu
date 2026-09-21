@@ -37,6 +37,7 @@
 #include "cogl/cogl-pipeline.h"
 #include "cogl/cogl-color.h"
 #include "cogl/cogl-depth-state.h"
+#include "cogl/deprecated/cogl-program.h"
 
 G_BEGIN_DECLS
 
@@ -165,13 +166,13 @@ cogl_pipeline_get_alpha_test_reference (CoglPipeline *pipeline);
  * ```
  *
  * This is the list of source-names usable as blend factors:
- *
+ * 
  * - `SRC_COLOR`: The color of the incoming fragment
  * - `DST_COLOR`: The color of the framebuffer
  * - `CONSTANT`: The constant set via cogl_pipeline_set_blend_constant()
  *
  * These can also be used as factors:
- *
+ * 
  * - `0`: (0, 0, 0, 0)
  * - `1`: (1, 1, 1, 1)
  * - `SRC_ALPHA_SATURATE_FACTOR`: (f,f,f,1) where `f = MIN(SRC_COLOR[A],1-DST_COLOR[A])`
@@ -290,6 +291,61 @@ cogl_pipeline_set_per_vertex_point_size (CoglPipeline *pipeline,
  */
 COGL_EXPORT gboolean
 cogl_pipeline_get_per_vertex_point_size (CoglPipeline *pipeline);
+
+/**
+ * cogl_pipeline_get_user_program:
+ * @pipeline: a #CoglPipeline object.
+ *
+ * Queries what user program has been associated with the given
+ * @pipeline using cogl_pipeline_set_user_program().
+ *
+ * Return value: (transfer none): The current user program or %NULL.
+ */
+COGL_EXPORT CoglProgram*
+cogl_pipeline_get_user_program (CoglPipeline *pipeline);
+
+/**
+ * cogl_pipeline_set_user_program:
+ * @pipeline: a #CoglPipeline object.
+ * @program: A linked CoglProgram
+ *
+ * Associates a linked CoglProgram with the given pipeline so that the
+ * program can take full control of vertex and/or fragment processing.
+ *
+ * This is an example of how it can be used to associate an ARBfp
+ * program with a #CoglPipeline:
+ * ```c
+ * CoglShader *shader;
+ * CoglProgram *program;
+ * CoglPipeline *pipeline;
+ *
+ * shader = cogl_create_shader (COGL_SHADER_TYPE_FRAGMENT);
+ * cogl_shader_source (shader,
+ *                     "!!ARBfp1.0\n"
+ *                     "MOV result.color,fragment.color;\n"
+ *                     "END\n");
+ *
+ * program = cogl_create_program ();
+ * cogl_program_attach_shader (program, shader);
+ * cogl_program_link (program);
+ *
+ * pipeline = cogl_pipeline_new ();
+ * cogl_pipeline_set_user_program (pipeline, program);
+ *
+ * cogl_set_source_color4ub (0xff, 0x00, 0x00, 0xff);
+ * cogl_rectangle (0, 0, 100, 100);
+ * ```
+ *
+ * It is possibly worth keeping in mind that this API is not part of
+ * the long term design for how we want to expose shaders to Cogl
+ * developers (We are planning on deprecating the cogl_program and
+ * cogl_shader APIs in favour of a "snippet" framework) but in the
+ * meantime we hope this will handle most practical GLSL and ARBfp
+ * requirements.
+ */
+COGL_EXPORT void
+cogl_pipeline_set_user_program (CoglPipeline *pipeline,
+                                CoglProgram  *program);
 
 /**
  * cogl_pipeline_set_depth_state:
@@ -459,7 +515,7 @@ cogl_pipeline_set_uniform_1i (CoglPipeline *pipeline,
  * @uniform_location: The uniform's location identifier
  * @n_components: The number of components in the corresponding uniform's type
  * @count: The number of values to set
- * @value: (array): The array of float to set @uniform
+ * @value: Pointer to the new values to set
  *
  * Sets new values for the uniform at @uniform_location. If this
  * pipeline has a user program attached and is later used as a source
@@ -487,7 +543,7 @@ cogl_pipeline_set_uniform_float (CoglPipeline *pipeline,
  * @uniform_location: The uniform's location identifier
  * @n_components: The number of components in the corresponding uniform's type
  * @count: The number of values to set
- * @value: (array): The array of int to set @uniform
+ * @value: Pointer to the new values to set
  *
  * Sets new values for the uniform at @uniform_location. If this
  * pipeline has a user program attached and is later used as a source
@@ -516,7 +572,7 @@ cogl_pipeline_set_uniform_int (CoglPipeline *pipeline,
  * @dimensions: The size of the matrix
  * @count: The number of values to set
  * @transpose: Whether to transpose the matrix
- * @value: (array): The array of float to set @uniform
+ * @value: Pointer to the new values to set
  *
  * Sets new values for the uniform at @uniform_location. If this
  * pipeline has a user program attached and is later used as a source

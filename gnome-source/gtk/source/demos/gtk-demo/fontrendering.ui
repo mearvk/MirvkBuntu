@@ -3,9 +3,9 @@
   <object class="GtkWindow" id="window">
     <property name="default-width">1024</property>
     <property name="default-height">768</property>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar">
-        <property name="title-widget">
+        <child type="title">
           <object class="GtkBox">
             <property name="halign">center</property>
             <property name="valign">center</property>
@@ -25,10 +25,10 @@
               </object>
             </child>
           </object>
-        </property>
+        </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkBox">
         <property name="orientation">vertical</property>
         <child>
@@ -130,11 +130,12 @@
                     <property name="valign">center</property>
                     <property name="model">
                       <object class="GtkStringList">
-                        <!-- translators: these items must be separated by newlines -->
-                        <property name="strings" translatable="yes">None
-Slight
-Medium
-Full</property>
+                        <items>
+                          <item translatable="yes">None</item>
+                          <item translatable="yes">Slight</item>
+                          <item translatable="yes">Medium</item>
+                          <item translatable="yes">Full</item>
+                        </items>
                       </object>
                     </property>
                   </object>
@@ -260,7 +261,7 @@ Full</property>
             <property name="propagate-natural-height">1</property>
             <property name="hexpand">1</property>
             <property name="vexpand">1</property>
-            <property name="child">
+            <child>
               <object class="GtkPicture" id="image">
                 <accessibility>
                   <property name="label">Font rendering example</property>
@@ -269,10 +270,10 @@ Full</property>
                 <property name="valign">center</property>
                 <property name="can-shrink">0</property>
               </object>
-            </property>
+            </child>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
 </interface>

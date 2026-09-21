@@ -7,8 +7,6 @@ install software on the host.
 It is suitable for gnome-shell development, and we maintain a number of scripts
 to make its use easier and more convenient.
 
-When things go wrong, please check out the [troubleshooting section][troubleshooting] in the [GNOME Project Handbook][handbook].
-
 ## create-toolbox.sh
 Create a new toolbox for gnome-shell development.
 
@@ -57,39 +55,7 @@ simulating multiple monitors or a greeter session.
 
 Run the script with `--help` to see all available options.
 
-## toolbox-sysext-install.sh
-
-Extract a prepared system extension directory from the toolbox and
-install it as [systemd-sysext] extension on the host.
-
-The `meson-build.sh` script has a `--sysext` option to easily add
-projects to the extension directory in the toolbox:
-
-```sh
-  $ cd path/to/mutter; meson-build.sh --sysext
-  $ cd path/to/gnome-shell; meson-build.sh --sysext
-  $ toolbox-sysext-install.sh
-```
-
-System extensions require that the host operating system matches
-the extension. For toolboxes created with the `create-toolbox.sh`
-script this means the most recent Fedora release.
-
-### Important note
-
-gnome-shell is tightly coupled with mutter, so an extension that
-only contains gnome-shell is very likely to fail. The `update-mutter`
-command inside the toolbox already takes care of this, but when
-building mutter manually, it is the responsibility of the caller
-to ensure that the system extension contains a recent-enough
-mutter build.
-
-Run the script with `--help` to see available options.
-
 [toolbox]: https://containertoolbx.org/
 [mutter]: https://gitlab.gnome.org/GNOME/mutter
 [builder]: https://apps.gnome.org/Builder/
 [meson]: https://mesonbuild.com
-[handbook]: https://handbook.gnome.org/
-[troubleshooting]: https://handbook.gnome.org/development/toolbx.html#when-things-go-wrong
-[systemd-sysext]: https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html

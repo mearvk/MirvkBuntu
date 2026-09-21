@@ -1,6 +1,9 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 
 import * as BarLevel from './barLevel.js';
@@ -9,7 +12,7 @@ import * as Main from './main.js';
 
 const HIDE_TIMEOUT = 1500;
 const FADE_TIME = 100;
-export const LEVEL_ANIMATION_TIME = 100;
+const LEVEL_ANIMATION_TIME = 100;
 
 export const OsdWindow = GObject.registerClass(
 class OsdWindow extends Clutter.Actor {
@@ -22,7 +25,7 @@ class OsdWindow extends Clutter.Actor {
         });
 
         this._monitorIndex = monitorIndex;
-        const constraint = new Layout.MonitorConstraint({index: monitorIndex});
+        let constraint = new Layout.MonitorConstraint({index: monitorIndex});
         this.add_constraint(constraint);
 
         this._hbox = new St.BoxLayout({
@@ -34,7 +37,7 @@ class OsdWindow extends Clutter.Actor {
         this._hbox.add_child(this._icon);
 
         this._vbox = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._hbox.add_child(this._vbox);
@@ -92,7 +95,7 @@ class OsdWindow extends Clutter.Actor {
             return;
 
         if (!this.visible) {
-            global.compositor.disable_unredirect();
+            Meta.disable_unredirect_for_display(global.display);
             super.show();
             this.opacity = 0;
             this.get_parent().set_child_above_sibling(this, null);
@@ -106,7 +109,7 @@ class OsdWindow extends Clutter.Actor {
 
         if (this._hideTimeoutId)
             GLib.source_remove(this._hideTimeoutId);
-        this._hideTimeoutId = GLib.timeout_add_once(
+        this._hideTimeoutId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT, HIDE_TIMEOUT, this._hide.bind(this));
         GLib.Source.set_name_by_id(this._hideTimeoutId, '[gnome-shell] this._hide');
     }
@@ -127,9 +130,10 @@ class OsdWindow extends Clutter.Actor {
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onComplete: () => {
                 this._reset();
-                global.compositor.enable_unredirect();
+                Meta.enable_unredirect_for_display(global.display);
             },
         });
+        return GLib.SOURCE_REMOVE;
     }
 
     _reset() {
@@ -170,26 +174,18 @@ export class OsdWindowManager {
         this._osdWindows[monitorIndex].show();
     }
 
-    show(icon, label, levels) {
-        for (let i = 0; i < this._osdWindows.length; i++) {
-            if (levels[i]) {
-                const {level, maxLevel = -1} = levels[i];
-                this._showOsdWindow(i, icon, label, level, maxLevel);
-            } else {
-                this._osdWindows[i].cancel();
+    show(monitorIndex, icon, label, level, maxLevel) {
+        if (monitorIndex !== -1) {
+            for (let i = 0; i < this._osdWindows.length; i++) {
+                if (i === monitorIndex)
+                    this._showOsdWindow(i, icon, label, level, maxLevel);
+                else
+                    this._osdWindows[i].cancel();
             }
+        } else {
+            for (let i = 0; i < this._osdWindows.length; i++)
+                this._showOsdWindow(i, icon, label, level, maxLevel);
         }
-    }
-
-    showOne(monitorIndex, icon, label, level, maxLevel) {
-        this.show(icon, label, {
-            [monitorIndex]: {level, maxLevel},
-        });
-    }
-
-    showAll(icon, label, level, maxLevel) {
-        for (let i = 0; i < this._osdWindows.length; i++)
-            this._showOsdWindow(i, icon, label, level, maxLevel);
     }
 
     hideAll() {

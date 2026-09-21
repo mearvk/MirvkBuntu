@@ -18,7 +18,7 @@
 
 #include "config.h"
 
-#include "gtkfilechooserentryprivate.h"
+#include "gtkfilechooserentry.h"
 
 #include <string.h>
 
@@ -786,7 +786,7 @@ insert_text_callback (GtkFileChooserEntry *chooser_entry,
        gtk_editable_get_text (GTK_EDITABLE (chooser_entry))[1] == ':'))
     {
       gtk_widget_error_bell (GTK_WIDGET (chooser_entry));
-      g_signal_stop_emission_by_name (chooser_entry, "insert-text");
+      g_signal_stop_emission_by_name (chooser_entry, "insert_text");
       return FALSE;
     }
 

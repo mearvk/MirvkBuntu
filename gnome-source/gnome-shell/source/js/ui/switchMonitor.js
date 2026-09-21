@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
@@ -10,7 +12,7 @@ const APP_ICON_SIZE = 96;
 export const SwitchMonitorPopup = GObject.registerClass(
 class SwitchMonitorPopup extends SwitcherPopup.SwitcherPopup {
     _init() {
-        const items = [];
+        let items = [];
 
         items.push({
             icon: 'shell-display-mirror-symbolic',
@@ -62,8 +64,8 @@ class SwitchMonitorPopup extends SwitcherPopup.SwitcherPopup {
     }
 
     _initialSelection() {
-        const currentConfig = global.backend.get_monitor_manager().get_switch_config();
-        const selectConfig = (currentConfig + 1) % this._items.length;
+        let currentConfig = global.backend.get_monitor_manager().get_switch_config();
+        let selectConfig = (currentConfig + 1) % this._items.length;
         this._select(selectConfig);
     }
 
@@ -102,7 +104,7 @@ class SwitchMonitorSwitcher extends SwitcherPopup.SwitcherList {
     _addIcon(item) {
         const box = new St.BoxLayout({
             style_class: 'alt-tab-app',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         const icon = new St.Icon({
@@ -111,7 +113,7 @@ class SwitchMonitorSwitcher extends SwitcherPopup.SwitcherList {
         });
         box.add_child(icon);
 
-        const text = new St.Label({
+        let text = new St.Label({
             text: item.label,
             x_align: Clutter.ActorAlign.CENTER,
         });

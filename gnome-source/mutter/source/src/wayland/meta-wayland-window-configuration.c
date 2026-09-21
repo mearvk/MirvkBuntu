@@ -18,9 +18,6 @@
 
 #include "config.h"
 
-#include "compositor/compositor-private.h"
-#include "core/meta-window-config-private.h"
-#include "core/window-private.h"
 #include "wayland/meta-wayland-window-configuration.h"
 #include "wayland/meta-window-wayland.h"
 
@@ -37,12 +34,9 @@ meta_wayland_window_configuration_new (MetaWindow          *window,
 {
   MetaWindowWayland *wl_window = META_WINDOW_WAYLAND (window);
   MetaWaylandWindowConfiguration *configuration;
-  int x, y;
 
   configuration = g_new0 (MetaWaylandWindowConfiguration, 1);
   *configuration = (MetaWaylandWindowConfiguration) {
-    .ref_count = G_REF_COUNT_INIT,
-
     .serial = ++global_serial_counter,
 
     .bounds_width = bounds_width,
@@ -52,15 +46,13 @@ meta_wayland_window_configuration_new (MetaWindow          *window,
     .gravity = gravity,
     .flags = flags,
 
-    .config = meta_window_config_new_from (window->config),
+    .is_fullscreen = meta_window_is_fullscreen (window),
     .is_suspended = meta_window_is_suspended (window),
   };
 
-  meta_window_config_get_position (window->config, &x, &y);
   if (flags & META_MOVE_RESIZE_MOVE_ACTION ||
-      x != rect.x ||
-      y != rect.y ||
-      !meta_window_config_is_floating (configuration->config))
+      window->rect.x != rect.x ||
+      window->rect.y != rect.y)
     {
       configuration->has_position = TRUE;
       configuration->x = rect.x;
@@ -89,8 +81,6 @@ meta_wayland_window_configuration_new_relative (MetaWindow *window,
 
   configuration = g_new0 (MetaWaylandWindowConfiguration, 1);
   *configuration = (MetaWaylandWindowConfiguration) {
-    .ref_count = G_REF_COUNT_INIT,
-
     .serial = ++global_serial_counter,
 
     .has_relative_position = TRUE,
@@ -109,80 +99,25 @@ meta_wayland_window_configuration_new_relative (MetaWindow *window,
 }
 
 MetaWaylandWindowConfiguration *
-meta_wayland_window_configuration_new_from_other (MetaWaylandWindowConfiguration *other)
+meta_wayland_window_configuration_new_empty (int bounds_width,
+                                             int bounds_height,
+                                             int scale)
 {
   MetaWaylandWindowConfiguration *configuration;
 
   configuration = g_new0 (MetaWaylandWindowConfiguration, 1);
   *configuration = (MetaWaylandWindowConfiguration) {
-    .ref_count = G_REF_COUNT_INIT,
     .serial = ++global_serial_counter,
-
-    .has_position = other->has_position,
-    .x = other->x,
-    .y = other->y,
-    .has_relative_position = other->has_relative_position,
-    .rel_x = other->rel_x,
-    .rel_y = other->rel_y,
-    .has_size = other->has_size,
-    .is_resizing = other->is_resizing,
-    .width = other->width,
-    .height = other->height,
-    .scale = other->scale,
-    .gravity = other->gravity,
-    .flags = other->flags,
-    .bounds_width = other->bounds_width,
-    .bounds_height = other->bounds_height,
-    .config = meta_window_config_new_from (other->config),
-    .is_suspended = other->is_suspended,
+    .scale = scale,
+    .bounds_width = bounds_width,
+    .bounds_height = bounds_height,
   };
 
   return configuration;
 }
 
-MetaWaylandWindowConfiguration *
-meta_wayland_window_configuration_ref (MetaWaylandWindowConfiguration *configuration)
-{
-  g_ref_count_inc (&configuration->ref_count);
-  return configuration;
-}
-
 void
-meta_wayland_window_configuration_unref (MetaWaylandWindowConfiguration *configuration)
+meta_wayland_window_configuration_free (MetaWaylandWindowConfiguration *configuration)
 {
-  if (g_ref_count_dec (&configuration->ref_count))
-    {
-      g_clear_object (&configuration->config);
-      g_clear_object (&configuration->window_drag);
-      g_free (configuration);
-    }
-}
-
-gboolean
-meta_wayland_window_configuration_is_equivalent (MetaWaylandWindowConfiguration *configuration,
-                                                 MetaWaylandWindowConfiguration *other)
-{
-  g_return_val_if_fail (configuration, FALSE);
-
-  if (!other)
-    return FALSE;
-
-  return (configuration->has_position == other->has_position &&
-          configuration->x == other->x &&
-          configuration->y == other->y &&
-          configuration->has_relative_position == other->has_relative_position &&
-          configuration->rel_x == other->rel_x &&
-          configuration->rel_y == other->rel_y &&
-          configuration->has_size == other->has_size &&
-          configuration->is_resizing == other->is_resizing &&
-          configuration->width == other->width &&
-          configuration->height == other->height &&
-          configuration->scale == other->scale &&
-          configuration->gravity == other->gravity &&
-          configuration->flags == other->flags &&
-          configuration->bounds_width == other->bounds_width &&
-          configuration->bounds_height == other->bounds_height &&
-          configuration->is_suspended == other->is_suspended &&
-          meta_window_config_is_equivalent (configuration->config,
-                                            other->config));
+  g_free (configuration);
 }

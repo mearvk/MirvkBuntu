@@ -30,8 +30,6 @@ typedef struct _MetaColorManager MetaColorManager;
 typedef struct _MetaColorProfile MetaColorProfile;
 typedef struct _MetaColorStore MetaColorStore;
 
-typedef enum _MetaColorMode MetaColorMode;
-
 typedef struct _MetaMonitorManager MetaMonitorManager;
 
 typedef struct _MetaMonitorConfigManager MetaMonitorConfigManager;
@@ -45,6 +43,8 @@ typedef struct _MetaMonitorNormal MetaMonitorNormal;
 typedef struct _MetaMonitorTiled MetaMonitorTiled;
 typedef struct _MetaMonitorSpec MetaMonitorSpec;
 typedef struct _MetaLogicalMonitor MetaLogicalMonitor;
+
+typedef enum _MetaMonitorTransform MetaMonitorTransform;
 
 typedef struct _MetaMonitorMode MetaMonitorMode;
 
@@ -60,9 +60,6 @@ typedef struct _MetaTileInfo MetaTileInfo;
 
 typedef struct _MetaRenderer MetaRenderer;
 typedef struct _MetaRendererView MetaRendererView;
-
-typedef struct _MetaStream MetaStream;
-typedef struct _MetaStreamSource MetaStreamSource;
 
 typedef struct _MetaRemoteDesktop MetaRemoteDesktop;
 typedef struct _MetaRemoteDesktopSession MetaRemoteDesktopSession;
@@ -87,11 +84,6 @@ typedef struct _MetaDbusSessionWatcher MetaDbusSessionWatcher;
 typedef struct _MetaRemoteDesktop MetaRemoteDesktop;
 #endif
 
-typedef struct _MetaCtm
-{
-  uint64_t matrix[9];
-} MetaCtm;
-
 typedef struct _MetaGammaLut
 {
   uint16_t *red;
@@ -105,6 +97,3 @@ typedef struct _MetaInputCaptureSession MetaInputCaptureSession;
 
 typedef struct _MetaEis MetaEis;
 typedef struct _MetaEisClient MetaEisClient;
-
-typedef struct _MetaLauncher MetaLauncher;
-typedef struct _MetaUdev MetaUdev;

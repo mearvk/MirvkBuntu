@@ -23,7 +23,6 @@
 
 #include "backends/meta-monitor-manager-private.h"
 #include "clutter/clutter.h"
-#include "commit-timing-v1-server-protocol.h"
 #include "compositor/meta-shaped-texture-private.h"
 #include "compositor/meta-surface-actor.h"
 #include "meta/meta-cursor-tracker.h"
@@ -67,7 +66,6 @@ struct _MetaWaylandSurfaceRoleClass
                                     float                  *out_sx,
                                     float                  *out_sy);
   MetaWindow * (*get_window) (MetaWaylandSurfaceRole *surface_role);
-  MetaLogicalMonitor * (*get_preferred_scale_monitor) (MetaWaylandSurfaceRole *surface_role);
 };
 
 struct _MetaWaylandSurfaceState
@@ -93,8 +91,6 @@ struct _MetaWaylandSurfaceState
   gboolean input_region_set;
   MtkRegion *opaque_region;
   gboolean opaque_region_set;
-  MtkRegion *background_blur_region;
-  gboolean background_blur_region_set;
 
   /* wl_surface.frame */
   struct wl_list frame_callback_list;
@@ -114,7 +110,7 @@ struct _MetaWaylandSurfaceState
   int new_max_height;
 
   gboolean has_new_buffer_transform;
-  MtkMonitorTransform buffer_transform;
+  MetaMonitorTransform buffer_transform;
   gboolean has_new_viewport_src_rect;
   graphene_rect_t viewport_src_rect;
   gboolean has_new_viewport_dst_size;
@@ -139,23 +135,6 @@ struct _MetaWaylandSurfaceState
     MetaWaylandSyncPoint *acquire;
     MetaWaylandSyncPoint *release;
   } drm_syncobj;
-
-  gboolean has_new_color_state;
-  ClutterColorState *color_state;
-
-  gboolean has_target_time;
-  int64_t target_time_us;
-
-  gboolean fifo_barrier;
-  gboolean fifo_wait;
-
-  /* color-representation */
-  gboolean has_new_premult;
-  MetaMultiTextureAlphaMode premult;
-  gboolean has_new_coeffs;
-  MetaMultiTextureCoefficients coeffs;
-  gboolean has_new_chroma_loc;
-  MetaMultiTextureChromaLoc chroma_loc;
 };
 
 struct _MetaWaylandDragDestFuncs
@@ -182,18 +161,16 @@ struct _MetaWaylandSurface
 
   /* Generic stuff */
   struct wl_resource *resource;
-  MetaWaylandClient *client;
   MetaWaylandCompositor *compositor;
   MetaWaylandSurfaceRole *role;
   MtkRegion *input_region;
   MtkRegion *opaque_region;
-  MtkRegion *background_blur_region;
   int32_t offset_x, offset_y;
   GHashTable *outputs;
-  MtkMonitorTransform buffer_transform;
+  MetaMonitorTransform buffer_transform;
 
   int preferred_scale;
-  MtkMonitorTransform preferred_transform;
+  MetaMonitorTransform preferred_transform;
 
   /* Buffer reference state. */
   MetaWaylandBuffer *buffer;
@@ -220,10 +197,6 @@ struct _MetaWaylandSurface
     GNode *subsurface_leaf_node;
     MetaMultiTexture *texture;
     int scale;
-    gboolean is_valid;
-    MetaMultiTextureAlphaMode premult;
-    MetaMultiTextureCoefficients coeffs;
-    MetaMultiTextureChromaLoc chroma_loc;
   } applied_state, committed_state;
 
   /* Extension resources. */
@@ -280,7 +253,7 @@ struct _MetaWaylandSurface
     MetaWaylandOutput *last_output;
     unsigned int last_output_sequence;
     gboolean is_last_output_sequence_valid;
-    int64_t last_view_frame_counter;
+    gboolean needs_sequence_update;
 
     /*
      * Sequence has an undefined base, but is guaranteed to monotonically
@@ -299,15 +272,6 @@ struct _MetaWaylandSurface
     MetaWaylandTransaction *first_committed;
     MetaWaylandTransaction *last_committed;
   } transaction;
-
-  MetaLogicalMonitor *main_monitor;
-
-  /* color-management */
-  ClutterColorState *color_state;
-
-  gboolean fifo_barrier;
-
-  gboolean flush_frame_callbacks;
 };
 
 void                meta_wayland_shell_init     (MetaWaylandCompositor *compositor);
@@ -359,6 +323,8 @@ void                meta_wayland_surface_drag_dest_focus_out (MetaWaylandSurface
 void                meta_wayland_surface_drag_dest_drop      (MetaWaylandSurface   *surface);
 void                meta_wayland_surface_drag_dest_update    (MetaWaylandSurface   *surface);
 
+double              meta_wayland_surface_get_highest_output_scale (MetaWaylandSurface *surface);
+
 void                meta_wayland_surface_update_outputs (MetaWaylandSurface *surface);
 
 MetaWaylandSurface *meta_wayland_surface_get_toplevel (MetaWaylandSurface *surface);
@@ -387,7 +353,8 @@ MtkRegion * meta_wayland_surface_calculate_input_region (MetaWaylandSurface *sur
 gboolean            meta_wayland_surface_begin_grab_op (MetaWaylandSurface   *surface,
                                                         MetaWaylandSeat      *seat,
                                                         MetaGrabOp            grab_op,
-                                                        ClutterSprite        *sprite,
+                                                        ClutterInputDevice   *device,
+                                                        ClutterEventSequence *sequence,
                                                         gfloat                x,
                                                         gfloat                y);
 
@@ -442,16 +409,9 @@ struct wl_resource * meta_wayland_surface_get_resource (MetaWaylandSurface *surf
 
 MetaWaylandCompositor * meta_wayland_surface_get_compositor (MetaWaylandSurface *surface);
 
-void meta_wayland_surface_notify_preferred_scale_monitor (MetaWaylandSurface *surface);
+void meta_wayland_surface_notify_highest_scale_monitor (MetaWaylandSurface *surface);
 
 void meta_wayland_surface_notify_actor_changed (MetaWaylandSurface *surface);
-
-void meta_wayland_surface_set_main_monitor (MetaWaylandSurface *surface,
-                                            MetaLogicalMonitor *logical_monitor);
-
-MetaLogicalMonitor * meta_wayland_surface_get_main_monitor (MetaWaylandSurface *surface);
-
-MetaLogicalMonitor * meta_wayland_surface_get_preferred_scale_monitor (MetaWaylandSurface *surface);
 
 static inline MetaWaylandSurfaceState *
 meta_wayland_surface_state_new (void)
@@ -459,14 +419,6 @@ meta_wayland_surface_state_new (void)
   return g_object_new (META_TYPE_WAYLAND_SURFACE_STATE, NULL);
 }
 gboolean meta_wayland_surface_is_xwayland (MetaWaylandSurface *surface);
-
-gboolean meta_wayland_surface_has_initial_commit (MetaWaylandSurface *surface);
-
-MetaWaylandClient * meta_wayland_surface_get_client (MetaWaylandSurface *surface);
-
-void meta_wayland_surface_queue_flush_frame_callbacks (MetaWaylandSurface *surface);
-
-gboolean meta_wayland_surface_flush_frame_callbacks (MetaWaylandSurface *surface);
 
 static inline GNode *
 meta_get_next_subsurface_sibling (GNode *n)

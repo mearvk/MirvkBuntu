@@ -49,27 +49,17 @@ typedef struct _GtkEventControllerScrollClass GtkEventControllerScrollClass;
  *
  * Describes the behavior of a `GtkEventControllerScroll`.
  **/
-
-/**
- * GTK_EVENT_CONTROLLER_SCROLL_PHYSICAL_DIRECTION:
- *
- * A #GtkEventControllerScrollFlags value to prefer physical direction over
- * logical direction (i.e. oblivious to natural scroll).
- *
- * Since: 4.20
- */
 typedef enum {
   GTK_EVENT_CONTROLLER_SCROLL_NONE       = 0,
   GTK_EVENT_CONTROLLER_SCROLL_VERTICAL   = 1 << 0,
   GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL = 1 << 1,
   GTK_EVENT_CONTROLLER_SCROLL_DISCRETE   = 1 << 2,
   GTK_EVENT_CONTROLLER_SCROLL_KINETIC    = 1 << 3,
-  GTK_EVENT_CONTROLLER_SCROLL_PHYSICAL_DIRECTION = 1 << 4,
   GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES  = (GTK_EVENT_CONTROLLER_SCROLL_VERTICAL | GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL),
 } GtkEventControllerScrollFlags;
 
 GDK_AVAILABLE_IN_ALL
-GType               gtk_event_controller_scroll_get_type  (void);
+GType               gtk_event_controller_scroll_get_type  (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkEventController *gtk_event_controller_scroll_new       (GtkEventControllerScrollFlags  flags);
@@ -82,8 +72,6 @@ GtkEventControllerScrollFlags
 
 GDK_AVAILABLE_IN_4_8
 GdkScrollUnit       gtk_event_controller_scroll_get_unit (GtkEventControllerScroll       *scroll);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkEventControllerScroll, g_object_unref)
 
 G_END_DECLS
 

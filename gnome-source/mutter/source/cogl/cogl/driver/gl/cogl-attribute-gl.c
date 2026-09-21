@@ -38,14 +38,13 @@
 
 #include "cogl/cogl-private.h"
 #include "cogl/cogl-context-private.h"
-#include "cogl/cogl-context-egl-private.h"
 #include "cogl/cogl-attribute.h"
 #include "cogl/cogl-attribute-private.h"
 #include "cogl/driver/gl/cogl-attribute-gl-private.h"
-#include "cogl/driver/gl/cogl-buffer-impl-gl-private.h"
-#include "cogl/driver/gl/cogl-driver-gl-private.h"
-#include "cogl/driver/gl/cogl-pipeline-gl-private.h"
+#include "cogl/driver/gl/cogl-buffer-gl-private.h"
+#include "cogl/driver/gl/cogl-pipeline-opengl-private.h"
 #include "cogl/driver/gl/cogl-pipeline-progend-glsl-private.h"
+#include "cogl/driver/gl/cogl-util-gl-private.h"
 
 typedef struct _ForeachChangedBitState
 {
@@ -60,12 +59,11 @@ toggle_custom_attribute_enabled_cb (int bit_num, void *user_data)
   ForeachChangedBitState *state = user_data;
   gboolean enabled = _cogl_bitmask_get (state->new_bits, bit_num);
   CoglContext *context = state->context;
-  CoglDriver *driver = cogl_context_get_driver (context);
 
   if (enabled)
-    GE (driver, glEnableVertexAttribArray (bit_num));
+    GE( context, glEnableVertexAttribArray (bit_num) );
   else
-    GE (driver, glDisableVertexAttribArray (bit_num));
+    GE( context, glDisableVertexAttribArray (bit_num) );
 
   return TRUE;
 }
@@ -77,16 +75,14 @@ foreach_changed_bit_and_save (CoglContext *context,
                               CoglBitmaskForeachFunc callback,
                               ForeachChangedBitState *state)
 {
-  CoglContextEGL *context_egl = COGL_CONTEXT_EGL (context);
-
   /* Get the list of bits that are different */
-  _cogl_bitmask_clear_all (cogl_context_egl_get_changed_bits_tmp (context_egl));
-  _cogl_bitmask_set_bits (cogl_context_egl_get_changed_bits_tmp (context_egl), current_bits);
-  _cogl_bitmask_xor_bits (cogl_context_egl_get_changed_bits_tmp (context_egl), new_bits);
+  _cogl_bitmask_clear_all (&context->changed_bits_tmp);
+  _cogl_bitmask_set_bits (&context->changed_bits_tmp, current_bits);
+  _cogl_bitmask_xor_bits (&context->changed_bits_tmp, new_bits);
 
   /* Iterate over each bit to change */
   state->new_bits = new_bits;
-  _cogl_bitmask_foreach (cogl_context_egl_get_changed_bits_tmp (context_egl),
+  _cogl_bitmask_foreach (&context->changed_bits_tmp,
                          callback,
                          state);
 
@@ -101,7 +97,6 @@ setup_generic_buffered_attribute (CoglContext *context,
                                   CoglAttribute *attribute,
                                   uint8_t *base)
 {
-  CoglDriver *driver = cogl_context_get_driver (context);
   int name_index = attribute->name_state->name_index;
   int attrib_location =
     _cogl_pipeline_progend_glsl_get_attrib_location (pipeline, name_index);
@@ -109,14 +104,62 @@ setup_generic_buffered_attribute (CoglContext *context,
   if (attrib_location == -1)
     return;
 
-  GE (driver, glVertexAttribPointer (attrib_location,
-                                     attribute->n_components,
-                                     attribute->type,
-                                     attribute->normalized,
-                                     attribute->stride,
-                                     base + attribute->offset));
-  _cogl_bitmask_set (cogl_context_egl_get_enable_custom_attributes_tmp (COGL_CONTEXT_EGL (context)),
+  GE( context, glVertexAttribPointer (attrib_location,
+                                      attribute->d.buffered.n_components,
+                                      attribute->d.buffered.type,
+                                      attribute->normalized,
+                                      attribute->d.buffered.stride,
+                                      base + attribute->d.buffered.offset) );
+  _cogl_bitmask_set (&context->enable_custom_attributes_tmp,
                      attrib_location, TRUE);
+}
+
+static void
+setup_generic_const_attribute (CoglContext *context,
+                               CoglPipeline *pipeline,
+                               CoglAttribute *attribute)
+{
+  int name_index = attribute->name_state->name_index;
+  int attrib_location =
+    _cogl_pipeline_progend_glsl_get_attrib_location (pipeline, name_index);
+  int columns;
+  int i;
+
+  if (attrib_location == -1)
+    return;
+
+  if (attribute->d.constant.boxed.type == COGL_BOXED_MATRIX)
+    columns = attribute->d.constant.boxed.size;
+  else
+    columns = 1;
+
+  /* Note: it's ok to access a COGL_BOXED_FLOAT as a matrix with only
+   * one column... */
+
+  switch (attribute->d.constant.boxed.size)
+    {
+    case 1:
+      GE( context, glVertexAttrib1fv (attrib_location,
+                                      attribute->d.constant.boxed.v.matrix));
+      break;
+    case 2:
+      for (i = 0; i < columns; i++)
+        GE( context, glVertexAttrib2fv (attrib_location + i,
+                                        attribute->d.constant.boxed.v.matrix));
+      break;
+    case 3:
+      for (i = 0; i < columns; i++)
+        GE( context, glVertexAttrib3fv (attrib_location + i,
+                                        attribute->d.constant.boxed.v.matrix));
+      break;
+    case 4:
+      for (i = 0; i < columns; i++)
+        GE( context, glVertexAttrib4fv (attrib_location + i,
+                                        attribute->d.constant.boxed.v.matrix));
+      break;
+    default:
+      g_warn_if_reached ();
+    }
 }
 
 static void
@@ -127,22 +170,21 @@ apply_attribute_enable_updates (CoglContext *context,
 
   changed_bits_state.context = context;
   changed_bits_state.pipeline = pipeline;
-  changed_bits_state.new_bits = cogl_context_egl_get_enable_custom_attributes_tmp (COGL_CONTEXT_EGL (context));
+  changed_bits_state.new_bits = &context->enable_custom_attributes_tmp;
   foreach_changed_bit_and_save (context,
-                                cogl_context_egl_get_enabled_custom_attributes (COGL_CONTEXT_EGL (context)),
-                                cogl_context_egl_get_enable_custom_attributes_tmp (COGL_CONTEXT_EGL (context)),
+                                &context->enabled_custom_attributes,
+                                &context->enable_custom_attributes_tmp,
                                 toggle_custom_attribute_enabled_cb,
                                 &changed_bits_state);
 }
 
 void
-_cogl_gl_flush_attributes_state (CoglDriver           *driver,
-                                 CoglFramebuffer      *framebuffer,
-                                 CoglPipeline         *pipeline,
-                                 CoglFlushLayerState  *layers_state,
-                                 CoglDrawFlags         flags,
-                                 CoglAttribute       **attributes,
-                                 int                   n_attributes)
+_cogl_gl_flush_attributes_state (CoglFramebuffer *framebuffer,
+                                 CoglPipeline *pipeline,
+                                 CoglFlushLayerState *layers_state,
+                                 CoglDrawFlags flags,
+                                 CoglAttribute **attributes,
+                                 int n_attributes)
 {
   CoglContext *ctx = cogl_framebuffer_get_context (framebuffer);
   int i;
@@ -217,7 +259,7 @@ _cogl_gl_flush_attributes_state (CoglDriver           *driver,
                                  with_color_attrib,
                                  unknown_color_alpha);
 
-  _cogl_bitmask_clear_all (cogl_context_egl_get_enable_custom_attributes_tmp (COGL_CONTEXT_EGL (ctx)));
+  _cogl_bitmask_clear_all (&ctx->enable_custom_attributes_tmp);
 
   /* Bind the attribute pointers. We need to do this after the
    * pipeline is flushed because when using GLSL that is the only
@@ -230,22 +272,29 @@ _cogl_gl_flush_attributes_state (CoglDriver           *driver,
       CoglBuffer *buffer;
       uint8_t *base;
 
-      attribute_buffer = cogl_attribute_get_buffer (attribute);
-      buffer = COGL_BUFFER (attribute_buffer);
+      if (attribute->is_buffered)
+        {
+          attribute_buffer = cogl_attribute_get_buffer (attribute);
+          buffer = COGL_BUFFER (attribute_buffer);
 
-      /* Note: we don't try and catch errors with binding buffers
-        * here since OOM errors at this point indicate that nothing
-        * has yet been uploaded to attribute buffer which we
-        * consider to be a programmer error.
-        */
-      base =
-        _cogl_buffer_gl_bind (buffer,
-                              COGL_BUFFER_BIND_TARGET_ATTRIBUTE_BUFFER,
-                              NULL);
+          /* Note: we don't try and catch errors with binding buffers
+           * here since OOM errors at this point indicate that nothing
+           * has yet been uploaded to attribute buffer which we
+           * consider to be a programmer error.
+           */
+          base =
+            _cogl_buffer_gl_bind (buffer,
+                                  COGL_BUFFER_BIND_TARGET_ATTRIBUTE_BUFFER,
+                                  NULL);
 
-      setup_generic_buffered_attribute (ctx, pipeline, attribute, base);
+          setup_generic_buffered_attribute (ctx, pipeline, attribute, base);
 
-      _cogl_buffer_gl_unbind (buffer);
+          _cogl_buffer_gl_unbind (buffer);
+        }
+      else
+        {
+          setup_generic_const_attribute (ctx, pipeline, attribute);
+        }
     }
 
   apply_attribute_enable_updates (ctx, pipeline);

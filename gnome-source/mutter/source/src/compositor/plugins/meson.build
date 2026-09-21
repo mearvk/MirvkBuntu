@@ -14,6 +14,5 @@ default_plugin = shared_module('default',
     libmutter_clutter_dep,
   ],
   install_dir: pkglibdir / 'plugins',
-  install_rpath: pkglibdir,
   install: true,
 )

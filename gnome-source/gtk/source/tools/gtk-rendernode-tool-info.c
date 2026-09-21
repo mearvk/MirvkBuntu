@@ -28,135 +28,179 @@
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 #include "gtk-rendernode-tool.h"
-#include "gtk-tool-utils.h"
 
-#define N_NODE_TYPES (GSK_TURBULENCE_NODE + 1)
-
-typedef struct {
-  unsigned long long counts[N_NODE_TYPES];
-  unsigned long long unique[N_NODE_TYPES];
-  unsigned long long depth;
-  unsigned long long n_leafs;
-  unsigned long long n_unique_leafs;
-} NodeCount;
-
-static void
-node_count_add_child (NodeCount       *count,
-                      const NodeCount *child,
-                      gboolean         unique)
-{
-  gsize i;
-
-  for (i = 0; i < N_NODE_TYPES; i++)
-    {
-      count->counts[i] += child->counts[i];
-      if (unique)
-        count->unique[i] += child->unique[i];
-    }
-
-  count->depth = MAX (count->depth, child->depth + 1);
-  count->n_leafs += child->n_leafs;
-  if (unique)
-    count->n_unique_leafs += child->n_unique_leafs;
-}
-
+#define N_NODE_TYPES (GSK_SUBSURFACE_NODE + 1)
 static void
 count_nodes (GskRenderNode *node,
-             GHashTable    *cache,
-             NodeCount     *count)
+             unsigned int  *counts,
+             unsigned int  *depth)
 {
-  GskRenderNode **children;
-  gsize i, n_children;
+  unsigned int d, dd;
 
+  counts[gsk_render_node_get_node_type (node)] += 1;
   g_assert (gsk_render_node_get_node_type (node) < N_NODE_TYPES);
+  d = 0;
 
-  count->counts[gsk_render_node_get_node_type (node)] += 1;
-  count->unique[gsk_render_node_get_node_type (node)] += 1;
-  count->depth = 1;
-  children = gsk_render_node_get_children (node, &n_children);
-  if (n_children == 0)
-    count->n_leafs++;
-  for (i = 0; i < n_children; i++)
+  switch (gsk_render_node_get_node_type (node))
     {
-      NodeCount *child;
+    case GSK_CONTAINER_NODE:
+      for (unsigned int i = 0; i < gsk_container_node_get_n_children (node); i++)
+        {
+          count_nodes (gsk_container_node_get_child (node, i), counts, &dd);
+          d = MAX (d, dd);
+        }
+      break;
 
-      child = g_hash_table_lookup (cache, children[i]);
-      if (child != NULL)
+    case GSK_CAIRO_NODE:
+    case GSK_COLOR_NODE:
+    case GSK_LINEAR_GRADIENT_NODE:
+    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
+    case GSK_RADIAL_GRADIENT_NODE:
+    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
+    case GSK_CONIC_GRADIENT_NODE:
+    case GSK_BORDER_NODE:
+    case GSK_TEXTURE_NODE:
+    case GSK_INSET_SHADOW_NODE:
+    case GSK_OUTSET_SHADOW_NODE:
+      break;
+
+    case GSK_TRANSFORM_NODE:
+      count_nodes (gsk_transform_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_OPACITY_NODE:
+      count_nodes (gsk_opacity_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_COLOR_MATRIX_NODE:
+      count_nodes (gsk_color_matrix_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_REPEAT_NODE:
+      count_nodes (gsk_repeat_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_CLIP_NODE:
+      count_nodes (gsk_clip_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_ROUNDED_CLIP_NODE:
+      count_nodes (gsk_rounded_clip_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_SHADOW_NODE:
+      count_nodes (gsk_shadow_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_BLEND_NODE:
+      count_nodes (gsk_blend_node_get_bottom_child (node), counts, &d);
+      count_nodes (gsk_blend_node_get_top_child (node), counts, &dd);
+      d = MAX (d, dd);
+      break;
+
+    case GSK_CROSS_FADE_NODE:
+      count_nodes (gsk_cross_fade_node_get_start_child (node), counts, &d);
+      count_nodes (gsk_cross_fade_node_get_end_child (node), counts, &dd);
+      d = MAX (d, dd);
+      break;
+
+    case GSK_TEXT_NODE:
+      break;
+
+    case GSK_BLUR_NODE:
+      count_nodes (gsk_blur_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_DEBUG_NODE:
+      count_nodes (gsk_debug_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_GL_SHADER_NODE:
+      for (unsigned int i = 0; i < gsk_gl_shader_node_get_n_children (node); i++)
         {
-          node_count_add_child (count, child, FALSE);
+          count_nodes (gsk_gl_shader_node_get_child (node, i), counts, &dd);
+          d = MAX (d, dd);
         }
-      else
-        {
-          child = g_new0 (NodeCount, 1);
-          count_nodes (children[i], cache, child);
-          g_hash_table_insert (cache, children[i], child);
-          node_count_add_child (count, child, TRUE);
-        }
+      break;
+
+    case GSK_TEXTURE_SCALE_NODE:
+      break;
+
+    case GSK_MASK_NODE:
+      count_nodes (gsk_mask_node_get_source (node), counts, &d);
+      count_nodes (gsk_mask_node_get_mask (node), counts, &dd);
+      d = MAX (d, dd);
+      break;
+
+    case GSK_FILL_NODE:
+      count_nodes (gsk_fill_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_STROKE_NODE:
+      count_nodes (gsk_stroke_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_SUBSURFACE_NODE:
+      count_nodes (gsk_subsurface_node_get_child (node), counts, &d);
+      break;
+
+    case GSK_NOT_A_RENDER_NODE:
+    default:
+      g_assert_not_reached ();
     }
+
+  *depth = d + 1;
+}
+
+static const char *
+get_node_name (GskRenderNodeType type)
+{
+  GEnumClass *class;
+  GEnumValue *value;
+  const char *name;
+
+  class = g_type_class_ref (GSK_TYPE_RENDER_NODE_TYPE);
+  value = g_enum_get_value (class, type);
+  name = value->value_nick;
+  g_type_class_unref (class);
+
+  return name;
 }
 
 static void
 file_info (const char *filename)
 {
   GskRenderNode *node;
-  GHashTable *cache;
-  NodeCount count = { { 0, } };
-  unsigned long long total = 0;
-  unsigned long long total_unique = 0;
+  unsigned int counts[N_NODE_TYPES] = { 0, };
+  unsigned int total = 0;
   unsigned int namelen = 0;
-  unsigned int digits = 0;
-  graphene_rect_t bounds, opaque;
+  unsigned int depth = 0;
+  graphene_rect_t bounds;
 
   node = load_node_file (filename);
-  cache = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
 
-  count_nodes (node, cache, &count);
+  count_nodes (node, counts, &depth);
 
-  for (unsigned int i = 0; i < G_N_ELEMENTS (count.counts); i++)
+  for (unsigned int i = 0; i < G_N_ELEMENTS (counts); i++)
     {
-      total += count.counts[i];
-      total_unique += count.unique[i];
-      if (count.counts[i] > 0)
+      total += counts[i];
+      if (counts[i] > 0)
         namelen = MAX (namelen, strlen (get_node_name (i)));
     }
 
-  namelen = MAX (namelen, strlen (_("Number of nodes:")));
-  namelen = MAX (namelen, strlen (_("leaf nodes")));
-
-  if (total == total_unique)
-    g_print ("%*s %llu\n", namelen, _("Number of nodes:"), total);
-  else
-    g_print ("%*s %llu (%s %llu)\n", namelen, _("Number of nodes:"), total, _("unique:"), total_unique);
-
-  while (pow (10, digits) < total)
-    digits++;
-
-  g_print ("%*s: %*llu\n", namelen - 1, _("leaf nodes"), digits, count.n_leafs);
-  for (unsigned int i = 0; i < G_N_ELEMENTS (count.counts); i++)
+  g_print (_("Number of nodes: %u\n"), total);
+  for (unsigned int i = 0; i < G_N_ELEMENTS (counts); i++)
     {
-      if (count.counts[i] != count.unique[i])
-        g_print ("%*s: %*llu (%s %llu)\n", namelen - 1, get_node_name (i), digits, count.counts[i], _("unique:"), count.unique[i]);
-      else if (count.counts[i] > 0)
-        g_print ("%*s: %*llu\n", namelen - 1, get_node_name (i), digits, count.counts[i]);
+      if (counts[i] > 0)
+        g_print ("  %*s: %u\n", namelen, get_node_name (i), counts[i]);
     }
 
-  g_print ("%s %llu\n", _("Depth:"), count.depth);
+  g_print (_("Depth: %u\n"), depth);
 
   gsk_render_node_get_bounds (node, &bounds);
-  g_print ("%s %g x %g\n", _("Bounds:"), bounds.size.width, bounds.size.height);
-  g_print ("%s %g %g\n", _("Origin:"), bounds.origin.x, bounds.origin.y);
-  if (gsk_render_node_get_opaque_rect (node, &opaque))
-    {
-      g_print ("%s %g %g, %g x %g (%.0f%%)\n",
-               _("Opaque part:"),
-               opaque.origin.x, opaque.origin.y,
-               opaque.size.width, opaque.size.height,
-               100 * (opaque.size.width * opaque.size.height) / (bounds.size.width * bounds.size.height));
-    }
-  else
-    g_print ("%s none\n", _("Opaque part:"));
+  g_print (_("Bounds: %g x %g\n"), bounds.size.width, bounds.size.height);
+  g_print (_("Origin: %g %g\n"), bounds.origin.x, bounds.origin.y);
 
-  g_hash_table_unref (cache);
   gsk_render_node_unref (node);
 }
 

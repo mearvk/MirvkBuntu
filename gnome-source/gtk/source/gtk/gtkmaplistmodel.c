@@ -28,7 +28,7 @@
 /**
  * GtkMapListModel:
  *
- * A list model that maps the items in another model to different items.
+ * A `GtkMapListModel` maps the items in a list model to different items.
  *
  * `GtkMapListModel` uses a [callback@Gtk.MapListModelMapFunc].
  *
@@ -152,7 +152,7 @@ static guint
 gtk_map_list_model_get_n_items (GListModel *list)
 {
   GtkMapListModel *self = GTK_MAP_LIST_MODEL (list);
-
+  
   if (self->model == NULL)
     return 0;
 
@@ -306,7 +306,7 @@ gtk_map_list_model_items_changed_cb (GListModel      *model,
       if (node == NULL)
         node = gtk_rb_tree_insert_before (self->items, NULL);
       else if (node->item)
-        node = gtk_rb_tree_insert_before (self->items, node);
+        node = gtk_rb_tree_insert_after (self->items, node);
 
       node->n_items += added;
       gtk_rb_tree_node_mark_dirty (node);
@@ -337,7 +337,7 @@ gtk_map_list_model_set_property (GObject      *object,
     }
 }
 
-static void
+static void 
 gtk_map_list_model_get_property (GObject     *object,
                                  guint        prop_id,
                                  GValue      *value,
@@ -406,14 +406,14 @@ gtk_map_list_model_class_init (GtkMapListModelClass *class)
   gobject_class->dispose = gtk_map_list_model_dispose;
 
   /**
-   * GtkMapListModel:has-map:
+   * GtkMapListModel:has-map: (attributes org.gtk.Property.get=gtk_map_list_model_has_map)
    *
    * If a map is set for this model
    */
   properties[PROP_HAS_MAP] =
       g_param_spec_boolean ("has-map", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkMapListModel:item-type:
@@ -425,17 +425,17 @@ gtk_map_list_model_class_init (GtkMapListModelClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkMapListModel:model:
+   * GtkMapListModel:model: (attributes org.gtk.Property.get=gtk_map_list_model_get_model org.gtk.Property.set=gtk_map_list_model_set_model)
    *
    * The model being mapped.
    */
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkMapListModel:n-items:
@@ -447,7 +447,7 @@ gtk_map_list_model_class_init (GtkMapListModelClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -485,8 +485,8 @@ gtk_map_list_model_augment (GtkRbTree *map,
 /**
  * gtk_map_list_model_new:
  * @model: (transfer full) (nullable): The model to map
- * @map_func: (nullable) (scope notified) (closure user_data) (destroy user_destroy): map function
- * @user_data:  user data passed to @map_func
+ * @map_func: (nullable): map function
+ * @user_data: (closure): user data passed to @map_func
  * @user_destroy: destroy notifier for @user_data
  *
  * Creates a new `GtkMapListModel` for the given arguments.
@@ -562,8 +562,8 @@ gtk_map_list_model_init_items (GtkMapListModel *self)
 /**
  * gtk_map_list_model_set_map_func:
  * @self: a `GtkMapListModel`
- * @map_func: (nullable) (scope notified) (closure user_data) (destroy user_destroy): map function
- * @user_data: user data passed to @map_func
+ * @map_func: (nullable): map function
+ * @user_data: (closure): user data passed to @map_func
  * @user_destroy: destroy notifier for @user_data
  *
  * Sets the function used to map items.
@@ -602,7 +602,7 @@ gtk_map_list_model_set_map_func (GtkMapListModel        *self,
   self->map_func = map_func;
   self->user_data = user_data;
   self->user_destroy = user_destroy;
-
+  
   gtk_map_list_model_init_items (self);
 
   if (self->model)
@@ -617,7 +617,7 @@ gtk_map_list_model_set_map_func (GtkMapListModel        *self,
 }
 
 /**
- * gtk_map_list_model_set_model:
+ * gtk_map_list_model_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkMapListModel`
  * @model: (nullable): The model to be mapped
  *
@@ -657,7 +657,7 @@ gtk_map_list_model_set_model (GtkMapListModel *self,
     }
 
   gtk_map_list_model_init_items (self);
-
+  
   if (removed > 0 || added > 0)
     g_list_model_items_changed (G_LIST_MODEL (self), 0, removed, added);
   if (removed != added)
@@ -667,7 +667,7 @@ gtk_map_list_model_set_model (GtkMapListModel *self,
 }
 
 /**
- * gtk_map_list_model_get_model:
+ * gtk_map_list_model_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkMapListModel`
  *
  * Gets the model that is currently being mapped or %NULL if none.
@@ -683,7 +683,7 @@ gtk_map_list_model_get_model (GtkMapListModel *self)
 }
 
 /**
- * gtk_map_list_model_has_map:
+ * gtk_map_list_model_has_map: (attributes org.gtk.Method.get_property=has-map)
  * @self: a `GtkMapListModel`
  *
  * Checks if a map function is currently set on @self.

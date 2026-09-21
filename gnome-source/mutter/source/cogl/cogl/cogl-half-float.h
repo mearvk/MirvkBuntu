@@ -23,7 +23,8 @@
 
 /* This source file is originally from Mesa (src/util/half_float.h). */
 
-#pragma once
+#ifndef COGL_HALF_FLOAT_H
+#define COGL_HALF_FLOAT_H
 
 #include "cogl/cogl-types.h"
 
@@ -45,6 +46,12 @@ uint16_t cogl_float_to_half_slow (float val);
 
 COGL_EXPORT
 float cogl_half_to_float_slow (uint16_t val);
+
+COGL_EXPORT
+uint8_t cogl_half_to_unorm8 (uint16_t v);
+
+COGL_EXPORT
+uint16_t cogl_uint16_div_64k_to_half (uint16_t v);
 
 COGL_EXPORT
 uint16_t cogl_float_to_float16_rtz_slow (float val);
@@ -110,3 +117,5 @@ cogl_half_is_negative (uint16_t h)
 {
    return !!(h & 0x8000);
 }
+
+#endif /* COGL_HALF_FLOAT_H */

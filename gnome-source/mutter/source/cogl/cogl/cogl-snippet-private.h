@@ -66,9 +66,6 @@ struct _CoglSnippet
   char *pre;
   char *replace;
   char *post;
-
-  GQuark capability_domain;
-  unsigned int capability;
 };
 
 void

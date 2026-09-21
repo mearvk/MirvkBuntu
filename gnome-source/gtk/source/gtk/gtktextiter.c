@@ -35,7 +35,7 @@
 /**
  * GtkTextIter:
  *
- * Iterates over the contents of a `GtkTextBuffer`.
+ * An iterator for the contents of a `GtkTextBuffer`.
  *
  * You may wish to begin by reading the
  * [text widget conceptual overview](section-text-widget.html),
@@ -4433,8 +4433,8 @@ matches_pred (GtkTextIter *iter,
 /**
  * gtk_text_iter_forward_find_char:
  * @iter: a `GtkTextIter`
- * @pred: (scope call) (closure user_data): a function to be called on each character
- * @user_data: user data for @pred
+ * @pred: (scope call): a function to be called on each character
+ * @user_data: (closure): user data for @pred
  * @limit: (nullable): search limit
  *
  * Advances @iter, calling @pred on each character.
@@ -4472,8 +4472,8 @@ gtk_text_iter_forward_find_char (GtkTextIter         *iter,
 /**
  * gtk_text_iter_backward_find_char:
  * @iter: a `GtkTextIter`
- * @pred: (scope call) (closure user_data): function to be called on each character
- * @user_data: user data for @pred
+ * @pred: (scope call): function to be called on each character
+ * @user_data: (closure): user data for @pred
  * @limit: (nullable): search limit
  *
  * Same as [method@Gtk.TextIter.forward_find_char],
@@ -4878,8 +4878,7 @@ strbreakup (const char *string,
             gboolean    case_insensitive)
 {
   GSList *string_list = NULL, *slist;
-  char **str_array;
-  const char *s;
+  char **str_array, *s;
   char *casefold, *new_string;
   guint i, n = 1;
 
@@ -5268,7 +5267,8 @@ lines_window_back (LinesWindow *win)
   *win->lines = line_text;
 
   /* Free old last line and NULL-terminate */
-  g_clear_pointer (&win->lines[win->n_lines], g_free);
+  g_free (win->lines[win->n_lines]);
+  win->lines[win->n_lines] = NULL;
 
   return TRUE;
 }
@@ -5708,21 +5708,6 @@ _gtk_text_btree_get_iter_at_line      (GtkTextBTree   *tree,
   check_invariants (iter);
 }
 
-void
-_gtk_text_btree_get_iter_at_line_ptr_char (GtkTextBTree   *tree,
-                                           GtkTextIter    *iter,
-                                           GtkTextLine    *line,
-                                           int             char_offset)
-{
-  g_return_if_fail (iter != NULL);
-  g_return_if_fail (tree != NULL);
-  g_return_if_fail (line != NULL);
-
-  iter_init_from_char_offset (iter, tree, line, char_offset);
-
-  check_invariants (iter);
-}
-
 gboolean
 _gtk_text_btree_get_iter_at_first_toggle (GtkTextBTree   *tree,
                                           GtkTextIter    *iter,
@@ -5950,10 +5935,6 @@ _gtk_text_iter_check (const GtkTextIter *iter)
             }
         }
     }
-#ifdef _MSC_VER
-  else
-    seg_byte_offset = 0;
-#endif
 
   if (real->line_char_offset >= 0)
     {
@@ -5987,10 +5968,6 @@ _gtk_text_iter_check (const GtkTextIter *iter)
             }
         }
     }
-#ifdef _MSC_VER
-  else
-    seg_char_offset = 0;
-#endif
 
   if (real->line_char_offset >= 0 && real->line_byte_offset >= 0)
     {

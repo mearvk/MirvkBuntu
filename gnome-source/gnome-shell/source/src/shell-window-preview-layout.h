@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __SHELL_WINDOW_PREVIEW_LAYOUT_H__
+#define __SHELL_WINDOW_PREVIEW_LAYOUT_H__
 
 G_BEGIN_DECLS
 
@@ -19,8 +20,6 @@ struct _ShellWindowPreviewLayout
   ShellWindowPreviewLayoutPrivate *priv;
 };
 
-ClutterActorBox * shell_window_preview_layout_get_bounding_box (ShellWindowPreviewLayout *self);
-
 ClutterActor * shell_window_preview_layout_add_window (ShellWindowPreviewLayout  *self,
                                                        MetaWindow *window);
 
@@ -30,3 +29,5 @@ void  shell_window_preview_layout_remove_window (ShellWindowPreviewLayout  *self
 GList * shell_window_preview_layout_get_windows (ShellWindowPreviewLayout  *self);
 
 G_END_DECLS
+
+#endif /* __SHELL_WINDOW_PREVIEW_LAYOUT_H__ */

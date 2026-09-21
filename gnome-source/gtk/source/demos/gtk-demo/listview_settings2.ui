@@ -10,7 +10,7 @@
     <property name="title" translatable="yes">Settings</property>
     <property name="default-width">640</property>
     <property name="default-height">480</property>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar">
         <child type="end">
           <object class="GtkToggleButton" id="search_button">
@@ -18,24 +18,24 @@
           </object>
         </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkBox">
         <property name="orientation">vertical</property>
         <child>
           <object class="GtkSearchBar">
             <property name="search-mode-enabled" bind-source="search_button" bind-property="active" bind-flags="bidirectional"/>
             <signal name="notify::search-mode-enabled" handler="search_enabled" object="entry"/>
-            <property name="child">
+            <child>
               <object class="GtkSearchEntry" id="entry">
                 <signal name="stop-search" handler="stop_search"/>
               </object>
-            </property>
+            </child>
           </object>
         </child>
         <child>
           <object class="GtkScrolledWindow">
-            <property name="child">
+            <child>
               <object class="GtkListView" id="listview">
                 <property name="vexpand">1</property>
                 <style>
@@ -87,7 +87,7 @@
                 <lookup name="item">GtkListItem</lookup>
               </lookup>
             </binding>
-            <signal name="notify::text" handler="item_value_changed"/>
+            <signal name="notify::label" handler="item_value_changed"/>
           </object>
         </child>
       </object>
@@ -121,10 +121,10 @@
                   </object>
                 </property>
               </object>
-            </property>
+            </child>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
 </interface>

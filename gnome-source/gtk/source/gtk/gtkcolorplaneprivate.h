@@ -29,7 +29,7 @@ G_BEGIN_DECLS
 typedef struct _GtkColorPlane         GtkColorPlane;
 
 
-GType       gtk_color_plane_get_type (void);
+GType       gtk_color_plane_get_type (void) G_GNUC_CONST;
 GtkWidget * gtk_color_plane_new      (GtkAdjustment *h_adj,
                                       GtkAdjustment *s_adj,
                                       GtkAdjustment *v_adj);

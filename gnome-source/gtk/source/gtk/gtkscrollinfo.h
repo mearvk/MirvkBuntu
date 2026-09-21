@@ -33,7 +33,7 @@ G_BEGIN_DECLS
 #define GTK_TYPE_SCROLL_INFO    (gtk_scroll_info_get_type ())
 
 GDK_AVAILABLE_IN_4_12
-GType                   gtk_scroll_info_get_type                (void);
+GType                   gtk_scroll_info_get_type                (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_4_12
 GtkScrollInfo *         gtk_scroll_info_new                     (void);
 

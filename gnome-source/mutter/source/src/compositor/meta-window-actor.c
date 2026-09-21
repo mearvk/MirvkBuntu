@@ -28,11 +28,18 @@
 #include "compositor/meta-shaped-texture-private.h"
 #include "compositor/meta-surface-actor.h"
 #include "compositor/meta-window-actor-private.h"
-#include "compositor/meta-surface-actor-wayland.h"
 #include "core/boxes-private.h"
 #include "core/window-private.h"
 #include "meta/window.h"
+
+#ifdef HAVE_X11_CLIENT
+#include "compositor/meta-surface-actor-x11.h"
+#endif
+
+#ifdef HAVE_WAYLAND
+#include "compositor/meta-surface-actor-wayland.h"
 #include "wayland/meta-wayland-surface-private.h"
+#endif
 
 typedef enum
 {
@@ -53,11 +60,6 @@ typedef struct _MetaWindowActorPrivate
   GPtrArray *surface_actors;
 
   int geometry_scale;
-
-  int n_mapped_clones;
-  int n_obscured_surfaces;
-  int n_mapped_surfaces;
-  gboolean is_effectively_visible;
 
   /*
    * These need to be counters rather than flags, since more plugins
@@ -80,9 +82,6 @@ typedef struct _MetaWindowActorPrivate
 
   guint             updates_frozen         : 1;
   guint             first_frame_state      : 2; /* FirstFrameState */
-
-  /* whether the associated window was created during a window drag */
-  unsigned int tied_to_drag : 1;
 } MetaWindowActorPrivate;
 
 enum
@@ -136,74 +135,14 @@ G_DEFINE_ABSTRACT_TYPE_WITH_CODE (MetaWindowActor, meta_window_actor, CLUTTER_TY
                                   G_IMPLEMENT_INTERFACE (META_TYPE_SCREEN_CAST_WINDOW, screen_cast_window_iface_init));
 
 static void
-update_is_effectively_visible (MetaWindowActor *window_actor)
-{
-  MetaWindowActorPrivate *priv =
-    meta_window_actor_get_instance_private (window_actor);
-  gboolean is_visible;
-
-  if (!priv->window)
-    return;
-
-  if (priv->n_mapped_clones > 0)
-    {
-      is_visible = TRUE;
-      goto out;
-    }
-
-  if (priv->n_mapped_surfaces == priv->n_obscured_surfaces)
-    {
-      is_visible = FALSE;
-      goto out;
-    }
-
-  is_visible = clutter_actor_is_mapped (CLUTTER_ACTOR (window_actor));
-
-out:
-  if (priv->is_effectively_visible == is_visible)
-    return;
-
-  if (is_visible)
-    meta_window_inhibit_suspend_state (priv->window);
-  else
-    meta_window_uninhibit_suspend_state (priv->window);
-
-  priv->is_effectively_visible = is_visible;
-}
-
-static void
-meta_window_actor_map (ClutterActor *actor)
-{
-  MetaWindowActor *window_actor = META_WINDOW_ACTOR (actor);
-
-  CLUTTER_ACTOR_CLASS (meta_window_actor_parent_class)->map (actor);
-
-  update_is_effectively_visible (window_actor);
-}
-
-static void
-meta_window_actor_unmap (ClutterActor *actor)
-{
-  MetaWindowActor *window_actor = META_WINDOW_ACTOR (actor);
-
-  CLUTTER_ACTOR_CLASS (meta_window_actor_parent_class)->unmap (actor);
-
-  update_is_effectively_visible (window_actor);
-}
-
-static void
 meta_window_actor_class_init (MetaWindowActorClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  ClutterActorClass *actor_class = CLUTTER_ACTOR_CLASS (klass);
 
   object_class->dispose      = meta_window_actor_dispose;
   object_class->set_property = meta_window_actor_set_property;
   object_class->get_property = meta_window_actor_get_property;
   object_class->constructed  = meta_window_actor_constructed;
-
-  actor_class->map = meta_window_actor_map;
-  actor_class->unmap = meta_window_actor_unmap;
 
   klass->get_scanout_candidate = meta_window_actor_real_get_scanout_candidate;
   klass->assign_surface_actor = meta_window_actor_real_assign_surface_actor;
@@ -277,7 +216,7 @@ meta_window_actor_class_init (MetaWindowActorClass *klass)
   obj_props[PROP_META_WINDOW] =
     g_param_spec_object ("meta-window", NULL, NULL,
                          META_TYPE_WINDOW,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_properties (object_class, N_PROPS, obj_props);
 }
 
@@ -289,7 +228,6 @@ meta_window_actor_init (MetaWindowActor *self)
 
   priv->surface_actors = g_ptr_array_new ();
   priv->geometry_scale = 1;
-  priv->is_effectively_visible = FALSE;
 
   g_signal_connect (self, "cloned",
                     G_CALLBACK (on_cloned), NULL);
@@ -437,7 +375,6 @@ meta_window_actor_real_assign_surface_actor (MetaWindowActor  *self,
   priv->surface = g_object_ref_sink (surface_actor);
 
   meta_window_actor_add_surface_actor (self, surface_actor);
-  meta_window_actor_update_opacity (self);
 
   if (meta_window_actor_is_frozen (self))
     meta_window_actor_set_frozen (self, TRUE);
@@ -462,25 +399,9 @@ is_surface_actor_obscured_changed (MetaSurfaceActor *surface_actor,
     meta_window_actor_get_instance_private (window_actor);
 
   if (meta_surface_actor_is_obscured (surface_actor))
-    priv->n_obscured_surfaces++;
+    meta_window_uninhibit_suspend_state (priv->window);
   else
-    priv->n_obscured_surfaces--;
-  update_is_effectively_visible  (window_actor);
-}
-
-static void
-is_surface_actor_mapped_changed (MetaSurfaceActor *surface_actor,
-                                 GParamSpec       *pspec,
-                                 MetaWindowActor  *window_actor)
-{
-  MetaWindowActorPrivate *priv =
-    meta_window_actor_get_instance_private (window_actor);
-
-  if (clutter_actor_is_mapped (CLUTTER_ACTOR (surface_actor)))
-    priv->n_mapped_surfaces++;
-  else
-    priv->n_mapped_surfaces--;
-  update_is_effectively_visible  (window_actor);
+    meta_window_inhibit_suspend_state (priv->window);
 }
 
 static void
@@ -493,11 +414,8 @@ disconnect_surface_actor_from (MetaSurfaceActor *surface_actor,
   g_signal_handlers_disconnect_by_func (surface_actor,
                                         is_surface_actor_obscured_changed,
                                         window_actor);
-  if (meta_surface_actor_is_obscured (surface_actor))
-    priv->n_obscured_surfaces--;
-  if (clutter_actor_is_mapped (CLUTTER_ACTOR (surface_actor)))
-    priv->n_mapped_surfaces--;
-  update_is_effectively_visible  (window_actor);
+  if (!meta_surface_actor_is_obscured (surface_actor))
+    meta_window_uninhibit_suspend_state (priv->window);
 }
 
 void
@@ -511,31 +429,9 @@ meta_window_actor_add_surface_actor (MetaWindowActor  *window_actor,
                     "notify::is-obscured",
                     G_CALLBACK (is_surface_actor_obscured_changed),
                     window_actor);
-  g_signal_connect (surface_actor,
-                    "notify::mapped",
-                    G_CALLBACK (is_surface_actor_mapped_changed),
-                    window_actor);
-  if (meta_surface_actor_is_obscured (surface_actor))
-    priv->n_obscured_surfaces++;
-  if (clutter_actor_is_mapped (CLUTTER_ACTOR (surface_actor)))
-    priv->n_mapped_surfaces++;
+  if (!meta_surface_actor_is_obscured (surface_actor))
+    meta_window_inhibit_suspend_state (priv->window);
   g_ptr_array_add (priv->surface_actors, surface_actor);
-  update_is_effectively_visible (window_actor);
-}
-
-void
-meta_window_actor_invalidate_background_blur (MetaWindowActor *window_actor)
-{
-  MetaWindowActorPrivate *priv =
-    meta_window_actor_get_instance_private (window_actor);
-  unsigned int i;
-
-  for (i = 0; i < priv->surface_actors->len; i++)
-    {
-      MetaSurfaceActor *surface_actor = priv->surface_actors->pdata[i];
-
-      meta_surface_actor_invalidate_background_blur (surface_actor);
-    }
 }
 
 void
@@ -558,12 +454,9 @@ on_clone_notify_mapped (ClutterClone    *clone,
     meta_window_actor_get_instance_private (window_actor);
 
   if (clutter_actor_is_mapped (CLUTTER_ACTOR (clone)))
-    priv->n_mapped_clones++;
+    meta_window_inhibit_suspend_state (priv->window);
   else
-    priv->n_mapped_clones--;
-  if (!priv->disposed)
-    meta_window_actor_invalidate_background_blur (window_actor);
-  update_is_effectively_visible (window_actor);
+    meta_window_uninhibit_suspend_state (priv->window);
 }
 
 static void
@@ -577,10 +470,7 @@ on_cloned (ClutterActor *actor,
   g_signal_connect (clone, "notify::mapped",
                     G_CALLBACK (on_clone_notify_mapped), actor);
   if (clutter_actor_is_mapped (CLUTTER_ACTOR (clone)))
-    priv->n_mapped_clones++;
-  if (!priv->disposed)
-    meta_window_actor_invalidate_background_blur (window_actor);
-  update_is_effectively_visible (window_actor);
+    meta_window_inhibit_suspend_state (priv->window);
 }
 
 static void
@@ -592,11 +482,9 @@ on_decloned (ClutterActor *actor,
     meta_window_actor_get_instance_private (window_actor);
 
   g_signal_handlers_disconnect_by_func (clone, on_clone_notify_mapped, actor);
-  if (clutter_actor_is_mapped (CLUTTER_ACTOR (clone)))
-    priv->n_mapped_clones--;
-  if (!priv->disposed)
-    meta_window_actor_invalidate_background_blur (window_actor);
-  update_is_effectively_visible (window_actor);
+  if (clutter_actor_is_mapped (CLUTTER_ACTOR (clone)) &&
+      priv->window)
+    meta_window_uninhibit_suspend_state (priv->window);
 }
 
 static void
@@ -605,8 +493,21 @@ init_surface_actor (MetaWindowActor *self)
   MetaWindowActorPrivate *priv =
     meta_window_actor_get_instance_private (self);
   MetaWindow *window = priv->window;
-  MetaWaylandSurface *surface = meta_window_get_wayland_surface (window);
-  MetaSurfaceActor *surface_actor = surface ? meta_wayland_surface_get_actor (surface) : NULL;
+  MetaSurfaceActor *surface_actor = NULL;
+
+#ifdef HAVE_X11_CLIENT
+  if (!meta_is_wayland_compositor ())
+    {
+      surface_actor = meta_surface_actor_x11_new (window);
+    }
+  else
+#endif
+#ifdef HAVE_WAYLAND
+    {
+      MetaWaylandSurface *surface = meta_window_get_wayland_surface (window);
+      surface_actor = surface ? meta_wayland_surface_get_actor (surface) : NULL;
+    }
+#endif
 
   if (surface_actor)
     meta_window_actor_assign_surface_actor (self, surface_actor);
@@ -628,8 +529,6 @@ meta_window_actor_constructed (GObject *object)
   MetaWindowActorPrivate *priv =
     meta_window_actor_get_instance_private (self);
   MetaWindow *window = priv->window;
-
-  G_OBJECT_CLASS (meta_window_actor_parent_class)->constructed (object);
 
   priv->compositor = window->display->compositor;
 
@@ -1052,6 +951,13 @@ meta_window_actor_sync_actor_geometry (MetaWindowActor *self,
 
   meta_window_get_buffer_rect (priv->window, &actor_rect);
 
+  /* When running as a Wayland compositor we catch size changes when new
+   * buffers are attached */
+#ifdef HAVE_X11_CLIENT
+  if (META_IS_SURFACE_ACTOR_X11 (priv->surface))
+    meta_surface_actor_x11_set_size (META_SURFACE_ACTOR_X11 (priv->surface),
+                                     actor_rect.width, actor_rect.height);
+#endif
   /* Normally we want freezing a window to also freeze its position; this allows
    * windows to atomically move and resize together, either under app control,
    * or because the user is resizing from the left/top. But on initial placement
@@ -1210,24 +1116,22 @@ meta_window_actor_sync_visibility (MetaWindowActor *self)
 
 void
 meta_window_actor_before_paint (MetaWindowActor  *self,
-                                ClutterStageView *stage_view,
-                                ClutterFrame     *frame)
+                                ClutterStageView *stage_view)
 {
   if (meta_window_actor_is_destroyed (self))
     return;
 
-  META_WINDOW_ACTOR_GET_CLASS (self)->before_paint (self, stage_view, frame);
+  META_WINDOW_ACTOR_GET_CLASS (self)->before_paint (self, stage_view);
 }
 
 void
 meta_window_actor_after_paint (MetaWindowActor  *self,
-                               ClutterStageView *stage_view,
-                               ClutterFrame     *frame)
+                               ClutterStageView *stage_view)
 {
   MetaWindowActorPrivate *priv =
     meta_window_actor_get_instance_private (self);
 
-  META_WINDOW_ACTOR_GET_CLASS (self)->after_paint (self, stage_view, frame);
+  META_WINDOW_ACTOR_GET_CLASS (self)->after_paint (self, stage_view);
 
   if (meta_window_actor_is_destroyed (self))
     return;
@@ -1336,8 +1240,8 @@ meta_window_actor_get_buffer_bounds (MetaScreenCastWindow *screen_cast_window,
 
   stex = meta_surface_actor_get_texture (priv->surface);
   *bounds = (MtkRectangle) {
-    .width = (int) floorf (meta_shaped_texture_get_unscaled_width (stex)),
-    .height = (int) floorf (meta_shaped_texture_get_unscaled_height (stex)),
+    .width = floorf (meta_shaped_texture_get_unscaled_width (stex)),
+    .height = floorf (meta_shaped_texture_get_unscaled_height (stex)),
   };
 }
 
@@ -1374,10 +1278,11 @@ meta_window_actor_transform_relative_position (MetaScreenCastWindow *screen_cast
 
 static gboolean
 meta_window_actor_transform_cursor_position (MetaScreenCastWindow *screen_cast_window,
-                                             ClutterCursor        *cursor,
+                                             MetaCursorSprite     *cursor_sprite,
                                              graphene_point_t     *cursor_position,
-                                             graphene_point_t     *out_relative_cursor_position,
-                                             float                *out_view_scale)
+                                             float                *out_cursor_scale,
+                                             MetaMonitorTransform *out_cursor_transform,
+                                             graphene_point_t     *out_relative_cursor_position)
 {
   MetaWindowActor *window_actor = META_WINDOW_ACTOR (screen_cast_window);
   MetaWindowActorPrivate *priv =
@@ -1387,6 +1292,37 @@ meta_window_actor_transform_cursor_position (MetaScreenCastWindow *screen_cast_w
   window = priv->window;
   if (!meta_window_has_pointer (window))
     return FALSE;
+
+  if (cursor_sprite &&
+      meta_cursor_sprite_get_cogl_texture (cursor_sprite) &&
+      out_cursor_scale)
+    {
+      MetaDisplay *display = meta_compositor_get_display (priv->compositor);
+      MetaContext *context = meta_display_get_context (display);
+      MetaBackend *backend = meta_context_get_backend (context);
+      MetaLogicalMonitor *logical_monitor;
+      float view_scale;
+      float cursor_texture_scale;
+
+      logical_monitor = meta_window_get_main_logical_monitor (window);
+
+      if (meta_backend_is_stage_views_scaled (backend))
+        view_scale = meta_logical_monitor_get_scale (logical_monitor);
+      else
+        view_scale = 1.0;
+
+      cursor_texture_scale = meta_cursor_sprite_get_texture_scale (cursor_sprite);
+
+      *out_cursor_scale = view_scale * cursor_texture_scale;
+    }
+
+  if (cursor_sprite &&
+      meta_cursor_sprite_get_cogl_texture (cursor_sprite) &&
+      out_cursor_transform)
+    {
+      *out_cursor_transform =
+        meta_cursor_sprite_get_texture_transform (cursor_sprite);
+    }
 
   if (out_relative_cursor_position)
     {
@@ -1410,25 +1346,6 @@ meta_window_actor_transform_cursor_position (MetaScreenCastWindow *screen_cast_w
         out_relative_cursor_position->y *= unscaled_height / height;
     }
 
-  if (out_view_scale)
-    {
-      MetaDisplay *display = meta_compositor_get_display (priv->compositor);
-      MetaContext *context = meta_display_get_context (display);
-      MetaBackend *backend = meta_context_get_backend (context);
-
-      if (meta_backend_is_stage_views_scaled (backend))
-        {
-          MetaLogicalMonitor *logical_monitor;
-
-          logical_monitor = meta_window_get_main_logical_monitor (window);
-          *out_view_scale = meta_logical_monitor_get_scale (logical_monitor);
-        }
-      else
-        {
-          *out_view_scale = 1.0;
-        }
-    }
-
   return TRUE;
 }
 
@@ -1438,40 +1355,34 @@ meta_window_actor_capture_into (MetaScreenCastWindow *screen_cast_window,
                                 uint8_t              *data)
 {
   MetaWindowActor *window_actor = META_WINDOW_ACTOR (screen_cast_window);
-  g_autoptr (CoglBitmap) bitmap = NULL;
-  uint8_t *image_data;
-  int image_width, image_height, image_stride;
+  cairo_surface_t *image;
+  uint8_t *cr_data;
+  int cr_stride;
+  int cr_width;
+  int cr_height;
   int bpp = 4;
 
   if (meta_window_actor_is_destroyed (window_actor))
     return;
 
-  bitmap = meta_window_actor_paint_to_bitmap (window_actor, bounds,
-                                              COGL_PIXEL_FORMAT_ARGB32_NATIVE);
-  if (!bitmap)
-    return;
+  image = meta_window_actor_get_image (window_actor, bounds);
+  cr_data = cairo_image_surface_get_data (image);
+  cr_width = cairo_image_surface_get_width (image);
+  cr_height = cairo_image_surface_get_height (image);
+  cr_stride = cairo_image_surface_get_stride (image);
 
-  image_width = cogl_bitmap_get_width (bitmap);
-  image_height = cogl_bitmap_get_height (bitmap);
-  image_stride = cogl_bitmap_get_rowstride (bitmap);
-  image_data = cogl_bitmap_map (bitmap,
-                                COGL_BUFFER_ACCESS_READ, 0,
-                                NULL);
-  if (!image_data)
-    return;
-
-  if (image_width == bounds->width && image_height == bounds->height)
+  if (cr_width == bounds->width && cr_height == bounds->height)
     {
-      memcpy (data, image_data, image_height * image_stride);
+      memcpy (data, cr_data, cr_height * cr_stride);
     }
   else
     {
-      int width = MIN (bounds->width, image_width);
-      int height = MIN (bounds->height, image_height);
+      int width = MIN (bounds->width, cr_width);
+      int height = MIN (bounds->height, cr_height);
       int stride = width * bpp;
       uint8_t *src, *dst;
 
-      src = image_data;
+      src = cr_data;
       dst = data;
 
       for (int i = 0; i < height; i++)
@@ -1480,7 +1391,7 @@ meta_window_actor_capture_into (MetaScreenCastWindow *screen_cast_window,
           if (width < bounds->width)
             memset (dst + stride, 0, (bounds->width * bpp) - stride);
 
-          src += image_stride;
+          src += cr_stride;
           dst += bounds->width * bpp;
         }
 
@@ -1491,7 +1402,7 @@ meta_window_actor_capture_into (MetaScreenCastWindow *screen_cast_window,
         }
     }
 
-  cogl_bitmap_unmap (bitmap);
+  cairo_surface_destroy (image);
 }
 
 static gboolean
@@ -1570,8 +1481,7 @@ meta_window_actor_blit_to_framebuffer (MetaScreenCastWindow *screen_cast_window,
 
   paint_context =
     clutter_paint_context_new_for_framebuffer (framebuffer, NULL,
-                                               CLUTTER_PAINT_FLAG_NONE,
-                                               clutter_actor_get_color_state (actor));
+                                               CLUTTER_PAINT_FLAG_NONE);
   clutter_actor_paint (actor, paint_context);
   clutter_paint_context_destroy (paint_context);
 
@@ -1656,11 +1566,9 @@ meta_window_actor_notify_damaged (MetaWindowActor *window_actor)
 }
 
 static CoglFramebuffer *
-create_framebuffer_from_window_actor (MetaWindowActor    *self,
-                                      MtkRectangle       *clip,
-                                      CoglPixelFormat     format,
-                                      ClutterColorState  *color_state,
-                                      GError            **error)
+create_framebuffer_from_window_actor (MetaWindowActor  *self,
+                                      MtkRectangle     *clip,
+                                      GError          **error)
 {
   MetaWindowActorPrivate *priv = meta_window_actor_get_instance_private (self);
   ClutterActor *actor = CLUTTER_ACTOR (self);
@@ -1676,28 +1584,16 @@ create_framebuffer_from_window_actor (MetaWindowActor    *self,
   CoglColor clear_color;
   ClutterPaintContext *paint_context;
   float resource_scale;
-  int tex_width, tex_height;
 
   resource_scale = clutter_actor_get_resource_scale (actor);
 
-  tex_width = (int) (clip->width * resource_scale);
-  tex_height = (int) (clip->height * resource_scale);
-
-  if (format != COGL_PIXEL_FORMAT_ANY)
-    {
-      texture = cogl_texture_2d_new_with_format (cogl_context,
-                                                 tex_width, tex_height,
-                                                 format);
-    }
-  else
-    {
-      texture = cogl_texture_2d_new_with_size (cogl_context,
-                                               tex_width, tex_height);
-    }
+  texture = cogl_texture_2d_new_with_size (cogl_context,
+                                           clip->width * resource_scale,
+                                           clip->height * resource_scale);
   if (!texture)
     return NULL;
 
-  cogl_texture_2d_set_auto_mipmap (COGL_TEXTURE_2D (texture), FALSE);
+  cogl_primitive_texture_set_auto_mipmap (texture, FALSE);
 
   offscreen = cogl_offscreen_new_with_texture (texture);
   framebuffer = COGL_FRAMEBUFFER (offscreen);
@@ -1716,13 +1612,9 @@ create_framebuffer_from_window_actor (MetaWindowActor    *self,
                                  0, 1.0);
   cogl_framebuffer_translate (framebuffer, -clip->x, -clip->y, 0);
 
-  if (!color_state)
-    color_state = clutter_actor_get_color_state (actor);
-
   paint_context =
     clutter_paint_context_new_for_framebuffer (framebuffer, NULL,
-                                               CLUTTER_PAINT_FLAG_NONE,
-                                               color_state);
+                                               CLUTTER_PAINT_FLAG_NONE);
   clutter_actor_paint (actor, paint_context);
   clutter_paint_context_destroy (paint_context);
 
@@ -1736,33 +1628,30 @@ meta_window_actor_is_single_surface_actor (MetaWindowActor *self)
 }
 
 /**
- * meta_window_actor_paint_to_bitmap:
+ * meta_window_actor_get_image:
  * @self: A #MetaWindowActor
  * @clip: (nullable): A clipping rectangle, to help prevent extra processing.
  * In the case that the clipping rectangle is partially or fully
  * outside the bounds of the actor, the rectangle will be clipped.
- * @format: The pixel format for the image data
  *
- * Flattens the layers of @self into an image by alpha blending
- * the layers, and returns the result as a [class@Cogl.Bitmap] in the
- * specified format.
+ * Flattens the layers of @self into one ARGB32 image by alpha blending
+ * the images, and returns the flattened image.
  *
- * Returns: (nullable) (transfer full): a new [class@Cogl.Bitmap]
+ * Returns: (nullable) (transfer full): a new cairo surface to be freed with
+ * cairo_surface_destroy().
  */
-CoglBitmap *
-meta_window_actor_paint_to_bitmap (MetaWindowActor *self,
-                                   MtkRectangle    *clip,
-                                   CoglPixelFormat  format)
+cairo_surface_t *
+meta_window_actor_get_image (MetaWindowActor *self,
+                             MtkRectangle    *clip)
 {
   MetaWindowActorPrivate *priv = meta_window_actor_get_instance_private (self);
   ClutterActor *actor = CLUTTER_ACTOR (self);
   MetaShapedTexture *stex;
-  CoglBitmap *bitmap = NULL;
+  cairo_surface_t *surface = NULL;
   CoglFramebuffer *framebuffer;
   MtkRectangle framebuffer_clip;
   float resource_scale;
-  float x, y, actor_width, actor_height;
-  int img_width, img_height;
+  float x, y, width, height;
 
   if (!priv->surface)
     return NULL;
@@ -1789,21 +1678,21 @@ meta_window_actor_paint_to_bitmap (MetaWindowActor *self,
           surface_clip->height = clip->height / geometry_scale;
         }
 
-      bitmap = meta_shaped_texture_paint_to_bitmap (stex, surface_clip, format);
+      surface = meta_shaped_texture_get_image (stex, surface_clip);
       goto out;
     }
 
   clutter_actor_get_position (actor, &x, &y);
-  clutter_actor_get_size (actor, &actor_width, &actor_height);
+  clutter_actor_get_size (actor, &width, &height);
 
-  if (actor_width == 0 || actor_height == 0)
+  if (width == 0 || height == 0)
     goto out;
 
   framebuffer_clip = (MtkRectangle) {
-    .x = (int) floorf (x),
-    .y = (int) floorf (y),
-    .width = (int) ceilf (actor_width),
-    .height = (int) ceilf (actor_height),
+    .x = floorf (x),
+    .y = floorf (y),
+    .width = ceilf (width),
+    .height = ceilf (height),
   };
 
   if (clip)
@@ -1812,8 +1701,8 @@ meta_window_actor_paint_to_bitmap (MetaWindowActor *self,
       MtkRectangle intersected_clip;
 
       tmp_clip = *clip;
-      tmp_clip.x += (int) floorf (x);
-      tmp_clip.y += (int) floorf (y);
+      tmp_clip.x += floorf (x);
+      tmp_clip.y += floorf (y);
       if (!mtk_rectangle_intersect (&framebuffer_clip,
                                     &tmp_clip,
                                     &intersected_clip))
@@ -1824,55 +1713,47 @@ meta_window_actor_paint_to_bitmap (MetaWindowActor *self,
 
   framebuffer = create_framebuffer_from_window_actor (self,
                                                       &framebuffer_clip,
-                                                      COGL_PIXEL_FORMAT_ANY,
-                                                      NULL,
                                                       NULL);
   if (!framebuffer)
     goto out;
 
   resource_scale = clutter_actor_get_resource_scale (actor);
-  img_width = (int) (framebuffer_clip.width * resource_scale);
-  img_height = (int) (framebuffer_clip.height * resource_scale);
-
-  bitmap = cogl_bitmap_new_with_malloc_buffer (cogl_framebuffer_get_context (framebuffer),
-                                               img_width, img_height,
-                                               format,
-                                               NULL);
-
-  cogl_framebuffer_read_pixels_into_bitmap (framebuffer,
-                                            0, 0,
-                                            COGL_READ_PIXELS_COLOR_BUFFER,
-                                            bitmap);
+  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                        framebuffer_clip.width *
+                                        resource_scale,
+                                        framebuffer_clip.height *
+                                        resource_scale);
+  cogl_framebuffer_read_pixels (framebuffer,
+                                0, 0,
+                                framebuffer_clip.width * resource_scale,
+                                framebuffer_clip.height * resource_scale,
+                                COGL_PIXEL_FORMAT_CAIRO_ARGB32_COMPAT,
+                                cairo_image_surface_get_data (surface));
 
   g_object_unref (framebuffer);
 
+  cairo_surface_mark_dirty (surface);
+
 out:
   clutter_actor_uninhibit_culling (actor);
-  return bitmap;
+  return surface;
 }
 
 /**
- * meta_window_actor_paint_to_content_full:
+ * meta_window_actor_paint_to_content:
  * @self: A #MetaWindowActor
  * @clip: (nullable): A clipping rectangle, in actor coordinates, to help
  * prevent extra processing.
  * In the case that the clipping rectangle is partially or fully
  * outside the bounds of the actor, the rectangle will be clipped.
- * @format: pixel format for the offscreen texture, or %COGL_PIXEL_FORMAT_ANY
- *   to keep the default (8-bit RGBA).
- * @color_state: (nullable): destination color state for the paint, or %NULL
- *   to inherit the actor's color state. Pass a BT.2020 / PQ #ClutterColorState
- *   together with %COGL_PIXEL_FORMAT_RGBA_FP_16161616 to retain HDR data.
  * @error: A #GError to catch exceptional errors or %NULL.
  *
  * Returns: (nullable) (transfer full): a new #ClutterContent
  */
 ClutterContent *
-meta_window_actor_paint_to_content_full (MetaWindowActor    *self,
-                                         MtkRectangle       *clip,
-                                         CoglPixelFormat     format,
-                                         ClutterColorState  *color_state,
-                                         GError            **error)
+meta_window_actor_paint_to_content (MetaWindowActor  *self,
+                                    MtkRectangle     *clip,
+                                    GError          **error)
 {
   MetaWindowActorPrivate *priv = meta_window_actor_get_instance_private (self);
   ClutterActor *actor = CLUTTER_ACTOR (self);
@@ -1894,10 +1775,10 @@ meta_window_actor_paint_to_content_full (MetaWindowActor    *self,
     goto out;
 
   framebuffer_clip = (MtkRectangle) {
-    .x = (int) floorf (x),
-    .y = (int) floorf (y),
-    .width = (int) ceilf (width),
-    .height = (int) ceilf (height),
+    .x = floorf (x),
+    .y = floorf (y),
+    .width = ceilf (width),
+    .height = ceilf (height),
   };
 
   if (clip)
@@ -1912,8 +1793,6 @@ meta_window_actor_paint_to_content_full (MetaWindowActor    *self,
 
   framebuffer = create_framebuffer_from_window_actor (self,
                                                       &framebuffer_clip,
-                                                      format,
-                                                      color_state,
                                                       error);
   if (!framebuffer)
     goto out;
@@ -1926,43 +1805,4 @@ meta_window_actor_paint_to_content_full (MetaWindowActor    *self,
 out:
   clutter_actor_uninhibit_culling (actor);
   return content;
-}
-
-/**
- * meta_window_actor_paint_to_content:
- * @self: A #MetaWindowActor
- * @clip: (nullable): A clipping rectangle, in actor coordinates, to help
- * prevent extra processing.
- * In the case that the clipping rectangle is partially or fully
- * outside the bounds of the actor, the rectangle will be clipped.
- * @error: A #GError to catch exceptional errors or %NULL.
- *
- * Returns: (nullable) (transfer full): a new #ClutterContent
- */
-ClutterContent *
-meta_window_actor_paint_to_content (MetaWindowActor  *self,
-                                    MtkRectangle     *clip,
-                                    GError          **error)
-{
-  return meta_window_actor_paint_to_content_full (self, clip,
-                                                  COGL_PIXEL_FORMAT_ANY,
-                                                  NULL,
-                                                  error);
-}
-
-void
-meta_window_actor_set_tied_to_drag (MetaWindowActor *window_actor,
-                                    gboolean         tied_to_drag)
-{
-  MetaWindowActorPrivate *priv =
-    meta_window_actor_get_instance_private (window_actor);
-  priv->tied_to_drag = tied_to_drag;
-}
-
-gboolean
-meta_window_actor_is_tied_to_drag (MetaWindowActor *window_actor)
-{
-  MetaWindowActorPrivate *priv =
-    meta_window_actor_get_instance_private (window_actor);
-  return priv->tied_to_drag;
 }

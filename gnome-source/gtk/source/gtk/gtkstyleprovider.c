@@ -25,7 +25,8 @@
 /**
  * GtkStyleProvider:
  *
- * An interface for style information used by [class@Gtk.StyleContext].
+ * `GtkStyleProvider` is an interface for style information used by
+ * `GtkStyleContext`.
  *
  * See [method@Gtk.StyleContext.add_provider] and
  * [func@Gtk.StyleContext.add_provider_for_display] for
@@ -169,19 +170,6 @@ gtk_style_provider_emit_error (GtkStyleProvider *provider,
     iface->emit_error (provider, section, error);
 }
 
-gboolean
-gtk_style_provider_has_section (GtkStyleProvider *provider,
-                                GtkCssSection    *section)
-{
-  GtkStyleProviderInterface *iface;
-
-  iface = GTK_STYLE_PROVIDER_GET_INTERFACE (provider);
-
-  if (iface->has_section)
-    return iface->has_section (provider, section);
-
-  return FALSE;
-}
 
 /* These apis are misnamed, and the rest of GtkStyleContext is deprecated,
  * so put them here for now
@@ -242,3 +230,4 @@ gtk_style_context_remove_provider_for_display (GdkDisplay       *display,
   cascade = _gtk_settings_get_style_cascade (gtk_settings_get_for_display (display), 1);
   _gtk_style_cascade_remove_provider (cascade, provider);
 }
+

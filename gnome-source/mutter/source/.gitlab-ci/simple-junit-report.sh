@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 OUTFILE=$1
 NAME=$2
 MESSAGE=$3

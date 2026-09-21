@@ -57,6 +57,8 @@ void            _gtk_window_notify_keys_changed (GtkWindow *window);
 
 void            _gtk_window_toggle_maximized (GtkWindow *window);
 
+void            _gtk_window_request_csd (GtkWindow *window);
+
 /* Window groups */
 
 GtkWindowGroup *_gtk_window_get_window_group (GtkWindow *window);
@@ -110,6 +112,10 @@ void             gtk_window_maybe_revoke_implicit_grab (GtkWindow *window,
 void             gtk_window_maybe_update_cursor (GtkWindow *window,
                                                  GtkWidget *widget,
                                                  GdkDevice *device);
+GtkWidget *      gtk_window_pick_popover (GtkWindow   *window,
+                                          double       x,
+                                          double       y,
+                                          GtkPickFlags flags);
 GdkDevice** gtk_window_get_foci_on_widget (GtkWindow *window,
                                            GtkWidget *widget,
                                            guint     *n_devices);

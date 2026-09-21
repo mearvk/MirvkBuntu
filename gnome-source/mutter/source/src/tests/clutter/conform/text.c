@@ -1,7 +1,5 @@
 #include <glib.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-mutter.h>
-#include <clutter/clutter-pango.h>
 #include <string.h>
 
 #include "tests/clutter-test-utils.h"
@@ -30,12 +28,12 @@ text_utf8_validation (void)
       char bytes[6];
       int nbytes;
 
-      g_assert_true (g_unichar_validate (t->unichar));
+      g_assert (g_unichar_validate (t->unichar));
 
       nbytes = g_unichar_to_utf8 (t->unichar, bytes);
       bytes[nbytes] = '\0';
       g_assert_cmpint (nbytes, ==, t->nbytes);
-      g_assert_cmpint (memcmp (t->bytes, bytes, nbytes), ==, 0);
+      g_assert (memcmp (t->bytes, bytes, nbytes) == 0);
 
       unichar = g_utf8_get_char_validated (bytes, nbytes);
       g_assert_cmpint (unichar, ==, t->unichar);
@@ -53,7 +51,7 @@ static int
 get_nchars (ClutterText *text)
 {
   const char *s = clutter_text_get_text (text);
-  g_assert_true (g_utf8_validate (s, -1, NULL));
+  g_assert (g_utf8_validate (s, -1, NULL));
   return g_utf8_strlen (s, -1);
 }
 
@@ -74,9 +72,8 @@ insert_unichar (ClutterText *text, gunichar unichar, int position)
 static void
 text_set_empty (void)
 {
-  g_autoptr (ClutterText) text = NULL;
-
-  text = CLUTTER_TEXT (clutter_text_new ());
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   g_assert_cmpstr (clutter_text_get_text (text), ==, "");
   g_assert_cmpint (*clutter_text_get_text (text), ==, '\0');
@@ -86,14 +83,15 @@ text_set_empty (void)
   g_assert_cmpint (get_nchars (text), ==, 0);
   g_assert_cmpint (get_nbytes (text), ==, 0);
   g_assert_cmpint (clutter_text_get_cursor_position (text), ==, -1);
+
+  clutter_actor_destroy (CLUTTER_ACTOR (text));
 }
 
 static void
 text_set_text (void)
 {
-  g_autoptr (ClutterText) text = NULL;
-
-  text = CLUTTER_TEXT (clutter_text_new ());
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   clutter_text_set_text (text, "abcdef");
   g_assert_cmpint (get_nchars (text), ==, 6);
@@ -107,15 +105,17 @@ text_set_text (void)
   clutter_text_set_text (text, "");
   g_assert_cmpint (clutter_text_get_cursor_position (text), ==, -1);
   */
+
+  clutter_actor_destroy (CLUTTER_ACTOR (text));
 }
 
 static void
 text_append_some (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
     {
@@ -140,10 +140,10 @@ text_append_some (void)
 static void
 text_prepend_some (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
     {
@@ -174,10 +174,10 @@ text_prepend_some (void)
 static void
 text_insert (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
     {
@@ -201,10 +201,10 @@ text_insert (void)
 static void
 text_delete_chars (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
     {
@@ -246,10 +246,10 @@ text_delete_chars (void)
 static void
 text_get_chars (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   gchar *chars;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   clutter_text_set_text (text, "00abcdef11");
   g_assert_cmpint (get_nchars (text), ==, 10);
@@ -278,10 +278,10 @@ text_get_chars (void)
 static void
 text_delete_text (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
     {
@@ -310,9 +310,9 @@ text_delete_text (void)
 static void
 text_password_char (void)
 {
-  g_autoptr (ClutterText) text = NULL;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
   g_assert_cmpint (clutter_text_get_password_char (text), ==, 0);
 
@@ -328,69 +328,55 @@ text_password_char (void)
 }
 
 static void
-after_change_cb (ClutterText *text,
-                 gpointer     data)
+send_keyval (ClutterText *text, int keyval)
 {
-  gboolean *got_change = data;
+  ClutterEvent *event;
+  ClutterSeat *seat;
 
-  *got_change = TRUE;
+  /* Unicode should be ignored for cursor keys etc. */
+  seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
+  event = clutter_event_key_new (CLUTTER_KEY_PRESS,
+                                 CLUTTER_EVENT_FLAG_SYNTHETIC,
+                                 CLUTTER_CURRENT_TIME,
+                                 clutter_seat_get_keyboard (seat),
+                                 (ClutterModifierSet) { 0, },
+                                 0, keyval, 0, 0, 0);
+
+  clutter_actor_event (CLUTTER_ACTOR (text), event, FALSE);
+
+  clutter_event_free (event);
 }
 
 static void
-wait_for_change (ClutterText *text)
+send_unichar (ClutterText *text, gunichar unichar)
 {
-  gboolean got_change = FALSE;
-  guint text_change_handler_id, cursor_change_handler_id;
+  ClutterEvent *event;
+  ClutterSeat *seat;
 
-  text_change_handler_id = g_signal_connect_after (text, "text-changed",
-                                                   G_CALLBACK (after_change_cb),
-                                                   &got_change);
-  cursor_change_handler_id = g_signal_connect_after (text, "cursor-changed",
-                                                     G_CALLBACK (after_change_cb),
-                                                     &got_change);
+  /* Key symbol should be ignored for printable characters */
+  seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
+  event = clutter_event_key_new (CLUTTER_KEY_PRESS,
+                                 CLUTTER_EVENT_FLAG_SYNTHETIC,
+                                 CLUTTER_CURRENT_TIME,
+                                 clutter_seat_get_keyboard (seat),
+                                 (ClutterModifierSet) { 0, },
+                                 0, 0, 0, 0, unichar);
 
-  while (!got_change)
-    g_main_context_iteration (NULL, FALSE);
+  clutter_actor_event (CLUTTER_ACTOR (text), event, FALSE);
 
-  g_signal_handler_disconnect (text, text_change_handler_id);
-  g_signal_handler_disconnect (text, cursor_change_handler_id);
-}
-
-static void
-send_keyval (ClutterVirtualInputDevice *virtual_keyboard,
-             ClutterText               *text,
-             int                        keyval)
-{
-  clutter_virtual_input_device_notify_keyval (virtual_keyboard,
-                                              g_get_monotonic_time (),
-                                              keyval,
-                                              CLUTTER_KEY_STATE_PRESSED);
-  clutter_virtual_input_device_notify_keyval (virtual_keyboard,
-                                              g_get_monotonic_time (),
-                                              keyval,
-                                              CLUTTER_KEY_STATE_RELEASED);
+  clutter_event_free (event);
 }
 
 static void
 text_cursor (void)
 {
-  ClutterText *text;
-  g_autoptr (ClutterVirtualInputDevice) virtual_keyboard = NULL;
-  ClutterSeat *seat;
-  ClutterActor *stage;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
   int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
-  stage = clutter_test_get_stage ();
-  clutter_actor_add_child (stage, CLUTTER_ACTOR (text));
+  /* only editable entries listen to events */
   clutter_text_set_editable (text, TRUE);
-  clutter_actor_set_reactive (CLUTTER_ACTOR (text), TRUE);
-  clutter_actor_grab_key_focus (CLUTTER_ACTOR (text));
-
-  seat = clutter_test_get_default_seat ();
-  virtual_keyboard =
-    clutter_seat_create_virtual_device (seat, CLUTTER_KEYBOARD_DEVICE);
 
   for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
     {
@@ -403,12 +389,13 @@ text_cursor (void)
       clutter_text_set_cursor_position (text, 2);
 
       /* test cursor moves and is clamped */
-      send_keyval (virtual_keyboard, text, CLUTTER_KEY_Left);
-      wait_for_change (text);
+      send_keyval (text, CLUTTER_KEY_Left);
       g_assert_cmpint (clutter_text_get_cursor_position (text), ==, 1);
 
-      send_keyval (virtual_keyboard, text, CLUTTER_KEY_Left);
-      wait_for_change (text);
+      send_keyval (text, CLUTTER_KEY_Left);
+      g_assert_cmpint (clutter_text_get_cursor_position (text), ==, 0);
+
+      send_keyval (text, CLUTTER_KEY_Left);
       g_assert_cmpint (clutter_text_get_cursor_position (text), ==, 0);
 
       /* delete text containing the cursor */
@@ -416,8 +403,7 @@ text_cursor (void)
       g_assert_cmpint (clutter_text_get_cursor_position (text), ==, 3);
 
       clutter_text_delete_text (text, 2, 4);
-      send_keyval (virtual_keyboard, text, CLUTTER_KEY_Left);
-      wait_for_change (text);
+      send_keyval (text, CLUTTER_KEY_Left);
 
       /* FIXME: cursor position should be -1?
       g_assert_cmpint (clutter_text_get_cursor_position (text), ==, -1);
@@ -432,38 +418,26 @@ text_cursor (void)
 static void
 text_event (void)
 {
-  ClutterText *text;
-  g_autoptr (ClutterVirtualInputDevice) virtual_keyboard = NULL;
-  ClutterActor *stage;
-  ClutterSeat *seat;
+  ClutterText *text = CLUTTER_TEXT (clutter_text_new ());
+  int i;
 
-  text = CLUTTER_TEXT (clutter_text_new ());
+  g_object_ref_sink (text);
 
-  stage = clutter_test_get_stage ();
-  clutter_actor_add_child (stage, CLUTTER_ACTOR (text));
+  /* only editable entries listen to events */
   clutter_text_set_editable (text, TRUE);
-  clutter_actor_set_reactive (CLUTTER_ACTOR (text), TRUE);
-  clutter_actor_grab_key_focus (CLUTTER_ACTOR (text));
 
-  seat = clutter_test_get_default_seat ();
-  virtual_keyboard =
-    clutter_seat_create_virtual_device (seat, CLUTTER_KEYBOARD_DEVICE);
+  for (i = 0; i < G_N_ELEMENTS (test_text_data); i++)
+    {
+      const TestData *t = &test_text_data[i];
 
-  send_keyval (virtual_keyboard, text, CLUTTER_KEY_A);
-  wait_for_change (text);
+      send_unichar (text, t->unichar);
 
-  g_assert_cmpint (get_nchars (text), ==, 1);
-  g_assert_cmpint (get_nbytes (text), ==, 1);
-  g_assert_cmpint (clutter_text_get_cursor_position (text), ==, -1);
+      g_assert_cmpint (get_nchars (text), ==, 1);
+      g_assert_cmpint (get_nbytes (text), ==, 1 * t->nbytes);
+      g_assert_cmpint (clutter_text_get_cursor_position (text), ==, -1);
 
-  send_keyval (virtual_keyboard, text, CLUTTER_KEY_B);
-  wait_for_change (text);
-
-  g_assert_cmpint (get_nchars (text), ==, 2);
-  g_assert_cmpint (get_nbytes (text), ==, 2);
-  g_assert_cmpint (clutter_text_get_cursor_position (text), ==, -1);
-
-  clutter_text_set_text (text, "");
+      clutter_text_set_text (text, "");
+    }
 
   clutter_actor_destroy (CLUTTER_ACTOR (text));
 }
@@ -479,10 +453,10 @@ validate_markup_attributes (ClutterText   *text,
   PangoAttrIterator *iter;
 
   layout = clutter_text_get_layout (text);
-  g_assert_nonnull (layout);
+  g_assert (layout != NULL);
 
   attrs = pango_layout_get_attributes (layout);
-  g_assert_nonnull (attrs);
+  g_assert (attrs != NULL);
 
   iter = pango_attr_list_get_iterator (attrs);
   while (pango_attr_iterator_next (iter))
@@ -493,7 +467,7 @@ validate_markup_attributes (ClutterText   *text,
       if (attributes == NULL)
         break;
 
-      g_assert_nonnull (attributes->data);
+      g_assert (attributes->data != NULL);
 
       a = attributes->data;
 
@@ -509,7 +483,7 @@ validate_markup_attributes (ClutterText   *text,
           continue;
         }
 
-      g_assert_true (a->klass->type == attr_type);
+      g_assert (a->klass->type == attr_type);
       g_assert_cmpint (a->start_index, ==, start_index);
       g_assert_cmpint (a->end_index, ==, end_index);
 
@@ -550,7 +524,6 @@ text_idempotent_use_markup (void)
                               bar_end_index);
 
   clutter_actor_destroy (CLUTTER_ACTOR (text));
-  g_object_unref (text);
 
   /* case 2: use_markup -> text */
   if (!g_test_quiet ())
@@ -573,7 +546,6 @@ text_idempotent_use_markup (void)
                               bar_end_index);
 
   clutter_actor_destroy (CLUTTER_ACTOR (text));
-  g_object_unref (text);
 }
 
 CLUTTER_TEST_SUITE (

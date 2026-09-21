@@ -27,7 +27,9 @@ from typing import TYPE_CHECKING
 from orca import (
     braille_presenter,
     debug,
+    flat_review_presenter,
     focus_manager,
+    input_event,
     input_event_manager,
     messages,
     presentation_manager,
@@ -40,8 +42,6 @@ from orca.ax_object import AXObject
 from orca.ax_table import AXTable
 from orca.ax_text import AXText
 from orca.ax_utilities import AXUtilities
-from orca.ax_utilities_event import TextEventReason
-from orca.ax_utilities_text import CaretSetReason
 from orca.scripts import default
 
 from .braille_generator import BrailleGenerator
@@ -73,44 +73,61 @@ class Script(default.Script):
 
         return Utilities(self)
 
-    def handle_braille_pan_at_edge(
-        self,
-        direction: braille_presenter.PanDirection,
-    ) -> bool | None:
-        """Handles braille panning when the presenter reaches the edge of a line."""
+    def _pan_braille_left(self, event: input_event.InputEvent | None = None) -> bool:
+        """Pans the braille display to the left."""
 
         focus = focus_manager.get_manager().get_locus_of_focus()
-        if AXUtilities.is_spreadsheet_cell(focus) or not AXUtilities.is_paragraph(focus):
-            return super().handle_braille_pan_at_edge(direction)
+        if (
+            flat_review_presenter.get_presenter().is_active()
+            or AXUtilities.is_spreadsheet_cell(focus)
+            or not AXUtilities.is_paragraph(focus)
+        ):
+            return super()._pan_braille_left(event)
 
-        if direction == braille_presenter.PanDirection.LEFT:
-            start_offset = AXText.get_line_at_offset(focus)[1]
-            if start_offset > 0:
-                AXUtilities.set_caret_offset_with_reason(
-                    focus, start_offset - 1, CaretSetReason.BRAILLE_PANNING
-                )
-                return True
+        if braille_presenter.get_presenter().pan_left():
+            return True
 
-            obj = self.utilities.find_previous_object(focus)
-            if obj is not None:
-                focus_manager.get_manager().set_locus_of_focus(None, obj, notify_script=False)
-                AXUtilities.set_caret_offset_to_end(obj, CaretSetReason.BRAILLE_PANNING)
-                return True
-        else:
-            end_offset = AXText.get_line_at_offset(focus)[2]
-            if end_offset < AXText.get_character_count(focus):
-                AXUtilities.set_caret_offset_with_reason(
-                    focus, end_offset, CaretSetReason.BRAILLE_PANNING
-                )
-                return True
+        # At edge of a paragraph. Try to move caret to previous line.
+        start_offset = AXText.get_line_at_offset(focus)[1]
+        if start_offset > 0:
+            AXText.set_caret_offset(focus, start_offset - 1)
+            return True
 
-            obj = self.utilities.find_next_object(focus)
-            if obj is not None:
-                focus_manager.get_manager().set_locus_of_focus(None, obj, notify_script=False)
-                AXUtilities.set_caret_offset_to_start(obj, CaretSetReason.BRAILLE_PANNING)
-                return True
+        obj = self.utilities.find_previous_object(focus)
+        if obj is not None:
+            focus_manager.get_manager().set_locus_of_focus(None, obj, notify_script=False)
+            AXUtilities.set_caret_offset_to_end(obj)
+            return True
 
-        return super().handle_braille_pan_at_edge(direction)
+        return super()._pan_braille_left(event)
+
+    def _pan_braille_right(self, event: input_event.InputEvent | None = None) -> bool:
+        """Pans the braille display to the right."""
+
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if (
+            flat_review_presenter.get_presenter().is_active()
+            or AXUtilities.is_spreadsheet_cell(focus)
+            or not AXUtilities.is_paragraph(focus)
+        ):
+            return super()._pan_braille_right(event)
+
+        if braille_presenter.get_presenter().pan_right():
+            return True
+
+        # At edge of a paragraph. Try to move caret to next line.
+        end_offset = AXText.get_line_at_offset(focus)[2]
+        if end_offset < AXText.get_character_count(focus):
+            AXText.set_caret_offset(focus, end_offset)
+            return True
+
+        obj = self.utilities.find_next_object(focus)
+        if obj is not None:
+            focus_manager.get_manager().set_locus_of_focus(None, obj, notify_script=False)
+            AXUtilities.set_caret_offset_to_start(obj)
+            return True
+
+        return super()._pan_braille_right(event)
 
     def locus_of_focus_changed(
         self,
@@ -122,6 +139,9 @@ class Script(default.Script):
 
         if self.run_find_command_on:
             return super().locus_of_focus_changed(event, old_focus, new_focus)
+
+        if flat_review_presenter.get_presenter().is_active():
+            flat_review_presenter.get_presenter().quit()
 
         # TODO - JD: This is a hack that needs to be done better. For now it
         # fixes the broken echo previous word on Return.
@@ -177,9 +197,6 @@ class Script(default.Script):
             msg = "SOFFICE: Neither source nor child have focused state. Clearing cache on table."
             AXObject.clear_cache(event.source, False, msg)
 
-        if not AXUtilities.is_focused(event.source) and not AXUtilities.is_focused(event.any_data):
-            return super()._on_active_descendant_changed(event)
-
         if event.source != focus and not AXUtilities.find_ancestor(
             focus, lambda x: x == event.source
         ):
@@ -200,6 +217,17 @@ class Script(default.Script):
         if event.detail1 == -1:
             return True
 
+        if AXUtilities.is_paragraph(event.source) and not AXUtilities.is_focused(event.source):
+            # TODO - JD: Can we remove this?
+            AXObject.clear_cache(
+                event.source,
+                False,
+                "Caret-moved event from object which lacks focused state.",
+            )
+            if AXUtilities.is_focused(event.source):
+                msg = "SOFFICE: Clearing cache was needed due to missing state-changed event."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+
         if table_navigator.get_navigator().last_input_event_was_navigation_command():
             msg = "SOFFICE: Event ignored: Last input event was table navigation."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -207,17 +235,6 @@ class Script(default.Script):
 
         if structural_navigator.get_navigator().last_input_event_was_navigation_command():
             msg = "SOFFICE: Event ignored: Last input event was structural navigation."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return True
-
-        manager = focus_manager.get_manager()
-        obj, offset = manager.get_last_cursor_position()
-        reason = AXUtilities.get_text_event_reason(event)
-        if (event.source, event.detail1) == (obj, offset) and reason in (
-            TextEventReason.NAVIGATION_BY_LINE,
-            TextEventReason.NAVIGATION_TO_FILE_BOUNDARY,
-        ):
-            msg = "SOFFICE: Event ignored: Event is for last saved cursor position."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return True
 
@@ -322,7 +339,7 @@ class Script(default.Script):
                 focus_manager.get_manager().set_locus_of_focus(event, combobox, True)
                 return True
 
-        if AXUtilities.is_paragraph(event.source) or AXUtilities.is_heading(event.source):
+        if AXUtilities.is_paragraph(event.source):
             input_manager = input_event_manager.get_manager()
             if input_manager.last_event_was_left() or input_manager.last_event_was_right():
                 focus_manager.get_manager().set_locus_of_focus(event, event.source, False)

@@ -40,14 +40,11 @@ usage (void)
              "Commands:\n"
              "  benchmark    Benchmark rendering of a node\n"
              "  compare      Compare nodes or images\n"
-             "  convert      Convert into nodes\n"
-             "  extract      Extract data urls\n"
              "  info         Provide information about the node\n"
-             "  match        Match pattern in the node\n"
              "  show         Show the node\n"
              "  render       Take a screenshot of the node\n"
              "\n"));
-  exit (0);
+  exit (1);
 }
 
 static GLogWriterOutput
@@ -101,6 +98,8 @@ main (int argc, const char *argv[])
 
   gtk_init_check ();
 
+  gtk_test_register_all_types ();
+
   if (argc < 2)
     usage ();
 
@@ -120,14 +119,6 @@ main (int argc, const char *argv[])
     do_benchmark (&argc, &argv);
   else if (strcmp (argv[0], "compare") == 0)
     do_compare (&argc, &argv);
-  else if (strcmp (argv[0], "extract") == 0)
-    do_extract (&argc, &argv);
-  else if (strcmp (argv[0], "convert") == 0)
-    do_convert (&argc, &argv);
-  else if (strcmp (argv[0], "filter") == 0)
-    do_filter (&argc, &argv);
-  else if (strcmp (argv[0], "match") == 0)
-    do_match (&argc, &argv);
   else
     usage ();
 

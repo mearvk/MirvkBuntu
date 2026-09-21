@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 /* exported Indicator */
 
 import Clutter from 'gi://Clutter';
@@ -21,7 +22,7 @@ const BrightnessProxy = Gio.DBusProxy.makeProxyWrapper(BrightnessInterface);
 const SliderItem = GObject.registerClass({
     Properties: {
         'value': GObject.ParamSpec.int(
-            'value', null, null,
+            'value', '', '',
             GObject.ParamFlags.READWRITE,
             0, 100, 0),
     },
@@ -55,20 +56,16 @@ const SliderItem = GObject.registerClass({
 
         this.notify('value');
     }
-
-    vfunc_navigate_focus(from, direction) {
-        return this._slider.navigate_focus(from, direction, false);
-    }
 });
 
 const DiscreteItem = GObject.registerClass({
     Properties: {
         'value': GObject.ParamSpec.int(
-            'value', null, null,
+            'value', '', '',
             GObject.ParamFlags.READWRITE,
             0, 100, 0),
         'n-levels': GObject.ParamSpec.int(
-            'n-levels', null, null,
+            'n-levels', '', '',
             GObject.ParamFlags.READWRITE,
             1, 3, 1),
     },
@@ -87,8 +84,6 @@ const DiscreteItem = GObject.registerClass({
         this.connect('notify::n-levels', () => this._syncLevels());
         this.connect('notify::value', () => this._syncChecked());
         this._syncLevels();
-
-        global.focus_manager.add_group(this);
     }
 
     _valueToLevel(value) {
@@ -104,23 +99,17 @@ const DiscreteItem = GObject.registerClass({
         return 100 * Math.min(keyIndex, this.nLevels - 1) / (this.nLevels - 1);
     }
 
-    _addLevelButton(key, labelText, iconName) {
+    _addLevelButton(key, label, iconName) {
         const box = new St.BoxLayout({
             style_class: 'keyboard-brightness-level',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
-        });
-
-        const label = new St.Label({
-            text: labelText,
-            x_align: Clutter.ActorAlign.CENTER,
         });
 
         box.button = new St.Button({
             styleClass: 'icon-button',
             canFocus: true,
             iconName,
-            labelActor: label,
         });
         box.add_child(box.button);
 
@@ -128,7 +117,10 @@ const DiscreteItem = GObject.registerClass({
             this.value = this._levelToValue(key);
         });
 
-        box.add_child(label);
+        box.add_child(new St.Label({
+            text: label,
+            x_align: Clutter.ActorAlign.CENTER,
+        }));
 
         this.add_child(box);
         this._levelButtons.set(key, box);
@@ -155,7 +147,6 @@ class KeyboardBrightnessToggle extends QuickMenuToggle {
         super._init({
             title: _('Keyboard'),
             iconName: 'display-brightness-symbolic',
-            menuButtonAccessibleName: _('Open keyboard brightness menu'),
         });
 
         this._proxy = new BrightnessProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH,
@@ -173,10 +164,6 @@ class KeyboardBrightnessToggle extends QuickMenuToggle {
 
         this._sliderItem = new SliderItem();
         this.menu.box.add_child(this._sliderItem);
-        const sliderAccessible = this._sliderItem._slider.get_accessible();
-        sliderAccessible.set_parent(this.menu.box.get_accessible());
-        this._sliderItem.set_accessible(sliderAccessible);
-
 
         this._discreteItem = new DiscreteItem();
         this.menu.box.add_child(this._discreteItem);

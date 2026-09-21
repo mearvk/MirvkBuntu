@@ -81,7 +81,7 @@ GtkShortcutTrigger *    gtk_never_trigger_get                   (void);
 /**
  * GtkKeyvalTrigger:
  *
- * Triggers when a specific keyval and modifiers are pressed.
+ * A `GtkShortcutTrigger` that triggers when a specific keyval and modifiers are pressed.
  */
 
 GDK_AVAILABLE_IN_ALL
@@ -100,7 +100,7 @@ guint                   gtk_keyval_trigger_get_keyval           (GtkKeyvalTrigge
 /**
  * GtkMnemonicTrigger:
  *
- * Triggers when a specific mnemonic is pressed.
+ * A `GtkShortcutTrigger` that triggers when a specific mnemonic is pressed.
  *
  * Mnemonics require a *mnemonic modifier* (typically <kbd>Alt</kbd>) to be
  * pressed together with the mnemonic key.
@@ -118,9 +118,9 @@ guint                   gtk_mnemonic_trigger_get_keyval         (GtkMnemonicTrig
 /**
  * GtkAlternativeTrigger:
  *
- * Combines two shortcut triggers.
+ * A `GtkShortcutTrigger` that combines two triggers.
  *
- * The `GtkAlternativeTrigger` triggers when either of the two trigger.
+ * The `GtkAlternativeTrigger` triggers when either of two trigger.
  *
  * This can be cascaded to combine more than two triggers.
  */
@@ -129,23 +129,12 @@ GDK_AVAILABLE_IN_ALL
 GDK_DECLARE_INTERNAL_TYPE (GtkAlternativeTrigger, gtk_alternative_trigger, GTK, ALTERNATIVE_TRIGGER, GtkShortcutTrigger)
 
 GDK_AVAILABLE_IN_ALL
-GtkShortcutTrigger *    gtk_alternative_trigger_new             (GtkShortcutTrigger     *first,
-                                                                 GtkShortcutTrigger     *second);
-GDK_AVAILABLE_IN_4_24
-GtkShortcutTrigger *    gtk_alternative_trigger_newv            (GtkShortcutTrigger    **triggers,
-                                                                 size_t                  n_triggers);
-
+GtkShortcutTrigger *    gtk_alternative_trigger_new             (GtkShortcutTrigger    *first,
+                                                                 GtkShortcutTrigger    *second);
 GDK_AVAILABLE_IN_ALL
-GtkShortcutTrigger *    gtk_alternative_trigger_get_first       (GtkAlternativeTrigger  *self);
+GtkShortcutTrigger *    gtk_alternative_trigger_get_first       (GtkAlternativeTrigger *self);
 GDK_AVAILABLE_IN_ALL
-GtkShortcutTrigger *    gtk_alternative_trigger_get_second      (GtkAlternativeTrigger  *self);
-
-GDK_AVAILABLE_IN_4_24
-GtkShortcutTrigger *    gtk_shortcut_trigger_create_with_aliases (unsigned int    keyval,
-                                                                  GdkModifierType modifiers);
-
-GDK_AVAILABLE_IN_4_24
-GtkShortcutTrigger *    gtk_shortcut_trigger_create_for_menu     (void);
+GtkShortcutTrigger *    gtk_alternative_trigger_get_second      (GtkAlternativeTrigger *self);
 
 G_END_DECLS
 

@@ -32,7 +32,6 @@
 #include "gtkmodelbuttonprivate.h"
 #include "gtkpopovermenu.h"
 #include "gtkprivate.h"
-#include "gtkshortcuttrigger.h"
 #include "gtksnapshot.h"
 #include "gtkwidgetprivate.h"
 #include "gtkeventcontrollerkey.h"
@@ -83,11 +82,8 @@ enum
   PROP_SELECTABLE,
   PROP_HAS_MENU,
   PROP_CAN_DROP,
-  PROP_CAN_DRAG,
-  N_PROPS
+  PROP_CAN_DRAG
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE (GtkColorSwatch, gtk_color_swatch, GTK_TYPE_WIDGET)
 
@@ -500,7 +496,6 @@ gtk_color_swatch_class_init (GtkColorSwatchClass *class)
 {
   GtkWidgetClass *widget_class = (GtkWidgetClass *)class;
   GObjectClass *object_class = (GObjectClass *)class;
-  GtkShortcut *shortcut;
 
   object_class->get_property = swatch_get_property;
   object_class->set_property = swatch_set_property;
@@ -512,18 +507,21 @@ gtk_color_swatch_class_init (GtkColorSwatchClass *class)
   widget_class->size_allocate = swatch_size_allocate;
   widget_class->state_flags_changed = swatch_state_flags_changed;
 
-  props[PROP_RGBA] = g_param_spec_boxed ("rgba", NULL, NULL,
-                                         GDK_TYPE_RGBA, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_SELECTABLE] = g_param_spec_boolean ("selectable", NULL, NULL,
-                                                 TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_HAS_MENU] = g_param_spec_boolean ("has-menu", NULL, NULL,
-                                               TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_CAN_DROP] = g_param_spec_boolean ("can-drop", NULL, NULL,
-                                               FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-  props[PROP_CAN_DRAG] = g_param_spec_boolean ("can-drag", NULL, NULL,
-                                               TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_RGBA,
+      g_param_spec_boxed ("rgba", NULL, NULL,
+                          GDK_TYPE_RGBA, GTK_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_SELECTABLE,
+      g_param_spec_boolean ("selectable", NULL, NULL,
+                            TRUE, GTK_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_HAS_MENU,
+      g_param_spec_boolean ("has-menu", NULL, NULL,
+                            TRUE, GTK_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_CAN_DROP,
+      g_param_spec_boolean ("can-drop", NULL, NULL,
+                            FALSE, GTK_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_CAN_DRAG,
+      g_param_spec_boolean ("can-drag", NULL, NULL,
+                            TRUE, GTK_PARAM_READWRITE));
 
   /**
    * GtkColorSwatch|menu.popup:
@@ -532,10 +530,14 @@ gtk_color_swatch_class_init (GtkColorSwatchClass *class)
    */
   gtk_widget_class_install_action (widget_class, "menu.popup", NULL, swatch_popup_menu);
 
-  shortcut = gtk_shortcut_new (gtk_shortcut_trigger_create_for_menu (),
-                               gtk_named_action_new ("menu.popup"));
-  gtk_widget_class_add_shortcut (widget_class, shortcut);
-  g_object_unref (shortcut);
+  gtk_widget_class_add_binding_action (widget_class,
+                                       GDK_KEY_F10, GDK_SHIFT_MASK,
+                                       "menu.popup",
+                                       NULL);
+  gtk_widget_class_add_binding_action (widget_class,
+                                       GDK_KEY_Menu, 0,
+                                       "menu.popup",
+                                       NULL);
 
   gtk_widget_class_set_css_name (widget_class, I_("colorswatch"));
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_RADIO);
@@ -625,7 +627,7 @@ gtk_color_swatch_set_rgba (GtkColorSwatch *swatch,
     }
 
   gtk_widget_queue_draw (GTK_WIDGET (swatch));
-  g_object_notify_by_pspec (G_OBJECT (swatch), props[PROP_RGBA]);
+  g_object_notify (G_OBJECT (swatch), "rgba");
 }
 
 gboolean
@@ -680,7 +682,7 @@ gtk_color_swatch_set_can_drop (GtkColorSwatch *swatch,
       swatch->dest = NULL;
     }
 
-  g_object_notify_by_pspec (G_OBJECT (swatch), props[PROP_CAN_DROP]);
+  g_object_notify (G_OBJECT (swatch), "can-drop");
 }
 
 void
@@ -704,7 +706,7 @@ gtk_color_swatch_set_can_drag (GtkColorSwatch *swatch,
       swatch->source = NULL;
     }
 
-  g_object_notify_by_pspec (G_OBJECT (swatch), props[PROP_CAN_DRAG]);
+  g_object_notify (G_OBJECT (swatch), "can-drag");
 }
 
 void
@@ -725,7 +727,7 @@ gtk_color_swatch_set_selectable (GtkColorSwatch *swatch,
   swatch->selectable = selectable;
 
   update_accessible_properties (swatch);
-  g_object_notify_by_pspec (G_OBJECT (swatch), props[PROP_SELECTABLE]);
+  g_object_notify (G_OBJECT (swatch), "selectable");
 }
 
 gboolean

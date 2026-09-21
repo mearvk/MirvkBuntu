@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -74,7 +76,7 @@ class BaseIcon extends Shell.SquareBin {
         super._init({style_class: styleClass});
 
         this._box = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
             y_expand: true,
         });
@@ -102,7 +104,7 @@ class BaseIcon extends Shell.SquareBin {
 
         this.icon = null;
 
-        const cache = St.TextureCache.get_default();
+        let cache = St.TextureCache.get_default();
         cache.connectObject(
             'icon-theme-changed', this._onIconThemeChanged.bind(this), this);
     }
@@ -134,7 +136,7 @@ class BaseIcon extends Shell.SquareBin {
 
     vfunc_style_changed() {
         super.vfunc_style_changed();
-        const node = this.get_theme_node();
+        let node = this.get_theme_node();
 
         let size;
         if (this._setSizeManually) {
@@ -143,7 +145,7 @@ class BaseIcon extends Shell.SquareBin {
             const {scaleFactor} =
                 St.ThemeContext.get_for_stage(global.stage);
 
-            const [found, len] = node.lookup_length('icon-size', false);
+            let [found, len] = node.lookup_length('icon-size', false);
             size = found ? len / scaleFactor : ICON_SIZE;
         }
 
@@ -179,7 +181,7 @@ class BaseIcon extends Shell.SquareBin {
  * @param {Clutter.Actor} actor
  */
 export function zoomOutActor(actor) {
-    const [x, y] = actor.get_transformed_position();
+    let [x, y] = actor.get_transformed_position();
     zoomOutActorAtPos(actor, x, y);
 }
 
@@ -192,7 +194,7 @@ function zoomOutActorAtPos(actor, x, y) {
         source: actor,
         reactive: false,
     });
-    const [width, height] = actor.get_transformed_size();
+    let [width, height] = actor.get_transformed_size();
 
     actorClone.set_size(width, height);
     actorClone.set_position(x, y);
@@ -202,12 +204,12 @@ function zoomOutActorAtPos(actor, x, y) {
     Main.uiGroup.add_child(actorClone);
 
     // Avoid monitor edges to not zoom outside the current monitor
-    const scaledWidth = width * APPICON_ANIMATION_OUT_SCALE;
-    const scaledHeight = height * APPICON_ANIMATION_OUT_SCALE;
-    const scaledX = x - (scaledWidth - width) / 2;
-    const scaledY = y - (scaledHeight - height) / 2;
-    const containedX = Math.clamp(scaledX, monitor.x, monitor.x + monitor.width - scaledWidth);
-    const containedY = Math.clamp(scaledY, monitor.y, monitor.y + monitor.height - scaledHeight);
+    let scaledWidth = width * APPICON_ANIMATION_OUT_SCALE;
+    let scaledHeight = height * APPICON_ANIMATION_OUT_SCALE;
+    let scaledX = x - (scaledWidth - width) / 2;
+    let scaledY = y - (scaledHeight - height) / 2;
+    let containedX = Math.clamp(scaledX, monitor.x, monitor.x + monitor.width - scaledWidth);
+    let containedY = Math.clamp(scaledY, monitor.y, monitor.y + monitor.height - scaledHeight);
 
     actorClone.ease({
         scale_x: APPICON_ANIMATION_OUT_SCALE,
@@ -245,63 +247,65 @@ function swap(value, length) {
 export const IconGridLayout = GObject.registerClass({
     Properties: {
         'allow-incomplete-pages': GObject.ParamSpec.boolean('allow-incomplete-pages',
-            null, null,
+            'Allow incomplete pages', 'Allow incomplete pages',
             GObject.ParamFlags.READWRITE,
             true),
         'column-spacing': GObject.ParamSpec.int('column-spacing',
-            null, null,
+            'Column spacing', 'Column spacing',
             GObject.ParamFlags.READWRITE,
             0, GLib.MAXINT32, 0),
         'columns-per-page': GObject.ParamSpec.int('columns-per-page',
-            null, null,
+            'Columns per page', 'Columns per page',
             GObject.ParamFlags.READWRITE,
             1, GLib.MAXINT32, 6),
         'fixed-icon-size': GObject.ParamSpec.int('fixed-icon-size',
-            null, null,
+            'Fixed icon size', 'Fixed icon size',
             GObject.ParamFlags.READWRITE,
             -1, GLib.MAXINT32, -1),
         'icon-size': GObject.ParamSpec.int('icon-size',
-            null, null,
+            'Icon size', 'Icon size',
             GObject.ParamFlags.READABLE,
             0, GLib.MAXINT32, 0),
         'last-row-align': GObject.ParamSpec.enum('last-row-align',
-            null, null,
+            'Last row align', 'Last row align',
             GObject.ParamFlags.READWRITE,
             Clutter.ActorAlign.$gtype,
             Clutter.ActorAlign.FILL),
         'max-column-spacing': GObject.ParamSpec.int('max-column-spacing',
-            null, null,
+            'Maximum column spacing', 'Maximum column spacing',
             GObject.ParamFlags.READWRITE,
             -1, GLib.MAXINT32, -1),
         'max-row-spacing': GObject.ParamSpec.int('max-row-spacing',
-            null, null,
+            'Maximum row spacing', 'Maximum row spacing',
             GObject.ParamFlags.READWRITE,
             -1, GLib.MAXINT32, -1),
         'orientation': GObject.ParamSpec.enum('orientation',
-            null, null,
+            'Orientation', 'Orientation',
             GObject.ParamFlags.READWRITE,
             Clutter.Orientation.$gtype,
             Clutter.Orientation.VERTICAL),
         'page-halign': GObject.ParamSpec.enum('page-halign',
-            null, null,
+            'Horizontal page align',
+            'Horizontal page align',
             GObject.ParamFlags.READWRITE,
             Clutter.ActorAlign.$gtype,
             Clutter.ActorAlign.FILL),
         'page-padding': GObject.ParamSpec.boxed('page-padding',
-            null, null,
+            'Page padding', 'Page padding',
             GObject.ParamFlags.READWRITE,
             Clutter.Margin.$gtype),
         'page-valign': GObject.ParamSpec.enum('page-valign',
-            null, null,
+            'Vertical page align',
+            'Vertical page align',
             GObject.ParamFlags.READWRITE,
             Clutter.ActorAlign.$gtype,
             Clutter.ActorAlign.FILL),
         'row-spacing': GObject.ParamSpec.int('row-spacing',
-            null, null,
+            'Row spacing', 'Row spacing',
             GObject.ParamFlags.READWRITE,
             0, GLib.MAXINT32, 0),
         'rows-per-page': GObject.ParamSpec.int('rows-per-page',
-            null, null,
+            'Rows per page', 'Rows per page',
             GObject.ParamFlags.READWRITE,
             1, GLib.MAXINT32, 4),
     },
@@ -1042,7 +1046,7 @@ export const IconGridLayout = GObject.registerClass({
             : Math.floor(x / this._pageWidth);
 
         // Out of bounds
-        if (page < 0 || page >= this._pages.length)
+        if (page >= this._pages.length)
             return [0, 0, DragLocation.INVALID];
 
         if (isRtl && this._orientation === Clutter.Orientation.HORIZONTAL)
@@ -1230,7 +1234,7 @@ export const IconGrid = GObject.registerClass({
         let closestRatio = Infinity;
         let bestMode = -1;
 
-        for (const modeIndex in this._gridModes) {
+        for (let modeIndex in this._gridModes) {
             const mode = this._gridModes[modeIndex];
             const modeRatio = mode.columns / mode.rows;
 

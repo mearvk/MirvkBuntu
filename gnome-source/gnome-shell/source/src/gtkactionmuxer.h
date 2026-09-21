@@ -17,7 +17,8 @@
  * Author: Ryan Lortie <desrt@desrt.ca>
  */
 
-#pragma once
+#ifndef __GTK_ACTION_MUXER_H__
+#define __GTK_ACTION_MUXER_H__
 
 #include <gio/gio.h>
 
@@ -53,14 +54,11 @@ void                    gtk_action_muxer_set_primary_accel              (GtkActi
 const gchar *           gtk_action_muxer_get_primary_accel              (GtkActionMuxer *muxer,
                                                                          const gchar    *action_and_target);
 
-void                    gtk_action_muxer_activate_action_full           (GtkActionMuxer *muxer,
-                                                                         const gchar    *action_name,
-                                                                         GVariant       *parameter,
-                                                                         GVariant       *platform_data);
-
 /* No better place for this... */
 gchar *                 gtk_print_action_and_target                     (const gchar    *action_namespace,
                                                                          const gchar    *action_name,
                                                                          GVariant       *target);
 
 G_END_DECLS
+
+#endif /* __GTK_ACTION_MUXER_H__ */

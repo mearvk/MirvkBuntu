@@ -217,6 +217,8 @@ G_BEGIN_DECLS
  *   cogl_pop_source ();
  * ```
  */
+typedef struct _CoglSnippet CoglSnippet;
+
 #define COGL_TYPE_SNIPPET (cogl_snippet_get_type ())
 
 COGL_EXPORT
@@ -619,25 +621,5 @@ cogl_snippet_set_post (CoglSnippet *snippet,
  */
 COGL_EXPORT const char *
 cogl_snippet_get_post (CoglSnippet *snippet);
-
-COGL_EXPORT void
-cogl_snippet_set_capability (CoglSnippet  *snippet,
-                             GQuark        domain,
-                             unsigned int  capability);
-
-/**
- * cogl_snippet_get_capability:
- * @snippet: A #CoglSnippet
- * @domain: (out): return location for the capability's domain
- * @capability: (out): return location for the capability value
- *
- * Retrieves the capability set with cogl_snippet_set_capability(), if any.
- *
- * Returns: %TRUE if @snippet has a capability set, and %FALSE otherwise.
- */
-COGL_EXPORT gboolean
-cogl_snippet_get_capability (CoglSnippet  *snippet,
-                             GQuark       *domain,
-                             unsigned int *capability);
 
 G_END_DECLS

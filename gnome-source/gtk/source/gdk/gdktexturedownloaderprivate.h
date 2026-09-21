@@ -21,8 +21,6 @@
 
 #include "gdktexturedownloader.h"
 
-#include "gdkmemorylayoutprivate.h"
-
 G_BEGIN_DECLS
 
 struct _GdkTextureDownloader
@@ -30,18 +28,12 @@ struct _GdkTextureDownloader
   /*< private >*/
   GdkTexture *texture;
   GdkMemoryFormat format;
-  GdkColorState *color_state;
 };
 
-void                    gdk_texture_downloader_init                     (GdkTextureDownloader           *self,
-                                                                         GdkTexture                     *texture);
-void                    gdk_texture_downloader_finish                   (GdkTextureDownloader           *self);
+void                    gdk_texture_downloader_init              (GdkTextureDownloader           *self,
+                                                                  GdkTexture                     *texture);
+void                    gdk_texture_downloader_finish            (GdkTextureDownloader           *self);
 
-void                    gdk_texture_downloader_download_into_layout     (const GdkTextureDownloader     *self,
-                                                                         guchar                         *data,
-                                                                         const GdkMemoryLayout          *layout);
-GBytes *                gdk_texture_downloader_download_bytes_layout    (const GdkTextureDownloader     *self,
-                                                                         GdkMemoryLayout                *out_layout);
 
 G_END_DECLS
 

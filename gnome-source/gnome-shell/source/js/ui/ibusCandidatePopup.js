@@ -1,7 +1,8 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import IBus from 'gi://IBus';
-import Mtk from 'gi://Mtk';
 import St from 'gi://St';
 
 import * as BoxPointer from './boxpointer.js';
@@ -29,7 +30,7 @@ const CandidateArea = GObject.registerClass({
 }, class CandidateArea extends St.BoxLayout {
     _init() {
         super._init({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             reactive: true,
             visible: false,
         });
@@ -47,13 +48,11 @@ const CandidateArea = GObject.registerClass({
             this._candidateBoxes.push(box);
             this.add_child(box);
 
-            const j = i;
-            const clickGesture = new Clutter.ClickGesture();
-            clickGesture.connect('recognize', gesture => {
-                this.emit('candidate-clicked', j, gesture.get_button(),
-                    gesture.get_state());
+            let j = i;
+            box.connect('button-release-event', (actor, event) => {
+                this.emit('candidate-clicked', j, event.get_button(), event.get_state());
+                return Clutter.EVENT_PROPAGATE;
             });
-            box.add_action(clickGesture);
         }
 
         this._buttonBox = new St.BoxLayout({style_class: 'candidate-page-button-box'});
@@ -81,19 +80,18 @@ const CandidateArea = GObject.registerClass({
 
         this._orientation = -1;
         this._cursorPosition = 0;
+    }
 
-        const scrollController = new Clutter.ScrollController({
-            flags: Clutter.ScrollControllerFlags.DISCRETE |
-                Clutter.ScrollControllerFlags.SCROLL_VERTICAL,
-        });
-        scrollController.connect(
-            'scroll', (_controller, _sprite, _source, dx, dy) => {
-                if (dy < 0)
-                    this.emit('cursor-up');
-                else if (dy > 0)
-                    this.emit('cursor-down');
-            });
-        this.add_action(scrollController);
+    vfunc_scroll_event(event) {
+        switch (event.get_scroll_direction()) {
+        case Clutter.ScrollDirection.UP:
+            this.emit('cursor-up');
+            break;
+        case Clutter.ScrollDirection.DOWN:
+            this.emit('cursor-down');
+            break;
+        }
+        return Clutter.EVENT_PROPAGATE;
     }
 
     setOrientation(orientation) {
@@ -103,13 +101,13 @@ const CandidateArea = GObject.registerClass({
         this._orientation = orientation;
 
         if (this._orientation === IBus.Orientation.HORIZONTAL) {
-            this.orientation = Clutter.Orientation.HORIZONTAL;
+            this.vertical = false;
             this.remove_style_class_name('vertical');
             this.add_style_class_name('horizontal');
             this._previousButton.icon_name = 'go-previous-symbolic';
             this._nextButton.icon_name = 'go-next-symbolic';
         } else {                // VERTICAL || SYSTEM
-            this.orientation = Clutter.Orientation.VERTICAL;
+            this.vertical = true;
             this.add_style_class_name('vertical');
             this.remove_style_class_name('horizontal');
             this._previousButton.icon_name = 'go-up-symbolic';
@@ -119,8 +117,8 @@ const CandidateArea = GObject.registerClass({
 
     setCandidates(indexes, candidates, cursorPosition, cursorVisible) {
         for (let i = 0; i < MAX_CANDIDATES_PER_PAGE; ++i) {
-            const visible = i < candidates.length;
-            const box = this._candidateBoxes[i];
+            let visible = i < candidates.length;
+            let box = this._candidateBoxes[i];
             box.visible = visible;
 
             if (!visible)
@@ -154,15 +152,14 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
         this.visible = false;
         this.style_class = 'candidate-popup-boxpointer';
 
-        const inputPanelGroup = global.compositor.get_input_panel_group();
-
         this._dummyCursor = new Clutter.Actor({opacity: 0});
-        inputPanelGroup.add_child(this._dummyCursor);
-        inputPanelGroup.add_child(this);
+        Main.layoutManager.uiGroup.add_child(this._dummyCursor);
+
+        Main.layoutManager.addTopChrome(this);
 
         const box = new St.BoxLayout({
             style_class: 'candidate-popup-content',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
         this.bin.set_child(box);
 
@@ -208,33 +205,16 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
             return;
 
         panelService.connect('set-cursor-location', (ps, x, y, w, h) => {
-            const focusWindow = global.display.focus_window;
-            let rect = new Mtk.Rectangle({x, y, width: w, height: h});
-            if (!global.stage.key_focus && focusWindow)
-                rect = focusWindow.protocol_to_stage_rect(rect);
-            this._setDummyCursorGeometry(
-                rect.x,
-                rect.y,
-                rect.width,
-                rect.height);
+            this._setDummyCursorGeometry(x, y, w, h);
         });
         try {
             panelService.connect('set-cursor-location-relative', (ps, x, y, w, h) => {
-                const focusWindow = global.display.focus_window;
-                if (!focusWindow)
+                if (!global.display.focus_window)
                     return;
-                let rect = new Mtk.Rectangle({x, y, width: w, height: h});
-                rect = focusWindow.protocol_to_stage_rect(rect);
-                const windowActor = focusWindow.get_compositor_private();
-                // IBus GtkIMModule cannot get the shell scale.
-                const scale = windowActor.get_resource_scale();
-                this._setDummyCursorGeometry(
-                    windowActor.x + rect.x / scale,
-                    windowActor.y + rect.y / scale,
-                    rect.width / scale,
-                    rect.height / scale);
+                let window = global.display.focus_window.get_compositor_private();
+                this._setDummyCursorGeometry(window.x + x, window.y + y, w, h);
             });
-        } catch {
+        } catch (e) {
             // Only recent IBus versions have support for this signal
             // which is used for wayland clients. In order to work
             // with older IBus versions we can silently ignore the
@@ -246,7 +226,7 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
 
             this._preeditText.text = text.get_text();
 
-            const attrs = text.get_attributes();
+            let attrs = text.get_attributes();
             if (attrs)
                 this._setTextAttributes(this._preeditText.clutter_text, attrs);
         });
@@ -276,15 +256,15 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
             this._candidateArea.visible = visible;
             this._updateVisibility();
 
-            const nCandidates = lookupTable.get_number_of_candidates();
-            const cursorPos = lookupTable.get_cursor_pos();
-            const pageSize = lookupTable.get_page_size();
-            const nPages = Math.ceil(nCandidates / pageSize);
-            const page = cursorPos === 0 ? 0 : Math.floor(cursorPos / pageSize);
-            const startIndex = page * pageSize;
-            const endIndex = Math.min((page + 1) * pageSize, nCandidates);
+            let nCandidates = lookupTable.get_number_of_candidates();
+            let cursorPos = lookupTable.get_cursor_pos();
+            let pageSize = lookupTable.get_page_size();
+            let nPages = Math.ceil(nCandidates / pageSize);
+            let page = cursorPos === 0 ? 0 : Math.floor(cursorPos / pageSize);
+            let startIndex = page * pageSize;
+            let endIndex = Math.min((page + 1) * pageSize, nCandidates);
 
-            const indexes = [];
+            let indexes = [];
             let indexLabel;
             for (let i = 0; (indexLabel = lookupTable.get_label(i)); ++i)
                 indexes.push(indexLabel.get_text());
@@ -292,12 +272,12 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
             Main.keyboard.resetSuggestions();
             Main.keyboard.setSuggestionsVisible(visible);
 
-            const candidates = [];
+            let candidates = [];
             for (let i = startIndex; i < endIndex; ++i) {
                 candidates.push(lookupTable.get_candidate(i).get_text());
 
                 Main.keyboard.addSuggestion(lookupTable.get_candidate(i).get_text(), () => {
-                    const index = i;
+                    let index = i;
                     this._panelService.candidate_clicked(index, 1, 0);
                 });
             }
@@ -334,7 +314,7 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
     }
 
     _updateVisibility() {
-        const isVisible = !Main.keyboard.visible &&
+        let isVisible = !Main.keyboard.visible &&
                          (this._preeditText.visible ||
                           this._auxText.visible ||
                           this._candidateArea.visible);
@@ -342,6 +322,12 @@ class IbusCandidatePopup extends BoxPointer.BoxPointer {
         if (isVisible) {
             this.setPosition(this._dummyCursor, 0);
             this.open(BoxPointer.PopupAnimation.NONE);
+            // We shouldn't be above some components like the screenshot UI,
+            // so don't raise to the top.
+            // The on-screen keyboard is expected to be above any entries,
+            // so just above the keyboard gets us to the right layer.
+            const {keyboardBox} = Main.layoutManager;
+            this.get_parent().set_child_above_sibling(this, keyboardBox);
         } else {
             this.close(BoxPointer.PopupAnimation.NONE);
         }

@@ -39,8 +39,8 @@ const char * meta_multi_texture_format_to_string (MetaMultiTextureFormat format)
 
 const MetaMultiTextureFormatInfo * meta_multi_texture_format_get_info (MetaMultiTextureFormat format);
 
-CoglSnippet * meta_multi_texture_format_get_snippet (MetaMultiTextureFormat       format,
-                                                     MetaMultiTextureCoefficients coeffs,
-                                                     MetaMultiTextureAlphaMode    premult);
+gboolean meta_multi_texture_format_get_snippets (MetaMultiTextureFormat   format,
+                                                 CoglSnippet            **fragment_globals_snippet,
+                                                 CoglSnippet            **fragment_snippet);
 
 G_END_DECLS

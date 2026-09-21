@@ -233,9 +233,11 @@ static void close_window(void)
   gtk_window_destroy (GTK_WINDOW (window));
   window = NULL;
 
-  g_clear_object (&file_pixbuf);
+  g_object_unref (file_pixbuf);
+  file_pixbuf = NULL;
 
-  g_clear_object (&folder_pixbuf);
+  g_object_unref (folder_pixbuf);
+  folder_pixbuf = NULL;
 }
 
 GtkWidget *

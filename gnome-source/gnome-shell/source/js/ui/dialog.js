@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -32,36 +34,6 @@ class Dialog extends St.Widget {
 
         this._parentActor = parentActor;
         this._parentActor.add_child(this);
-
-        const keyController = new Clutter.KeyController();
-        keyController.connectObject(
-            'key-press', () => {
-                const [, symbol] = keyController.get_key();
-                this._pressedKey = symbol;
-                return Clutter.EVENT_PROPAGATE;
-            },
-            'key-release', () => {
-                const pressedKey = this._pressedKey;
-                this._pressedKey = null;
-
-                const [, symbol] = keyController.get_key();
-                if (symbol !== pressedKey)
-                    return Clutter.EVENT_PROPAGATE;
-
-                const buttonInfo = this._buttonKeys[symbol];
-                if (!buttonInfo)
-                    return Clutter.EVENT_PROPAGATE;
-
-                const {button, action} = buttonInfo;
-
-                if (action && button.reactive) {
-                    action();
-                    return Clutter.EVENT_STOP;
-                }
-                return Clutter.EVENT_PROPAGATE;
-            },
-            this);
-        this.add_action(keyController);
     }
 
     _createDialog() {
@@ -69,7 +41,7 @@ class Dialog extends St.Widget {
             style_class: 'modal-dialog',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         // modal dialogs are fixed width and grow vertically; set the request
@@ -79,18 +51,14 @@ class Dialog extends St.Widget {
         this._dialog.set_offscreen_redirect(Clutter.OffscreenRedirect.ALWAYS);
 
         this.contentLayout = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             style_class: 'modal-dialog-content-box',
             y_expand: true,
         });
         this._dialog.add_child(this.contentLayout);
 
         this.buttonLayout = new St.Widget({
-            style_class: 'modal-dialog-button-box',
-            layout_manager: new Clutter.BoxLayout({
-                spacing: 12,
-                homogeneous: true,
-            }),
+            layout_manager: new Clutter.BoxLayout({homogeneous: true}),
         });
         this._dialog.add_child(this.buttonLayout);
     }
@@ -101,6 +69,32 @@ class Dialog extends St.Widget {
 
     _onDestroy() {
         this.makeInactive();
+    }
+
+    vfunc_event(event) {
+        if (event.type() === Clutter.EventType.KEY_PRESS) {
+            this._pressedKey = event.get_key_symbol();
+        } else if (event.type() === Clutter.EventType.KEY_RELEASE) {
+            let pressedKey = this._pressedKey;
+            this._pressedKey = null;
+
+            let symbol = event.get_key_symbol();
+            if (symbol !== pressedKey)
+                return Clutter.EVENT_PROPAGATE;
+
+            let buttonInfo = this._buttonKeys[symbol];
+            if (!buttonInfo)
+                return Clutter.EVENT_PROPAGATE;
+
+            let {button, action} = buttonInfo;
+
+            if (action && button.reactive) {
+                action();
+                return Clutter.EVENT_STOP;
+            }
+        }
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _setInitialKeyFocus(actor) {
@@ -117,8 +111,8 @@ class Dialog extends St.Widget {
     }
 
     addButton(buttonInfo) {
-        const {label, action, key} = buttonInfo;
-        const isDefault = buttonInfo['default'];
+        let {label, action, key} = buttonInfo;
+        let isDefault = buttonInfo['default'];
         let keys;
 
         if (key)
@@ -128,9 +122,9 @@ class Dialog extends St.Widget {
         else
             keys = [];
 
-        const button = new St.Button({
-            style_class: 'modal-dialog-button',
-            button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.SECONDARY,
+        let button = new St.Button({
+            style_class: 'modal-dialog-linked-button',
+            button_mask: St.ButtonMask.ONE | St.ButtonMask.THREE,
             reactive: true,
             can_focus: true,
             x_expand: true,
@@ -147,7 +141,7 @@ class Dialog extends St.Widget {
         if (this._initialKeyFocus == null || isDefault)
             this._setInitialKeyFocus(button);
 
-        for (const i in keys)
+        for (let i in keys)
             this._buttonKeys[keys[i]] = buttonInfo;
 
         this.buttonLayout.add_child(button);
@@ -164,12 +158,12 @@ class Dialog extends St.Widget {
 export const MessageDialogContent = GObject.registerClass({
     Properties: {
         'title': GObject.ParamSpec.string(
-            'title', null, null,
+            'title', 'title', 'title',
             GObject.ParamFlags.READWRITE |
             GObject.ParamFlags.CONSTRUCT,
             null),
         'description': GObject.ParamSpec.string(
-            'description', null, null,
+            'description', 'description', 'description',
             GObject.ParamFlags.READWRITE |
             GObject.ParamFlags.CONSTRUCT,
             null),
@@ -179,16 +173,13 @@ export const MessageDialogContent = GObject.registerClass({
         this._title = new St.Label({style_class: 'message-dialog-title'});
         this._description = new St.Label({style_class: 'message-dialog-description'});
 
-        this._title.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this._title.clutter_text.line_wrap = true;
-
         this._description.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         this._description.clutter_text.line_wrap = true;
 
         super._init({
             style_class: 'message-dialog-content',
             x_expand: true,
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             ...params,
         });
 
@@ -259,7 +250,7 @@ export const MessageDialogContent = GObject.registerClass({
 export const ListSection = GObject.registerClass({
     Properties: {
         'title': GObject.ParamSpec.string(
-            'title', null, null,
+            'title', 'title', 'title',
             GObject.ParamFlags.READWRITE |
             GObject.ParamFlags.CONSTRUCT,
             null),
@@ -267,12 +258,10 @@ export const ListSection = GObject.registerClass({
 }, class ListSection extends St.BoxLayout {
     _init(params) {
         this._title = new St.Label({style_class: 'dialog-list-title'});
-        this._title.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this._title.clutter_text.line_wrap = true;
 
         this.list = new St.BoxLayout({
             style_class: 'dialog-list-box',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         this._listScrollView = new St.ScrollView({
@@ -283,7 +272,7 @@ export const ListSection = GObject.registerClass({
         super._init({
             style_class: 'dialog-list',
             x_expand: true,
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             ...params,
         });
 
@@ -305,16 +294,16 @@ export const ListSection = GObject.registerClass({
 export const ListSectionItem = GObject.registerClass({
     Properties: {
         'icon-actor':  GObject.ParamSpec.object(
-            'icon-actor', null, null,
+            'icon-actor', 'icon-actor', 'Icon actor',
             GObject.ParamFlags.READWRITE,
             Clutter.Actor.$gtype),
         'title': GObject.ParamSpec.string(
-            'title', null, null,
+            'title', 'title', 'title',
             GObject.ParamFlags.READWRITE |
             GObject.ParamFlags.CONSTRUCT,
             null),
         'description': GObject.ParamSpec.string(
-            'description', null, null,
+            'description', 'description', 'description',
             GObject.ParamFlags.READWRITE |
             GObject.ParamFlags.CONSTRUCT,
             null),
@@ -323,8 +312,8 @@ export const ListSectionItem = GObject.registerClass({
     _init(params) {
         this._iconActorBin = new St.Bin();
 
-        const textLayout = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+        let textLayout = new St.BoxLayout({
+            vertical: true,
             y_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });

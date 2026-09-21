@@ -11,7 +11,7 @@ if win32_enabled
   # compile_resources doesn't like to consume targets with multiple outputs,
   # and the xxx.exe.manifest and xxx.rc are tied together
   uac_rc = custom_target(
-    '@0@-rc'.format(uac_exe_name),
+    'tools/@0@.rc'.format(uac_exe_name),
     output: ['@0@.rc'.format(uac_exe_name)],
     command: [gen_uac_manifest,
               '-p=@0@'.format(uac_exe_pkg),
@@ -41,36 +41,15 @@ gtk_tools = [
                          'gtk-builder-tool-preview.c',
                          'fake-scope.c'], [libgtk_dep] ],
   ['gtk4-rendernode-tool', ['gtk-rendernode-tool.c',
-                        'gtk-rendernode-filter-background-blur.c',
-                        'gtk-rendernode-filter-copypaste.c',
-                        'gtk-rendernode-filter-cut.c',
-                        'gtk-rendernode-filter-diff.c',
-                        'gtk-rendernode-filter-opaque.c',
-                        'gtk-rendernode-filter-simplify.c',
-                        'gtk-rendernode-filter-strip.c',
-                        'gtk-rendernode-filter-texture.c',
                         'gtk-rendernode-tool-benchmark.c',
                         'gtk-rendernode-tool-compare.c',
-                        'gtk-rendernode-tool-convert.c',
-                        'gtk-rendernode-tool-extract.c',
-                        'gtk-rendernode-tool-filter.c',
                         'gtk-rendernode-tool-info.c',
-                        'gtk-rendernode-tool-match.c',
                         'gtk-rendernode-tool-render.c',
                         'gtk-rendernode-tool-show.c',
-                       'gtk-tool-utils.c',
-                       'overlayconfig.c',
-                        '../testsuite/reftests/reftest-compare.c'], [libgtk_private_dep] ],
-  ['gtk4-image-tool', ['gtk-image-tool.c',
-                       'gtk-image-tool-info.c',
-                       'gtk-image-tool-compare.c',
-                       'gtk-image-tool-convert.c',
-                       'gtk-image-tool-play.c',
-                       'gtk-image-tool-relabel.c',
-                       'gtk-image-tool-show.c',
-                       'gtk-tool-utils.c',
+                        'gtk-rendernode-tool-utils.c',
                         '../testsuite/reftests/reftest-compare.c'], [libgtk_dep] ],
   ['gtk4-update-icon-cache', ['updateiconcache.c', '../gtk/gtkiconcachevalidator.c' ] + extra_update_icon_cache_objs, [ libgtk_dep ] ],
+  ['gtk4-encode-symbolic-svg', ['encodesymbolic.c'], [ libgtk_static_dep ] ],
 ]
 
 if os_unix
@@ -103,15 +82,3 @@ install_data([
   ],
   install_dir: gtk_datadir / 'gettext/its',
 )
-
-if bash.found()
-  install_data([
-      'completions/gtk4-builder-tool',
-      'completions/gtk4-image-tool',
-      'completions/gtk4-path-tool',
-      'completions/gtk4-rendernode-tool',
-    ],
-    install_dir: bash_comp_inst_dir,
-    install_tag: 'bin',
-  )
-endif

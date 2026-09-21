@@ -2,70 +2,41 @@
 # -*- mode: Python; indent-tabs-mode: nil; -*-
 
 import datetime
+from gi.repository import GLib, GObject, Gio
 try:
     import json
 except ImportError:
     import simplejson as json
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
-from configparser import ConfigParser
-from pathlib import Path
-
-class GSettingsConfig(ConfigParser):
-    def add(self, path, key, value):
-        if not path in self:
-            self[path] = {}
-        self[path][key] = value
-
-    def save(self, xdg_home):
-        dir = f'{xdg_home}/config/glib-2.0/settings'
-        Path(dir).mkdir(parents=True)
-        with open(f'{dir}/keyfile', 'w') as keyfile:
-            self.write(keyfile)
-
-def install_extension(extension, env):
-    self_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    args = []
-    args.append(os.path.join(self_dir, 'gnome-extensions'))
-    args.append('install')
-    args.append('--print-uuid')
-    args.append(extension)
-
-    proc = subprocess.run(args, env=env, check=True, capture_output=True, text=True)
-    return proc.stdout.strip()
+import base64
+from configparser import RawConfigParser
+import hashlib
+import hmac
+from http import client
+from urllib import parse
 
 def show_version(option, opt_str, value, parser):
-    print("GNOME Shell Test Tool @VERSION@")
+    print("GNOME Shell Performance Test @VERSION@")
     sys.exit()
 
-def start_shell(xdg_home, wrap=None, perf_output=None):
+def start_shell(wrap=None, perf_output=None):
     # Set up environment
     env = dict(os.environ)
 
     filters = ['Gnome-shell-perf-helper'] + options.extra_filter
     env['MUTTER_WM_CLASS_FILTER'] = ','.join(filters)
 
-    env['XDG_CACHE_HOME'] = f'{xdg_home}/cache'
-    env['XDG_CONFIG_HOME'] = f'{xdg_home}/config'
-    env['XDG_DATA_HOME'] = f'{xdg_home}/data'
-
     if perf_output is not None:
         env['SHELL_PERF_OUTPUT'] = perf_output
-
-    env['GSETTINGS_BACKEND'] = 'keyfile'
-
-    gsettings_config = GSettingsConfig()
 
     # A fixed background image
     if os.getenv('SHELL_BACKGROUND_IMAGE') is None:
       env['SHELL_BACKGROUND_IMAGE'] = '@pkgdatadir@/perf-background.xml'
-
-    if options.extension:
-        uuid = install_extension(options.extension, env=env)
-        gsettings_config.add('org/gnome/shell', 'enabled-extensions', f'["{uuid}"]')
 
     self_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
     args = []
@@ -76,14 +47,15 @@ def start_shell(xdg_home, wrap=None, perf_output=None):
     args.append('--automation-script')
     args.append(options.script)
 
-    if options.disable_animations:
-        gsettings_config.add('org/gnome/desktop/interface', 'enable-animations', 'false')
-    else:
-        args.append('--force-animations')
+    args.append('--force-animations')
 
-    if options.devkit or options.headless:
-        if options.devkit:
-            args.append('--devkit')
+    if options.replace:
+        args.append('--replace')
+
+    if options.wayland or options.nested or options.headless:
+        args.append('--wayland')
+        if options.nested:
+            args.append('--nested')
         elif options.headless:
             args.append('--headless')
             if not options.hotplug:
@@ -93,22 +65,109 @@ def start_shell(xdg_home, wrap=None, perf_output=None):
             args.append('--display-server')
         args.append('--wayland-display')
         args.append('gnome-shell-test-display')
-
-    gsettings_config.save(xdg_home)
+    elif options.x11:
+        args.append('--x11')
 
     print("args: {}".format(args))
     return subprocess.Popen(args, env=env)
 
 def run_shell(wrap=None, perf_output=None):
-    with tempfile.TemporaryDirectory() as xdg_home:
-        # we do no additional supervision of gnome-shell,
-        # beyond that of wait
-        # in particular, we don't kill the shell upon
-        # receiving a KeyboardInterrupt, as we expect to be
-        # in the same process group
-        shell = start_shell(xdg_home=xdg_home, wrap=wrap, perf_output=perf_output)
-        shell.wait()
+    # we do no additional supervision of gnome-shell,
+    # beyond that of wait
+    # in particular, we don't kill the shell upon
+    # receiving a KeyboardInterrupt, as we expect to be
+    # in the same process group
+    shell = start_shell(wrap=wrap, perf_output=perf_output)
+    shell.wait()
     return shell.returncode == 0
+
+def restore_shell():
+    pid = os.fork()
+    if (pid == 0):
+        os.execlp("gnome-shell", "gnome-shell", "--replace")
+    else:
+        sys.exit(0)
+
+def upload_performance_report(report_text):
+    try:
+        config_home = os.environ['XDG_CONFIG_HOME']
+    except KeyError:
+        config_home = None
+
+    if not config_home:
+        config_home = os.path.expanduser("~/.config")
+
+    config_file = os.path.join(config_home, "gnome-shell/perf.ini")
+
+    try:
+        config = RawConfigParser()
+        f = open(config_file)
+        config.readfp(f)
+        f.close()
+
+        base_url = config.get('upload', 'url')
+        system_name = config.get('upload', 'name')
+        secret_key = config.get('upload', 'key')
+    except Exception as e:
+        print("Can't read upload configuration from %s: %s" % (config_file, str(e)))
+        sys.exit(1)
+
+    # Determine host, port and upload URL from provided data, we're
+    # a bit extra-careful about normalization since the URL is part
+    # of the signature.
+
+    split = parse.urlsplit(base_url)
+    scheme = split[0].lower()
+    netloc = split[1]
+    base_path = split[2]
+
+    m = re.match(r'^(.*?)(?::(\d+))?$', netloc)
+    if m.group(2):
+        host, port = m.group(1), int(m.group(2))
+    else:
+        host, port = m.group(1), None
+
+    if scheme != "http":
+        print("'%s' is not a HTTP URL" % base_url)
+        sys.exit(1)
+
+    if port is None:
+        port = 80
+
+    if base_path.endswith('/'):
+        base_path = base_path[:-1]
+
+    if port == 80:
+        normalized_base = "%s://%s%s" % (scheme, host, base_path)
+    else:
+        normalized_base = "%s://%s:%d%s" % (scheme, host, port, base_path)
+
+    upload_url = normalized_base + '/system/%s/upload' % system_name
+    upload_path = parse.urlsplit(upload_url)[2] # path portion
+
+    # Create signature based on upload URL and the report data
+
+    signature_data = 'POST&' + upload_url + "&&"
+    h = hmac.new(secret_key, digestmod=hashlib.sha1)
+    h.update(signature_data)
+    h.update(report_text)
+    signature = parse.quote(base64.b64encode(h.digest()), "~")
+
+    headers = {
+        'User-Agent': 'gnome-shell-performance-tool/@VERSION@',
+        'Content-Type': 'application/json',
+        'X-Shell-Signature': 'HMAC-SHA1 ' + signature
+    };
+
+    connection = client.HTTPConnection(host, port)
+    connection.request('POST', upload_path, report_text, headers)
+    response = connection.getresponse()
+
+    if response.status == 200:
+        print("Performance report upload succeeded")
+    else:
+        print("Performance report upload failed with status %d" % response.status)
+        print(response.read())
 
 def gnome_hwtest_log(*args):
     command = ['gnome-hwtest-log', '-t', 'gnome-shell-perf-tool']
@@ -174,7 +233,7 @@ def run_performance_test(wrap=None):
 
         logs.append(output['log'])
 
-    if options.perf_output:
+    if options.perf_output or options.perf_upload:
         # Write a complete report, formatted as JSON. The Javascript/C code that
         # generates the individual reports we are summarizing here is very careful
         # to format them nicely, but we just dump out a compressed no-whitespace
@@ -205,6 +264,9 @@ def run_performance_test(wrap=None):
             f = open(options.perf_output, 'w')
             json.dump(report, f)
             f.close()
+
+        if options.perf_upload:
+            upload_performance_report(json.dumps(report))
     elif options.hwtest:
         # Log to systemd journal
         for metric in sorted(metric_summaries.keys()):
@@ -236,6 +298,8 @@ parser.add_argument("--perf-warmup", action="store_true",
                     help="Run a dry run before performance tests")
 parser.add_argument("--perf-output", metavar="OUTPUT_FILE",
                     help="Output file to write performance report")
+parser.add_argument("--perf-upload", action="store_true",
+                    help="Upload performance report to server")
 parser.add_argument("--extra-filter", action="append",
                     help="add an extra window class that should be allowed")
 parser.add_argument("--hwtest", action="store_true",
@@ -245,17 +309,18 @@ parser.add_argument("--version", action="version",
 
 parser.add_argument("--wrap")
 
-parser.add_argument("--devkit", action="store_true",
-                    help="Run development kit")
+parser.add_argument("-r", "--replace", action="store_true",
+                    help="Replace the running window manager")
+parser.add_argument("-w", "--wayland", action="store_true",
+                    help="Run as a Wayland compositor")
+parser.add_argument("-n", "--nested", action="store_true",
+                    help="Run as a Wayland nested compositor")
+parser.add_argument("-x", "--x11", action="store_true",
+                    help="Run as an X11 compositor")
 parser.add_argument("--headless", action="store_true",
                     help="Run as a headless Wayland compositor")
 parser.add_argument("--hotplug", action="store_true",
                     help="Start without a virtual monitor attached")
-
-parser.add_argument("--disable-animations", action="store_true",
-                    help="Run with animations disabled")
-parser.add_argument("--extension",
-                    help="Run with extension installed and enabled")
 
 options = parser.parse_args()
 
@@ -266,5 +331,8 @@ if options.script == 'hwtest':
     options.extra_filter.append('Gedit')
 
 normal_exit = run_performance_test(wrap=options.wrap)
-if not normal_exit:
+if normal_exit:
+    if not options.hwtest and options.replace:
+        restore_shell()
+else:
     sys.exit(1)

@@ -118,23 +118,23 @@
  *
  * # CSS nodes
  *
- * ```
+ * |[<!-- language="plain" -->
  * modelbutton
  * ├── <child>
  * ╰── check
- * ```
+ * ]|
  *
- * ```
+ * |[<!-- language="plain" -->
  * modelbutton
  * ├── <child>
  * ╰── radio
- * ```
+ * ]|
  *
- * ```
+ * |[<!-- language="plain" -->
  * modelbutton
  * ├── <child>
  * ╰── arrow
- * ```
+ * ]|
  *
  * GtkModelButton has a main CSS node with name modelbutton, and a subnode,
  * which will have the name check, radio or arrow, depending on the role
@@ -143,11 +143,11 @@
  * The subnode is positioned before or after the content nodes and gets the
  * .left or .right style class, depending on where it is located.
  *
- * ```
+ * |[<!-- language="plain" -->
  * button.model
  * ├── <child>
  * ╰── check
- * ```
+ * ]|
  *
  * Iconic model buttons (see GtkModelButton:iconic) change the name of
  * their main node to button and add a .model style class to it. The indicator
@@ -230,10 +230,11 @@ enum
   PROP_ICONIC,
   PROP_ACCEL,
   PROP_INDICATOR_SIZE_GROUP,
-  /* GtkActionable */
+
+  /* actionable properties */
   PROP_ACTION_NAME,
   PROP_ACTION_TARGET,
-  LAST_PROP
+  LAST_PROP = PROP_ACTION_NAME
 };
 
 enum
@@ -575,11 +576,13 @@ update_accessible_properties (GtkModelButton *button)
                                   GTK_ACCESSIBLE_STATE_EXPANDED);
     }
 
-  gtk_accessible_reset_relation (GTK_ACCESSIBLE (button), GTK_ACCESSIBLE_RELATION_CONTROLS);
   if (button->popover)
     gtk_accessible_update_relation (GTK_ACCESSIBLE (button),
                                     GTK_ACCESSIBLE_RELATION_CONTROLS, button->popover, NULL,
                                     -1);
+  else
+    gtk_accessible_reset_relation (GTK_ACCESSIBLE (button),
+                                   GTK_ACCESSIBLE_RELATION_CONTROLS);
 
   if (button->role == GTK_BUTTON_ROLE_CHECK ||
       button->role == GTK_BUTTON_ROLE_RADIO)
@@ -590,23 +593,16 @@ update_accessible_properties (GtkModelButton *button)
     gtk_accessible_reset_state (GTK_ACCESSIBLE (button),
                                 GTK_ACCESSIBLE_STATE_CHECKED);
 
-  gtk_accessible_reset_relation (GTK_ACCESSIBLE (button), GTK_ACCESSIBLE_RELATION_LABELLED_BY);
   gtk_accessible_update_relation (GTK_ACCESSIBLE (button),
                                   GTK_ACCESSIBLE_RELATION_LABELLED_BY, button->label, NULL,
                                   -1);
 
-  if (button->accel)
+  if (button->accel_label)
     {
-      guint key;
-      GdkModifierType mods;
-      char *text;
-
-      gtk_accelerator_parse (button->accel, &key, &mods);
-      text = gtk_accelerator_get_accessible_label (key, mods);
+      const char *text = gtk_label_get_label (GTK_LABEL (button->accel_label));
       gtk_accessible_update_property (GTK_ACCESSIBLE (button),
                                       GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS, text,
                                       -1);
-      g_free (text);
     }
   else
     gtk_accessible_reset_property (GTK_ACCESSIBLE (button),
@@ -717,7 +713,6 @@ gtk_model_button_set_text (GtkModelButton *button,
   update_visibility (button);
   update_tooltip (button);
 
-  gtk_accessible_reset_relation (GTK_ACCESSIBLE (button), GTK_ACCESSIBLE_RELATION_LABELLED_BY);
   gtk_accessible_update_relation (GTK_ACCESSIBLE (button),
                                   GTK_ACCESSIBLE_RELATION_LABELLED_BY, button->label, NULL,
                                   -1);
@@ -1072,29 +1067,10 @@ switch_menu (GtkModelButton *button)
   stack = gtk_widget_get_ancestor (GTK_WIDGET (button), GTK_TYPE_STACK);
   if (stack != NULL)
     {
-      if (button->role == GTK_BUTTON_ROLE_NORMAL)
-        {
-          GtkWidget *title_button = gtk_widget_get_first_child (gtk_stack_get_child_by_name (GTK_STACK (stack), button->menu_name));
-          gtk_accessible_update_state (GTK_ACCESSIBLE (button),
-                                       GTK_ACCESSIBLE_STATE_EXPANDED, TRUE,
-                                       -1);
-          gtk_accessible_update_state (GTK_ACCESSIBLE (title_button),
-                                       GTK_ACCESSIBLE_STATE_EXPANDED, TRUE,
-                                       -1);
-          g_object_set_data (G_OBJECT (title_button), "-gtk-model-button-parent", button);
-        }
-      else if (button->role == GTK_BUTTON_ROLE_TITLE)
-        {
-          GtkWidget *parent_button = g_object_get_data (G_OBJECT (button), "-gtk-model-button-parent");
-          gtk_accessible_update_state (GTK_ACCESSIBLE (parent_button),
-                                        GTK_ACCESSIBLE_STATE_EXPANDED, FALSE,
-                                        -1);
-          gtk_accessible_update_state (GTK_ACCESSIBLE (button),
-                                        GTK_ACCESSIBLE_STATE_EXPANDED, FALSE,
-                                        -1);
-          g_object_set_data (G_OBJECT (button), "-gtk-model-button-parent", NULL);
-        }
       gtk_stack_set_visible_child_name (GTK_STACK (stack), button->menu_name);
+      gtk_accessible_update_state (GTK_ACCESSIBLE (button),
+                                   GTK_ACCESSIBLE_STATE_EXPANDED, TRUE,
+                                   -1);
     }
 }
 
@@ -1253,7 +1229,7 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
     g_param_spec_enum ("role", NULL, NULL,
                        GTK_TYPE_BUTTON_ROLE,
                        GTK_BUTTON_ROLE_NORMAL,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:icon:
@@ -1264,7 +1240,7 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_ICON] =
     g_param_spec_object ("icon", NULL, NULL,
                          G_TYPE_ICON,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:text:
@@ -1274,7 +1250,7 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_TEXT] =
     g_param_spec_string ("text", NULL, NULL,
                          "",
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:use-markup:
@@ -1286,7 +1262,7 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_USE_MARKUP] =
     g_param_spec_boolean ("use-markup", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:active:
@@ -1297,7 +1273,7 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_ACTIVE] =
     g_param_spec_boolean ("active", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:menu-name:
@@ -1307,12 +1283,12 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_MENU_NAME] =
     g_param_spec_string ("menu-name", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
  properties[PROP_POPOVER] =
    g_param_spec_object ("popover", NULL, NULL,
                         GTK_TYPE_POPOVER,
-                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:iconic:
@@ -1324,7 +1300,7 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_ICONIC] =
     g_param_spec_boolean ("iconic", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkModelButton:indicator-size-group:
@@ -1336,17 +1312,15 @@ gtk_model_button_class_init (GtkModelButtonClass *class)
   properties[PROP_INDICATOR_SIZE_GROUP] =
     g_param_spec_object ("indicator-size-group", NULL, NULL,
                           GTK_TYPE_SIZE_GROUP,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   properties[PROP_ACCEL] =
     g_param_spec_string ("accel", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-  properties[PROP_ACTION_NAME] = g_param_spec_override ("action-name",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-name"));
-  properties[PROP_ACTION_TARGET] = g_param_spec_override ("action-target",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-target"));
-
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (object_class, LAST_PROP, properties);
+
+  g_object_class_override_property (object_class, PROP_ACTION_NAME, "action-name");
+  g_object_class_override_property (object_class, PROP_ACTION_TARGET, "action-target");
 
   signals[SIGNAL_CLICKED] = g_signal_new (I_("clicked"),
                                           G_OBJECT_CLASS_TYPE (object_class),
@@ -1409,10 +1383,6 @@ open_submenu (gpointer data)
           gtk_popover_menu_set_open_submenu (GTK_POPOVER_MENU (popover), submenu);
           gtk_popover_menu_set_parent_menu (GTK_POPOVER_MENU (submenu), GTK_WIDGET (popover));
         }
-      else
-        {
-          gtk_popover_menu_close_submenus (GTK_POPOVER_MENU (popover));
-        }
     }
 
   button->open_timeout = 0;
@@ -1439,7 +1409,11 @@ start_open (GtkModelButton *button)
 static void
 stop_open (GtkModelButton *button)
 {
-  g_clear_handle_id (&button->open_timeout, g_source_remove);
+  if (button->open_timeout)
+    {
+      g_source_remove (button->open_timeout);
+      button->open_timeout = 0;
+    }
 }
 
 static void

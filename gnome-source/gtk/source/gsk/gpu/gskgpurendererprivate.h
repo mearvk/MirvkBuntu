@@ -23,7 +23,6 @@ struct _GskGpuRendererClass
   GskRendererClass parent_class;
 
   GType frame_type;
-  GType profile_frame_type;
   GskGpuOptimizations optimizations; /* subclasses cannot override this */
 
   GskGpuDevice *        (* get_device)                                  (GdkDisplay             *display,
@@ -35,14 +34,15 @@ struct _GskGpuRendererClass
                                                                          GError                **error);
 
   void                  (* make_current)                                (GskGpuRenderer         *self);
-  gpointer              (* save_current)                                (GskGpuRenderer         *self);
-  void                  (* restore_current)                             (GskGpuRenderer         *self,
-                                                                         gpointer                current);
   GskGpuImage *         (* get_backbuffer)                              (GskGpuRenderer         *self);
+
+  double                (* get_scale)                                   (GskGpuRenderer         *self);
+  GdkDmabufFormats *    (* get_dmabuf_formats)                          (GskGpuRenderer         *self);
 };
 
 GdkDrawContext *        gsk_gpu_renderer_get_context                    (GskGpuRenderer         *self);
 GskGpuDevice *          gsk_gpu_renderer_get_device                     (GskGpuRenderer         *self);
+double                  gsk_gpu_renderer_get_scale                      (GskGpuRenderer         *self);
 
 G_END_DECLS
 

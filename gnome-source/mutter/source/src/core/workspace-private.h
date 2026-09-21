@@ -85,8 +85,6 @@ void meta_workspace_get_work_area_for_logical_monitor (MetaWorkspace      *works
                                                        MetaLogicalMonitor *logical_monitor,
                                                        MtkRectangle       *area);
 
-void meta_workspace_ensure_work_areas_validated (MetaWorkspace *workspace);
-
 void meta_workspace_invalidate_work_area (MetaWorkspace *workspace);
 
 GList* meta_workspace_get_onscreen_region       (MetaWorkspace *workspace);
@@ -105,6 +103,3 @@ MetaWindow * meta_workspace_get_default_focus_window_at_point (MetaWorkspace *wo
 GList * meta_workspace_get_default_focus_candidates (MetaWorkspace *workspace);
 
 void meta_workspace_index_changed (MetaWorkspace *workspace);
-
-META_EXPORT_TEST
-GSList * meta_workspace_get_builtin_struts (MetaWorkspace *workspace);

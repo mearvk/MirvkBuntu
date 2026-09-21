@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -49,7 +51,7 @@ class WelcomeDialog extends ModalDialog.ModalDialog {
 
     _buildLayout() {
         const title = _('Welcome to %s').format(this._getOSName());
-        const description = _('If you want to learn your way around, check out the tour');
+        const description = _('If you want to learn your way around, check out the tour.');
         const content = new Dialog.MessageDialogContent({title, description});
 
         const icon = new St.Widget({style_class: 'welcome-dialog-image'});

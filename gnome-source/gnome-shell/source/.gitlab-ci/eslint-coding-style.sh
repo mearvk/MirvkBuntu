@@ -6,36 +6,38 @@ trap "rm -rf $OUTDIR" EXIT
 
 # Turn ```javascript``` code snippets in the
 # style guide into .js files in $OUTDIR
-cat <<'EOF' | python3 - docs/js-coding-style.md $OUTDIR
-import sys
-import re
+awk --assign dir=$OUTDIR -- '
+  BEGIN {
+    do_print = 0;
+    cur = 0;
+  }
 
-def extract_js_snippets(input_file, output_dir):
-    with open(input_file, 'r') as file:
-        content = file.read()
+  # end of code snippet
+  /```$/ {
+    do_print = 0;
+    cur++;
+  }
 
-    # Find all JavaScript code blocks using regex
-    js_blocks = re.findall(r'```javascript\n(.*?)\n?```', content, flags=re.DOTALL)
+  do_print {
+    # remove one level of indent
+    sub("    ","")
 
-    for i, (match) in enumerate(js_blocks):
-        js_code = match
+    # the following are class snippets, turn them
+    # into functions to not confuse eslint
+    sub("moveActor","function moveActor")
+    sub("desaturateActor","function desaturateActor")
 
-        # Remove one level of indent
-        js_code = re.sub(r'^ {4}', '', js_code, flags=re.MULTILINE)
+    # finally, append to the currently generated .js file
+    print >> dir "/" cur ".js";
+  }
 
-        # The following are class snippets, turn them
-        # into functions to not confuse eslint
-        js_code = re.sub(r'^moveActor', 'function moveActor', js_code)
-        js_code = re.sub(r'^desaturateActor', 'function desaturateActor', js_code)
+  # start of code snippet
+  /```javascript$/ {
+    do_print = 1;
+  }
+' docs/js-coding-style.md
 
-        # Finally, create a .js file in the output directory
-        output_filename = f'{output_dir}/{i}.js'
-        with open(output_filename, 'w') as out_file:
-            out_file.write(f'{js_code}\n')
-
-input_file, output_dir = sys.argv[1:]
-extract_js_snippets(input_file, output_dir)
-EOF
-
-echo Checking coding style of coding style docs
-tools/run-eslint.sh "$@" $OUTDIR
+eslint \
+  --rule 'no-undef: off' \
+  --rule 'no-unused-vars: off' \
+  --rule 'no-invalid-this: off' $OUTDIR/*.js

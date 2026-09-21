@@ -2,8 +2,6 @@
 
 #include "gskroundedrect.h"
 
-#include "gdk/gdkdihedralprivate.h"
-
 #include <cairo.h>
 
 G_BEGIN_DECLS
@@ -36,15 +34,12 @@ G_STATIC_ASSERT (OPPOSITE_CORNER_Y (GSK_CORNER_BOTTOM_RIGHT) == GSK_CORNER_TOP_R
                      }}
 
 
-void                     gsk_rounded_rect_scale_affine          (GskRoundedRect           *dest,
-                                                                 const GskRoundedRect     *src,
-                                                                 float                     scale_x,
-                                                                 float                     scale_y,
-                                                                 float                     dx,
-                                                                 float                     dy);
-void                     gsk_rounded_rect_dihedral              (GskRoundedRect           *dest,
-                                                                 const GskRoundedRect     *src,
-                                                                 GdkDihedral               dihedral);
+void                     gsk_rounded_rect_scale_affine          (GskRoundedRect       *dest,
+                                                                 const GskRoundedRect *src,
+                                                                 float                 scale_x,
+                                                                 float                 scale_y,
+                                                                 float                 dx,
+                                                                 float                 dy);
 
 gboolean                 gsk_rounded_rect_is_circular           (const GskRoundedRect     *self) G_GNUC_PURE;
 
@@ -58,9 +53,9 @@ gboolean                 gsk_rounded_rect_equal                 (gconstpointer  
                                                                  gconstpointer             rect2) G_GNUC_PURE;
 char *                   gsk_rounded_rect_to_string             (const GskRoundedRect     *self) G_GNUC_MALLOC;
 
-gboolean                 gsk_rounded_rect_get_largest_cover     (const GskRoundedRect     *self,
+void                     gsk_rounded_rect_get_largest_cover     (const GskRoundedRect     *self,
                                                                  const graphene_rect_t    *rect,
-                                                                 graphene_rect_t          *result) G_GNUC_WARN_UNUSED_RESULT;
+                                                                 graphene_rect_t          *result);
 
 typedef enum {
   GSK_INTERSECTION_EMPTY,
@@ -75,25 +70,6 @@ GskRoundedRectIntersection gsk_rounded_rect_intersection          (const GskRoun
                                                                    const GskRoundedRect     *b,
                                                                    GskRoundedRect           *result);
 
-gboolean gsk_rounded_rect_corner_box_contains_point (const GskRoundedRect   *self,
-                                                     GskCorner               corner,
-                                                     const graphene_point_t *point);
-
-static inline void
-gsk_rounded_rect_init_uniform (GskRoundedRect *rect,
-                               float x, float y,
-                               float w, float h,
-                               float r)
-{
-  rect->bounds.origin.x = x;
-  rect->bounds.origin.y = y;
-  rect->bounds.size.width = w;
-  rect->bounds.size.height = h;
-  rect->corner[0].width = rect->corner[0].height = r;
-  rect->corner[1].width = rect->corner[1].height = r;
-  rect->corner[2].width = rect->corner[2].height = r;
-  rect->corner[3].width = rect->corner[3].height = r;
-}
 
 G_END_DECLS
 

@@ -42,7 +42,5 @@ typedef struct _GdkWin32DragClass GdkWin32DragClass;
 GDK_AVAILABLE_IN_ALL
 GType    gdk_win32_drag_get_type (void);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkWin32Drag, g_object_unref)
-
 G_END_DECLS
 

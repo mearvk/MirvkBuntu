@@ -58,11 +58,8 @@ typedef struct _GtkInspectorActionsClass
 
 enum {
   PROP_0,
-  PROP_BUTTON,
-  N_PROPS
+  PROP_BUTTON
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void gtk_inspector_actions_observer_iface_init (GtkActionObserverInterface *iface);
 
@@ -466,7 +463,7 @@ gtk_inspector_actions_observer_iface_init (GtkActionObserverInterface *iface)
 }
 
 static void
-gtk_inspector_actions_connect (GtkInspectorActions *sl)
+connect (GtkInspectorActions *sl)
 {
   if (G_IS_ACTION_GROUP (sl->object))
     {
@@ -497,7 +494,7 @@ gtk_inspector_actions_connect (GtkInspectorActions *sl)
 }
 
 static void
-gtk_inspector_actions_disconnect (GtkInspectorActions *sl)
+disconnect (GtkInspectorActions *sl)
 {
   if (G_IS_ACTION_GROUP (sl->object))
     {
@@ -536,7 +533,7 @@ gtk_inspector_actions_set_object (GtkInspectorActions *sl,
   gtk_stack_page_set_visible (page, FALSE);
 
   if (sl->object)
-    gtk_inspector_actions_disconnect (sl);
+    disconnect (sl);
 
   g_set_object (&sl->object, object);
 
@@ -545,7 +542,7 @@ gtk_inspector_actions_set_object (GtkInspectorActions *sl,
   gtk_stack_page_set_visible (page, loaded);
 
   if (sl->object)
-    gtk_inspector_actions_connect (sl);
+    connect (sl);
 }
 
 static void
@@ -601,8 +598,6 @@ constructed (GObject *object)
   GtkSorter *sorter;
   GListModel *model;
 
-  G_OBJECT_CLASS (gtk_inspector_actions_parent_class)->constructed (object);
-
   g_signal_connect_swapped (sl->button, "clicked",
                             G_CALLBACK (refresh_all), sl);
 
@@ -628,7 +623,7 @@ dispose (GObject *object)
   GtkInspectorActions *sl = GTK_INSPECTOR_ACTIONS (object);
 
   if (sl->object)
-    gtk_inspector_actions_disconnect (sl);
+    disconnect (sl);
 
   g_clear_object (&sl->sorted);
   g_clear_object (&sl->actions);
@@ -650,10 +645,9 @@ gtk_inspector_actions_class_init (GtkInspectorActionsClass *klass)
   object_class->set_property = set_property;
   object_class->constructed = constructed;
 
-  props[PROP_BUTTON] = g_param_spec_object ("button", NULL, NULL,
-                                            GTK_TYPE_WIDGET, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_BUTTON,
+      g_param_spec_object ("button", NULL, NULL,
+                           GTK_TYPE_WIDGET, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gtk/libgtk/inspector/actions.ui");
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorActions, swin);

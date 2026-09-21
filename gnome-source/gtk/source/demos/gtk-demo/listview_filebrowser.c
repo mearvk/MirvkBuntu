@@ -115,7 +115,7 @@ file_browser_view_finalize (GObject *object)
   g_free (self->icon_name);
   g_free (self->title);
 
-  G_OBJECT_CLASS (file_browser_view_parent_class)->finalize (object);
+  G_OBJECT_CLASS (file_browser_view_parent_class)->dispose (object);
 }
 
 static void
@@ -129,25 +129,29 @@ file_browser_view_class_init (FileBrowserViewClass *klass)
 
   properties[PROP_FACTORY] =
     g_param_spec_object ("factory",
-                         NULL, NULL,
+                         "factory",
+                         "factory to use in the main view",
                          GTK_TYPE_LIST_ITEM_FACTORY,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
   properties[PROP_ICON_NAME] =
     g_param_spec_string ("icon-name",
-                         NULL, NULL,
+                         "icon name",
+                         "icon to display for selecting this view",
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
   properties[PROP_TITLE] =
     g_param_spec_string ("title",
-                         NULL, NULL,
+                         "title",
+                         "title to display for selecting this view",
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
   properties[PROP_ORIENTATION] =
     g_param_spec_enum ("orientation",
-                       NULL, NULL,
+                       "orientation",
+                       "orientation of the view",
                        GTK_TYPE_ORIENTATION,
                        GTK_ORIENTATION_VERTICAL,
-                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -224,8 +228,7 @@ filebrowser_view_activated_cb (GtkGridView      *view,
   GFileInfo *info;
 
   info = g_list_model_get_item (G_LIST_MODEL (gtk_grid_view_get_model (view)), pos);
-  if (g_file_info_has_attribute (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) &&
-      g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
+  if (g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
     gtk_directory_list_set_file (list, G_FILE (g_file_info_get_attribute_object (info, "standard::file")));
 
   g_object_unref (info);
@@ -239,7 +242,6 @@ do_listview_filebrowser (GtkWidget *do_widget)
       GtkWidget *view;
       GtkBuilder *builder;
       GtkDirectoryList *dirlist;
-      GObject *spinner;
       GFile *file;
       char *cwd;
       GtkCssProvider *provider;
@@ -264,10 +266,6 @@ do_listview_filebrowser (GtkWidget *do_widget)
       dirlist = GTK_DIRECTORY_LIST (gtk_builder_get_object (builder, "dirlist"));
       gtk_directory_list_set_file (dirlist, file);
       g_object_unref (file);
-
-      /* Bind the loading spinner */
-      spinner = gtk_builder_get_object (builder, "loading-spinner");
-      g_object_bind_property (dirlist, "loading", spinner, "spinning", G_BINDING_DEFAULT);
 
       /* grab focus in the view */
       view = GTK_WIDGET (gtk_builder_get_object (builder, "view"));

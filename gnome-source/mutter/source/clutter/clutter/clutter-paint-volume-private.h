@@ -59,6 +59,11 @@ struct _ClutterPaintVolume
    */
   graphene_point3d_t vertices[8];
 
+  /* As an optimization for internally managed PaintVolumes we allow
+   * initializing ClutterPaintVolume variables allocated on the stack
+   * so we can avoid hammering the memory allocator. */
+  guint is_static:1;
+
   /* A newly initialized PaintVolume is considered empty as it is
    * degenerate on all three axis.
    *
@@ -96,10 +101,12 @@ struct _ClutterPaintVolume
    */
 };
 
-void clutter_paint_volume_init_from_actor (ClutterPaintVolume *pv,
-                                           ClutterActor       *actor);
-void clutter_paint_volume_init_from_paint_volume (ClutterPaintVolume       *dst_pv,
-                                                  const ClutterPaintVolume *src_pv);
+void                _clutter_paint_volume_init_static          (ClutterPaintVolume *pv,
+                                                                ClutterActor *actor);
+void                _clutter_paint_volume_copy_static          (const ClutterPaintVolume *src_pv,
+                                                                ClutterPaintVolume *dst_pv);
+void                _clutter_paint_volume_set_from_volume      (ClutterPaintVolume *pv,
+                                                                const ClutterPaintVolume *src);
 
 void                _clutter_paint_volume_complete             (ClutterPaintVolume *pv);
 void                _clutter_paint_volume_transform            (ClutterPaintVolume      *pv,

@@ -28,13 +28,13 @@
 #include "gtkprivate.h"
 #include "gdk/gdksurfaceprivate.h"
 #include "gdk/gdksubsurfaceprivate.h"
-#include "gdk/gdkrgbaprivate.h"
 #include "gtktypebuiltins.h"
 
 /**
  * GtkGraphicsOffload:
  *
- * Bypasses gsk rendering by passing the content of its child directly to the compositor.
+ * A widget that allows to bypass gsk rendering for its child by passing the content
+ * directly to the compositor.
  *
  * Graphics offload is an optimization to reduce overhead and battery use that is
  * most useful for video content. It only works on some platforms and in certain
@@ -82,7 +82,6 @@ struct _GtkGraphicsOffload
   GdkSubsurface *subsurface;
 
   GtkGraphicsOffloadEnabled enabled;
-  gboolean black_background;
 };
 
 struct _GtkGraphicsOffloadClass
@@ -95,7 +94,6 @@ enum
   PROP_0,
   PROP_CHILD,
   PROP_ENABLED,
-  PROP_BLACK_BACKGROUND,
   LAST_PROP,
 };
 
@@ -137,10 +135,6 @@ gtk_graphics_offload_set_property (GObject      *object,
       gtk_graphics_offload_set_enabled (self, g_value_get_enum (value));
       break;
 
-    case PROP_BLACK_BACKGROUND:
-      gtk_graphics_offload_set_black_background (self, g_value_get_boolean (value));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -162,10 +156,6 @@ gtk_graphics_offload_get_property (GObject    *object,
 
     case PROP_ENABLED:
       g_value_set_enum (value, gtk_graphics_offload_get_enabled (self));
-      break;
-
-    case PROP_BLACK_BACKGROUND:
-      g_value_set_boolean (value, gtk_graphics_offload_get_black_background (self));
       break;
 
     default:
@@ -218,13 +208,6 @@ gtk_graphics_offload_snapshot (GtkWidget   *widget,
   if (self->subsurface)
     gtk_snapshot_push_subsurface (snapshot, self->subsurface);
 
-  if (self->black_background)
-    gtk_snapshot_append_color (snapshot,
-                               &GDK_RGBA_BLACK,
-                               &GRAPHENE_RECT_INIT (0, 0,
-                                                    gtk_widget_get_width (widget),
-                                                    gtk_widget_get_height (widget)));
-
   if (self->child)
     gtk_widget_snapshot_child (widget, self->child, snapshot);
 
@@ -247,7 +230,7 @@ gtk_graphics_offload_class_init (GtkGraphicsOffloadClass *class)
   widget_class->snapshot = gtk_graphics_offload_snapshot;
 
   /**
-   * GtkGraphicsOffload:child:
+   * GtkGraphicsOffload:child: (attributes org.gtk.Property.get=gtk_graphics_offload_get_child org.gtk.Property.set=gtk_graphics_offload_set_child)
    *
    * The child widget.
    *
@@ -255,10 +238,10 @@ gtk_graphics_offload_class_init (GtkGraphicsOffloadClass *class)
    */
   properties[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
                                                 GTK_TYPE_WIDGET,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                                                GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkGraphicsOffload:enabled:
+   * GtkGraphicsOffload:enabled: (attributes org.gtk.Property.get=gtk_graphics_offload_get_enabled org.gtk.Property.set=gtk_graphics_offload_set_enabled)
    *
    * Whether graphics offload is enabled.
    *
@@ -267,18 +250,7 @@ gtk_graphics_offload_class_init (GtkGraphicsOffloadClass *class)
   properties[PROP_ENABLED] = g_param_spec_enum ("enabled", NULL, NULL,
                                                 GTK_TYPE_GRAPHICS_OFFLOAD_ENABLED,
                                                 GTK_GRAPHICS_OFFLOAD_ENABLED,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  /**
-   * GtkGraphicsOffload:black-background:
-   *
-   * Whether to draw a black background.
-   *
-   * Since: 4.16
-   */
-  properties[PROP_BLACK_BACKGROUND] = g_param_spec_boolean ("black-background", NULL, NULL,
-                                                            FALSE,
-                                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                                                GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, properties);
 
@@ -395,62 +367,4 @@ gtk_graphics_offload_get_enabled (GtkGraphicsOffload *self)
   g_return_val_if_fail (GTK_IS_GRAPHICS_OFFLOAD (self), TRUE);
 
   return self->enabled;
-}
-
-/**
- * gtk_graphics_offload_set_black_background:
- * @self: a `GtkGraphicsOffload`
- * @value: whether to draw a black background behind the content
- *
- * Sets whether this GtkGraphicsOffload widget will draw a black
- * background.
- *
- * A main use case for this is **_letterboxing_** where black bars are
- * visible next to the content if the aspect ratio of the content does
- * not match the dimensions of the monitor.
- *
- * Using this property for letterboxing instead of CSS allows compositors
- * to show content with maximum efficiency, using direct scanout to avoid
- * extra copies in the compositor.
- *
- * On Wayland, this is implemented using the
- * [single-pixel buffer](https://wayland.app/protocols/single-pixel-buffer-v1)
- * protocol.
- *
- * Since: 4.16
- */
-void
-gtk_graphics_offload_set_black_background (GtkGraphicsOffload *self,
-                                           gboolean            value)
-{
-  g_return_if_fail (GTK_IS_GRAPHICS_OFFLOAD (self));
-
-  if (self->black_background == value)
-    return;
-
-  self->black_background = value;
-
-  gtk_widget_queue_draw (GTK_WIDGET (self));
-
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_BLACK_BACKGROUND]);
-}
-
-/**
- * gtk_graphics_offload_get_black_background:
- * @self: a `GtkGraphicsOffload`
- *
- * Returns whether the widget draws a black background.
- *
- * See [method@Gtk.GraphicsOffload.set_black_background].
- *
- * Returns: `TRUE` if black background is drawn
- *
- * Since: 4.16
- */
-gboolean
-gtk_graphics_offload_get_black_background (GtkGraphicsOffload *self)
-{
-  g_return_val_if_fail (GTK_IS_GRAPHICS_OFFLOAD (self), FALSE);
-
-  return self->black_background;
 }

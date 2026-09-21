@@ -29,10 +29,7 @@
 enum {
   PROP_0,
   PROP_SUBPROPERTIES,
-  N_PROPS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE (GtkCssShorthandProperty, _gtk_css_shorthand_property, GTK_TYPE_STYLE_PROPERTY)
 
@@ -107,7 +104,7 @@ gtk_css_shorthand_property_parse_value (GtkStyleProperty *property,
       for (i = 0; i < n_props; i++)
         {
           if (data[i] != NULL)
-            gtk_css_value_unref (data[i]);
+            _gtk_css_value_unref (data[i]);
         }
       return NULL;
     }
@@ -134,11 +131,11 @@ _gtk_css_shorthand_property_class_init (GtkCssShorthandPropertyClass *klass)
 
   object_class->set_property = gtk_css_shorthand_property_set_property;
 
-  props[PROP_SUBPROPERTIES] = g_param_spec_boxed ("subproperties", NULL, NULL,
-                                                  G_TYPE_STRV,
-                                                  G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_SUBPROPERTIES,
+                                   g_param_spec_boxed ("subproperties", NULL, NULL,
+                                                       G_TYPE_STRV,
+                                                       G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
 
   property_class->parse_value = gtk_css_shorthand_property_parse_value;
 }
@@ -163,14 +160,7 @@ guint
 _gtk_css_shorthand_property_get_n_subproperties (GtkCssShorthandProperty *shorthand)
 {
   g_return_val_if_fail (GTK_IS_CSS_SHORTHAND_PROPERTY (shorthand), 0);
-
+  
   return shorthand->subproperties->len;
 }
 
-guint
-_gtk_css_shorthand_property_get_id (GtkCssShorthandProperty *shorthand)
-{
-  g_return_val_if_fail (GTK_IS_CSS_SHORTHAND_PROPERTY (shorthand), 0);
-
-  return shorthand->id;
-}

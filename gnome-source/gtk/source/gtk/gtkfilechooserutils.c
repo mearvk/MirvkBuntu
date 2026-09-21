@@ -173,7 +173,7 @@ _gtk_file_chooser_delegate_get_quark (void)
 
   if (G_UNLIKELY (quark == 0))
     quark = g_quark_from_static_string ("gtk-file-chooser-delegate");
-
+  
   return quark;
 }
 
@@ -357,9 +357,9 @@ _gtk_file_chooser_label_for_file (GFile *file)
         end = p;
 
       host = g_strndup (start, end - start);
-      /* Translators: the first string is a path and the second string
-       * is a hostname. Nautilus and the panel contain the same string
-       * to translate.
+      /* Translators: the first string is a path and the second string 
+       * is a hostname. Nautilus and the panel contain the same string 
+       * to translate. 
        */
       label = g_strdup_printf (_("%1$s on %2$s"), path, host);
 

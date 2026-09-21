@@ -25,9 +25,11 @@
 #include <wayland-server.h>
 
 #include "backends/meta-cursor-renderer.h"
+#include "backends/meta-cursor-sprite-xcursor.h"
 #include "wayland/meta-wayland-types.h"
 
 MetaWaylandTabletTool * meta_wayland_tablet_tool_new  (MetaWaylandTabletSeat  *seat,
+                                                       ClutterInputDevice     *device,
                                                        ClutterInputDeviceTool *device_tool);
 void                    meta_wayland_tablet_tool_free (MetaWaylandTabletTool  *tool);
 
@@ -45,13 +47,13 @@ void     meta_wayland_tablet_tool_update              (MetaWaylandTabletTool  *t
 gboolean meta_wayland_tablet_tool_handle_event        (MetaWaylandTabletTool  *tool,
                                                        const ClutterEvent     *event);
 
-gboolean meta_wayland_tablet_tool_get_grab_info (MetaWaylandTabletTool  *tool,
-                                                 MetaWaylandSurface     *surface,
-                                                 uint32_t                serial,
-                                                 gboolean                require_pressed,
-                                                 ClutterSprite         **sprite_out,
-                                                 float                  *x,
-                                                 float                  *y);
+gboolean meta_wayland_tablet_tool_get_grab_info (MetaWaylandTabletTool *tool,
+                                                 MetaWaylandSurface    *surface,
+                                                 uint32_t               serial,
+                                                 gboolean               require_pressed,
+                                                 ClutterInputDevice   **device_out,
+                                                 float                 *x,
+                                                 float                 *y);
 
 gboolean meta_wayland_tablet_tool_can_popup        (MetaWaylandTabletTool *tool,
                                                     uint32_t               serial);
@@ -61,17 +63,5 @@ gboolean meta_wayland_tablet_tool_has_current_tablet (MetaWaylandTabletTool *too
 
 MetaWaylandSurface * meta_wayland_tablet_tool_get_current_surface (MetaWaylandTabletTool *tool);
 
-MetaWaylandSurface * meta_wayland_tablet_tool_get_implicit_grab_surface (MetaWaylandTabletTool *tool);
-
 void meta_wayland_tablet_tool_focus_surface (MetaWaylandTabletTool *tool,
                                              MetaWaylandSurface    *surface);
-
-void meta_wayland_tablet_tool_set_cursor_shape (MetaWaylandTabletTool *tool,
-                                                ClutterCursorType      shape);
-
-gboolean meta_wayland_tablet_tool_check_focus_serial (MetaWaylandTabletTool *tool,
-                                                      struct wl_client      *client,
-                                                      uint32_t               serial);
-
-ClutterCursor * meta_wayland_tablet_tool_get_cursor (MetaWaylandTabletTool *tool,
-                                                     ClutterSprite         *sprite);

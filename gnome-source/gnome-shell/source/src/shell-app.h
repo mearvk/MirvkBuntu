@@ -1,5 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
-#pragma once
+#ifndef __SHELL_APP_H__
+#define __SHELL_APP_H__
 
 #include <clutter/clutter.h>
 #include <gio/gio.h>
@@ -32,8 +33,6 @@ GIcon *shell_app_get_icon (ShellApp *app);
 const char *shell_app_get_name (ShellApp *app);
 const char *shell_app_get_description (ShellApp *app);
 gboolean shell_app_is_window_backed (ShellApp *app);
-
-GActionGroup * shell_app_get_action_group (ShellApp *app);
 
 void shell_app_activate_window (ShellApp *app, MetaWindow *window, guint32 timestamp);
 
@@ -93,3 +92,5 @@ void shell_app_update_app_actions    (ShellApp *app, MetaWindow *window);
 gboolean shell_app_get_busy          (ShellApp *app);
 
 G_END_DECLS
+
+#endif /* __SHELL_APP_H__ */

@@ -74,7 +74,6 @@ surface_container_new (MetaWindowActor *window_actor)
   MetaSurfaceContainerActorWayland *surface_container;
 
   surface_container = g_object_new (META_TYPE_SURFACE_CONTAINER_ACTOR_WAYLAND,
-                                    "accessible-name", "Wayland surface container",
                                     NULL);
   surface_container->window_actor = window_actor;
 
@@ -257,9 +256,9 @@ meta_window_actor_wayland_rebuild_surface_tree (MetaWindowActor *actor)
 
       if (!g_list_find (surface_actors, child_actor))
         {
-          MetaSurfaceActor *child_surface_actor = META_SURFACE_ACTOR (child_actor);
+          MetaSurfaceActor *surface_actor = META_SURFACE_ACTOR (child_actor);
 
-          meta_window_actor_remove_surface_actor (actor, child_surface_actor);
+          meta_window_actor_remove_surface_actor (actor, surface_actor);
           clutter_actor_remove_child (CLUTTER_ACTOR (self->surface_container),
                                       child_actor);
         }
@@ -288,8 +287,8 @@ calculate_background_cull_region (MetaWindowActorWayland *self)
   rect = (MtkRectangle) {
     .x = 0,
     .y = 0,
-    .width = (int) (clutter_actor_get_width (self->background) * geometry_scale),
-    .height = (int) (clutter_actor_get_height (self->background) * geometry_scale),
+    .width = clutter_actor_get_width (self->background) * geometry_scale,
+    .height = clutter_actor_get_height (self->background) * geometry_scale,
   };
 
   return mtk_region_create_rectangle (&rect);
@@ -468,15 +467,13 @@ meta_window_actor_wayland_queue_frame_drawn (MetaWindowActor *actor,
 
 static void
 meta_window_actor_wayland_before_paint (MetaWindowActor  *actor,
-                                        ClutterStageView *stage_view,
-                                        ClutterFrame     *frame)
+                                        ClutterStageView *stage_view)
 {
 }
 
 static void
 meta_window_actor_wayland_after_paint (MetaWindowActor  *actor,
-                                       ClutterStageView *stage_view,
-                                       ClutterFrame     *frame)
+                                       ClutterStageView *stage_view)
 {
 }
 
@@ -550,7 +547,6 @@ maybe_configure_black_background (MetaWindowActorWayland *self,
   ClutterActorIter iter;
   float max_width = 0;
   float max_height = 0;
-  int width, height;
 
   if (!meta_window_wayland_is_acked_fullscreen (META_WINDOW_WAYLAND (window)))
     return FALSE;
@@ -587,9 +583,8 @@ maybe_configure_black_background (MetaWindowActorWayland *self,
 
   *surfaces_width = max_width;
   *surfaces_height = max_height;
-  meta_window_config_get_size (window->config, &width, &height);
-  *background_width = width / geometry_scale;
-  *background_height = height / geometry_scale;
+  *background_width = window->rect.width / geometry_scale;
+  *background_height = window->rect.height / geometry_scale;
   return TRUE;
 }
 
@@ -620,7 +615,7 @@ do_sync_geometry (MetaWindowActorWayland *self)
         {
           self->background = clutter_actor_new ();
           clutter_actor_set_background_color (self->background,
-                                              &COGL_COLOR_INIT (0, 0, 0, 255));
+                                               &CLUTTER_COLOR_INIT (0, 0, 0, 255));
           clutter_actor_set_reactive (self->background, TRUE);
           clutter_actor_insert_child_below (CLUTTER_ACTOR (self),
                                             self->background,

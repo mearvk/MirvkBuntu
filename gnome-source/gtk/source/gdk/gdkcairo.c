@@ -110,9 +110,7 @@ gdk_cairo_surface_paint_pixbuf (cairo_surface_t *surface,
 
   cairo_surface_flush (surface);
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture = gdk_texture_new_for_pixbuf (GDK_PIXBUF (pixbuf));
-G_GNUC_END_IGNORE_DEPRECATIONS
   gdk_texture_download (texture,
                         cairo_image_surface_get_data (surface),
                         cairo_image_surface_get_stride (surface));
@@ -132,8 +130,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
  *
  * The pattern has an extend mode of %CAIRO_EXTEND_NONE and is aligned
  * so that the origin of @pixbuf is @pixbuf_x, @pixbuf_y.
- *
- * Deprecated: 4.20: Use cairo_set_source_surface() and gdk_texture_download()
  */
 void
 gdk_cairo_set_source_pixbuf (cairo_t         *cr,
@@ -307,4 +303,3 @@ gdk_cairo_region_create_from_surface (cairo_surface_t *surface)
 
   return region;
 }
-

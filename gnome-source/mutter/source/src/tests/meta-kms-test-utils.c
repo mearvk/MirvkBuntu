@@ -28,11 +28,8 @@
 #include "backends/native/meta-kms-connector.h"
 #include "backends/native/meta-kms-crtc.h"
 #include "backends/native/meta-kms-device.h"
-#include "backends/native/meta-kms-device-private.h"
-#include "backends/native/meta-kms-impl-device.h"
 #include "backends/native/meta-kms-mode.h"
 #include "backends/native/meta-kms-plane.h"
-#include "backends/native/meta-kms-private.h"
 #include "backends/native/meta-kms-types.h"
 #include "backends/native/meta-kms-update.h"
 #include "backends/native/meta-kms.h"
@@ -167,64 +164,4 @@ meta_get_mode_rect (MetaKmsMode *mode)
   return MTK_RECTANGLE_INIT (0, 0,
                              meta_kms_mode_get_width (mode),
                              meta_kms_mode_get_height (mode));
-}
-
-GUdevDevice *
-meta_get_test_udev_device (MetaUdev *udev)
-{
-  g_autolist (GObject) list = NULL;
-  g_autoptr (GError) error = NULL;
-  GUdevDevice *test_device = NULL;
-  GList *l;
-
-  list = meta_udev_list_drm_devices (udev, META_UDEV_DEVICE_TYPE_CARD, &error);
-
-  for (l = list; l; l = l->next)
-    {
-      GUdevDevice *udev_device = l->data;
-
-      if (meta_is_udev_test_device (udev_device))
-        {
-          g_assert_null (test_device);
-          g_set_object (&test_device, udev_device);
-        }
-    }
-
-  g_assert_nonnull (test_device);
-  return test_device;
-}
-
-typedef struct
-{
-  MetaKmsImplDevice *impl_device;
-  MetaKmsInhibitSubset inhibited_subset;
-} SetUpdatesInhibitedData;
-
-static gpointer
-process_set_updates_inhibited_in_impl (MetaThreadImpl  *thread_impl,
-                                       gpointer         user_data,
-                                       GError         **error)
-{
-  SetUpdatesInhibitedData *data = user_data;
-
-  meta_kms_impl_device_set_updates_inhibited (data->impl_device,
-                                              data->inhibited_subset);
-
-  return GINT_TO_POINTER (TRUE);
-}
-
-void
-meta_inhibit_kms_updates (MetaKmsDevice        *device,
-                          MetaKmsInhibitSubset  inhibited_subset)
-{
-  MetaKms *kms = meta_kms_device_get_kms (device);
-  SetUpdatesInhibitedData data;
-
-  data.impl_device = meta_kms_device_get_impl_device (device);
-  data.inhibited_subset = inhibited_subset;
-
-  meta_kms_run_impl_task_sync (kms,
-                               process_set_updates_inhibited_in_impl,
-                               &data,
-                               NULL);
 }

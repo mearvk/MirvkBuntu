@@ -79,7 +79,7 @@ struct _GTlsPasswordClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType             g_tls_password_get_type            (void);
+GType             g_tls_password_get_type            (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GTlsPassword *    g_tls_password_new                 (GTlsPasswordFlags  flags,

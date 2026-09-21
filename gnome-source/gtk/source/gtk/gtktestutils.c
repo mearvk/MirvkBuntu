@@ -26,7 +26,6 @@
 #include "gtkbutton.h"
 #include "gtktextview.h"
 #include "gtkrange.h"
-#include "gsk/gskdisplacementnodeprivate.h"
 
 #include <locale.h>
 #include <string.h>
@@ -60,10 +59,10 @@
  *
  * This function is used to initialize a GTK test program.
  *
- * It will in turn call [func@GLib.test_init] and [func@Gtk.init]
- * to properly initialize the testing framework and graphical toolkit.
- * It will also set the program’s locale to “en_US.UTF-8”. This is done
- * to make test program environments as deterministic as possible.
+ * It will in turn call g_test_init() and gtk_init() to properly
+ * initialize the testing framework and graphical toolkit. It’ll
+ * also set the program’s locale to “C”. This is done to make test
+ * program environments as deterministic as possible.
  *
  * Like gtk_init() and g_test_init(), any known arguments will be
  * processed and stripped from @argc and @argv.
@@ -73,19 +72,12 @@ gtk_test_init (int    *argcp,
                char ***argvp,
                ...)
 {
-  char *lang;
-
   /* g_test_init is defined as a macro that aborts if assertions
    * are disabled. We don't want that, so we call the function.
    */
   (g_test_init) (argcp, argvp, NULL);
-
   gtk_disable_setlocale();
-  lang = setlocale (LC_ALL, "en_US.UTF-8");
-  if (lang == NULL)
-    g_warning ("Failed to set locale to en_US.UTF-8");
-  else if (g_test_verbose ())
-    g_test_message ("language: %s", lang);
+  setlocale (LC_ALL, "en_US.UTF-8");
 
   gtk_init ();
 }

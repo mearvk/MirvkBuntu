@@ -1,8 +1,0 @@
-<interface>
-  <menu>
-    <item>
-      <attribute name="label" translatable="yes">_Quit</attribute>
-      <attribute name="target"></attribute>
-    </item>
-  </menu>
-</interface>

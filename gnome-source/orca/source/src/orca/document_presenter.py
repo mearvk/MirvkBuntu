@@ -21,9 +21,7 @@
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-public-methods
 # pylint: disable=too-many-instance-attributes
-# pylint: disable=too-many-arguments,
-# pylint: disable=too-many-positional-arguments
-# pylint: disable=too-many-return-statements
+# pylint: disable=too-many-arguments, too-many-positional-arguments
 
 """Module for document-related presentation and navigation settings."""
 
@@ -36,38 +34,36 @@ from typing import TYPE_CHECKING, Any
 import gi
 
 gi.require_version("Atspi", "2.0")
-from gi.repository import Atspi  # pylint: disable=no-name-in-module
+gi.require_version("Gtk", "3.0")
+from gi.repository import Atspi, Gtk
 
 from . import (
     caret_navigator,
+    cmdnames,
     command_manager,
     dbus_service,
     debug,
-    document_presenter_command_definitions,
     focus_manager,
     gsettings_registry,
     guilabels,
     input_event,
     input_event_manager,
-    math_navigator,
+    keybindings,
     messages,
+    preferences_grid_base,
     presentation_manager,
     script_manager,
     structural_navigator,
     table_navigator,
 )
+from .ax_document import AXDocument
 from .ax_object import AXObject
 from .ax_text import AXText
 from .ax_utilities import AXUtilities
-from .ax_utilities_math import AXUtilitiesMath
-from .extension import Extension
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from .command import Command
-    from .dbus_service import UInt32
-    from .document_presenter_preferences_grid import DocumentPreferencesGrid
     from .scripts import default
 
 
@@ -96,15 +92,322 @@ class _AppModeState:
     in_focus_mode: bool = True
     focus_mode_is_sticky: bool = False
     browse_mode_is_sticky: bool = False
-    user_has_overridden_auto_sticky_focus_mode: bool = False
-    document_with_last_manual_mode_change: int | None = None
+    user_has_toggled: bool = False
+
+
+class CaretNavigationPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """Sub-grid for caret navigation settings within the Documents page."""
+
+    _gsettings_schema = "caret-navigation"
+
+    def __init__(self) -> None:
+        nav = caret_navigator.get_navigator()
+
+        # Child controls need to check the enabled switch's UI state (not runtime state)
+        # because the enabled switch has apply_immediately=False.
+        self._enabled_switch: Gtk.Switch | None = None
+
+        def is_enabled() -> bool:
+            if self._enabled_switch is not None:
+                return self._enabled_switch.get_active()
+            return nav.get_is_enabled()
+
+        controls = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.KB_GROUP_CARET_NAVIGATION,
+                getter=nav.get_is_enabled,
+                setter=nav.set_is_enabled,
+                prefs_key=caret_navigator.CaretNavigator.KEY_ENABLED,
+                apply_immediately=False,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.AUTOMATIC_FOCUS_MODE,
+                getter=nav.get_triggers_focus_mode,
+                setter=nav.set_triggers_focus_mode,
+                prefs_key=caret_navigator.CaretNavigator.KEY_TRIGGERS_FOCUS_MODE,
+                determine_sensitivity=is_enabled,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.CONTENT_LAYOUT_MODE,
+                getter=nav.get_layout_mode,
+                setter=nav.set_layout_mode,
+                prefs_key=caret_navigator.CaretNavigator.KEY_LAYOUT_MODE,
+                determine_sensitivity=is_enabled,
+            ),
+        ]
+        info = (
+            f"{guilabels.CARET_NAVIGATION_INFO}\n\n{guilabels.AUTOMATIC_FOCUS_MODE_INFO}"
+            f"\n\n{guilabels.LAYOUT_MODE_INFO}"
+        )
+        super().__init__(guilabels.KB_GROUP_CARET_NAVIGATION, controls, info_message=info)
+
+        self._enabled_switch = self._widgets[0]
+
+
+class StructuralNavigationPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """Sub-grid for structural navigation settings within the Documents page."""
+
+    _gsettings_schema = "structural-navigation"
+
+    def __init__(self) -> None:
+        nav = structural_navigator.get_navigator()
+
+        # Child controls need to check the enabled switch's UI state (not runtime state)
+        # because the enabled switch has apply_immediately=False.
+        self._enabled_switch: Gtk.Switch | None = None
+
+        def is_enabled() -> bool:
+            if self._enabled_switch is not None:
+                return self._enabled_switch.get_active()
+            return nav.get_is_enabled()
+
+        controls: list[preferences_grid_base.ControlType] = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.KB_GROUP_STRUCTURAL_NAVIGATION,
+                getter=nav.get_is_enabled,
+                setter=nav.set_is_enabled,
+                prefs_key=structural_navigator.StructuralNavigator.KEY_ENABLED,
+                apply_immediately=False,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.AUTOMATIC_FOCUS_MODE,
+                getter=nav.get_triggers_focus_mode,
+                setter=nav.set_triggers_focus_mode,
+                prefs_key=structural_navigator.StructuralNavigator.KEY_TRIGGERS_FOCUS_MODE,
+                determine_sensitivity=is_enabled,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.STRUCTURAL_NAVIGATION_WRAP_AROUND,
+                getter=nav.get_navigation_wraps,
+                setter=nav.set_navigation_wraps,
+                prefs_key=structural_navigator.StructuralNavigator.KEY_WRAPS,
+                determine_sensitivity=is_enabled,
+            ),
+            preferences_grid_base.IntRangePreferenceControl(
+                label=guilabels.STRUCTURAL_NAVIGATION_LARGE_OBJECT_LENGTH,
+                minimum=1,
+                maximum=500,
+                getter=nav.get_large_object_text_length,
+                setter=nav.set_large_object_text_length,
+                prefs_key=structural_navigator.StructuralNavigator.KEY_LARGE_OBJECT_TEXT_LENGTH,
+                determine_sensitivity=is_enabled,
+            ),
+        ]
+        info = (
+            f"{guilabels.STRUCTURAL_NAVIGATION_INFO}\n\n{guilabels.AUTOMATIC_FOCUS_MODE_INFO}"
+            f"\n\n{guilabels.LARGE_OBJECT_INFO}"
+        )
+        super().__init__(guilabels.KB_GROUP_STRUCTURAL_NAVIGATION, controls, info_message=info)
+
+        self._enabled_switch = self._widgets[0]
+
+
+class TableNavigationPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """Sub-grid for table navigation settings within the Documents page."""
+
+    _gsettings_schema = "table-navigation"
+
+    def __init__(self) -> None:
+        nav = table_navigator.get_navigator()
+
+        # Child controls need to check the enabled switch's UI state (not runtime state)
+        # because the enabled switch has apply_immediately=False.
+        self._enabled_switch: Gtk.Switch | None = None
+
+        def is_enabled() -> bool:
+            if self._enabled_switch is not None:
+                return self._enabled_switch.get_active()
+            return nav.get_is_enabled()
+
+        controls = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.KB_GROUP_TABLE_NAVIGATION,
+                getter=nav.get_is_enabled,
+                setter=nav.set_is_enabled,
+                prefs_key=table_navigator.TableNavigator.KEY_ENABLED,
+                apply_immediately=False,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.TABLE_SKIP_BLANK_CELLS,
+                getter=nav.get_skip_blank_cells,
+                setter=nav.set_skip_blank_cells,
+                prefs_key=table_navigator.TableNavigator.KEY_SKIP_BLANK_CELLS,
+                determine_sensitivity=is_enabled,
+            ),
+        ]
+        super().__init__(guilabels.KB_GROUP_TABLE_NAVIGATION, controls)
+
+        self._enabled_switch = self._widgets[0]
+
+
+class NativeNavigationPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """Sub-grid for native navigation settings within the Documents page."""
+
+    _gsettings_schema = "document"
+
+    def __init__(self, presenter: DocumentPresenter) -> None:
+        self._presenter = presenter
+        controls: list[preferences_grid_base.ControlType] = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.AUTOMATIC_FOCUS_MODE,
+                getter=presenter.get_native_nav_triggers_focus_mode,
+                setter=presenter.set_native_nav_triggers_focus_mode,
+                prefs_key=DocumentPresenter.KEY_NATIVE_NAV_TRIGGERS_FOCUS_MODE,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.AUTO_STICKY_FOCUS_MODE,
+                getter=presenter.get_auto_sticky_focus_mode_for_web_apps,
+                setter=presenter.set_auto_sticky_focus_mode_for_web_apps,
+                prefs_key=DocumentPresenter.KEY_AUTO_STICKY_FOCUS_MODE,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.FIND_SPEAK_RESULTS,
+                getter=presenter.get_speak_find_results,
+                setter=presenter.set_speak_find_results,
+                member_of=guilabels.FIND_OPTIONS,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.FIND_ONLY_SPEAK_CHANGED_LINES,
+                getter=presenter.get_only_speak_changed_lines,
+                setter=presenter.set_only_speak_changed_lines,
+                determine_sensitivity=presenter.get_speak_find_results,
+                member_of=guilabels.FIND_OPTIONS,
+            ),
+            preferences_grid_base.IntRangePreferenceControl(
+                label=guilabels.FIND_MINIMUM_MATCH_LENGTH,
+                minimum=0,
+                maximum=20,
+                getter=presenter.get_find_results_minimum_length,
+                setter=presenter.set_find_results_minimum_length,
+                prefs_key=DocumentPresenter.KEY_FIND_RESULTS_MINIMUM_LENGTH,
+                member_of=guilabels.FIND_OPTIONS,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.READ_PAGE_UPON_LOAD,
+                getter=presenter.get_say_all_on_load,
+                setter=presenter.set_say_all_on_load,
+                prefs_key=DocumentPresenter.KEY_SAY_ALL_ON_LOAD,
+                member_of=guilabels.PAGE_LOAD,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.PAGE_SUMMARY_UPON_LOAD,
+                getter=presenter.get_page_summary_on_load,
+                setter=presenter.set_page_summary_on_load,
+                prefs_key=DocumentPresenter.KEY_PAGE_SUMMARY_ON_LOAD,
+                member_of=guilabels.PAGE_LOAD,
+            ),
+        ]
+        info = (
+            f"{guilabels.NATIVE_NAVIGATION_INFO}\n\n"
+            f"{guilabels.AUTOMATIC_FOCUS_MODE_INFO}\n\n"
+            f"{guilabels.AUTO_STICKY_FOCUS_MODE_INFO}"
+        )
+        super().__init__(guilabels.NATIVE_NAVIGATION, controls, info_message=info)
+
+    def save_settings(self, profile: str = "", app_name: str = "") -> dict[str, Any]:
+        """Save settings, writing the find-results enum from the presenter."""
+
+        result = super().save_settings(profile, app_name)
+        verbosity = self._presenter.get_find_results_verbosity_name()
+        result[DocumentPresenter.KEY_FIND_RESULTS_VERBOSITY] = verbosity
+        self._write_gsettings(
+            {DocumentPresenter.KEY_FIND_RESULTS_VERBOSITY: verbosity}, profile, app_name
+        )
+        return result
+
+
+class DocumentPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+    """Main document preferences grid with categorized navigation settings."""
+
+    def __init__(
+        self,
+        presenter: DocumentPresenter,
+        title_change_callback: Callable[[str], None] | None = None,
+    ) -> None:
+        super().__init__(guilabels.DOCUMENTS)
+        self._presenter = presenter
+        self._initializing = True
+        self._title_change_callback = title_change_callback
+
+        self._caret_grid = CaretNavigationPreferencesGrid()
+        self._structural_grid = StructuralNavigationPreferencesGrid()
+        self._table_grid = TableNavigationPreferencesGrid()
+        self._native_grid = NativeNavigationPreferencesGrid(presenter)
+
+        self._build()
+        self._initializing = False
+
+    def _build(self) -> None:
+        categories = [
+            (guilabels.KB_GROUP_CARET_NAVIGATION, "caret", self._caret_grid),
+            (guilabels.KB_GROUP_STRUCTURAL_NAVIGATION, "structural", self._structural_grid),
+            (guilabels.KB_GROUP_TABLE_NAVIGATION, "table", self._table_grid),
+            (guilabels.NATIVE_NAVIGATION, "native", self._native_grid),
+        ]
+
+        _enable_listbox, stack, _categories_listbox = self._create_multi_page_stack(
+            enable_label=None,
+            enable_getter=None,
+            enable_setter=None,
+            categories=categories,
+            title_change_callback=self._title_change_callback,
+            main_title=guilabels.DOCUMENTS,
+        )
+
+        self.attach(stack, 0, 0, 1, 1)
+
+    def on_becoming_visible(self) -> None:
+        """Reset to the categories view when this grid becomes visible."""
+
+        self.multipage_on_becoming_visible()
+
+    def reload(self) -> None:
+        """Reload all child grids."""
+
+        self._initializing = True
+        self._has_unsaved_changes = False
+        self._caret_grid.reload()
+        self._structural_grid.reload()
+        self._table_grid.reload()
+        self._native_grid.reload()
+        self._initializing = False
+
+    def save_settings(self, profile: str = "", app_name: str = "") -> dict:
+        """Save all settings from child grids."""
+
+        result = {}
+        result.update(self._caret_grid.save_settings(profile, app_name))
+        result.update(self._structural_grid.save_settings(profile, app_name))
+        result.update(self._table_grid.save_settings(profile, app_name))
+        result.update(self._native_grid.save_settings(profile, app_name))
+
+        return result
+
+    def has_changes(self) -> bool:
+        """Check if any child grid has changes."""
+
+        return (
+            self._has_unsaved_changes
+            or self._caret_grid.has_changes()
+            or self._structural_grid.has_changes()
+            or self._table_grid.has_changes()
+            or self._native_grid.has_changes()
+        )
+
+    def refresh(self) -> None:
+        """Refresh all child grids."""
+
+        self._initializing = True
+        self._caret_grid.refresh()
+        self._structural_grid.refresh()
+        self._table_grid.refresh()
+        self._native_grid.refresh()
+        self._initializing = False
 
 
 @gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Document", name="document")
-class DocumentPresenter(Extension):
+class DocumentPresenter:
     """Manages document-related presentation and navigation settings."""
-
-    GROUP_LABEL = guilabels.KB_GROUP_DOCUMENTS
 
     _SCHEMA = "document"
     KEY_NATIVE_NAV_TRIGGERS_FOCUS_MODE = "native-nav-triggers-focus-mode"
@@ -127,31 +430,64 @@ class DocumentPresenter(Extension):
     def __init__(self) -> None:
         self._made_find_announcement = False
         self._app_states: dict[int, _AppModeState] = {}
-        super().__init__()
+        self._initialized: bool = False
 
-    def _register_commands(self) -> None:
-        """Registers commands and sets up exclusive groups."""
+        msg = "DOCUMENT PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("DocumentPresenter", self)
 
-        super()._register_commands()
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
 
         manager = command_manager.get_manager()
-        manager.add_exclusive_groups(
-            guilabels.KB_GROUP_MATH_NAVIGATION,
-            guilabels.KB_GROUP_CARET_NAVIGATION,
-        )
-        manager.add_exclusive_groups(
-            guilabels.KB_GROUP_MATH_NAVIGATION,
-            guilabels.KB_GROUP_STRUCTURAL_NAVIGATION,
-        )
-        manager.add_exclusive_groups(
-            guilabels.KB_GROUP_MATH_NAVIGATION,
-            guilabels.KB_GROUP_TABLE_NAVIGATION,
-        )
+        group_label = guilabels.KB_GROUP_DOCUMENTS
 
-    def _get_commands(self) -> list[Command]:
-        """Returns commands for registration."""
+        # Keybindings (same for desktop and laptop)
+        kb_a = keybindings.KeyBinding("a", keybindings.ORCA_MODIFIER_MASK)
+        kb_a_2 = keybindings.KeyBinding("a", keybindings.ORCA_MODIFIER_MASK, click_count=2)
+        kb_a_3 = keybindings.KeyBinding("a", keybindings.ORCA_MODIFIER_MASK, click_count=3)
 
-        return document_presenter_command_definitions.get_commands(self)
+        # (name, function, description, keybinding)
+        commands_data = [
+            (
+                "toggle_presentation_mode",
+                self.toggle_presentation_mode,
+                cmdnames.TOGGLE_PRESENTATION_MODE,
+                kb_a,
+            ),
+            (
+                "enable_sticky_focus_mode",
+                self.enable_sticky_focus_mode,
+                cmdnames.SET_FOCUS_MODE_STICKY,
+                kb_a_2,
+            ),
+            (
+                "enable_sticky_browse_mode",
+                self.enable_sticky_browse_mode,
+                cmdnames.SET_BROWSE_MODE_STICKY,
+                kb_a_3,
+            ),
+        ]
+
+        for name, function, description, kb in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=kb,
+                    laptop_keybinding=kb,
+                ),
+            )
+
+        msg = "DOCUMENT PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _get_state_for_app(self, app: Atspi.Accessible | None) -> _AppModeState:
         """Returns the mode state for the given app, creating if needed."""
@@ -202,9 +538,9 @@ class DocumentPresenter(Extension):
         if not AXUtilities.is_embedded(document):
             return False
 
-        uri = AXUtilities.get_uri(document)
+        uri = AXDocument.get_uri(document)
         result = bool(uri and uri.startswith("http"))
-        tokens = ["DOCUMENT PRESENTER:", document, "is top-level web app:", result, ". URI:", uri]
+        tokens = ["DOCUMENT PRESENTER:", document, f"is top-level web app: {result}. URI: {uri}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
 
@@ -219,55 +555,6 @@ class DocumentPresenter(Extension):
         if app_hash not in self._app_states:
             return False
         return self._app_states[app_hash].in_focus_mode
-
-    def user_has_overridden_auto_sticky_focus_mode(
-        self, app: Atspi.Accessible | None = None
-    ) -> bool:
-        """Returns True if the user has changed the mode Orca automatically made sticky."""
-
-        if app is None:
-            app = self._get_current_app()
-        if app is None:
-            return False
-        app_hash = hash(app)
-        if app_hash not in self._app_states:
-            return False
-        return self._app_states[app_hash].user_has_overridden_auto_sticky_focus_mode
-
-    def set_user_has_overridden_auto_sticky_focus_mode(
-        self, app: Atspi.Accessible | None, overridden: bool
-    ) -> None:
-        """Sets whether the user has changed the mode Orca automatically made sticky."""
-
-        self._get_state_for_app(app).user_has_overridden_auto_sticky_focus_mode = overridden
-
-    def user_last_changed_mode_in_document(
-        self, script: default.Script, obj: Atspi.Accessible | None
-    ) -> bool:
-        """Returns True if the user last changed the mode in the document containing obj."""
-
-        state = self._get_state_for_app(script.app)
-        if state.document_with_last_manual_mode_change is None:
-            return False
-
-        document = script.utilities.get_top_level_document_for_object(obj)
-        if document is None:
-            return False
-        return state.document_with_last_manual_mode_change == hash(document)
-
-    def set_document_with_last_manual_mode_change(
-        self, script: default.Script, obj: Atspi.Accessible | None
-    ) -> None:
-        """Records the document containing obj as where the user last changed the mode."""
-
-        document = script.utilities.get_top_level_document_for_object(obj)
-        state = self._get_state_for_app(script.app)
-        state.document_with_last_manual_mode_change = None if document is None else hash(document)
-
-    def clear_document_with_last_manual_mode_change(self, app: Atspi.Accessible | None) -> None:
-        """Clears the record of the document in which the user last changed the mode."""
-
-        self._get_state_for_app(app).document_with_last_manual_mode_change = None
 
     def focus_mode_is_sticky(self, app: Atspi.Accessible | None = None) -> bool:
         """Returns True if focus mode is sticky for the given app."""
@@ -304,14 +591,11 @@ class DocumentPresenter(Extension):
         """Sets the presentation mode to focus or browse mode."""
 
         tokens = [
-            "DOCUMENT PRESENTER: set_presentation_mode. Use focus mode:",
-            use_focus_mode,
-            ",",
+            f"DOCUMENT PRESENTER: set_presentation_mode. Use focus mode: {use_focus_mode},",
             obj,
             "in",
             document,
-            "notify user:",
-            notify_user,
+            f"notify user: {notify_user}",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
@@ -366,39 +650,15 @@ class DocumentPresenter(Extension):
     def suspend_navigators(self, script: default.Script, suspended: bool, reason: str) -> bool:
         """Suspends or unsuspends navigation commands. Returns True if state changed."""
 
-        if not suspended and math_navigator.get_navigator().is_active():
-            msg = "DOCUMENT PRESENTER: Not unsuspending navigators: math navigation is active."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return False
-
         caret_navigator.get_navigator().suspend_commands(script, suspended, reason)
         structural_navigator.get_navigator().suspend_commands(script, suspended, reason)
         return True
 
-    def enter_math_navigation(self, script: default.Script, obj: Atspi.Accessible) -> bool:
-        """Enters math navigation mode for the given math object."""
-
-        if not math_navigator.get_navigator().enter_math_mode(obj):
-            return False
-
-        self.suspend_navigators(script, True, "math navigation")
-        math_navigator.get_navigator().suspend_commands(script, False, "math navigation")
-        return True
-
-    def exit_math_navigation(self, script: default.Script) -> None:
-        """Exits math navigation mode and restores normal navigation."""
-
-        nav = math_navigator.get_navigator()
-        if nav.is_active():
-            nav.reset(script)
-        nav.suspend_commands(script, True, "leaving math navigation")
-        self.suspend_navigators(script, False, "leaving math navigation")
-
     def _enable_document_navigators(self, script: default.Script, reason: str) -> None:
         """Enables document navigators for the given script."""
 
-        tokens = ["DOCUMENT PRESENTER: _enable_document_navigators. Reason:", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: _enable_document_navigators. Reason: {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         structural_navigator.get_navigator().set_mode(
             script,
@@ -451,11 +711,10 @@ class DocumentPresenter(Extension):
         if role in always_focus_mode_roles:
             return True, "due to its role"
 
-        if role in (Atspi.Role.TABLE_CELL, Atspi.Role.TABLE):
-            if AXUtilities.is_layout_table(AXUtilities.get_table(obj)):
-                return False, "it's layout only"
-            if AXUtilities.is_pdf(script.utilities.get_document_for_object(obj)):
-                return False, "it's in a PDF"
+        if role in [Atspi.Role.TABLE_CELL, Atspi.Role.TABLE] and AXUtilities.is_layout_table(
+            AXUtilities.get_table(obj),
+        ):
+            return False, "it's layout only"
 
         if AXUtilities.is_list_box_item(obj, role):
             return True, "it's a listbox item"
@@ -463,16 +722,14 @@ class DocumentPresenter(Extension):
         if AXUtilities.is_button_with_popup(obj, role):
             return True, "it's a button with popup"
 
-        if role == Atspi.Role.SEPARATOR and AXUtilities.is_focusable(obj):
-            return True, "it's a focusable separator"
-
-        if role == Atspi.Role.EMBEDDED:
-            if script.utilities.has_name_and_action_and_no_useful_children(obj):
-                return False, "has name and action and no useful children"
+        focus_mode_roles = [Atspi.Role.EMBEDDED, Atspi.Role.TABLE_CELL, Atspi.Role.TABLE]
+        if (
+            role in focus_mode_roles
+            and not script.utilities.is_text_block_element(obj)
+            and not script.utilities.has_name_and_action_and_no_useful_children(obj)
+            and not AXDocument.is_pdf(script.utilities.get_document_for_object(obj))
+        ):
             return True, "based on presumed functionality"
-
-        if role == Atspi.Role.TABLE and AXUtilities.is_grid(obj, role):
-            return True, "it's a grid"
 
         return None, ""
 
@@ -483,14 +740,15 @@ class DocumentPresenter(Extension):
     ) -> tuple[bool, str]:
         """Returns (True, reason) if obj's ancestry makes it a focus mode widget."""
 
-        if AXUtilities.is_grid_descendant(obj):
-            return True, "it's a grid descendant"
-        if AXUtilities.is_menu_descendant(obj):
-            return True, "it's a menu descendant"
-        if AXUtilities.is_tool_bar_descendant(obj):
-            return True, "it's a toolbar descendant"
-        if AXUtilities.is_tree_or_tree_table_descendant(obj):
-            return True, "it's a tree or tree table descendant"
+        ancestor_checks: list[tuple[Callable[[Atspi.Accessible], bool], str]] = [
+            (AXUtilities.is_grid, "it's a grid descendant"),
+            (AXUtilities.is_menu, "it's a menu descendant"),
+            (AXUtilities.is_tool_bar, "it's a toolbar descendant"),
+        ]
+        for predicate, reason in ancestor_checks:
+            if AXUtilities.find_ancestor(obj, predicate) is not None:
+                return True, reason
+
         if script.utilities.is_content_editable_with_embedded_objects(obj):
             return True, "it's content editable"
 
@@ -509,7 +767,7 @@ class DocumentPresenter(Extension):
 
         prefix = "is" if result else "is not"
         if reason:
-            tokens = ["DOCUMENT PRESENTER:", obj, prefix, "focus mode widget:", reason]
+            tokens = ["DOCUMENT PRESENTER:", obj, f"{prefix} focus mode widget:", reason]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         return result
@@ -523,8 +781,8 @@ class DocumentPresenter(Extension):
     ) -> bool:
         """Enables sticky browse mode."""
 
-        tokens = ["DOCUMENT PRESENTER: enable_sticky_browse_mode(", event, ",", notify_user, ")"]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: enable_sticky_browse_mode({event}, {notify_user})"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         if not script.utilities.in_document_content():
             if notify_user:
@@ -539,8 +797,7 @@ class DocumentPresenter(Extension):
         state.in_focus_mode = False
         state.focus_mode_is_sticky = False
         state.browse_mode_is_sticky = True
-        if event is not None:
-            state.user_has_overridden_auto_sticky_focus_mode = True
+        state.user_has_toggled = True
 
         reason = "enable sticky browse mode"
         self.suspend_navigators(script, state.in_focus_mode, reason)
@@ -555,8 +812,8 @@ class DocumentPresenter(Extension):
     ) -> bool:
         """Enables sticky focus mode."""
 
-        tokens = ["DOCUMENT PRESENTER: enable_sticky_focus_mode(", event, ",", notify_user, ")"]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: enable_sticky_focus_mode({event}, {notify_user})"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         if not script.utilities.in_document_content():
             if notify_user:
@@ -571,8 +828,7 @@ class DocumentPresenter(Extension):
         state.in_focus_mode = True
         state.focus_mode_is_sticky = True
         state.browse_mode_is_sticky = False
-        if event is not None:
-            state.user_has_overridden_auto_sticky_focus_mode = True
+        state.user_has_toggled = True
 
         reason = "enable sticky focus mode"
         self.suspend_navigators(script, state.in_focus_mode, reason)
@@ -605,9 +861,7 @@ class DocumentPresenter(Extension):
             document=document,
             notify_user=notify_user,
         )
-        if event is not None:
-            self.set_user_has_overridden_auto_sticky_focus_mode(script.app, True)
-            self.set_document_with_last_manual_mode_change(script, obj)
+        self._get_state_for_app(script.app).user_has_toggled = True
         return True
 
     @dbus_service.getter
@@ -664,8 +918,8 @@ class DocumentPresenter(Extension):
             state.focus_mode_is_sticky,
             "Browse sticky:",
             state.browse_mode_is_sticky,
-            "User overrode auto sticky focus mode:",
-            state.user_has_overridden_auto_sticky_focus_mode,
+            "User toggled:",
+            state.user_has_toggled,
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
@@ -712,7 +966,7 @@ class DocumentPresenter(Extension):
         # toggled mode. This allows the user to escape auto-enabled sticky focus mode.
         if (
             self.get_auto_sticky_focus_mode_for_web_apps()
-            and not self.user_has_overridden_auto_sticky_focus_mode(script.app)
+            and not self._get_state_for_app(script.app).user_has_toggled
         ):
             if self._is_likely_electron_app(script.app):
                 msg = "DOCUMENT PRESENTER: Electron app detected, enabling sticky focus mode"
@@ -768,8 +1022,6 @@ class DocumentPresenter(Extension):
 
         if new_doc is None:
             self.reset_find_announcement_state()
-            if math_navigator.get_navigator().is_active():
-                self.exit_math_navigation(script)
             reason = "locus of focus no longer in document"
             self.suspend_navigators(script, False, reason)
             structural_navigator.get_navigator().set_mode(
@@ -777,9 +1029,6 @@ class DocumentPresenter(Extension):
                 structural_navigator.NavigationMode.OFF,
             )
             caret_navigator.get_navigator().set_enabled_for_script(script, False)
-            return True
-
-        if math_navigator.get_navigator().is_active() and AXUtilitiesMath.find_math_root(new_focus):
             return True
 
         if old_doc is None and not focus_manager.get_manager().old_focus_was_dead():
@@ -790,10 +1039,6 @@ class DocumentPresenter(Extension):
             return False
 
         use_focus = self.use_focus_mode(new_focus, old_focus)
-        if use_focus != self.in_focus_mode(script.app):
-            msg = "DOCUMENT PRESENTER: Mode changed automatically. Clearing the manual change."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            self.clear_document_with_last_manual_mode_change(script.app)
         self._set_presentation_mode(script, use_focus, obj=new_focus, document=new_doc)
         return True
 
@@ -823,8 +1068,8 @@ class DocumentPresenter(Extension):
         if self.get_native_nav_triggers_focus_mode() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting native nav triggers focus mode to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting native nav triggers focus mode to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_NATIVE_NAV_TRIGGERS_FOCUS_MODE,
@@ -853,8 +1098,8 @@ class DocumentPresenter(Extension):
         if self.get_auto_sticky_focus_mode_for_web_apps() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting auto sticky focus mode for web apps to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting auto sticky focus mode for web apps to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_AUTO_STICKY_FOCUS_MODE,
@@ -883,8 +1128,8 @@ class DocumentPresenter(Extension):
         if self.get_say_all_on_load() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting say all on load to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting say all on load to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_SAY_ALL_ON_LOAD, value
         )
@@ -911,8 +1156,8 @@ class DocumentPresenter(Extension):
         if self.get_page_summary_on_load() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting page summary on load to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting page summary on load to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_PAGE_SUMMARY_ON_LOAD,
@@ -952,8 +1197,8 @@ class DocumentPresenter(Extension):
         if self.get_speak_find_results() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting speak find results to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting speak find results to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         name = "all" if value else "none"
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
@@ -975,8 +1220,8 @@ class DocumentPresenter(Extension):
         if self.get_only_speak_changed_lines() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting only speak changed lines to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting only speak changed lines to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         name = "if-line-changed" if value else "all"
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
@@ -994,20 +1239,20 @@ class DocumentPresenter(Extension):
         migration_key="findResultsMinimumLength",
     )
     @dbus_service.getter
-    def get_find_results_minimum_length(self) -> UInt32:
+    def get_find_results_minimum_length(self) -> int:
         """Returns the minimum length for find results to be spoken."""
 
         return self._get_setting(self.KEY_FIND_RESULTS_MINIMUM_LENGTH, "i", 4)
 
     @dbus_service.setter
-    def set_find_results_minimum_length(self, value: UInt32) -> bool:
+    def set_find_results_minimum_length(self, value: int) -> bool:
         """Sets the minimum length for find results to be spoken."""
 
         if self.get_find_results_minimum_length() == value:
             return True
 
-        tokens = ["DOCUMENT PRESENTER: Setting find results minimum length to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"DOCUMENT PRESENTER: Setting find results minimum length to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_FIND_RESULTS_MINIMUM_LENGTH,
@@ -1015,31 +1260,9 @@ class DocumentPresenter(Extension):
         )
         return True
 
-    def _restrict_find_results_to_cell(
-        self,
-        obj: Atspi.Accessible,
-        contents: list[tuple[Atspi.Accessible, int, int, str]],
-    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
-        """Limits find-result contents to obj's table cell rather than the whole row."""
-
-        cell = AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_table_cell)
-        if cell is None:
-            return contents
-
-        return [
-            content
-            for content in contents
-            if AXUtilities.find_ancestor_inclusive(content[0], AXUtilities.is_table_cell) == cell
-        ]
-
     # pylint: disable-next=too-many-locals
     def present_find_results(self, obj: Atspi.Accessible, offset: int) -> bool:
         """Presents find results if appropriate based on settings. Returns True if presented."""
-
-        if not self.get_speak_find_results():
-            msg = "DOCUMENT PRESENTER: Speaking find results is disabled."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return False
 
         script = script_manager.get_manager().get_active_script()
         if script is None:
@@ -1062,10 +1285,7 @@ class DocumentPresenter(Extension):
         tokens = [
             "DOCUMENT PRESENTER: Find results",
             obj,
-            "offset:",
-            offset,
-            ", selection start offset:",
-            start,
+            f"offset: {offset}, selection start offset: {start}",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
@@ -1073,38 +1293,21 @@ class DocumentPresenter(Extension):
         context = script.utilities.get_caret_context(document)
         script.utilities.set_caret_context(obj, offset, document=document)
 
-        focus = focus_manager.get_manager().get_locus_of_focus()
-        manager = input_event_manager.get_manager()
-        user_is_editing_search_term = (
-            manager.last_event_was_printable_key()
-            or manager.last_event_was_backspace()
-            or manager.last_event_was_delete()
-        ) and AXUtilities.is_editable(focus)
         end = AXUtilities.get_selection_end_offset(obj)
-        if end - start < self.get_find_results_minimum_length() and user_is_editing_search_term:
-            msg = "DOCUMENT PRESENTER: Search term is shorter than the minimum length."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
+        if (
+            end - start < self.get_find_results_minimum_length()
+            or not self.get_speak_find_results()
+        ):
             return False
 
-        if self._made_find_announcement:
+        if self._made_find_announcement and self.get_only_speak_changed_lines():
             context_obj, context_offset = context
-            if context_obj == obj and context_offset == offset:
-                msg = "DOCUMENT PRESENTER: Find result location is unchanged. Not presenting."
-                debug.print_message(debug.LEVEL_INFO, msg, True)
+            context_rect = AXText.get_range_rect(context_obj, context_offset, context_offset + 1)
+            current_rect = AXText.get_range_rect(obj, offset, offset + 1)
+            if AXUtilities.rects_are_on_same_line(context_rect, current_rect):
                 return False
 
-            if self.get_only_speak_changed_lines():
-                context_rect = AXText.get_range_rect(
-                    context_obj, context_offset, context_offset + 1
-                )
-                current_rect = AXText.get_range_rect(obj, offset, offset + 1)
-                if AXUtilities.rects_are_on_same_line(context_rect, current_rect):
-                    msg = "DOCUMENT PRESENTER: Find result is on the same line as the last one."
-                    debug.print_message(debug.LEVEL_INFO, msg, True)
-                    return False
-
         contents = script.utilities.get_line_contents_at_offset(obj, offset)
-        contents = self._restrict_find_results_to_cell(obj, contents)
         presentation_manager.get_manager().speak_contents(contents)
         script.update_braille(obj)
 
@@ -1122,14 +1325,13 @@ class DocumentPresenter(Extension):
     ) -> bool:
         """Returns True if we should force browse mode for web-app descendant obj."""
 
-        if not AXUtilities.is_embedded_descendant(obj):
+        if not AXUtilities.find_ancestor(obj, AXUtilities.is_embedded):
             return False
 
         if AXUtilities.is_tool_tip(obj):
             return AXUtilities.is_focused(obj)
 
-        document = AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_document)
-        if document is not None and AXUtilities.is_embedded_descendant(document):
+        if AXUtilities.is_document_web(obj):
             return not self.is_focus_mode_widget(script, obj)
 
         return False
@@ -1158,7 +1360,7 @@ class DocumentPresenter(Extension):
         _caret_navigator = caret_navigator.get_navigator()
         caret_prevents = (
             _caret_navigator.last_command_prevents_focus_mode()
-            and not AXUtilities.is_tool_tip_descendant(prev_obj, inclusive=True)
+            and AXUtilities.find_ancestor_inclusive(prev_obj, AXUtilities.is_tool_tip) is None
         )
         if _structural_navigator.last_command_prevents_focus_mode() or caret_prevents:
             struct_prevents = _structural_navigator.last_command_prevents_focus_mode()
@@ -1195,8 +1397,8 @@ class DocumentPresenter(Extension):
         nav_result, reason = self._navigation_prevents_focus_mode(script, obj, prev_obj)
         if nav_result is not None:
             prefix = "Using" if nav_result else "Not using"
-            tokens = ["DOCUMENT PRESENTER:", prefix, "focus mode:", reason]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"DOCUMENT PRESENTER: {prefix} focus mode: {reason}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return nav_result
 
         do_not_toggle = AXUtilities.is_link(obj) or AXUtilities.is_radio_button(obj)
@@ -1211,28 +1413,22 @@ class DocumentPresenter(Extension):
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return True
 
-        was_in_app = AXUtilities.is_embedded_descendant(prev_obj)
-        is_in_app = AXUtilities.is_embedded_descendant(obj)
+        was_in_app = AXUtilities.find_ancestor(prev_obj, AXUtilities.is_embedded)
+        is_in_app = AXUtilities.find_ancestor(obj, AXUtilities.is_embedded)
         if is_in_app:
-            if self._force_browse_mode_for_web_app_descendant(script, obj):
-                tokens = ["DOCUMENT PRESENTER: Forcing browse mode for web app descendant", obj]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                return False
             if not was_in_app:
                 msg = "DOCUMENT PRESENTER: Using focus mode: just entered a web application"
                 debug.print_message(debug.LEVEL_INFO, msg, True)
                 return True
             if self.in_focus_mode(script.app):
-                msg = "DOCUMENT PRESENTER: Staying in focus mode: inside a web application"
-                debug.print_message(debug.LEVEL_INFO, msg, True)
-                return True
-            if self.user_last_changed_mode_in_document(script, obj):
-                msg = "DOCUMENT PRESENTER: Not using focus mode: user changed the mode here"
-                debug.print_message(debug.LEVEL_INFO, msg, True)
-                return False
-            msg = "DOCUMENT PRESENTER: Using focus mode: focus moved inside a web application"
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return True
+                force_browse = self._force_browse_mode_for_web_app_descendant(script, obj)
+                if force_browse:
+                    tokens = ["DOCUMENT PRESENTER: Forcing browse mode for web app descendant", obj]
+                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                else:
+                    msg = "DOCUMENT PRESENTER: Staying in focus mode: inside a web application"
+                    debug.print_message(debug.LEVEL_INFO, msg, True)
+                return not force_browse
 
         tokens = ["DOCUMENT PRESENTER: Not using focus mode for", obj, "due to lack of cause"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -1243,9 +1439,6 @@ class DocumentPresenter(Extension):
         title_change_callback: Callable[[str], None] | None = None,
     ) -> DocumentPreferencesGrid:
         """Returns the preferences grid for document settings."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .document_presenter_preferences_grid import DocumentPreferencesGrid
 
         return DocumentPreferencesGrid(self, title_change_callback)
 

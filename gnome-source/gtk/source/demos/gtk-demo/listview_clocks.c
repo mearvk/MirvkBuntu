@@ -307,11 +307,11 @@ gtk_clock_class_init (GtkClockClass *klass)
   gobject_class->finalize = gtk_clock_finalize;
 
   properties[PROP_LOCATION] =
-    g_param_spec_string ("location", NULL, NULL, NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+    g_param_spec_string ("location", NULL, NULL, NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   properties[PROP_TIME] =
-    g_param_spec_boxed ("time", NULL, NULL, G_TYPE_DATE_TIME, G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+    g_param_spec_boxed ("time", NULL, NULL, G_TYPE_DATE_TIME, G_PARAM_READABLE);
   properties[PROP_TIMEZONE] =
-    g_param_spec_boxed ("timezone", NULL, NULL, G_TYPE_TIME_ZONE, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+    g_param_spec_boxed ("timezone", NULL, NULL, G_TYPE_TIME_ZONE, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -355,28 +355,28 @@ create_clocks_model (void)
   g_list_store_append (result, clock);
   g_object_unref (clock);
   /* A bunch of timezones with GTK hackers */
-  clock = gtk_clock_new ("San Francisco", g_time_zone_new_identifier ("America/Los_Angeles"));
+  clock = gtk_clock_new ("San Francisco", g_time_zone_new ("America/Los_Angeles"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("Xalapa", g_time_zone_new_identifier ("America/Mexico_City"));
+  clock = gtk_clock_new ("Xalapa", g_time_zone_new ("America/Mexico_City"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("Boston", g_time_zone_new_identifier ("America/New_York"));
+  clock = gtk_clock_new ("Boston", g_time_zone_new ("America/New_York"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("London", g_time_zone_new_identifier ("Europe/London"));
+  clock = gtk_clock_new ("London", g_time_zone_new ("Europe/London"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("Berlin", g_time_zone_new_identifier ("Europe/Berlin"));
+  clock = gtk_clock_new ("Berlin", g_time_zone_new ("Europe/Berlin"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("Moscow", g_time_zone_new_identifier ("Europe/Moscow"));
+  clock = gtk_clock_new ("Moscow", g_time_zone_new ("Europe/Moscow"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("New Delhi", g_time_zone_new_identifier ("Asia/Kolkata"));
+  clock = gtk_clock_new ("New Delhi", g_time_zone_new ("Asia/Kolkata"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
-  clock = gtk_clock_new ("Shanghai", g_time_zone_new_identifier ("Asia/Shanghai"));
+  clock = gtk_clock_new ("Shanghai", g_time_zone_new ("Asia/Shanghai"));
   g_list_store_append (result, clock);
   g_object_unref (clock);
 

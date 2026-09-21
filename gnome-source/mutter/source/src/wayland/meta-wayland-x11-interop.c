@@ -88,20 +88,26 @@ bind_x11_interop (struct wl_client *client,
 }
 
 static MetaWaylandAccess
-x11_interop_filter (const struct wl_client *wayland_client,
+x11_interop_filter (const struct wl_client *client,
                     const struct wl_global *global,
                     gpointer                user_data)
 {
-  MetaWaylandClient *client = meta_get_wayland_client (wayland_client);
+  MetaWaylandCompositor *compositor = user_data;
+  MetaContext *context = meta_wayland_compositor_get_context (compositor);
+  MetaServiceChannel *service_channel =
+    meta_context_get_service_channel (context);
+  MetaWaylandClient *service_client;
 
-  if (!client)
+  service_client =
+    meta_service_channel_get_service_client (service_channel,
+                                             META_SERVICE_CLIENT_TYPE_PORTAL_BACKEND);
+  if (!service_client)
     return META_WAYLAND_ACCESS_DENIED;
 
-  if (!meta_wayland_client_has_caps (client,
-                                     META_WAYLAND_CLIENT_CAPS_X11_INTEROP))
+  if (meta_wayland_client_matches (service_client, client))
+    return META_WAYLAND_ACCESS_ALLOWED;
+  else
     return META_WAYLAND_ACCESS_DENIED;
-
-  return META_WAYLAND_ACCESS_ALLOWED;
 }
 
 void

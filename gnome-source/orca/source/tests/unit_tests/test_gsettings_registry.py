@@ -147,19 +147,6 @@ class TestActiveState:
         assert gsettings_registry.get_registry().get_active_app() == "Firefox"
         gsettings_registry.get_registry().set_active_app(None)
 
-    def test_set_active_profile_notifies_observers(self, test_context: OrcaTestContext) -> None:
-        """Test set_active_profile invokes registered profile-change observers."""
-
-        self._setup(test_context)
-        from orca import gsettings_registry
-
-        calls = []
-        registry = gsettings_registry.get_registry()
-        registry.add_profile_change_observer(calls.append)
-        registry.set_active_profile("spanish")
-        registry.set_active_profile("default")
-        assert calls == ["spanish", "default"]
-
     def test_set_active_app_empty_string_becomes_none(self, test_context: OrcaTestContext) -> None:
         """Test set_active_app treats empty string as None."""
 
@@ -217,33 +204,9 @@ class TestGsettingDecorator:
         assert desc.gtype == "b"
         assert desc.default is True
         assert desc.migration_key is None
-        assert desc.user_visible is True
 
         # Clean up
         del registry._descriptors[("test-schema", "test-key")]
-
-    def test_decorator_registers_hidden_setting(self, test_context: OrcaTestContext) -> None:
-        """Test @gsetting records that a setting should not be exposed to users."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import get_registry
-
-        registry = get_registry()
-
-        @registry.gsetting(
-            key="hidden",
-            schema="test",
-            gtype="b",
-            default=False,
-            summary="Test",
-            user_visible=False,
-        )
-        def some_getter():
-            return False
-
-        assert registry._descriptors[("test", "hidden")].user_visible is False
-
-        del registry._descriptors[("test", "hidden")]
 
     def test_decorator_registers_migration_key(self, test_context: OrcaTestContext) -> None:
         """Test @gsetting decorator stores migration_key in the descriptor."""
@@ -329,67 +292,6 @@ class TestGsettingDecorator:
 
 
 @pytest.mark.unit
-class TestVariantDict:
-    """Tests for a{sv} value encoding."""
-
-    def _setup(self, test_context: OrcaTestContext):
-        """Set up dependencies."""
-
-        additional_modules = [
-            "orca.cmdnames",
-            "orca.messages",
-            "orca.object_properties",
-            "orca.orca_gui_navlist",
-            "orca.orca_i18n",
-            "orca.AXHypertext",
-            "orca.AXObject",
-            "orca.AXTable",
-            "orca.AXText",
-            "orca.AXUtilities",
-            "orca.input_event",
-        ]
-        test_context.setup_shared_dependencies(additional_modules)
-
-    def test_variant_dict_encodes_supported_values(self, test_context: OrcaTestContext) -> None:
-        """Test supported Python values are wrapped as GLib variants."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry
-
-        result = GSettingsRegistry._variant_dict(
-            {
-                "enabled": True,
-                "count": 3,
-                "scale": 1.5,
-                "name": "orca",
-                "items": ["one", "two"],
-                "details": {"enabled": True, "count": 3, "scale": 1.5, "name": "orca"},
-            }
-        )
-
-        assert {key: value.unpack() for key, value in result.items()} == {
-            "enabled": True,
-            "count": 3,
-            "scale": 1.5,
-            "name": "orca",
-            "items": ["one", "two"],
-            "details": {"enabled": True, "count": 3, "scale": 1.5, "name": "orca"},
-        }
-
-    def test_variant_dict_rejects_unsupported_values(self, test_context: OrcaTestContext) -> None:
-        """Test unsupported values raise TypeError."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry
-
-        with pytest.raises(TypeError):
-            GSettingsRegistry._variant_dict({"bad-list": {"value": ["one"]}})
-
-        with pytest.raises(TypeError):
-            GSettingsRegistry._variant_dict({"bad-key": {1: "one"}})
-
-
-@pytest.mark.unit
 class TestGSettingsSchemaHandle:
     """Tests for GSettingsSchemaHandle."""
 
@@ -466,12 +368,8 @@ class TestGSettingsSchemaHandle:
         from orca.gsettings_registry import GSettingsSchemaHandle
 
         handle = GSettingsSchemaHandle("org.gnome.Orca.Voice", "voices")
-        from orca.gsettings_registry import GSettingsRegistry
-
-        path = handle._build_profile_path(
-            "default", sub_path=GSettingsRegistry.voice_set_sub_path("uppercase")
-        )
-        assert path == "/org/gnome/orca/default/voice-sets/primary/uppercase/"
+        path = handle._build_profile_path("default", sub_path="voices/uppercase")
+        assert path == "/org/gnome/orca/default/voices/uppercase/"
 
     def test_build_app_path(self, test_context: OrcaTestContext) -> None:
         """Test _build_app_path produces correct dconf path."""
@@ -487,13 +385,11 @@ class TestGSettingsSchemaHandle:
         """Test _build_app_path with sub_path override."""
 
         self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
+        from orca.gsettings_registry import GSettingsSchemaHandle
 
         handle = GSettingsSchemaHandle("org.gnome.Orca.Voice", "voices")
-        path = handle._build_app_path(
-            "Firefox", "spanish", sub_path=GSettingsRegistry.voice_set_sub_path("default")
-        )
-        assert path == "/org/gnome/orca/spanish/apps/firefox/voice-sets/primary/default/"
+        path = handle._build_app_path("Firefox", "spanish", sub_path="voices/default")
+        assert path == "/org/gnome/orca/spanish/apps/firefox/voices/default/"
 
     def test_get_for_profile_returns_none_without_schema(
         self,
@@ -694,7 +590,7 @@ class TestGSettingsSchemaHandle:
 
 @pytest.mark.unit
 class TestSettingsMappings:
-    """Tests for settings mappings registration."""
+    """Tests for JSON ↔ GSettings conversion functions."""
 
     def _setup(self, test_context: OrcaTestContext):
         """Set up dependencies."""
@@ -731,6 +627,528 @@ class TestSettingsMappings:
         assert not registry._get_settings_mappings("nonexistent")
 
         del registry._mappings["test-schema"]
+
+    def test_write_mapped_settings_boolean(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings writes boolean values."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-b",
+            [
+                SettingsMapping("enableFoo", "foo-enabled", "b", True),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        # Value differs from default
+        result = registry._write_mapped_settings({"enableFoo": False}, mock_gs, "test-b")
+        assert result is True
+        mock_gs.set_boolean.assert_called_once_with("foo-enabled", False)
+
+        del registry._mappings["test-b"]
+
+    def test_write_mapped_settings_skips_defaults(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings skips values matching schema defaults."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-skip",
+            [
+                SettingsMapping("enableFoo", "foo-enabled", "b", True),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        # Value matches default — should be skipped
+        result = registry._write_mapped_settings({"enableFoo": True}, mock_gs, "test-skip")
+        assert result is False
+        mock_gs.set_boolean.assert_not_called()
+
+        del registry._mappings["test-skip"]
+
+    def test_write_mapped_settings_enum(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings handles enum (int->string) conversions."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-enum",
+            [
+                SettingsMapping(
+                    "verbLevel",
+                    "verbosity-level",
+                    "s",
+                    1,
+                    enum_map={0: "brief", 1: "verbose"},
+                ),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        # Value 0 differs from default 1
+        result = registry._write_mapped_settings({"verbLevel": 0}, mock_gs, "test-enum")
+        assert result is True
+        mock_gs.set_string.assert_called_once_with("verbosity-level", "brief")
+
+        del registry._mappings["test-enum"]
+
+    def test_write_mapped_settings_enum_skips_default(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings enum skips value matching default int."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-enum-skip",
+            [
+                SettingsMapping(
+                    "verbLevel",
+                    "verbosity-level",
+                    "s",
+                    1,
+                    enum_map={0: "brief", 1: "verbose"},
+                ),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        result = registry._write_mapped_settings({"verbLevel": 1}, mock_gs, "test-enum-skip")
+        assert result is False
+        mock_gs.set_string.assert_not_called()
+
+        del registry._mappings["test-enum-skip"]
+
+    def test_read_mapped_settings_boolean(self, test_context: OrcaTestContext) -> None:
+        """Test gsettings_to_json reads boolean values."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-read",
+            [
+                SettingsMapping("enableFoo", "foo-enabled", "b", True),
+                SettingsMapping("enableBar", "bar-enabled", "b", False),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+
+        mock_variant_foo = test_context.Mock()
+        mock_variant_foo.get_boolean.return_value = False
+
+        def get_user_value_side_effect(key):
+            if key == "foo-enabled":
+                return mock_variant_foo
+            return None  # bar-enabled not set
+
+        mock_gs.get_user_value.side_effect = get_user_value_side_effect
+
+        mappings = registry._get_settings_mappings("test-read")
+        result = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+        assert result == {"enableFoo": False}
+        assert "enableBar" not in result
+
+        del registry._mappings["test-read"]
+
+    def test_read_mapped_settings_enum(self, test_context: OrcaTestContext) -> None:
+        """Test gsettings_to_json reverses enum mapping (string->int)."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-read-enum",
+            [
+                SettingsMapping(
+                    "verbLevel",
+                    "verbosity-level",
+                    "s",
+                    1,
+                    enum_map={0: "brief", 1: "verbose"},
+                ),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        mock_variant = test_context.Mock()
+        mock_variant.get_string.return_value = "brief"
+        mock_gs.get_user_value.return_value = mock_variant
+
+        mappings = registry._get_settings_mappings("test-read-enum")
+        result = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+        assert result == {"verbLevel": 0}
+
+        del registry._mappings["test-read-enum"]
+
+    def test_roundtrip(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings followed by gsettings_to_json preserves values."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-rt",
+            [
+                SettingsMapping("enableFoo", "foo-enabled", "b", True),
+                SettingsMapping(
+                    "punctStyle",
+                    "punctuation-level",
+                    "s",
+                    1,
+                    enum_map={0: "all", 1: "most", 2: "some", 3: "none"},
+                ),
+            ],
+        )
+
+        # Simulate a Gio.Settings object with in-memory storage
+        store: dict[str, tuple] = {}
+
+        mock_gs = test_context.Mock()
+
+        def set_boolean(key, value):
+            store[key] = ("b", value)
+
+        def set_string(key, value):
+            store[key] = ("s", value)
+
+        mock_gs.set_boolean.side_effect = set_boolean
+        mock_gs.set_string.side_effect = set_string
+
+        def get_user_value(key):
+            if key not in store:
+                return None
+            gtype, value = store[key]
+            variant = test_context.Mock()
+            if gtype == "b":
+                variant.get_boolean.return_value = value
+            elif gtype == "s":
+                variant.get_string.return_value = value
+            return variant
+
+        mock_gs.get_user_value.side_effect = get_user_value
+
+        original = {"enableFoo": False, "punctStyle": 2}
+        registry._write_mapped_settings(original, mock_gs, "test-rt")
+
+        mappings = registry._get_settings_mappings("test-rt")
+        recovered = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+        assert recovered == original
+
+        del registry._mappings["test-rt"]
+
+    def test_write_mapped_settings_missing_keys(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings ignores keys not present in json_dict."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-miss",
+            [
+                SettingsMapping("enableFoo", "foo-enabled", "b", True),
+                SettingsMapping("enableBar", "bar-enabled", "b", False),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        # Only enableBar in the dict, and it matches default
+        result = registry._write_mapped_settings({"enableBar": False}, mock_gs, "test-miss")
+        assert result is False
+        mock_gs.set_boolean.assert_not_called()
+
+        del registry._mappings["test-miss"]
+
+    def test_write_mapped_settings_int_and_double(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings handles int and double types."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-id",
+            [
+                SettingsMapping("rate", "rate", "i", 50),
+                SettingsMapping("pitch", "pitch", "d", 5.0),
+            ],
+        )
+
+        mock_gs = test_context.Mock()
+        result = registry._write_mapped_settings({"rate": 75, "pitch": 7.5}, mock_gs, "test-id")
+        assert result is True
+        mock_gs.set_int.assert_called_once_with("rate", 75)
+        mock_gs.set_double.assert_called_once_with("pitch", 7.5)
+
+        del registry._mappings["test-id"]
+
+
+@pytest.mark.unit
+class TestBidirectionalConversionMultiKey:
+    """Tests for JSON↔GSettings roundtrip with realistic multi-key mappings."""
+
+    def _setup(self, test_context: OrcaTestContext):
+        """Set up dependencies."""
+
+        additional_modules = [
+            "orca.cmdnames",
+            "orca.messages",
+            "orca.object_properties",
+            "orca.orca_gui_navlist",
+            "orca.orca_i18n",
+            "orca.AXHypertext",
+            "orca.AXObject",
+            "orca.AXTable",
+            "orca.AXText",
+            "orca.AXUtilities",
+            "orca.input_event",
+        ]
+        test_context.setup_shared_dependencies(additional_modules)
+
+    def _make_mock_gs(self, test_context: OrcaTestContext):
+        """Returns a mock Gio.Settings backed by an in-memory dict."""
+
+        store: dict[str, tuple[str, object]] = {}
+        mock_gs = test_context.Mock()
+
+        def set_boolean(key, value):
+            store[key] = ("b", value)
+
+        def set_string(key, value):
+            store[key] = ("s", value)
+
+        def set_int(key, value):
+            store[key] = ("i", value)
+
+        def set_double(key, value):
+            store[key] = ("d", value)
+
+        mock_gs.set_boolean.side_effect = set_boolean
+        mock_gs.set_string.side_effect = set_string
+        mock_gs.set_int.side_effect = set_int
+        mock_gs.set_double.side_effect = set_double
+
+        def get_user_value(key):
+            if key not in store:
+                return None
+            gtype, value = store[key]
+            variant = test_context.Mock()
+            if gtype == "b":
+                variant.get_boolean.return_value = value
+            elif gtype == "s":
+                variant.get_string.return_value = value
+            elif gtype == "i":
+                variant.get_int32.return_value = value
+            elif gtype == "d":
+                variant.get_double.return_value = value
+            return variant
+
+        mock_gs.get_user_value.side_effect = get_user_value
+        return mock_gs, store
+
+    def test_roundtrip_with_mixed_types_and_enums(self, test_context: OrcaTestContext) -> None:
+        """Test roundtrip with booleans, strings, ints, doubles, and enums together."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-multi",
+            [
+                SettingsMapping("enableSpeech", "enable", "b", True),
+                SettingsMapping("capitalizationStyle", "capitalization-style", "s", "none"),
+                SettingsMapping("rate", "rate", "i", 50),
+                SettingsMapping("pitch", "pitch", "d", 5.0),
+                SettingsMapping(
+                    "verbalizePunctuationStyle",
+                    "punctuation-level",
+                    "s",
+                    1,
+                    enum_map={0: "all", 1: "most", 2: "some", 3: "none"},
+                ),
+            ],
+        )
+        try:
+            json_dict = {
+                "enableSpeech": False,
+                "capitalizationStyle": "spell",
+                "rate": 75,
+                "pitch": 7.5,
+                "verbalizePunctuationStyle": 2,
+            }
+            mock_gs, _ = self._make_mock_gs(test_context)
+            wrote = registry._write_mapped_settings(json_dict, mock_gs, "test-multi")
+            assert wrote is True
+
+            mappings = registry._get_settings_mappings("test-multi")
+            recovered = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+            assert recovered == json_dict
+        finally:
+            registry._mappings.pop("test-multi", None)
+
+    def test_defaults_skipped_non_defaults_preserved(self, test_context: OrcaTestContext) -> None:
+        """Test that default values are skipped and non-defaults roundtrip correctly."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-defaults",
+            [
+                SettingsMapping("enableKeyEcho", "key-echo", "b", True),
+                SettingsMapping("enableEchoByCharacter", "character-echo", "b", False),
+                SettingsMapping("enableNavigationKeys", "navigation-keys", "b", False),
+                SettingsMapping(
+                    "speechVerbosityLevel",
+                    "verbosity-level",
+                    "s",
+                    1,
+                    enum_map={0: "brief", 1: "verbose"},
+                ),
+            ],
+        )
+        try:
+            json_dict = {
+                "enableKeyEcho": False,  # non-default (default True)
+                "enableEchoByCharacter": False,  # matches default — should be skipped
+                "enableNavigationKeys": True,  # non-default (default False)
+                "speechVerbosityLevel": 1,  # matches default — should be skipped
+            }
+            mock_gs, store = self._make_mock_gs(test_context)
+            registry._write_mapped_settings(json_dict, mock_gs, "test-defaults")
+
+            # Only non-defaults should have been written
+            assert "key-echo" in store
+            assert "navigation-keys" in store
+            assert "character-echo" not in store
+            assert "verbosity-level" not in store
+
+            mappings = registry._get_settings_mappings("test-defaults")
+            recovered = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+            assert recovered == {
+                "enableKeyEcho": False,
+                "enableNavigationKeys": True,
+            }
+        finally:
+            registry._mappings.pop("test-defaults", None)
+
+    def test_empty_dict_writes_nothing(self, test_context: OrcaTestContext) -> None:
+        """Test that an empty JSON dict produces no writes and empty recovery."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-empty",
+            [
+                SettingsMapping("enableSpeech", "enable", "b", True),
+                SettingsMapping("rate", "rate", "i", 50),
+            ],
+        )
+        try:
+            mock_gs, _ = self._make_mock_gs(test_context)
+            wrote = registry._write_mapped_settings({}, mock_gs, "test-empty")
+            assert wrote is False
+            mappings = registry._get_settings_mappings("test-empty")
+            assert not gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+        finally:
+            registry._mappings.pop("test-empty", None)
+
+    def test_unrelated_keys_ignored(self, test_context: OrcaTestContext) -> None:
+        """Test that JSON keys not in the mapping are ignored."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-ignore",
+            [
+                SettingsMapping("enableKeyEcho", "key-echo", "b", True),
+            ],
+        )
+        try:
+            json_dict = {
+                "enableKeyEcho": False,
+                "caretNavigationEnabled": True,
+                "brailleFlashTime": 8000,
+                "voices": {"default": {"rate": 56}},
+            }
+            mock_gs, store = self._make_mock_gs(test_context)
+            registry._write_mapped_settings(json_dict, mock_gs, "test-ignore")
+
+            assert len(store) == 1
+            assert "key-echo" in store
+
+            mappings = registry._get_settings_mappings("test-ignore")
+            recovered = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+            assert recovered == {"enableKeyEcho": False}
+        finally:
+            registry._mappings.pop("test-ignore", None)
+
+    def test_all_enum_values_roundtrip(self, test_context: OrcaTestContext) -> None:
+        """Test that every enum value roundtrips correctly."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        enum_map = {0: "all", 1: "most", 2: "some", 3: "none"}
+        registry.register_settings_mappings(
+            "test-all-enums",
+            [
+                SettingsMapping("punctStyle", "punctuation-level", "s", 1, enum_map=enum_map),
+            ],
+        )
+        try:
+            for int_val in enum_map:
+                if int_val == 1:
+                    continue  # skip default
+                mock_gs, _ = self._make_mock_gs(test_context)
+                registry._write_mapped_settings({"punctStyle": int_val}, mock_gs, "test-all-enums")
+                mappings = registry._get_settings_mappings("test-all-enums")
+                recovered = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+                assert recovered == {"punctStyle": int_val}
+        finally:
+            registry._mappings.pop("test-all-enums", None)
 
 
 @pytest.mark.unit
@@ -1030,6 +1448,270 @@ class TestDescriptorKeyCollision:
 
 
 @pytest.mark.unit
+class TestMigrateAll:
+    """Tests for migrate_all."""
+
+    def _setup(self, test_context: OrcaTestContext):
+        """Set up dependencies."""
+
+        additional_modules = [
+            "orca.cmdnames",
+            "orca.messages",
+            "orca.object_properties",
+            "orca.orca_gui_navlist",
+            "orca.orca_i18n",
+            "orca.AXHypertext",
+            "orca.AXObject",
+            "orca.AXTable",
+            "orca.AXText",
+            "orca.AXUtilities",
+            "orca.input_event",
+        ]
+        test_context.setup_shared_dependencies(additional_modules)
+
+    def test_migrate_all_calls_migrate_schema_for_each(self, test_context: OrcaTestContext) -> None:
+        """Test migrate_all iterates through all registered schemas."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import get_registry
+
+        registry = get_registry()
+
+        registry._schemas["test-alpha"] = "org.gnome.Orca.TestAlpha"
+        registry._schemas["test-beta"] = "org.gnome.Orca.TestBeta"
+
+        migrated_schemas: list[str] = []
+
+        def tracking_migrate(_handle, schema_name, _prefs_dir, _profiles):
+            migrated_schemas.append(schema_name)
+            return False
+
+        try:
+            test_context.patch_object(registry, "_has_dconf_keys", return_value=False)
+            test_context.patch_object(registry, "_sync_missing_profiles")
+            test_context.patch_object(registry, "_read_profiles_from_json", return_value=[])
+            test_context.patch_object(registry, "migrate_schema", side_effect=tracking_migrate)
+            registry.migrate_all("/tmp/test")
+            assert "test-alpha" in migrated_schemas
+            assert "test-beta" in migrated_schemas
+        finally:
+            registry._schemas.pop("test-alpha", None)
+            registry._schemas.pop("test-beta", None)
+
+    def test_migrate_all_returns_true_when_any_migrated(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test migrate_all returns True when at least one schema was migrated."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import get_registry
+
+        registry = get_registry()
+
+        registry._schemas["test-m1"] = "org.gnome.Orca.TestM1"
+        registry._schemas["test-m2"] = "org.gnome.Orca.TestM2"
+
+        def selective_migrate(_handle, schema_name, _prefs_dir, _profiles):
+            return schema_name == "test-m2"
+
+        try:
+            test_context.patch_object(registry, "_has_dconf_keys", return_value=False)
+            test_context.patch_object(registry, "_sync_missing_profiles")
+            test_context.patch_object(registry, "_read_profiles_from_json", return_value=[])
+            test_context.patch_object(registry, "migrate_schema", side_effect=selective_migrate)
+            assert registry.migrate_all("/tmp/test") is True
+        finally:
+            registry._schemas.pop("test-m1", None)
+            registry._schemas.pop("test-m2", None)
+
+    def test_migrate_all_returns_false_when_none_migrated(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test migrate_all returns False when no schemas were migrated."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import get_registry
+
+        registry = get_registry()
+
+        registry._schemas["test-n1"] = "org.gnome.Orca.TestN1"
+
+        try:
+            test_context.patch_object(registry, "_has_dconf_keys", return_value=False)
+            test_context.patch_object(registry, "_sync_missing_profiles")
+            test_context.patch_object(registry, "_read_profiles_from_json", return_value=[])
+            test_context.patch_object(registry, "migrate_schema", return_value=False)
+            assert registry.migrate_all("/tmp/test") is False
+        finally:
+            registry._schemas.pop("test-n1", None)
+
+    def test_migrate_all_creates_handle_with_correct_ids(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test migrate_all creates GSettingsSchemaHandle with correct schema_id and path."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import get_registry
+
+        registry = get_registry()
+
+        registry._schemas["typing-echo"] = "org.gnome.Orca.TypingEcho"
+
+        captured_handles: list = []
+
+        def capture_migrate(handle, schema_name, _prefs_dir, _profiles):
+            captured_handles.append((handle.get_schema_id(), schema_name))
+            return False
+
+        try:
+            test_context.patch_object(registry, "_has_dconf_keys", return_value=False)
+            test_context.patch_object(registry, "_sync_missing_profiles")
+            test_context.patch_object(registry, "_read_profiles_from_json", return_value=[])
+            test_context.patch_object(registry, "migrate_schema", side_effect=capture_migrate)
+            registry.migrate_all("/tmp/test")
+            assert len(captured_handles) >= 1
+            found = [h for h in captured_handles if h[1] == "typing-echo"]
+            assert len(found) == 1
+            assert found[0][0] == "org.gnome.Orca.TypingEcho"
+        finally:
+            registry._schemas.pop("typing-echo", None)
+
+    def test_migrate_all_skips_schemas_without_mappings(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test migrate_all gracefully handles schemas with no mappable descriptors."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingDescriptor, get_registry
+
+        registry = get_registry()
+
+        registry._schemas["test-nomaps"] = "org.gnome.Orca.TestNoMaps"
+        registry._descriptors[("test-nomaps", "entries")] = SettingDescriptor(
+            gsettings_key="entries",
+            schema="test-nomaps",
+            gtype="a{ss}",
+            default={},
+            migration_key=None,
+        )
+
+        try:
+            mappings = registry._build_mappings_from_descriptors("test-nomaps")
+            assert not mappings
+        finally:
+            registry._schemas.pop("test-nomaps", None)
+            registry._descriptors.pop(("test-nomaps", "entries"), None)
+
+
+@pytest.mark.unit
+class TestStringArraySupport:
+    """Tests for string array (as) type support in JSON↔GSettings conversion."""
+
+    def _setup(self, test_context: OrcaTestContext):
+        """Set up dependencies."""
+
+        additional_modules = [
+            "orca.cmdnames",
+            "orca.messages",
+            "orca.object_properties",
+            "orca.orca_gui_navlist",
+            "orca.orca_i18n",
+            "orca.AXHypertext",
+            "orca.AXObject",
+            "orca.AXTable",
+            "orca.AXText",
+            "orca.AXUtilities",
+            "orca.input_event",
+        ]
+        test_context.setup_shared_dependencies(additional_modules)
+
+    def test_write_mapped_settings_string_array(self, test_context: OrcaTestContext) -> None:
+        """Test _write_mapped_settings writes string array values."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-as",
+            [SettingsMapping("textAttributesToSpeak", "attributes-to-speak", "as", [])],
+        )
+
+        mock_gs = test_context.Mock()
+        attrs = ["size", "weight", "style"]
+        try:
+            result = registry._write_mapped_settings(
+                {"textAttributesToSpeak": attrs},
+                mock_gs,
+                "test-as",
+            )
+            assert result is True
+            mock_gs.set_strv.assert_called_once_with("attributes-to-speak", attrs)
+        finally:
+            registry._mappings.pop("test-as", None)
+
+    def test_write_mapped_settings_string_array_skips_default(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test _write_mapped_settings skips string array when it matches default."""
+
+        self._setup(test_context)
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        default_attrs = ["size", "weight"]
+        registry.register_settings_mappings(
+            "test-as-skip",
+            [SettingsMapping("textAttributesToSpeak", "attributes-to-speak", "as", default_attrs)],
+        )
+
+        mock_gs = test_context.Mock()
+        try:
+            result = registry._write_mapped_settings(
+                {"textAttributesToSpeak": ["size", "weight"]},
+                mock_gs,
+                "test-as-skip",
+            )
+            assert result is False
+            mock_gs.set_strv.assert_not_called()
+        finally:
+            registry._mappings.pop("test-as-skip", None)
+
+    def test_read_mapped_settings_string_array(self, test_context: OrcaTestContext) -> None:
+        """Test gsettings_to_json reads string array values."""
+
+        self._setup(test_context)
+        from orca import gsettings_migrator
+        from orca.gsettings_registry import SettingsMapping, get_registry
+
+        registry = get_registry()
+
+        registry.register_settings_mappings(
+            "test-as-read",
+            [SettingsMapping("textAttributesToSpeak", "attributes-to-speak", "as", [])],
+        )
+
+        mock_gs = test_context.Mock()
+        mock_variant = test_context.Mock()
+        mock_variant.unpack.return_value = ["size", "weight", "style"]
+        mock_gs.get_user_value.return_value = mock_variant
+
+        try:
+            mappings = registry._get_settings_mappings("test-as-read")
+            result = gsettings_migrator.gsettings_to_json(mock_gs, mappings)
+            assert result == {"textAttributesToSpeak": ["size", "weight", "style"]}
+        finally:
+            registry._mappings.pop("test-as-read", None)
+
+
+@pytest.mark.unit
 class TestRuntimeValues:
     """Tests for runtime value storage (set/get/clear)."""
 
@@ -1274,14 +1956,10 @@ class TestLayeredLookup:
 
         result = registry.layered_lookup("voice", "pitch", "d", voice_type="default")
         assert result == 7.5
-        mock_handle.get_double.assert_called_once_with(
-            "pitch",
-            "voice-sets/primary/default",
-            None,
-        )
+        mock_handle.get_double.assert_called_once_with("pitch", "voices/default", None)
 
     def test_voice_sub_path(self, test_context: OrcaTestContext) -> None:
-        """Test layered_lookup uses voice-sets/primary/{voice_type} sub_path for voice schema."""
+        """Test layered_lookup uses voices/{voice_type} sub_path for voice schema."""
 
         self._setup(test_context)
         from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
@@ -1295,7 +1973,7 @@ class TestLayeredLookup:
 
         result = registry.layered_lookup("voice", "rate", "i", voice_type="uppercase")
         assert result == 56
-        mock_handle.get_int.assert_called_once_with("rate", "voice-sets/primary/uppercase", None)
+        mock_handle.get_int.assert_called_once_with("rate", "voices/uppercase", None)
 
     def test_enum_returns_string(self, test_context: OrcaTestContext) -> None:
         """Test layered_lookup returns string nick for enum settings."""
@@ -1360,81 +2038,6 @@ class TestLayeredLookup:
         assert result is False
         mock_handle.get_boolean.assert_called_once_with("speak-room-name", "", None)
 
-    def test_scalar_values_cached_until_explicit_clear(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test layered_lookup reuses scalar values until the cache is explicitly cleared."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
-
-        registry = GSettingsRegistry()
-        registry._schemas["speech"] = "org.gnome.Orca.Speech"
-
-        mock_handle = test_context.Mock(spec=GSettingsSchemaHandle)
-        mock_handle.get_boolean.side_effect = [True, False]
-        registry._handles["speech"] = mock_handle
-
-        assert registry.layered_lookup("speech", "enabled", "b") is True
-        assert registry.layered_lookup("speech", "enabled", "b") is True
-        mock_handle.get_boolean.assert_called_once_with("enabled", "", None)
-
-        registry.clear_value_cache()
-        assert registry.layered_lookup("speech", "enabled", "b") is False
-
-    def test_lookup_cache_includes_sub_path(self, test_context: OrcaTestContext) -> None:
-        """Test layered_lookup keeps relocatable subpaths separate in the cache."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
-
-        registry = GSettingsRegistry()
-        registry._schemas["extensions"] = "org.gnome.Orca.Extensions"
-
-        mock_handle = test_context.Mock(spec=GSettingsSchemaHandle)
-        mock_handle.get_dict.side_effect = [{"scope": "messages"}, {"scope": "objects"}]
-        registry._handles["extensions"] = mock_handle
-
-        assert registry.layered_lookup(
-            "extensions",
-            "settings",
-            "a{sv}",
-            sub_path="extensions/reverse-words",
-        ) == {"scope": "messages"}
-        assert registry.layered_lookup(
-            "extensions",
-            "settings",
-            "a{sv}",
-            sub_path="extensions/hello-world",
-        ) == {"scope": "objects"}
-        assert [call.args for call in mock_handle.get_dict.call_args_list] == [
-            ("settings", "extensions/reverse-words", None),
-            ("settings", "extensions/hello-world", None),
-        ]
-
-    def test_routine_manager_clear_preserves_lookup_cache(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test routine manager cache clearing does not clear GSettings lookup values."""
-
-        self._setup(test_context)
-        from orca import ax_cache_manager
-        from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
-
-        registry = GSettingsRegistry()
-        registry._schemas["speech"] = "org.gnome.Orca.Speech"
-
-        mock_handle = test_context.Mock(spec=GSettingsSchemaHandle)
-        mock_handle.get_boolean.side_effect = [True, False]
-        registry._handles["speech"] = mock_handle
-
-        assert registry.layered_lookup("speech", "enabled", "b") is True
-        ax_cache_manager.get_manager().clear_cache_now("Unit test.")
-        assert registry.layered_lookup("speech", "enabled", "b") is True
-        mock_handle.get_boolean.assert_called_once_with("enabled", "", None)
-
 
 @pytest.mark.unit
 class TestLayeredGetDict:
@@ -1469,59 +2072,6 @@ class TestLayeredGetDict:
             variant.unpack.return_value = entries
             gs.get_user_value.return_value = variant
         return gs
-
-    @pytest.mark.parametrize("profile", ["default", "work"])
-    def test_explicit_app_lookup_merges_inherited_entries(
-        self,
-        test_context: OrcaTestContext,
-        profile: str,
-    ) -> None:
-        """Explicit app lookups include app entries and preserve inherited pronunciations."""
-
-        self._setup(test_context)
-        from orca import gsettings_registry
-        from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
-
-        registry = GSettingsRegistry()
-        test_context.patch_object(gsettings_registry, "get_registry", return_value=registry)
-        registry.set_active_profile(profile)
-        registry.set_active_app("orca")
-
-        handle = GSettingsSchemaHandle("org.gnome.Orca.Pronunciations", "pronunciations")
-        registry._handles["pronunciations"] = handle
-        test_context.patch_object(handle, "has_key", return_value=True)
-
-        default_entries = {"inherited": "default pronunciation", "overridden": "default"}
-        profile_entries = {"profile": "work pronunciation", "overridden": "work"}
-        app_entries = {"tst": "test", "overridden": "pluma"}
-        profile_settings = {
-            "default": self._make_gs_with_entries(test_context, default_entries),
-            "work": self._make_gs_with_entries(test_context, profile_entries),
-        }
-        test_context.patch_object(
-            handle,
-            "get_for_profile",
-            side_effect=lambda name, _sub_path="": profile_settings[name],
-        )
-        app_settings = self._make_gs_with_entries(test_context, app_entries)
-        get_for_app = test_context.patch_object(
-            handle,
-            "get_for_app",
-            side_effect=lambda name, *_args: app_settings if name == "pluma" else None,
-        )
-
-        expected = default_entries | (profile_entries if profile == "work" else {}) | app_entries
-        assert (
-            registry.layered_lookup(
-                "pronunciations",
-                "entries",
-                "a{ss}",
-                app_name="pluma",
-                default={},
-            )
-            == expected
-        )
-        get_for_app.assert_called_with("pluma", profile, "")
 
     def test_non_default_profile_inherits_default(
         self,
@@ -1879,52 +2429,3 @@ class TestGetKeybindings:
 
         result = registry.get_keybindings("default")
         assert not result
-
-    def test_layered_lookup_caching_does_not_mix_defaults(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test layered_lookup does not cache default fallback values."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry
-
-        registry = GSettingsRegistry()
-        registry._schemas["missing"] = "org.gnome.Orca.Missing"
-
-        # 1. Query with default=True
-        val1 = registry.layered_lookup("missing", "key", "b", default=True)
-        assert val1 is True
-
-        # 2. Query without default (should be None)
-        val2 = registry.layered_lookup("missing", "key", "b")
-        assert val2 is None
-
-        # 3. Query with default=False
-        val3 = registry.layered_lookup("missing", "key", "b", default=False)
-        assert val3 is False
-
-    def test_layered_lookup_does_not_cache_mutable_types(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test layered_lookup does not cache mutable dict or list types."""
-
-        self._setup(test_context)
-        from orca.gsettings_registry import GSettingsRegistry, GSettingsSchemaHandle
-
-        registry = GSettingsRegistry()
-        registry._schemas["speech"] = "org.gnome.Orca.Speech"
-
-        mock_handle = test_context.Mock(spec=GSettingsSchemaHandle)
-        mock_handle.get_dict.side_effect = lambda *args: {"a": "1"}
-        mock_handle.get_strv.side_effect = lambda *args: ["a", "b"]
-        registry._handles["speech"] = mock_handle
-
-        # First lookup returns the dict
-        dict1 = registry.layered_lookup("speech", "entries", "a{ss}")
-        assert dict1 == {"a": "1"}
-        # Mutate the returned dict
-        dict1["a"] = "mutated"
-
-        # Second lookup should not see the mutation (it must return a new {"a": "1"})
-        dict2 = registry.layered_lookup("speech", "entries", "a{ss}")
-        assert dict2 == {"a": "1"}

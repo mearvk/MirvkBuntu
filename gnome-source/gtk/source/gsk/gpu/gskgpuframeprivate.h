@@ -3,8 +3,6 @@
 #include "gskgpurenderer.h"
 #include "gskgputypesprivate.h"
 
-#include "gskdebugnodeprivate.h" /* GskDebugProfile */
-
 G_BEGIN_DECLS
 
 #define GSK_TYPE_GPU_FRAME         (gsk_gpu_frame_get_type ())
@@ -29,60 +27,26 @@ struct _GskGpuFrameClass
   void                  (* wait)                                        (GskGpuFrame            *self);
   void                  (* setup)                                       (GskGpuFrame            *self);
   void                  (* cleanup)                                     (GskGpuFrame            *self);
-  void                  (* begin)                                       (GskGpuFrame            *self,
-                                                                         GdkDrawContext         *context,
-                                                                         GskRenderNode          *node,
-                                                                         const cairo_region_t   *region);
-  void                  (* end)                                         (GskGpuFrame            *self,
-                                                                         GdkDrawContext         *context);
-  void                  (* sync)                                        (GskGpuFrame            *self);
   GskGpuImage *         (* upload_texture)                              (GskGpuFrame            *self,
                                                                          gboolean                with_mipmap,
                                                                          GdkTexture             *texture);
+  GskGpuDescriptors *   (* create_descriptors)                          (GskGpuFrame            *self);
   GskGpuBuffer *        (* create_vertex_buffer)                        (GskGpuFrame            *self,
-                                                                         gsize                   size);
-  GskGpuBuffer *        (* create_globals_buffer)                       (GskGpuFrame            *self,
                                                                          gsize                   size);
   GskGpuBuffer *        (* create_storage_buffer)                       (GskGpuFrame            *self,
                                                                          gsize                   size);
-  void                  (* write_texture_vertex_data)                   (GskGpuFrame            *self,
-                                                                         guchar                 *data,
-                                                                         GskGpuImage           **images,
-                                                                         GskGpuSampler          *samplers,
-                                                                         gsize                   n_images);
   void                  (* submit)                                      (GskGpuFrame            *self,
-                                                                         GskRenderPassType       pass_type,
                                                                          GskGpuBuffer           *vertex_buffer,
-                                                                         GskGpuBuffer           *globals_buffer,
                                                                          GskGpuOp               *op);
-  gpointer              (* alloc_op)                                    (GskGpuFrame            *self,
-                                                                         const GskGpuOpClass    *op_class);
-  void                  (* start_node)                                  (GskGpuFrame            *self,
-                                                                         GskRenderNode          *node,
-                                                                         gsize                   pos);
-  void                  (* end_node)                                    (GskGpuFrame            *self);
-  GskDebugProfile *     (* get_profile)                                 (GskGpuFrame            *self);
 };
 
-GType                   gsk_gpu_frame_get_type                          (void);
+GType                   gsk_gpu_frame_get_type                          (void) G_GNUC_CONST;
 
 
 void                    gsk_gpu_frame_setup                             (GskGpuFrame            *self,
                                                                          GskGpuRenderer         *renderer,
                                                                          GskGpuDevice           *device,
                                                                          GskGpuOptimizations     optimizations);
-void                    gsk_gpu_frame_set_texture_vertex_size           (GskGpuFrame            *self,
-                                                                         gsize                   texture_vertex_size);
-gsize                   gsk_gpu_frame_get_texture_vertex_size           (GskGpuFrame            *self,
-                                                                         gsize                   n_textures);
-
-void                    gsk_gpu_frame_begin                             (GskGpuFrame            *self,
-                                                                         GdkDrawContext         *context,
-                                                                         GskRenderNode          *node,
-                                                                         const cairo_region_t   *region);
-void                    gsk_gpu_frame_end                               (GskGpuFrame            *self,
-                                                                         GdkDrawContext         *context);
-void                    gsk_gpu_frame_sync                              (GskGpuFrame            *self);
 
 GdkDrawContext *        gsk_gpu_frame_get_context                       (GskGpuFrame            *self) G_GNUC_PURE;
 GskGpuDevice *          gsk_gpu_frame_get_device                        (GskGpuFrame            *self) G_GNUC_PURE;
@@ -91,21 +55,15 @@ gboolean                gsk_gpu_frame_should_optimize                   (GskGpuF
                                                                          GskGpuOptimizations     optimization) G_GNUC_PURE;
 
 gpointer                gsk_gpu_frame_alloc_op                          (GskGpuFrame            *self,
-                                                                         const GskGpuOpClass    *op_class);
+                                                                         gsize                   size);
 GskGpuImage *           gsk_gpu_frame_upload_texture                    (GskGpuFrame            *self,
                                                                          gboolean                with_mipmap,
                                                                          GdkTexture             *texture);
+GskGpuDescriptors *     gsk_gpu_frame_create_descriptors                (GskGpuFrame            *self);
 gsize                   gsk_gpu_frame_reserve_vertex_data               (GskGpuFrame            *self,
                                                                          gsize                   size);
 guchar *                gsk_gpu_frame_get_vertex_data                   (GskGpuFrame            *self,
                                                                          gsize                   offset);
-void                    gsk_gpu_frame_write_texture_vertex_data         (GskGpuFrame            *self,
-                                                                         guchar                 *data,
-                                                                         GskGpuImage           **images,
-                                                                         GskGpuSampler          *samplers,
-                                                                         gsize                   n_images);
-gsize                   gsk_gpu_frame_add_globals                       (GskGpuFrame            *self,
-                                                                         const GskGpuGlobalsInstance *globals);
 GskGpuBuffer *          gsk_gpu_frame_write_storage_buffer              (GskGpuFrame            *self,
                                                                          const guchar           *data,
                                                                          gsize                   size,
@@ -117,24 +75,17 @@ void                    gsk_gpu_frame_wait                              (GskGpuF
 void                    gsk_gpu_frame_render                            (GskGpuFrame            *self,
                                                                          gint64                  timestamp,
                                                                          GskGpuImage            *target,
-                                                                         GdkColorState          *target_color_state,
-                                                                         cairo_region_t         *clip,
+                                                                         const cairo_region_t   *region,
                                                                          GskRenderNode          *node,
                                                                          const graphene_rect_t  *viewport,
                                                                          GdkTexture            **texture);
-gboolean                gsk_gpu_frame_download_texture                  (GskGpuFrame            *self,
+void                    gsk_gpu_frame_download_texture                  (GskGpuFrame            *self,
                                                                          gint64                  timestamp,
                                                                          GdkTexture             *texture,
+                                                                         GdkMemoryFormat         format,
                                                                          guchar                 *data,
-                                                                         const GdkMemoryLayout  *layout,
-                                                                         GdkColorState          *color_state);
+                                                                         gsize                   stride);
 GskGpuOp               *gsk_gpu_frame_get_last_op                       (GskGpuFrame            *self);
-
-void                    gsk_gpu_frame_start_node                        (GskGpuFrame            *self,
-                                                                         GskRenderNode          *node,
-                                                                         gsize                   pos);
-void                    gsk_gpu_frame_end_node                          (GskGpuFrame            *self);
-GskDebugProfile *       gsk_gpu_frame_get_profile                       (GskGpuFrame            *self);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskGpuFrame, g_object_unref)
 

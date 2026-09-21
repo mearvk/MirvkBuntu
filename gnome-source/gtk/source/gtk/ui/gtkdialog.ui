@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface domain="gtk40">
   <template class="GtkDialog" parent="GtkWindow">
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar" id="headerbar"/>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkBox">
         <property name="orientation">1</property>
         <style>
@@ -32,6 +32,6 @@
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </template>
 </interface>

@@ -22,29 +22,28 @@
 
 #include "config.h"
 
+#define GL_GLEXT_PROTOTYPES
+
 #include "backends/native/meta-renderer-native-gles3.h"
 
+#include <GLES3/gl3.h>
 #include <drm_fourcc.h>
 #include <errno.h>
 #include <gio/gio.h>
 #include <string.h>
 
-#include "cogl/cogl.h"
-#include "cogl/driver/gl/cogl-driver-gl-private.h"
+#include "backends/meta-egl-ext.h"
+#include "backends/meta-gles3.h"
+#include "backends/meta-gles3-table.h"
 #include "meta/meta-debug.h"
-#include "mtk/mtk.h"
 
-#ifndef GL_TEXTURE_EXTERNAL_OES
-#define GL_TEXTURE_EXTERNAL_OES 0x8D65
+/*
+ * GL/gl.h being included may conflict with gl3.h on some architectures.
+ * Make sure that hasn't happened on any architecture.
+ */
+#ifdef GL_VERSION_1_1
+#error "Somehow included OpenGL headers when we shouldn't have"
 #endif
-#ifndef GL_TEXTURE_WRAP_R_OES
-#define GL_TEXTURE_WRAP_R_OES 0x8072
-#endif
-
-#define TRIANGLE_COUNT_PER_RECTANGLE 2
-#define VERTICES_PER_TRIANGLE 3
-#define VALUES_PER_VERTEX 4
-#define COMPONENTS_PER_RECTANGLE TRIANGLE_COUNT_PER_RECTANGLE * VERTICES_PER_TRIANGLE * VALUES_PER_VERTEX
 
 typedef struct _ContextData
 {
@@ -77,10 +76,11 @@ get_quark_for_egl_context (EGLContext egl_context)
 }
 
 static gboolean
-can_blit_buffer (ContextData     *context_data,
-                 CoglRendererEGL *renderer_egl,
-                 uint32_t         drm_format,
-                 uint64_t         drm_modifier)
+can_blit_buffer (ContextData *context_data,
+                 MetaEgl     *egl,
+                 EGLDisplay   egl_display,
+                 uint32_t     drm_format,
+                 uint64_t     drm_modifier)
 {
   EGLint num_modifiers;
   EGLuint64KHR *modifiers;
@@ -94,17 +94,17 @@ can_blit_buffer (ContextData     *context_data,
 
   for (i = 0; i < context_data->buffer_support->len; i++)
     {
-      BufferTypeSupport *other_support =
+      BufferTypeSupport *support =
         &g_array_index (context_data->buffer_support, BufferTypeSupport, i);
 
-      if (other_support->drm_format == drm_format &&
-          other_support->drm_modifier == drm_modifier)
-        return other_support->can_blit;
+      if (support->drm_format == drm_format &&
+          support->drm_modifier == drm_modifier)
+        return support->can_blit;
     }
 
-  if (!cogl_renderer_egl_has_extensions (renderer_egl, NULL,
-                                         "EGL_EXT_image_dma_buf_import_modifiers",
-                                         NULL))
+  if (!meta_egl_has_extensions (egl, egl_display, NULL,
+                                "EGL_EXT_image_dma_buf_import_modifiers",
+                                NULL))
     {
       meta_topic (META_DEBUG_RENDER,
                   "No support for EGL_EXT_image_dma_buf_import_modifiers, "
@@ -112,9 +112,9 @@ can_blit_buffer (ContextData     *context_data,
       goto out;
     }
 
-  if (!cogl_renderer_egl_query_dma_buf_modifiers (renderer_egl,
-                                                   drm_format, 0, NULL, NULL,
-                                                   &num_modifiers, &error))
+  if (!meta_egl_query_dma_buf_modifiers (egl, egl_display,
+                                         drm_format, 0, NULL, NULL,
+                                         &num_modifiers, &error))
     {
       meta_topic (META_DEBUG_RENDER,
                   "Failed to query supported DMA buffer modifiers (%s), "
@@ -128,10 +128,10 @@ can_blit_buffer (ContextData     *context_data,
 
   modifiers = g_alloca0 (sizeof (EGLuint64KHR) * num_modifiers);
   external_only = g_alloca0 (sizeof (EGLBoolean) * num_modifiers);
-  if (!cogl_renderer_egl_query_dma_buf_modifiers (renderer_egl,
-                                                   drm_format, num_modifiers,
-                                                   modifiers, external_only,
-                                                   &num_modifiers, &error))
+  if (!meta_egl_query_dma_buf_modifiers (egl, egl_display,
+                                         drm_format, num_modifiers,
+                                         modifiers, external_only,
+                                         &num_modifiers, &error))
     {
       g_warning ("Failed to requery supported DMA buffer modifiers: %s",
                  error->message);
@@ -160,29 +160,26 @@ out:
 }
 
 static GLuint
-load_shader (CoglDriver *driver,
-             const char *src,
+load_shader (const char *src,
              GLenum      type)
 {
-  GLuint shader;
-
-  GE_RET (shader, driver, glCreateShader (type));
+  GLuint shader = glCreateShader (type);
 
   if (shader)
     {
       GLint compiled;
 
-      GE (driver, glShaderSource (shader, 1, &src, NULL));
-      GE (driver, glCompileShader (shader));
-      GE (driver, glGetShaderiv (shader, GL_COMPILE_STATUS, &compiled));
+      glShaderSource (shader, 1, &src, NULL);
+      glCompileShader (shader);
+      glGetShaderiv (shader, GL_COMPILE_STATUS, &compiled);
       if (!compiled)
         {
           GLchar log[1024];
 
-          GE (driver, glGetShaderInfoLog (shader, sizeof (log) - 1, NULL, log));
+          glGetShaderInfoLog (shader, sizeof (log) - 1, NULL, log);
           log[sizeof (log) - 1] = '\0';
           g_warning ("load_shader compile failed: %s", log);
-          GE (driver, glDeleteShader (shader));
+          glDeleteShader (shader);
           shader = 0;
         }
     }
@@ -192,20 +189,18 @@ load_shader (CoglDriver *driver,
 
 static void
 ensure_shader_program (ContextData *context_data,
-                       CoglDriver  *driver)
+                       MetaGles3   *gles3)
 {
   static const char vertex_shader_source[] =
     "#version 100\n"
     "attribute vec2 position;\n"
     "attribute vec2 texcoord;\n"
     "varying vec2 v_texcoord;\n"
-    "uniform float framebuffer_width;\n"
-    "uniform float framebuffer_height;\n"
     "\n"
     "void main()\n"
     "{\n"
-    "  gl_Position = vec4(position.x / framebuffer_width * 2.0 - 1.0, position.y / framebuffer_height * 2.0 - 1.0, 0.0, 1.0);\n"
-    "  v_texcoord = vec2(texcoord.x / framebuffer_width, texcoord.y / framebuffer_height);\n"
+    "  gl_Position = vec4(position, 0.0, 1.0);\n"
+    "  v_texcoord = texcoord;\n"
     "}\n";
 
   static const char fragment_shader_source[] =
@@ -220,311 +215,240 @@ ensure_shader_program (ContextData *context_data,
     "  gl_FragColor = texture2D(s_texture, v_texcoord);\n"
     "}\n";
 
+  static const GLfloat box[] =
+  { /* position    texcoord */
+    -1.0f, +1.0f, 0.0f, 0.0f,
+    +1.0f, +1.0f, 1.0f, 0.0f,
+    +1.0f, -1.0f, 1.0f, 1.0f,
+    -1.0f, -1.0f, 0.0f, 1.0f,
+  };
   GLint linked;
   GLuint vertex_shader, fragment_shader;
+  GLint position_attrib, texcoord_attrib;
   GLuint shader_program;
 
   if (context_data->shader_program)
     return;
 
-  GE_RET (shader_program, driver, glCreateProgram ());
+  shader_program = glCreateProgram ();
   g_return_if_fail (shader_program);
   context_data->shader_program = shader_program;
 
-  vertex_shader = load_shader (driver, vertex_shader_source, GL_VERTEX_SHADER);
+  vertex_shader = load_shader (vertex_shader_source, GL_VERTEX_SHADER);
   g_return_if_fail (vertex_shader);
-  fragment_shader = load_shader (driver, fragment_shader_source, GL_FRAGMENT_SHADER);
+  fragment_shader = load_shader (fragment_shader_source, GL_FRAGMENT_SHADER);
   g_return_if_fail (fragment_shader);
 
-  GE (driver, glAttachShader (shader_program, vertex_shader));
-  GE (driver, glAttachShader (shader_program, fragment_shader));
-  GE (driver, glLinkProgram (shader_program));
-  GE (driver, glGetProgramiv (shader_program, GL_LINK_STATUS, &linked));
+  GLBAS (gles3, glAttachShader, (shader_program, vertex_shader));
+  GLBAS (gles3, glAttachShader, (shader_program, fragment_shader));
+  GLBAS (gles3, glLinkProgram, (shader_program));
+  GLBAS (gles3, glGetProgramiv, (shader_program, GL_LINK_STATUS, &linked));
   if (!linked)
     {
       GLchar log[1024];
 
-      GE (driver, glGetProgramInfoLog (shader_program, sizeof (log) - 1, NULL, log));
+      glGetProgramInfoLog (shader_program, sizeof (log) - 1, NULL, log);
       log[sizeof (log) - 1] = '\0';
       g_warning ("Link failed: %s", log);
       return;
     }
 
-  GE (driver, glUseProgram (shader_program));
+  GLBAS (gles3, glUseProgram, (shader_program));
+
+  position_attrib = glGetAttribLocation (shader_program, "position");
+  GLBAS (gles3, glEnableVertexAttribArray, (position_attrib));
+  GLBAS (gles3, glVertexAttribPointer,
+         (position_attrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof (GLfloat), box));
+
+  texcoord_attrib = glGetAttribLocation (shader_program, "texcoord");
+  GLBAS (gles3, glEnableVertexAttribArray, (texcoord_attrib));
+  GLBAS (gles3, glVertexAttribPointer,
+         (texcoord_attrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof (GLfloat), box + 2));
 }
 
 static void
-clear_gl_errors (CoglDriver *driver)
-{
-  while (cogl_driver_gl_get_gl_error (COGL_DRIVER_GL (driver)) != GL_NO_ERROR)
-    ;
-}
-
-static void
-blit_egl_image (CoglDriver       *driver,
-                EGLImageKHR       egl_image,
-                int               width,
-                int               height,
-                const MtkRegion  *region)
+blit_egl_image (MetaGles3   *gles3,
+                EGLImageKHR  egl_image,
+                int          width,
+                int          height)
 {
   GLuint texture;
   GLuint framebuffer;
-  int i;
-  int n_rectangles = mtk_region_num_rectangles (region);
 
-  clear_gl_errors (driver);
+  meta_gles3_clear_error (gles3);
 
-  GE (driver, glViewport (0, 0, width, height));
+  GLBAS (gles3, glViewport, (0, 0, width, height));
 
-  GE (driver, glGenFramebuffers (1, &framebuffer));
-  GE (driver, glBindFramebuffer (GL_READ_FRAMEBUFFER, framebuffer));
+  GLBAS (gles3, glGenFramebuffers, (1, &framebuffer));
+  GLBAS (gles3, glBindFramebuffer, (GL_READ_FRAMEBUFFER, framebuffer));
 
-  GE (driver, glActiveTexture (GL_TEXTURE0));
-  GE (driver, glGenTextures (1, &texture));
-  GE (driver, glBindTexture (GL_TEXTURE_2D, texture));
-  GE (driver, glEGLImageTargetTexture2D (GL_TEXTURE_2D, egl_image));
-  GE (driver, glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-                               GL_NEAREST));
-  GE (driver, glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                               GL_NEAREST));
-  GE (driver, glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-                               GL_CLAMP_TO_EDGE));
-  GE (driver, glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-                               GL_CLAMP_TO_EDGE));
-  GE (driver, glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_R_OES,
-                               GL_CLAMP_TO_EDGE));
+  GLBAS (gles3, glActiveTexture, (GL_TEXTURE0));
+  GLBAS (gles3, glGenTextures, (1, &texture));
+  GLBAS (gles3, glBindTexture, (GL_TEXTURE_2D, texture));
+  GLEXT (gles3, glEGLImageTargetTexture2DOES, (GL_TEXTURE_2D, egl_image));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                                  GL_NEAREST));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                                  GL_NEAREST));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                                  GL_CLAMP_TO_EDGE));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                                  GL_CLAMP_TO_EDGE));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_2D, GL_TEXTURE_WRAP_R_OES,
+                                  GL_CLAMP_TO_EDGE));
 
-  GE (driver, glFramebufferTexture2D (GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                      GL_TEXTURE_2D, texture, 0));
+  GLBAS (gles3, glFramebufferTexture2D, (GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                         GL_TEXTURE_2D, texture, 0));
 
-  for (i = 0; i < n_rectangles; ++i)
-    {
-      MtkRectangle rectangle;
-      GLint x1, y1, x2, y2;
+  GLBAS (gles3, glBindFramebuffer, (GL_READ_FRAMEBUFFER, framebuffer));
+  GLBAS (gles3, glBlitFramebuffer, (0, height, width, 0,
+                                    0, 0, width, height,
+                                    GL_COLOR_BUFFER_BIT,
+                                    GL_NEAREST));
 
-      rectangle = mtk_region_get_rectangle (region, i);
-
-      x1 = rectangle.x;
-      y1 = rectangle.y;
-      x2 = x1 + rectangle.width;
-      y2 = y1 + rectangle.height;
-
-      GE (driver, glBlitFramebuffer (x1, y1, x2, y2,
-                                     x1, y1, x2, y2,
-                                     GL_COLOR_BUFFER_BIT,
-                                     GL_NEAREST));
-    }
-
-
-  GE (driver, glDeleteTextures (1, &texture));
-  GE (driver, glDeleteFramebuffers (1, &framebuffer));
+  GLBAS (gles3, glDeleteTextures, (1, &texture));
+  GLBAS (gles3, glDeleteFramebuffers, (1, &framebuffer));
 }
 
 static void
-paint_egl_image (ContextData      *context_data,
-                 CoglDriver       *driver,
-                 EGLImageKHR       egl_image,
-                 int               width,
-                 int               height,
-                 const MtkRegion  *region)
+paint_egl_image (ContextData *context_data,
+                 MetaGles3   *gles3,
+                 EGLImageKHR  egl_image,
+                 int          width,
+                 int          height)
 {
-  int i;
   GLuint texture;
-  GLint *vertices = NULL;
-  GLuint vertex_buffer_object;
-  GLuint vertex_array_object;
-  GLint position_attrib, texcoord_attrib;
-  GLint framebuffer_width_uniform, framebuffer_height_uniform;
-  GLuint size_per_rectangle = COMPONENTS_PER_RECTANGLE * sizeof(GLint);
-  GLuint vertices_size;
-  int n_rectangles = mtk_region_num_rectangles (region);
 
-  vertices_size = n_rectangles * size_per_rectangle;
+  meta_gles3_clear_error (gles3);
+  ensure_shader_program (context_data, gles3);
 
-  vertices = g_alloca (vertices_size);
+  GLBAS (gles3, glViewport, (0, 0, width, height));
 
-  for (i = 0; i < n_rectangles; ++i)
-    {
-      GLint x1, y1, x2, y2;
-      GLint u1, v1, u2, v2;
-      MtkRectangle rectangle;
-      GLint *rectangle_vertices;
+  GLBAS (gles3, glActiveTexture, (GL_TEXTURE0));
+  GLBAS (gles3, glGenTextures, (1, &texture));
+  GLBAS (gles3, glBindTexture, (GL_TEXTURE_EXTERNAL_OES, texture));
+  GLEXT (gles3, glEGLImageTargetTexture2DOES, (GL_TEXTURE_EXTERNAL_OES,
+                                               egl_image));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_EXTERNAL_OES,
+                                  GL_TEXTURE_MAG_FILTER,
+                                  GL_NEAREST));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_EXTERNAL_OES,
+                                  GL_TEXTURE_MIN_FILTER,
+                                  GL_NEAREST));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_EXTERNAL_OES,
+                                  GL_TEXTURE_WRAP_S,
+                                  GL_CLAMP_TO_EDGE));
+  GLBAS (gles3, glTexParameteri, (GL_TEXTURE_EXTERNAL_OES,
+                                  GL_TEXTURE_WRAP_T,
+                                  GL_CLAMP_TO_EDGE));
 
-      rectangle = mtk_region_get_rectangle (region, i);
-      rectangle_vertices = &vertices[i * COMPONENTS_PER_RECTANGLE];
+  GLBAS (gles3, glDrawArrays, (GL_TRIANGLE_FAN, 0, 4));
 
-      x1 = rectangle.x;
-      y1 = rectangle.y;
-      x2 = rectangle.x + rectangle.width;
-      y2 = rectangle.y + rectangle.height;
-
-      u1 = rectangle.x;
-      v1 = rectangle.y;
-      u2 = rectangle.x + rectangle.width;
-      v2 = rectangle.y + rectangle.height;
-
-      rectangle_vertices[0] = x1;
-      rectangle_vertices[1] = y1;
-      rectangle_vertices[2] = u1;
-      rectangle_vertices[3] = v1;
-
-      rectangle_vertices[4] = x2;
-      rectangle_vertices[5] = y1;
-      rectangle_vertices[6] = u2;
-      rectangle_vertices[7] = v1;
-
-      rectangle_vertices[8] = x1;
-      rectangle_vertices[9] = y2;
-      rectangle_vertices[10] = u1;
-      rectangle_vertices[11] = v2;
-
-      rectangle_vertices[12] = x1;
-      rectangle_vertices[13] = y2;
-      rectangle_vertices[14] = u1;
-      rectangle_vertices[15] = v2;
-
-      rectangle_vertices[16] = x2;
-      rectangle_vertices[17] = y1;
-      rectangle_vertices[18] = u2;
-      rectangle_vertices[19] = v1;
-
-      rectangle_vertices[20] = x2;
-      rectangle_vertices[21] = y2;
-      rectangle_vertices[22] = u2;
-      rectangle_vertices[23] = v2;
-    }
-
-  clear_gl_errors (driver);
-  ensure_shader_program (context_data, driver);
-
-  g_return_if_fail (context_data->shader_program);
-
-  GE (driver, glViewport (0, 0, width, height));
-
-  GE (driver, glGenVertexArrays (1, &vertex_array_object));
-  GE (driver, glBindVertexArray (vertex_array_object));
-
-  GE (driver, glGenBuffers (1, &vertex_buffer_object));
-  GE (driver, glBindBuffer (GL_ARRAY_BUFFER,
-                            vertex_buffer_object));
-  GE (driver, glBufferData (GL_ARRAY_BUFFER,
-                            vertices_size,
-                            vertices,
-                            GL_DYNAMIC_DRAW));
-
-  GE_RET (position_attrib, driver,
-          glGetAttribLocation (context_data->shader_program, "position"));
-  GE (driver, glEnableVertexAttribArray (position_attrib));
-  GE (driver, glVertexAttribPointer (position_attrib, 2, GL_INT, GL_FALSE,
-                                     4 * sizeof (GLint), NULL));
-
-  GE_RET (texcoord_attrib, driver,
-          glGetAttribLocation (context_data->shader_program, "texcoord"));
-  GE (driver, glEnableVertexAttribArray (texcoord_attrib));
-  GE (driver, glVertexAttribPointer (texcoord_attrib, 2, GL_INT, GL_FALSE,
-                                     4 * sizeof (GLint),
-                                     (void*)(sizeof(GLint) * 2)));
-
-  GE_RET (framebuffer_width_uniform, driver,
-          glGetUniformLocation (context_data->shader_program,
-                                "framebuffer_width"));
-  GE (driver, glUniform1f (framebuffer_width_uniform, width));
-
-  GE_RET (framebuffer_height_uniform, driver,
-          glGetUniformLocation (context_data->shader_program,
-                                "framebuffer_height"));
-  GE (driver, glUniform1f (framebuffer_height_uniform, height));
-
-  GE (driver, glActiveTexture (GL_TEXTURE0));
-  GE (driver, glGenTextures (1, &texture));
-  GE (driver, glBindTexture (GL_TEXTURE_EXTERNAL_OES, texture));
-  GE (driver, glEGLImageTargetTexture2D (GL_TEXTURE_EXTERNAL_OES, egl_image));
-  GE (driver, glTexParameteri (GL_TEXTURE_EXTERNAL_OES,
-                               GL_TEXTURE_MAG_FILTER,
-                               GL_NEAREST));
-  GE (driver, glTexParameteri (GL_TEXTURE_EXTERNAL_OES,
-                               GL_TEXTURE_MIN_FILTER,
-                               GL_NEAREST));
-  GE (driver, glTexParameteri (GL_TEXTURE_EXTERNAL_OES,
-                               GL_TEXTURE_WRAP_S,
-                               GL_CLAMP_TO_EDGE));
-  GE (driver, glTexParameteri (GL_TEXTURE_EXTERNAL_OES,
-                               GL_TEXTURE_WRAP_T,
-                               GL_CLAMP_TO_EDGE));
-
-  GE (driver, glDrawArrays (GL_TRIANGLES, 0,
-                            TRIANGLE_COUNT_PER_RECTANGLE *
-                            VERTICES_PER_TRIANGLE *
-                            n_rectangles));
-
-  GE (driver, glDeleteTextures (1, &texture));
-  GE (driver, glDeleteBuffers (1, &vertex_buffer_object));
-  GE (driver, glDeleteVertexArrays (1, &vertex_array_object));
+  GLBAS (gles3, glDeleteTextures, (1, &texture));
 }
 
 gboolean
-meta_renderer_native_gles3_blit_shared_bo (CoglDriver       *driver,
-                                           CoglRendererEGL  *renderer_egl,
-                                           EGLContext        egl_context,
-                                           EGLImageKHR       dst_egl_image,
-                                           EGLImageKHR       src_egl_image,
-                                           struct gbm_bo    *shared_bo,
-                                           const MtkRegion  *region,
-                                           GError          **error)
+meta_renderer_native_gles3_blit_shared_bo (MetaEgl        *egl,
+                                           MetaGles3      *gles3,
+                                           EGLDisplay      egl_display,
+                                           EGLContext      egl_context,
+                                           EGLSurface      egl_surface,
+                                           struct gbm_bo  *shared_bo,
+                                           GError        **error)
 {
+  int shared_bo_fd;
   unsigned int width;
   unsigned int height;
+  uint32_t i, n_planes;
+  uint32_t strides[4] = { 0 };
+  uint32_t offsets[4] = { 0 };
+  uint64_t modifiers[4] = { 0 };
+  int fds[4] = { -1, -1, -1, -1 };
+  uint32_t format;
+  EGLImageKHR egl_image;
+  gboolean use_modifiers;
   GQuark context_data_quark;
   ContextData *context_data;
-  GLuint dst_texture, dst_framebuffer;
   gboolean can_blit;
 
   context_data_quark = get_quark_for_egl_context (egl_context);
-  context_data = g_object_get_qdata (G_OBJECT (driver), context_data_quark);
+  context_data = g_object_get_qdata (G_OBJECT (gles3), context_data_quark);
   if (!context_data)
     {
       context_data = g_new0 (ContextData, 1);
       context_data->buffer_support = g_array_new (FALSE, FALSE,
                                                   sizeof (BufferTypeSupport));
 
-      g_object_set_qdata_full (G_OBJECT (driver),
+      g_object_set_qdata_full (G_OBJECT (gles3),
                                context_data_quark,
                                context_data,
                                (GDestroyNotify) context_data_free);
     }
 
   can_blit = can_blit_buffer (context_data,
-                              renderer_egl,
+                              egl, egl_display,
                               gbm_bo_get_format (shared_bo),
                               gbm_bo_get_modifier (shared_bo));
 
+  shared_bo_fd = gbm_bo_get_fd (shared_bo);
+  if (shared_bo_fd < 0)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Failed to export gbm_bo: %s", strerror (errno));
+      return FALSE;
+    }
+
   width = gbm_bo_get_width (shared_bo);
   height = gbm_bo_get_height (shared_bo);
+  format = gbm_bo_get_format (shared_bo);
 
-  GE (driver, glGenFramebuffers (1, &dst_framebuffer));
-  GE (driver, glBindFramebuffer (GL_DRAW_FRAMEBUFFER, dst_framebuffer));
-  GE (driver, glActiveTexture (GL_TEXTURE0));
-  GE (driver, glGenTextures (1, &dst_texture));
-  GE (driver, glBindTexture (GL_TEXTURE_2D, dst_texture));
-  GE (driver, glEGLImageTargetTexture2D (GL_TEXTURE_2D, dst_egl_image));
-  GE (driver, glFramebufferTexture2D (GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                      GL_TEXTURE_2D, dst_texture, 0));
+  n_planes = gbm_bo_get_plane_count (shared_bo);
+  for (i = 0; i < n_planes; i++)
+    {
+      strides[i] = gbm_bo_get_stride_for_plane (shared_bo, i);
+      offsets[i] = gbm_bo_get_offset (shared_bo, i);
+      modifiers[i] = gbm_bo_get_modifier (shared_bo);
+      fds[i] = shared_bo_fd;
+    }
+
+  /* Workaround for https://gitlab.gnome.org/GNOME/mutter/issues/18 */
+  if (modifiers[0] == DRM_FORMAT_MOD_LINEAR ||
+      modifiers[0] == DRM_FORMAT_MOD_INVALID)
+    use_modifiers = FALSE;
+  else
+    use_modifiers = TRUE;
+
+  egl_image = meta_egl_create_dmabuf_image (egl,
+                                            egl_display,
+                                            width,
+                                            height,
+                                            format,
+                                            n_planes,
+                                            fds,
+                                            strides,
+                                            offsets,
+                                            use_modifiers ? modifiers : NULL,
+                                            error);
+  close (shared_bo_fd);
+
+  if (!egl_image)
+    return FALSE;
 
   if (can_blit)
-    blit_egl_image (driver, src_egl_image, width, height, region);
+    blit_egl_image (gles3, egl_image, width, height);
   else
-    paint_egl_image (context_data, driver, src_egl_image, width, height, region);
+    paint_egl_image (context_data, gles3, egl_image, width, height);
 
-  GE (driver, glDeleteTextures (1, &dst_texture));
-  GE (driver, glDeleteFramebuffers (1, &dst_framebuffer));
+  meta_egl_destroy_image (egl, egl_display, egl_image, NULL);
+
   return TRUE;
 }
 
 void
-meta_renderer_native_gles3_forget_context (CoglDriver *driver,
+meta_renderer_native_gles3_forget_context (MetaGles3  *gles3,
                                            EGLContext  egl_context)
 {
   GQuark context_data_quark = get_quark_for_egl_context (egl_context);
 
-  g_object_set_qdata (G_OBJECT (driver), context_data_quark, NULL);
+  g_object_set_qdata (G_OBJECT (gles3), context_data_quark, NULL);
 }

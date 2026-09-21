@@ -31,7 +31,7 @@
 #include "wayland/meta-window-wayland.h"
 #include "wayland/meta-xwayland-grab-keyboard.h"
 
-typedef struct _MetaXwaylandKeyboardActiveGrab
+struct _MetaXwaylandKeyboardActiveGrab
 {
   MetaWaylandSurface *surface;
   MetaWaylandSeat *seat;
@@ -40,7 +40,7 @@ typedef struct _MetaXwaylandKeyboardActiveGrab
   gulong shortcuts_restored_handler;
   gulong window_associate_handler;
   struct wl_resource *resource;
-} MetaXwaylandKeyboardActiveGrab;
+};
 
 static void
 meta_xwayland_keyboard_grab_end (MetaXwaylandKeyboardActiveGrab *active_grab)
@@ -74,31 +74,37 @@ meta_xwayland_keyboard_grab_end (MetaXwaylandKeyboardActiveGrab *active_grab)
 
 static MetaWaylandSurface *
 meta_xwayland_keyboard_grab_get_focus_surface (MetaWaylandEventHandler *handler,
-                                               ClutterFocus            *focus,
+                                               ClutterInputDevice      *device,
+                                               ClutterEventSequence    *sequence,
                                                gpointer                 user_data)
 {
   MetaXwaylandKeyboardActiveGrab *active_grab = user_data;
 
   /* Force focus onto the surface who has the active grab on the keyboard */
-  if (CLUTTER_IS_KEY_FOCUS (focus))
+  if (clutter_input_device_get_capabilities (device) &
+      CLUTTER_INPUT_CAPABILITY_KEYBOARD)
     return active_grab->surface;
 
   return meta_wayland_event_handler_chain_up_get_focus_surface (handler,
-                                                                focus);
+                                                                device,
+                                                                sequence);
 }
 
 static void
 meta_xwayland_keyboard_grab_focus (MetaWaylandEventHandler *handler,
-                                   ClutterFocus            *focus,
+                                   ClutterInputDevice      *device,
+                                   ClutterEventSequence    *sequence,
                                    MetaWaylandSurface      *surface,
                                    gpointer                 user_data)
 {
   MetaXwaylandKeyboardActiveGrab *active_grab = user_data;
 
-  if (CLUTTER_IS_KEY_FOCUS (focus) && surface != active_grab->surface)
+  if (clutter_input_device_get_capabilities (device) &
+      CLUTTER_INPUT_CAPABILITY_KEYBOARD &&
+      surface != active_grab->surface)
     meta_xwayland_keyboard_grab_end (active_grab);
   else
-    meta_wayland_event_handler_chain_up_focus (handler, focus, surface);
+    meta_wayland_event_handler_chain_up_focus (handler, device, sequence, surface);
 }
 
 static const MetaWaylandEventInterface grab_event_interface = {
@@ -234,8 +240,7 @@ meta_xwayland_keyboard_grab_activate (MetaXwaylandKeyboardActiveGrab *active_gra
 
   if (meta_xwayland_grab_is_granted (window))
     {
-      meta_topic (META_DEBUG_WAYLAND,
-                  "XWayland window %s has a grab granted", window->desc);
+      meta_verbose ("XWayland window %s has a grab granted", window->desc);
       meta_wayland_surface_inhibit_shortcuts (surface, seat);
 
       if (meta_xwayland_grab_should_lock_focus (window))

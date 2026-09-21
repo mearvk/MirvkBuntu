@@ -45,7 +45,7 @@
 #include <glib-object.h>
 
 #include "backends/meta-backend-private.h"
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 
 enum
 {
@@ -92,26 +92,15 @@ meta_renderer_create_cogl_renderer (MetaRenderer *renderer)
 }
 
 static MetaRendererView *
-meta_renderer_create_view (MetaRenderer        *renderer,
-                           MetaLogicalMonitor  *logical_monitor,
-                           MetaMonitor         *monitor,
-                           MetaOutput          *output,
-                           MetaCrtc            *crtc,
-                           GError             **error)
+meta_renderer_create_view (MetaRenderer       *renderer,
+                           MetaLogicalMonitor *logical_monitor,
+                           MetaOutput         *output,
+                           MetaCrtc           *crtc)
 {
-  MetaRendererView *view;
-
-  view = META_RENDERER_GET_CLASS (renderer)->create_view (renderer,
+  return META_RENDERER_GET_CLASS (renderer)->create_view (renderer,
                                                           logical_monitor,
-                                                          monitor,
                                                           output,
-                                                          crtc,
-                                                          error);
-
-  if (view)
-    meta_renderer_add_view (renderer, view);
-
-  return view;
+                                                          crtc);
 }
 
 /**
@@ -138,21 +127,9 @@ create_crtc_view (MetaLogicalMonitor *logical_monitor,
 {
   MetaRenderer *renderer = user_data;
   MetaRendererView *view;
-  g_autoptr (GError) error = NULL;
 
-  view = meta_renderer_create_view (renderer,
-                                    logical_monitor,
-                                    monitor,
-                                    output,
-                                    crtc,
-                                    &error);
-  if (!view)
-    {
-      g_warning ("Failed to create view for %s on %s: %s",
-                 meta_monitor_get_display_name (monitor),
-                 meta_output_get_name (output),
-                 error->message);
-    }
+  view = meta_renderer_create_view (renderer, logical_monitor, output, crtc);
+  meta_renderer_add_view (renderer, view);
 }
 
 static void
@@ -346,10 +323,8 @@ meta_renderer_is_hardware_accelerated (MetaRenderer *renderer)
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context =
     clutter_backend_get_cogl_context (clutter_backend);
-  CoglRenderer *cogl_renderer =
-    cogl_context_get_renderer (cogl_context);
 
-  return cogl_renderer_is_hardware_accelerated (cogl_renderer);
+  return cogl_context_is_hardware_accelerated (cogl_context);
 }
 
 static void

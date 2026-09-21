@@ -39,12 +39,9 @@
 /**
  * GtkScrollbar:
  *
- * Shows a horizontal or vertical scrollbar.
+ * The `GtkScrollbar` widget is a horizontal or vertical scrollbar.
  *
- * <picture>
- *   <source srcset="scrollbar-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkScrollbar" src="scrollbar.png">
- * </picture>
+ * ![An example GtkScrollbar](scrollbar.png)
  *
  * Its position and movement are controlled by the adjustment that is passed to
  * or created by [ctor@Gtk.Scrollbar.new]. See [class@Gtk.Adjustment] for more
@@ -83,7 +80,7 @@
  *
  * # Accessibility
  *
- * `GtkScrollbar` uses the [enum@Gtk.AccessibleRole.scrollbar] role.
+ * `GtkScrollbar` uses the %GTK_ACCESSIBLE_ROLE_SCROLLBAR role.
  */
 
 typedef struct _GtkScrollbarClass   GtkScrollbarClass;
@@ -106,9 +103,9 @@ typedef struct {
 enum {
   PROP_0,
   PROP_ADJUSTMENT,
-  /* GtkOrientable */
+
   PROP_ORIENTATION,
-  LAST_PROP
+  LAST_PROP = PROP_ORIENTATION
 };
 
 static void gtk_scrollbar_accessible_range_init (GtkAccessibleRangeInterface *iface);
@@ -240,19 +237,18 @@ gtk_scrollbar_class_init (GtkScrollbarClass *class)
   object_class->dispose = gtk_scrollbar_dispose;
 
   /**
-   * GtkScrollbar:adjustment:
+   * GtkScrollbar:adjustment: (attributes org.gtk.Property.get=gtk_scrollbar_get_adjustment org.gtk.Property.set=gtk_scrollbar_set_adjustment)
    *
    * The `GtkAdjustment` controlled by this scrollbar.
    */
   props[PROP_ADJUSTMENT] =
       g_param_spec_object ("adjustment", NULL, NULL,
                            GTK_TYPE_ADJUSTMENT,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
-
-  props[PROP_ORIENTATION] = g_param_spec_override ("orientation",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ORIENTABLE), "orientation"));
+                           GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
+
+  g_object_class_override_property (object_class, PROP_ORIENTATION, "orientation");
 
   gtk_widget_class_set_css_name (widget_class, I_("scrollbar"));
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BOX_LAYOUT);
@@ -267,7 +263,6 @@ gtk_scrollbar_init (GtkScrollbar *self)
   priv->orientation = GTK_ORIENTATION_HORIZONTAL;
 
   priv->range = g_object_new (GTK_TYPE_RANGE, NULL);
-  gtk_range_set_flippable (GTK_RANGE (priv->range), TRUE);
   gtk_widget_set_hexpand (priv->range, TRUE);
   gtk_widget_set_vexpand (priv->range, TRUE);
   gtk_widget_set_parent (priv->range, GTK_WIDGET (self));
@@ -307,8 +302,7 @@ gtk_scrollbar_adjustment_changed (GtkAdjustment *adjustment,
   GtkScrollbar *self = data;
 
   gtk_accessible_update_property (GTK_ACCESSIBLE (self),
-                                  GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, gtk_adjustment_get_upper (adjustment) -
-                                                                     gtk_adjustment_get_page_size (adjustment),
+                                  GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, gtk_adjustment_get_upper (adjustment),
                                   GTK_ACCESSIBLE_PROPERTY_VALUE_MIN, gtk_adjustment_get_lower (adjustment),
                                   -1);
 }
@@ -325,7 +319,7 @@ gtk_scrollbar_adjustment_value_changed (GtkAdjustment *adjustment,
 }
 
 /**
- * gtk_scrollbar_set_adjustment:
+ * gtk_scrollbar_set_adjustment: (attributes org.gtk.Method.set_property=adjustment)
  * @self: a `GtkScrollbar`
  * @adjustment: (nullable): the adjustment to set
  *
@@ -361,8 +355,7 @@ gtk_scrollbar_set_adjustment (GtkScrollbar  *self,
                         G_CALLBACK (gtk_scrollbar_adjustment_value_changed), self);
 
       gtk_accessible_update_property (GTK_ACCESSIBLE (self),
-                                      GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, gtk_adjustment_get_upper (adjustment) -
-                                                                         gtk_adjustment_get_page_size (adjustment),
+                                      GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, gtk_adjustment_get_upper (adjustment),
                                       GTK_ACCESSIBLE_PROPERTY_VALUE_MIN, gtk_adjustment_get_lower (adjustment),
                                       GTK_ACCESSIBLE_PROPERTY_VALUE_NOW, gtk_adjustment_get_value (adjustment),
                                       -1);
@@ -372,7 +365,7 @@ gtk_scrollbar_set_adjustment (GtkScrollbar  *self,
 }
 
 /**
- * gtk_scrollbar_get_adjustment:
+ * gtk_scrollbar_get_adjustment: (attributes org.gtk.Method.get_property=adjustment)
  * @self: a `GtkScrollbar`
  *
  * Returns the scrollbar's adjustment.

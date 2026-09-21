@@ -156,7 +156,6 @@ typedef struct _Block {
  * UNUSED STACK
  */
 
-#ifdef HAVE_MMAP
 static inline void
 unused_push (void **stack, void *ptr)
 {
@@ -183,7 +182,6 @@ unused_peek (void **stack)
 	g_assert (stack);
 	return *stack;
 }
-#endif
 
 /* -----------------------------------------------------------------------------
  * POOL META DATA ALLOCATION
@@ -1431,8 +1429,8 @@ gtk_secure_strdup_full (const char *tag,
 		return NULL;
 
 	len = strlen (str) + 1;
-	res = (char *) gtk_secure_alloc_full (tag, len, options);
-	g_strlcpy (res, str, len);
+	res = (char *)gtk_secure_alloc_full (tag, len, options);
+	strcpy (res, str);
 	return res;
 }
 

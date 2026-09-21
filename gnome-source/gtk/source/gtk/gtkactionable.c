@@ -26,7 +26,8 @@
 /**
  * GtkActionable:
  *
- * Provides a way to associate widgets with actions.
+ * The `GtkActionable` interface provides a convenient way of associating
+ * widgets with actions.
  *
  * It primarily consists of two properties: [property@Gtk.Actionable:action-name]
  * and [property@Gtk.Actionable:action-target]. There are also some convenience
@@ -55,28 +56,17 @@ G_DEFINE_INTERFACE (GtkActionable, gtk_actionable, GTK_TYPE_WIDGET)
 static void
 gtk_actionable_default_init (GtkActionableInterface *iface)
 {
-
-  /**
-   * GtkActionable:action-name:
-   *
-   * The name of the action with which this widget should be associated.
-   */
   g_object_interface_install_property (iface,
     g_param_spec_string ("action-name", NULL, NULL,
-                         NULL, G_PARAM_READWRITE | G_PARAM_STATIC_NAME));
+                         NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  /**
-   * GtkActionable:action-target:
-   *
-   * The target value of the actionable widget's action.
-   */
   g_object_interface_install_property (iface,
     g_param_spec_variant ("action-target", NULL, NULL,
-                          G_VARIANT_TYPE_ANY, NULL, G_PARAM_READWRITE | G_PARAM_STATIC_NAME));
+                          G_VARIANT_TYPE_ANY, NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 /**
- * gtk_actionable_get_action_name:
+ * gtk_actionable_get_action_name: (attributes org.gtk.Property.get=action-name)
  * @actionable: a `GtkActionable` widget
  *
  * Gets the action name for @actionable.
@@ -93,7 +83,7 @@ gtk_actionable_get_action_name (GtkActionable *actionable)
 }
 
 /**
- * gtk_actionable_set_action_name:
+ * gtk_actionable_set_action_name: (attributes org.gtk.Property.set=action-name)
  * @actionable: a `GtkActionable` widget
  * @action_name: (nullable): an action name
  *
@@ -122,7 +112,7 @@ gtk_actionable_set_action_name (GtkActionable *actionable,
 }
 
 /**
- * gtk_actionable_get_action_target_value: (get-property action-target)
+ * gtk_actionable_get_action_target_value: (attributes org.gtk.Method.get_property=action-target)
  * @actionable: a `GtkActionable` widget
  *
  * Gets the current target value of @actionable.
@@ -139,7 +129,7 @@ gtk_actionable_get_action_target_value (GtkActionable *actionable)
 }
 
 /**
- * gtk_actionable_set_action_target_value: (set-property action-target)
+ * gtk_actionable_set_action_target_value: (attributes org.gtk.Method.set_property=action-target)
  * @actionable: a `GtkActionable` widget
  * @target_value: (nullable): a [struct@GLib.Variant] to set as the target value
  *

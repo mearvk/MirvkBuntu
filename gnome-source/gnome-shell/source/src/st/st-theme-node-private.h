@@ -19,7 +19,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef __ST_THEME_NODE_PRIVATE_H__
+#define __ST_THEME_NODE_PRIVATE_H__
 
 #include "st-theme-node.h"
 #include "croco/libcroco.h"
@@ -36,10 +37,10 @@ struct _StThemeNode {
 
   PangoFontDescription *font_desc;
 
-  CoglColor background_color;
+  ClutterColor background_color;
   /* If gradient is set, then background_color is the gradient start */
   StGradientType background_gradient_type;
-  CoglColor background_gradient_end;
+  ClutterColor background_gradient_end;
 
   int background_position_x;
   int background_position_y;
@@ -48,9 +49,9 @@ struct _StThemeNode {
   gint background_size_w;
   gint background_size_h;
 
-  CoglColor foreground_color;
-  CoglColor border_color[4];
-  CoglColor outline_color;
+  ClutterColor foreground_color;
+  ClutterColor border_color[4];
+  ClutterColor outline_color;
 
   int border_width[4];
   int border_radius[4];
@@ -104,11 +105,14 @@ struct _StThemeNode {
   int box_shadow_min_width;
   int box_shadow_min_height;
 
+  guint stylesheets_changed_id;
+
   CoglTexture *border_slices_texture;
   CoglPipeline *border_slices_pipeline;
   CoglTexture *background_texture;
   CoglPipeline *background_pipeline;
   CoglPipeline *background_shadow_pipeline;
+  CoglPipeline *color_pipeline;
 
   StThemeNodePaintState cached_state;
 
@@ -121,3 +125,5 @@ void _st_theme_node_apply_margins (StThemeNode *node,
                                    ClutterActor *actor);
 
 G_END_DECLS
+
+#endif /* __ST_THEME_NODE_PRIVATE_H__ */

@@ -15,12 +15,8 @@ enum {
 
    PROP_PID,
    PROP_TITLE,
-   PROP_WM_CLASS,
-
-   N_PROPS
+   PROP_WM_CLASS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 typedef struct _ShellTrayIconPrivate ShellTrayIconPrivate;
 
@@ -189,10 +185,6 @@ shell_tray_icon_allocate (ClutterActor          *actor,
 
   CLUTTER_ACTOR_CLASS (shell_tray_icon_parent_class)->allocate (actor, box);
 
-  na_xembed_set_available_size (NA_XEMBED (tray_icon->tray_child),
-                                roundf (clutter_actor_box_get_width (box)),
-                                roundf (clutter_actor_box_get_height (box)));
-
   /* Find the actor's new coordinates in terms of the stage.
    */
   clutter_actor_get_transformed_position (actor, &wx, &wy);
@@ -214,19 +206,27 @@ shell_tray_icon_class_init (ShellTrayIconClass *klass)
   actor_class->get_preferred_height = shell_tray_icon_get_preferred_height;
   actor_class->allocate = shell_tray_icon_allocate;
 
-  props[PROP_PID] = g_param_spec_uint ("pid", NULL, NULL,
-                                       0, G_MAXUINT, 0,
-                                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
-
-  props[PROP_TITLE] = g_param_spec_string ("title", NULL, NULL,
-                                           NULL,
-                                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
-
-  props[PROP_WM_CLASS] = g_param_spec_string ("wm-class", NULL, NULL,
-                                              NULL,
-                                              G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_PID,
+                                   g_param_spec_uint ("pid",
+                                                      "PID",
+                                                      "The PID of the icon's application",
+                                                      0, G_MAXUINT, 0,
+                                                      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (object_class,
+                                   PROP_TITLE,
+                                   g_param_spec_string ("title",
+                                                        "Title",
+                                                        "The icon's window title",
+                                                        NULL,
+                                                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (object_class,
+                                   PROP_WM_CLASS,
+                                   g_param_spec_string ("wm-class",
+                                                        "WM Class",
+                                                        "The icon's window WM_CLASS",
+                                                        NULL,
+                                                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -241,7 +241,6 @@ shell_tray_icon_set_child (ShellTrayIcon *tray_icon,
   MetaDisplay *display = shell_global_get_display (shell_global_get ());
 
   g_return_if_fail (tray_icon != NULL);
-  g_return_if_fail (tray_icon->tray_child == NULL);
   g_return_if_fail (tray_child != NULL);
 
   /* We do all this now rather than computing it on the fly later,
@@ -262,10 +261,6 @@ shell_tray_icon_set_child (ShellTrayIcon *tray_icon,
                       "window-created",
                       G_CALLBACK (shell_tray_icon_window_created_cb),
                       tray_icon);
-
-  g_signal_connect_object (tray_child, "reconfigured",
-                           G_CALLBACK (clutter_actor_queue_relayout),
-                           tray_icon, G_CONNECT_SWAPPED);
 }
 
 /*
@@ -282,30 +277,6 @@ shell_tray_icon_new (NaTrayChild *tray_child)
   shell_tray_icon_set_child (tray_icon, tray_child);
 
   return CLUTTER_ACTOR (tray_icon);
-}
-
-pid_t
-shell_tray_icon_get_pid (ShellTrayIcon *icon)
-{
-  g_return_val_if_fail (SHELL_IS_TRAY_ICON (icon), -1);
-
-  return icon->pid;
-}
-
-const char *
-shell_tray_icon_get_title (ShellTrayIcon *icon)
-{
-  g_return_val_if_fail (SHELL_IS_TRAY_ICON (icon), NULL);
-
-  return icon->title;
-}
-
-const char *
-shell_tray_icon_get_wm_class (ShellTrayIcon *icon)
-{
-  g_return_val_if_fail (SHELL_IS_TRAY_ICON (icon), NULL);
-
-  return icon->wm_class;
 }
 
 /**

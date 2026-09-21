@@ -171,7 +171,7 @@ test_short_verts (TestState *state, int offset_x, int offset_y)
   CoglAttribute *attributes[2];
   CoglAttributeBuffer *buffer;
   CoglPipeline *pipeline, *pipeline2;
-  g_autoptr (CoglSnippet) snippet = NULL;
+  CoglSnippet *snippet;
   CoglPrimitive *primitive;
   CoglColor color;
 
@@ -220,7 +220,6 @@ test_short_verts (TestState *state, int offset_x, int offset_y)
   cogl_framebuffer_pop_matrix (test_fb);
 
   g_object_unref (attributes[0]);
-  g_object_unref (attributes[1]);
 
   /* Test again treating the attribute as unsigned */
   attributes[0] = cogl_attribute_new (buffer,

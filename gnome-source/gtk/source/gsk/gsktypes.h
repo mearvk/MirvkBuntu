@@ -22,22 +22,16 @@
 #endif
 
 #include <graphene.h>
-#include <gdk/gdktypes.h>
+#include <gdk/gdk.h>
 #include <gsk/gskenums.h>
-
-G_BEGIN_DECLS
 
 typedef struct _GskPath                 GskPath;
 typedef struct _GskPathBuilder          GskPathBuilder;
 typedef struct _GskPathMeasure          GskPathMeasure;
 typedef struct _GskPathPoint            GskPathPoint;
-typedef unsigned                        GskRectSnap;
 typedef struct _GskRenderer             GskRenderer;
 typedef struct _GskRenderNode           GskRenderNode;
-typedef struct _GskRenderReplay         GskRenderReplay;
 typedef struct _GskRoundedRect          GskRoundedRect;
 typedef struct _GskStroke               GskStroke;
 typedef struct _GskTransform            GskTransform;
-typedef struct _GskComponentTransfer    GskComponentTransfer;
 
-G_END_DECLS

@@ -20,13 +20,13 @@
 
 #include "backends/native/meta-kms-private.h"
 
-#include "backends/meta-udev.h"
 #include "backends/native/meta-backend-native.h"
 #include "backends/native/meta-kms-cursor-manager.h"
 #include "backends/native/meta-kms-device-private.h"
 #include "backends/native/meta-kms-impl.h"
 #include "backends/native/meta-kms-update-private.h"
 #include "backends/native/meta-thread-private.h"
+#include "backends/native/meta-udev.h"
 #include "cogl/cogl.h"
 
 #include "meta-private-enum-types.h"
@@ -34,8 +34,6 @@
 enum
 {
   RESOURCES_CHANGED,
-  DEVICE_ADDED,
-  LEASE_CHANGED,
 
   N_SIGNALS
 };
@@ -49,16 +47,22 @@ struct _MetaKms
   MetaKmsFlags flags;
 
   gulong hotplug_handler_id;
-  gulong lease_handler_id;
   gulong removed_handler_id;
 
+  MetaKmsImpl *impl;
+  gboolean in_impl_task;
+  gboolean waiting_for_impl_task;
+
   GList *devices;
+
+  GList *pending_updates;
+
+  GList *pending_callbacks;
+  guint callback_source_id;
 
   int kernel_thread_inhibit_count;
 
   MetaKmsCursorManager *cursor_manager;
-
-  gboolean shutting_down;
 };
 
 G_DEFINE_TYPE (MetaKms, meta_kms, META_TYPE_THREAD)
@@ -173,13 +177,18 @@ meta_kms_is_waiting_for_impl_task (MetaKms *kms)
   return meta_thread_is_waiting_for_impl_task (thread);
 }
 
+typedef struct _UpdateStatesData
+{
+  const char *device_path;
+  uint32_t crtc_id;
+  uint32_t connector_id;
+} UpdateStatesData;
+
 static MetaKmsResourceChanges
-meta_kms_update_states_in_impl (MetaKms *kms,
-                                char    *hotplug_event)
+meta_kms_update_states_in_impl (MetaKms          *kms,
+                                UpdateStatesData *update_data)
 {
   MetaKmsResourceChanges changes = META_KMS_RESOURCE_CHANGE_NONE;
-  uint32_t crtc_id = 0, connector_id = 0;
-  char *path = NULL;
   GList *l;
 
   COGL_TRACE_BEGIN_SCOPED (MetaKmsUpdateStates,
@@ -190,30 +199,28 @@ meta_kms_update_states_in_impl (MetaKms *kms,
   if (!kms->devices)
     return META_KMS_RESOURCE_CHANGE_NO_DEVICES;
 
-  if (hotplug_event)
-    {
-      sscanf (hotplug_event, "%08x:%08x:%*s", &crtc_id, &connector_id);
-      path = hotplug_event + 2 * strlen ("12345678:");
-    }
-
   for (l = kms->devices; l; l = l->next)
     {
       MetaKmsDevice *kms_device = META_KMS_DEVICE (l->data);
       const char *kms_device_path = meta_kms_device_get_path (kms_device);
 
-      if (path && strcmp (path, kms_device_path) != 0)
+      if (update_data->device_path &&
+          g_strcmp0 (kms_device_path, update_data->device_path) != 0)
         continue;
 
-      if (crtc_id > 0 &&
-          !meta_kms_device_find_crtc_in_impl (kms_device, crtc_id))
+      if (update_data->crtc_id > 0 &&
+          !meta_kms_device_find_crtc_in_impl (kms_device, update_data->crtc_id))
         continue;
 
-      if (connector_id > 0 &&
-          !meta_kms_device_find_connector_in_impl (kms_device, connector_id))
+      if (update_data->connector_id > 0 &&
+          !meta_kms_device_find_connector_in_impl (kms_device,
+                                                   update_data->connector_id))
         continue;
 
       changes |=
-        meta_kms_device_update_states_in_impl (kms_device, crtc_id, connector_id);
+        meta_kms_device_update_states_in_impl (kms_device,
+                                               update_data->crtc_id,
+                                               update_data->connector_id);
     }
 
   return changes;
@@ -224,48 +231,46 @@ update_states_in_impl (MetaThreadImpl  *thread_impl,
                        gpointer         user_data,
                        GError         **error)
 {
-  char *hotplug_event = user_data;
+  UpdateStatesData *data = user_data;
   MetaKmsImpl *impl = META_KMS_IMPL (thread_impl);
   MetaKms *kms = meta_kms_impl_get_kms (impl);
 
-  return GUINT_TO_POINTER (meta_kms_update_states_in_impl (kms, hotplug_event));
+  return GUINT_TO_POINTER (meta_kms_update_states_in_impl (kms, data));
 }
 
-static MetaKmsResourceChanges
-update_states_sync (MetaKms *kms,
-                    char    *hotplug_event)
+MetaKmsResourceChanges
+meta_kms_update_states_sync (MetaKms     *kms,
+                             GUdevDevice *udev_device)
 {
+  UpdateStatesData data = {};
   gpointer ret;
 
-  ret = meta_kms_run_impl_task_sync (kms, update_states_in_impl,
-                                     hotplug_event, NULL);
+  if (udev_device)
+    {
+      data.device_path = g_udev_device_get_device_file (udev_device);
+      data.crtc_id =
+        CLAMP (g_udev_device_get_property_as_int (udev_device, "CRTC"),
+               0, UINT32_MAX);
+      data.connector_id =
+        CLAMP (g_udev_device_get_property_as_int (udev_device, "CONNECTOR"),
+               0, UINT32_MAX);
+    }
+
+  ret = meta_kms_run_impl_task_sync (kms, update_states_in_impl, &data, NULL);
 
   return GPOINTER_TO_UINT (ret);
 }
 
-MetaKmsResourceChanges
-meta_kms_update_states_sync (MetaKms *kms)
-{
-  return update_states_sync (kms, NULL);
-}
-
 static void
-(meta_kms_update_resources) (MetaKms                *kms,
-                             char                   *hotplug_event,
-                             MetaKmsResourceChanges  changes,
-                             const char             *caller)
+handle_hotplug_event (MetaKms                *kms,
+                      GUdevDevice            *udev_device,
+                      MetaKmsResourceChanges  changes)
 {
-  changes |= update_states_sync (kms, hotplug_event);
-
-  meta_topic (META_DEBUG_KMS, "%s -> %s for '%s', changes=0x%x",
-              caller, G_STRFUNC, hotplug_event, changes);
+  changes |= meta_kms_update_states_sync (kms, udev_device);
 
   if (changes != META_KMS_RESOURCE_CHANGE_NONE)
     meta_kms_emit_resources_changed (kms, changes);
 }
-
-#define meta_kms_update_resources(kms, hotplug_event, changes) \
-  (meta_kms_update_resources) ((kms), (hotplug_event), (changes), G_STRFUNC);
 
 static gpointer
 resume_in_impl (MetaThreadImpl  *thread_impl,
@@ -281,28 +286,9 @@ resume_in_impl (MetaThreadImpl  *thread_impl,
 void
 meta_kms_resume (MetaKms *kms)
 {
-  meta_kms_update_resources (kms, NULL, META_KMS_RESOURCE_CHANGE_FULL);
+  handle_hotplug_event (kms, NULL, META_KMS_RESOURCE_CHANGE_FULL);
 
   meta_kms_run_impl_task_sync (kms, resume_in_impl, NULL, NULL);
-}
-
-static char *
-hotplug_event_from_udev_device (GUdevDevice *udev_device)
-{
-  const gchar *device_path;
-  uint32_t crtc_id, connector_id;
-
-  if (!udev_device)
-    return g_strdup ("");
-
-  device_path = g_udev_device_get_device_file (udev_device);
-  crtc_id =
-    CLAMP (g_udev_device_get_property_as_int (udev_device, "CRTC"),
-           0, UINT32_MAX);
-  connector_id =
-    CLAMP (g_udev_device_get_property_as_int (udev_device, "CONNECTOR"),
-           0, UINT32_MAX);
-  return g_strdup_printf ("%08x:%08x:%s", crtc_id, connector_id, device_path);
 }
 
 static void
@@ -310,17 +296,7 @@ on_udev_hotplug (MetaUdev    *udev,
                  GUdevDevice *udev_device,
                  MetaKms     *kms)
 {
-  g_autofree char *hotplug_event = NULL;
-
-  if (meta_is_topic_enabled (META_DEBUG_KMS))
-    {
-      meta_topic (META_DEBUG_KMS,
-                  "%s called at %" G_GINT64_FORMAT,
-                  G_STRFUNC, g_get_monotonic_time ());
-    }
-
-  hotplug_event = hotplug_event_from_udev_device (udev_device);
-  meta_kms_update_resources (kms, hotplug_event, META_KMS_RESOURCE_CHANGE_NONE);
+  handle_hotplug_event (kms, udev_device, META_KMS_RESOURCE_CHANGE_NONE);
 }
 
 static void
@@ -328,15 +304,7 @@ on_udev_device_removed (MetaUdev    *udev,
                         GUdevDevice *device,
                         MetaKms     *kms)
 {
-  meta_kms_update_resources (kms, NULL, META_KMS_RESOURCE_CHANGE_NONE);
-}
-
-static void
-on_udev_lease (MetaUdev    *udev,
-               GUdevDevice *udev_device,
-               MetaKms     *kms)
-{
-  g_signal_emit (kms, signals[LEASE_CHANGED], 0);
+  handle_hotplug_event (kms, NULL, META_KMS_RESOURCE_CHANGE_NONE);
 }
 
 MetaBackend *
@@ -363,28 +331,12 @@ meta_kms_create_device (MetaKms            *kms,
     flags |= META_KMS_DEVICE_FLAG_NO_MODE_SETTING;
 
   device = meta_kms_device_new (kms, path, flags, error);
-  if (!device &&
-      flags & META_KMS_DEVICE_FLAG_PREFERRED_PRIMARY &&
-      !(flags & META_KMS_DEVICE_FLAG_NO_MODE_SETTING))
-    {
-      flags |= META_KMS_DEVICE_FLAG_NO_MODE_SETTING;
-      device = meta_kms_device_new (kms, path, flags, error);
-    }
-
   if (!device)
     return NULL;
 
   kms->devices = g_list_append (kms->devices, device);
 
-  g_signal_emit (kms, signals[DEVICE_ADDED], 0, device);
-
   return device;
-}
-
-gboolean
-meta_kms_is_shutting_down (MetaKms *kms)
-{
-  return kms->shutting_down;
 }
 
 static gpointer
@@ -402,7 +354,6 @@ static void
 on_prepare_shutdown (MetaBackend *backend,
                      MetaKms     *kms)
 {
-  kms->shutting_down = TRUE;
   meta_kms_run_impl_task_sync (kms, prepare_shutdown_in_impl, NULL, NULL);
   meta_thread_flush_callbacks (META_THREAD (kms));
 
@@ -414,12 +365,12 @@ meta_kms_new (MetaBackend   *backend,
               MetaKmsFlags   flags,
               GError       **error)
 {
-  MetaUdev *udev = meta_backend_get_udev (backend);
+  MetaBackendNative *backend_native = META_BACKEND_NATIVE (backend);
+  MetaUdev *udev = meta_backend_native_get_udev (backend_native);
   MetaKms *kms;
   const char *thread_type_string;
-  const char *preferred_scheduling_priority_string;
   MetaThreadType thread_type = META_THREAD_TYPE_KERNEL;
-  MetaSchedulingPriority preferred_scheduling_priority;
+  gboolean wants_realtime_scheduling;
 
   thread_type_string = g_getenv ("MUTTER_DEBUG_KMS_THREAD_TYPE");
   if (thread_type_string)
@@ -431,39 +382,17 @@ meta_kms_new (MetaBackend   *backend,
       else
         g_assert_not_reached ();
     }
+
+  wants_realtime_scheduling = !(flags & META_KMS_FLAG_NO_MODE_SETTING);
   if (flags & META_KMS_FLAG_NO_MODE_SETTING)
     thread_type = META_THREAD_TYPE_USER;
-
-  preferred_scheduling_priority_string =
-    g_getenv ("MUTTER_DEBUG_KMS_SCHEDULING_PRIORITY");
-  if (preferred_scheduling_priority_string)
-    {
-      if (g_strcmp0 (preferred_scheduling_priority_string,
-                     "normal") == 0)
-        preferred_scheduling_priority = META_SCHEDULING_PRIORITY_NORMAL;
-      else if (g_strcmp0 (preferred_scheduling_priority_string,
-                          "realtime") == 0)
-        preferred_scheduling_priority = META_SCHEDULING_PRIORITY_REALTIME;
-      else if (g_strcmp0 (preferred_scheduling_priority_string,
-                          "high-priority") == 0)
-        preferred_scheduling_priority = META_SCHEDULING_PRIORITY_HIGH_PRIORITY;
-      else
-        g_assert_not_reached ();
-    }
-  else
-    {
-      if (flags & META_KMS_FLAG_NO_MODE_SETTING)
-        preferred_scheduling_priority = META_SCHEDULING_PRIORITY_NORMAL;
-      else
-        preferred_scheduling_priority = META_SCHEDULING_PRIORITY_HIGH_PRIORITY;
-    }
 
   kms = g_initable_new (META_TYPE_KMS,
                         NULL, error,
                         "backend", backend,
                         "name", "KMS thread",
                         "thread-type", thread_type,
-                        "preferred-scheduling-priority", preferred_scheduling_priority,
+                        "wants-realtime", wants_realtime_scheduling,
                         NULL);
   kms->flags = flags;
 
@@ -471,8 +400,6 @@ meta_kms_new (MetaBackend   *backend,
     {
       kms->hotplug_handler_id =
         g_signal_connect (udev, "hotplug", G_CALLBACK (on_udev_hotplug), kms);
-      kms->lease_handler_id =
-        g_signal_connect (udev, "lease", G_CALLBACK (on_udev_lease), kms);
     }
 
   kms->removed_handler_id =
@@ -486,35 +413,17 @@ meta_kms_new (MetaBackend   *backend,
   return kms;
 }
 
-static gpointer
-notify_probed_in_impl (MetaThreadImpl  *thread_impl,
-                       gpointer         user_data,
-                       GError         **error)
-{
-  meta_kms_impl_notify_probed (META_KMS_IMPL (thread_impl));
-  return NULL;
-}
-
-void
-meta_kms_notify_probed (MetaKms *kms)
-{
-  meta_thread_post_impl_task (META_THREAD (kms),
-                              notify_probed_in_impl,
-                              NULL, NULL, NULL, NULL);
-}
-
 static void
 meta_kms_finalize (GObject *object)
 {
   MetaKms *kms = META_KMS (object);
   MetaBackend *backend = meta_thread_get_backend (META_THREAD (kms));
-  MetaUdev *udev = meta_backend_get_udev (backend);
+  MetaBackendNative *backend_native = META_BACKEND_NATIVE (backend);
+  MetaUdev *udev = meta_backend_native_get_udev (backend_native);
 
-  g_clear_object (&kms->cursor_manager);
   g_list_free_full (kms->devices, g_object_unref);
 
   g_clear_signal_handler (&kms->hotplug_handler_id, udev);
-  g_clear_signal_handler (&kms->lease_handler_id, udev);
   g_clear_signal_handler (&kms->removed_handler_id, udev);
 
   G_OBJECT_CLASS (meta_kms_parent_class)->finalize (object);
@@ -543,23 +452,6 @@ meta_kms_class_init (MetaKmsClass *klass)
                   G_TYPE_NONE, 1,
                   META_TYPE_KMS_RESOURCE_CHANGES);
 
-  signals[DEVICE_ADDED] =
-    g_signal_new ("device-added",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST,
-                  0,
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE, 1,
-                  META_TYPE_KMS_DEVICE);
-
-  signals[LEASE_CHANGED] =
-    g_signal_new ("lease-changed",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST,
-                  0,
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
-
   meta_thread_class_register_impl_type (thread_class, META_TYPE_KMS_IMPL);
 }
 
@@ -568,6 +460,26 @@ meta_kms_emit_resources_changed (MetaKms                *kms,
                                  MetaKmsResourceChanges  changes)
 {
   g_signal_emit (kms, signals[RESOURCES_CHANGED], 0, changes);
+}
+
+void
+meta_kms_inhibit_kernel_thread (MetaKms *kms)
+{
+  kms->kernel_thread_inhibit_count++;
+
+  if (kms->kernel_thread_inhibit_count == 1)
+    meta_thread_reset_thread_type (META_THREAD (kms), META_THREAD_TYPE_USER);
+}
+
+void
+meta_kms_uninhibit_kernel_thread (MetaKms *kms)
+{
+  g_return_if_fail (kms->kernel_thread_inhibit_count > 0);
+
+  kms->kernel_thread_inhibit_count--;
+
+  if (kms->kernel_thread_inhibit_count == 0)
+    meta_thread_reset_thread_type (META_THREAD (kms), META_THREAD_TYPE_KERNEL);
 }
 
 MetaKmsCursorManager *

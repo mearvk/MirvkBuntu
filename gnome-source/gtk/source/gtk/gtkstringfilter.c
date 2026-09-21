@@ -26,9 +26,10 @@
 /**
  * GtkStringFilter:
  *
- * Determines whether to include items by comparing strings to a fixed search term.
+ * `GtkStringFilter` determines whether to include items by comparing
+ * strings to a fixed search term.
  *
- * The strings are obtained from the items by evaluating an expression
+ * The strings are obtained from the items by evaluating a `GtkExpression`
  * set with [method@Gtk.StringFilter.set_expression], and they are
  * compared against a search term set with [method@Gtk.StringFilter.set_search].
  *
@@ -246,27 +247,26 @@ gtk_string_filter_class_init (GtkStringFilterClass *class)
   object_class->dispose = gtk_string_filter_dispose;
 
   /**
-   * GtkStringFilter:expression: (type GtkExpression)
+   * GtkStringFilter:expression: (type GtkExpression) (attributes org.gtk.Property.get=gtk_string_filter_get_expression org.gtk.Property.set=gtk_string_filter_set_expression)
    *
-   * The expression to evaluate on each item to get a
-   * string to compare with.
+   * The expression to evaluate on item to get a string to compare with.
    */
   properties[PROP_EXPRESSION] =
     gtk_param_spec_expression ("expression", NULL, NULL,
-                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStringFilter:ignore-case:
+   * GtkStringFilter:ignore-case: (attributes org.gtk.Property.get=gtk_string_filter_get_ignore_case org.gtk.Property.set=gtk_string_filter_set_ignore_case)
    *
    * If matching is case sensitive.
    */
   properties[PROP_IGNORE_CASE] =
       g_param_spec_boolean ("ignore-case", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStringFilter:match-mode:
+   * GtkStringFilter:match-mode: (attributes org.gtk.Property.get=gtk_string_filter_get_match_mode org.gtk.Property.set=gtk_string_filter_set_match_mode)
    *
    * If exact matches are necessary or if substrings are allowed.
    */
@@ -274,17 +274,17 @@ gtk_string_filter_class_init (GtkStringFilterClass *class)
       g_param_spec_enum ("match-mode", NULL, NULL,
                          GTK_TYPE_STRING_FILTER_MATCH_MODE,
                          GTK_STRING_FILTER_MATCH_MODE_SUBSTRING,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkStringFilter:search:
+   * GtkStringFilter:search: (attributes org.gtk.Property.get=gtk_string_filter_get_search org.gtk.Property.set=gtk_string_filter_set_search)
    *
    * The search term.
    */
   properties[PROP_SEARCH] =
       g_param_spec_string ("search", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
@@ -299,7 +299,7 @@ gtk_string_filter_init (GtkStringFilter *self)
 
 /**
  * gtk_string_filter_new:
- * @expression: (transfer full) (nullable): the expression to evaluate
+ * @expression: (transfer full) (nullable): The expression to evaluate
  *
  * Creates a new string filter.
  *
@@ -323,12 +323,12 @@ gtk_string_filter_new (GtkExpression *expression)
 }
 
 /**
- * gtk_string_filter_get_search:
- * @self: a string filter
+ * gtk_string_filter_get_search: (attributes org.gtk.Method.get_property=search)
+ * @self: a `GtkStringFilter`
  *
  * Gets the search term.
  *
- * Returns: (nullable) (transfer none): the search term
+ * Returns: (nullable) (transfer none): The search term
  **/
 const char *
 gtk_string_filter_get_search (GtkStringFilter *self)
@@ -339,9 +339,10 @@ gtk_string_filter_get_search (GtkStringFilter *self)
 }
 
 /**
- * gtk_string_filter_set_search:
- * @self: a string filter
- * @search: (transfer none) (nullable): the string to search for
+ * gtk_string_filter_set_search: (attributes org.gtk.Method.set_property=search)
+ * @self: a `GtkStringFilter`
+ * @search: (transfer none) (nullable): The string to search for
+ *   or %NULL to clear the search
  *
  * Sets the string to search for.
  */
@@ -379,13 +380,13 @@ gtk_string_filter_set_search (GtkStringFilter *self,
 }
 
 /**
- * gtk_string_filter_get_expression:
- * @self: a string filter
+ * gtk_string_filter_get_expression: (attributes org.gtk.Method.get_property=expression)
+ * @self: a `GtkStringFilter`
  *
  * Gets the expression that the string filter uses to
  * obtain strings from items.
  *
- * Returns: (transfer none) (nullable): the expression 
+ * Returns: (transfer none) (nullable): a `GtkExpression`
  */
 GtkExpression *
 gtk_string_filter_get_expression (GtkStringFilter *self)
@@ -396,14 +397,14 @@ gtk_string_filter_get_expression (GtkStringFilter *self)
 }
 
 /**
- * gtk_string_filter_set_expression:
- * @self: a string filter
- * @expression: (nullable): the expression
+ * gtk_string_filter_set_expression: (attributes org.gtk.Method.set_property=expression)
+ * @self: a `GtkStringFilter`
+ * @expression: (nullable): a `GtkExpression`
  *
  * Sets the expression that the string filter uses to
  * obtain strings from items.
  *
- * The expression must have a value type of `G_TYPE_STRING`.
+ * The expression must have a value type of %G_TYPE_STRING.
  */
 void
 gtk_string_filter_set_expression (GtkStringFilter *self,
@@ -419,18 +420,18 @@ gtk_string_filter_set_expression (GtkStringFilter *self,
   self->expression = gtk_expression_ref (expression);
 
   if (gtk_string_filter_has_search (self))
-    gtk_filter_changed (GTK_FILTER (self), GTK_FILTER_CHANGE_DIFFERENT_REWATCH);
+    gtk_filter_changed (GTK_FILTER (self), GTK_FILTER_CHANGE_DIFFERENT);
 
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_EXPRESSION]);
 }
 
 /**
- * gtk_string_filter_get_ignore_case:
- * @self: a string filter
+ * gtk_string_filter_get_ignore_case: (attributes org.gtk.Method.get_property=ignore-case)
+ * @self: a `GtkStringFilter`
  *
  * Returns whether the filter ignores case differences.
  *
- * Returns: true if the filter ignores case
+ * Returns: %TRUE if the filter ignores case
  */
 gboolean
 gtk_string_filter_get_ignore_case (GtkStringFilter *self)
@@ -441,9 +442,9 @@ gtk_string_filter_get_ignore_case (GtkStringFilter *self)
 }
 
 /**
- * gtk_string_filter_set_ignore_case:
- * @self: a string filter
- * @ignore_case: true to ignore case
+ * gtk_string_filter_set_ignore_case: (attributes org.gtk.Method.set_property=ignore-case)
+ * @self: a `GtkStringFilter`
+ * @ignore_case: %TRUE to ignore case
  *
  * Sets whether the filter ignores case differences.
  */
@@ -469,8 +470,8 @@ gtk_string_filter_set_ignore_case (GtkStringFilter *self,
 }
 
 /**
- * gtk_string_filter_get_match_mode:
- * @self: a string filter
+ * gtk_string_filter_get_match_mode: (attributes org.gtk.Method.get_property=match-mode)
+ * @self: a `GtkStringFilter`
  *
  * Returns the match mode that the filter is using.
  *
@@ -485,8 +486,8 @@ gtk_string_filter_get_match_mode (GtkStringFilter *self)
 }
 
 /**
- * gtk_string_filter_set_match_mode:
- * @self: a string filter
+ * gtk_string_filter_set_match_mode: (attributes org.gtk.Method.set_property=match-mode)
+ * @self: a `GtkStringFilter`
  * @mode: the new match mode
  *
  * Sets the match mode for the filter.

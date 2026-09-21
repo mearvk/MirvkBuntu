@@ -44,7 +44,7 @@ struct _GGPhoto2VolumeClass {
    GObjectClass parent_class;
 };
 
-GType g_gphoto2_volume_get_type (void);
+GType g_gphoto2_volume_get_type (void) G_GNUC_CONST;
 
 GGPhoto2Volume *g_gphoto2_volume_new            (GVolumeMonitor   *volume_monitor,
                                                  GUdevDevice      *device,

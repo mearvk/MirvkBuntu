@@ -56,10 +56,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  *
  * `GtkInfoBar` can be used to show messages to the user without a dialog.
  *
- * <picture>
- *   <source srcset="info-bar-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkInfoBar" src="info-bar.png">
- * </picture>
+ * ![An example GtkInfoBar](info-bar.png)
  *
  * It is often temporarily shown at the top or bottom of a document.
  * In contrast to [class@Gtk.Dialog], which has an action area at the
@@ -301,7 +298,7 @@ clear_response_data (GtkWidget *widget)
   ResponseData *data;
 
   data = get_response_data (widget, FALSE);
-  g_clear_signal_handler (&data->handler_id, widget);
+  g_signal_handler_disconnect (widget, data->handler_id);
   g_object_set_data (G_OBJECT (widget), "gtk-info-bar-response-data", NULL);
 }
 
@@ -358,7 +355,7 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
   klass->close = gtk_info_bar_close;
 
   /**
-   * GtkInfoBar:message-type:
+   * GtkInfoBar:message-type: (attributes org.gtk.Property.get=gtk_info_bar_get_message_type org.gtk.Property.set=gtk_info_bar_set_message_type)
    *
    * The type of the message.
    *
@@ -368,27 +365,27 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
     g_param_spec_enum ("message-type", NULL, NULL,
                        GTK_TYPE_MESSAGE_TYPE,
                        GTK_MESSAGE_INFO,
-                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                       GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkInfoBar:show-close-button:
+   * GtkInfoBar:show-close-button: (attributes org.gtk.Property.get=gtk_info_bar_get_show_close_button org.gtk.Property.set=gtk_info_bar_set_show_close_button)
    *
    * Whether to include a standard close button.
    */
   props[PROP_SHOW_CLOSE_BUTTON] =
     g_param_spec_boolean ("show-close-button", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkInfoBar:revealed:
+   * GtkInfoBar:revealed: (attributes org.gtk.Property.get=gtk_info_bar_get_revealed org.gtk.Property.set=gtk_info_bar_set_revealed)
    *
    * Whether the info bar shows its contents.
    */
   props[PROP_REVEALED] =
     g_param_spec_boolean ("revealed", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
 
@@ -430,7 +427,7 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
                                   G_TYPE_NONE, 0);
 
   gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_Escape, GDK_NO_MODIFIER_MASK,
+                                       GDK_KEY_Escape, 0,
                                        "close",
                                        NULL);
 
@@ -1049,7 +1046,7 @@ gtk_info_bar_buildable_custom_finished (GtkBuildable *buildable,
   ResponseData *ad;
   guint signal_id;
 
-  if (strcmp (tagname, "action-widgets") != 0)
+  if (strcmp (tagname, "action-widgets"))
     {
       parent_buildable_iface->custom_finished (buildable, builder, child,
                                                tagname, user_data);
@@ -1107,7 +1104,7 @@ gtk_info_bar_buildable_add_child (GtkBuildable *buildable,
 }
 
 /**
- * gtk_info_bar_set_message_type:
+ * gtk_info_bar_set_message_type: (attributes org.gtk.Method.set_property=message-type)
  * @info_bar: a `GtkInfoBar`
  * @message_type: a `GtkMessageType`
  *
@@ -1148,7 +1145,7 @@ gtk_info_bar_set_message_type (GtkInfoBar     *info_bar,
 }
 
 /**
- * gtk_info_bar_get_message_type:
+ * gtk_info_bar_get_message_type: (attributes org.gtk.Method.get_property=message-type)
  * @info_bar: a `GtkInfoBar`
  *
  * Returns the message type of the message area.
@@ -1167,7 +1164,7 @@ gtk_info_bar_get_message_type (GtkInfoBar *info_bar)
 
 
 /**
- * gtk_info_bar_set_show_close_button:
+ * gtk_info_bar_set_show_close_button: (attributes org.gtk.Method.set_property=show-close-button)
  * @info_bar: a `GtkInfoBar`
  * @setting: %TRUE to include a close button
  *
@@ -1191,7 +1188,7 @@ gtk_info_bar_set_show_close_button (GtkInfoBar *info_bar,
 }
 
 /**
- * gtk_info_bar_get_show_close_button:
+ * gtk_info_bar_get_show_close_button: (attributes org.gtk.Method.get_property=show-close-button)
  * @info_bar: a `GtkInfoBar`
  *
  * Returns whether the widget will display a standard close button.
@@ -1209,7 +1206,7 @@ gtk_info_bar_get_show_close_button (GtkInfoBar *info_bar)
 }
 
 /**
- * gtk_info_bar_set_revealed:
+ * gtk_info_bar_set_revealed: (attributes org.gtk.Method.set_property=revealed)
  * @info_bar: a `GtkInfoBar`
  * @revealed: The new value of the property
  *
@@ -1238,7 +1235,7 @@ gtk_info_bar_set_revealed (GtkInfoBar *info_bar,
 }
 
 /**
- * gtk_info_bar_get_revealed:
+ * gtk_info_bar_get_revealed: (attributes org.gtk.Method.get_property=revealed)
  * @info_bar: a `GtkInfoBar`
  *
  * Returns whether the info bar is currently revealed.

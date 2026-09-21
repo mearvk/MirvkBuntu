@@ -34,7 +34,7 @@
 /**
  * GtkTreeExpander:
  *
- * Provides an expander for a tree-like list.
+ * `GtkTreeExpander` is a widget that provides an expander for a list.
  *
  * It is typically placed as a bottommost child into a `GtkListView`
  * to allow users to expand and collapse children in a list with a
@@ -66,28 +66,6 @@
  * the model of the treelistrow, to hide the expander for rows without children,
  * even if the row is expandable.
  *
- * ## Shortcuts and Gestures
- *
- * `GtkTreeExpander` supports the following keyboard shortcuts:
- *
- * - <kbd>+</kbd> or <kbd>*</kbd> expands the expander.
- * - <kbd>-</kbd> or <kbd>/</kbd> collapses the expander.
- * - Left and right arrow keys, when combined with <kbd>Shift</kbd> or
- *   <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, will expand or collapse, depending on
- *   the locale's text direction.
- * - <kbd>Ctrl</kbd>+<kbd>␣</kbd> toggles the expander state.
- *
- * The row can also expand on drag gestures.
- *
- * ## Actions
- *
- * `GtkTreeExpander` defines a set of built-in actions:
- *
- * - `listitem.expand` expands the expander if it can be expanded.
- * - `listitem.collapse` collapses the expander.
- * - `listitem.toggle-expand` tries to expand the expander if it was collapsed
- *   or collapses it if it was expanded.
- *
  * ## CSS nodes
  *
  * ```
@@ -106,9 +84,9 @@
  *
  * ## Accessibility
  *
- * Until GTK 4.10, `GtkTreeExpander` used the [enum@Gtk.AccessibleRole.group] role.
+ * Until GTK 4.10, `GtkTreeExpander` used the `GTK_ACCESSIBLE_ROLE_GROUP` role.
  *
- * Since GTK 4.12, `GtkTreeExpander` uses the [enum@Gtk.AccessibleRole.button] role.
+ * Since GTK 4.12, `GtkTreeExpander` uses the `GTK_ACCESSIBLE_ROLE_BUTTON` role.
  * Toggling it will change the `GTK_ACCESSIBLE_STATE_EXPANDED` state.
  */
 
@@ -120,7 +98,7 @@ struct _GtkTreeExpander
   GtkWidget *child;
 
   GtkWidget *expander_icon;
-  gulong notify_handler;
+  guint notify_handler;
 
   gboolean hide_expander;
   gboolean indent_for_depth;
@@ -362,7 +340,8 @@ gtk_tree_expander_clear_list_row (GtkTreeExpander *self)
   if (self->list_row == NULL)
     return;
 
-  g_clear_signal_handler (&self->notify_handler, self->list_row);
+  g_signal_handler_disconnect (self->list_row, self->notify_handler);
+  self->notify_handler = 0;
   g_clear_object (&self->list_row);
 }
 
@@ -371,7 +350,11 @@ gtk_tree_expander_dispose (GObject *object)
 {
   GtkTreeExpander *self = GTK_TREE_EXPANDER (object);
 
-  g_clear_handle_id (&self->expand_timer, g_source_remove);
+  if (self->expand_timer)
+    {
+      g_source_remove (self->expand_timer);
+      self->expand_timer = 0;
+    }
 
   gtk_tree_expander_clear_list_row (self);
   gtk_tree_expander_update_for_list_row (self);
@@ -548,17 +531,17 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
   gobject_class->set_property = gtk_tree_expander_set_property;
 
   /**
-   * GtkTreeExpander:child:
+   * GtkTreeExpander:child: (attributes org.gtk.Property.get=gtk_tree_expander_get_child org.gtk.Property.set=gtk_tree_expander_set_child)
    *
    * The child widget with the actual contents.
    */
   properties[PROP_CHILD] =
     g_param_spec_object ("child", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkTreeExpander:hide-expander:
+   * GtkTreeExpander:hide-expander: (attributes org.gtk.Property.get=gtk_tree_expander_get_hide_expander org.gtk.Property.set=gtk_tree_expander_set_hide_expander)
    *
    * Whether the expander icon should be hidden in a GtkTreeListRow.
    * Note that this property simply hides the icon.  The actions and keybinding
@@ -572,10 +555,10 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
   properties[PROP_HIDE_EXPANDER] =
       g_param_spec_boolean ("hide-expander", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkTreeExpander:indent-for-depth:
+   * GtkTreeExpander:indent-for-depth: (attributes org.gtk.Property.get=gtk_tree_expander_get_indent_for_depth org.gtk.Property.set=gtk_tree_expander_set_indent_for_depth)
    *
    * TreeExpander indents the child according to its depth.
    *
@@ -584,10 +567,10 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
   properties[PROP_INDENT_FOR_DEPTH] =
       g_param_spec_boolean ("indent-for-depth", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkTreeExpander:indent-for-icon:
+   * GtkTreeExpander:indent-for-icon: (attributes org.gtk.Property.get=gtk_tree_expander_get_indent_for_icon org.gtk.Property.set=gtk_tree_expander_set_indent_for_icon)
    *
    * TreeExpander indents the child by the width of an expander-icon if it is not expandable.
    *
@@ -596,27 +579,27 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
   properties[PROP_INDENT_FOR_ICON] =
       g_param_spec_boolean ("indent-for-icon", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkTreeExpander:item:
+   * GtkTreeExpander:item: (attributes org.gtk.Property.get=gtk_tree_expander_get_item)
    *
    * The item held by this expander's row.
    */
   properties[PROP_ITEM] =
       g_param_spec_object ("item", NULL, NULL,
                            G_TYPE_OBJECT,
-                           G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                           G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkTreeExpander:list-row:
+   * GtkTreeExpander:list-row: (attributes org.gtk.Property.get=gtk_tree_expander_get_list_row org.gtk.Property.set=gtk_tree_expander_set_list_row)
    *
    * The list row to track for expander state.
    */
   properties[PROP_LIST_ROW] =
     g_param_spec_object ("list-row", NULL, NULL,
                          GTK_TYPE_TREE_LIST_ROW,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 
@@ -651,21 +634,21 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
                                    NULL,
                                    gtk_tree_expander_toggle_expand);
 
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_plus, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_plus, 0,
                                        "listitem.expand", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Add, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Add, 0,
                                        "listitem.expand", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_asterisk, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_asterisk, 0,
                                        "listitem.expand", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Multiply, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Multiply, 0,
                                        "listitem.expand", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_minus, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_minus, 0,
                                        "listitem.collapse", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Subtract, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Subtract, 0,
                                        "listitem.collapse", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_slash, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_slash, 0,
                                        "listitem.collapse", NULL);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Divide, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Divide, 0,
                                        "listitem.collapse", NULL);
 
   gtk_widget_class_add_binding (widget_class, GDK_KEY_Right, GDK_SHIFT_MASK,
@@ -692,7 +675,7 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
 
 #if 0
   /* These can't be implements yet. */
-  gtk_widget_class_add_binding (widget_class, GDK_KEY_BackSpace, GDK_NO_MODIFIER_MASK, go_to_parent_row, NULL, NULL);
+  gtk_widget_class_add_binding (widget_class, GDK_KEY_BackSpace, 0, go_to_parent_row, NULL, NULL);
   gtk_widget_class_add_binding (widget_class, GDK_KEY_BackSpace, GDK_CONTROL_MASK, go_to_parent_row, NULL, NULL);
 #endif
 
@@ -701,7 +684,7 @@ gtk_tree_expander_class_init (GtkTreeExpanderClass *klass)
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_BUTTON);
 }
 
-static void
+static gboolean
 gtk_tree_expander_expand_timeout (gpointer data)
 {
   GtkTreeExpander *self = GTK_TREE_EXPANDER (data);
@@ -710,6 +693,8 @@ gtk_tree_expander_expand_timeout (gpointer data)
     gtk_tree_list_row_set_expanded (self->list_row, TRUE);
 
   self->expand_timer = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
 #define TIMEOUT_EXPAND 500
@@ -726,7 +711,7 @@ gtk_tree_expander_drag_enter (GtkDropControllerMotion *motion,
   if (!gtk_tree_list_row_get_expanded (self->list_row) &&
       !self->expand_timer)
     {
-      self->expand_timer = g_timeout_add_once (TIMEOUT_EXPAND, (GSourceOnceFunc) gtk_tree_expander_expand_timeout, self);
+      self->expand_timer = g_timeout_add (TIMEOUT_EXPAND, (GSourceFunc) gtk_tree_expander_expand_timeout, self);
       gdk_source_set_static_name_by_id (self->expand_timer, "[gtk] gtk_tree_expander_expand_timeout");
     }
 }
@@ -735,7 +720,11 @@ static void
 gtk_tree_expander_drag_leave (GtkDropControllerMotion *motion,
                               GtkTreeExpander         *self)
 {
-  g_clear_handle_id (&self->expand_timer, g_source_remove);
+  if (self->expand_timer)
+    {
+      g_source_remove (self->expand_timer);
+      self->expand_timer = 0;
+    }
 }
 
 static void
@@ -768,7 +757,7 @@ gtk_tree_expander_new (void)
 }
 
 /**
- * gtk_tree_expander_get_child:
+ * gtk_tree_expander_get_child: (attributes org.gtk.Method.get_property=child)
  * @self: a `GtkTreeExpander`
  *
  * Gets the child widget displayed by @self.
@@ -784,7 +773,7 @@ gtk_tree_expander_get_child (GtkTreeExpander *self)
 }
 
 /**
- * gtk_tree_expander_set_child:
+ * gtk_tree_expander_set_child: (attributes org.gtk.Method.set_property=child)
  * @self: a `GtkTreeExpander`
  * @child: (nullable): a `GtkWidget`
  *
@@ -820,7 +809,7 @@ gtk_tree_expander_set_child (GtkTreeExpander *self,
 }
 
 /**
- * gtk_tree_expander_get_item:
+ * gtk_tree_expander_get_item: (attributes org.gtk.Method.get_property=item)
  * @self: a `GtkTreeExpander`
  *
  * Forwards the item set on the `GtkTreeListRow` that @self is managing.
@@ -845,7 +834,7 @@ gtk_tree_expander_get_item (GtkTreeExpander *self)
 }
 
 /**
- * gtk_tree_expander_get_list_row:
+ * gtk_tree_expander_get_list_row: (attributes org.gtk.Method.get_property=list-row)
  * @self: a `GtkTreeExpander`
  *
  * Gets the list row managed by @self.
@@ -861,7 +850,7 @@ gtk_tree_expander_get_list_row (GtkTreeExpander *self)
 }
 
 /**
- * gtk_tree_expander_set_list_row:
+ * gtk_tree_expander_set_list_row: (attributes org.gtk.Method.set_property=list-row)
  * @self: a `GtkTreeExpander` widget
  * @list_row: (nullable): a `GtkTreeListRow`
  *
@@ -899,7 +888,7 @@ gtk_tree_expander_set_list_row (GtkTreeExpander *self,
 }
 
 /**
- * gtk_tree_expander_get_indent_for_depth:
+ * gtk_tree_expander_get_indent_for_depth: (attributes org.gtk.Method.get_property=indent-for-depth)
  * @self: a `GtkTreeExpander`
  *
  * TreeExpander indents each level of depth with an additional indent.
@@ -917,7 +906,7 @@ gtk_tree_expander_get_indent_for_depth (GtkTreeExpander *self)
 }
 
 /**
- * gtk_tree_expander_set_indent_for_depth:
+ * gtk_tree_expander_set_indent_for_depth: (attributes org.gtk.Method.set_property=indent-for-depth)
  * @self: a `GtkTreeExpander` widget
  * @indent_for_depth: TRUE if the child should be indented. Otherwise FALSE.
  *
@@ -942,7 +931,7 @@ gtk_tree_expander_set_indent_for_depth (GtkTreeExpander *self,
 }
 
 /**
- * gtk_tree_expander_get_indent_for_icon:
+ * gtk_tree_expander_get_indent_for_icon: (attributes org.gtk.Method.get_property=indent-for-icon)
  * @self: a `GtkTreeExpander`
  *
  * TreeExpander indents the child by the width of an expander-icon if it is not expandable.
@@ -960,7 +949,7 @@ gtk_tree_expander_get_indent_for_icon (GtkTreeExpander *self)
 }
 
 /**
- * gtk_tree_expander_set_indent_for_icon:
+ * gtk_tree_expander_set_indent_for_icon: (attributes org.gtk.Method.set_property=indent-for-icon)
  * @self: a `GtkTreeExpander` widget
  * @indent_for_icon: TRUE if the child should be indented without expander. Otherwise FALSE.
  *
@@ -985,7 +974,7 @@ gtk_tree_expander_set_indent_for_icon (GtkTreeExpander *self,
 }
 
 /**
- * gtk_tree_expander_get_hide_expander:
+ * gtk_tree_expander_get_hide_expander: (attributes org.gtk.Method.get_property=hide-expander)
  * @self: a `GtkTreeExpander`
  *
  * Gets whether the TreeExpander should be hidden in a GtkTreeListRow.
@@ -1003,7 +992,7 @@ gtk_tree_expander_get_hide_expander (GtkTreeExpander *self)
 }
 
 /**
- * gtk_tree_expander_set_hide_expander:
+ * gtk_tree_expander_set_hide_expander: (attributes org.gtk.Method.set_property=hide-expander)
  * @self: a `GtkTreeExpander` widget
  * @hide_expander: TRUE if the expander should be hidden. Otherwise FALSE.
  *

@@ -20,8 +20,8 @@
 
 #include "gdkcairocontext-wayland.h"
 
+#include "gdkprivate-wayland.h"
 #include "gdksurface-wayland-private.h"
-#include "gdkshm-private.h"
 
 #include "gdkprofilerprivate.h"
 
@@ -98,10 +98,7 @@ gdk_wayland_cairo_context_buffer_release (void             *_data,
 
   /* context was destroyed before compositor released this buffer */
   if (self == NULL)
-    {
-      cairo_surface_destroy (cairo_surface);
-      return;
-    }
+    return;
 
   /* Cache one surface for reuse when drawing */
   if (self->cached_surface == NULL)
@@ -123,16 +120,18 @@ static const struct wl_buffer_listener buffer_listener = {
 static cairo_surface_t *
 gdk_wayland_cairo_context_create_surface (GdkWaylandCairoContext *self)
 {
-  GdkDrawContext *draw_context = GDK_DRAW_CONTEXT (self);
-  GdkWaylandDisplay *display_wayland = GDK_WAYLAND_DISPLAY (gdk_draw_context_get_display (draw_context));
+  GdkWaylandDisplay *display_wayland = GDK_WAYLAND_DISPLAY (gdk_draw_context_get_display (GDK_DRAW_CONTEXT (self)));
+  GdkSurface *surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (self));
   cairo_surface_t *cairo_surface;
   struct wl_buffer *buffer;
   cairo_region_t *region;
-  guint width, height;
+  int width, height;
 
-  gdk_draw_context_get_buffer_size (draw_context, &width, &height);
+  width = gdk_surface_get_width (surface);
+  height = gdk_surface_get_height (surface);
   cairo_surface = gdk_wayland_display_create_shm_surface (display_wayland,
-                                                          width, height);
+                                                          width, height,
+                                                          &GDK_WAYLAND_SURFACE (surface)->scale);
   buffer = _gdk_wayland_shm_surface_get_wl_buffer (cairo_surface);
   wl_buffer_add_listener (buffer, &buffer_listener, cairo_surface);
   gdk_wayland_cairo_context_add_surface (self, cairo_surface);
@@ -145,17 +144,14 @@ gdk_wayland_cairo_context_create_surface (GdkWaylandCairoContext *self)
 }
 
 static void
-gdk_wayland_cairo_context_begin_frame (GdkDrawContext  *draw_context,
-                                       gpointer         context_data,
-                                       cairo_region_t  *region,
-                                       GdkColorState  **out_color_state,
-                                       GdkMemoryDepth  *out_depth)
+gdk_wayland_cairo_context_begin_frame (GdkDrawContext *draw_context,
+                                       GdkMemoryDepth  depth,
+                                       cairo_region_t *region)
 {
   GdkWaylandCairoContext *self = GDK_WAYLAND_CAIRO_CONTEXT (draw_context);
   const cairo_region_t *surface_region;
   GSList *l;
   cairo_t *cr;
-  GdkSurface *surface = gdk_draw_context_get_surface (draw_context);
 
   if (self->cached_surface)
     self->paint_surface = g_steal_pointer (&self->cached_surface);
@@ -177,20 +173,15 @@ gdk_wayland_cairo_context_begin_frame (GdkDrawContext  *draw_context,
   gdk_cairo_region (cr, region);
   cairo_fill (cr);
   cairo_destroy (cr);
-
-  *out_color_state = gdk_surface_get_color_state (surface);
-  *out_depth = GDK_MEMORY_U8;
 }
 
 static void
 gdk_wayland_cairo_context_end_frame (GdkDrawContext *draw_context,
-                                     gpointer        context_data,
                                      cairo_region_t *painted)
 {
   GdkWaylandCairoContext *self = GDK_WAYLAND_CAIRO_CONTEXT (draw_context);
   GdkSurface *surface = gdk_draw_context_get_surface (draw_context);
 
-  gdk_wayland_surface_update_content (surface);
   gdk_wayland_surface_sync (surface);
   gdk_wayland_surface_attach_image (surface, self->paint_surface, painted);
   gdk_wayland_surface_request_frame (surface);
@@ -199,15 +190,25 @@ gdk_wayland_cairo_context_end_frame (GdkDrawContext *draw_context,
   gdk_wayland_surface_commit (surface);
   gdk_wayland_surface_notify_committed (surface);
 
-  g_clear_pointer (&self->paint_surface, gdk_wayland_cairo_context_surface_clear_region);
+  gdk_wayland_cairo_context_surface_clear_region (self->paint_surface);
+  self->paint_surface = NULL;
 }
 
 static void
 gdk_wayland_cairo_context_empty_frame (GdkDrawContext *draw_context)
 {
   GdkSurface *surface = gdk_draw_context_get_surface (draw_context);
+  GdkWaylandSurface *impl = GDK_WAYLAND_SURFACE (surface);
 
-  gdk_wayland_surface_handle_empty_frame (surface);
+  if (!impl->has_pending_subsurface_commits)
+    return;
+
+  gdk_wayland_surface_sync (surface);
+  gdk_wayland_surface_request_frame (surface);
+
+  gdk_profiler_add_mark (GDK_PROFILER_CURRENT_TIME, 0, "Wayland surface commit", NULL);
+  gdk_wayland_surface_commit (surface);
+  gdk_wayland_surface_notify_committed (surface);
 }
 
 static void

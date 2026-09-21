@@ -24,6 +24,9 @@
 
 #include "config.h"
 
+#define GDK_PIXBUF_ENABLE_BACKEND
+#include <gdk-pixbuf/gdk-pixbuf.h>
+
 #include "gdkcursor.h"
 #include "gdkcursorprivate.h"
 #include "gdktexture.h"
@@ -35,7 +38,7 @@
 /**
  * GdkCursor:
  *
- * Used to create and destroy cursors.
+ * `GdkCursor` is used to create and destroy cursors.
  *
  * Cursors are immutable objects, so once you created them, there is no way
  * to modify them later. You should create a new cursor when you want to change
@@ -78,10 +81,7 @@ enum {
   PROP_HOTSPOT_Y,
   PROP_NAME,
   PROP_TEXTURE,
-  N_PROPS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE (GdkCursor, gdk_cursor, G_TYPE_OBJECT)
 
@@ -156,9 +156,6 @@ gdk_cursor_finalize (GObject *object)
   g_clear_object (&cursor->texture);
   g_clear_object (&cursor->fallback);
 
-  if (cursor->destroy)
-    cursor->destroy (cursor->data);
-
   G_OBJECT_CLASS (gdk_cursor_parent_class)->finalize (object);
 }
 
@@ -172,46 +169,54 @@ gdk_cursor_class_init (GdkCursorClass *cursor_class)
   object_class->finalize = gdk_cursor_finalize;
 
   /**
-   * GdkCursor:fallback:
+   * GdkCursor:fallback: (attributes org.gtk.Property.get=gdk_cursor_get_fallback)
    *
    * Cursor to fall back to if this cursor cannot be displayed.
    */
-  props[PROP_FALLBACK] = g_param_spec_object ("fallback", NULL, NULL,
-                                              GDK_TYPE_CURSOR,
-                                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                                              G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_FALLBACK,
+                                   g_param_spec_object ("fallback", NULL, NULL,
+                                                        GDK_TYPE_CURSOR,
+                                                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+                                                        G_PARAM_STATIC_STRINGS));
 
   /**
-   * GdkCursor:hotspot-x:
+   * GdkCursor:hotspot-x: (attributes org.gtk.Property.get=gdk_cursor_get_hotspot_x)
    *
    * X position of the cursor hotspot in the cursor image.
    */
-  props[PROP_HOTSPOT_X] = g_param_spec_int ("hotspot-x", NULL, NULL,
-                                            0, G_MAXINT, 0,
-                                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                                            G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_HOTSPOT_X,
+                                   g_param_spec_int ("hotspot-x", NULL, NULL,
+                                                     0, G_MAXINT, 0,
+                                                     G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+                                                     G_PARAM_STATIC_STRINGS));
 
   /**
-   * GdkCursor:hotspot-y:
+   * GdkCursor:hotspot-y: (attributes org.gtk.Property.get=gdk_cursor_get_hotspot_y)
    *
    * Y position of the cursor hotspot in the cursor image.
    */
-  props[PROP_HOTSPOT_Y] = g_param_spec_int ("hotspot-y", NULL, NULL,
-                                            0, G_MAXINT, 0,
-                                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                                            G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_HOTSPOT_Y,
+                                   g_param_spec_int ("hotspot-y", NULL, NULL,
+                                                     0, G_MAXINT, 0,
+                                                     G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+                                                     G_PARAM_STATIC_STRINGS));
 
   /**
-   * GdkCursor:name:
+   * GdkCursor:name: (attributes org.gtk.Property.get=gdk_cursor_get_name)
    *
    * Name of this this cursor.
    *
    * The name will be %NULL if the cursor was created from a texture.
    */
-  props[PROP_NAME] = g_param_spec_string ("name", NULL, NULL,
-                                          NULL,
-                                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                                          G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_NAME,
+                                   g_param_spec_string ("name", NULL, NULL,
+                                                        NULL,
+                                                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+                                                        G_PARAM_STATIC_STRINGS));
 
   /**
    * GdkCursor:texture:
@@ -220,12 +225,12 @@ gdk_cursor_class_init (GdkCursorClass *cursor_class)
    *
    * The texture will be %NULL if the cursor was created from a name.
    */
-  props[PROP_TEXTURE] = g_param_spec_object ("texture", NULL, NULL,
-                                             GDK_TYPE_TEXTURE,
-                                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                                             G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_TEXTURE,
+                                   g_param_spec_object ("texture", NULL, NULL,
+                                                        GDK_TYPE_TEXTURE,
+                                                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+                                                        G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -248,11 +253,6 @@ gdk_cursor_hash (gconstpointer pointer)
     hash ^= g_str_hash (cursor->name);
   else if (cursor->texture)
     hash ^= g_direct_hash (cursor->texture);
-  else if (cursor->callback)
-    {
-      hash ^= g_direct_hash (cursor->callback);
-      hash ^= g_direct_hash (cursor->data);
-    }
 
   hash ^= (cursor->hotspot_x << 8) | cursor->hotspot_y;
 
@@ -281,10 +281,6 @@ gdk_cursor_equal (gconstpointer a,
       ca->hotspot_y != cb->hotspot_y)
     return FALSE;
 
-  if (ca->callback != cb->callback ||
-      ca->data != cb->data)
-    return FALSE;
-
   return TRUE;
 }
 
@@ -300,45 +296,17 @@ gdk_cursor_equal (gconstpointer a,
  * A recommended set of cursor names that will work across different
  * platforms can be found in the CSS specification:
  *
- * | | | |
- * | --- | --- | --- |
- * |                               | "none"          | No cursor |
- * | ![](default_cursor.png)       | "default"       | The default cursor |
- * | ![](help_cursor.png)          | "help"          | Help is available |
- * | ![](pointer_cursor.png)       | "pointer"       | Indicates a link or interactive element |
- * | ![](context_menu_cursor.png)  |"context-menu"   | A context menu is available |
- * | ![](progress_cursor.png)      | "progress"      | Progress indicator |
- * | ![](wait_cursor.png)          | "wait"          | Busy cursor |
- * | ![](cell_cursor.png)          | "cell"          | Cell(s) may be selected |
- * | ![](crosshair_cursor.png)     | "crosshair"     | Simple crosshair |
- * | ![](text_cursor.png)          | "text"          | Text may be selected |
- * | ![](vertical_text_cursor.png) | "vertical-text" | Vertical text may be selected |
- * | ![](alias_cursor.png)         | "alias"         | DND: Something will be linked |
- * | ![](copy_cursor.png)          | "copy"          | DND: Something will be copied |
- * | ![](move_cursor.png)          | "move"          | DND: Something will be moved |
- * | ![](dnd_ask_cursor.png)       | "dnd-ask"       | DND: User can choose action to be carried out |
- * | ![](no_drop_cursor.png)       | "no-drop"       | DND: Can't drop here |
- * | ![](not_allowed_cursor.png)   | "not-allowed"   | DND: Action will not be carried out |
- * | ![](grab_cursor.png)          | "grab"          | DND: Something can be grabbed |
- * | ![](grabbing_cursor.png)      | "grabbing"      | DND: Something is being grabbed |
- * | ![](n_resize_cursor.png)      | "n-resize"      | Resizing: Move north border |
- * | ![](e_resize_cursor.png)      | "e-resize"      | Resizing: Move east border |
- * | ![](s_resize_cursor.png)      | "s-resize"      | Resizing: Move south border |
- * | ![](w_resize_cursor.png)      | "w-resize"      | Resizing: Move west border |
- * | ![](ne_resize_cursor.png)     | "ne-resize"     | Resizing: Move north-east corner |
- * | ![](nw_resize_cursor.png)     | "nw-resize"     | Resizing: Move north-west corner |
- * | ![](sw_resize_cursor.png)     | "sw-resize"     | Resizing: Move south-west corner |
- * | ![](se_resize_cursor.png)     | "se-resize"     | Resizing: Move south-east corner |
- * | ![](col_resize_cursor.png)    | "col-resize"    | Resizing: Move an item or border horizontally |
- * | ![](row_resize_cursor.png)    | "row-resize"    | Resizing: Move an item or border vertically |
- * | ![](ew_resize_cursor.png)     | "ew-resize"     | Moving: Something can be moved horizontally |
- * | ![](ns_resize_cursor.png)     | "ns-resize"     | Moving: Something can be moved vertically |
- * | ![](nesw_resize_cursor.png)   | "nesw-resize"   | Moving: Something can be moved diagonally, north-east to south-west |
- * | ![](nwse_resize_cursor.png)   | "nwse-resize"   | Moving: something can be moved diagonally, north-west to south-east |
- * | ![](all_resize_cursor.png)    | "all-resize"    | Moving: Something can be moved in any direction |
- * | ![](all_scroll_cursor.png)    | "all-scroll"    | Can scroll in any direction |
- * | ![](zoom_in_cursor.png)       | "zoom-in"       | Zoom in |
- * | ![](zoom_out_cursor.png)      | "zoom-out"      | Zoom out |
+ * | | | | |
+ * | --- | --- | ---- | --- |
+ * | "none" | ![](default_cursor.png) "default" | ![](help_cursor.png) "help" | ![](pointer_cursor.png) "pointer" |
+ * | ![](context_menu_cursor.png) "context-menu" | ![](progress_cursor.png) "progress" | ![](wait_cursor.png) "wait" | ![](cell_cursor.png) "cell" |
+ * | ![](crosshair_cursor.png) "crosshair" | ![](text_cursor.png) "text" | ![](vertical_text_cursor.png) "vertical-text" | ![](alias_cursor.png) "alias" |
+ * | ![](copy_cursor.png) "copy" | ![](no_drop_cursor.png) "no-drop" | ![](move_cursor.png) "move" | ![](not_allowed_cursor.png) "not-allowed" |
+ * | ![](grab_cursor.png) "grab" | ![](grabbing_cursor.png) "grabbing" | ![](all_scroll_cursor.png) "all-scroll" | ![](col_resize_cursor.png) "col-resize" |
+ * | ![](row_resize_cursor.png) "row-resize" | ![](n_resize_cursor.png) "n-resize" | ![](e_resize_cursor.png) "e-resize" | ![](s_resize_cursor.png) "s-resize" |
+ * | ![](w_resize_cursor.png) "w-resize" | ![](ne_resize_cursor.png) "ne-resize" | ![](nw_resize_cursor.png) "nw-resize" | ![](sw_resize_cursor.png) "sw-resize" |
+ * | ![](se_resize_cursor.png) "se-resize" | ![](ew_resize_cursor.png) "ew-resize" | ![](ns_resize_cursor.png) "ns-resize" | ![](nesw_resize_cursor.png) "nesw-resize" |
+ * | ![](nwse_resize_cursor.png) "nwse-resize" | ![](zoom_in_cursor.png) "zoom-in" | ![](zoom_out_cursor.png) "zoom-out" | |
  *
  * Returns: (nullable): a new `GdkCursor`, or %NULL if there is no
  *   cursor with the given name
@@ -388,46 +356,7 @@ gdk_cursor_new_from_texture (GdkTexture *texture,
 }
 
 /**
- * gdk_cursor_new_from_callback:
- * @callback: the `GdkCursorGetTextureCallback`
- * @data: data to pass to @callback
- * @destroy: destroy notify for @data
- * @fallback: (nullable): the `GdkCursor` to fall back to when
- *   this one cannot be supported
- *
- * Creates a new callback-based cursor object.
- *
- * Cursors of this kind produce textures for the cursor
- * image on demand, when the @callback is called.
- *
- * Returns: (nullable): a new `GdkCursor`
- *
- * Since: 4.16
- */
-GdkCursor *
-gdk_cursor_new_from_callback (GdkCursorGetTextureCallback  callback,
-                              gpointer                     data,
-                              GDestroyNotify               destroy,
-                              GdkCursor                   *fallback)
-{
-  GdkCursor *cursor;
-
-  g_return_val_if_fail (callback != NULL, NULL);
-  g_return_val_if_fail (fallback == NULL || GDK_IS_CURSOR (fallback), NULL);
-
-  cursor = g_object_new (GDK_TYPE_CURSOR,
-                         "fallback", fallback,
-                         NULL);
-
-  cursor->callback = callback;
-  cursor->data = data;
-  cursor->destroy = destroy;
-
-  return cursor;
-}
-
-/**
- * gdk_cursor_get_fallback:
+ * gdk_cursor_get_fallback: (attributes org.gtk.Method.get_property=fallback)
  * @cursor: a `GdkCursor`
  *
  * Returns the fallback for this @cursor.
@@ -450,7 +379,7 @@ gdk_cursor_get_fallback (GdkCursor *cursor)
 }
 
 /**
- * gdk_cursor_get_name:
+ * gdk_cursor_get_name: (attributes org.gtk.Method.get_property=name)
  * @cursor: a `GdkCursor`
  *
  * Returns the name of the cursor.
@@ -488,7 +417,7 @@ gdk_cursor_get_texture (GdkCursor *cursor)
 }
 
 /**
- * gdk_cursor_get_hotspot_x:
+ * gdk_cursor_get_hotspot_x: (attributes org.gtk.Method.get_property=hotspot-x)
  * @cursor: a `GdkCursor`
  *
  * Returns the horizontal offset of the hotspot.
@@ -510,7 +439,7 @@ gdk_cursor_get_hotspot_x (GdkCursor *cursor)
 }
 
 /**
- * gdk_cursor_get_hotspot_y:
+ * gdk_cursor_get_hotspot_y: (attributes org.gtk.Method.get_property=hotspot-y)
  * @cursor: a `GdkCursor`
  *
  * Returns the vertical offset of the hotspot.
@@ -529,23 +458,4 @@ gdk_cursor_get_hotspot_y (GdkCursor *cursor)
   g_return_val_if_fail (GDK_IS_CURSOR (cursor), 0);
 
   return cursor->hotspot_y;
-}
-
-GdkTexture *
-gdk_cursor_get_texture_for_size (GdkCursor *cursor,
-                                 int        cursor_size,
-                                 double     scale,
-                                 int       *width,
-                                 int       *height,
-                                 int       *hotspot_x,
-                                 int       *hotspot_y)
-{
-  if (cursor->callback == NULL)
-    return NULL;
-
-  return cursor->callback (cursor,
-                           cursor_size, scale,
-                           width, height,
-                           hotspot_x, hotspot_y,
-                           cursor->data);
 }

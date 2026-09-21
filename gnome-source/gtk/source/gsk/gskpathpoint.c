@@ -30,10 +30,10 @@
 /**
  * GskPathPoint:
  *
- * Represents a point on a path.
+ * `GskPathPoint` is an opaque type representing a point on a path.
  *
- * It can be queried for properties of the path at that point,
- * such as its tangent or its curvature.
+ * It can be queried for properties of the path at that point, such as
+ * its tangent or its curvature.
  *
  * To obtain a `GskPathPoint`, use [method@Gsk.Path.get_closest_point],
  * [method@Gsk.Path.get_start_point], [method@Gsk.Path.get_end_point]
@@ -51,16 +51,6 @@ G_DEFINE_BOXED_TYPE (GskPathPoint, gsk_path_point,
                      gsk_path_point_copy,
                      gsk_path_point_free)
 
-/**
- * gsk_path_point_copy:
- * @point: a path point
- *
- * Copies a path point.
- *
- * Returns: the copied point
- *
- * Since: 4.14
- */
 GskPathPoint *
 gsk_path_point_copy (GskPathPoint *point)
 {
@@ -73,14 +63,6 @@ gsk_path_point_copy (GskPathPoint *point)
   return copy;
 }
 
-/**
- * gsk_path_point_free:
- * @point: a path point
- *
- * Frees a path point copied by [method@Gsk.PathPoint.copy].
- *
- * Since: 4.14
- */
 void
 gsk_path_point_free (GskPathPoint *point)
 {
@@ -89,8 +71,8 @@ gsk_path_point_free (GskPathPoint *point)
 
 /**
  * gsk_path_point_equal:
- * @point1: a path point
- * @point2: another path point
+ * @point1: a `GskPathPoint`
+ * @point2: another `GskPathPoint`
  *
  * Returns whether the two path points refer to the same
  * location on all paths.
@@ -101,7 +83,7 @@ gsk_path_point_free (GskPathPoint *point)
  * start- and endpoint of a concrete path refer to the
  * same location.
  *
- * Return: true if @point1 and @point2 are equal
+ * Return: `TRUE` if @point1 and @point2 are equal
  *
  * Since: 4.14
  */
@@ -122,8 +104,8 @@ gsk_path_point_equal (const GskPathPoint *point1,
 
 /**
  * gsk_path_point_compare:
- * @point1: a path point
- * @point2: another path point
+ * @point1: a `GskPathPoint`
+ * @point2: another `GskPathPoint`
  *
  * Returns whether @point1 is before or after @point2.
  *
@@ -158,7 +140,7 @@ gsk_path_point_compare (const GskPathPoint *point1,
 
 /**
  * gsk_path_point_get_position:
- * @point: a path point
+ * @point: a `GskPathPoint`
  * @path: the path that @point is on
  * @position: (out caller-allocates): Return location for
  *   the coordinates of the point
@@ -184,7 +166,7 @@ gsk_path_point_get_position (const GskPathPoint *point,
 
 /**
  * gsk_path_point_get_tangent:
- * @point: a path point
+ * @point: a `GskPathPoint`
  * @path: the path that @point is on
  * @direction: the direction for which to return the tangent
  * @tangent: (out caller-allocates): Return location for
@@ -194,12 +176,12 @@ gsk_path_point_get_position (const GskPathPoint *point,
  *
  * Note that certain points on a path may not have a single
  * tangent, such as sharp turns. At such points, there are
- * two tangents — the direction of the path going into the
+ * two tangents -- the direction of the path going into the
  * point, and the direction coming out of it. The @direction
  * argument lets you choose which one to get.
  *
  * If the path is just a single point (e.g. a circle with
- * radius zero), then the tangent is set to `0, 0`.
+ * radius zero), then @tangent is set to `0, 0`.
  *
  * If you want to orient something in the direction of the
  * path, [method@Gsk.PathPoint.get_rotation] may be more
@@ -225,7 +207,7 @@ gsk_path_point_get_tangent (const GskPathPoint *point,
 
 /**
  * gsk_path_point_get_rotation:
- * @point: a path point
+ * @point: a `GskPathPoint`
  * @path: the path that @point is on
  * @direction: the direction for which to return the rotation
  *
@@ -258,10 +240,10 @@ gsk_path_point_get_rotation (const GskPathPoint *point,
 
 /**
  * gsk_path_point_get_curvature:
- * @point: a path point
+ * @point: a `GskPathPoint`
  * @path: the path that @point is on
  * @direction: the direction for which to return the curvature
- * @center: (out caller-allocates) (nullable): return location for
+ * @center: (out caller-allocates) (nullable): Return location for
  *   the center of the osculating circle
  *
  * Calculates the curvature of the path at the point.
@@ -270,22 +252,22 @@ gsk_path_point_get_rotation (const GskPathPoint *point,
  * The curvature is the inverse of the radius of the osculating circle.
  *
  * Lines have a curvature of zero (indicating an osculating circle of
- * infinite radius). In this case, the @center is not modified.
+ * infinite radius. In this case, the @center is not modified.
  *
  * Circles with a radius of zero have `INFINITY` as curvature
  *
  * Note that certain points on a path may not have a single curvature,
- * such as sharp turns. At such points, there are two curvatures — the
- * (limit of) the curvature of the path going into the point, and the
- * (limit of) the curvature of the path coming out of it. The @direction
- * argument lets you choose which one to get.
+ * such as sharp turns. At such points, there are two curvatures --
+ * the (limit of) the curvature of the path going into the point,
+ * and the (limit of) the curvature of the path coming out of it.
+ * The @direction argument lets you choose which one to get.
  *
  * <picture>
  *   <source srcset="curvature-dark.png" media="(prefers-color-scheme: dark)">
  *   <img alt="Osculating circle" src="curvature-light.png">
  * </picture>
 
- * Returns: the curvature of the path at the given point
+ * Returns: The curvature of the path at the given point
  *
  * Since: 4.14
  */

@@ -29,7 +29,7 @@
  */
 #include <atk/atk.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
+#include <cally/cally.h>
 
 #include "cally-examples-util.h"
 
@@ -86,13 +86,13 @@ make_ui (ClutterActor *stage)
   ClutterActor    *editable      = NULL;
   ClutterActor    *rectangle     = NULL;
   ClutterActor    *label         = NULL;
-  CoglColor color_sel = { 0x00, 0xff, 0x00, 0x55 };
-  CoglColor color_label = { 0x00, 0xff, 0x55, 0xff };
-  CoglColor color_rect = { 0x00, 0xff, 0xff, 0x55 };
+  ClutterColor     color_sel     = { 0x00, 0xff, 0x00, 0x55 };
+  ClutterColor     color_label   = { 0x00, 0xff, 0x55, 0xff };
+  ClutterColor     color_rect    = { 0x00, 0xff, 0xff, 0x55 };
   float label_geom_y, editable_geom_y;
 
   clutter_actor_set_background_color (CLUTTER_ACTOR (stage),
-                                      &COGL_COLOR_INIT (255, 255, 255, 255));
+                                      &CLUTTER_COLOR_INIT (255, 255, 255, 255));
   clutter_actor_set_size (stage, WIDTH, HEIGHT);
 
   label_geom_y = 50;
@@ -109,7 +109,7 @@ make_ui (ClutterActor *stage)
       /* editable */
       editable = clutter_text_new_full ("Sans Bold 32px",
                                         "ddd",
-                                        &COGL_COLOR_INIT (255, 0, 0, 255));
+                                        &CLUTTER_COLOR_INIT (255, 0, 0, 255));
       clutter_actor_set_position (editable, 150, editable_geom_y);
       clutter_actor_set_size (editable, 500, 75);
       clutter_text_set_editable (CLUTTER_TEXT (editable), TRUE);
@@ -171,12 +171,14 @@ main (int argc, char *argv[])
   atk_add_global_event_listener (window_event_listener, "Atk:AtkWindow:deactivate");
 
   stage_main = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage_main), "Cally - AtkEvents/1");
   g_signal_connect (stage_main, "destroy", G_CALLBACK (clutter_test_quit), NULL);
   make_ui (stage_main);
 
   clutter_actor_show (stage_main);
 
   stage = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Cally - AtkEvents/2");
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_test_quit), NULL);
 
   make_ui (stage);

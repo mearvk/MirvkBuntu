@@ -100,7 +100,6 @@ struct _GDBusAuthMechanismClass
                                                          gsize                 data_len);
   gchar                    *(*client_data_send)         (GDBusAuthMechanism   *mechanism,
                                                          gsize                *out_data_len);
-  gchar                    *(*client_get_reject_reason) (GDBusAuthMechanism   *mechanism);
   void                      (*client_shutdown)          (GDBusAuthMechanism   *mechanism);
 };
 
@@ -110,7 +109,7 @@ struct _GDBusAuthMechanism
   GDBusAuthMechanismPrivate *priv;
 };
 
-GType                     _g_dbus_auth_mechanism_get_type                 (void);
+GType                     _g_dbus_auth_mechanism_get_type                 (void) G_GNUC_CONST;
 
 gint                      _g_dbus_auth_mechanism_get_priority             (GType                 mechanism_type);
 const gchar              *_g_dbus_auth_mechanism_get_name                 (GType                 mechanism_type);
@@ -149,7 +148,6 @@ void                      _g_dbus_auth_mechanism_client_data_receive      (GDBus
                                                                            gsize                 data_len);
 gchar                    *_g_dbus_auth_mechanism_client_data_send         (GDBusAuthMechanism   *mechanism,
                                                                           gsize                *out_data_len);
-gchar                    *_g_dbus_auth_mechanism_client_get_reject_reason (GDBusAuthMechanism   *mechanism);
 void                      _g_dbus_auth_mechanism_client_shutdown          (GDBusAuthMechanism   *mechanism);
 
 

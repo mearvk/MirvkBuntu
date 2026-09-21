@@ -52,6 +52,9 @@ struct wl_resource    *meta_wayland_tablet_seat_lookup_resource     (MetaWayland
 MetaWaylandTablet     *meta_wayland_tablet_seat_lookup_tablet       (MetaWaylandTabletSeat *tablet_seat,
                                                                      ClutterInputDevice    *device);
 
+MetaWaylandTabletTool *meta_wayland_tablet_seat_lookup_tool         (MetaWaylandTabletSeat  *tablet_seat,
+                                                                     ClutterInputDeviceTool *tool);
+
 MetaWaylandTabletPad  *meta_wayland_tablet_seat_lookup_pad          (MetaWaylandTabletSeat *tablet_seat,
                                                                      ClutterInputDevice    *device);
 
@@ -78,19 +81,13 @@ gboolean meta_wayland_tablet_seat_get_grab_info (MetaWaylandTabletSeat *tablet_s
                                                  MetaWaylandSurface    *surface,
                                                  uint32_t               serial,
                                                  gboolean               require_pressed,
-                                                 ClutterSprite        **sprite_out,
+                                                 ClutterInputDevice   **device_out,
                                                  float                 *x,
                                                  float                 *y);
 
 MetaWaylandSurface * meta_wayland_tablet_seat_get_current_surface (MetaWaylandTabletSeat *tablet_seat,
                                                                    ClutterInputDevice    *device);
 
-MetaWaylandSurface * meta_wayland_tablet_seat_get_implicit_grab_surface (MetaWaylandTabletSeat *tablet_seat,
-                                                                         ClutterInputDevice    *device);
-
 void meta_wayland_tablet_seat_focus_surface (MetaWaylandTabletSeat *tablet_seat,
                                              ClutterInputDevice    *device,
                                              MetaWaylandSurface    *surface);
-
-ClutterCursor * meta_wayland_tablet_seat_get_cursor (MetaWaylandTabletSeat *tablet_seat,
-                                                     ClutterSprite         *sprite);

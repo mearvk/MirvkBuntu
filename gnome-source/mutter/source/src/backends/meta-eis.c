@@ -24,13 +24,8 @@
 
 #include "backends/meta-eis.h"
 #include "backends/meta-eis-client.h"
-#include "backends/meta-eis-monitor-viewport.h"
 #include "clutter/clutter-mutter.h"
 #include "meta/util.h"
-
-#include "backends/native/meta-backend-native.h"
-#include "backends/native/meta-input-thread.h"
-#include "backends/native/meta-seat-native.h"
 
 enum
 {
@@ -63,13 +58,7 @@ struct _MetaEis
 
   GList *viewports;
 
-  GHashTable *mapping_ids;
-
-  gulong monitors_changed_handler_id;
-
   GHashTable *eis_clients; /* eis_client => MetaEisClient */
-
-  GCancellable *cancellable;
 };
 
 G_DEFINE_TYPE (MetaEis, meta_eis, G_TYPE_OBJECT)
@@ -100,41 +89,6 @@ meta_eis_add_client (MetaEis           *eis,
                        client);
 }
 
-#ifdef HAVE_EIS_EVENT_REF
-static gboolean
-sync_callback_in_main (gpointer user_data)
-{
-  GTask *task = G_TASK (user_data);
-
-  if (g_task_return_error_if_cancelled (task))
-    return G_SOURCE_REMOVE;
-
-  g_task_return_boolean (task, TRUE);
-  return G_SOURCE_REMOVE;
-}
-
-static gboolean
-sync_callback_in_impl (GTask *task)
-{
-  MetaEis *eis;
-  ClutterSeat *seat;
-  MetaSeatNative *seat_native;
-
-  if (g_task_return_error_if_cancelled (task))
-    return G_SOURCE_REMOVE;
-
-  eis = g_task_get_source_object (task);
-  seat = meta_backend_get_default_seat (eis->backend);
-  seat_native = META_SEAT_NATIVE (seat);
-
-  meta_seat_impl_queue_main_thread_idle (seat_native->impl,
-                                         sync_callback_in_main,
-                                         g_object_ref (task), g_object_unref);
-
-  return G_SOURCE_REMOVE;
-}
-#endif /* HAVE_EIS_EVENT_REF */
-
 static void
 process_event (MetaEis          *eis,
                struct eis_event *event)
@@ -151,34 +105,12 @@ process_event (MetaEis          *eis,
     case EIS_EVENT_CLIENT_DISCONNECT:
       meta_eis_remove_client (eis, eis_client);
       break;
-    case EIS_EVENT_SYNC:
-#ifdef HAVE_EIS_EVENT_REF
-      if (META_IS_BACKEND_NATIVE (eis->backend))
-        {
-          ClutterSeat *seat = meta_backend_get_default_seat (eis->backend);
-          MetaSeatNative *seat_native = META_SEAT_NATIVE (seat);
-          g_autoptr (GTask) task = NULL;
-
-          /*
-           * The sync is considered done when the last reference of the sync
-           * event is released, so pass it via the input thread via a GTask to
-           * make sure queued input events are processed before releasing it.
-           */
-          task = g_task_new (eis, eis->cancellable, NULL, NULL);
-          g_task_set_task_data (task,
-                                eis_event_ref (event),
-                                (GDestroyNotify) eis_event_unref);
-          meta_seat_impl_run_input_task (seat_native->impl, task,
-                                         (GSourceFunc) sync_callback_in_impl);
-        }
-#endif /* HAVE_EIS_EVENT_REF */
-      break;
     default:
       client = g_hash_table_lookup (eis->eis_clients, eis_client);
       if (!client)
         {
-          meta_topic (META_DEBUG_EIS, "Event for unknown EIS client: %s",
-                      eis_client_get_name (eis_client));
+          g_warning ("Event for unknown EIS client: %s",
+                     eis_client_get_name (eis_client));
           return;
         }
       meta_eis_client_process_event (client, event);
@@ -203,7 +135,6 @@ meta_event_source_new (MetaEis      *eis,
                        int           fd,
                        GSourceFuncs *event_funcs)
 {
-  g_autoptr (GMainContext) main_context = NULL;
   GSource *source;
   MetaEventSource *event_source;
 
@@ -217,13 +148,11 @@ meta_event_source_new (MetaEis      *eis,
   event_source->event_poll_fd.fd = fd;
   event_source->event_poll_fd.events = G_IO_IN;
 
-  main_context = g_main_context_ref_thread_default ();
-
   /* and finally configure and attach the GSource */
   g_source_set_priority (source, CLUTTER_PRIORITY_EVENTS);
   g_source_add_poll (source, &event_source->event_poll_fd);
   g_source_set_can_recurse (source, TRUE);
-  g_source_attach (source, main_context);
+  g_source_attach (source, NULL);
 
   return event_source;
 }
@@ -323,40 +252,25 @@ meta_eis_add_client_get_fd (MetaEis *eis)
 }
 
 MetaEis *
-meta_eis_new (MetaBackend *backend)
+meta_eis_new (MetaBackend        *backend,
+              MetaEisDeviceTypes  device_types)
 {
   MetaEis *eis;
+  int fd;
 
   eis = g_object_new (META_TYPE_EIS, NULL);
   eis->backend = backend;
+  eis->device_types = device_types;
 
   eis->eis = eis_new (eis);
   eis_log_set_handler (eis->eis, eis_logger);
   eis_log_set_priority (eis->eis, EIS_LOG_PRIORITY_DEBUG);
-
-  return eis;
-}
-
-void
-meta_eis_enable (MetaEis            *eis,
-                 MetaEisDeviceTypes  device_types)
-{
-  int fd;
-
-  g_assert (!eis->event_source);
-
-  eis->device_types = device_types;
-
   eis_setup_backend_fd (eis->eis);
 
   fd = eis_get_fd (eis->eis);
   eis->event_source = meta_event_source_new (eis, fd, &eis_event_funcs);
-}
 
-gboolean
-meta_eis_is_enabled (MetaEis *eis)
-{
-  return !!eis->event_source;
+  return eis;
 }
 
 static void
@@ -365,26 +279,17 @@ meta_eis_init (MetaEis *eis)
   eis->eis_clients = g_hash_table_new_full (g_direct_hash, g_direct_equal,
                                             (GDestroyNotify) eis_client_unref,
                                             (GDestroyNotify) g_object_unref);
-  eis->cancellable = g_cancellable_new ();
-  eis->mapping_ids = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
 }
 
 static void
 meta_eis_dispose (GObject *object)
 {
   MetaEis *eis = META_EIS (object);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (eis->backend);
 
-  g_cancellable_cancel (eis->cancellable);
-  g_clear_object (&eis->cancellable);
-  g_clear_pointer (&eis->mapping_ids, g_hash_table_unref);
   g_clear_pointer (&eis->viewports, g_list_free);
   g_clear_pointer (&eis->event_source, meta_event_source_free);
-  g_clear_pointer (&eis->eis_clients, g_hash_table_destroy);
   g_clear_pointer (&eis->eis, eis_unref);
-  g_clear_signal_handler (&eis->monitors_changed_handler_id,
-                          monitor_manager);
+  g_clear_pointer (&eis->eis_clients, g_hash_table_destroy);
 
   G_OBJECT_CLASS (meta_eis_parent_class)->dispose (object);
 }
@@ -476,74 +381,4 @@ GList *
 meta_eis_peek_viewports (MetaEis *eis)
 {
   return eis->viewports;
-}
-
-static void
-add_logical_monitor_viewports (MetaEis *eis)
-{
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (eis->backend);
-  GList *logical_monitors;
-  GList *l;
-  GList *viewports = NULL;
-
-  logical_monitors =
-    meta_monitor_manager_get_logical_monitors (monitor_manager);
-  for (l = logical_monitors; l; l = l->next)
-    {
-      MetaLogicalMonitor *logical_monitor = l->data;
-      MetaEisMonitorViewport *eis_monitor_viewport;
-
-      eis_monitor_viewport =
-        meta_eis_monitor_viewport_new (logical_monitor);
-      viewports = g_list_append (viewports, eis_monitor_viewport);
-    }
-
-  meta_eis_remove_all_viewports (eis);
-  meta_eis_take_viewports (eis, viewports);
-}
-
-static void
-on_monitors_changed (MetaMonitorManager *monitor_manager,
-                     MetaEis            *eis)
-{
-  add_logical_monitor_viewports (eis);
-}
-
-void
-meta_eis_enable_monitor_viewports (MetaEis *eis)
-{
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (eis->backend);
-
-  if (eis->monitors_changed_handler_id)
-    return;
-
-  add_logical_monitor_viewports (eis);
-  eis->monitors_changed_handler_id =
-    g_signal_connect (monitor_manager, "monitors-changed",
-                      G_CALLBACK (on_monitors_changed), eis);
-}
-
-const char *
-meta_eis_acquire_mapping_id (MetaEis *eis)
-{
-  char *mapping_id;
-
-  mapping_id = g_uuid_string_random ();
-  while (g_hash_table_contains (eis->mapping_ids, mapping_id))
-    {
-      g_free (mapping_id);
-      mapping_id = g_uuid_string_random ();
-    }
-
-  g_hash_table_add (eis->mapping_ids, mapping_id);
-  return mapping_id;
-}
-
-void
-meta_eis_release_mapping_id (MetaEis    *eis,
-                             const char *mapping_id)
-{
-  g_hash_table_remove (eis->mapping_ids, mapping_id);
 }

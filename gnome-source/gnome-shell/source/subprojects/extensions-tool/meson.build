@@ -1,7 +1,7 @@
 project('gnome-extensions-tool', 'c',
-  version: '51.0',
+  version: '46.4',
   meson_version: '>= 0.58.0',
-  license: 'GPL-2.0-or-later',
+  license: 'GPLv2+'
 )
 
 gio_req = '>= 2.56.0'
@@ -31,7 +31,6 @@ gio_dep = dependency('gio-2.0', version: gio_req)
 gio_unix_dep = dependency('gio-unix-2.0', version: gio_req)
 autoar_dep = dependency('gnome-autoar-0')
 json_dep = dependency('json-glib-1.0')
-soup_dep = dependency('libsoup-3.0')
 
 cc = meson.get_compiler('c')
 
@@ -48,8 +47,12 @@ if bash_completion.found()
 endif
 
 if get_option('man')
-  rst2man = find_program('rst2man')
-  subdir('man')
+  if fs.exists('man/gnome-extensions.1')
+    install_man('man/gnome-extensions.1')
+  else
+    a2x = find_program('a2x')
+    subdir('man')
+  endif
 endif
 
 if not meson.is_subproject()

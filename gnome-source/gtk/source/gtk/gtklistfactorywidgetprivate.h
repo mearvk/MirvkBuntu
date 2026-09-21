@@ -58,12 +58,13 @@ struct _GtkListFactoryWidgetClass
                                                                  gpointer                      object);
 };
 
-GType                   gtk_list_factory_widget_get_type        (void);
+GType                   gtk_list_factory_widget_get_type        (void) G_GNUC_CONST;
 
 gpointer                gtk_list_factory_widget_get_object      (GtkListFactoryWidget   *self);
 
 void                    gtk_list_factory_widget_set_factory     (GtkListFactoryWidget   *self,
                                                                  GtkListItemFactory     *factory);
+GtkListItemFactory *    gtk_list_factory_widget_get_factory     (GtkListFactoryWidget   *self);
 
 void                    gtk_list_factory_widget_set_single_click_activate
                                                                 (GtkListFactoryWidget   *self,

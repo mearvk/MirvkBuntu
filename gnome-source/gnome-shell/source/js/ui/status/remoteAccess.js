@@ -1,7 +1,10 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 
 import * as Main from '../main.js';
@@ -16,7 +19,7 @@ class RemoteAccessApplet extends SystemIndicator {
     _init() {
         super._init();
 
-        const controller = global.backend.get_remote_access_controller();
+        let controller = global.backend.get_remote_access_controller();
 
         if (!controller)
             return;
@@ -91,12 +94,14 @@ export const ScreenRecordingIndicator = GObject.registerClass({
         Main.screenshotUI.connect(
             'notify::screencast-in-progress',
             this._onScreencastInProgressChanged.bind(this));
+    }
 
-        this._clickGesture = new Clutter.ClickGesture();
-        this._clickGesture.set_recognize_on_press(true);
-        this._clickGesture.connect(
-            'recognize', () => Main.screenshotUI.stopScreencast());
-        this.add_action(this._clickGesture);
+    vfunc_event(event) {
+        if (event.type() === Clutter.EventType.TOUCH_BEGIN ||
+            event.type() === Clutter.EventType.BUTTON_PRESS)
+            Main.screenshotUI.stopScreencast();
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _updateLabel() {
@@ -160,14 +165,16 @@ export const ScreenSharingIndicator = GObject.registerClass({
             (o, handle) => this._onNewHandle(handle));
 
         this._sync();
-
-        this._clickGesture = new Clutter.ClickGesture();
-        this._clickGesture.set_recognize_on_press(true);
-        this._clickGesture.connect('recognize', () => this._stopSharing());
-        this.add_action(this._clickGesture);
     }
 
     _onNewHandle(handle) {
+        // We can't possibly know about all types of screen sharing on X11, so
+        // showing these controls on X11 might give a false sense of security.
+        // Thus, only enable these controls when using Wayland, where we are
+        // in control of sharing.
+        if (!Meta.is_wayland_compositor())
+            return;
+
         if (handle.isRecording)
             return;
 
@@ -179,6 +186,14 @@ export const ScreenSharingIndicator = GObject.registerClass({
         this._sync();
     }
 
+    vfunc_event(event) {
+        if (event.type() === Clutter.EventType.TOUCH_BEGIN ||
+            event.type() === Clutter.EventType.BUTTON_PRESS)
+            this._stopSharing();
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
     _stopSharing() {
         for (const handle of this._handles)
             handle.stop();
@@ -187,6 +202,7 @@ export const ScreenSharingIndicator = GObject.registerClass({
     _hideIndicator() {
         this.hide();
         delete this._hideIndicatorId;
+        return GLib.SOURCE_REMOVE;
     }
 
     _sync() {
@@ -209,7 +225,7 @@ export const ScreenSharingIndicator = GObject.registerClass({
                 const timeUntilHideUs =
                     MIN_SHARED_INDICATOR_VISIBLE_TIME_US - timeSinceVisibleUs;
                 this._hideIndicatorId =
-                    GLib.timeout_add_once(GLib.PRIORITY_DEFAULT,
+                    GLib.timeout_add(GLib.PRIORITY_DEFAULT,
                         timeUntilHideUs / GLib.TIME_SPAN_MILLISECOND,
                         () => this._hideIndicator());
             }

@@ -20,26 +20,20 @@
 
 #include "clutter/clutter-context-private.h"
 
-#ifdef HAVE_FONTS
 #include <hb-glib.h>
-#include <pango/pangocairo.h>
-#endif
 
-#include "clutter/clutter-accessibility-private.h"
+#include "cally/cally.h"
 #include "clutter/clutter-backend-private.h"
-#include "clutter/clutter-color-state-params.h"
 #include "clutter/clutter-debug.h"
+#include "clutter/clutter-graphene.h"
 #include "clutter/clutter-main.h"
-#include "clutter/clutter-private.h"
 #include "clutter/clutter-paint-node-private.h"
 #include "clutter/clutter-settings-private.h"
-#ifdef HAVE_FONTS
-#include "clutter/pango/clutter-pango-private.h"
-#endif
 
+static gboolean clutter_disable_mipmap_text = FALSE;
 static gboolean clutter_show_fps = FALSE;
-static gboolean clutter_enable_accessibility = TRUE;
 
+#ifdef CLUTTER_ENABLE_DEBUG
 static const GDebugKey clutter_debug_keys[] = {
   { "misc", CLUTTER_DEBUG_MISC },
   { "actor", CLUTTER_DEBUG_ACTOR },
@@ -62,6 +56,7 @@ static const GDebugKey clutter_debug_keys[] = {
   { "frame-clock", CLUTTER_DEBUG_FRAME_CLOCK },
   { "gestures", CLUTTER_DEBUG_GESTURES },
 };
+#endif /* CLUTTER_ENABLE_DEBUG */
 
 static const GDebugKey clutter_pick_debug_keys[] = {
   { "nop-picking", CLUTTER_DEBUG_NOP_PICKING },
@@ -79,14 +74,11 @@ static const GDebugKey clutter_paint_debug_keys[] = {
   { "damage-region", CLUTTER_DEBUG_PAINT_DAMAGE_REGION },
   { "disable-dynamic-max-render-time", CLUTTER_DEBUG_DISABLE_DYNAMIC_MAX_RENDER_TIME },
   { "max-render-time", CLUTTER_DEBUG_PAINT_MAX_RENDER_TIME },
-  { "disable-triple-buffering", CLUTTER_DEBUG_DISABLE_TRIPLE_BUFFERING },
 };
 
 typedef struct _ClutterContextPrivate
 {
   ClutterTextDirection text_direction;
-
-  ClutterColorState *default_color_state;
 } ClutterContextPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (ClutterContext, clutter_context, G_TYPE_OBJECT)
@@ -95,19 +87,9 @@ static void
 clutter_context_dispose (GObject *object)
 {
   ClutterContext *context = CLUTTER_CONTEXT (object);
-  ClutterContextPrivate *priv = clutter_context_get_instance_private (context);
 
-  g_clear_object (&priv->default_color_state);
   g_clear_pointer (&context->events_queue, g_async_queue_unref);
-#ifdef HAVE_FONTS
-  g_clear_object (&context->font_map);
-  g_clear_object (&context->font_renderer);
-#endif
-  if (context->backend)
-    g_object_run_dispose (G_OBJECT (context->backend));
   g_clear_pointer (&context->backend, clutter_backend_destroy);
-  g_clear_object (&context->stage_manager);
-  g_clear_object (&context->settings);
 
   G_OBJECT_CLASS (clutter_context_parent_class)->dispose (object);
 }
@@ -119,7 +101,7 @@ clutter_context_class_init (ClutterContextClass *klass)
 
   object_class->dispose = clutter_context_dispose;
 
-  clutter_interval_register_progress_funcs ();
+  clutter_graphene_init ();
 }
 
 static void
@@ -144,7 +126,6 @@ clutter_get_text_direction (void)
       else if (strcmp (direction, "ltr") == 0)
         dir = CLUTTER_TEXT_DIRECTION_LTR;
     }
-#ifdef HAVE_FONTS
   else
     {
       PangoLanguage *language;
@@ -170,7 +151,6 @@ clutter_get_text_direction (void)
             continue;
         }
     }
-#endif
 
   CLUTTER_NOTE (MISC, "Text direction: %s",
                 dir == CLUTTER_TEXT_DIRECTION_RTL ? "rtl" : "ltr");
@@ -180,6 +160,7 @@ clutter_get_text_direction (void)
 
 static gboolean
 clutter_context_init_real (ClutterContext       *context,
+                           ClutterContextFlags   flags,
                            GError              **error)
 {
   ClutterContextPrivate *priv = clutter_context_get_instance_private (context);
@@ -206,12 +187,11 @@ clutter_context_init_real (ClutterContext       *context,
 
   priv->text_direction = clutter_get_text_direction ();
 
+  context->is_initialized = TRUE;
+
   /* Initialize a11y */
-  if (clutter_enable_accessibility)
-    {
-      _clutter_accessibility_override_atk_util ();
-      CLUTTER_NOTE (MISC, "Clutter Accessibility initialized");
-    }
+  if (!(flags & CLUTTER_CONTEXT_FLAG_NO_A11Y))
+    cally_accessibility_init ();
 
   /* Initialize types required for paint nodes */
   clutter_paint_node_init_types (context->backend);
@@ -224,6 +204,7 @@ init_clutter_debug (ClutterContext *context)
 {
   const char *env_string;
 
+#ifdef CLUTTER_ENABLE_DEBUG
   env_string = g_getenv ("CLUTTER_DEBUG");
   if (env_string != NULL)
     {
@@ -233,6 +214,7 @@ init_clutter_debug (ClutterContext *context)
                               G_N_ELEMENTS (clutter_debug_keys));
       env_string = NULL;
     }
+#endif /* CLUTTER_ENABLE_DEBUG */
 
   env_string = g_getenv ("CLUTTER_PICK");
   if (env_string != NULL)
@@ -258,13 +240,14 @@ init_clutter_debug (ClutterContext *context)
   if (env_string)
     clutter_show_fps = TRUE;
 
-  env_string = g_getenv ("CLUTTER_DISABLE_ACCESSIBILITY");
+  env_string = g_getenv ("CLUTTER_DISABLE_MIPMAPPED_TEXT");
   if (env_string)
-    clutter_enable_accessibility = FALSE;
+    clutter_disable_mipmap_text = TRUE;
 }
 
 ClutterContext *
-clutter_context_new (ClutterBackendConstructor   backend_constructor,
+clutter_context_new (ClutterContextFlags         flags,
+                     ClutterBackendConstructor   backend_constructor,
                      gpointer                    user_data,
                      GError                    **error)
 {
@@ -274,19 +257,18 @@ clutter_context_new (ClutterBackendConstructor   backend_constructor,
 
   init_clutter_debug (context);
   context->show_fps = clutter_show_fps;
+  context->is_initialized = FALSE;
 
-  context->backend = backend_constructor (context, user_data);
-  context->settings = g_object_new (CLUTTER_TYPE_SETTINGS, NULL);
+  context->backend = backend_constructor (user_data);
+  context->settings = clutter_settings_get_default ();
   _clutter_settings_set_backend (context->settings,
                                  context->backend);
-
-  context->stage_manager = g_object_new (CLUTTER_TYPE_STAGE_MANAGER, NULL);
 
   context->events_queue =
     g_async_queue_new_full ((GDestroyNotify) clutter_event_free);
   context->last_repaint_id = 1;
 
-  if (!clutter_context_init_real (context, error))
+  if (!clutter_context_init_real (context, flags, error))
     return NULL;
 
   return context;
@@ -305,42 +287,28 @@ clutter_context_get_backend (ClutterContext *context)
   return context->backend;
 }
 
-#ifdef HAVE_FONTS
-PangoFontMap *
+CoglPangoFontMap *
 clutter_context_get_pango_fontmap (ClutterContext *context)
 {
-  PangoFontMap *font_map;
-  PangoRenderer *font_renderer;
+  CoglPangoFontMap *font_map;
   gdouble resolution;
-  ClutterBackend *backend;
-  CoglContext *cogl_context;
+  gboolean use_mipmapping;
 
   if (G_LIKELY (context->font_map != NULL))
     return context->font_map;
 
-  backend = clutter_context_get_backend (context);
-  cogl_context = clutter_backend_get_cogl_context (backend);
-  font_map = pango_cairo_font_map_new ();
-  font_renderer = clutter_pango_renderer_new (cogl_context);
+  font_map = COGL_PANGO_FONT_MAP (cogl_pango_font_map_new ());
 
   resolution = clutter_backend_get_resolution (context->backend);
-  pango_cairo_font_map_set_resolution (PANGO_CAIRO_FONT_MAP (font_map),
-                                       resolution);
+  cogl_pango_font_map_set_resolution (font_map, resolution);
+
+  use_mipmapping = !clutter_disable_mipmap_text;
+  cogl_pango_font_map_set_use_mipmapping (font_map, use_mipmapping);
 
   context->font_map = font_map;
-  context->font_renderer = font_renderer;
 
   return context->font_map;
 }
-
-PangoRenderer *
-clutter_context_get_font_renderer (ClutterContext *context)
-{
-  g_return_val_if_fail (CLUTTER_IS_CONTEXT (context), NULL);
-
-  return context->font_renderer;
-}
-#endif
 
 ClutterTextDirection
 clutter_context_get_text_direction (ClutterContext *context)
@@ -348,53 +316,4 @@ clutter_context_get_text_direction (ClutterContext *context)
   ClutterContextPrivate *priv = clutter_context_get_instance_private (context);
 
   return priv->text_direction;
-}
-
-ClutterColorState *
-clutter_context_get_default_color_state (ClutterContext *context)
-{
-  ClutterContextPrivate *priv = clutter_context_get_instance_private (context);
-
-  if (!priv->default_color_state)
-    {
-      priv->default_color_state =
-        clutter_color_state_params_new (context,
-                                        CLUTTER_COLORSPACE_SRGB,
-                                        CLUTTER_TRANSFER_FUNCTION_GAMMA22);
-    }
-
-  return priv->default_color_state;
-}
-
-/**
- * clutter_get_accessibility_enabled:
- *
- * Returns whether Clutter has accessibility support enabled.
- *
- * Return value: %TRUE if Clutter has accessibility support enabled
- */
-gboolean
-clutter_get_accessibility_enabled (void)
-{
-  return clutter_enable_accessibility;
-}
-
-ClutterStageManager *
-clutter_context_get_stage_manager (ClutterContext *context)
-{
-  return context->stage_manager;
-}
-
-gboolean
-clutter_context_get_show_fps (ClutterContext *context)
-{
-  return context->show_fps;
-}
-
-ClutterSettings *
-clutter_context_get_settings (ClutterContext *context)
-{
-  g_return_val_if_fail (CLUTTER_IS_CONTEXT (context), NULL);
-
-  return context->settings;
 }

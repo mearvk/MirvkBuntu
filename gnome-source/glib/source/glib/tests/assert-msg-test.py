@@ -20,13 +20,16 @@
 
 """ Integration tests for g_assert() functions. """
 
+import collections
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 
 import taptestrunner
-import testprogramrunner
+
+Result = collections.namedtuple("Result", ("info", "out", "err"))
 
 GDB_SCRIPT = """
 # Work around https://sourceware.org/bugzilla/show_bug.cgi?id=22501
@@ -39,7 +42,7 @@ quit
 """
 
 
-class TestAssertMessage(testprogramrunner.TestProgramRunner):
+class TestAssertMessage(unittest.TestCase):
     """Integration test for throwing message on g_assert().
 
     This can be run when installed or uninstalled. When uninstalled,
@@ -51,21 +54,80 @@ class TestAssertMessage(testprogramrunner.TestProgramRunner):
     and automated tools can more easily debug assertion failures.
     """
 
-    PROGRAM_NAME = "assert-msg-test"
-    PROGRAM_TYPE = testprogramrunner.ProgramType.NATIVE
-
     def setUp(self):
-        super().setUp()
         self.__gdb = shutil.which("gdb")
+        self.timeout_seconds = 10  # seconds per test
+
+        ext = ""
+        if os.name == "nt":
+            ext = ".exe"
+        if "G_TEST_BUILDDIR" in os.environ:
+            self.__assert_msg_test = os.path.join(
+                os.environ["G_TEST_BUILDDIR"], "assert-msg-test" + ext
+            )
+        else:
+            self.__assert_msg_test = os.path.join(
+                os.path.dirname(__file__), "assert-msg-test" + ext
+            )
+        print("assert-msg-test:", self.__assert_msg_test)
 
     def runAssertMessage(self, *args):
-        return self.runTestProgram(args, should_fail=True)
+        argv = [self.__assert_msg_test]
+        argv.extend(args)
+        print("Running:", argv)
+
+        env = os.environ.copy()
+        env["LC_ALL"] = "C.UTF-8"
+        print("Environment:", env)
+
+        # We want to ensure consistent line endings...
+        info = subprocess.run(
+            argv,
+            timeout=self.timeout_seconds,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            universal_newlines=True,
+        )
+        out = info.stdout.strip()
+        err = info.stderr.strip()
+
+        result = Result(info, out, err)
+
+        print("Output:", result.out)
+        print("Error:", result.err)
+        return result
 
     def runGdbAssertMessage(self, *args):
         if self.__gdb is None:
-            return testprogramrunner.Result()
+            return Result(None, "", "")
 
-        return self.runTestProgram(args, wrapper_args=["gdb", "-n", "--batch"])
+        argv = ["gdb", "-n", "--batch"]
+        argv.extend(args)
+        print("Running:", argv)
+
+        env = os.environ.copy()
+        env["LC_ALL"] = "C.UTF-8"
+        print("Environment:", env)
+
+        # We want to ensure consistent line endings...
+        info = subprocess.run(
+            argv,
+            timeout=self.timeout_seconds,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            universal_newlines=True,
+        )
+        out = info.stdout.strip()
+        err = info.stderr.strip()
+
+        result = Result(info, out, err)
+
+        print("Output:", result.out)
+        print("Error:", result.err)
+        print(result.info)
+        return result
 
     def test_gassert(self):
         """Test running g_assert() and fail the program."""
@@ -81,10 +143,6 @@ class TestAssertMessage(testprogramrunner.TestProgramRunner):
         """Test running g_assert() within gdb and fail the program."""
         if self.__gdb is None:
             self.skipTest("GDB is not installed, skipping this test!")
-        if {"thread", "address"} & set(
-            os.getenv("_GLIB_TEST_SANITIZERS", "").split(",")
-        ):
-            self.skipTest("GDB can't run under sanitizers")
 
         with tempfile.NamedTemporaryFile(
             prefix="assert-msg-test-", suffix=".gdb", mode="w", delete=False
@@ -92,7 +150,9 @@ class TestAssertMessage(testprogramrunner.TestProgramRunner):
             try:
                 tmp.write(GDB_SCRIPT)
                 tmp.close()
-                result = self.runGdbAssertMessage("-x", tmp.name)
+                result = self.runGdbAssertMessage(
+                    "-x", tmp.name, self.__assert_msg_test
+                )
             finally:
                 os.unlink(tmp.name)
 

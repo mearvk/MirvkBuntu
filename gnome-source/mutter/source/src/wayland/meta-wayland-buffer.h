@@ -27,6 +27,7 @@
 #include "cogl/cogl.h"
 #include "meta/meta-multi-texture.h"
 #include "wayland/meta-wayland-types.h"
+#include "wayland/meta-wayland-egl-stream.h"
 #include "wayland/meta-wayland-dma-buf.h"
 #include "wayland/meta-wayland-single-pixel-buffer.h"
 
@@ -35,6 +36,9 @@ typedef enum _MetaWaylandBufferType
   META_WAYLAND_BUFFER_TYPE_UNKNOWN,
   META_WAYLAND_BUFFER_TYPE_SHM,
   META_WAYLAND_BUFFER_TYPE_EGL_IMAGE,
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  META_WAYLAND_BUFFER_TYPE_EGL_STREAM,
+#endif
   META_WAYLAND_BUFFER_TYPE_DMA_BUF,
   META_WAYLAND_BUFFER_TYPE_SINGLE_PIXEL,
 } MetaWaylandBufferType;
@@ -57,6 +61,13 @@ struct _MetaWaylandBuffer
     MetaMultiTexture *texture;
   } egl_image;
 
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  struct {
+    MetaWaylandEglStream *stream;
+    MetaMultiTexture *texture;
+  } egl_stream;
+#endif
+
   struct {
     MetaWaylandDmaBufBuffer *dma_buf;
     MetaMultiTexture *texture;
@@ -66,10 +77,6 @@ struct _MetaWaylandBuffer
     MetaWaylandSinglePixelBuffer *single_pixel_buffer;
     MetaMultiTexture *texture;
   } single_pixel;
-
-  struct {
-    struct wl_shm_buffer *buffer;
-  } shm;
 
   GHashTable *tainted_scanout_onscreens;
 
@@ -88,6 +95,7 @@ gboolean                meta_wayland_buffer_realize             (MetaWaylandBuff
 gboolean                meta_wayland_buffer_attach              (MetaWaylandBuffer     *buffer,
                                                                  MetaMultiTexture     **texture,
                                                                  GError               **error);
+CoglSnippet *           meta_wayland_buffer_create_snippet      (MetaWaylandBuffer     *buffer);
 void                    meta_wayland_buffer_inc_use_count       (MetaWaylandBuffer     *buffer);
 void                    meta_wayland_buffer_dec_use_count       (MetaWaylandBuffer     *buffer);
 gboolean                meta_wayland_buffer_is_y_inverted       (MetaWaylandBuffer     *buffer);
@@ -96,7 +104,6 @@ void                    meta_wayland_buffer_process_damage      (MetaWaylandBuff
                                                                  MtkRegion             *region);
 CoglScanout *           meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
                                                                  CoglOnscreen          *onscreen,
-                                                                 ClutterStageView      *stage_view,
                                                                  const graphene_rect_t *src_rect,
                                                                  const MtkRectangle    *dst_rect);
 

@@ -76,7 +76,7 @@ get_image_texture (GtkImage *image)
                                          NULL,
                                          width, 1,
                                          gtk_widget_get_direction (GTK_WIDGET (image)),
-                                         GTK_ICON_LOOKUP_NONE);
+                                         0);
       paintable = GDK_PAINTABLE (icon);
       break;
     case GTK_IMAGE_GICON:
@@ -120,7 +120,7 @@ got_texture (GObject *source,
   else
     {
       g_error_free (error);
-      gdk_drop_finish (drop, GDK_ACTION_NONE);
+      gdk_drop_finish (drop, 0);
     }
 
   g_object_set_data (G_OBJECT (image), "drop", NULL);
@@ -134,7 +134,7 @@ perform_drop (GdkDrop   *drop,
     gdk_drop_read_value_async (drop, GDK_TYPE_TEXTURE, G_PRIORITY_DEFAULT, NULL, got_texture, image);
   else
     {
-      gdk_drop_finish (drop, GDK_ACTION_NONE);
+      gdk_drop_finish (drop, 0);
       g_object_set_data (G_OBJECT (image), "drop", NULL);
     }
 }
@@ -158,7 +158,7 @@ do_cancel (GtkWidget *button)
   GdkDrop *drop = GDK_DROP (g_object_get_data (G_OBJECT (image), "drop"));
 
   gtk_popover_popdown (GTK_POPOVER (popover));
-  gdk_drop_finish (drop, GDK_ACTION_NONE);
+  gdk_drop_finish (drop, 0);
 
   g_object_set_data (G_OBJECT (image), "drop", NULL);
 }
@@ -191,7 +191,7 @@ ask_actions (GdkDrop *drop,
   gtk_popover_popup (GTK_POPOVER (popover));
 }
 
-static void
+static gboolean
 delayed_deny (gpointer data)
 {
   GtkDropTargetAsync *dest = data;
@@ -203,6 +203,8 @@ delayed_deny (gpointer data)
       g_print ("denying drop, late\n");
       gtk_drop_target_async_reject_drop (dest, drop);
     }
+
+  return G_SOURCE_REMOVE;
 }
 
 static gboolean
@@ -213,9 +215,7 @@ image_drag_accept (GtkDropTargetAsync *dest,
   GtkWidget *image = data;
   g_object_set_data_full (G_OBJECT (image), "drop", g_object_ref (drop), g_object_unref);
 
-  g_print ("accept\n");
-
-  g_timeout_add_once (1000, delayed_deny, dest);
+  g_timeout_add (1000, delayed_deny, dest);
 
   return TRUE;
 }
@@ -229,22 +229,10 @@ image_drag_drop (GtkDropTarget    *dest,
 {
   GtkWidget *image = data;
   GdkDragAction action = gdk_drop_get_actions (drop);
-  const char *name[] = { "copy", "move", "link", "ask" };
 
   g_object_set_data_full (G_OBJECT (image), "drop", g_object_ref (drop), g_object_unref);
 
-  g_print ("drop, actions: ");
-  for (guint i = 0; i < 4; i++)
-    {
-      if (action & (1 << i))
-        {
-          if (i > 0)
-            g_print (", ");
-          g_print ("%s", name[i]);
-        }
-    }
-  g_print ("\n");
-
+  g_print ("drop, actions %d\n", action);
   if (!gdk_drag_action_is_unique (action))
     ask_actions (drop, image);
   else
@@ -271,7 +259,7 @@ update_source_icon (GtkDragSource *source,
                                      NULL,
                                      size, 1,
                                      gtk_widget_get_direction (widget),
-                                     GTK_ICON_LOOKUP_NONE);
+                                     0);
   switch (hotspot)
     {
     default:
@@ -333,8 +321,7 @@ drag_cancel (GtkDragSource       *source,
              GdkDrag             *drag,
              GdkDragCancelReason  reason)
 {
-  const char *msg[] = { "no target", "user cancelled", "error" };
-  g_print ("drag failed: %s\n", msg[reason]);
+  g_print ("drag failed: %d\n", reason);
   return FALSE;
 }
 

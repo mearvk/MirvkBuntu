@@ -43,7 +43,7 @@ struct _GdkRGBA
 #define GDK_TYPE_RGBA (gdk_rgba_get_type ())
 
 GDK_AVAILABLE_IN_ALL
-GType     gdk_rgba_get_type  (void);
+GType     gdk_rgba_get_type  (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GdkRGBA * gdk_rgba_copy      (const GdkRGBA *rgba);
@@ -66,10 +66,6 @@ gboolean  gdk_rgba_parse     (GdkRGBA       *rgba,
                               const char    *spec);
 GDK_AVAILABLE_IN_ALL
 char *   gdk_rgba_to_string (const GdkRGBA *rgba) G_GNUC_MALLOC;
-
-GDK_AVAILABLE_IN_4_22
-GString *gdk_rgba_print     (const GdkRGBA *rgba,
-                             GString       *string);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkRGBA, gdk_rgba_free)
 

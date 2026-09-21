@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "cogl/cogl-pipeline-private.h"
 #include "cogl/cogl-texture-private.h"
 #include "cogl/cogl-texture-2d.h"
 
@@ -37,39 +38,37 @@ struct _CoglTexture2D
 {
   CoglTexture parent_instance;
 
+  /* The internal format of the GL texture represented as a
+     CoglPixelFormat */
   CoglPixelFormat internal_format;
 
   gboolean auto_mipmap;
   gboolean mipmaps_dirty;
   gboolean is_get_data_supported;
+
+  /* TODO: factor out these OpenGL specific members into some form
+   * of driver private state. */
+
+  /* The internal format of the GL texture represented as a GL enum */
+  GLenum gl_internal_format;
+  /* The texture object number */
+  GLuint gl_texture;
+  GLenum gl_target;
+  GLenum gl_legacy_texobj_min_filter;
+  GLenum gl_legacy_texobj_mag_filter;
+  GLint gl_legacy_texobj_wrap_mode_s;
+  GLint gl_legacy_texobj_wrap_mode_t;
+  CoglTexturePixel first_pixel;
+
+  struct {
+    void *user_data;
+    GDestroyNotify destroy;
+  } egl_image_external;
 };
 
 struct _CoglTexture2DClass
 {
-  CoglTextureClass parent_class;
-
-  void (* copy_from_framebuffer) (CoglTexture2D   *tex_2d,
-                                  int              src_x,
-                                  int              src_y,
-                                  int              width,
-                                  int              height,
-                                  CoglFramebuffer *src_fb,
-                                  int              dst_x,
-                                  int              dst_y,
-                                  int              level);
-
-  void (* generate_mipmap) (CoglTexture2D *tex_2d);
-
-  gboolean (* copy_from_bitmap) (CoglTexture2D  *tex_2d,
-                                 int             src_x,
-                                 int             src_y,
-                                 int             width,
-                                 int             height,
-                                 CoglBitmap     *bitmap,
-                                 int             dst_x,
-                                 int             dst_y,
-                                 int             level,
-                                 GError        **error);
+   CoglTextureClass parent_class;
 };
 
 CoglTexture *
@@ -78,6 +77,10 @@ _cogl_texture_2d_create_base (CoglContext *ctx,
                               int height,
                               CoglPixelFormat internal_format,
                               CoglTextureLoader *loader);
+
+void
+_cogl_texture_2d_set_auto_mipmap (CoglTexture *tex,
+                                  gboolean value);
 
 /*
  * _cogl_texture_2d_externally_modified:

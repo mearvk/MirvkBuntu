@@ -33,6 +33,7 @@ struct _MetaSelection
 
 struct TransferRequest
 {
+  MetaSelectionType selection_type;
   GInputStream  *istream;
   GOutputStream *ostream;
   gssize len;
@@ -209,24 +210,23 @@ on_external_cancellable_cancelled (GCancellable    *external_cancellable,
 }
 
 static TransferRequest *
-transfer_request_new (GOutputStream *ostream,
-                      ssize_t        len,
-                      GCancellable  *external_cancellable)
+transfer_request_new (GOutputStream     *ostream,
+                      MetaSelectionType  selection_type,
+                      ssize_t            len,
+                      GCancellable      *external_cancellable)
 {
-  g_autoptr (GMainContext) main_context = NULL;
   TransferRequest *request;
-
-  main_context = g_main_context_ref_thread_default ();
 
   request = g_new0 (TransferRequest, 1);
   request->ostream = g_object_ref (ostream);
+  request->selection_type = selection_type;
   request->len = len;
   request->cancellable = g_cancellable_new ();
   request->timeout_source = g_timeout_source_new_seconds (15);
 
   g_source_set_callback (request->timeout_source, cancel_transfer_request,
                          request, NULL);
-  g_source_attach (request->timeout_source, main_context);
+  g_source_attach (request->timeout_source, NULL);
 
   if (external_cancellable)
     {
@@ -319,7 +319,7 @@ read_cb (GInputStream *stream,
 {
   TransferRequest *request;
   GError *error = NULL;
-  g_autoptr (GBytes) bytes = NULL;
+  GBytes *bytes;
 
   bytes = g_input_stream_read_bytes_finish (stream, result, &error);
   if (error)
@@ -354,6 +354,7 @@ read_cb (GInputStream *stream,
                                      g_task_get_cancellable (task),
                                      (GAsyncReadyCallback) write_cb,
                                      task);
+  g_bytes_unref (bytes);
 }
 
 static void
@@ -444,11 +445,11 @@ meta_selection_transfer_async (MetaSelection        *selection,
     {
       g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
                                "Tried to transfer from NULL selection source");
-      g_object_unref (task);
       return;
     }
 
-  transfer_request = transfer_request_new (output, size, cancellable);
+  transfer_request = transfer_request_new (output, selection_type, size,
+                                           cancellable);
 
   g_task_set_task_data (task, transfer_request,
                         (GDestroyNotify) transfer_request_free);

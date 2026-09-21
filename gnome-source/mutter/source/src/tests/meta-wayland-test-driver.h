@@ -33,11 +33,5 @@ void meta_wayland_test_driver_set_property (MetaWaylandTestDriver *test_driver,
                                             const char            *name,
                                             const char            *value);
 
-void meta_wayland_test_driver_set_property_int (MetaWaylandTestDriver *test_driver,
-                                                const char            *name,
-                                                int32_t                value);
-
 void meta_wayland_test_driver_wait_for_sync_point (MetaWaylandTestDriver *test_driver,
                                                    unsigned int           sync_point);
-
-void meta_wayland_test_driver_terminate (MetaWaylandTestDriver *test_driver);

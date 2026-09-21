@@ -17,7 +17,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <clutter/clutter-mutter.h>
 #include <clutter/clutter.h>
 
 #include "tests/clutter-test-utils.h"
@@ -65,13 +64,11 @@ static void
 actor_event_hold (void)
 {
   ClutterActor *stage;
-  ClutterContext *context;
   ClutterBackend *backend;
   ClutterSeat *seat;
-  ClutterSprite *sprite;
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  g_autoptr (ClutterInputDevice) fake_pointer = NULL;
   int64_t now_us;
+  ClutterInputDevice *device;
   ClutterEvent *event;
   ClutterEvent *captured_event;
   size_t n_test_case;
@@ -84,7 +81,8 @@ actor_event_hold (void)
   clutter_actor_show (stage);
 
   /* Get the input device*/
-  seat = clutter_test_get_default_seat ();
+  backend = clutter_get_default_backend ();
+  seat = clutter_backend_get_default_seat (backend);
 
   virtual_pointer =
     clutter_seat_create_virtual_device (seat, CLUTTER_POINTER_DEVICE);
@@ -93,17 +91,8 @@ actor_event_hold (void)
                                                        now_us,
                                                        1.0, 1.0);
 
-  context = clutter_actor_get_context (stage);
-  backend = clutter_context_get_backend (context);
-
-  fake_pointer = g_object_new (CLUTTER_TYPE_INPUT_DEVICE,
-                               "device-type", CLUTTER_POINTER_DEVICE,
-                               "seat", seat,
-                               NULL);
-
-  sprite = clutter_backend_get_pointer_sprite (backend, CLUTTER_STAGE (stage));
-
-  while (clutter_focus_get_current_actor (CLUTTER_FOCUS (sprite)) == NULL)
+  device = clutter_seat_get_pointer (seat);
+  while (clutter_stage_get_device_actor (CLUTTER_STAGE (stage), device, NULL) == NULL)
     g_main_context_iteration (NULL, FALSE);
 
   for (n_test_case = 0; n_test_case < G_N_ELEMENTS (test_cases); n_test_case++)
@@ -119,7 +108,7 @@ actor_event_hold (void)
       /* Create a synthetic hold event */
       event = clutter_event_touchpad_hold_new (CLUTTER_EVENT_NONE,
                                                EVENT_TIME,
-                                               fake_pointer,
+                                               device,
                                                test_case->phase,
                                                test_case->n_fingers,
                                                GRAPHENE_POINT_INIT (test_case->x,
@@ -140,15 +129,15 @@ actor_event_hold (void)
       clutter_event_get_gesture_motion_delta (captured_event, &dx, &dy);
       clutter_event_get_gesture_motion_delta_unaccelerated (captured_event, &udx, &udy);
 
-      g_assert_cmpfloat (actual_position.x, ==, test_case->x);
-      g_assert_cmpfloat (actual_position.y, ==, test_case->y);
+      g_assert (actual_position.x == test_case->x);
+      g_assert (actual_position.y == test_case->y);
       g_assert_null (actual_axes);
-      g_assert_cmpint (actual_phase, ==, test_case->phase);
-      g_assert_cmpint (actual_n_fingers, ==, test_case->n_fingers);
-      g_assert_cmpfloat (dx, ==, 0);
-      g_assert_cmpfloat (dy, ==, 0);
-      g_assert_cmpfloat (udx, ==, 0);
-      g_assert_cmpfloat (udy, ==, 0);
+      g_assert (actual_phase == test_case->phase);
+      g_assert (actual_n_fingers == test_case->n_fingers);
+      g_assert (dx == 0);
+      g_assert (dy == 0);
+      g_assert (udx == 0);
+      g_assert (udy == 0);
 
       clutter_event_free (captured_event);
     }

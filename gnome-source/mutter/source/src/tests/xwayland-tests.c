@@ -268,10 +268,11 @@ meta_test_xwayland_compositor_selection (void)
   MetaDisplay *display = meta_context_get_display (test_context);
   MetaWaylandCompositor *compositor;
   const char *x11_display_name;
-  g_autofree char *x11_compositor_checker = NULL;
+  const char *x11_compositor_checker;
 
   g_assert_null (meta_display_get_x11_display (display));
 
+  g_assert (meta_is_wayland_compositor ());
   compositor = meta_context_get_wayland_compositor (test_context);
   x11_display_name = meta_wayland_get_public_xwayland_display_name (compositor);
   g_assert_nonnull (x11_display_name);
@@ -282,6 +283,8 @@ meta_test_xwayland_compositor_selection (void)
                                 TRUE);
 
   x11_compositor_checker = g_test_build_filename (G_TEST_BUILT,
+                                                  "src",
+                                                  "tests",
                                                   "x11-compositor-checker",
                                                   NULL);
 
@@ -317,12 +320,12 @@ main (int    argc,
       char **argv)
 {
   g_autoptr (MetaContext) context = NULL;
+  g_autoptr (GError) error = NULL;
 
   context = test_context =
     meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
-                              META_CONTEXT_TEST_FLAG_TEST_CLIENT |
-                              META_CONTEXT_TEST_FLAG_ADD_MONITOR);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+                              META_CONTEXT_TEST_FLAG_TEST_CLIENT);
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   init_tests ();
 

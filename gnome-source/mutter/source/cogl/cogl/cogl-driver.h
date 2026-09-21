@@ -24,155 +24,238 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ *
  */
 
 #pragma once
 
-#include "cogl/cogl-macros.h"
+#include "cogl/cogl-context.h"
+#include "cogl/cogl-offscreen-private.h"
+#include "cogl/cogl-framebuffer-private.h"
+#include "cogl/cogl-attribute-private.h"
+#include "cogl/cogl-sampler-cache-private.h"
+#include "cogl/cogl-texture-private.h"
 
-#if !defined(__COGL_H_INSIDE__) && !defined(COGL_COMPILATION)
-#error "Only <cogl/cogl.h> can be included directly."
-#endif
+typedef struct _CoglDriverVtable CoglDriverVtable;
 
-#include "cogl/cogl-pixel-format.h"
-
-/**
- * CoglGraphicsResetStatus:
- * @COGL_GRAPHICS_RESET_STATUS_NO_ERROR:
- * @COGL_GRAPHICS_RESET_STATUS_GUILTY_CONTEXT_RESET:
- * @COGL_GRAPHICS_RESET_STATUS_INNOCENT_CONTEXT_RESET:
- * @COGL_GRAPHICS_RESET_STATUS_UNKNOWN_CONTEXT_RESET:
- * @COGL_GRAPHICS_RESET_STATUS_PURGED_CONTEXT_RESET:
- *
- * All the error values that might be returned by
- * cogl_driver_get_graphics_reset_status(). Each value's meaning corresponds
- * to the similarly named value defined in the ARB_robustness and
- * NV_robustness_video_memory_purge extensions.
- */
-typedef enum _CoglGraphicsResetStatus
+struct _CoglDriverVtable
 {
-  COGL_GRAPHICS_RESET_STATUS_NO_ERROR,
-  COGL_GRAPHICS_RESET_STATUS_GUILTY_CONTEXT_RESET,
-  COGL_GRAPHICS_RESET_STATUS_INNOCENT_CONTEXT_RESET,
-  COGL_GRAPHICS_RESET_STATUS_UNKNOWN_CONTEXT_RESET,
-  COGL_GRAPHICS_RESET_STATUS_PURGED_CONTEXT_RESET,
-} CoglGraphicsResetStatus;
+  gboolean
+  (* context_init) (CoglContext *context);
 
-COGL_EXPORT
-G_DECLARE_DERIVABLE_TYPE (CoglDriver,
-                          cogl_driver,
-                          COGL,
-                          DRIVER,
-                          GObject)
+  void
+  (* context_deinit) (CoglContext *context);
 
-#define COGL_TYPE_DRIVER (cogl_driver_get_type ())
+  gboolean
+  (* is_hardware_accelerated) (CoglContext *context);
 
-typedef struct _CoglDriverClass CoglDriverClass;
+  CoglGraphicsResetStatus
+  (* get_graphics_reset_status) (CoglContext *context);
 
-COGL_EXPORT_TEST
-const char * cogl_driver_get_vendor (CoglDriver *driver);
+  /* TODO: factor this out since this is OpenGL specific and
+   * so can be ignored by non-OpenGL drivers. */
+  CoglPixelFormat
+  (* pixel_format_to_gl) (CoglContext *context,
+                          CoglPixelFormat format,
+                          GLenum *out_glintformat,
+                          GLenum *out_glformat,
+                          GLenum *out_gltype);
 
-/**
- * cogl_driver_get_graphics_reset_status:
- * @driver: a #CoglDriver
- *
- * Returns the graphics reset status as reported by
- * GetGraphicsResetStatusARB defined in the ARB_robustness extension.
- *
- * Note that Cogl doesn't normally enable the ARB_robustness
- * extension in which case this will only ever return
- * #COGL_GRAPHICS_RESET_STATUS_NO_ERROR.
- *
- * Return value: a #CoglGraphicsResetStatus
- */
-COGL_EXPORT
-CoglGraphicsResetStatus cogl_driver_get_graphics_reset_status (CoglDriver *driver);
+  CoglPixelFormat
+  (* get_read_pixels_format) (CoglContext     *context,
+                              CoglPixelFormat  from,
+                              CoglPixelFormat  to,
+                              GLenum          *gl_format_out,
+                              GLenum          *gl_type_out);
 
-COGL_EXPORT
-gboolean cogl_driver_format_supports_upload (CoglDriver     *driver,
-                                             CoglPixelFormat format);
+  gboolean
+  (* update_features) (CoglContext *context,
+                       GError **error);
 
+  CoglFramebufferDriver *
+  (* create_framebuffer_driver) (CoglContext                        *context,
+                                 CoglFramebuffer                    *framebuffer,
+                                 const CoglFramebufferDriverConfig  *driver_config,
+                                 GError                            **error);
 
-/* XXX: not guarded by the EXPERIMENTAL_API defines to avoid
- * upsetting glib-mkenums, but this can still be considered implicitly
- * experimental since it's only useable with experimental API... */
-/**
- * CoglFeatureID:
- * @COGL_FEATURE_ID_TEXTURE_RG: Support for
- *    %COGL_TEXTURE_COMPONENTS_RG as the internal components of a
- *    texture.
- * @COGL_FEATURE_ID_TEXTURE_RGBA1010102: Support for 10bpc RGBA formats
- * @COGL_FEATURE_ID_TEXTURE_HALF_FLOAT: Support for half float formats
- * @COGL_FEATURE_ID_TEXTURE_NORM16: Support for 16bpc formats
- * @COGL_FEATURE_ID_UNSIGNED_INT_INDICES: Set if
- *     %COGL_INDICES_TYPE_UNSIGNED_INT is supported in
- *     cogl_indices_new().
- * @COGL_FEATURE_ID_MAP_BUFFER_FOR_READ: Whether cogl_buffer_map() is
- *     supported with CoglBufferAccess including read support.
- * @COGL_FEATURE_ID_MAP_BUFFER_FOR_WRITE: Whether cogl_buffer_map() is
- *     supported with CoglBufferAccess including write support.
- * @COGL_FEATURE_ID_BLIT_FRAMEBUFFER: Whether blitting using
- *    [method@Cogl.Framebuffer.blit] is supported.
- *
- * All the capabilities that can vary between different GPUs supported
- * by Cogl. Applications that depend on any of these features should explicitly
- * check for them using [method@Cogl.Driver.has_feature].
- */
-typedef enum _CoglFeatureID
+  void
+  (* flush_framebuffer_state) (CoglContext          *context,
+                               CoglFramebuffer      *draw_buffer,
+                               CoglFramebuffer      *read_buffer,
+                               CoglFramebufferState  state);
+
+  /* Destroys any driver specific resources associated with the given
+   * 2D texture. */
+  void
+  (* texture_2d_free) (CoglTexture2D *tex_2d);
+
+  /* Returns TRUE if the driver can support creating a 2D texture with
+   * the given geometry and specified internal format.
+   */
+  gboolean
+  (* texture_2d_can_create) (CoglContext *ctx,
+                             int width,
+                             int height,
+                             CoglPixelFormat internal_format);
+
+  /* Initializes driver private state before allocating any specific
+   * storage for a 2D texture, where base texture and texture 2D
+   * members will already be initialized before passing control to
+   * the driver.
+   */
+  void
+  (* texture_2d_init) (CoglTexture2D *tex_2d);
+
+  /* Allocates (uninitialized) storage for the given texture according
+   * to the configured size and format of the texture */
+  gboolean
+  (* texture_2d_allocate) (CoglTexture *tex,
+                           GError **error);
+
+  /* Initialize the specified region of storage of the given texture
+   * with the contents of the specified framebuffer region
+   */
+  void
+  (* texture_2d_copy_from_framebuffer) (CoglTexture2D *tex_2d,
+                                        int src_x,
+                                        int src_y,
+                                        int width,
+                                        int height,
+                                        CoglFramebuffer *src_fb,
+                                        int dst_x,
+                                        int dst_y,
+                                        int level);
+
+  /* If the given texture has a corresponding OpenGL texture handle
+   * then return that.
+   *
+   * This is optional
+   */
+  unsigned int
+  (* texture_2d_get_gl_handle) (CoglTexture2D *tex_2d);
+
+  /* Update all mipmap levels > 0 */
+  void
+  (* texture_2d_generate_mipmap) (CoglTexture2D *tex_2d);
+
+  /* Initialize the specified region of storage of the given texture
+   * with the contents of the specified bitmap region
+   *
+   * Since this may need to create the underlying storage first
+   * it may throw a NO_MEMORY error.
+   */
+  gboolean
+  (* texture_2d_copy_from_bitmap) (CoglTexture2D *tex_2d,
+                                   int src_x,
+                                   int src_y,
+                                   int width,
+                                   int height,
+                                   CoglBitmap *bitmap,
+                                   int dst_x,
+                                   int dst_y,
+                                   int level,
+                                   GError **error);
+
+  gboolean
+  (* texture_2d_is_get_data_supported) (CoglTexture2D *tex_2d);
+
+  /* Reads back the full contents of the given texture and write it to
+   * @data in the given @format and with the given @rowstride.
+   *
+   * This is optional
+   */
+  void
+  (* texture_2d_get_data) (CoglTexture2D *tex_2d,
+                           CoglPixelFormat format,
+                           int rowstride,
+                           uint8_t *data);
+
+  /* Prepares for drawing by flushing the journal, framebuffer state,
+   * pipeline state and attribute state.
+   */
+  void
+  (* flush_attributes_state) (CoglFramebuffer *framebuffer,
+                              CoglPipeline *pipeline,
+                              CoglFlushLayerState *layer_state,
+                              CoglDrawFlags flags,
+                              CoglAttribute **attributes,
+                              int n_attributes);
+
+  /* Flushes the clip stack to the GPU using a combination of the
+   * stencil buffer, scissor and clip plane state.
+   */
+  void
+  (* clip_stack_flush) (CoglClipStack *stack, CoglFramebuffer *framebuffer);
+
+  /* Enables the driver to create some meta data to represent a buffer
+   * but with no corresponding storage allocated yet.
+   */
+  void
+  (* buffer_create) (CoglBuffer *buffer);
+
+  void
+  (* buffer_destroy) (CoglBuffer *buffer);
+
+  /* Maps a buffer into the CPU */
+  void *
+  (* buffer_map_range) (CoglBuffer *buffer,
+                        size_t offset,
+                        size_t size,
+                        CoglBufferAccess access,
+                        CoglBufferMapHint hints,
+                        GError **error);
+
+  /* Unmaps a buffer */
+  void
+  (* buffer_unmap) (CoglBuffer *buffer);
+
+  /* Uploads data to the buffer without needing to map it necessarily
+   */
+  gboolean
+  (* buffer_set_data) (CoglBuffer *buffer,
+                       unsigned int offset,
+                       const void *data,
+                       unsigned int size,
+                       GError **error);
+
+  void
+  (*sampler_init) (CoglContext *context,
+                   CoglSamplerCacheEntry *entry);
+
+  void
+  (*sampler_free) (CoglContext *context,
+                   CoglSamplerCacheEntry *entry);
+
+  void
+  (* set_uniform) (CoglContext *ctx,
+                   GLint location,
+                   const CoglBoxedValue *value);
+
+  CoglTimestampQuery *
+  (* create_timestamp_query) (CoglContext *context);
+
+  void
+  (* free_timestamp_query) (CoglContext *context,
+                            CoglTimestampQuery *query);
+
+  int64_t
+  (* timestamp_query_get_time_ns) (CoglContext *context,
+                                   CoglTimestampQuery *query);
+
+  int64_t
+  (* get_gpu_time_ns) (CoglContext *context);
+};
+
+#define COGL_DRIVER_ERROR (_cogl_driver_error_quark ())
+
+typedef enum /*< prefix=COGL_DRIVER_ERROR >*/
 {
-  COGL_FEATURE_ID_UNSIGNED_INT_INDICES,
-  COGL_FEATURE_ID_MAP_BUFFER_FOR_READ,
-  COGL_FEATURE_ID_MAP_BUFFER_FOR_WRITE,
-  COGL_FEATURE_ID_TEXTURE_RG,
-  COGL_FEATURE_ID_TEXTURE_RGBA1010102,
-  COGL_FEATURE_ID_TEXTURE_HALF_FLOAT,
-  COGL_FEATURE_ID_TEXTURE_NORM16,
-  COGL_FEATURE_ID_BLIT_FRAMEBUFFER,
-  COGL_FEATURE_ID_TIMESTAMP_QUERY,
-  COGL_FEATURE_ID_TEXTURE_2D_FROM_EGL_IMAGE,
-  COGL_FEATURE_ID_MESA_PACK_INVERT,
-  COGL_FEATURE_ID_PBOS,
-  COGL_FEATURE_ID_EXT_PACKED_DEPTH_STENCIL,
-  COGL_FEATURE_ID_OES_PACKED_DEPTH_STENCIL,
-  COGL_FEATURE_ID_TEXTURE_FORMAT_BGRA8888,
-  COGL_FEATURE_ID_TEXTURE_FORMAT_SIZED_RGBA,
-  COGL_FEATURE_ID_UNPACK_SUBIMAGE,
-  COGL_FEATURE_ID_SAMPLER_OBJECTS,
-  COGL_FEATURE_ID_READ_PIXELS_ANY_STRIDE,
-  COGL_FEATURE_ID_FORMAT_CONVERSION,
-  COGL_FEATURE_ID_QUERY_FRAMEBUFFER_BITS,
-  COGL_FEATURE_ID_ALPHA_TEXTURES,
-  COGL_FEATURE_ID_TEXTURE_SWIZZLE,
-  COGL_FEATURE_ID_TEXTURE_MAX_LEVEL,
-  COGL_FEATURE_ID_TEXTURE_LOD_BIAS,
+  COGL_DRIVER_ERROR_UNKNOWN_VERSION,
+  COGL_DRIVER_ERROR_INVALID_VERSION,
+  COGL_DRIVER_ERROR_NO_SUITABLE_DRIVER_FOUND,
+  COGL_DRIVER_ERROR_FAILED_TO_LOAD_LIBRARY
+} CoglDriverError;
 
-  /* This is a Mali bug/quirk: */
-  COGL_FEATURE_ID_QUIRK_GENERATE_MIPMAP_NEEDS_FLUSH,
-  /*< private >*/
-  _COGL_N_FEATURE_IDS   /*< skip >*/
-} CoglFeatureID;
-
-
-/**
- * cogl_driver_has_feature:
- * @driver: A #CoglDriver
- * @feature: A #CoglFeatureID
- *
- * Checks if a given @feature is currently available
- *
- * Cogl does not aim to be a lowest common denominator API, it aims to
- * expose all the interesting features of GPUs to application which
- * means applications have some responsibility to explicitly check
- * that certain features are available before depending on them.
- *
- * Returns: %TRUE if the @feature is currently supported or %FALSE if
- * not.
- */
-COGL_EXPORT
-gboolean cogl_driver_has_feature (CoglDriver    *driver,
-                                  CoglFeatureID  feature);
-
-COGL_EXPORT
-void cogl_driver_set_feature (CoglDriver    *driver,
-                              CoglFeatureID  feature,
-                              gboolean       value);
+uint32_t
+_cogl_driver_error_quark (void);

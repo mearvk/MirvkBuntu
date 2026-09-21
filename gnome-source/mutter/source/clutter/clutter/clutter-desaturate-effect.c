@@ -52,6 +52,9 @@ typedef struct _ClutterDesaturateEffectPrivate
 
   gint factor_uniform;
 
+  gint tex_width;
+  gint tex_height;
+
   CoglPipeline *pipeline;
 } ClutterDesaturateEffectPrivate;
 
@@ -169,7 +172,7 @@ update_factor_uniform (ClutterDesaturateEffect *self)
   if (priv->factor_uniform > -1)
     cogl_pipeline_set_uniform_1f (priv->pipeline,
                                   priv->factor_uniform,
-                                  (float) priv->factor);
+                                  priv->factor);
 }
 
 static void
@@ -210,13 +213,11 @@ clutter_desaturate_effect_init (ClutterDesaturateEffect *self)
 
   if (G_UNLIKELY (klass->base_pipeline == NULL))
     {
-      ClutterContext *context = _clutter_context_get_default ();
-      ClutterBackend *backend = clutter_context_get_backend (context);
-      CoglContext *cogl_context = clutter_backend_get_cogl_context (backend);
+      CoglContext *ctx =
+        clutter_backend_get_cogl_context (clutter_get_default_backend ());
       CoglSnippet *snippet;
 
-      klass->base_pipeline = cogl_pipeline_new (cogl_context);
-      cogl_pipeline_set_static_name (klass->base_pipeline, "ClutterDesaturate");
+      klass->base_pipeline = cogl_pipeline_new (ctx);
 
       snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT,
                                   desaturate_glsl_declarations,

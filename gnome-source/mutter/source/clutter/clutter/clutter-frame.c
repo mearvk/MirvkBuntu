@@ -37,7 +37,6 @@ clutter_frame_unref (ClutterFrame *frame)
     {
       if (frame->release)
         frame->release (frame);
-      g_clear_object (&frame->cogl_frame_info);
       g_free (frame);
     }
 }
@@ -64,12 +63,12 @@ clutter_frame_get_count (ClutterFrame *frame)
 }
 
 gboolean
-clutter_frame_get_expected_presentation_time (ClutterFrame *frame,
-                                              int64_t      *expected_presentation_time_us)
+clutter_frame_get_target_presentation_time (ClutterFrame *frame,
+                                            int64_t      *target_presentation_time_us)
 {
-  if (frame->has_expected_presentation_time)
+  if (frame->has_target_presentation_time)
     {
-      *expected_presentation_time_us = frame->expected_presentation_time_us;
+      *target_presentation_time_us = frame->target_presentation_time_us;
       return TRUE;
     }
   else
@@ -91,21 +90,6 @@ clutter_frame_get_frame_deadline (ClutterFrame *frame,
     {
       return FALSE;
     }
-}
-
-CoglFrameInfo *
-clutter_frame_get_cogl_frame_info (ClutterFrame *frame)
-{
-  return frame->cogl_frame_info;
-}
-
-void
-clutter_frame_take_cogl_frame_info (ClutterFrame  *frame,
-                                    CoglFrameInfo *frame_info)
-{
-  g_return_if_fail (!frame->cogl_frame_info);
-
-  frame->cogl_frame_info = frame_info;
 }
 
 ClutterFrameResult

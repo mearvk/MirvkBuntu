@@ -25,7 +25,7 @@ typedef enum _MetaContextTestType
 {
   META_CONTEXT_TEST_TYPE_HEADLESS,
   META_CONTEXT_TEST_TYPE_VKMS,
-  META_CONTEXT_TEST_TYPE_TEST,
+  META_CONTEXT_TEST_TYPE_NESTED,
 } MetaContextTestType;
 
 typedef enum _MetaContextTestFlag
@@ -33,8 +33,6 @@ typedef enum _MetaContextTestFlag
   META_CONTEXT_TEST_FLAG_NONE = 0,
   META_CONTEXT_TEST_FLAG_TEST_CLIENT = 1 << 0,
   META_CONTEXT_TEST_FLAG_NO_X11 = 1 << 1,
-  META_CONTEXT_TEST_FLAG_NO_ANIMATIONS = 1 << 2,
-  META_CONTEXT_TEST_FLAG_ADD_MONITOR = 1 << 3,
 } MetaContextTestFlag;
 
 typedef enum _MetaTestRunFlags
@@ -59,7 +57,3 @@ int meta_context_test_run_tests (MetaContextTest  *context_test,
 
 META_EXPORT
 void meta_context_test_wait_for_x11_display (MetaContextTest *context_test);
-
-META_EXPORT
-void meta_context_test_set_background_color (MetaContextTest *context_test,
-                                             CoglColor        color);

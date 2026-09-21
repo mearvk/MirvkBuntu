@@ -36,8 +36,9 @@
 
 #include <glib.h>
 
-#include "cogl/cogl-buffer-impl-private.h"
+#include "cogl/cogl-buffer.h"
 #include "cogl/cogl-context.h"
+#include "cogl/cogl-gl-header.h"
 
 G_BEGIN_DECLS
 
@@ -59,8 +60,7 @@ struct _CoglBuffer
 
   CoglBufferFlags flags;
 
-  CoglBufferImpl *impl;
-
+  GLuint gl_handle; /* OpenGL handle */
   unsigned int size; /* size of the buffer, in bytes */
   CoglBufferUpdateHint update_hint;
 
@@ -68,14 +68,42 @@ struct _CoglBuffer
    * ... or points to allocated memory in the fallback paths */
   uint8_t *data;
 
+  int immutable_ref;
+
   unsigned int store_created : 1;
 
-  unsigned int use_malloc: 1;
+  void * (* map_range) (CoglBuffer       *buffer,
+                        size_t            offset,
+                        size_t            size,
+                        CoglBufferAccess  access,
+                        CoglBufferMapHint hints,
+                        GError          **error);
+
+  void (* unmap) (CoglBuffer *buffer);
+
+  gboolean (* set_data) (CoglBuffer  *buffer,
+                         unsigned int offset,
+                         const void  *data,
+                         unsigned int size,
+                         GError     **error);
 };
 struct _CoglBufferClass
 {
   GObjectClass parent_class;
 };
+
+CoglBuffer *
+_cogl_buffer_immutable_ref (CoglBuffer *buffer);
+
+void
+_cogl_buffer_immutable_unref (CoglBuffer *buffer);
+
+gboolean
+_cogl_buffer_set_data (CoglBuffer *buffer,
+                       size_t offset,
+                       const void *data,
+                       size_t size,
+                       GError **error);
 
 void *
 _cogl_buffer_map (CoglBuffer *buffer,

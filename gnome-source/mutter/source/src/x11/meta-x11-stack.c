@@ -20,10 +20,10 @@
 
 #include <X11/Xatom.h>
 
+#include "core/frame.h"
 #include "core/stack.h"
 #include "core/window-private.h"
 #include "x11/meta-x11-display-private.h"
-#include "x11/meta-x11-frame.h"
 #include "x11/meta-x11-stack-private.h"
 #include "x11/window-x11.h"
 
@@ -124,20 +124,17 @@ stack_window_removed_cb (MetaStack    *stack,
                          MetaWindow   *window,
                          MetaX11Stack *x11_stack)
 {
-  MetaFrame *frame;
-
   if (window->client_type != META_WINDOW_CLIENT_TYPE_X11)
     return;
 
-  frame = meta_window_x11_get_frame (window);
   x11_stack->added = g_list_remove (x11_stack->added, window);
 
   x11_stack->removed = g_list_prepend (x11_stack->removed,
                                        GUINT_TO_POINTER (meta_window_x11_get_xwindow (window)));
-  if (frame)
+  if (window->frame)
     {
       x11_stack->removed = g_list_prepend (x11_stack->removed,
-                                           GUINT_TO_POINTER (frame->xwindow));
+                                           GUINT_TO_POINTER (window->frame->xwindow));
     }
 }
 
@@ -241,11 +238,12 @@ x11_stack_sync_to_xserver (MetaX11Stack *x11_stack)
   GList *tmp;
   GList *sorted;
 
-  meta_topic (META_DEBUG_STACK, "Syncing window stack to X server");
+  meta_topic (META_DEBUG_STACK, "Syncing window stack to server");
 
-  /* Create stacked xwindow array, in bottom-to-top order */
-
+  /* Create stacked xwindow arrays, in bottom-to-top order
+   */
   x11_stacked = g_array_new (FALSE, FALSE, sizeof (Window));
+
   sorted = meta_stack_list_windows (stack, NULL);
 
   for (tmp = sorted; tmp; tmp = tmp->next)
@@ -261,9 +259,6 @@ x11_stack_sync_to_xserver (MetaX11Stack *x11_stack)
     }
 
   /* Sync _NET_CLIENT_LIST and _NET_CLIENT_LIST_STACKING */
-
-  meta_topic (META_DEBUG_STACK, "Syncing %u stacked X windows",
-              x11_stacked->len);
 
   XChangeProperty (x11_stack->x11_display->xdisplay,
                    x11_stack->x11_display->xroot,
@@ -349,7 +344,7 @@ meta_x11_stack_class_init (MetaX11StackClass *klass)
   pspecs[PROP_DISPLAY] =
     g_param_spec_object ("display", NULL, NULL,
                          META_TYPE_X11_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (object_class, N_PROPS, pspecs);
 }

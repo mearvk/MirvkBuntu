@@ -28,7 +28,6 @@
 #include "gdk/gdkdisplayprivate.h"
 #include "gdk/gdkprofilerprivate.h"
 #include "gdk/gdkdebugprivate.h"
-#include "gdk/gdkseatprivate.h"
 #include "gsk/gskprivate.h"
 #include "gsk/gskrendernodeprivate.h"
 #include "gtknative.h"
@@ -44,20 +43,22 @@
 #include <sys/types.h>          /* For uid_t, gid_t */
 
 #ifdef G_OS_WIN32
+#define STRICT
 #include <windows.h>
+#undef STRICT
 #endif
 
 #include <hb-glib.h>
 
 #include <glib/gi18n-lib.h>
 
-#include "gtkdebugprivate.h"
+#include "gtkdebug.h"
 #include "gtkdropprivate.h"
 #include "gtkmain.h"
 #include "gtkmediafileprivate.h"
 #include "gtkmodulesprivate.h"
 #include "gtkprivate.h"
-#include "gtkrecentmanagerprivate.h"
+#include "gtkrecentmanager.h"
 #include "gtktooltipprivate.h"
 #include "gtkwidgetprivate.h"
 #include "gtkwindowprivate.h"
@@ -74,10 +75,6 @@
 #include "gdk/gdkeventsprivate.h"
 #include "gdk/gdksurfaceprivate.h"
 
-#ifdef GDK_WINDOWING_WAYLAND
-#include "gdk/wayland/gdkwaylandprivate.h"
-#endif
-
 #define GDK_ARRAY_ELEMENT_TYPE GtkWidget *
 #define GDK_ARRAY_TYPE_NAME GtkWidgetStack
 #define GDK_ARRAY_NAME gtk_widget_stack
@@ -91,7 +88,119 @@ static int pre_initialized = FALSE;
 static int gtk_initialized = FALSE;
 static GList *current_events = NULL;
 
-/* {{{ Initialization */
+typedef struct {
+  GdkDisplay *display;
+  guint flags;
+} DisplayDebugFlags;
+
+#define N_DEBUG_DISPLAYS 4
+
+DisplayDebugFlags debug_flags[N_DEBUG_DISPLAYS];
+
+/* This is a flag to speed up development builds. We set it to TRUE when
+ * any of the debug displays has debug flags >0, but we never set it back
+ * to FALSE. This way we don't need to call gtk_widget_get_display() in
+ * hot paths.
+ */
+gboolean any_display_debug_flags_set = FALSE;
+
+GtkDebugFlags
+gtk_get_display_debug_flags (GdkDisplay *display)
+{
+  int i;
+
+  if (display == NULL)
+    display = gdk_display_get_default ();
+
+  for (i = 0; i < N_DEBUG_DISPLAYS; i++)
+    {
+      if (debug_flags[i].display == display)
+        return (GtkDebugFlags)debug_flags[i].flags;
+    }
+
+  return 0;
+}
+
+gboolean
+gtk_get_any_display_debug_flag_set (void)
+{
+  return any_display_debug_flags_set;
+}
+
+void
+gtk_set_display_debug_flags (GdkDisplay    *display,
+                             GtkDebugFlags  flags)
+{
+  int i;
+
+  for (i = 0; i < N_DEBUG_DISPLAYS; i++)
+    {
+      if (debug_flags[i].display == NULL)
+        debug_flags[i].display = display;
+
+      if (debug_flags[i].display == display)
+        {
+          debug_flags[i].flags = flags;
+          if (flags > 0)
+            any_display_debug_flags_set = TRUE;
+
+          return;
+        }
+    }
+}
+
+/**
+ * gtk_get_debug_flags:
+ *
+ * Returns the GTK debug flags that are currently active.
+ *
+ * This function is intended for GTK modules that want
+ * to adjust their debug output based on GTK debug flags.
+ *
+ * Returns: the GTK debug flags.
+ */
+GtkDebugFlags
+gtk_get_debug_flags (void)
+{
+  if (gtk_get_any_display_debug_flag_set ())
+    return gtk_get_display_debug_flags (gdk_display_get_default ());
+
+  return 0;
+}
+
+/**
+ * gtk_set_debug_flags:
+ * @flags: the debug flags to set
+ *
+ * Sets the GTK debug flags.
+ */
+void
+gtk_set_debug_flags (GtkDebugFlags flags)
+{
+  gtk_set_display_debug_flags (gdk_display_get_default (), flags);
+}
+
+static const GdkDebugKey gtk_debug_keys[] = {
+  { "keybindings", GTK_DEBUG_KEYBINDINGS, "Information about keyboard shortcuts" },
+  { "modules", GTK_DEBUG_MODULES, "Information about modules and extensions" },
+  { "icontheme", GTK_DEBUG_ICONTHEME, "Information about icon themes" },
+  { "printing", GTK_DEBUG_PRINTING, "Information about printing" },
+  { "geometry", GTK_DEBUG_GEOMETRY, "Information about size allocation" },
+  { "size-request", GTK_DEBUG_SIZE_REQUEST, "Information about size requests" },
+  { "actions", GTK_DEBUG_ACTIONS, "Information about actions and menu models" },
+  { "constraints", GTK_DEBUG_CONSTRAINTS, "Information from the constraints solver" },
+  { "text", GTK_DEBUG_TEXT, "Information about GtkTextView" },
+  { "tree", GTK_DEBUG_TREE, "Information about GtkTreeView" },
+  { "layout", GTK_DEBUG_LAYOUT, "Information from layout managers" },
+  { "builder", GTK_DEBUG_BUILDER, "Trace GtkBuilder operation" },
+  { "builder-objects", GTK_DEBUG_BUILDER_OBJECTS, "Log unused GtkBuilder objects" },
+  { "no-css-cache", GTK_DEBUG_NO_CSS_CACHE, "Disable style property cache" },
+  { "interactive", GTK_DEBUG_INTERACTIVE, "Enable the GTK inspector" },
+  { "snapshot", GTK_DEBUG_SNAPSHOT, "Generate debug render nodes" },
+  { "accessibility", GTK_DEBUG_A11Y, "Information about accessibility state changes" },
+  { "iconfallback", GTK_DEBUG_ICONFALLBACK, "Information about icon fallback" },
+  { "invert-text-dir", GTK_DEBUG_INVERT_TEXT_DIR, "Invert the default text direction" },
+};
 
 /* This checks to see if the process is running suid or sgid
  * at the current time. If so, we don’t allow GTK to be initialized.
@@ -138,11 +247,12 @@ static gboolean do_setlocale = TRUE;
 /**
  * gtk_disable_setlocale:
  *
- * Prevents [func@Gtk.init] and [func@Gtk.init_check] from calling `setlocale()`.
+ * Prevents [func@Gtk.init] and [func@Gtk.init_check] from automatically calling
+ * `setlocale (LC_ALL, "")`.
  *
  * You would want to use this function if you wanted to set the locale for
- * your program to something other than the user’s locale, or if you wanted
- * to set different values for different locale categories.
+ * your program to something other than the user’s locale, or if
+ * you wanted to set different values for different locale categories.
  *
  * Most programs should not need to call this function.
  **/
@@ -153,47 +263,6 @@ gtk_disable_setlocale (void)
     g_warning ("gtk_disable_setlocale() must be called before gtk_init()");
 
   do_setlocale = FALSE;
-}
-
-/**
- * gtk_disable_portals:
- *
- * Prevents GTK from using portals.
- *
- * This is equivalent to setting `GDK_DEBUG=no-portals` in the environment.
- *
- * This should only be used in portal implementations, apps must not call it.
- *
- * Since: 4.18
- */
-void
-gtk_disable_portals (void)
-{
-  if (pre_initialized)
-    g_warning ("gtk_disable_portals() must be called before gtk_init()");
-
-  gdk_disable_all_portals ();
-}
-
-
-/**
- * gtk_disable_portal_interfaces:
- * @portal_interfaces: (array zero-terminated=1) (not nullable):
- *     a %NULL-terminated array of portal interface names to disable
- *
- * Prevents GTK from using the specified portals.
- *
- * This should only be used in portal implementations, apps must not call it.
- *
- * Since: 4.22
- */
-void
-gtk_disable_portal_interfaces (const char **portal_interfaces)
-{
-  if (pre_initialized)
-    g_warning ("gtk_disable_portal_interfaces() must be called before gtk_init()");
-
-  gdk_disable_portals (portal_interfaces);
 }
 
 #ifdef G_PLATFORM_WIN32
@@ -208,7 +277,7 @@ static char *script_to_check = NULL;
 static gboolean setlocale_called = FALSE;
 
 static BOOL CALLBACK
-enum_locale_proc (LPSTR locale)
+enum_locale_proc (LPTSTR locale)
 {
   LCID lcid;
   char iso639[10];
@@ -218,8 +287,8 @@ enum_locale_proc (LPSTR locale)
 
   lcid = strtoul (locale, &endptr, 16);
   if (*endptr == '\0' &&
-      GetLocaleInfoA (lcid, LOCALE_SISO639LANGNAME, iso639, sizeof (iso639)) &&
-      GetLocaleInfoA (lcid, LOCALE_SISO3166CTRYNAME, iso3166, sizeof (iso3166)))
+      GetLocaleInfo (lcid, LOCALE_SISO639LANGNAME, iso639, sizeof (iso639)) &&
+      GetLocaleInfo (lcid, LOCALE_SISO3166CTRYNAME, iso3166, sizeof (iso3166)))
     {
       if (strcmp (iso639, iso639_to_check) == 0 &&
           ((iso3166_to_check != NULL &&
@@ -272,12 +341,14 @@ enum_locale_proc (LPSTR locale)
 
           SetThreadLocale (lcid);
 
-          if (GetLocaleInfoA (lcid, LOCALE_SENGLANGUAGE, language, sizeof (language)) &&
-              GetLocaleInfoA (lcid, LOCALE_SENGCOUNTRY, country, sizeof (country)))
+          if (GetLocaleInfo (lcid, LOCALE_SENGLANGUAGE, language, sizeof (language)) &&
+              GetLocaleInfo (lcid, LOCALE_SENGCOUNTRY, country, sizeof (country)))
             {
               char str[300];
 
-              g_snprintf (str, sizeof (str), "%s_%s", language, country);
+              strcpy (str, language);
+              strcat (str, "_");
+              strcat (str, country);
 
               if (setlocale (LC_ALL, str) != NULL)
                 setlocale_called = TRUE;
@@ -353,7 +424,7 @@ setlocale_initialization (void)
                     iso3166_to_check = (char *) "SP";
                 }
 
-              EnumSystemLocalesA (enum_locale_proc, LCID_SUPPORTED);
+              EnumSystemLocales (enum_locale_proc, LCID_SUPPORTED);
             }
           g_free (p);
         }
@@ -394,32 +465,6 @@ _gtk_module_has_mixed_deps (GModule *module_to_check)
   return result;
 }
 
-#ifdef GDK_WINDOWING_WAYLAND
-static void
-prepare_wayland_socket (void)
-{
-  char *wayland_socket;
-
-  wayland_socket = getenv ("WAYLAND_SOCKET");
-  if (wayland_socket && *wayland_socket)
-    {
-      char *end;
-      int wayland_socket_fd;
-
-      errno = 0;
-      wayland_socket_fd = strtol (wayland_socket, &end, 10);
-      if (errno != 0 || wayland_socket == end || *end != '\0')
-        {
-          g_warning ("Invalid WAYLAND_SOCKET");
-          return;
-        }
-
-      unsetenv ("WAYLAND_SOCKET");
-      gdk_wayland_set_wayland_socket (wayland_socket_fd);
-    }
-}
-#endif
-
 static void
 do_pre_parse_initialization (void)
 {
@@ -434,13 +479,12 @@ do_pre_parse_initialization (void)
   if (_gtk_module_has_mixed_deps (NULL))
     g_error ("GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not supported");
 
-#ifdef GDK_WINDOWING_WAYLAND
-  prepare_wayland_socket ();
-#endif
-
   gdk_pre_parse ();
 
-  gtk_debug_init ();
+  debug_flags[0].flags = gdk_parse_debug_var ("GTK_DEBUG",
+                                              gtk_debug_keys,
+                                              G_N_ELEMENTS (gtk_debug_keys));
+  any_display_debug_flags_set = debug_flags[0].flags > 0;
 
   env_string = g_getenv ("GTK_SLOWDOWN");
   if (env_string)
@@ -467,7 +511,7 @@ gettext_initialization (void)
 static void
 default_display_notify_cb (GdkDisplayManager *dm)
 {
-  gtk_debug_init_display ();
+  debug_flags[0].display = gdk_display_get_default ();
 }
 
 static void
@@ -537,18 +581,16 @@ do_post_parse_initialization (void)
 /**
  * gtk_init_check:
  *
- * Initializes GTK.
- *
- * This function does the same work as [func@Gtk.init] with only a
- * single change: It does not terminate the program if the windowing
- * system can’t be initialized. Instead it returns false on failure.
+ * This function does the same work as gtk_init() with only a single
+ * change: It does not terminate the program if the windowing system
+ * can’t be initialized. Instead it returns %FALSE on failure.
  *
  * This way the application can fall back to some other means of
  * communication with the user - for example a curses or command line
  * interface.
  *
- * Returns: true if the windowing system has been successfully
- *   initialized, false otherwise
+ * Returns: %TRUE if the windowing system has been successfully
+ *   initialized, %FALSE otherwise
  */
 gboolean
 gtk_init_check (void)
@@ -574,9 +616,6 @@ gtk_init_check (void)
   if (ret && (gtk_get_debug_flags () & GTK_DEBUG_INTERACTIVE))
     gtk_window_set_interactive_debugging (TRUE);
 
-  if (ret && (gtk_get_debug_flags () & GTK_DEBUG_GENERAL_INFO))
-    gtk_inspector_print_general_info (gdk_display_get_default ());
-
   return ret;
 }
 
@@ -587,22 +626,19 @@ gtk_init_check (void)
 /**
  * gtk_init:
  *
- * Initializes GTK.
+ * Call this function before using any other GTK functions in your GUI
+ * applications. It will initialize everything needed to operate the
+ * toolkit.
  *
- * This function must be called before using any other GTK functions
- * in your GUI applications.
+ * If you are using `GtkApplication`, you usually don't have to call this
+ * function; the `GApplication::startup` handler does it for you. Though,
+ * if you are using GApplication methods that will be invoked before `startup`,
+ * such as `local_command_line`, you may need to initialize stuff explicitly.
  *
- * It will initialize everything needed to operate the toolkit. In particular,
- * it will open the default display (see [func@Gdk.Display.get_default]).
- *
- * If you are using [class@Gtk.Application], you usually don't have to call this
- * function; the [vfunc@Gio.Application.startup] handler does it for you. Though,
- * if you are using `GApplication` methods that will be invoked before `startup`,
- * such as `local_command_line`, you may need to initialize GTK explicitly.
- *
- * This function will terminate your program if it was unable to initialize
- * the windowing system for some reason. If you want your program to fall back
- * to a textual interface, call [func@Gtk.init_check] instead.
+ * This function will terminate your program if it was unable to
+ * initialize the windowing system for some reason. If you want
+ * your program to fall back to a textual interface, call
+ * [func@Gtk.init_check] instead.
  *
  * GTK calls `signal (SIGPIPE, SIG_IGN)` during initialization, to ignore
  * SIGPIPE signals, since these are almost never wanted in graphical
@@ -685,7 +721,7 @@ gtk_init_check_abi_check (int num_checks, size_t sizeof_GtkWindow, size_t sizeof
 /**
  * gtk_is_initialized:
  *
- * Returns whether GTK has been initialized.
+ * Use this function to check if GTK has been initialized.
  *
  * See [func@Gtk.init].
  *
@@ -697,29 +733,27 @@ gtk_is_initialized (void)
   return gtk_initialized;
 }
 
-/* }}} */
-/* {{{ Locale handling */
 
 /**
  * gtk_get_locale_direction:
  *
- * Gets the direction of the current locale.
- *
- * This is the expected reading direction for text and UI.
+ * Get the direction of the current locale. This is the expected
+ * reading direction for text and UI.
  *
  * This function depends on the current locale being set with
- * `setlocale()` and will default to setting the `GTK_TEXT_DIR_LTR`
- * direction otherwise. `GTK_TEXT_DIR_NONE` will never be returned.
+ * setlocale() and will default to setting the %GTK_TEXT_DIR_LTR
+ * direction otherwise. %GTK_TEXT_DIR_NONE will never be returned.
  *
- * GTK sets the default text direction according to the locale during
- * [func@Gtk.init], and you should normally use [method@Gtk.Widget.get_direction]
- * or [func@Gtk.Widget.get_default_direction] to obtain the current direction.
+ * GTK sets the default text direction according to the locale
+ * during gtk_init(), and you should normally use
+ * gtk_widget_get_direction() or gtk_widget_get_default_direction()
+ * to obtain the current direction.
  *
  * This function is only needed rare cases when the locale is
  * changed after GTK has already been initialized. In this case,
  * you can use it to update the default text direction as follows:
  *
- * ```c
+ * |[<!-- language="C" -->
  * #include <locale.h>
  *
  * static void
@@ -728,7 +762,7 @@ gtk_is_initialized (void)
  *   setlocale (LC_ALL, new_locale);
  *   gtk_widget_set_default_direction (gtk_get_locale_direction ());
  * }
- * ```
+ * ]|
  *
  * Returns: the direction of the current locale
  */
@@ -792,9 +826,6 @@ gtk_get_default_language (void)
   return pango_language_get_default ();
 }
 
-/* }}} */
-/* {{{ Clipboard sync */
-
 typedef struct {
   GMainLoop *store_loop;
   guint n_clipboards;
@@ -826,11 +857,12 @@ clipboard_store_finished (GObject      *source,
     g_main_loop_quit (store->store_loop);
 }
 
-static void
+static gboolean
 sync_timed_out_cb (ClipboardStore *store)
 {
   store->timeout_id = 0;
   g_main_loop_quit (store->store_loop);
+  return G_SOURCE_REMOVE;
 }
 
 void
@@ -862,7 +894,7 @@ gtk_main_sync (void)
   g_slist_free (displays);
 
   store.store_loop = g_main_loop_new (NULL, TRUE);
-  store.timeout_id = g_timeout_add_seconds_once (10, (GSourceOnceFunc) sync_timed_out_cb, &store);
+  store.timeout_id = g_timeout_add_seconds (10, (GSourceFunc) sync_timed_out_cb, &store);
   gdk_source_set_static_name_by_id (store.timeout_id, "[gtk] gtk_main_sync clipboard store timeout");
 
   if (g_main_loop_is_running (store.store_loop))
@@ -876,9 +908,6 @@ gtk_main_sync (void)
   /* Synchronize the recent manager singleton */
   _gtk_recent_manager_sync ();
 }
-
-/* }}} */
-/* {{{ Event handling */
 
 static GdkEvent *
 rewrite_event_for_surface (GdkEvent  *event,
@@ -964,20 +993,21 @@ rewrite_event_for_surface (GdkEvent  *event,
   return NULL;
 }
 
-/* If there is a seat grab in effect what GDK does is deliver the event normally
- * if it was going to this client, otherwise, delivers it in terms of the grab
- * surface.
- *
- * This function rewrites events to the effect that events going to the same
- * window group are delivered normally, otherwise, the event is delivered in
- * terms of the grab surface.
+/* If there is a pointer or keyboard grab in effect with owner_events = TRUE,
+ * then what X11 does is deliver the event normally if it was going to this
+ * client, otherwise, delivers it in terms of the grab surface. This function
+ * rewrites events to the effect that events going to the same window group
+ * are delivered normally, otherwise, the event is delivered in terms of the
+ * grab window.
  */
 static GdkEvent *
 rewrite_event_for_grabs (GdkEvent *event)
 {
   GdkSurface *grab_surface;
   GtkWidget *event_widget, *grab_widget;
-  GdkSeat *seat;
+  gboolean owner_events;
+  GdkDisplay *display;
+  GdkDevice *device;
 
   switch ((guint) gdk_event_get_event_type (event))
     {
@@ -996,10 +1026,10 @@ rewrite_event_for_grabs (GdkEvent *event)
     case GDK_TOUCHPAD_SWIPE:
     case GDK_TOUCHPAD_PINCH:
     case GDK_TOUCHPAD_HOLD:
-      seat = gdk_event_get_seat (event);
-      grab_surface = gdk_seat_get_topmost_grab_surface (seat);
+      display = gdk_event_get_display (event);
+      device = gdk_event_get_device (event);
 
-      if (!grab_surface)
+      if (!gdk_device_grab_info (display, device, &grab_surface, &owner_events))
         return NULL;
       break;
     default:
@@ -1012,10 +1042,18 @@ rewrite_event_for_grabs (GdkEvent *event)
   if (!grab_widget)
     return NULL;
 
-  /* Events in client surfaces get forwarded
+  /* If owner_events was set, events in client surfaces get forwarded
    * as normal, but we consider other window groups foreign surfaces.
    */
-  if (gtk_main_get_window_group (grab_widget) == gtk_main_get_window_group (event_widget))
+  if (owner_events &&
+      gtk_main_get_window_group (grab_widget) == gtk_main_get_window_group (event_widget))
+    return NULL;
+
+  /* If owner_events was not set, events only get sent to the grabbing
+   * surface.
+   */
+  if (!owner_events &&
+      grab_surface == gtk_native_get_surface (gtk_widget_get_native (event_widget)))
     return NULL;
 
   return rewrite_event_for_surface (event, grab_surface);
@@ -1205,8 +1243,6 @@ update_pointer_focus_state (GtkWindow *toplevel,
   GtkWidget *old_target = NULL;
   GdkEventSequence *sequence;
   GdkDevice *device;
-  GtkWidget *event_widget;
-  graphene_point_t p;
   double x, y;
   double nx, ny;
 
@@ -1217,18 +1253,12 @@ update_pointer_focus_state (GtkWindow *toplevel,
     return old_target;
 
   gdk_event_get_position (event, &x, &y);
-  p = GRAPHENE_POINT_INIT (x, y);
-
-  event_widget  = gtk_get_event_widget (event);
-  if (!gtk_widget_compute_point (event_widget, GTK_WIDGET (toplevel), &p, &p))
-    return old_target;
-
   gtk_native_get_surface_transform (GTK_NATIVE (toplevel), &nx, &ny);
-  p.x -= nx;
-  p.y -= ny;
+  x -= nx;
+  y -= ny;
 
   gtk_window_update_pointer_focus (toplevel, device, sequence,
-                                   new_target, p.x, p.y);
+                                   new_target, x, y);
 
   return old_target;
 }
@@ -1281,6 +1311,20 @@ is_key_event (GdkEvent *event)
     }
 }
 
+static inline void
+set_widget_active_state (GtkWidget      *target,
+                         const gboolean  is_active)
+{
+  GtkWidget *w;
+
+  w = target;
+  while (w)
+    {
+      gtk_widget_set_active_state (w, is_active);
+      w = _gtk_widget_get_parent (w);
+    }
+}
+
 static GtkWidget *
 handle_pointing_event (GdkEvent *event)
 {
@@ -1309,7 +1353,10 @@ handle_pointing_event (GdkEvent *event)
   type = gdk_event_get_event_type (event);
   sequence = gdk_event_get_event_sequence (event);
 
-  if (type == GDK_SCROLL && !gdk_event_get_device_tool (event))
+  if (type == GDK_SCROLL &&
+      (gdk_device_get_source (device) == GDK_SOURCE_TOUCHPAD ||
+       gdk_device_get_source (device) == GDK_SOURCE_TRACKPOINT ||
+       gdk_device_get_source (device) == GDK_SOURCE_MOUSE))
     {
       /* A bit of a kludge, resolve target lookups for scrolling devices
        * on the seat pointer.
@@ -1338,10 +1385,7 @@ handle_pointing_event (GdkEvent *event)
                                                            device,
                                                            sequence);
           if (grab_widget)
-            {
-              gtk_window_set_pointer_focus_grab (toplevel, device,
-                                                 sequence, NULL);
-            }
+            set_widget_active_state (grab_widget, FALSE);
         }
 
       old_target = update_pointer_focus_state (toplevel, event, NULL);
@@ -1351,8 +1395,7 @@ handle_pointing_event (GdkEvent *event)
     case GDK_TOUCH_END:
     case GDK_TOUCH_CANCEL:
       old_target = update_pointer_focus_state (toplevel, event, NULL);
-      gtk_window_set_pointer_focus_grab (toplevel, device,
-                                         sequence, NULL);
+      set_widget_active_state (old_target, FALSE);
       break;
     case GDK_DRAG_LEAVE:
       {
@@ -1404,6 +1447,7 @@ handle_pointing_event (GdkEvent *event)
       else if (type == GDK_TOUCH_BEGIN)
         {
           gtk_window_set_pointer_focus_grab (toplevel, device, sequence, target);
+          set_widget_active_state (target, TRUE);
         }
 
       /* Let it take the effective pointer focus anyway, as it may change due
@@ -1441,17 +1485,16 @@ handle_pointing_event (GdkEvent *event)
           gtk_window_maybe_update_cursor (toplevel, NULL, device);
           update_pointer_focus_state (toplevel, event, new_target);
         }
-      else if (type == GDK_BUTTON_PRESS &&
-               !has_implicit &&
-               (modifiers & (GDK_BUTTON1_MASK |
-                             GDK_BUTTON2_MASK |
-                             GDK_BUTTON3_MASK |
-                             GDK_BUTTON4_MASK |
-                             GDK_BUTTON5_MASK)) == 0)
+      else if (type == GDK_BUTTON_PRESS)
         {
           gtk_window_set_pointer_focus_grab (toplevel, device,
                                              sequence, target);
         }
+
+      if (type == GDK_BUTTON_PRESS)
+        set_widget_active_state (target, TRUE);
+      else if (has_implicit)
+        set_widget_active_state (target, FALSE);
 
       break;
     case GDK_SCROLL:
@@ -1465,11 +1508,7 @@ handle_pointing_event (GdkEvent *event)
           target = gtk_window_lookup_effective_pointer_focus_widget (toplevel,
                                                                      device,
                                                                      sequence);
-          if (target)
-            {
-              gtk_window_set_pointer_focus_grab (toplevel, device,
-                                                 sequence, NULL);
-            }
+          set_widget_active_state (target, FALSE);
         }
       break;
     default:
@@ -1643,7 +1682,6 @@ gtk_main_do_event (GdkEvent *event)
     case GDK_PAD_BUTTON_RELEASE:
     case GDK_PAD_RING:
     case GDK_PAD_STRIP:
-    case GDK_PAD_DIAL:
     case GDK_PAD_GROUP_MODE:
     case GDK_GRAB_BROKEN:
       handled_event = gtk_propagate_event (grab_widget, event);
@@ -1887,7 +1925,7 @@ gtk_propagate_event_internal (GtkWidget *widget,
       i--;
     }
 
-  /* If not yet handled, also propagate back up */
+  /* If not yet handled, also propagate down */
   if (!handled_event)
     {
       /* Propagate event up the widget tree so that
@@ -1958,21 +1996,3 @@ gtk_propagate_event (GtkWidget *widget,
 
   return gtk_propagate_event_internal (widget, event, topmost);
 }
-
-gboolean
-gtk_event_treat_as_touch (GdkEvent *event)
-{
-  switch ((unsigned int) gdk_device_get_source (gdk_event_get_device (event)))
-    {
-    case GDK_SOURCE_TOUCHSCREEN:
-      return TRUE;
-    case GDK_SOURCE_KEYBOARD:
-      return FALSE;
-    default:
-      return GTK_DISPLAY_DEBUG_CHECK (gdk_event_get_display (event), TOUCHSCREEN);
-    }
-}
-
-/* }}} */
-
-/* vim:set foldmethod=marker: */

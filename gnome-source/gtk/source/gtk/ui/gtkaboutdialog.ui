@@ -5,20 +5,20 @@
     <style>
       <class name="aboutdialog"/>
     </style>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar" id="headerbar1">
-        <property name="title-widget">
+        <child type="title">
           <object class="GtkStackSwitcher" id="stack_switcher">
             <property name="visible">0</property>
             <property name="stack">stack</property>
             <accessibility>
-              <property name="label" translatable="yes">Pages</property>
+              <property name="label" translatable="1">Pages</property>
             </accessibility>
           </object>
-        </property>
+        </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkBox">
         <property name="orientation">1</property>
         <property name="spacing">2</property>
@@ -40,7 +40,7 @@
                 <property name="icon-name">image-missing</property>
                 <property name="icon-size">2</property>
                 <accessibility>
-                  <property name="label" translatable="yes">Logo</property>
+                  <property name="label" translatable="1">Logo</property>
                 </accessibility>
                 <style>
                   <class name="icon-dropshadow"/>
@@ -136,7 +136,7 @@
                             <property name="hscrollbar-policy">2</property>
                             <property name="has-frame">1</property>
                             <property name="vexpand">1</property>
-                            <property name="child">
+                            <child>
                               <object class="GtkViewport" id="viewport1">
                                 <style>
                                   <class name="view"/>
@@ -154,12 +154,12 @@
                                     <property name="margin-top">5</property>
                                     <property name="margin-bottom">5</property>
                                     <accessibility>
-                                      <property name="label" translatable="yes">Credits</property>
+                                      <property name="label" translatable="1">Credits</property>
                                     </accessibility>
                                   </object>
                                 </child>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -180,16 +180,14 @@
                             <property name="hscrollbar-policy">2</property>
                             <property name="has-frame">1</property>
                             <property name="vexpand">1</property>
-                            <property name="child">
+                            <child>
                               <object class="GtkTextView" id="license_view">
                                 <property name="editable">0</property>
-                                <property name="left-margin">5</property>
-                                <property name="right-margin">5</property>
-                                <property name="top-margin">5</property>
-                                <property name="bottom-margin">5</property>
+                                <property name="left-margin">8</property>
+                                <property name="right-margin">8</property>
                                 <property name="cursor-visible">0</property>
                                 <accessibility>
-                                  <property name="label" translatable="yes">License</property>
+                                  <property name="label" translatable="1">License</property>
                                 </accessibility>
                                 <child>
                                   <object class="GtkGestureClick">
@@ -207,7 +205,7 @@
                                   </object>
                                 </child>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -228,7 +226,7 @@
                             <property name="hscrollbar-policy">2</property>
                             <property name="has-frame">1</property>
                             <property name="vexpand">1</property>
-                            <property name="child">
+                            <child>
                               <object class="GtkTextView" id="system_view">
                                 <property name="editable">0</property>
                                 <property name="left-margin">5</property>
@@ -237,7 +235,7 @@
                                 <property name="bottom-margin">5</property>
                                 <property name="cursor-visible">0</property>
                                 <accessibility>
-                                  <property name="label" translatable="yes">System Information</property>
+                                  <property name="label" translatable="1">System Information</property>
                                 </accessibility>
                                 <child>
                                   <object class="GtkGestureClick">
@@ -255,7 +253,7 @@
                                   </object>
                                 </child>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -267,6 +265,6 @@
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </template>
 </interface>

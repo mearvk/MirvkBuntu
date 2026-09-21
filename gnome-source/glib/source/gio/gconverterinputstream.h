@@ -64,7 +64,7 @@ struct _GConverterInputStreamClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType                  g_converter_input_stream_get_type      (void);
+GType                  g_converter_input_stream_get_type      (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 GInputStream          *g_converter_input_stream_new           (GInputStream          *base_stream,
                                                                GConverter            *converter);

@@ -54,15 +54,15 @@ test_blend_paint (TestState  *state,
 
   CoglPipeline *pipeline;
   gboolean status;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   int y_off;
   int x_off;
 
   /* First write out the destination color without any blending... */
   pipeline = cogl_pipeline_new (test_ctx);
   cogl_color_init_from_4f (&pipeline_color,
-                           Dr / 255.0f, Dg / 255.0f,
-                           Db / 255.0f, Da / 255.0f);
+                           Dr / 255.0, Dg / 255.0,
+                           Db / 255.0, Da / 255.0);
   cogl_pipeline_set_color (pipeline, &pipeline_color);
   cogl_pipeline_set_blend (pipeline, "RGBA = ADD (SRC_COLOR, 0)", NULL);
   cogl_framebuffer_draw_rectangle (test_fb,
@@ -79,8 +79,8 @@ test_blend_paint (TestState  *state,
 
   pipeline = cogl_pipeline_new (test_ctx);
   cogl_color_init_from_4f (&pipeline_color,
-                           Sr / 255.0f, Sg / 255.0f,
-                           Sb / 255.0f, Sa / 255.0f);
+                           Sr / 255.0, Sg / 255.0,
+                           Sb / 255.0, Sa / 255.0);
   cogl_pipeline_set_color (pipeline, &pipeline_color);
 
   status = cogl_pipeline_set_blend (pipeline, blend_string, &error);
@@ -98,8 +98,8 @@ test_blend_paint (TestState  *state,
     }
 
   cogl_color_init_from_4f (&blend_const_color,
-                           Br / 255.0f, Bg / 255.0f,
-                           Bb / 255.0f, Ba / 255.0f);
+                           Br / 255.0, Bg / 255.0,
+                           Bb / 255.0, Ba / 255.0);
   cogl_pipeline_set_blend_constant (pipeline, &blend_const_color);
 
   cogl_framebuffer_draw_rectangle (test_fb,
@@ -186,7 +186,7 @@ test_tex_combine (TestState *state,
 
   CoglPipeline *pipeline;
   gboolean status;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   int y_off;
   int x_off;
 
@@ -197,8 +197,8 @@ test_tex_combine (TestState *state,
   pipeline = cogl_pipeline_new (test_ctx);
 
   cogl_color_init_from_4f (&pipeline_color,
-                           128.0f / 255.0f, 128.0f / 255.0f,
-                           128.0f / 255.0f, 128.0f / 255.0f);
+                           128.0 / 255.0, 128.0 / 255.0,
+                           128.0 / 255.0, 128.0 / 255.0);
   cogl_pipeline_set_color (pipeline, &pipeline_color);
   cogl_pipeline_set_blend (pipeline, "RGBA = ADD (SRC_COLOR, 0)", NULL);
 
@@ -218,8 +218,8 @@ test_tex_combine (TestState *state,
     }
 
   cogl_color_init_from_4f (&combine_const_color,
-                           Cr / 255.0f, Cg / 255.0f,
-                           Cb / 255.0f, Ca / 255.0f);
+                           Cr / 255.0, Cg / 255.0,
+                           Cb / 255.0, Ca / 255.0);
   cogl_pipeline_set_layer_combine_constant (pipeline, 1, &combine_const_color);
 
   cogl_framebuffer_draw_rectangle (test_fb,

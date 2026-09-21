@@ -23,9 +23,6 @@ gtk_accessible_text_get_contents_at (GtkAccessibleText            *self,
                                      unsigned int                 *end);
 
 unsigned int
-gtk_accessible_text_get_character_count (GtkAccessibleText *self);
-
-unsigned int
 gtk_accessible_text_get_caret_position (GtkAccessibleText *self);
 
 gboolean
@@ -50,30 +47,9 @@ gboolean
 gtk_accessible_text_get_attributes_run (GtkAccessibleText        *self,
                                         unsigned int              offset,
                                         gboolean                  include_defaults,
-                                        gsize                    *n_attributes,
+                                        gsize                    *n_ranges,
+                                        GtkAccessibleTextRange  **ranges,
                                         char                   ***attribute_names,
-                                        char                   ***attribute_values,
-                                        int                      *start,
-                                        int                      *end);
-
-gboolean
-gtk_accessible_text_get_extents (GtkAccessibleText *self,
-                                 unsigned int       start,
-                                 unsigned int       end,
-                                 graphene_rect_t   *extents);
-
-gboolean
-gtk_accessible_text_get_offset (GtkAccessibleText      *self,
-                                const graphene_point_t *point,
-                                unsigned int           *offset);
-
-gboolean
-gtk_accessible_text_set_caret_position (GtkAccessibleText *self,
-                                        unsigned int       offset);
-
-gboolean
-gtk_accessible_text_set_selection (GtkAccessibleText      *self,
-                                   gsize                   i,
-                                   GtkAccessibleTextRange *range);
+                                        char                   ***attribute_values);
 
 G_END_DECLS

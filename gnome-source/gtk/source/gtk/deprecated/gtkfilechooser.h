@@ -55,15 +55,13 @@ typedef enum
 } GtkFileChooserAction;
 
 GDK_AVAILABLE_IN_ALL
-GType gtk_file_chooser_get_type (void);
+GType gtk_file_chooser_get_type (void) G_GNUC_CONST;
 
 /* GError enumeration for GtkFileChooser */
 /**
  * GTK_FILE_CHOOSER_ERROR:
  *
  * Used to get the `GError` quark for `GtkFileChooser` errors.
- *
- * Deprecated: 4.10: There is no replacement
  */
 #define GTK_FILE_CHOOSER_ERROR (gtk_file_chooser_error_quark ())
 
@@ -78,8 +76,6 @@ GType gtk_file_chooser_get_type (void);
  *
  * These identify the various errors that can occur while calling
  * `GtkFileChooser` functions.
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef enum {
   GTK_FILE_CHOOSER_ERROR_NONEXISTENT,
@@ -185,8 +181,6 @@ void                 gtk_file_chooser_set_choice           (GtkFileChooser      
 GDK_DEPRECATED_IN_4_10
 const char *         gtk_file_chooser_get_choice           (GtkFileChooser      *chooser,
                                                             const char          *id);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkFileChooser, g_object_unref)
 
 G_END_DECLS
 

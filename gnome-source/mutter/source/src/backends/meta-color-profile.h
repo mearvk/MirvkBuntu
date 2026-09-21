@@ -52,6 +52,13 @@ MetaColorProfile * meta_color_profile_new_from_cd_profile (MetaColorManager     
                                                            GBytes               *raw_bytes,
                                                            MetaColorCalibration *color_calibration);
 
+gboolean meta_color_profile_equals_bytes (MetaColorProfile *color_profile,
+                                          GBytes           *bytes);
+
+const uint8_t * meta_color_profile_get_data (MetaColorProfile *color_profile);
+
+size_t meta_color_profile_get_data_size (MetaColorProfile *color_profile);
+
 META_EXPORT_TEST
 CdIcc * meta_color_profile_get_cd_icc (MetaColorProfile *color_profile);
 
@@ -62,7 +69,6 @@ gboolean meta_color_profile_is_ready (MetaColorProfile *color_profile);
 META_EXPORT_TEST
 const char * meta_color_profile_get_id (MetaColorProfile *color_profile);
 
-META_EXPORT_TEST
 const char * meta_color_profile_get_file_path (MetaColorProfile *color_profile);
 
 const char * meta_color_profile_get_brightness_profile (MetaColorProfile *color_profile);
@@ -70,14 +76,6 @@ const char * meta_color_profile_get_brightness_profile (MetaColorProfile *color_
 MetaGammaLut * meta_color_profile_generate_gamma_lut (MetaColorProfile *color_profile,
                                                       unsigned int      temperature,
                                                       size_t            lut_size);
-
-/* Blackbody RGB scale factors for a color temperature; this is the same math
- * the uncalibrated gamma LUT is generated from. */
-META_EXPORT_TEST
-void meta_color_get_temperature_rgb_scales (unsigned int  temperature,
-                                            float        *out_red,
-                                            float        *out_green,
-                                            float        *out_blue);
 
 META_EXPORT_TEST
 const MetaColorCalibration * meta_color_profile_get_calibration (MetaColorProfile *color_profile);

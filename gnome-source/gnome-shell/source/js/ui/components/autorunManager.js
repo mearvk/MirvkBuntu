@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 
 import * as GnomeSession from '../../misc/gnomeSession.js';
@@ -24,8 +26,8 @@ const AutorunSetting = {
 
 // misc utils
 function shouldAutorunMount(mount) {
-    const root = mount.get_root();
-    const volume = mount.get_volume();
+    let root = mount.get_root();
+    let volume = mount.get_volume();
 
     if (!volume || !volume.allowAutorun)
         return false;
@@ -37,7 +39,7 @@ function shouldAutorunMount(mount) {
 }
 
 function isMountRootHidden(root) {
-    const path = root.get_path();
+    let path = root.get_path();
 
     // skip any mounts in hidden directory hierarchies
     return path.includes('/.');
@@ -47,7 +49,7 @@ function isMountNonLocal(mount) {
     // If the mount doesn't have an associated volume, that means it's
     // an uninteresting filesystem. Most devices that we care about will
     // have a mount, like media players and USB sticks.
-    const volume = mount.get_volume();
+    let volume = mount.get_volume();
     if (volume == null)
         return true;
 
@@ -55,8 +57,8 @@ function isMountNonLocal(mount) {
 }
 
 function startAppForMount(app, mount) {
-    const files = [];
-    const root = mount.get_root();
+    let files = [];
+    let root = mount.get_root();
     let retval = false;
 
     files.push(root);
@@ -85,8 +87,8 @@ class ContentTypeDiscoverer {
     }
 
     async guessContentTypes(mount) {
-        const autorunEnabled = !this._settings.get_boolean(SETTING_DISABLE_AUTORUN);
-        const shouldScan = autorunEnabled && !isMountNonLocal(mount);
+        let autorunEnabled = !this._settings.get_boolean(SETTING_DISABLE_AUTORUN);
+        let shouldScan = autorunEnabled && !isMountNonLocal(mount);
 
         let contentTypes = [];
         if (shouldScan) {
@@ -132,8 +134,7 @@ class AutorunManager {
 
     enable() {
         this._volumeMonitor.connectObject(
-            'mount-added',
-            (monitor, mount) => this._onMountAdded(monitor, mount).catch(logError),
+            'mount-added', this._onMountAdded.bind(this),
             'mount-removed', this._onMountRemoved.bind(this), this);
     }
 
@@ -165,15 +166,15 @@ class AutorunDispatcher {
     }
 
     _getAutorunSettingForType(contentType) {
-        const runApp = this._settings.get_strv(SETTING_START_APP);
+        let runApp = this._settings.get_strv(SETTING_START_APP);
         if (runApp.includes(contentType))
             return AutorunSetting.RUN;
 
-        const ignore = this._settings.get_strv(SETTING_IGNORE);
+        let ignore = this._settings.get_strv(SETTING_IGNORE);
         if (ignore.includes(contentType))
             return AutorunSetting.IGNORE;
 
-        const openFiles = this._settings.get_strv(SETTING_OPEN_FOLDER);
+        let openFiles = this._settings.get_strv(SETTING_OPEN_FOLDER);
         if (openFiles.includes(contentType))
             return AutorunSetting.FILES;
 
@@ -186,15 +187,11 @@ class AutorunDispatcher {
             return;
 
         const source = MessageTray.getSystemSource();
-        /* Translators: %s is the name of a partition on a external drive */
-        const title = _('“%s” connected'.format(mount.get_name()));
-        const body = _('Disk can now be used');
         const notification = new MessageTray.Notification({
             source,
-            title,
-            body,
+            title: mount.get_name(),
         });
-        notification.connect('activated', () => {
+        notification.connect('activate', () => {
             const app = Gio.app_info_get_default_for_type('inode/directory', false);
             startAppForMount(app, mount);
         });

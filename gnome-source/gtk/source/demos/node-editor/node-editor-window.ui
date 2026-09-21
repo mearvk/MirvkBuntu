@@ -23,40 +23,36 @@
   <menu id="extra_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">Paste _Node</attribute>
-        <attribute name="action">paste-node</attribute>
-      </item>
-      <item>
         <attribute name="label" translatable="yes">Assisted _Edit</attribute>
         <attribute name="action">smart-edit</attribute>
       </item>
     </section>
   </menu>
   <object class="GtkPopover" id="testcase_popover">
-    <property name="child">
-      <object class="GtkBox">
-        <property name="spacing">12</property>
-        <property name="orientation">vertical</property>
+    <child>
+      <object class="GtkGrid">
+        <property name="column-spacing">12</property>
+        <property name="row-spacing">12</property>
         <child>
-          <object class="GtkBox">
-            <property name="spacing">12</property>
-            <child>
-              <object class="GtkLabel">
-                <property name="label">Testcase Name:</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkEntry" id="testcase_name_entry">
-                <property name="hexpand">1</property>
-                <property name="activates-default">1</property>
-                <signal name="notify::text" handler="testcase_name_entry_changed_cb"/>
-              </object>
-            </child>
+          <object class="GtkLabel">
+            <property name="label">Testcase Name:</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkEntry" id="testcase_name_entry">
+            <property name="hexpand">1</property>
+            <property name="activates-default">1</property>
+            <signal name="notify::text" handler="testcase_name_entry_changed_cb"/>
           </object>
         </child>
         <child>
           <object class="GtkCheckButton" id="testcase_cairo_checkbutton">
             <property name="label">Render using Cairo renderer</property>
+            <layout>
+              <property name="row">1</property>
+              <property name="column">0</property>
+              <property name="column-span">2</property>
+            </layout>
           </object>
         </child>
         <child>
@@ -65,12 +61,22 @@
             <property name="label">&lt;i&gt;There will be a .node and a .png file placed in the testsuite/gsk/compare directory. &lt;b&gt;You need to add it to the meson.build yourself.&lt;/b&gt;&lt;/i&gt;</property>
             <property name="use-markup">1</property>
             <property name="max-width-chars">50</property>
+            <layout>
+              <property name="row">2</property>
+              <property name="column">0</property>
+              <property name="column-span">2</property>
+            </layout>
           </object>
         </child>
         <child>
           <object class="GtkLabel" id="testcase_error_label">
             <property name="wrap">1</property>
             <property name="xalign">0</property>
+            <layout>
+              <property name="row">3</property>
+              <property name="column">0</property>
+              <property name="column-span">2</property>
+            </layout>
           </object>
         </child>
         <child>
@@ -84,31 +90,27 @@
             <style>
               <class name="suggested-action"/>
             </style>
+            <layout>
+              <property name="row">4</property>
+              <property name="column">0</property>
+              <property name="column-span">2</property>
+            </layout>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
   <template class="NodeEditorWindow" parent="GtkApplicationWindow">
     <property name="title" translatable="yes">GTK Node Editor</property>
     <property name="default-width">1024</property>
     <property name="default-height">768</property>
     <property name="focus-widget">text_view</property>
-    <property name="paned-position" bind-source="paned" bind-property="position" bind-flags="sync-create|bidirectional"/>
     <child type="titlebar">
       <object class="GtkHeaderBar" id="header">
         <child type="start">
           <object class="GtkButton">
             <property name="focus-on-click">0</property>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/document-open-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
+            <property name="icon-name">document-open-symbolic</property>
             <property name="tooltip-text">Open node file</property>
             <signal name="clicked" handler="open_cb"/>
           </object>
@@ -116,15 +118,7 @@
         <child type="start">
           <object class="GtkButton">
             <property name="focus-on-click">0</property>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/document-save-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
+            <property name="icon-name">document-save-symbolic</property>
             <property name="tooltip-text">Save to node file</property>
             <signal name="clicked" handler="save_cb"/>
           </object>
@@ -132,15 +126,7 @@
         <child type="start">
           <object class="GtkButton">
             <property name="focus-on-click">0</property>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/insert-image-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
+            <property name="icon-name">insert-image-symbolic</property>
             <property name="tooltip-text">Export to image</property>
             <signal name="clicked" handler="export_image_cb"/>
           </object>
@@ -148,15 +134,7 @@
         <child type="start">
           <object class="GtkButton">
             <property name="focus-on-click">0</property>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/edit-copy-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
+            <property name="icon-name">edit-copy-symbolic</property>
             <property name="tooltip-text">Copy image to clipboard</property>
             <signal name="clicked" handler="clip_image_cb"/>
           </object>
@@ -173,15 +151,7 @@
             <property name="focus-on-click">0</property>
             <property name="valign">center</property>
             <property name="menu-model">gear_menu</property>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/open-menu-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
+            <property name="icon-name">open-menu-symbolic</property>
           </object>
         </child>
         <child type="end">
@@ -189,65 +159,26 @@
             <property name="focus-on-click">0</property>
             <property name="valign">center</property>
             <property name="has-frame">0</property>
-            <property name="active" bind-source="NodeEditorWindow" bind-property="dark-mode" bind-flags="sync-create | bidirectional"/>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/display-brightness-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
-            <property name="tooltip-text" translatable="yes">Toggle the color scheme</property>
+            <property name="icon-name">display-brightness-symbolic</property>
+            <property name="tooltip-text" translatable="yes">Use a dark background</property>
+            <signal name="notify::active" handler="dark_mode_cb" swapped="0"/>
           </object>
         </child>
         <child type="end">
-          <object class="GtkButton" id="zoom_in">
-            <property name="css-classes">circular
-flat</property>
+          <object class="GtkScaleButton" id="scale_scale">
             <property name="focus-on-click">0</property>
             <property name="valign">center</property>
-            <property name="tooltip-text" translatable="yes">Zoom in</property>
-            <signal name="clicked" handler="zoom_in_cb"/>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/zoom-in-symbolic.svg</property>
-                  </object>
-                </property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">-4</property>
+                <property name="value">0</property>
+                <property name="upper">4</property>
+                <property name="step-increment">0.1</property>
+                <property name="page-increment">0.5</property>
               </object>
-            </child>
-          </object>
-        </child>
-        <child type="end">
-        <object class="GtkLabel" id="zoom_label">
-          <property name="label" translatable="1">100%</property>
-          <attributes>
-            <attribute name="font-features" value="tnum=1"/>
-          </attributes>
-          <property name="width-chars">4</property>
-          <property name="xalign">0.5</property>
-          </object>
-        </child>
-        <child type="end">
-          <object class="GtkButton" id="zoom_out">
-            <property name="css-classes">circular
-flat</property>
-            <property name="focus-on-click">0</property>
-            <property name="valign">center</property>
-            <property name="tooltip-text" translatable="yes">Zoom out</property>
-            <signal name="clicked" handler="zoom_out_cb"/>
-            <child>
-              <object class="GtkImage">
-                <property name="paintable">
-                  <object class="GtkIconPaintable">
-                    <property name="file">resource:///org/gtk/libgtk/icons/zoom-out-symbolic.svg</property>
-                  </object>
-                </property>
-              </object>
-            </child>
+            </property>
+            <property name="icons">zoom-in-symbolic</property>
+            <property name="tooltip-text" translatable="yes">Scale the image</property>
           </object>
         </child>
       </object>
@@ -297,7 +228,7 @@ You can turn it back on in the menu.
           </object>
         </child>
         <property name="child">
-          <object class="GtkPaned" id="paned">
+          <object class="GtkPaned">
             <property name="shrink-start-child">false</property>
             <property name="shrink-end-child">false</property>
             <property name="position">400</property>
@@ -306,7 +237,7 @@ You can turn it back on in the menu.
                 <property name="hscrollbar-policy">never</property>
                 <property name="hexpand">1</property>
                 <property name="vexpand">1</property>
-                <property name="child">
+                <child>
                   <object class="GtkTextView" id="text_view">
                     <property name="wrap-mode">word</property>
                     <property name="monospace">1</property>
@@ -327,7 +258,7 @@ You can turn it back on in the menu.
                       </object>
                     </child>
                   </object>
-                </property>
+                </child>
               </object>
             </property>
             <property name="end-child">
@@ -338,9 +269,9 @@ You can turn it back on in the menu.
                     <property name="vexpand">1</property>
                     <property name="min-content-height">100</property>
                     <property name="min-content-width">100</property>
-                    <property name="child">
+                    <child>
                       <object class="GtkViewport">
-                        <property name="child">
+                        <child>
                           <object class="GtkPicture" id="picture">
                             <property name="can-shrink">0</property>
                             <property name="halign">center</property>
@@ -352,7 +283,7 @@ You can turn it back on in the menu.
                               </object>
                             </child>
                           </object>
-                        </property>
+                        </child>
                         <child>
                           <object class="GtkDropTargetAsync">
                             <property name="actions">copy</property>
@@ -361,17 +292,17 @@ You can turn it back on in the menu.
                           </object>
                         </child>
                       </object>
-                    </property>
+                    </child>
                   </object>
                 </child>
                 <child>
                   <object class="GtkScrolledWindow">
                     <property name="hscrollbar-policy">never</property>
-                    <property name="child">
+                    <child>
                       <object class="GtkListBox" id="renderer_listbox">
                         <property name="selection-mode">none</property>
                       </object>
-                    </property>
+                    </child>
                   </object>
                 </child>
               </object>

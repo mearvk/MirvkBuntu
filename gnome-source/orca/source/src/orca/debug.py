@@ -19,15 +19,15 @@
 
 """Handles writing debugging messages to the debug file or stderr."""
 
-import contextlib
 import inspect
-import os
 import re
 import sys
 import threading
 import traceback
 from datetime import datetime, timezone
 from typing import Any, TextIO
+
+from .ax_utilities_debugging import AXUtilitiesDebugging
 
 LEVEL_OFF = 10000
 LEVEL_SEVERE = 1000
@@ -63,29 +63,9 @@ def print_tokens(
     if level < debugLevel:
         return
 
-    # Avoid importing AXObject through AXUtilitiesDebugging before AXCacheManager initializes.
-    # pylint: disable=import-outside-toplevel
-    from .ax_utilities_debugging import AXUtilitiesDebugging
-
-    text = _join_tokens([AXUtilitiesDebugging.as_string(token) for token in tokens])
+    text = " ".join(map(AXUtilitiesDebugging.as_string, tokens))
+    text = re.sub(r" (?=[,.:)])(?![\n])", "", text)
     _print_text(level, text, timestamp, stack)
-
-
-def _join_tokens(strings: list[str]) -> str:
-    """Joins token strings, where nothing already separates them, with a space."""
-
-    text = ""
-    for i, string in enumerate(strings):
-        already_apart = (
-            text.endswith(("'", "=", "(", "["))
-            or text[-1:].isspace()
-            or string.startswith("'")
-            or string[:1].isspace()
-        )
-        if i and not already_apart:
-            text += " "
-        text += string
-    return re.sub(r" (?=[,.:)\]])(?![\n])", "", text)
 
 
 def print_message(level: int, text: str, timestamp: bool = False, stack: bool = False) -> None:
@@ -97,21 +77,7 @@ def print_message(level: int, text: str, timestamp: bool = False, stack: bool = 
     _print_text(level, text, timestamp, stack)
 
 
-def shutdown() -> None:
-    """Flushes debugFile and fsyncs it so no buffered writes are lost on exit."""
-
-    if debugFile is None:
-        return
-    with contextlib.suppress(OSError):
-        debugFile.flush()
-        os.fsync(debugFile.fileno())
-
-
 def _stack_as_string(max_frames: int = 4) -> str:
-    # Avoid importing AXObject through AXUtilitiesDebugging before AXCacheManager initializes.
-    # pylint: disable=import-outside-toplevel
-    from .ax_utilities_debugging import AXUtilitiesDebugging
-
     callers = []
     current_module = inspect.getmodule(inspect.currentframe())
     stack = inspect.stack()
@@ -142,40 +108,30 @@ def _print_text(level: int, text: str = "", timestamp: bool = False, stack: bool
 
     _printing.active = True
 
-    try:
-        if timestamp:
-            text = text.replace("\n", f"\n{' ' * 18}")
-            local_time = datetime.now(tz=timezone.utc).astimezone()
-            text = f"{local_time.strftime('%H:%M:%S.%f')} - {text}"
-        if stack:
-            text += f" {_stack_as_string()}"
+    if timestamp:
+        text = text.replace("\n", f"\n{' ' * 18}")
+        local_time = datetime.now(tz=timezone.utc).astimezone()
+        text = f"{local_time.strftime('%H:%M:%S.%f')} - {text}"
+    if stack:
+        text += f" {_stack_as_string()}"
 
-        if debugFile:
-            try:
-                debugFile.write(f"{text}\n")
-            except (AttributeError, OSError):
-                return
-            except (TypeError, ValueError, UnicodeEncodeError) as error:
-                text = f"Exception trying to write text to file: {error}"
-                with contextlib.suppress(
-                    AttributeError, OSError, TypeError, ValueError, UnicodeEncodeError
-                ):
-                    debugFile.write(f"{text}\n")
-            if level >= LEVEL_SEVERE:
-                with contextlib.suppress(
-                    AttributeError, OSError, TypeError, ValueError, UnicodeEncodeError
-                ):
-                    sys.stderr.write(f"{text}\n")
-        else:
-            try:
-                sys.stderr.write(f"{text}\n")
-            except (AttributeError, OSError):
-                return
-            except (TypeError, ValueError, UnicodeEncodeError) as error:
-                text = f"Exception trying to write text to stderr: {error}"
-                with contextlib.suppress(
-                    AttributeError, OSError, TypeError, ValueError, UnicodeEncodeError
-                ):
-                    sys.stderr.write(f"{text}\n")
-    finally:
-        _printing.active = False
+    if debugFile:
+        try:
+            debugFile.writelines([text, "\n"])
+        except (AttributeError, OSError):
+            _printing.active = False
+            return
+        except (TypeError, ValueError, UnicodeEncodeError) as error:
+            text = f"Exception trying to write text to file: {error}"
+            debugFile.writelines([text, "\n"])
+    else:
+        try:
+            sys.stderr.writelines([text, "\n"])
+        except (AttributeError, OSError):
+            _printing.active = False
+            return
+        except (TypeError, ValueError, UnicodeEncodeError) as error:
+            text = f"Exception trying to write text to stderr: {error}"
+            sys.stderr.writelines([text, "\n"])
+
+    _printing.active = False

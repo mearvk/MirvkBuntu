@@ -1,7 +1,7 @@
 # Orca
 #
-# Copyright 2004-2009 Sun Microsystems Inc.
-# Copyright 2011-2026 Igalia, S.L.
+# Copyright 2005-2008 Sun Microsystems Inc.
+# Copyright 2011-2025 Igalia, S.L.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -37,50 +37,49 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+import gi
+
+gi.require_version("Gtk", "3.0")
+
 from . import (
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     document_presenter,
-    extension_loader,
     focus_manager,
     gsettings_registry,
     guilabels,
     input_event,
+    keybindings,
+    mathsymbols,
     messages,
     object_properties,
-    output_recorder,
     phonnames,
+    preferences_grid_base,
     presentation_manager,
     pronunciation_dictionary_manager,
     say_all_presenter,
-    speech_generator,
+    speech,
     speech_manager,
     speech_monitor,
-    speech_presenter_command_definitions,
     speechserver,
 )
-from .acss import ACSS
+from .ax_document import AXDocument
 from .ax_hypertext import AXHypertext
-from .ax_text import AXText, AXTextAttribute
+from .ax_text import AXText
 from .ax_utilities import AXUtilities
-from .extension import Extension, SpeechOutput, SpeechOutputResult
-from .speechserver import VoiceFamily
-from .text_attribute_manager import TextAttributeChangeMode
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    import gi
-
-    from .command import Command
-    from .dbus_service import UInt32
-    from .generator import PresentationReason
+    from .generator import WhereAmI
     from .speech_generator import SpeechGeneratorContext
-    from .speech_presenter_preferences_grid import SpeechPreferencesGrid
 
     gi.require_version("Atspi", "2.0")
-    from gi.repository import Atspi
+    from gi.repository import Atspi, Gio
 
+    from .acss import ACSS
     from .input_event import KeyboardEvent
     from .scripts import default
 
@@ -120,11 +119,687 @@ class SpeechPreference:
     setter: Callable[[bool], bool]
 
 
-@gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Speech", name="speech")
-class SpeechPresenter(Extension):
-    """Configures verbosity settings and adjusts strings for speech presentation."""
+class AnnouncementsPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Container Announcements preferences page."""
 
-    GROUP_LABEL = guilabels.KB_GROUP_SPEECH_VERBOSITY
+    def __init__(self, presenter: SpeechPresenter) -> None:
+        (
+            _general_prefs,
+            _object_details_prefs,
+            announcements_prefs,
+        ) = presenter.get_speech_preferences()
+
+        controls = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=announcements_prefs[0].label,
+                getter=announcements_prefs[0].getter,
+                setter=announcements_prefs[0].setter,
+                prefs_key=announcements_prefs[0].prefs_key,
+                member_of=guilabels.ANNOUNCE_WHEN_ENTERING,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=announcements_prefs[1].label,
+                getter=announcements_prefs[1].getter,
+                setter=announcements_prefs[1].setter,
+                prefs_key=announcements_prefs[1].prefs_key,
+                member_of=guilabels.ANNOUNCE_WHEN_ENTERING,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=announcements_prefs[2].label,
+                getter=announcements_prefs[2].getter,
+                setter=announcements_prefs[2].setter,
+                prefs_key=announcements_prefs[2].prefs_key,
+                member_of=guilabels.ANNOUNCE_WHEN_ENTERING,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=announcements_prefs[3].label,
+                getter=announcements_prefs[3].getter,
+                setter=announcements_prefs[3].setter,
+                prefs_key=announcements_prefs[3].prefs_key,
+                member_of=guilabels.ANNOUNCE_WHEN_ENTERING,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=announcements_prefs[4].label,
+                getter=announcements_prefs[4].getter,
+                setter=announcements_prefs[4].setter,
+                prefs_key=announcements_prefs[4].prefs_key,
+                member_of=guilabels.ANNOUNCE_WHEN_ENTERING,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=announcements_prefs[5].label,
+                getter=announcements_prefs[5].getter,
+                setter=announcements_prefs[5].setter,
+                prefs_key=announcements_prefs[5].prefs_key,
+                member_of=guilabels.ANNOUNCE_WHEN_ENTERING,
+            ),
+        ]
+
+        super().__init__(guilabels.ANNOUNCEMENTS, controls)
+
+
+class ProgressBarsPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Progress Bars preferences page."""
+
+    def __init__(self, presenter: SpeechPresenter) -> None:
+        controls: list[preferences_grid_base.ControlType] = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.GENERAL_SPEAK_UPDATES,
+                getter=presenter.get_speak_progress_bar_updates,
+                setter=presenter.set_speak_progress_bar_updates,
+                prefs_key=SpeechPresenter.KEY_SPEAK_PROGRESS_BAR_UPDATES,
+            ),
+            preferences_grid_base.IntRangePreferenceControl(
+                label=guilabels.GENERAL_FREQUENCY_SECS,
+                getter=presenter.get_progress_bar_speech_interval,
+                setter=presenter.set_progress_bar_speech_interval,
+                prefs_key=SpeechPresenter.KEY_PROGRESS_BAR_SPEECH_INTERVAL,
+                minimum=0,
+                maximum=100,
+            ),
+            preferences_grid_base.EnumPreferenceControl(
+                label=guilabels.GENERAL_APPLIES_TO,
+                getter=presenter.get_progress_bar_speech_verbosity,
+                setter=presenter.set_progress_bar_speech_verbosity,
+                prefs_key=SpeechPresenter.KEY_PROGRESS_BAR_SPEECH_VERBOSITY,
+                options=[
+                    guilabels.PROGRESS_BAR_ALL,
+                    guilabels.PROGRESS_BAR_APPLICATION,
+                    guilabels.PROGRESS_BAR_WINDOW,
+                ],
+                values=[
+                    ProgressBarVerbosity.ALL.value,
+                    ProgressBarVerbosity.APPLICATION.value,
+                    ProgressBarVerbosity.WINDOW.value,
+                ],
+            ),
+        ]
+
+        super().__init__(guilabels.PROGRESS_BARS, controls)
+
+
+class VerbosityPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Verbosity preferences page."""
+
+    def __init__(self, presenter: SpeechPresenter) -> None:
+        self._presenter = presenter
+        (
+            general_prefs,
+            object_details_prefs,
+            _announcements_prefs,
+        ) = presenter.get_speech_preferences()
+
+        text_speak_blank_lines = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_BLANK_LINES,
+            guilabels.SPEECH_SPEAK_BLANK_LINES,
+            presenter.get_speak_blank_lines,
+            presenter.set_speak_blank_lines,
+        )
+        text_speak_misspelled = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_MISSPELLED_INDICATOR,
+            guilabels.SPEECH_SPEAK_MISSPELLED_WORD_INDICATOR,
+            presenter.get_speak_misspelled_indicator,
+            presenter.set_speak_misspelled_indicator,
+        )
+        text_speak_indentation = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_INDENTATION_AND_JUSTIFICATION,
+            guilabels.SPEECH_SPEAK_INDENTATION_AND_JUSTIFICATION,
+            presenter.get_speak_indentation_and_justification,
+            presenter.set_speak_indentation_and_justification,
+        )
+        text_indentation_only_if_changed = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_INDENTATION_ONLY_IF_CHANGED,
+            guilabels.SPEECH_INDENTATION_ONLY_IF_CHANGED,
+            presenter.get_speak_indentation_only_if_changed,
+            presenter.set_speak_indentation_only_if_changed,
+        )
+
+        self._only_speak_displayed_control = preferences_grid_base.BooleanPreferenceControl(
+            label=object_details_prefs[0].label,
+            getter=object_details_prefs[0].getter,
+            setter=object_details_prefs[0].setter,
+            prefs_key=object_details_prefs[0].prefs_key,
+            member_of=guilabels.SPEECH_OBJECT_DETAILS,
+        )
+
+        self._enable_indentation_control = preferences_grid_base.BooleanPreferenceControl(
+            label=text_speak_indentation.label,
+            getter=text_speak_indentation.getter,
+            setter=text_speak_indentation.setter,
+            prefs_key=text_speak_indentation.prefs_key,
+            member_of=guilabels.SPEECH_OBJECT_DETAILS,
+            determine_sensitivity=self._only_speak_displayed_text_is_off,
+        )
+
+        controls = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=general_prefs[0].label,
+                getter=general_prefs[0].getter,
+                setter=general_prefs[0].setter,
+                prefs_key=general_prefs[0].prefs_key,
+                member_of=guilabels.GENERAL,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.OBJECT_PRESENTATION_IS_DETAILED,
+                getter=presenter._get_verbosity_is_verbose,
+                setter=presenter._set_verbosity_from_bool,
+                member_of=guilabels.GENERAL,
+            ),
+            self._only_speak_displayed_control,
+            preferences_grid_base.BooleanPreferenceControl(
+                label=object_details_prefs[1].label,
+                getter=object_details_prefs[1].getter,
+                setter=object_details_prefs[1].setter,
+                prefs_key=object_details_prefs[1].prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=object_details_prefs[2].label,
+                getter=object_details_prefs[2].getter,
+                setter=object_details_prefs[2].setter,
+                prefs_key=object_details_prefs[2].prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=object_details_prefs[3].label,
+                getter=object_details_prefs[3].getter,
+                setter=object_details_prefs[3].setter,
+                prefs_key=object_details_prefs[3].prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=object_details_prefs[4].label,
+                getter=object_details_prefs[4].getter,
+                setter=object_details_prefs[4].setter,
+                prefs_key=object_details_prefs[4].prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=text_speak_blank_lines.label,
+                getter=text_speak_blank_lines.getter,
+                setter=text_speak_blank_lines.setter,
+                prefs_key=text_speak_blank_lines.prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=text_speak_misspelled.label,
+                getter=text_speak_misspelled.getter,
+                setter=text_speak_misspelled.setter,
+                prefs_key=text_speak_misspelled.prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            self._enable_indentation_control,
+            preferences_grid_base.BooleanPreferenceControl(
+                label=text_indentation_only_if_changed.label,
+                getter=text_indentation_only_if_changed.getter,
+                setter=text_indentation_only_if_changed.setter,
+                prefs_key=text_indentation_only_if_changed.prefs_key,
+                member_of=guilabels.SPEECH_OBJECT_DETAILS,
+                determine_sensitivity=self._indentation_enabled,
+            ),
+        ]
+
+        super().__init__(guilabels.VERBOSITY, controls)
+
+    def save_settings(self, profile: str = "", app_name: str = "") -> dict[str, Any]:
+        """Save settings, writing the verbosity-level enum from the presenter."""
+
+        result = super().save_settings(profile, app_name)
+        result[SpeechPresenter.KEY_VERBOSITY_LEVEL] = self._presenter.get_verbosity_level()
+        return result
+
+    def _only_speak_displayed_text_is_off(self) -> bool:
+        """Returns True if only-speak-displayed-text is off in the UI."""
+
+        only_displayed_widget = self.get_widget_for_control(self._only_speak_displayed_control)
+        if only_displayed_widget:
+            return not only_displayed_widget.get_active()
+        return True
+
+    def _indentation_enabled(self) -> bool:
+        """Check if speak indentation is enabled in the UI (widget state, not settings)."""
+
+        if not self._only_speak_displayed_text_is_off():
+            return False
+        widget = self.get_widget_for_control(self._enable_indentation_control)
+        return widget.get_active() if widget else True
+
+
+class TablesPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Tables preferences page."""
+
+    def __init__(self, presenter: SpeechPresenter) -> None:
+        # Table preferences
+        table_gui_rows = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_ROW_IN_GUI_TABLE,
+            guilabels.SPEECH_SPEAK_FULL_ROW_IN_GUI_TABLES,
+            presenter.get_speak_row_in_gui_table,
+            presenter.set_speak_row_in_gui_table,
+        )
+        table_doc_rows = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_ROW_IN_DOCUMENT_TABLE,
+            guilabels.SPEECH_SPEAK_FULL_ROW_IN_DOCUMENT_TABLES,
+            presenter.get_speak_row_in_document_table,
+            presenter.set_speak_row_in_document_table,
+        )
+        table_spreadsheet_rows = SpeechPreference(
+            SpeechPresenter.KEY_SPEAK_ROW_IN_SPREADSHEET,
+            guilabels.SPEECH_SPEAK_FULL_ROW_IN_SPREADSHEETS,
+            presenter.get_speak_row_in_spreadsheet,
+            presenter.set_speak_row_in_spreadsheet,
+        )
+        table_cell_headers = SpeechPreference(
+            SpeechPresenter.KEY_ANNOUNCE_CELL_HEADERS,
+            guilabels.TABLE_SPEAK_CELL_HEADER,
+            presenter.get_announce_cell_headers,
+            presenter.set_announce_cell_headers,
+        )
+        table_cell_coords = SpeechPreference(
+            SpeechPresenter.KEY_ANNOUNCE_CELL_COORDINATES,
+            guilabels.TABLE_SPEAK_CELL_COORDINATES,
+            presenter.get_announce_cell_coordinates,
+            presenter.set_announce_cell_coordinates,
+        )
+        table_spreadsheet_coords = SpeechPreference(
+            SpeechPresenter.KEY_ANNOUNCE_SPREADSHEET_CELL_COORDINATES,
+            guilabels.SPREADSHEET_SPEAK_CELL_COORDINATES,
+            presenter.get_announce_spreadsheet_cell_coordinates,
+            presenter.set_announce_spreadsheet_cell_coordinates,
+        )
+        table_cell_span = SpeechPreference(
+            SpeechPresenter.KEY_ANNOUNCE_CELL_SPAN,
+            guilabels.TABLE_SPEAK_CELL_SPANS,
+            presenter.get_announce_cell_span,
+            presenter.set_announce_cell_span,
+        )
+        table_selected_range = SpeechPreference(
+            SpeechPresenter.KEY_ALWAYS_ANNOUNCE_SELECTED_RANGE_IN_SPREADSHEET,
+            guilabels.SPREADSHEET_SPEAK_SELECTED_RANGE,
+            presenter.get_always_announce_selected_range_in_spreadsheet,
+            presenter.set_always_announce_selected_range_in_spreadsheet,
+        )
+
+        controls = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_gui_rows.label,
+                getter=table_gui_rows.getter,
+                setter=table_gui_rows.setter,
+                prefs_key=table_gui_rows.prefs_key,
+                member_of=guilabels.TABLE_ROW_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_doc_rows.label,
+                getter=table_doc_rows.getter,
+                setter=table_doc_rows.setter,
+                prefs_key=table_doc_rows.prefs_key,
+                member_of=guilabels.TABLE_ROW_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_spreadsheet_rows.label,
+                getter=table_spreadsheet_rows.getter,
+                setter=table_spreadsheet_rows.setter,
+                prefs_key=table_spreadsheet_rows.prefs_key,
+                member_of=guilabels.TABLE_ROW_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_cell_headers.label,
+                getter=table_cell_headers.getter,
+                setter=table_cell_headers.setter,
+                prefs_key=table_cell_headers.prefs_key,
+                member_of=guilabels.TABLE_CELL_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_cell_coords.label,
+                getter=table_cell_coords.getter,
+                setter=table_cell_coords.setter,
+                prefs_key=table_cell_coords.prefs_key,
+                member_of=guilabels.TABLE_CELL_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_spreadsheet_coords.label,
+                getter=table_spreadsheet_coords.getter,
+                setter=table_spreadsheet_coords.setter,
+                prefs_key=table_spreadsheet_coords.prefs_key,
+                member_of=guilabels.TABLE_CELL_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_cell_span.label,
+                getter=table_cell_span.getter,
+                setter=table_cell_span.setter,
+                prefs_key=table_cell_span.prefs_key,
+                member_of=guilabels.TABLE_CELL_NAVIGATION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=table_selected_range.label,
+                getter=table_selected_range.getter,
+                setter=table_selected_range.setter,
+                prefs_key=table_selected_range.prefs_key,
+                member_of=guilabels.TABLE_CELL_NAVIGATION,
+            ),
+        ]
+
+        super().__init__(guilabels.TABLES, controls)
+
+
+class SpeechOSDPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the speech on-screen display preferences page."""
+
+    def __init__(self, presenter: SpeechPresenter) -> None:
+        controls: list[preferences_grid_base.ControlType] = [
+            preferences_grid_base.IntRangePreferenceControl(
+                label=guilabels.SPEECH_MONITOR_FONT_SIZE,
+                getter=presenter.get_monitor_font_size,
+                setter=presenter.set_monitor_font_size,
+                prefs_key=SpeechPresenter.KEY_MONITOR_FONT_SIZE,
+                minimum=8,
+                maximum=72,
+                apply_immediately=True,
+            ),
+            preferences_grid_base.ColorPreferenceControl(
+                label=guilabels.SPEECH_MONITOR_FOREGROUND,
+                getter=presenter.get_monitor_foreground,
+                setter=presenter.set_monitor_foreground,
+                prefs_key=SpeechPresenter.KEY_MONITOR_FOREGROUND,
+            ),
+            preferences_grid_base.ColorPreferenceControl(
+                label=guilabels.SPEECH_MONITOR_BACKGROUND,
+                getter=presenter.get_monitor_background,
+                setter=presenter.set_monitor_background,
+                prefs_key=SpeechPresenter.KEY_MONITOR_BACKGROUND,
+            ),
+        ]
+
+        super().__init__(
+            guilabels.ON_SCREEN_DISPLAY,
+            controls,
+            info_message=guilabels.SPEECH_MONITOR_INFO,
+        )
+
+
+class SpeechPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+    """Main speech preferences grid with enable toggle and categorized settings."""
+
+    _VOICE_PROPERTY_MAP = (
+        ("rate", "rate", "i", 50),
+        ("average-pitch", "pitch", "d", 5.0),
+        ("gain", "volume", "d", 10.0),
+        ("established", "established", "b", False),
+    )
+
+    _VOICE_FAMILY_MAP = (
+        ("name", "family-name"),
+        ("lang", "family-lang"),
+        ("dialect", "family-dialect"),
+        ("gender", "family-gender"),
+        ("variant", "family-variant"),
+    )
+
+    def __init__(
+        self,
+        presenter: SpeechPresenter,
+        title_change_callback: Callable[[str], None] | None = None,
+        app_name: str = "",
+    ) -> None:
+        super().__init__(guilabels.SPEECH)
+        self._presenter = presenter
+        self._initializing = True
+        self._title_change_callback = title_change_callback
+
+        manager = speech_manager.get_manager()
+
+        # Create child grids (but don't attach them yet - they'll go in the stack detail)
+        self._voices_grid = manager.create_voices_preferences_grid(app_name=app_name)
+        self._verbosity_grid = VerbosityPreferencesGrid(presenter)
+        self._tables_grid = TablesPreferencesGrid(presenter)
+        self._progress_bars_grid = ProgressBarsPreferencesGrid(presenter)
+        self._announcements_grid = AnnouncementsPreferencesGrid(presenter)
+        self._osd_grid = SpeechOSDPreferencesGrid(presenter)
+
+        self._build()
+        self._initializing = False
+
+    def _build(self) -> None:
+        row = 0
+
+        manager = speech_manager.get_manager()
+
+        categories = [
+            (guilabels.VOICE, "voice", self._voices_grid),
+            (guilabels.VERBOSITY, "verbosity", self._verbosity_grid),
+            (guilabels.TABLES, "tables", self._tables_grid),
+            (guilabels.PROGRESS_BARS, "progress-bars", self._progress_bars_grid),
+            (guilabels.ANNOUNCEMENTS, "announcements", self._announcements_grid),
+            (guilabels.ON_SCREEN_DISPLAY, "osd", self._osd_grid),
+        ]
+
+        enable_listbox, stack, _categories_listbox = self._create_multi_page_stack(
+            enable_label=guilabels.SPEECH_ENABLE_SPEECH,
+            enable_getter=manager.get_speech_is_enabled,
+            enable_setter=manager.set_speech_is_enabled,
+            categories=categories,
+            title_change_callback=self._title_change_callback,
+            main_title=guilabels.SPEECH,
+        )
+
+        self.attach(enable_listbox, 0, row, 1, 1)
+        row += 1
+        self.attach(stack, 0, row, 1, 1)
+
+    def on_becoming_visible(self) -> None:
+        """Reset to the categories view when this grid becomes visible."""
+
+        self.multipage_on_becoming_visible()
+
+    def reload(self) -> None:
+        """Reload all child grids."""
+
+        self._initializing = True
+        self._has_unsaved_changes = False
+        self._voices_grid.reload()
+        self._verbosity_grid.reload()
+        self._tables_grid.reload()
+        self._progress_bars_grid.reload()
+        self._announcements_grid.reload()
+        self._osd_grid.reload()
+        self._initializing = False
+
+    def _save_voice(self, voice_gs: Gio.Settings, voice_data: dict, skip_defaults: bool) -> None:
+        """Save voice properties and family for a profile."""
+
+        for acss_key, gs_key, gs_type, default in self._VOICE_PROPERTY_MAP:
+            if acss_key not in voice_data:
+                continue
+            value = voice_data[acss_key]
+            if skip_defaults:
+                is_default = (
+                    (gs_type == "i" and int(value) == default)
+                    or (gs_type == "d" and float(value) == default)
+                    or (gs_type == "b" and bool(value) == default)
+                )
+                if is_default:
+                    voice_gs.reset(gs_key)
+                    continue
+            if gs_type == "i":
+                voice_gs.set_int(gs_key, int(value))
+            elif gs_type == "d":
+                voice_gs.set_double(gs_key, float(value))
+            else:
+                voice_gs.set_boolean(gs_key, bool(value))
+
+        family = voice_data.get("family", {})
+        if isinstance(family, dict):
+            for json_field, gs_key in self._VOICE_FAMILY_MAP:
+                val = family.get(json_field)
+                if val is not None and str(val):
+                    voice_gs.set_string(gs_key, str(val))
+
+    def _save_app_voice(
+        self,
+        voice_gs: Gio.Settings,
+        voice_data: dict,
+        profile_voice_gs: Gio.Settings,
+        default_voice_gs: Gio.Settings | None,
+    ) -> None:
+        """Save voice properties for an app, only writing genuine overrides."""
+
+        for acss_key, gs_key, gs_type, _default in self._VOICE_PROPERTY_MAP:
+            if acss_key not in voice_data:
+                continue
+            value = voice_data[acss_key]
+            profile_value = self._get_effective_voice_value(
+                gs_key,
+                profile_voice_gs,
+                default_voice_gs,
+                _default,
+            )
+            if gs_type == "i":
+                matches = int(value) == profile_value
+            elif gs_type == "d":
+                matches = float(value) == profile_value
+            else:
+                matches = bool(value) == profile_value
+            if matches:
+                voice_gs.reset(gs_key)
+            elif gs_type == "i":
+                voice_gs.set_int(gs_key, int(value))
+            elif gs_type == "d":
+                voice_gs.set_double(gs_key, float(value))
+            else:
+                voice_gs.set_boolean(gs_key, bool(value))
+
+        family = voice_data.get("family", {})
+        if isinstance(family, dict):
+            for json_field, gs_key in self._VOICE_FAMILY_MAP:
+                val = family.get(json_field)
+                if val is None or not str(val):
+                    continue
+                profile_val = self._get_effective_voice_value(
+                    gs_key,
+                    profile_voice_gs,
+                    default_voice_gs,
+                    "",
+                )
+                if str(val) == profile_val:
+                    voice_gs.reset(gs_key)
+                else:
+                    voice_gs.set_string(gs_key, str(val))
+
+    @staticmethod
+    def _get_effective_voice_value(
+        gs_key: str,
+        profile_gs: Gio.Settings,
+        default_gs: Gio.Settings | None,
+        fallback: Any,
+    ) -> Any:
+        """Returns the effective profile voice value, checking default profile if needed."""
+
+        if (val := profile_gs.get_user_value(gs_key)) is not None:
+            return val.unpack()
+        if default_gs is not None and (val := default_gs.get_user_value(gs_key)) is not None:
+            return val.unpack()
+        return fallback
+
+    def save_settings(self, profile: str = "", app_name: str = "") -> dict:
+        """Save all settings from child grids."""
+
+        assert self._multipage_enable_switch is not None
+        result: dict[str, Any] = {}
+        result["enable"] = self._multipage_enable_switch.get_active()
+        result.update(self._voices_grid.save_settings())
+        result.update(self._verbosity_grid.save_settings())
+        result.update(self._tables_grid.save_settings())
+        result.update(self._progress_bars_grid.save_settings())
+        result.update(self._announcements_grid.save_settings())
+        result.update(self._osd_grid.save_settings())
+
+        if profile:
+            registry = gsettings_registry.get_registry()
+            p = registry.sanitize_gsettings_path(profile)
+            skip = not app_name and profile == "default"
+
+            # For app saves, remove synthesizer from result before save_schema
+            # so it doesn't get written to the app dconf path unconditionally.
+            # save_schema writes all matched keys, which would shadow the
+            # profile-level synthesizer even when the user didn't change it.
+            app_synth = result.pop("synthesizer", None) if app_name else None
+            app_server = result.pop("speech-server", None) if app_name else None
+
+            registry.save_schema("speech", result, p, app_name, skip)
+
+            voices = result.get("voices", {})
+            for voice_type, voice_data in voices.items():
+                if not voice_data:
+                    continue
+                vt = registry.sanitize_gsettings_path(voice_type)
+                voice_gs = registry.get_settings("voice", p, f"voices/{vt}", app_name)
+                if voice_gs is None:
+                    continue
+                if app_name:
+                    profile_voice_gs = registry.get_settings("voice", p, f"voices/{vt}")
+                    if profile_voice_gs is None:
+                        continue
+                    default_voice_gs = None
+                    if p != "default":
+                        default_voice_gs = registry.get_settings(
+                            "voice",
+                            "default",
+                            f"voices/{vt}",
+                        )
+                    self._save_app_voice(
+                        voice_gs,
+                        voice_data,
+                        profile_voice_gs,
+                        default_voice_gs,
+                    )
+                else:
+                    self._save_voice(voice_gs, voice_data, skip)
+
+            if app_name and app_synth is not None:
+                profile_synth = registry.layered_lookup("speech", "synthesizer", "s")
+                if speech_gs := registry.get_settings("speech", p, "speech", app_name):
+                    if app_synth != profile_synth:
+                        speech_gs.set_string("synthesizer", app_synth)
+                        speech_gs.set_string("speech-server", app_server or "")
+                    elif speech_gs.get_user_value("synthesizer") is not None:
+                        speech_gs.reset("synthesizer")
+                        speech_gs.reset("speech-server")
+
+        return result
+
+    def has_changes(self) -> bool:
+        """Return True if there are unsaved changes."""
+
+        return (
+            self._has_unsaved_changes
+            or self._voices_grid.has_changes()
+            or self._verbosity_grid.has_changes()
+            or self._tables_grid.has_changes()
+            or self._progress_bars_grid.has_changes()
+            or self._announcements_grid.has_changes()
+            or self._osd_grid.has_changes()
+        )
+
+    def refresh(self) -> None:
+        """Refresh all child grids."""
+
+        self._initializing = True
+        self._voices_grid.refresh()
+        self._verbosity_grid.refresh()
+        self._tables_grid.refresh()
+        self._progress_bars_grid.refresh()
+        self._announcements_grid.refresh()
+        self._osd_grid.refresh()
+        self._initializing = False
+
+
+@gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Speech", name="speech")
+class SpeechPresenter:
+    """Configures verbosity settings and adjusts strings for speech presentation."""
 
     _SCHEMA = "speech"
 
@@ -145,25 +820,20 @@ class SpeechPresenter(Extension):
         "always-announce-selected-range-in-spreadsheet"
     )
     KEY_ANNOUNCE_CELL_HEADERS = "announce-cell-headers"
-    KEY_ANNOUNCE_ARTICLE = "announce-article"
     KEY_ANNOUNCE_BLOCKQUOTE = "announce-blockquote"
-    KEY_ANNOUNCE_CODE_BLOCK = "announce-code-block"
-    KEY_ANNOUNCE_DOCUMENT = "announce-document"
     KEY_ANNOUNCE_FORM = "announce-form"
     KEY_ANNOUNCE_GROUPING = "announce-grouping"
     KEY_ANNOUNCE_LANDMARK = "announce-landmark"
     KEY_ANNOUNCE_LIST = "announce-list"
     KEY_ANNOUNCE_TABLE = "announce-table"
-    KEY_ANNOUNCE_TRACKED_CHANGES = "announce-tracked-changes"
     KEY_ONLY_SPEAK_DISPLAYED_TEXT = "only-speak-displayed-text"
     KEY_SPEAK_PROGRESS_BAR_UPDATES = "speak-progress-bar-updates"
     KEY_PROGRESS_BAR_SPEECH_INTERVAL = "progress-bar-speech-interval"
     KEY_PROGRESS_BAR_SPEECH_VERBOSITY = "progress-bar-speech-verbosity"
     KEY_MESSAGES_ARE_DETAILED = "messages-are-detailed"
     KEY_VERBOSITY_LEVEL = "verbosity-level"
-    KEY_SPEAK_INDENTATION = "speak-indentation"
+    KEY_SPEAK_INDENTATION_AND_JUSTIFICATION = "speak-indentation-and-justification"
     KEY_SPEAK_INDENTATION_ONLY_IF_CHANGED = "speak-indentation-only-if-changed"
-    KEY_SPEAK_TEXT_ATTRIBUTE_CHANGES = "speak-text-attribute-changes"
     KEY_MONITOR_FONT_SIZE = "monitor-font-size"
     KEY_MONITOR_FOREGROUND = "monitor-foreground"
     KEY_MONITOR_BACKGROUND = "monitor-background"
@@ -181,19 +851,93 @@ class SpeechPresenter(Extension):
     def __init__(self) -> None:
         self._last_indentation_description: str = ""
         self._last_error_description: str = ""
+        self._initialized: bool = False
         self._monitor: speech_monitor.SpeechMonitor | None = None
         self._monitor_enabled_override: bool | None = None
         self._speech_history: list[tuple[str, str]] = []
         self._group_buffer: list[str] | None = None
         self._progress_bar_cache: dict = {}
-        self._text_attribute_change_mode_override: TextAttributeChangeMode | None = None
-        self._output_recorder = output_recorder.OutputRecorder("speech")
-        super().__init__()
 
-    def _get_commands(self) -> list[Command]:
-        """Returns commands for registration."""
+        msg = "SPEECH PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("SpeechPresenter", self)
 
-        return speech_presenter_command_definitions.get_commands(self)
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        speech.set_monitor_callbacks(
+            write_text=self.write_to_monitor,
+            write_key=self.write_key_to_monitor,
+            begin_group=self._begin_monitor_group,
+            end_group=self._end_monitor_group,
+        )
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_SPEECH_VERBOSITY
+
+        # Common keybindings (same for desktop and laptop)
+        kb_v = keybindings.KeyBinding("v", keybindings.ORCA_MODIFIER_MASK)
+        kb_f11 = keybindings.KeyBinding("F11", keybindings.ORCA_MODIFIER_MASK)
+        kb_shift_d = keybindings.KeyBinding("d", keybindings.ORCA_SHIFT_MODIFIER_MASK)
+
+        # (name, function, description, desktop_kb, laptop_kb)
+        commands_data = [
+            (
+                "changeNumberStyleHandler",
+                self.change_number_style,
+                cmdnames.CHANGE_NUMBER_STYLE,
+                None,
+                None,
+            ),
+            (
+                "toggleSpeechVerbosityHandler",
+                self.toggle_verbosity,
+                cmdnames.TOGGLE_SPEECH_VERBOSITY,
+                kb_v,
+                kb_v,
+            ),
+            (
+                "toggleSpeakingIndentationJustificationHandler",
+                self.toggle_indentation_and_justification,
+                cmdnames.TOGGLE_SPOKEN_INDENTATION_AND_JUSTIFICATION,
+                None,
+                None,
+            ),
+            (
+                "toggleTableCellReadModeHandler",
+                self.toggle_table_cell_reading_mode,
+                cmdnames.TOGGLE_TABLE_CELL_READ_MODE,
+                kb_f11,
+                kb_f11,
+            ),
+            (
+                "toggle_speech_monitor",
+                self.toggle_monitor,
+                cmdnames.TOGGLE_SPEECH_MONITOR,
+                kb_shift_d,
+                kb_shift_d,
+            ),
+        ]
+
+        for name, function, description, desktop_kb, laptop_kb in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=desktop_kb,
+                    laptop_keybinding=laptop_kb,
+                ),
+            )
+
+        msg = "SPEECH PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_SPEAK_MISSPELLED_INDICATOR,
@@ -213,8 +957,8 @@ class SpeechPresenter(Extension):
     def set_speak_misspelled_indicator(self, value: bool) -> bool:
         """Sets whether the misspelled indicator is spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak misspelled indicator to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak misspelled indicator to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_MISSPELLED_INDICATOR,
@@ -240,8 +984,8 @@ class SpeechPresenter(Extension):
     def set_speak_description(self, value: bool) -> bool:
         """Sets whether object descriptions are spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak description to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak description to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_DESCRIPTION,
@@ -267,8 +1011,8 @@ class SpeechPresenter(Extension):
     def set_speak_position_in_set(self, value: bool) -> bool:
         """Sets whether the position and set size of objects are spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak position in set to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak position in set to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_POSITION_IN_SET,
@@ -294,8 +1038,8 @@ class SpeechPresenter(Extension):
     def set_speak_widget_mnemonic(self, value: bool) -> bool:
         """Sets whether widget mnemonics are spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak widget mnemonics to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak widget mnemonics to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_WIDGET_MNEMONIC,
@@ -321,8 +1065,8 @@ class SpeechPresenter(Extension):
     def set_speak_tutorial_messages(self, value: bool) -> bool:
         """Sets whether tutorial messages are spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak tutorial messages to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak tutorial messages to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_TUTORIAL_MESSAGES,
@@ -339,17 +1083,17 @@ class SpeechPresenter(Extension):
         migration_key="repeatCharacterLimit",
     )
     @dbus_service.getter
-    def get_repeated_character_limit(self) -> UInt32:
+    def get_repeated_character_limit(self) -> int:
         """Returns the count at which repeated, non-alphanumeric symbols will be described."""
 
         return self._get_setting(self.KEY_REPEATED_CHARACTER_LIMIT, "i", 4)
 
     @dbus_service.setter
-    def set_repeated_character_limit(self, value: UInt32) -> bool:
+    def set_repeated_character_limit(self, value: int) -> bool:
         """Sets the count at which repeated, non-alphanumeric symbols will be described."""
 
-        tokens = ["SPEECH PRESENTER: Setting repeated character limit to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting repeated character limit to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_REPEATED_CHARACTER_LIMIT,
@@ -375,8 +1119,8 @@ class SpeechPresenter(Extension):
     def set_speak_blank_lines(self, value: bool) -> bool:
         """Sets whether blank lines will be spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak blank lines to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak blank lines to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_BLANK_LINES,
@@ -402,8 +1146,8 @@ class SpeechPresenter(Extension):
     def set_speak_row_in_gui_table(self, value: bool) -> bool:
         """Sets whether Up/Down in GUI tables speaks the row or just the cell."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak row in GUI table to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak row in GUI table to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_ROW_IN_GUI_TABLE,
@@ -429,8 +1173,8 @@ class SpeechPresenter(Extension):
     def set_speak_row_in_document_table(self, value: bool) -> bool:
         """Sets whether Up/Down in text-document tables speaks the row or just the cell."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak row in document table to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak row in document table to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_ROW_IN_DOCUMENT_TABLE,
@@ -456,8 +1200,8 @@ class SpeechPresenter(Extension):
     def set_speak_row_in_spreadsheet(self, value: bool) -> bool:
         """Sets whether Up/Down in spreadsheets speaks the row or just the cell."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak row in spreadsheet to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak row in spreadsheet to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_ROW_IN_SPREADSHEET,
@@ -483,8 +1227,8 @@ class SpeechPresenter(Extension):
     def set_announce_cell_span(self, value: bool) -> bool:
         """Sets whether cell spans are announced when greater than 1."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce cell spans to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce cell spans to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_CELL_SPAN,
@@ -510,8 +1254,8 @@ class SpeechPresenter(Extension):
     def set_announce_cell_coordinates(self, value: bool) -> bool:
         """Sets whether (non-spreadsheet) cell coordinates are announced."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce cell coordinates to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce cell coordinates to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_CELL_COORDINATES,
@@ -537,8 +1281,8 @@ class SpeechPresenter(Extension):
     def set_announce_spreadsheet_cell_coordinates(self, value: bool) -> bool:
         """Sets whether spreadsheet cell coordinates are announced."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce spreadsheet cell coordinates to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce spreadsheet cell coordinates to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_SPREADSHEET_CELL_COORDINATES,
@@ -568,12 +1312,8 @@ class SpeechPresenter(Extension):
     def set_always_announce_selected_range_in_spreadsheet(self, value: bool) -> bool:
         """Sets whether the selected range in spreadsheets is always announced."""
 
-        tokens = [
-            "SPEECH PRESENTER: Setting always announce selected spreadsheet range to",
-            value,
-            ".",
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting always announce selected spreadsheet range to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ALWAYS_ANNOUNCE_SELECTED_RANGE_IN_SPREADSHEET,
@@ -599,37 +1339,11 @@ class SpeechPresenter(Extension):
     def set_announce_cell_headers(self, value: bool) -> bool:
         """Sets whether cell headers are announced."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce cell headers to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce cell headers to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_CELL_HEADERS,
-            value,
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_ARTICLE,
-        schema="speech",
-        gtype="b",
-        default=True,
-        summary="Announce articles",
-    )
-    @dbus_service.getter
-    def get_announce_article(self) -> bool:
-        """Returns whether articles are announced when entered."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_ARTICLE, "b", True)
-
-    @dbus_service.setter
-    def set_announce_article(self, value: bool) -> bool:
-        """Sets whether articles are announced when entered."""
-
-        tokens = ["SPEECH PRESENTER: Setting announce articles to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_ARTICLE,
             value,
         )
         return True
@@ -652,37 +1366,11 @@ class SpeechPresenter(Extension):
     def set_announce_blockquote(self, value: bool) -> bool:
         """Sets whether blockquotes are announced when entered."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce blockquotes to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce blockquotes to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_BLOCKQUOTE,
-            value,
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_CODE_BLOCK,
-        schema="speech",
-        gtype="b",
-        default=True,
-        summary="Announce code blocks",
-    )
-    @dbus_service.getter
-    def get_announce_code_block(self) -> bool:
-        """Returns whether code blocks are announced when entered."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_CODE_BLOCK, "b", True)
-
-    @dbus_service.setter
-    def set_announce_code_block(self, value: bool) -> bool:
-        """Sets whether code blocks are announced when entered."""
-
-        tokens = ["SPEECH PRESENTER: Setting announce code blocks to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_CODE_BLOCK,
             value,
         )
         return True
@@ -705,8 +1393,8 @@ class SpeechPresenter(Extension):
     def set_announce_form(self, value: bool) -> bool:
         """Sets whether non-landmark forms are announced when entered."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce forms to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce forms to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ANNOUNCE_FORM, value
         )
@@ -730,8 +1418,8 @@ class SpeechPresenter(Extension):
     def set_announce_grouping(self, value: bool) -> bool:
         """Sets whether groupings are announced when entered."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce groupings to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce groupings to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_GROUPING,
@@ -757,8 +1445,8 @@ class SpeechPresenter(Extension):
     def set_announce_landmark(self, value: bool) -> bool:
         """Sets whether landmarks are announced when entered."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce landmarks to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce landmarks to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_LANDMARK,
@@ -784,34 +1472,10 @@ class SpeechPresenter(Extension):
     def set_announce_list(self, value: bool) -> bool:
         """Sets whether lists are announced when entered."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce lists to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce lists to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ANNOUNCE_LIST, value
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_DOCUMENT,
-        schema="speech",
-        gtype="b",
-        default=True,
-        summary="Announce embedded documents",
-    )
-    @dbus_service.getter
-    def get_announce_document(self) -> bool:
-        """Returns whether embedded documents are announced when entered and left."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_DOCUMENT, "b", True)
-
-    @dbus_service.setter
-    def set_announce_document(self, value: bool) -> bool:
-        """Sets whether embedded documents are announced when entered and left."""
-
-        tokens = ["SPEECH PRESENTER: Setting announce documents to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA, self.KEY_ANNOUNCE_DOCUMENT, value
         )
         return True
 
@@ -833,36 +1497,10 @@ class SpeechPresenter(Extension):
     def set_announce_table(self, value: bool) -> bool:
         """Sets whether tables are announced when entered."""
 
-        tokens = ["SPEECH PRESENTER: Setting announce tables to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting announce tables to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ANNOUNCE_TABLE, value
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_TRACKED_CHANGES,
-        schema="speech",
-        gtype="b",
-        default=True,
-        summary="Announce tracked changes",
-    )
-    @dbus_service.getter
-    def get_announce_tracked_changes(self) -> bool:
-        """Returns whether tracked changes are announced when entered."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_TRACKED_CHANGES, "b", True)
-
-    @dbus_service.setter
-    def set_announce_tracked_changes(self, value: bool) -> bool:
-        """Sets whether tracked changes are announced when entered."""
-
-        tokens = ["SPEECH PRESENTER: Setting announce tracked changes to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_TRACKED_CHANGES,
-            value,
         )
         return True
 
@@ -917,8 +1555,8 @@ class SpeechPresenter(Extension):
     def set_only_speak_displayed_text(self, value: bool) -> bool:
         """Sets whether only displayed text should be spoken."""
 
-        tokens = ["SPEECH PRESENTER: Setting only speak displayed text to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting only speak displayed text to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ONLY_SPEAK_DISPLAYED_TEXT,
@@ -944,8 +1582,8 @@ class SpeechPresenter(Extension):
     def set_speak_progress_bar_updates(self, value: bool) -> bool:
         """Sets whether speech progress bar updates are enabled."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak progress bar updates to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak progress bar updates to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_PROGRESS_BAR_UPDATES,
@@ -962,17 +1600,17 @@ class SpeechPresenter(Extension):
         migration_key="progressBarSpeechInterval",
     )
     @dbus_service.getter
-    def get_progress_bar_speech_interval(self) -> UInt32:
+    def get_progress_bar_speech_interval(self) -> int:
         """Returns the speech progress bar update interval in seconds."""
 
         return self._get_setting(self.KEY_PROGRESS_BAR_SPEECH_INTERVAL, "i", 10)
 
     @dbus_service.setter
-    def set_progress_bar_speech_interval(self, value: UInt32) -> bool:
+    def set_progress_bar_speech_interval(self, value: int) -> bool:
         """Sets the speech progress bar update interval in seconds."""
 
-        tokens = ["SPEECH PRESENTER: Setting progress bar speech interval to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting progress bar speech interval to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_PROGRESS_BAR_SPEECH_INTERVAL,
@@ -989,7 +1627,7 @@ class SpeechPresenter(Extension):
         migration_key="progressBarSpeechVerbosity",
     )
     @dbus_service.getter
-    def get_progress_bar_speech_verbosity(self) -> UInt32:
+    def get_progress_bar_speech_verbosity(self) -> int:
         """Returns the speech progress bar verbosity level."""
 
         value = gsettings_registry.get_registry().layered_lookup(
@@ -1002,11 +1640,11 @@ class SpeechPresenter(Extension):
         return ProgressBarVerbosity[value.upper()].value
 
     @dbus_service.setter
-    def set_progress_bar_speech_verbosity(self, value: UInt32) -> bool:
+    def set_progress_bar_speech_verbosity(self, value: int) -> bool:
         """Sets the speech progress bar verbosity level."""
 
-        tokens = ["SPEECH PRESENTER: Setting progress bar speech verbosity to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting progress bar speech verbosity to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         level = ProgressBarVerbosity(value)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
@@ -1069,8 +1707,8 @@ class SpeechPresenter(Extension):
     def set_messages_are_detailed(self, value: bool) -> bool:
         """Sets whether informative messages will be detailed or brief."""
 
-        tokens = ["SPEECH PRESENTER: Setting messages are detailed to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting messages are detailed to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_MESSAGES_ARE_DETAILED,
@@ -1110,12 +1748,12 @@ class SpeechPresenter(Extension):
         try:
             level = VerbosityLevel[value.upper()]
         except KeyError:
-            tokens = ["SPEECH PRESENTER: Invalid verbosity level:", value]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            msg = f"SPEECH PRESENTER: Invalid verbosity level: {value}"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
             return False
 
-        tokens = ["SPEECH PRESENTER: Setting verbosity level to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting verbosity level to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_VERBOSITY_LEVEL,
@@ -1177,28 +1815,28 @@ class SpeechPresenter(Extension):
         return True
 
     @gsettings_registry.get_registry().gsetting(
-        key=KEY_SPEAK_INDENTATION,
+        key=KEY_SPEAK_INDENTATION_AND_JUSTIFICATION,
         schema="speech",
         gtype="b",
         default=False,
-        summary="Speak indentation",
+        summary="Speak indentation and justification",
         migration_key="enableSpeechIndentation",
     )
     @dbus_service.getter
-    def get_speak_indentation(self) -> bool:
-        """Returns whether speaking of indentation is enabled."""
+    def get_speak_indentation_and_justification(self) -> bool:
+        """Returns whether speaking of indentation and justification is enabled."""
 
-        return self._get_setting(self.KEY_SPEAK_INDENTATION, "b", False)
+        return self._get_setting(self.KEY_SPEAK_INDENTATION_AND_JUSTIFICATION, "b", False)
 
     @dbus_service.setter
-    def set_speak_indentation(self, value: bool) -> bool:
-        """Sets whether spoken indentation is enabled."""
+    def set_speak_indentation_and_justification(self, value: bool) -> bool:
+        """Sets whether speaking of indentation and justification is enabled."""
 
-        tokens = ["SPEECH PRESENTER: Setting spoken indentation to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak indentation and justification to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
-            self.KEY_SPEAK_INDENTATION,
+            self.KEY_SPEAK_INDENTATION_AND_JUSTIFICATION,
             value,
         )
         return True
@@ -1221,8 +1859,8 @@ class SpeechPresenter(Extension):
     def set_speak_indentation_only_if_changed(self, value: bool) -> bool:
         """Sets whether indentation will be announced only if it has changed."""
 
-        tokens = ["SPEECH PRESENTER: Setting speak indentation only if changed to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speak indentation only if changed to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_SPEAK_INDENTATION_ONLY_IF_CHANGED,
@@ -1230,85 +1868,17 @@ class SpeechPresenter(Extension):
         )
         return True
 
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_SPEAK_TEXT_ATTRIBUTE_CHANGES,
-        schema="speech",
-        genum="org.gnome.Orca.TextAttributeChangeMode",
-        default="off",
-        summary="When to speak text attribute changes during navigation",
-    )
-    @dbus_service.getter
-    def get_speak_text_attribute_changes(self) -> str:
-        """Returns when text attribute changes are spoken during navigation."""
-
-        return gsettings_registry.get_registry().layered_lookup(
-            self._SCHEMA,
-            self.KEY_SPEAK_TEXT_ATTRIBUTE_CHANGES,
-            "",
-            genum="org.gnome.Orca.TextAttributeChangeMode",
-            default="off",
-        )
-
-    @dbus_service.setter
-    def set_speak_text_attribute_changes(self, value: str) -> bool:
-        """Sets when text attribute changes are spoken during navigation."""
-
-        tokens = ["SPEECH PRESENTER: Setting speak text attribute changes to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_SPEAK_TEXT_ATTRIBUTE_CHANGES,
-            value,
-        )
-        return True
-
-    def get_text_attribute_change_mode(self) -> TextAttributeChangeMode:
-        """Returns the text attribute change mode enum."""
-
-        name = self.get_speak_text_attribute_changes().upper().replace("-", "_")
-        for mode in TextAttributeChangeMode:
-            if mode.name == name:
-                return mode
-        return TextAttributeChangeMode.OFF
-
-    def get_text_attribute_change_mode_as_int(self) -> int:
-        """Returns the text attribute change mode as an int for the UI."""
-
-        return self.get_text_attribute_change_mode().value
-
-    def set_text_attribute_change_mode_from_int(self, value: int) -> bool:
-        """Sets the text attribute change mode from an int for the UI."""
-
-        name = TextAttributeChangeMode(value).name.lower().replace("_", "-")
-        return self.set_speak_text_attribute_changes(name)
-
-    def should_speak_text_attribute_changes(self, obj: Atspi.Accessible) -> bool:
-        """Returns True if text attribute changes should be spoken for obj."""
-
-        if self._text_attribute_change_mode_override is not None:
-            mode = self._text_attribute_change_mode_override
-        elif focus_manager.get_manager().in_say_all():
-            mode = say_all_presenter.get_presenter().get_text_attribute_change_mode()
-        else:
-            mode = self.get_text_attribute_change_mode()
-
-        if mode == TextAttributeChangeMode.OFF:
-            return False
-        if mode == TextAttributeChangeMode.ALWAYS:
-            return True
-        return AXUtilities.is_editable(obj)
-
     @dbus_service.command
-    def cycle_text_attribute_change_mode(
+    def toggle_indentation_and_justification(
         self,
         script: default.Script | None = None,
         event: input_event.InputEvent | None = None,
         notify_user: bool = True,
     ) -> bool:
-        """Cycles through text attribute change announcement modes."""
+        """Toggles the speaking of indentation and justification."""
 
         tokens = [
-            "SPEECH PRESENTER: cycle_text_attribute_change_mode. ",
+            "SPEECH PRESENTER: toggle_indentation_and_justification. ",
             "Script:",
             script,
             "Event:",
@@ -1318,58 +1888,14 @@ class SpeechPresenter(Extension):
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
-        if self._text_attribute_change_mode_override is not None:
-            mode = self._text_attribute_change_mode_override
-        elif focus_manager.get_manager().in_say_all():
-            mode = say_all_presenter.get_presenter().get_text_attribute_change_mode()
+        value = self.get_speak_indentation_and_justification()
+        self.set_speak_indentation_and_justification(not value)
+        if self.get_speak_indentation_and_justification():
+            full = messages.INDENTATION_JUSTIFICATION_ON_FULL
+            brief = messages.INDENTATION_JUSTIFICATION_ON_BRIEF
         else:
-            mode = self.get_text_attribute_change_mode()
-
-        mode_cycle = {
-            TextAttributeChangeMode.OFF: TextAttributeChangeMode.EDITABLE_ONLY,
-            TextAttributeChangeMode.EDITABLE_ONLY: TextAttributeChangeMode.ALWAYS,
-            TextAttributeChangeMode.ALWAYS: TextAttributeChangeMode.OFF,
-        }
-        self._text_attribute_change_mode_override = mode_cycle[mode]
-        new_mode = self._text_attribute_change_mode_override
-
-        msg_map = {
-            TextAttributeChangeMode.OFF: messages.TEXT_ATTRIBUTE_CHANGES_OFF,
-            TextAttributeChangeMode.EDITABLE_ONLY: messages.TEXT_ATTRIBUTE_CHANGES_EDITABLE_ONLY,
-            TextAttributeChangeMode.ALWAYS: messages.TEXT_ATTRIBUTE_CHANGES_ON,
-        }
-        if notify_user:
-            presentation_manager.get_manager().present_message(msg_map[new_mode])
-        return True
-
-    @dbus_service.command
-    def toggle_indentation(
-        self,
-        script: default.Script | None = None,
-        event: input_event.InputEvent | None = None,
-        notify_user: bool = True,
-    ) -> bool:
-        """Toggles spoken indentation."""
-
-        tokens = [
-            "SPEECH PRESENTER: toggle_indentation. ",
-            "Script:",
-            script,
-            "Event:",
-            event,
-            "notify_user:",
-            notify_user,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        value = self.get_speak_indentation()
-        self.set_speak_indentation(not value)
-        if self.get_speak_indentation():
-            full = messages.INDENTATION_ON_FULL
-            brief = messages.INDENTATION_ON_BRIEF
-        else:
-            full = messages.INDENTATION_OFF_FULL
-            brief = messages.INDENTATION_OFF_BRIEF
+            full = messages.INDENTATION_JUSTIFICATION_OFF_FULL
+            brief = messages.INDENTATION_JUSTIFICATION_OFF_BRIEF
         if script is not None and notify_user:
             presentation_manager.get_manager().present_message(full, brief)
         return True
@@ -1479,11 +2005,14 @@ class SpeechPresenter(Extension):
     def _adjust_for_links(obj: Atspi.Accessible, line: str, start_offset: int) -> str:
         """Adjust line to include the word "link" after any hypertext links."""
 
-        if AXUtilities.is_web_element(obj):
+        # This adjustment should only be made in cases where there is only presentable text.
+        # In content where embedded objects are present, "link" is presented as the role of any
+        # embedded link children.
+        if "\ufffc" in line:
             return line
 
         end_offset = start_offset + len(line)
-        links = AXUtilities.get_all_links_in_range(obj, start_offset, end_offset)
+        links = AXHypertext.get_all_links_in_range(obj, start_offset, end_offset)
         offsets = [AXHypertext.get_link_end_offset(link) for link in links]
         offsets = sorted([offset - start_offset for offset in offsets], reverse=True)
         tokens = list(line)
@@ -1521,7 +2050,7 @@ class SpeechPresenter(Extension):
             return False
 
         document = AXUtilities.find_ancestor_inclusive(ancestor, AXUtilities.is_document)
-        if AXUtilities.is_plain_text(document):
+        if AXDocument.is_plain_text(document):
             return False
 
         # If the user has set their punctuation level to All, then the synthesizer will
@@ -1553,12 +2082,15 @@ class SpeechPresenter(Extension):
 
         manager = pronunciation_dictionary_manager.get_manager()
         words = re.split(r"(\W+)", text)
-        return manager.apply_to_words(words)
+        return "".join(map(manager.get_pronunciation, words))
 
     def get_indentation_description(self, line: str, only_if_changed: bool | None = None) -> str:
         """Returns a description of the indentation in the given line."""
 
-        if self.get_only_speak_displayed_text() or not self.get_speak_indentation():
+        if (
+            self.get_only_speak_displayed_text()
+            or not self.get_speak_indentation_and_justification()
+        ):
             return ""
 
         line = line.replace("\u00a0", " ")
@@ -1608,11 +2140,10 @@ class SpeechPresenter(Extension):
             return ""
 
         msg = ""
-        attributes = AXText.get_text_attributes_at_offset(obj, offset)[0]
-        if AXUtilities.attributes_indicate_spelling_error(attributes):
+        if AXUtilities.string_has_spelling_error(obj, offset):
             # TODO - JD: We're using the message here to preserve existing behavior.
             msg = messages.MISSPELLED
-        elif AXUtilities.attributes_indicate_grammar_error(attributes):
+        elif AXUtilities.string_has_grammar_error(obj, offset):
             msg = object_properties.STATE_INVALID_GRAMMAR_SPEECH
 
         if only_if_changed and msg == self._last_error_description:
@@ -1620,48 +2151,6 @@ class SpeechPresenter(Extension):
 
         self._last_error_description = msg
         return msg
-
-    def present_text_attribute_state(
-        self,
-        obj: Atspi.Accessible,
-        offset: int | None = None,
-    ) -> None:
-        """Presents error indicators and text attribute changes at the given offset."""
-
-        if error := self.get_error_description(obj, offset):
-            self.speak_message(error)
-
-        if not self.should_speak_text_attribute_changes(obj):
-            return
-
-        for attr, _old, new in AXUtilities.get_text_attribute_changes(obj, offset):
-            if attr == AXTextAttribute.INVALID:
-                continue
-            if attr == AXTextAttribute.LANGUAGE and self._language_switch_is_active(new):
-                continue
-            if desc := attr.get_change_description(new):
-                self.speak_message(desc)
-
-    def _language_switch_is_active(self, language_value: str | None) -> bool:
-        """Returns True if auto language switching is enabled and supported for the language."""
-
-        if not language_value or not speech_manager.get_manager().get_auto_language_switching():
-            return False
-
-        parts = language_value.lower().split("-", 1)
-        lang = parts[0]
-        dialect = parts[1] if len(parts) > 1 else ""
-        full = f"{lang}-{dialect}" if dialect else lang
-
-        mgr = speech_manager.get_manager()
-        voice_set_names = mgr.get_voice_set_names()
-        if full in voice_set_names or lang in voice_set_names:
-            return True
-
-        primary = mgr.get_voice_properties()
-        primary_family = primary.get(ACSS.FAMILY, {})
-        primary_lang = primary_family.get(VoiceFamily.LANG, "").lower()
-        return lang == primary_lang
 
     def adjust_for_presentation(
         self,
@@ -1672,14 +2161,14 @@ class SpeechPresenter(Extension):
         """Adjusts text for spoken presentation."""
 
         tokens = [
-            "SPEECH PRESENTER: Adjusting '",
-            text,
-            "' from",
+            f"SPEECH PRESENTER: Adjusting '{text}' from",
             obj,
-            "start_offset:",
-            start_offset,
+            f"start_offset: {start_offset}",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if obj is not None and AXUtilities.is_math_related(obj):
+            text = mathsymbols.adjust_for_speech(text)
 
         if start_offset is not None and obj is not None:
             text = self._adjust_for_links(obj, text, start_offset)
@@ -1691,8 +2180,8 @@ class SpeechPresenter(Extension):
             text = self._adjust_for_verbalized_punctuation(obj, text)
         text = self._apply_pronunciation_dictionary(text)
 
-        tokens = ["SPEECH PRESENTER: Adjusted text: '", text, "'"]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Adjusted text: '{text}'"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return text
 
     def _get_active_script(self) -> default.Script | None:
@@ -1702,21 +2191,13 @@ class SpeechPresenter(Extension):
 
         return script_manager.get_manager().get_active_script()
 
-    def _get_voice(
-        self,
-        text: str = "",
-        obj: Atspi.Accessible | None = None,
-        language: str = "",
-        dialect: str = "",
-    ) -> list[ACSS]:
+    def _get_voice(self, text: str = "", obj: Atspi.Accessible | None = None) -> list[ACSS]:
         """Returns the voice to use for the given string."""
 
         if active_script := self._get_active_script():
             generator = active_script.get_speech_generator()
             context = self._build_generator_context()
-            return generator.voice(
-                obj=obj, string=text, context=context, language=language, dialect=dialect
-            )
+            return generator.voice(obj=obj, string=text, context=context)
         return []
 
     @dbus_service.getter
@@ -1729,31 +2210,12 @@ class SpeechPresenter(Extension):
     def set_monitor_is_enabled(self, value: bool) -> bool:
         """Sets whether the speech monitor is enabled."""
 
-        tokens = ["SPEECH PRESENTER: Setting enable speech monitor to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting enable speech monitor to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         self._monitor_enabled_override = value
         if not value:
             self.destroy_monitor()
         return True
-
-    @dbus_service.testing_command
-    def set_log_file_for_testing(
-        self,
-        token: str = "",  # pylint: disable=unused-argument
-        value: str = "",
-        script: default.Script | None = None,  # pylint: disable=unused-argument
-        event: input_event.InputEvent | None = None,  # pylint: disable=unused-argument
-    ) -> bool:
-        """Opens value for JSONL recording; an empty string closes any open file (test-only)."""
-
-        tokens = ["SPEECH PRESENTER: Setting log file to '", value, "'."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return self._output_recorder.set_path(value)
-
-    def record_interrupt(self) -> None:
-        """Records a marker so output observers can drop speech that was interrupted."""
-
-        self._output_recorder.record(kind="interrupt")
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_MONITOR_FONT_SIZE,
@@ -1764,17 +2226,17 @@ class SpeechPresenter(Extension):
         migration_key="speechMonitorFontSize",
     )
     @dbus_service.getter
-    def get_monitor_font_size(self) -> UInt32:
+    def get_monitor_font_size(self) -> int:
         """Returns the speech monitor font size."""
 
         return self._get_setting(self.KEY_MONITOR_FONT_SIZE, "i", 14)
 
     @dbus_service.setter
-    def set_monitor_font_size(self, value: UInt32) -> bool:
+    def set_monitor_font_size(self, value: int) -> bool:
         """Sets the speech monitor font size."""
 
-        tokens = ["SPEECH PRESENTER: Setting speech monitor font size to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speech monitor font size to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_MONITOR_FONT_SIZE,
@@ -1802,8 +2264,8 @@ class SpeechPresenter(Extension):
     def set_monitor_foreground(self, value: str) -> bool:
         """Sets the speech monitor foreground color."""
 
-        tokens = ["SPEECH PRESENTER: Setting speech monitor foreground to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speech monitor foreground to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_MONITOR_FOREGROUND,
@@ -1831,8 +2293,8 @@ class SpeechPresenter(Extension):
     def set_monitor_background(self, value: str) -> bool:
         """Sets the speech monitor background color."""
 
-        tokens = ["SPEECH PRESENTER: Setting speech monitor background to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPEECH PRESENTER: Setting speech monitor background to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_MONITOR_BACKGROUND,
@@ -1874,7 +2336,7 @@ class SpeechPresenter(Extension):
             self._monitor = None
 
     def _append_to_history(self, kind: str, value: str) -> None:
-        """Appends an entry to the speech history buffer used for monitor replay."""
+        """Appends an entry to the speech history buffer."""
 
         self._speech_history.append((kind, value))
         if len(self._speech_history) > 500:
@@ -1907,7 +2369,7 @@ class SpeechPresenter(Extension):
         self._group_buffer = []
 
     def _end_monitor_group(self) -> None:
-        """Flushes the group buffer as a single line to the live monitor and replay history."""
+        """Flushes the group buffer as a single line to the monitor and history."""
 
         buffered = self._group_buffer
         self._group_buffer = None
@@ -1919,18 +2381,6 @@ class SpeechPresenter(Extension):
         if monitor is not None:
             monitor.write_text(combined)
         self._append_to_history("text", combined)
-
-    def _record_speech(self, text: str, voice: ACSS) -> None:
-        """Writes a per-utterance JSONL entry for test consumers."""
-
-        family = voice.get(ACSS.FAMILY) or {}
-        self._output_recorder.record(
-            kind="speech",
-            text=text,
-            language=family.get(VoiceFamily.LANG, "") or "",
-            dialect=family.get(VoiceFamily.DIALECT, "") or "",
-            voice_type=voice.get(ACSS.VOICE_TYPE) or "",
-        )
 
     def write_to_monitor(self, text: str) -> None:
         """Writes spoken text to the speech monitor if active and not focused."""
@@ -1952,315 +2402,22 @@ class SpeechPresenter(Extension):
             monitor.write_key_event(key_description)
         self._append_to_history("key", key_description)
 
-    @staticmethod
-    def _resolve_acss(acss: ACSS | dict[str, Any] | list[dict[str, Any]] | None = None) -> ACSS:
-        """Normalizes various voice property formats to an ACSS instance."""
-
-        if isinstance(acss, ACSS):
-            family = acss.get(acss.FAMILY)
-            if family is not None:
-                try:
-                    family = VoiceFamily(family)
-                except (TypeError, ValueError):
-                    family = VoiceFamily({})
-                acss[acss.FAMILY] = family
-            return acss
-        if isinstance(acss, list) and len(acss) == 1:
-            return ACSS(acss[0])
-        if isinstance(acss, dict):
-            return ACSS(acss)
-        return ACSS({})
-
-    def _process_speech_output(
-        self,
-        text: str,
-        obj: Atspi.Accessible | None = None,
-    ) -> tuple[str, bool]:
-        """Lets extensions observe, replace, or consume outgoing speech."""
-
-        # A zero-width no-break space is never speakable; Gecko interleaves it in emoji.
-        text = text.replace("\ufeff", "")
-        handlers = extension_loader.get_loader().iter_speech_output_handlers()
-        if not handlers:
-            return text, False
-
-        tokens = [
-            "SPEECH OUTPUT HOOK: object:",
-            obj,
-            "text:",
-            text,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        for handler in handlers:
-            result = self._call_speech_output_handler(handler, SpeechOutput(text, obj))
-            if result is None:
-                tokens = [
-                    "SPEECH OUTPUT HOOK: Extension",
-                    handler.module_name,
-                    "returned without consuming output.",
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                continue
-            if result.text is not None:
-                tokens = [
-                    "SPEECH OUTPUT HOOK: Extension",
-                    handler.module_name,
-                    "replaced text:",
-                    result.text,
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                text = result.text
-            if result.consume:
-                tokens = [
-                    "SPEECH OUTPUT HOOK: Extension",
-                    handler.module_name,
-                    "consumed output.",
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                return text, True
-            tokens = [
-                "SPEECH OUTPUT HOOK: Extension",
-                handler.module_name,
-                "returned without consuming output.",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        return text, False
-
-    @staticmethod
-    def _call_speech_output_handler(
-        handler: Extension,
-        output: SpeechOutput,
-    ) -> SpeechOutputResult | None:
-        """Calls a speech output handler and validates the result."""
-
-        tokens: list[Any] = ["SPEECH OUTPUT HOOK: Calling extension:", handler.module_name]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        try:
-            result = handler.on_speech_output(output)
-        except Exception as error:  # pylint: disable=broad-exception-caught
-            tokens = [
-                "SPEECH PRESENTER: Extension",
-                handler.module_name,
-                "failed while handling speech output:",
-                error,
-            ]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
-            return None
-
-        if result is None:
-            return None
-        if not isinstance(result, SpeechOutputResult):
-            tokens = [
-                "SPEECH PRESENTER: Extension",
-                handler.module_name,
-                "returned unexpected speech output result:",
-                result,
-            ]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
-            return None
-        if result.text is not None and not isinstance(result.text, str):
-            tokens = [
-                "SPEECH PRESENTER: Extension",
-                handler.module_name,
-                "returned non-string speech text:",
-                result.text,
-            ]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
-            return None
-        return result
-
-    def _speak_single(
-        self,
-        text: str,
-        acss: ACSS | dict[str, Any] | None,
-        obj: Atspi.Accessible | None = None,
-    ) -> None:
-        """Speaks an individual string using the given ACSS."""
-
-        resolved_voice = speech_manager.get_manager().apply_voice_set(self._resolve_acss(acss))
-        text, consumed = self._process_speech_output(text, obj)
-
-        server = speech_manager.get_manager().get_server()
-        if not server:
-            tokens = ["SPEECH OUTPUT: '", text, "'", resolved_voice]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            if consumed:
-                self._record_speech(text, resolved_voice)
-                self.write_to_monitor(text)
-            return
-
-        tokens = ["SPEECH OUTPUT: '", text, "'", resolved_voice]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        if not consumed:
-            server.speak(text, resolved_voice)
-        self._record_speech(text, resolved_voice)
-        self.write_to_monitor(text)
-
-    @staticmethod
-    def _resolved_voice(voice: ACSS) -> ACSS:
-        """Returns voice with the active voice set applied, for merge-boundary decisions."""
-
-        candidate = ACSS(voice)
-        if (voice_type := voice.get(ACSS.VOICE_TYPE)) is not None:
-            candidate[ACSS.VOICE_TYPE] = voice_type
-        return speech_manager.get_manager().apply_voice_set(candidate)
-
-    def _speak_list(
-        self,
-        content: list,
-        acss: ACSS | dict[str, Any] | None,
-        obj: Atspi.Accessible | None,
-    ) -> None:
-        """Processes a list of speech content items."""
-
-        valid_types = (str, list, speech_generator.Pause, ACSS)
-
-        # to_speak holds text not yet claimed by a trailing ACSS. pending_text holds text
-        # already claimed by active_voice, deferred so that a subsequent same-voice group
-        # can be merged into one synthesizer call; each _speak_single call produces an
-        # audible pause between utterances.
-        to_speak: list[str] = []
-        pending_text: list[str] = []
-        active_voice = ACSS(acss) if acss is not None else acss
-
-        for element in content:
-            if not isinstance(element, valid_types):
-                tokens = ["SPEECH: Bad content sent to speak():", element]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True, True)
-            elif isinstance(element, list):
-                self._speak_list(element, acss, obj)
-            elif isinstance(element, str):
-                if element.strip(" "):
-                    to_speak.append(element)
-            elif isinstance(element, speech_generator.Pause):
-                if to_speak and to_speak[-1] and to_speak[-1][-1].isalnum():
-                    to_speak[-1] += "."
-                pending_text.extend(to_speak)
-                to_speak = []
-                if pending_text:
-                    self._speak_single(
-                        " ".join(pending_text),
-                        active_voice,
-                        obj,
-                    )
-                    pending_text = []
-            elif isinstance(element, ACSS):
-                new_voice = ACSS(acss)
-                new_voice.update(element)
-                # Merge text only when the two voices resolve to the same voice once the
-                # active voice set is applied. Otherwise a default-voiced name and a
-                # system-voiced role (identical until the set overlays them) would be
-                # spoken together in whichever voice came last.
-                if pending_text and (
-                    new_voice != active_voice
-                    or self._resolved_voice(active_voice) != self._resolved_voice(new_voice)
-                ):
-                    tokens = [
-                        "SPEECH: New voice",
-                        new_voice,
-                        " != active voice",
-                        active_voice,
-                    ]
-                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                    self._speak_single(
-                        " ".join(pending_text),
-                        active_voice,
-                        obj,
-                    )
-                    pending_text = []
-                pending_text.extend(to_speak)
-                to_speak = []
-                active_voice = new_voice
-
-        pending_text.extend(to_speak)
-        if pending_text:
-            self._speak_single(" ".join(pending_text), active_voice, obj)
-
-    def _speak(
-        self,
-        content: Any,
-        acss: ACSS | dict[str, Any] | None = None,
-        obj: Atspi.Accessible | None = None,
-    ) -> None:
-        """Speaks the given content, which can be a string or a list from the speech generator."""
-
-        if speech_manager.get_manager().get_speech_is_muted():
-            return
-
-        if isinstance(content, str):
-            tokens: list[Any] = ["SPEECH: Speak '", content, "' acss:", acss]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            self._speak_single(content, acss, obj)
-            return
-
-        if isinstance(content, list):
-            tokens = ["SPEECH: Speak", content, ", acss:", acss]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            self._begin_monitor_group()
-            try:
-                self._speak_list(content, acss, obj)
-            finally:
-                self._end_monitor_group()
-            return
-
-        if not isinstance(content, (speech_generator.Pause, ACSS)):
-            tokens = ["SPEECH: Bad content sent to speak():", content]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True, True)
-
     def present_key_event(self, event: KeyboardEvent) -> None:
         """Presents a key event via speech."""
 
-        if speech_manager.get_manager().get_speech_is_muted():
-            return
-
         key_name = event.get_key_name() if event.is_printable_key() else None
         voice = self._get_voice(text=key_name or "")
-        acss = self._resolve_acss(voice[0] if voice else None)
+        speech.speak_key_event(event, voice[0] if voice else None)
 
-        event_string = event.get_key_name()
-        locking_state_string = event.get_locking_state_string()
-        event_string = f"{event_string} {locking_state_string}".strip()
-        tokens = ["SPEECH OUTPUT: '", event_string, "'", acss]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        text, consumed = self._process_speech_output(event_string)
-
-        server = speech_manager.get_manager().get_server()
-        if server and not consumed:
-            if text == event_string:
-                server.speak_key_event(event, acss)
-            else:
-                server.speak(text, acss)
-        self.write_key_to_monitor(text)
-
-    def speak_accessible_text(
-        self,
-        obj: Atspi.Accessible | None,
-        text: str,
-        start_offset: int | None = None,
-    ) -> None:
-        """Speaks text from obj, using the specified start_offset for attribute presentation."""
-
-        if obj is not None and start_offset is not None and (script := self._get_active_script()):
-            end_offset = start_offset + len(text)
-            generator = script.get_speech_generator()
-            context = self._build_generator_context()
-            if utterances := generator.generate_line(obj, start_offset, end_offset, text, context):
-                self._speak(utterances, obj=obj)
-                return
+    def speak_accessible_text(self, obj: Atspi.Accessible | None, text: str) -> None:
+        """Speaks text from an accessible object, determining voice automatically."""
 
         voice = self._get_voice(text, obj)
-        text = self.adjust_for_presentation(obj, text, start_offset)
-        self._speak(
-            text,
-            voice[0] if voice else None,
-            obj=obj,
-        )
+        text = self.adjust_for_presentation(obj, text)
+        speech.speak(text, voice[0] if voice else None)
 
-    def speak_message(self, text: str, voice_type: str = speechserver.VoiceType.SYSTEM) -> None:
-        """Speaks a message using the given voice type (the system voice by default)."""
+    def speak_message(self, text: str) -> None:
+        """Speaks a message using the system voice."""
 
         try:
             assert isinstance(text, str)
@@ -2274,9 +2431,7 @@ class SpeechPresenter(Extension):
             return
 
         mgr = speech_manager.get_manager()
-        voice = mgr.get_voice_properties(voice_type)
-        if mgr.get_active_voice_set() != gsettings_registry.PRIMARY_VOICE_SET:
-            voice[ACSS.VOICE_TYPE] = voice_type
+        voice = mgr.get_voice_properties(speechserver.SYSTEM_VOICE)
 
         server = mgr.get_server()
         if server is not None:
@@ -2286,7 +2441,7 @@ class SpeechPresenter(Extension):
             server.update_punctuation_level(level)
 
         text = self.adjust_for_presentation(None, text)
-        self._speak(text, voice)
+        speech.speak(text, voice)
 
         if server is not None:
             mgr.update_capitalization_style()
@@ -2294,20 +2449,10 @@ class SpeechPresenter(Extension):
 
     def _build_generator_context(
         self,
-        reason: PresentationReason | None = None,
-        prior_obj: Atspi.Accessible | None = None,
-        *,
-        eliminate_pauses: bool = False,
-        index: int | None = None,
-        total: int | None = None,
-        next_obj: Atspi.Accessible | None = None,
+        where_am_i_type: WhereAmI | None = None,
     ) -> SpeechGeneratorContext:
         """Builds the settings context for speech generators."""
 
-        from .generator import (  # pylint: disable=import-outside-toplevel
-            ContentPosition,
-            PresentationReason,
-        )
         from .speech_generator import (  # pylint: disable=import-outside-toplevel
             SpeechGeneratorContext,
         )
@@ -2320,94 +2465,44 @@ class SpeechPresenter(Extension):
             p = self  # type: ignore[assignment]
 
         active_mode, _obj = mgr.get_active_mode_and_object_of_interest()
-        speech_mgr = speech_manager.get_manager()
-
-        # Automatic language switching only applies while the global voice set is active,
-        # regardless of the setting.
-        auto_switch = speech_mgr.get_active_voice_set() == gsettings_registry.PRIMARY_VOICE_SET
 
         return SpeechGeneratorContext(
-            next_content_subject=next_obj,
-            enabled=speech_mgr.get_speech_is_enabled(),
+            enabled=speech_manager.get_manager().get_speech_is_enabled(),
             verbose=self.use_verbose_speech(),
             focus=mgr.get_locus_of_focus(),
+            in_say_all=in_say_all,
             in_focus_mode=document_presenter.get_presenter().get_in_focus_mode(),
             active_mode=active_mode,
-            reason=reason or PresentationReason.FOCUS_CHANGE,
-            prior_obj=prior_obj,
-            offset=None,
-            leaving=False,
-            ancestor_of=None,
-            content_item=None,
-            content_position=(
-                ContentPosition(index=index, total=total)
-                if index is not None and total is not None
-                else None
-            ),
-            content_subject=None,
-            resolved_role=None,
-            role_subject=None,
-            include_context=True,
+            where_am_i_type=where_am_i_type,
             in_preferences_window=mgr.is_in_preferences_window(),
-            auto_language_switching_content=speech_mgr.get_auto_language_switching()
-            and auto_switch,
-            only_switch_configured_languages=speech_mgr.get_only_switch_configured_languages(),
-            voice_set_languages=tuple(speech_mgr.get_voice_set_names()),
-            auto_language_switching_ui=speech_mgr.get_auto_language_switching_ui() and auto_switch,
-            insert_pauses_between_utterances=speech_mgr.get_insert_pauses_between_utterances(),
-            punctuation_level=speech_mgr.get_punctuation_level(),
-            voices={vt: speech_mgr.get_voice_properties(vt) for vt in speechserver.VoiceType},
-            speech_server=speech_mgr.get_server(),
             only_displayed_text=self.get_only_speak_displayed_text(),
             speak_description=self.get_speak_description(),
             speak_tutorial_messages=self.get_speak_tutorial_messages(),
             speak_position_in_set=self.get_speak_position_in_set(),
             speak_widget_mnemonic=self.get_speak_widget_mnemonic(),
             speak_blank_lines=self.get_speak_blank_lines(),
-            speak_indentation=self.get_speak_indentation(),
+            speak_indentation=self.get_speak_indentation_and_justification(),
             announce_cell_headers=self.get_announce_cell_headers(),
             announce_cell_coordinates=self.get_announce_cell_coordinates(),
             announce_spreadsheet_cell_coordinates=self.get_announce_spreadsheet_cell_coordinates(),
-            announce_article=p.get_announce_article(),
             announce_blockquote=p.get_announce_blockquote(),
-            announce_code_block=p.get_announce_code_block(),
-            announce_document=p.get_announce_document(),
             announce_form=p.get_announce_form(),
-            announce_grouping=p.get_announce_grouping(),
             announce_landmark=p.get_announce_landmark(),
             announce_list=p.get_announce_list(),
+            announce_grouping=p.get_announce_grouping(),
             announce_table=p.get_announce_table(),
-            announce_tracked_changes=p.get_announce_tracked_changes(),
-            text_attribute_change_mode=self._text_attribute_change_mode_override.value
-            if self._text_attribute_change_mode_override is not None
-            else p.get_text_attribute_change_mode().value,
-            speak_misspelled_indicator=self.get_speak_misspelled_indicator(),
-            language="",
-            dialect="",
-            eliminate_pauses=eliminate_pauses,
         )
 
     def generate_speech_contents(
         self,
         script: default.Script,
         contents: list[tuple[Atspi.Accessible, int, int, str]],
-        *,
-        prior_obj: Atspi.Accessible | None = None,
-        eliminate_pauses: bool = False,
-        index: int | None = None,
-        total: int | None = None,
-        next_obj: Atspi.Accessible | None = None,
+        **args: Any,
     ) -> list:
         """Generates speech utterances for contents without speaking them."""
 
-        context = self._build_generator_context(
-            prior_obj=prior_obj,
-            eliminate_pauses=eliminate_pauses,
-            index=index,
-            total=total,
-            next_obj=next_obj,
-        )
-        return script.get_speech_generator().generate_contents(contents, context)
+        context = self._build_generator_context()
+        return script.get_speech_generator().generate_contents(contents, context, **args)
 
     def generate_speech_string(self, script: default.Script, obj: Atspi.Accessible) -> str:
         """Generates speech for obj and returns it as a string."""
@@ -2430,40 +2525,34 @@ class SpeechPresenter(Extension):
     def speak_contents(
         self,
         contents: list[tuple[Atspi.Accessible, int, int, str]],
-        *,
-        reason: PresentationReason | None = None,
-        prior_obj: Atspi.Accessible | None = None,
+        **args: Any,
     ) -> None:
         """Speaks the specified contents."""
 
-        tokens = ["SPEECH PRESENTER: Speaking", contents]
+        tokens = ["SPEECH PRESENTER: Speaking", contents, args]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True, True)
 
         if not (active_script := self._get_active_script()):
             return
 
-        context = self._build_generator_context(reason, prior_obj=prior_obj)
+        where_am_i_type = args.pop("where_am_i_type", None)
+        context = self._build_generator_context(where_am_i_type)
         generator = active_script.get_speech_generator()
-        utterances = generator.generate_contents(contents, context)
-        obj = contents[0][0] if contents else None
-        self._speak(utterances, obj=obj)
+        utterances = generator.generate_contents(contents, context, **args)
+        speech.speak(utterances)
 
     def present_generated_speech(
         self,
         script: default.Script,
         obj: Atspi.Accessible,
-        *,
-        prior_obj: Atspi.Accessible | None = None,
-        reason: PresentationReason | None = None,
+        **args: Any,
     ) -> None:
         """Generates speech for obj using the script's speech generator and speaks it."""
 
-        context = self._build_generator_context(
-            reason,
-            prior_obj=prior_obj,
-        )
-        utterances = script.get_speech_generator().generate_speech(obj, context)
-        self._speak(utterances, obj=obj)
+        where_am_i_type = args.pop("where_am_i_type", None)
+        context = self._build_generator_context(where_am_i_type)
+        utterances = script.get_speech_generator().generate_speech(obj, context, **args)
+        speech.speak(utterances)
 
     def speak_line(
         self,
@@ -2482,7 +2571,7 @@ class SpeechPresenter(Extension):
         context = self._build_generator_context()
         generator = script.get_speech_generator()
         utterances = generator.generate_line(obj, start_offset, end_offset, line, context)
-        self._speak(utterances, obj=obj)
+        speech.speak(utterances)
 
     def speak_phrase(
         self,
@@ -2495,12 +2584,7 @@ class SpeechPresenter(Extension):
         """Generates and speaks a phrase using the script's speech generator."""
 
         if len(phrase) <= 1 and not phrase.isalnum():
-            attrs = AXText.get_text_attributes_at_offset(obj, start_offset)[0]
-            lang = attrs.get("language", "")
-            dialect = ""
-            if "-" in lang:
-                lang, dialect = lang.split("-", 1)
-            self.speak_character(phrase, obj=obj, language=lang, dialect=dialect)
+            self.speak_character(phrase, obj=obj)
             return
 
         indentation = self.get_indentation_description(phrase)
@@ -2510,7 +2594,7 @@ class SpeechPresenter(Extension):
         context = self._build_generator_context()
         generator = script.get_speech_generator()
         utterances = generator.generate_phrase(obj, start_offset, end_offset, phrase, context)
-        self._speak(utterances, obj=obj)
+        speech.speak(utterances)
 
     def speak_word(
         self,
@@ -2522,7 +2606,7 @@ class SpeechPresenter(Extension):
 
         context = self._build_generator_context()
         utterances = script.get_speech_generator().generate_word(obj, offset, context)
-        self._speak(utterances, obj=obj)
+        speech.speak(utterances)
 
     def speak_character_at_offset(
         self,
@@ -2548,53 +2632,15 @@ class SpeechPresenter(Extension):
                 self.speak_message(messages.BLANK)
             return
 
-        self.present_text_attribute_state(obj, offset)
+        if error := self.get_error_description(obj, offset):
+            self.speak_message(error)
 
-        attrs = AXText.get_text_attributes_at_offset(obj, offset)[0]
-        lang = attrs.get("language", "")
-        dialect = ""
-        if "-" in lang:
-            lang, dialect = lang.split("-", 1)
-
-        self.speak_character(
-            character,
-            voice_from=character,
-            cap_style=cap_style,
-            obj=obj,
-            language=lang,
-            dialect=dialect,
-        )
+        self.speak_character(character, voice_from=character, cap_style=cap_style, obj=obj)
 
     def say_all(self, utterance_iterator: Any, progress_callback: Callable[..., Any]) -> None:
         """Speaks each item in the utterance_iterator."""
 
-        if speech_manager.get_manager().get_speech_is_muted():
-            return
-
-        def _with_monitor(iterator: Any) -> Any:
-            for context, acss in iterator:
-                resolved_voice = speech_manager.get_manager().apply_voice_set(
-                    self._resolve_acss(acss)
-                )
-                text, consumed = self._process_speech_output(context.utterance, context.obj)
-                output_context = context
-                if text != context.utterance:
-                    output_context = context.copy()
-                    output_context.utterance = text
-                self._record_speech(output_context.utterance, resolved_voice)
-                self.write_to_monitor(output_context.utterance)
-                if consumed:
-                    progress_callback(output_context, speechserver.SayAllContext.COMPLETED)
-                    continue
-                yield output_context, resolved_voice
-
-        server = speech_manager.get_manager().get_server()
-        if server:
-            server.say_all(_with_monitor(utterance_iterator), progress_callback)
-        else:
-            for context, _acss in utterance_iterator:
-                tokens = ["SPEECH OUTPUT: '", context.utterance, "'"]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        speech.say_all(utterance_iterator, progress_callback)
 
     def speak_character(
         self,
@@ -2602,77 +2648,25 @@ class SpeechPresenter(Extension):
         voice_from: str = "",
         cap_style: speechserver.CapitalizationStyle | None = None,
         obj: Atspi.Accessible | None = None,
-        language: str = "",
-        dialect: str = "",
     ) -> None:
         """Speaks a single character using the voice for voice_from."""
 
-        if speech_manager.get_manager().get_speech_is_muted():
-            return
+        voice = self._get_voice(text=voice_from or character, obj=obj)
+        speech.speak_character(character, voice[0] if voice else None, cap_style=cap_style)
 
-        voice = self._get_voice(
-            text=voice_from or character, obj=obj, language=language, dialect=dialect
-        )
-        acss = speech_manager.get_manager().apply_voice_set(
-            self._resolve_acss(voice[0] if voice else None)
-        )
-        tokens = ["SPEECH OUTPUT: '", character, "'", acss]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        text, consumed = self._process_speech_output(character, obj)
-
-        server = speech_manager.get_manager().get_server()
-        if server and not consumed:
-            if text == character and len(text) == 1:
-                server.speak_character(character, acss=acss, cap_style=cap_style)
-            else:
-                server.speak(text, acss)
-        self._record_speech(text, acss)
-        self.write_to_monitor(text)
-
-    def spell_item(
-        self,
-        text: str,
-        obj: Atspi.Accessible | None = None,
-        start_offset: int | None = None,
-    ) -> None:
+    def spell_item(self, text: str) -> None:
         """Speak the characters in the string one by one."""
 
-        for i, character in enumerate(text):
-            language, dialect = self._language_at_offset(obj, start_offset, i)
-            self.speak_character(character, obj=obj, language=language, dialect=dialect)
+        for character in text:
+            self.speak_character(character)
 
-    def spell_phonetically(
-        self,
-        item_string: str,
-        obj: Atspi.Accessible | None = None,
-        start_offset: int | None = None,
-    ) -> None:
+    def spell_phonetically(self, item_string: str) -> None:
         """Phonetically spell item_string."""
 
-        for i, character in enumerate(item_string):
-            language, dialect = self._language_at_offset(obj, start_offset, i)
-            voice = self._get_voice(text=character, obj=obj, language=language, dialect=dialect)
+        for character in item_string:
+            voice = self._get_voice(text=character)
             phonetic_string = phonnames.get_phonetic_name(character.lower())
-            self._speak(
-                phonetic_string,
-                voice[0] if voice else None,
-                obj=obj,
-            )
-
-    @staticmethod
-    def _language_at_offset(
-        obj: Atspi.Accessible | None, start_offset: int | None, index: int = 0
-    ) -> tuple[str, str]:
-        """Returns (language, dialect) from text attributes at start_offset + index."""
-
-        if obj is None or start_offset is None:
-            return "", ""
-        attrs = AXText.get_text_attributes_at_offset(obj, start_offset + index)[0]
-        lang = attrs.get("language", "")
-        if "-" in lang:
-            language, dialect = lang.split("-", 1)
-            return language, dialect
-        return lang, ""
+            speech.speak(phonetic_string, voice[0] if voice else None)
 
     def create_speech_preferences_grid(
         self,
@@ -2680,9 +2674,6 @@ class SpeechPresenter(Extension):
         app_name: str = "",
     ) -> SpeechPreferencesGrid:
         """Returns the GtkGrid containing the combined speech preferences UI."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .speech_presenter_preferences_grid import SpeechPreferencesGrid
 
         return SpeechPreferencesGrid(self, title_change_callback, app_name=app_name)
 
@@ -2739,28 +2730,10 @@ class SpeechPresenter(Extension):
 
         announcements = (
             SpeechPreference(
-                self.KEY_ANNOUNCE_ARTICLE,
-                guilabels.ANNOUNCE_ARTICLES,
-                self.get_announce_article,
-                self.set_announce_article,
-            ),
-            SpeechPreference(
                 self.KEY_ANNOUNCE_BLOCKQUOTE,
                 guilabels.ANNOUNCE_BLOCKQUOTES,
                 self.get_announce_blockquote,
                 self.set_announce_blockquote,
-            ),
-            SpeechPreference(
-                self.KEY_ANNOUNCE_CODE_BLOCK,
-                guilabels.ANNOUNCE_CODE_BLOCKS,
-                self.get_announce_code_block,
-                self.set_announce_code_block,
-            ),
-            SpeechPreference(
-                self.KEY_ANNOUNCE_DOCUMENT,
-                guilabels.ANNOUNCE_EMBEDDED_DOCUMENTS,
-                self.get_announce_document,
-                self.set_announce_document,
             ),
             SpeechPreference(
                 self.KEY_ANNOUNCE_FORM,
@@ -2791,12 +2764,6 @@ class SpeechPresenter(Extension):
                 guilabels.ANNOUNCE_TABLES,
                 self.get_announce_table,
                 self.set_announce_table,
-            ),
-            SpeechPreference(
-                self.KEY_ANNOUNCE_TRACKED_CHANGES,
-                guilabels.ANNOUNCE_TRACKED_CHANGES,
-                self.get_announce_tracked_changes,
-                self.set_announce_tracked_changes,
             ),
         )
 

@@ -37,8 +37,6 @@
 #include "gtkactionable.h"
 #include "gtkeventcontrollerkey.h"
 #include "gtkaccessible.h"
-#include "svg/gtksvg.h"
-#include "gtkimage.h"
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
@@ -64,10 +62,7 @@ struct _GtkFontChooserDialogClass
  *
  * The `GtkFontChooserDialog` widget is a dialog for selecting a font.
  *
- * <picture>
- *   <source srcset="fontchooser-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkFontChooserDialog" src="fontchooser.png">
- * </picture>
+ * ![An example GtkFontChooserDialog](fontchooser.png)
  *
  * `GtkFontChooserDialog` implements the [iface@Gtk.FontChooser] interface
  * and does not provide much API of its own.
@@ -152,9 +147,7 @@ dialog_forward_key (GtkEventControllerKey *controller,
 {
   GtkFontChooserDialog *dialog = GTK_FONT_CHOOSER_DIALOG (widget);
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   return gtk_event_controller_key_forward (controller, dialog->fontchooser);
-  G_GNUC_END_IGNORE_DEPRECATIONS
 }
 
 static void
@@ -185,8 +178,6 @@ setup_tweak_button (GtkFontChooserDialog *dialog)
       GtkWidget *button;
       GtkWidget *header;
       GActionGroup *actions;
-      GtkWidget *image;
-      GtkSvg *svg;
 
       actions = G_ACTION_GROUP (g_simple_action_group_new ());
       g_action_map_add_action (G_ACTION_MAP (actions), gtk_font_chooser_widget_get_tweak_action (dialog->fontchooser));
@@ -197,10 +188,7 @@ setup_tweak_button (GtkFontChooserDialog *dialog)
       gtk_actionable_set_action_name (GTK_ACTIONABLE (button), "font.tweak");
       gtk_widget_set_focus_on_click (button, FALSE);
       gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
-      svg = gtk_svg_new_from_resource ("/org/gtk/libgtk/icons/sliders.gpa");
-      image = gtk_image_new_from_paintable (GDK_PAINTABLE (svg));
-      g_object_unref (svg);
-      gtk_button_set_child (GTK_BUTTON (button), image);
+      gtk_button_set_icon_name (GTK_BUTTON (button), "emblem-system-symbolic");
       gtk_widget_set_tooltip_text (button, _("Change Font Features"));
       gtk_accessible_update_property (GTK_ACCESSIBLE (button),
                                       GTK_ACCESSIBLE_PROPERTY_LABEL,

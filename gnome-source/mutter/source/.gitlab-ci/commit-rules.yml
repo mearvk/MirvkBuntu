@@ -17,7 +17,3 @@ patterns:
     - regex: '^\S*\.[ch]:'
       message: Commit message subject prefix should not include .c, .h, etc.
       where: subject
-    - regex: '^[Cc]lose[sd]?:?\s*#[0-9]+'
-      message: Closes instructions must be a full link
-    - regex: '^[Ff]ix(e[sd]?)?:?\s*(#[0-9]+|https://)'
-      message: \"Fixes\" should be used with commits, use \"Closes\" for issues

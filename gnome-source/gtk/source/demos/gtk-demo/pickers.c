@@ -12,7 +12,6 @@
 #include <gtk/gtk.h>
 
 static GtkWidget *app_picker;
-static GtkWidget *open_folder_button;
 static GtkWidget *print_button;
 
 static void
@@ -26,8 +25,6 @@ set_file (GFile    *file,
     {
       gtk_widget_set_sensitive (app_picker, FALSE);
       g_object_set_data (G_OBJECT (app_picker), "file", NULL);
-      gtk_widget_set_sensitive (open_folder_button, FALSE);
-      g_object_set_data (G_OBJECT (open_folder_button), "file", NULL);
       return;
     }
 
@@ -37,13 +34,8 @@ set_file (GFile    *file,
 
   gtk_widget_set_sensitive (app_picker, TRUE);
   g_object_set_data_full (G_OBJECT (app_picker), "file", g_object_ref (file), g_object_unref);
-  gtk_widget_set_sensitive (open_folder_button, TRUE);
-  g_object_set_data_full (G_OBJECT (open_folder_button), "file", g_object_ref (file), g_object_unref);
 
-  info = g_file_query_info (file, "standard::content-type",
-                            G_FILE_QUERY_INFO_NONE,
-                            NULL,
-                            NULL);
+  info = g_file_query_info (file, "standard::content-type", 0, NULL, NULL);
   if (strcmp (g_file_info_get_content_type (info), "application/pdf") == 0)
     {
       gtk_widget_set_sensitive (print_button, TRUE);
@@ -74,13 +66,14 @@ file_opened (GObject *source,
   set_file (file, data);
 }
 
-static void
+static gboolean
 abort_mission (gpointer data)
 {
   GCancellable *cancellable = data;
 
   g_cancellable_cancel (cancellable);
-  g_object_unref (cancellable);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -95,9 +88,9 @@ open_file (GtkButton *picker,
 
   cancellable = g_cancellable_new ();
 
-  g_timeout_add_seconds_once (20,
-                              abort_mission,
-                              g_object_ref (cancellable));
+  g_timeout_add_seconds_full (G_PRIORITY_DEFAULT,
+                              20,
+                              abort_mission, g_object_ref (cancellable), g_object_unref);
 
   gtk_file_dialog_open (dialog, parent, cancellable, file_opened, label);
 
@@ -131,36 +124,6 @@ open_app (GtkButton *picker)
   launcher = gtk_file_launcher_new (file);
 
   gtk_file_launcher_launch (launcher, parent, NULL, open_app_done, NULL);
-
-  g_object_unref (launcher);
-}
-
-static void
-open_folder_done (GObject      *source,
-                  GAsyncResult *result,
-                  gpointer      data)
-{
-  GtkFileLauncher *launcher = GTK_FILE_LAUNCHER (source);
-  GError *error = NULL;
-
-  if (!gtk_file_launcher_open_containing_folder_finish (launcher, result, &error))
-    {
-      g_print ("%s\n", error->message);
-      g_error_free (error);
-    }
-}
-
-static void
-open_folder (GtkButton *picker)
-{
-  GtkWindow *parent = GTK_WINDOW (gtk_widget_get_root (GTK_WIDGET (picker)));
-  GtkFileLauncher *launcher;
-  GFile *file;
-
-  file = G_FILE (g_object_get_data (G_OBJECT (picker), "file"));
-  launcher = gtk_file_launcher_new (file);
-
-  gtk_file_launcher_open_containing_folder (launcher, parent, NULL, open_folder_done, NULL);
 
   g_object_unref (launcher);
 }
@@ -201,9 +164,9 @@ print_file (GtkButton *picker)
 
   cancellable = g_cancellable_new ();
 
-  id = g_timeout_add_seconds_once (20,
-                                   abort_mission,
-                                   g_object_ref (cancellable));
+  id = g_timeout_add_seconds_full (G_PRIORITY_DEFAULT,
+                                   20,
+                                   abort_mission, g_object_ref (cancellable), g_object_unref);
   g_object_set_data (G_OBJECT (cancellable), "timeout", GUINT_TO_POINTER (id));
 
   gtk_print_dialog_print_file (dialog, parent, NULL, file, cancellable, print_file_done, NULL);
@@ -256,44 +219,6 @@ on_drop (GtkDropTarget *target,
   return FALSE;
 }
 
-static void
-on_language_changed (GtkDropDown *drop_down,
-                     GParamSpec  *pspec,
-                     gpointer     data)
-{
-  GtkFontDialog *font_dialog = GTK_FONT_DIALOG (data);
-  GtkStringObject *selected_obj;
-  const char *selected_text;
-  PangoLanguage *lang = NULL;
-
-  selected_obj = GTK_STRING_OBJECT (gtk_drop_down_get_selected_item (drop_down));
-  if (!selected_obj)
-    return;
-
-  selected_text = gtk_string_object_get_string (selected_obj);
-
-  if (g_strcmp0 (selected_text, "No Language") == 0)
-    {
-      lang = NULL;
-    }
-  else if (g_strcmp0 (selected_text, "Current") == 0)
-    {
-      lang = gtk_get_default_language ();
-    }
-  else if (g_strcmp0 (selected_text, "English") == 0)
-    lang = pango_language_from_string ("en");
-  else if (g_strcmp0 (selected_text, "Arabic") == 0)
-    lang = pango_language_from_string ("ar");
-  else if (g_strcmp0 (selected_text, "Hindi") == 0)
-    lang = pango_language_from_string ("hi");
-  else if (g_strcmp0 (selected_text, "Thai") == 0)
-    lang = pango_language_from_string ("th");
-  else if (g_strcmp0 (selected_text, "Vietnamese") == 0)
-    lang = pango_language_from_string ("vi");
-
-  gtk_font_dialog_set_language (font_dialog, lang);
-}
-	
 GtkWidget *
 do_pickers (GtkWidget *do_widget)
 {
@@ -303,11 +228,6 @@ do_pickers (GtkWidget *do_widget)
 
   if (!window)
   {
-    GtkFontDialog *font_dialog;
-    GtkWidget *lang_dropdown;
-    GtkWidget *font_hbox;
-    const char *languages[] = { "No Language", "Current", "English", "Arabic", "Hindi", "Thai", "Vietnamese", NULL };
-    
     window = gtk_window_new ();
     gtk_window_set_display (GTK_WINDOW (window),
                             gtk_widget_get_display (do_widget));
@@ -323,7 +243,7 @@ do_pickers (GtkWidget *do_widget)
     gtk_grid_set_column_spacing (GTK_GRID (table), 6);
     gtk_window_set_child (GTK_WINDOW (window), table);
 
-    label = gtk_label_new_with_mnemonic ("_Color:");
+    label = gtk_label_new ("Color:");
     gtk_widget_set_halign (label, GTK_ALIGN_START);
     gtk_widget_set_valign (label, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand (label, TRUE);
@@ -333,27 +253,17 @@ do_pickers (GtkWidget *do_widget)
     gtk_label_set_mnemonic_widget (GTK_LABEL (label), picker);
     gtk_grid_attach (GTK_GRID (table), picker, 1, 0, 1, 1);
 
-    label = gtk_label_new_with_mnemonic ("_Font:");
+    label = gtk_label_new ("Font:");
     gtk_widget_set_halign (label, GTK_ALIGN_START);
     gtk_widget_set_valign (label, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand (label, TRUE);
     gtk_grid_attach (GTK_GRID (table), label, 0, 1, 1, 1);
 
-    font_dialog = gtk_font_dialog_new ();
-    picker = gtk_font_dialog_button_new (font_dialog);
+    picker = gtk_font_dialog_button_new (gtk_font_dialog_new ());
     gtk_label_set_mnemonic_widget (GTK_LABEL (label), picker);
-    
-    lang_dropdown = gtk_drop_down_new_from_strings (languages);
-    gtk_drop_down_set_selected (GTK_DROP_DOWN (lang_dropdown), 0);
-    g_signal_connect (lang_dropdown, "notify::selected", G_CALLBACK (on_language_changed), font_dialog);
-    
-    font_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_append (GTK_BOX (font_hbox), picker);
-    gtk_box_append (GTK_BOX (font_hbox), lang_dropdown);
+    gtk_grid_attach (GTK_GRID (table), picker, 1, 1, 1, 1);
 
-    gtk_grid_attach (GTK_GRID (table), font_hbox, 1, 1, 1, 1);
-
-    label = gtk_label_new_with_mnemonic ("_File:");
+    label = gtk_label_new ("File:");
     gtk_widget_set_halign (label, GTK_ALIGN_START);
     gtk_widget_set_valign (label, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand (label, TRUE);
@@ -361,10 +271,8 @@ do_pickers (GtkWidget *do_widget)
 
     picker = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
     button = gtk_button_new_from_icon_name ("document-open-symbolic");
-    gtk_label_set_mnemonic_widget (GTK_LABEL (label), button);
     gtk_accessible_update_property (GTK_ACCESSIBLE (button),
                                     GTK_ACCESSIBLE_PROPERTY_LABEL, "Select File",
-                                    GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
                                     -1);
 
     label = gtk_label_new ("None");
@@ -379,49 +287,30 @@ do_pickers (GtkWidget *do_widget)
     g_signal_connect (button, "clicked", G_CALLBACK (open_file), label);
     gtk_box_append (GTK_BOX (picker), label);
     gtk_box_append (GTK_BOX (picker), button);
-    app_picker = gtk_button_new_from_icon_name ("system-run-symbolic");
+    app_picker = gtk_button_new_from_icon_name ("emblem-system-symbolic");
     gtk_widget_set_halign (app_picker, GTK_ALIGN_END);
     gtk_accessible_update_property (GTK_ACCESSIBLE (app_picker),
                                     GTK_ACCESSIBLE_PROPERTY_LABEL, "Open File",
-                                    GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
                                     -1);
     gtk_widget_set_sensitive (app_picker, FALSE);
     g_signal_connect (app_picker, "clicked", G_CALLBACK (open_app), NULL);
     gtk_box_append (GTK_BOX (picker), app_picker);
-    open_folder_button = gtk_button_new_from_icon_name ("folder-symbolic");
-    gtk_widget_set_halign (open_folder_button, GTK_ALIGN_END);
-    gtk_accessible_update_property (GTK_ACCESSIBLE (open_folder_button),
-                                    GTK_ACCESSIBLE_PROPERTY_LABEL, "Open in Folder",
-                                    GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
-                                    -1);
-    gtk_widget_set_sensitive (open_folder_button, FALSE);
-    g_signal_connect (open_folder_button, "clicked", G_CALLBACK (open_folder), NULL);
-    gtk_box_append (GTK_BOX (picker), open_folder_button);
 
     print_button = gtk_button_new_from_icon_name ("printer-symbolic");
-    gtk_widget_set_tooltip_text (print_button, "Print File");
+    gtk_widget_set_tooltip_text (print_button, "Print file");
     gtk_widget_set_sensitive (print_button, FALSE);
-    gtk_accessible_update_property (GTK_ACCESSIBLE (print_button),
-                                    GTK_ACCESSIBLE_PROPERTY_LABEL, "Print File",
-                                    GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
-                                    -1);
     g_signal_connect (print_button, "clicked", G_CALLBACK (print_file), NULL);
     gtk_box_append (GTK_BOX (picker), print_button);
 
     gtk_grid_attach (GTK_GRID (table), picker, 1, 2, 1, 1);
 
-    label = gtk_label_new_with_mnemonic ("_URI:");
+    label = gtk_label_new ("URI:");
     gtk_widget_set_halign (label, GTK_ALIGN_START);
     gtk_widget_set_valign (label, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand (label, TRUE);
     gtk_grid_attach (GTK_GRID (table), label, 0, 3, 1, 1);
 
     picker = gtk_button_new_with_label ("www.gtk.org");
-    gtk_label_set_mnemonic_widget (GTK_LABEL (label), picker);
-    gtk_accessible_update_property (GTK_ACCESSIBLE (picker),
-                                    GTK_ACCESSIBLE_PROPERTY_LABEL, "Open www.gtk.org",
-                                    GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
-                                    -1);
     g_signal_connect (picker, "clicked", G_CALLBACK (launch_uri), NULL);
     gtk_grid_attach (GTK_GRID (table), picker, 1, 3, 1, 1);
   }

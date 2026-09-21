@@ -23,6 +23,14 @@
 
 G_BEGIN_DECLS
 
+
+#define GDK_DROP_CLASS(klass)      (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_DROP, GdkDropClass))
+#define GDK_IS_DROP_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_DROP))
+#define GDK_DROP_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_DROP, GdkDropClass))
+
+typedef struct _GdkDropClass GdkDropClass;
+
+
 struct _GdkDrop {
   GObject parent_instance;
 };
@@ -69,7 +77,6 @@ void                    gdk_drop_emit_drop_event                (GdkDrop        
                                                                  double                  x,
                                                                  double                  y,
                                                                  guint32                 time);
-gboolean                gdk_drop_is_finished                    (GdkDrop                *self);
 
 G_END_DECLS
 

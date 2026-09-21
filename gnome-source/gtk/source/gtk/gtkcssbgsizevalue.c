@@ -33,39 +33,41 @@ static void
 gtk_css_value_bg_size_free (GtkCssValue *value)
 {
   if (value->x)
-    gtk_css_value_unref (value->x);
+    _gtk_css_value_unref (value->x);
   if (value->y)
-    gtk_css_value_unref (value->y);
+    _gtk_css_value_unref (value->y);
 
   g_free (value);
 }
 
 static GtkCssValue *
-gtk_css_value_bg_size_compute (GtkCssValue          *value,
-                               guint                 property_id,
-                               GtkCssComputeContext *context)
+gtk_css_value_bg_size_compute (GtkCssValue      *value,
+                               guint             property_id,
+                               GtkStyleProvider *provider,
+                               GtkCssStyle      *style,
+                               GtkCssStyle      *parent_style)
 {
   GtkCssValue *x, *y;
 
   if (value->x == NULL && value->y == NULL)
-    return gtk_css_value_ref (value);
+    return _gtk_css_value_ref (value);
 
   x = y = NULL;
 
   if (value->x)
-    x = gtk_css_value_compute (value->x, property_id, context);
+    x = _gtk_css_value_compute (value->x, property_id, provider, style, parent_style);
 
   if (value->y)
-    y = gtk_css_value_compute (value->y, property_id, context);
+    y = _gtk_css_value_compute (value->y, property_id, provider, style, parent_style);
 
   if (x == value->x && y == value->y)
     {
       if (x)
-        gtk_css_value_unref (x);
+        _gtk_css_value_unref (x);
       if (y)
-        gtk_css_value_unref (y);
+        _gtk_css_value_unref (y);
 
-      return gtk_css_value_ref (value);
+      return _gtk_css_value_ref (value);
     }
 
   return _gtk_css_bg_size_value_new (value->x ? x : NULL,
@@ -80,10 +82,10 @@ gtk_css_value_bg_size_equal (const GtkCssValue *value1,
          value1->contain == value2->contain &&
          (value1->x == value2->x ||
           (value1->x != NULL && value2->x != NULL &&
-           gtk_css_value_equal (value1->x, value2->x))) &&
+           _gtk_css_value_equal (value1->x, value2->x))) &&
          (value1->y == value2->y ||
           (value1->y != NULL && value2->y != NULL &&
-           gtk_css_value_equal (value1->y, value2->y)));
+           _gtk_css_value_equal (value1->y, value2->y)));
 }
 
 static GtkCssValue *
@@ -95,9 +97,9 @@ gtk_css_value_bg_size_transition (GtkCssValue *start,
   GtkCssValue *x, *y;
 
   if (start->cover)
-    return end->cover ? gtk_css_value_ref (end) : NULL;
+    return end->cover ? _gtk_css_value_ref (end) : NULL;
   if (start->contain)
-    return end->contain ? gtk_css_value_ref (end) : NULL;
+    return end->contain ? _gtk_css_value_ref (end) : NULL;
 
   if ((start->x != NULL) ^ (end->x != NULL) ||
       (start->y != NULL) ^ (end->y != NULL))
@@ -105,7 +107,7 @@ gtk_css_value_bg_size_transition (GtkCssValue *start,
 
   if (start->x)
     {
-      x = gtk_css_value_transition (start->x, end->x, property_id, progress);
+      x = _gtk_css_value_transition (start->x, end->x, property_id, progress);
       if (x == NULL)
         return NULL;
     }
@@ -114,10 +116,10 @@ gtk_css_value_bg_size_transition (GtkCssValue *start,
 
   if (start->y)
     {
-      y = gtk_css_value_transition (start->y, end->y, property_id, progress);
+      y = _gtk_css_value_transition (start->y, end->y, property_id, progress);
       if (y == NULL)
         {
-          gtk_css_value_unref (x);
+          _gtk_css_value_unref (x);
           return NULL;
         }
     }
@@ -140,12 +142,12 @@ gtk_css_value_bg_size_print (const GtkCssValue *value,
       if (value->x == NULL)
         g_string_append (string, "auto");
       else
-        gtk_css_value_print (value->x, string);
+        _gtk_css_value_print (value->x, string);
 
       if (value->y)
         {
           g_string_append_c (string, ' ');
-          gtk_css_value_print (value->y, string);
+          _gtk_css_value_print (value->y, string);
         }
     }
 }
@@ -154,7 +156,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_BG_SIZE = {
   "GtkCssBgSizeValue",
   gtk_css_value_bg_size_free,
   gtk_css_value_bg_size_compute,
-  NULL,
   gtk_css_value_bg_size_equal,
   gtk_css_value_bg_size_transition,
   NULL,
@@ -162,9 +163,9 @@ static const GtkCssValueClass GTK_CSS_VALUE_BG_SIZE = {
   gtk_css_value_bg_size_print
 };
 
-static GtkCssValue auto_singleton = { &GTK_CSS_VALUE_BG_SIZE, 1, 1, 0, 0, FALSE, FALSE, NULL, NULL };
-static GtkCssValue cover_singleton = { &GTK_CSS_VALUE_BG_SIZE, 1, 1, 0, 0, TRUE, FALSE, NULL, NULL };
-static GtkCssValue contain_singleton = { &GTK_CSS_VALUE_BG_SIZE, 1, 1, 0, 0, FALSE, TRUE, NULL, NULL };
+static GtkCssValue auto_singleton = { &GTK_CSS_VALUE_BG_SIZE, 1, TRUE, FALSE, FALSE, NULL, NULL };
+static GtkCssValue cover_singleton = { &GTK_CSS_VALUE_BG_SIZE, 1, TRUE, TRUE, FALSE, NULL, NULL };
+static GtkCssValue contain_singleton = { &GTK_CSS_VALUE_BG_SIZE, 1, TRUE, FALSE, TRUE, NULL, NULL };
 
 GtkCssValue *
 _gtk_css_bg_size_value_new (GtkCssValue *x,
@@ -173,9 +174,9 @@ _gtk_css_bg_size_value_new (GtkCssValue *x,
   GtkCssValue *result;
 
   if (x == NULL && y == NULL)
-    return gtk_css_value_ref (&auto_singleton);
+    return _gtk_css_value_ref (&auto_singleton);
 
-  result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_BG_SIZE);
+  result = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_BG_SIZE);
   result->x = x;
   result->y = y;
   result->is_computed = (!x || gtk_css_value_is_computed (x)) &&
@@ -190,18 +191,18 @@ _gtk_css_bg_size_value_parse (GtkCssParser *parser)
   GtkCssValue *x, *y;
 
   if (gtk_css_parser_try_ident (parser, "cover"))
-    return gtk_css_value_ref (&cover_singleton);
+    return _gtk_css_value_ref (&cover_singleton);
   else if (gtk_css_parser_try_ident (parser, "contain"))
-    return gtk_css_value_ref (&contain_singleton);
+    return _gtk_css_value_ref (&contain_singleton);
 
   if (gtk_css_parser_try_ident (parser, "auto"))
     x = NULL;
   else
     {
-      x = gtk_css_number_value_parse (parser,
-                                      GTK_CSS_POSITIVE_ONLY
-                                      | GTK_CSS_PARSE_PERCENT
-                                      | GTK_CSS_PARSE_LENGTH);
+      x = _gtk_css_number_value_parse (parser,
+                                       GTK_CSS_POSITIVE_ONLY
+                                       | GTK_CSS_PARSE_PERCENT
+                                       | GTK_CSS_PARSE_LENGTH);
       if (x == NULL)
         return NULL;
     }
@@ -212,13 +213,13 @@ _gtk_css_bg_size_value_parse (GtkCssParser *parser)
     y = NULL;
   else
     {
-      y = gtk_css_number_value_parse (parser,
-                                      GTK_CSS_POSITIVE_ONLY
-                                      | GTK_CSS_PARSE_PERCENT
-                                      | GTK_CSS_PARSE_LENGTH);
+      y = _gtk_css_number_value_parse (parser,
+                                       GTK_CSS_POSITIVE_ONLY
+                                       | GTK_CSS_PARSE_PERCENT
+                                       | GTK_CSS_PARSE_LENGTH);
       if (y == NULL)
         {
-          gtk_css_value_unref (x);
+          _gtk_css_value_unref (x);
           return NULL;
         }
     }
@@ -281,8 +282,8 @@ _gtk_css_bg_size_value_compute_size (const GtkCssValue *value,
       double x, y;
 
       /* note: 0 does the right thing later for 'auto' */
-      x = value->x ? gtk_css_number_value_get (value->x, area_width) : 0;
-      y = value->y ? gtk_css_number_value_get (value->y, area_height) : 0;
+      x = value->x ? _gtk_css_number_value_get (value->x, area_width) : 0;
+      y = value->y ? _gtk_css_number_value_get (value->y, area_height) : 0;
 
       if ((x <= 0 && value->x) ||
           (y <= 0 && value->y))

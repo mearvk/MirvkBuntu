@@ -37,7 +37,7 @@
 #include "cogl/cogl-buffer-private.h"
 #include "cogl/cogl-pixel-buffer.h"
 #include "cogl/cogl-context-private.h"
-#include "cogl/driver/gl/cogl-buffer-impl-gl-private.h"
+#include "cogl/driver/gl/cogl-buffer-gl-private.h"
 #include "cogl/driver/gl/cogl-bitmap-gl-private.h"
 
 uint8_t *
@@ -63,7 +63,7 @@ _cogl_bitmap_gl_bind (CoglBitmap *bitmap,
      implementation of bind is the same as map */
   if (bitmap->buffer == NULL)
     {
-      uint8_t *data = cogl_bitmap_map (bitmap, access, hints, error);
+      uint8_t *data = _cogl_bitmap_map (bitmap, access, hints, error);
       if (data)
         bitmap->bound = TRUE;
       return data;
@@ -117,5 +117,5 @@ _cogl_bitmap_gl_unbind (CoglBitmap *bitmap)
   if (bitmap->buffer)
     _cogl_buffer_gl_unbind (bitmap->buffer);
   else
-    cogl_bitmap_unmap (bitmap);
+    _cogl_bitmap_unmap (bitmap);
 }

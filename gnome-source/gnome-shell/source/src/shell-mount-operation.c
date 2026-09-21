@@ -29,7 +29,7 @@
  * except for ask-password, as we don't want to handle that.
  *
  * Also, we need to workaround the fact that gjs doesn't support type
- * annotations for signals yet (so we can't effectively forward e.g.
+ * annotations for signals yet (so we can't effectively forward e.g. 
  * the GPid array to JS).
  * See https://bugzilla.gnome.org/show_bug.cgi?id=645978
  */
@@ -41,20 +41,27 @@ enum {
 
 static guint signals[NUM_SIGNALS] = { 0, };
 
-typedef struct _ShellMountOperation
+typedef struct _ShellMountOperationPrivate  ShellMountOperationPrivate;
+
+struct _ShellMountOperation
 {
   GMountOperation parent_instance;
 
+  ShellMountOperationPrivate *priv;
+};
+
+struct _ShellMountOperationPrivate {
   GArray *pids;
   gchar **choices;
   gchar *message;
-} ShellMountOperation;
+};
 
-G_DEFINE_FINAL_TYPE (ShellMountOperation, shell_mount_operation, G_TYPE_MOUNT_OPERATION);
+G_DEFINE_TYPE_WITH_PRIVATE (ShellMountOperation, shell_mount_operation, G_TYPE_MOUNT_OPERATION);
 
 static void
 shell_mount_operation_init (ShellMountOperation *self)
 {
+  self->priv = shell_mount_operation_get_instance_private (self);
 }
 
 static void
@@ -83,15 +90,19 @@ shell_mount_operation_show_processes (GMountOperation *operation,
 {
   ShellMountOperation *self = SHELL_MOUNT_OPERATION (operation);
 
-  g_clear_pointer (&self->pids, g_array_unref);
+  if (self->priv->pids != NULL)
+    {
+      g_array_unref (self->priv->pids);
+      self->priv->pids = NULL;
+    }
 
-  g_free (self->message);
-  g_strfreev (self->choices);
+  g_free (self->priv->message);
+  g_strfreev (self->priv->choices);
 
   /* save the parameters */
-  self->pids = g_array_ref (processes);
-  self->choices = g_strdupv ((gchar **) choices);
-  self->message = g_strdup (message);
+  self->priv->pids = g_array_ref (processes);
+  self->priv->choices = g_strdupv ((gchar **) choices);
+  self->priv->message = g_strdup (message);
 
   g_signal_emit (self, signals[SHOW_PROCESSES_2], 0);
 }
@@ -101,9 +112,14 @@ shell_mount_operation_finalize (GObject *obj)
 {
   ShellMountOperation *self = SHELL_MOUNT_OPERATION (obj);
 
-  g_strfreev (self->choices);
-  g_free (self->message);
-  g_clear_pointer (&self->pids, g_array_unref);
+  g_strfreev (self->priv->choices);
+  g_free (self->priv->message);
+
+  if (self->priv->pids != NULL)
+    {
+      g_array_unref (self->priv->pids);
+      self->priv->pids = NULL;
+    }
 
   G_OBJECT_CLASS (shell_mount_operation_parent_class)->finalize (obj);
 }
@@ -145,7 +161,7 @@ shell_mount_operation_new (void)
 GArray *
 shell_mount_operation_get_show_processes_pids (ShellMountOperation *self)
 {
-  return g_array_ref (self->pids);
+  return g_array_ref (self->priv->pids);
 }
 
 /**
@@ -157,7 +173,7 @@ shell_mount_operation_get_show_processes_pids (ShellMountOperation *self)
 gchar **
 shell_mount_operation_get_show_processes_choices (ShellMountOperation *self)
 {
-  return g_strdupv (self->choices);
+  return g_strdupv (self->priv->choices);
 }
 
 /**
@@ -169,5 +185,5 @@ shell_mount_operation_get_show_processes_choices (ShellMountOperation *self)
 gchar *
 shell_mount_operation_get_show_processes_message (ShellMountOperation *self)
 {
-  return g_strdup (self->message);
+  return g_strdup (self->priv->message);
 }

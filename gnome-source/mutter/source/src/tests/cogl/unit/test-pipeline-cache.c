@@ -1,7 +1,6 @@
 #include "config.h"
 
 #include "cogl/cogl.h"
-#include "cogl/cogl-context-private.h"
 #include "cogl/cogl-pipeline-cache-private.h"
 #include "cogl/cogl-pipeline-hash-table.h"
 #include "tests/cogl-test-utils.h"
@@ -50,9 +49,9 @@ check_pipeline_pruning (void)
   CoglPipeline *pipelines[18];
   int fb_width, fb_height;
   CoglPipelineHashTable *fragment_hash =
-    cogl_pipeline_cache_get_fragment_hash (cogl_context_get_pipeline_cache (test_ctx));
+    cogl_pipeline_cache_get_fragment_hash (test_ctx->pipeline_cache);
   CoglPipelineHashTable *combined_hash =
-    cogl_pipeline_cache_get_combined_hash (cogl_context_get_pipeline_cache (test_ctx));
+    cogl_pipeline_cache_get_combined_hash (test_ctx->pipeline_cache);
   int i;
 
   fb_width = cogl_framebuffer_get_width (test_fb);

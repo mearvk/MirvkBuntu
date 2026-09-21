@@ -5,16 +5,7 @@ subsurface {
         transform: scale(10, 10);
         child: texture {
           bounds: 0 0 10 21;
-          texture: memory {
-            format: RGB8;
-            width: 10;
-            height: 21;
-            offset: 0;
-            stride: 30;
-            data: url("data:application/gzip;base64,\
-        H4sIAAAAAAACA2NgGAWjgN4AAIkr6EF2AgAA\
-        ");
-          }
+          texture: url('data:image/svg+xml;utf-8,<svg width="10" height="21"></svg>');
         }
       }
    }
@@ -27,16 +18,7 @@ subsurface {
       clip: 5 5 200 200;
       child: texture {
         bounds: 0 0 40 40;
-        texture: memory {
-          format: BGRA8p;
-          width: 40;
-          height: 40;
-          offset: 0;
-          stride: 160;
-          data: url("data:application/gzip;base64,\
-      H4sIAAAAAAACA+3DAQkAAAwEoetfeuvxKFhdqqqqqqqqQx+V9ROOABkAAA==\
-      ");
-        }
+        texture: url('data:image/svg+xml;utf-8,<svg width="40" height="40"></svg>');
       }
     }
   }
@@ -49,16 +31,7 @@ subsurface {
       transform: translate(10, 10);
       child: texture {
         bounds: 0 0 40 40;
-        texture: memory {
-          format: BGRA8p;
-          width: 40;
-          height: 40;
-          offset: 0;
-          stride: 160;
-          data: url("data:application/gzip;base64,\
-      H4sIAAAAAAACA+3DAQkAAAwEoetfeuvxKFhdqqqqqqqqQx+V9ROOABkAAA==\
-      ");
-        }
+        texture: url('data:image/svg+xml;utf-8,<svg width="40" height="40"></svg>');
       }
     }
   }

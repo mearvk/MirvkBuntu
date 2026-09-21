@@ -27,7 +27,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from . import (
-    chat_presenter_command_definitions,
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     focus_manager,
@@ -36,6 +37,7 @@ from . import (
     input_event,
     input_event_manager,
     messages,
+    preferences_grid_base,
     presentation_manager,
     script_manager,
 )
@@ -43,16 +45,12 @@ from .ax_object import AXObject
 from .ax_selection import AXSelection
 from .ax_text import AXText
 from .ax_utilities import AXUtilities
-from .extension import Extension
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from gi.repository import Atspi
 
-    from .chat_presenter_preferences_grid import ChatPreferencesGrid
-    from .command import Command
-    from .dbus_service import UInt32
     from .scripts import default
 
 
@@ -360,8 +358,69 @@ class Chat:
         return float(attr.get("scale", "1")) < 1 or int(attr.get("weight", "400")) < 400
 
 
+class ChatPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """Preferences grid for Chat settings."""
+
+    _gsettings_schema = "chat"
+
+    def __init__(self, presenter: ChatPresenter) -> None:
+        options = [
+            guilabels.CHAT_SPEAK_MESSAGES_ALL,
+            guilabels.CHAT_SPEAK_MESSAGES_ACTIVE_CHANNEL,
+            guilabels.CHAT_SPEAK_MESSAGES_ALL_IF_FOCUSED,
+            guilabels.CHAT_SPEAK_MESSAGES_ACTIVE,
+        ]
+        values = [
+            ChatMessageVerbosity.ALL_ANY_APP.value,
+            ChatMessageVerbosity.CURRENT_ANY_APP.value,
+            ChatMessageVerbosity.ALL_ACTIVE_APP.value,
+            ChatMessageVerbosity.CURRENT_ACTIVE_APP.value,
+        ]
+
+        controls: list[
+            preferences_grid_base.BooleanPreferenceControl
+            | preferences_grid_base.SelectionPreferenceControl
+        ] = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.CHAT_SPEAK_ROOM_NAME,
+                getter=presenter.get_speak_room_name,
+                setter=presenter.set_speak_room_name,
+                prefs_key=ChatPresenter.KEY_SPEAK_ROOM_NAME,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.CHAT_SPEAK_ROOM_NAME_LAST,
+                getter=presenter.get_speak_room_name_last,
+                setter=presenter.set_speak_room_name_last,
+                prefs_key=ChatPresenter.KEY_SPEAK_ROOM_NAME_LAST,
+                determine_sensitivity=presenter.get_speak_room_name,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.CHAT_ANNOUNCE_BUDDY_TYPING,
+                getter=presenter.get_announce_buddy_typing,
+                setter=presenter.set_announce_buddy_typing,
+                prefs_key=ChatPresenter.KEY_ANNOUNCE_BUDDY_TYPING,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.CHAT_SEPARATE_MESSAGE_HISTORIES,
+                getter=presenter.get_room_histories,
+                setter=presenter.set_room_histories,
+                prefs_key=ChatPresenter.KEY_ROOM_HISTORIES,
+            ),
+            preferences_grid_base.SelectionPreferenceControl(
+                label=guilabels.CHAT_SPEAK_MESSAGES_FROM,
+                options=options,
+                values=values,
+                getter=presenter.get_message_verbosity,
+                setter=presenter.set_message_verbosity,
+                prefs_key=ChatPresenter.KEY_MESSAGE_VERBOSITY,
+            ),
+        ]
+
+        super().__init__(guilabels.KB_GROUP_CHAT, controls)
+
+
 @gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Chat", name="chat")
-class ChatPresenter(Extension):
+class ChatPresenter:
     """Presenter for chat preferences and commands."""
 
     _SCHEMA = "chat"
@@ -381,16 +440,64 @@ class ChatPresenter(Extension):
             default=default,
         )
 
-    GROUP_LABEL = guilabels.KB_GROUP_CHAT
+    def __init__(self) -> None:
+        self._initialized: bool = False
+        msg = "CHAT PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("ChatPresenter", self)
 
-    def _get_commands(self) -> list[Command]:
-        return chat_presenter_command_definitions.get_commands(self)
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_CHAT
+
+        commands_data = [
+            (
+                "chat_toggle_room_name_prefix",
+                self.toggle_prefix,
+                cmdnames.CHAT_TOGGLE_ROOM_NAME_PREFIX,
+            ),
+            (
+                "chat_toggle_buddy_typing",
+                self.toggle_buddy_typing,
+                cmdnames.CHAT_TOGGLE_BUDDY_TYPING,
+            ),
+            (
+                "chat_toggle_message_histories",
+                self.toggle_message_histories,
+                cmdnames.CHAT_TOGGLE_MESSAGE_HISTORIES,
+            ),
+            (
+                "chat_previous_message",
+                self.present_previous_message,
+                cmdnames.CHAT_PREVIOUS_MESSAGE,
+            ),
+            ("chat_next_message", self.present_next_message, cmdnames.CHAT_NEXT_MESSAGE),
+        ]
+
+        for name, function, description in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=None,
+                    laptop_keybinding=None,
+                ),
+            )
+
+        msg = "CHAT PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def create_preferences_grid(self) -> ChatPreferencesGrid:
         """Create and return the chat preferences grid."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .chat_presenter_preferences_grid import ChatPreferencesGrid
 
         return ChatPreferencesGrid(self)
 
@@ -632,7 +739,7 @@ class ChatPresenter(Extension):
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_SPEAK_ROOM_NAME, value
         )
-        return True
+        return value
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_ANNOUNCE_BUDDY_TYPING,
@@ -657,7 +764,7 @@ class ChatPresenter(Extension):
             self.KEY_ANNOUNCE_BUDDY_TYPING,
             value,
         )
-        return True
+        return value
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_ROOM_HISTORIES,
@@ -680,7 +787,7 @@ class ChatPresenter(Extension):
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ROOM_HISTORIES, value
         )
-        return True
+        return value
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_MESSAGE_VERBOSITY,
@@ -691,7 +798,7 @@ class ChatPresenter(Extension):
         migration_key="chatMessageVerbosity",
     )
     @dbus_service.getter
-    def get_message_verbosity(self, app: Atspi.Accessible | None = None) -> UInt32:
+    def get_message_verbosity(self, app: Atspi.Accessible | None = None) -> int:
         """Returns the chat message verbosity setting."""
 
         app_name = AXObject.get_name(app) if app else None
@@ -711,7 +818,7 @@ class ChatPresenter(Extension):
         return 0
 
     @dbus_service.setter
-    def set_message_verbosity(self, value: UInt32) -> bool:
+    def set_message_verbosity(self, value: int) -> int:
         """Sets the chat message verbosity setting."""
 
         gsettings_registry.get_registry().set_runtime_value(
@@ -719,7 +826,7 @@ class ChatPresenter(Extension):
             self.KEY_MESSAGE_VERBOSITY,
             value,
         )
-        return True
+        return value
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_SPEAK_ROOM_NAME_LAST,
@@ -744,7 +851,7 @@ class ChatPresenter(Extension):
             self.KEY_SPEAK_ROOM_NAME_LAST,
             value,
         )
-        return True
+        return value
 
     @dbus_service.command
     def toggle_prefix(

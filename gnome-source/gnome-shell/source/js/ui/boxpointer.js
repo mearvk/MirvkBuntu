@@ -1,5 +1,8 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 
 import * as Main from './main.js';
@@ -11,7 +14,7 @@ export const PopupAnimation = {
     FULL:  ~0,
 };
 
-export const POPUP_ANIMATION_TIME = 150;
+const POPUP_ANIMATION_TIME = 150;
 
 /**
  * BoxPointer:
@@ -47,24 +50,30 @@ export const BoxPointer = GObject.registerClass({
         this.add_child(this._border);
         this.set_child_above_sibling(this.bin, this._border);
         this._sourceAlignment = 0.5;
+        this._muteKeys = true;
+        this._muteInput = true;
 
         this.connect('notify::visible', () => {
             if (this.visible)
-                global.compositor.disable_unredirect();
+                Meta.disable_unredirect_for_display(global.display);
             else
-                global.compositor.enable_unredirect();
+                Meta.enable_unredirect_for_display(global.display);
         });
+    }
 
-        this._muteKeys = new Clutter.KeyController();
-        this._muteKeys.connect('key-press', () => Clutter.EVENT_STOP);
-        this.add_action_full(
-            'key-muting', Clutter.EventPhase.CAPTURE, this._muteKeys);
+    vfunc_captured_event(event) {
+        if (event.type() === Clutter.EventType.ENTER ||
+            event.type() === Clutter.EventType.LEAVE)
+            return Clutter.EVENT_PROPAGATE;
 
-        this._muteInput = new Clutter.ClickGesture({
-            recognize_on_press: true,
-        });
-        this.add_action_full(
-            'click-muting', Clutter.EventPhase.CAPTURE, this._muteInput);
+        let mute = event.type() === Clutter.EventType.KEY_PRESS ||
+            event.type() === Clutter.EventType.KEY_RELEASE
+            ? this._muteKeys : this._muteInput;
+
+        if (mute)
+            return Clutter.EVENT_STOP;
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     get arrowSide() {
@@ -72,41 +81,31 @@ export const BoxPointer = GObject.registerClass({
     }
 
     open(animate, onComplete) {
-        const themeNode = this.get_theme_node();
-        const rise = themeNode.get_length('-arrow-rise');
-        const animationTime = animate & PopupAnimation.FULL ? POPUP_ANIMATION_TIME : 0;
-
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
+        let themeNode = this.get_theme_node();
+        let rise = themeNode.get_length('-arrow-rise');
+        let animationTime = animate & PopupAnimation.FULL ? POPUP_ANIMATION_TIME : 0;
 
         if (animate & PopupAnimation.FADE)
             this.opacity = 0;
         else
             this.opacity = 255;
 
-        this._muteKeys.enabled = false;
+        this._muteKeys = false;
         this.show();
 
-        if (useMotion && animate & PopupAnimation.SLIDE) {
-            this.scale_x = 0.96;
-            this.scale_y = 0.96;
-
+        if (animate & PopupAnimation.SLIDE) {
             switch (this._arrowSide) {
             case St.Side.TOP:
                 this.translation_y = -rise;
-                this.set_pivot_point(0.5, 0);
                 break;
             case St.Side.BOTTOM:
                 this.translation_y = rise;
-                this.set_pivot_point(0.5, 1);
                 break;
             case St.Side.LEFT:
                 this.translation_x = -rise;
-                this.set_pivot_point(0, 0.5);
                 break;
             case St.Side.RIGHT:
                 this.translation_x = rise;
-                this.set_pivot_point(1, 0.5);
                 break;
             }
         }
@@ -115,12 +114,10 @@ export const BoxPointer = GObject.registerClass({
             opacity: 255,
             translation_x: 0,
             translation_y: 0,
-            scale_x: 1,
-            scale_y: 1,
             duration: animationTime,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            mode: Clutter.AnimationMode.LINEAR,
             onComplete: () => {
-                this._muteInput.enabled = false;
+                this._muteInput = false;
                 if (onComplete)
                     onComplete();
             },
@@ -133,52 +130,38 @@ export const BoxPointer = GObject.registerClass({
 
         let translationX = 0;
         let translationY = 0;
-        let scaleX = 1;
-        let scaleY = 1;
-        const themeNode = this.get_theme_node();
-        const rise = themeNode.get_length('-arrow-rise');
-        const fade = animate & PopupAnimation.FADE;
-        const animationTime = animate & PopupAnimation.FULL ? POPUP_ANIMATION_TIME : 0;
+        let themeNode = this.get_theme_node();
+        let rise = themeNode.get_length('-arrow-rise');
+        let fade = animate & PopupAnimation.FADE;
+        let animationTime = animate & PopupAnimation.FULL ? POPUP_ANIMATION_TIME : 0;
 
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
-
-        if (useMotion && animate & PopupAnimation.SLIDE) {
-            scaleX = 0.96;
-            scaleY = 0.96;
-
+        if (animate & PopupAnimation.SLIDE) {
             switch (this._arrowSide) {
             case St.Side.TOP:
-                translationY = -rise;
-                this.set_pivot_point(0.5, 0);
+                translationY = rise;
                 break;
             case St.Side.BOTTOM:
-                translationY = rise;
-                this.set_pivot_point(0.5, 1);
+                translationY = -rise;
                 break;
             case St.Side.LEFT:
-                translationX = -rise;
-                this.set_pivot_point(0, 0.5);
+                translationX = rise;
                 break;
             case St.Side.RIGHT:
-                translationX = rise;
-                this.set_pivot_point(1, 0.5);
+                translationX = -rise;
                 break;
             }
         }
 
-        this._muteInput.enabled = true;
-        this._muteKeys.enabled = true;
+        this._muteInput = true;
+        this._muteKeys = true;
 
         this.remove_all_transitions();
         this.ease({
             opacity: fade ? 0 : 255,
             translation_x: translationX,
             translation_y: translationY,
-            scale_x: scaleX,
-            scale_y: scaleY,
             duration: animationTime,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            mode: Clutter.AnimationMode.LINEAR,
             onComplete: () => {
                 this.hide();
                 this.opacity = 0;
@@ -191,13 +174,13 @@ export const BoxPointer = GObject.registerClass({
     }
 
     _adjustAllocationForArrow(isWidth, minSize, natSize) {
-        const themeNode = this.get_theme_node();
-        const borderWidth = themeNode.get_length('-arrow-border-width');
+        let themeNode = this.get_theme_node();
+        let borderWidth = themeNode.get_length('-arrow-border-width');
         minSize += borderWidth * 2;
         natSize += borderWidth * 2;
         if ((!isWidth && (this._arrowSide === St.Side.TOP || this._arrowSide === St.Side.BOTTOM)) ||
             (isWidth && (this._arrowSide === St.Side.LEFT || this._arrowSide === St.Side.RIGHT))) {
-            const rise = themeNode.get_length('-arrow-rise');
+            let rise = themeNode.get_length('-arrow-rise');
             minSize += rise;
             natSize += rise;
         }
@@ -206,7 +189,7 @@ export const BoxPointer = GObject.registerClass({
     }
 
     vfunc_get_preferred_width(forHeight) {
-        const themeNode = this.get_theme_node();
+        let themeNode = this.get_theme_node();
         forHeight = themeNode.adjust_for_height(forHeight);
 
         let width = this.bin.get_preferred_width(forHeight);
@@ -216,8 +199,8 @@ export const BoxPointer = GObject.registerClass({
     }
 
     vfunc_get_preferred_height(forWidth) {
-        const themeNode = this.get_theme_node();
-        const borderWidth = themeNode.get_length('-arrow-border-width');
+        let themeNode = this.get_theme_node();
+        let borderWidth = themeNode.get_length('-arrow-border-width');
         forWidth = themeNode.adjust_for_width(forWidth);
 
         let height = this.bin.get_preferred_height(forWidth - 2 * borderWidth);
@@ -234,11 +217,11 @@ export const BoxPointer = GObject.registerClass({
 
         this.set_allocation(box);
 
-        const themeNode = this.get_theme_node();
-        const borderWidth = themeNode.get_length('-arrow-border-width');
-        const rise = themeNode.get_length('-arrow-rise');
-        const childBox = new Clutter.ActorBox();
-        const [availWidth, availHeight] = themeNode.get_content_box(box).get_size();
+        let themeNode = this.get_theme_node();
+        let borderWidth = themeNode.get_length('-arrow-border-width');
+        let rise = themeNode.get_length('-arrow-rise');
+        let childBox = new Clutter.ActorBox();
+        let [availWidth, availHeight] = themeNode.get_content_box(box).get_size();
 
         childBox.x1 = 0;
         childBox.y1 = 0;
@@ -268,12 +251,12 @@ export const BoxPointer = GObject.registerClass({
     }
 
     _drawBorder(area) {
-        const themeNode = this.get_theme_node();
+        let themeNode = this.get_theme_node();
 
         if (this._arrowActor) {
-            const [sourceX, sourceY] = this._arrowActor.get_transformed_position();
-            const [sourceWidth, sourceHeight] = this._arrowActor.get_transformed_size();
-            const [absX, absY] = this.get_transformed_position();
+            let [sourceX, sourceY] = this._arrowActor.get_transformed_position();
+            let [sourceWidth, sourceHeight] = this._arrowActor.get_transformed_size();
+            let [absX, absY] = this.get_transformed_position();
 
             if (this._arrowSide === St.Side.TOP ||
                 this._arrowSide === St.Side.BOTTOM)
@@ -282,22 +265,22 @@ export const BoxPointer = GObject.registerClass({
                 this._arrowOrigin = sourceY - absY + sourceHeight / 2;
         }
 
-        const borderWidth = themeNode.get_length('-arrow-border-width');
-        const base = themeNode.get_length('-arrow-base');
-        const rise = themeNode.get_length('-arrow-rise');
-        const borderRadius = themeNode.get_length('-arrow-border-radius');
+        let borderWidth = themeNode.get_length('-arrow-border-width');
+        let base = themeNode.get_length('-arrow-base');
+        let rise = themeNode.get_length('-arrow-rise');
+        let borderRadius = themeNode.get_length('-arrow-border-radius');
 
-        const halfBorder = borderWidth / 2;
-        const halfBase = Math.floor(base / 2);
+        let halfBorder = borderWidth / 2;
+        let halfBase = Math.floor(base / 2);
 
-        const [width, height] = area.get_surface_size();
+        let [width, height] = area.get_surface_size();
         let [boxWidth, boxHeight] = [width, height];
         if (this._arrowSide === St.Side.TOP || this._arrowSide === St.Side.BOTTOM)
             boxHeight -= rise;
         else
             boxWidth -= rise;
 
-        const cr = area.get_context();
+        let cr = area.get_context();
 
         // Translate so that box goes from 0,0 to boxWidth,boxHeight,
         // with the arrow poking out of that
@@ -306,8 +289,8 @@ export const BoxPointer = GObject.registerClass({
         else if (this._arrowSide === St.Side.LEFT)
             cr.translate(rise, 0);
 
-        const [x1, y1] = [halfBorder, halfBorder];
-        const [x2, y2] = [boxWidth - halfBorder, boxHeight - halfBorder];
+        let [x1, y1] = [halfBorder, halfBorder];
+        let [x2, y2] = [boxWidth - halfBorder, boxHeight - halfBorder];
 
         let skipTopLeft = false;
         let skipTopRight = false;
@@ -444,7 +427,7 @@ export const BoxPointer = GObject.registerClass({
         }
 
         if (borderWidth > 0) {
-            const borderColor = themeNode.get_color('-arrow-border-color');
+            let borderColor = themeNode.get_color('-arrow-border-color');
             cr.setSourceColor(borderColor);
             cr.setLineWidth(borderWidth);
             cr.stroke();
@@ -478,9 +461,9 @@ export const BoxPointer = GObject.registerClass({
     }
 
     _reposition(allocationBox) {
-        const sourceActor = this._sourceActor;
+        let sourceActor = this._sourceActor;
         let alignment = this._arrowAlignment;
-        const monitorIndex = Main.layoutManager.findIndexForActor(sourceActor);
+        let monitorIndex = Main.layoutManager.findIndexForActor(sourceActor);
 
         this._sourceExtents = sourceActor.get_transformed_extents();
         this._workArea = Main.layoutManager.getWorkAreaForMonitor(monitorIndex);
@@ -493,24 +476,24 @@ export const BoxPointer = GObject.registerClass({
                 x2: sourceAllocation.get_width(),
                 y2: sourceAllocation.get_height(),
             });
-        const sourceTopLeft = this._sourceExtents.get_top_left();
-        const sourceBottomRight = this._sourceExtents.get_bottom_right();
-        const sourceCenterX = sourceTopLeft.x + sourceContentBox.x1 + (sourceContentBox.x2 - sourceContentBox.x1) * this._sourceAlignment;
-        const sourceCenterY = sourceTopLeft.y + sourceContentBox.y1 + (sourceContentBox.y2 - sourceContentBox.y1) * this._sourceAlignment;
-        const [, , natWidth, natHeight] = this.get_preferred_size();
+        let sourceTopLeft = this._sourceExtents.get_top_left();
+        let sourceBottomRight = this._sourceExtents.get_bottom_right();
+        let sourceCenterX = sourceTopLeft.x + sourceContentBox.x1 + (sourceContentBox.x2 - sourceContentBox.x1) * this._sourceAlignment;
+        let sourceCenterY = sourceTopLeft.y + sourceContentBox.y1 + (sourceContentBox.y2 - sourceContentBox.y1) * this._sourceAlignment;
+        let [, , natWidth, natHeight] = this.get_preferred_size();
 
         // We also want to keep it onscreen, and separated from the
         // edge by the same distance as the main part of the box is
         // separated from its sourceActor
-        const workarea = this._workArea;
-        const themeNode = this.get_theme_node();
-        const borderWidth = themeNode.get_length('-arrow-border-width');
-        const arrowBase = themeNode.get_length('-arrow-base');
-        const borderRadius = themeNode.get_length('-arrow-border-radius');
-        const margin = 4 * borderRadius + borderWidth + arrowBase;
+        let workarea = this._workArea;
+        let themeNode = this.get_theme_node();
+        let borderWidth = themeNode.get_length('-arrow-border-width');
+        let arrowBase = themeNode.get_length('-arrow-base');
+        let borderRadius = themeNode.get_length('-arrow-border-radius');
+        let margin = 4 * borderRadius + borderWidth + arrowBase;
 
-        const gap = themeNode.get_length('-boxpointer-gap');
-        const padding = themeNode.get_length('-arrow-rise');
+        let gap = themeNode.get_length('-boxpointer-gap');
+        let padding = themeNode.get_length('-arrow-rise');
 
         let resX, resY;
 
@@ -541,11 +524,11 @@ export const BoxPointer = GObject.registerClass({
         //     of the box to maintain the arrow's accuracy.
 
         let arrowOrigin;
-        const halfBase = Math.floor(arrowBase / 2);
-        const halfBorder = borderWidth / 2;
-        const halfMargin = margin / 2;
-        const [x1, y1] = [halfBorder, halfBorder];
-        const [x2, y2] = [natWidth - halfBorder, natHeight - halfBorder];
+        let halfBase = Math.floor(arrowBase / 2);
+        let halfBorder = borderWidth / 2;
+        let halfMargin = margin / 2;
+        let [x1, y1] = [halfBorder, halfBorder];
+        let [x2, y2] = [natWidth - halfBorder, natHeight - halfBorder];
 
         switch (this._arrowSide) {
         case St.Side.TOP:
@@ -624,10 +607,10 @@ export const BoxPointer = GObject.registerClass({
     }
 
     _calculateArrowSide(arrowSide) {
-        const sourceTopLeft = this._sourceExtents.get_top_left();
-        const sourceBottomRight = this._sourceExtents.get_bottom_right();
-        const [, , boxWidth, boxHeight] = this.get_preferred_size();
-        const workarea = this._workArea;
+        let sourceTopLeft = this._sourceExtents.get_top_left();
+        let sourceBottomRight = this._sourceExtents.get_bottom_right();
+        let [, , boxWidth, boxHeight] = this.get_preferred_size();
+        let workarea = this._workArea;
 
         switch (arrowSide) {
         case St.Side.TOP:
@@ -656,7 +639,7 @@ export const BoxPointer = GObject.registerClass({
     }
 
     _updateFlip(allocationBox) {
-        const arrowSide = this._calculateArrowSide(this._userArrowSide);
+        let arrowSide = this._calculateArrowSide(this._userArrowSide);
         if (this._arrowSide !== arrowSide) {
             this._arrowSide = arrowSide;
             this._reposition(allocationBox);
@@ -666,8 +649,8 @@ export const BoxPointer = GObject.registerClass({
     }
 
     updateArrowSide(side) {
-        this._arrowSide = this._userArrowSide = side;
-        this.queue_relayout();
+        this._arrowSide = side;
+        this._border.queue_repaint();
 
         this.emit('arrow-side-changed');
     }

@@ -41,6 +41,7 @@
 #include "gskroundedrect.h"
 #include "gskroundedrectprivate.h"
 
+#include "gskdebugprivate.h"
 #include "gskrectprivate.h"
 
 #include <math.h>
@@ -93,19 +94,19 @@ gsk_rounded_rect_normalize_in_place (GskRoundedRect *self)
 
 /**
  * gsk_rounded_rect_init:
- * @self: the rounded rectangle to initialize
+ * @self: The `GskRoundedRect` to initialize
  * @bounds: a `graphene_rect_t` describing the bounds
  * @top_left: the rounding radius of the top left corner
  * @top_right: the rounding radius of the top right corner
  * @bottom_right: the rounding radius of the bottom right corner
  * @bottom_left: the rounding radius of the bottom left corner
  *
- * Initializes a rounded rectangle with the given values.
+ * Initializes the given `GskRoundedRect` with the given values.
  *
- * This function will implicitly normalize the rounded rectangle
+ * This function will implicitly normalize the `GskRoundedRect`
  * before returning.
  *
- * Returns: (transfer none): the initialized rounded rectangle
+ * Returns: (transfer none): the initialized rectangle
  */
 GskRoundedRect *
 gsk_rounded_rect_init (GskRoundedRect        *self,
@@ -128,15 +129,15 @@ gsk_rounded_rect_init (GskRoundedRect        *self,
 
 /**
  * gsk_rounded_rect_init_copy:
- * @self: the rounded rectangle to initialize
- * @src: another rounded rectangle
+ * @self: a `GskRoundedRect`
+ * @src: a `GskRoundedRect`
  *
- * Initializes a rounded rectangle with a copy.
+ * Initializes @self using the given @src rectangle.
  *
- * This function will not normalize the rounded rectangle,
+ * This function will not normalize the `GskRoundedRect`,
  * so make sure the source is normalized.
  *
- * Returns: (transfer none): the initialized rounded rectangle
+ * Returns: (transfer none): the initialized rectangle
  */
 GskRoundedRect *
 gsk_rounded_rect_init_copy (GskRoundedRect       *self,
@@ -149,14 +150,14 @@ gsk_rounded_rect_init_copy (GskRoundedRect       *self,
 
 /**
  * gsk_rounded_rect_init_from_rect:
- * @self: the rounded rectangle to initialize
+ * @self: a `GskRoundedRect`
  * @bounds: a `graphene_rect_t`
  * @radius: the border radius
  *
- * Initializes a rounded rectangle to the given bounds
- * and sets the radius of all four corners equally.
+ * Initializes @self to the given @bounds and sets the radius
+ * of all four corners to @radius.
  *
- * Returns: (transfer none): the initialized rounded rectangle
+ * Returns: (transfer none): the initialized rectangle
  **/
 GskRoundedRect *
 gsk_rounded_rect_init_from_rect (GskRoundedRect        *self,
@@ -170,15 +171,15 @@ gsk_rounded_rect_init_from_rect (GskRoundedRect        *self,
 
 /**
  * gsk_rounded_rect_normalize:
- * @self: a rounded rectangle
+ * @self: a `GskRoundedRect`
  *
- * Normalizes a rounded rectangle.
+ * Normalizes the passed rectangle.
  *
- * This function will ensure that the bounds of the rounded rectangle
+ * This function will ensure that the bounds of the rectangle
  * are normalized and ensure that the corner values are positive
  * and the corners do not overlap.
  *
- * Returns: (transfer none): the normalized rounded rectangle
+ * Returns: (transfer none): the normalized rectangle
  */
 GskRoundedRect *
 gsk_rounded_rect_normalize (GskRoundedRect *self)
@@ -190,15 +191,15 @@ gsk_rounded_rect_normalize (GskRoundedRect *self)
 
 /**
  * gsk_rounded_rect_offset:
- * @self: a rounded rectangle
+ * @self: a `GskRoundedRect`
  * @dx: the horizontal offset
  * @dy: the vertical offset
  *
- * Offsets the rounded rectangle's origin by @dx and @dy.
+ * Offsets the bound's origin by @dx and @dy.
  *
- * The size and corners of the rounded rectangle are unchanged.
+ * The size and corners of the rectangle are unchanged.
  *
- * Returns: (transfer none): the offset rounded rectangle
+ * Returns: (transfer none): the offset rectangle
  */
 GskRoundedRect *
 gsk_rounded_rect_offset (GskRoundedRect *self,
@@ -238,23 +239,23 @@ border_radius_shrink (graphene_size_t       *corner,
 
 /**
  * gsk_rounded_rect_shrink:
- * @self: the rounded rectangle to shrink or grow
- * @top: how far to move the top side downwards
- * @right: how far to move the right side to the left
- * @bottom: how far to move the bottom side upwards
- * @left: how far to move the left side to the right
+ * @self: The `GskRoundedRect` to shrink or grow
+ * @top: How far to move the top side downwards
+ * @right: How far to move the right side to the left
+ * @bottom: How far to move the bottom side upwards
+ * @left: How far to move the left side to the right
  *
- * Shrinks (or grows) a rounded rectangle by moving the 4 sides
+ * Shrinks (or grows) the given rectangle by moving the 4 sides
  * according to the offsets given.
  *
  * The corner radii will be changed in a way that tries to keep
  * the center of the corner circle intact. This emulates CSS behavior.
  *
- * This function also works for growing rounded rectangles
- * if you pass negative values for the @top, @right, @bottom or @left.
+ * This function also works for growing rectangles if you pass
+ * negative values for the @top, @right, @bottom or @left.
  *
- * Returns: (transfer none): the resized rounded rectangle
- */
+ * Returns: (transfer none): the resized `GskRoundedRect`
+ **/
 GskRoundedRect *
 gsk_rounded_rect_shrink (GskRoundedRect *self,
                          float           top,
@@ -308,7 +309,7 @@ gsk_rounded_rect_scale_affine (GskRoundedRect       *dest,
   g_assert (dest != src);
 
   gsk_rect_scale (&src->bounds, scale_x, scale_y, &dest->bounds);
-  gsk_rect_init_offset (&dest->bounds, &dest->bounds, &GRAPHENE_POINT_INIT (dx, dy));
+  graphene_rect_offset (&dest->bounds, dx, dy);
 
   scale_x = fabsf (scale_x);
   scale_y = fabsf (scale_y);
@@ -320,64 +321,16 @@ gsk_rounded_rect_scale_affine (GskRoundedRect       *dest,
     }
 }
 
-/* The permutation of corners that is induced
- * by the dihedral transform.
- */
-static GskCorner
-gsk_corner_dihedral (GskCorner   corner,
-                     GdkDihedral dihedral)
-{
-  static const GskCorner p[8][4] = {
-    [GDK_DIHEDRAL_NORMAL]      = { 0, 1, 2, 3 },
-    [GDK_DIHEDRAL_90]          = { 3, 0, 1, 2 },
-    [GDK_DIHEDRAL_180]         = { 2, 3, 0, 1 },
-    [GDK_DIHEDRAL_270]         = { 1, 2, 3, 0 },
-    [GDK_DIHEDRAL_FLIPPED]     = { 1, 0, 3, 2 },
-    [GDK_DIHEDRAL_FLIPPED_90]  = { 0, 3, 2, 1 },
-    [GDK_DIHEDRAL_FLIPPED_180] = { 3, 2, 1, 0 },
-    [GDK_DIHEDRAL_FLIPPED_270] = { 2, 1, 0, 3 },
-  };
-
-  return p[dihedral][corner];
-}
-
-void
-gsk_rounded_rect_dihedral (GskRoundedRect       *dest,
-                           const GskRoundedRect *src,
-                           GdkDihedral           dihedral)
-{
-  gsk_rect_dihedral (&src->bounds, dihedral, &dest->bounds);
-
-  if (gdk_dihedral_swaps_xy (dihedral))
-    {
-      for (guint i = 0; i < 4; i++)
-        {
-          GskCorner c = gsk_corner_dihedral ((GskCorner)i, dihedral);
-          dest->corner[i].width = src->corner[c].height;
-          dest->corner[i].height = src->corner[c].width;
-        }
-    }
-  else
-    {
-      for (guint i = 0; i < 4; i++)
-        {
-          GskCorner c = gsk_corner_dihedral ((GskCorner)i, dihedral);
-          dest->corner[i].width = src->corner[c].width;
-          dest->corner[i].height = src->corner[c].height;
-        }
-    }
-}
-
 /*<private>
  * gsk_rounded_rect_is_circular:
- * @self: the rounded rectangle to check
+ * @self: the `GskRoundedRect` to check
  *
- * Checks if all corners of a rounded rectangle are quarter-circles
- * (as opposed to quarter-ellipses).
+ * Checks if all corners of @self are quarter-circles (as
+ * opposed to quarter-ellipses).
  *
  * Note that different corners can still have different radii.
  *
- * Returns: true if the rounded rectangle is circular
+ * Returns: %TRUE if the rectangle is circular.
  */
 gboolean
 gsk_rounded_rect_is_circular (const GskRoundedRect *self)
@@ -393,15 +346,15 @@ gsk_rounded_rect_is_circular (const GskRoundedRect *self)
 
 /**
  * gsk_rounded_rect_is_rectilinear:
- * @self: the rounded rectangle to check
+ * @self: the `GskRoundedRect` to check
  *
- * Checks if all corners of a rounded rectangle are right angles
- * and the rectangle covers all of its bounds.
+ * Checks if all corners of @self are right angles and the
+ * rectangle covers all of its bounds.
  *
  * This information can be used to decide if [ctor@Gsk.ClipNode.new]
  * or [ctor@Gsk.RoundedClipNode.new] should be called.
  *
- * Returns: true if the rounded rectangle is rectilinear
+ * Returns: %TRUE if the rectangle is rectilinear
  **/
 gboolean
 gsk_rounded_rect_is_rectilinear (const GskRoundedRect *self)
@@ -481,12 +434,12 @@ gsk_rounded_rect_locate_point (const GskRoundedRect   *self,
 
 /**
  * gsk_rounded_rect_contains_point:
- * @self: a rounded rectangle
+ * @self: a `GskRoundedRect`
  * @point: the point to check
  *
- * Checks if the given point is inside the rounded rectangle.
+ * Checks if the given @point is inside the rounded rectangle.
  *
- * Returns: true if the point is inside the rounded rectangle
+ * Returns: %TRUE if the @point is inside the rounded rectangle
  **/
 gboolean
 gsk_rounded_rect_contains_point (const GskRoundedRect   *self,
@@ -497,12 +450,12 @@ gsk_rounded_rect_contains_point (const GskRoundedRect   *self,
 
 /**
  * gsk_rounded_rect_contains_rect:
- * @self: a rounded rectangle
+ * @self: a `GskRoundedRect`
  * @rect: the rectangle to check
  *
- * Checks if the given rectangle is contained inside the rounded rectangle.
+ * Checks if the given @rect is contained inside the rounded rectangle.
  *
- * Returns: true if the @rect is fully contained inside the rounded rectangle
+ * Returns: %TRUE if the @rect is fully contained inside the rounded rectangle
  **/
 gboolean
 gsk_rounded_rect_contains_rect (const GskRoundedRect  *self,
@@ -554,13 +507,12 @@ gsk_rounded_rect_contains_rect (const GskRoundedRect  *self,
 
 /**
  * gsk_rounded_rect_intersects_rect:
- * @self: a rounded rectangle
+ * @self: a `GskRoundedRect`
  * @rect: the rectangle to check
  *
- * Checks if part a rectangle is contained
- * inside the rounded rectangle.
+ * Checks if part of the given @rect is contained inside the rounded rectangle.
  *
- * Returns: true if the @rect intersects with the rounded rectangle
+ * Returns: %TRUE if the @rect intersects with the rounded rectangle
  */
 gboolean
 gsk_rounded_rect_intersects_rect (const GskRoundedRect  *self,
@@ -1030,100 +982,43 @@ gsk_rounded_rect_to_string (const GskRoundedRect *self)
                           self->corner[3].height);
 }
 
-/*< private >
+/*
  * gsk_rounded_rect_get_largest_cover:
- * @self: the rounded rectangle to intersect with
+ * @self: the rounded rect to intersect with
  * @rect: the rectangle to intersect
  * @result: (out caller-allocates): The resulting rectangle
  *
  * Computes the largest rectangle that is fully covered by both
- * the given rect and the rounded rectangle.
- *
+ * the given rect and the rounded rect.  
  * In particular, this function respects corners, so
- *
- *     gsk_rounded_rect_get_largest_cover (self, &self->bounds, &rect)
- *
- * can be used to compute a decomposition for
- * the rounded rectangle itself.
- */
-gboolean
+ *   gsk_rounded_rect_get_largest_cover(self, &self->bounds, &rect)
+ * can be used to compute a decomposition for a rounded rect itself.
+ **/
+void
 gsk_rounded_rect_get_largest_cover (const GskRoundedRect  *self,
                                     const graphene_rect_t *rect,
                                     graphene_rect_t       *result)
 {
   graphene_rect_t wide, high;
   double start, end;
-  gboolean empty_wide, empty_high;
 
   wide = self->bounds;
   start = MAX(self->corner[GSK_CORNER_TOP_LEFT].height, self->corner[GSK_CORNER_TOP_RIGHT].height);
   end = MAX(self->corner[GSK_CORNER_BOTTOM_LEFT].height, self->corner[GSK_CORNER_BOTTOM_RIGHT].height);
   wide.size.height -= MIN (wide.size.height, start + end);
   wide.origin.y += start;
-  empty_wide = !gsk_rect_intersection (&wide, rect, &wide);
+  gsk_rect_intersection (&wide, rect, &wide);
 
   high = self->bounds;
   start = MAX(self->corner[GSK_CORNER_TOP_LEFT].width, self->corner[GSK_CORNER_BOTTOM_LEFT].width);
   end = MAX(self->corner[GSK_CORNER_TOP_RIGHT].width, self->corner[GSK_CORNER_BOTTOM_RIGHT].width);
   high.size.width -= MIN (high.size.width, start + end);
   high.origin.x += start;
-  empty_high = !gsk_rect_intersection (&high, rect, &high);
+  gsk_rect_intersection (&high, rect, &high);
 
-  if (empty_wide && empty_high)
-    return FALSE;
-  else if (empty_wide)
-    *result = high;
-  else if (empty_high)
-    *result = wide;
-  else if (wide.size.width * wide.size.height > high.size.width * high.size.height)
+  if (wide.size.width * wide.size.height > high.size.width * high.size.height)
     *result = wide;
   else
     *result = high;
-
-  return TRUE;
 }
 
-/*< private >
- * gsk_rounded_rect_corner_box_contains_point:
- * @self: a rounded rectangle
- * @corner: the corner
- * @point: the point
- *
- * Returns whether @point is inside the rectangle defining
- * the quarter ellipses of the given corner.
- *
- * Returns: true if @point is inside the @corner's box
- */
-gboolean
-gsk_rounded_rect_corner_box_contains_point (const GskRoundedRect   *self,
-                                            GskCorner               corner,
-                                            const graphene_point_t *point)
-{
-  graphene_rect_t rect;
-
-  graphene_size_init_from_size (&rect.size, &self->corner[corner]);
-
-  switch (corner)
-    {
-    case GSK_CORNER_TOP_LEFT:
-      rect.origin.x = self->bounds.origin.x;
-      rect.origin.y = self->bounds.origin.y;
-      break;
-    case GSK_CORNER_TOP_RIGHT:
-      rect.origin.x = self->bounds.origin.x + self->bounds.size.width - self->corner[corner].width;
-      rect.origin.y = self->bounds.origin.y;
-      break;
-    case GSK_CORNER_BOTTOM_RIGHT:
-      rect.origin.x = self->bounds.origin.x + self->bounds.size.width - self->corner[corner].width;
-      rect.origin.y = self->bounds.origin.y + self->bounds.size.height - self->corner[corner].height;
-      break;
-    case GSK_CORNER_BOTTOM_LEFT:
-      rect.origin.x = self->bounds.origin.x;
-      rect.origin.y = self->bounds.origin.y + self->bounds.size.height - self->corner[corner].height;
-      break;
-    default:
-      g_assert_not_reached ();
-    }
-
-  return graphene_rect_contains_point (&rect, point);
-}

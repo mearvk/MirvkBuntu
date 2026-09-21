@@ -55,7 +55,7 @@ struct _GDBusAuthMechanismAnon
   GDBusAuthMechanismAnonPrivate *priv;
 };
 
-GType _g_dbus_auth_mechanism_anon_get_type (void);
+GType _g_dbus_auth_mechanism_anon_get_type (void) G_GNUC_CONST;
 
 
 G_END_DECLS

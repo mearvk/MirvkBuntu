@@ -28,9 +28,9 @@ G_BEGIN_DECLS
 #define GDK_TYPE_TEXTURE_DOWNLOADER    (gdk_texture_downloader_get_type ())
 
 GDK_AVAILABLE_IN_4_10
-GType                   gdk_texture_downloader_get_type         (void);
+GType                   gdk_texture_downloader_get_type         (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_4_10
-GdkTextureDownloader *  gdk_texture_downloader_new              (GdkTexture                     *texture);
+GdkTextureDownloader *  gdk_texture_downloader_new              (GdkTexture             *texture);
 
 GDK_AVAILABLE_IN_4_10
 GdkTextureDownloader *  gdk_texture_downloader_copy             (const GdkTextureDownloader     *self);
@@ -48,11 +48,6 @@ void                    gdk_texture_downloader_set_format       (GdkTextureDownl
                                                                  GdkMemoryFormat                 format);
 GDK_AVAILABLE_IN_4_10
 GdkMemoryFormat         gdk_texture_downloader_get_format       (const GdkTextureDownloader     *self);
-GDK_AVAILABLE_IN_4_16
-void                    gdk_texture_downloader_set_color_state  (GdkTextureDownloader           *self,
-                                                                 GdkColorState                  *color_state);
-GDK_AVAILABLE_IN_4_16
-GdkColorState *         gdk_texture_downloader_get_color_state  (const GdkTextureDownloader     *self);
 
 
 GDK_AVAILABLE_IN_4_10
@@ -62,11 +57,6 @@ void                    gdk_texture_downloader_download_into    (const GdkTextur
 GDK_AVAILABLE_IN_4_10
 GBytes *                gdk_texture_downloader_download_bytes   (const GdkTextureDownloader     *self,
                                                                  gsize                          *out_stride);
-GDK_AVAILABLE_IN_4_20
-GBytes *                gdk_texture_downloader_download_bytes_with_planes
-                                                                (const GdkTextureDownloader     *self,
-                                                                 gsize                           out_offsets[4],
-                                                                 gsize                           out_strides[4]);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkTextureDownloader, gdk_texture_downloader_free)
 

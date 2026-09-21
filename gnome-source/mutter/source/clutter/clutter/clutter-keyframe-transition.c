@@ -23,7 +23,7 @@
 
 /**
  * ClutterKeyframeTransition:
- *
+ * 
  * Keyframe property transition
  *
  * #ClutterKeyframeTransition allows animating a property by defining
@@ -300,6 +300,7 @@ clutter_keyframe_transition_compute_value (ClutterTransition *transition,
   /* normalize the progress and apply the easing mode */
   real_progress = clutter_easing_for_mode ( cur_frame->mode, (p - cur_frame->start), (cur_frame->end - cur_frame->start));
 
+#ifdef CLUTTER_ENABLE_DEBUG
   if (CLUTTER_HAS_DEBUG (ANIMATION))
     {
       char *from, *to;
@@ -325,6 +326,7 @@ clutter_keyframe_transition_compute_value (ClutterTransition *transition,
       g_free (from);
       g_free (to);
     }
+#endif /* CLUTTER_ENABLE_DEBUG */
 
 out:
   parent_class =
@@ -613,8 +615,11 @@ clutter_keyframe_transition_clear (ClutterKeyframeTransition *transition)
   g_return_if_fail (CLUTTER_IS_KEYFRAME_TRANSITION (transition));
 
   priv = clutter_keyframe_transition_get_instance_private (transition);
-
-  g_clear_pointer (&priv->frames, g_array_unref);
+  if (priv->frames != NULL)
+    {
+      g_array_unref (priv->frames);
+      priv->frames = NULL;
+    }
 }
 
 /**

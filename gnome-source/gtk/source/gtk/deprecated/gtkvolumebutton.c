@@ -43,10 +43,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * `GtkVolumeButton` is a `GtkScaleButton` subclass tailored for
  * volume control.
  *
- * <picture>
- *   <source srcset="volumebutton-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkVolumeButton" src="volumebutton.png">
- * </picture>
+ * ![An example GtkVolumeButton](volumebutton.png)
  *
  * Deprecated: 4.10: This widget will be removed in GTK 5
  */
@@ -81,11 +78,8 @@ static const char * const icons_symbolic[] =
 enum
 {
   PROP_0,
-  PROP_SYMBOLIC,
-  N_PROPS
+  PROP_SYMBOLIC
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static gboolean cb_query_tooltip (GtkWidget       *button,
                                   int              x,
@@ -179,11 +173,11 @@ gtk_volume_button_class_init (GtkVolumeButtonClass *klass)
    *
    * Deprecated: 4.10: This widget will be removed in GTK 5
    */
-  props[PROP_SYMBOLIC] = g_param_spec_boolean ("use-symbolic", NULL, NULL,
-                                               TRUE,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+                                   PROP_SYMBOLIC,
+                                   g_param_spec_boolean ("use-symbolic", NULL, NULL,
+                                                         TRUE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY));
 
   /* Bind class to template
    */

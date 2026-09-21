@@ -37,7 +37,7 @@
 #include "cogl/cogl-snippet-private.h"
 #include "cogl/cogl-util.h"
 
-G_DEFINE_FINAL_TYPE (CoglSnippet, cogl_snippet, G_TYPE_OBJECT);
+G_DEFINE_TYPE (CoglSnippet, cogl_snippet, G_TYPE_OBJECT);
 
 
 static void
@@ -114,7 +114,8 @@ cogl_snippet_set_declarations (CoglSnippet *snippet,
   if (!_cogl_snippet_modify (snippet))
     return;
 
-  g_set_str (&snippet->declarations, declarations);
+  g_free (snippet->declarations);
+  snippet->declarations = declarations ? g_strdup (declarations) : NULL;
 }
 
 const char *
@@ -134,7 +135,8 @@ cogl_snippet_set_pre (CoglSnippet *snippet,
   if (!_cogl_snippet_modify (snippet))
     return;
 
-  g_set_str (&snippet->pre, pre);
+  g_free (snippet->pre);
+  snippet->pre = pre ? g_strdup (pre) : NULL;
 }
 
 const char *
@@ -154,7 +156,8 @@ cogl_snippet_set_replace (CoglSnippet *snippet,
   if (!_cogl_snippet_modify (snippet))
     return;
 
-  g_set_str (&snippet->replace, replace);
+  g_free (snippet->replace);
+  snippet->replace = replace ? g_strdup (replace) : NULL;
 }
 
 const char *
@@ -174,7 +177,8 @@ cogl_snippet_set_post (CoglSnippet *snippet,
   if (!_cogl_snippet_modify (snippet))
     return;
 
-  g_set_str (&snippet->post, post);
+  g_free (snippet->post);
+  snippet->post = post ? g_strdup (post) : NULL;
 }
 
 const char *
@@ -189,32 +193,4 @@ void
 _cogl_snippet_make_immutable (CoglSnippet *snippet)
 {
   snippet->immutable = TRUE;
-}
-
-void
-cogl_snippet_set_capability (CoglSnippet  *snippet,
-                             GQuark        domain,
-                             unsigned int  capability)
-{
-  g_return_if_fail (!snippet->capability_domain);
-
-  snippet->capability_domain = domain;
-  snippet->capability = capability;
-}
-
-gboolean
-cogl_snippet_get_capability (CoglSnippet  *snippet,
-                             GQuark       *domain,
-                             unsigned int *capability)
-{
-  if (snippet->capability_domain)
-    {
-      *domain = snippet->capability_domain;
-      *capability = snippet->capability;
-      return TRUE;
-    }
-  else
-    {
-      return FALSE;
-    }
 }

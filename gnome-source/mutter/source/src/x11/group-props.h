@@ -22,7 +22,7 @@
 #pragma once
 
 #include "core/window-private.h"
-#include "meta/meta-x11-group.h"
+#include "meta/group.h"
 
 void meta_group_reload_property         (MetaGroup   *group,
                                          Atom         property);

@@ -26,9 +26,10 @@
 G_BEGIN_DECLS
 
 #define GDK_TYPE_CONTENT_SERIALIZER         (gdk_content_serializer_get_type ())
+#define GDK_CONTENT_SERIALIZER(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), GDK_TYPE_CONTENT_SERIALIZER, GdkContentSerializer))
+#define GDK_IS_CONTENT_SERIALIZER(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), GDK_TYPE_CONTENT_SERIALIZER))
 
-GDK_AVAILABLE_IN_ALL
-G_DECLARE_FINAL_TYPE (GdkContentSerializer, gdk_content_serializer, GDK, CONTENT_SERIALIZER, GObject)
+typedef struct _GdkContentSerializer GdkContentSerializer;
 
 /**
  * GdkContentSerializeFunc:
@@ -41,6 +42,9 @@ G_DECLARE_FINAL_TYPE (GdkContentSerializer, gdk_content_serializer, GDK, CONTENT
  * operation.
  */
 typedef void (* GdkContentSerializeFunc) (GdkContentSerializer *serializer);
+
+GDK_AVAILABLE_IN_ALL
+GType                   gdk_content_serializer_get_type                 (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 const char *            gdk_content_serializer_get_mime_type            (GdkContentSerializer   *serializer);
@@ -92,4 +96,6 @@ GDK_AVAILABLE_IN_ALL
 gboolean                gdk_content_serialize_finish                    (GAsyncResult           *result,
                                                                          GError                **error);
 
+
 G_END_DECLS
+

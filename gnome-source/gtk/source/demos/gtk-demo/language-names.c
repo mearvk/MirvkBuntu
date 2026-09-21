@@ -260,7 +260,8 @@ languages_variant_init (const char *variant)
 
       ctx = g_markup_parse_context_new (&parser, 0, NULL, NULL);
 
-      g_clear_pointer (&error, g_free);
+      g_free (error);
+      error = NULL;
       res = g_markup_parse_context_parse (ctx, buf, buf_len, &error);
       g_free (ctx);
 

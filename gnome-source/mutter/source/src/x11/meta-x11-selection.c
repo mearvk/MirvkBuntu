@@ -21,8 +21,6 @@
 
 #include "core/meta-selection-private.h"
 #include "meta/meta-selection-source-memory.h"
-#include "mtk/mtk.h"
-#include "mtk/mtk-x11.h"
 #include "x11/meta-selection-source-x11-private.h"
 #include "x11/meta-x11-selection-output-stream-private.h"
 #include "x11/meta-x11-selection-private.h"
@@ -138,10 +136,8 @@ send_selection_notify (MetaX11Display         *x11_display,
   event.target = request_event->target;
   event.property = accepted ? request_event->property : None;
 
-  mtk_x11_error_trap_push (xdisplay);
   XSendEvent (xdisplay, request_event->requestor,
               False, NoEventMask, (XEvent *) &event);
-  mtk_x11_error_trap_pop (xdisplay);
 }
 
 static void
@@ -149,14 +145,17 @@ write_mimetypes_cb (GOutputStream *stream,
                     GAsyncResult  *res,
                     gpointer       user_data)
 {
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
 
   g_output_stream_write_bytes_finish (stream, res, &error);
   g_output_stream_close (stream, NULL, NULL);
   g_object_unref (stream);
 
   if (error)
-    g_warning ("Could not fetch selection mimetypes: %s", error->message);
+    {
+      g_warning ("Could not fetch selection mimetypes: %s", error->message);
+      g_error_free (error);
+    }
 }
 
 static void
@@ -164,10 +163,13 @@ transfer_cb (MetaSelection *selection,
              GAsyncResult  *res,
              GOutputStream *output)
 {
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
 
   if (!meta_selection_transfer_finish (selection, res, &error))
-    g_warning ("Error writing data to X11 selection: %s", error->message);
+    {
+      g_warning ("Error writing data to X11 selection: %s", error->message);
+      g_error_free (error);
+    }
 
   g_output_stream_close (output, NULL, NULL);
   g_object_unref (output);
@@ -344,7 +346,7 @@ source_new_cb (GObject      *object,
   g_free (data);
 }
 
-static void
+static gboolean
 unset_clipboard_owner (gpointer user_data)
 {
   MetaX11Display *x11_display = user_data;
@@ -356,6 +358,8 @@ unset_clipboard_owner (gpointer user_data)
   g_clear_object (&x11_display->selection.owners[META_SELECTION_CLIPBOARD]);
 
   x11_display->selection.timeout_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
 static gboolean
@@ -374,7 +378,7 @@ meta_x11_selection_handle_xfixes_selection_notify (MetaX11Display *x11_display,
   selection = meta_display_get_selection (display);
 
   if (selection_type == META_SELECTION_CLIPBOARD)
-    g_clear_handle_id (&x11_display->selection.timeout_id, mtk_source_remove);
+    g_clear_handle_id (&x11_display->selection.timeout_id, g_source_remove);
 
   if (x11_display->selection.cancellables[selection_type])
     {
@@ -405,11 +409,9 @@ meta_x11_selection_handle_xfixes_selection_notify (MetaX11Display *x11_display,
            * selection. Restoring the clipboard in this case would overwrite the
            * new selection, so this will be cancelled when a new selection
            * arrives. */
-          x11_display->selection.timeout_id = mtk_timeout_add_once (10,
-                                                                    unset_clipboard_owner,
-                                                                    x11_display);
-          mtk_source_set_name_by_id (x11_display->selection.timeout_id,
-                                     "[mutter] unset_clipboard_owner [x11]");
+          x11_display->selection.timeout_id = g_timeout_add (10,
+                                                             unset_clipboard_owner,
+                                                             x11_display);
         }
       else
         {
@@ -558,5 +560,5 @@ meta_x11_selection_shutdown (MetaX11Display *x11_display)
       x11_display->selection.xwindow = None;
     }
 
-  g_clear_handle_id (&x11_display->selection.timeout_id, mtk_source_remove);
+  g_clear_handle_id (&x11_display->selection.timeout_id, g_source_remove);
 }

@@ -8,10 +8,6 @@ gtk4-update-icon-cache
 Icon theme caching utility
 --------------------------
 
-:Version: GTK
-:Manual section: 1
-:Manual group: GTK commands
-
 SYNOPSIS
 --------
 

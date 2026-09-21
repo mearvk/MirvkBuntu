@@ -189,6 +189,8 @@ typedef enum
 "                                                                         \n"\
 "cogl_color_out *= rounded_rect_coverage (texture_coord);                 \n"
 
+typedef struct _MetaBackgroundLayer MetaBackgroundLayer;
+
 typedef enum
 {
   PIPELINE_VIGNETTE = (1 << 0),
@@ -301,12 +303,10 @@ on_background_changed (MetaBackground        *background,
 {
   invalidate_pipeline (self, CHANGED_BACKGROUND);
   clutter_content_invalidate (CLUTTER_CONTENT (self));
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_BACKGROUND]);
 }
 
 static CoglPipeline *
-make_pipeline (CoglContext   *cogl_context,
-               PipelineFlags  pipeline_flags)
+make_pipeline (PipelineFlags pipeline_flags)
 {
   static CoglPipeline *templates[PIPELINE_ALL + 1];
   CoglPipeline **templatep;
@@ -320,7 +320,7 @@ make_pipeline (CoglContext   *cogl_context,
        * so we need to prevent identical pipelines from getting cached
        * separately, by reusing the same shader snippets.
        */
-      *templatep = COGL_PIPELINE (meta_create_texture_pipeline (cogl_context, NULL));
+      *templatep = COGL_PIPELINE (meta_create_texture_pipeline (NULL));
 
       if ((pipeline_flags & PIPELINE_VIGNETTE) != 0)
         {
@@ -393,14 +393,11 @@ setup_pipeline (MetaBackgroundContent *self,
 {
   MetaContext *context = meta_display_get_context (self->display);
   MetaBackend *backend = meta_context_get_backend (context);
-  ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
-  CoglContext *cogl_context = clutter_backend_get_cogl_context (clutter_backend);
   PipelineFlags pipeline_flags = 0;
   guint8 opacity;
   float color_component;
   CoglFramebuffer *fb;
   CoglPipelineFilter min_filter, mag_filter;
-  MetaTransforms transforms = { 0 };
   CoglColor color;
 
   opacity = clutter_actor_get_paint_opacity (actor);
@@ -419,7 +416,7 @@ setup_pipeline (MetaBackgroundContent *self,
   if (self->pipeline == NULL)
     {
       self->pipeline_flags = pipeline_flags;
-      self->pipeline = make_pipeline (cogl_context, pipeline_flags);
+      self->pipeline = make_pipeline (pipeline_flags);
       self->changed = CHANGED_ALL;
     }
 
@@ -453,7 +450,7 @@ setup_pipeline (MetaBackgroundContent *self,
       cogl_pipeline_set_uniform_1f (self->pipeline,
                                     cogl_pipeline_get_uniform_location (self->pipeline,
                                                                         "vignette_sharpness"),
-                                    (float) self->vignette_sharpness);
+                                    self->vignette_sharpness);
 
       self->changed &= ~CHANGED_VIGNETTE_PARAMETERS;
     }
@@ -465,8 +462,7 @@ setup_pipeline (MetaBackgroundContent *self,
 
       meta_display_get_monitor_geometry (self->display,
                                          self->monitor, &monitor_geometry);
-      gradient_height_perc = MAX (0.0001f,
-                                  self->gradient_height / (float) monitor_geometry.height);
+      gradient_height_perc = MAX (0.0001, self->gradient_height / (float)monitor_geometry.height);
       cogl_pipeline_set_uniform_1f (self->pipeline,
                                     cogl_pipeline_get_uniform_location (self->pipeline,
                                                                         "gradient_height_perc"),
@@ -474,7 +470,7 @@ setup_pipeline (MetaBackgroundContent *self,
       cogl_pipeline_set_uniform_1f (self->pipeline,
                                     cogl_pipeline_get_uniform_location (self->pipeline,
                                                                         "gradient_max_darkness"),
-                                    (float) self->gradient_max_darkness);
+                                    self->gradient_max_darkness);
 
       self->changed &= ~CHANGED_GRADIENT_PARAMETERS;
     }
@@ -487,7 +483,7 @@ setup_pipeline (MetaBackgroundContent *self,
 
       monitor_scale = meta_backend_is_stage_views_scaled (backend)
         ? meta_display_get_monitor_scale (self->display, self->monitor)
-        : 1.0f;
+        : 1.0;
 
       if (self->rounded_clip_bounds_set)
         {
@@ -539,15 +535,15 @@ setup_pipeline (MetaBackgroundContent *self,
     }
 
   if (self->vignette)
-    color_component = (float) (self->vignette_brightness * opacity / 255.0);
+    color_component = self->vignette_brightness * opacity / 255.;
   else
-    color_component = opacity / 255.0f;
+    color_component = opacity / 255.;
 
   cogl_color_init_from_4f (&color,
                            color_component,
                            color_component,
                            color_component,
-                           opacity / 255.0f);
+                           opacity / 255.);
   cogl_pipeline_set_color (self->pipeline, &color);
 
   fb = clutter_paint_context_get_framebuffer (paint_context);
@@ -556,24 +552,14 @@ setup_pipeline (MetaBackgroundContent *self,
                                          actor_pixel_rect->height,
                                          self->texture_width,
                                          self->texture_height,
-                                         &transforms))
+                                         NULL))
     {
       min_filter = COGL_PIPELINE_FILTER_NEAREST;
       mag_filter = COGL_PIPELINE_FILTER_NEAREST;
     }
   else
     {
-      /* The min filter (and thus mipmaps) only ever applies to minified
-       * images, so scaling down is the only case we need to care about here;
-       * otherwise, avoid requesting a mipmap filter so cogl doesn't generate
-       * mipmaps that would never actually be sampled.
-       */
-      if (transforms.x_scale < 1.0f - FLT_EPSILON ||
-          transforms.y_scale < 1.0f - FLT_EPSILON)
-        min_filter = COGL_PIPELINE_FILTER_LINEAR_MIPMAP_NEAREST;
-      else
-        min_filter = COGL_PIPELINE_FILTER_LINEAR;
-
+      min_filter = COGL_PIPELINE_FILTER_LINEAR_MIPMAP_NEAREST;
       mag_filter = COGL_PIPELINE_FILTER_LINEAR;
     }
 
@@ -593,11 +579,11 @@ set_glsl_parameters (MetaBackgroundContent *self,
 
   monitor_scale = meta_backend_is_stage_views_scaled (backend)
     ? meta_display_get_monitor_scale (self->display, self->monitor)
-    : 1.0f;
+    : 1.0;
 
   float pixel_step[] = {
-    1.0f / (self->texture_area.width * monitor_scale),
-    1.0f / (self->texture_area.height * monitor_scale),
+    1.f / (self->texture_area.width * monitor_scale),
+    1.f / (self->texture_area.height * monitor_scale),
   };
 
   pixel_step_uniform_location =
@@ -609,8 +595,8 @@ set_glsl_parameters (MetaBackgroundContent *self,
    */
   scale[0] = self->texture_area.width / (float)actor_pixel_rect->width;
   scale[1] = self->texture_area.height / (float)actor_pixel_rect->height;
-  offset[0] = self->texture_area.x / (float)actor_pixel_rect->width - 0.5f;
-  offset[1] = self->texture_area.y / (float)actor_pixel_rect->height - 0.5f;
+  offset[0] = self->texture_area.x / (float)actor_pixel_rect->width - 0.5;
+  offset[1] = self->texture_area.y / (float)actor_pixel_rect->height - 0.5;
 
   cogl_pipeline_set_uniform_float (self->pipeline,
                                    cogl_pipeline_get_uniform_location (self->pipeline,
@@ -686,10 +672,10 @@ meta_background_content_paint_content (ClutterContent      *content,
     return;
 
   clutter_actor_get_content_box (actor, &actor_box);
-  rect_within_actor.x = (int) actor_box.x1;
-  rect_within_actor.y = (int) actor_box.y1;
-  rect_within_actor.width = (int) (actor_box.x2 - actor_box.x1);
-  rect_within_actor.height = (int) (actor_box.y2 - actor_box.y1);
+  rect_within_actor.x = actor_box.x1;
+  rect_within_actor.y = actor_box.y1;
+  rect_within_actor.width = actor_box.x2 - actor_box.x1;
+  rect_within_actor.height = actor_box.y2 - actor_box.y1;
 
   if (clutter_actor_is_in_clone_paint (actor))
     {
@@ -700,14 +686,14 @@ meta_background_content_paint_content (ClutterContent      *content,
       clutter_actor_get_transformed_position (actor,
                                               &transformed_x,
                                               &transformed_y);
-      rect_within_stage.x = (int) floorf (transformed_x);
-      rect_within_stage.y = (int) floorf (transformed_y);
+      rect_within_stage.x = floorf (transformed_x);
+      rect_within_stage.y = floorf (transformed_y);
 
       clutter_actor_get_transformed_size (actor,
                                           &transformed_width,
                                           &transformed_height);
-      rect_within_stage.width = (int) ceilf (transformed_width);
-      rect_within_stage.height = (int) ceilf (transformed_height);
+      rect_within_stage.width = ceilf (transformed_width);
+      rect_within_stage.height = ceilf (transformed_height);
 
       untransformed =
         rect_within_actor.x == rect_within_stage.x &&
@@ -969,49 +955,47 @@ meta_background_content_class_init (MetaBackgroundContentClass *klass)
   properties[PROP_META_DISPLAY] =
     g_param_spec_object ("meta-display", NULL, NULL,
                          META_TYPE_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   properties[PROP_MONITOR] =
     g_param_spec_int ("monitor", NULL, NULL,
                       0, G_MAXINT, 0,
-                      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   properties[PROP_BACKGROUND] =
     g_param_spec_object ("background", NULL, NULL,
                          META_TYPE_BACKGROUND,
-                         G_PARAM_READWRITE |
-                         G_PARAM_STATIC_STRINGS |
-                         G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE);
 
   properties[PROP_GRADIENT] =
     g_param_spec_boolean ("gradient", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE);
 
   properties[PROP_GRADIENT_HEIGHT] =
     g_param_spec_int ("gradient-height", NULL, NULL,
                       0, G_MAXINT, 0,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                      G_PARAM_READWRITE);
 
   properties[PROP_GRADIENT_MAX_DARKNESS] =
     g_param_spec_double ("gradient-max-darkness", NULL, NULL,
                          0.0, 1.0, 0.0,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
 
   properties[PROP_VIGNETTE] =
     g_param_spec_boolean ("vignette", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE);
 
   properties[PROP_VIGNETTE_BRIGHTNESS] =
     g_param_spec_double ("brightness", NULL, NULL,
                          0.0, 1.0, 1.0,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
 
   properties[PROP_VIGNETTE_SHARPNESS] =
     g_param_spec_double ("vignette-sharpness", NULL, NULL,
                          0.0, G_MAXDOUBLE, 0.0,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
 
   properties[PROP_ROUNDED_CLIP_RADIUS] =
     g_param_spec_float ("rounded-clip-radius", NULL, NULL,
@@ -1040,7 +1024,6 @@ meta_background_content_init (MetaBackgroundContent *self)
 
 /**
  * meta_background_content_new:
- * @display: a #MetaDisplay
  * @monitor: Index of the monitor for which to draw the background
  *
  * Creates a new actor to draw the background for the given monitor.
@@ -1084,7 +1067,6 @@ meta_background_content_set_background (MetaBackgroundContent *self,
 
   invalidate_pipeline (self, CHANGED_BACKGROUND);
   clutter_content_invalidate (CLUTTER_CONTENT (self));
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_BACKGROUND]);
 }
 
 void
@@ -1223,6 +1205,12 @@ meta_background_content_set_rounded_clip_bounds (MetaBackgroundContent *self,
   clutter_content_invalidate (CLUTTER_CONTENT (self));
 }
 
+MtkRegion *
+meta_background_content_get_clip_region (MetaBackgroundContent *self)
+{
+  return self->clip_region;
+}
+
 void
 meta_background_content_cull_unobscured (MetaBackgroundContent *self,
                                          MtkRegion             *unobscured_region)
@@ -1235,10 +1223,4 @@ meta_background_content_cull_redraw_clip (MetaBackgroundContent *self,
                                           MtkRegion             *clip_region)
 {
   set_clip_region (self, clip_region);
-}
-
-MetaBackground *
-meta_background_content_get_background (MetaBackgroundContent *self)
-{
-  return self->background;
 }

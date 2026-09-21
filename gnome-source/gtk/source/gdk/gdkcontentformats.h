@@ -31,7 +31,7 @@ GDK_AVAILABLE_IN_ALL
 const char *            gdk_intern_mime_type                    (const char                     *string);
 
 GDK_AVAILABLE_IN_ALL
-GType                   gdk_content_formats_get_type            (void);
+GType                   gdk_content_formats_get_type            (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GdkContentFormats *     gdk_content_formats_new                 (const char                    **mime_types,
                                                                  guint                           n_mime_types);
@@ -76,15 +76,12 @@ GDK_AVAILABLE_IN_ALL
 gboolean                gdk_content_formats_contain_mime_type   (const GdkContentFormats        *formats,
                                                                  const char                     *mime_type);
 
-GDK_AVAILABLE_IN_4_18
-gboolean gdk_content_formats_is_empty                           (GdkContentFormats              *formats);
-
 #define GDK_TYPE_CONTENT_FORMATS_BUILDER (gdk_content_formats_builder_get_type ())
 
 typedef struct _GdkContentFormatsBuilder GdkContentFormatsBuilder;
 
 GDK_AVAILABLE_IN_ALL
-GType                   gdk_content_formats_builder_get_type    (void);
+GType                   gdk_content_formats_builder_get_type    (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GdkContentFormatsBuilder *gdk_content_formats_builder_new        (void);
@@ -106,13 +103,12 @@ GDK_AVAILABLE_IN_ALL
 void                    gdk_content_formats_builder_add_gtype   (GdkContentFormatsBuilder       *builder,
                                                                  GType                           type);
 
-
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkContentFormats, gdk_content_formats_unref)
 
 /* dunno where else to put this */
 #define GDK_TYPE_FILE_LIST (gdk_file_list_get_type ())
 GDK_AVAILABLE_IN_ALL
-GType gdk_file_list_get_type (void);
+GType gdk_file_list_get_type (void) G_GNUC_CONST;
 
 /**
  * GdkFileList:
@@ -130,8 +126,6 @@ GdkFileList *   gdk_file_list_new_from_list (GSList *files);
 GDK_AVAILABLE_IN_4_8
 GdkFileList *   gdk_file_list_new_from_array (GFile **files,
                                               gsize   n_files);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkContentFormatsBuilder, gdk_content_formats_builder_unref)
 
 G_END_DECLS
 

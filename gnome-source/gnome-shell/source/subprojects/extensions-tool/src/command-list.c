@@ -18,13 +18,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "config.h"
-
-#include <gio/gio.h>
 #include <glib/gi18n.h>
+#include <gio/gio.h>
 
 #include "commands.h"
 #include "common.h"
+#include "config.h"
 
 
 typedef enum {
@@ -37,7 +36,7 @@ typedef enum {
   LIST_FLAGS_INACTIVE = 1 << 5,
   LIST_FLAGS_NO_PREFS = 1 << 6,
   LIST_FLAGS_NO_UPDATES = 1 << 7,
-} G_GNUC_FLAG_ENUM ListFilterFlags;
+} ListFilterFlags;
 
 static gboolean
 list_extensions (ListFilterFlags filter, DisplayFormat format)

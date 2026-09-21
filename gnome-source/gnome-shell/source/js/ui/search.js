@@ -1,4 +1,5 @@
-import Atk from 'gi://Atk';
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -15,46 +16,21 @@ import * as RemoteSearch from './remoteSearch.js';
 import {ensureActorVisibleInScrollView} from '../misc/animationUtils.js';
 
 import {Highlighter} from '../misc/util.js';
-import {Spinner} from './animation.js';
-import {logErrorUnlessCancelled} from '../misc/errorUtils.js';
 
 const SEARCH_PROVIDERS_SCHEMA = 'org.gnome.desktop.search-providers';
 
 const MAX_LIST_SEARCH_RESULTS_ROWS = 5;
-const SEARCH_SPINNER_SIZE = 64;
-
-export class SearchEntry extends St.Entry {
-    static [GObject.signals] = {
-        'activate-new-instance': {},
-    };
-
-    static {
-        GObject.registerClass(this);
-
-        const bindingPool = this.get_binding_pool();
-
-        bindingPool.install_closure(
-            'activate-new-instance',
-            Clutter.KEY_Return,
-            Clutter.ModifierType.CONTROL_MASK,
-            obj => {
-                obj.emit('activate-new-instance');
-                return Clutter.EVENT_STOP;
-            }
-        );
-    }
-}
 
 const MaxWidthBox = GObject.registerClass(
 class MaxWidthBox extends St.BoxLayout {
     vfunc_allocate(box) {
-        const themeNode = this.get_theme_node();
-        const maxWidth = themeNode.get_max_width();
-        const availWidth = box.x2 - box.x1;
-        const adjustedBox = box;
+        let themeNode = this.get_theme_node();
+        let maxWidth = themeNode.get_max_width();
+        let availWidth = box.x2 - box.x1;
+        let adjustedBox = box;
 
         if (availWidth > maxWidth) {
-            const excessWidth = availWidth - maxWidth;
+            let excessWidth = availWidth - maxWidth;
             adjustedBox.x1 += Math.floor(excessWidth / 2);
             adjustedBox.x2 -= Math.floor(excessWidth / 2);
         }
@@ -99,16 +75,16 @@ class ListSearchResult extends SearchResult {
 
         this.style_class = 'list-search-result';
 
-        const content = new St.BoxLayout({
+        let content = new St.BoxLayout({
             style_class: 'list-search-result-content',
-            orientation: Clutter.Orientation.HORIZONTAL,
+            vertical: false,
             x_align: Clutter.ActorAlign.START,
             x_expand: true,
             y_expand: true,
         });
         this.set_child(content);
 
-        const titleBox = new St.BoxLayout({
+        let titleBox = new St.BoxLayout({
             style_class: 'list-search-result-title',
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -116,11 +92,11 @@ class ListSearchResult extends SearchResult {
         content.add_child(titleBox);
 
         // An icon for, or thumbnail of, content
-        const icon = this.metaInfo['createIcon'](this.ICON_SIZE);
+        let icon = this.metaInfo['createIcon'](this.ICON_SIZE);
         if (icon)
             titleBox.add_child(icon);
 
-        const title = new St.Label({
+        let title = new St.Label({
             text: this.metaInfo['name'],
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -135,10 +111,6 @@ class ListSearchResult extends SearchResult {
             });
             content.add_child(this._descriptionLabel);
 
-            this.get_accessible().add_relationship(
-                Atk.RelationType.DESCRIBED_BY,
-                this._descriptionLabel.get_accessible());
-
             this._resultsView.connectObject(
                 'terms-changed', this._highlightTerms.bind(this), this);
 
@@ -151,7 +123,7 @@ class ListSearchResult extends SearchResult {
     }
 
     _highlightTerms() {
-        const markup = this._resultsView.highlightTerms(this.metaInfo['description'].split('\n')[0]);
+        let markup = this._resultsView.highlightTerms(this.metaInfo['description'].split('\n')[0]);
         this._descriptionLabel.clutter_text.set_markup(markup);
     }
 });
@@ -166,7 +138,7 @@ class GridSearchResult extends SearchResult {
         this.icon = new IconGrid.BaseIcon(this.metaInfo['name'], {
             createIcon: this.metaInfo['createIcon'],
         });
-        const content = new St.Bin({
+        let content = new St.Bin({
             child: this.icon,
             x_align: Clutter.ActorAlign.START,
             x_expand: true,
@@ -181,16 +153,13 @@ const SearchResultsBase = GObject.registerClass({
     GTypeFlags: GObject.TypeFlags.ABSTRACT,
     Properties: {
         'focus-child': GObject.ParamSpec.object(
-            'focus-child', null, null,
+            'focus-child', 'focus-child', 'focus-child',
             GObject.ParamFlags.READABLE,
             Clutter.Actor.$gtype),
     },
 }, class SearchResultsBase extends St.BoxLayout {
     _init(provider, resultsView) {
-        super._init({
-            style_class: 'search-section',
-            orientation: Clutter.Orientation.VERTICAL,
-        });
+        super._init({style_class: 'search-section', vertical: true});
 
         this.provider = provider;
         this._resultsView = resultsView;
@@ -201,7 +170,7 @@ const SearchResultsBase = GObject.registerClass({
         this._resultDisplayBin = new St.Bin();
         this.add_child(this._resultDisplayBin);
 
-        const separator = new St.Widget({style_class: 'search-section-separator'});
+        let separator = new St.Widget({style_class: 'search-section-separator'});
         this.add_child(separator);
 
         this._resultDisplays = {};
@@ -224,7 +193,7 @@ const SearchResultsBase = GObject.registerClass({
 
     clear() {
         this._cancellable.cancel();
-        for (const resultId in this._resultDisplays)
+        for (let resultId in this._resultDisplays)
             this._resultDisplays[resultId].destroy();
         this._resultDisplays = {};
         this._clearResultDisplay();
@@ -246,19 +215,18 @@ const SearchResultsBase = GObject.registerClass({
     }
 
     async _ensureResultActors(results) {
-        const metasNeeded = results.filter(
+        let metasNeeded = results.filter(
             resultId => this._resultDisplays[resultId] === undefined);
 
         if (metasNeeded.length === 0)
             return;
 
         this._cancellable.cancel();
-        const cancellable = new Gio.Cancellable();
-        this._cancellable = cancellable;
+        this._cancellable.reset();
 
-        const metas = await this.provider.getResultMetas(metasNeeded, cancellable);
+        const metas = await this.provider.getResultMetas(metasNeeded, this._cancellable);
 
-        if (cancellable.is_cancelled()) {
+        if (this._cancellable.is_cancelled()) {
             if (metas.length > 0)
                 throw new Error(`Search provider ${this.provider.id} returned results after the request was canceled`);
         }
@@ -272,24 +240,25 @@ const SearchResultsBase = GObject.registerClass({
             throw new Error(`Invalid result meta returned from search provider ${this.provider.id}`);
 
         metasNeeded.forEach((resultId, i) => {
-            const meta = metas[i];
-            const display = this._createResultDisplay(meta);
+            let meta = metas[i];
+            let display = this._createResultDisplay(meta);
             display.connect('key-focus-in', this._keyFocusIn.bind(this));
             this._resultDisplays[resultId] = display;
         });
     }
 
-    async updateSearch(providerResults, terms) {
+    async updateSearch(providerResults, terms, callback) {
         this._terms = terms;
         if (providerResults.length === 0) {
             this._clearResultDisplay();
             this.hide();
+            callback();
         } else {
-            const maxResults = this._getMaxDisplayedResults();
-            const results = maxResults > -1
+            let maxResults = this._getMaxDisplayedResults();
+            let results = maxResults > -1
                 ? this.provider.filterResults(providerResults, maxResults)
                 : providerResults;
-            const moreCount = Math.max(providerResults.length - results.length, 0);
+            let moreCount = Math.max(providerResults.length - results.length, 0);
 
             try {
                 await this._ensureResultActors(results);
@@ -303,9 +272,10 @@ const SearchResultsBase = GObject.registerClass({
                     resultId => this._addItem(this._resultDisplays[resultId]));
                 this._setMoreCount(this.provider.canLaunchSearch ? moreCount : 0);
                 this.show();
+                callback();
             } catch (e) {
-                logErrorUnlessCancelled(e);
                 this._clearResultDisplay();
+                callback();
             }
         }
     }
@@ -332,7 +302,7 @@ class ListSearchResults extends SearchResultsBase {
 
         this._content = new St.BoxLayout({
             style_class: 'list-search-results',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
         });
         this._container.add_child(this._content);
@@ -371,7 +341,7 @@ class ListSearchResults extends SearchResultsBase {
 
 const GridSearchResultsLayout = GObject.registerClass({
     Properties: {
-        'spacing': GObject.ParamSpec.int('spacing', null, null,
+        'spacing': GObject.ParamSpec.int('spacing', 'Spacing', 'Spacing',
             GObject.ParamFlags.READWRITE, 0, GLib.MAXINT32, 0),
     },
 }, class GridSearchResultsLayout extends Clutter.LayoutManager {
@@ -389,7 +359,7 @@ const GridSearchResultsLayout = GObject.registerClass({
         let natWidth = 0;
         let first = true;
 
-        for (const child of container) {
+        for (let child of container) {
             if (!child.visible)
                 continue;
 
@@ -411,7 +381,7 @@ const GridSearchResultsLayout = GObject.registerClass({
         let minHeight = 0;
         let natHeight = 0;
 
-        for (const child of container) {
+        for (let child of container) {
             if (!child.visible)
                 continue;
 
@@ -426,38 +396,33 @@ const GridSearchResultsLayout = GObject.registerClass({
 
     vfunc_allocate(container, box) {
         const width = box.get_width();
-        const ltr = container.get_text_direction() !== Clutter.TextDirection.RTL;
 
         const childBox = new Clutter.ActorBox();
-        let accumulatedWidth = 0;
+        childBox.x1 = 0;
+        childBox.y1 = 0;
 
         let first = true;
-        for (const child of container) {
+        for (let child of container) {
             if (!child.visible)
                 continue;
 
             if (first)
                 first = false;
             else
-                accumulatedWidth += this._spacing;
+                childBox.x1 += this._spacing;
 
             const [childWidth] = child.get_preferred_width(-1);
             const [childHeight] = child.get_preferred_height(-1);
 
-            if (ltr)
-                childBox.set_origin(accumulatedWidth, 0);
-            else
-                childBox.set_origin(width - accumulatedWidth - childWidth, 0);
-
-            accumulatedWidth += childWidth;
-
-            if (accumulatedWidth <= width)
+            if (childBox.x1 + childWidth <= width)
                 childBox.set_size(childWidth, childHeight);
             else
                 childBox.set_size(0, 0);
 
             child.allocate(childBox);
             child.can_focus = childBox.get_area() > 0;
+
+            childBox.x1 += childWidth;
         }
     }
 
@@ -524,7 +489,7 @@ class GridSearchResults extends SearchResultsBase {
         super._onDestroy();
     }
 
-    async updateSearch(...args) {
+    updateSearch(...args) {
         if (this._notifyAllocationId)
             this.disconnect(this._notifyAllocationId);
         if (this._updateSearchLater) {
@@ -541,12 +506,12 @@ class GridSearchResults extends SearchResultsBase {
             const laters = global.compositor.get_laters();
             this._updateSearchLater = laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
                 delete this._updateSearchLater;
-                super.updateSearch(...args).catch(logErrorUnlessCancelled);
+                super.updateSearch(...args);
                 return GLib.SOURCE_REMOVE;
             });
         });
 
-        await super.updateSearch(...args);
+        super.updateSearch(...args);
     }
 
     _getMaxDisplayedResults() {
@@ -578,7 +543,7 @@ class GridSearchResults extends SearchResultsBase {
     }
 
     getFirstResult() {
-        for (const child of this._grid) {
+        for (let child of this._grid) {
             if (child.visible)
                 return child;
         }
@@ -592,20 +557,17 @@ export const SearchResultsView = GObject.registerClass({
     _init() {
         super._init({
             name: 'searchResults',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
             y_expand: true,
-            reactive: true,
         });
-
-        global.focus_manager.add_group(this);
 
         this._parentalControlsManager = ParentalControlsManager.getDefault();
         this._parentalControlsManager.connect('app-filter-changed', this._reloadRemoteProviders.bind(this));
 
         this._content = new MaxWidthBox({
             name: 'searchResultsContent',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
         });
 
@@ -617,25 +579,22 @@ export const SearchResultsView = GObject.registerClass({
             child: this._content,
         });
 
+        let action = new Clutter.PanAction({interpolate: true});
+        action.connect('pan', this._onPan.bind(this));
+        this._scrollView.add_action(action);
+
         this.add_child(this._scrollView);
 
-        this._statusContainer = new St.BoxLayout({
-            style_class: 'search-statusbox',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-            y_expand: true,
+        this._statusText = new St.Label({
+            style_class: 'search-statustext',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-
-        this._statusSpinner = new Spinner(SEARCH_SPINNER_SIZE);
-
-        this._statusText = new St.Label({style_class: 'search-statustext'});
-
-        this._statusContainer.add_child(this._statusSpinner);
-        this._statusContainer.add_child(this._statusText);
-
-        this.add_child(this._statusContainer);
+        this._statusBin = new St.Bin({
+            y_expand: true,
+            child: this._statusText,
+        });
+        this.add_child(this._statusBin);
 
         this._highlightDefault = false;
         this._defaultResult = null;
@@ -659,7 +618,7 @@ export const SearchResultsView = GObject.registerClass({
 
         this._registerProvider(new AppDisplay.AppSearchProvider());
 
-        const appSystem = Shell.AppSystem.get_default();
+        let appSystem = Shell.AppSystem.get_default();
         appSystem.connect('installed-changed', this._reloadRemoteProviders.bind(this));
         this._reloadRemoteProviders();
     }
@@ -669,7 +628,7 @@ export const SearchResultsView = GObject.registerClass({
     }
 
     _reloadRemoteProviders() {
-        const remoteProviders = this._providers.filter(p => p.isRemoteProvider);
+        let remoteProviders = this._providers.filter(p => p.isRemoteProvider);
         remoteProviders.forEach(provider => {
             this._unregisterProvider(provider);
         });
@@ -690,10 +649,7 @@ export const SearchResultsView = GObject.registerClass({
     }
 
     _unregisterProvider(provider) {
-        const index = this._providers.indexOf(provider);
-        if (index < 0)
-            return;
-
+        let index = this._providers.indexOf(provider);
         this._providers.splice(index, 1);
 
         if (provider.display)
@@ -721,35 +677,31 @@ export const SearchResultsView = GObject.registerClass({
     async _doProviderSearch(provider, previousResults) {
         provider.searchInProgress = true;
 
-        let results = [];
-        const terms = this._terms;
-        try {
-            if (this._isSubSearch && previousResults) {
-                results = await provider.getSubsearchResultSet(
-                    previousResults,
-                    terms,
-                    this._cancellable);
-            } else {
-                results = await provider.getInitialResultSet(
-                    terms,
-                    this._cancellable);
-            }
-        } finally {
-            this._results[provider.id] = results;
-            await this._updateResults(provider, terms, results);
+        let results;
+        if (this._isSubSearch && previousResults) {
+            results = await provider.getSubsearchResultSet(
+                previousResults,
+                this._terms,
+                this._cancellable);
+        } else {
+            results = await provider.getInitialResultSet(
+                this._terms,
+                this._cancellable);
         }
+
+        this._results[provider.id] = results;
+        this._updateResults(provider, results);
     }
 
     _doSearch() {
         this._startingSearch = false;
 
-        const previousResults = this._results;
+        let previousResults = this._results;
         this._results = {};
 
         this._providers.forEach(provider => {
-            const previousProviderResults = previousResults[provider.id];
-            this._doProviderSearch(provider, previousProviderResults).catch(
-                logErrorUnlessCancelled);
+            let previousProviderResults = previousResults[provider.id];
+            this._doProviderSearch(provider, previousProviderResults);
         });
 
         this._updateSearchProgress();
@@ -760,6 +712,7 @@ export const SearchResultsView = GObject.registerClass({
     _onSearchTimeout() {
         this._searchTimeoutId = 0;
         this._doSearch();
+        return GLib.SOURCE_REMOVE;
     }
 
     setTerms(terms) {
@@ -767,15 +720,15 @@ export const SearchResultsView = GObject.registerClass({
         // setting state of the current search or cancelling the search.
         // This will prevent incorrect state being as a result of a duplicate
         // search while the previous search is still active.
-        const searchString = terms.join(' ');
-        const previousSearchString = this._terms.join(' ');
+        let searchString = terms.join(' ');
+        let previousSearchString = this._terms.join(' ');
         if (searchString === previousSearchString)
             return;
 
         this._startingSearch = true;
 
         this._cancellable.cancel();
-        this._cancellable = new Gio.Cancellable();
+        this._cancellable.reset();
 
         if (terms.length === 0) {
             this._reset();
@@ -791,11 +744,18 @@ export const SearchResultsView = GObject.registerClass({
         this._updateSearchProgress();
 
         if (this._searchTimeoutId === 0)
-            this._searchTimeoutId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, 150, this._onSearchTimeout.bind(this));
+            this._searchTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, this._onSearchTimeout.bind(this));
 
         this._highlighter = new Highlighter(this._terms);
 
         this.emit('terms-changed');
+    }
+
+    _onPan(action) {
+        let [dist_, dx_, dy] = action.get_motion_delta(0);
+        let adjustment = this._scrollView.vadjustment;
+        adjustment.value -= (dy / this.height) * adjustment.page_size;
+        return false;
     }
 
     _focusChildChanged(provider) {
@@ -827,15 +787,15 @@ export const SearchResultsView = GObject.registerClass({
     _maybeSetInitialSelection() {
         let newDefaultResult = null;
 
-        const providers = this._providers;
+        let providers = this._providers;
         for (let i = 0; i < providers.length; i++) {
-            const provider = providers[i];
-            const display = provider.display;
+            let provider = providers[i];
+            let display = provider.display;
 
             if (!display.visible)
                 continue;
 
-            const firstResult = display.getFirstResult();
+            let firstResult = display.getFirstResult();
             if (firstResult) {
                 newDefaultResult = firstResult;
                 break; // select this one!
@@ -858,36 +818,32 @@ export const SearchResultsView = GObject.registerClass({
     }
 
     _updateSearchProgress() {
-        const haveResults = this._providers.some(provider => {
-            const display = provider.display;
+        let haveResults = this._providers.some(provider => {
+            let display = provider.display;
             return display.getFirstResult() != null;
         });
 
         this._scrollView.visible = haveResults;
-        this._statusContainer.visible = !haveResults;
+        this._statusBin.visible = !haveResults;
 
         if (!haveResults) {
-            if (this.searchInProgress) {
-                this._statusSpinner.play();
-                this._statusText.set_text(_('Searching'));
-            } else {
-                this._statusSpinner.stop();
-                this._statusText.set_text(_('No results'));
-            }
+            if (this.searchInProgress)
+                this._statusText.set_text(_('Searching…'));
+            else
+                this._statusText.set_text(_('No results.'));
         }
     }
 
-    async _updateResults(provider, terms, results) {
-        const display = provider.display;
+    _updateResults(provider, results) {
+        let terms = this._terms;
+        let display = provider.display;
 
-        try {
-            await display.updateSearch(results, terms);
-        } finally {
+        display.updateSearch(results, terms, () => {
             provider.searchInProgress = false;
 
             this._maybeSetInitialSelection();
             this._updateSearchProgress();
-        }
+        });
     }
 
     activateDefault() {
@@ -914,7 +870,7 @@ export const SearchResultsView = GObject.registerClass({
     }
 
     navigateFocus(direction) {
-        const rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
+        let rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
         if (direction === St.DirectionType.TAB_BACKWARD ||
             direction === (rtl
                 ? St.DirectionType.RIGHT
@@ -962,7 +918,7 @@ class ProviderInfo extends St.Button {
         });
 
         this._content = new St.BoxLayout({
-            orientation: Clutter.Orientation.HORIZONTAL,
+            vertical: false,
             style_class: 'list-search-provider-content',
         });
         this.set_child(this._content);
@@ -974,16 +930,13 @@ class ProviderInfo extends St.Button {
 
         const detailsBox = new St.BoxLayout({
             style_class: 'list-search-provider-details',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
-            y_expand: false,
         });
 
         const nameLabel = new St.Label({
             text: provider.appInfo.get_name(),
             x_align: Clutter.ActorAlign.START,
-            y_align: Clutter.ActorAlign.CENTER,
-            y_expand: true,
         });
 
         this._moreLabel = new St.Label({x_align: Clutter.ActorAlign.START});
@@ -1001,8 +954,8 @@ class ProviderInfo extends St.Button {
     }
 
     animateLaunch() {
-        const appSys = Shell.AppSystem.get_default();
-        const app = appSys.lookup_app(this.provider.appInfo.get_id());
+        let appSys = Shell.AppSystem.get_default();
+        let app = appSys.lookup_app(this.provider.appInfo.get_id());
         if (app.state === Shell.AppState.STOPPED)
             IconGrid.zoomOutActor(this._content);
     }

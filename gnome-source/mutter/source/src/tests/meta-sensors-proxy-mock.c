@@ -192,6 +192,19 @@ meta_sensors_proxy_mock_get (void)
   g_assert_true (G_IS_DBUS_PROXY (proxy));
   g_assert_no_error (error);
 
+  while (TRUE)
+    {
+      g_autoptr (GVariant) ret = NULL;
+      size_t n_owners = 0;
+
+      ret = get_internal_property_value (proxy, "AccelerometerOwners");
+      if (g_variant_get_strv (ret, &n_owners) && n_owners)
+        {
+          g_assert_cmpuint (n_owners, ==, 1);
+          break;
+        }
+    }
+
   sensors_proxy_mock = proxy;
   g_object_add_weak_pointer (G_OBJECT (sensors_proxy_mock),
                              (gpointer *) &sensors_proxy_mock);
@@ -239,27 +252,4 @@ meta_sensors_proxy_mock_set_orientation (MetaSensorsProxyMock *proxy,
   orientation_str = orientation_to_string (orientation);
   meta_sensors_proxy_mock_set_property (proxy, "AccelerometerOrientation",
                                         g_variant_new_string (orientation_str));
-}
-
-void
-meta_sensors_proxy_mock_wait_accelerometer_claimed (MetaSensorsProxyMock *proxy,
-                                                    gboolean              claimed)
-{
-  while (TRUE)
-    {
-      g_autoptr (GVariant) ret = NULL;
-      size_t n_owners = 0;
-      g_autofree const char **owners = NULL;
-
-      ret = get_internal_property_value (proxy, "AccelerometerOwners");
-
-      owners = g_variant_get_strv (ret, &n_owners);
-      if (!owners)
-        g_assert_not_reached ();
-
-      if (n_owners == (claimed ? 1 : 0))
-        break;
-
-      g_main_context_iteration (NULL, TRUE);
-    }
 }

@@ -41,10 +41,8 @@ G_BEGIN_DECLS
 
 #ifdef GDK_ARRAY_NULL_TERMINATED
 #define GDK_ARRAY_REAL_SIZE(_size) ((_size) + 1)
-#define GDK_ARRAY_MAX_SIZE (G_MAXSIZE / sizeof (_T_) - 1)
 #else
 #define GDK_ARRAY_REAL_SIZE(_size) (_size)
-#define GDK_ARRAY_MAX_SIZE (G_MAXSIZE / sizeof (_T_))
 #endif
 
 /* make this readable */
@@ -120,7 +118,7 @@ gdk_array(clear) (GdkArray *self)
 #ifdef GDK_ARRAY_PREALLOC
   if (self->start != self->preallocated)
 #endif
-    g_free_sized (self->start, gdk_array(get_capacity) (self) * sizeof (_T_));
+    g_free (self->start);
   gdk_array(init) (self);
 }
 
@@ -133,27 +131,17 @@ gdk_array(clear) (GdkArray *self)
  * If you need to know the size of the data, you should query it
  * beforehand.
  *
- * Returns: (nullable): The array's data, or NULL if the array is empty
- *   and not NULL-terminated
+ * Returns: The array's data
  **/
 G_GNUC_UNUSED static inline _T_ *
 gdk_array(steal) (GdkArray *self)
 {
   _T_ *result;
-  gsize size = GDK_ARRAY_REAL_SIZE (gdk_array(get_size) (self));
-
-  /* An empty array has nothing to hand out unless it is NULL-terminated,
-   * in which case the terminator still needs to be copied - that is what
-   * GDK_ARRAY_REAL_SIZE() accounts for, so it is never 0 in that case. */
-  if (size == 0)
-    {
-      gdk_array(clear) (self);
-      return NULL;
-    }
 
 #ifdef GDK_ARRAY_PREALLOC
   if (self->start == self->preallocated)
     {
+      gsize size = GDK_ARRAY_REAL_SIZE (gdk_array(get_size) (self));
       result = g_new (_T_, size);
       memcpy (result, self->preallocated, sizeof (_T_) * size);
     }
@@ -189,23 +177,18 @@ G_GNUC_UNUSED static inline void
 gdk_array(reserve) (GdkArray *self,
                     gsize      n)
 {
-  gsize new_capacity, size, capacity;
+  gsize new_size, size;
 
-  if (G_UNLIKELY (n > GDK_ARRAY_MAX_SIZE))
-    g_error ("requesting array size of %zu, but maximum size is %zu", n, GDK_ARRAY_MAX_SIZE);
-
-  capacity = gdk_array(get_capacity) (self);
-  if (n <= capacity)
-     return;
+  if (n <= gdk_array(get_capacity) (self))
+    return;
 
   size = gdk_array(get_size) (self);
-  /* capacity * 2 can overflow, that's why we MAX() */
-  new_capacity = MAX (GDK_ARRAY_REAL_SIZE (n), capacity * 2);
+  new_size = ((gsize) 1) << g_bit_storage (MAX (GDK_ARRAY_REAL_SIZE (n), 16) - 1);
 
 #ifdef GDK_ARRAY_PREALLOC
   if (self->start == self->preallocated)
     {
-      self->start = g_new (_T_, new_capacity);
+      self->start = g_new (_T_, new_size);
       memcpy (self->start, self->preallocated, sizeof (_T_) * GDK_ARRAY_REAL_SIZE (size));
     }
   else
@@ -213,15 +196,15 @@ gdk_array(reserve) (GdkArray *self,
 #ifdef GDK_ARRAY_NULL_TERMINATED
   if (self->start == NULL)
     {
-      self->start = g_new (_T_, new_capacity);
+      self->start = g_new (_T_, new_size);
       *self->start = *(_T_[1]) { 0 };
     }
   else
 #endif
-    self->start = g_renew (_T_, self->start, new_capacity);
+    self->start = g_renew (_T_, self->start, new_size);
 
   self->end = self->start + size;
-  self->end_allocation = self->start + new_capacity;
+  self->end_allocation = self->start + new_size;
 #ifdef GDK_ARRAY_NULL_TERMINATED
   self->end_allocation--;
 #endif
@@ -244,7 +227,6 @@ gdk_array(splice) (GdkArray *self,
 
   size = gdk_array(get_size) (self);
   g_assert (pos + removed <= size);
-  g_assert (additions < gdk_array(index) (self, 0) || additions >= gdk_array(index) (self, size));
   remaining = size - pos - removed;
 
   if (!stolen)
@@ -271,7 +253,8 @@ gdk_array(splice) (GdkArray *self,
     }
 
 
-  self->end = self->start + (size - removed + added);
+  /* might overflow, but does the right thing */
+  self->end += added - removed;
 }
 
 G_GNUC_UNUSED static void
@@ -329,7 +312,6 @@ gdk_array(get) (const GdkArray *self,
 #undef gdk_array_paste
 #undef gdk_array
 #undef GDK_ARRAY_REAL_SIZE
-#undef GDK_ARRAY_MAX_SIZE
 
 #undef GDK_ARRAY_BY_VALUE
 #undef GDK_ARRAY_ELEMENT_TYPE

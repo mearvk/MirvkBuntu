@@ -36,14 +36,12 @@ typedef struct _GdkWin32GLContext		GdkWin32GLContext;
 typedef struct _GdkWin32GLContextClass	GdkWin32GLContextClass;
 
 GDK_AVAILABLE_IN_ALL
-GType gdk_win32_gl_context_get_type (void);
+GType gdk_win32_gl_context_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 gboolean        gdk_win32_display_get_wgl_version (GdkDisplay *display,
                                                    int        *major,
                                                    int        *minor);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdkWin32GLContext, g_object_unref)
 
 G_END_DECLS
 

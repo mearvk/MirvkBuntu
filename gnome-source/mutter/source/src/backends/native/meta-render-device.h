@@ -28,24 +28,15 @@ G_DECLARE_DERIVABLE_TYPE (MetaRenderDevice, meta_render_device,
                           META, RENDER_DEVICE,
                           GObject)
 
-typedef struct _MetaRendererEgl MetaRendererEgl;
-
 MetaBackend * meta_render_device_get_backend (MetaRenderDevice *render_device);
 
 EGLDisplay meta_render_device_get_egl_display (MetaRenderDevice *render_device);
-
-MetaRendererEgl * meta_render_device_get_renderer_egl (MetaRenderDevice *render_device);
 
 const char * meta_render_device_get_name (MetaRenderDevice *render_device);
 
 gboolean meta_render_device_is_hardware_accelerated (MetaRenderDevice *render_device);
 
 MetaDeviceFile * meta_render_device_get_device_file (MetaRenderDevice *render_device);
-
-GArray * meta_render_device_query_drm_modifiers (MetaRenderDevice       *render_device,
-                                                 uint32_t                drm_format,
-                                                 CoglDrmModifierFilter   filter,
-                                                 GError                **error);
 
 MetaDrmBuffer * meta_render_device_allocate_dma_buf (MetaRenderDevice    *render_device,
                                                      int                  width,

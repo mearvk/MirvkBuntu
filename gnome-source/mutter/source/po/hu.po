@@ -1,26 +1,26 @@
 # Hungarian translation for mutter.
-# Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026 Free Software Foundation, Inc.
+# Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024 Free Software Foundation, Inc.
 # This file is distributed under the same license as the mutter package.
 #
 # Andras Timar <timar at gnome dot hu>, 2002, 2003.
 # Gabor Sari <saga at externet dot hu>, 2003.
 # Laszlo Dvornik <dvornik at gnome dot hu>, 2004.
 # Gabor Kelemen <kelemeng at gnome dot hu>, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013.
-# Balázs Úr <ur.balazs at fsf dot hu>, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026.
+# Balázs Úr <ur.balazs at fsf dot hu>, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024.
 # Balázs Meskó <mesko.balazs at fsf dot hu>, 2021.
 msgid ""
 msgstr ""
 "Project-Id-Version: mutter master\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/mutter/issues/\n"
-"POT-Creation-Date: 2026-09-01 10:20+0000\n"
-"PO-Revision-Date: 2026-09-07 10:50+0200\n"
+"POT-Creation-Date: 2024-03-02 12:22+0000\n"
+"PO-Revision-Date: 2024-03-02 20:01+0100\n"
 "Last-Translator: Balázs Úr <ur.balazs at fsf dot hu>\n"
 "Language-Team: Hungarian <openscope at fsf dot hu>\n"
 "Language: hu\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Lokalize 25.12.3\n"
+"X-Generator: Lokalize 23.08.4\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: data/50-mutter-navigation.xml:6
@@ -251,39 +251,13 @@ msgstr "Ablak függőleges maximalizálása"
 msgid "Maximize window horizontally"
 msgstr "Ablak vízszintes maximalizálása"
 
-#: data/50-mutter-windows.xml:41 data/org.gnome.mutter.gschema.xml.in:142
+#: data/50-mutter-windows.xml:41 data/org.gnome.mutter.gschema.xml.in:167
 msgid "View split on left"
 msgstr "Bal oldali felosztás megjelenítése"
 
-#: data/50-mutter-windows.xml:45 data/org.gnome.mutter.gschema.xml.in:147
+#: data/50-mutter-windows.xml:45 data/org.gnome.mutter.gschema.xml.in:172
 msgid "View split on right"
 msgstr "Jobb oldali felosztás megjelenítése"
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:7
-msgid "Always allocate scanout buffers with explicit modifiers"
-msgstr "Mindig kifejezett módosítókkal foglalja le a kiolvasási puffereket"
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:8
-msgid ""
-"When true, mutter will always allocate scanout buffers with explicit "
-"modifiers, if supported by the driver. This option requires a restart."
-msgstr ""
-"Ha igaz, akkor a mutter mindig kifejezett módosítókkal fogja lefoglalni le a k"
-"iolvasási puffereket, ha az illesztőprogram támogatja. Ez a beállítás újraindí"
-"tást igényel."
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:17
-msgid "Automatically terminate Xwayland after last client is gone"
-msgstr "Xwayland automatikus leállítása az utolsó ügyfélprogram eltűnése után"
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:18
-msgid ""
-"When true, mutter will automatically terminate Xwayland after the last "
-"relevant client is gone. This option requires a restart."
-msgstr ""
-"Ha igaz, akkor a mutter automatikusan le fogja állítani az Xwayland háttérprog"
-"ramot az utolsó vonatkozó ügyfélprogram eltűnése után. Ez a beállítás újraindí"
-"tást igényel."
 
 #: data/org.gnome.mutter.gschema.xml.in:15
 msgid "Modifier to use for extended window management operations"
@@ -336,8 +310,8 @@ msgstr "Munkaterületek dinamikus kezelése"
 #: data/org.gnome.mutter.gschema.xml.in:49
 msgid ""
 "Determines whether workspaces are managed dynamically or whether there’s a "
-"static number of workspaces (determined by the num-workspaces key in "
-"org.gnome.desktop.wm.preferences)."
+"static number of workspaces (determined by the num-workspaces key in org."
+"gnome.desktop.wm.preferences)."
 msgstr ""
 "A munkaterületek dinamikusan vannak-e kezelve, vagy a számuk rögzített (ezt "
 "a num-workspaces kulcs adja meg az org.gnome.desktop.wm.preferences fájlban)."
@@ -405,19 +379,73 @@ msgstr ""
 "Ha igaz, az új ablakok mindig a monitor aktív képernyőjének közepére lesznek "
 "helyezve."
 
-#: data/org.gnome.mutter.gschema.xml.in:106
+#: data/org.gnome.mutter.gschema.xml.in:107
+msgid "Enable experimental features"
+msgstr "Kísérleti funkciók engedélyezése"
+
+#: data/org.gnome.mutter.gschema.xml.in:108
+#| msgid ""
+#| "To enable experimental features, add the feature keyword to the list. "
+#| "Whether the feature requires restarting the compositor depends on the "
+#| "given feature. Any experimental feature is not required to still be "
+#| "available, or configurable. Don’t expect adding anything in this setting "
+#| "to be future proof. Currently possible keywords: • “scale-monitor-"
+#| "framebuffer” — makes mutter default to layout logical monitors in a "
+#| "logical pixel coordinate space, while scaling monitor framebuffers "
+#| "instead of window content, to manage HiDPI monitors. Does not require a "
+#| "restart. • “kms-modifiers” — makes mutter always allocate scanout buffers "
+#| "with explicit modifiers, if supported by the driver. Requires a restart. "
+#| "• “rt-scheduler” — makes mutter request a low priority real-time "
+#| "scheduling. Requires a restart. • “autoclose-xwayland” — automatically "
+#| "terminates Xwayland if all relevant X11 clients are gone. Requires a "
+#| "restart."
+msgid ""
+"To enable experimental features, add the feature keyword to the list. "
+"Whether the feature requires restarting the compositor depends on the given "
+"feature. Any experimental feature is not required to still be available, or "
+"configurable. Don’t expect adding anything in this setting to be future "
+"proof. Currently possible keywords: • “scale-monitor-framebuffer” — makes "
+"mutter default to layout logical monitors in a logical pixel coordinate "
+"space, while scaling monitor framebuffers instead of window content, to "
+"manage HiDPI monitors. Does not require a restart. • “kms-modifiers” — makes "
+"mutter always allocate scanout buffers with explicit modifiers, if supported "
+"by the driver. Requires a restart. • “autoclose-xwayland” — automatically "
+"terminates Xwayland if all relevant X11 clients are gone. Requires a "
+"restart. • “variable-refresh-rate” — makes mutter dynamically adjust the "
+"refresh rate of the monitor when applicable if supported by the monitor, GPU "
+"and DRM driver. Configurable in Settings. Requires a restart."
+msgstr ""
+"A kísérleti funkciók engedélyezéséhez adja hozzá a funkció kulcsszavát a"
+" listához. A funkció a kompozitor újraindítását igényelheti az adott"
+" funkciótól függően. Egyik kísérleti funkciónál sem szükséges, hogy továbbra"
+" is elérhető vagy beállítható legyen. Ne várja el azt, hogy ha bármit hozzáad"
+" ehhez a beállításhoz, akkor az a jövőben is elérhető lesz. Jelenleg"
+" lehetséges kulcsszavak: • „scale-monitor-framebuffer” — alapértelmezetté"
+" teszi a mutter programot a logikai monitorok elrendezéséhez egy logikai"
+" képpontkoordináta-térben, miközben átméretezi a monitor keretpufferét az"
+" ablaktartalom helyett azért, hogy kezelje a HiDPI monitorokat. Nem igényel"
+" újraindítást. • „kms-modifiers” — mindig explicit módosítókkal osztatja ki a"
+" mutter programmal a letapogatási puffereket, ha az illesztőprogram támogatja"
+" azokat. Újraindítást igényel. • „autoclose-xwayland” — automatikusan"
+" megszakítja az Xwayland kiszolgálót, ha az összes kapcsolódó X11 kliens"
+" eltűnt. Újraindítást igényel. • „variable-refresh-rate” — dinamikusan"
+" beállíttatja a mutter programmal a monitor frissítési frekvenciáját, ha"
+" alkalmazható és a monitor, a GPU és a DRM-illesztőprogram támogatja. A"
+" beállításokban átállítható. Újraindítást igényel."
+
+#: data/org.gnome.mutter.gschema.xml.in:144
 msgid "Modifier to use to locate the pointer"
 msgstr "Használandó módosító a mutató elhelyezéséhez"
 
-#: data/org.gnome.mutter.gschema.xml.in:107
+#: data/org.gnome.mutter.gschema.xml.in:145
 msgid "This key will initiate the “locate pointer” action."
 msgstr "Ez a kulcs el fogja indítani a „mutató elhelyezése” műveletet."
 
-#: data/org.gnome.mutter.gschema.xml.in:114
+#: data/org.gnome.mutter.gschema.xml.in:152
 msgid "Timeout for check-alive ping"
 msgstr "Elérhetőség-ellenőrzés pingelésének időkorlátja"
 
-#: data/org.gnome.mutter.gschema.xml.in:115
+#: data/org.gnome.mutter.gschema.xml.in:153
 msgid ""
 "Number of milliseconds a client has to respond to a ping request in order to "
 "not be detected as frozen. Using 0 will disable the alive check completely."
@@ -426,34 +454,15 @@ msgstr ""
 "kérésre, hogy ne lefagyottként legyen azonosítva. A 0 használata teljesen "
 "letiltja annak ellenőrzését, hogy életben van-e."
 
-#. TRANSLATORS: Luminance is different from brightness.
-#. See https://en.wikipedia.org/wiki/Luminance
-#: data/org.gnome.mutter.gschema.xml.in:126
-msgid "Per output luminance settings"
-msgstr "Kimenetenkénti fényességbeállítások"
-
-#: data/org.gnome.mutter.gschema.xml.in:127
-msgid ""
-"Per output and color mode luminance setting. Each entry consists of a tuple "
-"with connector, vendor, product, serial, and a color mode, as well as an "
-"associated floating point value representing the output luminance in percent "
-"(%). The default when not specified is 100%."
-msgstr ""
-"Kimenetenkénti és színmódonkénti fényességbeállítás. Minden egyes bejegyzés "
-"a csatlakozót, a gyártót, a terméket, a sorozatot, a színmódot, valamint a "
-"kimeneti fényességet százalékban (%) kifejező lebegőpontos értéket "
-"tartalmazó, rendezett sorozatból áll. Ha nincs megadva, akkor az "
-"alapértelmezett érték 100%."
-
-#: data/org.gnome.mutter.gschema.xml.in:152
+#: data/org.gnome.mutter.gschema.xml.in:177
 msgid "Switch monitor configurations"
 msgstr "Monitorkonfiguráció átváltása"
 
-#: data/org.gnome.mutter.gschema.xml.in:157
+#: data/org.gnome.mutter.gschema.xml.in:182
 msgid "Rotates the built-in monitor configuration"
 msgstr "Cserélgeti a beépített monitorkonfigurációkat"
 
-#: data/org.gnome.mutter.gschema.xml.in:162
+#: data/org.gnome.mutter.gschema.xml.in:187
 msgid "Cancel any active input capture session"
 msgstr "Bármely aktív bevitelrögzítő munkamenet megszakítása"
 
@@ -614,157 +623,26 @@ msgstr ""
 "byteswappedclients parancssori kapcsolót a beállítás vezérléséhez. Az "
 "Xwaylandet újra kell indítani ahhoz, hogy ez a beállítás érvénybe lépjen."
 
-#: data/org.gnome.mutter.wayland.gschema.xml.in:154
-msgid "Configure the Xwayland scaling factor"
-msgstr "Az Xwayland méretezési tényezőjének beállítása"
-
-#: data/org.gnome.mutter.wayland.gschema.xml.in:155
-msgid ""
-"Scale the Xwayland coordinate space according to this factor. This will "
-"affect what scale HiDPI capable X11 clients will present themselves as, and "
-"how the compositor scales X11 client windows. Setting the scale to 0 means "
-"the scale will be automatically calculated. The scale will as of now be "
-"rounded to the closest integer."
-msgstr ""
-"Az Xwayland koordinátatér méretezése ezen tényező szerint. Ez hatással lesz "
-"arra, hogy a HiDPI-képes X11-ügyfelek milyen méretezéssel jelenítik meg "
-"magukat, és hogy a kompozitáló hogyan méretezi az X11-ügyfél ablakait. A "
-"méretezés 0 értékre állítása azt jelenti, hogy a méretezés automatikusan "
-"lesz kiszámítva. A méretezés mostantól a legközelebbi egész számra lesz "
-"kerekítve."
-
-#: mdk/mdk-launcher-adder.c:451 mdk/mdk-launcher-adder.ui:22
-msgid "Application"
-msgstr "Alkalmazás"
-
-#: mdk/mdk-launcher-adder.c:456 mdk/mdk-launcher-adder.ui:23
-msgid "Executable"
-msgstr "Végrehajtható"
-
-#: mdk/mdk-launcher-adder.ui:3
-msgid "Add Launcher"
-msgstr "Indító hozzáadása"
-
-#: mdk/mdk-launcher-adder.ui:15
-msgid "Launcher"
-msgstr "Indító"
-
-#: mdk/mdk-launcher-adder.ui:18
-msgid "Type"
-msgstr "Típus"
-
-#: mdk/mdk-launcher-adder.ui:38 mdk/mdk-launchers-editor.ui:22
-msgid "Add"
-msgstr "Hozzáadás"
-
-#: mdk/mdk-launcher-entry.c:204
-msgid "Run"
-msgstr "Futtatás"
-
-#: mdk/mdk-launcher-entry.ui:12
-msgid "Delete"
-msgstr "Törlés"
-
-#: mdk/mdk-launcher-entry.ui:20
-msgid "Action"
-msgstr "Művelet"
-
-#: mdk/mdk-launchers-editor.ui:3
-msgid "Edit Launchers"
-msgstr "Indítók szerkesztése"
-
-#: mdk/mdk-launchers-editor.ui:16
-msgid "Launchers"
-msgstr "Indítók"
-
-#: mdk/mdk-main-window.ui:7
-msgid "_Input"
-msgstr "_Bemenet"
-
-#: mdk/mdk-main-window.ui:9
-msgid "_Emulate touch"
-msgstr "Érintés _emulálása"
-
-#: mdk/mdk-main-window.ui:13
-msgid "_Inhibit system shortcuts"
-msgstr "Rendszer gyorsbillentyűinek _elnyomása"
-
-#: mdk/mdk-main-window.ui:17
-msgid "Use host _keymap"
-msgstr "A gazdagép _billentyűleképezésének használata"
-
-#: mdk/mdk-main-window.ui:24
-msgid "_Monitors"
-msgstr "_Monitorok"
-
-#: mdk/mdk-main-window.ui:26
-msgid "_Add monitor"
-msgstr "Monitor _hozzáadása"
-
-#: mdk/mdk-main-window.ui:30
-msgid "_Emulate monitor modes"
-msgstr "Monitormódok _emulálása"
-
-#: mdk/mdk-main-window.ui:37
-msgid "_Launchers"
-msgstr "_Indítók"
-
-#: mdk/mdk-main-window.ui:41
-msgid "_Edit launchers"
-msgstr "Indítók _szerkesztése"
-
-#: mdk/mdk-main-window.ui:48
-msgid "_About Mutter Development Kit"
-msgstr "A Mutter fejlesztői készlet _névjegye"
-
-#: mdk/mdk-main-window.ui:54 mdk/mdk-main.c:60
-msgid "Mutter Development Kit"
-msgstr "Mutter fejlesztői készlet"
-
-#: mdk/mdk-main-window.ui:64
-msgid "Main Menu"
-msgstr "Főmenü"
-
-#: mdk/mdk-main.c:53
-msgid "The Mutter Team"
-msgstr "A Mutter csapata"
-
-#: mdk/mdk-main.c:66
-msgid "Mutter software development kit"
-msgstr "Mutter szoftverfejlesztői készlet"
-
-#: mdk/mdk-main.c:69
-msgid "About Mutter Development Kit"
-msgstr "A Mutter fejlesztői készlet névjegye"
-
-#: mdk/mdk-main.c:397 mdk/mdk-main.c:398
-msgid "Devkit options"
-msgstr "Fejlesztői készlet beállítások"
-
-#: mdk/mdk-monitor.c:561
-msgid "Failed to create monitor"
-msgstr "Nem sikerült létrehozni a monitort"
-
-#: src/backends/meta-monitor.c:283
+#: src/backends/meta-monitor.c:251
 msgid "Built-in display"
 msgstr "Beépített kijelző"
 
-#: src/backends/meta-monitor.c:310
+#: src/backends/meta-monitor.c:278
 msgid "Unknown"
 msgstr "Ismeretlen"
 
-#: src/backends/meta-monitor.c:312
+#: src/backends/meta-monitor.c:280
 msgid "Unknown Display"
 msgstr "Ismeretlen kijelző"
 
-#: src/backends/meta-monitor.c:320
+#: src/backends/meta-monitor.c:288
 #, c-format
 msgctxt ""
 "This is a monitor vendor name, followed by a size in inches, like 'Dell 15\"'"
 msgid "%s %s"
 msgstr "%s %s"
 
-#: src/backends/meta-monitor.c:328
+#: src/backends/meta-monitor.c:296
 #, c-format
 msgctxt ""
 "This is a monitor vendor name followed by product/model name where size in "
@@ -772,108 +650,123 @@ msgctxt ""
 msgid "%s %s"
 msgstr "%s %s"
 
-#: src/core/bell.c:237
+#: src/core/bell.c:193
 msgid "Bell event"
 msgstr "Csengetés esemény"
 
-#: src/core/display.c:603
+#: src/core/display.c:734
 msgid "Privacy Screen Enabled"
 msgstr "Adatvédelem képernyő engedélyezve"
 
-#: src/core/display.c:604
+#: src/core/display.c:735
 msgid "Privacy Screen Disabled"
 msgstr "Adatvédelem képernyő letiltva"
 
-#: src/core/meta-context-main.c:344
+#: src/core/meta-context-main.c:601
+msgid "Replace the running window manager"
+msgstr "A futó ablakkezelő helyettesítése"
+
+#: src/core/meta-context-main.c:607
+msgid "X Display to use"
+msgstr "A használandó X megjelenítő"
+
+#: src/core/meta-context-main.c:613
+msgid "Disable connection to session manager"
+msgstr "A munkamenet-kezelőhöz való csatlakozás tiltása"
+
+#: src/core/meta-context-main.c:619
+msgid "Specify session management ID"
+msgstr "A munkamenet-kezelő azonosítójának megadása"
+
+#: src/core/meta-context-main.c:625
+msgid "Initialize session from savefile"
+msgstr "A munkamenet előkészítése a mentési fájlból"
+
+#: src/core/meta-context-main.c:631
+msgid "Make X calls synchronous"
+msgstr "Az X-hívások szinkronná tétele"
+
+#: src/core/meta-context-main.c:639
 msgid "Run as a wayland compositor"
 msgstr "Futtatás wayland kompozitálóként"
 
-#: src/core/meta-context-main.c:351
+#: src/core/meta-context-main.c:645
+msgid "Run as a nested compositor"
+msgstr "Futtatás beágyazott kompozitálóként"
+
+#: src/core/meta-context-main.c:651
 msgid "Run wayland compositor without starting Xwayland"
 msgstr "Wayland kompozitáló futtatása az Xwayland elindítása nélkül"
 
-#: src/core/meta-context-main.c:358
+#: src/core/meta-context-main.c:657
 msgid "Specify Wayland display name to use"
 msgstr "Adja meg a használandó Wayland megjelenítőnevet"
 
-#: src/core/meta-context-main.c:364
+#: src/core/meta-context-main.c:665
 msgid "Run as a full display server, rather than nested"
 msgstr ""
 "Futtatás teljes megjelenítő kiszolgálóként az egymásba ágyazott helyett"
 
-#: src/core/meta-context-main.c:369
+#: src/core/meta-context-main.c:670
 msgid "Run as a headless display server"
 msgstr "Futtatás grafikus felület nélküli megjelenítő kiszolgálóként"
 
-#: src/core/meta-context-main.c:374
+#: src/core/meta-context-main.c:675
 msgid "Add persistent virtual monitor (WxH or WxH@R)"
 msgstr ""
 "Állandó virtuális monitor hozzáadása (SZÉLESSÉGxMAGASSÁG vagy "
 "SZÉLESSÉGxMAGASSÁG@FELBONTÁS)"
 
-#: src/core/meta-context-main.c:380
-msgid "Run development kit"
-msgstr "Fejlesztői készlet futtatása"
+#: src/core/meta-context-main.c:687
+msgid "Run with X11 backend"
+msgstr "Futtatás X11 háttérprogrammal"
 
-#: src/core/meta-context-main.c:385
-#| msgid "Run development kit"
-msgid "Development kit arguments"
-msgstr "Fejlesztői készlet argumentumai"
-
-#: src/core/meta-context-main.c:396
+#: src/core/meta-context-main.c:693
 msgid "Profile performance using trace instrumentation"
 msgstr "Nyomkövető műszereket használó profilteljesítmény"
 
-#: src/core/meta-context-main.c:402
+#: src/core/meta-context-main.c:699
 msgid "Enable debug control D-Bus interface"
 msgstr "Hibakeresés-vezérlő D-Bus interfész engedélyezése"
 
 #. TRANSLATORS: This string refers to a button that switches between
-#. * different modes in that button group.
+#. * different modes.
 #.
-#: src/core/meta-pad-action-mapper.c:617
+#: src/core/meta-pad-action-mapper.c:826
 #, c-format
 msgid "Mode Switch (Group %d)"
 msgstr "Módkapcsoló (%d. csoport)"
 
-#. TRANSLATORS: This string refers to a button that switches between
-#. * different modes.
-#.
-#: src/core/meta-pad-action-mapper.c:624
-#, c-format
-msgid "Mode Switch"
-msgstr "Módkapcsoló"
-
 #. TRANSLATORS: This string refers to an action, cycles drawing tablets'
 #. * mapping through the available outputs.
 #.
-#: src/core/meta-pad-action-mapper.c:647
+#: src/core/meta-pad-action-mapper.c:848
 msgid "Switch monitor"
 msgstr "Monitorváltás"
 
-#: src/core/meta-pad-action-mapper.c:649
+#: src/core/meta-pad-action-mapper.c:850
 msgid "Show on-screen help"
 msgstr "Képernyősúgó megjelenítése"
 
 #. Translators: this string will appear in Sysprof
-#: src/core/meta-profiler.c:109 src/core/meta-profiler.c:303
+#: src/core/meta-profiler.c:109 src/core/meta-profiler.c:299
 msgid "Compositor"
 msgstr "Kompozitáló"
 
-#: src/core/mutter.c:75
+#: src/core/mutter.c:74
 msgid "Print version"
 msgstr "Verzió kiírása"
 
-#: src/core/mutter.c:81
+#: src/core/mutter.c:80
 msgid "Mutter plugin to use"
 msgstr "Használandó Mutter bővítmény"
 
-#: src/core/prefs.c:1866
+#: src/core/prefs.c:1842
 #, c-format
 msgid "Workspace %d"
 msgstr "%d. munkaterület"
 
-#: src/core/util.c:154
+#: src/core/util.c:139
 msgid "Mutter was compiled without support for verbose mode"
 msgstr "A Muttert a részletes mód támogatása nélkül fordították"
 
@@ -881,29 +774,33 @@ msgstr "A Muttert a részletes mód támogatása nélkül fordították"
 msgid "Workspace switched"
 msgstr "Munkaterület átváltva"
 
-#: src/wayland/meta-wayland-tablet-pad.c:558
+#: src/wayland/meta-wayland-tablet-pad.c:532
 #, c-format
 msgid "Mode Switch: Mode %d"
 msgstr "Módkapcsoló: %d. mód"
 
-#: src/x11/meta-x11-display.c:729
+#: src/x11/meta-x11-display.c:723
 #, c-format
-msgid "Display “%s” already has a window manager"
-msgstr "A(z) „%s” kijelző már rendelkezik ablakkezelővel"
+msgid ""
+"Display “%s” already has a window manager; try using the --replace option to "
+"replace the current window manager."
+msgstr ""
+"A(z) „%s” kijelző már rendelkezik ablakkezelővel; próbálja a --replace "
+"kapcsolóval helyettesíteni a jelenlegi ablakkezelőt."
 
-#: src/x11/meta-x11-display.c:1092
+#: src/x11/meta-x11-display.c:1088
 #, c-format
 msgid "Failed to open X Window System display “%s”"
 msgstr "Nem sikerült megnyitni a(z) „%s” X Window rendszer megjelenítőt"
 
-#: src/x11/meta-x11-display.c:1236
+#: src/x11/meta-x11-display.c:1268
 #, c-format
 msgid "Screen %d on display “%s” is invalid"
 msgstr "A(z) %d. képernyő a(z) „%s” megjelenítőn érvénytelen"
 
 #. This probably means that a non-WM compositor like xcompmgr is running;
 #. * we have no way to get it to exit
-#: src/x11/meta-x11-display.c:2410
+#: src/x11/meta-x11-display.c:2538
 #, c-format
 msgid ""
 "Another compositing manager is already running on screen %i on display “%s”."
@@ -916,7 +813,7 @@ msgstr ""
 msgid "Format %s not supported"
 msgstr "A(z) %s formátum nem támogatott"
 
-#: src/x11/window-props.c:562
+#: src/x11/window-props.c:528
 #, c-format
 msgid "%s (on %s)"
 msgstr "%s (ezen: %s)"

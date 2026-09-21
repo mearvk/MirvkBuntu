@@ -18,7 +18,8 @@
  * Author:
  *   Joseph Scheuhammer <clown@alum.mit.edu>
  */
-#pragma once
+#ifndef __SHELL_INVERT_LIGHTNESS_EFFECT_H__
+#define __SHELL_INVERT_LIGHTNESS_EFFECT_H__
 
 #include <clutter/clutter.h>
 
@@ -31,8 +32,10 @@ G_BEGIN_DECLS
 typedef struct _ShellInvertLightnessEffect        ShellInvertLightnessEffect;
 typedef struct _ShellInvertLightnessEffectClass   ShellInvertLightnessEffectClass;
 
-GType shell_invert_lightness_effect_get_type (void);
+GType shell_invert_lightness_effect_get_type (void) G_GNUC_CONST;
 
 ClutterEffect *shell_invert_lightness_effect_new (void);
 
 G_END_DECLS
+
+#endif /* __SHELL_INVERT_LIGHTNESS_EFFECT_H__ */

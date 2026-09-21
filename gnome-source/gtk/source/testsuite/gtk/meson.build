@@ -38,7 +38,6 @@ tests = [
   { 'name': 'cssprovider' },
   { 'name': 'defaultvalue' },
   { 'name': 'entry' },
-  { 'name': 'enumlist' },
   { 'name': 'expression' },
   { 'name': 'filefilter' },
   { 'name': 'filter' },
@@ -50,7 +49,7 @@ tests = [
   { 'name': 'flattenlistmodel' },
   { 'name': 'floating' },
   { 'name': 'flowbox' },
-  { 'name': 'gestures' },
+  #{ 'name': 'gestures' },
   { 'name': 'grid' },
   { 'name': 'grid-layout' },
   { 'name': 'icontheme' },
@@ -68,7 +67,6 @@ tests = [
   { 'name': 'objects-finalize' },
   { 'name': 'papersize' },
   #{ 'name': 'popover' },
-  { 'name': 'popovermenu' },
   { 'name': 'recentmanager' },
   { 'name': 'regression-tests' },
   { 'name': 'scrolledwindow' },
@@ -115,15 +113,16 @@ endif
 
 # Tests that test private apis and therefore are linked against libgtk-4.a
 internal_tests = [
+  { 'name': 'bitmask' },
   {
     'name': 'composetable',
-    'libs': [
-      testutils_lib
-    ]
+    'sources': [
+      'composetable.c',
+      '../testutils.c'
+    ],
   },
   { 'name': 'imcontext' },
   { 'name': 'constraint-solver' },
-  { 'name': 'constraint-vfl-parser' },
   { 'name': 'rbtree-crash' },
   { 'name': 'propertylookuplistmodel' },
   { 'name': 'rbtree' },
@@ -134,13 +133,6 @@ internal_tests = [
   { 'name': 'a11y' },
   { 'name': 'listitemmanager' },
   { 'name': 'colorutils' },
-  { 'name': 'symbolic',
-    'sources': [
-      'symbolic.c',
-      '../reftests/reftest-compare.c',
-    ],
-  },
-  { 'name': 'bitmask' },
 ]
 
 is_debug = get_option('buildtype').startswith('debug')
@@ -172,7 +164,6 @@ foreach t : tests
   test_srcs = ['@0@.c'.format(test_name)] + t.get('sources', [])
   test_extra_cargs = t.get('c_args', [])
   test_extra_ldflags = t.get('link_args', [])
-  test_extra_libs = t.get('libs', [])
   test_extra_suites = t.get('suites', [])
   test_timeout = 60
 
@@ -180,7 +171,6 @@ foreach t : tests
     sources: test_srcs,
     c_args: test_cargs + test_extra_cargs,
     link_args: test_extra_ldflags,
-    link_with: test_extra_libs,
     dependencies: libgtk_dep,
   )
 
@@ -202,7 +192,6 @@ foreach t : internal_tests
   test_srcs = ['@0@.c'.format(test_name)] + t.get('sources', [])
   test_extra_cargs = t.get('c_args', [])
   test_extra_ldflags = t.get('link_args', [])
-  test_extra_libs = t.get('libs', [])
   test_extra_suites = t.get('suites', [])
   test_timeout = 60
 
@@ -210,8 +199,7 @@ foreach t : internal_tests
     sources: test_srcs,
     c_args: test_cargs + test_extra_cargs + ['-DGTK_COMPILATION'],
     link_args: test_extra_ldflags,
-    link_with: test_extra_libs,
-    dependencies: libgtk_private_dep,
+    dependencies: libgtk_static_dep,
   )
 
   if test_extra_suites.contains('slow')
@@ -265,8 +253,7 @@ focus_chain_tests = [
 ]
 
 focus_chain = executable('test-focus-chain',
-  sources: ['test-focus-chain.c'],
-  link_with: testutils_lib,
+  sources: ['test-focus-chain.c', '../testutils.c'],
   dependencies: libgtk_dep,
   c_args: common_cflags,
 )
@@ -290,3 +277,27 @@ make_pot = find_program ('make-pot', dirs: meson.project_source_root())
 test('potfiles', make_pot,
      workdir: meson.project_source_root(),
      suite: ['gtk', 'translations' ])
+
+if false and get_option ('profiler')
+
+  performance_env = test_env
+  performance_env.set('GTK_THEME', 'Empty')
+
+  test('performance-layout', test_performance,
+    args: [
+      '--mark', 'size allocation',
+      join_paths(meson.current_build_dir(), '../../demos/widget-factory/gtk4-widget-factory'),
+    ],
+    env: performance_env,
+    suite: [ 'gtk' ],
+  )
+
+  test('performance-snapshot', test_performance,
+    args: [
+      '--mark', 'widget snapshot',
+      join_paths(meson.current_build_dir(), '../../demos/widget-factory/gtk4-widget-factory'),
+    ],
+    env: performance_env,
+    suite: [ 'gtk' ],
+  )
+endif

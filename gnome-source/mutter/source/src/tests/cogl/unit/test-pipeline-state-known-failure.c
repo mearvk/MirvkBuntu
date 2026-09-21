@@ -2,13 +2,13 @@
 
 #include "cogl/cogl.h"
 #include "cogl/cogl-pipeline-state.h"
-#include "cogl/cogl-pipeline-private.h"
 #include "tests/cogl-test-utils.h"
 
 static void
 test_pipeline_state_uniform_ancestry (void)
 {
   CoglPipeline *pipeline;
+  CoglNode *node;
   int pipeline_length = 0;
   int i;
 
@@ -32,7 +32,7 @@ test_pipeline_state_uniform_ancestry (void)
       cogl_pipeline_set_uniform_1i (pipeline, uniform_location, i);
     }
 
-  for (CoglPipeline *p = pipeline; p; p = p->parent)
+  for (node = (CoglNode *) pipeline; node; node = node->parent)
     pipeline_length++;
 
   g_assert_cmpint (pipeline_length, <=, 2);

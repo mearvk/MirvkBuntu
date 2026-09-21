@@ -52,7 +52,6 @@ void clutter_stage_view_add_redraw_clip (ClutterStageView   *view,
 
 gboolean clutter_stage_view_has_full_redraw_clip (ClutterStageView *view);
 
-CLUTTER_EXPORT
 gboolean clutter_stage_view_has_redraw_clip (ClutterStageView *view);
 
 CLUTTER_EXPORT
@@ -65,6 +64,13 @@ CLUTTER_EXPORT
 CoglScanout * clutter_stage_view_take_scanout (ClutterStageView *view);
 
 CLUTTER_EXPORT
+void clutter_stage_view_transform_rect_to_onscreen (ClutterStageView   *view,
+                                                    const MtkRectangle *src_rect,
+                                                    int                 dst_width,
+                                                    int                 dst_height,
+                                                    MtkRectangle       *dst_rect);
+
+CLUTTER_EXPORT
 void clutter_stage_view_schedule_update (ClutterStageView *view);
 
 CLUTTER_EXPORT
@@ -75,14 +81,3 @@ CLUTTER_EXPORT
 void clutter_stage_view_notify_ready (ClutterStageView *view);
 
 void clutter_stage_view_invalidate_input_devices (ClutterStageView *view);
-
-CLUTTER_EXPORT
-void clutter_stage_view_set_color_state (ClutterStageView  *view,
-                                         ClutterColorState *color_state);
-
-CLUTTER_EXPORT
-void clutter_stage_view_set_output_color_state (ClutterStageView  *view,
-                                                ClutterColorState *color_state);
-
-CLUTTER_EXPORT
-const char * clutter_stage_view_get_name (ClutterStageView *view);

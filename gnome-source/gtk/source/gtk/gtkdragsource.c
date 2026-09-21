@@ -44,7 +44,7 @@
 /**
  * GtkDragSource:
  *
- * An event controller to initiate Drag-And-Drop operations.
+ * `GtkDragSource` is an event controller to initiate Drag-And-Drop operations.
  *
  * `GtkDragSource` can be set up with the necessary
  * ingredients for a DND operation ahead of time. This includes
@@ -268,12 +268,14 @@ gtk_drag_source_filter_event (GtkEventController *controller,
   return GTK_EVENT_CONTROLLER_CLASS (gtk_drag_source_parent_class)->filter_event (controller, event);
 }
 
-static void
+static gboolean
 drag_timeout (gpointer user_data)
 {
   GtkDragSource *source = user_data;
 
   source->timeout_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -284,8 +286,7 @@ gtk_drag_source_begin (GtkGesture       *gesture,
   GdkEventSequence *current;
 
   current = gtk_gesture_single_get_current_sequence (GTK_GESTURE_SINGLE (gesture));
-  g_clear_handle_id (&source->timeout_id, g_source_remove);
-  source->timeout_id = g_timeout_add_once (MIN_TIME_TO_DND, drag_timeout, source);
+  source->timeout_id = g_timeout_add (MIN_TIME_TO_DND, drag_timeout, source);
 
   gtk_gesture_get_point (gesture, current, &source->start_x, &source->start_y);
 }
@@ -332,17 +333,17 @@ gtk_drag_source_class_init (GtkDragSourceClass *class)
   class->prepare = gtk_drag_source_prepare;
 
   /**
-   * GtkDragSource:content:
+   * GtkDragSource:content: (attributes org.gtk.Property.get=gtk_drag_source_get_content org.gtk.Property.set=gtk_drag_source_set_content)
    *
    * The data that is offered by drag operations from this source.
    */
   properties[PROP_CONTENT] =
        g_param_spec_object ("content", NULL, NULL,
                            GDK_TYPE_CONTENT_PROVIDER,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkDragSource:actions:
+   * GtkDragSource:actions: (attributes org.gtk.Property.get=gtk_drag_source_get_actions org.gtk.Property.set=gtk_drag_source_set_actions)
    *
    * The actions that are supported by drag operations from the source.
    *
@@ -352,7 +353,7 @@ gtk_drag_source_class_init (GtkDragSourceClass *class)
   properties[PROP_ACTIONS] =
        g_param_spec_flags ("actions", NULL, NULL,
                            GDK_TYPE_DRAG_ACTION, GDK_ACTION_COPY,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
@@ -641,7 +642,7 @@ gtk_drag_source_new (void)
 }
 
 /**
- * gtk_drag_source_get_content:
+ * gtk_drag_source_get_content: (attributes org.gtk.Method.get_property=content)
  * @source: a `GtkDragSource`
  *
  * Gets the current content provider of a `GtkDragSource`.
@@ -657,7 +658,7 @@ gtk_drag_source_get_content (GtkDragSource *source)
 }
 
 /**
- * gtk_drag_source_set_content:
+ * gtk_drag_source_set_content: (attributes org.gtk.Method.set_property=content)
  * @source: a `GtkDragSource`
  * @content: (nullable): a `GdkContentProvider`
  *
@@ -685,7 +686,7 @@ gtk_drag_source_set_content (GtkDragSource      *source,
 }
 
 /**
- * gtk_drag_source_get_actions:
+ * gtk_drag_source_get_actions: (attributes org.gtk.Method.get_property=actions)
  * @source: a `GtkDragSource`
  *
  * Gets the actions that are currently set on the `GtkDragSource`.
@@ -695,13 +696,13 @@ gtk_drag_source_set_content (GtkDragSource      *source,
 GdkDragAction
 gtk_drag_source_get_actions (GtkDragSource *source)
 {
-  g_return_val_if_fail (GTK_IS_DRAG_SOURCE (source), GDK_ACTION_NONE);
+  g_return_val_if_fail (GTK_IS_DRAG_SOURCE (source), 0);
 
   return source->actions;
 }
 
 /**
- * gtk_drag_source_set_actions:
+ * gtk_drag_source_set_actions: (attributes org.gtk.Method.set_property=actions)
  * @source: a `GtkDragSource`
  * @actions: the actions to offer
  *
@@ -800,7 +801,7 @@ gtk_drag_source_drag_cancel (GtkDragSource *source)
 
 /**
  * gtk_drag_check_threshold: (method)
- * @widget: a widget
+ * @widget: a `GtkWidget`
  * @start_x: X coordinate of start of drag
  * @start_y: Y coordinate of start of drag
  * @current_x: current X coordinate
@@ -808,7 +809,7 @@ gtk_drag_source_drag_cancel (GtkDragSource *source)
  *
  * Checks to see if a drag movement has passed the GTK drag threshold.
  *
- * Returns: true if the drag threshold has been passed
+ * Returns: %TRUE if the drag threshold has been passed.
  */
 gboolean
 gtk_drag_check_threshold (GtkWidget *widget,

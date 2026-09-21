@@ -29,7 +29,7 @@
 
 #include "config.h"
 
-#include "gtkspinnerprivate.h"
+#include "gtkspinner.h"
 
 #include "gtkimage.h"
 #include "gtkprivate.h"
@@ -37,21 +37,17 @@
 #include "gtkwidgetprivate.h"
 #include "gtkcssnumbervalueprivate.h"
 #include "gtkrendericonprivate.h"
-#include "svg/gtksvg.h"
 
 
 /**
  * GtkSpinner:
  *
- * Displays an icon-size spinning animation.
+ * A `GtkSpinner` widget displays an icon-size spinning animation.
  *
  * It is often used as an alternative to a [class@Gtk.ProgressBar]
  * for displaying indefinite activity, instead of actual progress.
  *
- * <picture>
- *   <source srcset="spinner-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkSpinner" src="spinner.png">
- * </picture>
+ * ![An example GtkSpinner](spinner.png)
  *
  * To start the animation, use [method@Gtk.Spinner.start], to stop it
  * use [method@Gtk.Spinner.stop].
@@ -61,10 +57,6 @@
  * `GtkSpinner` has a single CSS node with the name spinner.
  * When the animation is active, the :checked pseudoclass is
  * added to this node.
- *
- * # Accessibility
- *
- * `GtkSpinner` uses the [enum@Gtk.AccessibleRole.progress_bar] role.
  */
 
 typedef struct _GtkSpinnerClass GtkSpinnerClass;
@@ -72,9 +64,7 @@ typedef struct _GtkSpinnerClass GtkSpinnerClass;
 struct _GtkSpinner
 {
   GtkWidget parent;
-  GtkSvg *paintable;
 
-  GtkReducedMotion motion;
   guint spinning : 1;
 };
 
@@ -86,11 +76,8 @@ struct _GtkSpinnerClass
 
 enum {
   PROP_0,
-  PROP_SPINNING,
-  N_PROPS
+  PROP_SPINNING
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE (GtkSpinner, gtk_spinner, GTK_TYPE_WIDGET)
 
@@ -99,7 +86,7 @@ G_DEFINE_TYPE (GtkSpinner, gtk_spinner, GTK_TYPE_WIDGET)
 static void
 update_state_flags (GtkSpinner *spinner)
 {
-  if (spinner->spinning)
+  if (spinner->spinning && gtk_widget_get_mapped (GTK_WIDGET (spinner)))
     gtk_widget_set_state_flags (GTK_WIDGET (spinner),
                                 GTK_STATE_FLAG_CHECKED, FALSE);
   else
@@ -119,63 +106,19 @@ gtk_spinner_measure (GtkWidget      *widget,
   GtkCssStyle *style;
 
   style = gtk_css_node_get_style (gtk_widget_get_css_node (widget));
-  *minimum = *natural = gtk_css_number_value_get (style->icon->icon_size, 100);
+  *minimum = *natural = _gtk_css_number_value_get (style->icon->icon_size, 100);
 }
 
 static void
 gtk_spinner_snapshot (GtkWidget   *widget,
                       GtkSnapshot *snapshot)
 {
-  GtkSpinner *spinner = GTK_SPINNER (widget);
   GtkCssStyle *style = gtk_css_node_get_style (gtk_widget_get_css_node (widget));
 
-  gtk_css_style_snapshot_icon_paintable (style,
-                                         snapshot,
-                                         GDK_PAINTABLE (spinner->paintable),
-                                         gtk_widget_get_width (widget),
-                                         gtk_widget_get_height (widget));
-}
-
-static void
-ensure_paintable (GtkSpinner *spinner)
-{
-  GdkFrameClock *clock;
-  GtkReducedMotion motion;
-
-  g_object_get (gtk_widget_get_settings (GTK_WIDGET (spinner)),
-                "gtk-interface-reduced-motion", &motion,
-                NULL);
-
-  if (spinner->motion != motion)
-    {
-      spinner->motion = motion;
-      g_clear_object (&spinner->paintable);
-    }
-
-  if (spinner->paintable)
-    return;
-
-  if (spinner->motion == GTK_REDUCED_MOTION_NO_PREFERENCE)
-    spinner->paintable = gtk_svg_new_from_resource ("/org/gtk/libgtk/icons/process-working.gpa");
-  else
-    spinner->paintable = gtk_svg_new_from_resource ("/org/gtk/libgtk/icons/sand-watch.svg");
-
-  g_signal_connect_swapped (spinner->paintable, "invalidate-contents",
-                            G_CALLBACK (gtk_widget_queue_draw), spinner);
-
-  gtk_svg_set_state (spinner->paintable, spinner->spinning ? 0 : 1);
-
-  clock = gtk_widget_get_frame_clock (GTK_WIDGET (spinner));
-  gtk_svg_set_frame_clock (spinner->paintable, clock);
-
-  gtk_svg_play (spinner->paintable);
-  gtk_widget_queue_draw (GTK_WIDGET (spinner));
-}
-
-static void
-motion_changed (GtkSpinner *spinner)
-{
-  ensure_paintable (spinner);
+  gtk_css_style_snapshot_icon (style,
+                               snapshot,
+                               gtk_widget_get_width (widget),
+                               gtk_widget_get_height (widget));
 }
 
 static void
@@ -185,11 +128,7 @@ gtk_spinner_map (GtkWidget *widget)
 
   GTK_WIDGET_CLASS (gtk_spinner_parent_class)->map (widget);
 
-  ensure_paintable (spinner);
-
-  g_signal_connect_swapped (gtk_widget_get_settings (widget),
-                            "notify::gtk-interface-reduced-motion",
-                            G_CALLBACK (motion_changed), widget);
+  update_state_flags (spinner);
 }
 
 static void
@@ -197,20 +136,17 @@ gtk_spinner_unmap (GtkWidget *widget)
 {
   GtkSpinner *spinner = GTK_SPINNER (widget);
 
-  gtk_svg_pause (spinner->paintable);
-
-  g_signal_handlers_disconnect_by_func (gtk_widget_get_settings (widget),
-                                        motion_changed, widget);
-
   GTK_WIDGET_CLASS (gtk_spinner_parent_class)->unmap (widget);
+
+  update_state_flags (spinner);
 }
 
 static void
 gtk_spinner_css_changed (GtkWidget         *widget,
                          GtkCssStyleChange *change)
-{
+{ 
   GTK_WIDGET_CLASS (gtk_spinner_parent_class)->css_changed (widget, change);
-
+  
   if (change == NULL ||
       gtk_css_style_change_affects (change, GTK_CSS_AFFECTS_ICON_SIZE))
     {
@@ -224,7 +160,7 @@ gtk_spinner_css_changed (GtkWidget         *widget,
 }
 
 /**
- * gtk_spinner_get_spinning:
+ * gtk_spinner_get_spinning: (attributes org.gtk.Method.get_property=spinning)
  * @spinner: a `GtkSpinner`
  *
  * Returns whether the spinner is spinning.
@@ -240,7 +176,7 @@ gtk_spinner_get_spinning (GtkSpinner *spinner)
 }
 
 /**
- * gtk_spinner_set_spinning:
+ * gtk_spinner_set_spinning: (attributes org.gtk.Method.set_property=spinning)
  * @spinner: a `GtkSpinner`
  * @spinning: whether the spinner should be spinning
  *
@@ -259,12 +195,9 @@ gtk_spinner_set_spinning (GtkSpinner *spinner,
 
   spinner->spinning = spinning;
 
-  if (gtk_widget_get_mapped (GTK_WIDGET (spinner)))
-    gtk_svg_set_state (spinner->paintable, spinner->spinning ? 0 : 1);
-
   update_state_flags (spinner);
 
-  g_object_notify_by_pspec (G_OBJECT (spinner), props[PROP_SPINNING]);
+  g_object_notify (G_OBJECT (spinner), "spinning");
 }
 
 static void
@@ -300,19 +233,6 @@ gtk_spinner_set_property (GObject      *object,
 }
 
 static void
-gtk_spinner_dispose (GObject *object)
-{
-  GtkSpinner *spinner = GTK_SPINNER (object);
-
-  if (spinner->paintable)
-    g_signal_handlers_disconnect_by_func (spinner->paintable, G_CALLBACK (gtk_widget_queue_draw), spinner);
-
-  g_clear_object (&spinner->paintable);
-
-  G_OBJECT_CLASS (gtk_spinner_parent_class)->dispose (object);
-}
-
-static void
 gtk_spinner_class_init (GtkSpinnerClass *klass)
 {
   GObjectClass *gobject_class;
@@ -321,7 +241,6 @@ gtk_spinner_class_init (GtkSpinnerClass *klass)
   gobject_class = G_OBJECT_CLASS(klass);
   gobject_class->get_property = gtk_spinner_get_property;
   gobject_class->set_property = gtk_spinner_set_property;
-  gobject_class->dispose = gtk_spinner_dispose;
 
   widget_class = GTK_WIDGET_CLASS(klass);
   widget_class->snapshot = gtk_spinner_snapshot;
@@ -331,24 +250,22 @@ gtk_spinner_class_init (GtkSpinnerClass *klass)
   widget_class->css_changed = gtk_spinner_css_changed;
 
   /**
-   * GtkSpinner:spinning:
+   * GtkSpinner:spinning: (attributes org.gtk.Property.get=gtk_spinner_get_spinning org.gtk.Property.set=gtk_spinner_set_spinning)
    *
    * Whether the spinner is spinning
    */
-  props[PROP_SPINNING] = g_param_spec_boolean ("spinning", NULL, NULL,
-                                               FALSE,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+                                   PROP_SPINNING,
+                                   g_param_spec_boolean ("spinning", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   gtk_widget_class_set_css_name (widget_class, I_("spinner"));
-  gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_PROGRESS_BAR);
 }
 
 static void
 gtk_spinner_init (GtkSpinner *spinner)
 {
-  spinner->motion = GTK_REDUCED_MOTION_NO_PREFERENCE;
 }
 
 /**
@@ -376,10 +293,6 @@ gtk_spinner_start (GtkSpinner *spinner)
   g_return_if_fail (GTK_IS_SPINNER (spinner));
 
   gtk_spinner_set_spinning (spinner, TRUE);
-
-  gtk_accessible_update_state (GTK_ACCESSIBLE (spinner),
-                               GTK_ACCESSIBLE_STATE_BUSY, TRUE,
-                               -1);
 }
 
 /**
@@ -394,14 +307,4 @@ gtk_spinner_stop (GtkSpinner *spinner)
   g_return_if_fail (GTK_IS_SPINNER (spinner));
 
   gtk_spinner_set_spinning (spinner, FALSE);
-
-  gtk_accessible_update_state (GTK_ACCESSIBLE (spinner),
-                               GTK_ACCESSIBLE_STATE_BUSY, FALSE,
-                               -1);
-}
-
-GtkSvg *
-gtk_spinner_get_svg (GtkSpinner *spinner)
-{
-  return spinner->paintable;
 }

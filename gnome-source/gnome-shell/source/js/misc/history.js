@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import * as Signals from './signals.js';
 import Clutter from 'gi://Clutter';
 import * as Params from './params.js';
@@ -29,18 +31,8 @@ export class HistoryManager extends Signals.EventEmitter {
         this._entry = params.entry;
 
         if (this._entry) {
-            const keyController = new Clutter.KeyController();
-            keyController.connect('key-press', () => {
-                const [, symbol] = keyController.get_key();
-
-                if (symbol === Clutter.KEY_Up)
-                    return this._setPrevItem(this._entry.get_text().trim());
-                else if (symbol === Clutter.KEY_Down)
-                    return this._setNextItem(this._entry.get_text().trim());
-
-                return Clutter.EVENT_PROPAGATE;
-            });
-            this._entry.add_action(keyController);
+            this._entry.connect('key-press-event',
+                this._onEntryKeyPress.bind(this));
         }
     }
 
@@ -93,8 +85,18 @@ export class HistoryManager extends Signals.EventEmitter {
         return input; // trimmed
     }
 
+    _onEntryKeyPress(entry, event) {
+        let symbol = event.get_key_symbol();
+        if (symbol === Clutter.KEY_Up)
+            return this._setPrevItem(entry.get_text().trim());
+        else if (symbol === Clutter.KEY_Down)
+            return this._setNextItem(entry.get_text().trim());
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
     _indexChanged() {
-        const current = this._history[this._historyIndex] || '';
+        let current = this._history[this._historyIndex] || '';
         this.emit('changed', current);
 
         if (this._entry)

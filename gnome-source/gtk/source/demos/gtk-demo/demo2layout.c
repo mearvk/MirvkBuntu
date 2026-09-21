@@ -133,15 +133,9 @@ demo2_layout_allocate (GtkLayoutManager *layout_manager,
       graphene_point3d_init (&q4, x0 + SX (r, t_1, p_2), y0 + SY (r, t_1, p_2), SZ (r, t_1, p_2));
 
       /* Get a matrix that moves p1 -> q1, p2 -> q2, ... */
-      perspective_3d (&p4, &p3, &p2, &p1,
+      perspective_3d (&p1, &p2, &p3, &p4,
                       &q1, &q2, &q3, &q4,
                       &m);
-
-      if (graphene_matrix_is_singular (&m))
-        {
-          gtk_widget_set_child_visible (child, FALSE);
-          continue;
-        }
 
       transform = gsk_transform_matrix (NULL, &m);
 
@@ -151,7 +145,6 @@ demo2_layout_allocate (GtkLayoutManager *layout_manager,
       transform = gsk_transform_translate_3d (transform,
                                               &GRAPHENE_POINT3D_INIT (0, 0, 1));
 
-      gtk_widget_set_child_visible (child, TRUE);
       gtk_widget_allocate (child, w, h, -1, transform);
     }
 }

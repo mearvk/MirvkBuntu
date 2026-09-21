@@ -34,11 +34,12 @@ You can get a list of all available options for the build by
 running `meson configure`.
 
 After Meson successfully configured the build directory, you then
-can build and install GTK:
+can run the build, using Ninja:
 
 ```
-meson compile -Cbuilddir
-meson install -Cbuilddir
+cd builddir
+meson compile
+meson install
 ```
 
 If you don't have permission to write to the directory you are
@@ -136,10 +137,10 @@ Other libraries are maintained separately.
   from [here](https://download.gnome.org/sources/glib/).
 - The [GdkPixbuf](https://git.gnome.org/browse/gdk-pixbuf/)
   library provides facilities for loading images in a variety of
-  file formats. It is available [here](https://download.gnome.org/sources/gdk-pixbuf/).
+  file formats. It is available [here](ttps://download.gnome.org/sources/gdk-pixbuf/).
 - [Pango](http://www.pango.org) is a library for internationalized
   text handling. It is available [here](https://download.gnome.org/sources/pango/).
-- [GObject Introspection](https://gitlab.gnome.org/GNOME/gobject-introspection)
+- [GObject Introspection](https://wiki.gnome.org/Projects/GObjectIntrospection)
   is a framework for making introspection data available to language
   bindings. It is available [here](https://download.gnome.org/sources/gobject-introspection/).
 - The [GNU libiconv](https://www.gnu.org/software/libiconv/) library
@@ -195,7 +196,7 @@ between them and the GTK build; if you are using a separate prefix
 for GTK, for instance, you will need to use the same prefix for
 all its dependencies you build. If you're lucky, this will all go
 smoothly, and you'll be ready to [start compiling your own GTK
-applications](https://docs.gtk.org/gtk4/compiling.html). You can test your GTK installation
+applications](#gtk-compiling). You can test your GTK installation
 by running the `gtk4-demo` program that GTK installs.
 
 If one of the projects you're configuring or building fails, look
@@ -203,7 +204,7 @@ closely at the error messages printed; these will often provide useful
 information as to what went wrong. Every build system has its own
 log that can help you understand the issue you're encountering. If
 all else fails, you can ask for help on the
-[GTK forums](https://docs.gtk.org/gtk4/resources.html).
+[GTK forums](#gtk-resources).
 
 ## Extra Configuration Options
 
@@ -217,7 +218,7 @@ To see a summary of all supported options and their allowed values, run
 meson configure builddir
 ```
 
-### `x11-backend`, `win32-backend`, `broadway-backend`, `wayland-backend`, `macos-backend` and `android-backend`
+### `x11-backend`, `win32-backend`, `broadway-backend`, `wayland-backend` and `macos-backend`
 
 Enable specific backends for GDK.  If none of these options are given, the
 Wayland backend will be enabled by default, if the platform is Linux; the
@@ -263,12 +264,6 @@ support in the file chooser.
 
 This option controls whether GTK should use colord for color
 calibration support in the cups print backend.
-
-### `accesskit`
-
-This option controls whether GTK should include the AccessKit backend
-for accessibility. This backend supports Windows and macOS. It requires
-the accesskit-c bindings.
 
 ### `documentation`, `man-pages` and `screenshots`
 

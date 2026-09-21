@@ -33,10 +33,11 @@
 G_BEGIN_DECLS
 
 #define GDK_TYPE_DISPLAY              (gdk_display_get_type ())
+#define GDK_DISPLAY(object)           (G_TYPE_CHECK_INSTANCE_CAST ((object), GDK_TYPE_DISPLAY, GdkDisplay))
+#define GDK_IS_DISPLAY(object)        (G_TYPE_CHECK_INSTANCE_TYPE ((object), GDK_TYPE_DISPLAY))
 
 GDK_AVAILABLE_IN_ALL
-GDK_DECLARE_INTERNAL_TYPE (GdkDisplay, gdk_display, GDK, DISPLAY, GObject)
-
+GType       gdk_display_get_type (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GdkDisplay *gdk_display_open                (const char *display_name);
 
@@ -138,6 +139,8 @@ gboolean     gdk_display_get_setting (GdkDisplay *display,
 GDK_AVAILABLE_IN_4_14
 GdkDmabufFormats *
              gdk_display_get_dmabuf_formats (GdkDisplay *display);
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkDisplay, g_object_unref)
 
 G_END_DECLS
 

@@ -22,36 +22,29 @@
 
 """Provides support for a flat review find."""
 
-from __future__ import annotations
-
 import copy
 import re
 import time
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 import gi
 
 gi.require_version("Atspi", "2.0")
 gi.require_version("Gtk", "3.0")
-
 from gi.repository import Atspi, Gtk
 
 from . import (
+    cmdnames,
+    command_manager,
     debug,
-    flat_review_finder_command_definitions,
     flat_review_presenter,
     focus_manager,
     guilabels,
+    keybindings,
     messages,
     presentation_manager,
 )
-from .extension import Extension
 from .flat_review import Context
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from .command import Command
 
 
 class _SearchQueryMatch:
@@ -114,10 +107,8 @@ class SearchQuery:
         return string
 
 
-class FlatReviewFinder(Extension):
+class FlatReviewFinder:
     """Provides tools to search the current window's flat-review contents."""
-
-    GROUP_LABEL = guilabels.KB_GROUP_FIND
 
     def __init__(self) -> None:
         self._gui: FlatReviewFinderGUI | None = None
@@ -126,10 +117,57 @@ class FlatReviewFinder(Extension):
         self._wrapped: bool = False
         self._match: _SearchQueryMatch | None = None
         self._focus: Atspi.Accessible | None = None
-        super().__init__()
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return flat_review_finder_command_definitions.get_commands(self)
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_FIND
+
+        # (name, function, description, desktop_binding, laptop_binding)
+        commands_data = [
+            (
+                "findHandler",
+                self.show_dialog,
+                cmdnames.SHOW_FIND_GUI,
+                keybindings.KeyBinding("KP_Delete", keybindings.NO_MODIFIER_MASK),
+                keybindings.KeyBinding("bracketleft", keybindings.ORCA_MODIFIER_MASK),
+            ),
+            (
+                "findNextHandler",
+                self.find_next,
+                cmdnames.FIND_NEXT,
+                keybindings.KeyBinding("KP_Delete", keybindings.ORCA_MODIFIER_MASK),
+                keybindings.KeyBinding("bracketright", keybindings.ORCA_MODIFIER_MASK),
+            ),
+            (
+                "findPreviousHandler",
+                self.find_previous,
+                cmdnames.FIND_PREVIOUS,
+                keybindings.KeyBinding("KP_Delete", keybindings.ORCA_SHIFT_MODIFIER_MASK),
+                keybindings.KeyBinding("bracketright", keybindings.ORCA_CTRL_MODIFIER_MASK),
+            ),
+        ]
+
+        for name, function, description, desktop_kb, laptop_kb in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=desktop_kb,
+                    laptop_keybinding=laptop_kb,
+                ),
+            )
+
+        msg = "FLAT REVIEW FINDER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _on_query(self, query: SearchQuery) -> None:
         """Handler after a query has been made via the Find dialog."""
@@ -240,15 +278,8 @@ class FlatReviewFinder(Extension):
 
             match = re.search(pattern, string)
             debug_string = string.replace("\n", "\\n")
-            tokens = [
-                "FLAT REVIEW FINDER: Looking in",
-                type_string,
-                "='",
-                debug_string,
-                "'. Match:",
-                match,
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"FLAT REVIEW FINDER: Looking in {type_string}='{debug_string}'. Match: {match}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return bool(match)
 
         found = matches(context, pattern, context_type)
@@ -286,10 +317,10 @@ class FlatReviewFinder(Extension):
     def _do_find(self, query: SearchQuery, context: Context) -> Context | None:
         """Performs the actual search."""
 
-        tokens: list[Any] = ["FLAT REVIEW FINDER: Searching for", query]
+        msg = f"FLAT REVIEW FINDER: Searching for {query!s}"
         if self._match:
-            tokens += [". Last match:", self._match]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg += f". Last match: {self._match}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         flags = re.UNICODE
         if not query.case_sensitive:

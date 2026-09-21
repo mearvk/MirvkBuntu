@@ -1,36 +1,15 @@
 include:
-  - project: 'Infrastructure/freedesktop-ci-templates'
-    ref: '707b49ef'
-    file:
-      - 'templates/fedora.yml'
-      - 'templates/debian.yml'
   - project: 'gnome/citemplates'
     file: 'flatpak/flatpak_ci_initiative.yml'
-  - component:  gitlab.gnome.org/GNOME/citemplates/release-service@master
-    inputs:
-      dist-job-name: "release-build"
-      tarball-artifact-path: "_build/meson-dist/$CI_PROJECT_NAME-$CI_COMMIT_TAG.tar.xz"
-  - component: "gitlab.gnome.org/GNOME/citemplates/goblint@master"
-    inputs:
-      job-stage: "analysis"
-  - component: "gitlab.gnome.org/GNOME/citemplates/goblint@master"
-    inputs:
-      job-stage: "analysis"
-      job-name: "gobject-linter-latest"
-      image-ref: "ghcr.io/bilelmoussaoui/gobject-linter:latest"
-      allow-failure: true
 
 stages:
-  - prepare
   - check
   - build
   - analysis
   - docs
-  - android
   - flatpak
   - publish
   - deploy
-  - release
 
 .cache-paths: &cache-paths
   paths:
@@ -43,12 +22,11 @@ stages:
 
 # Common variables
 variables:
-  FDO_UPSTREAM_REPO: GNOME/gtk
-  COMMON_MESON_FLAGS: "-Dwerror=true -Dcairo:werror=false -Dgi-docgen:werror=false -Dgraphene:werror=false -Dlibepoxy:werror=false -Dlibsass:werror=false -Dpango:werror=false -Dsassc:werror=false -Dgdk-pixbuf:werror=false -Dglib:werror=false -Dlibcloudproviders:werror=false -Dlibpng:werror=false -Dlibtiff:werror=false -Dsysprof:werror=false -Dwayland:werror=false -Dwayland-protocols:werror=false -Dharfbuzz:werror=false -Dfreetype2:werror=false -Dfontconfig:werror=false -Dfribidi:werror=false -Dlibffi:werror=false -Dlibjpeg-turbo:werror=false -Dmutest:werror=false -Dpcre2:werror=false -Dpixman:werror=false -Dproxy-libintl:werror=false -Dgperf:werror=false -Dlibxml2:werror=false -Dfribidi:docs=false"
+  COMMON_MESON_FLAGS: "-Dwerror=true -Dcairo:werror=false -Dgi-docgen:werror=false -Dgraphene:werror=false -Dlibepoxy:werror=false -Dlibsass:werror=false -Dpango:werror=false -Dsassc:werror=false -Dgdk-pixbuf:werror=false -Dglib:werror=false -Dlibcloudproviders:werror=false -Dlibpng:werror=false -Dlibtiff:werror=false -Dsysprof:werror=false -Dwayland-protocols:werror=false -Dharfbuzz:werror=false -Dfreetype2:werror=false -Dfontconfig:werror=false -Dfribidi:werror=false -Dlibffi:werror=false -Dlibjpeg-turbo:werror=false -Dmutest:werror=false -Dpixman:werror=false -Dproxy-libintl:werror=false"
   BACKEND_FLAGS: "-Dx11-backend=true -Dwayland-backend=true -Dbroadway-backend=true"
   FEATURE_FLAGS: "-Dvulkan=enabled -Dcloudproviders=enabled -Dbuild-testsuite=true -Dintrospection=enabled"
   MESON_TEST_TIMEOUT_MULTIPLIER: 3
-  MESON_TEST_MAX_PROCESSES: 8
+  FEDORA_IMAGE: "registry.gitlab.gnome.org/gnome/gtk/fedora:v49"
 
 workflow:
   rules:
@@ -73,145 +51,29 @@ default:
       - 'api_failure'
   interruptible: true
 
-.container.fedora:
-  variables:
-    BASE_TAG: '2026-08-09.0'
-    FDO_DISTRIBUTION_VERSION: 45
-    FDO_DISTRIBUTION_TAG: "x86_64-${BASE_TAG}"
-    FDO_DISTRIBUTION_PACKAGES:
-      ccache
-      clang
-      clang-analyzer
-      clang-tools-extra
-      cmake
-      compiler-rt
-      dbus-daemon
-      dejavu-sans-mono-fonts
-      diffutils
-      git
-      glibc-langpack-en
-      graphviz
-      libasan
-      libcloudproviders-devel
-      libubsan
-      mesa-vulkan-drivers
-      meson
-      mingw64-filesystem
-      mingw64-gcc
-      mingw64-binutils
-      mingw64-cairo
-      mingw64-gdk-pixbuf
-      mingw64-gstreamer1-plugins-bad-free
-      mingw64-glib2
-      mingw64-libepoxy
-      mingw64-pango
-      mold
-      mutter
-      python-devel
-      python3-jinja2
-      python3-markdown
-      python3-markupsafe
-      python3-pip
-      python3-pygments
-      python3-typogrify
-      sassc
-      tinysparql-devel
-      vulkan-validation-layers
-      weston
-      xorg-x11-server-Xvfb
-    FDO_DISTRIBUTION_EXEC: |
-      dnf builddep -y gtk4 &&
-      meson subprojects download || exit 137 &&
-      meson subprojects update --reset || exit 137 &&
-      mkdir /subprojects && find subprojects -mindepth 1 -maxdepth 1 -type d -exec mv {} /subprojects \;
-    VK_LOADER_DRIVERS_DISABLE: "*power*"
-
-.distribution.fedora:
-  extends:
-    - .fdo.distribution-image@fedora
-    - .container.fedora
-
-container:fedora:
-  extends:
-    - .container.fedora
-    - .fdo.container-build@fedora@x86_64
-  # DNS issues can cause this to fail
-  retry:
-    max: 2
-    exit_codes: 137
-  stage: prepare
-
-.container.android:
-  variables:
-    BASE_TAG: '2026-07-30.1'
-    FDO_DISTRIBUTION_VERSION: sid
-    FDO_DISTRIBUTION_TAG: "x86_64-${BASE_TAG}"
-    FDO_DISTRIBUTION_PACKAGES:
-      build-essential
-      gir1.2-appstream
-      git
-      git-lfs
-      glslc
-      gobject-introspection
-      libglib2.0-dev-bin
-      libglib-perl
-      libglib-object-introspection-perl
-      libipc-run-perl
-      libjson-perl
-      libset-scalar-perl
-      libxml2-utils
-      libxml-libxml-perl
-      libxml-libxslt-perl
-      meson
-      ninja-build
-      openjdk-17-jre
-      openjdk-17-jdk
-      perl
-      pkg-config
-      sassc
-      sdkmanager
-      sudo
-    FDO_DISTRIBUTION_EXEC: |
-      .gitlab-ci/android-sdk.sh &&
-      apt-get -y clean
-    ANDROID_HOME: "/opt/android/"
-    ANDROID_SDKVER: "35.0.0"
-    HOST_USER_ID: "5555"
-    LANG: "C.UTF-8"
-
-.distribution.android:
-  extends:
-    - .fdo.distribution-image@debian
-    - .container.android
-
-container:android:
-  extends:
-    - .container.android
-    - .fdo.container-build@debian@x86_64
-  stage: prepare
-
 style-check-diff:
-  extends:
-    - .distribution.fedora
+  image: $FEDORA_IMAGE
   stage: check
   when: manual
   script:
     - .gitlab-ci/run-style-check-diff.sh
-  needs: ['container:fedora']
 
-.test-runner:
+.build-fedora-default:
+  image: $FEDORA_IMAGE
   artifacts:
-    name: "gtk-${CI_COMMIT_REF_NAME}"
     when: always
     reports:
       junit:
-        - "${CI_PROJECT_DIR}/_build/meson-logs/testlog-x11.junit.xml"
-        - "${CI_PROJECT_DIR}/_build/meson-logs/testlog-wayland.junit.xml"
-        - "${CI_PROJECT_DIR}/_build/meson-logs/testlog-wayland_gl.junit.xml"
-        - "${CI_PROJECT_DIR}/_build/meson-logs/testlog-wayland_minimal.junit.xml"
-        - "${CI_PROJECT_DIR}/_build/meson-logs/testlog-broadway.junit.xml"
+        - "${CI_PROJECT_DIR}/_build/report-x11.xml"
+        - "${CI_PROJECT_DIR}/_build/report-wayland.xml"
+        - "${CI_PROJECT_DIR}/_build/report-wayland_gl.xml"
+        - "${CI_PROJECT_DIR}/_build/report-wayland_gles2.xml"
+        - "${CI_PROJECT_DIR}/_build/report-broadway.xml"
+    name: "gtk-${CI_COMMIT_REF_NAME}"
     paths:
       - "${CI_PROJECT_DIR}/_build/meson-logs"
+      - "${CI_PROJECT_DIR}/_build/report*.xml"
+      - "${CI_PROJECT_DIR}/_build/report*.html"
       - "${CI_PROJECT_DIR}/_build/testsuite/reftests/output/*/*.png"
       - "${CI_PROJECT_DIR}/_build/testsuite/reftests/output/*/*.node"
       - "${CI_PROJECT_DIR}/_build/testsuite/tools/output/*/*"
@@ -219,60 +81,23 @@ style-check-diff:
       - "${CI_PROJECT_DIR}/_build/testsuite/gsk/compare/*/*/*.node"
       - "${CI_PROJECT_DIR}/_build/testsuite/css/output/*/*.syscap"
       - "${CI_PROJECT_DIR}/_build/testsuite/headless/*/*.log"
-      - "${CI_PROJECT_DIR}/_build/testsuite/svg/*/*.diff"
-      - "${CI_PROJECT_DIR}/_build/testsuite/svg/*/*.svg"
-      - "${CI_PROJECT_DIR}/_build/testsuite/svg/*/*.nodes"
       - "${CI_PROJECT_DIR}/_build_hello/meson-logs"
-      - "${CI_PROJECT_DIR}/_build/gtk/GdkX11-4.0.gir"
-      - "${CI_PROJECT_DIR}/_build/gtk/GdkWayland-4.0.gir"
-      - "${CI_PROJECT_DIR}/_build/meson-dist/*.tar.xz"
-      - "${CI_PROJECT_DIR}/_build/testsuite/*.md"
-
-.build-fedora-default:
-  extends:
-    - .distribution.fedora
   cache:
     key: "$CI_JOB_NAME"
     paths:
       - _ccache/
 
-.meson-subprojects:
-  before_script:
-    - find /subprojects -mindepth 1 -maxdepth 1 -type d -exec ln -s {} subprojects/ \;
-
-gnomeos-x86_64:
-  extends:
-    - .test-runner
-  needs: []
-  stage: build
-  image: "quay.io/gnome_infrastructure/gnome-build-meta:gnomeos-devel-nightly"
-  variables:
-    EXTRA_MESON_FLAGS: "--buildtype=debug --default-library=both"
-  script:
-    - .gitlab-ci/show-info-linux.sh
-    - export PATH="$HOME/.local/bin:$PATH"
-    - meson setup
-            --prefix=/usr
-            --libdir=lib/$(gcc -print-multiarch)
-            ${EXTRA_MESON_FLAGS}
-            _build
-    - meson compile -C _build
-    - .gitlab-ci/collect-info-gtk.sh _build
-    - .gitlab-ci/run-tests.sh _build wayland gtk failing
-
 fedora-x86_64:
-  extends:
-    - .test-runner
-    - .build-fedora-default
-    - .meson-subprojects
+  extends: .build-fedora-default
   stage: build
-  needs: ["container:fedora"]
+  needs: []
   variables:
     EXTRA_MESON_FLAGS: "--buildtype=debug --default-library=both"
   script:
     - .gitlab-ci/show-info-linux.sh
     - export PATH="$HOME/.local/bin:$PATH"
-    - export CC_LD=mold
+    - meson subprojects download
+    - meson subprojects update --reset
     - meson setup
             ${COMMON_MESON_FLAGS}
             ${EXTRA_MESON_FLAGS}
@@ -280,23 +105,22 @@ fedora-x86_64:
             ${FEATURE_FLAGS}
             _build
     - meson compile -C _build
-    - .gitlab-ci/collect-info-gtk.sh _build
-    - .gitlab-ci/run-tests.sh _build x11 gtk failing
+    - .gitlab-ci/run-tests.sh _build x11 gtk
     # only repeat test runs that are likely affected by test setups
-    - .gitlab-ci/run-tests.sh _build wayland_gl gtk:gdk,gtk:gsk-gl failing
+    - .gitlab-ci/run-tests.sh _build wayland_gl gtk:gdk,gtk:gsk-gl
 
 release-build:
-  extends:
-    - .test-runner
-    - .build-fedora-default
+  extends: .build-fedora-default
   stage: build
-  needs: ['container:fedora']
+  needs: []
   variables:
-    EXTRA_MESON_FLAGS: "--buildtype=release -Dtracker=enabled"
+    EXTRA_MESON_FLAGS: "--buildtype=release"
   script:
     - .gitlab-ci/show-info-linux.sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - meson subprojects download
+    - meson subprojects update --reset
     - mkdir _install
-    - git config --global --add safe.directory $CI_PROJECT_DIR
     - meson setup
             --prefix=${CI_PROJECT_DIR}/_install
             ${COMMON_MESON_FLAGS}
@@ -306,46 +130,54 @@ release-build:
             _build
     - meson compile -C _build
     - meson install -C _build
-    - .gitlab-ci/collect-info-gtk.sh _build
     - PKG_CONFIG_PATH=${CI_PROJECT_DIR}/_install/lib64/pkgconfig:${CI_PROJECT_DIR}/_install/share/pkgconfig meson setup _build_hello examples/hello
     - LD_LIBRARY_PATH=${CI_PROJECT_DIR}/_install/lib64 meson compile -C _build_hello
-    - .gitlab-ci/run-tests.sh _build wayland gtk failing
-    - meson dist -C _build --include-subprojects --no-tests
+    - .gitlab-ci/run-tests.sh _build wayland gtk
+    # only repeat test runs that are likely affected by test setups
+    - .gitlab-ci/run-tests.sh _build wayland_gles2 gtk:gdk,gtk:gsk-gl
 
 fedora-clang:
-  extends:
-    - .test-runner
-    - .build-fedora-default
-    - .meson-subprojects
+  extends: .build-fedora-default
   stage: build
-  needs: ["container:fedora"]
+  needs: []
   variables:
     EXTRA_MESON_FLAGS: "--buildtype=release"
   script:
     - .gitlab-ci/show-info-linux.sh
     - export PATH="$HOME/.local/bin:$PATH"
     - export CC=clang
-    - export CC_LD=mold
+    - meson subprojects download
+    - meson subprojects update --reset
     - meson setup
             ${COMMON_MESON_FLAGS}
             ${EXTRA_MESON_FLAGS}
-            -Dx11-backend=false -Dwayland-backend=true -Dbroadway-backend=false
+            ${BACKEND_FLAGS}
             ${FEATURE_FLAGS}
             _build
     - meson compile -C _build
-    - .gitlab-ci/collect-info-gtk.sh _build
-    - .gitlab-ci/run-tests.sh _build wayland_minimal gtk:gsk failing
 
 fedora-mingw64:
-  extends:
-    - .build-fedora-default
-    - .meson-subprojects
+  extends: .build-fedora-default
   stage: build
-  needs: ["container:fedora"]
+  needs: []
+  before_script:
+    - sudo dnf install -y
+            mingw64-filesystem
+            mingw64-gcc
+            mingw64-binutils
+            mingw64-cairo
+            mingw64-gdk-pixbuf
+            mingw64-gstreamer1-plugins-bad-free
+            mingw64-glib2
+            mingw64-libepoxy
+            mingw64-pango
+            # mingw64-graphene (rawhide)
   script:
     - .gitlab-ci/show-info-linux.sh
     - export PATH="$HOME/.local/bin:$PATH"
-    - pip3 install --user meson==1.11.1
+    - pip3 install --user meson~=1.0
+    - meson subprojects download
+    - meson subprojects update --reset
     - meson -Dintrospection=disabled -Dgraphene:introspection=disabled _build
     - meson compile -C _build
 
@@ -353,10 +185,6 @@ fedora-mingw64:
   stage: build
   tags:
     - win32-ps
-  # Downloading subprojects can fail, see .container.fedora
-  retry:
-    max: 2
-    exit_codes: 137
   script:
     - C:\msys64\usr\bin\pacman --noconfirm -Syyuu
     - C:\msys64\usr\bin\bash -lc "bash -x ./.gitlab-ci/test-msys2.sh"
@@ -370,91 +198,60 @@ fedora-mingw64:
       - subprojects/libepoxy/
       - subprojects/pango/
 
-msys2-ucrt64:
-  extends: .mingw-defaults
-  when: manual
-  needs: []
-  variables:
-    MSYSTEM: "UCRT64"
-    CHERE_INVOKING: "yes"
-  artifacts:
-    when: always
-    expose_as: 'Windows_DLL_MSYS2_UCRT64_toolchain'
-    paths:
-      - "${CI_PROJECT_DIR}/_build/meson-logs"
-      - "${CI_PROJECT_DIR}/_build/gtkdll.tar.gz"
-      - "${CI_PROJECT_DIR}/_build/gtk/GdkWin32-4.0.gir"
-
-msys2-clang64:
+msys2-mingw64:
   extends: .mingw-defaults
   needs: []
   variables:
-    MSYSTEM: "CLANG64"
+    MSYSTEM: "MINGW64"
     CHERE_INVOKING: "yes"
   artifacts:
     when: always
-    expose_as: 'Windows_DLL_MSYS2_CLANG64_toolchain'
+    expose_as: 'Windows_DLL_MSYS2_64_bit_toolchain'
     paths:
-      - "${CI_PROJECT_DIR}/_build/meson-logs"
       - "${CI_PROJECT_DIR}/_build/gtkdll.tar.gz"
-      - "${CI_PROJECT_DIR}/_build/gtk/GdkWin32-4.0.gir"
 
-macos-arm64:
-  allow_failure: true
+macos:
+  rules:
+    # Do not run in forks as the runner is not available there.
+    # (except for dehesselle who maintains the runner)
+    - if: $CI_PROJECT_NAMESPACE != "GNOME" && $CI_PROJECT_NAMESPACE != "dehesselle"
+      when: never
+    - if: $RUNNER == "macosintel"
+      variables:
+        SDKROOT: /opt/sdks/MacOSX10.13.4.sdk
+        NINJA_PKG: $CI_API_V4_URL/projects/30745/packages/generic/ninja_macos/v1.11.1.1+9/ninja-1.11.1.1-cp38-cp38-macosx_11_0_x86_64.whl
+      when: manual
+      allow_failure: true
+    - if: $RUNNER == "macosarm"
+      variables:
+        SDKROOT: /opt/sdks/MacOSX11.3.sdk
+        NINJA_PKG: ninja==1.11.1.1
   stage: build
+  parallel:
+    matrix:
+      - RUNNER: [ "macosintel", "macosarm" ]
   tags:
-    - macos
-    - arm64
+    - ${RUNNER}
   needs: []
-  cache:
-    - key: $CI_JOB_NAME_SLUG
-      paths:
-        - ccache
   variables:
-    BACKEND_FLAGS: ""
-    FEATURE_FLAGS: "-Dvulkan=disabled -Daccesskit=enabled -Dgobject-introspection:werror=false -Dintrospection=enabled -Dmedia-gstreamer=disabled"
     EXTRA_MESON_FLAGS: ""
-    # additional settings
-    CCACHE_MAXSIZE: "250Mi"
-    CCACHE_DIR: $CI_PROJECT_DIR/ccache
-    ORKA_RUNNER: sonoma-5
-    PKG_CONFIG_PATH: $CI_PROJECT_DIR/.venv/lib/pkgconfig
-    SDKROOT: /opt/sdks/MacOSX11.3.sdk
+    BACKEND_FLAGS: "-Dx11-backend=false -Dbroadway-backend=true"
+    FEATURE_FLAGS: "-Dmedia-gstreamer=disabled -Dintrospection=enabled -Dgobject-introspection:werror=false"
+    TMPDIR: /Users/Shared/work/tmp
+    PIP_CACHE_DIR: /Users/Shared/build/cache
+    PIPENV_CACHE_DIR: $PIP_CACHE_DIR
+    PYTHONPYCACHEPREFIX: $PIP_CACHE_DIR
   before_script:
     - .gitlab-ci/show-info-macos.sh
-    # Setup the virtual environment with meson and ninja. Add ccache to speed
-    # up the build.
-    - |
-      python3 -m venv .venv
-      source .venv/bin/activate
-      pip3 install meson==1.11.1 ninja==1.11.1.1
-      ln -s /opt/ccache/ccache .venv/bin
-    # The introspection feature requires pkg-config and bison.
+    - python3 -m venv .venv
+    # Building the introspection feature requires pkg-config and bison.
     - curl -L $CI_API_V4_URL/projects/30437/packages/generic/pkgconfig/v0.29.2+10/pkg-config-0.29.2+10_$(uname -m).tar.xz | tar -C .venv -xJ
     - curl -L $CI_API_V4_URL/projects/30438/packages/generic/bison/v3.8.2+3/bison-3.8.2+3_$(uname -m).tar.xz | tar -C .venv -xJ
-    # The AccessKit feature requires Rust and toml2json.
-    - ln -s /opt/rustup/toolchains/1.93.1-aarch64-apple-darwin/bin/* .venv/bin
-    - pip3 install toml2json==0.1.0
-    # Meson cannot handle circular dependencies in subprojects, so we have to build GLib and
-    # GObject Introspection ourselves. With crudini we ensure using the same versions as
-    # defined in the subproject wrappers.
-    - pip3 install crudini==0.9.6
-    - |
-      pip3 install packaging==24.2
-      git clone --depth 1 --branch $(crudini --get subprojects/glib.wrap wrap-git revision) https://gitlab.gnome.org/gnome/glib.git
-      meson setup -Dprefix=${CI_PROJECT_DIR}/.venv -Dintrospection=disabled -Dtests=false _glib_build glib
-      meson compile -C _glib_build
-      meson install -C _glib_build
-      cp -rvf "${CI_PROJECT_DIR}/_glib_build/meson-logs" "${CI_PROJECT_DIR}/_glib_build/meson-logs.no-introspection"
-    - |
-      git clone --depth 1 --branch $(crudini --get subprojects/gobject-introspection.wrap wrap-git revision) --recurse-submodules https://gitlab.gnome.org/gnome/gobject-introspection.git
-      meson setup -Dprefix=${CI_PROJECT_DIR}/.venv _gi_build gobject-introspection
-      meson compile -C _gi_build
-      meson install -C _gi_build
-    - |
-      meson configure -Dintrospection=enabled _glib_build
-      meson compile -C _glib_build
-      meson install -C _glib_build
+    - source .venv/bin/activate
+    - pip3 install meson==1.3.2 $NINJA_PKG
+    # We're not setting up ccache here on purpose as it accelerates the build
+    # so much that it triggers race conditions in the gobject-introspection
+    # subproject.
   script:
     - meson setup
             ${COMMON_MESON_FLAGS}
@@ -466,12 +263,9 @@ macos-arm64:
   artifacts:
     when: always
     paths:
-      - "${CI_PROJECT_DIR}/_glib_build/meson-logs.no-introspection"
-      - "${CI_PROJECT_DIR}/_glib_build/meson-logs"
       - "${CI_PROJECT_DIR}/_build/meson-logs"
-      - "${CI_PROJECT_DIR}/_build/gtk/GdkMacos-4.0.gir"
 
-vs2019-x64:
+vs2017-x64:
   # TODO: Uncomment this when ready to merge.
   # rules:
   #   - if: $CI_PROJECT_NAMESPACE == "GNOME"
@@ -479,113 +273,12 @@ vs2019-x64:
   tags:
     - win32-ps
   needs: []
-  variables:
   script:
-    - .gitlab-ci/test-msvc.bat ${COMMON_MESON_FLAGS}
-  cache:
-    key: "$CI_JOB_NAME"
-    paths:
-      - _ccache/
+    - .gitlab-ci/test-msvc.bat
   artifacts:
     when: always
     paths:
       - "${CI_PROJECT_DIR}/_build/meson-logs"
-
-android:
-  extends:
-    - .distribution.android
-  stage: build
-  parallel:
-    matrix:
-      - ARCH: [ "aarch64", "x86_64" ]
-  needs: ['container:android']
-  variables:
-    EXTRA_MESON_FLAGS: "-Dgperf:werror=false"
-    BACKEND_FLAGS: "-Dandroid-backend=true"
-    FEATURE_FLAGS: "-Dmedia-gstreamer=disabled"
-  before_script:
-    - .gitlab-ci/show-info-linux.sh
-    # We aren't actually using pixiewood here, we just make get the ${ARCH}.cross, android.cross, and glib/hack.patch files.
-    - git clone https://github.com/sp1ritCS/gtk-android-builder.git --branch android36 pixiewood
-    # glib/hack makes the g_set_user_dirs public. Drop once glib has android support
-    - mkdir -p subprojects/packagefiles/
-    - cp -f pixiewood/prepare/wraps/glib/hack.patch subprojects/packagefiles/glib_hack.patch
-    - sed -i 's/\[provide\]/diff_files = glib_hack.patch\n\n\0/' subprojects/glib.wrap
-  script:
-    - meson setup
-            --cross-file "${ANDROID_HOME}/toolchain.cross"
-            --cross-file "pixiewood/prepare/arch/$ARCH.cross"
-            --cross-file "pixiewood/prepare/android.cross"
-            ${COMMON_MESON_FLAGS}
-            ${EXTRA_MESON_FLAGS}
-            ${BACKEND_FLAGS}
-            ${FEATURE_FLAGS}
-            _build
-    - meson compile -C _build
-  artifacts:
-    when: always
-    paths:
-      - "${CI_PROJECT_DIR}/_build/meson-logs"
-
-.android-defaults:
-  extends:
-    - .distribution.android
-  stage: android
-  artifacts:
-    paths:
-      - apks
-    expire_in: 1 day
-  rules:
-    # Treat Android application bundle build job like a normal job on main or when marge is checking the changeset
-    - if: $CI_COMMIT_BRANCH == "main" || $GITLAB_USER_LOGIN == "marge-bot" || $CI_MERGE_REQUEST_ASSIGNEES == "marge-bot"
-      # normal CI job
-    - if: $CI_COMMIT_BRANCH != "main" && $GITLAB_USER_LOGIN != "marge-bot" && $CI_MERGE_REQUEST_ASSIGNEES != "marge-bot"
-      when: "manual"
-      allow_failure: true
-  needs: ['container:android']
-  before_script:
-    - .gitlab-ci/show-info-linux.sh
-    - git clone https://github.com/sp1ritCS/gtk-android-builder.git --branch android36 pixiewood
-    - git clone --depth 1 https://github.com/sp1ritCS/mini-studio.git
-  script:
-    - ./pixiewood/pixiewood prepare --release -s "${ANDROID_HOME}" -a ./mini-studio "build-aux/android/${APPID}.xml"
-    - ./pixiewood/pixiewood generate
-    - ./pixiewood/pixiewood build
-    - mkdir -p apks/${APPID}/
-    - cp .pixiewood/android/app/build/outputs/apk/release/* apks/${APPID}/
-
-android:demo:
-  extends: '.android-defaults'
-  variables:
-    APPID: org.gtk.Demo4
-
-android:nodeeditor:
-  extends: '.android-defaults'
-  variables:
-    APPID: org.gtk.gtk4.NodeEditor
-
-android-signer:
-  extends:
-    - .distribution.android
-  stage: android
-  artifacts:
-    paths:
-      - apks
-    expire_in: 1 day
-  needs: [ 'android:demo', 'android:nodeeditor' ]
-  before_script:
-    - |
-      if [ -z ${ANDROID_KEYSTORE_ENC} ]; then
-        export ANDROID_KEYSTORE_LOCATION=".gitlab-ci/debug.keystore"
-        export ANDROID_KEYSTORE_KEY="android"
-        export ANDROID_APK_SUFFIX="debugsigned"
-      else
-        export ANDROID_KEYSTORE_LOCATION="keystore.jks"
-        echo "${ANDROID_KEYSTORE_ENC}" | base64 -d > ${ANDROID_KEYSTORE_LOCATION}
-        export ANDROID_APK_SUFFIX="signed"
-      fi
-  script:
-    - find apks/ -type f -name '*.apk' -exec sh -c '${ANDROID_HOME}/build-tools/${ANDROID_SDKVER}/apksigner sign --ks "${ANDROID_KEYSTORE_LOCATION}" --ks-pass "env:ANDROID_KEYSTORE_KEY" --in "$0" --out `echo "$0" | sed s/unsigned/${ANDROID_APK_SUFFIX}/g`' {} \; -delete
 
 .flatpak-defaults:
   image: "quay.io/gnome_infrastructure/gnome-runtime-images:gnome-master"
@@ -634,6 +327,20 @@ flatpak:widget-factory:aarch64:
   variables:
     APPID: org.gtk.WidgetFactory4
 
+flatpak:icon-browser:
+  extends: '.flatpak-defaults'
+  needs: []
+  variables:
+    APPID: org.gtk.IconBrowser4
+
+flatpak:icon-browser:aarch64:
+  extends: '.flatpak-defaults'
+  needs: []
+  tags:
+    - flatpak-aarch64
+  variables:
+    APPID: org.gtk.IconBrowser4
+
 flatpak:node-editor:
   extends: '.flatpak-defaults'
   needs: []
@@ -667,6 +374,14 @@ nightly factory aarch64:
     extends: '.publish_nightly'
     needs: ['flatpak:widget-factory:aarch64']
 
+nightly icon-browser:
+    extends: '.publish_nightly'
+    needs: ['flatpak:icon-browser']
+
+nightly icon-browser aarch64:
+    extends: '.publish_nightly'
+    needs: ['flatpak:icon-browser:aarch64']
+
 nightly node-editor:
     extends: '.publish_nightly'
     needs: ['flatpak:node-editor']
@@ -676,15 +391,13 @@ nightly node-editor aarch64:
     needs: ['flatpak:node-editor:aarch64']
 
 static-scan:
-  extends:
-    - .distribution.fedora
+  image: $FEDORA_IMAGE
   stage: analysis
-  needs: ['container:fedora']
+  needs: []
   variables:
     EXTRA_MESON_FLAGS: "--buildtype=debug"
   script:
     - export PATH="$HOME/.local/bin:$PATH"
-    - export CC_LD=mold
     - meson setup
             ${COMMON_MESON_FLAGS}
             ${EXTRA_MESON_FLAGS}
@@ -697,31 +410,19 @@ static-scan:
       - _scan_build/meson-logs
   allow_failure: true
 
-# Run tests with the address and undefined behavior sanitizers. We need to
-# turn off introspection and f16c, since they are incompatible with asan.
-#
-# Two ubsan checks are turned off:
-#
-#  - "function", since GObject dispatches signal handlers through the generic
-#    prototypes that glib-genmarshal generates, which the check flags for
-#    every handler with a concrete signature.
-#
-#  - "object-size", since GtkTextLineSegment is allocated with room for just
-#    one member of its body union, which the check flags on every access.
-sanitizer-build:
-  extends:
-    - .test-runner
-    - .build-fedora-default
+# Run tests with the address sanitizer. We need to turn off introspection
+# and f16c, since they are incompatible with asan
+asan-build:
+  image: $FEDORA_IMAGE
   tags: [ asan ]
   stage: analysis
-  needs: ['container:fedora']
+  needs: []
+  variables:
   script:
     - export PATH="$HOME/.local/bin:$PATH"
-    - export CC=clang
-    - meson setup
+    - CC=clang meson setup
             --buildtype=debugoptimized
-            -Db_sanitize=address,undefined
-            -Dc_args=-fno-sanitize=function,object-size
+            -Db_sanitize=address
             -Db_lundef=false
             -Dbuild-demos=false
             -Dbuild-tests=false
@@ -729,16 +430,13 @@ sanitizer-build:
             -Dintrospection=disabled
             -Df16c=disabled
             _build
-    - meson compile -C_build
-    # Work around https://gitlab.freedesktop.org/mesa/mesa/-/issues/12666
-    - rm -rf _build/subprojects/wayland/src/libwayland-server*
+    - ninja -C _build
     - .gitlab-ci/run-tests.sh _build wayland gtk
 
 reference:
-  extends:
-    - .distribution.fedora
+  image: $FEDORA_IMAGE
   stage: docs
-  needs: ['container:fedora']
+  needs: []
   script:
     - export PATH="$HOME/.local/bin:$PATH"
     - meson setup
@@ -747,10 +445,10 @@ reference:
             --force-fallback-for=gdk-pixbuf,pango
             -Dintrospection=enabled
             -Ddocumentation=true
-            -Dman-pages=true
+            -Dgtk_doc=true
             -Dgdk-pixbuf:gtk_doc=true
-            -Dpango:documentation=true
-            -Dbuild-demos=true
+            -Dpango:gtk_doc=true
+            -Dbuild-demos=false
             -Dbuild-examples=false
             -Dbuild-tests=false
             -Dbuild-testsuite=false
@@ -762,7 +460,6 @@ reference:
     - mv _build/docs/reference/gdk/gdk4-wayland/ _reference/gdk4-wayland/
     - mv _build/docs/reference/gsk/gsk4/ _reference/gsk4/
     - mv _build/docs/reference/gtk/gtk4/ _reference/gtk4/
-    - mv _build/docs/reference/gtk/*.html _reference/gtk4/
     - mv _build/subprojects/pango/docs/Pango/ _reference/Pango/
     - mv _build/subprojects/pango/docs/PangoCairo/ _reference/PangoCairo/
     - mv _build/subprojects/pango/docs/PangoFc/ _reference/PangoFc/
@@ -776,13 +473,12 @@ reference:
       - _reference
 
 publish-docs:
-  extends:
-    - .distribution.fedora
+  image: fedora:latest
   stage: publish
   interruptible: false
   needs: ['reference']
   script:
-    - export DOCS_TRIGGER_TOKEN=$( cat "${DOCS_TRIGGER_TOKEN_FILE}" )
-    - "curl -X POST -F token=${DOCS_TRIGGER_TOKEN} -F ref=docs-gtk-org https://gitlab.gnome.org/api/v4/projects/665/trigger/pipeline"
+    - "curl -X POST -F token=${PAGES_TRIGGER_TOKEN} -F ref=docs-gtk-org https://gitlab.gnome.org/api/v4/projects/665/trigger/pipeline"
   rules:
     - if: $CI_COMMIT_REF_NAME == "main"
+

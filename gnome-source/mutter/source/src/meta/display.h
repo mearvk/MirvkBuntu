@@ -34,15 +34,13 @@
  * @META_TAB_LIST_DOCKS: Dock windows
  * @META_TAB_LIST_GROUP: Groups
  * @META_TAB_LIST_NORMAL_ALL: All windows
- * @META_TAB_LIST_NORMAL_ALL_MRU: All windows in pure MRU order
  */
 typedef enum
 {
   META_TAB_LIST_NORMAL,
   META_TAB_LIST_DOCKS,
   META_TAB_LIST_GROUP,
-  META_TAB_LIST_NORMAL_ALL,
-  META_TAB_LIST_NORMAL_ALL_MRU,
+  META_TAB_LIST_NORMAL_ALL
 } MetaTabList;
 
 /**
@@ -60,7 +58,6 @@ typedef enum
 {
   META_PAD_FEATURE_RING,
   META_PAD_FEATURE_STRIP,
-  META_PAD_FEATURE_DIAL,
 } MetaPadFeatureType;
 
 typedef enum
@@ -81,7 +78,9 @@ typedef struct _MetaDisplayClass MetaDisplayClass;
 #define META_DISPLAY_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), META_TYPE_DISPLAY, MetaDisplayClass))
 
 META_EXPORT
-GType meta_display_get_type (void);
+GType meta_display_get_type (void) G_GNUC_CONST;
+
+#define meta_XFree(p) do { if ((p)) XFree ((p)); } while (0)
 
 META_EXPORT
 void meta_display_close (MetaDisplay *display,
@@ -92,6 +91,9 @@ MetaContext * meta_display_get_context (MetaDisplay *display);
 
 META_EXPORT
 MetaCompositor *meta_display_get_compositor  (MetaDisplay *display);
+
+META_EXPORT
+MetaX11Display *meta_display_get_x11_display (MetaDisplay *display);
 
 META_EXPORT
 MetaWindow *meta_display_get_focus_window (MetaDisplay *display);
@@ -171,6 +173,10 @@ META_EXPORT
 void meta_display_clear_mouse_mode (MetaDisplay *display);
 
 META_EXPORT
+gboolean meta_display_is_pointer_emulating_sequence (MetaDisplay          *display,
+                                                     ClutterEventSequence *sequence);
+
+META_EXPORT
 void    meta_display_request_pad_osd      (MetaDisplay        *display,
                                            ClutterInputDevice *pad,
                                            gboolean            edition_mode);
@@ -191,6 +197,10 @@ META_EXPORT
 void meta_display_get_size (MetaDisplay *display,
                             int         *width,
                             int         *height);
+
+META_EXPORT
+void meta_display_set_cursor (MetaDisplay *display,
+                              MetaCursor   cursor);
 
 /**
  * MetaDisplayDirection:

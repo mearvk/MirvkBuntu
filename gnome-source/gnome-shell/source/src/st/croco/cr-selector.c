@@ -157,7 +157,7 @@ cr_selector_to_string (CRSelector const * a_this)
         }
 
         if (str_buf) {
-                result = (guchar *) g_string_free_and_steal (str_buf);
+                result = (guchar *) g_string_free (str_buf, FALSE);
                 str_buf = NULL;
         }
 
@@ -273,13 +273,19 @@ cr_selector_destroy (CRSelector * a_this)
 
         /*walk backward the list and free each "next element" */
         for (cur = cur->prev; cur && cur->prev; cur = cur->prev) {
-                g_clear_pointer (&cur->next, g_free);
+                if (cur->next) {
+                        g_free (cur->next);
+                        cur->next = NULL;
+                }
         }
 
         if (!cur)
                 return;
 
-        g_clear_pointer (&cur->next, g_free);
+        if (cur->next) {
+                g_free (cur->next);
+                cur->next = NULL;
+        }
 
         g_free (cur);
 }

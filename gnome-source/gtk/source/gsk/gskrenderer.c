@@ -1,4 +1,5 @@
 /* GSK - The GTK Scene Kit
+ *
  * Copyright 2016  Endless
  *
  * This library is free software; you can redistribute it and/or
@@ -18,7 +19,8 @@
 /**
  * GskRenderer:
  *
- * Renders a scene graph defined via a tree of [class@Gsk.RenderNode] instances.
+ * `GskRenderer` is a class that renders a scene graph defined via a
+ * tree of [class@Gsk.RenderNode] instances.
  *
  * Typically you will use a `GskRenderer` instance to repeatedly call
  * [method@Gsk.Renderer.render] to update the contents of its associated
@@ -36,12 +38,13 @@
 
 #include "gskcairorenderer.h"
 #include "gskdebugprivate.h"
+#include "gskprofilerprivate.h"
 #include "gskrendernodeprivate.h"
 #include "gskoffloadprivate.h"
 
 #include "gskenumtypes.h"
 
-#include "gpu/gskglrenderer.h"
+#include "gl/gskglrenderer.h"
 #include "gpu/gskvulkanrenderer.h"
 #include "gdk/gdkvulkancontextprivate.h"
 #include "gdk/gdkdisplayprivate.h"
@@ -49,10 +52,25 @@
 #include <graphene-gobject.h>
 #include <cairo-gobject.h>
 #include <gdk/gdk.h>
-#include "gdk/gdkdebugprivate.h"
 
+#ifdef GDK_WINDOWING_X11
+#include <gdk/x11/gdkx.h>
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/wayland/gdkwayland.h>
+#endif
 #ifdef GDK_WINDOWING_BROADWAY
 #include "broadway/gskbroadwayrenderer.h"
+#endif
+#ifdef GDK_WINDOWING_MACOS
+#include <gdk/macos/gdkmacos.h>
+#endif
+#ifdef GDK_WINDOWING_WIN32
+#include <gdk/win32/gdkwin32.h>
+
+/* Remove these lines when OpenGL/ES 2.0 shader is ready */
+#include "win32/gdkprivate-win32.h"
+#include "win32/gdkdisplay-win32.h"
 #endif
 
 typedef struct
@@ -61,6 +79,8 @@ typedef struct
 
   GdkSurface *surface;
   GskRenderNode *prev_node;
+
+  GskProfiler *profiler;
 
   GskDebugFlags debug_flags;
 
@@ -86,7 +106,6 @@ static gboolean
 gsk_renderer_real_realize (GskRenderer  *self,
                            GdkDisplay   *display,
                            GdkSurface   *surface,
-                           gboolean      attach,
                            GError      **error)
 {
   GSK_RENDERER_WARN_NOT_IMPLEMENTED_METHOD (self, realize);
@@ -120,11 +139,13 @@ static void
 gsk_renderer_dispose (GObject *gobject)
 {
   GskRenderer *self = GSK_RENDERER (gobject);
-  G_GNUC_UNUSED GskRendererPrivate *priv = gsk_renderer_get_instance_private (self);
+  GskRendererPrivate *priv = gsk_renderer_get_instance_private (self);
 
   /* We can't just unrealize here because superclasses have already run dispose.
    * So we insist that unrealize must be called before unreffing. */
   g_assert (!priv->is_realized);
+
+  g_clear_object (&priv->profiler);
 
   G_OBJECT_CLASS (gsk_renderer_parent_class)->dispose (gobject);
 }
@@ -168,24 +189,24 @@ gsk_renderer_class_init (GskRendererClass *klass)
   gobject_class->dispose = gsk_renderer_dispose;
 
   /**
-   * GskRenderer:realized: (getter is_realized)
+   * GskRenderer:realized: (attributes org.gtk.Property.get=gsk_renderer_is_realized)
    *
    * Whether the renderer has been associated with a surface or draw context.
    */
   gsk_renderer_properties[PROP_REALIZED] =
     g_param_spec_boolean ("realized", NULL, NULL,
                           FALSE,
-                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GskRenderer:surface:
+   * GskRenderer:surface: (attributes org.gtk.Property.get=gsk_renderer_get_surface)
    *
    * The surface associated with renderer.
    */
   gsk_renderer_properties[PROP_SURFACE] =
     g_param_spec_object ("surface", NULL, NULL,
                          GDK_TYPE_SURFACE,
-                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, gsk_renderer_properties);
 }
@@ -195,18 +216,19 @@ gsk_renderer_init (GskRenderer *self)
 {
   GskRendererPrivate *priv = gsk_renderer_get_instance_private (self);
 
+  priv->profiler = gsk_profiler_new ();
   priv->debug_flags = gsk_get_debug_flags ();
 }
 
 /**
- * gsk_renderer_get_surface:
- * @renderer: a renderer
+ * gsk_renderer_get_surface: (attributes org.gtk.Method.get_property=surface)
+ * @renderer: a `GskRenderer`
  *
- * Retrieves the surface that the renderer is associated with.
+ * Retrieves the `GdkSurface` set using gsk_enderer_realize().
  *
- * If the renderer has not been realized yet, `NULL` will be returned.
+ * If the renderer has not been realized yet, %NULL will be returned.
  *
- * Returns: (transfer none) (nullable): the surface
+ * Returns: (transfer none) (nullable): a `GdkSurface`
  */
 GdkSurface *
 gsk_renderer_get_surface (GskRenderer *renderer)
@@ -219,12 +241,12 @@ gsk_renderer_get_surface (GskRenderer *renderer)
 }
 
 /**
- * gsk_renderer_is_realized: (get-property realized)
- * @renderer: a renderer
+ * gsk_renderer_is_realized: (attributes org.gtk.Method.get_property=realized)
+ * @renderer: a `GskRenderer`
  *
- * Checks whether the renderer is realized or not.
+ * Checks whether the @renderer is realized or not.
  *
- * Returns: true if the renderer was realized, false otherwise
+ * Returns: %TRUE if the `GskRenderer` was realized, and %FALSE otherwise
  */
 gboolean
 gsk_renderer_is_realized (GskRenderer *renderer)
@@ -240,17 +262,14 @@ static gboolean
 gsk_renderer_do_realize (GskRenderer  *renderer,
                          GdkDisplay   *display,
                          GdkSurface   *surface,
-                         gboolean      attach,
                          GError      **error)
 {
   GskRendererPrivate *priv = gsk_renderer_get_instance_private (renderer);
 
-  g_assert (surface != NULL || !attach);
-
   if (surface)
     priv->surface = g_object_ref (surface);
 
-  if (!GSK_RENDERER_GET_CLASS (renderer)->realize (renderer, display, surface, attach, error))
+  if (!GSK_RENDERER_GET_CLASS (renderer)->realize (renderer, display, surface, error))
     {
       g_clear_object (&priv->surface);
       return FALSE;
@@ -258,30 +277,31 @@ gsk_renderer_do_realize (GskRenderer  *renderer,
 
   priv->is_realized = TRUE;
 
-  g_object_notify_by_pspec (G_OBJECT (renderer), gsk_renderer_properties[PROP_REALIZED]);
+  g_object_notify (G_OBJECT (renderer), "realized");
   if (surface)
-    g_object_notify_by_pspec (G_OBJECT (renderer), gsk_renderer_properties[PROP_SURFACE]);
+    g_object_notify (G_OBJECT (renderer), "surface");
 
   return TRUE;
 }
 
 /**
  * gsk_renderer_realize:
- * @renderer: a renderer
- * @surface: (nullable): the surface that renderer will be used on
+ * @renderer: a `GskRenderer`
+ * @surface: (nullable): the `GdkSurface` renderer will be used on
  * @error: return location for an error
  *
- * Creates the resources needed by the renderer.
+ * Creates the resources needed by the @renderer to render the scene
+ * graph.
  *
  * Since GTK 4.6, the surface may be `NULL`, which allows using
- * renderers without having to create a surface. Since GTK 4.14,
- * it is recommended to use [method@Gsk.Renderer.realize_for_display]
- * for this case.
+ * renderers without having to create a surface.
+ * Since GTK 4.14, it is recommended to use [method@Gsk.Renderer.realize_for_display]
+ * instead.
  *
- * Note that it is mandatory to call [method@Gsk.Renderer.unrealize]
- * before destroying the renderer.
+ * Note that it is mandatory to call [method@Gsk.Renderer.unrealize] before
+ * destroying the renderer.
  *
- * Returns: whether the renderer was successfully realized
+ * Returns: Whether the renderer was successfully realized
  */
 gboolean
 gsk_renderer_realize (GskRenderer  *renderer,
@@ -298,7 +318,6 @@ gsk_renderer_realize (GskRenderer  *renderer,
       return gsk_renderer_do_realize (renderer,
                                       gdk_display_get_default (),
                                       NULL,
-                                      FALSE,
                                       error);
     }
   else
@@ -306,23 +325,23 @@ gsk_renderer_realize (GskRenderer  *renderer,
       return gsk_renderer_do_realize (renderer,
                                       gdk_surface_get_display (surface),
                                       surface,
-                                      FALSE,
                                       error);
     }
 }
 
 /**
  * gsk_renderer_realize_for_display:
- * @renderer: a renderer
- * @display: the display that the renderer will be used on
+ * @renderer: a `GskRenderer`
+ * @display: the `GdkDisplay` renderer will be used on
  * @error: return location for an error
  *
- * Creates the resources needed by the renderer.
+ * Creates the resources needed by the @renderer to render the scene
+ * graph.
  *
- * Note that it is mandatory to call [method@Gsk.Renderer.unrealize]
- * before destroying the renderer.
+ * Note that it is mandatory to call [method@Gsk.Renderer.unrealize] before
+ * destroying the renderer.
  *
- * Returns: whether the renderer was successfully realized
+ * Returns: Whether the renderer was successfully realized
  *
  * Since: 4.14
  */
@@ -336,14 +355,14 @@ gsk_renderer_realize_for_display (GskRenderer  *renderer,
   g_return_val_if_fail (display == NULL || GDK_IS_DISPLAY (display), FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  return gsk_renderer_do_realize (renderer, display, NULL, FALSE,error);
+  return gsk_renderer_do_realize (renderer, display, NULL, error);
 }
 
 /**
  * gsk_renderer_unrealize:
- * @renderer: a renderer
+ * @renderer: a `GskRenderer`
  *
- * Releases all the resources created by [method@Gsk.Renderer.realize].
+ * Releases all the resources created by gsk_renderer_realize().
  */
 void
 gsk_renderer_unrealize (GskRenderer *renderer)
@@ -365,27 +384,27 @@ gsk_renderer_unrealize (GskRenderer *renderer)
 
   priv->is_realized = FALSE;
 
-  g_object_notify_by_pspec (G_OBJECT (renderer), gsk_renderer_properties[PROP_REALIZED]);
+  g_object_notify (G_OBJECT (renderer), "realized");
   if (has_surface)
-    g_object_notify_by_pspec (G_OBJECT (renderer), gsk_renderer_properties[PROP_SURFACE]);
+    g_object_notify (G_OBJECT (renderer), "surface");
 }
 
 /**
  * gsk_renderer_render_texture:
- * @renderer: a realized renderer
- * @root: the render node to render
- * @viewport: (nullable): the section to draw or `NULL` to use @root's bounds
+ * @renderer: a realized `GskRenderer`
+ * @root: a `GskRenderNode`
+ * @viewport: (nullable): the section to draw or %NULL to use @root's bounds
  *
- * Renders a scene graph, described by a tree of `GskRenderNode` instances,
- * to a texture.
+ * Renders the scene graph, described by a tree of `GskRenderNode` instances,
+ * to a `GdkTexture`.
  *
- * The renderer will acquire a reference on the `GskRenderNode` tree while
+ * The @renderer will acquire a reference on the `GskRenderNode` tree while
  * the rendering is in progress.
  *
  * If you want to apply any transformations to @root, you should put it into a
  * transform node and pass that node instead.
  *
- * Returns: (transfer full): a texture with the rendered contents of @root
+ * Returns: (transfer full): a `GdkTexture` with the rendered contents of @root.
  */
 GdkTexture *
 gsk_renderer_render_texture (GskRenderer           *renderer,
@@ -410,18 +429,33 @@ gsk_renderer_render_texture (GskRenderer           *renderer,
 
   texture = GSK_RENDERER_GET_CLASS (renderer)->render_texture (renderer, root, viewport);
 
+  if (GSK_RENDERER_DEBUG_CHECK (renderer, RENDERER))
+    {
+      GString *buf = g_string_new ("*** Texture stats ***\n\n");
+
+      gsk_profiler_append_counters (priv->profiler, buf);
+      g_string_append_c (buf, '\n');
+
+      gsk_profiler_append_timers (priv->profiler, buf);
+      g_string_append_c (buf, '\n');
+
+      g_print ("%s\n***\n\n", buf->str);
+
+      g_string_free (buf, TRUE);
+    }
+
   return texture;
 }
 
 /**
  * gsk_renderer_render:
- * @renderer: a realized renderer
- * @root: the render node to render
- * @region: (nullable): the `cairo_region_t` that must be redrawn or `NULL`
- *   for the whole surface
+ * @renderer: a realized `GskRenderer`
+ * @root: a `GskRenderNode`
+ * @region: (nullable): the `cairo_region_t` that must be redrawn or %NULL
+ *   for the whole window
  *
  * Renders the scene graph, described by a tree of `GskRenderNode` instances
- * to the renderer's surface, ensuring that the given region gets redrawn.
+ * to the renderer's surface,  ensuring that the given @region gets redrawn.
  *
  * If the renderer has no associated surface, this function does nothing.
  *
@@ -430,7 +464,7 @@ gsk_renderer_render_texture (GskRenderer           *renderer,
  * free to not redraw any pixel outside of @region if they can guarantee that
  * it didn't change.
  *
- * The renderer will acquire a reference on the `GskRenderNode` tree while
+ * The @renderer will acquire a reference on the `GskRenderNode` tree while
  * the rendering is in progress.
  */
 void
@@ -454,7 +488,8 @@ gsk_renderer_render (GskRenderer          *renderer,
 
   clip = cairo_region_copy (region);
 
-  if (renderer_class->supports_offload && gdk_has_feature (GDK_FEATURE_OFFLOAD))
+  if (renderer_class->supports_offload &&
+      !GSK_RENDERER_DEBUG_CHECK (renderer, OFFLOAD_DISABLE))
     offload = gsk_offload_new (priv->surface, root, clip);
   else
     offload = NULL;
@@ -470,15 +505,48 @@ gsk_renderer_render (GskRenderer          *renderer,
     }
   else
     {
-      gsk_render_node_diff (priv->prev_node, root, &(GskDiffData) { clip, NULL, priv->surface });
+      gsk_render_node_diff (priv->prev_node, root, &(GskDiffData) { clip, priv->surface });
     }
 
   renderer_class->render (renderer, root, clip);
+
+  if (GSK_RENDERER_DEBUG_CHECK (renderer, RENDERER))
+    {
+      GString *buf = g_string_new ("*** Frame stats ***\n\n");
+
+      gsk_profiler_append_counters (priv->profiler, buf);
+      g_string_append_c (buf, '\n');
+
+      gsk_profiler_append_timers (priv->profiler, buf);
+      g_string_append_c (buf, '\n');
+
+      g_print ("%s\n***\n\n", buf->str);
+
+      g_string_free (buf, TRUE);
+    }
 
   g_clear_pointer (&priv->prev_node, gsk_render_node_unref);
   cairo_region_destroy (clip);
   g_clear_pointer (&offload, gsk_offload_free);
   priv->prev_node = gsk_render_node_ref (root);
+}
+
+/*< private >
+ * gsk_renderer_get_profiler:
+ * @renderer: a `GskRenderer`
+ *
+ * Retrieves a pointer to the `GskProfiler` instance of the renderer.
+ *
+ * Returns: (transfer none): the profiler
+ */
+GskProfiler *
+gsk_renderer_get_profiler (GskRenderer *renderer)
+{
+  GskRendererPrivate *priv = gsk_renderer_get_instance_private (renderer);
+
+  g_return_val_if_fail (GSK_IS_RENDERER (renderer), NULL);
+
+  return priv->profiler;
 }
 
 static GType
@@ -492,38 +560,34 @@ get_renderer_for_name (const char *renderer_name)
 #endif
   else if (g_ascii_strcasecmp (renderer_name, "cairo") == 0)
     return GSK_TYPE_CAIRO_RENDERER;
-  else if (g_ascii_strcasecmp (renderer_name, "gl") == 0 ||
-           g_ascii_strcasecmp (renderer_name, "opengl") == 0)
+  else if (g_ascii_strcasecmp (renderer_name, "opengl") == 0 ||
+           g_ascii_strcasecmp (renderer_name, "gl") == 0)
     return GSK_TYPE_GL_RENDERER;
   else if (g_ascii_strcasecmp (renderer_name, "ngl") == 0)
-    {
-      g_warning ("The new GL renderer has been renamed to gl. Try GSK_RENDERER=help");
-      return GSK_TYPE_GL_RENDERER;
-    }
+    return gsk_ngl_renderer_get_type ();
 #ifdef GDK_RENDERING_VULKAN
   else if (g_ascii_strcasecmp (renderer_name, "vulkan") == 0)
     return GSK_TYPE_VULKAN_RENDERER;
 #endif
   else if (g_ascii_strcasecmp (renderer_name, "help") == 0)
     {
-      gdk_help_message ("Supported arguments for GSK_RENDERER environment variable:\n"
+      g_print ("Supported arguments for GSK_RENDERER environment variable:\n");
 #ifdef GDK_WINDOWING_BROADWAY
-                        "  broadway - Use the Broadway specific renderer\n"
+      g_print ("  broadway - Use the Broadway specific renderer\n");
 #else
-                        "  broadway - Disabled during GTK build\n"
+      g_print ("  broadway - Disabled during GTK build\n");
 #endif
-                        "     cairo - Use the Cairo fallback renderer\n"
-                        "    opengl - Use the OpenGL renderer\n"
-                        "        gl - Use the OpenGL renderer\n"
+      g_print ("   cairo - Use the Cairo fallback renderer\n");
+      g_print ("  opengl - Use the OpenGL renderer\n");
+      g_print ("      gl - Use the OpenGL renderer\n");
+      g_print ("     ngl - Use the new OpenGL renderer\n");
 #ifdef GDK_RENDERING_VULKAN
-                        "    vulkan - Use the Vulkan renderer\n"
+      g_print ("  vulkan - Use the Vulkan renderer\n");
 #else
-                        "    vulkan - Disabled during GTK build\n"
+      g_print ("  vulkan - Disabled during GTK build\n");
 #endif
-                        "      help - Print this help\n\n"
-                        "The old OpenGL renderer has been removed in GTK 4.18, so using\n"
-                        "GSK_RENDERER=gl will cause a warning and use the new OpenGL renderer.\n\n"
-                        "Other arguments will cause a warning and be ignored.");
+      g_print ("    help - Print this help\n\n");
+      g_print ("Other arguments will cause a warning and be ignored.\n");
     }
   else
     {
@@ -546,17 +610,12 @@ get_renderer_for_display (GdkSurface *surface)
 static GType
 get_renderer_for_env_var (GdkSurface *surface)
 {
-  static GType env_var_type = G_TYPE_INVALID;
+  static GType env_var_type = G_TYPE_NONE;
 
-  if (env_var_type == G_TYPE_INVALID)
+  if (env_var_type == G_TYPE_NONE)
     {
       const char *renderer_name = g_getenv ("GSK_RENDERER");
       env_var_type = get_renderer_for_name (renderer_name);
-      if (env_var_type != G_TYPE_INVALID)
-        GSK_DEBUG (RENDERER,
-                   "Environment variable GSK_RENDERER=%s set, trying %s",
-                   renderer_name,
-                   g_type_name (env_var_type));
     }
 
   return env_var_type;
@@ -574,121 +633,63 @@ get_renderer_for_backend (GdkSurface *surface)
 }
 
 static gboolean
-gl_supported_platform (GdkSurface *surface,
-                       gboolean    as_fallback)
+gl_software_rendering (GdkSurface *surface)
 {
   GdkDisplay *display = gdk_surface_get_display (surface);
   GdkGLContext *context;
-  GError *error = NULL;
 
-  if (!gdk_display_prepare_gl (display, &error))
-    {
-      GSK_DEBUG (RENDERER, "Not using GL%s: %s",
-                 as_fallback ? " as fallback" : "",
-                 error->message);
-      g_clear_error (&error);
-      return FALSE;
-    }
-
-  if (as_fallback)
-    return TRUE;
+  if (!gdk_display_prepare_gl (display, NULL))
+    return G_TYPE_INVALID;
 
   context = gdk_display_get_gl_context (display);
   gdk_gl_context_make_current (context);
 
-  if (strstr ((const char *) glGetString (GL_RENDERER), "llvmpipe") != NULL)
-    {
-      GSK_DEBUG (RENDERER, "Not using GL: renderer is llvmpipe");
-      return FALSE;
-    }
-
-  return TRUE;
+  return strstr ((const char *) glGetString (GL_RENDERER), "llvmpipe") != NULL;
 }
 
 static GType
 get_renderer_for_gl (GdkSurface *surface)
 {
-  if (!gl_supported_platform (surface, FALSE))
+  if (gl_software_rendering (surface))
     return G_TYPE_INVALID;
 
-  return GSK_TYPE_GL_RENDERER;
-}
-
-static GType
-get_renderer_for_gl_fallback (GdkSurface *surface)
-{
-  if (!gl_supported_platform (surface, TRUE))
-    return G_TYPE_INVALID;
-
-  return GSK_TYPE_GL_RENDERER;
+  return gsk_ngl_renderer_get_type ();
 }
 
 #ifdef GDK_RENDERING_VULKAN
 static gboolean
-vulkan_supported_platform (GdkSurface *surface,
-                           gboolean    as_fallback)
+vulkan_software_rendering (GdkSurface *surface)
 {
   GdkDisplay *display = gdk_surface_get_display (surface);
   VkPhysicalDeviceProperties props;
-  GError *error = NULL;
 
-  if (!gdk_display_get_prefer_vulkan (display) && !as_fallback)
-    {
-      GSK_DEBUG (RENDERER, "Not using Vulkan: %s prefers OpenGL", G_OBJECT_TYPE_NAME (display));
-      return FALSE;
-    }
-
-  if (!gdk_display_prepare_vulkan (display, &error))
-    {
-      GSK_DEBUG (RENDERER, "Not using Vulkan%s: %s",
-                 as_fallback ? " as fallback" : "",
-                 error->message);
-      g_clear_error (&error);
-      return FALSE;
-    }
-
-  if (as_fallback)
-    return TRUE;
+  if (!gdk_display_init_vulkan (display, NULL))
+    return G_TYPE_INVALID;
 
   vkGetPhysicalDeviceProperties (display->vk_physical_device, &props);
 
-  if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
-    {
-      GSK_DEBUG (RENDERER, "Not using Vulkan: device is CPU");
-      return FALSE;
-    }
-
-#ifdef HAVE_DMABUF
-  gdk_vulkan_init_dmabuf (display);
-  if (!display->vk_dmabuf_formats ||
-      gdk_dmabuf_formats_get_n_formats (display->vk_dmabuf_formats) == 0)
-    {
-      GSK_DEBUG (RENDERER, "Not using Vulkan: no dmabuf support");
-      return FALSE;
-    }
-#endif
-
-  return TRUE;
+  return props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
 }
+#endif
 
 static GType
 get_renderer_for_vulkan (GdkSurface *surface)
 {
-  if (!vulkan_supported_platform (surface, FALSE))
+#ifdef GDK_RENDERING_VULKAN
+  if (vulkan_software_rendering (surface))
     return G_TYPE_INVALID;
 
   return GSK_TYPE_VULKAN_RENDERER;
+#else
+  return G_TYPE_INVALID;
+#endif
 }
 
 static GType
-get_renderer_for_vulkan_fallback (GdkSurface *surface)
+get_renderer_for_gles2 (GdkSurface *surface)
 {
-  if (!vulkan_supported_platform (surface, TRUE))
-    return G_TYPE_INVALID;
-
-  return GSK_TYPE_VULKAN_RENDERER;
+  return GSK_TYPE_GL_RENDERER;
 }
-#endif
 
 static GType
 get_renderer_fallback (GdkSurface *surface)
@@ -697,31 +698,40 @@ get_renderer_fallback (GdkSurface *surface)
 }
 
 static struct {
-  gboolean warn_if_fail;
   GType (* get_renderer) (GdkSurface *surface);
 } renderer_possibilities[] = {
-  { TRUE,  get_renderer_for_display },
-  { TRUE,  get_renderer_for_env_var },
-  { FALSE, get_renderer_for_backend },
-#ifdef GDK_RENDERING_VULKAN
-  { FALSE, get_renderer_for_vulkan },
-#endif
-  { FALSE, get_renderer_for_gl },
-#ifdef GDK_RENDERING_VULKAN
-  { FALSE, get_renderer_for_vulkan_fallback },
-#endif
-  { FALSE, get_renderer_for_gl_fallback },
-  { FALSE, get_renderer_fallback },
+  { get_renderer_for_display },
+  { get_renderer_for_env_var },
+  { get_renderer_for_backend },
+  { get_renderer_for_gl },
+  { get_renderer_for_gles2 },
+  { get_renderer_for_vulkan },
+  { get_renderer_fallback },
 };
 
+/**
+ * gsk_renderer_new_for_surface:
+ * @surface: a `GdkSurface`
+ *
+ * Creates an appropriate `GskRenderer` instance for the given @surface.
+ *
+ * If the `GSK_RENDERER` environment variable is set, GSK will
+ * try that renderer first, before trying the backend-specific
+ * default. The ultimate fallback is the cairo renderer.
+ *
+ * The renderer will be realized before it is returned.
+ *
+ * Returns: (transfer full) (nullable): a `GskRenderer`
+ */
 GskRenderer *
-gsk_renderer_new_for_surface_full (GdkSurface *surface,
-                                   gboolean    attach)
+gsk_renderer_new_for_surface (GdkSurface *surface)
 {
   GType renderer_type;
   GskRenderer *renderer;
   GError *error = NULL;
   guint i;
+
+  g_return_val_if_fail (GDK_IS_SURFACE (surface), NULL);
 
   for (i = 0; i < G_N_ELEMENTS (renderer_possibilities); i++)
     {
@@ -731,59 +741,25 @@ gsk_renderer_new_for_surface_full (GdkSurface *surface,
 
       renderer = g_object_new (renderer_type, NULL);
 
-      if (gsk_renderer_do_realize (renderer, gdk_surface_get_display (surface), surface, attach, &error))
+      if (gsk_renderer_realize (renderer, surface, &error))
         {
-          GSK_DEBUG (RENDERER,
-                     "Using renderer '%s' for surface '%s'",
-                     G_OBJECT_TYPE_NAME (renderer),
-                     G_OBJECT_TYPE_NAME (surface));
+          GSK_RENDERER_DEBUG (renderer, RENDERER,
+                              "Using renderer of type '%s' for surface '%s'",
+                              G_OBJECT_TYPE_NAME (renderer),
+                              G_OBJECT_TYPE_NAME (surface));
           return renderer;
         }
 
-      if (renderer_possibilities[i].warn_if_fail)
-        {
-          g_warning ("Failed to realize renderer '%s' for surface '%s': %s",
-                     G_OBJECT_TYPE_NAME (renderer),
-                     G_OBJECT_TYPE_NAME (surface),
-                     error->message);
-        }
-      else
-        {
-          GSK_DEBUG (RENDERER,
-                     "Failed to realize renderer '%s' for surface '%s': %s",
-                     G_OBJECT_TYPE_NAME (renderer),
-                     G_OBJECT_TYPE_NAME (surface),
-                     error->message);
-        }
-
+      g_message ("Failed to realize renderer of type '%s' for surface '%s': %s\n",
+                 G_OBJECT_TYPE_NAME (renderer),
+                 G_OBJECT_TYPE_NAME (surface),
+                 error->message);
       g_object_unref (renderer);
       g_clear_error (&error);
     }
 
   g_assert_not_reached ();
   return NULL;
-}
-
-/**
- * gsk_renderer_new_for_surface:
- * @surface: a surface
- *
- * Creates an appropriate `GskRenderer` instance for the given surface.
- *
- * If the `GSK_RENDERER` environment variable is set, GSK will
- * try that renderer first, before trying the backend-specific
- * default. The ultimate fallback is the cairo renderer.
- *
- * The renderer will be realized before it is returned.
- *
- * Returns: (transfer full) (nullable): the realized renderer
- */
-GskRenderer *
-gsk_renderer_new_for_surface (GdkSurface *surface)
-{
-  g_return_val_if_fail (GDK_IS_SURFACE (surface), NULL);
-
-  return gsk_renderer_new_for_surface_full (surface, FALSE);
 }
 
 GskDebugFlags
@@ -806,3 +782,4 @@ gsk_renderer_set_debug_flags (GskRenderer   *renderer,
 
   priv->debug_flags = flags;
 }
+

@@ -25,10 +25,10 @@
 
 enum
 {
+  META_KMS_ERROR_USER_INHIBITED,
   META_KMS_ERROR_DENY_LISTED,
   META_KMS_ERROR_NOT_SUPPORTED,
   META_KMS_ERROR_EMPTY_UPDATE,
-  META_KMS_ERROR_DISCARDED,
 };
 
 typedef enum _MetaKmsFlags
@@ -60,13 +60,15 @@ MetaKmsDevice * meta_kms_create_device (MetaKms            *kms,
                                         MetaKmsDeviceFlag   flags,
                                         GError            **error);
 
-gboolean meta_kms_is_shutting_down (MetaKms *kms);
-
 MetaKms * meta_kms_new (MetaBackend   *backend,
                         MetaKmsFlags   flags,
                         GError       **error);
 
-void meta_kms_notify_probed (MetaKms *kms);
+META_EXPORT_TEST
+void meta_kms_inhibit_kernel_thread (MetaKms *kms);
+
+META_EXPORT_TEST
+void meta_kms_uninhibit_kernel_thread (MetaKms *kms);
 
 META_EXPORT_TEST
 MetaKmsCursorManager * meta_kms_get_cursor_manager (MetaKms *kms);

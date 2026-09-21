@@ -451,11 +451,11 @@ hint about how modifiers are expected to be used. It also promoted
 the use of `<Primary>` instead of `<Control>` to specify accelerators that
 adapt to platform conventions.
 
-In GTK 4, the meaning of modifiers has been fixed, and applications are
+In GTK 4, the meaning of modifiers has been fixed, and backends are
 expected to map the platform conventions to the existing modifiers.
 The expected use of modifiers in GTK 4 is:
 
-`GDK_CONTROL_MASK` (`GDK_META_MASK` on macOS)
+`GDK_CONTROL_MASK`
  : Primary accelerators
 
 `GDK_ALT_MASK`
@@ -464,7 +464,7 @@ The expected use of modifiers in GTK 4 is:
 `GDK_SHIFT_MASK`
  : Extending selections
 
-`GDK_CONTROL_MASK` (`GDK_META_MASK` on macOS)
+`GDK_CONTROL_MASK`
  : Modifying selections
 
 `GDK_CONTROL_MASK|GDK_ALT_MASK`
@@ -473,15 +473,9 @@ The expected use of modifiers in GTK 4 is:
 Consequently, `GdkModifierIntent` and related APIs have been removed,
 and `<Control>` is preferred over `<Primary>` in accelerators.
 
-In GTK 3 on macOS, the `<Primary>` modifier mapped to  the <kbd>Command</kbd> key.
-In GTK 4, this is no longer the case: `<Primary>` is synonymous to `<Control>`.
-If you want to make your application to feel native on macOS,
-you need to add accelerators for macOS that use the `<Meta>` modifier.
-
 A related change is that GTK 4 no longer supports the use of archaic
 X11 'real' modifiers with the names Mod1,..., Mod5, and `GDK_MOD1_MASK`
-has been renamed to `GDK_ALT_MASK` and `GDK_MOD2_MASK` has been renamed to
-`GDK_META_MASK`.
+has been renamed to `GDK_ALT_MASK`.
 
 ### Replace `GtkClipboard` with `GdkClipboard`
 
@@ -995,7 +989,7 @@ since these windows no longer exist:
 
 ### Widgets are now visible by default
 
-The default value of [property@Gtk.Widget:visible] in GTK 4 is true, so you no
+The default value of [property@Gtk.Widget:visible] in GTK 4 is %TRUE, so you no
 longer need to explicitly show all your widgets. On the flip side, you
 need to hide widgets that are not meant to be visible from the start.
 The only widgets that still need to be explicitly shown are toplevel
@@ -1044,10 +1038,7 @@ handling is done via event controllers now.
 
 Only [method@Gtk.Widget.queue_draw] is left to mark a widget as needing redraw.
 Variations like `gtk_widget_queue_draw_rectangle()` or `gtk_widget_queue_draw_region()`
-are no longer available. The minimum unit of invalidation is the widget. If you are
-invalidating parts of a larger widget surface, like a canvas, you will need to replace
-those parts with child widgets instead. You can use widgets for your canvas items,
-or you can use a tiled rendering approach with a widget for each tile.
+are no longer available.
 
 ### Stop using GtkWidget::draw
 
@@ -1143,7 +1134,7 @@ The way search entries are connected to global events has changed;
 
 ### Adapt to GtkScale changes
 
-The default value of `GtkScale:draw-value` has been changed to false.
+The default value of `GtkScale:draw-value` has been changed to %FALSE.
 If you want your scales to draw values, you will have to set this
 property explicitly now.
 
@@ -1204,11 +1195,11 @@ instead, as appropriate.
 
 To allow signal handlers to access the deleted text before it
 has been deleted, the [signal@Gtk.EntryBuffer::deleted-text] signal
-has changed from `G_SIGNAL_RUN_FIRST` to `G_SIGNAL_RUN_LAST`. The default
+has changed from %G_SIGNAL_RUN_FIRST to %G_SIGNAL_RUN_LAST. The default
 handler removes the text from the [class@Gtk.EntryBuffer].
 
 To adapt existing code, use `g_signal_connect_after()` or
-`G_CONNECT_AFTER` when using `g_signal_connect_data()` or
+%G_CONNECT_AFTER when using `g_signal_connect_data()` or
 `g_signal_connect_object()`.
 
 ### GtkMenu, GtkMenuBar and GtkMenuItem are gone
@@ -1305,7 +1296,7 @@ has been removed; GFile can be used to access non-local as well as local
 resources.
 
 The `GTK_FILE_CHOOSER_ACTION_CREATE_FOLDER` action has been removed. Use
-`GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER`, instead. If a new folder is needed,
+%GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, instead. If a new folder is needed,
 the user can create one.
 
 The "confirm-overwrite" signal, and the "do-overwrite-confirmation"
@@ -1330,7 +1321,7 @@ the event-driven programming model of GTK.
 
 You can replace calls to `gtk_dialog_run()` by specifying that the
 `GtkDialog` must be modal using [method@Gtk.Window.set_modal] or the
-`GTK_DIALOG_MODAL` flag, and connecting to the [signal@Gtk.Dialog::response]
+%GTK_DIALOG_MODAL flag, and connecting to the [signal@Gtk.Dialog::response]
 signal.
 
 ### Stop using GtkBuildable API

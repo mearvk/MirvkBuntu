@@ -73,7 +73,6 @@ compare_textures (GdkTexture *texture1,
 
   g_assert_true (gdk_texture_get_width (texture1) == gdk_texture_get_width (texture2));
   g_assert_true (gdk_texture_get_height (texture1) == gdk_texture_get_height (texture2));
-  g_assert_true (gdk_texture_get_color_state (texture1) == gdk_texture_get_color_state (texture2));
 
   width = gdk_texture_get_width (texture1);
   height = gdk_texture_get_height (texture1);
@@ -105,7 +104,7 @@ test_texture_from_pixbuf (void)
   cairo_surface_t *surface;
   cairo_t *cr;
 
-  pixbuf = gdk_pixbuf_new_from_resource ("/org/gtk/libgdk/cursor/text", &error);
+  pixbuf = gdk_pixbuf_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png", &error);
   g_assert_no_error (error);
   g_assert_nonnull (pixbuf);
   g_assert_true (gdk_pixbuf_get_has_alpha (pixbuf));
@@ -113,9 +112,7 @@ test_texture_from_pixbuf (void)
   width = gdk_pixbuf_get_width (pixbuf);
   height = gdk_pixbuf_get_height (pixbuf);
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   g_assert_nonnull (texture);
   g_assert_cmpint (gdk_texture_get_width (texture), ==, width);
@@ -127,9 +124,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
   surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
   cr = cairo_create (surface);
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gdk_cairo_set_source_pixbuf (cr, pixbuf, 0, 0);
-G_GNUC_END_IGNORE_DEPRECATIONS
   cairo_paint (cr);
   cairo_destroy (cr);
 
@@ -149,22 +144,18 @@ static void
 test_texture_from_resource (void)
 {
   GdkTexture *texture;
-  GdkColorState *color_state;
   int width, height;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   g_assert_nonnull (texture);
   g_object_get (texture,
                 "width", &width,
                 "height", &height,
-                "color-state", &color_state,
                 NULL);
-  g_assert_cmpint (width, ==, 32);
-  g_assert_cmpint (height, ==, 32);
-  g_assert_true (gdk_color_state_equal (color_state, gdk_color_state_get_srgb ()));
+  g_assert_cmpint (width, ==, 16);
+  g_assert_cmpint (height, ==, 16);
 
-  gdk_color_state_unref (color_state);
   g_object_unref (texture);
 }
 
@@ -176,7 +167,7 @@ test_texture_save_to_png (void)
   GFile *file;
   GdkTexture *texture2;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   g_assert_true (gdk_texture_save_to_png (texture, "test.png"));
   file = g_file_new_for_path ("test.png");
@@ -202,7 +193,7 @@ test_texture_save_to_tiff (void)
   GFile *file;
   GdkTexture *texture2;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   gdk_texture_save_to_tiff (texture, "test.tiff");
   file = g_file_new_for_path ("test.tiff");
@@ -246,8 +237,6 @@ test_texture_subtexture (void)
 
   g_assert_cmpint (gdk_texture_get_width (subtexture), ==, 32);
   g_assert_cmpint (gdk_texture_get_height (subtexture), ==, 32);
-  g_assert_true (gdk_color_state_equal (gdk_texture_get_color_state (subtexture),
-                                        gdk_texture_get_color_state (texture)));
 
   data = g_new0 (guchar, 64 * 64 * 4);
   stride = 64 * 4;
@@ -277,7 +266,7 @@ test_texture_icon (void)
   GdkPixbuf *pixbuf;
   GError *error = NULL;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   stream = g_loadable_icon_load (G_LOADABLE_ICON (texture), 16, NULL, NULL, &error);
   g_assert_no_error (error);
@@ -287,9 +276,7 @@ test_texture_icon (void)
   g_assert_no_error (error);
   g_assert_nonnull (pixbuf);
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture2 = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   compare_textures (texture, texture2);
 
@@ -319,9 +306,7 @@ icon_loaded (GObject *source,
   g_assert_no_error (error);
   g_assert_nonnull (pixbuf);
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture2 = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   compare_textures (texture, texture2);
 
@@ -339,7 +324,7 @@ test_texture_icon_async (void)
   GdkTexture *texture;
   gboolean done = FALSE;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   g_loadable_icon_load_async (G_LOADABLE_ICON (texture), 16, NULL, icon_loaded, &done);
 
@@ -354,7 +339,7 @@ test_texture_icon_serialize (void)
   GVariant *data;
   GIcon *icon;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   data = g_icon_serialize (G_ICON (texture));
   g_assert_nonnull (data);
@@ -378,12 +363,12 @@ test_texture_diff (void)
   cairo_region_t *left;
   cairo_region_t *left_center;
 
-  texture0 = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
-  texture2 = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture0 = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
+  texture2 = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   empty = cairo_region_create();
-  full = cairo_region_create_rectangle (&(cairo_rectangle_int_t) { 0, 0, 32, 32 });
+  full = cairo_region_create_rectangle (&(cairo_rectangle_int_t) { 0, 0, 16, 16 });
   center = cairo_region_create_rectangle (&(cairo_rectangle_int_t) { 4, 4, 8 ,8 });
   left = cairo_region_create_rectangle (&(cairo_rectangle_int_t) { 0, 4, 4, 4 });
   left_center = cairo_region_copy (left);
@@ -424,10 +409,9 @@ test_texture_downloader (void)
   gsize stride;
   GBytes *bytes;
   guchar *data;
-  guint width, height;
 
-  texture = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
-  texture2 = gdk_texture_new_from_resource ("/org/gtk/libgdk/cursor/text");
+  texture = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
+  texture2 = gdk_texture_new_from_resource ("/org/gtk/libgtk/icons/16x16/places/user-trash.png");
 
   downloader = gdk_texture_downloader_new (texture);
 
@@ -441,15 +425,13 @@ test_texture_downloader (void)
 
   bytes = gdk_texture_downloader_download_bytes (downloader, &stride);
 
-  width = gdk_texture_get_width (texture2);
-  height = gdk_texture_get_height (texture2);
-  g_assert_true (stride == 4 * 2 * width);
-  g_assert_true (g_bytes_get_size (bytes) == stride * height);
+  g_assert_true (stride == 4 * 2 * 16);
+  g_assert_true (g_bytes_get_size (bytes) == stride * 16);
 
-  data = g_malloc (stride * height);
+  data = g_malloc (stride * 16);
   gdk_texture_downloader_download_into (downloader, data, stride);
 
-  g_assert_true (memcmp (data, g_bytes_get_data (bytes, NULL), stride * height) == 0);
+  g_assert_true (memcmp (data, g_bytes_get_data (bytes, NULL), stride * 16) == 0);
 
   g_free (data);
   g_bytes_unref (bytes);

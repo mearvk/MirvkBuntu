@@ -20,7 +20,8 @@
 /**
 * GtkShortcutAction:
 *
-* Encodes an action that can be triggered by a keyboard shortcut.
+* `GtkShortcutAction` encodes an action that can be triggered by a
+* keyboard shortcut.
 *
 * `GtkShortcutActions` contain functions that allow easy presentation
 * to end users as well as being printed for debugging.
@@ -405,10 +406,10 @@ gtk_callback_action_init (GtkCallbackAction *self)
 
 /**
  * gtk_callback_action_new:
- * @callback: (scope notified) (closure data) (destroy destroy): the callback
- *   to call when the action is activated
- * @data: the data to be passed to @callback
- * @destroy: the function to be called when the callback action is finalized
+ * @callback: (scope notified): the callback to call
+ * @data: (closure callback): the data to be passed to @callback
+ * @destroy: (destroy data): the function to be called when the
+ *   callback action is finalized
  *
  * Create a custom action that calls the given @callback when
  * activated.
@@ -753,7 +754,8 @@ binding_compose_params (GtkWidget     *widget,
       for (j = 0; j < i; j++)
         g_value_unset (&(*params_p)[j]);
 
-      g_clear_pointer (params_p, g_free);
+      g_free (*params_p);
+      *params_p = NULL;
     }
 
   return valid;
@@ -938,14 +940,14 @@ gtk_signal_action_class_init (GtkSignalActionClass *klass)
   action_class->print = gtk_signal_action_print;
 
   /**
-   * GtkSignalAction:signal-name:
+   * GtkSignalAction:signal-name: (attributes org.gtk.Property.get=gtk_signal_action_get_signal_name)
    *
    * The name of the signal to emit.
    */
   signal_props[SIGNAL_PROP_SIGNAL_NAME] =
-    g_param_spec_string ("signal-name", NULL, NULL,
+    g_param_spec_string (I_("signal-name"), NULL, NULL,
                          NULL,
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY);
 
@@ -989,7 +991,7 @@ gtk_signal_action_new (const char *signal_name)
 }
 
 /**
- * gtk_signal_action_get_signal_name:
+ * gtk_signal_action_get_signal_name: (attributes org.gtk.Method.get_property=signal-name)
  * @self: a signal action
  *
  * Returns the name of the signal that will be emitted.
@@ -1188,14 +1190,14 @@ gtk_named_action_class_init (GtkNamedActionClass *klass)
   action_class->print = gtk_named_action_print;
 
   /**
-   * GtkNamedAction:action-name:
+   * GtkNamedAction:action-name: (attributes org.gtk.Property.get=gtk_named_action_get_action_name)
    *
    * The name of the action to activate.
    */
   named_props[NAMED_PROP_ACTION_NAME] =
-    g_param_spec_string ("action-name", NULL, NULL,
+    g_param_spec_string (I_("action-name"), NULL, NULL,
                          NULL,
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY);
 
@@ -1232,7 +1234,7 @@ gtk_named_action_new (const char *name)
 }
 
 /**
- * gtk_named_action_get_action_name:
+ * gtk_named_action_get_action_name: (attributes org.gtk.Method.get_property=action-name)
  * @self: a named action
  *
  * Returns the name of the action that will be activated.

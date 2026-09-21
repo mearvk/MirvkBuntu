@@ -64,11 +64,8 @@ enum {
   PROP_0,
   PROP_ACTIVE,
   PROP_PULSE,
-  PROP_SIZE,
-  N_PROPS
+  PROP_SIZE
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 typedef struct _GtkCellRendererSpinnerClass   GtkCellRendererSpinnerClass;
 typedef struct _GtkCellRendererSpinnerPrivate GtkCellRendererSpinnerPrivate;
@@ -178,14 +175,15 @@ gtk_cell_renderer_spinner_class_init (GtkCellRendererSpinnerClass *klass)
   cell_class->get_preferred_height = gtk_cell_renderer_spinner_get_preferred_height;
   cell_class->snapshot = gtk_cell_renderer_spinner_snapshot;
 
-  /**
-   * GtkCellRendererSpinner:active:
+  /* GtkCellRendererSpinner:active:
    *
    * Whether the spinner is active (ie. shown) in the cell
    */
-  props[PROP_ACTIVE] = g_param_spec_boolean ("active", NULL, NULL,
-                                             FALSE,
-                                             G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_ACTIVE,
+                                   g_param_spec_boolean ("active", NULL, NULL,
+                                                         FALSE,
+                                                         G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkCellRendererSpinner:pulse:
@@ -196,20 +194,22 @@ gtk_cell_renderer_spinner_class_init (GtkCellRendererSpinnerClass *klass)
    * By default, the `GtkSpinner` widget draws one full cycle of the animation,
    * consisting of 12 frames, in 750 milliseconds.
    */
-  props[PROP_PULSE] = g_param_spec_uint ("pulse", NULL, NULL,
-                                         0, G_MAXUINT, 0,
-                                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_PULSE,
+                                   g_param_spec_uint ("pulse", NULL, NULL,
+                                                      0, G_MAXUINT, 0,
+                                                      G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkCellRendererSpinner:size:
    *
    * The `GtkIconSize` value that specifies the size of the rendered spinner.
    */
-  props[PROP_SIZE] = g_param_spec_enum ("size", NULL, NULL,
-                                        GTK_TYPE_ICON_SIZE, GTK_ICON_SIZE_INHERIT,
-                                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_SIZE,
+                                   g_param_spec_enum ("size", NULL, NULL,
+                                                      GTK_TYPE_ICON_SIZE, GTK_ICON_SIZE_INHERIT,
+                                                      G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 }
 
@@ -253,7 +253,7 @@ gtk_cell_renderer_spinner_update_size (GtkCellRendererSpinner *cell,
   node = gtk_style_context_get_node (context);
   gtk_icon_size_set_style_classes (node, priv->icon_size);
   style = gtk_css_node_get_style (node);
-  priv->size = gtk_css_number_value_get (style->icon->icon_size, 100);
+  priv->size = _gtk_css_number_value_get (style->icon->icon_size, 100);
 
   gtk_style_context_restore (context);
 }
@@ -298,21 +298,21 @@ gtk_cell_renderer_spinner_set_property (GObject      *object,
         if (priv->active != g_value_get_boolean (value))
           {
             priv->active = g_value_get_boolean (value);
-            g_object_notify_by_pspec (object, props[PROP_ACTIVE]);
+            g_object_notify (object, "active");
           }
         break;
       case PROP_PULSE:
         if (priv->pulse != g_value_get_uint (value))
           {
             priv->pulse = g_value_get_uint (value);
-            g_object_notify_by_pspec (object, props[PROP_PULSE]);
+            g_object_notify (object, "pulse");
           }
         break;
       case PROP_SIZE:
         if (priv->icon_size != g_value_get_enum (value))
           {
             priv->icon_size = g_value_get_enum (value);
-            g_object_notify_by_pspec (object, props[PROP_SIZE]);
+            g_object_notify (object, "size");
           }
         break;
       default:

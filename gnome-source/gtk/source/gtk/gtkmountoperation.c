@@ -60,16 +60,16 @@
 /**
  * GtkMountOperation:
  *
- * Asks the user for passwords and other information required to
- * mount a volume.
+ * `GtkMountOperation` is an implementation of `GMountOperation`.
+ *
+ * The functions and objects described here make working with GTK and
+ * GIO more convenient.
  *
  * `GtkMountOperation` is needed when mounting volumes:
  * It is an implementation of `GMountOperation` that can be used with
  * GIO functions for mounting volumes such as
- * [method@Gio.File.mount_enclosing_volume],
- * [method@Gio.File.mount_mountable],
- * [method@Gio.Volume.mount],
- * [method@Gio.Mount.unmount_with_operation] and others.
+ * g_file_mount_enclosing_volume(), g_file_mount_mountable(),
+ * g_volume_mount(), g_mount_unmount_with_operation() and others.
  *
  * When necessary, `GtkMountOperation` shows dialogs to let the user
  * enter passwords, ask questions or show processes blocking unmount.
@@ -136,12 +136,9 @@ enum {
   PROP_0,
   PROP_PARENT,
   PROP_IS_SHOWING,
-  PROP_DISPLAY,
-  N_PROPS
+  PROP_DISPLAY
 
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE_WITH_PRIVATE (GtkMountOperation, gtk_mount_operation, G_TYPE_MOUNT_OPERATION)
 
@@ -161,33 +158,37 @@ gtk_mount_operation_class_init (GtkMountOperationClass *klass)
   mount_op_class->aborted = gtk_mount_operation_aborted;
 
   /**
-   * GtkMountOperation:parent:
+   * GtkMountOperation:parent: (attributes org.gtk.Property.get=gtk_mount_operation_get_parent org.gtk.Property.set=gtk_mount_operation_set_parent)
    *
    * The parent window.
    */
-  props[PROP_PARENT] = g_param_spec_object ("parent", NULL, NULL,
-                                            GTK_TYPE_WINDOW,
-                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_PARENT,
+                                   g_param_spec_object ("parent", NULL, NULL,
+                                                        GTK_TYPE_WINDOW,
+                                                        GTK_PARAM_READWRITE));
 
   /**
-   * GtkMountOperation:is-showing:
+   * GtkMountOperation:is-showing: (attributes org.gtk.Property.get=gtk_mount_operation_is_showing)
    *
    * Whether a dialog is currently shown.
    */
-  props[PROP_IS_SHOWING] = g_param_spec_boolean ("is-showing", NULL, NULL,
-                                                 FALSE,
-                                                 G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+                                   PROP_IS_SHOWING,
+                                   g_param_spec_boolean ("is-showing", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READABLE));
 
   /**
-   * GtkMountOperation:display:
+   * GtkMountOperation:display: (attributes org.gtk.Property.get=gtk_mount_operation_get_display org.gtk.Property.set=gtk_mount_operation_set_display)
    *
    * The display where dialogs will be shown.
    */
-  props[PROP_DISPLAY] = g_param_spec_object ("display", NULL, NULL,
-                                             GDK_TYPE_DISPLAY,
-                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_DISPLAY,
+                                   g_param_spec_object ("display", NULL, NULL,
+                                                        GDK_TYPE_DISPLAY,
+                                                        GTK_PARAM_READWRITE));
 }
 
 static void
@@ -309,7 +310,7 @@ gtk_mount_operation_proxy_finish (GtkMountOperation     *op,
   _gtk_mount_operation_handler_call_close (op->priv->handler, NULL, NULL, NULL);
 
   op->priv->handler_showing = FALSE;
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (op), "is-showing");
 
   g_mount_operation_reply (G_MOUNT_OPERATION (op), result);
 
@@ -399,7 +400,7 @@ pw_dialog_got_response (GtkDialog         *dialog,
 
   priv->user_widgets = NULL;
   priv->dialog = NULL;
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (op), "is-showing");
   gtk_window_destroy (GTK_WINDOW (dialog));
   g_object_unref (op);
 }
@@ -580,7 +581,7 @@ gtk_mount_operation_ask_password_do_gtk (GtkMountOperation *operation,
   gboolean   can_anonymous;
   guint      rows;
   char *primary;
-  const char *secondary;
+  const char *secondary = NULL;
   gboolean use_header;
 
   priv = operation->priv;
@@ -631,14 +632,12 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 18);
   gtk_box_append (GTK_BOX (hbox), main_vbox);
 
-  secondary = strstr (message, "\n");
-  if (secondary)
+  primary = strstr (message, "\n");
+  if (primary)
     {
-      primary = g_strndup (message, secondary - message);
-      secondary++;
+      secondary = primary + 1;
+      primary = g_strndup (message, primary - message);
     }
-  else
-    primary = NULL;
 
   label = gtk_label_new (primary != NULL ? primary : message);
   gtk_widget_set_halign (label, GTK_ALIGN_START);
@@ -739,7 +738,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       priv->password_entry = table_add_entry (operation, rows++, _("_Password"),
                                               NULL, operation);
       gtk_entry_set_visibility (GTK_ENTRY (priv->password_entry), FALSE);
-      gtk_entry_set_input_purpose (GTK_ENTRY (priv->password_entry), GTK_INPUT_PURPOSE_PASSWORD);
     }
 
    if (priv->ask_flags & G_ASK_PASSWORD_SAVING_SUPPORTED)
@@ -808,7 +806,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 G_GNUC_END_IGNORE_DEPRECATIONS
     }
 
-  g_object_notify_by_pspec (G_OBJECT (operation), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (operation), "is-showing");
 
   if (priv->parent_window)
     {
@@ -830,7 +828,7 @@ call_password_proxy_cb (GObject      *source,
 {
   _GtkMountOperationHandler *proxy = _GTK_MOUNT_OPERATION_HANDLER (source);
   GMountOperation *op = user_data;
-  guint result;
+  GMountOperationResult result;
   GVariant *result_details;
   GVariantIter iter;
   const char *key;
@@ -878,7 +876,7 @@ gtk_mount_operation_ask_password_do_proxy (GtkMountOperation *operation,
   g_sprintf(id, "GtkMountOperation%p", operation);
 
   operation->priv->handler_showing = TRUE;
-  g_object_notify_by_pspec (G_OBJECT (operation), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (operation), "is-showing");
 
   /* keep a ref to the operation while the handler is showing */
   g_object_ref (operation);
@@ -936,7 +934,7 @@ question_dialog_button_clicked (GObject      *source,
   else
     g_mount_operation_reply (op, G_MOUNT_OPERATION_ABORTED);
 
-  g_object_notify_by_pspec (G_OBJECT (operation), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (operation), "is-showing");
   g_object_unref (op);
 }
 
@@ -947,7 +945,7 @@ gtk_mount_operation_ask_question_do_gtk (GtkMountOperation *op,
 {
   GtkMountOperationPrivate *priv;
   GtkAlertDialog *dialog;
-  const char *secondary;
+  const char *secondary = NULL;
   char       *primary;
 
   g_return_if_fail (GTK_IS_MOUNT_OPERATION (op));
@@ -956,14 +954,12 @@ gtk_mount_operation_ask_question_do_gtk (GtkMountOperation *op,
 
   priv = op->priv;
 
-  secondary = strstr (message, "\n");
-  if (secondary)
+  primary = strstr (message, "\n");
+  if (primary)
     {
-      primary = g_strndup (message, secondary - message);
-      secondary++;
+      secondary = primary + 1;
+      primary = g_strndup (message, primary - message);
     }
-  else
-    primary = NULL;
 
   dialog = gtk_alert_dialog_new ("%s", primary ? primary : message);
   if (secondary)
@@ -977,7 +973,7 @@ gtk_mount_operation_ask_question_do_gtk (GtkMountOperation *op,
   g_object_unref (dialog);
   g_free (primary);
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (op), "is-showing");
 }
 
 static void
@@ -987,7 +983,7 @@ call_question_proxy_cb (GObject      *source,
 {
   _GtkMountOperationHandler *proxy = _GTK_MOUNT_OPERATION_HANDLER (source);
   GMountOperation *op = user_data;
-  guint result;
+  GMountOperationResult result;
   GVariant *result_details;
   GVariantIter iter;
   const char *key;
@@ -1026,7 +1022,7 @@ gtk_mount_operation_ask_question_do_proxy (GtkMountOperation *operation,
   g_sprintf(id, "GtkMountOperation%p", operation);
 
   operation->priv->handler_showing = TRUE;
-  g_object_notify_by_pspec (G_OBJECT (operation), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (operation), "is-showing");
 
   /* keep a ref to the operation while the handler is showing */
   g_object_ref (operation);
@@ -1079,7 +1075,7 @@ show_processes_button_clicked (GtkWidget       *button,
     g_mount_operation_reply (op, G_MOUNT_OPERATION_ABORTED);
 
   priv->dialog = NULL;
-  g_object_notify_by_pspec (G_OBJECT (operation), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (operation), "is-showing");
   gtk_window_destroy (GTK_WINDOW (dialog));
   g_object_unref (op);
 }
@@ -1268,7 +1264,7 @@ add_pid_to_process_list_store (GtkMountOperation              *mount_operation,
                                          NULL,
                                          24, 1,
                                          gtk_widget_get_direction (GTK_WIDGET (mount_operation->priv->dialog)),
-                                         GTK_ICON_LOOKUP_NONE);
+                                         0);
       texture = render_paintable_to_texture (GDK_PAINTABLE (icon));
       g_object_unref (icon);
     }
@@ -1450,7 +1446,7 @@ create_show_processes_dialog (GtkMountOperation *op,
 {
   GtkMountOperationPrivate *priv;
   GtkWidget  *dialog;
-  const char *secondary;
+  const char *secondary = NULL;
   char       *primary;
   int        count, len = 0;
   GtkWidget *label;
@@ -1466,14 +1462,12 @@ create_show_processes_dialog (GtkMountOperation *op,
 
   priv = op->priv;
 
-  secondary = strstr (message, "\n");
-  if (secondary)
+  primary = strstr (message, "\n");
+  if (primary)
     {
-      primary = g_strndup (message, secondary - message);
-      secondary++;
+      secondary = primary + 1;
+      primary = g_strndup (message, primary - message);
     }
-  else
-    primary = g_strdup (message);
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   dialog = gtk_dialog_new ();
@@ -1523,7 +1517,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   gtk_box_append (GTK_BOX (vbox), hbox);
 
   priv->dialog = GTK_DIALOG (dialog);
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (op), "is-showing");
 
   if (priv->parent_window == NULL && priv->display)
     gtk_window_set_display (GTK_WINDOW (dialog), priv->display);
@@ -1572,7 +1566,7 @@ call_processes_proxy_cb (GObject     *source,
 {
   _GtkMountOperationHandler *proxy = _GTK_MOUNT_OPERATION_HANDLER (source);
   GMountOperation *op = user_data;
-  guint result;
+  GMountOperationResult result;
   GVariant *result_details;
   GVariantIter iter;
   const char *key;
@@ -1618,7 +1612,7 @@ gtk_mount_operation_show_processes_do_proxy (GtkMountOperation *operation,
   g_sprintf(id, "GtkMountOperation%p", operation);
 
   operation->priv->handler_showing = TRUE;
-  g_object_notify_by_pspec (G_OBJECT (operation), props[PROP_IS_SHOWING]);
+  g_object_notify (G_OBJECT (operation), "is-showing");
 
   /* keep a ref to the operation while the handler is showing */
   g_object_ref (operation);
@@ -1695,7 +1689,7 @@ gtk_mount_operation_aborted (GMountOperation *op)
     {
       gtk_window_destroy (GTK_WINDOW (priv->dialog));
       priv->dialog = NULL;
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_IS_SHOWING]);
+      g_object_notify (G_OBJECT (op), "is-showing");
       g_object_unref (op);
     }
 
@@ -1704,7 +1698,7 @@ gtk_mount_operation_aborted (GMountOperation *op)
       _gtk_mount_operation_handler_call_close (priv->handler, NULL, NULL, NULL);
 
       priv->handler_showing = FALSE;
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_IS_SHOWING]);
+      g_object_notify (G_OBJECT (op), "is-showing");
     }
 }
 
@@ -1728,7 +1722,7 @@ gtk_mount_operation_new (GtkWindow *parent)
 }
 
 /**
- * gtk_mount_operation_is_showing:
+ * gtk_mount_operation_is_showing: (attributes org.gtk.Method.get_property=is-showing)
  * @op: a `GtkMountOperation`
  *
  * Returns whether the `GtkMountOperation` is currently displaying
@@ -1745,7 +1739,7 @@ gtk_mount_operation_is_showing (GtkMountOperation *op)
 }
 
 /**
- * gtk_mount_operation_set_parent:
+ * gtk_mount_operation_set_parent: (attributes org.gtk.Method.set_property=parent)
  * @op: a `GtkMountOperation`
  * @parent: (nullable): transient parent of the window
  *
@@ -1784,11 +1778,11 @@ gtk_mount_operation_set_parent (GtkMountOperation *op,
   if (priv->dialog)
     gtk_window_set_transient_for (GTK_WINDOW (priv->dialog), priv->parent_window);
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_PARENT]);
+  g_object_notify (G_OBJECT (op), "parent");
 }
 
 /**
- * gtk_mount_operation_get_parent:
+ * gtk_mount_operation_get_parent: (attributes org.gtk.Method.get_property=parent)
  * @op: a `GtkMountOperation`
  *
  * Gets the transient parent used by the `GtkMountOperation`.
@@ -1804,7 +1798,7 @@ gtk_mount_operation_get_parent (GtkMountOperation *op)
 }
 
 /**
- * gtk_mount_operation_set_display:
+ * gtk_mount_operation_set_display: (attributes org.gtk.Method.set_property=display)
  * @op: a `GtkMountOperation`
  * @display: a `GdkDisplay`
  *
@@ -1832,11 +1826,11 @@ gtk_mount_operation_set_display (GtkMountOperation *op,
   if (priv->dialog)
     gtk_window_set_display (GTK_WINDOW (priv->dialog), display);
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_DISPLAY]);
+  g_object_notify (G_OBJECT (op), "display");
 }
 
 /**
- * gtk_mount_operation_get_display:
+ * gtk_mount_operation_get_display: (attributes org.gtk.Method.get_property=display)
  * @op: a `GtkMountOperation`
  *
  * Gets the display on which windows of the `GtkMountOperation`

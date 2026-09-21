@@ -117,7 +117,7 @@ _gtk_print_get_default_user_units (void)
 
   if (strcmp (e, "default:inch")==0)
     return GTK_UNIT_INCH;
-  else if (strcmp (e, "default:mm") != 0)
+  else if (strcmp (e, "default:mm"))
     g_warning ("Whoever translated default:mm did so wrongly.");
   return GTK_UNIT_MM;
 }
@@ -335,14 +335,16 @@ gtk_custom_paper_unix_dialog_finalize (GObject *object)
   if (dialog->printer_list)
     {
       g_signal_handler_disconnect (dialog->printer_list, dialog->printer_inserted_tag);
-      g_clear_object (&dialog->printer_list);
+      g_object_unref (dialog->printer_list);
+      dialog->printer_list = NULL;
     }
 
   if (dialog->request_details_tag)
     {
       g_signal_handler_disconnect (dialog->request_details_printer,
                                    dialog->request_details_tag);
-      g_clear_object (&dialog->request_details_printer);
+      g_object_unref (dialog->request_details_printer);
+      dialog->request_details_printer = NULL;
       dialog->request_details_tag = 0;
     }
 
@@ -350,7 +352,8 @@ gtk_custom_paper_unix_dialog_finalize (GObject *object)
 
   for (node = dialog->print_backends; node; node = node->next)
     gtk_print_backend_destroy (GTK_PRINT_BACKEND (node->data));
-  g_clear_list (&dialog->print_backends, g_object_unref);
+  g_list_free_full (dialog->print_backends, g_object_unref);
+  dialog->print_backends = NULL;
 
   G_OBJECT_CLASS (gtk_custom_paper_unix_dialog_parent_class)->finalize (object);
 }
@@ -672,7 +675,8 @@ margins_from_printer_changed (GtkCustomPaperUnixDialog *dialog)
     {
       g_signal_handler_disconnect (dialog->request_details_printer,
                                    dialog->request_details_tag);
-      g_clear_object (&dialog->request_details_printer);
+      g_object_unref (dialog->request_details_printer);
+      dialog->request_details_printer = NULL;
       dialog->request_details_tag = 0;
     }
 

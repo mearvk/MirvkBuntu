@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "backends/meta-cursor.h"
 #include "core/util-private.h"
 #include "meta/boxes.h"
 #include "meta/meta-stage.h"
@@ -26,7 +27,6 @@ G_BEGIN_DECLS
 
 typedef struct _MetaStageWatch MetaStageWatch;
 typedef struct _MetaOverlay    MetaOverlay;
-typedef struct _MetaStageRedrawClipFilter MetaStageRedrawClipFilter;
 
 typedef enum
 {
@@ -34,9 +34,7 @@ typedef enum
   META_STAGE_WATCH_AFTER_ACTOR_PAINT,
   META_STAGE_WATCH_AFTER_OVERLAY_PAINT,
   META_STAGE_WATCH_AFTER_PAINT,
-  META_STAGE_WATCH_SKIPPED_PAINT,
 } MetaStageWatchPhase;
-#define META_N_WATCH_MODES (META_STAGE_WATCH_SKIPPED_PAINT + 1)
 
 typedef void (* MetaStageWatchFunc) (MetaStage        *stage,
                                      ClutterStageView *view,
@@ -44,29 +42,23 @@ typedef void (* MetaStageWatchFunc) (MetaStage        *stage,
                                      ClutterFrame     *frame,
                                      gpointer          user_data);
 
-typedef gboolean (* MetaStageRedrawClipFilterFunc) (MetaStage        *stage,
-                                                    ClutterStageView *stage_view,
-                                                    MtkRegion        *redraw_clip,
-                                                    gpointer          user_data);
-
 ClutterActor     *meta_stage_new                     (MetaBackend *backend);
 
 MetaOverlay      *meta_stage_create_cursor_overlay   (MetaStage   *stage);
 void              meta_stage_remove_cursor_overlay   (MetaStage   *stage,
 						      MetaOverlay *overlay);
 
-void              meta_stage_update_cursor_overlay   (MetaStage               *stage,
-                                                      MetaOverlay             *overlay,
-                                                      CoglTexture             *texture,
-                                                      const graphene_matrix_t *matrix,
-                                                      const graphene_rect_t   *dst_rect);
+void              meta_stage_update_cursor_overlay   (MetaStage            *stage,
+                                                      MetaOverlay          *overlay,
+                                                      CoglTexture          *texture,
+                                                      graphene_rect_t      *rect,
+                                                      MetaMonitorTransform  buffer_transform);
 
-void meta_overlay_set_view_visible (MetaOverlay      *overlay,
-                                    ClutterStageView *view,
-                                    gboolean          is_visible);
+void meta_overlay_set_visible (MetaOverlay *overlay,
+                               gboolean     is_visible);
 
-gboolean meta_overlay_get_view_visible (MetaOverlay      *overlay,
-                                        ClutterStageView *view);
+void meta_stage_set_active (MetaStage *stage,
+                            gboolean   is_active);
 
 META_EXPORT_TEST
 MetaStageWatch * meta_stage_watch_view (MetaStage           *stage,
@@ -78,16 +70,5 @@ MetaStageWatch * meta_stage_watch_view (MetaStage           *stage,
 META_EXPORT_TEST
 void meta_stage_remove_watch (MetaStage      *stage,
                               MetaStageWatch *watch);
-
-MetaStageRedrawClipFilter * meta_stage_add_redraw_clip_filter (MetaStage                     *stage,
-                                                               MetaStageRedrawClipFilterFunc  filter_func,
-                                                               gpointer                       user_data,
-                                                               GDestroyNotify                 destroy_notify);
-void meta_stage_remove_redraw_clip_filter (MetaStageRedrawClipFilter *filter);
-void meta_stage_apply_redraw_clip_filters (MetaStage        *stage,
-                                           ClutterStageView *stage_view,
-                                           MtkRegion        *redraw_clip);
-
-void meta_stage_rebuild_views (MetaStage *stage);
 
 G_END_DECLS

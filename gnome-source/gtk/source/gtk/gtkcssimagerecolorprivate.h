@@ -21,7 +21,6 @@
 
 #include "gtk/gtkcssimageurlprivate.h"
 #include "gtk/gtkcssvalueprivate.h"
-#include "gsk/gsktypes.h"
 
 G_BEGIN_DECLS
 
@@ -40,11 +39,12 @@ struct _GtkCssImageRecolor
   GtkCssImage parent;
 
   GFile *file;
-  GtkCssValue *color;
   GtkCssValue *palette;
-  GdkPaintable *paintable;
-  double width;
-  double height;
+  GdkTexture *texture;
+  GdkRGBA color;
+  GdkRGBA success;
+  GdkRGBA warning;
+  GdkRGBA error;
 };
 
 struct _GtkCssImageRecolorClass
@@ -52,7 +52,7 @@ struct _GtkCssImageRecolorClass
   GtkCssImageClass parent_class;
 };
 
-GType          _gtk_css_image_recolor_get_type             (void);
+GType          _gtk_css_image_recolor_get_type             (void) G_GNUC_CONST;
 
 G_END_DECLS
 

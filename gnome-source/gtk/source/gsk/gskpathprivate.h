@@ -29,11 +29,9 @@ G_BEGIN_DECLS
 typedef enum
 {
   /* path has only lines */
-  GSK_PATH_FLAT          = 1 << 0,
-  /* all points of the path are identical */
-  GSK_PATH_ZERO_LENGTH   = 1 << 1,
+  GSK_PATH_FLAT,
   /* all contours are closed */
-  GSK_PATH_CLOSED        = 1 << 2,
+  GSK_PATH_CLOSED
 } GskPathFlags;
 
 typedef struct _GskContour GskContour;
@@ -60,74 +58,5 @@ gboolean                gsk_path_foreach_with_tolerance         (GskPath        
 void                    gsk_path_builder_add_contour            (GskPathBuilder         *builder,
                                                                  GskContour             *contour);
 
-void                    gsk_path_builder_add_op                 (GskPathBuilder         *builder,
-                                                                 GskPathOperation        op,
-                                                                 const graphene_point_t *pts,
-                                                                 gsize                   n_pts,
-                                                                 float                   weight);
-
-
-/* implemented in gskstrokenode.c */
-void                    gsk_cairo_stroke_path                   (cairo_t                *cr,
-                                                                 GskPath                *path,
-                                                                 const GskStroke        *stroke);
-
-static inline void
-gsk_cairo_set_fill_rule (cairo_t     *cr,
-                         GskFillRule  fill_rule)
-{
-  switch (fill_rule)
-    {
-      case GSK_FILL_RULE_WINDING:
-        cairo_set_fill_rule (cr, CAIRO_FILL_RULE_WINDING);
-        break;
-      case GSK_FILL_RULE_EVEN_ODD:
-        cairo_set_fill_rule (cr, CAIRO_FILL_RULE_EVEN_ODD);
-        break;
-      default:
-        g_assert_not_reached ();
-        break;
-    }
-}
-
-/* Callbacks for gsk_path_parse_full
- * add_rect, add_circle and add_rounded_rect
- * are optional - the parser will just emit
- * equivalent ops if they are not provided
- */
-typedef struct
-{
-  gboolean (* add_op)        (GskPathOperation        op,
-                              const graphene_point_t *pts,
-                              size_t                  n_pts,
-                              float                   weight,
-                              gpointer                user_data);
-  gboolean (* add_arc)       (float                   rx,
-                              float                   ry,
-                              float                   x_axis_rotation,
-                              gboolean                large_arc,
-                              gboolean                positive_sweep,
-                              float                   x,
-                              float                   y,
-                              gpointer                user_data);
-} GskPathParser;
-
-gboolean gsk_path_parse_full (const char    *string,
-                              GskPathParser *callbacks,
-                              gpointer       data);
-
-typedef enum
-{
-  GSK_PATH_EMPTY,
-  GSK_PATH_RECT,
-  GSK_PATH_ROUNDED_RECT,
-  GSK_PATH_CIRCLE,
-  GSK_PATH_APPROXIMATE_ROUNDED_RECT,
-  GSK_PATH_APPROXIMATE_CIRCLE,
-  GSK_PATH_GENERAL,
-} GskPathClassification;
-
-GskPathClassification gsk_path_classify (GskPath        *path,
-                                         GskRoundedRect *rect);
-
 G_END_DECLS
+

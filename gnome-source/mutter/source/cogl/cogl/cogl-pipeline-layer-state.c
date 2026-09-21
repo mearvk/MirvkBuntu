@@ -303,7 +303,8 @@ cogl_pipeline_set_layer_wrap_mode_s (CoglPipeline *pipeline,
   CoglSamplerCacheWrapMode     internal_mode =
     public_to_internal_wrap_mode (mode);
   const CoglSamplerCacheEntry *sampler_state;
-  CoglContext *ctx = pipeline->context;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   g_return_if_fail (COGL_IS_PIPELINE (pipeline));
 
@@ -320,7 +321,7 @@ cogl_pipeline_set_layer_wrap_mode_s (CoglPipeline *pipeline,
   authority = _cogl_pipeline_layer_get_authority (layer, change);
 
   sampler_state =
-    _cogl_sampler_cache_update_wrap_modes (cogl_context_get_sampler_cache (ctx),
+    _cogl_sampler_cache_update_wrap_modes (ctx->sampler_cache,
                                            authority->sampler_cache_entry,
                                            internal_mode,
                                            authority->sampler_cache_entry->
@@ -342,11 +343,10 @@ cogl_pipeline_set_layer_wrap_mode_t (CoglPipeline *pipeline,
   CoglSamplerCacheWrapMode     internal_mode =
     public_to_internal_wrap_mode (mode);
   const CoglSamplerCacheEntry *sampler_state;
-  CoglContext *ctx;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   g_return_if_fail (COGL_IS_PIPELINE (pipeline));
-
-  ctx = pipeline->context;
 
   /* Note: this will ensure that the layer exists, creating one if it
    * doesn't already.
@@ -361,7 +361,7 @@ cogl_pipeline_set_layer_wrap_mode_t (CoglPipeline *pipeline,
   authority = _cogl_pipeline_layer_get_authority (layer, change);
 
   sampler_state =
-    _cogl_sampler_cache_update_wrap_modes (cogl_context_get_sampler_cache (ctx),
+    _cogl_sampler_cache_update_wrap_modes (ctx->sampler_cache,
                                            authority->sampler_cache_entry,
                                            authority->sampler_cache_entry->
                                            wrap_mode_s,
@@ -383,11 +383,11 @@ cogl_pipeline_set_layer_wrap_mode (CoglPipeline *pipeline,
   CoglSamplerCacheWrapMode     internal_mode =
     public_to_internal_wrap_mode (mode);
   const CoglSamplerCacheEntry *sampler_state;
-  CoglContext *ctx;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   g_return_if_fail (COGL_IS_PIPELINE (pipeline));
 
-  ctx = pipeline->context;
   /* Note: this will ensure that the layer exists, creating one if it
    * doesn't already.
    *
@@ -401,7 +401,7 @@ cogl_pipeline_set_layer_wrap_mode (CoglPipeline *pipeline,
   authority = _cogl_pipeline_layer_get_authority (layer, change);
 
   sampler_state =
-    _cogl_sampler_cache_update_wrap_modes (cogl_context_get_sampler_cache (ctx),
+    _cogl_sampler_cache_update_wrap_modes (ctx->sampler_cache,
                                            authority->sampler_cache_entry,
                                            internal_mode,
                                            internal_mode);
@@ -509,6 +509,8 @@ cogl_pipeline_set_layer_point_sprite_coords_enabled (CoglPipeline *pipeline,
   CoglPipelineLayer           *layer;
   CoglPipelineLayer           *new;
   CoglPipelineLayer           *authority;
+
+  _COGL_GET_CONTEXT (ctx, FALSE);
 
   g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), FALSE);
 
@@ -621,8 +623,6 @@ _cogl_pipeline_layer_add_vertex_snippet (CoglPipeline *pipeline,
   _cogl_pipeline_snippet_list_add (&layer->big_state->vertex_snippets,
                                    snippet);
 
-  cogl_pipeline_add_capability_from_snippet (pipeline, snippet);
-
   /* If we weren't previously the authority on this state then we need
    * to extended our differences mask and so it's possible that some
    * of our ancestry will now become redundant, so we aim to reparent
@@ -658,8 +658,6 @@ _cogl_pipeline_layer_add_fragment_snippet (CoglPipeline *pipeline,
 
   _cogl_pipeline_snippet_list_add (&layer->big_state->fragment_snippets,
                                    snippet);
-
-  cogl_pipeline_add_capability_from_snippet (pipeline, snippet);
 
   /* If we weren't previously the authority on this state then we need
    * to extended our differences mask and so it's possible that some
@@ -1266,14 +1264,14 @@ cogl_pipeline_set_layer_filters (CoglPipeline      *pipeline,
   CoglPipelineLayer *layer;
   CoglPipelineLayer *authority;
   const CoglSamplerCacheEntry *sampler_state;
-  CoglContext *ctx;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   g_return_if_fail (COGL_IS_PIPELINE (pipeline));
 
   g_return_if_fail (mag_filter == COGL_PIPELINE_FILTER_NEAREST ||
                     mag_filter == COGL_PIPELINE_FILTER_LINEAR);
 
-  ctx = pipeline->context;
   /* Note: this will ensure that the layer exists, creating one if it
    * doesn't already.
    *
@@ -1287,7 +1285,7 @@ cogl_pipeline_set_layer_filters (CoglPipeline      *pipeline,
   authority = _cogl_pipeline_layer_get_authority (layer, state);
 
   sampler_state =
-    _cogl_sampler_cache_update_filters (cogl_context_get_sampler_cache (ctx),
+    _cogl_sampler_cache_update_filters (ctx->sampler_cache,
                                         authority->sampler_cache_entry,
                                         min_filter,
                                         mag_filter);
@@ -1462,6 +1460,15 @@ _cogl_pipeline_layer_hash_point_sprite_state (CoglPipelineLayer *authority,
   state->hash =
     _cogl_util_one_at_a_time_hash (state->hash, &big_state->point_sprite_coords,
                                    sizeof (big_state->point_sprite_coords));
+}
+
+void
+_cogl_pipeline_layer_hash_vertex_snippets_state (CoglPipelineLayer *authority,
+                                                 CoglPipelineLayer **authorities,
+                                                 CoglPipelineHashState *state)
+{
+  _cogl_pipeline_snippet_list_hash (&authority->big_state->vertex_snippets,
+                                    &state->hash);
 }
 
 void

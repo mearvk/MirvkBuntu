@@ -19,34 +19,6 @@ static PointState touch_state[10]; /* touchpoint 0 gets pointer emulation,
 #define EVENT_SEQUENCE(point) (GdkEventSequence*) ((point) - touch_state + 1)
 
 static void
-show_toplevel (GtkWindow *window)
-{
-  GdkSurface *surface;
-
-  gtk_window_present (window);
-
-  surface = gtk_native_get_surface (GTK_NATIVE (window));
-
-  while (gdk_surface_get_width (surface) <= 1 ||
-         gdk_surface_get_height (surface) <= 1)
-    g_main_context_iteration (NULL, TRUE);
-}
-
-static void
-show_popover (GtkPopover *popover)
-{
-  GdkSurface *surface;
-
-  gtk_popover_popup (popover);
-
-  surface = gtk_native_get_surface (GTK_NATIVE (popover));
-
-  while (gdk_surface_get_width (surface) <= 1 ||
-         gdk_surface_get_height (surface) <= 1)
-    g_main_context_iteration (NULL, TRUE);
-}
-
-static void
 inject_event (GdkEvent *event)
 {
   gboolean handled;
@@ -72,45 +44,36 @@ point_press (PointState *point,
 
   if (point == &mouse_state)
     {
-      GdkButtonEvent *button_event;
-
-      button_event = (GdkButtonEvent *) g_type_create_instance (GDK_TYPE_BUTTON_EVENT);
-      ev = (GdkEvent *) button_event;
-
-      ev->event_type = GDK_BUTTON_PRESS;
-      ev->surface = g_object_ref (surface);
-      ev->device = g_object_ref (device);
-      ev->time = GDK_CURRENT_TIME;
-
-      button_event->button = button;
-      button_event->state = point->state;
-      button_event->x = point->x;
-      button_event->y = point->y;
+      ev = gdk_button_event_new (GDK_BUTTON_PRESS,
+                                 surface,
+                                 device,
+                                 device,
+                                 NULL,
+                                 GDK_CURRENT_TIME,
+                                 point->x,
+                                 point->y,
+                                 button,
+                                 point->state);
 
       point->state |= GDK_BUTTON1_MASK << (button - 1);
     }
   else
     {
-      GdkTouchEvent *touch_event;
-
-      touch_event = (GdkTouchEvent *) g_type_create_instance (GDK_TYPE_TOUCH_EVENT);
-      ev = (GdkEvent *) touch_event;
-
-      ev->event_type = GDK_TOUCH_BEGIN;
-      ev->surface = g_object_ref (surface);
-      ev->device = g_object_ref (device);
-      ev->time = GDK_CURRENT_TIME;
-
-      touch_event->sequence = EVENT_SEQUENCE (point);
-      touch_event->state = point->state;
-      touch_event->x = point->x;
-      touch_event->y = point->y;
-      touch_event->touch_emulating = (point == &touch_state[0]);
+      ev = gdk_touch_event_new (GDK_TOUCH_BEGIN,
+                                EVENT_SEQUENCE (point),
+                                surface,
+                                device,
+                                device,
+                                GDK_CURRENT_TIME,
+                                point->state,
+                                point->x,
+                                point->y,
+                                point == &touch_state[0]);
     }
 
   inject_event (ev);
 
-  gdk_event_unref (ev);
+  g_object_unref (ev);
 
   point->widget = widget;
 }
@@ -137,45 +100,35 @@ point_update (PointState *point,
 
   if (point == &mouse_state)
     {
-      GdkMotionEvent *motion_event;
-
-      motion_event = (GdkMotionEvent *) g_type_create_instance (GDK_TYPE_MOTION_EVENT);
-      ev = (GdkEvent *) motion_event;
-
-      ev->event_type = GDK_MOTION_NOTIFY;
-      ev->surface = g_object_ref (surface);
-      ev->device = g_object_ref (device);
-      ev->time = GDK_CURRENT_TIME;
-
-      motion_event->state = point->state;
-      motion_event->x = point->x;
-      motion_event->y = point->y;
+      ev = gdk_motion_event_new (surface,
+                                 device,
+                                 device,
+                                 NULL,
+                                 GDK_CURRENT_TIME,
+                                 point->state,
+                                 point->x,
+                                 point->y);
     }
   else
     {
-      GdkTouchEvent *touch_event;
-
       if (!point->widget || widget != point->widget)
         return;
 
-      touch_event = (GdkTouchEvent *) g_type_create_instance (GDK_TYPE_TOUCH_EVENT);
-      ev = (GdkEvent *) touch_event;
-
-      ev->event_type = GDK_TOUCH_UPDATE;
-      ev->surface = g_object_ref (surface);
-      ev->device = g_object_ref (device);
-      ev->time = GDK_CURRENT_TIME;
-
-      touch_event->sequence = EVENT_SEQUENCE (point);
-      touch_event->state = point->state;
-      touch_event->x = point->x;
-      touch_event->y = point->y;
-      touch_event->touch_emulating = (point == &touch_state[0]);
+      ev = gdk_touch_event_new (GDK_TOUCH_UPDATE,
+                                EVENT_SEQUENCE (point),
+                                surface,
+                                device,
+                                device,
+                                GDK_CURRENT_TIME,
+                                point->state,
+                                point->x,
+                                point->y,
+                                point == &touch_state[0]);
     }
 
   inject_event (ev);
 
-  gdk_event_unref (ev);
+  g_object_unref (ev);
 }
 
 static void
@@ -201,48 +154,39 @@ point_release (PointState *point,
 
   if (point == &mouse_state)
     {
-      GdkButtonEvent *button_event;
-
       if ((point->state & (GDK_BUTTON1_MASK << (button - 1))) == 0)
         return;
 
-      button_event = (GdkButtonEvent *) g_type_create_instance (GDK_TYPE_BUTTON_EVENT);
-      ev = (GdkEvent *) button_event;
-
-      ev->event_type = GDK_BUTTON_RELEASE;
-      ev->surface = g_object_ref (surface);
-      ev->device = g_object_ref (device);
-      ev->time = GDK_CURRENT_TIME;
-
-      button_event->button = button;
-      button_event->state = point->state;
-      button_event->x = point->x;
-      button_event->y = point->y;
+      ev = gdk_button_event_new (GDK_BUTTON_RELEASE,
+                                 surface,
+                                 device,
+                                 device,
+                                 NULL,
+                                 GDK_CURRENT_TIME,
+                                 point->x,
+                                 point->y,
+                                 button,
+                                 point->state);
 
       point->state &= ~(GDK_BUTTON1_MASK << (button - 1));
     }
   else
     {
-      GdkTouchEvent *touch_event;
-
-      touch_event = (GdkTouchEvent *) g_type_create_instance (GDK_TYPE_TOUCH_EVENT);
-      ev = (GdkEvent *) touch_event;
-
-      ev->event_type = GDK_TOUCH_END;
-      ev->surface = g_object_ref (surface);
-      ev->device = g_object_ref (device);
-      ev->time = GDK_CURRENT_TIME;
-
-      touch_event->sequence = EVENT_SEQUENCE (point);
-      touch_event->state = point->state;
-      touch_event->x = point->x;
-      touch_event->y = point->y;
-      touch_event->touch_emulating = (point == &touch_state[0]);
+      ev = gdk_touch_event_new (GDK_TOUCH_END,
+                                EVENT_SEQUENCE (point),
+                                surface,
+                                device,
+                                device,
+                                GDK_CURRENT_TIME,
+                                point->state,
+                                point->x,
+                                point->y,
+                                point == &touch_state[0]);
     }
 
   inject_event (ev);
 
-  gdk_event_unref (ev);
+  g_object_unref (ev);
 }
 
 static const char *
@@ -253,7 +197,7 @@ phase_nick (GtkPropagationPhase phase)
 
  class = g_type_class_ref (GTK_TYPE_PROPAGATION_PHASE);
  value = g_enum_get_value ((GEnumClass*)class, phase);
- g_type_class_unref (class);
+ g_type_class_unref (class);  
 
  return value->value_nick;
 }
@@ -266,7 +210,7 @@ state_nick (GtkEventSequenceState state)
 
  class = g_type_class_ref (GTK_TYPE_EVENT_SEQUENCE_STATE);
  value = g_enum_get_value ((GEnumClass*)class, state);
- g_type_class_unref (class);
+ g_type_class_unref (class);  
 
  return value->value_nick;
 }
@@ -310,7 +254,7 @@ press_cb (GtkGesture *g, int n_press, double x, double y, gpointer data)
   GtkPropagationPhase phase;
   GestureData *gd = data;
   const char *name;
-
+  
   name = g_object_get_data (G_OBJECT (g), "name");
   phase = gtk_event_controller_get_propagation_phase (c);
 
@@ -332,9 +276,9 @@ cancel_cb (GtkGesture *g, GdkEventSequence *sequence, gpointer data)
 {
   GestureData *gd = data;
   const char *name;
-
+  
   name = g_object_get_data (G_OBJECT (g), "name");
-
+  
   if (gd->str->len > 0)
     g_string_append (gd->str, ", ");
   g_string_append_printf (gd->str, "%s cancelled", name);
@@ -374,9 +318,9 @@ update_cb (GtkGesture *g, GdkEventSequence *sequence, gpointer data)
 {
   GestureData *gd = data;
   const char *name;
-
+  
   name = g_object_get_data (G_OBJECT (g), "name");
-
+  
   if (gd->str->len > 0)
     g_string_append (gd->str, ", ");
   g_string_append_printf (gd->str, "%s updated", name);
@@ -387,9 +331,9 @@ state_changed_cb (GtkGesture *g, GdkEventSequence *sequence, GtkEventSequenceSta
 {
   GestureData *gd = data;
   const char *name;
-
+  
   name = g_object_get_data (G_OBJECT (g), "name");
-
+  
   if (gd->str->len > 0)
     g_string_append (gd->str, ", ");
   g_string_append_printf (gd->str, "%s state %s", name, state_nick (state));
@@ -404,7 +348,6 @@ add_gesture (GtkWidget *w, const char *name, GtkPropagationPhase phase, GString 
 {
   GtkGesture *g;
   GestureData *data;
-  GList *gestures;
 
   data = g_new (GestureData, 1);
   data->str = str;
@@ -417,11 +360,6 @@ add_gesture (GtkWidget *w, const char *name, GtkPropagationPhase phase, GString 
   gtk_widget_add_controller (w, GTK_EVENT_CONTROLLER (g));
 
   g_object_set_data (G_OBJECT (g), "name", (gpointer)name);
-
-  gestures = g_object_steal_data (G_OBJECT (w), "gestures");
-  gestures = g_list_prepend (gestures, g);
-  g_object_set_data_full (G_OBJECT (w), "gestures", (gpointer) gestures,
-                          (GDestroyNotify) g_list_free);
 
   g_signal_connect (g, "pressed", G_CALLBACK (press_cb), data);
   g_signal_connect (g, "cancel", G_CALLBACK (cancel_cb), data);
@@ -436,7 +374,6 @@ add_mt_gesture (GtkWidget *w, const char *name, GtkPropagationPhase phase, GStri
 {
   GtkGesture *g;
   GestureData *data;
-  GList *gestures;
 
   data = g_new (GestureData, 1);
   data->str = str;
@@ -447,11 +384,6 @@ add_mt_gesture (GtkWidget *w, const char *name, GtkPropagationPhase phase, GStri
   gtk_widget_add_controller (w, GTK_EVENT_CONTROLLER (g));
 
   g_object_set_data (G_OBJECT (g), "name", (gpointer)name);
-
-  gestures = g_object_get_data (G_OBJECT (w), "gestures");
-  gestures = g_list_prepend (gestures, g);
-  g_object_set_data_full (G_OBJECT (w), "gestures", (gpointer) gestures,
-                          (GDestroyNotify) g_list_free);
 
   g_signal_connect (g, "begin", G_CALLBACK (begin_cb), data);
   g_signal_connect (g, "update", G_CALLBACK (update_cb), data);
@@ -477,43 +409,13 @@ add_legacy (GtkWidget *w, GString *str, gboolean exit)
 }
 
 static void
-assert_gesture_state (GtkWidget *w, const char *name, GdkEventSequence *seq, GtkEventSequenceState state)
-{
-  GList *gestures, *l;
-
-  gestures = g_object_get_data (G_OBJECT (w), "gestures");
-
-  for (l = gestures; l; l = l->next)
-    {
-      const char *n;
-
-      n = g_object_get_data (l->data, "name");
-      if (g_strcmp0 (n, name) != 0)
-        continue;
-
-      g_assert_cmpint (gtk_gesture_get_sequence_state (l->data, seq), ==, state);
-      return;
-    }
-
-  g_assert_not_reached ();
-}
-
-static void
 test_phases (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -522,11 +424,10 @@ test_phases (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -540,11 +441,9 @@ test_phases (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -556,27 +455,19 @@ test_phases (void)
                    "bubble b3, "
                    "bubble a3");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 static void
 test_mixed (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -585,11 +476,10 @@ test_mixed (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -607,11 +497,9 @@ test_mixed (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -626,27 +514,19 @@ test_mixed (void)
                    "bubble a3, "
                    "legacy A");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 static void
 test_early_exit (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -655,11 +535,10 @@ test_early_exit (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -675,11 +554,9 @@ test_early_exit (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -692,27 +569,19 @@ test_early_exit (void)
                    "bubble b3, "
                    "legacy B");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 static void
 test_claim_capture (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -721,11 +590,10 @@ test_claim_capture (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -737,50 +605,30 @@ test_claim_capture (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
                    "capture a1, "
                    "capture b1, "
                    "capture c1, "
-                   "b1 cancelled, "
-                   "a1 cancelled, "
                    "c1 state claimed");
 
-  assert_gesture_state (A, "a1", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (B, "b1", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (C, "c1", NULL, GTK_EVENT_SEQUENCE_CLAIMED);
-  assert_gesture_state (C, "c2", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (C, "c3", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (B, "b3", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (A, "a3", NULL, GTK_EVENT_SEQUENCE_NONE);
-
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 static void
 test_claim_target (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -789,11 +637,10 @@ test_claim_target (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -805,10 +652,8 @@ test_claim_target (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -816,40 +661,21 @@ test_claim_target (void)
                    "capture b1, "
                    "capture c1, "
                    "target c2, "
-                   "c1 state denied, "
-                   "b1 state denied, "
-                   "a1 state denied, "
                    "c2 state claimed");
 
-  assert_gesture_state (A, "a1", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (B, "b1", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (C, "c1", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (C, "c2", NULL, GTK_EVENT_SEQUENCE_CLAIMED);
-  assert_gesture_state (C, "c3", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (B, "b3", NULL, GTK_EVENT_SEQUENCE_NONE);
-  assert_gesture_state (A, "a3", NULL, GTK_EVENT_SEQUENCE_NONE);
-
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 static void
 test_claim_bubble (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -858,11 +684,10 @@ test_claim_bubble (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -874,11 +699,8 @@ test_claim_bubble (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_CLAIMED);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -888,43 +710,26 @@ test_claim_bubble (void)
                    "target c2, "
                    "bubble c3, "
                    "bubble b3, "
-                   "b1 state denied, "
-                   "c3 state denied, "
-                   "c2 state denied, "
-                   "c1 state denied, "
-                   "a1 state denied, "
-                   "b3 state claimed");
-
-  assert_gesture_state (A, "a1", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (B, "b1", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (C, "c1", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (C, "c2", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (C, "c3", NULL, GTK_EVENT_SEQUENCE_DENIED);
-  assert_gesture_state (B, "b3", NULL, GTK_EVENT_SEQUENCE_CLAIMED);
-  assert_gesture_state (A, "a3", NULL, GTK_EVENT_SEQUENCE_NONE);
-
-  gtk_window_destroy (GTK_WINDOW (A));
+                   "c3 cancelled, "
+                   "c2 cancelled, "
+                   "c1 cancelled, "
+                   "b3 state claimed"
+                   );
 
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 static void
 test_early_claim_capture (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GtkGesture *g;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -933,11 +738,10 @@ test_early_claim_capture (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -949,17 +753,13 @@ test_early_claim_capture (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
                    "capture a1, "
                    "capture b1, "
-                   "a1 cancelled, "
                    "b1 state claimed");
 
   /* Reset the string */
@@ -968,36 +768,25 @@ test_early_claim_capture (void)
   gtk_gesture_set_state (g, GTK_EVENT_SEQUENCE_DENIED);
 
   g_assert_cmpstr (str->str, ==,
-                   "capture a1, "
                    "capture c1, "
-                   "b1 cancelled, "
-                   "a1 cancelled, "
                    "c1 state claimed, "
                    "b1 state denied");
 
   point_release (&mouse_state, 1);
-  gtk_window_destroy (GTK_WINDOW (A));
 
   g_string_free (str, TRUE);
+  gtk_window_destroy (A);
 }
 
 static void
 test_late_claim_capture (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GtkGesture *g;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -1006,11 +795,10 @@ test_late_claim_capture (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -1022,11 +810,8 @@ test_late_claim_capture (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1034,9 +819,6 @@ test_late_claim_capture (void)
                    "capture b1, "
                    "capture c1, "
                    "target c2, "
-                   "c1 state denied, "
-                   "b1 state denied, "
-                   "a1 state denied, "
                    "c2 state claimed");
 
   /* Reset the string */
@@ -1044,31 +826,26 @@ test_late_claim_capture (void)
 
   gtk_gesture_set_state (g, GTK_EVENT_SEQUENCE_CLAIMED);
 
-  g_assert_cmpstr (str->str, ==, "");
+  g_assert_cmpstr (str->str, ==,
+                   "c2 cancelled, "
+                   "c1 cancelled, "
+                   "b1 state claimed");
 
   point_release (&mouse_state, 1);
-  gtk_window_destroy (GTK_WINDOW (A));
 
   g_string_free (str, TRUE);
+  gtk_window_destroy (A);
 }
 
 static void
 test_group (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
   GtkGesture *g1, *g2;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -1077,11 +854,10 @@ test_group (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -1095,11 +871,8 @@ test_group (void)
   add_gesture (B, "b3", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (C, "c4", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1107,34 +880,23 @@ test_group (void)
                    "capture b1, "
                    "capture c1, "
                    "target c3, "
-                   "c1 state denied, "
-                   "b1 state denied, "
-                   "a1 state denied, "
                    "c3 state claimed, "
                    "c2 state claimed, "
                    "target c2");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
-G_GNUC_UNUSED static void
+static void
 test_gestures_outside_grab (void)
 {
-  GtkWidget *A, *B, *C, *D, *E;
-  GdkDisplay *display;
+  GtkWidget *A, *B, *C, *D;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -1143,19 +905,13 @@ test_gestures_outside_grab (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
-  D = gtk_popover_new ();
-  gtk_widget_set_name (D, "D");
-  gtk_widget_set_parent (D, C);
-
-  E = gtk_image_new ();
-  gtk_widget_set_name (E, "E");
-  gtk_popover_set_child (GTK_POPOVER (D), E);
+  D = gtk_window_new ();
+  gtk_window_present (GTK_WINDOW (D));
 
   str = g_string_new ("");
 
@@ -1166,11 +922,8 @@ test_gestures_outside_grab (void)
   add_gesture (B, "b2", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (A, "a2", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1178,12 +931,11 @@ test_gestures_outside_grab (void)
                    "capture b1, "
                    "capture c1, "
                    "target c2, "
-                   "c1 state denied, "
                    "c2 state claimed");
 
   /* Set a grab on another window */
   g_string_erase (str, 0, str->len);
-  show_popover (GTK_POPOVER (D));
+  gtk_grab_add (D);
 
   g_assert_cmpstr (str->str, ==,
                    "c1 cancelled, "
@@ -1191,41 +943,32 @@ test_gestures_outside_grab (void)
                    "b1 cancelled, "
                    "a1 cancelled");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
+  gtk_window_destroy (D);
 }
 
-G_GNUC_UNUSED static void
+static void
 test_gestures_inside_grab (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
-  B = gtk_popover_new ();
+  B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
-  gtk_widget_set_parent (B, A);
   C = gtk_image_new ();
   gtk_widget_set_hexpand (C, TRUE);
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
-  gtk_popover_set_child (GTK_POPOVER (B), C);
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
+  gtk_box_append (GTK_BOX (A), B);
+  gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
-  show_popover (GTK_POPOVER (B));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
@@ -1236,11 +979,8 @@ test_gestures_inside_grab (void)
   add_gesture (B, "b2", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (A, "a2", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_NONE);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
-
-  point_update (&mouse_state, A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  gtk_widget_get_allocation (B, &allocation);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   point_press (&mouse_state, A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1250,39 +990,33 @@ test_gestures_inside_grab (void)
                    "target c2, "
                    "c2 state claimed");
 
+  /* Set a grab on B */
   g_string_erase (str, 0, str->len);
+  gtk_grab_add (B);
   g_assert_cmpstr (str->str, ==,
                    "a1 cancelled");
 
   /* Update with the grab under effect */
   g_string_erase (str, 0, str->len);
-  point_update (&mouse_state, A, allocation.origin.x, allocation.origin.y);
+  point_update (&mouse_state, A, allocation.x, allocation.y);
   g_assert_cmpstr (str->str, ==,
                    "b1 updated, "
                    "c1 updated, "
                    "c2 updated");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
-G_GNUC_UNUSED static void
+static void
 test_multitouch_on_single (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -1291,63 +1025,49 @@ test_multitouch_on_single (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
   add_gesture (A, "a1", GTK_PHASE_CAPTURE, str, GTK_EVENT_SEQUENCE_NONE);
   add_gesture (B, "b1", GTK_PHASE_CAPTURE, str, GTK_EVENT_SEQUENCE_CLAIMED);
 
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
   /* First touch down */
-  point_update (&touch_state[0], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[0], A, allocation.x, allocation.y);
   point_press (&touch_state[0], A, 1);
 
   g_assert_cmpstr (str->str, ==,
                    "capture a1 (1), "
                    "capture b1 (1), "
-                   "a1 cancelled, "
                    "b1 state claimed (1)");
 
   /* Second touch down */
   g_string_erase (str, 0, str->len);
-  point_update (&touch_state[1], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[1], A, allocation.x, allocation.y);
   point_press (&touch_state[1], A, 1);
 
   g_assert_cmpstr (str->str, ==,
-                   "capture a1 (2), "
+                   "a1 state denied (2), "
                    "b1 state denied (2)");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
-G_GNUC_UNUSED static void
+static void
 test_multitouch_activation (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -1356,29 +1076,24 @@ test_multitouch_activation (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
   add_mt_gesture (C, "c1", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_CLAIMED);
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
   /* First touch down */
-  point_update (&touch_state[0], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[0], A, allocation.x, allocation.y);
   point_press (&touch_state[0], A, 1);
 
   g_assert_cmpstr (str->str, ==, "");
 
   /* Second touch down */
-  point_update (&touch_state[1], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[1], A, allocation.x, allocation.y);
   point_press (&touch_state[1], A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1395,9 +1110,7 @@ test_multitouch_activation (void)
 
   /* A third touch down triggering again action */
   g_string_erase (str, 0, str->len);
-  point_update (&touch_state[2], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[2], A, allocation.x, allocation.y);
   point_press (&touch_state[2], A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1417,28 +1130,20 @@ test_multitouch_activation (void)
 
   g_assert_cmpstr (str->str, ==, "");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
-G_GNUC_UNUSED static void
+static void
 test_multitouch_interaction (void)
 {
   GtkWidget *A, *B, *C;
-  GdkDisplay *display;
   GtkGesture *g;
   GString *str;
-  graphene_rect_t allocation;
+  GtkAllocation allocation;
 
   A = gtk_window_new ();
-  display = gtk_widget_get_display (A);
-  if (gdk_display_get_default_seat (display) == NULL)
-    {
-      g_test_skip ("Display has no seat");
-      return;
-    }
-
   gtk_widget_set_name (A, "A");
   B = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name (B, "B");
@@ -1447,22 +1152,19 @@ test_multitouch_interaction (void)
   gtk_widget_set_vexpand (C, TRUE);
   gtk_widget_set_name (C, "C");
 
-  gtk_window_set_default_size (GTK_WINDOW (A), 400, 400);
-  gtk_window_set_child (GTK_WINDOW (A), B);
+  gtk_box_append (GTK_BOX (A), B);
   gtk_box_append (GTK_BOX (B), C);
 
-  show_toplevel (GTK_WINDOW (A));
+  gtk_window_present (GTK_WINDOW (A));
 
   str = g_string_new ("");
 
   g = add_gesture (A, "a1", GTK_PHASE_CAPTURE, str, GTK_EVENT_SEQUENCE_CLAIMED);
   add_mt_gesture (C, "c1", GTK_PHASE_BUBBLE, str, GTK_EVENT_SEQUENCE_CLAIMED);
-  g_assert_true (gtk_widget_compute_bounds (B, B, &allocation));
+  gtk_widget_get_allocation (B, &allocation);
 
   /* First touch down, a1 claims the sequence */
-  point_update (&touch_state[0], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[0], A, allocation.x, allocation.y);
   point_press (&touch_state[0], A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1471,9 +1173,7 @@ test_multitouch_interaction (void)
 
   /* Second touch down, a1 denies and c1 takes over */
   g_string_erase (str, 0, str->len);
-  point_update (&touch_state[1], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[1], A, allocation.x, allocation.y);
   point_press (&touch_state[1], A, 1);
 
   /* Denying sequences in touch-excess situation is a responsibility of the caller */
@@ -1488,7 +1188,7 @@ test_multitouch_interaction (void)
 
   /* Move first point, only c1 should update */
   g_string_erase (str, 0, str->len);
-  point_update (&touch_state[0], A, allocation.origin.x, allocation.origin.y);
+  point_update (&touch_state[0], A, allocation.x, allocation.y);
 
   g_assert_cmpstr (str->str, ==,
                    "c1 updated");
@@ -1502,9 +1202,7 @@ test_multitouch_interaction (void)
 
   /* A third touch down triggering again action on c1 */
   g_string_erase (str, 0, str->len);
-  point_update (&touch_state[2], A,
-                allocation.origin.x + allocation.size.width / 2 ,
-                allocation.origin.y + allocation.size.height / 2);
+  point_update (&touch_state[2], A, allocation.x, allocation.y);
   point_press (&touch_state[2], A, 1);
 
   g_assert_cmpstr (str->str, ==,
@@ -1525,9 +1223,9 @@ test_multitouch_interaction (void)
 
   g_assert_cmpstr (str->str, ==, "");
 
-  gtk_window_destroy (GTK_WINDOW (A));
-
   g_string_free (str, TRUE);
+
+  gtk_window_destroy (A);
 }
 
 int
@@ -1544,13 +1242,11 @@ main (int argc, char *argv[])
   g_test_add_func ("/gestures/claim/early-capture", test_early_claim_capture);
   g_test_add_func ("/gestures/claim/late-capture", test_late_claim_capture);
   g_test_add_func ("/gestures/group", test_group);
-#if 0
   g_test_add_func ("/gestures/grabs/gestures-outside-grab", test_gestures_outside_grab);
   g_test_add_func ("/gestures/grabs/gestures-inside-grab", test_gestures_inside_grab);
   g_test_add_func ("/gestures/multitouch/gesture-single", test_multitouch_on_single);
   g_test_add_func ("/gestures/multitouch/multitouch-activation", test_multitouch_activation);
   g_test_add_func ("/gestures/multitouch/interaction", test_multitouch_interaction);
-#endif
 
   return g_test_run ();
 }

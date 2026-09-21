@@ -234,7 +234,7 @@ gtk_surface_titlebar_gesture (struct wl_client   *client,
     return;
 
   if (!meta_wayland_seat_get_grab_info (seat, surface, serial, FALSE,
-                                        NULL, &x, &y))
+                                        NULL, NULL, &x, &y))
     return;
 
   switch (gesture)
@@ -261,30 +261,30 @@ gtk_surface_titlebar_gesture (struct wl_client   *client,
       if (!window->has_maximize_func)
         break;
 
-      if (meta_window_is_maximized (window))
-        meta_window_unmaximize (window);
+      if (META_WINDOW_MAXIMIZED (window))
+        meta_window_unmaximize (window, META_MAXIMIZE_BOTH);
       else
-        meta_window_maximize (window);
+        meta_window_maximize (window, META_MAXIMIZE_BOTH);
       break;
 
     case G_DESKTOP_TITLEBAR_ACTION_TOGGLE_MAXIMIZE_HORIZONTALLY:
       if (!window->has_maximize_func)
         break;
 
-      if (meta_window_get_maximize_flags (window) & META_MAXIMIZE_HORIZONTAL)
-        meta_window_set_unmaximize_flags (window, META_MAXIMIZE_HORIZONTAL);
+      if (META_WINDOW_MAXIMIZED_HORIZONTALLY (window))
+        meta_window_unmaximize (window, META_MAXIMIZE_HORIZONTAL);
       else
-        meta_window_set_maximize_flags (window, META_MAXIMIZE_HORIZONTAL);
+        meta_window_maximize (window, META_MAXIMIZE_HORIZONTAL);
       break;
 
     case G_DESKTOP_TITLEBAR_ACTION_TOGGLE_MAXIMIZE_VERTICALLY:
       if (!window->has_maximize_func)
         break;
 
-      if (meta_window_get_maximize_flags (window) & META_MAXIMIZE_VERTICAL)
-        meta_window_set_unmaximize_flags (window, META_MAXIMIZE_VERTICAL);
+      if (META_WINDOW_MAXIMIZED_VERTICALLY (window))
+        meta_window_unmaximize (window, META_MAXIMIZE_VERTICAL);
       else
-        meta_window_set_maximize_flags (window, META_MAXIMIZE_VERTICAL);
+        meta_window_maximize (window, META_MAXIMIZE_VERTICAL);
       break;
 
     case G_DESKTOP_TITLEBAR_ACTION_MINIMIZE:
@@ -304,34 +304,12 @@ gtk_surface_titlebar_gesture (struct wl_client   *client,
       break;
 
     case G_DESKTOP_TITLEBAR_ACTION_MENU:
-      meta_window_show_menu (window, META_WINDOW_MENU_WM, (int) x, (int) y);
+      meta_window_show_menu (window, META_WINDOW_MENU_WM, x, y);
       break;
 
     default:
       break;
     }
-}
-
-static void
-gtk_surface_set_a11y_properties (struct wl_client   *client,
-                                 struct wl_resource *resource,
-                                 const char         *a11y_dbus_name,
-                                 const char         *toplevel_object_path)
-{
-  MetaWaylandGtkSurface *gtk_surface = wl_resource_get_user_data (resource);
-  MetaWaylandSurface *surface = gtk_surface->surface;
-  MetaWindow *window;
-
-  if (!surface)
-    return;
-
-  window = meta_wayland_surface_get_window (surface);
-  if (!window)
-    return;
-
-  meta_window_set_a11y_properties (window,
-                                   a11y_dbus_name,
-                                   toplevel_object_path);
 }
 
 static void
@@ -348,8 +326,7 @@ static const struct gtk_surface1_interface meta_wayland_gtk_surface_interface = 
   gtk_surface_present,
   gtk_surface_request_focus,
   gtk_surface_release,
-  gtk_surface_titlebar_gesture,
-  gtk_surface_set_a11y_properties,
+  gtk_surface_titlebar_gesture
 };
 
 static void
@@ -418,14 +395,13 @@ fill_states (struct wl_array    *states,
              MetaWindow         *window,
              struct wl_resource *resource)
 {
-  MetaTileMode tile_mode = meta_window_config_get_tile_mode (window->config);
   int version;
 
   version = wl_resource_get_version (resource);
 
   if (version < GTK_SURFACE1_CONFIGURE_EDGES_SINCE_VERSION &&
-      (tile_mode == META_TILE_LEFT ||
-       tile_mode == META_TILE_RIGHT))
+      (window->tile_mode == META_TILE_LEFT ||
+       window->tile_mode == META_TILE_RIGHT))
     add_state_value (states, GTK_SURFACE1_STATE_TILED);
 
   if (version >= GTK_SURFACE1_STATE_TILED_TOP_SINCE_VERSION &&

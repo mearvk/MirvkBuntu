@@ -55,11 +55,12 @@ G_BEGIN_DECLS
 #define COGL_SUB_TEXTURE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  COGL_TYPE_SUB_TEXTURE, CoglSubTextureClass))
 
 typedef struct _CoglSubTextureClass CoglSubTextureClass;
+typedef struct _CoglSubTexture CoglSubTexture;
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglSubTexture, g_object_unref)
 
 COGL_EXPORT
-GType               cogl_sub_texture_get_type       (void);
+GType               cogl_sub_texture_get_type       (void) G_GNUC_CONST;
 /**
  * cogl_sub_texture_new:
  * @ctx: A #CoglContext pointer
@@ -76,13 +77,13 @@ GType               cogl_sub_texture_get_type       (void);
  * Creates a high-level #CoglSubTexture representing a sub-region of
  * any other #CoglTexture. The sub-region must strictly lye within the
  * bounds of the @parent_texture. The returned texture implements the
- * #CoglTexture interface because it's not a low level texture
+ * #CoglMetaTexture interface because it's not a low level texture
  * that hardware can understand natively.
  *
  * Remember: Unless you are using high level drawing APIs such
  * as cogl_rectangle() or other APIs documented to understand the
- * #CoglTexture interface then you need to use the
- * #CoglTexture interface to resolve a #CoglSubTexture into a
+ * #CoglMetaTexture interface then you need to use the
+ * #CoglMetaTexture interface to resolve a #CoglSubTexture into a
  * low-level texture before drawing.
  *
  * Return value: (transfer full): A newly allocated #CoglSubTexture
@@ -95,5 +96,19 @@ cogl_sub_texture_new (CoglContext *ctx,
                       int sub_y,
                       int sub_width,
                       int sub_height);
+
+/**
+ * cogl_sub_texture_get_parent:
+ * @sub_texture: A pointer to a #CoglSubTexture
+ *
+ * Retrieves the parent texture that @sub_texture derives its content
+ * from.  This is the texture that was passed to
+ * cogl_sub_texture_new() as the parent_texture argument.
+ *
+ * Return value: (transfer none): The parent texture that @sub_texture
+ *               derives its content from.
+ */
+COGL_EXPORT CoglTexture *
+cogl_sub_texture_get_parent (CoglSubTexture *sub_texture);
 
 G_END_DECLS

@@ -66,6 +66,18 @@ struct _GdkMacosSeatClass
 
 G_DEFINE_TYPE (GdkMacosSeat, gdk_macos_seat, GDK_TYPE_SEAT)
 
+#define KEYBOARD_EVENTS (GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK |    \
+                         GDK_FOCUS_CHANGE_MASK)
+#define TOUCH_EVENTS    (GDK_TOUCH_MASK)
+#define POINTER_EVENTS  (GDK_POINTER_MOTION_MASK |                      \
+                         GDK_BUTTON_PRESS_MASK |                        \
+                         GDK_BUTTON_RELEASE_MASK |                      \
+                         GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK |     \
+                         GDK_ENTER_NOTIFY_MASK |                        \
+                         GDK_LEAVE_NOTIFY_MASK |                        \
+                         GDK_PROXIMITY_IN_MASK |                        \
+                         GDK_PROXIMITY_OUT_MASK)
+
 static void
 gdk_macos_tablet_data_free (gpointer user_data)
 {
@@ -122,16 +134,87 @@ gdk_macos_seat_get_capabilities (GdkSeat *seat)
 }
 
 static GdkGrabStatus
-gdk_macos_seat_grab (GdkSeat    *seat,
-                     GdkSurface *surface)
+gdk_macos_seat_grab (GdkSeat                *seat,
+                     GdkSurface             *surface,
+                     GdkSeatCapabilities     capabilities,
+                     gboolean                owner_events,
+                     GdkCursor              *cursor,
+                     GdkEvent               *event,
+                     GdkSeatGrabPrepareFunc  prepare_func,
+                     gpointer                prepare_func_data)
 {
-  return GDK_GRAB_SUCCESS;
+  GdkMacosSeat *self = GDK_MACOS_SEAT (seat);
+  guint32 evtime = event ? gdk_event_get_time (event) : GDK_CURRENT_TIME;
+  GdkGrabStatus status = GDK_GRAB_SUCCESS;
+  gboolean was_visible;
+
+  was_visible = gdk_surface_get_mapped (surface);
+
+  if (prepare_func)
+    (prepare_func) (seat, surface, prepare_func_data);
+
+  if (!gdk_surface_get_mapped (surface))
+    {
+      g_critical ("Surface %p has not been mapped in GdkSeatGrabPrepareFunc",
+                  surface);
+      return GDK_GRAB_NOT_VIEWABLE;
+    }
+
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+
+  if (capabilities & GDK_SEAT_CAPABILITY_ALL_POINTING)
+    {
+      /* ALL_POINTING spans 3 capabilities; get the mask for the ones we have */
+      GdkEventMask pointer_evmask = 0;
+
+      /* We let tablet styli take over the pointer cursor */
+      if (capabilities & (GDK_SEAT_CAPABILITY_POINTER |
+                          GDK_SEAT_CAPABILITY_TABLET_STYLUS))
+        {
+          pointer_evmask |= POINTER_EVENTS;
+        }
+
+      if (capabilities & GDK_SEAT_CAPABILITY_TOUCH)
+        pointer_evmask |= TOUCH_EVENTS;
+
+      status = gdk_device_grab (self->logical_pointer, surface,
+                                owner_events,
+                                pointer_evmask, cursor,
+                                evtime);
+    }
+
+  if (status == GDK_GRAB_SUCCESS &&
+      capabilities & GDK_SEAT_CAPABILITY_KEYBOARD)
+    {
+      status = gdk_device_grab (self->logical_keyboard, surface,
+                                owner_events,
+                                KEYBOARD_EVENTS, cursor,
+                                evtime);
+
+      if (status != GDK_GRAB_SUCCESS)
+        {
+          if (capabilities & ~GDK_SEAT_CAPABILITY_KEYBOARD)
+            gdk_device_ungrab (self->logical_pointer, evtime);
+        }
+    }
+
+  if (status != GDK_GRAB_SUCCESS && !was_visible)
+    gdk_surface_hide (surface);
+
+  G_GNUC_END_IGNORE_DEPRECATIONS;
+
+  return status;
 }
 
 static void
-gdk_macos_seat_ungrab (GdkSeat    *seat,
-                       GdkSurface *surface)
+gdk_macos_seat_ungrab (GdkSeat *seat)
 {
+  GdkMacosSeat *self = GDK_MACOS_SEAT (seat);
+
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+  gdk_device_ungrab (self->logical_pointer, GDK_CURRENT_TIME);
+  gdk_device_ungrab (self->logical_keyboard, GDK_CURRENT_TIME);
+  G_GNUC_END_IGNORE_DEPRECATIONS;
 }
 
 static GdkDevice *
@@ -524,7 +607,7 @@ _gdk_macos_seat_get_tablet_axes_from_nsevent (GdkMacosSeat *seat,
 
       axis_index = tablet->axis_indices[GDK_AXIS_YTILT];
       _gdk_device_translate_axis (tablet->stylus_device, axis_index,
-                                  -[nsevent tilt].y, &tablet->axes[GDK_AXIS_YTILT]);
+                                  [nsevent tilt].y, &tablet->axes[GDK_AXIS_YTILT]);
     }
 
   if (tablet->current_tool->tool_axes & GDK_AXIS_FLAG_PRESSURE)

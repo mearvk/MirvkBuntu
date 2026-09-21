@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 /**
  * parse:
  *
@@ -17,7 +19,7 @@
  */
 export function parse(params = {}, defaults, allowExtras) {
     if (!allowExtras) {
-        for (const prop in params) {
+        for (let prop in params) {
             if (!(prop in defaults))
                 throw new Error(`Unrecognized parameter "${prop}"`);
         }

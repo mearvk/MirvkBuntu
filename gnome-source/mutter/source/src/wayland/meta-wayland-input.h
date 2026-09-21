@@ -39,12 +39,14 @@ typedef struct _MetaWaylandEventInterface MetaWaylandEventInterface;
 struct _MetaWaylandEventInterface
 {
   MetaWaylandSurface * (*get_focus_surface) (MetaWaylandEventHandler *handler,
-                                             ClutterFocus            *focus,
-                                             gpointer                 user_data);
+                                             ClutterInputDevice      *device,
+                                             ClutterEventSequence    *sequence,
+                                             gpointer                user_data);
 
   /* Pointer/stylus/touch */
   void (*focus) (MetaWaylandEventHandler *handler,
-                 ClutterFocus            *focus,
+                 ClutterInputDevice      *device,
+                 ClutterEventSequence    *sequence,
                  MetaWaylandSurface      *surface,
                  gpointer                 user_data);
 
@@ -87,12 +89,15 @@ void meta_wayland_input_detach_event_handler (MetaWaylandInput        *input,
 gboolean meta_wayland_input_handle_event (MetaWaylandInput   *input,
                                           const ClutterEvent *event);
 
-void meta_wayland_input_invalidate_focus (MetaWaylandInput *input,
-                                          ClutterFocus     *focus);
+void meta_wayland_input_invalidate_focus (MetaWaylandInput     *input,
+                                          ClutterInputDevice   *device,
+                                          ClutterEventSequence *sequence);
 
 MetaWaylandSurface * meta_wayland_event_handler_chain_up_get_focus_surface (MetaWaylandEventHandler *handler,
-                                                                            ClutterFocus            *focus);
+                                                                            ClutterInputDevice      *device,
+                                                                            ClutterEventSequence    *sequence);
 
 void meta_wayland_event_handler_chain_up_focus (MetaWaylandEventHandler *handler,
-                                                ClutterFocus            *focus,
+                                                ClutterInputDevice      *device,
+                                                ClutterEventSequence    *sequence,
                                                 MetaWaylandSurface      *surface);

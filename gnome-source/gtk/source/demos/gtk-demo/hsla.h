@@ -1,7 +1,5 @@
 #pragma once
 
-#include <gdk/gdk.h>
-
 typedef struct _GdkHSLA GdkHSLA;
 
 struct _GdkHSLA {

@@ -37,6 +37,9 @@ G_DECLARE_DERIVABLE_TYPE (MetaCursorTracker,
                           GObject)
 
 META_EXPORT
+MetaCursorTracker *meta_cursor_tracker_get_for_display (MetaDisplay *display);
+
+META_EXPORT
 void           meta_cursor_tracker_get_hot    (MetaCursorTracker *tracker,
                                                int               *x,
                                                int               *y);
@@ -56,7 +59,5 @@ META_EXPORT
 gboolean       meta_cursor_tracker_get_pointer_visible (MetaCursorTracker *tracker);
 
 META_EXPORT
-void           meta_cursor_tracker_inhibit_cursor_visibility (MetaCursorTracker *tracker);
-
-META_EXPORT
-void           meta_cursor_tracker_uninhibit_cursor_visibility (MetaCursorTracker *tracker);
+void           meta_cursor_tracker_set_pointer_visible (MetaCursorTracker *tracker,
+                                                        gboolean           visible);

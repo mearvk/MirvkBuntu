@@ -19,56 +19,11 @@
 
 #include "config.h"
 
-#include "meta-frames-client.h"
 #include "meta-window-tracker.h"
 
 #include <gdk/x11/gdkx.h>
 #include <glib-unix.h>
-#include <gmodule.h>
 #include <X11/extensions/Xfixes.h>
-
-static gboolean should_monitor_color_scheme = TRUE;
-
-typedef void (* InitFunc) (void);
-
-static gboolean
-should_load_libadwaita (void)
-{
-  g_auto(GStrv) desktops = NULL;
-  const char *current_desktop;
-  const char *platform_library;
-
-  platform_library = g_getenv ("MUTTER_FRAMES_PLATFORM_LIBRARY");
-
-  if (g_strcmp0 (platform_library, "none") == 0)
-    return FALSE;
-
-  if (g_strcmp0 (platform_library, "adwaita") == 0)
-    return TRUE;
-
-  current_desktop = g_getenv ("XDG_CURRENT_DESKTOP");
-  if (current_desktop != NULL)
-    desktops = g_strsplit (current_desktop, ":", -1);
-
-  return desktops && g_strv_contains ((const char * const *) desktops, "GNOME");
-}
-
-static void
-load_libadwaita (void)
-{
-  GModule *libadwaita;
-  InitFunc adw_init;
-
-  libadwaita = g_module_open ("libadwaita-1.so.0", G_MODULE_BIND_LAZY);
-  if (!libadwaita)
-    return;
-
-  if (!g_module_symbol (libadwaita, "adw_init", (gpointer *) &adw_init))
-    return;
-
-  should_monitor_color_scheme = FALSE;
-  adw_init ();
-}
 
 static gboolean
 on_sigterm (gpointer user_data)
@@ -76,12 +31,6 @@ on_sigterm (gpointer user_data)
   exit (0);
 
   return G_SOURCE_REMOVE;
-}
-
-gboolean
-meta_frames_client_should_monitor_color_scheme (void)
-{
-  return should_monitor_color_scheme;
 }
 
 int
@@ -108,12 +57,7 @@ main (int   argc,
 
   display = gdk_display_get_default ();
 
-  if (should_load_libadwaita ())
-    load_libadwaita ();
-
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   xdisplay = gdk_x11_display_get_xdisplay (display);
-  G_GNUC_END_IGNORE_DEPRECATIONS
   XFixesSetClientDisconnectMode (xdisplay,
                                  XFixesClientDisconnectFlagTerminate);
 

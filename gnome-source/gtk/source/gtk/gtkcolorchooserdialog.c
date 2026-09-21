@@ -35,10 +35,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  *
  * A dialog for choosing a color.
  *
- * <picture>
- *   <source srcset="colorchooser-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkColorChooserDialog" src="colorchooser.png">
- * </picture>
+ * ![An example GtkColorChooserDialog](colorchooser.png)
  *
  * `GtkColorChooserDialog` implements the [iface@Gtk.ColorChooser] interface
  * and does not provide much API of its own.
@@ -66,7 +63,6 @@ struct _GtkColorChooserDialog
   GtkDialog parent_instance;
 
   GtkWidget *chooser;
-  GtkWidget *scroller;
 };
 
 struct _GtkColorChooserDialogClass
@@ -77,14 +73,10 @@ struct _GtkColorChooserDialogClass
 enum
 {
   PROP_ZERO,
-  PROP_SHOW_EDITOR,
-  /* GtkColorChooser */
   PROP_RGBA,
   PROP_USE_ALPHA,
-  N_PROPS
+  PROP_SHOW_EDITOR
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void gtk_color_chooser_dialog_iface_init (GtkColorChooserInterface *iface);
 
@@ -221,7 +213,7 @@ gtk_color_chooser_dialog_dispose (GObject *object)
 {
   GtkColorChooserDialog *cc = GTK_COLOR_CHOOSER_DIALOG (object);
 
-  g_clear_pointer (&cc->scroller, gtk_widget_unparent);
+  g_clear_pointer (&cc->chooser, gtk_widget_unparent);
 
   G_OBJECT_CLASS (gtk_color_chooser_dialog_parent_class)->dispose (object);
 }
@@ -238,29 +230,17 @@ gtk_color_chooser_dialog_class_init (GtkColorChooserDialogClass *class)
 
   widget_class->unmap = gtk_color_chooser_dialog_unmap;
 
-  props[PROP_RGBA] = g_param_spec_override ("rgba",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "rgba"));
-  props[PROP_USE_ALPHA] = g_param_spec_override ("use-alpha",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "use-alpha"));
-
-  /**
-   * GtkColorChooserDialog:show-editor:
-   *
-   * Whether the color chooser dialog is showing the single-color editor.
-   *
-   * It can be set to switch the color chooser into single-color editing mode.
-   */
-  props[PROP_SHOW_EDITOR] = g_param_spec_boolean ("show-editor", NULL, NULL,
-                                                  FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_override_property (object_class, PROP_RGBA, "rgba");
+  g_object_class_override_property (object_class, PROP_USE_ALPHA, "use-alpha");
+  g_object_class_install_property (object_class, PROP_SHOW_EDITOR,
+      g_param_spec_boolean ("show-editor", NULL, NULL,
+                            FALSE, GTK_PARAM_READWRITE));
 
   /* Bind class to template
    */
   gtk_widget_class_set_template_from_resource (widget_class,
 					       "/org/gtk/libgtk/ui/gtkcolorchooserdialog.ui");
   gtk_widget_class_bind_template_child (widget_class, GtkColorChooserDialog, chooser);
-  gtk_widget_class_bind_template_child (widget_class, GtkColorChooserDialog, scroller);
   gtk_widget_class_bind_template_callback (widget_class, propagate_notify);
   gtk_widget_class_bind_template_callback (widget_class, color_activated_cb);
 }

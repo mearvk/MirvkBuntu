@@ -66,27 +66,27 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (ClutterInputDevice, g_object_unref)
 typedef struct _ClutterInputDeviceClass ClutterInputDeviceClass;
 
 CLUTTER_EXPORT
-GType clutter_input_device_get_type (void);
+GType clutter_input_device_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 ClutterInputDeviceType  clutter_input_device_get_device_type    (ClutterInputDevice  *device);
 
 CLUTTER_EXPORT
 const gchar *           clutter_input_device_get_device_name    (ClutterInputDevice  *device);
+CLUTTER_EXPORT
+ClutterInputMode        clutter_input_device_get_device_mode    (ClutterInputDevice  *device);
+CLUTTER_EXPORT
+gboolean                clutter_input_device_get_has_cursor     (ClutterInputDevice  *device);
 
 CLUTTER_EXPORT
-guint                   clutter_input_device_get_vendor_id      (ClutterInputDevice *device);
+const gchar *           clutter_input_device_get_vendor_id      (ClutterInputDevice *device);
 CLUTTER_EXPORT
-guint                   clutter_input_device_get_product_id     (ClutterInputDevice *device);
-CLUTTER_EXPORT
-guint                   clutter_input_device_get_bus_type       (ClutterInputDevice *device);
+const gchar *           clutter_input_device_get_product_id     (ClutterInputDevice *device);
 
 CLUTTER_EXPORT
 gint                    clutter_input_device_get_n_rings        (ClutterInputDevice *device);
 CLUTTER_EXPORT
 gint                    clutter_input_device_get_n_strips       (ClutterInputDevice *device);
-CLUTTER_EXPORT
-gint                    clutter_input_device_get_n_dials        (ClutterInputDevice *device);
 CLUTTER_EXPORT
 gint                    clutter_input_device_get_n_mode_groups  (ClutterInputDevice *device);
 CLUTTER_EXPORT

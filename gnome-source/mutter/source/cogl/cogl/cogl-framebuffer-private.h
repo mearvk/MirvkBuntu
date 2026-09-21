@@ -34,7 +34,7 @@
 #include "cogl/cogl-framebuffer-driver.h"
 #include "cogl/cogl-matrix-stack-private.h"
 #include "cogl/cogl-journal-private.h"
-#include "cogl/winsys/cogl-winsys.h"
+#include "cogl/winsys/cogl-winsys-private.h"
 #include "cogl/cogl-attribute-private.h"
 #include "cogl/cogl-clip-stack.h"
 
@@ -44,12 +44,20 @@ typedef enum
   COGL_FRAMEBUFFER_DRIVER_TYPE_BACK,
 } CoglFramebufferDriverType;
 
-typedef struct _CoglFramebufferDriverConfig
+struct _CoglFramebufferDriverConfig
 {
   CoglFramebufferDriverType type;
 
   gboolean disable_depth_and_stencil;
-} CoglFramebufferDriverConfig;
+};
+
+typedef struct
+{
+  CoglSwapChain *swap_chain;
+  gboolean need_stencil;
+  int samples_per_pixel;
+  gboolean stereo_enabled;
+} CoglFramebufferConfig;
 
 /* XXX: The order of these indices determines the order they are
  * flushed.
@@ -67,10 +75,11 @@ typedef enum _CoglFramebufferStateIndex
   COGL_FRAMEBUFFER_STATE_INDEX_PROJECTION         = 5,
   COGL_FRAMEBUFFER_STATE_INDEX_FRONT_FACE_WINDING = 6,
   COGL_FRAMEBUFFER_STATE_INDEX_DEPTH_WRITE        = 7,
-  COGL_FRAMEBUFFER_STATE_INDEX_MAX                = 8
+  COGL_FRAMEBUFFER_STATE_INDEX_STEREO_MODE        = 8,
+  COGL_FRAMEBUFFER_STATE_INDEX_MAX                = 9
 } CoglFramebufferStateIndex;
 
-enum _CoglFramebufferState
+typedef enum _CoglFramebufferState
 {
   COGL_FRAMEBUFFER_STATE_BIND               = 1<<0,
   COGL_FRAMEBUFFER_STATE_VIEWPORT           = 1<<1,
@@ -80,7 +89,8 @@ enum _CoglFramebufferState
   COGL_FRAMEBUFFER_STATE_PROJECTION         = 1<<5,
   COGL_FRAMEBUFFER_STATE_FRONT_FACE_WINDING = 1<<6,
   COGL_FRAMEBUFFER_STATE_DEPTH_WRITE        = 1<<7,
-};
+  COGL_FRAMEBUFFER_STATE_STEREO_MODE        = 1<<8
+} CoglFramebufferState;
 
 #define COGL_FRAMEBUFFER_STATE_ALL ((1<<COGL_FRAMEBUFFER_STATE_INDEX_MAX) - 1)
 
@@ -94,8 +104,29 @@ typedef enum
   COGL_READ_PIXELS_NO_FLIP = 1L << 30
 } CoglPrivateReadPixelsFlags;
 
+typedef struct _CoglFramebufferBits
+{
+  int red;
+  int blue;
+  int green;
+  int alpha;
+  int depth;
+  int stencil;
+} CoglFramebufferBits;
+
 gboolean
 cogl_framebuffer_is_allocated (CoglFramebuffer *framebuffer);
+
+void
+cogl_framebuffer_init_config (CoglFramebuffer             *framebuffer,
+                              const CoglFramebufferConfig *config);
+
+const CoglFramebufferConfig *
+cogl_framebuffer_get_config (CoglFramebuffer *framebuffer);
+
+void
+cogl_framebuffer_update_samples_per_pixel (CoglFramebuffer *framebuffer,
+                                           int              samples_per_pixel);
 
 void
 cogl_framebuffer_update_size (CoglFramebuffer *framebuffer,
@@ -117,6 +148,9 @@ cogl_framebuffer_update_size (CoglFramebuffer *framebuffer,
 void
 _cogl_framebuffer_set_internal_format (CoglFramebuffer *framebuffer,
                                        CoglPixelFormat internal_format);
+
+CoglPixelFormat
+cogl_framebuffer_get_internal_format (CoglFramebuffer *framebuffer);
 
 void
 _cogl_framebuffer_clear_without_flush4f (CoglFramebuffer *framebuffer,

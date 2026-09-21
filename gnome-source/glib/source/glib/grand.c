@@ -49,13 +49,11 @@
 #include "genviron.h"
 #include "gmain.h"
 #include "gmem.h"
-#include "gstdio.h"
 #include "gtestutils.h"
 #include "gthread.h"
 #include "gtimer.h"
 
 #ifdef G_OS_UNIX
-#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -177,24 +175,30 @@ g_rand_new (void)
 
   if (dev_urandom_exists)
     {
-      int dev_urandom;
+      FILE* dev_urandom;
 
       do
-        dev_urandom = g_open ("/dev/urandom", O_RDONLY | O_CLOEXEC);
-      while G_UNLIKELY (dev_urandom < 0 && errno == EINTR);
-
-      if (dev_urandom >= 0)
 	{
-	  ssize_t r;
+	  dev_urandom = fopen ("/dev/urandom", "rbe");
+	}
+      while G_UNLIKELY (dev_urandom == NULL && errno == EINTR);
 
+      if (dev_urandom)
+	{
+	  int r;
+
+	  setvbuf (dev_urandom, NULL, _IONBF, 0);
 	  do
-            r = read (dev_urandom, seed, sizeof (seed));
-	  while G_UNLIKELY (r < 0 && errno == EINTR);
+	    {
+	      errno = 0;
+	      r = fread (seed, sizeof (seed), 1, dev_urandom);
+	    }
+	  while G_UNLIKELY (errno == EINTR);
 
-	  if (r != sizeof (seed))
+	  if (r != 1)
 	    dev_urandom_exists = FALSE;
 
-	  close (dev_urandom);
+	  fclose (dev_urandom);
 	}	
       else
 	dev_urandom_exists = FALSE;
@@ -203,7 +207,7 @@ g_rand_new (void)
   if (!dev_urandom_exists)
     {
       gint64 now_us = g_get_real_time ();
-      seed[0] = (guint32) (now_us / G_USEC_PER_SEC);
+      seed[0] = now_us / G_USEC_PER_SEC;
       seed[1] = now_us % G_USEC_PER_SEC;
       seed[2] = getpid ();
       seed[3] = getppid ();

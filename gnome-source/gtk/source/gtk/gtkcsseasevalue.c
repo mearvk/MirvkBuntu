@@ -50,11 +50,13 @@ gtk_css_value_ease_free (GtkCssValue *value)
 }
 
 static GtkCssValue *
-gtk_css_value_ease_compute (GtkCssValue          *value,
-                            guint                 property_id,
-                            GtkCssComputeContext *context)
+gtk_css_value_ease_compute (GtkCssValue      *value,
+                            guint             property_id,
+                            GtkStyleProvider *provider,
+                            GtkCssStyle      *style,
+                            GtkCssStyle      *parent_style)
 {
-  return gtk_css_value_ref (value);
+  return _gtk_css_value_ref (value);
 }
 
 static gboolean
@@ -136,7 +138,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_EASE = {
   "GtkCssEaseValue",
   gtk_css_value_ease_free,
   gtk_css_value_ease_compute,
-  NULL,
   gtk_css_value_ease_equal,
   gtk_css_value_ease_transition,
   NULL,
@@ -157,7 +158,7 @@ _gtk_css_ease_value_new_cubic_bezier (double x1,
   g_return_val_if_fail (x2 >= 0.0, NULL);
   g_return_val_if_fail (x2 <= 1.0, NULL);
 
-  value = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_EASE);
+  value = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_EASE);
 
   value->type = GTK_CSS_EASE_CUBIC_BEZIER;
   value->u.cubic.x1 = x1;
@@ -177,7 +178,7 @@ _gtk_css_ease_value_new_steps (guint n_steps,
 
   g_return_val_if_fail (n_steps > 0, NULL);
 
-  value = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_EASE);
+  value = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_EASE);
 
   value->type = GTK_CSS_EASE_STEPS;
   value->u.steps.steps = n_steps;
@@ -404,6 +405,5 @@ _gtk_css_ease_value_transform (const GtkCssValue *ease,
       return 1.0;
     }
 }
-
 
 

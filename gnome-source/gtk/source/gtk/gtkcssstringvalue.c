@@ -35,11 +35,13 @@ gtk_css_value_string_free (GtkCssValue *value)
 }
 
 static GtkCssValue *
-gtk_css_value_string_compute (GtkCssValue          *value,
-                              guint                 property_id,
-                              GtkCssComputeContext *context)
+gtk_css_value_string_compute (GtkCssValue      *value,
+                              guint             property_id,
+                              GtkStyleProvider *provider,
+                              GtkCssStyle      *style,
+                              GtkCssStyle      *parent_style)
 {
-  return gtk_css_value_ref (value);
+  return _gtk_css_value_ref (value);
 }
 
 static gboolean
@@ -119,7 +121,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_STRING = {
   "GtkCssStringValue",
   gtk_css_value_string_free,
   gtk_css_value_string_compute,
-  NULL,
   gtk_css_value_string_equal,
   gtk_css_value_string_transition,
   NULL,
@@ -131,7 +132,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_IDENT = {
   "GtkCssIdentValue",
   gtk_css_value_string_free,
   gtk_css_value_string_compute,
-  NULL,
   gtk_css_value_string_equal,
   gtk_css_value_string_transition,
   NULL,
@@ -150,7 +150,7 @@ _gtk_css_string_value_new_take (char *string)
 {
   GtkCssValue *result;
 
-  result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_STRING);
+  result = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_STRING);
   result->string = string;
   result->is_computed = TRUE;
 
@@ -191,7 +191,7 @@ _gtk_css_ident_value_new_take (char *ident)
 {
   GtkCssValue *result;
 
-  result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_IDENT);
+  result = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_IDENT);
   result->string = ident;
   result->is_computed = TRUE;
 
@@ -225,5 +225,4 @@ _gtk_css_ident_value_get (const GtkCssValue *value)
 
   return value->string;
 }
-
 

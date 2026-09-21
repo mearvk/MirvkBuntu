@@ -580,7 +580,7 @@ main (int    argc,
 {
   GtkApplication *app;
 
-  app = gtk_application_new ("org.gtk.Test.headerbar2", G_APPLICATION_DEFAULT_FLAGS);
+  app = gtk_application_new ("org.gtk.Test.headerbar2", 0);
 
   g_signal_connect (app,
                     "activate",

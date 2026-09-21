@@ -149,9 +149,6 @@ validate_template (const char *filename,
   GError *error = NULL;
   gboolean ret;
 
-  if (deprecations)
-    gtk_set_debug_flags (gtk_get_debug_flags () | GTK_DEBUG_BUILDER);
-
   builder = gtk_builder_new ();
   scope = fake_scope_new ();
   gtk_builder_set_scope (builder, GTK_BUILDER_SCOPE (scope));
@@ -193,20 +190,19 @@ parse_template_error (const char   *message,
                       char        **parent_name)
 {
   char *p;
-  const char *m;
 
-  m = strstr (message, "(class '");
-  if (m)
+  p = strstr (message, "(class '");
+  if (p)
     {
-      *class_name = g_strdup (m + strlen ("(class '"));
+      *class_name = g_strdup (p + strlen ("(class '"));
       p = strstr (*class_name, "'");
       if (p)
         *p = '\0';
     }
-  m = strstr (message, ", parent '");
-  if (m)
+  p = strstr (message, ", parent '");
+  if (p)
     {
-      *parent_name = g_strdup (m + strlen (", parent '"));
+      *parent_name = g_strdup (p + strlen (", parent '"));
       p = strstr (*parent_name, "'");
       if (p)
         *p = '\0';
@@ -225,9 +221,6 @@ validate_file (const char *filename,
   gboolean ret;
   char *class_name = NULL;
   char *parent_name = NULL;
-
-  if (deprecations)
-    gtk_set_debug_flags (gtk_get_debug_flags () | GTK_DEBUG_BUILDER);
 
   builder = gtk_builder_new ();
   scope = fake_scope_new ();
@@ -306,4 +299,4 @@ do_validate (int *argc, const char ***argv)
   g_strfreev (filenames);
 }
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

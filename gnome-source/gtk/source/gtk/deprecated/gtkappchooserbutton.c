@@ -23,10 +23,7 @@
  *
  * The `GtkAppChooserButton` lets the user select an application.
  *
- * <picture>
- *   <source srcset="appchooserbutton-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkAppChooserButton" src="appchooserbutton.png">
- * </picture>
+ * ![An example GtkAppChooserButton](appchooserbutton.png)
  *
  * Initially, a `GtkAppChooserButton` selects the first application
  * in its list, which will either be the most-recently used application
@@ -81,8 +78,9 @@ enum {
   PROP_SHOW_DEFAULT_ITEM,
   PROP_HEADING,
   PROP_MODAL,
-  PROP_CONTENT_TYPE,
-  NUM_PROPERTIES
+  NUM_PROPERTIES,
+
+  PROP_CONTENT_TYPE = NUM_PROPERTIES
 };
 
 enum {
@@ -682,11 +680,10 @@ gtk_app_chooser_button_class_init (GtkAppChooserButtonClass *klass)
 
   klass->activate = gtk_app_chooser_button_activate;
 
-  properties[PROP_CONTENT_TYPE] = g_param_spec_override ("content-type",
-      g_object_interface_find_property (g_type_default_interface_peek (GTK_TYPE_APP_CHOOSER), "content-type"));
+  g_object_class_override_property (oclass, PROP_CONTENT_TYPE, "content-type");
 
   /**
-   * GtkAppChooserButton:show-dialog-item:
+   * GtkAppChooserButton:show-dialog-item: (attributes org.gtk.Property.get=gtk_app_chooser_button_get_show_dialog_item org.gtk.Property.set=gtk_app_chooser_button_set_show_dialog_item)
    *
    * Determines whether the dropdown menu shows an item to open
    * a `GtkAppChooserDialog`.
@@ -694,10 +691,10 @@ gtk_app_chooser_button_class_init (GtkAppChooserButtonClass *klass)
   properties[PROP_SHOW_DIALOG_ITEM] =
     g_param_spec_boolean ("show-dialog-item", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          G_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkAppChooserButton:show-default-item:
+   * GtkAppChooserButton:show-default-item: (attributes org.gtk.Property.get=gtk_app_chooser_button_get_show_default_item org.gtk.Property.set=gtk_app_chooser_button_set_show_default_item)
    *
    * Determines whether the dropdown menu shows the default application
    * on top for the provided content type.
@@ -705,10 +702,10 @@ gtk_app_chooser_button_class_init (GtkAppChooserButtonClass *klass)
   properties[PROP_SHOW_DEFAULT_ITEM] =
     g_param_spec_boolean ("show-default-item", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          G_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkAppChooserButton:heading:
+   * GtkAppChooserButton:heading: (attributes org.gtk.Property.get=gtk_app_chooser_button_get_heading org.gtk.Property.set=gtk_app_chooser_button_set_heading)
    *
    * The text to show at the top of the dialog that can be
    * opened from the button.
@@ -718,18 +715,17 @@ gtk_app_chooser_button_class_init (GtkAppChooserButtonClass *klass)
   properties[PROP_HEADING] =
     g_param_spec_string ("heading", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkAppChooserButton:modal:
+   * GtkAppChooserButton:modal: (attributes org.gtk.Property.get=gtk_app_chooser_button_get_modal org.gtk.Property.set=gtk_app_chooser_button_set_modal)
    *
    * Whether the app chooser dialog should be modal.
    */
   properties[PROP_MODAL] =
     g_param_spec_boolean ("modal", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
+                          G_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
   g_object_class_install_properties (oclass, NUM_PROPERTIES, properties);
 
   /**
@@ -994,7 +990,7 @@ gtk_app_chooser_button_set_active_custom_item (GtkAppChooserButton *self,
 }
 
 /**
- * gtk_app_chooser_button_get_show_dialog_item:
+ * gtk_app_chooser_button_get_show_dialog_item: (attributes org.gtk.Method.get_property=show-dialog-item)
  * @self: a `GtkAppChooserButton`
  *
  * Returns whether the dropdown menu shows an item
@@ -1013,7 +1009,7 @@ gtk_app_chooser_button_get_show_dialog_item (GtkAppChooserButton *self)
 }
 
 /**
- * gtk_app_chooser_button_set_show_dialog_item:
+ * gtk_app_chooser_button_set_show_dialog_item: (attributes org.gtk.Method.set_property=show-dialog-item)
  * @self: a `GtkAppChooserButton`
  * @setting: the new value for [property@Gtk.AppChooserButton:show-dialog-item]
  *
@@ -1037,7 +1033,7 @@ gtk_app_chooser_button_set_show_dialog_item (GtkAppChooserButton *self,
 }
 
 /**
- * gtk_app_chooser_button_get_show_default_item:
+ * gtk_app_chooser_button_get_show_default_item: (attributes org.gtk.Method.get_property=show-default-item)
  * @self: a `GtkAppChooserButton`
  *
  * Returns whether the dropdown menu should show the default
@@ -1056,7 +1052,7 @@ gtk_app_chooser_button_get_show_default_item (GtkAppChooserButton *self)
 }
 
 /**
- * gtk_app_chooser_button_set_show_default_item:
+ * gtk_app_chooser_button_set_show_default_item: (attributes org.gtk.Method.set_property=show-default-item)
  * @self: a `GtkAppChooserButton`
  * @setting: the new value for [property@Gtk.AppChooserButton:show-default-item]
  *
@@ -1082,7 +1078,7 @@ gtk_app_chooser_button_set_show_default_item (GtkAppChooserButton *self,
 }
 
 /**
- * gtk_app_chooser_button_set_heading:
+ * gtk_app_chooser_button_set_heading: (attributes org.gtk.Method.set_property=heading)
  * @self: a `GtkAppChooserButton`
  * @heading: a string containing Pango markup
  *
@@ -1105,7 +1101,7 @@ gtk_app_chooser_button_set_heading (GtkAppChooserButton *self,
 }
 
 /**
- * gtk_app_chooser_button_get_heading:
+ * gtk_app_chooser_button_get_heading: (attributes org.gtk.Method.get_property=heading)
  * @self: a `GtkAppChooserButton`
  *
  * Returns the text to display at the top of the dialog.
@@ -1124,7 +1120,7 @@ gtk_app_chooser_button_get_heading (GtkAppChooserButton *self)
 }
 
 /**
- * gtk_app_chooser_button_set_modal:
+ * gtk_app_chooser_button_set_modal: (attributes org.gtk.Method.set_property=modal)
  * @self: a `GtkAppChooserButton`
  * @modal: %TRUE to make the dialog modal
  *
@@ -1143,11 +1139,11 @@ gtk_app_chooser_button_set_modal (GtkAppChooserButton *self,
 
   self->modal = modal;
 
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_MODAL]);
+  g_object_notify (G_OBJECT (self), "modal");
 }
 
 /**
- * gtk_app_chooser_button_get_modal:
+ * gtk_app_chooser_button_get_modal: (attributes org.gtk.Method.get_property=modal)
  * @self: a `GtkAppChooserButton`
  *
  * Gets whether the dialog is modal.

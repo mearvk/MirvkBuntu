@@ -12,9 +12,9 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: mutter\n"
-"Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/mutter/issues/\n"
-"POT-Creation-Date: 2026-08-12 20:19+0000\n"
-"PO-Revision-Date: 2026-08-19 21:20+0300\n"
+"Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/mutter/issues\n"
+"POT-Creation-Date: 2023-07-16 01:41+0000\n"
+"PO-Revision-Date: 2023-08-17 20:56+0300\n"
 "Last-Translator: Jiri Grönroos <jiri.gronroos+l10n@iki.fi>\n"
 "Language-Team: suomi <gnome-fi-laatu@lists.sourceforge.net>\n"
 "Language: fi\n"
@@ -23,7 +23,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-POT-Import-Date: 2012-02-19 15:25:23+0000\n"
-"X-Generator: Poedit 3.9\n"
+"X-Generator: Poedit 3.3.2\n"
 
 #: data/50-mutter-navigation.xml:6
 msgid "Navigation"
@@ -106,12 +106,14 @@ msgid "Switch to previous window of an application"
 msgstr "Vaihda sovelluksen edelliseen ikkunaan"
 
 #: data/50-mutter-navigation.xml:78
+#, fuzzy
 msgid "Switch system controls"
 msgstr "Vaihda järjestelmän kontrolleja"
 
 #: data/50-mutter-navigation.xml:83
+#, fuzzy
 msgid "Switch to previous system control"
-msgstr "Vaihda edelliseen järjestelmän kontrolliin"
+msgstr "Vaihda järjestelmän kontrolleja"
 
 #: data/50-mutter-navigation.xml:87
 msgid "Switch windows directly"
@@ -130,12 +132,14 @@ msgid "Switch directly to previous window of an app"
 msgstr "Vaihda suoraan sovelluksen edelliseen ikkunaan"
 
 #: data/50-mutter-navigation.xml:105
+#, fuzzy
 msgid "Switch system controls directly"
 msgstr "Vaihda järjestelmän kontrolleja suoraan"
 
 #: data/50-mutter-navigation.xml:110
+#, fuzzy
 msgid "Switch directly to previous system control"
-msgstr "Vaihda suoraan aiempaan järjestelmän kontrolliin"
+msgstr "Vaihda järjestelmän kontrolleja"
 
 #: data/50-mutter-navigation.xml:113
 msgid "Hide all normal windows"
@@ -202,8 +206,9 @@ msgid "Toggle fullscreen mode"
 msgstr "Vaihda koko näytön tilaan tai pois"
 
 #: data/50-mutter-windows.xml:12
+#, fuzzy
 msgid "Toggle maximization state"
-msgstr "Vaihda suurennuksen tilaa"
+msgstr "Vaihda suurennustilaa"
 
 #: data/50-mutter-windows.xml:14
 msgid "Maximize window"
@@ -230,8 +235,9 @@ msgid "Resize window"
 msgstr "Muuta ikkunan kokoa"
 
 #: data/50-mutter-windows.xml:27
+#, fuzzy
 msgid "Toggle window on all workspaces or one"
-msgstr "Näytä ikkuna kaikissa työtiloissa tai vain yhdessä"
+msgstr "Valitse onko ikkuna yhdessä vai kaikissa työtiloissa"
 
 #: data/50-mutter-windows.xml:29
 msgid "Raise window if covered, otherwise lower it"
@@ -253,33 +259,13 @@ msgstr "Suurenna ikkuna pystysuunnassa"
 msgid "Maximize window horizontally"
 msgstr "Suurenna ikkuna vaakasuunnassa"
 
-#: data/50-mutter-windows.xml:41 data/org.gnome.mutter.gschema.xml.in:142
+#: data/50-mutter-windows.xml:41 data/org.gnome.mutter.gschema.xml.in:164
 msgid "View split on left"
 msgstr "Jaettu näkymä vasemmalla"
 
-#: data/50-mutter-windows.xml:45 data/org.gnome.mutter.gschema.xml.in:147
+#: data/50-mutter-windows.xml:45 data/org.gnome.mutter.gschema.xml.in:169
 msgid "View split on right"
 msgstr "Jaettu näkymä oikealla"
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:7
-msgid "Always allocate scanout buffers with explicit modifiers"
-msgstr ""
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:8
-msgid ""
-"When true, mutter will always allocate scanout buffers with explicit "
-"modifiers, if supported by the driver. This option requires a restart."
-msgstr ""
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:17
-msgid "Automatically terminate Xwayland after last client is gone"
-msgstr ""
-
-#: data/org.gnome.mutter.experimental.gschema.xml.in:18
-msgid ""
-"When true, mutter will automatically terminate Xwayland after the last "
-"relevant client is gone. This option requires a restart."
-msgstr ""
 
 #: data/org.gnome.mutter.gschema.xml.in:15
 msgid "Modifier to use for extended window management operations"
@@ -335,8 +321,8 @@ msgstr "Työtilat hallitaan dynaamisesti"
 #: data/org.gnome.mutter.gschema.xml.in:49
 msgid ""
 "Determines whether workspaces are managed dynamically or whether there’s a "
-"static number of workspaces (determined by the num-workspaces key in "
-"org.gnome.desktop.wm.preferences)."
+"static number of workspaces (determined by the num-workspaces key in org."
+"gnome.desktop.wm.preferences)."
 msgstr ""
 
 #: data/org.gnome.mutter.gschema.xml.in:58
@@ -399,47 +385,54 @@ msgid ""
 "screen of the monitor."
 msgstr ""
 
-#: data/org.gnome.mutter.gschema.xml.in:106
+#: data/org.gnome.mutter.gschema.xml.in:107
+msgid "Enable experimental features"
+msgstr "Ota käyttöön kokeelliset ominaisuudet"
+
+#: data/org.gnome.mutter.gschema.xml.in:108
+msgid ""
+"To enable experimental features, add the feature keyword to the list. "
+"Whether the feature requires restarting the compositor depends on the given "
+"feature. Any experimental feature is not required to still be available, or "
+"configurable. Don’t expect adding anything in this setting to be future "
+"proof. Currently possible keywords: • “scale-monitor-framebuffer” — makes "
+"mutter default to layout logical monitors in a logical pixel coordinate "
+"space, while scaling monitor framebuffers instead of window content, to "
+"manage HiDPI monitors. Does not require a restart. • “kms-modifiers” — makes "
+"mutter always allocate scanout buffers with explicit modifiers, if supported "
+"by the driver. Requires a restart. • “rt-scheduler” — makes mutter request a "
+"low priority real-time scheduling. Requires a restart. • “autoclose-"
+"xwayland” — automatically terminates Xwayland if all relevant X11 clients "
+"are gone. Requires a restart."
+msgstr ""
+
+#: data/org.gnome.mutter.gschema.xml.in:141
 msgid "Modifier to use to locate the pointer"
 msgstr ""
 
-#: data/org.gnome.mutter.gschema.xml.in:107
+#: data/org.gnome.mutter.gschema.xml.in:142
 msgid "This key will initiate the “locate pointer” action."
 msgstr ""
 
-#: data/org.gnome.mutter.gschema.xml.in:114
+#: data/org.gnome.mutter.gschema.xml.in:149
 msgid "Timeout for check-alive ping"
 msgstr "Aikakatkaisu \"check-alive\"-ping-tarkistukselle"
 
-#: data/org.gnome.mutter.gschema.xml.in:115
+#: data/org.gnome.mutter.gschema.xml.in:150
 msgid ""
 "Number of milliseconds a client has to respond to a ping request in order to "
 "not be detected as frozen. Using 0 will disable the alive check completely."
 msgstr ""
 
-#. TRANSLATORS: Luminance is different from brightness.
-#. See https://en.wikipedia.org/wiki/Luminance
-#: data/org.gnome.mutter.gschema.xml.in:126
-msgid "Per output luminance settings"
-msgstr ""
-
-#: data/org.gnome.mutter.gschema.xml.in:127
-msgid ""
-"Per output and color mode luminance setting. Each entry consists of a tuple "
-"with connector, vendor, product, serial, and a color mode, as well as an "
-"associated floating point value representing the output luminance in percent "
-"(%). The default when not specified is 100%."
-msgstr ""
-
-#: data/org.gnome.mutter.gschema.xml.in:152
+#: data/org.gnome.mutter.gschema.xml.in:174
 msgid "Switch monitor configurations"
 msgstr "Vaihda näyttöasetuksia"
 
-#: data/org.gnome.mutter.gschema.xml.in:157
+#: data/org.gnome.mutter.gschema.xml.in:179
 msgid "Rotates the built-in monitor configuration"
 msgstr ""
 
-#: data/org.gnome.mutter.gschema.xml.in:162
+#: data/org.gnome.mutter.gschema.xml.in:184
 msgid "Cancel any active input capture session"
 msgstr ""
 
@@ -559,157 +552,26 @@ msgid ""
 "take effect."
 msgstr ""
 
-#: data/org.gnome.mutter.wayland.gschema.xml.in:154
-msgid "Configure the Xwayland scaling factor"
-msgstr ""
-
-#: data/org.gnome.mutter.wayland.gschema.xml.in:155
-msgid ""
-"Scale the Xwayland coordinate space according to this factor. This will "
-"affect what scale HiDPI capable X11 clients will present themselves as, and "
-"how the compositor scales X11 client windows. Setting the scale to 0 means "
-"the scale will be automatically calculated. The scale will as of now be "
-"rounded to the closest integer."
-msgstr ""
-
-#: mdk/mdk-launcher-adder.c:451 mdk/mdk-launcher-adder.ui:22
-msgid "Application"
-msgstr "Sovellus"
-
-#: mdk/mdk-launcher-adder.c:456 mdk/mdk-launcher-adder.ui:23
-msgid "Executable"
-msgstr "Suoritettava"
-
-#: mdk/mdk-launcher-adder.ui:3
-msgid "Add Launcher"
-msgstr "Lisää käynnistin"
-
-#: mdk/mdk-launcher-adder.ui:15
-msgid "Launcher"
-msgstr "Käynnistin"
-
-#: mdk/mdk-launcher-adder.ui:18
-msgid "Type"
-msgstr "Tyyppi"
-
-#: mdk/mdk-launcher-adder.ui:38 mdk/mdk-launchers-editor.ui:22
-msgid "Add"
-msgstr "Lisää"
-
-#: mdk/mdk-launcher-entry.c:204
-msgid "Run"
-msgstr "Suorita"
-
-#: mdk/mdk-launcher-entry.ui:12
-msgid "Delete"
-msgstr "Poista"
-
-#: mdk/mdk-launcher-entry.ui:20
-msgid "Action"
-msgstr "Toiminto"
-
-#: mdk/mdk-launchers-editor.ui:3
-msgid "Edit Launchers"
-msgstr "Muokkaa käynnistimiä"
-
-#: mdk/mdk-launchers-editor.ui:16
-msgid "Launchers"
-msgstr "Käynnistimet"
-
-#: mdk/mdk-main-window.ui:7
-msgid "_Input"
-msgstr "_Syöte"
-
-#: mdk/mdk-main-window.ui:9
-msgid "_Emulate touch"
-msgstr "_Emuloi kosketusta"
-
-#: mdk/mdk-main-window.ui:13
-msgid "_Inhibit system shortcuts"
-msgstr "_Rajoita järjestelmän pikanäppäimiä"
-
-#: mdk/mdk-main-window.ui:17
-msgid "Use host _keymap"
-msgstr ""
-
-#: mdk/mdk-main-window.ui:24
-msgid "_Monitors"
-msgstr ""
-
-#: mdk/mdk-main-window.ui:26
-#, fuzzy
-#| msgid "Switch monitor"
-msgid "_Add monitor"
-msgstr "Vaihda näyttöä"
-
-#: mdk/mdk-main-window.ui:30
-#, fuzzy
-#| msgid "_Emulate touch"
-msgid "_Emulate monitor modes"
-msgstr "_Emuloi kosketusta"
-
-#: mdk/mdk-main-window.ui:37
-msgid "_Launchers"
-msgstr "_Käynnistimet"
-
-#: mdk/mdk-main-window.ui:41
-msgid "_Edit launchers"
-msgstr "_Muokkaa käynnistimiä"
-
-#: mdk/mdk-main-window.ui:48
-msgid "_About Mutter Development Kit"
-msgstr "_Tietoja - Mutter-ohjelmistokehityspaketti"
-
-#: mdk/mdk-main-window.ui:54 mdk/mdk-main.c:60
-msgid "Mutter Development Kit"
-msgstr "Mutter-ohjelmistokehityspaketti"
-
-#: mdk/mdk-main-window.ui:64
-msgid "Main Menu"
-msgstr "Päävalikko"
-
-#: mdk/mdk-main.c:53
-msgid "The Mutter Team"
-msgstr "Mutter-tiimi"
-
-#: mdk/mdk-main.c:66
-msgid "Mutter software development kit"
-msgstr "Mutter-ohjelmistokehityspaketti"
-
-#: mdk/mdk-main.c:69
-msgid "About Mutter Development Kit"
-msgstr "Tietoja - Mutter-ohjelmistokehityspaketti"
-
-#: mdk/mdk-main.c:397 mdk/mdk-main.c:398
-msgid "Devkit options"
-msgstr ""
-
-#: mdk/mdk-monitor.c:561
-#, fuzzy
-#| msgid "Failed to scan themes directory: %s\n"
-msgid "Failed to create monitor"
-msgstr "Teemakansion lukeminen epäonnistui: %s\n"
-
-#: src/backends/meta-monitor.c:283
+#: src/backends/meta-monitor.c:253
 msgid "Built-in display"
 msgstr "Sisäänrakennettu näyttö"
 
-#: src/backends/meta-monitor.c:310
+#: src/backends/meta-monitor.c:280
 msgid "Unknown"
 msgstr "Tuntematon"
 
-#: src/backends/meta-monitor.c:312
+#: src/backends/meta-monitor.c:282
 msgid "Unknown Display"
 msgstr "Tuntematon näyttö"
 
-#: src/backends/meta-monitor.c:320
+#: src/backends/meta-monitor.c:290
 #, c-format
 msgctxt ""
 "This is a monitor vendor name, followed by a size in inches, like 'Dell 15\"'"
 msgid "%s %s"
 msgstr "%s %s"
 
-#: src/backends/meta-monitor.c:328
+#: src/backends/meta-monitor.c:298
 #, c-format
 msgctxt ""
 "This is a monitor vendor name followed by product/model name where size in "
@@ -717,137 +579,152 @@ msgctxt ""
 msgid "%s %s"
 msgstr "%s %s"
 
-#: src/core/bell.c:237
+#: src/core/bell.c:193
 msgid "Bell event"
 msgstr "Äänimerkki"
 
-#: src/core/display.c:603
+#: src/core/display.c:718
 msgid "Privacy Screen Enabled"
 msgstr "Näytön tietoturvasuoja käytössä"
 
-#: src/core/display.c:604
+#: src/core/display.c:719
 msgid "Privacy Screen Disabled"
 msgstr "Näytön tietoturvasuoja pois käytöstä"
 
-#: src/core/meta-context-main.c:344
+#: src/core/meta-context-main.c:581
+msgid "Replace the running window manager"
+msgstr "Vaihda käytössä oleva ikkunanhallinta"
+
+#: src/core/meta-context-main.c:587
+msgid "X Display to use"
+msgstr "Käytettävä X-näyttö"
+
+#: src/core/meta-context-main.c:593
+msgid "Disable connection to session manager"
+msgstr "Estä yhteys sessionhallintaan"
+
+#: src/core/meta-context-main.c:599
+msgid "Specify session management ID"
+msgstr "Anna sessionhallinnan ID"
+
+#: src/core/meta-context-main.c:605
+msgid "Initialize session from savefile"
+msgstr "Alusta sessio tiedostosta"
+
+#: src/core/meta-context-main.c:611
+msgid "Make X calls synchronous"
+msgstr "Käytä synkronisia X-kutsuja"
+
+#: src/core/meta-context-main.c:619
 msgid "Run as a wayland compositor"
 msgstr "Suorita wayland-koostajana"
 
-#: src/core/meta-context-main.c:351
+#: src/core/meta-context-main.c:625
+#, fuzzy
+#| msgid "Run as a wayland compositor"
+msgid "Run as a nested compositor"
+msgstr "Suorita wayland-koostajana"
+
+#: src/core/meta-context-main.c:631
 msgid "Run wayland compositor without starting Xwayland"
 msgstr "Suorita wayland-koostaja käynnistämättä Xwaylandia"
 
-#: src/core/meta-context-main.c:358
+#: src/core/meta-context-main.c:637
 msgid "Specify Wayland display name to use"
 msgstr "Määritä käytettävä Wayland-näyttönimi"
 
-#: src/core/meta-context-main.c:364
+#: src/core/meta-context-main.c:645
 msgid "Run as a full display server, rather than nested"
 msgstr ""
 
-#: src/core/meta-context-main.c:369
+#: src/core/meta-context-main.c:650
 msgid "Run as a headless display server"
 msgstr "Suorita headless-näyttöpalvelimena"
 
-#: src/core/meta-context-main.c:374
+#: src/core/meta-context-main.c:655
 msgid "Add persistent virtual monitor (WxH or WxH@R)"
 msgstr "Lisää pysyvä virtuaalinäyttö (WxH tai WxH@R)"
 
-#: src/core/meta-context-main.c:380
-msgid "Run development kit"
-msgstr "Suorita ohjelmistokehityspaketti"
+#: src/core/meta-context-main.c:667
+msgid "Run with X11 backend"
+msgstr "Suorita X11-taustaosalla"
 
-#: src/core/meta-context-main.c:385
-#, fuzzy
-#| msgid "Run development kit"
-msgid "Development kit arguments"
-msgstr "Suorita ohjelmistokehityspaketti"
-
-#: src/core/meta-context-main.c:396
+#: src/core/meta-context-main.c:673
 msgid "Profile performance using trace instrumentation"
 msgstr ""
-
-#: src/core/meta-context-main.c:402
-msgid "Enable debug control D-Bus interface"
-msgstr ""
-
-#. TRANSLATORS: This string refers to a button that switches between
-#. * different modes in that button group.
-#.
-#: src/core/meta-pad-action-mapper.c:617
-#, c-format
-msgid "Mode Switch (Group %d)"
-msgstr "Tilanvaihto (Ryhmä %d)"
 
 #. TRANSLATORS: This string refers to a button that switches between
 #. * different modes.
 #.
-#: src/core/meta-pad-action-mapper.c:624
+#: src/core/meta-pad-action-mapper.c:861
 #, c-format
-msgid "Mode Switch"
-msgstr "Tilanvaihto"
+msgid "Mode Switch (Group %d)"
+msgstr ""
 
 #. TRANSLATORS: This string refers to an action, cycles drawing tablets'
 #. * mapping through the available outputs.
 #.
-#: src/core/meta-pad-action-mapper.c:647
+#: src/core/meta-pad-action-mapper.c:884
 msgid "Switch monitor"
 msgstr "Vaihda näyttöä"
 
-#: src/core/meta-pad-action-mapper.c:649
+#: src/core/meta-pad-action-mapper.c:886
 msgid "Show on-screen help"
-msgstr "Näytä ohjeet näytöllä"
+msgstr ""
 
 #. Translators: this string will appear in Sysprof
-#: src/core/meta-profiler.c:109 src/core/meta-profiler.c:303
+#: src/core/meta-profiler.c:111 src/core/meta-profiler.c:301
 msgid "Compositor"
 msgstr "Komposiittori"
 
-#: src/core/mutter.c:75
+#: src/core/mutter.c:74
 msgid "Print version"
 msgstr "Näytä versio"
 
-#: src/core/mutter.c:81
+#: src/core/mutter.c:80
 msgid "Mutter plugin to use"
 msgstr "Käytettävä Mutter-liitännäinen"
 
-#: src/core/prefs.c:1866
+#: src/core/prefs.c:1843
 #, c-format
 msgid "Workspace %d"
 msgstr "Työtila %d"
 
-#: src/core/util.c:154
+#: src/core/util.c:139
 msgid "Mutter was compiled without support for verbose mode"
 msgstr "Mutter on käännetty ilman tukea monisanaisille ilmoituksille"
 
-#: src/core/workspace.c:510
+#: src/core/workspace.c:541
 msgid "Workspace switched"
 msgstr "Työtila vaihdettu"
 
-#: src/wayland/meta-wayland-tablet-pad.c:558
+#: src/wayland/meta-wayland-tablet-pad.c:530
 #, c-format
 msgid "Mode Switch: Mode %d"
 msgstr ""
 
-#: src/x11/meta-x11-display.c:729
-#, fuzzy, c-format
-#| msgid "Screen %d on display \"%s\" already has a window manager\n"
-msgid "Display “%s” already has a window manager"
-msgstr "Näytön ”%2$s” ruudulla %1$d on jo ikkunointiohjelma\n"
+#: src/x11/meta-x11-display.c:708
+#, c-format
+msgid ""
+"Display “%s” already has a window manager; try using the --replace option to "
+"replace the current window manager."
+msgstr ""
+"Näytöllä “%s” on jo ikkunointiohjelma: kokeile valitsinta --replace, jos "
+"haluat korvata nykyisen ikkunointiohjelman."
 
-#: src/x11/meta-x11-display.c:1092
+#: src/x11/meta-x11-display.c:1073
 #, c-format
 msgid "Failed to open X Window System display “%s”"
 msgstr "X-ikkunointijärjestelmän näytön “%s” avaaminen epäonnistui"
 
-#: src/x11/meta-x11-display.c:1236
+#: src/x11/meta-x11-display.c:1219
 #, c-format
 msgid "Screen %d on display “%s” is invalid"
 msgstr "Näytön %d ruutu “%s” ei ole kelvollinen"
 
 #. This probably means that a non-WM compositor like xcompmgr is running;
 #. * we have no way to get it to exit
-#: src/x11/meta-x11-display.c:2410
+#: src/x11/meta-x11-display.c:2550
 #, fuzzy, c-format
 #| msgid ""
 #| "Another compositing manager is already running on screen %i on display "
@@ -862,47 +739,10 @@ msgstr ""
 msgid "Format %s not supported"
 msgstr "Muoto %s ei ole tuettu"
 
-#: src/x11/window-props.c:562
+#: src/x11/window-props.c:548
 #, c-format
 msgid "%s (on %s)"
 msgstr "%s @ %s"
-
-#~ msgid "Enable experimental features"
-#~ msgstr "Ota käyttöön kokeelliset ominaisuudet"
-
-#~ msgid "Replace the running window manager"
-#~ msgstr "Vaihda käytössä oleva ikkunanhallinta"
-
-#~ msgid "X Display to use"
-#~ msgstr "Käytettävä X-näyttö"
-
-#~ msgid "Make X calls synchronous"
-#~ msgstr "Käytä synkronisia X-kutsuja"
-
-#, fuzzy
-#~| msgid "Run as a wayland compositor"
-#~ msgid "Run as a nested compositor"
-#~ msgstr "Suorita wayland-koostajana"
-
-#~ msgid "Run with X11 backend"
-#~ msgstr "Suorita X11-taustaosalla"
-
-#, c-format
-#~ msgid ""
-#~ "Display “%s” already has a window manager; try using the --replace option "
-#~ "to replace the current window manager."
-#~ msgstr ""
-#~ "Näytöllä “%s” on jo ikkunointiohjelma: kokeile valitsinta --replace, jos "
-#~ "haluat korvata nykyisen ikkunointiohjelman."
-
-#~ msgid "Disable connection to session manager"
-#~ msgstr "Estä yhteys sessionhallintaan"
-
-#~ msgid "Specify session management ID"
-#~ msgstr "Anna sessionhallinnan ID"
-
-#~ msgid "Initialize session from savefile"
-#~ msgstr "Alusta sessio tiedostosta"
 
 #~ msgid "Move to workspace above"
 #~ msgstr "Siirrä yllä olevaan työtilaan"
@@ -983,11 +823,17 @@ msgstr "%s @ %s"
 #~ msgid "Toggle shaded state"
 #~ msgstr "Vaihda rullaustilaa"
 
+#~ msgid "Failed to scan themes directory: %s\n"
+#~ msgstr "Teemakansion lukeminen epäonnistui: %s\n"
+
 #~ msgid ""
 #~ "Could not find a theme! Be sure %s exists and contains the usual themes.\n"
 #~ msgstr ""
 #~ "Teemaa ei löydy! Varmista, että %s on olemassa, ja sisältää tavalliset "
 #~ "teemat.\n"
+
+#~ msgid "Screen %d on display \"%s\" already has a window manager\n"
+#~ msgstr "Näytön ”%2$s” ruudulla %1$d on jo ikkunointiohjelma\n"
 
 #~ msgid "%d x %d"
 #~ msgstr "%d × %d"
@@ -1041,8 +887,8 @@ msgstr "%s @ %s"
 #~ "muotoinen"
 
 #~ msgid ""
-#~ "GTK color specification must have the state in brackets, e.g. "
-#~ "gtk:fg[NORMAL] where NORMAL is the state; could not parse \"%s\""
+#~ "GTK color specification must have the state in brackets, e.g. gtk:"
+#~ "fg[NORMAL] where NORMAL is the state; could not parse \"%s\""
 #~ msgstr ""
 #~ "GTK-värimääritteessä täytyy olla tila hakasuluissa, esim. gtk:fg[NORMAL], "
 #~ "jossa NORMAL on tila. ”%s” ei jäsenny"
@@ -1236,11 +1082,11 @@ msgstr "%s @ %s"
 #~ "%g\n"
 
 #~ msgid ""
-#~ "Invalid title scale \"%s\" (must be one of xx-small,x-"
-#~ "small,small,medium,large,x-large,xx-large)\n"
+#~ "Invalid title scale \"%s\" (must be one of xx-small,x-small,small,medium,"
+#~ "large,x-large,xx-large)\n"
 #~ msgstr ""
-#~ "Epäkelpo otsikon skaala ”%s” (täytyy olla joko xx-small,x-"
-#~ "small,small,medium,large,x-large tai xx-large)\n"
+#~ "Epäkelpo otsikon skaala ”%s” (täytyy olla joko xx-small,x-small,small,"
+#~ "medium,large,x-large tai xx-large)\n"
 
 #~ msgid "<%s> name \"%s\" used a second time"
 #~ msgstr "<%s>-elementin nimeä ”%s” käytetty toisenkin kerran"

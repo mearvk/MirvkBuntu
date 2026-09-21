@@ -506,44 +506,31 @@ gvfs_udisks2_utils_spawn_finish (GAsyncResult   *res,
 #if defined(HAVE_LOGIND)
 #include <systemd/sd-login.h>
 
-static const gchar * const *
-get_seats (void)
+static const gchar *
+get_seat (void)
 {
   static gsize once = 0;
-  static gchar **seats = NULL;
+  static char *seat = NULL;
 
   if (g_once_init_enter (&once))
     {
-      g_autofree char *session = NULL;
-      g_autofree char *unit = NULL;
-
-      if (sd_pid_get_user_unit (getpid (), &unit) == 0)
+      char *session = NULL;
+      if (sd_pid_get_session (getpid (), &session) == 0)
         {
-          /* We are in a user unit scope. We take care of any seat we have an
-           * active session on. */
-          sd_uid_get_seats (getuid (), TRUE, &seats);
+          sd_session_get_seat (session, &seat);
+          free (session);
+          /* we intentionally leak seat here... */
         }
-      else if (sd_pid_get_session (getpid (), &session) == 0)
-        {
-          /* We are in a session scope, so we only care about the seat it is on. */
-        }
-      else
-        {
-          /* Looks like the system has no multi-seat support. */
-          g_debug ("Cannot determine seats we take care of. Assuming a single, global seat.");
-        }
-
       g_once_init_leave (&once, (gsize) 1);
     }
-  return (const gchar * const *)seats;
+  return seat;
 }
 
 #else
 
-static const gchar * const *
-get_seats (void)
+static const gchar *
+get_seat (void)
 {
-  g_debug ("Cannot determine seats we take care of. Assuming a single, global seat.");
   return NULL;
 }
 
@@ -553,12 +540,12 @@ gboolean
 gvfs_udisks2_utils_is_drive_on_our_seat (UDisksDrive *drive)
 {
   gboolean ret = FALSE;
-  const gchar * const *seats;
+  const gchar *seat;
   const gchar *drive_seat = NULL;
 
   /* assume our own seat if we don't have seat-support or it doesn't work */
-  seats = get_seats ();
-  if (seats == NULL)
+  seat = get_seat ();
+  if (seat == NULL)
     {
       ret = TRUE;
       goto out;
@@ -580,11 +567,8 @@ gvfs_udisks2_utils_is_drive_on_our_seat (UDisksDrive *drive)
     }
 
   /* Otherwise, check if it's on our seat */
-  if (g_strv_contains (seats, drive_seat))
-    {
-      ret = TRUE;
-      goto out;
-    }
+  if (g_strcmp0 (seat, drive_seat) == 0)
+    ret = TRUE;
 
  out:
   return ret;

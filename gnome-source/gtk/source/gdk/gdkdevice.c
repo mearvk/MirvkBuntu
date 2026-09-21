@@ -28,7 +28,8 @@
 /**
  * GdkDevice:
  *
- * Represents an input device, such as a keyboard, mouse or touchpad.
+ * The `GdkDevice` object represents an input device, such
+ * as a keyboard, a mouse, or a touchpad.
  *
  * See the [class@Gdk.Seat] documentation for more information
  * about the various kinds of devices, and their relationships.
@@ -87,9 +88,6 @@ enum {
   PROP_NUM_LOCK_STATE,
   PROP_SCROLL_LOCK_STATE,
   PROP_MODIFIER_STATE,
-  PROP_LAYOUT_NAMES,
-  PROP_ACTIVE_LAYOUT_INDEX,
-
   LAST_PROP
 };
 
@@ -106,17 +104,17 @@ gdk_device_class_init (GdkDeviceClass *klass)
   object_class->get_property = gdk_device_get_property;
 
   /**
-   * GdkDevice:display:
+   * GdkDevice:display: (attributes org.gtk.Property.get=gdk_device_get_display)
    *
    * The `GdkDisplay` the `GdkDevice` pertains to.
    */
   device_props[PROP_DISPLAY] =
       g_param_spec_object ("display", NULL, NULL,
                            GDK_TYPE_DISPLAY,
-                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:name:
+   * GdkDevice:name: (attributes org.gtk.Property.get=gdk_device_get_name)
    *
    * The device name.
    */
@@ -124,10 +122,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_string ("name", NULL, NULL,
                            NULL,
                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:source:
+   * GdkDevice:source: (attributes org.gtk.Property.get=gdk_device_get_source)
    *
    * Source type for the device.
    */
@@ -136,10 +134,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
                          GDK_TYPE_INPUT_SOURCE,
                          GDK_SOURCE_MOUSE,
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDevice:has-cursor:
+   * GdkDevice:has-cursor: (attributes org.gtk.Property.get=gdk_device_get_has_cursor)
    *
    * Whether the device is represented by a cursor on the screen.
    */
@@ -147,7 +145,7 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_boolean ("has-cursor", NULL, NULL,
                             FALSE,
                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                            G_PARAM_STATIC_NAME);
+                            G_PARAM_STATIC_STRINGS);
 
   /**
    * GdkDevice:n-axes:
@@ -158,10 +156,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_uint ("n-axes", NULL, NULL,
                          0, G_MAXUINT,
                          0,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:vendor-id:
+   * GdkDevice:vendor-id: (attributes org.gtk.Property.get=gdk_device_get_vendor_id)
    *
    * Vendor ID of this device.
    *
@@ -171,10 +169,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_string ("vendor-id", NULL, NULL,
                            NULL,
                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:product-id:
+   * GdkDevice:product-id: (attributes org.gtk.Property.get=gdk_device_get_product_id)
    *
    * Product ID of this device.
    *
@@ -184,10 +182,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_string ("product-id", NULL, NULL,
                            NULL,
                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:seat:
+   * GdkDevice:seat: (attributes org.gtk.Property.get=gdk_device_get_seat)
    *
    * `GdkSeat` of this device.
    */
@@ -195,10 +193,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_object ("seat", NULL, NULL,
                            GDK_TYPE_SEAT,
                            G_PARAM_READWRITE |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:num-touches:
+   * GdkDevice:num-touches: (attributes org.gtk.Property.get=gdk_device_get_num_touches)
    *
    * The maximal number of concurrent touches on a touch device.
    *
@@ -210,20 +208,20 @@ gdk_device_class_init (GdkDeviceClass *klass)
                          0, G_MAXUINT,
                          0,
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME);
+                         G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:tool: (getter get_device_tool)
+   * GdkDevice:tool: (attributes org.gtk.Property.get=gdk_device_get_device_tool)
    *
    * The `GdkDeviceTool` that is currently used with this device.
    */
   device_props[PROP_TOOL] =
     g_param_spec_object ("tool", NULL, NULL,
                          GDK_TYPE_DEVICE_TOOL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:direction:
+   * GdkDevice:direction: (attributes org.gtk.Property.get=gdk_device_get_direction)
    *
    * The direction of the current layout.
    *
@@ -232,10 +230,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
   device_props[PROP_DIRECTION] =
       g_param_spec_enum ("direction", NULL, NULL,
                          PANGO_TYPE_DIRECTION, PANGO_DIRECTION_NEUTRAL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:has-bidi-layouts:
+   * GdkDevice:has-bidi-layouts: (attributes org.gtk.Property.get=gdk_device_has_bidi_layouts)
    *
    * Whether the device has both right-to-left and left-to-right layouts.
    *
@@ -244,10 +242,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
   device_props[PROP_HAS_BIDI_LAYOUTS] =
       g_param_spec_boolean ("has-bidi-layouts", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:caps-lock-state:
+   * GdkDevice:caps-lock-state: (attributes org.gtk.Property.get=gdk_device_get_caps_lock_state)
    *
    * Whether Caps Lock is on.
    *
@@ -256,10 +254,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
   device_props[PROP_CAPS_LOCK_STATE] =
       g_param_spec_boolean ("caps-lock-state", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:num-lock-state:
+   * GdkDevice:num-lock-state: (attributes org.gtk.Property.get=gdk_device_get_num_lock_state)
    *
    * Whether Num Lock is on.
    *
@@ -268,10 +266,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
   device_props[PROP_NUM_LOCK_STATE] =
       g_param_spec_boolean ("num-lock-state", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:scroll-lock-state:
+   * GdkDevice:scroll-lock-state: (attributes org.gtk.Property.get=gdk_device_get_scroll_lock_state)
    *
    * Whether Scroll Lock is on.
    *
@@ -280,10 +278,10 @@ gdk_device_class_init (GdkDeviceClass *klass)
   device_props[PROP_SCROLL_LOCK_STATE] =
       g_param_spec_boolean ("scroll-lock-state", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDevice:modifier-state:
+   * GdkDevice:modifier-state: (attributes org.gtk.Property.get=gdk_device_get_modifier_state)
    *
    * The current modifier state of the device.
    *
@@ -293,41 +291,7 @@ gdk_device_class_init (GdkDeviceClass *klass)
       g_param_spec_flags ("modifier-state", NULL, NULL,
                           GDK_TYPE_MODIFIER_TYPE,
                           GDK_NO_MODIFIER_MASK,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GdkDevice:active-layout-index:
-   *
-   * The index of the keyboard active layout of a `GdkDevice`.
-   *
-   * Will be -1 if there is no valid active layout.
-   *
-   * This is only relevant for keyboard devices.
-   *
-   * Value changes from compositor events, connect to notify if needed.
-   *
-   * Since: 4.18
-   */
-  device_props[PROP_ACTIVE_LAYOUT_INDEX] =
-      g_param_spec_int ("active-layout-index", NULL, NULL,
-                        -1, G_MAXINT, 0,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
-
-  /**
-   * GdkDevice:layout-names:
-   *
-   * The names of the keyboard layouts of a `GdkDevice`.
-   *
-   * This is only relevant for keyboard devices.
-   *
-   * Value changes from compositor events, connect to notify if needed.
-   *
-   * Since: 4.18
-   */
-  device_props[PROP_LAYOUT_NAMES] =
-      g_param_spec_boxed ("layout-names", NULL, NULL,
-                          G_TYPE_STRV,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, device_props);
 
@@ -515,13 +479,6 @@ gdk_device_get_property (GObject    *object,
     case PROP_MODIFIER_STATE:
       g_value_set_flags (value, gdk_device_get_modifier_state (device));
       break;
-    case PROP_ACTIVE_LAYOUT_INDEX:
-      g_value_set_int (value, gdk_device_get_active_layout_index (device));
-      break;
-    case PROP_LAYOUT_NAMES:
-      g_value_set_boxed (value, gdk_device_get_layout_names (device));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -583,7 +540,7 @@ gdk_device_get_name (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_has_cursor:
+ * gdk_device_get_has_cursor: (attributes org.gtk.Method.get_property=has-cursor)
  * @device: a `GdkDevice`
  *
  * Determines whether the pointer follows device motion.
@@ -602,7 +559,7 @@ gdk_device_get_has_cursor (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_source:
+ * gdk_device_get_source: (attributes org.gtk.Method.get_property=source)
  * @device: a `GdkDevice`
  *
  * Determines the type of the device.
@@ -642,7 +599,7 @@ gdk_device_get_axis_use (GdkDevice *device,
 }
 
 /**
- * gdk_device_get_display:
+ * gdk_device_get_display: (attributes org.gtk.Method.get_property=display)
  * @device: a `GdkDevice`
  *
  * Returns the `GdkDisplay` to which @device pertains.
@@ -767,6 +724,77 @@ gdk_device_get_axis (GdkDevice  *device,
     }
 
   return FALSE;
+}
+
+static GdkEventMask
+get_native_grab_event_mask (GdkEventMask grab_mask)
+{
+  /* Similar to the above but for pointer events only */
+  return
+    GDK_POINTER_MOTION_MASK |
+    GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK |
+    GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK |
+    GDK_SCROLL_MASK |
+    (grab_mask &
+     ~(GDK_BUTTON_MOTION_MASK |
+       GDK_BUTTON1_MOTION_MASK |
+       GDK_BUTTON2_MOTION_MASK |
+       GDK_BUTTON3_MOTION_MASK));
+}
+
+GdkGrabStatus
+gdk_device_grab (GdkDevice        *device,
+                 GdkSurface       *surface,
+                 gboolean          owner_events,
+                 GdkEventMask      event_mask,
+                 GdkCursor        *cursor,
+                 guint32           time_)
+{
+  GdkGrabStatus res;
+
+  g_return_val_if_fail (GDK_IS_DEVICE (device), GDK_GRAB_FAILED);
+  g_return_val_if_fail (GDK_IS_SURFACE (surface), GDK_GRAB_FAILED);
+  g_return_val_if_fail (gdk_surface_get_display (surface) == gdk_device_get_display (device), GDK_GRAB_FAILED);
+
+  if (GDK_SURFACE_DESTROYED (surface))
+    return GDK_GRAB_NOT_VIEWABLE;
+
+  res = GDK_DEVICE_GET_CLASS (device)->grab (device,
+                                             surface,
+                                             owner_events,
+                                             get_native_grab_event_mask (event_mask),
+                                             NULL,
+                                             cursor,
+                                             time_);
+
+  if (res == GDK_GRAB_SUCCESS)
+    {
+      GdkDisplay *display;
+      gulong serial;
+
+      display = gdk_surface_get_display (surface);
+      serial = _gdk_display_get_next_serial (display);
+
+      _gdk_display_add_device_grab (display,
+                                    device,
+                                    surface,
+                                    owner_events,
+                                    event_mask,
+                                    serial,
+                                    time_,
+                                    FALSE);
+    }
+
+  return res;
+}
+
+void
+gdk_device_ungrab (GdkDevice  *device,
+                   guint32     time_)
+{
+  g_return_if_fail (GDK_IS_DEVICE (device));
+
+  GDK_DEVICE_GET_CLASS (device)->ungrab (device, time_);
 }
 
 /* Private API */
@@ -1054,7 +1082,7 @@ _gdk_device_surface_at_position (GdkDevice       *device,
 }
 
 /**
- * gdk_device_get_vendor_id:
+ * gdk_device_get_vendor_id: (attributes org.gtk.Method.get_property=vendor-id)
  * @device: a physical `GdkDevice`
  *
  * Returns the vendor ID of this device.
@@ -1096,7 +1124,7 @@ gdk_device_get_vendor_id (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_product_id:
+ * gdk_device_get_product_id: (attributes org.gtk.Method.get_property=product-id)
  * @device: a physical `GdkDevice`
  *
  * Returns the product ID of this device.
@@ -1125,11 +1153,11 @@ gdk_device_set_seat (GdkDevice *device,
     return;
 
   device->seat = seat;
-  g_object_notify_by_pspec (G_OBJECT (device), device_props[PROP_SEAT]);
+  g_object_notify (G_OBJECT (device), "seat");
 }
 
 /**
- * gdk_device_get_seat:
+ * gdk_device_get_seat: (attributes org.gtk.Method.get_property=seat)
  * @device: A `GdkDevice`
  *
  * Returns the `GdkSeat` the device belongs to.
@@ -1152,7 +1180,7 @@ gdk_device_update_tool (GdkDevice     *device,
 
   if (g_set_object (&device->last_tool, tool))
     {
-      g_object_notify_by_pspec (G_OBJECT (device), device_props[PROP_TOOL]);
+      g_object_notify (G_OBJECT (device), "tool");
       g_signal_emit (device, signals[TOOL_CHANGED], 0, tool);
     }
 }
@@ -1174,7 +1202,7 @@ gdk_device_get_num_touches (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_device_tool: (get-property tool)
+ * gdk_device_get_device_tool: (attributes org.gtk.Method.get_property=tool)
  * @device: a `GdkDevice`
  *
  * Retrieves the current tool for @device.
@@ -1190,7 +1218,7 @@ gdk_device_get_device_tool (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_caps_lock_state:
+ * gdk_device_get_caps_lock_state: (attributes org.gtk.Method.get_property=caps-lock-state)
  * @device: a `GdkDevice`
  *
  * Retrieves whether the Caps Lock modifier of the keyboard is locked.
@@ -1211,7 +1239,7 @@ gdk_device_get_caps_lock_state (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_num_lock_state:
+ * gdk_device_get_num_lock_state: (attributes org.gtk.Method.get_property=num-lock-state)
  * @device: a ``GdkDevice`
  *
  * Retrieves whether the Num Lock modifier of the keyboard is locked.
@@ -1232,7 +1260,7 @@ gdk_device_get_num_lock_state (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_scroll_lock_state:
+ * gdk_device_get_scroll_lock_state: (attributes org.gtk.Method.get_property=scroll-lock-state)
  * @device: a `GdkDevice`
  *
  * Retrieves whether the Scroll Lock modifier of the keyboard is locked.
@@ -1253,7 +1281,7 @@ gdk_device_get_scroll_lock_state (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_modifier_state:
+ * gdk_device_get_modifier_state: (attributes org.gtk.Method.get_property=modifier-state)
  * @device: a `GdkDevice`
  *
  * Retrieves the current modifier state of the keyboard.
@@ -1274,57 +1302,7 @@ gdk_device_get_modifier_state (GdkDevice *device)
 }
 
 /**
- * gdk_device_get_active_layout_index:
- * @device: a `GdkDevice`
- *
- * Retrieves the index of the active layout of the keyboard.
- *
- * If there is no valid active layout for the `GdkDevice`, this function will
- * return -1;
- *
- * This is only relevant for keyboard devices.
- *
- * Returns: The layout index of the active layout or -1.
- *
- * Since: 4.18
- */
-gint
-gdk_device_get_active_layout_index (GdkDevice *device)
-{
-  GdkKeymap *keymap = gdk_display_get_keymap (device->display);
-
-  if (device->source == GDK_SOURCE_KEYBOARD)
-    return gdk_keymap_get_active_layout_index (keymap);
-
-  return -1;
-}
-
-/**
- * gdk_device_get_layout_names:
- * @device: a `GdkDevice`
- *
- * Retrieves the names of the layouts of the keyboard.
- *
- * This is only relevant for keyboard devices.
- *
- * Returns: (transfer full) (nullable) (array zero-terminated=1):
- *   %NULL-terminated array of strings of layouts,
- *
- * Since: 4.18
- */
-char **
-gdk_device_get_layout_names (GdkDevice *device)
-{
-  GdkKeymap *keymap = gdk_display_get_keymap (device->display);
-
-  if (device->source == GDK_SOURCE_KEYBOARD)
-    return gdk_keymap_get_layout_names (keymap);
-
-  return NULL;
-}
-
-/**
- * gdk_device_get_direction:
+ * gdk_device_get_direction: (attributes org.gtk.Method.get_property=direction)
  * @device: a `GdkDevice`
  *
  * Returns the direction of effective layout of the keyboard.
@@ -1350,7 +1328,7 @@ gdk_device_get_direction (GdkDevice *device)
 }
 
 /**
- * gdk_device_has_bidi_layouts:
+ * gdk_device_has_bidi_layouts: (attributes org.gtk.Method.get_property=has-bidi-layouts)
  * @device: a `GdkDevice`
  *
  * Determines if layouts for both right-to-left and

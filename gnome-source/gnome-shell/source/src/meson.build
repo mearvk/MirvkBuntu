@@ -4,18 +4,16 @@ service_data = configuration_data()
 service_data.set('libexecdir', libexecdir)
 
 introspection_common = {
-  'install_gir': false,
-  'install_typelib': true,
+  'install_dir_gir': pkgdatadir,
   'install_dir_typelib': pkglibdir,
+  'install': true,
   'fatal_warnings': get_option('werror'),
 }
 
 subdir('calendar-server')
 subdir('hotplug-sniffer')
 subdir('st')
-if have_xwayland
-  subdir('tray')
-endif
+subdir('tray')
 
 script_data = configuration_data()
 script_data.set('bindir', bindir)
@@ -43,10 +41,9 @@ if get_option('extensions_tool')
   )
 endif
 
-typelib_cflags = [
-  '-DMUTTER_TYPELIB_DIR="@0@"'.format(mutter_typelibdir),
-  '-DSHELL_TYPELIB_DIR="@0@"'.format(pkglibdir),
-]
+install_data('gnome-shell-extension-prefs',
+  install_dir: bindir
+)
 
 gnome_shell_cflags = [
   '-DCLUTTER_ENABLE_EXPERIMENTAL_API',
@@ -69,17 +66,14 @@ gnome_shell_deps = [
   gjs_dep,
   mtk_dep,
   clutter_dep,
+  cogl_pango_dep,
   gi_dep,
   polkit_dep,
   gcr_dep,
   libsystemd_dep,
   libpipewire_dep,
-  pango_dep,
+  x11_dep,
 ]
-
-if have_xwayland
-  gnome_shell_deps += x11_dep
-endif
 
 gnome_shell_deps += nm_deps
 
@@ -113,7 +107,7 @@ libshell_public_headers = [
   'shell-app-usage.h',
   'shell-blur-effect.h',
   'shell-camera-monitor.h',
-  'shell-edge-drag-gesture.h',
+  'shell-glsl-effect.h',
   'shell-global.h',
   'shell-invert-lightness-effect.h',
   'shell-action-modes.h',
@@ -122,7 +116,8 @@ libshell_public_headers = [
   'shell-screenshot.h',
   'shell-square-bin.h',
   'shell-stack.h',
-  'shell-time-change-source.h',
+  'shell-tray-icon.h',
+  'shell-tray-manager.h',
   'shell-util.h',
   'shell-window-preview.h',
   'shell-window-preview-layout.h',
@@ -130,13 +125,6 @@ libshell_public_headers = [
   'shell-wm.h',
   'shell-workspace-background.h'
 ]
-
-if have_xwayland
-  libshell_public_headers += [
-    'shell-tray-icon.h',
-    'shell-tray-manager.h',
-  ]
-endif
 
 if have_networkmanager
   libshell_public_headers += 'shell-network-agent.h'
@@ -147,14 +135,10 @@ libshell_private_headers = [
   'shell-app-cache-private.h',
   'shell-app-system-private.h',
   'shell-global-private.h',
+  'shell-tray-icon-private.h',
+  'shell-window-tracker-private.h',
   'shell-wm-private.h'
 ]
-
-if have_xwayland
-  libshell_private_headers += [
-    'shell-tray-icon-private.h',
-  ]
-endif
 
 libshell_sources = [
   'gnome-shell-plugin.c',
@@ -163,8 +147,8 @@ libshell_sources = [
   'shell-app-usage.c',
   'shell-blur-effect.c',
   'shell-camera-monitor.c',
-  'shell-edge-drag-gesture.c',
   'shell-global.c',
+  'shell-glsl-effect.c',
   'shell-invert-lightness-effect.c',
   'shell-keyring-prompt.c',
   'shell-keyring-prompt.h',
@@ -177,7 +161,8 @@ libshell_sources = [
   'shell-secure-text-buffer.h',
   'shell-square-bin.c',
   'shell-stack.c',
-  'shell-time-change-source.c',
+  'shell-tray-icon.c',
+  'shell-tray-manager.c',
   'shell-util.c',
   'shell-window-preview.c',
   'shell-window-preview-layout.c',
@@ -185,13 +170,6 @@ libshell_sources = [
   'shell-wm.c',
   'shell-workspace-background.c'
 ]
-
-if have_xwayland
-  libshell_sources += [
-    'shell-tray-icon.c',
-    'shell-tray-manager.c',
-  ]
-endif
 
 if have_networkmanager
   libshell_sources += 'shell-network-agent.c'
@@ -229,34 +207,24 @@ dbus_generated += gnome.gdbus_codegen('switcheroo-control',
 
 libshell_no_gir_sources += dbus_generated
 
-libshell_link_with = []
-if have_xwayland
-  libshell_link_with += [libtray]
-endif
-
 libshell = library('shell-' + mutter_api_version,
   sources: libshell_gir_sources + libshell_no_gir_sources,
-  dependencies: gnome_shell_deps + [libshell_menu_dep, libst_dep, mutter_dep, gnome_desktop_dep, m_dep, cairo_dep],
-  include_directories: [conf_inc, include_directories('tray')],
+  dependencies: gnome_shell_deps + [libshell_menu_dep, libst_dep, mutter_dep, gnome_desktop_dep, m_dep],
+  include_directories: [conf_inc, st_inc, include_directories('tray')],
   c_args: gnome_shell_cflags,
-  link_with: libshell_link_with,
+  link_with: [libtray],
   build_rpath: mutter_typelibdir,
   install_rpath: install_rpath,
   install_dir: pkglibdir,
   install: true
 )
 
-libshell_dep = declare_dependency(
-  link_with: libshell,
-  dependencies: [libst_dep, mutter_dep],
-  include_directories: [include_directories('tray')],
-)
+libshell_dep = declare_dependency(link_with: libshell)
 
 libshell_gir_includes = [
   'Clutter-@0@'.format(mutter_api_version),
   'Meta-@0@'.format(mutter_api_version),
   'Gcr-4',
-  'GioUnix-2.0',
   'PolkitAgent-1.0',
   'GdkPixbuf-2.0'
 ]
@@ -279,16 +247,18 @@ libshell_gir = gnome.generate_gir(libshell,
   kwargs: introspection_common,
 )
 
-gnome_shell_binary = executable('gnome-shell', 'main.c',
-  c_args: gnome_shell_cflags + typelib_cflags,
+executable('gnome-shell', 'main.c',
+  c_args: gnome_shell_cflags + [
+    '-DMUTTER_TYPELIB_DIR="@0@"'.format(mutter_typelibdir)
+  ],
   dependencies: gnome_shell_deps + [libshell_dep, libst_dep, mutter_dep],
-  include_directories: [conf_inc],
+  include_directories: [conf_inc, st_inc, include_directories('tray')],
   build_rpath: mutter_typelibdir,
   install_rpath: install_rpath,
   install: true
 )
 
-if have_portal_helper
+if have_networkmanager
   executable('gnome-shell-portal-helper',
     'gnome-shell-portal-helper.c', portal_resources,
     c_args: tools_cflags,
@@ -299,16 +269,16 @@ if have_portal_helper
   )
 endif
 
-gnome_shell_perf_helper = executable('gnome-shell-perf-helper', 'shell-perf-helper.c', js_resources,
+executable('gnome-shell-perf-helper', 'shell-perf-helper.c', js_resources,
   dependencies: [gtk_dep, gio_dep, m_dep],
   include_directories: [conf_inc],
   install_dir: libexecdir,
   install: true
 )
 
-run_test = executable('run-js-test', 'run-js-test.c',
-  dependencies: [gio_dep, gi_dep, gjs_dep, libshell_dep],
-  c_args: typelib_cflags,
+executable('run-js-test', 'run-js-test.c',
+  dependencies: [mutter_dep, mtk_dep, gdk_pixbuf_dep, gio_dep, gi_dep, gjs_dep],
   include_directories: [conf_inc],
+  link_with: libshell,
   build_rpath: mutter_typelibdir,
 )

@@ -38,12 +38,10 @@ typedef struct _GtkEventControllerLegacy GtkEventControllerLegacy;
 typedef struct _GtkEventControllerLegacyClass GtkEventControllerLegacyClass;
 
 GDK_AVAILABLE_IN_ALL
-GType               gtk_event_controller_legacy_get_type   (void);
+GType               gtk_event_controller_legacy_get_type   (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkEventController *gtk_event_controller_legacy_new        (void);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkEventControllerLegacy, g_object_unref)
 
 G_END_DECLS
 

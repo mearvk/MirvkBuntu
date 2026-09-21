@@ -85,6 +85,8 @@ G_BEGIN_DECLS
  * configuration.
  */
 
+typedef struct _CoglFramebufferDriverConfig CoglFramebufferDriverConfig;
+
 #define COGL_TYPE_FRAMEBUFFER (cogl_framebuffer_get_type ())
 COGL_EXPORT
 G_DECLARE_DERIVABLE_TYPE (CoglFramebuffer, cogl_framebuffer,
@@ -97,7 +99,6 @@ struct _CoglFramebufferClass
 
   gboolean (* allocate) (CoglFramebuffer  *framebuffer,
                          GError          **error);
-  CoglFramebuffer* (* get_bind_buffer) (CoglFramebuffer *framebuffer);
   gboolean (* is_y_flipped) (CoglFramebuffer *framebuffer);
 };
 
@@ -264,6 +265,15 @@ COGL_EXPORT void
 cogl_framebuffer_pop_matrix (CoglFramebuffer *framebuffer);
 
 /**
+ * cogl_framebuffer_identity_matrix:
+ * @framebuffer: A #CoglFramebuffer pointer
+ *
+ * Resets the current model-view matrix to the identity matrix.
+ */
+COGL_EXPORT void
+cogl_framebuffer_identity_matrix (CoglFramebuffer *framebuffer);
+
+/**
  * cogl_framebuffer_scale:
  * @framebuffer: A #CoglFramebuffer pointer
  * @x: Amount to scale along the x-axis
@@ -315,6 +325,18 @@ cogl_framebuffer_rotate (CoglFramebuffer *framebuffer,
                          float x,
                          float y,
                          float z);
+
+/**
+ * cogl_framebuffer_rotate_euler:
+ * @framebuffer: A #CoglFramebuffer pointer
+ * @euler: A #graphene_euler_t
+ *
+ * Multiplies the current model-view matrix by one that rotates
+ * according to the rotation described by @euler.
+ */
+COGL_EXPORT void
+cogl_framebuffer_rotate_euler (CoglFramebuffer *framebuffer,
+                               const graphene_euler_t *euler);
 
 /**
  * cogl_framebuffer_transform:
@@ -472,6 +494,40 @@ cogl_framebuffer_push_rectangle_clip (CoglFramebuffer *framebuffer,
                                       float x_2,
                                       float y_2);
 
+/**
+ * cogl_framebuffer_push_primitive_clip:
+ * @framebuffer: A #CoglFramebuffer pointer
+ * @primitive: A #CoglPrimitive describing a flat 2D shape
+ * @bounds_x1: x coordinate for the top-left corner of the primitives
+ *             bounds
+ * @bounds_y1: y coordinate for the top-left corner of the primitives
+ *             bounds
+ * @bounds_x2: x coordinate for the bottom-right corner of the
+ *             primitives bounds.
+ * @bounds_y2: y coordinate for the bottom-right corner of the
+ *             primitives bounds.
+ *
+ * Sets a new clipping area using a 2D shaped described with a
+ * #CoglPrimitive. The shape must not contain self overlapping
+ * geometry and must lie on a single 2D plane. A bounding box of the
+ * 2D shape in local coordinates (the same coordinates used to
+ * describe the shape) must be given. It is acceptable for the bounds
+ * to be larger than the true bounds but behaviour is undefined if the
+ * bounds are smaller than the true bounds.
+ *
+ * The primitive is transformed by the current model-view matrix and
+ * the silhouette is intersected with the previous clipping area.  To
+ * restore the previous clipping area, call
+ * cogl_framebuffer_pop_clip().
+ */
+COGL_EXPORT void
+cogl_framebuffer_push_primitive_clip (CoglFramebuffer *framebuffer,
+                                      CoglPrimitive *primitive,
+                                      float bounds_x1,
+                                      float bounds_y1,
+                                      float bounds_x2,
+                                      float bounds_y2);
+
 COGL_EXPORT void
 cogl_framebuffer_push_region_clip (CoglFramebuffer *framebuffer,
                                    MtkRegion       *region);
@@ -481,7 +537,8 @@ cogl_framebuffer_push_region_clip (CoglFramebuffer *framebuffer,
  * @framebuffer: A #CoglFramebuffer pointer
  *
  * Reverts the clipping region to the state before the last call to
- * cogl_framebuffer_push_rectangle_clip()
+ * cogl_framebuffer_push_rectangle_clip(), or
+ * cogl_framebuffer_push_primitive_clip().
  */
 COGL_EXPORT void
 cogl_framebuffer_pop_clip (CoglFramebuffer *framebuffer);
@@ -533,6 +590,31 @@ cogl_framebuffer_get_blue_bits (CoglFramebuffer *framebuffer);
  */
 COGL_EXPORT int
 cogl_framebuffer_get_alpha_bits (CoglFramebuffer *framebuffer);
+
+/**
+ * cogl_framebuffer_get_depth_bits:
+ * @framebuffer: a pointer to a #CoglFramebuffer
+ *
+ * Retrieves the number of depth bits of @framebuffer
+ *
+ * Return value: the number of bits
+ */
+COGL_EXPORT int
+cogl_framebuffer_get_depth_bits (CoglFramebuffer *framebuffer);
+
+/*
+ * cogl_framebuffer_get_is_stereo:
+ * @framebuffer: a pointer to a #CoglFramebuffer
+ *
+ * Retrieves whether @framebuffer has separate left and right
+ * buffers for use with stereo drawing. See
+ * cogl_framebuffer_set_stereo_mode().
+ *
+ * Return value: %TRUE if @framebuffer has separate left and
+ * right buffers.
+ */
+COGL_EXPORT gboolean
+cogl_framebuffer_get_is_stereo (CoglFramebuffer *framebuffer);
 
 /**
  * cogl_framebuffer_get_dither_enabled:
@@ -601,6 +683,171 @@ cogl_framebuffer_get_depth_write_enabled (CoglFramebuffer *framebuffer);
 COGL_EXPORT void
 cogl_framebuffer_set_depth_write_enabled (CoglFramebuffer *framebuffer,
                                           gboolean depth_write_enabled);
+
+/**
+ * cogl_framebuffer_get_stereo_mode:
+ * @framebuffer: a pointer to a #CoglFramebuffer
+ *
+ * Gets the current #CoglStereoMode, which defines which stereo buffers
+ * should be drawn to. See cogl_framebuffer_set_stereo_mode().
+ *
+ * Returns: A #CoglStereoMode
+ */
+COGL_EXPORT CoglStereoMode
+cogl_framebuffer_get_stereo_mode (CoglFramebuffer *framebuffer);
+
+/**
+ * cogl_framebuffer_set_stereo_mode:
+ * @framebuffer: a pointer to a #CoglFramebuffer
+ * @stereo_mode: A #CoglStereoMode specifying which stereo buffers
+ *               should be drawn tow.
+ *
+ * Sets which stereo buffers should be drawn to. The default
+ * is %COGL_STEREO_BOTH, which means that both the left and
+ * right buffers will be affected by drawing. For this to have
+ * an effect, the display system must support stereo drawables,
+ * and the framebuffer must have been created with stereo
+ * enabled. (See cogl_onscreen_template_set_stereo_enabled(),
+ * cogl_framebuffer_get_is_stereo().)
+ */
+COGL_EXPORT void
+cogl_framebuffer_set_stereo_mode (CoglFramebuffer *framebuffer,
+				  CoglStereoMode stereo_mode);
+
+/**
+ * cogl_framebuffer_set_samples_per_pixel:
+ * @framebuffer: A #CoglFramebuffer framebuffer
+ * @samples_per_pixel: The minimum number of samples per pixel
+ *
+ * Requires that when rendering to @framebuffer then @n point samples
+ * should be made per pixel which will all contribute to the final
+ * resolved color for that pixel. The idea is that the hardware aims
+ * to get quality similar to what you would get if you rendered
+ * everything twice as big (for 4 samples per pixel) and then scaled
+ * that image back down with filtering. It can effectively remove the
+ * jagged edges of polygons and should be more efficient than if you
+ * were to manually render at a higher resolution and downscale
+ * because the hardware is often able to take some shortcuts. For
+ * example the GPU may only calculate a single texture sample for all
+ * points of a single pixel, and for tile based architectures all the
+ * extra sample data (such as depth and stencil samples) may be
+ * handled on-chip and so avoid increased demand on system memory
+ * bandwidth.
+ *
+ * By default this value is usually set to 0 and that is referred to
+ * as "single-sample" rendering. A value of 1 or greater is referred
+ * to as "multisample" rendering.
+ *
+ * There are some semantic differences between single-sample
+ * rendering and multisampling with just 1 point sample such as it
+ * being redundant to use the cogl_framebuffer_resolve_samples() and
+ * cogl_framebuffer_resolve_samples_region() apis with single-sample
+ * rendering.
+ *
+ * It's recommended that
+ * cogl_framebuffer_resolve_samples_region() be explicitly used at the
+ * end of rendering to a point sample buffer to minimize the number of
+ * samples that get resolved. By default Cogl will implicitly resolve
+ * all framebuffer samples but if only a small region of a
+ * framebuffer has changed this can lead to redundant work being
+ * done.
+ *
+ */
+COGL_EXPORT void
+cogl_framebuffer_set_samples_per_pixel (CoglFramebuffer *framebuffer,
+                                        int samples_per_pixel);
+
+/**
+ * cogl_framebuffer_get_samples_per_pixel:
+ * @framebuffer: A #CoglFramebuffer framebuffer
+ *
+ * Gets the number of points that are sampled per-pixel when
+ * rasterizing geometry. Usually by default this will return 0 which
+ * means that single-sample not multisample rendering has been chosen.
+ * When using a GPU supporting multisample rendering it's possible to
+ * increase the number of samples per pixel using
+ * cogl_framebuffer_set_samples_per_pixel().
+ *
+ * Calling cogl_framebuffer_get_samples_per_pixel() before the
+ * framebuffer has been allocated will simply return the value set
+ * using cogl_framebuffer_set_samples_per_pixel(). After the
+ * framebuffer has been allocated the value will reflect the actual
+ * number of samples that will be made by the GPU.
+ *
+ * Returns: The number of point samples made per pixel when
+ *          rasterizing geometry or 0 if single-sample rendering
+ *          has been chosen.
+ */
+COGL_EXPORT int
+cogl_framebuffer_get_samples_per_pixel (CoglFramebuffer *framebuffer);
+
+
+/**
+ * cogl_framebuffer_resolve_samples:
+ * @framebuffer: A #CoglFramebuffer framebuffer
+ *
+ * When point sample rendering (also known as multisample rendering)
+ * has been enabled via cogl_framebuffer_set_samples_per_pixel()
+ * then you can optionally call this function (or
+ * cogl_framebuffer_resolve_samples_region()) to explicitly resolve
+ * the point samples into values for the final color buffer.
+ *
+ * Some GPUs will implicitly resolve the point samples during
+ * rendering and so this function is effectively a nop, but with other
+ * architectures it is desirable to defer the resolve step until the
+ * end of the frame.
+ *
+ * Since Cogl will automatically ensure samples are resolved if the
+ * target color buffer is used as a source this API only needs to be
+ * used if explicit control is desired - perhaps because you want to
+ * ensure that the resolve is completed in advance to avoid later
+ * having to wait for the resolve to complete.
+ *
+ * If you are performing incremental updates to a framebuffer you
+ * should consider using cogl_framebuffer_resolve_samples_region()
+ * instead to avoid resolving redundant pixels.
+ *
+ */
+COGL_EXPORT void
+cogl_framebuffer_resolve_samples (CoglFramebuffer *framebuffer);
+
+/**
+ * cogl_framebuffer_resolve_samples_region:
+ * @framebuffer: A #CoglFramebuffer framebuffer
+ * @x: top-left x coordinate of region to resolve
+ * @y: top-left y coordinate of region to resolve
+ * @width: width of region to resolve
+ * @height: height of region to resolve
+ *
+ * When point sample rendering (also known as multisample rendering)
+ * has been enabled via cogl_framebuffer_set_samples_per_pixel()
+ * then you can optionally call this function (or
+ * cogl_framebuffer_resolve_samples()) to explicitly resolve the point
+ * samples into values for the final color buffer.
+ *
+ * Some GPUs will implicitly resolve the point samples during
+ * rendering and so this function is effectively a nop, but with other
+ * architectures it is desirable to defer the resolve step until the
+ * end of the frame.
+ *
+ * Use of this API is recommended if incremental, small updates to
+ * a framebuffer are being made because by default Cogl will
+ * implicitly resolve all the point samples of the framebuffer which
+ * can result in redundant work if only a small number of samples have
+ * changed.
+ *
+ * Because some GPUs implicitly resolve point samples this function
+ * only guarantees that at-least the region specified will be resolved
+ * and if you have rendered to a larger region then it's possible that
+ * other samples may be implicitly resolved.
+ *
+ */
+COGL_EXPORT void
+cogl_framebuffer_resolve_samples_region (CoglFramebuffer *framebuffer,
+                                         int x,
+                                         int y,
+                                         int width,
+                                         int height);
 
 /**
  * cogl_framebuffer_get_context:
@@ -712,7 +959,7 @@ cogl_framebuffer_draw_rectangle (CoglFramebuffer *framebuffer,
  * matrix.
  *
  * This is a high level drawing api that can handle any kind of
- * #CoglTexture texture such as #CoglTexture2DSliced textures
+ * #CoglMetaTexture texture such as #CoglTexture2DSliced textures
  * which may internally be comprised of multiple low-level textures.
  * This is unlike low-level drawing apis such as cogl_primitive_draw()
  * which only support low level texture types that are directly
@@ -721,7 +968,7 @@ cogl_framebuffer_draw_rectangle (CoglFramebuffer *framebuffer,
  * The given texture coordinates will only be used for the first
  * texture layer of the pipeline and if your pipeline has more than
  * one layer then all other layers will have default texture
- * coordinates of @s_1=0.0 @t_1=0.0 @s_2=1.0 @t_2=1.0
+ * coordinates of @s_1=0.0 @t_1=0.0 @s_2=1.0 @t_2=1.0 
  *
  * The given texture coordinates should always be normalized such that
  * (0, 0) corresponds to the top left and (1, 1) corresponds to the
@@ -768,7 +1015,7 @@ cogl_framebuffer_draw_textured_rectangle (CoglFramebuffer *framebuffer,
  * matrix.
  *
  * This is a high level drawing api that can handle any kind of
- * #CoglTexture texture for the first layer such as
+ * #CoglMetaTexture texture for the first layer such as
  * #CoglTexture2DSliced textures which may internally be comprised of
  * multiple low-level textures.  This is unlike low-level drawing apis
  * such as cogl_primitive_draw() which only support low level texture
@@ -793,7 +1040,7 @@ cogl_framebuffer_draw_textured_rectangle (CoglFramebuffer *framebuffer,
  *
  * The first pair of coordinates are for the first layer (with the
  * smallest layer index) and if you supply less texture coordinates
- * than there are layers in the current source pipeline then default
+ * than there are layers in the current source material then default
  * texture coordinates (0.0, 0.0, 1.0, 1.0) are generated.
  */
 COGL_EXPORT void
@@ -862,7 +1109,7 @@ cogl_framebuffer_draw_rectangles (CoglFramebuffer *framebuffer,
  * matrix.
  *
  * This is a high level drawing api that can handle any kind of
- * #CoglTexture texture such as #CoglTexture2DSliced textures
+ * #CoglMetaTexture texture such as #CoglTexture2DSliced textures
  * which may internally be comprised of multiple low-level textures.
  * This is unlike low-level drawing apis such as cogl_primitive_draw()
  * which only support low level texture types that are directly
@@ -924,27 +1171,6 @@ cogl_framebuffer_draw_textured_rectangles (CoglFramebuffer *framebuffer,
 COGL_EXPORT void
 cogl_framebuffer_discard_buffers (CoglFramebuffer *framebuffer,
                                   unsigned long buffers);
-
-/**
- * cogl_framebuffer_bind_renderbuffers:
- * @framebuffer: A #CoglFramebuffer
- * @renderbuffers: A #CoglRenderbuffers
- *
- * Binds the depth/stencil @renderbuffers to @framebuffer.
- */
-COGL_EXPORT void
-cogl_framebuffer_bind_renderbuffers (CoglFramebuffer   *framebuffer,
-                                     CoglRenderbuffers *renderbuffers);
-
-/**
- * cogl_framebuffer_peek_renderbuffers:
- * @framebuffer: A #CoglFramebuffer
- *
- * Return value: (transfer none): A #CoglRenderbuffers which references the
- * depth/stencil renderbuffers bound to @framebuffer, or NULL if none.
- */
-COGL_EXPORT CoglRenderbuffers *
-cogl_framebuffer_peek_renderbuffers (CoglFramebuffer *framebuffer);
 
 /**
  * cogl_framebuffer_finish:
@@ -1056,78 +1282,19 @@ typedef enum /*< prefix=COGL_FRAMEBUFFER_ERROR >*/
 } CoglFramebufferError;
 
 /**
- * cogl_can_blit_between_formats:
- * @src_format: The #CoglPixelFormat to blit from
- * @dst_format: The #CoglPixelFormat to blit to
+ * cogl_is_framebuffer:
+ * @object: A #CoglObject pointer
  *
- * Checks whether the preconditions for blitting between the formats are met.
- * This does not imply that blitting will definitely succeed.
+ * Gets whether the given object references a #CoglFramebuffer.
  *
- * @return TRUE if the preconditions for blitting between the formats are met.
+ * Return value: %TRUE if the object references a #CoglFramebuffer
+ *   and %FALSE otherwise.
  */
 COGL_EXPORT gboolean
-cogl_can_blit_between_formats (CoglPixelFormat src_format,
-                               CoglPixelFormat dst_format);
+cogl_is_framebuffer (void *object);
 
 /**
- * cogl_framebuffer_blit_region:
- * @framebuffer: The source #CoglFramebuffer
- * @dst: The destination #CoglFramebuffer
- * @src_region: Source region
- * @dst_x_offset: Destination x offset
- * @dst_y_offset: Destination y offset
- * @error: optional error object
- *
- * @return FALSE for an immediately detected error, TRUE otherwise.
- *
- * This blits a region of the color buffer of the source buffer
- * to the destination buffer. This function should only be
- * called if the COGL_FEATURE_ID_BLIT_FRAMEBUFFER feature is
- * advertised.
- *
- * The source region and destination offsets are defined in offscreen
- * framebuffer orientation. When copying between an offscreen and
- * onscreen framebuffers, the image is y-flipped accordingly.
- *
- * The two buffers must have the same value types (e.g. floating-point,
- * unsigned int, signed int, or fixed-point), but color formats do not
- * need to match. This limitation comes from OpenGL ES 3.0 definition
- * of glBlitFramebuffer.
- *
- * Note that this function differs a lot from the glBlitFramebuffer
- * function provided by the GL_EXT_framebuffer_blit extension. Notably
- * it doesn't support having different sizes for the source and
- * destination region. This doesn't seem
- * like a particularly useful feature. If the application wanted to
- * scale the results it may make more sense to draw a primitive
- * instead.
- *
- * The GL function is documented to be affected by the scissor. This
- * function therefore ensure that an empty clip stack is flushed
- * before performing the blit which means the scissor is effectively
- * ignored.
- *
- * The function also doesn't support specifying the buffers to copy
- * and instead only the color buffer is copied. When copying the depth
- * or stencil buffers the extension on GLES2.0 only supports copying
- * the full buffer which would be awkward to document with this
- * API. If we wanted to support that feature it may be better to have
- * a separate function to copy the entire buffer for a given mask.
- *
- * The @c error argument is optional, it can be NULL. If it is not NULL
- * and this function returns FALSE, an error object with a code from
- * COGL_SYSTEM_ERROR will be created.
- */
-COGL_EXPORT gboolean
-cogl_framebuffer_blit_region (CoglFramebuffer  *framebuffer,
-                              CoglFramebuffer  *dst,
-                              const MtkRegion  *src_region,
-                              int               dst_x_offset,
-                              int               dst_y_offset,
-                              GError          **error);
-
-/**
- * cogl_framebuffer_blit:
+ * cogl_blit_framebuffer:
  * @framebuffer: The source #CoglFramebuffer
  * @dst: The destination #CoglFramebuffer
  * @src_x: Source x position
@@ -1179,7 +1346,7 @@ cogl_framebuffer_blit_region (CoglFramebuffer  *framebuffer,
  * COGL_SYSTEM_ERROR will be created.
  */
 COGL_EXPORT gboolean
-cogl_framebuffer_blit (CoglFramebuffer *framebuffer,
+cogl_blit_framebuffer (CoglFramebuffer *framebuffer,
                        CoglFramebuffer *dst,
                        int src_x,
                        int src_y,
@@ -1202,11 +1369,16 @@ COGL_EXPORT void
 cogl_framebuffer_flush (CoglFramebuffer *framebuffer);
 
 /**
- * cogl_framebuffer_get_internal_format: (skip)
+ * cogl_framebuffer_create_timestamp_query: (skip)
  *
- * Returns the pixel format used internally by the framebuffer.
+ * Creates a query for the GPU timestamp that will complete upon completion of
+ * all previously submitted GL commands related to this framebuffer. E.g. when
+ * the rendering is finished on this framebuffer.
+ *
+ * This function should only be called if the COGL_FEATURE_ID_TIMESTAMP_QUERY
+ * feature is advertised.
  */
-COGL_EXPORT CoglPixelFormat
-cogl_framebuffer_get_internal_format (CoglFramebuffer *framebuffer);
+COGL_EXPORT CoglTimestampQuery *
+cogl_framebuffer_create_timestamp_query (CoglFramebuffer *framebuffer);
 
 G_END_DECLS

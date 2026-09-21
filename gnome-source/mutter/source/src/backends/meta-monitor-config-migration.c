@@ -69,7 +69,7 @@ typedef struct
   gboolean enabled;
   MtkRectangle rect;
   float refresh_rate;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
 
   gboolean is_primary;
   gboolean is_presentation;
@@ -414,7 +414,8 @@ handle_end_element (GMarkupParseContext *context,
 
     case STATE_OUTPUT_FIELD:
       {
-        g_clear_pointer (&parser->output_field, g_free);
+        g_free (parser->output_field);
+        parser->output_field = NULL;
 
         parser->state = STATE_OUTPUT;
         return;
@@ -462,7 +463,7 @@ read_float (const char  *text,
   strncpy (buf, text, text_len);
   buf[MIN (63, text_len)] = 0;
 
-  v = (float) g_ascii_strtod (buf, &end);
+  v = g_ascii_strtod (buf, &end);
 
   /* Limit reasonable values (actual limits are a lot smaller that these) */
   if (*end)
@@ -578,20 +579,20 @@ handle_text (GMarkupParseContext *context,
         else if (strcmp (parser->output_field, "rotation") == 0)
           {
             if (strncmp (text, "normal", text_len) == 0)
-              parser->output.transform = MTK_MONITOR_TRANSFORM_NORMAL;
+              parser->output.transform = META_MONITOR_TRANSFORM_NORMAL;
             else if (strncmp (text, "left", text_len) == 0)
-              parser->output.transform = MTK_MONITOR_TRANSFORM_90;
+              parser->output.transform = META_MONITOR_TRANSFORM_90;
             else if (strncmp (text, "upside_down", text_len) == 0)
-              parser->output.transform = MTK_MONITOR_TRANSFORM_180;
+              parser->output.transform = META_MONITOR_TRANSFORM_180;
             else if (strncmp (text, "right", text_len) == 0)
-              parser->output.transform = MTK_MONITOR_TRANSFORM_270;
+              parser->output.transform = META_MONITOR_TRANSFORM_270;
             else
               g_set_error (error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT,
                            "Invalid rotation type %.*s", (int)text_len, text);
           }
         else if (strcmp (parser->output_field, "reflect_x") == 0)
           parser->output.transform += read_bool (text, text_len, error) ?
-            MTK_MONITOR_TRANSFORM_FLIPPED : 0;
+            META_MONITOR_TRANSFORM_FLIPPED : 0;
         else if (strcmp (parser->output_field, "reflect_y") == 0)
           {
             if (read_bool (text, text_len, error))
@@ -727,7 +728,7 @@ try_derive_tiled_monitor_config (MetaLegacyMonitorsConfig *config,
   MonitorTile bottom_left_tile = { 0 };
   MonitorTile bottom_right_tile = { 0 };
   MonitorTile origin_tile = { 0 };
-  MtkMonitorTransform transform = output_config->transform;
+  MetaMonitorTransform transform = output_config->transform;
   unsigned int i;
   int max_x = 0;
   int min_x = INT_MAX;
@@ -809,42 +810,42 @@ try_derive_tiled_monitor_config (MetaLegacyMonitorsConfig *config,
 
   switch (transform)
     {
-    case MTK_MONITOR_TRANSFORM_NORMAL:
+    case META_MONITOR_TRANSFORM_NORMAL:
       origin_tile = top_left_tile;
       mode_width = max_x - min_x;
       mode_height = max_y - min_y;
       break;
-    case MTK_MONITOR_TRANSFORM_90:
+    case META_MONITOR_TRANSFORM_90:
       origin_tile = bottom_left_tile;
       mode_width = max_y - min_y;
       mode_height = max_x - min_x;
       break;
-    case MTK_MONITOR_TRANSFORM_180:
+    case META_MONITOR_TRANSFORM_180:
       origin_tile = bottom_right_tile;
       mode_width = max_x - min_x;
       mode_height = max_y - min_y;
       break;
-    case MTK_MONITOR_TRANSFORM_270:
+    case META_MONITOR_TRANSFORM_270:
       origin_tile = top_right_tile;
       mode_width = max_y - min_y;
       mode_height = max_x - min_x;
       break;
-    case MTK_MONITOR_TRANSFORM_FLIPPED:
+    case META_MONITOR_TRANSFORM_FLIPPED:
       origin_tile = bottom_left_tile;
       mode_width = max_x - min_x;
       mode_height = max_y - min_y;
       break;
-    case MTK_MONITOR_TRANSFORM_FLIPPED_90:
+    case META_MONITOR_TRANSFORM_FLIPPED_90:
       origin_tile = bottom_right_tile;
       mode_width = max_y - min_y;
       mode_height = max_x - min_x;
       break;
-    case MTK_MONITOR_TRANSFORM_FLIPPED_180:
+    case META_MONITOR_TRANSFORM_FLIPPED_180:
       origin_tile = top_right_tile;
       mode_width = max_x - min_x;
       mode_height = max_y - min_y;
       break;
-    case MTK_MONITOR_TRANSFORM_FLIPPED_270:
+    case META_MONITOR_TRANSFORM_FLIPPED_270:
       origin_tile = top_left_tile;
       mode_width = max_y - min_y;
       mode_height = max_x - min_x;
@@ -890,7 +891,7 @@ derive_monitor_config (MetaOutputKey    *output_key,
   int mode_height;
   MetaMonitorConfig *monitor_config;
 
-  if (mtk_monitor_transform_is_rotated (output_config->transform))
+  if (meta_monitor_transform_is_rotated (output_config->transform))
     {
       mode_width = output_config->rect.height;
       mode_height = output_config->rect.width;
@@ -1095,7 +1096,7 @@ migrate_config (gpointer key,
     meta_monitor_config_store_get_monitor_manager (config_store);
   GList *logical_monitor_configs;
   MetaLogicalMonitorLayoutMode layout_mode;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   GList *disabled_monitor_specs;
   MetaMonitorsConfig *config;
 

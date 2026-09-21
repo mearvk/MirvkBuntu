@@ -77,12 +77,8 @@ enum
   PROP_0,
   PROP_APPLICATION_STYLESHEET,
   PROP_THEME_STYLESHEET,
-  PROP_DEFAULT_STYLESHEET,
-
-  N_PROPS
+  PROP_DEFAULT_STYLESHEET
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -135,9 +131,13 @@ st_theme_class_init (StThemeClass *klass)
    * The highest priority stylesheet, representing application-specific
    * styling; this is associated with the CSS "author" stylesheet.
    */
-  props[PROP_APPLICATION_STYLESHEET] = g_param_spec_object ("application-stylesheet", NULL, NULL,
-                                                            G_TYPE_FILE,
-                                                            ST_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class,
+                                   PROP_APPLICATION_STYLESHEET,
+                                   g_param_spec_object ("application-stylesheet",
+                                                        "Application Stylesheet",
+                                                        "Stylesheet with application-specific styling",
+                                                        G_TYPE_FILE,
+                                                        ST_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   /**
    * StTheme:theme-stylesheet:
@@ -145,9 +145,13 @@ st_theme_class_init (StThemeClass *klass)
    * The second priority stylesheet, representing theme-specific styling;
    * this is associated with the CSS "user" stylesheet.
    */
-  props[PROP_THEME_STYLESHEET] = g_param_spec_object ("theme-stylesheet", NULL, NULL,
-                                                      G_TYPE_FILE,
-                                                      ST_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class,
+                                   PROP_THEME_STYLESHEET,
+                                   g_param_spec_object ("theme-stylesheet",
+                                                        "Theme Stylesheet",
+                                                        "Stylesheet with theme-specific styling",
+                                                        G_TYPE_FILE,
+                                                        ST_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   /**
    * StTheme:default-stylesheet:
@@ -155,11 +159,13 @@ st_theme_class_init (StThemeClass *klass)
    * The lowest priority stylesheet, representing global default
    * styling; this is associated with the CSS "user agent" stylesheet.
    */
-  props[PROP_DEFAULT_STYLESHEET] = g_param_spec_object ("default-stylesheet", NULL, NULL,
+  g_object_class_install_property (object_class,
+                                   PROP_DEFAULT_STYLESHEET,
+                                   g_param_spec_object ("default-stylesheet",
+                                                        "Default Stylesheet",
+                                                        "Stylesheet with global default styling",
                                                         G_TYPE_FILE,
-                                                        ST_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+                                                        ST_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   signals[STYLESHEETS_CHANGED] =
     g_signal_new ("custom-stylesheets-changed",
@@ -187,6 +193,7 @@ parse_stylesheet (GFile   *file,
 
   status = cr_om_parser_simply_parse_buf ((const guchar *) contents,
                                           length,
+                                          CR_UTF_8,
                                           &stylesheet);
   g_free (contents);
 
@@ -208,7 +215,8 @@ parse_stylesheet (GFile   *file,
 CRDeclaration *
 _st_theme_parse_declaration_list (const char *str)
 {
-  return cr_declaration_parse_list_from_buf ((const guchar *)str);
+  return cr_declaration_parse_list_from_buf ((const guchar *)str,
+                                             CR_UTF_8);
 }
 
 /* Just g_warning for now until we have something nicer to do */
@@ -242,27 +250,6 @@ insert_stylesheet (StTheme      *theme,
   g_hash_table_insert (theme->files_by_stylesheet, stylesheet, file);
 }
 
-static CRStyleSheet *
-resolve_stylesheet (StTheme  *theme,
-                    GFile    *file,
-                    GError  **error)
-{
-  CRStyleSheet *sheet;
-
-  sheet = g_hash_table_lookup (theme->stylesheets_by_file, file);
-  if (sheet)
-    {
-      cr_stylesheet_ref (sheet);
-      return sheet;
-    }
-
-  sheet = parse_stylesheet (file, error);
-  if (sheet)
-    insert_stylesheet (theme, file, sheet);
-
-  return sheet;
-}
-
 /**
  * st_theme_load_stylesheet:
  * @theme: a #StTheme
@@ -280,12 +267,13 @@ st_theme_load_stylesheet (StTheme    *theme,
 {
   CRStyleSheet *stylesheet;
 
-  stylesheet = resolve_stylesheet (theme, file, error);
+  stylesheet = parse_stylesheet (file, error);
   if (!stylesheet)
     return FALSE;
 
   stylesheet->app_data = GUINT_TO_POINTER (TRUE);
 
+  insert_stylesheet (theme, file, stylesheet);
   cr_stylesheet_ref (stylesheet);
   theme->custom_stylesheets = g_slist_prepend (theme->custom_stylesheets, stylesheet);
   g_signal_emit (theme, signals[STYLESHEETS_CHANGED], 0);
@@ -385,7 +373,8 @@ st_theme_finalize (GObject * object)
   StTheme *theme = ST_THEME (object);
 
   g_slist_foreach (theme->custom_stylesheets, (GFunc) cr_stylesheet_unref, NULL);
-  g_clear_slist (&theme->custom_stylesheets, NULL);
+  g_slist_free (theme->custom_stylesheets);
+  theme->custom_stylesheets = NULL;
 
   g_hash_table_destroy (theme->stylesheets_by_file);
   g_hash_table_destroy (theme->files_by_stylesheet);
@@ -901,7 +890,6 @@ add_matched_properties (StTheme      *a_this,
 
             if (import_rule->sheet == NULL)
               {
-                CRStyleSheet *sheet = NULL;
                 GFile *file = NULL;
 
                 if (import_rule->url->stryng && import_rule->url->stryng->str)
@@ -909,12 +897,13 @@ add_matched_properties (StTheme      *a_this,
                     file = _st_theme_resolve_url (a_this,
                                                   a_nodesheet,
                                                   import_rule->url->stryng->str);
-                    sheet = resolve_stylesheet (a_this, file, NULL);
+                    import_rule->sheet = parse_stylesheet (file, NULL);
                   }
 
-                if (sheet)
+                if (import_rule->sheet)
                   {
-                    import_rule->sheet = sheet;
+                    insert_stylesheet (a_this, file, import_rule->sheet);
+                    /* refcount of stylesheets starts off at zero, so we don't need to unref! */
                   }
                 else
                   {
@@ -1093,43 +1082,4 @@ _st_theme_resolve_url (StTheme      *theme,
     }
 
   return resource;
-}
-
-/**
- * st_theme_get_application_stylesheet:
- *
- * Returns: (transfer none): the stylesheet
- */
-GFile *
-st_theme_get_application_stylesheet (StTheme *theme)
-{
-  g_return_val_if_fail (ST_IS_THEME (theme), NULL);
-
-  return theme->application_stylesheet;
-}
-
-/**
- * st_theme_get_theme_stylesheet:
- *
- * Returns: (transfer none): the stylesheet
- */
-GFile *
-st_theme_get_theme_stylesheet (StTheme *theme)
-{
-  g_return_val_if_fail (ST_IS_THEME (theme), NULL);
-
-  return theme->theme_stylesheet;
-}
-
-/**
- * st_theme_get_default_stylesheet:
- *
- * Returns: (transfer none): the stylesheet
- */
-GFile *
-st_theme_get_default_stylesheet (StTheme *theme)
-{
-  g_return_val_if_fail (ST_IS_THEME (theme), NULL);
-
-  return theme->default_stylesheet;
 }

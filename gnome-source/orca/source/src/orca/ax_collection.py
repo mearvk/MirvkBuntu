@@ -22,8 +22,6 @@
 
 """Wrapper for the Atspi.Collection interface."""
 
-from __future__ import annotations
-
 import time
 
 import gi
@@ -126,14 +124,8 @@ class AXCollection:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return []
 
-        tokens = [
-            "AXCollection:",
-            len(matches),
-            "match(es) found in",
-            round(time.time() - start, 4),
-            "s",
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"AXCollection: {len(matches)} match(es) found in {time.time() - start:.4f}s"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return matches
 
     @staticmethod
@@ -166,6 +158,6 @@ class AXCollection:
         if matches:
             match = matches[0]
 
-        tokens = ["AXCollection: found", match, "in", round(time.time() - start, 4), "s"]
+        tokens = ["AXCollection: found", match, f"in {time.time() - start:.4f}s"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return match

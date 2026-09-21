@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GioUnix from 'gi://GioUnix';
@@ -10,7 +12,6 @@ import St from 'gi://St';
 import * as Signals from '../../misc/signals.js';
 
 import * as Dialog from '../dialog.js';
-import * as Main from '../main.js';
 import * as MessageTray from '../messageTray.js';
 import * as ModalDialog from '../modalDialog.js';
 import * as ShellEntry from '../shellEntry.js';
@@ -36,17 +37,17 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
         else
             this._content = this._getContent();
 
-        const contentBox = new Dialog.MessageDialogContent({
+        let contentBox = new Dialog.MessageDialogContent({
             title: this._content.title,
             description: this._content.message,
         });
 
         let initialFocusSet = false;
         for (let i = 0; i < this._content.secrets.length; i++) {
-            const secret = this._content.secrets[i];
-            const reactive = secret.key != null;
+            let secret = this._content.secrets[i];
+            let reactive = secret.key != null;
 
-            const entryParams = {
+            let entryParams = {
                 style_class: 'prompt-dialog-password-entry',
                 hint_text: secret.label,
                 text: secret.value,
@@ -87,13 +88,13 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
         }
 
         if (this._content.secrets.some(s => s.password)) {
-            const capsLockWarning = new ShellEntry.CapsLockWarning();
+            let capsLockWarning = new ShellEntry.CapsLockWarning();
             contentBox.add_child(capsLockWarning);
         }
 
         if (flags & NM.SecretAgentGetSecretsFlags.WPS_PBC_ACTIVE) {
-            const descriptionLabel = new St.Label({
-                text: _('Alternatively you can connect by pushing the “WPS” button on your router'),
+            let descriptionLabel = new St.Label({
+                text: _('Alternatively you can connect by pushing the “WPS” button on your router.'),
                 style_class: 'message-dialog-description',
             });
             descriptionLabel.clutter_text.line_wrap = true;
@@ -122,7 +123,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     _updateOkButton() {
         let valid = true;
         for (let i = 0; i < this._content.secrets.length; i++) {
-            const secret = this._content.secrets[i];
+            let secret = this._content.secrets[i];
             valid &&= secret.valid;
         }
 
@@ -133,7 +134,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     _onOk() {
         let valid = true;
         for (let i = 0; i < this._content.secrets.length; i++) {
-            const secret = this._content.secrets[i];
+            let secret = this._content.secrets[i];
             valid &&= secret.valid;
             if (secret.key !== null) {
                 if (this._settingName === 'vpn')
@@ -156,7 +157,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     }
 
     _validateWpaPsk(secret) {
-        const value = secret.value;
+        let value = secret.value;
         if (value.length === 64) {
             // must be composed of hexadecimal digits only
             for (let i = 0; i < 64; i++) {
@@ -172,7 +173,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     }
 
     _validateStaticWep(secret) {
-        const value = secret.value;
+        let value = secret.value;
         if (secret.wep_key_type === NM.WepKeyType.KEY) {
             if (value.length === 10 || value.length === 26) {
                 for (let i = 0; i < value.length; i++) {
@@ -198,7 +199,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     }
 
     _getWirelessSecrets(secrets, _wirelessSetting) {
-        const wirelessSecuritySetting = this._connection.get_setting_wireless_security();
+        let wirelessSecuritySetting = this._connection.get_setting_wireless_security();
 
         if (this._settingName === '802-1x') {
             this._get8021xSecrets(secrets);
@@ -249,7 +250,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     }
 
     _get8021xSecrets(secrets) {
-        const ieee8021xSetting = this._connection.get_setting_802_1x();
+        let ieee8021xSetting = this._connection.get_setting_802_1x();
 
         /* If hints were given we know exactly what we need to ask */
         if (this._settingName === '802-1x' && this._hints.length) {
@@ -322,7 +323,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     }
 
     _getPPPoESecrets(secrets) {
-        const pppoeSetting = this._connection.get_setting_pppoe();
+        let pppoeSetting = this._connection.get_setting_pppoe();
         secrets.push({
             label: _('Username'),
             key: 'username',
@@ -356,12 +357,12 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
     }
 
     _getContent() {
-        const connectionSetting = this._connection.get_setting_connection();
-        const connectionType = connectionSetting.get_connection_type();
+        let connectionSetting = this._connection.get_setting_connection();
+        let connectionType = connectionSetting.get_connection_type();
         let wirelessSetting;
         let ssid;
 
-        const content = { };
+        let content = { };
         content.secrets = [];
 
         switch (connectionType) {
@@ -369,7 +370,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
             wirelessSetting = this._connection.get_setting_wireless();
             ssid = NM.utils_ssid_to_utf8(wirelessSetting.get_ssid().get_data());
             content.title = _('Authentication required');
-            content.message = _('Passwords or encryption keys are required to access the wireless network “%s”').format(ssid);
+            content.message = _('Passwords or encryption keys are required to access the wireless network “%s”.').format(ssid);
             this._getWirelessSecrets(content.secrets, wirelessSetting);
             break;
         case '802-3-ethernet':
@@ -390,7 +391,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
             break;
         case 'gsm':
             if (this._hints.includes('pin')) {
-                const gsmSetting = this._connection.get_setting_gsm();
+                let gsmSetting = this._connection.get_setting_gsm();
                 content.title = _('PIN code required');
                 content.message = _('PIN code is needed for the mobile broadband device');
                 content.secrets.push({
@@ -405,7 +406,7 @@ class NetworkSecretDialog extends ModalDialog.ModalDialog {
         case 'cdma':
         case 'bluetooth':
             content.title = _('Authentication required');
-            content.message = _('A password is required to connect to “%s”').format(connectionSetting.get_id());
+            content.message = _('A password is required to connect to “%s”.').format(connectionSetting.get_id());
             this._getMobileSecrets(content.secrets, connectionType);
             break;
         default:
@@ -430,7 +431,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
         this._content = [];
         this._shellDialog = null;
 
-        const connectionSetting = connection.get_setting_connection();
+        let connectionSetting = connection.get_setting_connection();
 
         const argv = [
             authHelper.fileName,
@@ -455,7 +456,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
 
         try {
             const launchContext = global.create_app_launch_context(0, -1);
-            const [pid, stdin, stdout, stderr] =
+            let [pid, stdin, stdout, stderr] =
                 Shell.util_spawn_async_with_pipes(
                     null, /* pwd */
                     argv,
@@ -473,7 +474,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
             else
                 this._readStdoutOldStyle();
 
-            GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid,
+            this._childWatch = GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid,
                 this._vpnChildFinished.bind(this));
 
             this._writeConnection();
@@ -494,7 +495,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
         } else {
             try {
                 this._stdin.write('QUIT\n\n', null);
-            } catch { /* ignore broken pipe errors */ }
+            } catch (e) { /* ignore broken pipe errors */ }
         }
 
         this.destroy();
@@ -505,6 +506,8 @@ class VPNRequestHandler extends Signals.EventEmitter {
             return;
 
         this.emit('destroy');
+        if (this._childWatch)
+            GLib.source_remove(this._childWatch);
 
         this._stdin.close(null);
         // Stdout is closed when we finish reading from it
@@ -513,15 +516,14 @@ class VPNRequestHandler extends Signals.EventEmitter {
     }
 
     _vpnChildFinished(pid, status, _requestObj) {
-        if (this._destroyed)
-            return;
+        this._childWatch = 0;
         if (this._newStylePlugin) {
             // For new style plugin, all work is done in the async reading functions
             // Just reap the process here
             return;
         }
 
-        const [exited, exitStatus] = Shell.util_wifexited(status);
+        let [exited, exitStatus] = Shell.util_wifexited(status);
 
         if (exited) {
             if (exitStatus !== 0)
@@ -543,7 +545,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
             if (line === '' && this._previousLine === '') {
                 try {
                     this._stdin.write('QUIT\n\n', null);
-                } catch { /* ignore broken pipe errors */ }
+                } catch (e) { /* ignore broken pipe errors */ }
             } else {
                 this._agent.add_vpn_secret(this._requestId, this._previousLine, line);
                 this._previousLine = undefined;
@@ -588,7 +590,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
     }
 
     _showNewStyleDialog() {
-        const keyfile = new GLib.KeyFile();
+        let keyfile = new GLib.KeyFile();
         let data;
         let contentOverride;
 
@@ -605,13 +607,13 @@ class VPNRequestHandler extends Signals.EventEmitter {
                 secrets: [],
             };
 
-            const [groups, len_] = keyfile.get_groups();
+            let [groups, len_] = keyfile.get_groups();
             for (let i = 0; i < groups.length; i++) {
                 if (groups[i] === VPN_UI_GROUP)
                     continue;
 
-                const value = keyfile.get_string(groups[i], 'Value');
-                const shouldAsk = keyfile.get_boolean(groups[i], 'ShouldAsk');
+                let value = keyfile.get_string(groups[i], 'Value');
+                let shouldAsk = keyfile.get_boolean(groups[i], 'ShouldAsk');
 
                 if (shouldAsk) {
                     contentOverride.secrets.push({
@@ -649,7 +651,7 @@ class VPNRequestHandler extends Signals.EventEmitter {
     }
 
     _writeConnection() {
-        const vpnSetting = this._connection.get_setting_vpn();
+        let vpnSetting = this._connection.get_setting_vpn();
 
         try {
             vpnSetting.foreach_data_item((key, value) => {
@@ -676,7 +678,6 @@ class NetworkAgent {
             identifier: 'org.gnome.Shell.NetworkAgent',
             capabilities: NM.SecretAgentCapabilities.VPN_HINTS,
             auto_register: false,
-            force_always_ask: Main.sessionMode.isGreeter,
         });
 
         this._dialogs = { };
@@ -735,23 +736,23 @@ class NetworkAgent {
     _showNotification(requestId, connection, settingName, hints, flags) {
         let title, body;
 
-        const connectionSetting = connection.get_setting_connection();
-        const connectionType = connectionSetting.get_connection_type();
+        let connectionSetting = connection.get_setting_connection();
+        let connectionType = connectionSetting.get_connection_type();
         switch (connectionType) {
         case '802-11-wireless': {
-            const wirelessSetting = connection.get_setting_wireless();
-            const ssid = NM.utils_ssid_to_utf8(wirelessSetting.get_ssid().get_data());
+            let wirelessSetting = connection.get_setting_wireless();
+            let ssid = NM.utils_ssid_to_utf8(wirelessSetting.get_ssid().get_data());
             title = _('Authentication required');
-            body = _('Passwords or encryption keys are required to access the wireless network “%s”').format(ssid);
+            body = _('Passwords or encryption keys are required to access the wireless network “%s”.').format(ssid);
             break;
         }
         case '802-3-ethernet':
             title = _('Wired 802.1X authentication');
-            body = _('A password is required to connect to “%s”').format(connection.get_id());
+            body = _('A password is required to connect to “%s”.').format(connection.get_id());
             break;
         case 'pppoe':
             title = _('DSL authentication');
-            body = _('A password is required to connect to “%s”').format(connection.get_id());
+            body = _('A password is required to connect to “%s”.').format(connection.get_id());
             break;
         case 'gsm':
             if (hints.includes('pin')) {
@@ -763,11 +764,11 @@ class NetworkAgent {
         case 'cdma':
         case 'bluetooth':
             title = _('Authentication required');
-            body = _('A password is required to connect to “%s”').format(connectionSetting.get_id());
+            body = _('A password is required to connect to “%s”.').format(connectionSetting.get_id());
             break;
         case 'vpn':
             title = _('VPN password');
-            body = _('A password is required to connect to “%s”').format(connectionSetting.get_id());
+            body = _('A password is required to connect to “%s”.').format(connectionSetting.get_id());
             break;
         default:
             log(`Invalid connection type: ${connectionType}`);
@@ -807,7 +808,7 @@ class NetworkAgent {
             return;
         }
 
-        const dialog = new NetworkSecretDialog(this._native, requestId, connection, settingName, hints, flags);
+        let dialog = new NetworkSecretDialog(this._native, requestId, connection, settingName, hints, flags);
         dialog.connect('destroy', () => {
             delete this._dialogs[requestId];
         });
@@ -827,10 +828,10 @@ class NetworkAgent {
     }
 
     async _vpnRequest(requestId, connection, hints, flags) {
-        const vpnSetting = connection.get_setting_vpn();
-        const serviceType = vpnSetting.service_type;
+        let vpnSetting = connection.get_setting_vpn();
+        let serviceType = vpnSetting.service_type;
 
-        const binary = await this._findAuthBinary(serviceType);
+        let binary = await this._findAuthBinary(serviceType);
         if (!binary) {
             log('Invalid VPN service type (cannot find authentication binary)');
 
@@ -839,7 +840,7 @@ class NetworkAgent {
             return;
         }
 
-        const vpnRequest = new VPNRequestHandler(this._native, requestId, binary, serviceType, connection, hints, flags);
+        let vpnRequest = new VPNRequestHandler(this._native, requestId, binary, serviceType, connection, hints, flags);
         vpnRequest.connect('destroy', () => {
             delete this._vpnRequests[requestId];
         });

@@ -33,19 +33,22 @@ gdk_broadway_cairo_context_dispose (GObject *object)
 }
 
 static void
-gdk_broadway_cairo_context_begin_frame (GdkDrawContext  *draw_context,
-                                        gpointer         context_data,
-                                        cairo_region_t  *region,
-                                        GdkColorState  **out_color_state,
-                                        GdkMemoryDepth  *out_depth)
+gdk_broadway_cairo_context_begin_frame (GdkDrawContext *draw_context,
+                                        GdkMemoryDepth  depth,
+                                        cairo_region_t *region)
 {
   GdkBroadwayCairoContext *self = GDK_BROADWAY_CAIRO_CONTEXT (draw_context);
+  GdkSurface *surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (self));
   cairo_t *cr;
   cairo_region_t *repaint_region;
-  guint width, height;
+  int width, height, scale;
 
-  gdk_draw_context_get_buffer_size (draw_context, &width, &height);
-  self->paint_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+  width = gdk_surface_get_width (surface);
+  height = gdk_surface_get_height (surface);
+  scale = gdk_surface_get_scale_factor (surface);
+  self->paint_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                                    width * scale, height * scale);
+  cairo_surface_set_device_scale (self->paint_surface, scale, scale);
 
   repaint_region = cairo_region_create_rectangle (&(cairo_rectangle_int_t) { 0, 0, width, height });
   cairo_region_union (region, repaint_region);
@@ -56,9 +59,6 @@ gdk_broadway_cairo_context_begin_frame (GdkDrawContext  *draw_context,
   cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
   cairo_fill (cr);
   cairo_destroy (cr);
-
-  *out_color_state = GDK_COLOR_STATE_SRGB;
-  *out_depth = gdk_color_state_get_depth (GDK_COLOR_STATE_SRGB);
 }
 
 static void
@@ -77,7 +77,6 @@ add_float (GArray *nodes, float f)
 
 static void
 gdk_broadway_cairo_context_end_frame (GdkDrawContext *draw_context,
-                                      gpointer        context_data,
                                       cairo_region_t *painted)
 {
   GdkBroadwayCairoContext *self = GDK_BROADWAY_CAIRO_CONTEXT (draw_context);
@@ -106,7 +105,8 @@ gdk_broadway_cairo_context_end_frame (GdkDrawContext *draw_context,
   g_array_unref (nodes);
   g_ptr_array_unref (node_textures);
 
-  g_clear_pointer (&self->paint_surface, cairo_surface_destroy);
+  cairo_surface_destroy (self->paint_surface);
+  self->paint_surface = NULL;
 }
 
 static void

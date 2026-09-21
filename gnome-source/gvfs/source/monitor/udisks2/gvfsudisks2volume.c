@@ -684,6 +684,8 @@ gvfs_udisks2_volume_new (GVfsUDisks2VolumeMonitor   *monitor,
   volume->activation_root = activation_root != NULL ? g_object_ref (activation_root) : NULL;
 
   volume->drive = drive;
+  if (drive != NULL)
+    gvfs_udisks2_drive_set_volume (drive, volume);
 
   update_volume (volume);
 
@@ -705,10 +707,7 @@ void
 gvfs_udisks2_volume_removed (GVfsUDisks2Volume *volume)
 {
   if (volume->mount_pending_op != NULL)
-    {
-      mount_cancel_pending_op (volume->mount_pending_op);
-      volume->mount_pending_op = NULL;
-    }
+    mount_cancel_pending_op (volume->mount_pending_op);
 
   if (volume->mount != NULL)
     {
@@ -733,7 +732,8 @@ gvfs_udisks2_volume_set_mount (GVfsUDisks2Volume *volume,
         gvfs_udisks2_mount_unset_volume (volume->mount, volume);
 
       volume->mount = mount;
-      update_volume (volume);
+
+      emit_changed (volume);
     }
 }
 
@@ -744,7 +744,7 @@ gvfs_udisks2_volume_unset_mount (GVfsUDisks2Volume *volume,
   if (volume->mount == mount)
     {
       volume->mount = NULL;
-      update_volume (volume);
+      emit_changed (volume);
     }
 }
 
@@ -757,6 +757,7 @@ gvfs_udisks2_volume_set_drive (GVfsUDisks2Volume *volume,
       if (volume->drive != NULL)
         gvfs_udisks2_drive_unset_volume (volume->drive, volume);
       volume->drive = drive;
+      emit_changed (volume);
     }
 }
 
@@ -767,6 +768,7 @@ gvfs_udisks2_volume_unset_drive (GVfsUDisks2Volume *volume,
   if (volume->drive == drive)
     {
       volume->drive = NULL;
+      emit_changed (volume);
     }
 }
 
@@ -1848,14 +1850,6 @@ gvfs_udisks2_volume_get_block (GVfsUDisks2Volume *volume)
 {
   g_return_val_if_fail (GVFS_IS_UDISKS2_VOLUME (volume), NULL);
   return volume->block;
-}
-
-GVfsUDisks2Drive *
-gvfs_udisks2_volume_get_udisks2_drive (GVfsUDisks2Volume *volume)
-{
-  g_return_val_if_fail (GVFS_IS_UDISKS2_VOLUME (volume), NULL);
-
-  return volume->drive;
 }
 
 GUnixMountPoint *

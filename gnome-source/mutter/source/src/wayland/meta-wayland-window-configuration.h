@@ -21,22 +21,16 @@
 #include <glib.h>
 #include <stdint.h>
 
-#include "compositor/meta-window-drag.h"
 #include "core/window-private.h"
-#include "meta/meta-window-config.h"
 #include "wayland/meta-wayland-types.h"
 
 struct _MetaWaylandWindowConfiguration
 {
-  grefcount ref_count;
-
   uint32_t serial;
 
   gboolean has_position;
   int x;
   int y;
-
-  MetaWindowDrag *window_drag;
 
   gboolean has_relative_position;
   int rel_x;
@@ -54,7 +48,7 @@ struct _MetaWaylandWindowConfiguration
   int bounds_width;
   int bounds_height;
 
-  MetaWindowConfig *config;
+  gboolean is_fullscreen;
   gboolean is_suspended;
 };
 
@@ -73,14 +67,8 @@ MetaWaylandWindowConfiguration * meta_wayland_window_configuration_new_relative 
                                                                                  int         height,
                                                                                  int         scale);
 
-MetaWaylandWindowConfiguration * meta_wayland_window_configuration_new_from_other (MetaWaylandWindowConfiguration *other);
+MetaWaylandWindowConfiguration * meta_wayland_window_configuration_new_empty (int bounds_width,
+                                                                              int bounds_height,
+                                                                              int scale);
 
-MetaWaylandWindowConfiguration * meta_wayland_window_configuration_ref (MetaWaylandWindowConfiguration *configuration);
-
-void meta_wayland_window_configuration_unref (MetaWaylandWindowConfiguration *configuration);
-
-gboolean meta_wayland_window_configuration_is_equivalent (MetaWaylandWindowConfiguration *configuration,
-                                                          MetaWaylandWindowConfiguration *other);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaWaylandWindowConfiguration,
-                               meta_wayland_window_configuration_unref)
+void meta_wayland_window_configuration_free (MetaWaylandWindowConfiguration *configuration);

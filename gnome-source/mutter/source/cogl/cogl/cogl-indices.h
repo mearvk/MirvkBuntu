@@ -37,6 +37,11 @@
 #error "Only <cogl/cogl.h> can be included directly."
 #endif
 
+/* We forward declare the CoglIndices type here to avoid some circular
+ * dependency issues with the following headers.
+ */
+typedef struct _CoglIndices CoglIndices;
+
 #include "cogl/cogl-index-buffer.h"
 
 #include <glib-object.h>
@@ -98,7 +103,7 @@ G_BEGIN_DECLS
  * needs to look like depending on the number of quads that need to be
  * drawn. It doesn't matter how the quads might be animated and
  * changed the indices will remain the same. Cogl even has a utility
- * ([method@Cogl.Context.get_rectangle_indices]) to get access to re-useable indices
+ * (cogl_get_rectangle_indices()) to get access to re-useable indices
  * for drawing quads as above.
  */
 
@@ -114,6 +119,11 @@ cogl_indices_new (CoglContext *context,
                   const void *indices_data,
                   int n_indices);
 
+COGL_EXPORT CoglIndices *
+cogl_indices_new_for_buffer (CoglIndicesType type,
+                             CoglIndexBuffer *buffer,
+                             size_t offset);
+
 /**
  * cogl_indices_get_buffer:
  *
@@ -124,5 +134,20 @@ cogl_indices_get_buffer (CoglIndices *indices);
 
 COGL_EXPORT CoglIndicesType
 cogl_indices_get_indices_type (CoglIndices *indices);
+
+COGL_EXPORT size_t
+cogl_indices_get_offset (CoglIndices *indices);
+
+COGL_EXPORT void
+cogl_indices_set_offset (CoglIndices *indices,
+                         size_t offset);
+
+/**
+ * cogl_get_rectangle_indices:
+ *
+ * Returns: (transfer none): a #CoglIndices
+ */
+COGL_EXPORT CoglIndices *
+cogl_get_rectangle_indices (CoglContext *context, int n_rectangles);
 
 G_END_DECLS

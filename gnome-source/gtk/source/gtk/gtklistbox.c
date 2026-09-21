@@ -31,7 +31,6 @@
 #include "gtkscrollable.h"
 #include "gtktypebuiltins.h"
 #include "gtkwidgetprivate.h"
-#include "gtksizerequest.h"
 
 #include <float.h>
 #include <math.h>
@@ -40,12 +39,7 @@
 /**
  * GtkListBox:
  *
- * Shows a vertical list.
- *
- * <picture>
- *   <source srcset="list-box-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkListBox" src="list-box.png">
- * </picture>
+ * `GtkListBox` is a vertical list.
  *
  * A `GtkListBox` only contains `GtkListBoxRow` children. These rows can
  * by dynamically sorted and filtered, and headers can be added dynamically
@@ -75,21 +69,12 @@
  * attribute of a `<child>` element. See [method@Gtk.ListBox.set_placeholder]
  * for info.
  *
- * # Shortcuts and Gestures
- *
- * The following signals have default keybindings:
- *
- * - [signal@Gtk.ListBox::move-cursor]
- * - [signal@Gtk.ListBox::select-all]
- * - [signal@Gtk.ListBox::toggle-cursor-row]
- * - [signal@Gtk.ListBox::unselect-all]
- *
  * # CSS nodes
  *
- * ```
+ * |[<!-- language="plain" -->
  * list[.separators][.rich-list][.navigation-sidebar][.boxed-list]
  * ╰── row[.activatable]
- * ```
+ * ]|
  *
  * `GtkListBox` uses a single CSS node named list. It may carry the .separators
  * style class, when the [property@Gtk.ListBox:show-separators] property is set.
@@ -105,17 +90,14 @@
  *
  * # Accessibility
  *
- * `GtkListBox` uses the [enum@Gtk.AccessibleRole.list] role and `GtkListBoxRow` uses
- * the [enum@Gtk.AccessibleRole.list_item] role.
+ * `GtkListBox` uses the %GTK_ACCESSIBLE_ROLE_LIST role and `GtkListBoxRow` uses
+ * the %GTK_ACCESSIBLE_ROLE_LIST_ITEM role.
  */
 
 /**
  * GtkListBoxRow:
  *
- * The kind of widget that can be added to a `GtkListBox`.
- *
- * [class@Gtk.ListBox] will automatically wrap its children in a `GtkListboxRow`
- * when necessary.
+ * `GtkListBoxRow` is the kind of widget that can be added to a `GtkListBox`.
  */
 
 typedef struct _GtkListBoxClass   GtkListBoxClass;
@@ -164,8 +146,6 @@ struct _GtkListBox
   GtkListBoxCreateWidgetFunc create_widget_func;
   gpointer create_widget_func_data;
   GDestroyNotify create_widget_func_data_destroy;
-
-  GtkListTabBehavior tab_behavior;
 };
 
 struct _GtkListBoxClass
@@ -225,8 +205,7 @@ enum {
   PROP_ACTIVATE_ON_SINGLE_CLICK,
   PROP_ACCEPT_UNPAIRED_RELEASE,
   PROP_SHOW_SEPARATORS,
-  PROP_TAB_BEHAVIOR,
-  N_PROPS,
+  LAST_PROPERTY
 };
 
 enum {
@@ -234,11 +213,12 @@ enum {
   ROW_PROP_ACTIVATABLE,
   ROW_PROP_SELECTABLE,
   ROW_PROP_CHILD,
-  /* GtkActionable */
+
+  /* actionable properties */
   ROW_PROP_ACTION_NAME,
   ROW_PROP_ACTION_TARGET,
-  ROW_N_PROPS
 
+  LAST_ROW_PROPERTY = ROW_PROP_ACTION_NAME
 };
 
 #define ROW_PRIV(row) ((GtkListBoxRowPrivate*)gtk_list_box_row_get_instance_private ((GtkListBoxRow*)(row)))
@@ -331,9 +311,9 @@ static void gtk_list_box_click_unpaired_release (GtkGestureClick  *gesture,
 static void gtk_list_box_click_gesture_stopped  (GtkGestureClick  *gesture,
                                                  GtkListBox       *box);
 
-static void gtk_list_box_update_row        (GtkListBox    *box,
+static void gtk_list_box_update_row_styles (GtkListBox    *box);
+static void gtk_list_box_update_row_style  (GtkListBox    *box,
                                             GtkListBoxRow *row);
-static void gtk_list_box_update_rows       (GtkListBox    *box);
 
 static void                 gtk_list_box_bound_model_changed            (GListModel          *list,
                                                                          guint                position,
@@ -353,9 +333,9 @@ static void gtk_list_box_measure (GtkWidget     *widget,
 
 
 
-static GParamSpec *properties[N_PROPS] = { NULL, };
+static GParamSpec *properties[LAST_PROPERTY] = { NULL, };
 static guint signals[LAST_SIGNAL] = { 0 };
-static GParamSpec *row_properties[ROW_N_PROPS] = { NULL, };
+static GParamSpec *row_properties[LAST_ROW_PROPERTY] = { NULL, };
 static guint row_signals[ROW__LAST_SIGNAL] = { 0 };
 
 
@@ -416,9 +396,6 @@ gtk_list_box_get_property (GObject    *obj,
     case PROP_SHOW_SEPARATORS:
       g_value_set_boolean (value, box->show_separators);
       break;
-    case PROP_TAB_BEHAVIOR:
-      g_value_set_enum (value, box->tab_behavior);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (obj, property_id, pspec);
       break;
@@ -446,9 +423,6 @@ gtk_list_box_set_property (GObject      *obj,
       break;
     case PROP_SHOW_SEPARATORS:
       gtk_list_box_set_show_separators (box, g_value_get_boolean (value));
-      break;
-    case PROP_TAB_BEHAVIOR:
-      gtk_list_box_set_tab_behavior (box, g_value_get_enum (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (obj, property_id, pspec);
@@ -522,7 +496,7 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
   klass->selected_rows_changed = gtk_list_box_selected_rows_changed;
 
   /**
-   * GtkListBox:selection-mode:
+   * GtkListBox:selection-mode: (attributes org.gtk.Property.get=gtk_list_box_get_selection_mode org.gtk.Property.set=gtk_list_box_set_selection_mode)
    *
    * The selection mode used by the list box.
    */
@@ -530,10 +504,10 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
     g_param_spec_enum ("selection-mode", NULL, NULL,
                        GTK_TYPE_SELECTION_MODE,
                        GTK_SELECTION_SINGLE,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
     /**
-   * GtkListBox:activate-on-single-click:
+   * GtkListBox:activate-on-single-click: (attributes org.gtk.Property.get=gtk_list_box_get_activate_on_single_click org.gtk.Property.set=gtk_list_box_set_activate_on_single_click)
    *
    * Determines whether children can be activated with a single
    * click, or require a double-click.
@@ -541,7 +515,7 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
   properties[PROP_ACTIVATE_ON_SINGLE_CLICK] =
     g_param_spec_boolean ("activate-on-single-click", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkListBox:accept-unpaired-release:
@@ -551,33 +525,20 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
   properties[PROP_ACCEPT_UNPAIRED_RELEASE] =
     g_param_spec_boolean ("accept-unpaired-release", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
 
   /**
-   * GtkListBox:show-separators:
+   * GtkListBox:show-separators: (attributes org.gtk.Property.get=gtk_list_box_get_show_separators org.gtk.Property.set=gtk_list_box_set_show_separators)
    *
    * Whether to show separators between rows.
    */
   properties[PROP_SHOW_SEPARATORS] =
     g_param_spec_boolean ("show-separators", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
-                          /**
-                           * GtkListBox:tab-behavior:
-                           * 
-                           * Behavior of the <kbd>Tab</kbd> key
-                           *
-                           * Since: 4.18 
-                           */
-                          properties[PROP_TAB_BEHAVIOR] =
-                            g_param_spec_enum ("tab-behavior", NULL, NULL,
-                                               GTK_TYPE_LIST_TAB_BEHAVIOR,
-                                               GTK_LIST_TAB_ALL,
-                                               G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, properties);
+  g_object_class_install_properties (object_class, LAST_PROPERTY, properties);
 
   /**
    * GtkListBox::row-selected:
@@ -670,13 +631,6 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
                   NULL,
                   G_TYPE_NONE, 1,
                   GTK_TYPE_LIST_BOX_ROW);
-
-  /**
-   * GtkListBox::activate-cursor-row:
-   * @box: the list box
-   *
-   * Emitted when the cursor row is activated.
-   */
   signals[ACTIVATE_CURSOR_ROW] =
     g_signal_new (I_("activate-cursor-row"),
                   GTK_TYPE_LIST_BOX,
@@ -685,15 +639,6 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
                   NULL, NULL,
                   NULL,
                   G_TYPE_NONE, 0);
-
-  /**
-   * GtkListBox::toggle-cursor-row:
-   * @box: the list box
-   *
-   * Emitted when the cursor row is toggled.
-   *
-   * The default bindings for this signal is <kbd>Ctrl</kbd>+<kbd>␣</kbd>.
-   */
   signals[TOGGLE_CURSOR_ROW] =
     g_signal_new (I_("toggle-cursor-row"),
                   GTK_TYPE_LIST_BOX,
@@ -702,26 +647,6 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
                   NULL, NULL,
                   NULL,
                   G_TYPE_NONE, 0);
-  /**
-   * GtkListBox::move-cursor:
-   * @box: the list box on which the signal is emitted
-   * @step: the granularity of the move, as a `GtkMovementStep`
-   * @count: the number of @step units to move
-   * @extend: whether to extend the selection
-   * @modify: whether to modify the selection
-   *
-   * Emitted when the user initiates a cursor movement.
-   *
-   * The default bindings for this signal come in two variants, the variant with
-   * the Shift modifier extends the selection, the variant without the Shift
-   * modifier does not. There are too many key combinations to list them all
-   * here.
-   *
-   * - <kbd>←</kbd>, <kbd>→</kbd>, <kbd>↑</kbd>, <kbd>↓</kbd>
-   *   move by individual children
-   * - <kbd>Home</kbd>, <kbd>End</kbd> move to the ends of the box
-   * - <kbd>PgUp</kbd>, <kbd>PgDn</kbd> move vertically by pages
-   */
   signals[MOVE_CURSOR] =
     g_signal_new (I_("move-cursor"),
                   GTK_TYPE_LIST_BOX,
@@ -739,31 +664,38 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
 
   gtk_list_box_add_move_binding (widget_class, GDK_KEY_Home, 0,
                                  GTK_MOVEMENT_BUFFER_ENDS, -1);
+  gtk_list_box_add_move_binding (widget_class, GDK_KEY_KP_Home, 0,
+                                 GTK_MOVEMENT_BUFFER_ENDS, -1);
   gtk_list_box_add_move_binding (widget_class, GDK_KEY_End, 0,
+                                 GTK_MOVEMENT_BUFFER_ENDS, 1);
+  gtk_list_box_add_move_binding (widget_class, GDK_KEY_KP_End, 0,
                                  GTK_MOVEMENT_BUFFER_ENDS, 1);
   gtk_list_box_add_move_binding (widget_class, GDK_KEY_Up, 0,
                                  GTK_MOVEMENT_DISPLAY_LINES, -1);
+  gtk_list_box_add_move_binding (widget_class, GDK_KEY_KP_Up, 0,
+                                 GTK_MOVEMENT_DISPLAY_LINES, -1);
   gtk_list_box_add_move_binding (widget_class, GDK_KEY_Down, 0,
+                                 GTK_MOVEMENT_DISPLAY_LINES, 1);
+  gtk_list_box_add_move_binding (widget_class, GDK_KEY_KP_Down, 0,
                                  GTK_MOVEMENT_DISPLAY_LINES, 1);
   gtk_list_box_add_move_binding (widget_class, GDK_KEY_Page_Up, 0,
                                  GTK_MOVEMENT_PAGES, -1);
+  gtk_list_box_add_move_binding (widget_class, GDK_KEY_KP_Page_Up, 0,
+                                 GTK_MOVEMENT_PAGES, -1);
   gtk_list_box_add_move_binding (widget_class, GDK_KEY_Page_Down, 0,
+                                 GTK_MOVEMENT_PAGES, 1);
+  gtk_list_box_add_move_binding (widget_class, GDK_KEY_KP_Page_Down, 0,
                                  GTK_MOVEMENT_PAGES, 1);
 
   gtk_widget_class_add_binding_signal (widget_class,
                                        GDK_KEY_space, GDK_CONTROL_MASK,
-                                       "toggle-cursor-row", NULL);
+                                       "toggle-cursor-row",
+                                       NULL);
+  gtk_widget_class_add_binding_signal (widget_class,
+                                       GDK_KEY_KP_Space, GDK_CONTROL_MASK,
+                                       "toggle-cursor-row",
+                                       NULL);
 
-#ifdef __APPLE__
-  gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_a, GDK_META_MASK,
-                                       "select-all",
-                                       NULL);
-  gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_a, GDK_META_MASK | GDK_SHIFT_MASK,
-                                       "unselect-all",
-                                       NULL);
-#else
   gtk_widget_class_add_binding_signal (widget_class,
                                        GDK_KEY_a, GDK_CONTROL_MASK,
                                        "select-all",
@@ -772,7 +704,6 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
                                        GDK_KEY_a, GDK_CONTROL_MASK | GDK_SHIFT_MASK,
                                        "unselect-all",
                                        NULL);
-#endif
 
   gtk_widget_class_set_css_name (widget_class, I_("list"));
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_LIST);
@@ -1174,7 +1105,8 @@ gtk_list_box_parent_cb (GObject    *object,
   if (box->adjustment_changed_id != 0 &&
       box->scrollable_parent != NULL)
     {
-      g_clear_signal_handler (&box->adjustment_changed_id, box->scrollable_parent);
+      g_signal_handler_disconnect (box->scrollable_parent,
+                                   box->adjustment_changed_id);
     }
 
   if (parent && GTK_IS_SCROLLABLE (parent))
@@ -1193,7 +1125,7 @@ gtk_list_box_parent_cb (GObject    *object,
 }
 
 /**
- * gtk_list_box_set_selection_mode:
+ * gtk_list_box_set_selection_mode: (attributes org.gtk.Method.set_property=selection-mode)
  * @box: a `GtkListBox`
  * @mode: The `GtkSelectionMode`
  *
@@ -1216,7 +1148,7 @@ gtk_list_box_set_selection_mode (GtkListBox       *box,
 
   box->selection_mode = mode;
 
-  gtk_list_box_update_rows (box);
+  gtk_list_box_update_row_styles (box);
 
   gtk_accessible_update_property (GTK_ACCESSIBLE (box),
                                   GTK_ACCESSIBLE_PROPERTY_MULTI_SELECTABLE, mode == GTK_SELECTION_MULTIPLE,
@@ -1232,7 +1164,7 @@ gtk_list_box_set_selection_mode (GtkListBox       *box,
 }
 
 /**
- * gtk_list_box_get_selection_mode:
+ * gtk_list_box_get_selection_mode: (attributes org.gtk.Method.get_property=selection-mode)
  * @box: a `GtkListBox`
  *
  * Gets the selection mode of the listbox.
@@ -1250,9 +1182,8 @@ gtk_list_box_get_selection_mode (GtkListBox *box)
 /**
  * gtk_list_box_set_filter_func:
  * @box: a `GtkListBox`
- * @filter_func: (nullable) (scope notified) (closure user_data) (destroy destroy): callback
- *   that lets you filter which rows to show
- * @user_data: user data passed to @filter_func
+ * @filter_func: (nullable): callback that lets you filter which rows to show
+ * @user_data: (closure): user data passed to @filter_func
  * @destroy: destroy notifier for @user_data
  *
  * By setting a filter function on the @box one can decide dynamically which
@@ -1292,9 +1223,8 @@ gtk_list_box_set_filter_func (GtkListBox           *box,
 /**
  * gtk_list_box_set_header_func:
  * @box: a `GtkListBox`
- * @update_header: (nullable) (scope notified) (closure user_data) (destroy destroy): callback
- *   that lets you add row headers
- * @user_data: user data passed to @update_header
+ * @update_header: (nullable): callback that lets you add row headers
+ * @user_data: (closure): user data passed to @update_header
  * @destroy: destroy notifier for @user_data
  *
  * Sets a header function.
@@ -1448,8 +1378,8 @@ gtk_list_box_invalidate_headers (GtkListBox *box)
 /**
  * gtk_list_box_set_sort_func:
  * @box: a `GtkListBox`
- * @sort_func: (nullable) (scope notified) (closure user_data) (destroy destroy): the sort function
- * @user_data: user data passed to @sort_func
+ * @sort_func: (nullable): the sort function
+ * @user_data: (closure): user data passed to @sort_func
  * @destroy: destroy notifier for @user_data
  *
  * Sets a sort function.
@@ -1514,7 +1444,7 @@ gtk_list_box_got_row_changed (GtkListBox    *box,
 }
 
 /**
- * gtk_list_box_set_activate_on_single_click:
+ * gtk_list_box_set_activate_on_single_click: (attributes org.gtk.Method.set_property=activate-on-single-click)
  * @box: a `GtkListBox`
  * @single: a boolean
  *
@@ -1538,7 +1468,7 @@ gtk_list_box_set_activate_on_single_click (GtkListBox *box,
 }
 
 /**
- * gtk_list_box_get_activate_on_single_click:
+ * gtk_list_box_get_activate_on_single_click: (attributes org.gtk.Method.get_property=activate-on-single-click)
  * @box: a `GtkListBox`
  *
  * Returns whether rows activate on single clicks.
@@ -1975,9 +1905,6 @@ gtk_list_box_click_gesture_released (GtkGestureClick *gesture,
           state = gdk_event_get_modifier_state (event);
           extend = (state & GDK_SHIFT_MASK) != 0;
           modify = (state & GDK_CONTROL_MASK) != 0;
-#ifdef __APPLE__
-          modify = modify | ((state & GDK_META_MASK) != 0);
-#endif
           source = gdk_device_get_source (gdk_event_get_device (event));
 
           if (source == GDK_SOURCE_TOUCHSCREEN)
@@ -2034,7 +1961,7 @@ gtk_list_box_focus (GtkWidget        *widget,
       if (gtk_widget_child_focus (focus_child, direction))
         return TRUE;
 
-      if (direction == GTK_DIR_UP || (direction == GTK_DIR_TAB_BACKWARD && box->tab_behavior == GTK_LIST_TAB_ALL))
+      if (direction == GTK_DIR_UP || direction == GTK_DIR_TAB_BACKWARD)
         {
           if (GTK_IS_LIST_BOX_ROW (focus_child))
             {
@@ -2064,7 +1991,7 @@ gtk_list_box_focus (GtkWidget        *widget,
               i = gtk_list_box_get_previous_visible (box, i);
             }
         }
-      else if (direction == GTK_DIR_DOWN || (direction == GTK_DIR_TAB_FORWARD && box->tab_behavior == GTK_LIST_TAB_ALL))
+      else if (direction == GTK_DIR_DOWN || direction == GTK_DIR_TAB_FORWARD)
         {
           if (GTK_IS_LIST_BOX_ROW (focus_child))
             i = gtk_list_box_get_next_visible (box, ROW_PRIV (GTK_LIST_BOX_ROW (focus_child))->iter);
@@ -2077,7 +2004,7 @@ gtk_list_box_focus (GtkWidget        *widget,
                 i = NULL;
             }
 
-          while (i != NULL && !g_sequence_iter_is_end (i))
+          while (!g_sequence_iter_is_end (i))
             {
               if (gtk_widget_get_sensitive (g_sequence_get (i)))
                 {
@@ -2354,6 +2281,7 @@ gtk_list_box_update_header (GtkListBox    *box,
               g_hash_table_insert (box->header_hash, new_header, row);
               gtk_widget_unparent (new_header);
               gtk_widget_set_parent (new_header, GTK_WIDGET (box));
+              gtk_widget_set_visible (new_header, TRUE);
             }
           gtk_widget_queue_resize (GTK_WIDGET (box));
         }
@@ -2381,8 +2309,7 @@ gtk_list_box_row_visibility_changed (GtkListBox    *box,
 {
   update_row_is_visible (box, row);
 
-  if (gtk_widget_get_visible (GTK_WIDGET (box)) &&
-      ROW_PRIV (row)->iter)
+  if (gtk_widget_get_visible (GTK_WIDGET (box)))
     {
       gtk_list_box_update_header (box, ROW_PRIV (row)->iter);
       gtk_list_box_update_header (box,
@@ -2444,8 +2371,6 @@ gtk_list_box_remove (GtkListBox *box,
 
   row = GTK_LIST_BOX_ROW (child);
   iter = ROW_PRIV (row)->iter;
-  ROW_PRIV (row)->iter = NULL;
-
   if (g_sequence_iter_get_sequence (iter) != box->children)
     {
       g_warning ("Tried to remove non-child %p", child);
@@ -2540,265 +2465,119 @@ gtk_list_box_compute_expand (GtkWidget *widget,
 
   *hexpand_p = hexpand;
   *vexpand_p = vexpand;
+
+  /* We don't expand vertically beyond the minimum size */
+  if (*vexpand_p)
+    *vexpand_p = FALSE;
 }
 
 static GtkSizeRequestMode
 gtk_list_box_get_request_mode (GtkWidget *widget)
 {
-  GtkListBox *box = GTK_LIST_BOX (widget);
-  GSequenceIter *iter;
-  GtkListBoxRow *row;
-
-  if (box->placeholder && gtk_widget_get_child_visible (box->placeholder))
-    return gtk_widget_get_request_mode (box->placeholder);
-
-  /* Return constant-size, unless any of the children do hfw (or wfh) */
-
-  for (iter = g_sequence_get_begin_iter (box->children);
-       !g_sequence_iter_is_end (iter);
-       iter = g_sequence_iter_next (iter))
-    {
-      row = g_sequence_get (iter);
-      if (!row_is_visible (row))
-        continue;
-
-      if (ROW_PRIV (row)->header != NULL &&
-          gtk_widget_get_request_mode (ROW_PRIV (row)->header) != GTK_SIZE_REQUEST_CONSTANT_SIZE)
-        return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
-      if (gtk_widget_get_request_mode (GTK_WIDGET (row)) != GTK_SIZE_REQUEST_CONSTANT_SIZE)
-        return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
-    }
-
-  return GTK_SIZE_REQUEST_CONSTANT_SIZE;
-}
-
-static void
-gtk_list_box_measure_height_for_width (GtkListBox       *box,
-                                       int               for_width,
-                                       int              *minimum,
-                                       int              *natural,
-                                       GtkRequestedSize *sizes)
-{
-  GSequenceIter *iter;
-  GtkListBoxRow *row;
-  int i = 0;
-
-  if (box->placeholder && gtk_widget_get_child_visible (box->placeholder))
-    {
-      gtk_widget_measure (box->placeholder, GTK_ORIENTATION_VERTICAL,
-                          for_width, minimum, natural, NULL, NULL);
-      return;
-    }
-
-  *minimum = 0;
-  *natural = 0;
-
-  for (iter = g_sequence_get_begin_iter (box->children);
-       !g_sequence_iter_is_end (iter);
-       iter = g_sequence_iter_next (iter))
-    {
-      int row_min = 0, row_nat = 0;
-
-      row = g_sequence_get (iter);
-      if (!row_is_visible (row))
-        continue;
-
-      if (ROW_PRIV (row)->header != NULL)
-        {
-          gtk_widget_measure (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL,
-                              for_width, &row_min, &row_nat, NULL, NULL);
-          *minimum += row_min;
-          *natural += row_nat;
-
-          if (sizes)
-            {
-              sizes[i].minimum_size = row_min;
-              sizes[i].natural_size = row_nat;
-              i++;
-            }
-        }
-      gtk_widget_measure (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL,
-                          for_width, &row_min, &row_nat, NULL, NULL);
-      *minimum += row_min;
-      *natural += row_nat;
-
-      if (sizes)
-        {
-          sizes[i].minimum_size = row_min;
-          sizes[i].natural_size = row_nat;
-          i++;
-        }
-    }
-}
-
-static void
-gtk_list_box_measure_width_for_height (GtkListBox *box,
-                                       int         for_height,
-                                       int        *minimum,
-                                       int        *natural)
-{
-  GSequenceIter *iter;
-  GtkListBoxRow *row;
-  int i = 0;
-  GtkRequestedSize *sizes = NULL;
-  int min, max, min_height, nat_height;
-  int n_vexpand_children = 0;
-  int extra_height;
-
-  if (box->placeholder && gtk_widget_get_child_visible (box->placeholder))
-    {
-      gtk_widget_measure (box->placeholder, GTK_ORIENTATION_HORIZONTAL,
-                          for_height, minimum, natural, NULL, NULL);
-      return;
-    }
-
-  *minimum = 0;
-  *natural = 0;
-
-  /* Measure width for natural height */
-  for (iter = g_sequence_get_begin_iter (box->children);
-       !g_sequence_iter_is_end (iter);
-       iter = g_sequence_iter_next (iter))
-    {
-      int row_min, row_nat;
-
-      row = g_sequence_get (iter);
-
-      /* We *do* take visible but filtered rows into account here so that
-       * the list width doesn't change during filtering
-       */
-      if (!gtk_widget_get_visible (GTK_WIDGET (row)))
-        continue;
-
-      gtk_widget_measure (GTK_WIDGET (row), GTK_ORIENTATION_HORIZONTAL,
-                          -1, &row_min, &row_nat, NULL, NULL);
-
-      *minimum = MAX (*minimum, row_min);
-      *natural = MAX (*natural, row_nat);
-
-      if (for_height >= 0 && gtk_widget_compute_expand (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL))
-        n_vexpand_children++;
-
-      i++;
-
-      if (ROW_PRIV (row)->header != NULL)
-        {
-          gtk_widget_measure (ROW_PRIV (row)->header, GTK_ORIENTATION_HORIZONTAL,
-                              -1, &row_min, &row_nat, NULL, NULL);
-          *minimum = MAX (*minimum, row_min);
-          *natural = MAX (*natural, row_nat);
-
-          if (for_height >= 0 && gtk_widget_compute_expand (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL))
-            n_vexpand_children++;
-
-          i++;
-        }
-    }
-
-  if (for_height < 0)
-    return;
-
-  /* Binary search for the smallest width that lets us fit
-   * into the suggested height.  */
-  min = *minimum;
-  max = G_MAXINT;
-
-  while (min < max)
-    {
-      int test;
-
-      /* We're most likely to be measured for a height that matches
-       * our min or nat width, so start by checking around those
-       * sizes.  */
-      if (min == *minimum + 1 && max == *natural)
-        test = max - 1;
-      else if (max != G_MAXINT)
-        test = (min + max) / 2;
-      else if (min == *minimum)
-        test = min;
-      else if (min == *minimum + 1 && *natural >= min)
-        test = *natural;
-      else
-        test = min * 2;
-
-      gtk_list_box_measure_height_for_width (box, test,
-                                             &min_height, &nat_height,
-                                             NULL);
-      if (min_height > for_height)
-        min = test + 1;
-      else
-        max = test;
-    }
-
-  *minimum = min;
-
-  /* Now find the natural width */
-  sizes = g_new (GtkRequestedSize, i);
-  gtk_list_box_measure_height_for_width (box, -1,
-                                         &min_height, &nat_height,
-                                         sizes);
-  extra_height = gtk_distribute_natural_allocation (for_height - min_height,
-                                                    i, sizes);
-  *natural = 0;
-  i = 0;
-
-  for (iter = g_sequence_get_begin_iter (box->children);
-       !g_sequence_iter_is_end (iter);
-       iter = g_sequence_iter_next (iter))
-    {
-      int row_height, row_min, row_nat;
-
-      row = g_sequence_get (iter);
-
-      if (!gtk_widget_get_visible (GTK_WIDGET (row)))
-        continue;
-
-      row_height = sizes[i].minimum_size;
-      if (gtk_widget_compute_expand (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL))
-        row_height += extra_height / n_vexpand_children;
-
-      gtk_widget_measure (GTK_WIDGET (row), GTK_ORIENTATION_HORIZONTAL,
-                          row_height, &row_min, &row_nat,
-                          NULL, NULL);
-
-      *natural = MAX (*natural, row_nat);
-      i++;
-
-      if (ROW_PRIV (row)->header != NULL)
-        {
-          row_height = sizes[i].minimum_size;
-          if (gtk_widget_compute_expand (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL))
-            row_height += extra_height / n_vexpand_children;
-
-          gtk_widget_measure (ROW_PRIV (row)->header, GTK_ORIENTATION_HORIZONTAL,
-                              row_height, &row_min, &row_nat,
-                              NULL, NULL);
-
-          *natural = MAX (*natural, row_nat);
-          i++;
-        }
-    }
-
-  g_free (sizes);
+  return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
 }
 
 static void
 gtk_list_box_measure (GtkWidget     *widget,
-                      GtkOrientation orientation,
-                      int            for_size,
-                      int           *minimum,
-                      int           *natural,
-                      int           *minimum_baseline,
-                      int           *natural_baseline)
+                      GtkOrientation  orientation,
+                      int             for_size,
+                      int            *minimum,
+                      int            *natural,
+                      int            *minimum_baseline,
+                      int            *natural_baseline)
 {
   GtkListBox *box = GTK_LIST_BOX (widget);
+  GSequenceIter *iter;
 
   if (orientation == GTK_ORIENTATION_HORIZONTAL)
-    gtk_list_box_measure_width_for_height (box, for_size,
-                                           minimum, natural);
+    {
+      *minimum = 0;
+      *natural = 0;
+
+      if (box->placeholder && gtk_widget_get_child_visible (box->placeholder))
+        gtk_widget_measure (box->placeholder, GTK_ORIENTATION_HORIZONTAL, -1,
+                            minimum, natural,
+                            NULL, NULL);
+
+      for (iter = g_sequence_get_begin_iter (box->children);
+           !g_sequence_iter_is_end (iter);
+           iter = g_sequence_iter_next (iter))
+        {
+          GtkListBoxRow *row;
+          int row_min;
+          int row_nat;
+
+          row = g_sequence_get (iter);
+
+          /* We *do* take visible but filtered rows into account here so that
+           * the list width doesn't change during filtering
+           */
+          if (!gtk_widget_get_visible (GTK_WIDGET (row)))
+            continue;
+
+          gtk_widget_measure (GTK_WIDGET (row), orientation, -1,
+                              &row_min, &row_nat,
+                              NULL, NULL);
+
+          *minimum = MAX (*minimum, row_min);
+          *natural = MAX (*natural, row_nat);
+
+          if (ROW_PRIV (row)->header != NULL)
+            {
+              gtk_widget_measure (ROW_PRIV (row)->header, orientation, -1,
+                                  &row_min, &row_nat,
+                                  NULL, NULL);
+              *minimum = MAX (*minimum, row_min);
+              *natural = MAX (*natural, row_nat);
+            }
+        }
+    }
   else
-    gtk_list_box_measure_height_for_width (box, for_size,
-                                           minimum, natural, NULL);
+    {
+      if (for_size < 0)
+        {
+          int f;
+          gtk_list_box_measure (widget, GTK_ORIENTATION_HORIZONTAL, -1,
+                                &f, &for_size, NULL, NULL);
+        }
+
+      *minimum = 0;
+
+      if (box->placeholder && gtk_widget_get_child_visible (box->placeholder))
+        gtk_widget_measure (box->placeholder, orientation, for_size,
+                            minimum, NULL,
+                            NULL, NULL);
+
+      for (iter = g_sequence_get_begin_iter (box->children);
+           !g_sequence_iter_is_end (iter);
+           iter = g_sequence_iter_next (iter))
+        {
+          GtkListBoxRow *row;
+          int row_min = 0;
+
+          row = g_sequence_get (iter);
+          if (!row_is_visible (row))
+            continue;
+
+          if (ROW_PRIV (row)->header != NULL)
+            {
+              gtk_widget_measure (ROW_PRIV (row)->header, orientation, for_size,
+                                  &row_min, NULL,
+                                  NULL, NULL);
+              *minimum += row_min;
+            }
+          gtk_widget_measure (GTK_WIDGET (row), orientation, for_size,
+                              &row_min, NULL,
+                              NULL, NULL);
+          *minimum += row_min;
+        }
+
+      /* We always allocate the minimum height, since handling expanding rows
+       * is way too costly, and unlikely to be used, as lists are generally put
+       * inside a scrolling window anyway.
+       */
+      *natural = *minimum;
+    }
 }
 
 static void
@@ -2812,13 +2591,7 @@ gtk_list_box_size_allocate (GtkWidget *widget,
   GtkAllocation header_allocation;
   GtkListBoxRow *row;
   GSequenceIter *iter;
-  int child_min, child_nat;
-  int total_min = 0, total_nat = 0;
-  gboolean allocate_min = FALSE, allocate_nat = FALSE;
-  GtkRequestedSize *sizes = NULL;
-  int i = 0;
-  int n_vexpand_children = 0;
-  int extra_height = height;
+  int child_min;
 
 
   child_allocation.x = 0;
@@ -2848,88 +2621,6 @@ gtk_list_box_size_allocate (GtkWidget *widget,
     {
       row = g_sequence_get (iter);
       if (!row_is_visible (row))
-        continue;
-
-      if (ROW_PRIV (row)->header != NULL)
-        {
-          gtk_widget_measure (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL,
-                              width, &child_min, &child_nat, NULL, NULL);
-          total_min += child_min;
-          total_nat += child_nat;
-          i++;
-
-          if (gtk_widget_compute_expand (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL))
-            n_vexpand_children++;
-        }
-
-      gtk_widget_measure (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL,
-                          width, &child_min, &child_nat, NULL, NULL);
-      total_min += child_min;
-      total_nat += child_nat;
-      i++;
-
-      if (gtk_widget_compute_expand (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL))
-        n_vexpand_children++;
-    }
-
-  /* We're most likely to be allocated either our minimum or natural
-   * height, even more so when we're placed inside a GtkScrolledWindow &
-   * GtkViewport. Detect these cases and skip the logic for distributing
-   * sizes.
-   */
-  if (height == total_min)
-    {
-      allocate_min = TRUE;
-      extra_height = 0;
-      goto do_allocate;
-    }
-  else if (height >= total_nat)
-    {
-      allocate_nat = TRUE;
-      extra_height = height - total_nat;
-      goto do_allocate;
-    }
-
-  extra_height = height - total_min;
-  sizes = g_new (GtkRequestedSize, i);
-  i = 0;
-
-  for (iter = g_sequence_get_begin_iter (box->children);
-       !g_sequence_iter_is_end (iter);
-       iter = g_sequence_iter_next (iter))
-    {
-      row = g_sequence_get (iter);
-      if (!row_is_visible (row))
-        continue;
-
-      if (ROW_PRIV (row)->header != NULL)
-        {
-          gtk_widget_measure (ROW_PRIV (row)->header,
-                              GTK_ORIENTATION_VERTICAL, width,
-                              &sizes[i].minimum_size,
-                              &sizes[i].natural_size,
-                              NULL, NULL);
-          i++;
-        }
-
-      gtk_widget_measure (GTK_WIDGET (row),
-                          GTK_ORIENTATION_VERTICAL, width,
-                          &sizes[i].minimum_size,
-                          &sizes[i].natural_size,
-                          NULL, NULL);
-      i++;
-    }
-
-  extra_height = gtk_distribute_natural_allocation (extra_height, i, sizes);
-
-do_allocate:
-  i = 0;
-  for (iter = g_sequence_get_begin_iter (box->children);
-       !g_sequence_iter_is_end (iter);
-       iter = g_sequence_iter_next (iter))
-    {
-      row = g_sequence_get (iter);
-      if (!row_is_visible (row))
         {
           ROW_PRIV (row)->y = child_allocation.y;
           ROW_PRIV (row)->height = 0;
@@ -2938,55 +2629,28 @@ do_allocate:
 
       if (ROW_PRIV (row)->header != NULL)
         {
-          if (allocate_min || allocate_nat)
-            {
-              gtk_widget_measure (ROW_PRIV (row)->header,
-                                  GTK_ORIENTATION_VERTICAL, width,
-                                  &child_min, &child_nat,
-                                  NULL, NULL);
-              if (allocate_min)
-                header_allocation.height = child_min;
-              else
-                header_allocation.height = child_nat;
-            }
-          else
-            header_allocation.height = sizes[i].minimum_size;
-
-          if (gtk_widget_compute_expand (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL))
-            header_allocation.height += extra_height / n_vexpand_children;
+          gtk_widget_measure (ROW_PRIV (row)->header, GTK_ORIENTATION_VERTICAL,
+                              width,
+                              &child_min, NULL, NULL, NULL);
+          header_allocation.height = child_min;
           header_allocation.y = child_allocation.y;
           gtk_widget_size_allocate (ROW_PRIV (row)->header,
                                     &header_allocation,
                                     -1);
-          child_allocation.y += header_allocation.height;
-          i++;
+          child_allocation.y += child_min;
         }
-
-      if (allocate_min || allocate_nat)
-        {
-          gtk_widget_measure (GTK_WIDGET (row),
-                              GTK_ORIENTATION_VERTICAL, width,
-                              &child_min, &child_nat,
-                              NULL, NULL);
-          if (allocate_min)
-            child_allocation.height = child_min;
-          else
-            child_allocation.height = child_nat;
-        }
-      else
-        child_allocation.height = sizes[i].minimum_size;
-
-      if (gtk_widget_compute_expand (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL))
-        child_allocation.height += extra_height / n_vexpand_children;
 
       ROW_PRIV (row)->y = child_allocation.y;
+
+      gtk_widget_measure (GTK_WIDGET (row), GTK_ORIENTATION_VERTICAL,
+                          child_allocation.width,
+                          &child_min, NULL, NULL, NULL);
+      child_allocation.height = child_min;
+
       ROW_PRIV (row)->height = child_allocation.height;
       gtk_widget_size_allocate (GTK_WIDGET (row), &child_allocation, -1);
-      child_allocation.y += child_allocation.height;
-      i++;
+      child_allocation.y += child_min;
     }
-
-  g_free (sizes);
 }
 
 /**
@@ -3082,7 +2746,7 @@ gtk_list_box_insert (GtkListBox *box,
   if (ROW_PRIV (row)->visible)
     list_box_add_visible_rows (box, 1);
   gtk_list_box_apply_filter (box, row);
-  gtk_list_box_update_row (box, row);
+  gtk_list_box_update_row_style (box, row);
   if (gtk_widget_get_visible (GTK_WIDGET (box)))
     {
       gtk_list_box_update_header (box, ROW_PRIV (row)->iter);
@@ -3304,7 +2968,7 @@ gtk_list_box_row_new (void)
 }
 
 /**
- * gtk_list_box_row_set_child:
+ * gtk_list_box_row_set_child: (attributes org.gtk.Method.set_property=child)
  * @row: a `GtkListBoxRow`
  * @child: (nullable): the child widget
  *
@@ -3332,7 +2996,7 @@ gtk_list_box_row_set_child (GtkListBoxRow *row,
 }
 
 /**
- * gtk_list_box_row_get_child:
+ * gtk_list_box_row_get_child: (attributes org.gtk.Method.get_property=child)
  * @row: a `GtkListBoxRow`
  *
  * Gets the child widget of @row.
@@ -3375,7 +3039,7 @@ gtk_list_box_row_focus (GtkWidget        *widget,
     }
 
   /* Otherwise, decide based on the direction. */
-  if (direction == GTK_DIR_RIGHT || direction == GTK_DIR_TAB_FORWARD || direction == GTK_DIR_DOWN)
+  if (direction == GTK_DIR_RIGHT || direction == GTK_DIR_TAB_FORWARD)
     {
       /* If a child was focused and focus couldn't be moved within that (see
        * above), let focus leave. */
@@ -3395,7 +3059,7 @@ gtk_list_box_row_focus (GtkWidget        *widget,
 
       return FALSE;
     }
-  else if (direction == GTK_DIR_LEFT || direction == GTK_DIR_TAB_BACKWARD || direction == GTK_DIR_UP)
+  else if (direction == GTK_DIR_LEFT || direction == GTK_DIR_TAB_BACKWARD)
     {
       /* If the row itself is focused, let focus leave it. */
       if (had_focus)
@@ -3458,12 +3122,13 @@ static void
 gtk_list_box_row_root (GtkWidget *widget)
 {
   GtkListBoxRow *row = GTK_LIST_BOX_ROW (widget);
-  GtkListBox *box;
 
   GTK_WIDGET_CLASS (gtk_list_box_row_parent_class)->root (widget);
 
-  box = gtk_list_box_row_get_box (row);
-  gtk_list_box_update_row (box, row);
+  if (ROW_PRIV (row)->selectable)
+    gtk_accessible_update_state (GTK_ACCESSIBLE (row),
+                                 GTK_ACCESSIBLE_STATE_SELECTED, ROW_PRIV (row)->selected,
+                                 -1);
 }
 
 /**
@@ -3590,16 +3255,9 @@ gtk_list_box_row_is_selected (GtkListBoxRow *row)
   return ROW_PRIV (row)->selected;
 }
 
-/*< private >
- * gtk_list_box_update_row:
- * @box: the list box
- * @row: the row
- *
- * Update the visual and accessible representation of a row.
- */
 static void
-gtk_list_box_update_row (GtkListBox    *box,
-                         GtkListBoxRow *row)
+gtk_list_box_update_row_style (GtkListBox    *box,
+                               GtkListBoxRow *row)
 {
   gboolean can_select;
 
@@ -3613,32 +3271,25 @@ gtk_list_box_update_row (GtkListBox    *box,
     gtk_widget_add_css_class (GTK_WIDGET (row), "activatable");
   else
     gtk_widget_remove_css_class (GTK_WIDGET (row), "activatable");
-
-  if (ROW_PRIV (row)->selectable && can_select)
-    gtk_accessible_update_state (GTK_ACCESSIBLE (row),
-                                 GTK_ACCESSIBLE_STATE_SELECTED, ROW_PRIV (row)->selected,
-                                 -1);
-  else
-    gtk_accessible_reset_state (GTK_ACCESSIBLE (row),
-                                GTK_ACCESSIBLE_STATE_SELECTED);
 }
 
 static void
-gtk_list_box_update_rows (GtkListBox *box)
+gtk_list_box_update_row_styles (GtkListBox *box)
 {
   GSequenceIter *iter;
+  GtkListBoxRow *row;
 
   for (iter = g_sequence_get_begin_iter (box->children);
        !g_sequence_iter_is_end (iter);
        iter = g_sequence_iter_next (iter))
     {
-      GtkListBoxRow *row = g_sequence_get (iter);
-      gtk_list_box_update_row (box, row);
+      row = g_sequence_get (iter);
+      gtk_list_box_update_row_style (box, row);
     }
 }
 
 /**
- * gtk_list_box_row_set_activatable:
+ * gtk_list_box_row_set_activatable: (attributes org.gtk.Method.set_property=activatable)
  * @row: a `GtkListBoxRow`
  * @activatable: %TRUE to mark the row as activatable
  *
@@ -3656,13 +3307,13 @@ gtk_list_box_row_set_activatable (GtkListBoxRow *row,
     {
       ROW_PRIV (row)->activatable = activatable;
 
-      gtk_list_box_update_row (gtk_list_box_row_get_box (row), row);
+      gtk_list_box_update_row_style (gtk_list_box_row_get_box (row), row);
       g_object_notify_by_pspec (G_OBJECT (row), row_properties[ROW_PROP_ACTIVATABLE]);
     }
 }
 
 /**
- * gtk_list_box_row_get_activatable:
+ * gtk_list_box_row_get_activatable: (attributes org.gtk.Method.get_property=activatable)
  * @row: a `GtkListBoxRow`
  *
  * Gets whether the row is activatable.
@@ -3678,7 +3329,7 @@ gtk_list_box_row_get_activatable (GtkListBoxRow *row)
 }
 
 /**
- * gtk_list_box_row_set_selectable:
+ * gtk_list_box_row_set_selectable: (attributes org.gtk.Method.set_property=selectable)
  * @row: a `GtkListBoxRow`
  * @selectable: %TRUE to mark the row as selectable
  *
@@ -3699,14 +3350,22 @@ gtk_list_box_row_set_selectable (GtkListBoxRow *row,
 
       ROW_PRIV (row)->selectable = selectable;
 
-      gtk_list_box_update_row (gtk_list_box_row_get_box (row), row);
+      if (selectable)
+        gtk_accessible_update_state (GTK_ACCESSIBLE (row),
+                                     GTK_ACCESSIBLE_STATE_SELECTED, FALSE,
+                                     -1);
+      else
+        gtk_accessible_reset_state (GTK_ACCESSIBLE (row),
+                                    GTK_ACCESSIBLE_STATE_SELECTED);
+
+      gtk_list_box_update_row_style (gtk_list_box_row_get_box (row), row);
 
       g_object_notify_by_pspec (G_OBJECT (row), row_properties[ROW_PROP_SELECTABLE]);
     }
 }
 
 /**
- * gtk_list_box_row_get_selectable:
+ * gtk_list_box_row_get_selectable: (attributes org.gtk.Method.get_property=selectable)
  * @row: a `GtkListBoxRow`
  *
  * Gets whether the row can be selected.
@@ -3913,7 +3572,7 @@ gtk_list_box_row_class_init (GtkListBoxRowClass *klass)
   gtk_widget_class_set_activate_signal (widget_class, row_signals[ROW__ACTIVATE]);
 
   /**
-   * GtkListBoxRow:activatable:
+   * GtkListBoxRow:activatable: (attributes org.gtk.Property.get=gtk_list_box_row_get_activatable org.gtk.Property.set=gtk_list_box_row_set_activatable)
    *
    * Determines whether the ::row-activated
    * signal will be emitted for this row.
@@ -3921,34 +3580,32 @@ gtk_list_box_row_class_init (GtkListBoxRowClass *klass)
   row_properties[ROW_PROP_ACTIVATABLE] =
     g_param_spec_boolean ("activatable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkListBoxRow:selectable:
+   * GtkListBoxRow:selectable: (attributes org.gtk.Property.get=gtk_list_box_row_get_selectable org.gtk.Property.set=gtk_list_box_row_set_selectable)
    *
    * Determines whether this row can be selected.
    */
   row_properties[ROW_PROP_SELECTABLE] =
     g_param_spec_boolean ("selectable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkListBoxRow:child:
+   * GtkListBoxRow:child: (attributes org.gtk.Property.get=gtk_list_box_row_get_child org.gtk.Property.set=gtk_list_box_row_set_child)
    *
    * The child widget.
    */
   row_properties[ROW_PROP_CHILD] =
     g_param_spec_object ("child", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
-  row_properties[ROW_PROP_ACTION_NAME] = g_param_spec_override ("action-name",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-name"));
-  row_properties[ROW_PROP_ACTION_TARGET] = g_param_spec_override ("action-target",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-target"));
+  g_object_class_install_properties (object_class, LAST_ROW_PROPERTY, row_properties);
 
-  g_object_class_install_properties (object_class, ROW_N_PROPS, row_properties);
+  g_object_class_override_property (object_class, ROW_PROP_ACTION_NAME, "action-name");
+  g_object_class_override_property (object_class, ROW_PROP_ACTION_TARGET, "action-target");
 
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BIN_LAYOUT);
   gtk_widget_class_set_css_name (widget_class, I_("row"));
@@ -4023,6 +3680,7 @@ gtk_list_box_bound_model_changed (GListModel *list,
       if (g_object_is_floating (widget))
         g_object_ref_sink (widget);
 
+      gtk_widget_set_visible (widget, TRUE);
       gtk_list_box_insert (box, widget, position + i);
 
       g_object_unref (widget);
@@ -4042,9 +3700,9 @@ gtk_list_box_check_model_compat (GtkListBox *box)
  * gtk_list_box_bind_model:
  * @box: a `GtkListBox`
  * @model: (nullable): the `GListModel` to be bound to @box
- * @create_widget_func: (nullable) (scope notified) (closure user_data) (destroy user_data_free_func): a function
- *   that creates widgets for items or %NULL in case you also passed %NULL as @model
- * @user_data: user data passed to @create_widget_func
+ * @create_widget_func: (nullable): a function that creates widgets for items
+ *   or %NULL in case you also passed %NULL as @model
+ * @user_data: (closure): user data passed to @create_widget_func
  * @user_data_free_func: function for freeing @user_data
  *
  * Binds @model to @box.
@@ -4109,7 +3767,7 @@ gtk_list_box_bind_model (GtkListBox                 *box,
 }
 
 /**
- * gtk_list_box_set_show_separators:
+ * gtk_list_box_set_show_separators: (attributes org.gtk.Method.set_property=show-separators)
  * @box: a `GtkListBox`
  * @show_separators: %TRUE to show separators
  *
@@ -4136,7 +3794,7 @@ gtk_list_box_set_show_separators (GtkListBox *box,
 }
 
 /**
- * gtk_list_box_get_show_separators:
+ * gtk_list_box_get_show_separators: (attributes org.gtk.Method.get_property=show-separators)
  * @box: a `GtkListBox`
  *
  * Returns whether the list box should show separators
@@ -4150,45 +3808,4 @@ gtk_list_box_get_show_separators (GtkListBox *box)
   g_return_val_if_fail (GTK_IS_LIST_BOX (box), FALSE);
 
   return box->show_separators;
-}
-
-/**
- * gtk_list_box_set_tab_behavior:
- * @box: a `GtkListBox`
- * @behavior: the tab behavior
- * 
- * Sets the behavior of the <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> keys.
- *
- * Since: 4.18
- */
-void
-gtk_list_box_set_tab_behavior (GtkListBox         *box,
-                               GtkListTabBehavior  behavior)
-{
-  g_return_if_fail (GTK_IS_LIST_BOX (box));
-
-  if (box->tab_behavior == behavior)
-    return;
-
-  box->tab_behavior = behavior;
-
-  g_object_notify_by_pspec (G_OBJECT (box), properties[PROP_TAB_BEHAVIOR]);
-}
-
-/**
- * gtk_list_box_get_tab_behavior:
- * @box: a `GtkListBox`
- *
- * Returns the behavior of the <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> keys.
- *
- * Returns: the tab behavior
- * 
- * Since: 4.18
- */
-GtkListTabBehavior
-gtk_list_box_get_tab_behavior (GtkListBox *box)
-{
-  g_return_val_if_fail (GTK_IS_LIST_BOX (box), GTK_LIST_TAB_ALL);
-
-  return box->tab_behavior;
 }

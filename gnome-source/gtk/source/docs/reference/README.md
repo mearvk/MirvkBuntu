@@ -65,9 +65,6 @@ for which the source is in .md files in docs/reference/gtk.
 
 ## Style guide
 
-In-depth recommendations for documentation style can be found in the
-[GNOME developer documentation](https://developer.gnome.org/documentation/guidelines/devel-docs.html) guide. The following provides a summary to get you started.
-
 Like the [coding style][coding], these rules try to formalize the existing
 documentation style; in general, you should only ever modify existing code
 that does not match the rules if you're already changing that code for
@@ -154,11 +151,10 @@ Checks whether the widget is set to be visible or not.
  - Methods are special functions whose first argument is always the instance
    of a certain class. The instance argument for newly written code should be
    called `self`.
- - If a method is a setter or a getter for an object property
-   `GtkClassName:prop-name`, and if its name does not match the naming scheme
-   `gtk_class_name_{g,s}et_prop_name`, you should add a `(set-property
-   prop-name)` or a `(get-property prop-name)` annotation to the method's
-   identifier
+ - If a method is a setter or a getter for an object property, you should
+   add an `(attributes org.gtk.Method.set_property=property-name)` or a
+   an `(attributes org.gtk.Method.get_property=property-name)` annotation
+   to the method's identifier
  - If a method changes one or more properties as side effect, link those
    properties in the method's description
  - If a method is a signal emitter, you should use the
@@ -196,10 +192,9 @@ Checks whether the widget is set to be visible or not.
    purposes.
  - Always note if setting a property has side effects, like causing another
    property to change state.
- - If a property `GtkClassName:prop-name` has a public getter or setter, and
-   they do not match the naming scheme `gtk_class_name_{g,s}et_prop_name` you
-   should annotate it with the `(setter setter_function)` and `(getter
-   getter_function)`.
+ - If the property has public accessors you should annotate it with
+   the `(attributes org.gtk.Property.set=setter_function)` and
+   `(attributes org.gtk.Property.get=getter_function)` attributes
  - The syntax for property documentation is:
 
 ```c

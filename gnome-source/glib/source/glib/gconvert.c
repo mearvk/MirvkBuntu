@@ -32,8 +32,13 @@
 #include <stdlib.h>
 
 #ifdef G_OS_WIN32
-#include <windows.h>
 #include "win_iconv.c"
+#endif
+
+#ifdef G_PLATFORM_WIN32
+#define STRICT
+#include <windows.h>
+#undef STRICT
 #endif
 
 #include "gconvert.h"
@@ -71,7 +76,7 @@ try_conversion (const char *to_codeset,
 
 #if defined(__FreeBSD__) && defined(ICONV_SET_ILSEQ_INVALID)
   /* On FreeBSD request GNU iconv compatible handling of characters that cannot
-   * be represented in the destination character set.
+   * be repesented in the destination character set.
    * See https://cgit.freebsd.org/src/commit/?id=7c5b23111c5fd1992047922d4247c4a1ce1bb6c3
    */
   int value = 1;
@@ -171,9 +176,6 @@ g_iconv_open (const gchar  *to_codeset,
  * positive number of non-reversible conversions as replacement characters were
  * used), or it may return -1 and set an error such as %EILSEQ, in such a
  * situation.
- *
- * See [`iconv(3posix)`](man:iconv(3posix)) and [`iconv(3)`](man:iconv(3)) for more details about behavior when an
- * error occurs.
  *
  * Returns: count of non-reversible conversions, or -1 on error
  **/
@@ -805,11 +807,11 @@ typedef enum
 {
   CONVERT_CHECK_NO_NULS_IN_INPUT  = 1 << 0,
   CONVERT_CHECK_NO_NULS_IN_OUTPUT = 1 << 1
-} G_GNUC_FLAG_ENUM ConvertCheckFlags;
+} ConvertCheckFlags;
 
 /*
  * Convert from @string in the encoding identified by @from_codeset,
- * returning a string in the encoding identified by @to_codeset.
+ * returning a string in the encoding identifed by @to_codeset.
  * @len can be negative if @string is nul-terminated, or a non-negative
  * value in bytes. Flags defined in #ConvertCheckFlags can be set in @flags
  * to check the input, the output, or both, for embedded nul bytes.
@@ -898,7 +900,7 @@ convert_checked (const gchar      *string,
  * 
  * Converts a string which is in the encoding used for strings by
  * the C runtime (usually the same as that used by the operating
- * system) in the [current locale](running.html#locale) into a UTF-8 string.
+ * system) in the [current locale][setlocale] into a UTF-8 string.
  *
  * If the source encoding is not UTF-8 and the conversion output contains a
  * nul character, the error %G_CONVERT_ERROR_EMBEDDED_NUL is set and the
@@ -993,8 +995,8 @@ _g_ctype_locale_to_utf8 (const gchar *opsysstring,
  * 
  * Converts a string from UTF-8 to the encoding used for strings by
  * the C runtime (usually the same as that used by the operating
- * system) in the [current locale](running.html#locale).
- * On Windows this means the system codepage.
+ * system) in the [current locale][setlocale]. On Windows this means
+ * the system codepage.
  *
  * The input string shall not contain nul characters even if the @len
  * argument is positive. A nul character found inside the string will result
@@ -1057,8 +1059,8 @@ filename_charset_cache_free (gpointer data)
  * and said environment variables have no effect.
  *
  * `G_FILENAME_ENCODING` may be set to a comma-separated list of
- * character set names. The special token `@locale` is taken to mean the
- * character set for the [current locale](running.html#locale).
+ * character set names. The special token "\@locale" is taken
+ * to  mean the character set for the [current locale][setlocale].
  * If `G_FILENAME_ENCODING` is not set, but `G_BROKEN_FILENAMES` is,
  * the character set of the current locale is taken as the filename
  * encoding. If neither environment variable  is set, UTF-8 is taken
@@ -1203,7 +1205,7 @@ get_filename_charset (const gchar **filename_charset)
  * Converts a string which is in the encoding used by GLib for
  * filenames into a UTF-8 string. Note that on Windows GLib uses UTF-8
  * for filenames; on other platforms, this function indirectly depends on 
- * the [current locale](running.html#locale).
+ * the [current locale][setlocale].
  *
  * The input string shall not contain nul characters even if the @len
  * argument is positive. A nul character found inside the string will result
@@ -1256,7 +1258,7 @@ g_filename_to_utf8 (const gchar *opsysstring,
  * Converts a string from UTF-8 to the encoding GLib uses for
  * filenames. Note that on Windows GLib uses UTF-8 for filenames;
  * on other platforms, this function indirectly depends on the 
- * [current locale](running.html#locale).
+ * [current locale][setlocale].
  *
  * The input string shall not contain nul characters even if the @len
  * argument is positive. A nul character found inside the string will result
@@ -1336,9 +1338,8 @@ static const gchar hex[] = "0123456789ABCDEF";
 /* Note: This escape function works on file: URIs, but if you want to
  * escape something else, please read RFC-2396 */
 static gchar *
-g_escape_uri_string (const gchar         *string,
-                     UnsafeCharacterSet   mask,
-                     GError             **error)
+g_escape_uri_string (const gchar *string, 
+		     UnsafeCharacterSet mask)
 {
 #define ACCEPTABLE(a) ((a)>=32 && (a)<128 && (acceptable[(a)-32] & use_mask))
 
@@ -1346,7 +1347,7 @@ g_escape_uri_string (const gchar         *string,
   gchar *q;
   gchar *result;
   int c;
-  size_t unacceptable;
+  gint unacceptable;
   UnsafeCharacterSet use_mask;
   
   g_return_val_if_fail (mask == UNSAFE_ALL
@@ -1363,14 +1364,7 @@ g_escape_uri_string (const gchar         *string,
       if (!ACCEPTABLE (c)) 
 	unacceptable++;
     }
-
-  if (unacceptable >= (G_MAXSIZE - (p - string)) / 2)
-    {
-      g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_BAD_URI,
-                           _("The URI is too long"));
-      return NULL;
-    }
-
+  
   result = g_malloc (p - string + unacceptable * 2 + 1);
   
   use_mask = mask;
@@ -1395,13 +1389,12 @@ g_escape_uri_string (const gchar         *string,
 
 
 static gchar *
-g_escape_file_uri (const gchar  *hostname,
-                   const gchar  *pathname,
-                   GError      **error)
+g_escape_file_uri (const gchar *hostname,
+		   const gchar *pathname)
 {
   char *escaped_hostname = NULL;
-  char *escaped_path = NULL;
-  char *res = NULL;
+  char *escaped_path;
+  char *res;
 
 #ifdef G_OS_WIN32
   char *p, *backslash;
@@ -1422,14 +1415,10 @@ g_escape_file_uri (const gchar  *hostname,
 
   if (hostname && *hostname != '\0')
     {
-      escaped_hostname = g_escape_uri_string (hostname, UNSAFE_HOST, error);
-      if (escaped_hostname == NULL)
-        goto out;
+      escaped_hostname = g_escape_uri_string (hostname, UNSAFE_HOST);
     }
 
-  escaped_path = g_escape_uri_string (pathname, UNSAFE_PATH, error);
-  if (escaped_path == NULL)
-    goto out;
+  escaped_path = g_escape_uri_string (pathname, UNSAFE_PATH);
 
   res = g_strconcat ("file://",
 		     (escaped_hostname) ? escaped_hostname : "",
@@ -1437,7 +1426,6 @@ g_escape_file_uri (const gchar  *hostname,
 		     escaped_path,
 		     NULL);
 
-out:
 #ifdef G_OS_WIN32
   g_free ((char *) pathname);
 #endif
@@ -1467,7 +1455,7 @@ unescape_character (const char *scanner)
 
 static gchar *
 g_unescape_uri_string (const char *escaped,
-		       size_t      len,
+		       int         len,
 		       const char *illegal_escaped_characters,
 		       gboolean    ascii_must_not_be_escaped)
 {
@@ -1477,6 +1465,9 @@ g_unescape_uri_string (const char *escaped,
   
   if (escaped == NULL)
     return NULL;
+
+  if (len < 0)
+    len = strlen (escaped);
 
   result = g_malloc (len + 1);
   
@@ -1511,7 +1502,7 @@ g_unescape_uri_string (const char *escaped,
       *out++ = c;
     }
   
-  g_assert (out >= result && (size_t) (out - result) <= len);
+  g_assert (out - result <= len);
   *out = '\0';
 
   if (in != in_end)
@@ -1529,13 +1520,18 @@ is_asciialphanum (gunichar c)
   return c <= 0x7F && g_ascii_isalnum (c);
 }
 
+static gboolean
+is_asciialpha (gunichar c)
+{
+  return c <= 0x7F && g_ascii_isalpha (c);
+}
+
 /* allows an empty string */
 static gboolean
 hostname_validate (const char *hostname)
 {
   const char *p;
   gunichar c, first_char, last_char;
-  gboolean no_domain = TRUE;
 
   p = hostname;
   if (*p == '\0')
@@ -1560,8 +1556,7 @@ hostname_validate (const char *hostname)
       
       /* if that was the last label, check that it was a toplabel */
       if (c == '\0' || (c == '.' && *p == '\0'))
-	return no_domain || is_asciialphanum (first_char);
-      no_domain = FALSE;
+	return is_asciialpha (first_char);
     }
   while (c == '.');
   return FALSE;
@@ -1592,12 +1587,12 @@ g_filename_from_uri (const gchar *uri,
 		     gchar      **hostname,
 		     GError     **error)
 {
+  const char *past_scheme;
   const char *host_part;
   char *unescaped_hostname;
   char *result;
   char *filename;
   char *past_path;
-  char *past_scheme;
   char *temp_uri;
   int offs;
 #ifdef G_OS_WIN32
@@ -1664,7 +1659,7 @@ g_filename_from_uri (const gchar *uri,
 	g_free (unescaped_hostname);
     }
 
-  filename = g_unescape_uri_string (past_scheme, strlen (past_scheme), "/", FALSE);
+  filename = g_unescape_uri_string (past_scheme, -1, "/", FALSE);
 
   if (filename == NULL)
     {
@@ -1764,7 +1759,7 @@ g_filename_to_uri (const gchar *filename,
     hostname = NULL;
 #endif
 
-  escaped_uri = g_escape_file_uri (hostname, filename, error);
+  escaped_uri = g_escape_file_uri (hostname, filename);
 
   return escaped_uri;
 }

@@ -20,10 +20,13 @@
 
 #pragma once
 
+G_BEGIN_DECLS
+
+#define _gdk_win32_clipdrop_get() (_win32_clipdrop)
 #define _gdk_atom_array_index(a, i) (g_array_index (a, const char *, i))
-#define _gdk_win32_clipdrop_atom(c, i) (_gdk_atom_array_index (c->known_atoms, i))
+#define _gdk_win32_clipdrop_atom(i) (_gdk_atom_array_index (_gdk_win32_clipdrop_get ()->known_atoms, i))
 #define _gdk_cf_array_index(a, i) (g_array_index (a, UINT, i))
-#define _gdk_win32_clipdrop_cf(c,i) (_gdk_cf_array_index (c->known_clipboard_formats, i))
+#define _gdk_win32_clipdrop_cf(i) (_gdk_cf_array_index (_gdk_win32_clipdrop_get ()->known_clipboard_formats, i))
 
 /* Maps GDK contentformats to w32formats or vice versa, depending on the
  * semantics of the array that holds these.
@@ -111,6 +114,12 @@ typedef enum _GdkWin32CFIndex GdkWin32CFIndex;
 typedef struct _GdkWin32Clipdrop GdkWin32Clipdrop;
 typedef struct _GdkWin32ClipdropClass GdkWin32ClipdropClass;
 
+typedef BOOL (WINAPI * GetUpdatedClipboardFormatsFunc)(
+  _Out_ PUINT lpuiFormats,
+  _In_  UINT  cFormats,
+  _Out_ PUINT pcFormatsOut
+);
+
 /* This object is just a sink to hold all the clipboard- and dnd-related data
  * that otherwise would be in global variables.
  */
@@ -139,6 +148,14 @@ struct _GdkWin32Clipdrop
   /* A format-keyed hash table of GArrays of GdkAtoms describing compatibility contentformats for a w32format */
   GHashTable       *compatibility_contentformats;
 
+  /* By all rights we should be able to just use this function
+   * normally, as our target platform is Vista-or-later.
+   * This pointer is manually retrieved only to allow
+   * GTK to be compiled with old MinGW versions, which
+   * don't have GetUpdatedClipboardFormats in the import libs.
+   */
+  GetUpdatedClipboardFormatsFunc GetUpdatedClipboardFormats;
+
   /* The thread that tries to open the clipboard and then
    * do stuff with it. Since clipboard opening can
    * fail, we split the code into a thread, and let
@@ -146,12 +163,6 @@ struct _GdkWin32Clipdrop
    * the operation times out.
    */
   GThread          *clipboard_open_thread;
-
-  /* The main loop run in the clipboard thread.
-   * When we want to communicate with the thread, we just add
-   * tasks to it via this context.
-   */
-  GMainContext     *clipboard_main_context;
 
   /* Our primary means of communicating with the thread.
    * The communication is one-way only - the thread replies
@@ -166,6 +177,13 @@ struct _GdkWin32Clipdrop
    * to render the data.
    */
   GAsyncQueue      *clipboard_render_queue;
+
+  /* Window handle for the clipboard window that we
+   * receive from the clipboard thread. We use that
+   * to wake up the clipboard window main loop by
+   * posting a message to it.
+   */
+  HWND              clipboard_window;
 
   /* The thread that calls DoDragDrop (), which would
    * normally block our main thread, as it runs its own
@@ -206,15 +224,6 @@ struct _GdkWin32Clipdrop
    * dnd thread is not active.
    */
   GHashTable       *active_source_drags;
-
-  /* our custom MSG UINT that we register once to prcoess DND/Clipbord actions */
-  UINT              thread_wakeup_message;
-
-  /* this is a GdkWin32ClipboardThread structure */
-  void             *clipboard_thread_items;
-
-  /* this is a GdkWin32DndThread structure */
-  void             *dnd_thread_items;
 };
 
 struct _GdkWin32ClipdropClass
@@ -222,45 +231,46 @@ struct _GdkWin32ClipdropClass
   GObjectClass parent_class;
 };
 
-GType    gdk_win32_clipdrop_get_type                               (void);
+GType    gdk_win32_clipdrop_get_type                               (void) G_GNUC_CONST;
+
+void     _gdk_win32_clipdrop_init                                  (void);
 
 gboolean _gdk_win32_format_uses_hdata                              (UINT                         w32format);
 
 char   * _gdk_win32_get_clipboard_format_name                      (UINT                         fmt,
                                                                     gboolean                    *is_predefined);
-int      _gdk_win32_add_contentformat_to_pairs                     (GdkWin32Clipdrop            *clip_drop,
-                                                                    const char                  *target,
+void     _gdk_win32_add_w32format_to_pairs                         (UINT                         format,
+                                                                    GArray                      *array,
+                                                                    GdkContentFormatsBuilder    *builder);
+int      _gdk_win32_add_contentformat_to_pairs                     (const char                  *target,
                                                                     GArray                      *array);
 
-gboolean gdk_win32_clipdrop_transmute_contentformat                (GdkWin32Clipdrop            *clipdrop,
-                                                                    const char                  *from_contentformat,
+void     _gdk_win32_clipboard_default_output_done                  (GObject                     *clipboard,
+                                                                    GAsyncResult                *result,
+                                                                    gpointer                     user_data);
+gboolean _gdk_win32_transmute_contentformat                        (const char                  *from_contentformat,
                                                                     UINT                         to_w32format,
                                                                     const guchar                *data,
                                                                     gsize                        length,
                                                                     guchar                     **set_data,
                                                                     gsize                       *set_data_length);
 
-gboolean gdk_win32_clipdrop_transmute_windows_data                  (GdkWin32Clipdrop           *clipdrop,
-                                                                     UINT                        from_w32format,
-                                                                     const char                 *to_contentformat,
-                                                                     HANDLE                      hdata,
-                                                                     guchar                    **set_data,
-                                                                     gsize                      *set_data_length);
+gboolean _gdk_win32_transmute_windows_data                         (UINT                         from_w32format,
+                                                                    const char                  *to_contentformat,
+                                                                    HANDLE                       hdata,
+                                                                    guchar                     **set_data,
+                                                                    gsize                       *set_data_length);
 
 
 gboolean _gdk_win32_store_clipboard_contentformats                 (GdkClipboard                *cb,
                                                                     GTask                       *task,
                                                                     GdkContentFormats           *contentformats);
 
-void     _gdk_win32_retrieve_clipboard_contentformats              (GdkClipboard                *cb,
-                                                                    GTask                       *task,
+void     _gdk_win32_retrieve_clipboard_contentformats              (GTask                       *task,
                                                                     GdkContentFormats           *contentformats);
 
-void     _gdk_win32_advertise_clipboard_contentformats             (GdkClipboard                *cb,
-                                                                    GTask                       *task,
+void     _gdk_win32_advertise_clipboard_contentformats             (GTask                       *task,
                                                                     GdkContentFormats           *contentformats);
 
-void     gdk_win32_clipdrop_add_win32_format_to_pairs              (GdkWin32Clipdrop            *clipdrop,
-                                                                    UINT                         w32format,
-                                                                    GArray                      *array,
-                                                                    GdkContentFormatsBuilder    *builder);
+
+

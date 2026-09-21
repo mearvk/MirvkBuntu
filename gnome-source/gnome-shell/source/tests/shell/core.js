@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 /* eslint camelcase: ["error", { properties: "never", allow: ["^script_", "^malloc", "^glx", "^clutter"] }] */
 
 import * as System from 'system';
@@ -115,7 +116,7 @@ export async function run() {
         // to calculate the mipmaps for the windows, the second time to get
         // a clean set of numbers.
         if ((i % 2) === 0) {
-            const config = WINDOW_CONFIGS[i / 2];
+            let config = WINDOW_CONFIGS[i / 2];
             await Scripting.destroyTestWindows();
 
             for (let k = 0; k < config.count; k++) {
@@ -153,9 +154,11 @@ export async function run() {
 
     for (let i = 0; i < 2; i++) {
         Scripting.scriptEvent('applicationsShowStart');
+        // eslint-disable-next-line require-atomic-updates
         Main.overview.dash.showAppsButton.checked = true;
         await Scripting.waitLeisure();
         Scripting.scriptEvent('applicationsShowDone');
+        // eslint-disable-next-line require-atomic-updates
         Main.overview.dash.showAppsButton.checked = false;
         await Scripting.waitLeisure();
     }
@@ -169,7 +172,7 @@ let overviewFrames;
 let overviewLatency;
 let mallocUsedSize = 0;
 let overviewShowCount = 0;
-const haveSwapComplete = false;
+let haveSwapComplete = false;
 let applicationsShowStart;
 let applicationsShowCount = 0;
 
@@ -254,11 +257,11 @@ function _frameDone(time) {
         finishedShowingOverview = false;
         overviewShowCount++;
 
-        const dt = (time - (overviewShowStart + overviewLatency)) / 1000000;
+        let dt = (time - (overviewShowStart + overviewLatency)) / 1000000;
 
         // If we see a start frame and an end frame, that would
         // be 1 frame for a FPS computation, hence the '- 1'
-        const fps = (overviewFrames - 1) / dt;
+        let fps = (overviewFrames - 1) / dt;
 
         if (overviewShowCount === 1) {
             METRICS.overviewLatencyFirst.value = overviewLatency;
@@ -270,7 +273,7 @@ function _frameDone(time) {
         // Other than overviewFpsFirst, we collect FPS metrics the second
         // we show each window configuration. overviewShowCount is 1,2,3...
         if (overviewShowCount % 2 === 0) {
-            const config = WINDOW_CONFIGS[(overviewShowCount / 2) - 1];
+            let config = WINDOW_CONFIGS[(overviewShowCount / 2) - 1];
             METRICS[config.metric].value = fps;
         }
     }

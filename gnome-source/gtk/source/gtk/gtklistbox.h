@@ -129,7 +129,7 @@ typedef GtkWidget * (*GtkListBoxCreateWidgetFunc) (gpointer item,
                                                    gpointer user_data);
 
 GDK_AVAILABLE_IN_ALL
-GType      gtk_list_box_row_get_type      (void);
+GType      gtk_list_box_row_get_type      (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget* gtk_list_box_row_new           (void);
 
@@ -166,7 +166,7 @@ GDK_AVAILABLE_IN_ALL
 gboolean   gtk_list_box_row_get_activatable (GtkListBoxRow *row);
 
 GDK_AVAILABLE_IN_ALL
-GType          gtk_list_box_get_type                     (void);
+GType          gtk_list_box_get_type                     (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 void           gtk_list_box_prepend                      (GtkListBox                    *box,
                                                           GtkWidget                     *child);
@@ -273,12 +273,6 @@ void           gtk_list_box_set_show_separators          (GtkListBox            
                                                           gboolean                      show_separators);
 GDK_AVAILABLE_IN_ALL
 gboolean       gtk_list_box_get_show_separators          (GtkListBox                   *box);
-
-GDK_AVAILABLE_IN_4_18
-void               gtk_list_box_set_tab_behavior (GtkListBox         *box,
-                                                  GtkListTabBehavior  behavior);
-GDK_AVAILABLE_IN_4_18
-GtkListTabBehavior gtk_list_box_get_tab_behavior (GtkListBox         *box);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkListBox, g_object_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkListBoxRow, g_object_unref)

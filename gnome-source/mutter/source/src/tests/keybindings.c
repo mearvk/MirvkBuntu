@@ -28,11 +28,11 @@
 static MetaContext *test_context;
 
 static void
-test_handler (MetaDisplay        *display,
-              MetaWindow         *window,
-              const ClutterEvent *event,
-              MetaKeyBinding     *binding,
-              gpointer            user_data)
+test_handler (MetaDisplay           *display,
+              MetaWindow            *window,
+              const ClutterKeyEvent *event,
+              MetaKeyBinding        *binding,
+              gpointer               user_data)
 {
   gboolean *triggered = user_data;
 
@@ -136,7 +136,7 @@ main (int    argc,
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   test_context = context;
   init_tests ();

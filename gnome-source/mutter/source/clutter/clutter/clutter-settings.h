@@ -15,4 +15,7 @@ G_DECLARE_FINAL_TYPE (ClutterSettings, clutter_settings,
                       CLUTTER, SETTINGS,
                       GObject)
 
+CLUTTER_EXPORT
+ClutterSettings *clutter_settings_get_default (void);
+
 G_END_DECLS

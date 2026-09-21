@@ -1,5 +1,4 @@
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -86,7 +85,7 @@ get_character (int ch)
 static ClutterActor *
 create_label (void)
 {
-  CoglColor label_color = { 0xff, 0xff, 0xff, 0xff };
+  ClutterColor label_color = { 0xff, 0xff, 0xff, 0xff };
   ClutterActor *label;
   char         *font_name;
   GString      *str;
@@ -135,13 +134,14 @@ main (int argc, char *argv[])
   stage = clutter_test_get_stage ();
   clutter_actor_set_size (stage, STAGE_WIDTH, STAGE_HEIGHT);
   clutter_actor_set_background_color (CLUTTER_ACTOR (stage),
-                                      &COGL_COLOR_INIT (0, 0, 0, 255));
+                                      &CLUTTER_COLOR_INIT (0, 0, 0, 255));
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Text Performance");
 
   g_signal_connect (CLUTTER_STAGE (stage), "after-paint", G_CALLBACK (on_after_paint), NULL);
 
   label = create_label ();
-  w = (int) clutter_actor_get_width (label);
-  h = (int) clutter_actor_get_height (label);
+  w = clutter_actor_get_width (label);
+  h = clutter_actor_get_height (label);
 
   /* If the label is too big to fit on the stage then scale it so that
      it will fit */
@@ -154,12 +154,12 @@ main (int argc, char *argv[])
         {
           scale = x_scale;
           cols = 1;
-          rows = (int) (STAGE_HEIGHT / (h * scale));
+          rows = STAGE_HEIGHT / (h * scale);
         }
       else
         {
           scale = y_scale;
-          cols = (int) (STAGE_WIDTH / (w * scale));
+          cols = STAGE_WIDTH / (w * scale);
           rows = 1;
         }
 
@@ -184,7 +184,7 @@ main (int argc, char *argv[])
 
   clutter_actor_show (stage);
 
-  g_idle_add (queue_redraw, stage);
+  clutter_threads_add_idle (queue_redraw, stage);
 
   clutter_test_main ();
 

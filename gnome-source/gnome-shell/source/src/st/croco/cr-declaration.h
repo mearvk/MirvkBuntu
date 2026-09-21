@@ -20,7 +20,8 @@
  * See the COPYRIGHTS file for copyright information.
  */
 
-#pragma once
+#ifndef __CR_DECLARATION_H__
+#define __CR_DECLARATION_H__
 
 #include <stdio.h>
 #include "cr-utils.h"
@@ -80,9 +81,11 @@ CRDeclaration * cr_declaration_new (CRStatement *a_statement,
 
 
 CRDeclaration * cr_declaration_parse_from_buf (CRStatement *a_statement,
-					       const guchar *a_str) ;
+					       const guchar *a_str,
+					       enum CREncoding a_enc) ;
 
-CRDeclaration * cr_declaration_parse_list_from_buf (const guchar *a_str) ;
+CRDeclaration * cr_declaration_parse_list_from_buf (const guchar *a_str, 
+						    enum CREncoding a_enc) ;
 
 CRDeclaration * cr_declaration_append (CRDeclaration *a_this, 
 				       CRDeclaration *a_new) ;
@@ -129,3 +132,5 @@ gboolean cr_declaration_unref (CRDeclaration *a_this) ;
 void cr_declaration_destroy (CRDeclaration *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_DECLARATION_H__*/

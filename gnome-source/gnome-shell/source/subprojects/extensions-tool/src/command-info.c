@@ -18,13 +18,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "config.h"
-
-#include <gio/gio.h>
 #include <glib/gi18n.h>
+#include <gio/gio.h>
 
 #include "commands.h"
 #include "common.h"
+#include "config.h"
 
 static gboolean
 show_extension_info (const char *uuid)

@@ -48,9 +48,9 @@ G_DEFINE_TYPE (GtkA11yOverlay, gtk_a11y_overlay, GTK_TYPE_INSPECTOR_OVERLAY)
 
 typedef enum
 {
-  FIX_SEVERITY_GOOD,
-  FIX_SEVERITY_RECOMMENDATION,
-  FIX_SEVERITY_ERROR
+  SEVERITY_GOOD,
+  SEVERITY_RECOMMENDATION,
+  SEVERITY_ERROR
 } FixSeverity;
 
 typedef enum
@@ -132,7 +132,7 @@ check_accessibility_errors (GtkATContext       *context,
   if (gtk_accessible_role_is_abstract (role))
     {
       *hint = g_strdup_printf ("%s is an abstract role", role_name);
-      return FIX_SEVERITY_ERROR;
+      return SEVERITY_ERROR;
     }
 
   /* Check for name and description */
@@ -142,10 +142,14 @@ check_accessibility_errors (GtkATContext       *context,
   switch (gtk_accessible_role_get_naming (role))
     {
     case GTK_ACCESSIBLE_NAME_ALLOWED:
-      break;
+      return SEVERITY_GOOD;
 
     case GTK_ACCESSIBLE_NAME_REQUIRED:
-      if (!label_set)
+      if (label_set)
+        {
+          return SEVERITY_GOOD;
+        }
+      else
         {
           if (gtk_accessible_role_supports_name_from_author (role))
             {
@@ -156,14 +160,18 @@ check_accessibility_errors (GtkATContext       *context,
                   g_free (name);
                   *hint = g_strdup_printf ("%s must have text content or label", role_name);
 
-                  return FIX_SEVERITY_ERROR;
+                  return SEVERITY_ERROR;
+                }
+              else
+                {
+                  return SEVERITY_GOOD;
                 }
             }
           else
             {
               *hint = g_strdup_printf ("%s must have label", role_name);
 
-              return FIX_SEVERITY_ERROR;
+              return SEVERITY_ERROR;
             }
         }
       break;
@@ -173,25 +181,37 @@ check_accessibility_errors (GtkATContext       *context,
         {
           *hint = g_strdup_printf ("%s can't have label", role_name);
 
-          return FIX_SEVERITY_ERROR;
+          return SEVERITY_ERROR;
+        }
+      else
+        {
+          return SEVERITY_GOOD;
         }
       break;
 
     case GTK_ACCESSIBLE_NAME_RECOMMENDED:
-      if (!label_set)
+      if (label_set)
+        {
+          return SEVERITY_GOOD;
+        }
+      else
         {
           *hint = g_strdup_printf ("label recommended for %s", role_name);
 
-          return FIX_SEVERITY_RECOMMENDATION;
+          return SEVERITY_RECOMMENDATION;
         }
       break;
 
     case GTK_ACCESSIBLE_NAME_NOT_RECOMMENDED:
-      if (label_set)
+      if (!label_set)
+        {
+          return SEVERITY_GOOD;
+        }
+      else
         {
           *hint = g_strdup_printf ("label not recommended for %s", role_name);
 
-          return FIX_SEVERITY_RECOMMENDATION;
+          return SEVERITY_RECOMMENDATION;
         }
       break;
 
@@ -214,7 +234,7 @@ check_accessibility_errors (GtkATContext       *context,
               if (!gtk_at_context_has_accessible_state (context, required_attributes[i].id))
                 {
                   *hint = g_strdup_printf ("%s must have state %s", role_name, g_enum_get_value (states, required_attributes[i].id)->value_nick);
-                  return FIX_SEVERITY_ERROR;
+                  return SEVERITY_ERROR;
                 }
               break;
 
@@ -222,7 +242,7 @@ check_accessibility_errors (GtkATContext       *context,
               if (!gtk_at_context_has_accessible_property (context, required_attributes[i].id))
                 {
                   *hint = g_strdup_printf ("%s must have property %s", role_name, g_enum_get_value (properties, required_attributes[i].id)->value_nick);
-                  return FIX_SEVERITY_ERROR;
+                  return SEVERITY_ERROR;
                 }
               break;
 
@@ -230,7 +250,7 @@ check_accessibility_errors (GtkATContext       *context,
               if (!gtk_at_context_has_accessible_relation (context, required_attributes[i].id))
                 {
                   *hint = g_strdup_printf ("%s must have relation %s", role_name, g_enum_get_value (relations, required_attributes[i].id)->value_nick);
-                  return FIX_SEVERITY_ERROR;
+                  return SEVERITY_ERROR;
                 }
               break;
 
@@ -284,27 +304,10 @@ check_accessibility_errors (GtkATContext       *context,
 
       g_string_free (s, TRUE);
 
-      return FIX_SEVERITY_ERROR;
+      return SEVERITY_ERROR;
     }
 
-  if (role == GTK_ACCESSIBLE_ROLE_BUTTON)
-    {
-      GtkAccessible *accessible = gtk_at_context_get_accessible (context);
-
-      if (GTK_IS_WIDGET (accessible))
-        {
-          int width = gtk_widget_get_width (GTK_WIDGET (accessible));
-          int height = gtk_widget_get_height (GTK_WIDGET (accessible));
-
-          if (width < 24 || height < 24)
-            {
-              *hint = g_strdup_printf ("Button is too small: %dx%d", width, height);
-              return FIX_SEVERITY_ERROR;
-            }
-        }
-    }
-
-  return FIX_SEVERITY_GOOD;
+  return SEVERITY_GOOD;
 }
 
 static FixSeverity
@@ -325,19 +328,6 @@ check_widget_accessibility_errors (GtkWidget  *widget,
 }
 
 static void
-center_over_within (graphene_rect_t       *rect,
-                    const graphene_rect_t *over,
-                    const graphene_rect_t *within)
-{
-  graphene_point_t center;
-
-  graphene_rect_get_center (over, &center);
-
-  rect->origin.x = CLAMP (center.x - 0.5 * rect->size.width, within->origin.x, within->origin.x + within->size.width - rect->size.width);
-  rect->origin.y = CLAMP (center.y - 0.5 * rect->size.height, within->origin.y, within->origin.y + within->size.height - rect->size.height);
-}
-
-static void
 recurse_child_widgets (GtkA11yOverlay *self,
                        GtkWidget      *widget,
                        GtkSnapshot    *snapshot)
@@ -352,7 +342,7 @@ recurse_child_widgets (GtkA11yOverlay *self,
 
   severity = check_widget_accessibility_errors (widget, self->context, &hint);
 
-  if (severity != FIX_SEVERITY_GOOD)
+  if (severity != SEVERITY_GOOD)
     {
       int width, height;
       GdkRGBA color;
@@ -360,7 +350,7 @@ recurse_child_widgets (GtkA11yOverlay *self,
       width = gtk_widget_get_width (widget);
       height = gtk_widget_get_height (widget);
 
-      if (severity == FIX_SEVERITY_ERROR)
+      if (severity == SEVERITY_ERROR)
         color = self->error_color;
       else
         color = self->recommend_color;
@@ -373,7 +363,6 @@ recurse_child_widgets (GtkA11yOverlay *self,
 
       if (hint)
         {
-          int toplevel_width, toplevel_height;
           PangoLayout *layout;
           PangoRectangle extents;
           GdkRGBA black = { 0, 0, 0, 1 };
@@ -384,18 +373,11 @@ recurse_child_widgets (GtkA11yOverlay *self,
             { 0, 0, 0, 1 },
             { 0, 0, 0, 1 },
           };
-          GtkNative *native;
-          graphene_rect_t over, within, bounds;
-          gboolean ret G_GNUC_UNUSED;
-
-          native = gtk_widget_get_native (widget);
-          toplevel_width = gtk_widget_get_width (GTK_WIDGET (native));
-          toplevel_height = gtk_widget_get_height (GTK_WIDGET (native));
 
           gtk_snapshot_save (snapshot);
 
           layout = gtk_widget_create_pango_layout (widget, hint);
-          pango_layout_set_width (layout, toplevel_width * PANGO_SCALE);
+          pango_layout_set_width (layout, width * PANGO_SCALE);
 
           pango_layout_get_pixel_extents (layout, NULL, &extents);
 
@@ -404,29 +386,18 @@ recurse_child_widgets (GtkA11yOverlay *self,
           extents.width += 10;
           extents.height += 10;
 
-          ret = gtk_widget_compute_point (widget, GTK_WIDGET (native), &GRAPHENE_POINT_INIT (0, 0), &over.origin);
-          over.size.width = width;
-          over.size.height = height;
-
-          graphene_rect_init (&within, 0, 0, toplevel_width, toplevel_height);
-
-          graphene_rect_init (&bounds, 0, 0, extents.width, extents.height);
-          center_over_within (&bounds, &over, &within);
-
           color.alpha = 0.8f;
 
-          gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (bounds.origin.x - over.origin.x,
-                                                                  bounds.origin.y - over.origin.y));
+          gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (0.5 * (width - extents.width), 0.5 * (height - extents.height)));
 
           gtk_snapshot_append_border (snapshot,
-                                       &GSK_ROUNDED_RECT_INIT (0, 0,
+                                       &GSK_ROUNDED_RECT_INIT (extents.x, extents.y,
                                                                extents.width, extents.height),
                                       widths, colors);
           gtk_snapshot_append_color (snapshot, &color,
-                                     &GRAPHENE_RECT_INIT (0, 0,
+                                     &GRAPHENE_RECT_INIT (extents.x, extents.y,
                                                           extents.width, extents.height));
 
-          gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (5, 5));
           gtk_snapshot_append_layout (snapshot, layout, &black);
           g_object_unref (layout);
 

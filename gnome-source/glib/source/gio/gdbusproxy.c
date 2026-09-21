@@ -93,8 +93,6 @@
  * context (see [method@GLib.MainContext.push_thread_default]) of the thread
  * where the instance was constructed.
  *
- *
- * ## A watch proxy example
  * An example using a proxy for a well-known name can be found in
  * [`gdbus-example-watch-proxy.c`](https://gitlab.gnome.org/GNOME/glib/-/blob/HEAD/gio/tests/gdbus-example-watch-proxy.c).
  *
@@ -200,15 +198,15 @@ g_dbus_proxy_finalize (GObject *object)
 
   if (proxy->priv->name_owner_changed_subscription_id > 0)
     g_dbus_connection_signal_unsubscribe (proxy->priv->connection,
-                                          g_steal_handle_id (&proxy->priv->name_owner_changed_subscription_id));
+                                          proxy->priv->name_owner_changed_subscription_id);
 
   if (proxy->priv->properties_changed_subscription_id > 0)
     g_dbus_connection_signal_unsubscribe (proxy->priv->connection,
-                                          g_steal_handle_id (&proxy->priv->properties_changed_subscription_id));
+                                          proxy->priv->properties_changed_subscription_id);
 
   if (proxy->priv->signals_subscription_id > 0)
     g_dbus_connection_signal_unsubscribe (proxy->priv->connection,
-                                          g_steal_handle_id (&proxy->priv->signals_subscription_id));
+                                          proxy->priv->signals_subscription_id);
 
   if (proxy->priv->connection != NULL)
     g_object_unref (proxy->priv->connection);
@@ -340,7 +338,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
    * in derived classes */
 
   /**
-   * GDBusProxy:g-interface-info: (getter get_interface_info) (setter set_interface_info)
+   * GDBusProxy:g-interface-info:
    *
    * Ensure that interactions with this proxy conform to the given
    * interface. This is mainly to ensure that malformed data received
@@ -380,7 +378,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                        G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-connection: (getter get_connection)
+   * GDBusProxy:g-connection:
    *
    * The #GDBusConnection the proxy is for.
    *
@@ -419,7 +417,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                       G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-flags: (getter get_flags)
+   * GDBusProxy:g-flags:
    *
    * Flags from the #GDBusProxyFlags enumeration.
    *
@@ -438,7 +436,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                        G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-name: (getter get_name)
+   * GDBusProxy:g-name:
    *
    * The well-known or unique name that the proxy is for.
    *
@@ -456,7 +454,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                         G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-name-owner: (getter get_name_owner)
+   * GDBusProxy:g-name-owner:
    *
    * The unique name that owns #GDBusProxy:g-name or %NULL if no-one
    * currently owns that name. You may connect to #GObject::notify signal to
@@ -474,7 +472,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                         G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-object-path: (getter get_object_path)
+   * GDBusProxy:g-object-path:
    *
    * The object path the proxy is for.
    *
@@ -492,7 +490,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                         G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-interface-name: (getter get_interface_name)
+   * GDBusProxy:g-interface-name:
    *
    * The D-Bus interface name the proxy is for.
    *
@@ -510,7 +508,7 @@ g_dbus_proxy_class_init (GDBusProxyClass *klass)
                                                         G_PARAM_STATIC_NICK));
 
   /**
-   * GDBusProxy:g-default-timeout: (getter get_default_timeout) (setter set_default_timeout)
+   * GDBusProxy:g-default-timeout:
    *
    * The timeout to use if -1 (specifying default timeout) is passed
    * as @timeout_msec in the g_dbus_proxy_call() and
@@ -956,7 +954,7 @@ invalidated_property_get_cb (GDBusConnection *connection,
   g_variant_get (value, "(v)", &unpacked_value);
 
   /* synthesize the a{sv} in the PropertiesChanged signal */
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("a{sv}"));
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a{sv}"));
   g_variant_builder_add (&builder, "{sv}", data->prop_name, unpacked_value);
 
   G_LOCK (properties_lock);
@@ -1060,7 +1058,7 @@ on_properties_changed (GDBusConnection *connection,
               g_dbus_connection_call (proxy->priv->connection,
                                       proxy->priv->name_owner,
                                       proxy->priv->object_path,
-                                      DBUS_INTERFACE_PROPERTIES,
+                                      "org.freedesktop.DBus.Properties",
                                       "Get",
                                       g_variant_new ("(ss)", proxy->priv->interface_name, data->prop_name),
                                       G_VARIANT_TYPE ("(v)"),
@@ -1266,7 +1264,7 @@ on_name_owner_changed (GDBusConnection *connection,
           const gchar *key;
 
           /* Build changed_properties (always empty) and invalidated_properties ... */
-          g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("a{sv}"));
+          g_variant_builder_init (&builder, G_VARIANT_TYPE ("a{sv}"));
 
           invalidated_properties = g_ptr_array_new_with_free_func (g_free);
           g_hash_table_iter_init (&iter, proxy->priv->properties);
@@ -1332,7 +1330,7 @@ on_name_owner_changed (GDBusConnection *connection,
           g_dbus_connection_call (proxy->priv->connection,
                                   data->name_owner,
                                   proxy->priv->object_path,
-                                  DBUS_INTERFACE_PROPERTIES,
+                                  "org.freedesktop.DBus.Properties",
                                   "GetAll",
                                   g_variant_new ("(s)", proxy->priv->interface_name),
                                   G_VARIANT_TYPE ("(a{sv})"),
@@ -1426,7 +1424,7 @@ async_init_data_set_name_owner (GTask       *task,
       g_dbus_connection_call (proxy->priv->connection,
                               name_owner,
                               proxy->priv->object_path,
-                              DBUS_INTERFACE_PROPERTIES,
+                              "org.freedesktop.DBus.Properties",
                               "GetAll",
                               g_variant_new ("(s)", proxy->priv->interface_name),
                               G_VARIANT_TYPE ("(a{sv})"),
@@ -1487,9 +1485,9 @@ async_init_call_get_name_owner (GTask *task)
   GDBusProxy *proxy = g_task_get_source_object (task);
 
   g_dbus_connection_call (proxy->priv->connection,
-                          DBUS_SERVICE_DBUS,
-                          DBUS_PATH_DBUS,
-                          DBUS_INTERFACE_DBUS,
+                          "org.freedesktop.DBus",  /* name */
+                          "/org/freedesktop/DBus", /* object path */
+                          "org.freedesktop.DBus",  /* interface */
                           "GetNameOwner",
                           g_variant_new ("(s)",
                                          proxy->priv->name),
@@ -1565,8 +1563,8 @@ async_init_start_service_by_name_cb (GDBusConnection *connection,
                      "(u)",
                      &start_service_result);
       g_variant_unref (result);
-      if (start_service_result == DBUS_START_REPLY_SUCCESS ||
-          start_service_result == DBUS_START_REPLY_ALREADY_RUNNING)
+      if (start_service_result == 1 ||  /* DBUS_START_REPLY_SUCCESS */
+          start_service_result == 2)    /* DBUS_START_REPLY_ALREADY_RUNNING */
         {
           /* continue to invoke GetNameOwner() */
         }
@@ -1596,9 +1594,9 @@ async_init_call_start_service_by_name (GTask *task)
   GDBusProxy *proxy = g_task_get_source_object (task);
 
   g_dbus_connection_call (proxy->priv->connection,
-                          DBUS_SERVICE_DBUS,
-                          DBUS_PATH_DBUS,
-                          DBUS_INTERFACE_DBUS,
+                          "org.freedesktop.DBus",  /* name */
+                          "/org/freedesktop/DBus", /* object path */
+                          "org.freedesktop.DBus",  /* interface */
                           "StartServiceByName",
                           g_variant_new ("(su)",
                                          proxy->priv->name,
@@ -1690,7 +1688,7 @@ async_initable_init_first (GAsyncInitable *initable)
       proxy->priv->properties_changed_subscription_id =
         g_dbus_connection_signal_subscribe (proxy->priv->connection,
                                             proxy->priv->name,
-                                            DBUS_INTERFACE_PROPERTIES,
+                                            "org.freedesktop.DBus.Properties",
                                             "PropertiesChanged",
                                             proxy->priv->object_path,
                                             proxy->priv->interface_name,
@@ -1721,10 +1719,10 @@ async_initable_init_first (GAsyncInitable *initable)
     {
       proxy->priv->name_owner_changed_subscription_id =
         g_dbus_connection_signal_subscribe (proxy->priv->connection,
-                                            DBUS_SERVICE_DBUS,
-                                            DBUS_INTERFACE_DBUS,
+                                            "org.freedesktop.DBus",  /* name */
+                                            "org.freedesktop.DBus",  /* interface */
                                             "NameOwnerChanged",      /* signal name */
-                                            DBUS_PATH_DBUS,
+                                            "/org/freedesktop/DBus", /* path */
                                             proxy->priv->name,       /* arg0 */
                                             signal_flags,
                                             on_name_owner_changed,
@@ -1960,7 +1958,7 @@ initable_iface_init (GInitableIface *initable_iface)
  *
  * See g_dbus_proxy_new_sync() and for a synchronous version of this constructor.
  *
- * #GDBusProxy is used in this [example][class@Gio.DBusProxy#a-watch-proxy-example].
+ * #GDBusProxy is used in this [example][gdbus-wellknown-proxy].
  *
  * Since: 2.26
  */
@@ -2061,7 +2059,7 @@ g_dbus_proxy_new_finish (GAsyncResult  *res,
  * This is a synchronous failable constructor. See g_dbus_proxy_new()
  * and g_dbus_proxy_new_finish() for the asynchronous version.
  *
- * #GDBusProxy is used in this [example][class@Gio.DBusProxy#a-watch-proxy-example].
+ * #GDBusProxy is used in this [example][gdbus-wellknown-proxy].
  *
  * Returns: (transfer full): A #GDBusProxy or %NULL if error is set.
  *    Free with g_object_unref().
@@ -2118,7 +2116,7 @@ g_dbus_proxy_new_sync (GDBusConnection     *connection,
  *
  * Like g_dbus_proxy_new() but takes a #GBusType instead of a #GDBusConnection.
  *
- * #GDBusProxy is used in this [example][class@Gio.DBusProxy#a-watch-proxy-example].
+ * #GDBusProxy is used in this [example][gdbus-wellknown-proxy].
  *
  * Since: 2.26
  */
@@ -2186,7 +2184,7 @@ g_dbus_proxy_new_for_bus_finish (GAsyncResult  *res,
  *
  * Like g_dbus_proxy_new_sync() but takes a #GBusType instead of a #GDBusConnection.
  *
- * #GDBusProxy is used in this [example][class@Gio.DBusProxy#a-watch-proxy-example].
+ * #GDBusProxy is used in this [example][gdbus-wellknown-proxy].
  *
  * Returns: (transfer full): A #GDBusProxy or %NULL if error is set.
  *    Free with g_object_unref().
@@ -2230,7 +2228,7 @@ g_dbus_proxy_new_for_bus_sync (GBusType             bus_type,
 /* ---------------------------------------------------------------------------------------------------- */
 
 /**
- * g_dbus_proxy_get_connection: (get-property g-connection)
+ * g_dbus_proxy_get_connection:
  * @proxy: A #GDBusProxy.
  *
  * Gets the connection @proxy is for.
@@ -2247,7 +2245,7 @@ g_dbus_proxy_get_connection (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_get_flags: (get-property g-flags)
+ * g_dbus_proxy_get_flags:
  * @proxy: A #GDBusProxy.
  *
  * Gets the flags that @proxy was constructed with.
@@ -2264,7 +2262,7 @@ g_dbus_proxy_get_flags (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_get_name: (get-property g-name)
+ * g_dbus_proxy_get_name:
  * @proxy: A #GDBusProxy.
  *
  * Gets the name that @proxy was constructed for.
@@ -2285,7 +2283,7 @@ g_dbus_proxy_get_name (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_get_name_owner: (get-property g-name-owner)
+ * g_dbus_proxy_get_name_owner:
  * @proxy: A #GDBusProxy.
  *
  * The unique name that owns the name that @proxy is for or %NULL if
@@ -2312,7 +2310,7 @@ g_dbus_proxy_get_name_owner (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_get_object_path: (get-property g-object-path)
+ * g_dbus_proxy_get_object_path:
  * @proxy: A #GDBusProxy.
  *
  * Gets the object path @proxy is for.
@@ -2329,7 +2327,7 @@ g_dbus_proxy_get_object_path (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_get_interface_name: (get-property g-interface-name)
+ * g_dbus_proxy_get_interface_name:
  * @proxy: A #GDBusProxy.
  *
  * Gets the D-Bus interface name @proxy is for.
@@ -2346,7 +2344,7 @@ g_dbus_proxy_get_interface_name (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_get_default_timeout: (get-property g-default-timeout)
+ * g_dbus_proxy_get_default_timeout:
  * @proxy: A #GDBusProxy.
  *
  * Gets the timeout to use if -1 (specifying default timeout) is
@@ -2373,7 +2371,7 @@ g_dbus_proxy_get_default_timeout (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_set_default_timeout: (set-property g-default-timeout)
+ * g_dbus_proxy_set_default_timeout:
  * @proxy: A #GDBusProxy.
  * @timeout_msec: Timeout in milliseconds.
  *
@@ -2408,7 +2406,7 @@ g_dbus_proxy_set_default_timeout (GDBusProxy *proxy,
 }
 
 /**
- * g_dbus_proxy_get_interface_info: (get-property g-interface-info)
+ * g_dbus_proxy_get_interface_info:
  * @proxy: A #GDBusProxy
  *
  * Returns the #GDBusInterfaceInfo, if any, specifying the interface
@@ -2437,7 +2435,7 @@ g_dbus_proxy_get_interface_info (GDBusProxy *proxy)
 }
 
 /**
- * g_dbus_proxy_set_interface_info: (set-property g-interface-info)
+ * g_dbus_proxy_set_interface_info:
  * @proxy: A #GDBusProxy
  * @info: (transfer none) (nullable): Minimum interface this proxy conforms to
  *    or %NULL to unset.
@@ -2916,8 +2914,8 @@ g_dbus_proxy_call_sync_internal (GDBusProxy      *proxy,
  * then the return value is checked against the return type.
  *
  * This is an asynchronous method. When the operation is finished,
- * @callback will be invoked in the thread-default main context
- * (see [method@GLib.MainContext.push_thread_default])
+ * @callback will be invoked in the
+ * [thread-default main context][g-main-context-push-thread-default]
  * of the thread you are calling this method from.
  * You can then call g_dbus_proxy_call_finish() to get the result of
  * the operation. See g_dbus_proxy_call_sync() for the synchronous
@@ -3067,7 +3065,7 @@ g_dbus_proxy_call_with_unix_fd_list (GDBusProxy          *proxy,
 /**
  * g_dbus_proxy_call_with_unix_fd_list_finish:
  * @proxy: A #GDBusProxy.
- * @out_fd_list: (out) (optional) (nullable): Return location for a #GUnixFDList or %NULL.
+ * @out_fd_list: (out) (optional): Return location for a #GUnixFDList or %NULL.
  * @res: A #GAsyncResult obtained from the #GAsyncReadyCallback passed to g_dbus_proxy_call_with_unix_fd_list().
  * @error: Return location for error or %NULL.
  *
@@ -3097,7 +3095,7 @@ g_dbus_proxy_call_with_unix_fd_list_finish (GDBusProxy    *proxy,
  * @timeout_msec: The timeout in milliseconds (with %G_MAXINT meaning
  *                "infinite") or -1 to use the proxy default timeout.
  * @fd_list: (nullable): A #GUnixFDList or %NULL.
- * @out_fd_list: (out) (optional) (nullable): Return location for a #GUnixFDList or %NULL.
+ * @out_fd_list: (out) (optional): Return location for a #GUnixFDList or %NULL.
  * @cancellable: (nullable): A #GCancellable or %NULL.
  * @error: Return location for error or %NULL.
  *

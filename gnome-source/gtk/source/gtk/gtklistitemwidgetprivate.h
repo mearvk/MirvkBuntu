@@ -43,7 +43,7 @@ struct _GtkListItemWidgetClass
   GtkListFactoryWidgetClass parent_class;
 };
 
-GType                   gtk_list_item_widget_get_type           (void);
+GType                   gtk_list_item_widget_get_type           (void) G_GNUC_CONST;
 
 GtkWidget *             gtk_list_item_widget_new                (GtkListItemFactory     *factory,
                                                                  const char             *css_name,

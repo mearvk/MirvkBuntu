@@ -23,10 +23,7 @@
 #include <math.h>
 #include <string.h>
 
-#include <cairo.h>
-#ifdef CAIRO_HAS_PDF_SURFACE
 #include <cairo-pdf.h>
-#endif
 
 #include <glib/gi18n-lib.h>
 #include "gtkmarshalers.h"
@@ -38,7 +35,7 @@
 /**
  * GtkPrintOperation:
  *
- * High-level, portable printing API.
+ * `GtkPrintOperation` is the high-level, portable printing API.
  *
  * It looks a bit different than other GTK dialogs such as the
  * `GtkFileChooser`, since some platforms don’t expose enough
@@ -141,11 +138,8 @@ enum
   PROP_EMBED_PAGE_SETUP,
   PROP_HAS_SELECTION,
   PROP_SUPPORT_SELECTION,
-  PROP_N_PAGES_TO_PRINT,
-  N_PROPS
+  PROP_N_PAGES_TO_PRINT
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static guint signals[LAST_SIGNAL] = { 0 };
 static int job_nr = 0;
@@ -363,7 +357,8 @@ preview_end_run (GtkPrintOperation *op,
 		 gboolean           wait,
 		 gboolean           cancelled)
 {
-  g_clear_pointer (&op->priv->page_ranges, g_free);
+  g_free (op->priv->page_ranges);
+  op->priv->page_ranges = NULL;
 }
 
 
@@ -565,7 +560,6 @@ preview_print_idle_done (gpointer data)
   g_object_unref (pop->pages_data->op);
   g_free (pop->pages_data->pages);
   g_free (pop->pages_data);
-  cairo_surface_destroy (pop->surface);
 
   g_object_unref (op);
   g_free (pop);
@@ -704,7 +698,11 @@ gtk_print_operation_done (GtkPrintOperation       *operation,
 {
   GtkPrintOperationPrivate *priv = gtk_print_operation_get_instance_private (operation);
 
-  g_clear_object (&priv->print_context); 
+  if (priv->print_context)
+    {
+      g_object_unref (priv->print_context);
+      priv->print_context = NULL;
+    } 
 }
 
 static gboolean
@@ -1090,7 +1088,7 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
                               _gtk_marshal_BOOLEAN__OBJECT_OBJECT_OBJECTv);
 
   /**
-   * GtkPrintOperation:default-page-setup:
+   * GtkPrintOperation:default-page-setup: (attributes org.gtk.Property.get=gtk_print_operation_get_default_page_setup org.gtk.Property.set=gtk_print_operation_set_default_page_setup)
    *
    * The `GtkPageSetup` used by default.
    *
@@ -1098,12 +1096,14 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * but it can be overridden on a per-page basis by connecting
    * to the [signal@Gtk.PrintOperation::request-page-setup] signal.
    */
-  props[PROP_DEFAULT_PAGE_SETUP] = g_param_spec_object ("default-page-setup", NULL, NULL,
-                                                        GTK_TYPE_PAGE_SETUP,
-                                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_DEFAULT_PAGE_SETUP,
+				   g_param_spec_object ("default-page-setup", NULL, NULL,
+							GTK_TYPE_PAGE_SETUP,
+							G_PARAM_READWRITE));
 
   /**
-   * GtkPrintOperation:print-settings:
+   * GtkPrintOperation:print-settings: (attributes org.gtk.Property.get=gtk_print_operation_get_print_settings org.gtk.Property.set=gtk_print_operation_set_print_settings)
    *
    * The `GtkPrintSettings` used for initializing the dialog.
    *
@@ -1111,12 +1111,14 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * print settings from a previous print operation, see
    * [method@Gtk.PrintOperation.run].
    */
-  props[PROP_PRINT_SETTINGS] = g_param_spec_object ("print-settings", NULL, NULL,
-                                                    GTK_TYPE_PRINT_SETTINGS,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_PRINT_SETTINGS,
+				   g_param_spec_object ("print-settings", NULL, NULL,
+							GTK_TYPE_PRINT_SETTINGS,
+							G_PARAM_READWRITE));
 
   /**
-   * GtkPrintOperation:job-name:
+   * GtkPrintOperation:job-name: (attributes org.gtk.Property.set=gtk_print_operation_set_job_name)
    *
    * A string used to identify the job (e.g. in monitoring
    * applications like eggcups).
@@ -1124,12 +1126,14 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * If you don't set a job name, GTK picks a default one
    * by numbering successive print jobs.
    */
-  props[PROP_JOB_NAME] = g_param_spec_string ("job-name", NULL, NULL,
-                                              "",
-                                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_JOB_NAME,
+				   g_param_spec_string ("job-name", NULL, NULL,
+							"",
+							G_PARAM_READWRITE));
 
   /**
-   * GtkPrintOperation:n-pages:
+   * GtkPrintOperation:n-pages: (attributes org.gtk.Property.set=gtk_print_operation_set_n_pages)
    *
    * The number of pages in the document.
    *
@@ -1143,14 +1147,16 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * if the user chooses to print all pages, the last ::draw-page signal
    * will be for page @n_pages - 1.
    */
-  props[PROP_N_PAGES] = g_param_spec_int ("n-pages", NULL, NULL,
-                                          -1,
-                                          G_MAXINT,
-                                          -1,
-                                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_N_PAGES,
+				   g_param_spec_int ("n-pages", NULL, NULL,
+						     -1,
+						     G_MAXINT,
+						     -1,
+						     G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:current-page:
+   * GtkPrintOperation:current-page: (attributes org.gtk.Property.set=gtk_print_operation_set_current_page)
    *
    * The current page in the document.
    *
@@ -1159,14 +1165,16 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    *
    * Note that this only makes sense for pre-paginated documents.
    */
-  props[PROP_CURRENT_PAGE] = g_param_spec_int ("current-page", NULL, NULL,
-                                               -1,
-                                               G_MAXINT,
-                                               -1,
-                                               G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_CURRENT_PAGE,
+				   g_param_spec_int ("current-page", NULL, NULL,
+						     -1,
+						     G_MAXINT,
+						     -1,
+						     G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:use-full-page:
+   * GtkPrintOperation:use-full-page: (attributes org.gtk.Property.set=gtk_print_operation_set_use_full_page)
    *
    * If %TRUE, the transformation for the cairo context obtained
    * from `GtkPrintContext` puts the origin at the top left corner
@@ -1177,12 +1185,14 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * the origin is at the top left corner of the imageable area (i.e.
    * inside the margins).
    */
-  props[PROP_USE_FULL_PAGE] = g_param_spec_boolean ("use-full-page", NULL, NULL,
-                                                    FALSE,
-                                                    G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_USE_FULL_PAGE,
+				   g_param_spec_boolean ("use-full-page", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:track-print-status:
+   * GtkPrintOperation:track-print-status: (attributes org.gtk.Property.set=gtk_print_operation_set_track_print_status)
    *
    * If %TRUE, the print operation will try to continue report on
    * the status of the print job in the printer queues and printer.
@@ -1192,34 +1202,40 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * However, this is often implemented using polling, and should
    * not be enabled unless needed.
    */
-  props[PROP_TRACK_PRINT_STATUS] = g_param_spec_boolean ("track-print-status", NULL, NULL,
-                                                         FALSE,
-                                                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_TRACK_PRINT_STATUS,
+				   g_param_spec_boolean ("track-print-status", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:unit:
+   * GtkPrintOperation:unit: (attributes org.gtk.Property.set=gtk_print_operation_set_unit)
    *
    * The transformation for the cairo context obtained from
    * `GtkPrintContext` is set up in such a way that distances
    * are measured in units of @unit.
    */
-  props[PROP_UNIT] = g_param_spec_enum ("unit", NULL, NULL,
-                                        GTK_TYPE_UNIT,
-                                        GTK_UNIT_NONE,
-                                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_UNIT,
+				   g_param_spec_enum ("unit", NULL, NULL,
+						      GTK_TYPE_UNIT,
+						      GTK_UNIT_NONE,
+						      G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:show-progress:
+   * GtkPrintOperation:show-progress: (attributes org.gtk.Property.set=gtk_print_operation_set_show_progress)
    *
    * Determines whether to show a progress dialog during the
    * print operation.
    */
-  props[PROP_SHOW_PROGRESS] = g_param_spec_boolean ("show-progress", NULL, NULL,
-                                                    FALSE,
-                                                    G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_SHOW_PROGRESS,
+				   g_param_spec_boolean ("show-progress", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:allow-async:
+   * GtkPrintOperation:allow-async: (attributes org.gtk.Property.set=gtk_print_operation_set_allow_async)
    *
    * Determines whether the print operation may run asynchronously or not.
    *
@@ -1232,12 +1248,14 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * is unlikely to change). On other platforms, all actions except for
    * %GTK_PRINT_OPERATION_ACTION_EXPORT support asynchronous operation.
    */
-  props[PROP_ALLOW_ASYNC] = g_param_spec_boolean ("allow-async", NULL, NULL,
-                                                  FALSE,
-                                                  G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_ALLOW_ASYNC,
+				   g_param_spec_boolean ("allow-async", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:export-filename:
+   * GtkPrintOperation:export-filename: (attributes org.gtk.Property.set=gtk_print_operation_set_export_filename)
    *
    * The name of a file to generate instead of showing the print dialog.
    *
@@ -1250,22 +1268,26 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * by letting the user pick the “Print to PDF” item from the
    * list of printers in the print dialog.
    */
-  props[PROP_EXPORT_FILENAME] = g_param_spec_string ("export-filename", NULL, NULL,
-                                                     NULL,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_EXPORT_FILENAME,
+				   g_param_spec_string ("export-filename", NULL, NULL,
+							NULL,
+							G_PARAM_READWRITE));
 
   /**
-   * GtkPrintOperation:status:
+   * GtkPrintOperation:status: (attributes org.gtk.Property.get=gtk_print_operation_get_status)
    *
    * The status of the print operation.
    */
-  props[PROP_STATUS] = g_param_spec_enum ("status", NULL, NULL,
-                                          GTK_TYPE_PRINT_STATUS,
-                                          GTK_PRINT_STATUS_INITIAL,
-                                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_STATUS,
+				   g_param_spec_enum ("status", NULL, NULL,
+						      GTK_TYPE_PRINT_STATUS,
+						      GTK_PRINT_STATUS_INITIAL,
+						      G_PARAM_READABLE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:status-string:
+   * GtkPrintOperation:status-string: (attributes org.gtk.Property.get=gtk_print_operation_get_status_string)
    *
    * A string representation of the status of the print operation.
    *
@@ -1275,13 +1297,15 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    * See the [property@Gtk.PrintOperation:status] property for a status
    * value that is suitable for programmatic use.
    */
-  props[PROP_STATUS_STRING] = g_param_spec_string ("status-string", NULL, NULL,
-                                                   "",
-                                                   G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_STATUS_STRING,
+				   g_param_spec_string ("status-string", NULL, NULL,
+							"",
+							G_PARAM_READABLE));
   
 
   /**
-   * GtkPrintOperation:custom-tab-label:
+   * GtkPrintOperation:custom-tab-label: (attributes org.gtk.Property.set=gtk_print_operation_set_custom_tab_label)
    *
    * Used as the label of the tab containing custom widgets.
    *
@@ -1289,46 +1313,54 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    *
    * If this is %NULL, GTK uses a default label.
    */
-  props[PROP_CUSTOM_TAB_LABEL] = g_param_spec_string ("custom-tab-label", NULL, NULL,
-                                                      NULL,
-                                                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_CUSTOM_TAB_LABEL,
+				   g_param_spec_string ("custom-tab-label", NULL, NULL,
+							NULL,
+							G_PARAM_READWRITE));
 
   /**
-   * GtkPrintOperation:support-selection:
+   * GtkPrintOperation:support-selection: (attributes org.gtk.Property.get=gtk_print_operation_get_support_selection org.gtk.Property.set=gtk_print_operation_set_support_selection)
    *
    * If %TRUE, the print operation will support print of selection.
    *
    * This allows the print dialog to show a "Selection" button.
    */
-  props[PROP_SUPPORT_SELECTION] = g_param_spec_boolean ("support-selection", NULL, NULL,
-                                                        FALSE,
-                                                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_SUPPORT_SELECTION,
+				   g_param_spec_boolean ("support-selection", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:has-selection:
+   * GtkPrintOperation:has-selection: (attributes org.gtk.Property.get=gtk_print_operation_get_has_selection org.gtk.Property.set=gtk_print_operation_set_has_selection)
    *
    * Determines whether there is a selection in your application.
    *
    * This can allow your application to print the selection.
    * This is typically used to make a "Selection" button sensitive.
    */
-  props[PROP_HAS_SELECTION] = g_param_spec_boolean ("has-selection", NULL, NULL,
-                                                    FALSE,
-                                                    G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_HAS_SELECTION,
+				   g_param_spec_boolean ("has-selection", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 
   /**
-   * GtkPrintOperation:embed-page-setup:
+   * GtkPrintOperation:embed-page-setup: (attributes org.gtk.Property.get=gtk_print_operation_get_embed_page_setup org.gtk.Property.set=gtk_print_operation_set_embed_page_setup)
    *
    * If %TRUE, page size combo box and orientation combo box
    * are embedded into page setup page.
    */
-  props[PROP_EMBED_PAGE_SETUP] = g_param_spec_boolean ("embed-page-setup", NULL, NULL,
-                                                       FALSE,
-                                                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+				   PROP_EMBED_PAGE_SETUP,
+				   g_param_spec_boolean ("embed-page-setup", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkPrintOperation:n-pages-to-print:
+   * GtkPrintOperation:n-pages-to-print: (attributes org.gtk.Property.get=gtk_print_operation_get_n_pages_to_print)
    *
    * The number of pages that will be printed.
    *
@@ -1341,13 +1373,13 @@ gtk_print_operation_class_init (GtkPrintOperationClass *class)
    *
    * This is typically used to track the progress of print operation.
    */
-  props[PROP_N_PAGES_TO_PRINT] = g_param_spec_int ("n-pages-to-print", NULL, NULL,
-                                                   -1,
-                                                   G_MAXINT,
-                                                   -1,
-                                                   G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+				   PROP_N_PAGES_TO_PRINT,
+				   g_param_spec_int ("n-pages-to-print", NULL, NULL,
+						     -1,
+						     G_MAXINT,
+						     -1,
+						     G_PARAM_READABLE|G_PARAM_EXPLICIT_NOTIFY));
 }
 
 /**
@@ -1368,7 +1400,7 @@ gtk_print_operation_new (void)
 }
 
 /**
- * gtk_print_operation_set_default_page_setup:
+ * gtk_print_operation_set_default_page_setup: (attributes org.gtk.Method.set_property=default-page-setup)
  * @op: a `GtkPrintOperation`
  * @default_page_setup: (nullable): a `GtkPageSetup`
  *
@@ -1398,12 +1430,12 @@ gtk_print_operation_set_default_page_setup (GtkPrintOperation *op,
       
       priv->default_page_setup = default_page_setup;
      
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_DEFAULT_PAGE_SETUP]);
+      g_object_notify (G_OBJECT (op), "default-page-setup");
     }
 }
 
 /**
- * gtk_print_operation_get_default_page_setup:
+ * gtk_print_operation_get_default_page_setup: (attributes org.gtk.Method.get_property=default-page-setup)
  * @op: a `GtkPrintOperation`
  *
  * Returns the default page setup.
@@ -1420,7 +1452,7 @@ gtk_print_operation_get_default_page_setup (GtkPrintOperation *op)
 
 
 /**
- * gtk_print_operation_set_print_settings:
+ * gtk_print_operation_set_print_settings: (attributes org.gtk.Method.set_property=print-settings)
  * @op: a `GtkPrintOperation`
  * @print_settings: (nullable): `GtkPrintSettings`
  *
@@ -1449,12 +1481,12 @@ gtk_print_operation_set_print_settings (GtkPrintOperation *op,
   
       priv->print_settings = print_settings;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_PRINT_SETTINGS]);
+      g_object_notify (G_OBJECT (op), "print-settings");
     }
 }
 
 /**
- * gtk_print_operation_get_print_settings:
+ * gtk_print_operation_get_print_settings: (attributes org.gtk.Method.get_property=print-settings)
  * @op: a `GtkPrintOperation`
  *
  * Returns the current print settings.
@@ -1474,7 +1506,7 @@ gtk_print_operation_get_print_settings (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_set_job_name:
+ * gtk_print_operation_set_job_name: (attributes org.gtk.Method.set_property=job-name)
  * @op: a `GtkPrintOperation`
  * @job_name: a string that identifies the print job
  *
@@ -1501,11 +1533,11 @@ gtk_print_operation_set_job_name (GtkPrintOperation *op,
   g_free (priv->job_name);
   priv->job_name = g_strdup (job_name);
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_JOB_NAME]);
+  g_object_notify (G_OBJECT (op), "job-name");
 }
 
 /**
- * gtk_print_operation_set_n_pages:
+ * gtk_print_operation_set_n_pages: (attributes org.gtk.Method.set_property=n-pages)
  * @op: a `GtkPrintOperation`
  * @n_pages: the number of pages
  *
@@ -1536,12 +1568,12 @@ gtk_print_operation_set_n_pages (GtkPrintOperation *op,
     {
       priv->nr_of_pages = n_pages;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_N_PAGES]);
+      g_object_notify (G_OBJECT (op), "n-pages");
     }
 }
 
 /**
- * gtk_print_operation_set_current_page:
+ * gtk_print_operation_set_current_page: (attributes org.gtk.Method.set_property=current-page)
  * @op: a `GtkPrintOperation`
  * @current_page: the current page, 0-based
  *
@@ -1567,12 +1599,12 @@ gtk_print_operation_set_current_page (GtkPrintOperation *op,
     {
       priv->current_page = current_page;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_CURRENT_PAGE]);
+      g_object_notify (G_OBJECT (op), "current-page");
     }
 }
 
 /**
- * gtk_print_operation_set_use_full_page:
+ * gtk_print_operation_set_use_full_page: (attributes org.gtk.Method.set_property=use-full-page)
  * @op: a `GtkPrintOperation`
  * @full_page: %TRUE to set up the `GtkPrintContext` for the full page
  *
@@ -1598,12 +1630,12 @@ gtk_print_operation_set_use_full_page (GtkPrintOperation *op,
     {
       priv->use_full_page = full_page;
    
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_USE_FULL_PAGE]);
+      g_object_notify (G_OBJECT (op), "use-full-page");
     }
 }
 
 /**
- * gtk_print_operation_set_unit:
+ * gtk_print_operation_set_unit: (attributes org.gtk.Method.set_property=unit)
  * @op: a `GtkPrintOperation`
  * @unit: the unit to use
  *
@@ -1623,12 +1655,12 @@ gtk_print_operation_set_unit (GtkPrintOperation *op,
     {
       priv->unit = unit;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_UNIT]);
+      g_object_notify (G_OBJECT (op), "unit");
     }
 }
 
 /**
- * gtk_print_operation_set_track_print_status:
+ * gtk_print_operation_set_track_print_status: (attributes org.gtk.Method.set_property=track-print-status)
  * @op: a `GtkPrintOperation`
  * @track_status: %TRUE to track status after printing
  *
@@ -1653,7 +1685,7 @@ gtk_print_operation_set_track_print_status (GtkPrintOperation  *op,
     {
       priv->track_print_status = track_status;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_TRACK_PRINT_STATUS]);
+      g_object_notify (G_OBJECT (op), "track-print-status");
     }
 }
 
@@ -1689,15 +1721,15 @@ _gtk_print_operation_set_status (GtkPrintOperation *op,
   priv->status_string = g_strdup (string);
   priv->status = status;
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_STATUS]);
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_STATUS_STRING]);
+  g_object_notify (G_OBJECT (op), "status");
+  g_object_notify (G_OBJECT (op), "status-string");
 
   g_signal_emit (op, signals[STATUS_CHANGED], 0);
 }
 
 
 /**
- * gtk_print_operation_get_status:
+ * gtk_print_operation_get_status: (attributes org.gtk.Method.get_property=status)
  * @op: a `GtkPrintOperation`
  *
  * Returns the status of the print operation.
@@ -1716,7 +1748,7 @@ gtk_print_operation_get_status (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_get_status_string:
+ * gtk_print_operation_get_status_string: (attributes org.gtk.Method.get_property=status-string)
  * @op: a `GtkPrintOperation`
  *
  * Returns a string representation of the status of the
@@ -1768,7 +1800,7 @@ gtk_print_operation_is_finished (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_set_show_progress:
+ * gtk_print_operation_set_show_progress: (attributes org.gtk.Method.set_property=show-progress)
  * @op: a `GtkPrintOperation`
  * @show_progress: %TRUE to show a progress dialog
  *
@@ -1789,12 +1821,12 @@ gtk_print_operation_set_show_progress (GtkPrintOperation  *op,
     {
       priv->show_progress = show_progress;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_SHOW_PROGRESS]);
+      g_object_notify (G_OBJECT (op), "show-progress");
     }
 }
 
 /**
- * gtk_print_operation_set_allow_async:
+ * gtk_print_operation_set_allow_async: (attributes org.gtk.Method.set_property=allow-async)
  * @op: a `GtkPrintOperation`
  * @allow_async: %TRUE to allow asynchronous operation
  *
@@ -1818,13 +1850,13 @@ gtk_print_operation_set_allow_async (GtkPrintOperation  *op,
     {
       priv->allow_async = allow_async;
 
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_ALLOW_ASYNC]);
+      g_object_notify (G_OBJECT (op), "allow-async");
     }
 }
 
 
 /**
- * gtk_print_operation_set_custom_tab_label:
+ * gtk_print_operation_set_custom_tab_label: (attributes org.gtk.Method.set_property=custom-tab-label)
  * @op: a `GtkPrintOperation`
  * @label: (nullable): the label to use, or %NULL to use the default label
  *
@@ -1841,12 +1873,12 @@ gtk_print_operation_set_custom_tab_label (GtkPrintOperation  *op,
   g_free (priv->custom_tab_label);
   priv->custom_tab_label = g_strdup (label);
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_CUSTOM_TAB_LABEL]);
+  g_object_notify (G_OBJECT (op), "custom-tab-label");
 }
 
 
 /**
- * gtk_print_operation_set_export_filename:
+ * gtk_print_operation_set_export_filename: (attributes org.gtk.Method.set_property=export-filename)
  * @op: a `GtkPrintOperation`
  * @filename: (type filename): the filename for the exported file
  *
@@ -1872,7 +1904,7 @@ gtk_print_operation_set_export_filename (GtkPrintOperation *op,
   g_free (priv->export_filename);
   priv->export_filename = g_strdup (filename);
 
-  g_object_notify_by_pspec (G_OBJECT (op), props[PROP_EXPORT_FILENAME]);
+  g_object_notify (G_OBJECT (op), "export-filename");
 }
 
 /* Creates the initial page setup used for printing unless the
@@ -1921,7 +1953,6 @@ create_page_setup (GtkPrintOperation *op)
   return page_setup;
 }
 
-#ifdef CAIRO_HAS_PDF_SURFACE
 static void 
 pdf_start_page (GtkPrintOperation *op,
 		GtkPrintContext   *print_context,
@@ -2032,7 +2063,7 @@ run_pdf (GtkPrintOperation  *op,
   
   return GTK_PRINT_OPERATION_RESULT_APPLY; 
 }
-#endif
+
 
 static void
 clamp_page_ranges (PrintPagesData *data)
@@ -2174,7 +2205,11 @@ print_pages_idle_done (gpointer user_data)
 
   priv->print_pages_idle_id = 0;
 
-  g_clear_handle_id (&priv->show_progress_timeout_id, g_source_remove);
+  if (priv->show_progress_timeout_id > 0)
+    {
+      g_source_remove (priv->show_progress_timeout_id);
+      priv->show_progress_timeout_id = 0;
+    }
  
   if (data->progress)
     gtk_window_destroy (GTK_WINDOW (data->progress));
@@ -2250,7 +2285,7 @@ gtk_print_operation_set_defer_drawing (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_set_embed_page_setup:
+ * gtk_print_operation_set_embed_page_setup: (attributes org.gtk.Method.set_property=embed-page-setup)
  * @op: a `GtkPrintOperation`
  * @embed: %TRUE to embed page setup selection in the `GtkPrintUnixDialog`
  *
@@ -2270,12 +2305,12 @@ gtk_print_operation_set_embed_page_setup (GtkPrintOperation  *op,
   if (priv->embed_page_setup != embed)
     {
       priv->embed_page_setup = embed;
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_EMBED_PAGE_SETUP]);
+      g_object_notify (G_OBJECT (op), "embed-page-setup");
     }
 }
 
 /**
- * gtk_print_operation_get_embed_page_setup:
+ * gtk_print_operation_get_embed_page_setup: (attributes org.gtk.Method.get_property=embed-page-setup)
  * @op: a `GtkPrintOperation`
  *
  * Gets whether page setup selection combos are embedded
@@ -2782,12 +2817,14 @@ handle_progress_response (GtkWidget *dialog,
   gtk_print_operation_cancel (op);
 }
 
-static void
+static gboolean
 show_progress_timeout (PrintPagesData *data)
 {
   gtk_window_present (GTK_WINDOW (data->progress));
 
   data->op->priv->show_progress_timeout_id = 0;
+
+  return FALSE;
 }
 
 static void
@@ -2837,7 +2874,9 @@ G_GNUC_END_IGNORE_DEPRECATIONS
                         G_CALLBACK (handle_progress_response), op);
 
       priv->show_progress_timeout_id =
-        g_timeout_add_once (SHOW_PROGRESS_TIME, (GSourceOnceFunc) show_progress_timeout, data);
+        g_timeout_add (SHOW_PROGRESS_TIME,
+                       (GSourceFunc) show_progress_timeout,
+                       data);
       g_source_set_static_name (g_main_context_find_source_by_id (NULL, priv->show_progress_timeout_id), "[gtk] show_progress_timeout");
 
       data->progress = progress;
@@ -2919,7 +2958,8 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       g_object_ref (op);
 
       g_main_loop_run (priv->rloop);
-      g_clear_pointer (&priv->rloop, g_main_loop_unref);
+      g_main_loop_unref (priv->rloop);
+      priv->rloop = NULL;
 
       g_object_unref (op);
     }
@@ -3056,11 +3096,7 @@ gtk_print_operation_run (GtkPrintOperation        *op,
        */
       priv->is_sync = TRUE;
       g_return_val_if_fail (priv->export_filename != NULL, GTK_PRINT_OPERATION_RESULT_ERROR);
-#ifdef CAIRO_HAS_PDF_SURFACE
       result = run_pdf (op, parent, &do_print);
-#else
-      result = GTK_PRINT_OPERATION_RESULT_ERROR;
-#endif
     }
   else if (action == GTK_PRINT_OPERATION_ACTION_PREVIEW)
     {
@@ -3131,7 +3167,7 @@ gtk_print_operation_cancel (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_set_support_selection:
+ * gtk_print_operation_set_support_selection: (attributes org.gtk.Method.set_property=support-selection)
  * @op: a `GtkPrintOperation`
  * @support_selection: %TRUE to support selection
  *
@@ -3149,12 +3185,12 @@ gtk_print_operation_set_support_selection (GtkPrintOperation  *op,
   if (priv->support_selection != support_selection)
     {
       priv->support_selection = support_selection;
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_SUPPORT_SELECTION]);
+      g_object_notify (G_OBJECT (op), "support-selection");
     }
 }
 
 /**
- * gtk_print_operation_get_support_selection:
+ * gtk_print_operation_get_support_selection: (attributes org.gtk.Method.get_property=support-selection)
  * @op: a `GtkPrintOperation`
  *
  * Gets whether the application supports print of selection
@@ -3172,7 +3208,7 @@ gtk_print_operation_get_support_selection (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_set_has_selection:
+ * gtk_print_operation_set_has_selection: (attributes org.gtk.Method.set_property=has-selection)
  * @op: a `GtkPrintOperation`
  * @has_selection: %TRUE indicates that a selection exists
  *
@@ -3194,12 +3230,12 @@ gtk_print_operation_set_has_selection (GtkPrintOperation  *op,
   if (priv->has_selection != has_selection)
     {
       priv->has_selection = has_selection;
-      g_object_notify_by_pspec (G_OBJECT (op), props[PROP_HAS_SELECTION]);
+      g_object_notify (G_OBJECT (op), "has-selection");
     }
 }
 
 /**
- * gtk_print_operation_get_has_selection:
+ * gtk_print_operation_get_has_selection: (attributes org.gtk.Method.get_property=has-selection)
  * @op: a `GtkPrintOperation`
  *
  * Gets whether there is a selection.
@@ -3217,7 +3253,7 @@ gtk_print_operation_get_has_selection (GtkPrintOperation *op)
 }
 
 /**
- * gtk_print_operation_get_n_pages_to_print:
+ * gtk_print_operation_get_n_pages_to_print: (attributes org.gtk.Method.get_property=n-pages-to-print)
  * @op: a `GtkPrintOperation`
  *
  * Returns the number of pages that will be printed.

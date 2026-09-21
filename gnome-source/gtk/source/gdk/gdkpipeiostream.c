@@ -93,8 +93,15 @@ gdk_io_pipe_unlock (GdkIOPipe *pipe)
 
 /* INPUT STREAM */
 
-#define GDK_TYPE_PIPE_INPUT_STREAM (gdk_pipe_input_stream_get_type ())
-GDK_DECLARE_INTERNAL_TYPE (GdkPipeInputStream, gdk_pipe_input_stream, GDK, PIPE_INPUT_STREAM, GInputStream)
+#define GDK_TYPE_PIPE_INPUT_STREAM            (gdk_pipe_input_stream_get_type ())
+#define GDK_PIPE_INPUT_STREAM(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GDK_TYPE_PIPE_INPUT_STREAM, GdkPipeInputStream))
+#define GDK_IS_PIPE_INPUT_STREAM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GDK_TYPE_PIPE_INPUT_STREAM))
+#define GDK_PIPE_INPUT_STREAM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_PIPE_INPUT_STREAM, GdkPipeInputStreamClass))
+#define GDK_IS_PIPE_INPUT_STREAM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_PIPE_INPUT_STREAM))
+#define GDK_PIPE_INPUT_STREAM_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_PIPE_INPUT_STREAM, GdkPipeInputStreamClass))
+
+typedef struct _GdkPipeInputStream GdkPipeInputStream;
+typedef struct _GdkPipeInputStreamClass GdkPipeInputStreamClass;
 
 struct _GdkPipeInputStream
 {
@@ -107,6 +114,8 @@ struct _GdkPipeInputStreamClass
 {
   GInputStreamClass parent_class;
 };
+
+GType gdk_pipe_input_stream_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE (GdkPipeInputStream, gdk_pipe_input_stream, G_TYPE_INPUT_STREAM)
 
@@ -223,8 +232,15 @@ gdk_pipe_input_stream_init (GdkPipeInputStream *pipe)
 
 /* OUTPUT STREAM */
 
-#define GDK_TYPE_PIPE_OUTPUT_STREAM (gdk_pipe_output_stream_get_type ())
-GDK_DECLARE_INTERNAL_TYPE (GdkPipeOutputStream, gdk_pipe_output_stream, GDK, PIPE_OUTPUT_STREAM, GOutputStream)
+#define GDK_TYPE_PIPE_OUTPUT_STREAM            (gdk_pipe_output_stream_get_type ())
+#define GDK_PIPE_OUTPUT_STREAM(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GDK_TYPE_PIPE_OUTPUT_STREAM, GdkPipeOutputStream))
+#define GDK_IS_PIPE_OUTPUT_STREAM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GDK_TYPE_PIPE_OUTPUT_STREAM))
+#define GDK_PIPE_OUTPUT_STREAM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_PIPE_OUTPUT_STREAM, GdkPipeOutputStreamClass))
+#define GDK_IS_PIPE_OUTPUT_STREAM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_PIPE_OUTPUT_STREAM))
+#define GDK_PIPE_OUTPUT_STREAM_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_PIPE_OUTPUT_STREAM, GdkPipeOutputStreamClass))
+
+typedef struct _GdkPipeOutputStream GdkPipeOutputStream;
+typedef struct _GdkPipeOutputStreamClass GdkPipeOutputStreamClass;
 
 struct _GdkPipeOutputStream
 {
@@ -237,6 +253,8 @@ struct _GdkPipeOutputStreamClass
 {
   GOutputStreamClass parent_class;
 };
+
+GType gdk_pipe_output_stream_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE (GdkPipeOutputStream, gdk_pipe_output_stream, G_TYPE_OUTPUT_STREAM)
 
@@ -349,8 +367,15 @@ gdk_pipe_output_stream_init (GdkPipeOutputStream *pipe)
 
 /* IOSTREAM */
 
-#define GDK_TYPE_PIPE_IO_STREAM (gdk_pipe_io_stream_get_type ())
-GDK_DECLARE_INTERNAL_TYPE (GdkPipeIOStream, gdk_pipe_io_stream, GDK, PIPE_IO_STREAM, GIOStream)
+#define GDK_TYPE_PIPE_IO_STREAM            (gdk_pipe_io_stream_get_type ())
+#define GDK_PIPE_IO_STREAM(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GDK_TYPE_PIPE_IO_STREAM, GdkPipeIOStream))
+#define GDK_IS_PIPE_IO_STREAM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GDK_TYPE_PIPE_IO_STREAM))
+#define GDK_PIPE_IO_STREAM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_PIPE_IO_STREAM, GdkPipeIOStreamClass))
+#define GDK_IS_PIPE_IO_STREAM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_PIPE_IO_STREAM))
+#define GDK_PIPE_IO_STREAM_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_PIPE_IO_STREAM, GdkPipeIOStreamClass))
+
+typedef struct _GdkPipeIOStream GdkPipeIOStream;
+typedef struct _GdkPipeIOStreamClass GdkPipeIOStreamClass;
 
 struct _GdkPipeIOStream
 {
@@ -365,6 +390,8 @@ struct _GdkPipeIOStreamClass
 {
   GIOStreamClass parent_class;
 };
+
+GType gdk_pipe_io_stream_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE (GdkPipeIOStream, gdk_pipe_io_stream, G_TYPE_IO_STREAM)
 

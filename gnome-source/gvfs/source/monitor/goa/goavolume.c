@@ -38,7 +38,6 @@ struct _GVfsGoaVolume
   gchar *uuid;
   gchar *icon;
   gchar *symbolic_icon;
-  gchar *presentation_identity;
   gulong account_attention_needed_id;
 };
 
@@ -104,7 +103,7 @@ account_attention_needed_cb (GObject *_object, GParamSpec *pspec, gpointer user_
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-GType g_vfs_goa_mount_operation_get_type (void);
+GType g_vfs_goa_mount_operation_get_type (void) G_GNUC_CONST;
 
 typedef struct
 {
@@ -365,7 +364,7 @@ ensure_credentials_cb (GObject *source_object, GAsyncResult *res, gpointer user_
         {
           g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_FAILED,
                                    _("Invalid credentials for %s"),
-                                   self->presentation_identity);
+                                   goa_account_get_presentation_identity (account));
           g_error_free (error);
         }
       else
@@ -398,7 +397,7 @@ ensure_credentials_cb (GObject *source_object, GAsyncResult *res, gpointer user_
 
   g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
                            _("Unsupported authentication method for %s"),
-                           self->presentation_identity);
+                           goa_account_get_presentation_identity (account));
   g_object_unref (task);
 }
 
@@ -478,8 +477,10 @@ static char *
 g_vfs_goa_volume_get_name (GVolume *_self)
 {
   GVfsGoaVolume *self = G_VFS_GOA_VOLUME (_self);
+  GoaAccount *account;
 
-  return g_strdup (self->presentation_identity);
+  account = goa_object_peek_account (self->object);
+  return goa_account_dup_presentation_identity (account);
 }
 
 static GIcon *
@@ -571,7 +572,6 @@ g_vfs_goa_volume_constructed (GObject *_self)
                                                         "notify::attention-needed",
                                                         G_CALLBACK (account_attention_needed_cb),
                                                         self);
-  self->presentation_identity = goa_account_dup_presentation_identity (account);
 }
 
 static void
@@ -603,7 +603,6 @@ g_vfs_goa_volume_finalize (GObject *_self)
   g_free (self->uuid);
   g_free (self->icon);
   g_free (self->symbolic_icon);
-  g_free (self->presentation_identity);
 
   G_OBJECT_CLASS (g_vfs_goa_volume_parent_class)->finalize (_self);
 }
@@ -686,24 +685,6 @@ g_vfs_goa_volume_iface_init (GVolumeIface *iface)
   iface->mount_fn = g_vfs_goa_volume_mount;
   iface->mount_finish = g_vfs_goa_volume_mount_finish;
   iface->should_automount = g_vfs_goa_volume_should_automount;
-}
-
-gboolean
-g_vfs_goa_volume_update (GVfsGoaVolume *self)
-{
-  GoaAccount *account;
-  g_autofree gchar *presentation_identity = NULL;
-  gboolean changed = FALSE;
-
-  g_return_val_if_fail (G_VFS_IS_GOA_VOLUME (self), FALSE);
-
-  account = goa_object_peek_account (self->object);
-  presentation_identity = goa_account_dup_presentation_identity (account);
-
-  if (g_set_str (&self->presentation_identity, presentation_identity))
-    changed = TRUE;
-
-  return changed;
 }
 
 GVolume *

@@ -109,7 +109,7 @@ gtk_text_line_display_cache_free (GtkTextLineDisplayCache *cache)
   g_free (cache);
 }
 
-static void
+static gboolean
 gtk_text_line_display_cache_blow_cb (gpointer data)
 {
   GtkTextLineDisplayCache *cache = data;
@@ -123,6 +123,8 @@ gtk_text_line_display_cache_blow_cb (gpointer data)
   cache->evict_source = NULL;
 
   gtk_text_line_display_cache_invalidate (cache);
+
+  return G_SOURCE_REMOVE;
 }
 
 void
@@ -141,7 +143,9 @@ gtk_text_line_display_cache_delay_eviction (GtkTextLineDisplayCache *cache)
     {
       guint tag;
 
-      tag = g_timeout_add_seconds_once (BLOW_CACHE_TIMEOUT_SEC, gtk_text_line_display_cache_blow_cb, cache);
+      tag = g_timeout_add_seconds (BLOW_CACHE_TIMEOUT_SEC,
+                                   gtk_text_line_display_cache_blow_cb,
+                                   cache);
       cache->evict_source = g_main_context_find_source_by_id (NULL, tag);
       g_source_set_static_name (cache->evict_source, "[gtk+] gtk_text_line_display_cache_blow_cb");
     }
@@ -326,13 +330,10 @@ gtk_text_line_display_cache_get (GtkTextLineDisplayCache *cache,
                                  gboolean                 size_only)
 {
   GtkTextLineDisplay *display;
-  GtkTextLine *cursor_line;
 
   g_assert (cache != NULL);
   g_assert (layout != NULL);
   g_assert (line != NULL);
-
-  cursor_line = cache->cursor_line;
 
   display = g_hash_table_lookup (cache->line_to_display, line);
 
@@ -343,9 +344,6 @@ gtk_text_line_display_cache_get (GtkTextLineDisplayCache *cache,
           STAT_INC (cache->hits);
 
           if (!size_only && display->line == cache->cursor_line)
-            gtk_text_layout_update_display_cursors (layout, display->line, display);
-
-          if (!size_only && display->cursors_invalid)
             gtk_text_layout_update_display_cursors (layout, display->line, display);
 
           if (!size_only && display->has_children)
@@ -376,11 +374,6 @@ gtk_text_line_display_cache_get (GtkTextLineDisplayCache *cache,
 
   if (!size_only)
     {
-      /* Reestablish cache->cursor_line, in case it was cleared by
-       * gtk_text_line_display_cache_invalidate_display() above.
-       */
-      cache->cursor_line = cursor_line;
-
       if (line == cache->cursor_line)
         gtk_text_layout_update_display_cursors (layout, line, display);
 

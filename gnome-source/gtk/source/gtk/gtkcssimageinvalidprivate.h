@@ -46,7 +46,7 @@ struct _GtkCssImageInvalidClass
   GtkCssImageClass parent_class;
 };
 
-GType           gtk_css_image_invalid_get_type                  (void);
+GType           gtk_css_image_invalid_get_type                  (void) G_GNUC_CONST;
 
 GtkCssImage *   gtk_css_image_invalid_new                       (void);
 

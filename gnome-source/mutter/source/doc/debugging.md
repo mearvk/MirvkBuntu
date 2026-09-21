@@ -35,7 +35,7 @@ When a test fails when running `meson test`, it makes sense to re-run this speci
  12/243 mutter:cogl+cogl/conform / cogl-test-backface-culling-gles2                                             OK              1.46s
 ^CWARNING: CTRL-C detected, interrupting mutter:cogl+cogl/conform / cogl-test-just-vertex-shader-gl3
  13/243 mutter:cogl+cogl/conform / cogl-test-just-vertex-shader-gl3                                             INTERRUPT       0.75s   killed by signal 15 SIGTERM
->>> COGL_DRIVER=gl3 G_TEST_BUILDDIR=/var/home/swick/Projects/mutter/build/src/tests/cogl/conform MALLOC_PERTURB_=83 G_TEST_SRCDIR=/var/home/swick/Projects/mutter/src/tests/cogl/conform G_ENABLE_DIAGNOSTIC=0 LD_LIBRARY_PATH=/var/home/swick/Projects/mutter/build/cogl/cogl:/var/home/swick/Projects/mutter/build/src/tests:/var/home/swick/Projects/mutter/build/mtk/mtk:/var/home/swick/Projects/mutter/build/clutter/clutter:/var/home/swick/Projects/mutter/build/src /var/home/swick/Projects/mutter/src/tests/meta-dbus-runner.py -- /var/home/swick/Projects/mutter/build/src/tests/cogl/conform/cogl-test-just-vertex-shader
+>>> COGL_DRIVER=gl3 G_TEST_BUILDDIR=/var/home/swick/Projects/mutter/build/src/tests/cogl/conform MALLOC_PERTURB_=83 G_TEST_SRCDIR=/var/home/swick/Projects/mutter/src/tests/cogl/conform G_ENABLE_DIAGNOSTIC=0 LD_LIBRARY_PATH=/var/home/swick/Projects/mutter/build/cogl/cogl:/var/home/swick/Projects/mutter/build/src/tests:/var/home/swick/Projects/mutter/build/mtk/mtk:/var/home/swick/Projects/mutter/build/clutter/clutter:/var/home/swick/Projects/mutter/build/cogl/cogl-pango:/var/home/swick/Projects/mutter/build/src /var/home/swick/Projects/mutter/src/tests/meta-dbus-runner.py -- /var/home/swick/Projects/mutter/build/src/tests/cogl/conform/cogl-test-just-vertex-shader
 
 ```
 
@@ -62,29 +62,9 @@ Debugging GL based applications can be hard without insights into the GL state t
 
 For more detailed state dumps, it's possible to use graphics debuggers such as apitrace and renderdoc.
 
-Mutter has built-in Renderdoc support (see `meta_backend_renderdoc_capture` and lg `global.context.get_backend().renderdoc_capture()`).
-To get renderdoc to capture mutter, `LD_PRELOAD` must be set to the path of `librenderdoc.so`. If any process is in between setting the environment variable and mutter, it will fail.
-For example, `LD_PRELOAD=path/to/librenderdoc.so dbus-run-session gnome-shell --wayland` will not work, but `dbus-run-session env LD_PRELOAD=path/to/librenderdoc.so gnome-shell --wayland` will.
-The way gdb starts the target also involves another process, so use `gdb -ex 'set exec-wrapper env LD_PRELOAD=path/to/librenderdoc.so'` in those cases.
+Renderdoc is usually the better tool to debug something with, but it's also harder to capture a trace. In those cases apitrace can help by capturing trace by wrapping the Mutter invocation with `apitrace trace --api=egl` and then capturing with renderdoc the replay of the apitrace (`eglretrace mutter.trace`).
 
-Apitraces can help by capturing multiple frames. The mutter invocation can be wrapped with `apitrace trace --api=egl` to capture a trace which can be replay with `eglretrace`. Apitrace can also be captured by renderdoc to select a single frame to investigate further.
-
-## Reproducing CI test failures using helper scripts
-
-1. Use `./.gitlab-ci/prepare-build-in-container.sh` to create and enter a
-   container with a volume prepared with a build of mutter.
-
-   ```sh
-   ./.gitlab-ci/prepare-build-in-container.sh
-   ```
-
-2. Run the specific test case in entered container.
-
-   ```sh
-   meson test -C build failing-test-case
-   ```
-
-## Reproducing CI test failures locally manually
+## Reproducing CI test failures locally
 
 1. Create a podman that can run gdb locally using the same image used in CI. The example below uses the tag `x86_64-2022-01-20` but this will depend on the image used by the failed CI job. The Fedora version may also differ.
 
@@ -107,14 +87,23 @@ Apitraces can help by capturing multiple frames. The mutter invocation can be wr
     dnf install -y gdb
     ```
 
-4. Run the test case
+4. Replicate a environment and run the test inside gdb. What you need here depends on the test that needs investigation. In the simplest case, the following is enough:
 
     ```sh
-    meson test -C build failing-test-case
+    export XDG_RUNTIME_DIR=$PWD/runtime-dir
+    mkdir -p $XDG_RUNTIME_DIR
+    ./src/tests/meta-dbus-runner.py xvfb-run meson test -C build --setup plain --gdb failing-test-case
     ```
 
-5. Run the test case in gdb
+    The need for `xvfb-run` depends on whether the test case uses the nested backend or the headless backend.
+
+    If it involves screen casting, it becomes a bit more complicated:
 
     ```sh
-    ./src/tests/meta-dbus-runner.py meson test -C build --setup plain --gdb failing-test-case
+    export XDG_RUNTIME_DIR=$PWD/runtime-dir
+    mkdir -p $XDG_RUNTIME_DIR
+    ./src/tests/meta-dbus-runner.py bash -l
+    pipewire&
+    wireplumber&
+    meson test -C build --setup plain --gdb failing-test-case
     ```

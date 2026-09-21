@@ -50,6 +50,8 @@ input_capture_test_client_new (const char *test_case)
   GDataOutputStream *line_writer;
 
   test_client_path = g_test_build_filename (G_TEST_BUILT,
+                                            "src",
+                                            "tests",
                                             "mutter-input-capture-test-client",
                                             NULL);
   launcher = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE |
@@ -173,7 +175,6 @@ input_capture_test_client_finish (InputCaptureTestClient *test_client)
 
   g_main_loop_unref (test_client->main_loop);
   g_object_unref (test_client->line_reader);
-  g_object_unref (test_client->line_writer);
   g_object_unref (test_client->subprocess);
   g_free (test_client);
 }
@@ -235,15 +236,15 @@ meta_test_input_capture_zones (void)
 }
 
 static void
-assert_pointer_position (MetaBackend *backend,
-                         double          x,
-                         double          y)
+assert_pointer_position (ClutterSeat *seat,
+                         double       x,
+                         double       y)
 {
-  ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
-  ClutterSeat *seat = clutter_backend_get_default_seat (clutter_backend);
   graphene_point_t pos;
 
-  clutter_seat_query_state (seat, NULL, &pos, NULL);
+  clutter_seat_query_state (seat,
+                            clutter_seat_get_pointer (seat),
+                            NULL, &pos, NULL);
 
   g_assert_cmpfloat_with_epsilon (pos.x, x, DBL_EPSILON);
   g_assert_cmpfloat_with_epsilon (pos.y, y, DBL_EPSILON);
@@ -282,32 +283,31 @@ meta_test_input_capture_barriers (void)
                                                        -20.0, 10.0);
 
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
-  assert_pointer_position (backend, 0.0, 15.0);
+  assert_pointer_position (seat, 0.0, 15.0);
 
   input_capture_test_client_write_state (test_client, "1");
   input_capture_test_client_wait_for_state (test_client, "2");
 
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
-  assert_pointer_position (backend, 200.0, 150.0);
+  assert_pointer_position (seat, 200.0, 150.0);
 
   clutter_virtual_input_device_notify_relative_motion (virtual_pointer,
                                                        g_get_monotonic_time (),
                                                        800.0, 300.0);
   meta_flush_input (test_context);
 
-  assert_pointer_position (backend, 1000.0, 450.0);
+  assert_pointer_position (seat, 1000.0, 450.0);
 
   clutter_virtual_input_device_notify_relative_motion (virtual_pointer,
                                                        g_get_monotonic_time (),
                                                        0.0, 400.0);
 
   input_capture_test_client_wait_for_state (test_client, "3");
-  meta_flush_input (test_context);
-  assert_pointer_position (backend, 1200.0, 700.0);
+  assert_pointer_position (seat, 1200.0, 700.0);
 
   input_capture_test_client_finish (test_client);
 }
@@ -318,6 +318,7 @@ meta_test_input_capture_clear_barriers (void)
   MetaBackend *backend = meta_context_get_backend (test_context);
   ClutterSeat *seat = meta_backend_get_default_seat (backend);
   g_autoptr (MetaVirtualMonitor) virtual_monitor1 = NULL;
+  g_autoptr (MetaVirtualMonitor) virtual_monitor2 = NULL;
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   InputCaptureTestClient *test_client;
 
@@ -336,8 +337,8 @@ meta_test_input_capture_clear_barriers (void)
                                                        g_get_monotonic_time (),
                                                        -20.0, 0.0);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  assert_pointer_position (backend, 0.0, 10.0);
+  meta_wait_for_paint (test_context);
+  assert_pointer_position (seat, 0.0, 10.0);
 
   input_capture_test_client_wait_for_state (test_client, "2");
 
@@ -345,8 +346,8 @@ meta_test_input_capture_clear_barriers (void)
                                                        g_get_monotonic_time (),
                                                        10.0, 10.0);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  assert_pointer_position (backend, 10.0, 20.0);
+  meta_wait_for_paint (test_context);
+  assert_pointer_position (seat, 10.0, 20.0);
 
   input_capture_test_client_write_state (test_client, "1");
   input_capture_test_client_finish (test_client);
@@ -378,15 +379,15 @@ meta_test_input_capture_cancel_keybinding (void)
                                                        g_get_monotonic_time (),
                                                        -20.0, 0.0);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  assert_pointer_position (backend, 0.0, 10.0);
+  meta_wait_for_paint (test_context);
+  assert_pointer_position (seat, 0.0, 10.0);
 
   clutter_virtual_input_device_notify_relative_motion (virtual_pointer,
                                                        g_get_monotonic_time (),
                                                        10.0, 10.0);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  assert_pointer_position (backend, 0.0, 10.0);
+  meta_wait_for_paint (test_context);
+  assert_pointer_position (seat, 0.0, 10.0);
 
   clutter_virtual_input_device_notify_key (virtual_keyboard,
                                            g_get_monotonic_time (),
@@ -414,15 +415,15 @@ meta_test_input_capture_cancel_keybinding (void)
                                            CLUTTER_KEY_STATE_RELEASED);
 
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
   clutter_virtual_input_device_notify_relative_motion (virtual_pointer,
                                                        g_get_monotonic_time (),
                                                        10.0, 10.0);
 
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  assert_pointer_position (backend, 10.0, 20.0);
+  meta_wait_for_paint (test_context);
+  assert_pointer_position (seat, 10.0, 20.0);
 
   input_capture_test_client_write_state (test_client, "1");
 
@@ -435,6 +436,7 @@ meta_test_input_capture_events (void)
   MetaBackend *backend = meta_context_get_backend (test_context);
   ClutterSeat *seat = meta_backend_get_default_seat (backend);
   g_autoptr (MetaVirtualMonitor) virtual_monitor1 = NULL;
+  g_autoptr (MetaVirtualMonitor) virtual_monitor2 = NULL;
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
   g_autoptr (ClutterVirtualInputDevice) virtual_keyboard = NULL;
   InputCaptureTestClient *test_client;
@@ -474,41 +476,15 @@ on_a11y_timeout_started (ClutterSeat                   *seat,
   (*a11y_started_counter)++;
 }
 
-static void
-on_a11y_key_event (GDBusProxy  *proxy,
-                   const char  *sender_name,
-                   const char  *signal_name,
-                   GVariant    *parameters,
-                   int         *a11y_key_counter)
+static gboolean
+atk_key_listener (AtkKeyEventStruct *event,
+                  gpointer           user_data)
 {
-  if (g_strcmp0 (signal_name, "KeyEvent") == 0)
-    (*a11y_key_counter)++;
-}
+  int *a11y_key_counter = user_data;
 
-static void
-on_dbus_call_done (GObject      *source,
-                   GAsyncResult *result,
-                   gpointer      user_data)
-{
-  g_autoptr (GVariant) ret = NULL;
-  g_autoptr (GError) error = NULL;
-  gboolean *done = user_data;
+  (*a11y_key_counter)++;
 
-  ret = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), result, &error);
-  g_assert_no_error (error);
-  *done = TRUE;
-}
-
-static void
-flush_dbus_signals (GDBusProxy *proxy)
-{
-  gboolean done = FALSE;
-
-  g_dbus_proxy_call (proxy, "WatchKeyboard",
-                     NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-                     on_dbus_call_done, &done);
-  while (!done)
-    g_main_context_iteration (NULL, TRUE);
+  return TRUE;
 }
 
 static void
@@ -524,28 +500,10 @@ meta_test_input_capture_a11y (void)
   int a11y_started_counter = 0;
   int a11y_key_counter = 0;
   g_autoptr (GSettings) a11y_mouse_settings = NULL;
-  g_autoptr (GDBusProxy) kbd_monitor_proxy = NULL;
-  g_autoptr (GError) error = NULL;
-  gulong signal_id;
+  guint atk_key_listener_id;
 
-  kbd_monitor_proxy =
-    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
-                                   G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START |
-                                   G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
-                                   NULL,
-                                   "org.freedesktop.a11y.Manager",
-                                   "/org/freedesktop/a11y/Manager",
-                                   "org.freedesktop.a11y.KeyboardMonitor",
-                                   NULL,
-                                   &error);
-  g_assert_nonnull (kbd_monitor_proxy);
-  g_assert_no_error (error);
-
-  flush_dbus_signals (kbd_monitor_proxy);
-
-  signal_id = g_signal_connect (kbd_monitor_proxy, "g-signal",
-                                G_CALLBACK (on_a11y_key_event),
-                                &a11y_key_counter);
+  atk_key_listener_id = atk_add_key_event_listener (atk_key_listener,
+                                                    &a11y_key_counter);
 
   a11y_mouse_settings = g_settings_new ("org.gnome.desktop.a11y.mouse");
 
@@ -571,8 +529,7 @@ meta_test_input_capture_a11y (void)
   click_button (virtual_pointer, CLUTTER_BUTTON_PRIMARY);
   press_key (virtual_keyboard, KEY_A);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  flush_dbus_signals (kbd_monitor_proxy);
+  meta_wait_for_paint (test_context);
   g_assert_cmpint (a11y_started_counter, ==, 1);
   g_assert_cmpint (a11y_key_counter, ==, 2);
 
@@ -582,8 +539,7 @@ meta_test_input_capture_a11y (void)
   click_button (virtual_pointer, CLUTTER_BUTTON_PRIMARY);
   press_key (virtual_keyboard, KEY_A);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  flush_dbus_signals (kbd_monitor_proxy);
+  meta_wait_for_paint (test_context);
   g_assert_cmpint (a11y_started_counter, ==, 2);
   g_assert_cmpint (a11y_key_counter, ==, 4);
 
@@ -594,8 +550,7 @@ meta_test_input_capture_a11y (void)
   click_button (virtual_pointer, CLUTTER_BUTTON_PRIMARY);
   press_key (virtual_keyboard, KEY_A);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  flush_dbus_signals (kbd_monitor_proxy);
+  meta_wait_for_paint (test_context);
   g_assert_cmpint (a11y_started_counter, ==, 2);
   g_assert_cmpint (a11y_key_counter, ==, 4);
 
@@ -605,8 +560,7 @@ meta_test_input_capture_a11y (void)
   click_button (virtual_pointer, CLUTTER_BUTTON_PRIMARY);
   press_key (virtual_keyboard, KEY_A);
   meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-  flush_dbus_signals (kbd_monitor_proxy);
+  meta_wait_for_paint (test_context);
   g_assert_cmpint (a11y_started_counter, ==, 3);
   g_assert_cmpint (a11y_key_counter, ==, 6);
 
@@ -614,40 +568,7 @@ meta_test_input_capture_a11y (void)
   clutter_seat_set_pointer_a11y_dwell_click_type (seat, dwell_click_type);
   g_settings_set_boolean (a11y_mouse_settings, "dwell-click-enabled", FALSE);
   g_settings_set_boolean (a11y_mouse_settings, "secondary-click-enabled", FALSE);
-
-  g_signal_handler_disconnect (kbd_monitor_proxy, signal_id);
-}
-
-static void
-meta_test_input_capture_disconnect (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  ClutterSeat *seat = meta_backend_get_default_seat (backend);
-  g_autoptr (MetaVirtualMonitor) virtual_monitor = NULL;
-  g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  InputCaptureTestClient *test_client;
-
-  virtual_monitor = meta_create_test_monitor (test_context, 800, 600, 20.0);
-  virtual_pointer = clutter_seat_create_virtual_device (seat,
-                                                        CLUTTER_POINTER_DEVICE);
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer,
-                                                       g_get_monotonic_time (),
-                                                       10.0, 10.0);
-  meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-
-  test_client = input_capture_test_client_new ("disconnect");
-
-  input_capture_test_client_wait_for_state (test_client, "1");
-
-  clutter_virtual_input_device_notify_relative_motion (virtual_pointer,
-                                                       g_get_monotonic_time (),
-                                                       -20.0, -20.0);
-
-  input_capture_test_client_write_state (test_client, "1");
-  input_capture_test_client_wait_for_state (test_client, "2");
-
-  input_capture_test_client_finish (test_client);
+  atk_remove_key_event_listener (atk_key_listener_id);
 }
 
 static void
@@ -667,8 +588,6 @@ init_tests (void)
                    meta_test_input_capture_events);
   g_test_add_func ("/backends/native/input-capture/a11y",
                    meta_test_input_capture_a11y);
-  g_test_add_func ("/backends/native/input-capture/disconnect",
-                   meta_test_input_capture_disconnect);
 }
 
 int
@@ -676,11 +595,14 @@ main (int    argc,
       char **argv)
 {
   g_autoptr (MetaContext) context = NULL;
+  g_autoptr (GError) error = NULL;
+
+  g_assert_cmpstr (getenv ("GSETTINGS_BACKEND"), ==, "memory");
 
   context = test_context =
     meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                               META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   init_tests ();
 

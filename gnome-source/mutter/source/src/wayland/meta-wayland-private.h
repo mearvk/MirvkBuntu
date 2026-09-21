@@ -57,13 +57,14 @@ struct _MetaXWaylandManager
   MetaXWaylandConnection private_connection;
   MetaXWaylandConnection public_connection;
 
-  GSource *abstract_fd_watch;
-  GSource *unix_fd_watch;
+  guint abstract_fd_watch_id;
+  guint unix_fd_watch_id;
 
   gulong prepare_shutdown_id;
 
   struct wl_display *wayland_display;
   struct wl_client *client;
+  struct wl_resource *xserver_resource;
   char *auth_file;
 
   GCancellable *xserver_died_cancellable;
@@ -76,8 +77,6 @@ struct _MetaXWaylandManager
   int rr_error_base;
 
   gboolean should_enable_ei_portal;
-
-  double highest_monitor_scale;
 };
 
 struct _MetaWaylandCompositor
@@ -89,7 +88,6 @@ struct _MetaWaylandCompositor
   struct wl_display *wayland_display;
   char *display_name;
   GSource *source;
-  struct wl_listener client_created_listener;
 
   GHashTable *outputs;
   GList *frame_callback_surfaces;
@@ -102,7 +100,6 @@ struct _MetaWaylandCompositor
   MetaWaylandTabletManager *tablet_manager;
   MetaWaylandActivation *activation;
   MetaWaylandXdgForeign *foreign;
-  MetaWaylandXdgSessionManager *session_manager;
 
   GHashTable *scheduled_surface_associations;
 
@@ -114,12 +111,6 @@ struct _MetaWaylandCompositor
    * order they were committed.
    */
   GQueue committed_transactions;
-
-  /* Transactions with time constraints. */
-  GQueue *timed_transactions;
-
-  /* Surfaces with fifo barriers. */
-  GList *barrier_surfaces;
 };
 
 gboolean meta_wayland_compositor_is_egl_display_bound (MetaWaylandCompositor *compositor);

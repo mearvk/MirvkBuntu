@@ -28,7 +28,6 @@
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 #include "gtk-rendernode-tool.h"
-#include "gtk-tool-utils.h"
 
 static void
 benchmark_node (GskRenderNode *node,
@@ -63,8 +62,6 @@ benchmark_node (GskRenderNode *node,
           gsize stride;
 
           downloader = gdk_texture_downloader_new (texture);
-          gdk_texture_downloader_set_format (downloader, gdk_texture_get_format (texture));
-          gdk_texture_downloader_set_color_state (downloader, gdk_texture_get_color_state (texture));
           bytes = gdk_texture_downloader_download_bytes (downloader, &stride);
           g_bytes_unref (bytes);
           gdk_texture_downloader_free (downloader);
@@ -138,7 +135,7 @@ do_benchmark (int          *argc,
     }
 
   if (renderers == NULL || renderers[0] == NULL)
-    renderers = g_strdupv ((char **) (const char *[]) { "gl", "vulkan", "cairo", NULL });
+    renderers = g_strdupv ((char **) (const char *[]) { "gl", "ngl", "vulkan", "cairo", NULL });
   
   node = load_node_file (filenames[0]);
 

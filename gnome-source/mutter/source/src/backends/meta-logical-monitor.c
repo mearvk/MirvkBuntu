@@ -38,22 +38,27 @@
 
 #include "config.h"
 
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 
 #include "backends/meta-backend-private.h"
 #include "backends/meta-crtc.h"
 #include "backends/meta-output.h"
 
-typedef struct _MetaLogicalMonitorPrivate
+G_DEFINE_TYPE (MetaLogicalMonitor, meta_logical_monitor, G_TYPE_OBJECT)
+
+static MetaMonitor *
+get_first_monitor (MetaMonitorManager *monitor_manager,
+                   GList              *monitor_configs)
 {
-  MetaMonitorManager *monitor_manager;
+  MetaMonitorConfig *first_monitor_config;
+  MetaMonitorSpec *first_monitor_spec;
 
-  MetaLogicalMonitorId *id;
-} MetaLogicalMonitorPrivate;
+  first_monitor_config = g_list_first (monitor_configs)->data;
+  first_monitor_spec = first_monitor_config->monitor_spec;
 
-G_DEFINE_TYPE_WITH_PRIVATE (MetaLogicalMonitor,
-                            meta_logical_monitor,
-                            G_TYPE_OBJECT)
+  return meta_monitor_manager_get_monitor_from_spec (monitor_manager,
+                                                     first_monitor_spec);
+}
 
 typedef struct
 {
@@ -81,17 +86,18 @@ meta_logical_monitor_new (MetaMonitorManager       *monitor_manager,
                           int                       monitor_number)
 {
   MetaLogicalMonitor *logical_monitor;
-  MetaLogicalMonitorPrivate *priv;
   GList *monitor_configs;
+  MetaMonitor *first_monitor;
+  MetaOutput *main_output;
 
   logical_monitor = g_object_new (META_TYPE_LOGICAL_MONITOR, NULL);
-  priv = meta_logical_monitor_get_instance_private (logical_monitor);
-
-  priv->monitor_manager = monitor_manager;
 
   monitor_configs = logical_monitor_config->monitor_configs;
+  first_monitor = get_first_monitor (monitor_manager, monitor_configs);
+  main_output = meta_monitor_get_main_output (first_monitor);
 
   logical_monitor->number = monitor_number;
+  logical_monitor->winsys_id = meta_output_get_id (main_output);
   logical_monitor->scale = logical_monitor_config->scale;
   logical_monitor->transform = logical_monitor_config->transform;
   logical_monitor->in_fullscreen = -1;
@@ -107,34 +113,55 @@ meta_logical_monitor_new (MetaMonitorManager       *monitor_manager,
   return logical_monitor;
 }
 
-static MetaLogicalMonitorId *
-generate_id (MetaLogicalMonitor *logical_monitor)
+static MetaMonitorTransform
+derive_monitor_transform (MetaMonitor *monitor)
 {
-  MetaMonitor *monitor = g_list_first (logical_monitor->monitors)->data;
-  MetaMonitorSpec *spec = meta_monitor_get_spec (monitor);
+  MetaOutput *main_output;
+  MetaCrtc *crtc;
+  const MetaCrtcConfig *crtc_config;
+  MetaMonitorTransform transform;
 
-  if (g_strcmp0 (spec->vendor, "unknown") == 0 ||
-      g_strcmp0 (spec->product, "unknown") == 0 ||
-      g_strcmp0 (spec->serial, "unknown") == 0)
-    {
-      return (MetaLogicalMonitorId *) g_strdup_printf ("CONNECTOR:%s",
-                                                       spec->connector);
-    }
-  else
-    {
-      return (MetaLogicalMonitorId *) g_strdup_printf ("EDID:%s:%s:%s",
-                                                       spec->vendor,
-                                                       spec->product,
-                                                       spec->serial);
-    }
+  main_output = meta_monitor_get_main_output (monitor);
+  crtc = meta_output_get_assigned_crtc (main_output);
+  crtc_config = meta_crtc_get_config (crtc);
+  transform = crtc_config->transform;
+
+  return meta_monitor_crtc_to_logical_transform (monitor, transform);
+}
+
+MetaLogicalMonitor *
+meta_logical_monitor_new_derived (MetaMonitorManager *monitor_manager,
+                                  MetaMonitor        *monitor,
+                                  MtkRectangle       *layout,
+                                  float               scale,
+                                  int                 monitor_number)
+{
+  MetaLogicalMonitor *logical_monitor;
+  MetaOutput *main_output;
+  MetaMonitorTransform transform;
+
+  logical_monitor = g_object_new (META_TYPE_LOGICAL_MONITOR, NULL);
+
+  transform = derive_monitor_transform (monitor);
+
+  main_output = meta_monitor_get_main_output (monitor);
+  logical_monitor->number = monitor_number;
+  logical_monitor->winsys_id = meta_output_get_id (main_output);
+  logical_monitor->scale = scale;
+  logical_monitor->transform = transform;
+  logical_monitor->in_fullscreen = -1;
+  logical_monitor->rect = *layout;
+
+  logical_monitor->is_presentation = TRUE;
+  meta_logical_monitor_add_monitor (logical_monitor, monitor);
+
+  return logical_monitor;
 }
 
 void
 meta_logical_monitor_add_monitor (MetaLogicalMonitor *logical_monitor,
                                   MetaMonitor        *monitor)
 {
-  MetaLogicalMonitorPrivate *priv =
-    meta_logical_monitor_get_instance_private (logical_monitor);
   GList *l;
   gboolean is_presentation;
 
@@ -144,11 +171,11 @@ meta_logical_monitor_add_monitor (MetaLogicalMonitor *logical_monitor,
 
   for (l = logical_monitor->monitors; l; l = l->next)
     {
-      MetaMonitor *other_monitor = l->data;
+      MetaMonitor *monitor = l->data;
       GList *outputs;
       GList *l_output;
 
-      outputs = meta_monitor_get_outputs (other_monitor);
+      outputs = meta_monitor_get_outputs (monitor);
       for (l_output = outputs; l_output; l_output = l_output->next)
         {
           MetaOutput *output = l_output->data;
@@ -159,9 +186,6 @@ meta_logical_monitor_add_monitor (MetaLogicalMonitor *logical_monitor,
     }
 
   logical_monitor->is_presentation = is_presentation;
-
-  if (!priv->id)
-    priv->id = generate_id (logical_monitor);
 
   meta_monitor_set_logical_monitor (monitor, logical_monitor);
 }
@@ -178,19 +202,13 @@ meta_logical_monitor_make_primary (MetaLogicalMonitor *logical_monitor)
   logical_monitor->is_primary = TRUE;
 }
 
-void
-meta_logical_monitor_clear_primary (MetaLogicalMonitor *logical_monitor)
-{
-  logical_monitor->is_primary = FALSE;
-}
-
 float
 meta_logical_monitor_get_scale (MetaLogicalMonitor *logical_monitor)
 {
   return logical_monitor->scale;
 }
 
-MtkMonitorTransform
+MetaMonitorTransform
 meta_logical_monitor_get_transform (MetaLogicalMonitor *logical_monitor)
 {
   return logical_monitor->transform;
@@ -202,30 +220,6 @@ meta_logical_monitor_get_layout (MetaLogicalMonitor *logical_monitor)
   return logical_monitor->rect;
 }
 
-/**
- * meta_logical_monitor_get_number:
- * @logical_monitor: A #MetaLogicalMonitor
- *
- * Returns the [class@Meta.Monitor]s number which is compatible with the monitor
- * API on [class@Meta.Display] until the next monitors-changed.
- *
- * Returns: The [class@Meta.Monitor]s number
- */
-int
-meta_logical_monitor_get_number (MetaLogicalMonitor *logical_monitor)
-{
-  return logical_monitor->number;
-}
-
-/**
- * meta_logical_monitor_get_monitors:
- * @logical_monitor: A #MetaLogicalMonitor
- *
- * Returns the list of [class@Meta.Monitor]s.
- *
- * Returns: (transfer none) (element-type Meta.Monitor):
- * The list of [class@Meta.Monitor]s.
- */
 GList *
 meta_logical_monitor_get_monitors (MetaLogicalMonitor *logical_monitor)
 {
@@ -289,21 +283,13 @@ meta_logical_monitor_dispose (GObject *object)
 {
   MetaLogicalMonitor *logical_monitor = META_LOGICAL_MONITOR (object);
 
-  g_clear_list (&logical_monitor->monitors, g_object_unref);
+  if (logical_monitor->monitors)
+    {
+      g_list_free_full (logical_monitor->monitors, g_object_unref);
+      logical_monitor->monitors = NULL;
+    }
 
   G_OBJECT_CLASS (meta_logical_monitor_parent_class)->dispose (object);
-}
-
-static void
-meta_logical_monitor_finalize (GObject *object)
-{
-  MetaLogicalMonitor *logical_monitor = META_LOGICAL_MONITOR (object);
-  MetaLogicalMonitorPrivate *priv =
-    meta_logical_monitor_get_instance_private (logical_monitor);
-
-  g_clear_pointer (&priv->id, meta_logical_monitor_id_free);
-
-  G_OBJECT_CLASS (meta_logical_monitor_parent_class)->finalize (object);
 }
 
 static void
@@ -312,7 +298,6 @@ meta_logical_monitor_class_init (MetaLogicalMonitorClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->dispose = meta_logical_monitor_dispose;
-  object_class->finalize = meta_logical_monitor_finalize;
 }
 
 gboolean
@@ -353,128 +338,4 @@ meta_logical_monitor_has_neighbor (MetaLogicalMonitor   *logical_monitor,
     }
 
   return FALSE;
-}
-
-void
-meta_logical_monitor_id_free (MetaLogicalMonitorId *id)
-{
-  g_free (id);
-}
-
-MetaLogicalMonitorId *
-meta_logical_monitor_id_dup (const MetaLogicalMonitorId *id)
-{
-  return (MetaLogicalMonitorId *) g_strdup ((char *) id);
-}
-
-gboolean
-meta_logical_monitor_id_equal (const MetaLogicalMonitorId *id,
-                               const MetaLogicalMonitorId *other_id)
-{
-  return g_str_equal ((const char *) id, (const char *) other_id);
-}
-
-const MetaLogicalMonitorId *
-meta_logical_monitor_get_id (MetaLogicalMonitor *logical_monitor)
-{
-  MetaLogicalMonitorPrivate *priv =
-    meta_logical_monitor_get_instance_private (logical_monitor);
-
-  return priv->id;
-}
-
-MetaLogicalMonitorId *
-meta_logical_monitor_dup_id (MetaLogicalMonitor *logical_monitor)
-{
-  MetaLogicalMonitorPrivate *priv =
-    meta_logical_monitor_get_instance_private (logical_monitor);
-
-  return meta_logical_monitor_id_dup (priv->id);
-}
-
-static int
-monitor_config_spec_compare (gconstpointer a,
-                             gconstpointer b)
-{
-  const MetaMonitorConfig *monitor_config = a;
-  const MetaMonitorSpec *monitor_spec = b;
-
-  return meta_monitor_spec_compare (monitor_config->monitor_spec, monitor_spec);
-}
-
-MetaMonitorManager *
-meta_logical_monitor_get_monitor_manager (MetaLogicalMonitor *logical_monitor)
-{
-  MetaLogicalMonitorPrivate *priv =
-    meta_logical_monitor_get_instance_private (logical_monitor);
-
-  return priv->monitor_manager;
-}
-
-static void
-add_monitor_cb (MetaMonitor        *monitor,
-                MetaLogicalMonitor *logical_monitor)
-{
-  meta_logical_monitor_add_monitor (logical_monitor, monitor);
-}
-
-gboolean
-meta_logical_monitor_update (MetaLogicalMonitor       *logical_monitor,
-                             MetaLogicalMonitorConfig *logical_monitor_config,
-                             int                       number)
-{
-  MetaLogicalMonitorPrivate *priv =
-    meta_logical_monitor_get_instance_private (logical_monitor);
-  g_autolist (MetaMonitor) old_monitors = NULL;
-  g_autolist (MetaMonitor) new_monitors = NULL;
-  GList *l;
-
-  if (logical_monitor->number != number)
-    return FALSE;
-
-  if (!mtk_rectangle_equal (&logical_monitor->rect,
-                            &logical_monitor_config->layout))
-    return FALSE;
-
-  if (logical_monitor->transform != logical_monitor_config->transform)
-    return FALSE;
-
-  if (logical_monitor->scale != logical_monitor_config->scale)
-    return FALSE;
-
-  if (g_list_length (logical_monitor->monitors) !=
-      g_list_length (logical_monitor_config->monitor_configs))
-    return FALSE;
-
-  for (l = logical_monitor->monitors; l; l = l->next)
-    {
-      MetaMonitor *monitor = META_MONITOR (l->data);
-
-      if (!g_list_find_custom (logical_monitor_config->monitor_configs,
-                               meta_monitor_get_spec (monitor),
-                               (GCompareFunc) monitor_config_spec_compare))
-        return FALSE;
-    }
-
-  old_monitors = g_steal_pointer (&logical_monitor->monitors);
-  for (l = old_monitors; l; l = l->next)
-    {
-      MetaMonitor *old_monitor = META_MONITOR (l->data);
-      MetaMonitor *new_monitor;
-
-      new_monitor =
-        meta_monitor_manager_find_monitor (priv->monitor_manager,
-                                           old_monitor);
-      if (!new_monitor)
-        return FALSE;
-
-      new_monitors = g_list_prepend (new_monitors, g_object_ref (new_monitor));
-    }
-  new_monitors = g_list_reverse (new_monitors);
-
-  g_list_foreach (new_monitors,
-                  (GFunc) add_monitor_cb,
-                  logical_monitor);
-
-  return TRUE;
 }

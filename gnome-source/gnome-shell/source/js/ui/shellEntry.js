@@ -1,10 +1,12 @@
-import Atk from 'gi://Atk';
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import * as BoxPointer from './boxpointer.js';
 import * as Main from './main.js';
 import * as Params from '../misc/params.js';
 import * as PopupMenu from './popupMenu.js';
@@ -36,7 +38,7 @@ export class EntryMenu extends PopupMenu.PopupMenu {
     }
 
     _makePasswordItem() {
-        const item = new PopupMenu.PopupMenuItem('');
+        let item = new PopupMenu.PopupMenuItem('');
         item.connect('activate', this._onPasswordActivated.bind(this));
         this.addMenuItem(item);
         this._passwordItem = item;
@@ -46,25 +48,22 @@ export class EntryMenu extends PopupMenu.PopupMenu {
             GObject.BindingFlags.SYNC_CREATE);
     }
 
-    open(params = {}) {
-        if (!super.open(params))
-            return false;
-
+    open(animate) {
         this._updatePasteItem();
         this._updateCopyItem();
         if (this._passwordItem)
             this._updatePasswordItem();
 
+        super.open(animate);
         this._entry.add_style_pseudo_class('focus');
 
-        const direction = St.DirectionType.TAB_FORWARD;
+        let direction = St.DirectionType.TAB_FORWARD;
         if (!this.actor.navigate_focus(null, direction, false))
             this.actor.grab_key_focus();
-        return true;
     }
 
     _updateCopyItem() {
-        const selection = this._entry.clutter_text.get_selection();
+        let selection = this._entry.clutter_text.get_selection();
         this._copyItem.setSensitive(!this._entry.clutter_text.password_char &&
                                     selection && selection !== '');
     }
@@ -84,7 +83,7 @@ export class EntryMenu extends PopupMenu.PopupMenu {
     }
 
     _onCopyActivated() {
-        const selection = this._entry.clutter_text.get_selection();
+        let selection = this._entry.clutter_text.get_selection();
         this._clipboard.set_text(St.ClipboardType.CLIPBOARD, selection);
     }
 
@@ -94,7 +93,7 @@ export class EntryMenu extends PopupMenu.PopupMenu {
                 if (!text)
                     return;
                 this._entry.clutter_text.delete_selection();
-                const pos = this._entry.clutter_text.get_cursor_position();
+                let pos = this._entry.clutter_text.get_cursor_position();
                 this._entry.clutter_text.insert_text(text, pos);
             });
     }
@@ -105,27 +104,30 @@ export class EntryMenu extends PopupMenu.PopupMenu {
 }
 
 function _setMenuAlignment(entry, stageX) {
-    const [success, entryX] = entry.transform_stage_point(stageX, 0);
+    let [success, entryX] = entry.transform_stage_point(stageX, 0);
     if (success)
         entry.menu.setSourceAlignment(entryX / entry.width);
 }
 
-function _onMenuClickGesture(gesture, entry) {
+function _onButtonPressEvent(actor, event, entry) {
     if (entry.menu.isOpen) {
-        entry.menu.close();
-    } else if (gesture.get_button() === Clutter.BUTTON_SECONDARY) {
-        const coords = gesture.get_coords_abs();
-        _setMenuAlignment(entry, coords.x);
-        entry.menu.open();
+        entry.menu.close(BoxPointer.PopupAnimation.FULL);
+        return Clutter.EVENT_STOP;
+    } else if (event.get_button() === 3) {
+        let [stageX] = event.get_coords();
+        _setMenuAlignment(entry, stageX);
+        entry.menu.open(BoxPointer.PopupAnimation.FULL);
+        return Clutter.EVENT_STOP;
     }
+    return Clutter.EVENT_PROPAGATE;
 }
 
 function _onPopup(actor, entry) {
-    const cursorPosition = entry.clutter_text.get_cursor_position();
-    const [success, textX, textY_, lineHeight_] = entry.clutter_text.position_to_coords(cursorPosition);
+    let cursorPosition = entry.clutter_text.get_cursor_position();
+    let [success, textX, textY_, lineHeight_] = entry.clutter_text.position_to_coords(cursorPosition);
     if (success)
         entry.menu.setSourceAlignment(textX / entry.width);
-    entry.menu.open();
+    entry.menu.open(BoxPointer.PopupAnimation.FULL);
 }
 
 /**
@@ -144,13 +146,15 @@ export function addContextMenu(entry, params) {
     });
     entry._menuManager.addMenu(entry.menu);
 
-    const clickGesture = new Clutter.ClickGesture();
-    clickGesture.set_recognize_on_press(true);
-    clickGesture.set_required_button(Clutter.BUTTON_SECONDARY);
-    clickGesture.connect(
-        'recognize', gesture => _onMenuClickGesture(gesture, entry));
-    entry.add_action_full(
-        'menu-click-gesture', Clutter.EventPhase.CAPTURE, clickGesture);
+    // Add an event handler to both the entry and its clutter_text; the former
+    // so padding is included in the clickable area, the latter because the
+    // event processing of ClutterText prevents event-bubbling.
+    entry.clutter_text.connect('button-press-event', (actor, event) => {
+        _onButtonPressEvent(actor, event, entry);
+    });
+    entry.connect('button-press-event', (actor, event) => {
+        _onButtonPressEvent(actor, event, entry);
+    });
 
     entry.connect('popup-menu', actor => _onPopup(actor, entry));
 
@@ -169,13 +173,12 @@ class CapsLockWarning extends St.Label {
             ...params,
         });
 
-        this.text = _('Caps lock is on');
+        this.text = _('Caps lock is on.');
 
         this.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         this.clutter_text.line_wrap = true;
 
-        const backend = this.get_context().get_backend();
-        const seat = backend.get_default_seat();
+        let seat = Clutter.get_default_backend().get_default_seat();
         this._keymap = seat.get_keymap();
 
         this.connect('notify::mapped', () => {
@@ -191,22 +194,14 @@ class CapsLockWarning extends St.Label {
     }
 
     _sync(animate) {
-        const capsLockOn = this._keymap.get_caps_lock_state();
+        let capsLockOn = this._keymap.get_caps_lock_state();
 
         this.remove_all_transitions();
 
         const {naturalHeightSet} = this;
         this.natural_height_set = false;
-        const [, height] = this.get_preferred_height(-1);
+        let [, height] = this.get_preferred_height(-1);
         this.natural_height_set = naturalHeightSet;
-
-        if (capsLockOn) {
-            this.add_accessible_state(Atk.StateType.SHOWING);
-            this.add_accessible_state(Atk.StateType.VISIBLE);
-        } else {
-            this.remove_accessible_state(Atk.StateType.SHOWING);
-            this.remove_accessible_state(Atk.StateType.VISIBLE);
-        }
 
         this.ease({
             height: capsLockOn ? height : 0,

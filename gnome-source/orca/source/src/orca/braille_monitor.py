@@ -131,13 +131,13 @@ class BrailleCell(Gtk.Button):
             return
 
         # pylint: disable=import-outside-toplevel
-        from . import braille_presenter, input_event
+        from . import input_event
 
         fake_key_press = {}
         fake_key_press["command"] = KEY_CMD_ROUTE
         fake_key_press["argument"] = self._position
         event = input_event.BrailleEvent(fake_key_press)
-        braille_presenter.get_presenter().process_routing_key(script, event)
+        script.process_routing_key(None, event)
 
     def clear(self) -> None:
         """Clears the braille cell."""

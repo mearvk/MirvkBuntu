@@ -66,7 +66,7 @@ gtk_app_chooser_default_init (GtkAppChooserIface *iface)
   GParamSpec *pspec;
 
   /**
-   * GtkAppChooser:content-type:
+   * GtkAppChooser:content-type: (attributes org.gtk.Property.get=gtk_app_chooser_get_content_type)
    *
    * The content type of the `GtkAppChooser` object.
    *
@@ -75,13 +75,13 @@ gtk_app_chooser_default_init (GtkAppChooserIface *iface)
   pspec = g_param_spec_string ("content-type", NULL, NULL,
                                NULL,
                                G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
-                               G_PARAM_STATIC_NAME);
+                               G_PARAM_STATIC_STRINGS);
   g_object_interface_install_property (iface, pspec);
 }
 
 
 /**
- * gtk_app_chooser_get_content_type:
+ * gtk_app_chooser_get_content_type: (attributes org.gtk.Method.get_property=content-type)
  * @self: a `GtkAppChooser`
  *
  * Returns the content type for which the `GtkAppChooser`

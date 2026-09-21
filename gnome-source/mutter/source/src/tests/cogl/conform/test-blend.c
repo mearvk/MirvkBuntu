@@ -7,7 +7,7 @@
 static void
 paint (void)
 {
-  g_autoptr (CoglPipeline) pipeline = NULL;
+  CoglPipeline *pipeline = cogl_pipeline_new (test_ctx);
   int width = cogl_framebuffer_get_width (test_fb);
   int half_width = width / 2;
   int height = cogl_framebuffer_get_height (test_fb);
@@ -21,8 +21,8 @@ paint (void)
         { half_width, height, 0x80, 0x80, 0x80, 0x80 },
         { width, height, 0x80, 0x80, 0x80, 0x80 },
   };
-  g_autoptr (CoglPrimitive) tri0 = NULL;
-  g_autoptr (CoglPrimitive) tri1 = NULL;
+  CoglPrimitive *tri0;
+  CoglPrimitive *tri1;
 
   cogl_framebuffer_clear4f (test_fb, COGL_BUFFER_BIT_COLOR, 0, 0, 0, 0);
 
@@ -41,7 +41,6 @@ paint (void)
    * primitive will be drawn with blending still disabled.
    */
 
-  pipeline = cogl_pipeline_new (test_ctx);
   cogl_primitive_draw (tri0, test_fb, pipeline);
   cogl_primitive_draw (tri1, test_fb, pipeline);
 

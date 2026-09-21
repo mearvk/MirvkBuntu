@@ -69,7 +69,7 @@ typedef enum {
   GTK_PLACES_OPEN_NEW_WINDOW = 1 << 2
 } GtkPlacesOpenFlags;
 
-GType              gtk_places_sidebar_get_type                   (void);
+GType              gtk_places_sidebar_get_type                   (void) G_GNUC_CONST;
 GtkWidget *        gtk_places_sidebar_new                        (void);
 
 GtkPlacesOpenFlags gtk_places_sidebar_get_open_flags             (GtkPlacesSidebar   *sidebar);

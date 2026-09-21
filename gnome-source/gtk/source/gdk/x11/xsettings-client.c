@@ -38,8 +38,6 @@
 #include <X11/Xlib.h>
 #include <X11/Xmd.h>		/* For CARD16 */
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 typedef enum
 {
   GDK_SETTING_ACTION_NEW,
@@ -352,7 +350,8 @@ parse_settings (unsigned char *data,
 	}
 
       gdk_name = gdk_from_xsettings_name (x_name);
-      g_clear_pointer (&x_name, g_free);
+      g_free (x_name);
+      x_name = NULL;
 
       if (gdk_name == NULL)
         {
@@ -580,5 +579,9 @@ _gdk_x11_xsettings_finish (GdkX11Screen *x11_screen)
   if (x11_screen->xsettings_manager_window)
     x11_screen->xsettings_manager_window = 0;
 
-  g_clear_pointer (&x11_screen->xsettings, g_hash_table_unref);
+  if (x11_screen->xsettings)
+    {
+      g_hash_table_unref (x11_screen->xsettings);
+      x11_screen->xsettings = NULL;
+    }
 }

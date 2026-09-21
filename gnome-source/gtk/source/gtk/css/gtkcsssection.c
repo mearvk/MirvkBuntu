@@ -26,7 +26,6 @@ struct _GtkCssSection
   int                 ref_count;
   GtkCssSection      *parent;
   GFile              *file;
-  GBytes             *bytes;
   GtkCssLocation      start_location;
   GtkCssLocation      end_location;   /* end location if parser is %NULL */
 };
@@ -50,30 +49,6 @@ gtk_css_section_new (GFile                *file,
                      const GtkCssLocation *start,
                      const GtkCssLocation *end)
 {
-  return gtk_css_section_new_with_bytes (file, NULL,start, end);
-}
-
-/**
- * gtk_css_section_new_with_bytes: (constructor)
- * @file: (nullable) (transfer none): The file this section refers to
- * @bytes: (nullable) (transfer none): The bytes this sections refers to
- * @start: The start location
- * @end: The end location
- *
- * Creates a new `GtkCssSection` referring to the section
- * in the given `file` or the given `bytes` from the `start` location to the
- * `end` location.
- *
- * Returns: (transfer full): a new `GtkCssSection`
- *
- * Since: 4.16
- **/
-GtkCssSection *
-gtk_css_section_new_with_bytes (GFile  *file,
-                                GBytes *bytes,
-                                const GtkCssLocation *start,
-                                const GtkCssLocation *end)
-{
   GtkCssSection *result;
 
   g_return_val_if_fail (file == NULL || G_IS_FILE (file), NULL);
@@ -85,8 +60,6 @@ gtk_css_section_new_with_bytes (GFile  *file,
   result->ref_count = 1;
   if (file)
     result->file = g_object_ref (file);
-  if (bytes)
-    result->bytes = g_bytes_ref (bytes);
   result->start_location = *start;
   result->end_location = *end;
 
@@ -131,8 +104,6 @@ gtk_css_section_unref (GtkCssSection *section)
     gtk_css_section_unref (section->parent);
   if (section->file)
     g_object_unref (section->file);
-  if (section->bytes)
-    g_bytes_unref (section->bytes);
 
   g_free (section);
 }
@@ -144,7 +115,7 @@ gtk_css_section_unref (GtkCssSection *section)
  * Gets the parent section for the given `section`.
  *
  * The parent section is the section that contains this `section`. A special
- * case are sections of  type `GTK_CSS_SECTION_DOCUMENT`. Their parent will
+ * case are sections of  type `GTK_CSS_SECTION_DOCUMEN`T. Their parent will
  * either be `NULL` if they are the original CSS document that was loaded by
  * [method@Gtk.CssProvider.load_from_file] or a section of type
  * `GTK_CSS_SECTION_IMPORT` if it was loaded with an `@import` rule from
@@ -178,25 +149,6 @@ gtk_css_section_get_file (const GtkCssSection *section)
   g_return_val_if_fail (section != NULL, NULL);
 
   return section->file;
-}
-
-/**
- * gtk_css_section_get_bytes:
- * @section: the section
- *
- * Gets the bytes that @section was parsed from.
- *
- * Returns: (transfer none) (nullable): the `GBytes` from which the `section`
- *   was parsed
- *
- * Since: 4.16
- **/
-GBytes *
-gtk_css_section_get_bytes (const GtkCssSection *section)
-{
-  g_return_val_if_fail (section != NULL, NULL);
-
-  return section->bytes;
 }
 
 /**
@@ -251,10 +203,7 @@ gtk_css_section_print (const GtkCssSection  *section,
     {
       GFileInfo *info;
 
-      info = g_file_query_info (section->file, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
-                                G_FILE_QUERY_INFO_NONE,
-                                NULL,
-                                NULL);
+      info = g_file_query_info (section->file, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME, 0, NULL, NULL);
 
       if (info)
         {
@@ -271,7 +220,7 @@ gtk_css_section_print (const GtkCssSection  *section,
       g_string_append (string, "<data>");
     }
 
-  g_string_append_printf (string, ":%zu:%zu",
+  g_string_append_printf (string, ":%zu:%zu", 
                           section->start_location.lines + 1,
                           section->start_location.line_chars + 1);
   if (section->start_location.lines != section->end_location.lines ||

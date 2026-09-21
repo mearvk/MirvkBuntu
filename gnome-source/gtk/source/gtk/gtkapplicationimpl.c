@@ -33,14 +33,6 @@
 #include <gdk/macos/gdkmacos.h>
 #endif
 
-#ifdef GDK_WINDOWING_ANDROID
-#include <gdk/android/gdkandroid.h>
-#endif
-
-#ifdef GDK_WINDOWING_WIN32
-#include <gdk/win32/gdkwin32display.h>
-#endif
-
 G_DEFINE_TYPE (GtkApplicationImpl, gtk_application_impl, G_TYPE_OBJECT)
 
 static void
@@ -49,7 +41,7 @@ gtk_application_impl_init (GtkApplicationImpl *impl)
 }
 
 static guint do_nothing (void) { return 0; }
-static gpointer return_null (void) { return NULL; }
+static gboolean return_false (void) { return FALSE; }
 
 static void
 gtk_application_impl_class_init (GtkApplicationImplClass *class)
@@ -60,9 +52,6 @@ gtk_application_impl_class_init (GtkApplicationImplClass *class)
   class->before_emit = (gpointer) do_nothing;
   class->window_added = (gpointer) do_nothing;
   class->window_removed = (gpointer) do_nothing;
-  class->window_forget = (gpointer) do_nothing;
-  class->window_forget_by_state = (gpointer) do_nothing;
-  class->window_unforget = (gpointer) do_nothing;
   class->active_window_changed = (gpointer) do_nothing;
   class->handle_window_realize = (gpointer) do_nothing;
   class->handle_window_map = (gpointer) do_nothing;
@@ -70,22 +59,14 @@ gtk_application_impl_class_init (GtkApplicationImplClass *class)
   class->set_menubar = (gpointer) do_nothing;
   class->inhibit = (gpointer) do_nothing;
   class->uninhibit = (gpointer) do_nothing;
-  class->get_restore_reason = (gpointer) do_nothing;
-  class->clear_restore_reason = (gpointer) do_nothing;
-  class->collect_global_state = (gpointer) do_nothing;
-  class->restore_global_state = (gpointer) do_nothing;
-  class->collect_window_state = (gpointer) do_nothing;
-  class->store_state = (gpointer) do_nothing;
-  class->forget_state = (gpointer) do_nothing;
-  class->unforget_state = (gpointer) do_nothing;
-  class->retrieve_state = (gpointer) return_null;
+  class->prefers_app_menu = (gpointer) return_false;
 }
 
 void
 gtk_application_impl_startup (GtkApplicationImpl *impl,
-                              gboolean            support_save)
+                              gboolean            register_session)
 {
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->startup (impl, support_save);
+  GTK_APPLICATION_IMPL_GET_CLASS (impl)->startup (impl, register_session);
 }
 
 void
@@ -103,10 +84,9 @@ gtk_application_impl_before_emit (GtkApplicationImpl *impl,
 
 void
 gtk_application_impl_window_added (GtkApplicationImpl *impl,
-                                   GtkWindow          *window,
-                                   GVariant           *state)
+                                   GtkWindow          *window)
 {
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->window_added (impl, window, state);
+  GTK_APPLICATION_IMPL_GET_CLASS (impl)->window_added (impl, window);
 }
 
 void
@@ -114,27 +94,6 @@ gtk_application_impl_window_removed (GtkApplicationImpl *impl,
                                      GtkWindow          *window)
 {
   GTK_APPLICATION_IMPL_GET_CLASS (impl)->window_removed (impl, window);
-}
-
-void
-gtk_application_impl_window_forget (GtkApplicationImpl *impl,
-                                    GtkWindow          *window)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->window_forget (impl, window);
-}
-
-void
-gtk_application_impl_window_forget_by_state (GtkApplicationImpl *impl,
-                                             GVariant           *state)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->window_forget_by_state (impl, state);
-}
-
-void
-gtk_application_impl_window_unforget (GtkApplicationImpl *impl,
-                                      GtkWindow          *window)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->window_unforget (impl, window);
 }
 
 void
@@ -188,63 +147,10 @@ gtk_application_impl_uninhibit (GtkApplicationImpl *impl,
   GTK_APPLICATION_IMPL_GET_CLASS (impl)->uninhibit (impl, cookie);
 }
 
-GtkRestoreReason
-gtk_application_impl_get_restore_reason (GtkApplicationImpl *impl)
+gboolean
+gtk_application_impl_prefers_app_menu (GtkApplicationImpl *impl)
 {
-  return GTK_APPLICATION_IMPL_GET_CLASS (impl)->get_restore_reason (impl);
-}
-
-void
-gtk_application_impl_clear_restore_reason (GtkApplicationImpl *impl)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->clear_restore_reason (impl);
-}
-
-void
-gtk_application_impl_collect_global_state (GtkApplicationImpl *impl,
-                                           GVariantBuilder    *state)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->collect_global_state (impl, state);
-}
-
-void
-gtk_application_impl_restore_global_state (GtkApplicationImpl *impl,
-                                           GVariant           *state)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->restore_global_state (impl, state);
-}
-
-void
-gtk_application_impl_collect_window_state (GtkApplicationImpl *impl,
-                                           GtkWindow          *window,
-                                           GVariantBuilder    *state)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->collect_window_state (impl, window, state);
-}
-
-void
-gtk_application_impl_store_state (GtkApplicationImpl *impl,
-                                  GVariant           *state)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->store_state (impl, state);
-}
-
-void
-gtk_application_impl_forget_state (GtkApplicationImpl *impl)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->forget_state (impl);
-}
-
-void
-gtk_application_impl_unforget_state (GtkApplicationImpl *impl)
-{
-  GTK_APPLICATION_IMPL_GET_CLASS (impl)->unforget_state (impl);
-}
-
-GVariant *
-gtk_application_impl_retrieve_state (GtkApplicationImpl *impl)
-{
-  return GTK_APPLICATION_IMPL_GET_CLASS (impl)->retrieve_state (impl);
+  return GTK_APPLICATION_IMPL_GET_CLASS (impl)->prefers_app_menu (impl);
 }
 
 GtkApplicationImpl *
@@ -269,16 +175,6 @@ gtk_application_impl_new (GtkApplication *application,
 #ifdef GDK_WINDOWING_MACOS
   if (GDK_IS_MACOS_DISPLAY (display))
     impl_type = gtk_application_impl_quartz_get_type ();
-#endif
-
-#ifdef GDK_WINDOWING_ANDROID
-  if (GDK_IS_ANDROID_DISPLAY (display))
-    impl_type = gtk_application_impl_android_get_type ();
-#endif
-
-#ifdef GDK_WINDOWING_WIN32
-  if (GDK_IS_WIN32_DISPLAY (display))
-    impl_type = gtk_application_impl_win32_get_type ();
 #endif
 
   impl = g_object_new (impl_type, NULL);

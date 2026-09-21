@@ -34,7 +34,7 @@
 #include "config.h"
 
 #include "cogl/cogl-context-private.h"
-#include "cogl/cogl-color.h"
+#include "cogl/cogl-color-private.h"
 #include "cogl/cogl-blend-string.h"
 #include "cogl/cogl-util.h"
 #include "cogl/cogl-depth-state-private.h"
@@ -85,6 +85,8 @@ _cogl_pipeline_blend_state_equal (CoglPipeline *authority0,
 {
   CoglPipelineBlendState *blend_state0 = &authority0->big_state->blend_state;
   CoglPipelineBlendState *blend_state1 = &authority1->big_state->blend_state;
+
+  _COGL_GET_CONTEXT (ctx, FALSE);
 
   if (blend_state0->blend_equation_rgb != blend_state1->blend_equation_rgb)
     return FALSE;
@@ -182,6 +184,14 @@ _cogl_pipeline_cull_face_state_equal (CoglPipeline *authority0,
           cull_face_state0->front_winding == cull_face_state1->front_winding);
 }
 
+gboolean
+_cogl_pipeline_user_shader_equal (CoglPipeline *authority0,
+                                  CoglPipeline *authority1)
+{
+  return (authority0->big_state->user_program ==
+          authority1->big_state->user_program);
+}
+
 typedef struct
 {
   const CoglBoxedValue **dst_values;
@@ -207,11 +217,11 @@ _cogl_pipeline_get_all_uniform_values (CoglPipeline *pipeline,
                                        const CoglBoxedValue **values)
 {
   GetUniformsClosure data;
-  CoglContext *ctx = pipeline->context;
-  int n_uniform_names = cogl_context_get_n_uniform_names (ctx);
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   memset (values, 0,
-          sizeof (const CoglBoxedValue *) * n_uniform_names);
+          sizeof (const CoglBoxedValue *) * ctx->n_uniform_names);
 
   data.dst_values = values;
 
@@ -242,16 +252,16 @@ _cogl_pipeline_uniforms_state_equal (CoglPipeline *authority0,
   const CoglBoxedValue **values0, **values1;
   int n_longs;
   int i;
-  CoglContext *ctx = authority0->context;
-  int n_uniform_names = cogl_context_get_n_uniform_names (ctx);
+
+  _COGL_GET_CONTEXT (ctx, FALSE);
 
   if (authority0 == authority1)
     return TRUE;
 
-  values0 = g_alloca (sizeof (const CoglBoxedValue *) * n_uniform_names);
-  values1 = g_alloca (sizeof (const CoglBoxedValue *) * n_uniform_names);
+  values0 = g_alloca (sizeof (const CoglBoxedValue *) * ctx->n_uniform_names);
+  values1 = g_alloca (sizeof (const CoglBoxedValue *) * ctx->n_uniform_names);
 
-  n_longs = COGL_FLAGS_N_LONGS_FOR_SIZE (n_uniform_names);
+  n_longs = COGL_FLAGS_N_LONGS_FOR_SIZE (ctx->n_uniform_names);
   differences = g_alloca (n_longs * sizeof (unsigned long));
   memset (differences, 0, sizeof (unsigned long) * n_longs);
   _cogl_pipeline_compare_uniform_differences (differences,
@@ -316,6 +326,17 @@ cogl_pipeline_get_color (CoglPipeline *pipeline,
     _cogl_pipeline_get_authority (pipeline, COGL_PIPELINE_STATE_COLOR);
 
   *color = authority->color;
+}
+
+/* This is used heavily by the cogl journal when logging quads */
+void
+_cogl_pipeline_get_colorubv (CoglPipeline *pipeline,
+                             uint8_t *color)
+{
+  CoglPipeline *authority =
+    _cogl_pipeline_get_authority (pipeline, COGL_PIPELINE_STATE_COLOR);
+
+  _cogl_color_get_rgba_4ubv (&authority->color, color);
 }
 
 void
@@ -546,6 +567,8 @@ cogl_pipeline_set_blend (CoglPipeline *pipeline,
   int count;
   CoglPipelineBlendState *blend_state;
 
+  _COGL_GET_CONTEXT (ctx, FALSE);
+
   g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), FALSE);
 
   count =
@@ -621,6 +644,8 @@ cogl_pipeline_set_blend_constant (CoglPipeline *pipeline,
   CoglPipeline *authority;
   CoglPipelineBlendState *blend_state;
 
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
+
   g_return_if_fail (COGL_IS_PIPELINE (pipeline));
 
   authority = _cogl_pipeline_get_authority (pipeline, state);
@@ -645,6 +670,78 @@ cogl_pipeline_set_blend_constant (CoglPipeline *pipeline,
   pipeline->dirty_real_blend_enable = TRUE;
 }
 
+CoglProgram*
+cogl_pipeline_get_user_program (CoglPipeline *pipeline)
+{
+  CoglPipeline *authority;
+
+  g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), NULL);
+
+  authority =
+    _cogl_pipeline_get_authority (pipeline, COGL_PIPELINE_STATE_USER_SHADER);
+
+  return authority->big_state->user_program;
+}
+
+/* XXX: for now we don't mind if the program has vertex shaders
+ * attached but if we ever make a similar API public we should only
+ * allow attaching of programs containing fragment shaders. Eventually
+ * we will have a CoglPipeline abstraction to also cover vertex
+ * processing.
+ */
+void
+cogl_pipeline_set_user_program (CoglPipeline *pipeline,
+                                CoglProgram  *program)
+{
+  CoglPipelineState state = COGL_PIPELINE_STATE_USER_SHADER;
+  CoglPipeline *authority;
+
+  g_return_if_fail (COGL_IS_PIPELINE (pipeline));
+
+  authority = _cogl_pipeline_get_authority (pipeline, state);
+
+  if (authority->big_state->user_program == program)
+    return;
+
+  /* - Flush journal primitives referencing the current state.
+   * - Make sure the pipeline has no dependants so it may be modified.
+   * - If the pipeline isn't currently an authority for the state being
+   *   changed, then initialize that state from the current authority.
+   */
+  _cogl_pipeline_pre_change_notify (pipeline, state, NULL, FALSE);
+
+  /* If we are the current authority see if we can revert to one of our
+   * ancestors being the authority */
+  if (pipeline == authority &&
+      _cogl_pipeline_get_parent (authority) != NULL)
+    {
+      CoglPipeline *parent = _cogl_pipeline_get_parent (authority);
+      CoglPipeline *old_authority =
+        _cogl_pipeline_get_authority (parent, state);
+
+      if (old_authority->big_state->user_program == program)
+        pipeline->differences &= ~state;
+    }
+  else if (pipeline != authority)
+    {
+      /* If we weren't previously the authority on this state then we
+       * need to extended our differences mask and so it's possible
+       * that some of our ancestry will now become redundant, so we
+       * aim to reparent ourselves if that's true... */
+      pipeline->differences |= state;
+      _cogl_pipeline_prune_redundant_ancestry (pipeline);
+    }
+
+  if (program != NULL)
+    g_object_ref (program);
+  if (authority == pipeline &&
+      pipeline->big_state->user_program != NULL)
+    g_object_unref (pipeline->big_state->user_program);
+  pipeline->big_state->user_program = program;
+
+  pipeline->dirty_real_blend_enable = TRUE;
+}
+
 gboolean
 cogl_pipeline_set_depth_state (CoglPipeline *pipeline,
                                const CoglDepthState *depth_state,
@@ -653,6 +750,8 @@ cogl_pipeline_set_depth_state (CoglPipeline *pipeline,
   CoglPipelineState state = COGL_PIPELINE_STATE_DEPTH;
   CoglPipeline *authority;
   CoglDepthState *orig_state;
+
+  _COGL_GET_CONTEXT (ctx, FALSE);
 
   g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), FALSE);
   g_return_val_if_fail (depth_state->magic == COGL_DEPTH_STATE_MAGIC, FALSE);
@@ -861,6 +960,7 @@ cogl_pipeline_set_per_vertex_point_size (CoglPipeline *pipeline,
   CoglPipelineState state = COGL_PIPELINE_STATE_PER_VERTEX_POINT_SIZE;
   CoglPipeline *authority;
 
+  _COGL_GET_CONTEXT (ctx, FALSE);
   g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), FALSE);
 
   authority = _cogl_pipeline_get_authority (pipeline, state);
@@ -906,13 +1006,12 @@ _cogl_pipeline_override_uniform (CoglPipeline *pipeline,
   CoglPipelineState state = COGL_PIPELINE_STATE_UNIFORMS;
   CoglPipelineUniformsState *uniforms_state;
   int override_index;
-  int n_uniform_names;
+
+  _COGL_GET_CONTEXT (ctx, NULL);
 
   g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), NULL);
   g_return_val_if_fail (location >= 0, NULL);
-
-  n_uniform_names = cogl_context_get_n_uniform_names (pipeline->context);
-  g_return_val_if_fail (location < n_uniform_names, NULL);
+  g_return_val_if_fail (location < ctx->n_uniform_names, NULL);
 
   /* - Flush journal primitives referencing the current state.
    * - Make sure the pipeline has no dependants so it may be modified.
@@ -1058,8 +1157,6 @@ _cogl_pipeline_add_vertex_snippet (CoglPipeline *pipeline,
 
   _cogl_pipeline_snippet_list_add (&pipeline->big_state->vertex_snippets,
                                    snippet);
-
-  cogl_pipeline_add_capability_from_snippet (pipeline, snippet);
 }
 
 static void
@@ -1077,8 +1174,6 @@ _cogl_pipeline_add_fragment_snippet (CoglPipeline *pipeline,
 
   _cogl_pipeline_snippet_list_add (&pipeline->big_state->fragment_snippets,
                                    snippet);
-
-  cogl_pipeline_add_capability_from_snippet (pipeline, snippet);
 }
 
 void
@@ -1153,7 +1248,7 @@ _cogl_pipeline_hash_color_state (CoglPipeline *authority,
                                  CoglPipelineHashState *state)
 {
   state->hash = _cogl_util_one_at_a_time_hash (state->hash, &authority->color,
-                                               sizeof (CoglColor));
+                                               _COGL_COLOR_DATA_SIZE);
 }
 
 void
@@ -1182,6 +1277,8 @@ _cogl_pipeline_hash_blend_state (CoglPipeline *authority,
 {
   CoglPipelineBlendState *blend_state = &authority->big_state->blend_state;
   unsigned int hash;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   if (!authority->real_blend_enable)
     return;
@@ -1219,6 +1316,15 @@ _cogl_pipeline_hash_blend_state (CoglPipeline *authority,
                                    sizeof (blend_state->blend_dst_factor_rgb));
 
   state->hash = hash;
+}
+
+void
+_cogl_pipeline_hash_user_shader_state (CoglPipeline *authority,
+                                       CoglPipelineHashState *state)
+{
+  CoglProgram *user_program = authority->big_state->user_program;
+  state->hash = _cogl_util_one_at_a_time_hash (state->hash, &user_program,
+                                               sizeof (user_program));
 }
 
 void

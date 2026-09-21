@@ -19,6 +19,7 @@
 #pragma once
 
 #include "gskrenderer.h"
+#include "gskprofilerprivate.h"
 #include "gskdebugprivate.h"
 #include "gskoffloadprivate.h"
 
@@ -42,7 +43,6 @@ struct _GskRendererClass
   gboolean             (* realize)                              (GskRenderer            *renderer,
                                                                  GdkDisplay             *display,
                                                                  GdkSurface             *surface,
-                                                                 gboolean                attach,
                                                                  GError                **error);
   void                 (* unrealize)                            (GskRenderer            *renderer);
 
@@ -54,8 +54,7 @@ struct _GskRendererClass
                                                                  const cairo_region_t   *invalid);
 };
 
-GskRenderer *           gsk_renderer_new_for_surface_full       (GdkSurface             *surface,
-                                                                 gboolean                attach);
+GskProfiler *           gsk_renderer_get_profiler               (GskRenderer    *renderer);
 
 GskDebugFlags           gsk_renderer_get_debug_flags            (GskRenderer    *renderer);
 void                    gsk_renderer_set_debug_flags            (GskRenderer    *renderer,

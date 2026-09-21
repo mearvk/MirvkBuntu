@@ -26,6 +26,7 @@
 #include "config.h"
 
 #include "gtkstatusbar.h"
+#include "gtkstatusbarprivate.h"
 
 #include "gtkbinlayout.h"
 #include "gtklabel.h"
@@ -43,10 +44,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * A `GtkStatusbar` widget is usually placed along the bottom of an application's
  * main [class@Gtk.Window].
  *
- * <picture>
- *   <source srcset="statusbar-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkStatusbar" src="statusbar.png">
- * </picture>
+ * ![An example GtkStatusbar](statusbar.png)
  *
  * A `GtkStatusBar` may provide a regular commentary of the application's
  * status (as is usually the case in a web browser, for example), or may be
@@ -142,9 +140,11 @@ gtk_statusbar_dispose (GObject *object)
 {
   GtkStatusbar *self = GTK_STATUSBAR (object);
 
-  g_clear_slist (&self->messages, (GDestroyNotify) gtk_statusbar_msg_free);
+  g_slist_free_full (self->messages, (GDestroyNotify) gtk_statusbar_msg_free);
+  self->messages = NULL;
 
-  g_clear_slist (&self->keys, g_free);
+  g_slist_free_full (self->keys, g_free);
+  self->keys = NULL;
 
   gtk_widget_dispose_template (GTK_WIDGET (self), GTK_TYPE_STATUSBAR);
 
@@ -508,4 +508,22 @@ gtk_statusbar_remove_all (GtkStatusbar *statusbar,
     {
       gtk_statusbar_pop (statusbar, context_id);
     }
+}
+
+/**
+ * gtk_statusbar_get_message:
+ * @statusbar: a `GtkStatusbar`
+ *
+ * Retrieves the contents of the label in `GtkStatusbar`.
+ *
+ * Returns: (transfer none): the contents of the statusbar
+ *
+ * Deprecated: 4.10: This widget will be removed in GTK 5
+ */
+const char *
+gtk_statusbar_get_message (GtkStatusbar *statusbar)
+{
+  g_return_val_if_fail (GTK_IS_STATUSBAR (statusbar), NULL);
+
+  return gtk_label_get_label (GTK_LABEL (statusbar->label));
 }

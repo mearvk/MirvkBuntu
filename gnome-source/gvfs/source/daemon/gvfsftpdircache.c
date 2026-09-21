@@ -254,7 +254,7 @@ g_vfs_ftp_dir_cache_resolve_symlink (GVfsFtpDirCache *  cache,
   link = g_vfs_ftp_file_copy (file);
   do {
       target = g_file_info_get_symlink_target (info);
-      if (target == NULL || target[0] == '\0')
+      if (target == NULL)
         {
           /* This happens when bad servers don't report a symlink target.
            * We now want to figure out if this is a directory or regular file,
@@ -270,15 +270,15 @@ g_vfs_ftp_dir_cache_resolve_symlink (GVfsFtpDirCache *  cache,
       g_object_unref (info);
       if (link == NULL)
         {
-          g_object_unref (original);
-          return NULL;
+          g_vfs_ftp_task_clear_error (task);
+          return original;
         }
       info = g_vfs_ftp_dir_cache_lookup_file_internal (cache, task, link, stamp);
       if (info == NULL)
         {
           g_vfs_ftp_file_free (link);
-          g_object_unref (original);
-          return NULL;
+          g_vfs_ftp_task_clear_error (task);
+          return original;
         }
     }
   while (g_file_info_get_is_symlink (info) && lookups++ < 8);
@@ -422,12 +422,6 @@ g_vfs_ftp_dir_cache_lookup_dir (GVfsFtpDirCache *  cache,
 
       if (resolve_symlinks)
         info = g_vfs_ftp_dir_cache_resolve_symlink (cache, task, file, info, stamp);
-      if (info == NULL)
-        {
-          g_list_free_full (result, g_object_unref);
-          return NULL;
-        }
-
       g_assert (!g_vfs_ftp_task_is_in_error (task));
       result = g_list_prepend (result, info);
     }
@@ -525,7 +519,6 @@ g_vfs_ftp_dir_cache_funcs_lookup_uncached (GVfsFtpTask *      task,
       g_file_info_set_name (info, tmp);
       g_free (tmp);
 
-      g_file_info_set_is_symlink (info, FALSE);
       gvfs_file_info_populate_default (info, g_vfs_ftp_file_get_gvfs_path (file), G_FILE_TYPE_DIRECTORY);
 
       g_file_info_set_is_hidden (info, TRUE);
@@ -544,7 +537,6 @@ g_vfs_ftp_dir_cache_funcs_lookup_uncached (GVfsFtpTask *      task,
       g_file_info_set_name (info, tmp);
       g_free (tmp);
 
-      g_file_info_set_is_symlink (info, FALSE);
       gvfs_file_info_populate_default (info, g_vfs_ftp_file_get_gvfs_path (file), G_FILE_TYPE_REGULAR);
 
       g_file_info_set_size (info, g_ascii_strtoull (reply[0] + 4, NULL, 0));
@@ -721,12 +713,7 @@ g_vfs_ftp_dir_cache_funcs_process (GInputStream *        stream,
         {
           char *link;
 
-          /* Malformed listing may leave fe_lname NULL / fe_lnlen 0 */
-          if (result.fe_lname != NULL && result.fe_lnlen > 0)
-            link = g_strndup (result.fe_lname, result.fe_lnlen);
-          else
-            link = g_strdup ("");
-
+          link = g_strndup (result.fe_lname, result.fe_lnlen);
           g_file_info_set_symlink_target (info, link);
           g_file_info_set_is_symlink (info, TRUE);
           g_free (link);
@@ -853,7 +840,7 @@ g_vfs_ftp_dir_cache_funcs_resolve_default (GVfsFtpTask *      task,
   /* remove trailing / */
   g_string_set_size (new_path, new_path->len - 1);
 
-  link = g_vfs_ftp_file_new_from_ftp (task->backend, new_path->str, &task->error);
+  link = g_vfs_ftp_file_new_from_ftp (task->backend, new_path->str);
   g_string_free (new_path, TRUE);
   return link;
 }

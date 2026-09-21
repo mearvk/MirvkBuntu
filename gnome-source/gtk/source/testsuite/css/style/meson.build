@@ -5,7 +5,6 @@ styletest_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 styletest_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 styletest_env.set('GSETTINGS_BACKEND', 'memory')
 styletest_env.set('G_ENABLE_DIAGNOSTIC', '0')
-styletest_env.set('GTK_DEBUG', '')
 
 cssresources = gnome.compile_resources(
   'cssresources',
@@ -14,9 +13,8 @@ cssresources = gnome.compile_resources(
 )
 
 test_style = executable('test-css-style',
-  sources: ['test-css-style.c', cssresources],
+  sources: ['test-css-style.c', '../../testutils.c', cssresources],
   c_args: common_cflags,
-  link_with: testutils_lib,
   dependencies: libgtk_dep,
 )
 

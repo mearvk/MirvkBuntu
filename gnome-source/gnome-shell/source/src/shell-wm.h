@@ -1,5 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
-#pragma once
+#ifndef __SHELL_WM_H__
+#define __SHELL_WM_H__
 
 #include <glib-object.h>
 #include <meta/meta-plugin.h>
@@ -27,3 +28,5 @@ void     shell_wm_complete_display_change    (ShellWM         *wm,
                                               gboolean         ok);
 
 G_END_DECLS
+
+#endif /* __SHELL_WM_H__ */

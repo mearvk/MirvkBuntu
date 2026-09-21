@@ -1,72 +1,81 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 022
 
-# Ubuntu Determinant — Orca source acquisition
-# Downloads a pinned official GNOME release archive without Git credentials.
-
-VERSION="${ORCA_VERSION:-51.0}"
-SERIES="${VERSION%%.*}"
-ARCHIVE="orca-${VERSION}.tar.xz"
-BASE_URL="${ORCA_SOURCE_BASE_URL:-https://download.gnome.org/sources/orca/${SERIES}}"
-SOURCE_URL="${ORCA_SOURCE_URL:-${BASE_URL}/${ARCHIVE}}"
-CHECKSUM_URL="${ORCA_CHECKSUM_URL:-${BASE_URL}/orca-${VERSION}.sha256sum}"
+# Orca source acquisition for MirvkBuntu.
+# Canonical build input is gnome-source/orca/source/.
+#
+# Two modes, in priority order:
+#   1. Git (default here): clone GNOME's mirror into source/. Pin with ORCA_REF
+#      (tag/branch/commit); default is the upstream default branch.
+#   2. Release tarball: set ORCA_VERSION to fetch a pinned official release from
+#      download.gnome.org (verified against its published sha256sum). Selected
+#      automatically when ORCA_VERSION is set and ORCA_REF is not.
+#
+# GNOME_CLONE_DEPTH controls git shallow depth (0 = full clone).
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-UPSTREAM_DIR="${ROOT_DIR}/upstream"
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+MODULE="orca"
+SOURCE="$ROOT_DIR/source"
+URL="${ORCA_URL:-https://github.com/GNOME/orca.git}"
+REF="${ORCA_REF:-}"
+VERSION="${ORCA_VERSION:-}"
+DEPTH="${GNOME_CLONE_DEPTH:-20}"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
-command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required." >&2; exit 1; }
-command -v sha256sum >/dev/null 2>&1 || { echo "ERROR: sha256sum is required." >&2; exit 1; }
 command -v tar >/dev/null 2>&1 || { echo "ERROR: tar is required." >&2; exit 1; }
 
-mkdir -p "$UPSTREAM_DIR"
+atomic_replace_source(){  # $1 = a directory whose contents become source/
+  rm -rf "$SOURCE.new"
+  mkdir -p "$SOURCE.new"
+  cp -a "$1/." "$SOURCE.new/"
+  rm -rf "$SOURCE"
+  mv "$SOURCE.new" "$SOURCE"
+}
 
-printf '=== Downloading Orca %s ===\n' "$VERSION"
-printf 'Source: %s\n' "$SOURCE_URL"
+# Orca is a Python (meson) project; accept meson.build or setup.py as the marker.
+has_orca_build(){ [ -f "$1/meson.build" ] || [ -f "$1/setup.py" ]; }
 
-curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
-  --output "$TMP_DIR/$ARCHIVE" "$SOURCE_URL"
-
-printf 'Checksum: %s\n' "$CHECKSUM_URL"
-curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
-  --output "$TMP_DIR/orca.sha256sum" "$CHECKSUM_URL"
-
-EXPECTED_LINE="$(grep -E "(^|[[:space:]])${ARCHIVE}([[:space:]]|$)" "$TMP_DIR/orca.sha256sum" | head -n 1 || true)"
-if [ -z "$EXPECTED_LINE" ]; then
-  echo "ERROR: published checksum for $ARCHIVE was not found." >&2
-  exit 1
+# Mode 2: pinned release tarball (only when a version is set and no git ref).
+if [ -n "$VERSION" ] && [ -z "$REF" ]; then
+  command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required for tarball mode." >&2; exit 1; }
+  command -v sha256sum >/dev/null 2>&1 || { echo "ERROR: sha256sum is required." >&2; exit 1; }
+  SERIES="${VERSION%%.*}"
+  ARCHIVE="orca-${VERSION}.tar.xz"
+  BASE_URL="${ORCA_SOURCE_BASE_URL:-https://download.gnome.org/sources/orca/${SERIES}}"
+  SOURCE_URL="${ORCA_SOURCE_URL:-${BASE_URL}/${ARCHIVE}}"
+  CHECKSUM_URL="${ORCA_CHECKSUM_URL:-${BASE_URL}/orca-${VERSION}.sha256sum}"
+  EXPECTED_SHA256="${ORCA_SHA256:-}"
+  curl --fail --location --retry 3 --proto '=https' --tlsv1.2 --output "$TMP/$ARCHIVE" "$SOURCE_URL"
+  if [ -z "$EXPECTED_SHA256" ] && curl --fail --location --retry 3 --proto '=https' --tlsv1.2 --output "$TMP/checksum.txt" "$CHECKSUM_URL"; then
+    EXPECTED_SHA256="$(awk -v f="$ARCHIVE" '$0 ~ f {print $1; exit}' "$TMP/checksum.txt")"
+  fi
+  [[ "$EXPECTED_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "ERROR: no valid SHA-256 for $ARCHIVE." >&2; exit 1; }
+  printf '%s  %s\n' "$EXPECTED_SHA256" "$TMP/$ARCHIVE" | sha256sum --check --strict
+  tar -xJf "$TMP/$ARCHIVE" -C "$TMP"
+  EXTRACTED="$TMP/orca-${VERSION}"
+  has_orca_build "$EXTRACTED" || { echo "ERROR: incomplete Orca source tree." >&2; exit 1; }
+  atomic_replace_source "$EXTRACTED"
+  printf '%s %s\n' "$EXPECTED_SHA256" "orca-${VERSION}.tar.xz" > "$ROOT_DIR/${MODULE}.source-ref"
+  printf 'Imported Orca %s (tarball) into %s\n' "$VERSION" "$SOURCE"
+  exit 0
 fi
 
-printf '%s\n' "$EXPECTED_LINE" | (cd "$TMP_DIR" && sha256sum --check --strict)
-ACTUAL_SHA256="$(sha256sum "$TMP_DIR/$ARCHIVE" | awk '{print $1}')"
-printf 'SHA256: %s\n' "$ACTUAL_SHA256"
-
-rm -rf "$TMP_DIR/source"
-mkdir -p "$TMP_DIR/source"
-tar -xJf "$TMP_DIR/$ARCHIVE" -C "$TMP_DIR/source"
-
-EXTRACTED="$TMP_DIR/source/orca-${VERSION}"
-if [ ! -d "$EXTRACTED" ]; then
-  echo "ERROR: archive did not contain expected directory orca-${VERSION}" >&2
-  exit 1
+# Mode 1: git clone into source/ (default).
+command -v git >/dev/null 2>&1 || { echo "ERROR: git is required." >&2; exit 1; }
+REF="${REF:-main}"
+if [ "$DEPTH" = "0" ]; then
+  git clone "$URL" "$TMP/$MODULE"
+  git -C "$TMP/$MODULE" checkout --quiet "$REF"
+else
+  git clone --depth "$DEPTH" --branch "$REF" --single-branch "$URL" "$TMP/$MODULE" 2>/dev/null \
+    || { git clone "$URL" "$TMP/$MODULE"; git -C "$TMP/$MODULE" checkout --quiet "$REF"; }
 fi
-
-rm -rf "$UPSTREAM_DIR/orca-${VERSION}"
-cp -a "$EXTRACTED" "$UPSTREAM_DIR/orca-${VERSION}"
-printf '%s\n' "$ACTUAL_SHA256" > "$UPSTREAM_DIR/orca-${VERSION}.sha256"
-cp "$TMP_DIR/orca.sha256sum" "$UPSTREAM_DIR/orca-${VERSION}.sha256sum"
-cat > "$UPSTREAM_DIR/SOURCE-INFO.txt" <<EOF
-Project: Orca
-Version: ${VERSION}
-Source URL: ${SOURCE_URL}
-Checksum URL: ${CHECKSUM_URL}
-SHA256: ${ACTUAL_SHA256}
-Acquired: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
-
-This directory contains pristine upstream source. Determinant modifications
-must be maintained outside this directory as patches/offsets.
-EOF
-
-printf '=== Orca source installed ===\n'
-printf '  %s\n' "$UPSTREAM_DIR/orca-${VERSION}"
+git -C "$TMP/$MODULE" fsck --no-progress
+has_orca_build "$TMP/$MODULE" || { echo "ERROR: incomplete Orca source tree." >&2; exit 1; }
+RESOLVED="$(git -C "$TMP/$MODULE" rev-parse HEAD)"
+rm -rf "$TMP/$MODULE/.git"
+atomic_replace_source "$TMP/$MODULE"
+printf '%s %s\n' "$RESOLVED" "$REF" > "$ROOT_DIR/${MODULE}.source-ref"
+printf 'Imported verified Orca source (ref %s -> %s) into %s\n' "$REF" "$RESOLVED" "$SOURCE"

@@ -44,29 +44,23 @@
 struct _CoglDmaBufHandle
 {
   CoglFramebuffer *framebuffer;
+  int dmabuf_fd;
   int width;
   int height;
-  int *fds;
-  uint32_t *strides;
-  uint32_t *offsets;
+  int stride;
+  int offset;
   int bpp;
-  int n_planes;
-  uint32_t format;
-  uint64_t modifier;
   gpointer user_data;
   GDestroyNotify destroy_func;
 };
 
 CoglDmaBufHandle *
 cogl_dma_buf_handle_new (CoglFramebuffer *framebuffer,
+                         int              dmabuf_fd,
                          int              width,
                          int              height,
-                         uint32_t         format,
-                         uint64_t         modifier,
-                         int              n_planes,
-                         int             *fds,
-                         uint32_t        *strides,
-                         uint32_t        *offsets,
+                         int              stride,
+                         int              offset,
                          int              bpp,
                          gpointer         user_data,
                          GDestroyNotify   destroy_func)
@@ -74,21 +68,19 @@ cogl_dma_buf_handle_new (CoglFramebuffer *framebuffer,
   CoglDmaBufHandle *dmabuf_handle;
 
   g_assert (framebuffer);
+  g_assert (dmabuf_fd != -1);
 
   dmabuf_handle = g_new0 (CoglDmaBufHandle, 1);
   dmabuf_handle->framebuffer = g_object_ref (framebuffer);
+  dmabuf_handle->dmabuf_fd = dmabuf_fd;
   dmabuf_handle->user_data = user_data;
   dmabuf_handle->destroy_func = destroy_func;
 
   dmabuf_handle->width = width;
   dmabuf_handle->height = height;
-  dmabuf_handle->fds = g_memdup2 (fds, sizeof (*fds) * n_planes);
-  dmabuf_handle->strides = g_memdup2 (strides, sizeof (*strides) * n_planes);
-  dmabuf_handle->offsets = g_memdup2 (offsets, sizeof (*offsets) * n_planes);
+  dmabuf_handle->stride = stride;
+  dmabuf_handle->offset = offset;
   dmabuf_handle->bpp = bpp;
-  dmabuf_handle->n_planes = n_planes;
-  dmabuf_handle->format = format;
-  dmabuf_handle->modifier = modifier;
 
   return dmabuf_handle;
 }
@@ -96,8 +88,6 @@ cogl_dma_buf_handle_new (CoglFramebuffer *framebuffer,
 void
 cogl_dma_buf_handle_free (CoglDmaBufHandle *dmabuf_handle)
 {
-  int i;
-
   g_return_if_fail (dmabuf_handle != NULL);
 
   g_clear_object (&dmabuf_handle->framebuffer);
@@ -105,12 +95,7 @@ cogl_dma_buf_handle_free (CoglDmaBufHandle *dmabuf_handle)
   if (dmabuf_handle->destroy_func)
     g_clear_pointer (&dmabuf_handle->user_data, dmabuf_handle->destroy_func);
 
-  for (i = 0; i < dmabuf_handle->n_planes; i++)
-    g_clear_fd (&dmabuf_handle->fds[i], NULL);
-
-  g_clear_pointer (&dmabuf_handle->fds, g_free);
-  g_clear_pointer (&dmabuf_handle->strides, g_free);
-  g_clear_pointer (&dmabuf_handle->offsets, g_free);
+  g_clear_fd (&dmabuf_handle->dmabuf_fd, NULL);
 
   g_free (dmabuf_handle);
 }
@@ -122,15 +107,13 @@ sync_read (CoglDmaBufHandle  *dmabuf_handle,
 {
   struct dma_buf_sync sync = { 0 };
 
-  g_assert (dmabuf_handle->n_planes == 1);
-
   sync.flags = start_or_end | DMA_BUF_SYNC_READ;
 
   while (TRUE)
     {
       int ret;
 
-      ret = ioctl (dmabuf_handle->fds[0], DMA_BUF_IOCTL_SYNC, &sync);
+      ret = ioctl (dmabuf_handle->dmabuf_fd, DMA_BUF_IOCTL_SYNC, &sync);
       if (ret == -1 && errno == EINTR)
         {
           continue;
@@ -171,13 +154,11 @@ cogl_dma_buf_handle_mmap (CoglDmaBufHandle  *dmabuf_handle,
   size_t size;
   gpointer data;
 
-  g_assert (dmabuf_handle->n_planes == 1);
-
-  size = dmabuf_handle->height * dmabuf_handle->strides[0];
+  size = dmabuf_handle->height * dmabuf_handle->stride;
 
   data = mmap (NULL, size, PROT_READ, MAP_PRIVATE,
-               dmabuf_handle->fds[0],
-               dmabuf_handle->offsets[0]);
+               dmabuf_handle->dmabuf_fd,
+               dmabuf_handle->offset);
   if (data == MAP_FAILED)
     {
       g_set_error (error, G_IO_ERROR, g_io_error_from_errno (errno),
@@ -195,9 +176,7 @@ cogl_dma_buf_handle_munmap (CoglDmaBufHandle  *dmabuf_handle,
 {
   size_t size;
 
-  g_assert (dmabuf_handle->n_planes == 1);
-
-  size = dmabuf_handle->height * dmabuf_handle->strides[0];
+  size = dmabuf_handle->height * dmabuf_handle->stride;
   if (munmap (data, size) != 0)
     {
       g_set_error (error, G_IO_ERROR, g_io_error_from_errno (errno),
@@ -215,12 +194,9 @@ cogl_dma_buf_handle_get_framebuffer (CoglDmaBufHandle *dmabuf_handle)
 }
 
 int
-cogl_dma_buf_handle_get_fd (CoglDmaBufHandle *dmabuf_handle,
-                            int               plane)
+cogl_dma_buf_handle_get_fd (CoglDmaBufHandle *dmabuf_handle)
 {
-  g_return_val_if_fail (plane < dmabuf_handle->n_planes, -1);
-
-  return dmabuf_handle->fds[plane];
+  return dmabuf_handle->dmabuf_fd;
 }
 
 int
@@ -236,33 +212,19 @@ cogl_dma_buf_handle_get_height (CoglDmaBufHandle *dmabuf_handle)
 }
 
 int
-cogl_dma_buf_handle_get_stride (CoglDmaBufHandle *dmabuf_handle,
-                                int               plane)
+cogl_dma_buf_handle_get_stride (CoglDmaBufHandle *dmabuf_handle)
 {
-  return dmabuf_handle->strides[plane];
+  return dmabuf_handle->stride;
 }
 
 int
-cogl_dma_buf_handle_get_offset (CoglDmaBufHandle *dmabuf_handle,
-                                int               plane)
+cogl_dma_buf_handle_get_offset (CoglDmaBufHandle *dmabuf_handle)
 {
-  return dmabuf_handle->offsets[plane];
+  return dmabuf_handle->offset;
 }
 
 int
 cogl_dma_buf_handle_get_bpp (CoglDmaBufHandle *dmabuf_handle)
 {
   return dmabuf_handle->bpp;
-}
-
-int
-cogl_dma_buf_handle_get_n_planes (CoglDmaBufHandle *dmabuf_handle)
-{
-  return dmabuf_handle->n_planes;
-}
-
-uint64_t
-cogl_dma_buf_handle_get_modifier (CoglDmaBufHandle *dmabuf_handle)
-{
-  return dmabuf_handle->modifier;
 }

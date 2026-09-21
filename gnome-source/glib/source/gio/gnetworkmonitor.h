@@ -33,7 +33,7 @@ G_BEGIN_DECLS
  * G_NETWORK_MONITOR_EXTENSION_POINT_NAME:
  *
  * Extension point for network status monitoring functionality.
- * See [Extending GIO](overview.html#extending-gio).
+ * See [Extending GIO][extending-gio].
  *
  * Since: 2.30
  */
@@ -67,7 +67,7 @@ struct _GNetworkMonitorInterface {
 };
 
 GIO_AVAILABLE_IN_2_32
-GType                 g_network_monitor_get_type              (void);
+GType                 g_network_monitor_get_type              (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_2_32
 GNetworkMonitor      *g_network_monitor_get_default           (void);
 

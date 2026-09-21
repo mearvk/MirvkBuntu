@@ -17,7 +17,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #include <math.h>
 #include <gio/gio.h>
@@ -31,9 +33,7 @@
 #define KEY_DRAG_THRESHOLD        "drag-threshold"
 #define KEY_FONT_NAME             "font-name"
 #define KEY_COLOR_SCHEME          "color-scheme"
-#define KEY_ACCENT_COLOR          "accent-color"
 #define KEY_HIGH_CONTRAST         "high-contrast"
-#define KEY_REDUCED_MOTION        "reduced-motion"
 #define KEY_GTK_ICON_THEME        "icon-theme"
 #define KEY_MAGNIFIER_ACTIVE      "screen-magnifier-enabled"
 #define KEY_DISABLE_SHOW_PASSWORD "disable-show-password"
@@ -45,9 +45,7 @@ enum {
   PROP_DRAG_THRESHOLD,
   PROP_FONT_NAME,
   PROP_COLOR_SCHEME,
-  PROP_ACCENT_COLOR,
   PROP_HIGH_CONTRAST,
-  PROP_REDUCED_MOTION,
   PROP_GTK_ICON_THEME,
   PROP_MAGNIFIER_ACTIVE,
   PROP_SLOW_DOWN_FACTOR,
@@ -76,14 +74,23 @@ struct _StSettings
   gboolean disable_show_password;
   gint drag_threshold;
   double slow_down_factor;
-  StReducedMotion reduced_motion;
   StSystemColorScheme color_scheme;
-  StSystemAccentColor accent_color;
 };
 
 G_DEFINE_TYPE (StSettings, st_settings, G_TYPE_OBJECT)
 
 #define EPSILON (1e-10)
+
+static void
+st_settings_set_slow_down_factor (StSettings *settings,
+                                  double      factor)
+{
+  if (fabs (settings->slow_down_factor - factor) < EPSILON)
+    return;
+
+  settings->slow_down_factor = factor;
+  g_object_notify_by_pspec (G_OBJECT (settings), props[PROP_SLOW_DOWN_FACTOR]);
+}
 
 static gboolean
 get_enable_animations (StSettings *settings)
@@ -92,115 +99,6 @@ get_enable_animations (StSettings *settings)
     return FALSE;
   else
     return settings->enable_animations;
-}
-
-gboolean
-st_settings_get_enable_animations (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), FALSE);
-
-  return get_enable_animations (settings);
-}
-
-gboolean
-st_settings_get_primary_paste (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), FALSE);
-
-  return settings->primary_paste;
-}
-
-int
-st_settings_get_drag_threshold (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), -1);
-
-  return settings->drag_threshold;
-}
-
-const char *
-st_settings_get_font_name (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), NULL);
-
-  return settings->font_name;
-}
-
-const char *
-st_settings_get_gtk_icon_theme (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), NULL);
-
-  return settings->gtk_icon_theme;
-}
-
-StSystemColorScheme
-st_settings_get_color_scheme (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), ST_SYSTEM_COLOR_SCHEME_DEFAULT);
-
-  return settings->color_scheme;
-}
-
-StSystemAccentColor
-st_settings_get_accent_color (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), ST_SYSTEM_ACCENT_COLOR_BLUE);
-
-  return settings->accent_color;
-}
-
-gboolean
-st_settings_get_high_contrast (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), FALSE);
-
-  return settings->high_contrast;
-}
-
-StReducedMotion
-st_settings_get_reduced_motion (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), FALSE);
-
-  return settings->reduced_motion;
-}
-
-gboolean
-st_settings_get_magnifier_active (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), FALSE);
-
-  return settings->magnifier_active;
-}
-
-gboolean
-st_settings_get_disable_show_password (StSettings *settings)
-{
-  g_return_val_if_fail (ST_IS_SETTINGS (settings), FALSE);
-
-  return settings->disable_show_password;
-}
-
-double
-st_settings_get_slow_down_factor (StSettings *settings)
-{
-  g_return_val_if_fail (ST_SETTINGS (settings), -1);
-
-  return settings->slow_down_factor;
-}
-
-void
-st_settings_set_slow_down_factor (StSettings *settings,
-                                  double      factor)
-{
-  g_return_if_fail (ST_IS_SETTINGS (settings));
-
-  if (fabs (settings->slow_down_factor - factor) < EPSILON)
-    return;
-
-  settings->slow_down_factor = factor;
-  g_object_notify_by_pspec (G_OBJECT (settings), props[PROP_SLOW_DOWN_FACTOR]);
 }
 
 void
@@ -288,17 +186,11 @@ st_settings_get_property (GObject    *object,
     case PROP_HIGH_CONTRAST:
       g_value_set_boolean (value, settings->high_contrast);
       break;
-    case PROP_REDUCED_MOTION:
-      g_value_set_enum (value, settings->reduced_motion);
-      break;
     case PROP_GTK_ICON_THEME:
       g_value_set_string (value, settings->gtk_icon_theme);
       break;
     case PROP_COLOR_SCHEME:
       g_value_set_enum (value, settings->color_scheme);
-      break;
-    case PROP_ACCENT_COLOR:
-      g_value_set_enum (value, settings->accent_color);
       break;
     case PROP_MAGNIFIER_ACTIVE:
       g_value_set_boolean (value, settings->magnifier_active);
@@ -328,7 +220,9 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * Whether animations are enabled.
    */
-  props[PROP_ENABLE_ANIMATIONS] = g_param_spec_boolean ("enable-animations", NULL, NULL,
+  props[PROP_ENABLE_ANIMATIONS] = g_param_spec_boolean ("enable-animations",
+                                                        "Enable animations",
+                                                        "Enable animations",
                                                         TRUE,
                                                         ST_PARAM_READABLE);
 
@@ -338,7 +232,9 @@ st_settings_class_init (StSettingsClass *klass)
    * Whether pasting from the `PRIMARY` selection is supported (eg. middle-click
    * paste).
    */
-  props[PROP_PRIMARY_PASTE] = g_param_spec_boolean ("primary-paste", NULL, NULL,
+  props[PROP_PRIMARY_PASTE] = g_param_spec_boolean ("primary-paste",
+                                                    "Primary paste",
+                                                    "Primary paste",
                                                     TRUE,
                                                     ST_PARAM_READABLE);
 
@@ -347,7 +243,9 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * The threshold before a drag operation begins.
    */
-  props[PROP_DRAG_THRESHOLD] = g_param_spec_int ("drag-threshold", NULL, NULL,
+  props[PROP_DRAG_THRESHOLD] = g_param_spec_int ("drag-threshold",
+                                                 "Drag threshold",
+                                                 "Drag threshold",
                                                  0, G_MAXINT, 8,
                                                  ST_PARAM_READABLE);
 
@@ -356,7 +254,9 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * The current font name.
    */
-  props[PROP_FONT_NAME] = g_param_spec_string ("font-name", NULL, NULL,
+  props[PROP_FONT_NAME] = g_param_spec_string ("font-name",
+                                               "font name",
+                                               "font name",
                                                "",
                                                ST_PARAM_READABLE);
 
@@ -365,26 +265,20 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * Whether the accessibility high contrast mode is enabled.
    */
-  props[PROP_HIGH_CONTRAST] = g_param_spec_boolean ("high-contrast", NULL, NULL,
+  props[PROP_HIGH_CONTRAST] = g_param_spec_boolean ("high-contrast",
+                                                    "High contrast",
+                                                    "High contrast",
                                                     FALSE,
                                                     ST_PARAM_READABLE);
-
-  /**
-   * StSettings:reduced-motion:
-   *
-   * Whether animations should be reduced to essential motions.
-   */
-  props[PROP_REDUCED_MOTION] = g_param_spec_enum ("reduced-motion", NULL, NULL,
-                                                  ST_TYPE_REDUCED_MOTION,
-                                                  ST_REDUCED_MOTION_NO_PREFERENCE,
-                                                  ST_PARAM_READABLE);
 
   /**
    * StSettings:gtk-icon-theme:
    *
    * The current GTK icon theme
    */
-  props[PROP_GTK_ICON_THEME] = g_param_spec_string ("gtk-icon-theme", NULL, NULL,
+  props[PROP_GTK_ICON_THEME] = g_param_spec_string ("gtk-icon-theme",
+                                                    "GTK Icon Theme",
+                                                    "GTK Icon Theme",
                                                     "",
                                                     ST_PARAM_READABLE);
 
@@ -393,19 +287,11 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * The preferred color-scheme
    */
-  props[PROP_COLOR_SCHEME] = g_param_spec_enum ("color-scheme", NULL, NULL,
+  props[PROP_COLOR_SCHEME] = g_param_spec_enum ("color-scheme",
+                                                "Color scheme",
+                                                "Color scheme",
                                                 ST_TYPE_SYSTEM_COLOR_SCHEME,
                                                 ST_SYSTEM_COLOR_SCHEME_DEFAULT,
-                                                ST_PARAM_READABLE);
-
-  /**
-   * StSettings:accent-color:
-   *
-   * The current accent color.
-   */
-  props[PROP_ACCENT_COLOR] = g_param_spec_enum ("accent-color", NULL, NULL,
-                                                ST_TYPE_SYSTEM_ACCENT_COLOR,
-                                                ST_SYSTEM_ACCENT_COLOR_BLUE,
                                                 ST_PARAM_READABLE);
 
   /**
@@ -413,7 +299,9 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * Whether the accessibility magnifier is active.
    */
-  props[PROP_MAGNIFIER_ACTIVE] = g_param_spec_boolean("magnifier-active", NULL, NULL,
+  props[PROP_MAGNIFIER_ACTIVE] = g_param_spec_boolean("magnifier-active",
+                                                      "Magnifier is active",
+                                                      "Whether the a11y magnifier is active",
                                                       FALSE,
                                                       ST_PARAM_READABLE);
 
@@ -422,7 +310,9 @@ st_settings_class_init (StSettingsClass *klass)
    *
    * The slow-down factor applied to all animation durations.
    */
-  props[PROP_SLOW_DOWN_FACTOR] = g_param_spec_double("slow-down-factor", NULL, NULL,
+  props[PROP_SLOW_DOWN_FACTOR] = g_param_spec_double("slow-down-factor",
+                                                      "Slow down factor",
+                                                      "Factor applied to all animation durations",
                                                       EPSILON, G_MAXDOUBLE, 1.0,
                                                       ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -431,7 +321,9 @@ st_settings_class_init (StSettingsClass *klass)
    *
    *  Whether password showing can be locked down
    */
-  props[PROP_DISABLE_SHOW_PASSWORD] = g_param_spec_boolean("disable-show-password", NULL, NULL,
+  props[PROP_DISABLE_SHOW_PASSWORD] = g_param_spec_boolean("disable-show-password",
+                                                           "'Show Password' is disabled",
+                                                           "Whether user can request to see their password",
                                                            FALSE,
                                                            ST_PARAM_READABLE);
 
@@ -472,11 +364,6 @@ on_interface_settings_changed (GSettings   *g_settings,
       g_object_notify_by_pspec (G_OBJECT (settings),
                                 props[PROP_COLOR_SCHEME]);
     }
-  else if (g_str_equal (key, KEY_ACCENT_COLOR))
-    {
-      settings->accent_color = g_settings_get_enum (g_settings, key);
-      g_object_notify_by_pspec (G_OBJECT (settings), props[PROP_ACCENT_COLOR]);
-    }
 }
 
 static void
@@ -512,11 +399,6 @@ on_a11y_interface_settings_changed (GSettings   *g_settings,
     {
       settings->high_contrast = g_settings_get_boolean (g_settings, key);
       g_object_notify_by_pspec (G_OBJECT (settings), props[PROP_HIGH_CONTRAST]);
-    }
-  else if (g_str_equal (key, KEY_REDUCED_MOTION))
-    {
-      settings->reduced_motion = g_settings_get_enum (g_settings, key);
-      g_object_notify_by_pspec (G_OBJECT (settings), props[PROP_REDUCED_MOTION]);
     }
 }
 
@@ -565,16 +447,12 @@ st_settings_init (StSettings *settings)
                                                     KEY_GTK_ICON_THEME);
   settings->color_scheme = g_settings_get_enum (settings->interface_settings,
                                                 KEY_COLOR_SCHEME);
-  settings->accent_color = g_settings_get_enum (settings->interface_settings,
-                                                KEY_ACCENT_COLOR);
   settings->drag_threshold = g_settings_get_int (settings->mouse_settings,
                                                  KEY_DRAG_THRESHOLD);
   settings->magnifier_active = g_settings_get_boolean (settings->a11y_applications_settings,
                                                        KEY_MAGNIFIER_ACTIVE);
   settings->high_contrast = g_settings_get_boolean (settings->a11y_interface_settings,
                                                     KEY_HIGH_CONTRAST);
-  settings->reduced_motion = g_settings_get_enum (settings->a11y_interface_settings,
-                                                  KEY_REDUCED_MOTION);
   settings->slow_down_factor = 1.;
   settings->disable_show_password = g_settings_get_boolean (settings->lockdown_settings, KEY_DISABLE_SHOW_PASSWORD);
 }

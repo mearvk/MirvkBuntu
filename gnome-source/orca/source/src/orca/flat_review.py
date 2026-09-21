@@ -323,16 +323,11 @@ class Zone:
 
         return self._start_offset
 
-    def get_end_offset(self) -> int:
-        """Returns the end offset of this Zone with respect to the accessible object."""
-
-        return self._start_offset + len(self._string)
-
     def get_word_at_offset(self, char_offset: int) -> tuple[Word | None, int]:
         """Returns the Word at the specified offset with respect to the accessible object."""
 
-        tokens = ["FLAT REVIEW: Searching for word at offset", char_offset]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"FLAT REVIEW: Searching for word at offset {char_offset}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         words = self.get_words()
         for word in words:
@@ -343,20 +338,18 @@ class Zone:
             if offset >= 0:
                 return word, offset
 
-        if self.get_end_offset() == char_offset and words:
+        if len(self._string) == char_offset and words:
             last_word = words[-1]
             return last_word, len(last_word.get_string())
 
         return None, -1
 
-    def has_caret(
-        self, _caret_offset: int | None = None, _character_count: int | None = None
-    ) -> bool:
+    def has_caret(self) -> bool:
         """Returns True if this Zone contains the caret."""
 
         return False
 
-    def word_with_caret(self, _caret_offset: int | None = None) -> tuple[Word | None, int]:
+    def word_with_caret(self) -> tuple[Word | None, int]:
         """Returns the Word and relative offset with the caret."""
 
         return None, -1
@@ -419,7 +412,7 @@ class TextZone(Zone):
         """Returns the list of Words in this Zone."""
 
         words = []
-        self._word_index_map.clear()
+        self._word_index_map.clear()  # Clear any existing mapping
         for i, word in enumerate(re.finditer(self.WORDS_RE, self.get_string())):
             start = word.start() + self._start_offset
             word_obj = Word(self, start, word.group())
@@ -442,39 +435,22 @@ class TextZone(Zone):
         self._word_rect_cache[cache_key] = rect
         return rect
 
-    def has_caret(
-        self, caret_offset: int | None = None, character_count: int | None = None
-    ) -> bool:
+    def has_caret(self) -> bool:
         """Returns True if this Zone contains the caret."""
 
-        if caret_offset is None:
-            caret_offset = AXText.get_caret_offset(self._obj)
-
-        end_offset = self.get_end_offset()
-        if self._start_offset <= caret_offset < end_offset:
+        end_offset = self._start_offset + len(self._string)
+        if self._start_offset <= AXText.get_caret_offset(self._obj) < end_offset:
             return True
 
-        if caret_offset == end_offset:
-            char, start, end = AXText.get_character_at_offset(self._obj, caret_offset)
-            if not char and start == end == caret_offset:
-                msg = "FLAT REVIEW: Caret believed to be at end of wrapped line in this zone."
-                debug.print_message(debug.LEVEL_INFO, msg, True, True)
-                return True
+        return end_offset == AXText.get_character_count(self._obj)
 
-        if character_count is None:
-            character_count = AXText.get_character_count(self._obj)
-
-        return end_offset == character_count
-
-    def word_with_caret(self, caret_offset: int | None = None) -> tuple[Word | None, int]:
+    def word_with_caret(self) -> tuple[Word | None, int]:
         """Returns the Word and relative offset with the caret."""
 
-        if caret_offset is None:
-            caret_offset = AXText.get_caret_offset(self._obj)
-        if not self.has_caret(caret_offset):
+        if not self.has_caret():
             return None, -1
 
-        return self.get_word_at_offset(caret_offset)
+        return self.get_word_at_offset(AXText.get_caret_offset(self._obj))
 
 
 class StateZone(Zone):
@@ -632,7 +608,6 @@ class Context:
     LINE = 3
     WINDOW = 4
 
-    # pylint: disable-next=too-many-locals,too-many-statements
     def __init__(self, script, root: Atspi.Accessible | None = None) -> None:
         """Create a new Context for script."""
 
@@ -672,23 +647,11 @@ class Context:
             if obj not in self._object_to_zone_map:
                 self._object_to_zone_map[obj] = []
             self._object_to_zone_map[obj].append(zone)
-
-        caret_offset = AXText.get_caret_offset(self._focus_obj)
-        character_count = AXText.get_character_count(self._focus_obj)
-        self._focus_zone = self._find_zone_with_object(
-            self._focus_obj, caret_offset, character_count
-        )
+        self._focus_zone = self._find_zone_with_object(self._focus_obj)
 
         self._lines = self._cluster_zones_by_line(self._zones)
         if not (self._lines and self._focus_zone):
             return
-
-        zone_object = self._focus_zone.get_object()
-        caret_offset = (
-            caret_offset
-            if self._focus_obj == self._focus_zone.get_object()
-            else AXText.get_caret_offset(zone_object)
-        )
 
         for i, line in enumerate(self._lines):
             index = line.get_index_of_zone(self._focus_zone)
@@ -697,23 +660,17 @@ class Context:
 
             self._line_index = i
             self._zone_index = index
-            word, offset = self._focus_zone.word_with_caret(caret_offset)
+            word, offset = self._focus_zone.word_with_caret()
             if word:
                 self._word_index = self._focus_zone.get_index_of_word(word)
                 self._char_index = offset
             break
 
-        tokens = [
-            "FLAT REVIEW: On line",
-            self._line_index,
-            ", zone",
-            self._zone_index,
-            "word",
-            self._word_index,
-            ", char",
-            self._char_index,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = (
+            f"FLAT REVIEW: On line {self._line_index}, zone {self._zone_index} "
+            f"word {self._word_index}, char {self._char_index}"
+        )
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _split_text_into_zones(
         self,
@@ -785,7 +742,7 @@ class Context:
             else:
                 string = ""
                 if not AXUtilities.is_table_row(obj):
-                    string = self._script.get_speech_generator().get_name(obj, in_flat_review=True)
+                    string = self._script.get_speech_generator().get_name(obj, inFlatReview=True)
                 if not string:
                     string = self._script.get_speech_generator().get_role_name(obj)
                 if string:
@@ -803,16 +760,8 @@ class Context:
         tokens = [
             "FLAT REVIEW: Current",
             self.get_current_object(),
-            "line:",
-            self._line_index,
-            ", zone:",
-            self._zone_index,
-            ",",
-            "word:",
-            self._word_index,
-            ", char:",
-            self._char_index,
-            ")",
+            f"line: {self._line_index}, zone: {self._zone_index},",
+            f"word: {self._word_index}, char: {self._char_index})",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
@@ -844,26 +793,13 @@ class Context:
         tokens = [
             "FLAT REVIEW: Updated",
             self.get_current_object(),
-            "line:",
-            self._line_index,
-            ", zone:",
-            self._zone_index,
-            ",",
-            "word:",
-            self._word_index,
-            ", char:",
-            self._char_index,
-            ")",
+            f"line: {self._line_index}, zone: {self._zone_index},",
+            f"word: {self._word_index}, char: {self._char_index})",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return True
 
-    def _find_zone_with_object(
-        self,
-        obj: Atspi.Accessible | None,
-        caret_offset: int | None = None,
-        character_count: int | None = None,
-    ) -> Zone | None:
+    def _find_zone_with_object(self, obj: Atspi.Accessible | None) -> Zone | None:
         """Returns the existing zone which contains obj."""
 
         if obj is None:
@@ -871,7 +807,7 @@ class Context:
 
         if matching_zones := self._object_to_zone_map.get(obj, []):
             for zone in matching_zones:
-                if zone.has_caret(caret_offset, character_count):
+                if zone.has_caret():
                     return zone
             return matching_zones[0]
 
@@ -950,8 +886,6 @@ class Context:
             lines.append(line)
             for zone in zones_in_line:
                 zone.line = line
-                tokens = ["FLAT REVIEW: Line", line_index, "has", zone, "at", zone.get_rect()]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         tokens = ["FLAT REVIEW: Zones clustered into", len(lines), "lines"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -972,64 +906,30 @@ class Context:
             return zone.get_string()
         return ""
 
-    def get_current_line_start_offset(self) -> int | None:
-        """Returns the current line's start offset, or None if the line spans multiple zones."""
-
-        zone = self._get_current_zone()
-        if zone is None or zone.line is None:
-            return None
-        zones = zone.line.get_zones()
-        if len(zones) != 1:
-            return None
-        return zones[0].get_start_offset()
-
-    def _get_current_word(self) -> Word | None:
-        """Returns the current word, or None (with a warning) if its index is out of range."""
-
-        zone = self._get_current_zone()
-        if zone is None:
-            return None
-        words = zone.get_words()
-        if not words:
-            return None
-        try:
-            return words[self._word_index]
-        except IndexError:
-            tokens = [
-                "FLAT REVIEW: Word index",
-                self._word_index,
-                "out of range for",
-                len(words),
-                "words",
-            ]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
-            return None
-
-    def get_current_word_start_offset(self) -> int | None:
-        """Returns the start offset of the current word."""
-
-        zone = self._get_current_zone()
-        if zone is None:
-            return None
-        words = zone.get_words()
-        if not words or not 0 <= self._word_index < len(words):
-            return zone.get_start_offset()
-        return words[self._word_index].get_start_offset()
-
     def get_current_word_string(self) -> str:
         """Returns the string of the current word."""
 
-        if (word := self._get_current_word()) is not None:
-            return word.get_string()
         zone = self._get_current_zone()
-        return zone.get_string() if zone is not None else ""
+        if not zone:
+            return ""
+
+        if words := zone.get_words():
+            return words[self._word_index].get_string()
+
+        return zone.get_string()
 
     def get_current_character_string(self) -> str:
         """Returns the string of the current character."""
 
-        word = self._get_current_word()
-        if word is None:
+        zone = self._get_current_zone()
+        if not zone:
             return ""
+
+        words = zone.get_words()
+        if not words:
+            return ""
+
+        word = words[self._word_index]
         if char := word.get_character_at_index(self._char_index):
             return char.get_string()
         return ""
@@ -1037,33 +937,19 @@ class Context:
     def _get_current_character_rect(self) -> Atspi.Rect:
         """Returns the extents of the current character."""
 
-        word = self._get_current_word()
-        if word is None:
+        zone = self._get_current_zone()
+        if not zone:
             return Atspi.Rect()
+
+        words = zone.get_words()
+        if not words:
+            return Atspi.Rect()
+
+        word = words[self._word_index]
         if char := word.get_character_at_index(self._char_index):
             return char.get_rect()
+
         return Atspi.Rect()
-
-    def is_stale(self) -> bool:
-        """Returns True if this context no longer reflects the on-screen state."""
-
-        if self._top_level is None:
-            return True
-
-        current = AXComponent.get_rect(self._top_level)
-        if current.width != self._rect.width or current.height != self._rect.height:
-            tokens = [
-                "FLAT REVIEW: Context is stale due to top level",
-                self._top_level,
-                "being resized from",
-                self._rect,
-                "to",
-                current,
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return True
-
-        return False
 
     def get_current_location(self) -> tuple[int, int, int, int]:
         """Returns the location as a (lineIndex, zoneIndex, wordIndex, charIndex) tuple."""
@@ -1074,22 +960,6 @@ class Context:
         """Sets the location to the specified (lineIndex, zoneIndex, wordIndex, charIndex)."""
 
         self._line_index, self._zone_index, self._word_index, self._char_index = location
-
-    def can_set_location(self, location: tuple[int, int, int, int]) -> bool:
-        """Returns True if the (lineIndex, zoneIndex, wordIndex, charIndex) is valid."""
-
-        line_idx, zone_idx, word_idx, char_idx = location
-        if not 0 <= line_idx < len(self._lines):
-            return False
-        zones = self._lines[line_idx].get_zones()
-        if not 0 <= zone_idx < len(zones):
-            return False
-        words = zones[zone_idx].get_words()
-        if not words:
-            return word_idx == 0 and char_idx == 0
-        if not 0 <= word_idx < len(words):
-            return False
-        return 0 <= char_idx < len(words[word_idx].get_string())
 
     def set_current_zone(self, zone: Zone, offset_in_zone: int = 0) -> None:
         """Sets zone as the current zone."""
@@ -1124,9 +994,13 @@ class Context:
     def get_current_text_offset(self) -> int:
         """Returns the current text offset in the current object."""
 
-        word = self._get_current_word()
-        if word is None:
+        zone = self._get_current_zone()
+        if zone is None:
             return -1
+        words = zone.get_words()
+        if not words:
+            return -1
+        word = words[self._word_index]
         if char := word.get_character_at_index(self._char_index):
             return char.get_start_offset()
         return -1
@@ -1161,18 +1035,8 @@ class Context:
         focused_region.cursor_offset = 0
         if words := zone.get_words():
             focused_region.cursor_offset += words[0].get_start_offset() - zone.get_start_offset()
-            try:
-                for word_index in range(self._word_index):
-                    focused_region.cursor_offset += len(words[word_index].get_string())
-            except IndexError:
-                tokens = [
-                    "FLAT REVIEW: Word index",
-                    self._word_index,
-                    "out of range for",
-                    len(words),
-                    "words",
-                ]
-                debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            for word_index in range(self._word_index):
+                focused_region.cursor_offset += len(words[word_index].get_string())
         focused_region.cursor_offset += self._char_index
         # This is related to contracted braille.
         focused_region.reposition_cursor()
@@ -1327,8 +1191,8 @@ class Context:
         zone = self._get_current_zone()
         if zone is None:
             return False
-        if word := self._get_current_word():
-            chars = word.get_characters()
+        if words := zone.get_words():
+            chars = words[self._word_index].get_characters()
             self._char_index = max(len(chars) - 1, 0)
         else:
             self._char_index = 0
@@ -1340,8 +1204,8 @@ class Context:
         zone = self._get_current_zone()
         if zone is None:
             return False
-        if word := self._get_current_word():
-            chars = word.get_characters()
+        if words := zone.get_words():
+            chars = words[self._word_index].get_characters()
             if self._char_index < (len(chars) - 1):
                 self._char_index += 1
                 return True

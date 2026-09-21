@@ -42,13 +42,15 @@
                 <property name="receives-default">1</property>
                 <property name="valign">baseline</property>
                 <property name="has-frame">0</property>
-                <property name="child">
+                <child>
                   <object class="GtkLabel" id="source_name">
                     <property name="valign">baseline</property>
                     <property name="label" translatable="0">Username</property>
-                    <property name="attributes">0 -1 weight bold</property>
+                    <attributes>
+                      <attribute name="weight" value="bold"></attribute>
+                    </attributes>
                   </object>
-                </property>
+                </child>
               </object>
             </child>
             <child>
@@ -173,7 +175,7 @@
         </child>
         <child>
           <object class="GtkRevealer" id="details_revealer">
-            <property name="child">
+            <child>
               <object class="GtkBox" id="box5">
                 <property name="orientation">vertical</property>
                 <child>
@@ -220,7 +222,7 @@ FAVORITES</property>
                   </object>
                 </child>
               </object>
-            </property>
+            </child>
             <layout>
               <property name="column">1</property>
               <property name="row">4</property>

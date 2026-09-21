@@ -49,13 +49,9 @@ void meta_window_place_with_placement_rule (MetaWindow        *window,
 void meta_window_update_placement_rule (MetaWindow        *window,
                                         MetaPlacementRule *placement_rule);
 
-META_EXPORT_TEST
 MetaWaylandWindowConfiguration *
   meta_window_wayland_peek_configuration (MetaWindowWayland *wl_window,
                                           uint32_t           serial);
-
-void meta_window_wayland_configure (MetaWindowWayland              *wl_window,
-                                    MetaWaylandWindowConfiguration *configuration);
 
 void meta_window_wayland_set_min_size (MetaWindow *window,
                                        int         width,
@@ -80,9 +76,3 @@ gboolean meta_window_wayland_is_resize (MetaWindowWayland *wl_window,
 
 META_EXPORT_TEST
 gboolean meta_window_wayland_is_acked_fullscreen (MetaWindowWayland *wl_window);
-
-META_EXPORT_TEST
-gboolean meta_window_wayland_get_pending_serial (MetaWindowWayland *wl_window,
-                                                 uint32_t          *serial);
-
-MetaWaylandClient * meta_window_wayland_get_client (MetaWindowWayland *wl_window);

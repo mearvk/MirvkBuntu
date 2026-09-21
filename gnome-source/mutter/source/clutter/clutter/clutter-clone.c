@@ -23,7 +23,7 @@
 
 /**
  * ClutterClone:
- *
+ * 
  * An actor that displays a clone of a source actor
  *
  * #ClutterClone is a [class@Clutter.Actor] which draws with the paint
@@ -41,8 +41,6 @@
 #include "clutter/clutter-clone.h"
 #include "clutter/clutter-debug.h"
 #include "clutter/clutter-main.h"
-#include "clutter/clutter-mutter.h"
-#include "clutter/clutter-paint-context-private.h"
 #include "clutter/clutter-paint-volume-private.h"
 #include "clutter/clutter-private.h"
 
@@ -159,7 +157,6 @@ clutter_clone_paint (ClutterActor        *actor,
    */
   if (clutter_actor_is_realized (priv->clone_source))
     {
-      GList clone_link = { .data = self };
       CoglFramebuffer *fb = NULL;
 
       if (priv->x_scale != 1.0 || priv->y_scale != 1.0)
@@ -170,9 +167,9 @@ clutter_clone_paint (ClutterActor        *actor,
           cogl_framebuffer_scale (fb, priv->x_scale, priv->y_scale, 1.0f);
         }
 
-      clutter_paint_context_push_clone_paint (paint_context, &clone_link);
+      _clutter_actor_push_clone_paint ();
       clutter_actor_paint (priv->clone_source, paint_context);
-      clutter_paint_context_pop_clone_paint (paint_context);
+      _clutter_actor_pop_clone_paint ();
 
       if (fb != NULL)
         cogl_framebuffer_pop_matrix (fb);
@@ -204,8 +201,7 @@ clutter_clone_get_paint_volume (ClutterActor       *actor,
   if (source_volume == NULL)
     return FALSE;
 
-  clutter_paint_volume_init_from_paint_volume (volume, source_volume);
-  clutter_paint_volume_scale (volume, priv->x_scale, priv->y_scale, 1.0f);
+  _clutter_paint_volume_set_from_volume (volume, source_volume);
   _clutter_paint_volume_set_reference_actor (volume, actor);
 
   return TRUE;
@@ -233,7 +229,6 @@ clutter_clone_allocate (ClutterActor           *self,
     clutter_clone_get_instance_private (CLUTTER_CLONE (self));
   ClutterActorClass *parent_class;
   ClutterActorBox source_box;
-  float source_width, source_height;
   float x_scale, y_scale;
 
   /* chain up */
@@ -261,17 +256,10 @@ clutter_clone_allocate (ClutterActor           *self,
   /* We need to scale what the clone-source actor paints to fill our own
    * allocation...
    */
-  source_width = clutter_actor_box_get_width (&source_box);
-  if (source_width != 0.0f)
-    x_scale = clutter_actor_box_get_width (box) / source_width;
-  else
-    x_scale = 1.0f;
-
-  source_height = clutter_actor_box_get_height (&source_box);
-  if (source_height != 0.0f)
-    y_scale = clutter_actor_box_get_height (box) / source_height;
-  else
-    y_scale = 1.0f;
+  x_scale = clutter_actor_box_get_width (box)
+          / clutter_actor_box_get_width (&source_box);
+  y_scale = clutter_actor_box_get_height (box)
+          / clutter_actor_box_get_height (&source_box);
 
   if (!G_APPROX_VALUE (priv->x_scale, x_scale, FLT_EPSILON) ||
       !G_APPROX_VALUE (priv->y_scale, y_scale, FLT_EPSILON))
@@ -388,20 +376,6 @@ clutter_clone_init (ClutterClone *self)
   priv->y_scale = 1.f;
 }
 
-void
-clutter_clone_get_source_transform (ClutterClone      *clone,
-                                    graphene_matrix_t *transform)
-{
-  ClutterClonePrivate *priv;
-
-  g_return_if_fail (CLUTTER_IS_CLONE (clone));
-  g_return_if_fail (transform != NULL);
-
-  priv = clutter_clone_get_instance_private (clone);
-
-  graphene_matrix_init_scale (transform, priv->x_scale, priv->y_scale, 1.0f);
-}
-
 /**
  * clutter_clone_new:
  * @source: a #ClutterActor, or %NULL
@@ -413,10 +387,7 @@ clutter_clone_get_source_transform (ClutterClone      *clone,
 ClutterActor *
 clutter_clone_new (ClutterActor *source)
 {
-  return g_object_new (CLUTTER_TYPE_CLONE,
-                       "source", source,
-                       "accessible-role", ATK_ROLE_IMAGE,
-                       NULL);
+  return g_object_new (CLUTTER_TYPE_CLONE, "source", source,  NULL);
 }
 
 static void
@@ -439,8 +410,8 @@ clutter_clone_set_source_internal (ClutterClone *self,
     {
       g_clear_signal_handler (&priv->source_destroy_id, priv->clone_source);
       _clutter_actor_detach_clone (priv->clone_source, CLUTTER_ACTOR (self));
-
-      g_clear_object (&priv->clone_source);
+      g_object_unref (priv->clone_source);
+      priv->clone_source = NULL;
     }
 
   if (source != NULL)

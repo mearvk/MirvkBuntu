@@ -20,12 +20,7 @@
  *     Owen Taylor <otaylor@redhat.com>
  */
 
-#include "config.h"
-
 #include "gskcairoblurprivate.h"
-#include "gdkcairoprivate.h"
-
-#include "gdkcairoprivate.h"
 
 #include <math.h>
 #include <string.h>
@@ -301,38 +296,7 @@ needs_blur (float        radius,
   return TRUE;
 }
 
-static void
-apply_current_scale (cairo_t *cr,
-                     double  *x,
-                     double  *y)
-{
-  double x_scale, y_scale;
-  cairo_matrix_t matrix;
-
-  cairo_get_matrix (cr, &matrix);
-
-  if (matrix.xx != 0 || matrix.yx != 0)
-    {
-      x_scale = sqrt (matrix.xx * matrix.xx + matrix.yx * matrix.yx);
-      y_scale = (matrix.xx * matrix.yy - matrix.yx * matrix.xy) / x_scale;
-    }
-  else if (matrix.xy != 0 || matrix.yy != 0)
-    {
-      y_scale = sqrt (matrix.xy * matrix.xy + matrix.yy * matrix.yy);
-      x_scale = (matrix.xx * matrix.yy - matrix.yx * matrix.xy) / y_scale;
-    }
-  else
-    {
-      return;
-    }
-
-  if (x)
-    *x *= fabs (x_scale);
-  if (y)
-    *y *= fabs (y_scale);
-}
-
-static const cairo_user_data_key_t original_cr_key = { 0, };
+static const cairo_user_data_key_t original_cr_key;
 
 cairo_t *
 gsk_cairo_blur_start_drawing (cairo_t         *cr,
@@ -358,10 +322,6 @@ gsk_cairo_blur_start_drawing (cairo_t         *cr,
 
   x_scale = y_scale = 1;
   cairo_surface_get_device_scale (cairo_get_target (cr), &x_scale, &y_scale);
-  apply_current_scale (cr, &x_scale, &y_scale);
-
-  clip_width = x_scale * (clip_width + (blur_x ? 2 * clip_radius : 0));
-  clip_height = y_scale * (clip_height + (blur_y ? 2 * clip_radius : 0));
 
   if (blur_flags & GSK_BLUR_REPEAT)
     {
@@ -374,8 +334,8 @@ gsk_cairo_blur_start_drawing (cairo_t         *cr,
   /* Create a larger surface to center the blur. */
   surface = cairo_surface_create_similar_image (cairo_get_target (cr),
                                                 CAIRO_FORMAT_A8,
-                                                clip_width,
-                                                clip_height);
+                                                x_scale * (clip_width + (blur_x ? 2 * clip_radius : 0)),
+                                                y_scale * (clip_height + (blur_y ? 2 * clip_radius : 0)));
   cairo_surface_set_device_scale (surface, x_scale, y_scale);
   cairo_surface_set_device_offset (surface,
                                     x_scale * ((blur_x ? clip_radius : 0) - clip_x1),
@@ -411,15 +371,13 @@ mask_surface_repeat (cairo_t         *cr,
 
 cairo_t *
 gsk_cairo_blur_finish_drawing (cairo_t         *cr,
-                               GdkColorState   *ccs,
                                float            radius,
-                               const GdkColor  *color,
+                               const GdkRGBA   *color,
                                GskBlurFlags     blur_flags)
 {
   cairo_t *original_cr;
   cairo_surface_t *surface;
   double x_scale;
-  double scaled_radius;
 
   if (!needs_blur (radius, blur_flags))
     return cr;
@@ -431,11 +389,10 @@ gsk_cairo_blur_finish_drawing (cairo_t         *cr,
 
   x_scale = 1;
   cairo_surface_get_device_scale (cairo_get_target (cr), &x_scale, NULL);
-  scaled_radius = round ((x_scale + 0.0001) * radius);
 
-  gsk_cairo_blur_surface (surface, scaled_radius, blur_flags);
+  gsk_cairo_blur_surface (surface, x_scale * radius, blur_flags);
 
-  gdk_cairo_set_source_color (original_cr, ccs, color);
+  gdk_cairo_set_source_rgba (original_cr, color);
   if (blur_flags & GSK_BLUR_REPEAT)
     mask_surface_repeat (original_cr, surface);
   else

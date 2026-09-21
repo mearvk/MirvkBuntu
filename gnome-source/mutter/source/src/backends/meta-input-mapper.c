@@ -23,7 +23,7 @@
 #include "backends/meta-input-device-private.h"
 #include "backends/meta-input-mapper-private.h"
 #include "backends/meta-monitor-manager-private.h"
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "backends/meta-backend-private.h"
 
 #include "meta-dbus-input-mapping.h"
@@ -79,6 +79,7 @@ struct _MetaMapperInputInfo
   MetaInputMapper *mapper;
   MetaMapperOutputInfo *output;
   GSettings *settings;
+  guint builtin : 1;
 };
 
 struct _MetaMapperOutputInfo
@@ -133,8 +134,7 @@ G_DEFINE_TYPE_WITH_CODE (MetaInputMapper, meta_input_mapper,
 static GSettings *
 get_device_settings (ClutterInputDevice *device)
 {
-  const char *group, *schema;
-  guint vendor, product;
+  const char *group, *schema, *vendor, *product;
   ClutterInputDeviceType type;
   GSettings *settings;
   char *path;
@@ -162,7 +162,7 @@ get_device_settings (ClutterInputDevice *device)
 
   vendor = clutter_input_device_get_vendor_id (device);
   product = clutter_input_device_get_product_id (device);
-  path = g_strdup_printf ("/org/gnome/desktop/peripherals/%s/%.4x:%.4x/",
+  path = g_strdup_printf ("/org/gnome/desktop/peripherals/%s/%s:%s/",
                           group, vendor, product);
 
   settings = g_settings_new_with_path (schema, path);
@@ -234,7 +234,7 @@ mapper_input_info_set_output (MetaMapperInputInfo  *input,
   double aspect_ratio;
   int width, height;
 
-  if (input->output == output && output)
+  if (input->output == output)
     return;
 
   input->output = output;
@@ -388,7 +388,7 @@ static gboolean
 match_builtin (MetaInputMapper *mapper,
                MetaMonitor     *monitor)
 {
-  return monitor == meta_monitor_manager_get_builtin_monitor (mapper->monitor_manager);
+  return monitor == meta_monitor_manager_get_laptop_panel (mapper->monitor_manager);
 }
 
 static gboolean
@@ -532,7 +532,7 @@ guess_candidates (MetaInputMapper     *mapper,
           DeviceMatch match = { 0 };
 
           match.monitor =
-            meta_monitor_manager_get_builtin_monitor (mapper->monitor_manager);
+            meta_monitor_manager_get_laptop_panel (mapper->monitor_manager);
 
           if (match.monitor != NULL)
             g_array_append_val (info->matches, match);
@@ -621,9 +621,6 @@ mapping_helper_apply (MappingHelper   *helper,
           mapper_output_info_add_input (output, info->input, monitor);
           break;
         }
-
-      if (j >= info->matches->len)
-        mapper_input_info_set_output (info->input, NULL, NULL);
     }
 }
 
@@ -699,7 +696,6 @@ input_mapper_power_save_mode_changed_cb (MetaMonitorManager        *monitor_mana
                                          MetaInputMapper           *mapper)
 {
   ClutterInputDevice *device;
-  ClutterSeat *seat;
   MetaLogicalMonitor *logical_monitor;
   MetaMonitor *builtin;
   MetaPowerSave power_save_mode;
@@ -709,7 +705,7 @@ input_mapper_power_save_mode_changed_cb (MetaMonitorManager        *monitor_mana
     meta_monitor_manager_get_power_save_mode (mapper->monitor_manager);
   on = power_save_mode == META_POWER_SAVE_ON;
 
-  builtin = meta_monitor_manager_get_builtin_monitor (monitor_manager);
+  builtin = meta_monitor_manager_get_laptop_panel (monitor_manager);
   if (!builtin)
     return;
 
@@ -722,10 +718,6 @@ input_mapper_power_save_mode_changed_cb (MetaMonitorManager        *monitor_mana
                                                   logical_monitor,
                                                   CLUTTER_TOUCHSCREEN_DEVICE);
   if (!device)
-    return;
-
-  seat = clutter_input_device_get_seat (device);
-  if (!on && !clutter_seat_get_touch_mode (seat))
     return;
 
   g_signal_emit (mapper, signals[DEVICE_ENABLED], 0, device, on);
@@ -801,12 +793,10 @@ static void
 meta_input_mapper_constructed (GObject *object)
 {
   MetaInputMapper *mapper = META_INPUT_MAPPER (object);
-  ClutterBackend *clutter_backend;
 
   G_OBJECT_CLASS (meta_input_mapper_parent_class)->constructed (object);
 
-  clutter_backend = meta_backend_get_clutter_backend (mapper->backend);
-  mapper->seat = clutter_backend_get_default_seat (clutter_backend);
+  mapper->seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
   g_signal_connect (mapper->seat, "device-removed",
                     G_CALLBACK (input_mapper_device_removed_cb), mapper);
 
@@ -889,7 +879,7 @@ on_name_acquired (GDBusConnection *connection,
                   const char      *name,
                   gpointer         user_data)
 {
-  meta_topic (META_DEBUG_DBUS, "Acquired name %s", name);
+  g_info ("Acquired name %s", name);
 }
 
 static void
@@ -897,7 +887,7 @@ on_name_lost (GDBusConnection *connection,
               const char      *name,
               gpointer         user_data)
 {
-  meta_topic (META_DEBUG_DBUS, "Lost or failed to acquire name %s", name);
+  g_info ("Lost or failed to acquire name %s", name);
 }
 
 static void
@@ -999,9 +989,6 @@ meta_input_mapper_add_device (MetaInputMapper    *mapper,
                               ClutterInputDevice *device)
 {
   MetaMapperInputInfo *info;
-  ClutterInputDeviceType type;
-  MetaPowerSave power_save_mode;
-  gboolean on;
 
   g_return_if_fail (mapper != NULL);
   g_return_if_fail (device != NULL);
@@ -1012,15 +999,6 @@ meta_input_mapper_add_device (MetaInputMapper    *mapper,
   info = mapper_input_info_new (device, mapper);
   g_hash_table_insert (mapper->input_devices, device, info);
   mapper_recalculate_input (mapper, info);
-
-  type = clutter_input_device_get_device_type (device);
-  if (type == CLUTTER_TOUCHSCREEN_DEVICE)
-    {
-      power_save_mode =
-        meta_monitor_manager_get_power_save_mode (mapper->monitor_manager);
-      on = power_save_mode == META_POWER_SAVE_ON;
-      g_signal_emit (mapper, signals[DEVICE_ENABLED], 0, device, on);
-    }
 }
 
 void

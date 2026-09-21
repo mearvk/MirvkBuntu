@@ -9,9 +9,9 @@ test_pipeline_shader_state (void)
 {
   CoglOffscreen *offscreen;
   CoglFramebuffer *fb;
-  g_autoptr (CoglPipeline) base_pipeline = NULL;
+  CoglPipeline *base_pipeline;
   CoglPipeline *draw_pipeline;
-  g_autoptr (CoglTexture) tex = NULL;
+  CoglTexture *tex;
   CoglSnippet *snippet;
   CoglColor color;
 
@@ -90,7 +90,7 @@ test_pipeline_shader_state (void)
   g_object_unref (draw_pipeline);
 
 
-  test_utils_check_region (test_fb, 0, 0, (int) width, (int) height,
+  test_utils_check_region (test_fb, 0, 0, width, height,
                            0x0000ffff);
 }
 

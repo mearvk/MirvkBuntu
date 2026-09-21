@@ -100,7 +100,7 @@ meta_viewport_info_get_view_at (MetaViewportInfo *viewport_info,
     {
       ViewInfo *info = &g_array_index (viewport_info->views, ViewInfo, i);
 
-      if (mtk_rectangle_contains_pointf (&info->rect, x, y))
+      if (META_POINT_IN_RECT (x, y, info->rect))
         return i;
     }
 

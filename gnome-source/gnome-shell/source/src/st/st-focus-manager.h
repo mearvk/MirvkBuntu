@@ -22,7 +22,8 @@
 #error "Only <st/st.h> can be included directly.h"
 #endif
 
-#pragma once
+#ifndef __ST_FOCUS_MANAGER_H__
+#define __ST_FOCUS_MANAGER_H__
 
 #include <st/st-types.h>
 #include <st/st-widget.h>
@@ -33,6 +34,20 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (StFocusManager, st_focus_manager, ST, FOCUS_MANAGER, GObject)
 
 typedef struct _StFocusManager                 StFocusManager;
+typedef struct _StFocusManagerPrivate          StFocusManagerPrivate;
+
+/**
+ * StFocusManager:
+ *
+ * The #StFocusManager struct contains only private data
+ */
+struct _StFocusManager
+{
+  /*< private >*/
+  GObject parent_instance;
+
+  StFocusManagerPrivate *priv;
+};
 
 StFocusManager *st_focus_manager_get_for_stage (ClutterStage *stage);
 
@@ -42,5 +57,9 @@ void            st_focus_manager_remove_group  (StFocusManager *manager,
                                                 StWidget       *root);
 StWidget       *st_focus_manager_get_group     (StFocusManager *manager,
                                                 StWidget       *widget);
+gboolean        st_focus_manager_navigate_from_event (StFocusManager *manager,
+                                                      ClutterEvent   *event);
 
 G_END_DECLS
+
+#endif /* __ST_FOCUS_MANAGER_H__ */

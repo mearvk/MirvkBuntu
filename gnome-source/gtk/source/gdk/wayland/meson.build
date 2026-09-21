@@ -1,3 +1,5 @@
+subdir('cursor')
+
 gdk_wayland_sources = files([
   'gdkapplaunchcontext-wayland.c',
   'gdkcairocontext-wayland.c',
@@ -6,7 +8,6 @@ gdk_wayland_sources = files([
   'gdkdevice-wayland.c',
   'gdkdevicepad-wayland.c',
   'gdkdisplay-wayland.c',
-  'gdkdmabuf-wayland.c',
   'gdkdrag-wayland.c',
   'gdkdragsurface-wayland.c',
   'gdkdrop-wayland.c',
@@ -16,15 +17,13 @@ gdk_wayland_sources = files([
   'gdkmonitor-wayland.c',
   'gdkprimary-wayland.c',
   'gdkseat-wayland.c',
-  'gdksettings-wayland.c',
-  'gdkshm.c',
   'gdksurface-wayland.c',
   'gdksubsurface-wayland.c',
   'gdktoplevel-wayland.c',
   'gdkpopup-wayland.c',
   'gdkvulkancontext-wayland.c',
-  'gdkwaylandcolor.c',
   'gdkwaylandpresentationtime.c',
+  'wm-button-layout-translation.c',
 ])
 
 gdk_wayland_public_headers = files([
@@ -47,6 +46,8 @@ gdk_wayland_deps = [
   wlprotocolsdep,
   wlegldep,
 ]
+
+wayland_scanner = find_program('wayland-scanner')
 
 # Fields:
 #  - name: protocol name
@@ -93,7 +94,7 @@ proto_sources = [
   },
   {
     'name': 'tablet',
-    'stability': 'stable',
+    'stability': 'unstable',
     'version': 2,
   },
   {
@@ -133,88 +134,68 @@ proto_sources = [
   {
     'name': 'presentation-time',
     'stability': 'stable',
-  },
-  {
-    'name': 'single-pixel-buffer',
-    'stability': 'staging',
     'version': 1,
   },
   {
     'name': 'xdg-dialog',
     'stability': 'staging',
     'version': 1,
+    'required': '>=1.36',
   },
   {
-    'name': 'color-management',
-    'stability': 'staging',
+    'name': 'xdg-dialog',
+    'stability': 'private',
     'version': 1,
-  },
-  {
-    'name': 'xdg-system-bell',
-    'stability': 'staging',
-    'version': 1,
-  },
-  {
-    'name': 'cursor-shape',
-    'stability': 'staging',
-    'version': 1,
-  },
-  {
-    'name': 'xdg-toplevel-icon',
-    'stability': 'staging',
-    'version': 1,
-  },
-  {
-    'name': 'color-representation',
-    'stability': 'staging',
-    'version': 1,
-  },
-  {
-    'name': 'xdg-session-management',
-    'stability': 'staging',
-    'version': 1,
-  },
-  {
-    'name': 'ext-background-effect',
-    'stability': 'staging',
-    'version': 1,
+    'required': '<1.36',
   },
 ]
 
 gdk_wayland_gen_headers = []
 
-wlmod = import('wayland')
 foreach p: proto_sources
+  proto_name = p.get('name')
+  proto_stability = p.get('stability')
+
   if wlprotocolsdep.version().version_compare(p.get('required', '>=0'))
-    if p.get('stability') == 'private'
-      if (p.has_key('version'))
-        proto_file = 'protocol/@0@-v@1@.xml'.format(p.get('name'), p.get('version'))
+    if proto_stability == 'stable'
+      output_base = proto_name
+      input = files(join_paths(wlproto_dir, '@0@/@1@/@2@.xml'.format(proto_stability, proto_name, output_base)))
+    elif proto_stability == 'staging'
+      proto_version = p.get('version')
+      output_base = '@0@-v@1@'.format(proto_name, proto_version)
+      input = files(join_paths(wlproto_dir, '@0@/@1@/@2@.xml'.format(proto_stability, proto_name, output_base)))
+    elif proto_stability == 'private'
+      if p.has_key('version')
+        output_base = '@0@-v@1@'.format(proto_name, p.get('version'))
       else
-        proto_file = 'protocol/@0@.xml'.format(p.get('name'))
+        output_base = proto_name
       endif
-    elif p.get('stability') == 'stable'
-      if (p.has_key('version'))
-        proto_file = wlmod.find_protocol(p.get('name'),
-          state: p.get('stability'),
-          version: p.get('version'),
-        )
-      else
-        proto_file = wlmod.find_protocol(p.get('name'),
-          state: p.get('stability'),
-        )
-      endif
+      input = files('protocol/@0@.xml'.format(output_base))
     else
-      proto_file = wlmod.find_protocol(p.get('name'),
-        state: p.get('stability'),
-        version: p.get('version'),
-      )
+      proto_version = p.get('version')
+      output_base = '@0@-@1@-v@2@'.format(proto_name, proto_stability, proto_version)
+      input = files(join_paths(wlproto_dir, '@0@/@1@/@2@.xml'.format(proto_stability, proto_name, output_base)))
     endif
 
-    # Returns a list [.c, .h]
-    gen = wlmod.scan_xml(proto_file)
-    assert(gen.length() == 2)
-    gdk_wayland_sources += gen[0]
-    gdk_wayland_gen_headers += gen[1]
+    gdk_wayland_gen_headers += custom_target('@0@ client header'.format(output_base),
+      input: input,
+      output: '@0@-client-protocol.h'.format(output_base),
+      command: [
+        wayland_scanner,
+        'client-header',
+        '@INPUT@', '@OUTPUT@',
+      ],
+    )
+
+    gdk_wayland_sources += custom_target('@0@ source'.format(output_base),
+      input: input,
+      output: '@0@-protocol.c'.format(output_base),
+      command: [
+        wayland_scanner,
+        'private-code',
+        '@INPUT@', '@OUTPUT@',
+      ],
+    )
   endif
 endforeach
 
@@ -225,13 +206,9 @@ libgdk_wayland = static_library('gdk-wayland',
     '-DGTK_COMPILATION',
     '-DG_LOG_DOMAIN="Gdk"',
   ] + common_cflags,
+  link_with: [ libwayland_cursor, ],
   dependencies: [ gdk_deps, gdk_wayland_deps ],
-  gnu_symbol_visibility: symbol_visibility,
 )
 
 # Used to generate pkg-config Requires
-wayland_public_deps = []
-
-if wlclientdep.type_name() != 'internal'
-  wayland_public_deps += [wlclientdep]
-endif
+wayland_public_deps = [wlclientdep]

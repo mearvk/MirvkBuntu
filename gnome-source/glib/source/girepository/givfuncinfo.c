@@ -224,8 +224,7 @@ gi_vfunc_info_get_address (GIVFuncInfo  *vfunc_info,
   GIObjectInfo *object_info;
   GIStructInfo *struct_info;
   GIFieldInfo *field_info = NULL;
-  size_t offset;
-  unsigned int length, i;
+  int length, i, offset;
   void *implementor_class, *implementor_vtable;
   void *func = NULL;
 

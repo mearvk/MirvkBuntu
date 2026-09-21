@@ -1,3 +1,15 @@
+if enable_deprecated_apis
+  headers = files(
+    'gvfsurimapper.h',
+    'gvfsuriutils.h',
+  )
+
+  install_headers(
+    headers,
+    subdir: 'gvfs-client/gvfs',
+  )
+endif
+
 # Dynamic client lib
 uri_parser_sources = files(
   'afpuri.c',
@@ -52,27 +64,20 @@ libgvfsdbus = shared_module(
   install_dir: gio_giomoduledir,
 )
 
-if enable_unit_tests
+if enable_devel_utils
   test_name = 'test-uri-utils'
 
-  test_uri_utils = executable(
+  executable(
     test_name,
     [test_name + '.c'] + uri_utils,
     include_directories: top_inc,
     dependencies: libgvfscommon_dep,
     c_args: cflags,
   )
-
-  test(test_name, test_uri_utils)
 endif
 
 # FUSE daemon
 if enable_fuse
-  fuse_cflags = []
-  if cc.has_function('fuse_set_feature_flag', dependencies: fuse_dep)
-    fuse_cflags = ['-DHAVE_FUSE_FEATURE_FLAG_FUNCS']
-  endif
-
   if install_systemd_tmpfilesdir
     install_data(
       'gvfsd-fuse-tmpfiles.conf',
@@ -90,7 +95,7 @@ if enable_fuse
     'gvfsfusedaemon.c',
     include_directories: top_inc,
     dependencies: deps,
-    c_args: cflags + ['-UG_LOG_DOMAIN'] + fuse_cflags,
+    c_args: cflags + ['-UG_LOG_DOMAIN'],
     install: true,
     install_rpath: gvfs_rpath,
     install_dir: gvfs_libexecdir,

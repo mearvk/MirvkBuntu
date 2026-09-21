@@ -3,10 +3,6 @@
 #include "gskgpuopprivate.h"
 
 #include "gskgputypesprivate.h"
-#include "gskgpucolorstatesprivate.h"
-#include "gdkcolorprivate.h"
-
-#include <graphene.h>
 
 G_BEGIN_DECLS
 
@@ -14,12 +10,9 @@ struct _GskGpuShaderOp
 {
   GskGpuOp parent_op;
 
-  GskGpuImage *images[2];
-  GskGpuSampler samplers[2];
-  GskGpuImage *clip_mask;
-  GskGpuShaderFlags flags;
-  GskGpuColorStates color_states;
+  GskGpuDescriptors *desc;
   guint32 variation;
+  GskGpuShaderClip clip;
   gsize vertex_offset;
   gsize n_ops;
 };
@@ -29,8 +22,6 @@ struct _GskGpuShaderOpClass
   GskGpuOpClass         parent_class;
 
   const char *          shader_name;
-  gsize                 n_textures;
-  gsize                 n_instances;
   gsize                 vertex_size;
 #ifdef GDK_RENDERING_VULKAN
   const VkPipelineVertexInputStateCreateInfo *vertex_input_state;
@@ -44,12 +35,9 @@ struct _GskGpuShaderOpClass
 
 void                    gsk_gpu_shader_op_alloc                         (GskGpuFrame            *frame,
                                                                          const GskGpuShaderOpClass *op_class,
-                                                                         GskGpuColorStates       color_states,
                                                                          guint32                 variation,
                                                                          GskGpuShaderClip        clip,
-                                                                         GskGpuImage            *clip_mask,
-                                                                         GskGpuImage           **images,
-                                                                         GskGpuSampler          *samplers,
+                                                                         GskGpuDescriptors      *desc,
                                                                          gpointer                out_vertex_data);
 
 void                    gsk_gpu_shader_op_finish                        (GskGpuOp               *op);
@@ -59,16 +47,42 @@ void                    gsk_gpu_shader_op_print                         (GskGpuO
                                                                          GString                *string,
                                                                          guint                   indent);
 #ifdef GDK_RENDERING_VULKAN
+GskGpuOp *              gsk_gpu_shader_op_vk_command_n                  (GskGpuOp               *op,
+                                                                         GskGpuFrame            *frame,
+                                                                         GskVulkanCommandState  *state,
+                                                                         gsize                   instance_scale);
 GskGpuOp *              gsk_gpu_shader_op_vk_command                    (GskGpuOp               *op,
                                                                          GskGpuFrame            *frame,
                                                                          GskVulkanCommandState  *state);
 #endif
+GskGpuOp *              gsk_gpu_shader_op_gl_command_n                  (GskGpuOp               *op,
+                                                                         GskGpuFrame            *frame,
+                                                                         GskGLCommandState      *state,
+                                                                         gsize                   instance_scale);
 GskGpuOp *              gsk_gpu_shader_op_gl_command                    (GskGpuOp               *op,
                                                                          GskGpuFrame            *frame,
                                                                          GskGLCommandState      *state);
 
-#define GSK_RGBA_TO_VEC4(_color) (float[4]) { (_color)->red, (_color)->green, (_color)->blue, (_color)->alpha }
-#define GSK_RGBA_TO_VEC4_ALPHA(_color, _alpha) (float[4]) { (_color)->red, (_color)->green, (_color)->blue, (_color)->alpha * (_alpha) }
-#define GSK_VEC4_TRANSPARENT (float[4]) { 0.0f, 0.0f, 0.0f, 0.0f }
+static inline void
+gsk_gpu_rgba_to_float (const GdkRGBA *rgba,
+                       float          values[4])
+{
+  values[0] = rgba->red;
+  values[1] = rgba->green;
+  values[2] = rgba->blue;
+  values[3] = rgba->alpha;
+}
+
+#include <graphene.h>
+
+static inline void
+gsk_gpu_point_to_float (const graphene_point_t *point,
+                        const graphene_point_t *offset,
+                        float                   values[2])
+{
+  values[0] = point->x + offset->x;
+  values[1] = point->y + offset->y;
+}
 
 G_END_DECLS
+

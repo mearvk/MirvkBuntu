@@ -108,10 +108,7 @@ g_vfs_backend_smb_finalize (GObject *object)
   g_free (backend->domain);
   g_free (backend->path);
   g_free (backend->default_workgroup);
-  gvfs_free_password (backend->last_password);
-  g_free (backend->last_user);
-  g_free (backend->last_domain);
-
+  
   if (G_OBJECT_CLASS (g_vfs_backend_smb_parent_class)->finalize)
     (*G_OBJECT_CLASS (g_vfs_backend_smb_parent_class)->finalize) (object);
 }
@@ -317,14 +314,11 @@ auth_callback (SMBCCTX *context,
         }
 
     out:
-      gvfs_free_password (ask_password);
+      g_free (ask_password);
       g_free (ask_user);
       g_free (ask_domain);
     }
 
-  g_free (backend->last_user);
-  g_free (backend->last_domain);
-  gvfs_free_password (backend->last_password);
   backend->last_user = g_strdup (username_out);
   backend->last_domain = g_strdup (domain_out);
   backend->last_password = g_strdup (password_out);
@@ -571,15 +565,6 @@ do_mount (GVfsBackend *backend,
         {
           g_debug ("do_mount - enabling NTLMSSP fallback\n");
           smbc_setOptionFallbackAfterKerberos (op_backend->smb_context, 1);
-        }
-      else if (op_backend->mount_try == 1 &&
-               op_backend->user == NULL)
-        {
-          /* Samba 4.24 can return EINVAL with UseCCache enabled and missing
-           * kerberos ccache, which blocks NTLM/anonymous fallback, see:
-           * https://gitlab.gnome.org/GNOME/gvfs/-/work_items/857
-           */
-           smbc_setOptionUseCCache (op_backend->smb_context, 0);
         }
 
       op_backend->mount_try ++;
@@ -850,7 +835,6 @@ typedef struct {
   char *uri;
   char *tmp_uri;
   char *backup_uri;
-  GVfsJobOpenForWriteMode mode;
 } SmbWriteHandle;
 
 static void
@@ -863,11 +847,10 @@ smb_write_handle_free (SmbWriteHandle *handle)
 }
 
 static void
-open_for_write (GVfsBackend *backend,
-                GVfsJobOpenForWrite *job,
-                const char *filename,
-                GFileCreateFlags flags,
-                int open_flags)
+do_create (GVfsBackend *backend,
+	   GVfsJobOpenForWrite *job,
+	   const char *filename,
+	   GFileCreateFlags flags)
 {
   GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
   char *uri;
@@ -875,12 +858,12 @@ open_for_write (GVfsBackend *backend,
   SmbWriteHandle *handle;
   smbc_open_fn smbc_open;
   int errsv;
-  off_t initial_offset = 0;
 
   uri = create_smb_uri (op_backend->server, op_backend->port, op_backend->share, filename);
   smbc_open = smbc_getFunctionOpen (op_backend->smb_context);
   errno = 0;
-  file = smbc_open (op_backend->smb_context, uri, open_flags, 0666);
+  file = smbc_open (op_backend->smb_context, uri,
+                    O_CREAT|O_RDWR|O_EXCL, 0666);
   g_free (uri);
 
   if (file == NULL)
@@ -888,70 +871,66 @@ open_for_write (GVfsBackend *backend,
       errsv = fixup_open_errno (errno);
 
       /* We guarantee EEXIST on create on existing dir */
-      if (job->mode == OPEN_FOR_WRITE_CREATE && errsv == EISDIR)
+      if (errsv == EISDIR)
 	errsv = EEXIST;
       g_vfs_job_failed_from_errno (G_VFS_JOB (job), errsv);
-      return;
     }
-
-  if (job->mode == OPEN_FOR_WRITE_APPEND)
+  else
     {
-      smbc_lseek_fn smbc_lseek;
+      handle = g_new0 (SmbWriteHandle, 1);
+      handle->file = file;
+
+      g_vfs_job_open_for_write_set_can_seek (job, TRUE);
+      g_vfs_job_open_for_write_set_can_truncate (job, TRUE);
+      g_vfs_job_open_for_write_set_handle (job, handle);
+      g_vfs_job_succeeded (G_VFS_JOB (job));
+    }
+}
+
+static void
+do_append_to (GVfsBackend *backend,
+	      GVfsJobOpenForWrite *job,
+	      const char *filename,
+	      GFileCreateFlags flags)
+{
+  GVfsBackendSmb *op_backend = G_VFS_BACKEND_SMB (backend);
+  char *uri;
+  SMBCFILE *file;
+  SmbWriteHandle *handle;
+  off_t initial_offset;
+  smbc_open_fn smbc_open;
+  smbc_lseek_fn smbc_lseek;
+
+  uri = create_smb_uri (op_backend->server, op_backend->port, op_backend->share, filename);
+  smbc_open = smbc_getFunctionOpen (op_backend->smb_context);
+  errno = 0;
+  file = smbc_open (op_backend->smb_context, uri,
+                    O_CREAT|O_RDWR|O_APPEND, 0666);
+  g_free (uri);
+
+  if (file == NULL)
+    g_vfs_job_failed_from_errno (G_VFS_JOB (job), fixup_open_errno (errno));
+  else
+    {
+      handle = g_new0 (SmbWriteHandle, 1);
+      handle->file = file;
 
       smbc_lseek = smbc_getFunctionLseek (op_backend->smb_context);
       initial_offset = smbc_lseek (op_backend->smb_context, file,
 						       0, SEEK_CUR);
       if (initial_offset == (off_t) -1)
-        {
-          g_vfs_job_failed_from_errno (G_VFS_JOB (job),
-                                       fixup_open_errno (errno));
-          return;
-        }
+	g_vfs_job_open_for_write_set_can_seek (job, FALSE);
+      else
+	{
+	  g_vfs_job_open_for_write_set_initial_offset (job, initial_offset);
+	  g_vfs_job_open_for_write_set_can_seek (job, TRUE);
+	  g_vfs_job_open_for_write_set_can_truncate (job, TRUE);
+	}
+      g_vfs_job_open_for_write_set_handle (job, handle);
+      g_vfs_job_succeeded (G_VFS_JOB (job));
     }
-
-  handle = g_new0 (SmbWriteHandle, 1);
-  handle->file = file;
-  handle->mode = job->mode;
-
-  g_vfs_job_open_for_write_set_initial_offset (job, initial_offset);
-
-  /* The O_APPEND flag is not properly supported by the libsmbclient library
-   * when seeking. See:
-   * https://github.com/samba-team/samba/blob/e4e3f05/source3/libsmb/libsmb_file.c#L162-L183
-   */
-  g_vfs_job_open_for_write_set_can_seek (job,
-                                         job->mode != OPEN_FOR_WRITE_APPEND);
-  g_vfs_job_open_for_write_set_can_truncate (job, TRUE);
-  g_vfs_job_open_for_write_set_handle (job, handle);
-  g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
-static void
-do_create (GVfsBackend *backend,
-           GVfsJobOpenForWrite *job,
-           const char *filename,
-           GFileCreateFlags flags)
-{
-  open_for_write (backend, job, filename, flags, O_CREAT|O_RDWR|O_EXCL);
-}
-
-static void
-do_append_to (GVfsBackend *backend,
-              GVfsJobOpenForWrite *job,
-              const char *filename,
-              GFileCreateFlags flags)
-{
-  open_for_write (backend, job, filename, flags, O_CREAT|O_RDWR|O_APPEND);
-}
-
-static void
-do_edit (GVfsBackend *backend,
-         GVfsJobOpenForWrite *job,
-         const char *filename,
-         GFileCreateFlags flags)
-{
-  open_for_write (backend, job, filename, flags, O_CREAT|O_RDWR);
-}
 
 static char *
 get_dir_from_uri (const char *uri)
@@ -1210,7 +1189,6 @@ do_replace (GVfsBackend *backend,
   handle->uri = uri;
   handle->tmp_uri = tmp_uri;
   handle->backup_uri = backup_uri;
-  handle->mode = job->mode;
   
   g_vfs_job_open_for_write_set_can_seek (job, TRUE);
   g_vfs_job_open_for_write_set_can_truncate (job, TRUE);
@@ -1299,26 +1277,9 @@ do_truncate (GVfsBackend *backend,
 
   smbc_ftruncate = smbc_getFunctionFtruncate (op_backend->smb_context);
   if (smbc_ftruncate (op_backend->smb_context, handle->file, size) == -1)
-    {
-      g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
-      return;
-    }
-
-  if (handle->mode == OPEN_FOR_WRITE_APPEND)
-    {
-      smbc_lseek_fn smbc_lseek;
-      off_t res;
-
-      smbc_lseek = smbc_getFunctionLseek (op_backend->smb_context);
-      res = smbc_lseek (op_backend->smb_context, handle->file, size, SEEK_SET);
-      if (res == (off_t)-1)
-        {
-          g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
-          return;
-        }
-    }
-
-  g_vfs_job_succeeded (G_VFS_JOB (job));
+    g_vfs_job_failed_from_errno (G_VFS_JOB (job), errno);
+  else
+    g_vfs_job_succeeded (G_VFS_JOB (job));
 }
 
 static void
@@ -1947,8 +1908,6 @@ do_enumerate (GVfsBackend *backend,
 	    }
 	  
 	  dirlen = dirp->dirlen;
-	  if (dirlen == 0 || dirlen > (unsigned int) res)
-	    break;
 	  dirp = (struct smbc_dirent *) (((char *)dirp) + dirlen);
 	  res -= dirlen;
 	}
@@ -2309,7 +2268,6 @@ g_vfs_backend_smb_class_init (GVfsBackendSmbClass *klass)
   backend_class->close_read = do_close_read;
   backend_class->create = do_create;
   backend_class->append_to = do_append_to;
-  backend_class->edit = do_edit;
   backend_class->replace = do_replace;
   backend_class->write = do_write;
   backend_class->seek_on_write = do_seek_on_write;

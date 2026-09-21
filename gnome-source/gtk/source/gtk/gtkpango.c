@@ -96,11 +96,6 @@ attribute_from_text (GtkBuilder  *builder,
     case PANGO_ATTR_WEIGHT:
       if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_WEIGHT, value, &val, error))
         attribute = pango_attr_weight_new (g_value_get_enum (&val));
-      else if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, NULL))
-        {
-          g_clear_error (error);
-          attribute = pango_attr_weight_new (g_value_get_int (&val));
-        }
       break;
     case PANGO_ATTR_VARIANT:
       if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_VARIANT, value, &val, error))
@@ -110,17 +105,6 @@ attribute_from_text (GtkBuilder  *builder,
       if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_STRETCH, value, &val, error))
         attribute = pango_attr_stretch_new (g_value_get_enum (&val));
       break;
-#if PANGO_VERSION_CHECK (1, 58, 0)
-    case PANGO_ATTR_WIDTH:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_WIDTH, value, &val, error))
-        attribute = pango_attr_width_new (g_value_get_enum (&val));
-      else if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, NULL))
-        {
-          g_clear_error (error);
-          attribute = pango_attr_width_new (g_value_get_int (&val));
-        }
-      break;
-#endif
     case PANGO_ATTR_UNDERLINE:
       if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_UNDERLINE, value, &val, NULL))
         attribute = pango_attr_underline_new (g_value_get_enum (&val));
@@ -466,9 +450,9 @@ pango_stretch_to_string (PangoStretch stretch)
 }
 
 const char *
-pango_underline_to_string (PangoUnderline underline)
+pango_underline_to_string (PangoUnderline value)
 {
-  switch (underline)
+  switch (value)
     {
     case PANGO_UNDERLINE_NONE:
       return "none";
@@ -489,9 +473,9 @@ pango_underline_to_string (PangoUnderline underline)
 }
 
 const char *
-pango_overline_to_string (PangoOverline overline)
+pango_overline_to_string (PangoOverline value)
 {
-  switch (overline)
+  switch (value)
     {
     case PANGO_OVERLINE_NONE:
       return "none";
@@ -514,8 +498,6 @@ pango_wrap_mode_to_string (PangoWrapMode mode)
       return "char";
     case PANGO_WRAP_WORD_CHAR:
       return "word-char";
-    case PANGO_WRAP_NONE:
-      return "none";
     default:
       g_assert_not_reached ();
     }
@@ -1169,7 +1151,7 @@ gtk_pango_get_line_start (PangoLayout *layout,
       length = pango_layout_line_get_length (line);
       end_index = start_index + length;
 
-      if (index >= start_index && (index < end_index || pango_layout_iter_at_last_line (iter)))
+      if (index >= start_index && index <= end_index)
         {
           /* Found line for offset */
           if (pango_layout_iter_next_line (iter))
@@ -1267,43 +1249,3 @@ gtk_pango_get_string_at (PangoLayout                  *layout,
 
   return g_utf8_substring (text, start, end);
 }
-
-gboolean
-gtk_pango_glyph_item_has_color_glyphs (PangoGlyphItem *run)
-{
-  for (int i = 0; i < run->glyphs->num_glyphs; i++)
-    {
-      if (run->glyphs->glyphs[i].attr.is_color)
-        return TRUE;
-   }
-
-  return FALSE;
-}
-
-gboolean
-gtk_pango_layout_has_color_glyphs (PangoLayout *layout)
-{
-  gboolean ret = FALSE;
-  PangoLayoutIter *iter;
-
-  iter = pango_layout_get_iter (layout);
-
-  while (pango_layout_iter_next_run (iter) && !ret)
-    {
-      PangoLayoutRun *run = pango_layout_iter_get_run_readonly (iter);
-
-      if (!run)
-        continue;
-
-      if (gtk_pango_glyph_item_has_color_glyphs (run))
-        {
-          ret = TRUE;
-          break;
-        }
-    }
-
-  pango_layout_iter_free (iter);
-
-  return ret;
-}
-

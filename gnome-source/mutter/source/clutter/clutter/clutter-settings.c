@@ -17,11 +17,12 @@
 
 #include "config.h"
 
-#ifdef HAVE_FONTS
-#include <cairo/cairo.h>
-#endif
-
 #include "clutter/clutter-settings.h"
+
+#ifdef HAVE_PANGO_FT2
+/* for pango_fc_font_map_cache_clear() */
+#include <pango/pangofc-fontmap.h>
+#endif /* HAVE_PANGO_FT2 */
 
 #include "clutter/clutter-context-private.h"
 #include "clutter/clutter-debug.h"
@@ -33,6 +34,18 @@
 #include <stdlib.h>
 
 #define DEFAULT_FONT_NAME       "Sans 12"
+
+typedef struct
+{
+  cairo_antialias_t cairo_antialias;
+  gint clutter_font_antialias;
+
+  cairo_hint_style_t cairo_hint_style;
+  const char *clutter_font_hint_style;
+
+  cairo_subpixel_order_t cairo_subpixel_order;
+  const char *clutter_font_subpixel_order;
+} FontSettings;
 
 struct _ClutterSettings
 {
@@ -53,9 +66,18 @@ struct _ClutterSettings
   gchar *font_name;
   gint font_dpi;
 
+  gint xft_hinting;
+  gint xft_antialias;
+  gchar *xft_hint_style;
+  gchar *xft_rgba;
+
   gint long_press_duration;
 
+  guint last_fontconfig_timestamp;
+
   guint password_hint_time;
+
+  gint unscaled_font_dpi;
 };
 
 enum
@@ -69,12 +91,19 @@ enum
 
   PROP_FONT_NAME,
 
+  PROP_FONT_ANTIALIAS,
   PROP_FONT_DPI,
+  PROP_FONT_HINTING,
+  PROP_FONT_HINT_STYLE,
+  PROP_FONT_RGBA,
 
   PROP_LONG_PRESS_DURATION,
 
+  PROP_FONTCONFIG_TIMESTAMP,
+
   PROP_PASSWORD_HINT_TIME,
 
+  PROP_UNSCALED_FONT_DPI,
 
   PROP_LAST
 };
@@ -82,6 +111,79 @@ enum
 static GParamSpec *obj_props[PROP_LAST];
 
 G_DEFINE_FINAL_TYPE (ClutterSettings, clutter_settings, G_TYPE_OBJECT);
+
+static inline void
+settings_update_font_options (ClutterSettings *self)
+{
+  cairo_hint_style_t hint_style = CAIRO_HINT_STYLE_NONE;
+  cairo_antialias_t antialias_mode = CAIRO_ANTIALIAS_GRAY;
+  cairo_subpixel_order_t subpixel_order = CAIRO_SUBPIXEL_ORDER_DEFAULT;
+  cairo_font_options_t *options;
+
+  if (self->backend == NULL)
+    return;
+
+  options = cairo_font_options_create ();
+
+  cairo_font_options_set_hint_metrics (options, CAIRO_HINT_METRICS_ON);
+
+  if (self->xft_hinting >= 0 &&
+      self->xft_hint_style == NULL)
+    {
+      hint_style = CAIRO_HINT_STYLE_NONE;
+    }
+  else if (self->xft_hint_style != NULL)
+    {
+      if (strcmp (self->xft_hint_style, "hintnone") == 0)
+        hint_style = CAIRO_HINT_STYLE_NONE;
+      else if (strcmp (self->xft_hint_style, "hintslight") == 0)
+        hint_style = CAIRO_HINT_STYLE_SLIGHT;
+      else if (strcmp (self->xft_hint_style, "hintmedium") == 0)
+        hint_style = CAIRO_HINT_STYLE_MEDIUM;
+      else if (strcmp (self->xft_hint_style, "hintfull") == 0)
+        hint_style = CAIRO_HINT_STYLE_FULL;
+    }
+
+  cairo_font_options_set_hint_style (options, hint_style);
+
+  if (self->xft_rgba)
+    {
+      if (strcmp (self->xft_rgba, "rgb") == 0)
+        subpixel_order = CAIRO_SUBPIXEL_ORDER_RGB;
+      else if (strcmp (self->xft_rgba, "bgr") == 0)
+        subpixel_order = CAIRO_SUBPIXEL_ORDER_BGR;
+      else if (strcmp (self->xft_rgba, "vrgb") == 0)
+        subpixel_order = CAIRO_SUBPIXEL_ORDER_VRGB;
+      else if (strcmp (self->xft_rgba, "vbgr") == 0)
+        subpixel_order = CAIRO_SUBPIXEL_ORDER_VBGR;
+    }
+
+  cairo_font_options_set_subpixel_order (options, subpixel_order);
+
+  if (self->xft_antialias >= 0 && !self->xft_antialias)
+    antialias_mode = CAIRO_ANTIALIAS_NONE;
+  else if (subpixel_order != CAIRO_SUBPIXEL_ORDER_DEFAULT)
+    antialias_mode = CAIRO_ANTIALIAS_SUBPIXEL;
+  else if (self->xft_antialias >= 0)
+    antialias_mode = CAIRO_ANTIALIAS_GRAY;
+
+  cairo_font_options_set_antialias (options, antialias_mode);
+
+  CLUTTER_NOTE (BACKEND, "New font options:\n"
+                " - font-name:  %s\n"
+                " - antialias:  %d\n"
+                " - hinting:    %d\n"
+                " - hint-style: %s\n"
+                " - rgba:       %s\n",
+                self->font_name != NULL ? self->font_name : DEFAULT_FONT_NAME,
+                self->xft_antialias,
+                self->xft_hinting,
+                self->xft_hint_style != NULL ? self->xft_hint_style : "<null>",
+                self->xft_rgba != NULL ? self->xft_rgba : "<null>");
+
+  clutter_backend_set_font_options (self->backend, options);
+  cairo_font_options_destroy (options);
+}
 
 static void
 settings_update_font_name (ClutterSettings *self)
@@ -110,26 +212,60 @@ settings_update_resolution (ClutterSettings *self)
         self->resolution *= scale;
     }
 
-  CLUTTER_NOTE (BACKEND, "New resolution: %.2f",
-                self->resolution);
+  CLUTTER_NOTE (BACKEND, "New resolution: %.2f (%s)",
+                self->resolution,
+                self->unscaled_font_dpi > 0 ? "unscaled" : "scaled");
 
   if (self->backend != NULL)
     g_signal_emit_by_name (self->backend, "resolution-changed");
 }
 
-#ifdef HAVE_FONTS
 static void
-clutter_settings_update_font_options (ClutterSettings *self)
+settings_update_fontmap (ClutterSettings *self,
+                         guint            stamp)
 {
-  GSettings *settings = self->font_settings;
-  cairo_hint_style_t hint_style = CAIRO_HINT_STYLE_NONE;
-  cairo_antialias_t antialias_mode = CAIRO_ANTIALIAS_GRAY;
-  cairo_subpixel_order_t subpixel_order = CAIRO_SUBPIXEL_ORDER_DEFAULT;
-  const char *clutter_font_hint_style = NULL, *clutter_font_subpixel_order = NULL;
-
   if (self->backend == NULL)
     return;
 
+#ifdef HAVE_PANGO_FT2
+  CLUTTER_NOTE (BACKEND, "Update fontmaps (stamp: %d)", stamp);
+
+  if (self->last_fontconfig_timestamp != stamp)
+    {
+      ClutterContext *context;
+      gboolean update_needed = FALSE;
+
+      context = _clutter_context_get_default ();
+
+      /* If there is no font map yet then we don't need to do anything
+       * because the config for fontconfig will be read when it is
+       * created */
+      if (context->font_map)
+        {
+          PangoFontMap *fontmap = PANGO_FONT_MAP (context->font_map);
+
+          if (PANGO_IS_FC_FONT_MAP (fontmap) &&
+              !FcConfigUptoDate (NULL))
+            {
+              pango_fc_font_map_cache_clear (PANGO_FC_FONT_MAP (fontmap));
+
+              if (FcInitReinitialize ())
+                update_needed = TRUE;
+            }
+        }
+
+      self->last_fontconfig_timestamp = stamp;
+
+      if (update_needed)
+        g_signal_emit_by_name (self->backend, "font-changed");
+    }
+#endif /* HAVE_PANGO_FT2 */
+}
+
+static void
+get_font_gsettings (GSettings    *settings,
+                    FontSettings *output)
+{
   /* org.gnome.desktop.GDesktopFontAntialiasingMode */
   static const struct
   {
@@ -176,43 +312,60 @@ clutter_settings_update_font_options (ClutterSettings *self)
   i = g_settings_get_enum (settings, "font-hinting");
   if (i < G_N_ELEMENTS (hintings))
     {
-      hint_style = hintings[i].cairo_hint_style;
-      clutter_font_hint_style = hintings[i].clutter_font_hint_style;
+      output->cairo_hint_style = hintings[i].cairo_hint_style;
+      output->clutter_font_hint_style = hintings[i].clutter_font_hint_style;
     }
-  cairo_font_options_set_hint_style (self->backend->font_options, hint_style);
+  else
+    {
+      output->cairo_hint_style = CAIRO_HINT_STYLE_DEFAULT;
+      output->clutter_font_hint_style = NULL;
+    }
+
+  i = g_settings_get_enum (settings, "font-antialiasing");
+  if (i < G_N_ELEMENTS (antialiasings))
+    {
+      output->cairo_antialias = antialiasings[i].cairo_antialias;
+      output->clutter_font_antialias = antialiasings[i].clutter_font_antialias;
+    }
+  else
+    {
+      output->cairo_antialias = CAIRO_ANTIALIAS_DEFAULT;
+      output->clutter_font_antialias = -1;
+    }
 
   i = g_settings_get_enum (settings, "font-rgba-order");
   if (i < G_N_ELEMENTS (rgba_orders))
     {
-      subpixel_order = rgba_orders[i].cairo_subpixel_order;
-      clutter_font_subpixel_order = rgba_orders[i].clutter_font_subpixel_order;
+      output->cairo_subpixel_order = rgba_orders[i].cairo_subpixel_order;
+      output->clutter_font_subpixel_order = rgba_orders[i].clutter_font_subpixel_order;
     }
-  cairo_font_options_set_subpixel_order (self->backend->font_options, subpixel_order);
+  else
+    {
+      output->cairo_subpixel_order = CAIRO_SUBPIXEL_ORDER_DEFAULT;
+      output->clutter_font_subpixel_order = NULL;
+    }
 
-  i = g_settings_get_enum (settings, "font-antialiasing");
-  if (i < G_N_ELEMENTS (antialiasings))
-    antialias_mode = antialiasings[i].cairo_antialias;
-
-  if (subpixel_order == CAIRO_SUBPIXEL_ORDER_DEFAULT)
-    antialias_mode = CAIRO_ANTIALIAS_SUBPIXEL;
-
-  cairo_font_options_set_antialias (self->backend->font_options, antialias_mode);
-
-  CLUTTER_NOTE (BACKEND, "New font options:\n"
-                " - font-name:  %s\n"
-                " - antialias:  %d\n"
-                " - hinting:    %d\n"
-                " - hint-style: %s\n"
-                " - rgba:       %s\n",
-                self->font_name != NULL ? self->font_name : DEFAULT_FONT_NAME,
-                antialias_mode,
-                hint_style == CAIRO_HINT_STYLE_NONE ? 0 : 1,
-                clutter_font_hint_style != NULL ? clutter_font_hint_style : "<null>",
-                clutter_font_subpixel_order != NULL ? clutter_font_subpixel_order : "<null>");
-
-  g_signal_emit_by_name (self->backend, "font-changed");
+  if (output->cairo_antialias == CAIRO_ANTIALIAS_GRAY)
+    output->clutter_font_subpixel_order = "none";
 }
-#endif
+
+static void
+init_font_options (ClutterSettings *self)
+{
+  GSettings *settings = self->font_settings;
+  cairo_font_options_t *options = cairo_font_options_create ();
+  FontSettings fs;
+
+  get_font_gsettings (settings, &fs);
+
+  cairo_font_options_set_hint_style (options, fs.cairo_hint_style);
+  cairo_font_options_set_antialias (options, fs.cairo_antialias);
+  cairo_font_options_set_subpixel_order (options, fs.cairo_subpixel_order);
+
+  clutter_backend_set_font_options (self->backend, options);
+
+  cairo_font_options_destroy (options);
+}
 
 static void
 sync_mouse_options (ClutterSettings *self)
@@ -229,20 +382,27 @@ sync_mouse_options (ClutterSettings *self)
                 NULL);
 }
 
-#ifdef HAVE_FONTS
 static gboolean
 on_font_settings_change_event (GSettings *settings,
-                               gpointer   keys,
-                               gint       n_keys,
-                               gpointer   user_data)
+			       gpointer   keys,
+			       gint       n_keys,
+			       gpointer   user_data)
 {
   ClutterSettings *self = CLUTTER_SETTINGS (user_data);
+  FontSettings fs;
+  gint hinting;
 
-  clutter_settings_update_font_options (self);
+  get_font_gsettings (settings, &fs);
+  hinting = fs.cairo_hint_style == CAIRO_HINT_STYLE_NONE ? 0 : 1;
+  g_object_set (self,
+                "font-hinting",        hinting,
+                "font-hint-style",     fs.clutter_font_hint_style,
+                "font-antialias",      fs.clutter_font_antialias,
+                "font-subpixel-order", fs.clutter_font_subpixel_order,
+                NULL);
 
   return FALSE;
 }
-#endif
 
 static gboolean
 on_mouse_settings_change_event (GSettings *settings,
@@ -315,12 +475,11 @@ sync_pointer_a11y_settings (ClutterSettings *self,
 
   /* "secondary-click-time" is expressed in seconds */
   pointer_a11y_settings.secondary_click_delay =
-    (int) (1000 * g_settings_get_double (self->mouse_a11y_settings,
-                                         "secondary-click-time"));
+    (1000 * g_settings_get_double (self->mouse_a11y_settings,
+                                   "secondary-click-time"));
   /* "dwell-time" is expressed in seconds */
   pointer_a11y_settings.dwell_delay =
-    (int) (1000 * g_settings_get_double (self->mouse_a11y_settings,
-                                         "dwell-time"));
+    (1000 * g_settings_get_double (self->mouse_a11y_settings, "dwell-time"));
   pointer_a11y_settings.dwell_threshold =
     g_settings_get_int (self->mouse_a11y_settings, "dwell-threshold");
 
@@ -359,15 +518,12 @@ on_mouse_a11y_settings_change_event (GSettings *settings,
 static void
 load_initial_settings (ClutterSettings *self)
 {
-#ifdef HAVE_FONTS
   static const gchar *font_settings_path = "org.gnome.desktop.interface";
-#endif
   static const gchar *mouse_settings_path = "org.gnome.desktop.peripherals.mouse";
   static const char *mouse_a11y_settings_path = "org.gnome.desktop.a11y.mouse";
   GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
-  g_autoptr (GSettingsSchema) schema = NULL;
+  GSettingsSchema *schema;
 
-#ifdef HAVE_FONTS
   schema = g_settings_schema_source_lookup (source, font_settings_path, TRUE);
   if (!schema)
     {
@@ -378,15 +534,12 @@ load_initial_settings (ClutterSettings *self)
       self->font_settings = g_settings_new_full (schema, NULL, NULL);
       if (self->font_settings)
         {
-          clutter_settings_update_font_options (self);
+          init_font_options (self);
           g_signal_connect (self->font_settings, "change-event",
                             G_CALLBACK (on_font_settings_change_event),
                             self);
         }
-
-      g_clear_pointer (&schema, g_settings_schema_unref);
     }
- #endif
 
   schema = g_settings_schema_source_lookup (source, mouse_settings_path, TRUE);
   if (!schema)
@@ -403,8 +556,6 @@ load_initial_settings (ClutterSettings *self)
                             G_CALLBACK (on_mouse_settings_change_event),
                             self);
         }
-
-      g_clear_pointer (&schema, g_settings_schema_unref);
     }
 
   schema = g_settings_schema_source_lookup (source, mouse_a11y_settings_path, TRUE);
@@ -427,6 +578,8 @@ clutter_settings_finalize (GObject *gobject)
   ClutterSettings *self = CLUTTER_SETTINGS (gobject);
 
   g_free (self->font_name);
+  g_free (self->xft_hint_style);
+  g_free (self->xft_rgba);
 
   g_clear_object (&self->font_settings);
   g_clear_object (&self->mouse_settings);
@@ -463,17 +616,48 @@ clutter_settings_set_property (GObject      *gobject,
       settings_update_font_name (self);
       break;
 
+    case PROP_FONT_ANTIALIAS:
+      self->xft_antialias = g_value_get_int (value);
+      settings_update_font_options (self);
+      break;
+
     case PROP_FONT_DPI:
       self->font_dpi = g_value_get_int (value);
       settings_update_resolution (self);
+      break;
+
+    case PROP_FONT_HINTING:
+      self->xft_hinting = g_value_get_int (value);
+      settings_update_font_options (self);
+      break;
+
+    case PROP_FONT_HINT_STYLE:
+      g_free (self->xft_hint_style);
+      self->xft_hint_style = g_value_dup_string (value);
+      settings_update_font_options (self);
+      break;
+
+    case PROP_FONT_RGBA:
+      g_free (self->xft_rgba);
+      self->xft_rgba = g_value_dup_string (value);
+      settings_update_font_options (self);
       break;
 
     case PROP_LONG_PRESS_DURATION:
       self->long_press_duration = g_value_get_int (value);
       break;
 
+    case PROP_FONTCONFIG_TIMESTAMP:
+      settings_update_fontmap (self, g_value_get_uint (value));
+      break;
+
     case PROP_PASSWORD_HINT_TIME:
       self->password_hint_time = g_value_get_uint (value);
+      break;
+
+    case PROP_UNSCALED_FONT_DPI:
+      self->font_dpi = g_value_get_int (value);
+      settings_update_resolution (self);
       break;
 
     default:
@@ -508,8 +692,24 @@ clutter_settings_get_property (GObject    *gobject,
       g_value_set_string (value, self->font_name);
       break;
 
+    case PROP_FONT_ANTIALIAS:
+      g_value_set_int (value, self->xft_antialias);
+      break;
+
     case PROP_FONT_DPI:
-      g_value_set_int (value, (int) (self->resolution * 1024));
+      g_value_set_int (value, self->resolution * 1024);
+      break;
+
+    case PROP_FONT_HINTING:
+      g_value_set_int (value, self->xft_hinting);
+      break;
+
+    case PROP_FONT_HINT_STYLE:
+      g_value_set_string (value, self->xft_hint_style);
+      break;
+
+    case PROP_FONT_RGBA:
+      g_value_set_string (value, self->xft_rgba);
       break;
 
     case PROP_LONG_PRESS_DURATION:
@@ -600,6 +800,20 @@ clutter_settings_class_init (ClutterSettingsClass *klass)
                          G_PARAM_STATIC_STRINGS);
 
   /**
+   * ClutterSettings:font-antialias:
+   *
+   * Whether or not to use antialiasing when rendering text; a value
+   * of 1 enables it unconditionally; a value of 0 disables it
+   * unconditionally; and -1 will use the system's default.
+   */
+  obj_props[PROP_FONT_ANTIALIAS] =
+    g_param_spec_int ("font-antialias", NULL, NULL,
+                      -1, 1,
+                      -1,
+                      G_PARAM_READWRITE |
+                      G_PARAM_STATIC_STRINGS);
+
+  /**
    * ClutterSettings:font-dpi:
    *
    * The DPI used when rendering text, as a value of 1024 * dots/inch.
@@ -613,13 +827,69 @@ clutter_settings_class_init (ClutterSettingsClass *klass)
                       G_PARAM_READWRITE |
                       G_PARAM_STATIC_STRINGS);
 
+  obj_props[PROP_UNSCALED_FONT_DPI] =
+    g_param_spec_int ("unscaled-font-dpi", NULL, NULL,
+                      -1, 1024 * 1024,
+                      -1,
+                      G_PARAM_WRITABLE |
+                      G_PARAM_STATIC_STRINGS);
+
+  /**
+   * ClutterSettings:font-hinting:
+   *
+   * Whether or not to use hinting when rendering text; a value of 1
+   * unconditionally enables it; a value of 0 unconditionally disables
+   * it; and a value of -1 will use the system's default.
+   */
+  obj_props[PROP_FONT_HINTING] =
+    g_param_spec_int ("font-hinting", NULL, NULL,
+                      -1, 1,
+                      -1,
+                      G_PARAM_READWRITE |
+                      G_PARAM_STATIC_STRINGS);
+
+  /**
+   * ClutterSettings:font-hint-style:
+   *
+   * The style of the hinting used when rendering text. Valid values
+   * are:
+   *
+   *   - hintnone
+   *   - hintslight
+   *   - hintmedium
+   *   - hintfull
+   */
+  obj_props[PROP_FONT_HINT_STYLE] =
+    g_param_spec_string ("font-hint-style", NULL, NULL,
+                         NULL,
+                         G_PARAM_READWRITE |
+                         G_PARAM_STATIC_STRINGS);
+
+  /**
+   * ClutterSettings:font-subpixel-order:
+   *
+   * The type of sub-pixel antialiasing used when rendering text. Valid
+   * values are:
+   *
+   *   - none
+   *   - rgb
+   *   - bgr
+   *   - vrgb
+   *   - vbgr
+   */
+  obj_props[PROP_FONT_RGBA] =
+    g_param_spec_string ("font-subpixel-order", NULL, NULL,
+                         NULL,
+                         G_PARAM_READWRITE |
+                         G_PARAM_STATIC_STRINGS);
+
   /**
    * ClutterSettings:long-press-duration:
    *
    * Sets the minimum duration for a press to be recognized as a long press
    * gesture. The duration is expressed in milliseconds.
    *
-   * See also [property@PressGesture:long-press-duration-ms].
+   * See also [property@ClickAction:long-press-duration].
    */
   obj_props[PROP_LONG_PRESS_DURATION] =
     g_param_spec_int ("long-press-duration", NULL, NULL,
@@ -628,6 +898,12 @@ clutter_settings_class_init (ClutterSettingsClass *klass)
                       G_PARAM_READWRITE |
                       G_PARAM_STATIC_STRINGS);
 
+  obj_props[PROP_FONTCONFIG_TIMESTAMP] =
+    g_param_spec_uint ("fontconfig-timestamp", NULL, NULL,
+                       0, G_MAXUINT,
+                       0,
+                       G_PARAM_WRITABLE |
+                       G_PARAM_STATIC_STRINGS);
 
   /**
    * ClutterText:password-hint-time:
@@ -658,6 +934,7 @@ clutter_settings_init (ClutterSettings *self)
   self->resolution = -1.0;
 
   self->font_dpi = -1;
+  self->unscaled_font_dpi = -1;
 
   self->double_click_time = 250;
   self->double_click_distance = 5;
@@ -666,7 +943,32 @@ clutter_settings_init (ClutterSettings *self)
 
   self->font_name = g_strdup (DEFAULT_FONT_NAME);
 
+  self->xft_antialias = -1;
+  self->xft_hinting = -1;
+  self->xft_hint_style = NULL;
+  self->xft_rgba = NULL;
+
   self->long_press_duration = 500;
+}
+
+/**
+ * clutter_settings_get_default:
+ *
+ * Retrieves the singleton instance of #ClutterSettings
+ *
+ * Return value: (transfer none): the instance of #ClutterSettings. The
+ *   returned object is owned by Clutter and it should not be unreferenced
+ *   directly
+ */
+ClutterSettings *
+clutter_settings_get_default (void)
+{
+  static ClutterSettings *settings = NULL;
+
+  if (G_UNLIKELY (settings == NULL))
+    settings = g_object_new (CLUTTER_TYPE_SETTINGS, NULL);
+
+  return settings;
 }
 
 void

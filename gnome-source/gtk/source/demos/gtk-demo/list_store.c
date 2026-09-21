@@ -104,7 +104,7 @@ create_model (void)
       gboolean sensitive;
 
       if (i == 1 || i == 3)
-        icon_name = "battery-level-10-charging-symbolic";
+        icon_name = "battery-caution-charging-symbolic";
       else
         icon_name = NULL;
       if (i == 3)
@@ -235,7 +235,11 @@ window_closed (GtkWidget *widget,
 {
   model = NULL;
   window = NULL;
-  g_clear_handle_id (&timeout, g_source_remove);
+  if (timeout != 0)
+    {
+      g_source_remove (timeout);
+      timeout = 0;
+    }
   return FALSE;
 }
 
@@ -306,7 +310,11 @@ do_list_store (GtkWidget *do_widget)
     {
       gtk_window_destroy (GTK_WINDOW (window));
       window = NULL;
-      g_clear_handle_id (&timeout, g_source_remove);
+      if (timeout != 0)
+        {
+          g_source_remove (timeout);
+          timeout = 0;
+        }
     }
 
   return window;

@@ -1,3 +1,0 @@
-Plain text document for Orca.
-Second line of the file.
-Third line of the file.

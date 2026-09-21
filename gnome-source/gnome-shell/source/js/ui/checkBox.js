@@ -7,14 +7,14 @@ import St from 'gi://St';
 export const CheckBox = GObject.registerClass(
 class CheckBox extends St.Button {
     _init(label) {
-        const container = new St.BoxLayout({
+        let container = new St.BoxLayout({
             x_expand: true,
             y_expand: true,
         });
         super._init({
             style_class: 'check-box',
             child: container,
-            button_mask: St.ButtonMask.PRIMARY,
+            button_mask: St.ButtonMask.ONE,
             toggle_mode: true,
             can_focus: true,
         });
@@ -22,11 +22,6 @@ class CheckBox extends St.Button {
 
         this._box = new St.Bin({y_align: Clutter.ActorAlign.START});
         container.add_child(this._box);
-
-        this._check = new St.Icon({
-            icon_name: 'check-symbolic',
-        });
-        this._box.set_child(this._check);
 
         this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER});
         this._label.clutter_text.set_line_wrap(true);

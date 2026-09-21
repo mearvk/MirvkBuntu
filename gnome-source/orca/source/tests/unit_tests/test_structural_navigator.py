@@ -224,6 +224,9 @@ class TestStructuralNavigator:
         from orca.structural_navigator import get_navigator
 
         nav = get_navigator()
+        assert (
+            nav._last_input_event is None or nav._last_input_event is not None
+        )  # May be set by other tests
         assert isinstance(nav._suspended, bool)
         assert isinstance(nav._mode_for_script, dict)
         # Verify commands are registered in CommandManager
@@ -401,6 +404,13 @@ class TestStructuralNavigator:
 
         assert nav._suspended == expected_suspended
 
+        if expects_debug:
+            essential_modules["orca.debug"].print_message.assert_any_call(
+                essential_modules["orca.debug"].LEVEL_INFO,
+                f"STRUCTURAL NAVIGATOR: Suspended: {suspend_value}: test reason",
+                True,
+            )
+
         if expects_cmd_mgr:
             mock_cmd_mgr.set_group_suspended.assert_called_once()
         else:
@@ -411,17 +421,17 @@ class TestStructuralNavigator:
 
         self._setup_dependencies(test_context)
         mock_script = test_context.Mock()
-        from orca.structural_navigator import NavigationType, get_navigator
+        from orca.structural_navigator import get_navigator
 
         nav = get_navigator()
-        result = nav._get_object_in_direction(mock_script, [], True, NavigationType.LINK)
+        result = nav._get_object_in_direction(mock_script, [], True)
         assert result is None
 
     def test_get_object_in_direction_next_object(self, test_context: OrcaTestContext) -> None:
         """Test StructuralNavigator._get_object_in_direction returns next object."""
 
         essential_modules = self._setup_dependencies(test_context)
-        from orca.structural_navigator import NavigationType, get_navigator
+        from orca.structural_navigator import get_navigator
 
         nav = get_navigator()
         mock_obj1 = test_context.Mock()
@@ -456,18 +466,20 @@ class TestStructuralNavigator:
                 return 1
             return 0
 
-        essential_modules["orca.AXUtilities"].path_comparison.side_effect = mock_path_comparison
+        mock_script.utilities.path_comparison.side_effect = mock_path_comparison
 
-        result = nav._get_object_in_direction(mock_script, objects, True, NavigationType.LINK)
+        result = nav._get_object_in_direction(mock_script, objects, True)
         assert result == mock_obj3
 
     def test_get_object_in_direction_previous_object(self, test_context: OrcaTestContext) -> None:
         """Test StructuralNavigator._get_object_in_direction returns previous object."""
 
         essential_modules = self._setup_dependencies(test_context)
-        from orca.structural_navigator import NavigationType, get_navigator
+        from orca import ax_utilities
+        from orca.structural_navigator import get_navigator
 
         nav = get_navigator()
+        test_context.patch_object(ax_utilities.AXUtilities, "is_live_region", return_value=False)
         mock_obj1 = test_context.Mock()
         mock_obj2 = test_context.Mock()
         mock_obj3 = test_context.Mock()
@@ -500,9 +512,9 @@ class TestStructuralNavigator:
                 return 1
             return 0
 
-        essential_modules["orca.AXUtilities"].path_comparison.side_effect = mock_path_comparison
+        mock_script.utilities.path_comparison.side_effect = mock_path_comparison
 
-        result = nav._get_object_in_direction(mock_script, objects, False, NavigationType.LINK)
+        result = nav._get_object_in_direction(mock_script, objects, False)
         assert result == mock_obj1
 
     def test_get_object_in_direction_wrap_to_beginning(self, test_context: OrcaTestContext) -> None:
@@ -743,7 +755,10 @@ class TestStructuralNavigator:
         if element_type == "lists":
             test_context.patch(
                 f"orca.structural_navigator.AXUtilities.{ax_method}",
-                side_effect=lambda root, **kwargs: mock_elements,
+                side_effect=lambda root,
+                include_description_lists=False,
+                include_tab_lists=False,
+                pred=None: mock_elements,
             )
         elif element_type == "paragraphs":
             test_context.patch(

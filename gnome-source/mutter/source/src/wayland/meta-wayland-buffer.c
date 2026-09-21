@@ -36,6 +36,7 @@
  * @META_WAYLAND_BUFFER_TYPE_UNKNOWN: Unknown type.
  * @META_WAYLAND_BUFFER_TYPE_SHM: wl_buffer backed by shared memory
  * @META_WAYLAND_BUFFER_TYPE_EGL_IMAGE: wl_buffer backed by an EGLImage
+ * @META_WAYLAND_BUFFER_TYPE_EGL_STREAM: wl_buffer backed by an EGLStream (NVIDIA-specific)
  * @META_WAYLAND_BUFFER_TYPE_DMA_BUF: wl_buffer backed by a Linux DMA-BUF
  *
  * Specifies the backing memory for a #MetaWaylandBuffer. Depending on the type
@@ -52,21 +53,22 @@
 
 #include "backends/meta-backend-private.h"
 #include "clutter/clutter.h"
-#include "cogl/cogl-texture-private.h"
-#include "cogl/cogl.h"
+#include "cogl/cogl-egl.h"
 #include "meta/util.h"
 #include "wayland/meta-wayland-dma-buf.h"
 #include "wayland/meta-wayland-private.h"
 #include "common/meta-cogl-drm-formats.h"
 #include "common/meta-drm-format-helpers.h"
-#include "common/meta-drm-timeline.h"
 #include "compositor/meta-multi-texture-format-private.h"
+#include "wayland/meta-drm-timeline.h"
 #include "wayland/meta-wayland-linux-drm-syncobj.h"
 
+#ifdef HAVE_NATIVE_BACKEND
 #include "backends/native/meta-drm-buffer-gbm.h"
 #include "backends/native/meta-kms-utils.h"
 #include "backends/native/meta-onscreen-native.h"
 #include "backends/native/meta-renderer-native.h"
+#endif
 
 #define META_WAYLAND_SHM_MAX_PLANES 4
 
@@ -140,6 +142,9 @@ meta_wayland_buffer_is_realized (MetaWaylandBuffer *buffer)
 gboolean
 meta_wayland_buffer_realize (MetaWaylandBuffer *buffer)
 {
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  MetaWaylandEglStream *stream;
+#endif
   MetaWaylandDmaBufBuffer *dma_buf;
   MetaWaylandSinglePixelBuffer *single_pixel_buffer;
 
@@ -149,23 +154,41 @@ meta_wayland_buffer_realize (MetaWaylandBuffer *buffer)
       return TRUE;
     }
 
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  stream = meta_wayland_egl_stream_new (buffer, NULL);
+  if (stream)
+    {
+      CoglTexture *texture;
+
+      texture = meta_wayland_egl_stream_create_texture (stream, NULL);
+      if (!texture)
+        return FALSE;
+
+      buffer->egl_stream.stream = stream;
+      buffer->type = META_WAYLAND_BUFFER_TYPE_EGL_STREAM;
+      buffer->egl_stream.texture = meta_multi_texture_new_simple (texture);
+      buffer->is_y_inverted = meta_wayland_egl_stream_is_y_inverted (stream);
+
+      return TRUE;
+    }
+#endif /* HAVE_WAYLAND_EGLSTREAM */
+
   if (meta_wayland_compositor_is_egl_display_bound (buffer->compositor))
     {
       MetaContext *context =
         meta_wayland_compositor_get_context (buffer->compositor);
       MetaBackend *backend = meta_context_get_backend (context);
       EGLint format;
+      MetaEgl *egl = meta_backend_get_egl (backend);
       ClutterBackend *clutter_backend =
         meta_backend_get_clutter_backend (backend);
       CoglContext *cogl_context =
         clutter_backend_get_cogl_context (clutter_backend);
-      CoglRendererEGL *renderer_egl =
-        COGL_RENDERER_EGL (cogl_context_get_renderer (cogl_context));
+      EGLDisplay egl_display = cogl_egl_context_get_egl_display (cogl_context);
 
-      if (cogl_renderer_egl_query_wayland_buffer (renderer_egl,
-                                                  buffer->resource,
-                                                  EGL_TEXTURE_FORMAT, &format,
-                                                  NULL))
+      if (meta_egl_query_wayland_buffer (egl, egl_display, buffer->resource,
+                                         EGL_TEXTURE_FORMAT, &format,
+                                         NULL))
         {
           buffer->type = META_WAYLAND_BUFFER_TYPE_EGL_IMAGE;
           buffer->dma_buf.dma_buf =
@@ -404,9 +427,6 @@ shm_buffer_attach (MetaWaylandBuffer  *buffer,
       return FALSE;
     }
 
-  g_clear_pointer (&buffer->shm.buffer, wl_shm_buffer_unref);
-  buffer->shm.buffer = wl_shm_buffer_ref (shm_buffer);
-
   cogl_format = format_info->cogl_format;
   multi_format = format_info->multi_texture_format;
 
@@ -426,7 +446,7 @@ shm_buffer_attach (MetaWaylandBuffer  *buffer,
       CoglTexture *cogl_texture = meta_multi_texture_get_plane (*texture, 0);
 
       if (!meta_multi_texture_is_simple (*texture) ||
-          cogl_texture_get_format (cogl_texture) == cogl_format)
+          _cogl_texture_get_format (cogl_texture) == cogl_format)
         {
           buffer->is_y_inverted = TRUE;
           return TRUE;
@@ -458,10 +478,10 @@ egl_image_buffer_attach (MetaWaylandBuffer  *buffer,
   MetaContext *context =
     meta_wayland_compositor_get_context (buffer->compositor);
   MetaBackend *backend = meta_context_get_backend (context);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context = clutter_backend_get_cogl_context (clutter_backend);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (cogl_context_get_renderer (cogl_context));
+  EGLDisplay egl_display = cogl_egl_context_get_egl_display (cogl_context);
   int format, width, height, y_inverted;
   CoglPixelFormat cogl_format;
   EGLImageKHR egl_image;
@@ -475,25 +495,24 @@ egl_image_buffer_attach (MetaWaylandBuffer  *buffer,
       return TRUE;
     }
 
-  if (!cogl_renderer_egl_query_wayland_buffer (renderer_egl, buffer->resource,
-                                               EGL_TEXTURE_FORMAT, &format,
-                                               error))
+  if (!meta_egl_query_wayland_buffer (egl, egl_display, buffer->resource,
+                                      EGL_TEXTURE_FORMAT, &format,
+                                      error))
     return FALSE;
 
-  if (!cogl_renderer_egl_query_wayland_buffer (renderer_egl, buffer->resource,
-                                               EGL_WIDTH, &width,
-                                               error))
+  if (!meta_egl_query_wayland_buffer (egl, egl_display, buffer->resource,
+                                      EGL_WIDTH, &width,
+                                      error))
     return FALSE;
 
-  if (!cogl_renderer_egl_query_wayland_buffer (renderer_egl, buffer->resource,
-                                               EGL_HEIGHT, &height,
-                                               error))
+  if (!meta_egl_query_wayland_buffer (egl, egl_display, buffer->resource,
+                                      EGL_HEIGHT, &height,
+                                      error))
     return FALSE;
 
-  if (!cogl_renderer_egl_query_wayland_buffer (renderer_egl, buffer->resource,
-                                               EGL_WAYLAND_Y_INVERTED_WL,
-                                               &y_inverted,
-                                               NULL))
+  if (!meta_egl_query_wayland_buffer (egl, egl_display, buffer->resource,
+                                      EGL_WAYLAND_Y_INVERTED_WL, &y_inverted,
+                                      NULL))
     y_inverted = EGL_TRUE;
 
   switch (format)
@@ -513,23 +532,22 @@ egl_image_buffer_attach (MetaWaylandBuffer  *buffer,
 
   /* The WL_bind_wayland_display spec states that EGL_NO_CONTEXT is to be used
    * in conjunction with the EGL_WAYLAND_BUFFER_WL target. */
-  egl_image = cogl_renderer_egl_create_image (renderer_egl, EGL_NO_CONTEXT,
-                                              EGL_WAYLAND_BUFFER_WL,
-                                              buffer->resource,
-                                              NULL,
-                                              error);
+  egl_image = meta_egl_create_image (egl, egl_display, EGL_NO_CONTEXT,
+                                     EGL_WAYLAND_BUFFER_WL, buffer->resource,
+                                     NULL,
+                                     error);
   if (egl_image == EGL_NO_IMAGE_KHR)
     return FALSE;
 
   flags = COGL_EGL_IMAGE_FLAG_NONE;
-  texture_2d = cogl_texture_2d_new_from_egl_image (cogl_context,
+  texture_2d = cogl_egl_texture_2d_new_from_image (cogl_context,
                                                    width, height,
                                                    cogl_format,
                                                    egl_image,
                                                    flags,
                                                    error);
 
-  cogl_renderer_egl_destroy_image (renderer_egl, egl_image, NULL);
+  meta_egl_destroy_image (egl, egl_display, egl_image, NULL);
 
   if (!texture_2d)
     return FALSE;
@@ -542,6 +560,26 @@ egl_image_buffer_attach (MetaWaylandBuffer  *buffer,
 
   return TRUE;
 }
+
+#ifdef HAVE_WAYLAND_EGLSTREAM
+static gboolean
+egl_stream_buffer_attach (MetaWaylandBuffer  *buffer,
+                          MetaMultiTexture  **texture,
+                          GError            **error)
+{
+  MetaWaylandEglStream *stream = buffer->egl_stream.stream;
+
+  g_assert (stream);
+
+  if (!meta_wayland_egl_stream_attach (stream, error))
+    return FALSE;
+
+  g_clear_object (texture);
+  *texture = g_object_ref (buffer->egl_stream.texture);
+
+  return TRUE;
+}
+#endif /* HAVE_WAYLAND_EGLSTREAM */
 
 static void
 on_onscreen_destroyed (gpointer  user_data,
@@ -561,9 +599,7 @@ on_scanout_failed (CoglScanout       *scanout,
   if (!buffer->tainted_scanout_onscreens)
     buffer->tainted_scanout_onscreens = g_hash_table_new (NULL, NULL);
 
-  if (!g_hash_table_add (buffer->tainted_scanout_onscreens, onscreen))
-    return;
-
+  g_hash_table_add (buffer->tainted_scanout_onscreens, onscreen);
   g_object_weak_ref (G_OBJECT (onscreen), on_onscreen_destroyed, buffer);
 }
 
@@ -625,6 +661,10 @@ meta_wayland_buffer_attach (MetaWaylandBuffer  *buffer,
       return shm_buffer_attach (buffer, texture, error);
     case META_WAYLAND_BUFFER_TYPE_EGL_IMAGE:
       return egl_image_buffer_attach (buffer, texture, error);
+#ifdef HAVE_WAYLAND_EGLSTREAM
+    case META_WAYLAND_BUFFER_TYPE_EGL_STREAM:
+      return egl_stream_buffer_attach (buffer, texture, error);
+#endif
     case META_WAYLAND_BUFFER_TYPE_DMA_BUF:
       return meta_wayland_dma_buf_buffer_attach (buffer,
                                                  texture,
@@ -642,65 +682,75 @@ meta_wayland_buffer_attach (MetaWaylandBuffer  *buffer,
   return FALSE;
 }
 
+/**
+ * meta_wayland_buffer_create_snippet:
+ * @buffer: A #MetaWaylandBuffer object
+ *
+ * If needed, this method creates a #CoglSnippet to make sure the buffer can be
+ * dealt with appropriately in a #CoglPipeline that renders it.
+ *
+ * Returns: (transfer full) (nullable): A new #CoglSnippet, or %NULL.
+ */
+CoglSnippet *
+meta_wayland_buffer_create_snippet (MetaWaylandBuffer *buffer)
+{
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  if (!buffer->egl_stream.stream)
+    return NULL;
+
+  return meta_wayland_egl_stream_create_snippet (buffer->egl_stream.stream);
+#else
+  return NULL;
+#endif /* HAVE_WAYLAND_EGLSTREAM */
+}
+
 void
 meta_wayland_buffer_inc_use_count (MetaWaylandBuffer *buffer)
 {
+  g_warn_if_fail (buffer->resource);
+
   buffer->use_count++;
-}
-
-static void
-handle_release_points (MetaWaylandBuffer *buffer)
-{
-  MetaContext *context = meta_wayland_compositor_get_context (buffer->compositor);
-  MetaBackend *backend = meta_context_get_backend (context);
-  ClutterBackend *clutter_backend;
-  CoglContext *cogl_context;
-  CoglRenderer *cogl_renderer;
-  MetaWaylandSyncPoint *sync_point;
-  g_autoptr (GError) error = NULL;
-  g_autofd int sync_fd = -1;
-
-  if (!backend)
-    return;
-
-  clutter_backend = meta_backend_get_clutter_backend (backend);
-  cogl_context = clutter_backend_get_cogl_context (clutter_backend);
-  cogl_renderer = cogl_context_get_renderer (cogl_context);
-  sync_fd = cogl_renderer_get_latest_sync_fd (cogl_renderer);
-  if (sync_fd < 0)
-    {
-      meta_topic (META_DEBUG_WAYLAND, "Invalid Sync Fd returned by COGL");
-      return;
-    }
-
-  for (int i = 0; i < buffer->release_points->len; i++)
-    {
-      sync_point = g_ptr_array_index (buffer->release_points, i);
-      if (!meta_wayland_sync_timeline_set_sync_point (sync_point->timeline,
-                                                      sync_point->sync_point,
-                                                      sync_fd,
-                                                      &error))
-        g_warning ("Failed to import sync point: %s", error->message);
-    }
-
-  g_ptr_array_remove_range (buffer->release_points, 0,
-                            buffer->release_points->len);
 }
 
 void
 meta_wayland_buffer_dec_use_count (MetaWaylandBuffer *buffer)
 {
+  MetaContext *context = meta_wayland_compositor_get_context (buffer->compositor);
+  MetaBackend *backend = meta_context_get_backend (context);
+  ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
+  CoglContext *cogl_context = clutter_backend_get_cogl_context (clutter_backend);
+  MetaWaylandSyncPoint *sync_point;
+  g_autoptr(GError) error = NULL;
+  g_autofd int sync_fd = -1;
+
   g_return_if_fail (buffer->use_count > 0);
 
   buffer->use_count--;
 
-  if (buffer->use_count == 0)
+  if (buffer->use_count == 0 && buffer->resource)
     {
-      if (buffer->resource)
-        wl_buffer_send_release (buffer->resource);
+      wl_buffer_send_release (buffer->resource);
 
-      if (buffer->release_points->len)
-        handle_release_points (buffer);
+      sync_fd = cogl_context_get_latest_sync_fd (cogl_context);
+      if (sync_fd < 0)
+        {
+          meta_topic (META_DEBUG_WAYLAND, "Invalid Sync Fd returned by COGL");
+          return;
+        }
+
+      for (int i = 0; i < buffer->release_points->len; i++)
+        {
+          sync_point = g_ptr_array_index (buffer->release_points, i);
+          if (!meta_wayland_sync_timeline_set_sync_point (sync_point->timeline,
+                                                          sync_point->sync_point,
+                                                          sync_fd,
+                                                          &error))
+            {
+              g_warning ("Failed to import sync point: %s", error->message);
+            }
+        }
+      g_ptr_array_remove_range (buffer->release_points, 0,
+                                buffer->release_points->len);
     }
 }
 
@@ -730,7 +780,7 @@ process_shm_buffer_damage (MetaWaylandBuffer *buffer,
 
   n_rectangles = mtk_region_num_rectangles (region);
 
-  shm_buffer = buffer->shm.buffer;
+  shm_buffer = wl_shm_buffer_get (buffer->resource);
   stride = wl_shm_buffer_get_stride (shm_buffer);
   height = wl_shm_buffer_get_height (shm_buffer);
   shm_format = wl_shm_buffer_get_format (shm_buffer);
@@ -761,7 +811,7 @@ process_shm_buffer_damage (MetaWaylandBuffer *buffer,
       plane_stride = shm_stride[plane_index];
 
       cogl_texture = meta_multi_texture_get_plane (texture, i);
-      subformat = cogl_texture_get_format (cogl_texture);
+      subformat = _cogl_texture_get_format (cogl_texture);
       bpp = cogl_pixel_format_get_bytes_per_pixel (subformat, 0);
 
       for (j = 0; j < n_rectangles; j++)
@@ -800,7 +850,9 @@ meta_wayland_buffer_process_damage (MetaWaylandBuffer *buffer,
                                     MtkRegion         *region)
 {
   gboolean res = FALSE;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
+
+  g_return_if_fail (buffer->resource);
 
   switch (buffer->type)
     {
@@ -808,6 +860,9 @@ meta_wayland_buffer_process_damage (MetaWaylandBuffer *buffer,
       res = process_shm_buffer_damage (buffer, texture, region, &error);
       break;
     case META_WAYLAND_BUFFER_TYPE_EGL_IMAGE:
+#ifdef HAVE_WAYLAND_EGLSTREAM
+    case META_WAYLAND_BUFFER_TYPE_EGL_STREAM:
+#endif
     case META_WAYLAND_BUFFER_TYPE_DMA_BUF:
     case META_WAYLAND_BUFFER_TYPE_SINGLE_PIXEL:
       res = TRUE;
@@ -821,15 +876,17 @@ meta_wayland_buffer_process_damage (MetaWaylandBuffer *buffer,
     }
 
   if (!res)
-    g_warning ("Failed to process Wayland buffer damage: %s", error->message);
+    {
+      g_warning ("Failed to process Wayland buffer damage: %s", error->message);
+      g_error_free (error);
+    }
 }
 
 static CoglScanout *
-try_acquire_egl_image_scanout (MetaWaylandBuffer     *buffer,
-                               CoglOnscreen          *onscreen,
-                               const graphene_rect_t *src_rect,
-                               const MtkRectangle    *dst_rect)
+try_acquire_egl_image_scanout (MetaWaylandBuffer *buffer,
+                               CoglOnscreen      *onscreen)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaContext *context =
     meta_wayland_compositor_get_context (buffer->compositor);
   MetaBackend *backend = meta_context_get_backend (context);
@@ -843,9 +900,6 @@ try_acquire_egl_image_scanout (MetaWaylandBuffer     *buffer,
   g_autoptr (MetaDrmBufferGbm) fb = NULL;
   g_autoptr (CoglScanout) scanout = NULL;
   g_autoptr (GError) error = NULL;
-
-  if (!buffer->resource)
-    return NULL;
 
   gpu_kms = meta_renderer_native_get_primary_gpu (renderer_native);
   device_file = meta_renderer_native_get_primary_device_file (renderer_native);
@@ -869,18 +923,19 @@ try_acquire_egl_image_scanout (MetaWaylandBuffer     *buffer,
       return NULL;
     }
 
-  scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)),
-                              dst_rect);
-  cogl_scanout_set_src_rect (scanout, src_rect);
+  scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)));
   if (!meta_onscreen_native_is_buffer_scanout_compatible (onscreen, scanout))
     return NULL;
 
   return g_steal_pointer (&scanout);
+#else
+  return NULL;
+#endif
 }
 
 static void
-scanout_buffer_disposed (gpointer  data,
-                         GObject  *where_the_object_was)
+scanout_destroyed (gpointer  data,
+                   GObject  *where_the_object_was)
 {
   MetaWaylandBuffer *buffer = data;
 
@@ -891,12 +946,10 @@ scanout_buffer_disposed (gpointer  data,
 CoglScanout *
 meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
                                          CoglOnscreen          *onscreen,
-                                         ClutterStageView      *stage_view,
                                          const graphene_rect_t *src_rect,
                                          const MtkRectangle    *dst_rect)
 {
   CoglScanout *scanout = NULL;
-  CoglScanoutBuffer *scanout_buffer;
 
   COGL_TRACE_BEGIN_SCOPED (MetaWaylandBufferTryScanout,
                            "Meta::WaylandBuffer::try_acquire_scanout()");
@@ -912,6 +965,9 @@ meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
     {
     case META_WAYLAND_BUFFER_TYPE_SHM:
     case META_WAYLAND_BUFFER_TYPE_SINGLE_PIXEL:
+#ifdef HAVE_WAYLAND_EGLSTREAM
+    case META_WAYLAND_BUFFER_TYPE_EGL_STREAM:
+#endif
       meta_topic (META_DEBUG_RENDER,
                   "Buffer type not scanout compatible");
       return NULL;
@@ -922,16 +978,12 @@ meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
                       "Buffer type does not support scaling operations");
           return NULL;
         }
-      scanout = try_acquire_egl_image_scanout (buffer,
-                                               onscreen,
-                                               src_rect,
-                                               dst_rect);
+      scanout = try_acquire_egl_image_scanout (buffer, onscreen);
       break;
     case META_WAYLAND_BUFFER_TYPE_DMA_BUF:
       {
         scanout = meta_wayland_dma_buf_try_acquire_scanout (buffer,
                                                             onscreen,
-                                                            stage_view,
                                                             src_rect,
                                                             dst_rect);
         break;
@@ -949,11 +1001,7 @@ meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
 
   g_object_ref (buffer);
   meta_wayland_buffer_inc_use_count (buffer);
-
-  scanout_buffer = cogl_scanout_get_buffer (scanout);
-  g_object_weak_ref (G_OBJECT (scanout_buffer),
-                     scanout_buffer_disposed,
-                     buffer);
+  g_object_weak_ref (G_OBJECT (scanout), scanout_destroyed, buffer);
 
   return scanout;
 }
@@ -964,19 +1012,21 @@ meta_wayland_buffer_finalize (GObject *object)
   MetaWaylandBuffer *buffer = META_WAYLAND_BUFFER (object);
 
   g_warn_if_fail (buffer->use_count == 0);
-  g_warn_if_fail (!buffer->resource);
 
   clear_tainted_scanout_onscreens (buffer);
   g_clear_pointer (&buffer->tainted_scanout_onscreens, g_hash_table_unref);
   g_clear_pointer (&buffer->release_points, g_ptr_array_unref);
 
   g_clear_object (&buffer->egl_image.texture);
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  g_clear_object (&buffer->egl_stream.texture);
+  g_clear_object (&buffer->egl_stream.stream);
+#endif
   g_clear_object (&buffer->dma_buf.texture);
   g_clear_object (&buffer->dma_buf.dma_buf);
   g_clear_pointer (&buffer->single_pixel.single_pixel_buffer,
                    meta_wayland_single_pixel_buffer_free);
   g_clear_object (&buffer->single_pixel.texture);
-  g_clear_pointer (&buffer->shm.buffer, wl_shm_buffer_unref);
 
   G_OBJECT_CLASS (meta_wayland_buffer_parent_class)->finalize (object);
 }
@@ -1011,7 +1061,6 @@ static gboolean
 context_supports_format (CoglContext         *cogl_context,
                          const MetaFormatInfo *format_info)
 {
-  CoglDriver *cogl_driver = cogl_context_get_driver (cogl_context);
   const MetaMultiTextureFormatInfo *mt_format_info;
   size_t i;
 
@@ -1020,8 +1069,8 @@ context_supports_format (CoglContext         *cogl_context,
 
   if (format_info->multi_texture_format == META_MULTI_TEXTURE_FORMAT_SIMPLE)
     {
-      return cogl_driver_format_supports_upload (cogl_driver,
-                                                 format_info->cogl_format);
+      return cogl_context_format_supports_upload (cogl_context,
+                                                  format_info->cogl_format);
     }
 
   mt_format_info =
@@ -1029,8 +1078,8 @@ context_supports_format (CoglContext         *cogl_context,
 
   for (i = 0; i < mt_format_info->n_planes; i++)
     {
-      if (!cogl_driver_format_supports_upload (cogl_driver,
-                                               mt_format_info->subformats[i]))
+      if (!cogl_context_format_supports_upload (cogl_context,
+                                                mt_format_info->subformats[i]))
         return FALSE;
     }
 
@@ -1065,8 +1114,6 @@ meta_wayland_init_shm (MetaWaylandCompositor *compositor)
     WL_SHM_FORMAT_NV12,
     WL_SHM_FORMAT_P010,
     WL_SHM_FORMAT_YUV420,
-    WL_SHM_FORMAT_YUV422,
-    WL_SHM_FORMAT_YUV444,
   };
 
   wl_display_init_shm (compositor->wayland_display);

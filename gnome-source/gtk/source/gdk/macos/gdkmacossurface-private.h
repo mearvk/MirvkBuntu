@@ -70,8 +70,8 @@ struct _GdkMacosSurface
   guint next_frame_set : 1;
   guint show_on_next_swap : 1;
   guint in_change_monitor : 1;
+  guint in_frame : 1;
   guint awaiting_frame : 1;
-  guint popup_grab : 1;
 };
 
 struct _GdkMacosSurfaceClass
@@ -86,7 +86,11 @@ CGDirectDisplayID  _gdk_macos_surface_get_screen_id           (GdkMacosSurface  
 const char        *_gdk_macos_surface_get_title               (GdkMacosSurface      *self);
 void               _gdk_macos_surface_set_title               (GdkMacosSurface      *self,
                                                                const char           *title);
+gboolean           _gdk_macos_surface_is_opaque               (GdkMacosSurface      *self);
 NSView            *_gdk_macos_surface_get_view                (GdkMacosSurface      *self);
+gboolean           _gdk_macos_surface_get_modal_hint          (GdkMacosSurface      *self);
+void               _gdk_macos_surface_set_modal_hint          (GdkMacosSurface      *self,
+                                                               gboolean              modal_hint);
 void               _gdk_macos_surface_set_geometry_hints      (GdkMacosSurface      *self,
                                                                const GdkGeometry    *geometry,
                                                                GdkSurfaceHints       geom_mask);

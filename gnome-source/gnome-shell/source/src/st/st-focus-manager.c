@@ -19,37 +19,38 @@
  */
 
 /**
- * StFocusManager:
- *
- * Keyboard focus management
+ * SECTION:st-focus-manager
+ * @short_description: Keyboard focus management
  *
  * #StFocusManager handles keyboard focus for all actors on the stage.
  */
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #include <clutter/clutter.h>
 
 #include "st-focus-manager.h"
 
-static GQuark key_controller_quark = 0;
-
-typedef struct _StFocusManager
+struct _StFocusManagerPrivate
 {
-  GObject parent;
-
   ClutterStage *stage;
   GHashTable *groups;
-} StFocusManager;
+};
 
-G_DEFINE_FINAL_TYPE (StFocusManager, st_focus_manager, G_TYPE_OBJECT)
+G_DEFINE_TYPE_WITH_PRIVATE (StFocusManager, st_focus_manager, G_TYPE_OBJECT)
 
 static void
 st_focus_manager_dispose (GObject *object)
 {
   StFocusManager *manager = ST_FOCUS_MANAGER (object);
 
-  g_clear_pointer (&manager->groups, g_hash_table_destroy);
+  if (manager->priv->groups)
+    {
+      g_hash_table_destroy (manager->priv->groups);
+      manager->priv->groups = NULL;
+    }
 
   G_OBJECT_CLASS (st_focus_manager_parent_class)->dispose (object);
 }
@@ -60,56 +61,44 @@ st_focus_manager_class_init (StFocusManagerClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->dispose = st_focus_manager_dispose;
-
-  key_controller_quark =
-    g_quark_from_string ("st-focus-manager-key-controller");
 }
 
 static void
 st_focus_manager_init (StFocusManager *manager)
 {
-  manager->groups = g_hash_table_new (NULL, NULL);
+  manager->priv = st_focus_manager_get_instance_private (manager);
+  manager->priv->groups = g_hash_table_new (NULL, NULL);
 }
 
 static gboolean
-on_focus_root_key_press (ClutterKeyController *key_controller,
-                         StFocusManager       *focus_manager)
+st_focus_manager_stage_event (ClutterActor *stage,
+			      ClutterEvent *event,
+			      gpointer      user_data)
 {
-  ClutterActor *actor, *stage, *focused;
+  StFocusManager *manager = user_data;
   StDirectionType direction;
   gboolean wrap_around = FALSE;
-  uint32_t symbol;
-  uint32_t pressed, latched, locked, state;
-  StKeynavFlags keynav_flags;
+  ClutterActor *focused, *group;
 
-  actor = clutter_actor_meta_get_actor (CLUTTER_ACTOR_META (key_controller));
-  stage = clutter_actor_get_stage (actor);
-  clutter_key_controller_get_key (key_controller, &symbol, NULL, NULL);
-  clutter_key_controller_get_state (key_controller, &pressed, &latched, &locked);
-  state = pressed | latched | locked;
+  if (clutter_event_type (event) != CLUTTER_KEY_PRESS)
+    return FALSE;
 
-  keynav_flags = st_widget_get_keynav_flags (ST_WIDGET (actor));
-
-  switch (symbol)
+  switch (clutter_event_get_key_symbol (event))
     {
     case CLUTTER_KEY_Up:
       direction = ST_DIR_UP;
-      wrap_around = (keynav_flags & ST_KEYNAV_FLAG_WRAP_VERTICALLY) != 0;
       break;
     case CLUTTER_KEY_Down:
       direction = ST_DIR_DOWN;
-      wrap_around = (keynav_flags & ST_KEYNAV_FLAG_WRAP_VERTICALLY) != 0;
       break;
     case CLUTTER_KEY_Left:
       direction = ST_DIR_LEFT;
-      wrap_around = (keynav_flags & ST_KEYNAV_FLAG_WRAP_HORIZONTALLY) != 0;
       break;
     case CLUTTER_KEY_Right:
       direction = ST_DIR_RIGHT;
-      wrap_around = (keynav_flags & ST_KEYNAV_FLAG_WRAP_HORIZONTALLY) != 0;
       break;
     case CLUTTER_KEY_Tab:
-      if (state & CLUTTER_SHIFT_MASK)
+      if (clutter_event_get_state (event) & CLUTTER_SHIFT_MASK)
         direction = ST_DIR_TAB_BACKWARD;
       else
         direction = ST_DIR_TAB_FORWARD;
@@ -121,15 +110,22 @@ on_focus_root_key_press (ClutterKeyController *key_controller,
       break;
 
     default:
-      return CLUTTER_EVENT_PROPAGATE;
+      return FALSE;
     }
 
   focused = clutter_stage_get_key_focus (CLUTTER_STAGE (stage));
   if (!focused)
-    return CLUTTER_EVENT_PROPAGATE;
+    return FALSE;
 
-  return st_widget_navigate_focus (ST_WIDGET (actor), focused,
-                                   direction, wrap_around);
+  for (group = focused; group != stage; group = clutter_actor_get_parent (group))
+    {
+      if (g_hash_table_lookup (manager->priv->groups, group))
+        {
+          return st_widget_navigate_focus (ST_WIDGET (group), focused,
+                                           direction, wrap_around);
+        }
+    }
+  return FALSE;
 }
 
 /**
@@ -149,9 +145,12 @@ st_focus_manager_get_for_stage (ClutterStage *stage)
   if (!manager)
     {
       manager = g_object_new (ST_TYPE_FOCUS_MANAGER, NULL);
-      manager->stage = stage;
+      manager->priv->stage = stage;
       g_object_set_data_full (G_OBJECT (stage), "st-focus-manager",
 			      manager, g_object_unref);
+
+      g_signal_connect (stage, "event",
+			G_CALLBACK (st_focus_manager_stage_event), manager);
     }
 
   return manager;
@@ -163,19 +162,7 @@ remove_destroyed_group (ClutterActor *actor,
 {
   StFocusManager *manager = user_data;
 
-  g_object_set_qdata_full (G_OBJECT (actor),
-                           key_controller_quark,
-                           NULL, NULL);
-  g_hash_table_remove (manager->groups, actor);
-}
-
-static void
-remove_controller (ClutterKeyController *key_controller)
-{
-  ClutterActor *actor;
-
-  actor = clutter_actor_meta_get_actor (CLUTTER_ACTOR_META (key_controller));
-  clutter_actor_remove_action (actor, CLUTTER_ACTION (key_controller));
+  st_focus_manager_remove_group (manager, ST_WIDGET (actor));
 }
 
 /**
@@ -191,33 +178,13 @@ void
 st_focus_manager_add_group (StFocusManager *manager,
                             StWidget       *root)
 {
-  gpointer count_p = g_hash_table_lookup (manager->groups, root);
-  int count = GPOINTER_TO_INT (count_p);
+  gpointer count_p = g_hash_table_lookup (manager->priv->groups, root);
+  int count = count_p ? GPOINTER_TO_INT (count_p) : 0;
 
-  if (count == 0)
-    {
-      ClutterAction *key_controller;
-
-      g_signal_connect (root, "destroy",
-                        G_CALLBACK (remove_destroyed_group),
-                        manager);
-
-      key_controller = clutter_key_controller_new (NULL);
-      g_signal_connect (key_controller, "key-press",
-                        G_CALLBACK (on_focus_root_key_press),
-                        manager);
-
-      g_object_set_qdata_full (G_OBJECT (root),
-                               key_controller_quark,
-                               key_controller,
-                               (GDestroyNotify) remove_controller);
-
-      clutter_actor_add_action_with_name (CLUTTER_ACTOR (root),
-                                          "st-focus-manager-key-controller",
-                                          CLUTTER_ACTION (key_controller));
-    }
-
-  g_hash_table_insert (manager->groups, root, GINT_TO_POINTER (++count));
+  g_signal_connect (root, "destroy",
+                    G_CALLBACK (remove_destroyed_group),
+                    manager);
+  g_hash_table_insert (manager->priv->groups, root, GINT_TO_POINTER (++count));
 }
 
 /**
@@ -231,27 +198,15 @@ void
 st_focus_manager_remove_group (StFocusManager *manager,
                                StWidget       *root)
 {
-  gpointer count_p = g_hash_table_lookup (manager->groups, root);
+  gpointer count_p = g_hash_table_lookup (manager->priv->groups, root);
   int count = count_p ? GPOINTER_TO_INT (count_p) : 0;
 
   if (count == 0)
     return;
-
   if (count == 1)
-    {
-      g_signal_handlers_disconnect_by_func (root,
-                                            remove_destroyed_group,
-                                            manager);
-
-      g_object_set_qdata_full (G_OBJECT (root), key_controller_quark,
-                               NULL, NULL);
-
-      g_hash_table_remove (manager->groups, root);
-    }
+    g_hash_table_remove (manager->priv->groups, root);
   else
-    {
-      g_hash_table_insert (manager->groups, root, GINT_TO_POINTER(--count));
-    }
+    g_hash_table_insert (manager->priv->groups, root, GINT_TO_POINTER(--count));
 }
 
 /**
@@ -271,8 +226,31 @@ st_focus_manager_get_group (StFocusManager *manager,
 {
   ClutterActor *actor = CLUTTER_ACTOR (widget);
 
-  while (actor && !g_hash_table_lookup (manager->groups, actor))
+  while (actor && !g_hash_table_lookup (manager->priv->groups, actor))
     actor = clutter_actor_get_parent (actor);
 
   return ST_WIDGET (actor);
+}
+
+/**
+ * st_focus_manager_navigate_from_event:
+ * @manager: the #StFocusManager
+ * @event: a #ClutterEvent
+ *
+ * Try to navigate from @event as if it bubbled all the way up to
+ * the stage. This is useful in complex event handling situations
+ * where you want key navigation, but a parent might be stopping
+ * the key navigation event from bubbling all the way up to the stage.
+ *
+ * Returns: Whether a new actor was navigated to
+ */
+gboolean
+st_focus_manager_navigate_from_event (StFocusManager *manager,
+                                      ClutterEvent   *event)
+{
+  if (clutter_event_type (event) != CLUTTER_KEY_PRESS)
+    return FALSE;
+
+  return st_focus_manager_stage_event (CLUTTER_ACTOR (manager->priv->stage),
+                                       event, manager);
 }

@@ -5,9 +5,14 @@
 
 #include <gio/gio.h>
 
-#include "gdbusprivate.h"
 #include "gdbus-tests.h"
 
+/* From the D-Bus Specification */
+#define DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER 1
+
+#define DBUS_SERVICE_DBUS "org.freedesktop.DBus"
+#define DBUS_PATH_DBUS "/org/freedesktop/DBus"
+#define DBUS_INTERFACE_DBUS DBUS_SERVICE_DBUS
 #define NAME_OWNER_CHANGED "NameOwnerChanged"
 
 /* A signal that each connection emits to indicate that it has finished
@@ -620,6 +625,35 @@ typedef struct
   guint finished_subscription;
 } Fixture;
 
+/* Wait for asynchronous messages from @conn to have been processed
+ * by the message bus, as a sequence point so that we can make
+ * "happens before" and "happens after" assertions relative to this.
+ * The easiest way to achieve this is to call a message bus method that has
+ * no arguments and wait for it to return: because the message bus processes
+ * messages in-order, anything we sent before this must have been processed
+ * by the time this call arrives. */
+static void
+connection_wait_for_bus (GDBusConnection *conn)
+{
+  GError *error = NULL;
+  GVariant *call_result;
+
+  call_result = g_dbus_connection_call_sync (conn,
+                                             DBUS_SERVICE_DBUS,
+                                             DBUS_PATH_DBUS,
+                                             DBUS_INTERFACE_DBUS,
+                                             "GetId",
+                                             NULL,   /* arguments */
+                                             NULL,   /* result type */
+                                             G_DBUS_CALL_FLAGS_NONE,
+                                             -1,
+                                             NULL,
+                                             &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (call_result);
+  g_variant_unref (call_result);
+}
+
 /*
  * Called when the subscriber receives a message from any connection
  * announcing that it has emitted all the signals that it plans to emit.
@@ -866,7 +900,7 @@ fixture_subscribe (Fixture             *f,
       if (subscribe->unsubscribe_immediately)
         {
           g_test_message ("\tImmediately unsubscribing");
-          g_dbus_connection_signal_unsubscribe (subscriber, g_steal_handle_id (&id));
+          g_dbus_connection_signal_unsubscribe (subscriber, id);
         }
       else
         {
@@ -1256,12 +1290,12 @@ teardown (Fixture *f,
   g_ptr_array_unref (f->proxies);
 
   if (f->finished_subscription != 0)
-    g_dbus_connection_signal_unsubscribe (subscriber, g_steal_handle_id (&f->finished_subscription));
+    g_dbus_connection_signal_unsubscribe (subscriber, f->finished_subscription);
 
   for (i = 0; i < G_N_ELEMENTS (f->subscriptions); i++)
     {
       if (f->subscriptions[i] != 0)
-        g_dbus_connection_signal_unsubscribe (subscriber, g_steal_handle_id (&f->subscriptions[i]));
+        g_dbus_connection_signal_unsubscribe (subscriber, f->subscriptions[i]);
     }
 
   g_ptr_array_unref (f->received);

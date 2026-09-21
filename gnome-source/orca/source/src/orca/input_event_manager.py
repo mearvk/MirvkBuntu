@@ -1,6 +1,6 @@
 # Orca
 #
-# Copyright 2024-2026 Igalia, S.L.
+# Copyright 2024 Igalia, S.L.
 # Copyright 2024 GNOME Foundation Inc.
 # Author: Joanmarie Diggs <jdiggs@igalia.com>
 #
@@ -20,6 +20,8 @@
 # Boston MA  02110-1301 USA.
 
 # pylint: disable=too-many-public-methods
+# pylint: disable=too-many-lines
+# pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-positional-arguments
 
@@ -27,13 +29,9 @@
 
 from __future__ import annotations
 
-import os
-import sys
-import time
+from typing import TYPE_CHECKING
 
 import gi
-
-import orca
 
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
@@ -41,7 +39,10 @@ from gi.repository import Atspi
 from . import ax_device_manager, debug, focus_manager, input_event, script_manager
 from .ax_utilities import AXUtilities
 
-_DOUBLE_CLICK_TIMEOUT: float = float(os.environ.get("ORCA_TEST_DOUBLE_CLICK_TIMEOUT") or 0.5)
+if TYPE_CHECKING:
+    from . import keybindings
+
+_DOUBLE_CLICK_TIMEOUT: float = 0.5
 
 
 class InputEventManager:
@@ -50,40 +51,186 @@ class InputEventManager:
     def __init__(self) -> None:
         self._last_input_event: input_event.InputEvent | None = None
         self._last_non_modifier_key_event: input_event.KeyboardEvent | None = None
+        self._device: Atspi.Device | None = None
+        self._mapped_keycodes: list[int] = []
+        self._mapped_keysyms: list[int] = []
+        self._grabbed_bindings: dict[int, keybindings.KeyBinding] = {}
         self._paused: bool = False
-        self._previous_non_modifier_key_event: input_event.KeyboardEvent | None = None
-        self._previous_braille_event: input_event.BrailleEvent | None = None
+        self._key_pressed_id: int = 0
+        self._key_released_id: int = 0
 
     def start_key_watcher(self) -> None:
         """Starts the watcher for keyboard input events."""
 
-        ax_device_manager.get_manager().start_key_watcher(
-            self._on_key_pressed,
-            self._on_key_released,
-            self.process_keyboard_event,
-        )
+        msg = "INPUT EVENT MANAGER: Starting key watcher."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        self._device = ax_device_manager.get_manager().get_device()
+
+        atspi_version = Atspi.get_version()  # pylint: disable=no-value-for-parameter
+        if atspi_version[0] > 2 or atspi_version[1] >= 60:
+            self._key_pressed_id = self._device.connect("key-pressed", self._on_key_pressed)
+            self._key_released_id = self._device.connect("key-released", self._on_key_released)
+        else:
+            self._device.add_key_watcher(self.process_keyboard_event)
 
     def stop_key_watcher(self) -> None:
         """Stops the watcher for keyboard input events."""
 
-        ax_device_manager.get_manager().stop_key_watcher()
+        msg = "INPUT EVENT MANAGER: Stopping key watcher."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        if self._device is None:
+            return
+
+        atspi_version = Atspi.get_version()  # pylint: disable=no-value-for-parameter
+        if atspi_version[0] > 2 or atspi_version[1] >= 60:
+            self._device.disconnect(self._key_pressed_id)
+            self._device.disconnect(self._key_released_id)
+        else:
+            self._device = None
+
+    def has_device(self) -> bool:
+        """Returns True if there is an active input device."""
+
+        return self._device is not None
 
     def pause_key_watcher(self, pause: bool = True, reason: str = "") -> None:
         """Pauses processing of keyboard input events."""
 
-        tokens = ["INPUT EVENT MANAGER: Pause queueing:", pause, ".", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"INPUT EVENT MANAGER: Pause queueing: {pause}. {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         self._paused = pause
+
+    def add_grabs_for_keybinding(
+        self,
+        binding: keybindings.KeyBinding,
+        orca_modifiers: list[str],
+    ) -> list[int]:
+        """Adds grabs for binding, returns grab IDs."""
+
+        if binding.has_grabs():
+            tokens = ["INPUT EVENT MANAGER:", binding, "already has grabs."]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return binding.get_grab_ids()
+
+        if self._device is None:
+            tokens = ["INPUT EVENT MANAGER: No device to add grab for", binding]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return []
+
+        grab_ids = []
+        for kd in binding.key_definitions(orca_modifiers):
+            grab_id = self._device.add_key_grab(kd, None)
+            # When we have double/triple-click bindings, the single-click binding will be
+            # registered first, and subsequent attempts to register what is externally the
+            # same grab will fail. If we only have a double/triple-click, it succeeds.
+            # A grab id of 0 indicates failure.
+            if grab_id == 0:
+                continue
+            grab_ids.append(grab_id)
+            self._grabbed_bindings[grab_id] = binding
+
+        return grab_ids
+
+    def remove_grabs_for_keybinding(self, binding: keybindings.KeyBinding) -> None:
+        """Removes grabs for binding."""
+
+        if self._device is None:
+            tokens = ["INPUT EVENT MANAGER: No device to remove grab from", binding]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return
+
+        grab_ids = binding.get_grab_ids()
+        if not grab_ids:
+            return
+
+        for grab_id in grab_ids:
+            self._device.remove_key_grab(grab_id)
+            removed = self._grabbed_bindings.pop(grab_id, None)
+            if removed is None:
+                msg = f"INPUT EVENT MANAGER: No key binding for grab id {grab_id}"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+
+    def map_keysym_to_modifier(self, keysym: int) -> int:
+        """Maps keysym as a modifier, returns the newly-mapped modifier."""
+
+        if self._device is None:
+            msg = f"INPUT EVENT MANAGER: No device to map keysym {keysym} to modifier"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return 0
+
+        self._mapped_keysyms.append(keysym)
+        return self._device.map_keysym_modifier(keysym)
+
+    def unmap_all_modifiers(self) -> None:
+        """Unmaps all previously mapped modifiers."""
+
+        if self._device is None:
+            msg = "INPUT EVENT MANAGER: No device to unmap all modifiers from"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        for keycode in self._mapped_keycodes:
+            self._device.unmap_modifier(keycode)
+
+        for keysym in self._mapped_keysyms:
+            self._device.unmap_keysym_modifier(keysym)
+
+        self._mapped_keycodes.clear()
+        self._mapped_keysyms.clear()
+
+    def add_grab_for_modifier(self, modifier: str, keysym: int, keycode: int) -> int:
+        """Adds grab for modifier, returns grab id."""
+
+        if self._device is None:
+            msg = f"INPUT EVENT MANAGER: No device to add grab for {modifier}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return -1
+
+        kd = Atspi.KeyDefinition()
+        kd.keysym = keysym
+        kd.keycode = keycode
+        kd.modifiers = 0
+        grab_id = self._device.add_key_grab(kd)
+
+        msg = f"INPUT EVENT MANAGER: Grab id for {modifier}: {grab_id}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        return grab_id
+
+    def remove_grab_for_modifier(self, modifier: str, grab_id: int) -> None:
+        """Removes grab for modifier."""
+
+        if self._device is None:
+            msg = f"INPUT EVENT MANAGER: No device to remove grab from {modifier}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return
+
+        self._device.remove_key_grab(grab_id)
+        msg = f"INPUT EVENT MANAGER: Grab id removed for {modifier}: {grab_id}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+
+    def grab_keyboard(self, reason: str = "") -> None:
+        """Grabs the keyboard, e.g. when entering learn mode."""
+
+        msg = "INPUT EVENT MANAGER: Grabbing keyboard"
+        if reason:
+            msg += f" Reason: {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        Atspi.Device.grab_keyboard(self._device)
+
+    def ungrab_keyboard(self, reason: str = "") -> None:
+        """Removes keyboard grab, e.g. when exiting learn mode."""
+
+        msg = "INPUT EVENT MANAGER: Ungrabbing keyboard"
+        if reason:
+            msg += f" Reason: {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        Atspi.Device.ungrab_keyboard(self._device)
 
     def process_braille_event(self, event: Atspi.Event) -> bool:
         """Processes this Braille event."""
 
         braille_event = input_event.BrailleEvent(event)
         result = braille_event.process()
-        if isinstance(self._last_input_event, input_event.BrailleEvent):
-            self._previous_braille_event = self._last_input_event
-        else:
-            self._previous_braille_event = None
         self._last_input_event = braille_event
         self._last_non_modifier_key_event = None
         return result
@@ -97,9 +244,6 @@ class InputEventManager:
 
     def process_remote_controller_event(self, event: input_event.RemoteControllerEvent) -> None:
         """Processes this RemoteController event."""
-
-        if isinstance(event, input_event.RemoteControllerTestingEvent):
-            return
 
         # TODO - JD: It probably makes sense to process remote controller events here rather
         # than just updating state.
@@ -151,9 +295,7 @@ class InputEventManager:
         manager = focus_manager.get_manager()
         if pressed:
             window = manager.get_active_window()
-            if not AXUtilities.can_be_active_window(
-                window, clear_cache=False
-            ) and not AXUtilities.can_be_active_window(window):
+            if not AXUtilities.can_be_active_window(window):
                 new_window = AXUtilities.find_active_window()
                 if new_window is not None:
                     window = new_window
@@ -186,7 +328,6 @@ class InputEventManager:
                 debug.print_message(debug.LEVEL_INFO, msg, True)
                 self._last_non_modifier_key_event = None
         else:
-            self._previous_non_modifier_key_event = self._last_non_modifier_key_event
             self._last_non_modifier_key_event = event
         self._last_input_event = event
         return True
@@ -249,21 +390,17 @@ class InputEventManager:
 
         return self._last_input_event.get_click_count() + 1
 
-    def last_event_was_keyboard(self, within: float | None = None) -> bool:
-        """Returns True if the last event was a keyboard event, optionally within recent seconds."""
+    def last_event_was_keyboard(self) -> bool:
+        """Returns True if the last event is a keyboard event."""
 
-        if not isinstance(self._last_input_event, input_event.KeyboardEvent):
-            return False
-        if within is None:
-            return True
-        return time.time() - self._last_input_event.time <= within
+        return isinstance(self._last_input_event, input_event.KeyboardEvent)
 
     def last_event_was_mouse_button(self) -> bool:
         """Returns True if the last event is a mouse button event."""
 
         return isinstance(self._last_input_event, input_event.MouseButtonEvent)
 
-    def is_release_for(self, event1, event2, ignore_modifiers=False):
+    def is_release_for(self, event1, event2):
         """Returns True if event1 is a release for event2."""
 
         if event1 is None or event2 is None:
@@ -284,18 +421,14 @@ class InputEventManager:
             and event1.keyval_name == event2.keyval_name
         )
 
-        if result and not event1.is_modifier_key() and not ignore_modifiers:
+        if result and not event1.is_modifier_key():
             result = event1.modifiers == event2.modifiers
 
-        tokens = [
-            "INPUT EVENT MANAGER:",
-            event1.as_single_line_string(),
-            "is release for",
-            event2.as_single_line_string(),
-            ":",
-            result,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = (
+            f"INPUT EVENT MANAGER: {event1.as_single_line_string()} "
+            f"is release for {event2.as_single_line_string()}: {result}"
+        )
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return result
 
     def last_event_equals_or_is_release_for_event(self, event):
@@ -313,55 +446,7 @@ class InputEventManager:
         if event == self._last_non_modifier_key_event:
             return True
 
-        # The release of a modified key has different modifiers than the press if the user
-        # releases the modifier first; match by key identity in that case.
-        return self.is_release_for(self._last_non_modifier_key_event, event, ignore_modifiers=True)
-
-    def previous_event_equals_or_is_release_for_event(self, event):
-        """Returns True if the previous event equals the provided event, or is the release."""
-
-        if isinstance(event, input_event.BrailleEvent):
-            return self._previous_braille_event is event
-
-        if self._previous_non_modifier_key_event is None:
-            return False
-
-        if self._previous_non_modifier_key_event is event:
-            return True
-
-        if event == self._previous_non_modifier_key_event:
-            return True
-
-        # The release of a modified key has different modifiers than the press if the user
-        # releases the modifier first; match by key identity in that case.
-        return self.is_release_for(
-            self._previous_non_modifier_key_event,
-            event,
-            ignore_modifiers=True,
-        )
-
-    def get_last_input_event(self) -> input_event.InputEvent | None:
-        """Returns the most recently processed input event (of any type), or None."""
-
-        self._ensure_allowed_call("get_last_input_event")
-
-        return self._last_input_event
-
-    @staticmethod
-    def _ensure_allowed_call(method_name: str) -> None:
-        """Raise PermissionError if the caller is not Orca code."""
-
-        try:
-            filename = sys._getframe(2).f_code.co_filename  # pylint: disable=protected-access
-        except ValueError:
-            filename = ""
-
-        if orca.is_orca(filename):
-            return
-
-        tokens = ["INPUT EVENT MANAGER: Refusing", method_name, "call from outside Orca:", filename]
-        debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
-        raise PermissionError(f"INPUT EVENT MANAGER: Refusing {method_name} call from outside Orca")
+        return self.is_release_for(self._last_non_modifier_key_event, event)
 
     def _last_key_and_modifiers(self):
         """Returns the last keyval name and modifiers"""
@@ -397,22 +482,18 @@ class InputEventManager:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return rv
 
-    def last_event_was_printable_key(self, unmodified: bool = False) -> bool:
+    def last_event_was_printable_key(self):
         """Returns True if the last event is believed to be a printable key."""
 
-        event = self._last_input_event
-        if not isinstance(event, input_event.KeyboardEvent):
+        if not self.last_event_was_keyboard():
             return False
 
-        if not event.is_printable_key():
-            return False
+        if self._last_input_event.is_printable_key():
+            msg = "INPUT EVENT MANAGER: Last event was printable key"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
 
-        if unmodified and event.is_alt_control_or_orca_modified():
-            return False
-
-        msg = "INPUT EVENT MANAGER: Last event was printable key"
-        debug.print_message(debug.LEVEL_INFO, msg, True)
-        return True
+        return False
 
     def last_event_was_caret_navigation(self):
         """Returns True if the last event is believed to be caret navigation."""
@@ -636,33 +717,6 @@ class InputEventManager:
             debug.print_message(debug.LEVEL_INFO, msg, True)
         return rv
 
-    def last_event_was_not_in_current_object(self, within: float | None = None):
-        """Returns True if the last event occurred in an object other than the one with focus."""
-
-        if not self.last_event_was_keyboard(within):
-            return False
-
-        assert isinstance(self._last_input_event, input_event.KeyboardEvent)
-        obj = self._last_input_event.get_object()
-        if obj is None:
-            return False
-
-        rv = obj != focus_manager.get_manager().get_locus_of_focus()
-        if rv:
-            tokens = ["INPUT EVENT MANAGER: Last event was in", obj, "which does not have focus"]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return rv
-
-    def last_event_was_ctrl_tab(self):
-        """Returns True if the last event is Ctrl+Tab."""
-
-        string, mods = self._last_key_and_modifiers()
-        rv = string == "Tab" and bool(mods & 1 << Atspi.ModifierType.CONTROL)
-        if rv:
-            msg = "INPUT EVENT MANAGER: Last event was Ctrl+Tab"
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-        return rv
-
     def last_event_was_tab_navigation(self):
         """Returns True if the last event is believed to be Tab navigation."""
 
@@ -732,11 +786,6 @@ class InputEventManager:
         """Returns True if the last event is Down."""
 
         return self._last_key_and_modifiers()[0] == "Down"
-
-    def last_event_was_escape(self):
-        """Returns True if the last event is Escape."""
-
-        return self._last_key_and_modifiers()[0] == "Escape"
 
     def last_event_was_f1(self):
         """Returns True if the last event is F1."""

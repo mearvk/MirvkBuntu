@@ -1162,12 +1162,6 @@ handle_overwrite_open (const char    *filename,
 	}
 #endif
 
-      /* The FD could be invalid if the file is a symlink, a backup has been
-       * requested, and the source directory is read-only (as we won’t have
-       * errored out earlier), but in that case creating the backup file will
-       * have failed just above. */
-      g_assert (fd >= 0);
-
       if (!copy_file_data (fd, bfd, NULL))
 	{
 	  g_set_error_literal (error,
@@ -1199,7 +1193,8 @@ handle_overwrite_open (const char    *filename,
 
   if (replace_destination_set)
     {
-      g_clear_fd (&fd, NULL);
+      g_close (fd, NULL);
+      fd = -1;
 
       if (g_unlink (filename) != 0)
 	{

@@ -121,8 +121,8 @@ meta_wayland_subsurface_union_geometry (MetaWaylandSubsurface *subsurface,
   MetaWaylandSurface *subsurface_surface;
 
   geometry = (MtkRectangle) {
-    .x = surface->offset_x + surface->sub.x + parent_x,
-    .y = surface->offset_y + surface->sub.y + parent_y,
+    .x = surface->offset_x + surface->sub.x,
+    .y = surface->offset_y + surface->sub.y,
     .width = meta_wayland_surface_get_width (surface),
     .height = meta_wayland_surface_get_height (surface),
   };
@@ -133,12 +133,12 @@ meta_wayland_subsurface_union_geometry (MetaWaylandSubsurface *subsurface,
   META_WAYLAND_SURFACE_FOREACH_SUBSURFACE (&surface->applied_state,
                                            subsurface_surface)
     {
-      MetaWaylandSubsurface *sub_surface;
+      MetaWaylandSubsurface *subsurface;
 
-      sub_surface = META_WAYLAND_SUBSURFACE (subsurface_surface->role);
-      meta_wayland_subsurface_union_geometry (sub_surface,
-                                              geometry.x,
-                                              geometry.y,
+      subsurface = META_WAYLAND_SUBSURFACE (subsurface_surface->role);
+      meta_wayland_subsurface_union_geometry (subsurface,
+                                              parent_x + geometry.x,
+                                              parent_y + geometry.y,
                                               out_geometry);
     }
 }
@@ -211,20 +211,6 @@ meta_wayland_subsurface_notify_subsurface_state_changed (MetaWaylandSurfaceRole 
     return meta_wayland_surface_notify_subsurface_state_changed (parent);
 }
 
-static MetaLogicalMonitor *
-meta_wayland_subsurface_get_preferred_scale_monitor (MetaWaylandSurfaceRole *surface_role)
-{
-  MetaWaylandSurface *surface =
-    meta_wayland_surface_role_get_surface (surface_role);
-  MetaWaylandSurface *parent;
-
-  parent = surface->committed_state.parent;
-  if (!parent)
-    return NULL;
-
-  return meta_wayland_surface_get_preferred_scale_monitor (parent);
-}
-
 static int
 meta_wayland_subsurface_get_geometry_scale (MetaWaylandActorSurface *actor_surface)
 {
@@ -283,8 +269,6 @@ meta_wayland_subsurface_class_init (MetaWaylandSubsurfaceClass *klass)
   surface_role_class->is_synchronized = meta_wayland_subsurface_is_synchronized;
   surface_role_class->notify_subsurface_state_changed =
     meta_wayland_subsurface_notify_subsurface_state_changed;
-  surface_role_class->get_preferred_scale_monitor =
-    meta_wayland_subsurface_get_preferred_scale_monitor;
 
   actor_surface_class->get_geometry_scale =
     meta_wayland_subsurface_get_geometry_scale;
@@ -588,7 +572,7 @@ wl_subcompositor_get_subsurface (struct wl_client   *client,
   surface->sub.synchronous = TRUE;
   surface->committed_state.parent = parent;
 
-  meta_wayland_surface_notify_preferred_scale_monitor (surface);
+  meta_wayland_surface_notify_highest_scale_monitor (surface);
 
   reference =
     g_node_last_child (parent->committed_state.subsurface_branch_node)->data;

@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "meta/meta-x11-display.h"
+#include "meta/display.h"
 
 void meta_x11_display_init_events (MetaX11Display *x11_display);
 void meta_x11_display_free_events (MetaX11Display *x11_display);

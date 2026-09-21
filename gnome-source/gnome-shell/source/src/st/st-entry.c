@@ -20,9 +20,8 @@
  */
 
 /**
- * StEntry:
- *
- * Widget for displaying text
+ * SECTION:st-entry
+ * @short_description: Widget for displaying text
  *
  * #StEntry is a simple widget for displaying text. It derives from
  * #StWidget to add extra style and placement functionality over
@@ -35,7 +34,9 @@
  * - `indeterminate`: the widget is showing the hint text or actor
  */
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #include <math.h>
 
@@ -45,7 +46,6 @@
 #include <glib.h>
 
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 
 #include "st-entry.h"
 
@@ -103,9 +103,11 @@ struct _StEntryPrivate
 
   gfloat        spacing;
 
+  gboolean      has_ibeam;
+
   StShadow     *shadow_spec;
 
-  CoglPipeline *text_shadow_pipeline;
+  CoglPipeline *text_shadow_material;
   gfloat        shadow_width;
   gfloat        shadow_height;
 };
@@ -114,13 +116,7 @@ static guint entry_signals[LAST_SIGNAL] = { 0, };
 
 G_DEFINE_TYPE_WITH_PRIVATE (StEntry, st_entry, ST_TYPE_WIDGET);
 
-G_DECLARE_FINAL_TYPE (StEntryAccessible,
-                      st_entry_accessible,
-                      ST, ENTRY_ACCESSIBLE,
-                      StWidgetAccessible)
-
-static void update_hint_relation (StEntry *entry);
-static void update_label_relation (StEntry *entry);
+static GType st_entry_accessible_get_type (void) G_GNUC_CONST;
 
 static void
 st_entry_set_property (GObject      *gobject,
@@ -220,7 +216,7 @@ st_entry_dispose (GObject *object)
   StEntry *entry = ST_ENTRY (object);
   StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
 
-  g_clear_object (&priv->text_shadow_pipeline);
+  g_clear_object (&priv->text_shadow_material);
 
   G_OBJECT_CLASS (st_entry_parent_class)->dispose (object);
 }
@@ -249,7 +245,7 @@ st_entry_style_changed (StWidget *self)
   StEntryPrivate *priv = ST_ENTRY_PRIV (self);
   StThemeNode *theme_node;
   StShadow *shadow_spec;
-  CoglColor color;
+  ClutterColor color;
   gdouble size;
 
   theme_node = st_widget_get_theme_node (self);
@@ -258,7 +254,7 @@ st_entry_style_changed (StWidget *self)
   if (!priv->shadow_spec || !shadow_spec ||
       !st_shadow_equal (shadow_spec, priv->shadow_spec))
     {
-      g_clear_object (&priv->text_shadow_pipeline);
+      g_clear_object (&priv->text_shadow_material);
 
       g_clear_pointer (&priv->shadow_spec, st_shadow_unref);
       if (shadow_spec)
@@ -516,14 +512,6 @@ st_entry_allocate (ClutterActor          *actor,
 }
 
 static void
-st_entry_label_actor_changed_cb (StEntry    *entry,
-                                 GParamSpec *pspec,
-                                 gpointer    user_data G_GNUC_UNUSED)
-{
-  update_label_relation (entry);
-}
-
-static void
 clutter_text_reactive_changed_cb (ClutterActor *text,
                                   GParamSpec   *pspec,
                                   gpointer      user_data)
@@ -567,7 +555,7 @@ clutter_text_cursor_changed (ClutterText *text,
 
   st_entry_update_hint_visibility (entry);
 
-  g_clear_object (&priv->text_shadow_pipeline);
+  g_clear_object (&priv->text_shadow_material);
 }
 
 static void
@@ -581,7 +569,7 @@ clutter_text_changed_cb (GObject    *object,
   st_entry_update_hint_visibility (entry);
 
   /* Since the text changed, force a regen of the shadow texture */
-  g_clear_object (&priv->text_shadow_pipeline);
+  g_clear_object (&priv->text_shadow_material);
 
   g_object_notify_by_pspec (G_OBJECT (entry), props[PROP_TEXT]);
 }
@@ -593,7 +581,7 @@ invalidate_shadow_pipeline (GObject    *object,
 {
   StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
 
-  g_clear_object (&priv->text_shadow_pipeline);
+  g_clear_object (&priv->text_shadow_material);
 }
 
 static void
@@ -614,90 +602,6 @@ st_entry_clipboard_callback (StClipboard *clipboard,
   /* "paste" the clipboard text into the entry */
   cursor_pos = clutter_text_get_cursor_position (ctext);
   clutter_text_insert_text (ctext, text, cursor_pos);
-}
-
-static void
-st_entry_paste_clipboard (StEntry *entry)
-{
-  StClipboard *clipboard;
-
-  clipboard = st_clipboard_get_default ();
-
-  st_clipboard_get_text (clipboard,
-                         ST_CLIPBOARD_TYPE_CLIPBOARD,
-                         st_entry_clipboard_callback,
-                         entry);
-}
-
-static void
-st_entry_copy_clipboard (StEntry *entry)
-{
-  StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
-  ClutterText *clutter_text = CLUTTER_TEXT (priv->entry);
-  StClipboard *clipboard;
-  g_autofree char *text = NULL;
-
-  if (clutter_text_get_password_char (clutter_text) != 0)
-    return;
-
-  clipboard = st_clipboard_get_default ();
-
-  text = clutter_text_get_selection (clutter_text);
-
-  if (text && strlen (text))
-    st_clipboard_set_text (clipboard,
-                           ST_CLIPBOARD_TYPE_CLIPBOARD,
-                           text);
-}
-
-static void
-st_entry_cut_clipboard (StEntry *entry)
-{
-  StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
-  ClutterText *clutter_text = CLUTTER_TEXT (priv->entry);
-  StClipboard *clipboard;
-  g_autofree char *text = NULL;
-
-  if (clutter_text_get_password_char (clutter_text) != 0)
-    return;
-
-  clipboard = st_clipboard_get_default ();
-
-  text = clutter_text_get_selection (clutter_text);
-
-  if (text && strlen (text))
-    {
-      st_clipboard_set_text (clipboard,
-                             ST_CLIPBOARD_TYPE_CLIPBOARD,
-                             text);
-
-      /* now delete the text */
-      clutter_text_delete_selection (clutter_text);
-    }
-}
-
-static void
-st_entry_delete_to_line_start (StEntry *entry)
-{
-  StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
-  ClutterText *clutter_text = CLUTTER_TEXT (priv->entry);
-  int pos;
-
-  pos = clutter_text_get_cursor_position (clutter_text);
-  clutter_text_delete_text (clutter_text, 0, pos);
-}
-
-static void
-st_entry_delete_to_line_end (StEntry *entry)
-{
-  StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
-  ClutterText *clutter_text = CLUTTER_TEXT (priv->entry);
-  ClutterTextBuffer *buffer;
-  int pos;
-
-  buffer = clutter_text_get_buffer (clutter_text);
-  pos = clutter_text_get_cursor_position (clutter_text);
-  clutter_text_buffer_delete_text (buffer, pos, -1);
 }
 
 static gboolean
@@ -737,6 +641,117 @@ clutter_text_button_press_event (ClutterActor *actor,
   return FALSE;
 }
 
+static gboolean
+st_entry_key_press_event (ClutterActor *actor,
+                          ClutterEvent *event)
+{
+  StEntryPrivate *priv = ST_ENTRY_PRIV (actor);
+  ClutterModifierType state;
+  uint32_t keyval;
+
+  /* This is expected to handle events that were emitted for the inner
+     ClutterText. They only reach this function if the ClutterText
+     didn't handle them */
+
+  /* paste */
+  state = clutter_event_get_state (event);
+  keyval = clutter_event_get_key_symbol (event);
+
+  if (((state & CLUTTER_CONTROL_MASK)
+       && keyval == CLUTTER_KEY_v) ||
+      ((state & CLUTTER_CONTROL_MASK)
+       && keyval == CLUTTER_KEY_V) ||
+      ((state & CLUTTER_SHIFT_MASK)
+       && keyval == CLUTTER_KEY_Insert))
+    {
+      StClipboard *clipboard;
+
+      clipboard = st_clipboard_get_default ();
+
+      st_clipboard_get_text (clipboard,
+                             ST_CLIPBOARD_TYPE_CLIPBOARD,
+                             st_entry_clipboard_callback,
+                             actor);
+
+      return TRUE;
+    }
+
+  /* copy */
+  if ((state & CLUTTER_CONTROL_MASK)
+      && (keyval == CLUTTER_KEY_c || keyval == CLUTTER_KEY_C) &&
+      clutter_text_get_password_char ((ClutterText*) priv->entry) == 0)
+    {
+      StClipboard *clipboard;
+      gchar *text;
+
+      clipboard = st_clipboard_get_default ();
+
+      text = clutter_text_get_selection ((ClutterText*) priv->entry);
+
+      if (text && strlen (text))
+        st_clipboard_set_text (clipboard,
+                               ST_CLIPBOARD_TYPE_CLIPBOARD,
+                               text);
+
+      g_free (text);
+
+      return TRUE;
+    }
+
+
+  /* cut */
+  if ((state & CLUTTER_CONTROL_MASK)
+      && (keyval == CLUTTER_KEY_x || keyval == CLUTTER_KEY_X) &&
+      clutter_text_get_password_char ((ClutterText*) priv->entry) == 0)
+    {
+      StClipboard *clipboard;
+      gchar *text;
+
+      clipboard = st_clipboard_get_default ();
+
+      text = clutter_text_get_selection ((ClutterText*) priv->entry);
+
+      if (text && strlen (text))
+        {
+          st_clipboard_set_text (clipboard,
+                                 ST_CLIPBOARD_TYPE_CLIPBOARD,
+                                 text);
+
+          /* now delete the text */
+          clutter_text_delete_selection ((ClutterText *) priv->entry);
+        }
+
+      g_free (text);
+
+      return TRUE;
+    }
+
+
+  /* delete to beginning of line */
+  if ((state & CLUTTER_CONTROL_MASK) &&
+      (keyval == CLUTTER_KEY_u || keyval == CLUTTER_KEY_U))
+    {
+      int pos = clutter_text_get_cursor_position ((ClutterText *)priv->entry);
+      clutter_text_delete_text ((ClutterText *)priv->entry, 0, pos);
+
+      return TRUE;
+    }
+
+
+  /* delete to end of line */
+  if ((state & CLUTTER_CONTROL_MASK) &&
+      (keyval == CLUTTER_KEY_k || keyval == CLUTTER_KEY_K))
+    {
+      ClutterTextBuffer *buffer = clutter_text_get_buffer ((ClutterText *)priv->entry);
+      int pos = clutter_text_get_cursor_position ((ClutterText *)priv->entry);
+      clutter_text_buffer_delete_text (buffer, pos, -1);
+
+      return TRUE;
+    }
+
+  return CLUTTER_ACTOR_CLASS (st_entry_parent_class)->key_press_event (actor, event);
+}
+
 static void
 st_entry_key_focus_in (ClutterActor *actor)
 {
@@ -747,14 +762,68 @@ st_entry_key_focus_in (ClutterActor *actor)
   clutter_actor_grab_key_focus (priv->entry);
 }
 
+static StEntryCursorFunc cursor_func = NULL;
+static gpointer          cursor_func_data = NULL;
+
+/**
+ * st_entry_set_cursor_func: (skip)
+ *
+ * This function is for private use by libgnome-shell.
+ * Do not ever use.
+ */
+void
+st_entry_set_cursor_func (StEntryCursorFunc func,
+                          gpointer          data)
+{
+  cursor_func = func;
+  cursor_func_data = data;
+}
+
 static void
-st_entry_paint_node (ClutterActor        *actor,
-                     ClutterPaintNode    *node,
-                     ClutterPaintContext *paint_context)
+st_entry_set_cursor (StEntry  *entry,
+                     gboolean  use_ibeam)
+{
+  if (cursor_func)
+    cursor_func (entry, use_ibeam, cursor_func_data);
+
+  ((StEntryPrivate *)ST_ENTRY_PRIV (entry))->has_ibeam = use_ibeam;
+}
+
+static gboolean
+st_entry_enter_event (ClutterActor *actor,
+                      ClutterEvent *event)
 {
   StEntryPrivate *priv = ST_ENTRY_PRIV (actor);
+  ClutterStage *stage;
+  ClutterActor *target;
 
-  st_widget_paint_background (ST_WIDGET (actor), node, paint_context);
+  stage = CLUTTER_STAGE (clutter_actor_get_stage (actor));
+  target = clutter_stage_get_event_actor (stage, event);
+
+  if (target == priv->entry &&
+      clutter_event_get_related (event) != NULL)
+    st_entry_set_cursor (ST_ENTRY (actor), TRUE);
+
+  return CLUTTER_ACTOR_CLASS (st_entry_parent_class)->enter_event (actor, event);
+}
+
+static gboolean
+st_entry_leave_event (ClutterActor *actor,
+                      ClutterEvent *event)
+{
+  st_entry_set_cursor (ST_ENTRY (actor), FALSE);
+
+  return CLUTTER_ACTOR_CLASS (st_entry_parent_class)->leave_event (actor, event);
+}
+
+static void
+st_entry_paint (ClutterActor        *actor,
+                ClutterPaintContext *paint_context)
+{
+  StEntryPrivate *priv = ST_ENTRY_PRIV (actor);
+  ClutterActorClass *parent_class;
+
+  st_widget_paint_background (ST_WIDGET (actor), paint_context);
 
   if (priv->shadow_spec)
     {
@@ -764,32 +833,51 @@ st_entry_paint_node (ClutterActor        *actor,
       clutter_actor_get_allocation_box (priv->entry, &allocation);
       clutter_actor_box_get_size (&allocation, &width, &height);
 
-      if (priv->text_shadow_pipeline == NULL ||
+      if (priv->text_shadow_material == NULL ||
           width != priv->shadow_width ||
           height != priv->shadow_height)
         {
-          CoglPipeline *pipeline;
+          CoglPipeline *material;
 
-          g_clear_object (&priv->text_shadow_pipeline);
+          g_clear_object (&priv->text_shadow_material);
 
-          pipeline = _st_create_shadow_pipeline_from_actor (priv->shadow_spec,
-                                                            priv->entry,
-                                                            paint_context);
+          material = _st_create_shadow_pipeline_from_actor (priv->shadow_spec,
+                                                            priv->entry);
 
           priv->shadow_width = width;
           priv->shadow_height = height;
-          priv->text_shadow_pipeline = pipeline;
+          priv->text_shadow_material = material;
         }
 
-      if (priv->text_shadow_pipeline != NULL)
+      if (priv->text_shadow_material != NULL)
         {
+          CoglFramebuffer *framebuffer =
+            clutter_paint_context_get_framebuffer (paint_context);
+
           _st_paint_shadow_with_opacity (priv->shadow_spec,
-                                         node,
-                                         priv->text_shadow_pipeline,
+                                         framebuffer,
+                                         priv->text_shadow_material,
                                          &allocation,
                                          clutter_actor_get_paint_opacity (priv->entry));
         }
     }
+
+  /* Since we paint the background ourselves, chain to the parent class
+   * of StWidget, to avoid painting it twice.
+   * This is needed as we still want to paint children.
+   */
+  parent_class = g_type_class_peek_parent (st_entry_parent_class);
+  parent_class->paint (actor, paint_context);
+}
+
+static void
+st_entry_unmap (ClutterActor *actor)
+{
+  StEntryPrivate *priv = ST_ENTRY_PRIV (actor);
+  if (priv->has_ibeam)
+    st_entry_set_cursor (ST_ENTRY (actor), FALSE);
+
+  CLUTTER_ACTOR_CLASS (st_entry_parent_class)->unmap (actor);
 }
 
 static gboolean
@@ -805,23 +893,27 @@ st_entry_class_init (StEntryClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   ClutterActorClass *actor_class = CLUTTER_ACTOR_CLASS (klass);
   StWidgetClass *widget_class = ST_WIDGET_CLASS (klass);
-  ClutterBindingPool *binding_pool;
 
   gobject_class->set_property = st_entry_set_property;
   gobject_class->get_property = st_entry_get_property;
   gobject_class->dispose = st_entry_dispose;
 
-  actor_class->get_accessible_type = st_entry_accessible_get_type;
   actor_class->get_preferred_width = st_entry_get_preferred_width;
   actor_class->get_preferred_height = st_entry_get_preferred_height;
   actor_class->allocate = st_entry_allocate;
-  actor_class->paint_node = st_entry_paint_node;
+  actor_class->paint = st_entry_paint;
+  actor_class->unmap = st_entry_unmap;
   actor_class->get_paint_volume = st_entry_get_paint_volume;
 
+  actor_class->key_press_event = st_entry_key_press_event;
   actor_class->key_focus_in = st_entry_key_focus_in;
+
+  actor_class->enter_event = st_entry_enter_event;
+  actor_class->leave_event = st_entry_leave_event;
 
   widget_class->style_changed = st_entry_style_changed;
   widget_class->navigate_focus = st_entry_navigate_focus;
+  widget_class->get_accessible_type = st_entry_accessible_get_type;
 
   /**
    * StEntry:clutter-text:
@@ -829,7 +921,9 @@ st_entry_class_init (StEntryClass *klass)
    * The internal #ClutterText actor supporting the #StEntry.
    */
   props[PROP_CLUTTER_TEXT] =
-    g_param_spec_object ("clutter-text", NULL, NULL,
+    g_param_spec_object ("clutter-text",
+                         "Clutter Text",
+                         "Internal ClutterText actor",
                          CLUTTER_TYPE_TEXT,
                          ST_PARAM_READABLE);
 
@@ -839,7 +933,9 @@ st_entry_class_init (StEntryClass *klass)
    * The #ClutterActor acting as the primary icon at the start of the #StEntry.
    */
   props[PROP_PRIMARY_ICON] =
-    g_param_spec_object ("primary-icon", NULL, NULL,
+    g_param_spec_object ("primary-icon",
+                         "Primary Icon",
+                         "Primary Icon actor",
                          CLUTTER_TYPE_ACTOR,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -849,7 +945,9 @@ st_entry_class_init (StEntryClass *klass)
    * The #ClutterActor acting as the secondary icon at the end of the #StEntry.
    */
   props[PROP_SECONDARY_ICON] =
-    g_param_spec_object ("secondary-icon", NULL, NULL,
+    g_param_spec_object ("secondary-icon",
+                         "Secondary Icon",
+                         "Secondary Icon actor",
                          CLUTTER_TYPE_ACTOR,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -860,7 +958,10 @@ st_entry_class_init (StEntryClass *klass)
    * will replace the actor of #StEntry::hint-actor.
    */
   props[PROP_HINT_TEXT] =
-    g_param_spec_string ("hint-text", NULL, NULL,
+    g_param_spec_string ("hint-text",
+                         "Hint Text",
+                         "Text to display when the entry is not focused "
+                         "and the text property is empty",
                          NULL,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -871,7 +972,10 @@ st_entry_class_init (StEntryClass *klass)
    * this will replace the actor displaying #StEntry:hint-text.
    */
   props[PROP_HINT_ACTOR] =
-    g_param_spec_object ("hint-actor", NULL, NULL,
+    g_param_spec_object ("hint-actor",
+                         "Hint Actor",
+                         "An actor to display when the entry is not focused "
+                         "and the text property is empty",
                          CLUTTER_TYPE_ACTOR,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -881,7 +985,9 @@ st_entry_class_init (StEntryClass *klass)
    * The current text value of the #StEntry.
    */
   props[PROP_TEXT] =
-    g_param_spec_string ("text", NULL, NULL,
+    g_param_spec_string ("text",
+                         "Text",
+                         "Text of the entry",
                          NULL,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -892,7 +998,9 @@ st_entry_class_init (StEntryClass *klass)
    * input methods to decide which keys should be presented to the user.
    */
   props[PROP_INPUT_PURPOSE] =
-    g_param_spec_enum ("input-purpose", NULL, NULL,
+    g_param_spec_enum ("input-purpose",
+                       "Purpose",
+                       "Purpose of the text field",
                        CLUTTER_TYPE_INPUT_CONTENT_PURPOSE,
                        CLUTTER_INPUT_CONTENT_PURPOSE_NORMAL,
                        ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
@@ -905,7 +1013,9 @@ st_entry_class_init (StEntryClass *klass)
    * behaviour.
    */
   props[PROP_INPUT_HINTS] =
-    g_param_spec_flags ("input-hints", NULL, NULL,
+    g_param_spec_flags ("input-hints",
+                        "hints",
+                        "Hints for the text field behaviour",
                         CLUTTER_TYPE_INPUT_CONTENT_HINT_FLAGS,
                         0,
                         ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
@@ -940,84 +1050,6 @@ st_entry_class_init (StEntryClass *klass)
                   G_STRUCT_OFFSET (StEntryClass, secondary_icon_clicked),
                   NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
-
-  binding_pool = clutter_binding_pool_get_for_class (klass);
-
-  /* paste */
-  clutter_binding_pool_install_action (binding_pool,
-                                       "paste-clipboard",
-                                       CLUTTER_KEY_v,
-                                       CLUTTER_CONTROL_MASK,
-                                       G_CALLBACK (st_entry_paste_clipboard),
-                                       NULL,
-                                       NULL);
-
-  clutter_binding_pool_install_action (binding_pool,
-                                       "paste-clipboard",
-                                       CLUTTER_KEY_Insert,
-                                       CLUTTER_SHIFT_MASK,
-                                       G_CALLBACK (st_entry_paste_clipboard),
-                                       NULL,
-                                       NULL);
-
-  clutter_binding_pool_install_action (binding_pool,
-                                       "paste-clipboard",
-                                       CLUTTER_KEY_Paste,
-                                       0,
-                                       G_CALLBACK (st_entry_paste_clipboard),
-                                       NULL,
-                                       NULL);
-
-  /* copy */
-  clutter_binding_pool_install_action (binding_pool,
-                                       "copy-clipboard",
-                                       CLUTTER_KEY_c,
-                                       CLUTTER_CONTROL_MASK,
-                                       G_CALLBACK (st_entry_copy_clipboard),
-                                       NULL,
-                                       NULL);
-
-  clutter_binding_pool_install_action (binding_pool,
-                                       "copy-clipboard",
-                                       CLUTTER_KEY_Copy,
-                                       0,
-                                       G_CALLBACK (st_entry_copy_clipboard),
-                                       NULL,
-                                       NULL);
-  /* cut */
-  clutter_binding_pool_install_action (binding_pool,
-                                       "cut-clipboard",
-                                       CLUTTER_KEY_x,
-                                       CLUTTER_CONTROL_MASK,
-                                       G_CALLBACK (st_entry_cut_clipboard),
-                                       NULL,
-                                       NULL);
-
-  clutter_binding_pool_install_action (binding_pool,
-                                       "cut-clipboard",
-                                       CLUTTER_KEY_Cut,
-                                       0,
-                                       G_CALLBACK (st_entry_cut_clipboard),
-                                       NULL,
-                                       NULL);
-
-  /* delete to beginning of line */
-  clutter_binding_pool_install_action (binding_pool,
-                                       "delete-to-line-start",
-                                       CLUTTER_KEY_u,
-                                       CLUTTER_CONTROL_MASK,
-                                       G_CALLBACK (st_entry_delete_to_line_start),
-                                       NULL,
-                                       NULL);
-
-  /* delete to end of line */
-  clutter_binding_pool_install_action (binding_pool,
-                                       "delete-to-line-end",
-                                       CLUTTER_KEY_k,
-                                       CLUTTER_CONTROL_MASK,
-                                       G_CALLBACK (st_entry_delete_to_line_end),
-                                       NULL,
-                                       NULL);
 }
 
 static void
@@ -1037,9 +1069,6 @@ st_entry_init (StEntry *entry)
   g_object_bind_property (G_OBJECT (entry), "reactive",
                           priv->entry, "reactive",
                           G_BINDING_DEFAULT);
-
-  g_signal_connect (entry, "notify::label-actor",
-                    G_CALLBACK (st_entry_label_actor_changed_cb), entry);
 
   g_signal_connect(priv->entry, "notify::reactive",
                    G_CALLBACK (clutter_text_reactive_changed_cb), entry);
@@ -1075,7 +1104,7 @@ st_entry_init (StEntry *entry)
 
   priv->spacing = 6.0f;
 
-  priv->text_shadow_pipeline = NULL;
+  priv->text_shadow_material = NULL;
   priv->shadow_width = -1.;
   priv->shadow_height = -1.;
 
@@ -1084,8 +1113,6 @@ st_entry_init (StEntry *entry)
 
   /* set cursor hidden until we receive focus */
   clutter_text_set_cursor_visible ((ClutterText *) priv->entry, FALSE);
-
-  clutter_actor_set_cursor_type (CLUTTER_ACTOR (entry), CLUTTER_CURSOR_TEXT);
 }
 
 /**
@@ -1162,16 +1189,12 @@ st_entry_set_text (StEntry     *entry,
  *
  * Returns: (transfer none): the #ClutterText used by @entry
  */
-ClutterText *
+ClutterActor*
 st_entry_get_clutter_text (StEntry *entry)
 {
-  StEntryPrivate *priv;
-
   g_return_val_if_fail (ST_ENTRY (entry), NULL);
 
-  priv = st_entry_get_instance_private (entry);
-
-  return CLUTTER_TEXT (priv->entry);
+  return ((StEntryPrivate *)ST_ENTRY_PRIV (entry))->entry;
 }
 
 /**
@@ -1321,11 +1344,11 @@ st_entry_get_input_hints (StEntry *entry)
 }
 
 static void
-icon_click_gesture_recognize_cb (ClutterClickGesture *gesture,
-                                 StEntry             *entry)
+_st_entry_icon_clicked_cb (ClutterClickAction *action,
+                           ClutterActor       *actor,
+                           StEntry            *entry)
 {
   StEntryPrivate *priv = ST_ENTRY_PRIV (entry);
-  ClutterActor *actor = clutter_actor_meta_get_actor (CLUTTER_ACTOR_META (gesture));
 
   if (!clutter_actor_get_reactive (CLUTTER_ACTOR (entry)))
     return;
@@ -1343,25 +1366,24 @@ _st_entry_set_icon (StEntry       *entry,
 {
   if (*icon)
     {
-      clutter_actor_remove_action_by_name (*icon, "entry-icon-click-gesture");
+      clutter_actor_remove_action_by_name (*icon, "entry-icon-action");
       clutter_actor_remove_child (CLUTTER_ACTOR (entry), *icon);
       *icon = NULL;
     }
 
   if (new_icon)
     {
-      ClutterAction *click_gesture;
+      ClutterAction *action;
 
-      *icon = new_icon;
+      *icon = g_object_ref (new_icon);
 
       clutter_actor_set_reactive (*icon, TRUE);
       clutter_actor_add_child (CLUTTER_ACTOR (entry), *icon);
-      clutter_actor_set_cursor_type (*icon, CLUTTER_CURSOR_DEFAULT);
 
-      click_gesture = clutter_click_gesture_new ();
-      clutter_actor_add_action_with_name (*icon, "entry-icon-click-gesture", click_gesture);
-      g_signal_connect (click_gesture, "recognize",
-                        G_CALLBACK (icon_click_gesture_recognize_cb), entry);
+      action = clutter_click_action_new ();
+      clutter_actor_add_action_with_name (*icon, "entry-icon-action", action);
+      g_signal_connect (action, "clicked",
+                        G_CALLBACK (_st_entry_icon_clicked_cb), entry);
     }
 
   clutter_actor_queue_relayout (CLUTTER_ACTOR (entry));
@@ -1488,8 +1510,6 @@ st_entry_set_hint_actor (StEntry      *entry,
   st_entry_update_hint_visibility (entry);
   g_object_notify_by_pspec (G_OBJECT (entry), props[PROP_HINT_ACTOR]);
 
-  update_hint_relation (entry);
-
   clutter_actor_queue_relayout (CLUTTER_ACTOR (entry));
 }
 
@@ -1517,33 +1537,31 @@ st_entry_get_hint_actor (StEntry *entry)
 /******************************************************************************/
 
 #define ST_TYPE_ENTRY_ACCESSIBLE         (st_entry_accessible_get_type ())
+#define ST_ENTRY_ACCESSIBLE(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), ST_TYPE_ENTRY_ACCESSIBLE, StEntryAccessible))
+#define ST_IS_ENTRY_ACCESSIBLE(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), ST_TYPE_ENTRY_ACCESSIBLE))
+#define ST_ENTRY_ACCESSIBLE_CLASS(c)     (G_TYPE_CHECK_CLASS_CAST ((c),    ST_TYPE_ENTRY_ACCESSIBLE, StEntryAccessibleClass))
+#define ST_IS_ENTRY_ACCESSIBLE_CLASS(c)  (G_TYPE_CHECK_CLASS_TYPE ((c),    ST_TYPE_ENTRY_ACCESSIBLE))
+#define ST_ENTRY_ACCESSIBLE_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o),  ST_TYPE_ENTRY_ACCESSIBLE, StEntryAccessibleClass))
 
+typedef struct _StEntryAccessible  StEntryAccessible;
+typedef struct _StEntryAccessibleClass  StEntryAccessibleClass;
 
-typedef struct _StEntryAccessible
+struct _StEntryAccessible
 {
   StWidgetAccessible parent;
+};
 
-  AtkObject *current_hint;
-  AtkObject *current_label;
-} StEntryAccessible;
+struct _StEntryAccessibleClass
+{
+  StWidgetAccessibleClass parent_class;
+};
 
-G_DEFINE_FINAL_TYPE (StEntryAccessible, st_entry_accessible, ST_TYPE_WIDGET_ACCESSIBLE)
+G_DEFINE_TYPE (StEntryAccessible, st_entry_accessible, ST_TYPE_WIDGET_ACCESSIBLE)
 
 static void
 st_entry_accessible_init (StEntryAccessible *self)
 {
   /* initialization done on AtkObject->initialize */
-}
-
-static void
-st_entry_accessible_dispose (GObject *object)
-{
-  StEntryAccessible *accessible = ST_ENTRY_ACCESSIBLE (object);
-
-  g_clear_object (&accessible->current_hint);
-  g_clear_object (&accessible->current_label);
-
-  G_OBJECT_CLASS (st_entry_accessible_parent_class)->dispose (object);
 }
 
 static void
@@ -1554,8 +1572,6 @@ st_entry_accessible_initialize (AtkObject *obj,
 
   /* StEntry is behaving as a ClutterText container */
   atk_object_set_role (obj, ATK_ROLE_PANEL);
-
-  update_hint_relation (ST_ENTRY (data));
 }
 
 static gint
@@ -1609,94 +1625,8 @@ static void
 st_entry_accessible_class_init (StEntryAccessibleClass *klass)
 {
   AtkObjectClass *atk_class = ATK_OBJECT_CLASS (klass);
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-
-  gobject_class->dispose = st_entry_accessible_dispose;
 
   atk_class->initialize = st_entry_accessible_initialize;
   atk_class->get_n_children = st_entry_accessible_get_n_children;
   atk_class->ref_child= st_entry_accessible_ref_child;
-}
-
-static void
-update_hint_relation (StEntry *entry)
-{
-  StEntryPrivate *priv;
-  AtkObject *accessible;
-  StEntryAccessible *entry_accessible;
-
-  priv = st_entry_get_instance_private (entry);
-
-  accessible = clutter_actor_get_accessible (priv->entry);
-  entry_accessible = ST_ENTRY_ACCESSIBLE (atk_object_get_parent (accessible));
-
-  if (accessible == NULL || entry_accessible == NULL)
-    return;
-
-  if (entry_accessible->current_hint != NULL)
-    {
-      atk_object_remove_relationship (accessible,
-                                      ATK_RELATION_DESCRIBED_BY,
-                                      entry_accessible->current_hint);
-      atk_object_remove_relationship (entry_accessible->current_hint,
-                                      ATK_RELATION_DESCRIPTION_FOR,
-                                      accessible);
-      g_clear_object (&entry_accessible->current_hint);
-    }
-
-  if (ST_IS_LABEL (priv->hint_actor))
-    {
-      g_set_object (&entry_accessible->current_hint,
-                    clutter_actor_get_accessible (priv->hint_actor));
-
-      atk_object_add_relationship (accessible,
-                                   ATK_RELATION_DESCRIBED_BY,
-                                   entry_accessible->current_hint);
-      atk_object_add_relationship (entry_accessible->current_hint,
-                                   ATK_RELATION_DESCRIPTION_FOR,
-                                   accessible);
-    }
-}
-
-static void
-update_label_relation (StEntry *entry)
-{
-  StEntryPrivate *priv;
-  AtkObject *accessible;
-  StEntryAccessible *entry_accessible;
-  ClutterActor *label_actor;
-
-  priv = st_entry_get_instance_private (entry);
-
-  accessible = clutter_actor_get_accessible (priv->entry);
-  entry_accessible = ST_ENTRY_ACCESSIBLE (atk_object_get_parent (accessible));
-
-  if (accessible == NULL || entry_accessible == NULL)
-    return;
-
-  if (entry_accessible->current_label != NULL)
-    {
-      atk_object_remove_relationship (accessible,
-                                      ATK_RELATION_LABELLED_BY,
-                                      entry_accessible->current_label);
-      atk_object_remove_relationship (entry_accessible->current_label,
-                                      ATK_RELATION_LABEL_FOR,
-                                      accessible);
-      g_clear_object (&entry_accessible->current_label);
-    }
-
-  label_actor = st_widget_get_label_actor (ST_WIDGET (entry));
-
-  if (label_actor != NULL)
-    {
-      g_set_object (&entry_accessible->current_label,
-                    clutter_actor_get_accessible (label_actor));
-
-      atk_object_add_relationship (accessible,
-                                   ATK_RELATION_LABELLED_BY,
-                                   entry_accessible->current_label);
-      atk_object_add_relationship (entry_accessible->current_label,
-                                   ATK_RELATION_LABEL_FOR,
-                                   accessible);
-    }
 }

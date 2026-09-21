@@ -35,28 +35,6 @@
 #include <cairo-svg.h>
 #endif
 
-/* Hardcode zoom levels that fractional scaling is likely to use.
- * Be aware that people using this might have fractional
- * scaling enabled themselves. and might want to view stuff at device scale */
-static float zoom_levels[] = {
-  /* TINY */ 1.0 / 8.0,
-  /*  25% */ 1.0 / 4.0,
-  /*  33% */ 1.0 / 3.0,
-  /*  40% */ 2.0 / 5.0,
-  /*  50% */ 1.0 / 2.0,
-  /*  67% */ 2.0 / 3.0,
-  /*  80% */ 4.0 / 5.0,
-  /* d'oh */ 1.0,
-  /* 125% */ 5.0 / 4.0,
-  /* 150% */ 3.0 / 2.0,
-  /* 175% */ 7.0 / 4.0,
-  /* 200% */ 2.0,
-  /* 250% */ 5.0 / 2.0,
-  /* 300% */ 3.0,
-  /* 400% */ 4.0,
-  /* HUGE */ 8.0
-};
-
 typedef struct
 {
   gsize  start_chars;
@@ -78,9 +56,7 @@ struct _NodeEditorWindow
   GtkWidget *testcase_cairo_checkbutton;
   GtkWidget *testcase_name_entry;
   GtkWidget *testcase_save_button;
-  GtkWidget *zoom_in;
-  GtkWidget *zoom_out;
-  GtkWidget *zoom_label;
+  GtkWidget *scale_scale;
   GtkWidget *crash_warning;
 
   GtkWidget *renderer_listbox;
@@ -95,10 +71,6 @@ struct _NodeEditorWindow
   gboolean auto_reload;
   gboolean mark_as_safe_pending;
   gulong after_paint_handler;
-
-  int zoom_level;
-  gboolean dark_mode;
-  int paned_position;
 };
 
 struct _NodeEditorWindowClass
@@ -108,9 +80,6 @@ struct _NodeEditorWindowClass
 
 enum {
   PROP_AUTO_RELOAD = 1,
-  PROP_ZOOM_LEVEL,
-  PROP_DARK_MODE,
-  PROP_PANED_POSITION,
   NUM_PROPERTIES
 };
 
@@ -219,33 +188,7 @@ highlight_text (NodeEditorWindow *self)
     {
       gunichar c = gtk_text_iter_get_char (&iter);
 
-      if (c == '/')
-        {
-          GtkTextIter comment_start = iter;
-          gtk_text_iter_forward_char (&iter);
-
-          c = gtk_text_iter_get_char (&iter);
-          if (c == '*')
-            {
-              gtk_text_iter_forward_char (&iter);
-              while (!gtk_text_iter_is_end (&iter))
-                {
-                  c = gtk_text_iter_get_char (&iter);
-                  gtk_text_iter_forward_char (&iter);
-
-                  if (c == '*')
-                    {
-                      c = gtk_text_iter_get_char (&iter);
-                      gtk_text_iter_forward_char (&iter);
-                      if (c == '/')
-                        break;
-                    }
-                }
-            }
-
-          gtk_text_buffer_apply_tag_by_name (self->text_buffer, "comment", &comment_start, &iter);
-        }
-      else if (c == '{')
+      if (c == '{')
         {
           GtkTextIter word_end = iter;
           GtkTextIter word_start;
@@ -313,9 +256,6 @@ mark_autosave_as_unsafe (void)
   path2 = get_autosave_path (NULL);
 
   g_rename (path2, path1);
-
-  g_free (path1);
-  g_free (path2);
 }
 
 static void
@@ -328,9 +268,6 @@ mark_autosave_as_safe (void)
   path2 = get_autosave_path (NULL);
 
   g_rename (path1, path2);
-
-  g_free (path1);
-  g_free (path2);
 }
 
 static void
@@ -349,6 +286,7 @@ reload (NodeEditorWindow *self)
 {
   char *text;
   GBytes *bytes;
+  float scale;
   GskRenderNode *big_node;
 
   mark_autosave_as_unsafe ();
@@ -361,17 +299,11 @@ reload (NodeEditorWindow *self)
   /* If this is too slow, go fix the parser performance */
   self->node = gsk_render_node_deserialize (bytes, deserialize_error_func, self);
 
-  if (self->node && self->zoom_level != 0)
+  scale = gtk_scale_button_get_value (GTK_SCALE_BUTTON (self->scale_scale));
+  if (self->node && scale != 0.)
     {
-      GskTransform *transform;
-      float scale;
-
-      scale = zoom_levels [self->zoom_level];
-
-      transform = gsk_transform_scale (NULL, scale, scale);
-      big_node = gsk_transform_node_new (self->node, transform);
-
-      gsk_transform_unref (transform);
+      scale = pow (2., scale);
+      big_node = gsk_transform_node_new (self->node, gsk_transform_scale (NULL, scale, scale));
     }
   else if (self->node)
     {
@@ -435,6 +367,14 @@ text_changed (GtkTextBuffer    *buffer,
     reload (self);
 
   highlight_text (self);
+}
+
+static void
+scale_changed (GObject          *object,
+               GParamSpec       *pspec,
+               NodeEditorWindow *self)
+{
+  text_changed (self->text_buffer, self);
 }
 
 static gboolean
@@ -610,7 +550,7 @@ on_picture_drop_read_cb (GObject      *source,
   if (input == NULL)
     {
       g_object_unref (self);
-      gdk_drop_finish (drop, GDK_ACTION_NONE);
+      gdk_drop_finish (drop, 0);
       return;
     }
 
@@ -1196,7 +1136,6 @@ testcase_save_clicked_cb (GtkWidget        *button,
   gtk_popover_popdown (GTK_POPOVER (self->testcase_popover));
 
 out:
-  g_clear_error (&error);
   g_free (text);
   g_free (png_file);
   g_free (node_file);
@@ -1204,33 +1143,13 @@ out:
 }
 
 static void
-set_dark_mode (NodeEditorWindow *self,
-               gboolean          dark_mode)
+dark_mode_cb (GtkToggleButton *button,
+              GParamSpec      *pspec,
+              NodeEditorWindow *self)
 {
-  GtkSettings *settings;
-
-  if (self->dark_mode == dark_mode)
-    return;
-
-  self->dark_mode = dark_mode;
-
-  settings = gtk_widget_get_settings (GTK_WIDGET (self));
-
-  if (dark_mode)
-    {
-      GtkInterfaceColorScheme color_scheme;
-
-      g_object_get (settings, "gtk-interface-color-scheme", &color_scheme, NULL);
-      if (color_scheme == GTK_INTERFACE_COLOR_SCHEME_DARK)
-        color_scheme = GTK_INTERFACE_COLOR_SCHEME_LIGHT;
-      else
-        color_scheme = GTK_INTERFACE_COLOR_SCHEME_DARK;
-      g_object_set (settings, "gtk-interface-color-scheme", color_scheme, NULL);
-    }
-  else
-    gtk_settings_reset_property (settings, "gtk-interface-color-scheme");
-
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_DARK_MODE]);
+  g_object_set (gtk_widget_get_settings (GTK_WIDGET (self)),
+                "gtk-application-prefer-dark-theme", gtk_toggle_button_get_active (button),
+                NULL);
 }
 
 static void
@@ -1287,19 +1206,6 @@ node_editor_window_add_renderer (NodeEditorWindow *self,
 }
 
 static void
-update_paste_action (GdkClipboard *clipboard,
-                     GParamSpec   *pspec,
-                     gpointer      data)
-{
-  GtkWidget *widget = GTK_WIDGET (data);
-  gboolean has_node;
-
-  has_node = gdk_content_formats_contain_mime_type (gdk_clipboard_get_formats (clipboard), "application/x-gtk-render-node");
-
-  gtk_widget_action_set_enabled (widget, "paste-node", has_node);
-}
-
-static void
 node_editor_window_realize (GtkWidget *widget)
 {
   NodeEditorWindow *self = NODE_EDITOR_WINDOW (widget);
@@ -1316,14 +1222,17 @@ node_editor_window_realize (GtkWidget *widget)
                                    gsk_gl_renderer_new (),
                                    "OpenGL");
   node_editor_window_add_renderer (self,
+                                   gsk_ngl_renderer_new (),
+                                   "NGL");
+#ifdef GDK_RENDERING_VULKAN
+  node_editor_window_add_renderer (self,
                                    gsk_vulkan_renderer_new (),
                                    "Vulkan");
+#endif
 #ifdef GDK_WINDOWING_BROADWAY
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   node_editor_window_add_renderer (self,
                                    gsk_broadway_renderer_new (),
                                    "Broadway");
-G_GNUC_END_IGNORE_DEPRECATIONS
 #endif
   node_editor_window_add_renderer (self,
                                    gsk_cairo_renderer_new (),
@@ -1333,7 +1242,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   self->after_paint_handler = g_signal_connect (frameclock, "after-paint",
                                                 G_CALLBACK (after_paint), self);
 
-  g_signal_connect (gtk_widget_get_clipboard (widget), "notify::formats", G_CALLBACK (update_paste_action), widget);
 }
 
 static void
@@ -1343,10 +1251,9 @@ node_editor_window_unrealize (GtkWidget *widget)
   GdkFrameClock *frameclock;
   guint i;
 
-  g_signal_handlers_disconnect_by_func (gtk_widget_get_clipboard (widget), update_paste_action, widget);
-
   frameclock = gtk_widget_get_frame_clock (widget);
-  g_clear_signal_handler (&self->after_paint_handler, frameclock);
+  g_signal_handler_disconnect (frameclock, self->after_paint_handler);
+  self->after_paint_handler = 0;
 
   for (i = 0; i < g_list_model_get_n_items (G_LIST_MODEL (self->renderers)); i ++)
     {
@@ -1709,44 +1616,6 @@ edit_action_cb (GtkWidget  *widget,
 }
 
 static void
-text_received (GObject      *source,
-               GAsyncResult *result,
-               gpointer      data)
-{
-  GdkClipboard *clipboard = GDK_CLIPBOARD (source);
-  NodeEditorWindow *self = NODE_EDITOR_WINDOW (data);
-  char *text;
-
-  text = gdk_clipboard_read_text_finish (clipboard, result, NULL);
-  if (text)
-    {
-      GtkTextBuffer *buffer;
-      GtkTextIter start, end;
-
-      buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (self->text_view));
-      gtk_text_buffer_begin_user_action (buffer);
-      gtk_text_buffer_get_bounds (buffer, &start, &end);
-      gtk_text_buffer_delete (buffer, &start, &end);
-      gtk_text_buffer_insert (buffer, &start, text, -1);
-      gtk_text_buffer_end_user_action (buffer);
-      g_free (text);
-    }
-}
-
-static void
-paste_node_cb (GtkWidget  *widget,
-               const char *action_name,
-               GVariant   *parameter)
-{
-  GdkClipboard *clipboard = gtk_widget_get_clipboard (widget);
-
-  gdk_clipboard_read_text_async (clipboard, NULL, text_received, widget);
-}
-
-static void set_zoom_level (NodeEditorWindow *self,
-                            int               zoom_level);
-
-static void
 node_editor_window_set_property (GObject      *object,
                                  guint         prop_id,
                                  const GValue *value,
@@ -1769,18 +1638,6 @@ node_editor_window_set_property (GObject      *object,
       }
       break;
 
-    case PROP_ZOOM_LEVEL:
-      set_zoom_level (self, g_value_get_int (value));
-      break;
-
-    case PROP_DARK_MODE:
-      set_dark_mode (self, g_value_get_boolean (value));
-      break;
-
-    case PROP_PANED_POSITION:
-      self->paned_position = g_value_get_int (value);
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1801,18 +1658,6 @@ node_editor_window_get_property (GObject    *object,
       g_value_set_boolean (value, self->auto_reload);
       break;
 
-    case PROP_ZOOM_LEVEL:
-      g_value_set_int (value, self->zoom_level);
-      break;
-
-    case PROP_DARK_MODE:
-      g_value_set_boolean (value, self->dark_mode);
-      break;
-
-    case PROP_PANED_POSITION:
-      g_value_set_int (value, self->paned_position);
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1824,48 +1669,6 @@ close_crash_warning (GtkButton        *button,
                      NodeEditorWindow *self)
 {
   gtk_revealer_set_reveal_child (GTK_REVEALER (self->crash_warning), FALSE);
-}
-
-static void
-update_zoom_buttons (NodeEditorWindow *self)
-{
-  GString *s = g_string_new ("");
-
-  gtk_widget_set_sensitive (self->zoom_in, self->zoom_level < G_N_ELEMENTS (zoom_levels) - 1);
-  gtk_widget_set_sensitive (self->zoom_out, self->zoom_level > 0);
-  g_string_append_printf (s, "%3d%%", (guint) round (100 * zoom_levels[self->zoom_level]));
-  g_string_replace (s, " ", " ", 0); /* Replace ASCII space by U+2007 figure space */
-  gtk_label_set_text (GTK_LABEL (self->zoom_label), s->str);
-  g_string_free (s, TRUE);
-}
-
-static void
-set_zoom_level (NodeEditorWindow *self,
-                int               zoom_level)
-{
-  zoom_level = CLAMP (zoom_level, 0, G_N_ELEMENTS (zoom_levels) - 1);
-
-  if (self->zoom_level == zoom_level)
-    return;
-
-  self->zoom_level = zoom_level;
-  update_zoom_buttons (self);
-  text_changed (self->text_buffer, self);
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ZOOM_LEVEL]);
-}
-
-static void
-zoom_in_cb (GtkButton        *button,
-            NodeEditorWindow *self)
-{
-  set_zoom_level (self, self->zoom_level + 1);
-}
-
-static void
-zoom_out_cb (GtkButton        *button,
-             NodeEditorWindow *self)
-{
-  set_zoom_level (self, self->zoom_level - 1);
 }
 
 static void
@@ -1890,19 +1693,7 @@ node_editor_window_class_init (NodeEditorWindowClass *class)
 
   properties[PROP_AUTO_RELOAD] = g_param_spec_boolean ("auto-reload", NULL, NULL,
                                                        TRUE,
-                                                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  properties[PROP_ZOOM_LEVEL] = g_param_spec_int ("zoom-level", NULL, NULL,
-                                                  0, G_N_ELEMENTS (zoom_levels) - 1, 0,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  properties[PROP_DARK_MODE] = g_param_spec_boolean ("dark-mode", NULL, NULL,
-                                                     FALSE,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  properties[PROP_PANED_POSITION] = g_param_spec_int ("paned-position", NULL, NULL,
-                                                      0, G_MAXINT, 0,
-                                                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                                       G_PARAM_READABLE | G_PARAM_WRITABLE | G_PARAM_STATIC_NAME);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
@@ -1914,10 +1705,8 @@ node_editor_window_class_init (NodeEditorWindowClass *class)
   gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, testcase_cairo_checkbutton);
   gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, testcase_name_entry);
   gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, testcase_save_button);
+  gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, scale_scale);
   gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, crash_warning);
-  gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, zoom_in);
-  gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, zoom_out);
-  gtk_widget_class_bind_template_child (widget_class, NodeEditorWindow, zoom_label);
 
   gtk_widget_class_bind_template_callback (widget_class, text_view_query_tooltip_cb);
   gtk_widget_class_bind_template_callback (widget_class, open_cb);
@@ -1926,24 +1715,16 @@ node_editor_window_class_init (NodeEditorWindowClass *class)
   gtk_widget_class_bind_template_callback (widget_class, clip_image_cb);
   gtk_widget_class_bind_template_callback (widget_class, testcase_save_clicked_cb);
   gtk_widget_class_bind_template_callback (widget_class, testcase_name_entry_changed_cb);
+  gtk_widget_class_bind_template_callback (widget_class, dark_mode_cb);
   gtk_widget_class_bind_template_callback (widget_class, on_picture_drag_prepare_cb);
   gtk_widget_class_bind_template_callback (widget_class, on_picture_drop_cb);
   gtk_widget_class_bind_template_callback (widget_class, click_gesture_pressed);
   gtk_widget_class_bind_template_callback (widget_class, close_crash_warning);
-  gtk_widget_class_bind_template_callback (widget_class, zoom_in_cb);
-  gtk_widget_class_bind_template_callback (widget_class, zoom_out_cb);
 
   gtk_widget_class_install_action (widget_class, "smart-edit", NULL, edit_action_cb);
 
   trigger = gtk_keyval_trigger_new (GDK_KEY_e, GDK_CONTROL_MASK);
   action = gtk_named_action_new ("smart-edit");
-  shortcut = gtk_shortcut_new (trigger, action);
-  gtk_widget_class_add_shortcut (widget_class, shortcut);
-
-  gtk_widget_class_install_action (widget_class, "paste-node", NULL, paste_node_cb);
-
-  trigger = gtk_keyval_trigger_new (GDK_KEY_v, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-  action = gtk_named_action_new ("paste-node");
   shortcut = gtk_shortcut_new (trigger, action);
   gtk_widget_class_add_shortcut (widget_class, shortcut);
 }
@@ -2041,7 +1822,7 @@ set_initial_text (NodeEditorWindow *self)
          "transform {\n"
          "  child: text {\n"
          "    color: rgb(46,52,54);\n"
-         "    font: \"Sans Bold 14.6px\";\n"
+         "    font: \"Cantarell Bold 11\";\n"
          "    glyphs: \"GTK Node Editor\";\n"
          "    offset: 8 14.418;\n"
          "  }\n"
@@ -2077,18 +1858,9 @@ static void
 node_editor_window_init (NodeEditorWindow *self)
 {
   GAction *action;
-  gsize i;
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  for (i = 0; i < G_N_ELEMENTS (zoom_levels); i++)
-    {
-      if (zoom_levels[i] == 1.0)
-        {
-          self->zoom_level = i;
-          break;
-        }
-    }
   self->auto_reload = TRUE;
 
   self->renderers = g_list_store_new (GDK_TYPE_PAINTABLE);
@@ -2112,11 +1884,6 @@ node_editor_window_init (NodeEditorWindow *self)
                           g_object_new (GTK_TYPE_TEXT_TAG,
                                         "name", "error",
                                         "underline", PANGO_UNDERLINE_ERROR,
-                                        NULL));
-  gtk_text_tag_table_add (self->tag_table,
-                          g_object_new (GTK_TYPE_TEXT_TAG,
-                                        "name", "comment",
-                                        "foreground-rgba", &(GdkRGBA) { 0.8, 0.52, 0.5, 1},
                                         NULL));
   gtk_text_tag_table_add (self->tag_table,
                           g_object_new (GTK_TYPE_TEXT_TAG,
@@ -2146,6 +1913,7 @@ node_editor_window_init (NodeEditorWindow *self)
 
   self->text_buffer = gtk_text_buffer_new (self->tag_table);
   g_signal_connect (self->text_buffer, "changed", G_CALLBACK (text_changed), self);
+  g_signal_connect (self->scale_scale, "notify::value", G_CALLBACK (scale_changed), self);
   gtk_text_view_set_buffer (GTK_TEXT_VIEW (self->text_view), self->text_buffer);
 
   set_initial_text (self);

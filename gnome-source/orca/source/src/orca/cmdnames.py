@@ -25,7 +25,7 @@ have been put in their own module so that we can present them in
 the correct language when users change the synthesizer language
 on the fly without having to reload a bunch of modules."""
 
-from .orca_i18n import C_, _  # pylint: disable=import-error
+from .orca_i18n import _  # pylint: disable=import-error
 
 # Translators: this command will move the mouse pointer to the current item,
 # typically a widget, without clicking on it.
@@ -127,20 +127,6 @@ TOGGLE_FLAT_REVIEW = _("Enter and exit flat review mode")
 # the user to explore this text by the {previous,next} {line,word,character}.
 # This switch allows the user to restrict the flat review function to a specific object.
 TOGGLE_RESTRICT_FLAT_REVIEW = _("Toggle restricting flat review to the current object")
-
-# Translators: the 'flat review' feature of Orca allows the blind user to
-# explore the text in a window in a 2D fashion.  That is, Orca treats all
-# the text from all objects in a window (e.g., buttons, labels, etc.) as a
-# sequence of words in a sequence of lines.  This command moves the flat review
-# location to the object which currently has focus.
-MOVE_REVIEW_TO_FOCUS = _("Move flat review to the object with focus")
-
-# Translators: the 'flat review' feature of Orca allows the blind user to
-# explore the text in a window in a 2D fashion.  That is, Orca treats all
-# the text from all objects in a window (e.g., buttons, labels, etc.) as a
-# sequence of words in a sequence of lines.  This command moves focus to the
-# object at the current flat review location.
-MOVE_FOCUS_TO_REVIEW = _("Move focus to the flat review location")
 
 # Translators: the 'flat review' feature of Orca allows the blind user to
 # explore the text in a window in a 2D fashion.  That is, Orca treats all
@@ -359,23 +345,16 @@ FLAT_REVIEW_APPEND = _("Append the contents under flat review to the clipboard")
 # and copy the text. This string describes that command.
 FLAT_REVIEW_SHOW_CONTENTS = _("Show flat review contents")
 
+# Translators: when users are navigating a table, they sometimes want the
+# entire row of a table read; other times they just want the current cell
+# to be presented to them.
 TOGGLE_TABLE_CELL_READ_MODE = _(
-    # Translators: when users are navigating a table, they sometimes want the
-    # entire row of a table read; other times they just want the current cell
-    # to be presented to them.
     "Toggle whether to read just the current table cell or the whole row",
 )
 
-# Translators: This is a command description. The command presents formatting
-# information for the current text character, such as font name, font size,
-# bold, italic, underline, foreground color, and background color.
-PRESENT_CHARACTER_FORMATTING = _("Present character formatting")
-
-# Translators: This is a command description. The command opens a window
-# containing available formatting information for the current text character,
-# such as font name, font size, bold, italic, underline, foreground color, and
-# background color.
-SHOW_CHARACTER_FORMATTING = _("Show character formatting")
+# Translators: the attributes being presented are the text attributes, such as
+# bold, italic, font name, font size, etc.
+READ_CHAR_ATTRIBUTES = _("Read the attributes associated with the current text character")
 
 # Translators: a refreshable braille display is an external hardware device that
 # presents braille characters to the user. There are a limited number of cells
@@ -449,14 +428,6 @@ INCREASE_SPEECH_VOLUME = _("Increase the speech volume")
 # speech synthesis engine will generate speech.
 DECREASE_SPEECH_VOLUME = _("Decrease the speech volume")
 
-# Translators: the speech inflection is the pitch range used by the
-# speech synthesis engine. More inflection means more variation in pitch.
-INCREASE_SPEECH_INFLECTION = _("Increase the speech inflection")
-
-# Translators: the speech inflection is the pitch range used by the
-# speech synthesis engine. Less inflection means a more monotone voice.
-DECREASE_SPEECH_INFLECTION = _("Decrease the speech inflection")
-
 # Translators: Orca allows the user to turn speech synthesis on or off.
 #  We call it 'silencing'.
 TOGGLE_SPEECH = _("Toggle the silencing of speech")
@@ -501,21 +472,22 @@ TOGGLE_SPEECH_VERBOSITY = _("Toggle speech verbosity level")
 TOGGLE_KEYBOARD_LAYOUT = _("Toggle keyboard layout")
 
 # Translators: this string is associated with the keyboard shortcut to quit
-# Orca when it was started like a regular application. It is not meant for
-# quitting an Orca instance managed as a systemd service, because systemd may
-# treat that as a failure and restart Orca.
-QUIT_ORCA = _("Quit the screen reader application")
+# Orca.
+QUIT_ORCA = _("Quit the screen reader")
 
-# Translators: the preferences window allows users to set their preferences
-# for Orca.
-SHOW_PREFERENCES_GUI = _("Display the preferences window")
+# Translators: the preferences configuration dialog is the dialog that allows
+# users to set their preferences for Orca.
+SHOW_PREFERENCES_GUI = _("Display the preferences configuration dialog")
 
-# Translators: the application preferences window allows users to set their
-# preferences for a specific application within Orca.
-SHOW_APP_PREFERENCES_GUI = _("Display the application preferences window")
+# Translators: the preferences configuration dialog is the dialog that allows
+# users to set their preferences for a specific application within Orca.
+SHOW_APP_PREFERENCES_GUI = _("Display the application preferences configuration dialog")
 
-# Translators: Orca allows the user to enable/disable spoken indentation.
-TOGGLE_SPOKEN_INDENTATION = _("Toggle spoken indentation")
+# Translators: Orca allows the user to enable/disable speaking of indentation
+# and justification.
+TOGGLE_SPOKEN_INDENTATION_AND_JUSTIFICATION = _(
+    "Toggle the speaking of indentation and justification",
+)
 
 # Translators: Orca has a setting through which users can control how a number is
 # spoken. The options are digits ("1 2 3") and words ("one hundred and twenty
@@ -536,17 +508,6 @@ CYCLE_PUNCTUATION_LEVEL = _("Cycle to the next speaking of punctuation level")
 # available on their system, such as espeak, voxin, mbrola, etc. This string
 # is the description of the command.
 CYCLE_SYNTHESIZER = _("Cycle to the next speech synthesizer")
-
-# Translators: Orca can hold several "voice sets": collections of voices, such as
-# one set per language. This command switches the voice Orca speaks with to the
-# named set. The "%s" is replaced with the name of the set, e.g. a language name
-# or "Global" for the user's primary set.
-SWITCH_VOICE_SET = _("Switch voice to: %s")
-
-# Translators: Orca can hold several "voice sets": collections of voices, such as
-# one set per language. This command switches the voice Orca speaks with to the
-# next set in the list, wrapping around to the first set after the last.
-CYCLE_VOICE_SET = _("Cycle to the next voice set")
 
 # Translators: Orca has a feature whereby users can set up different "profiles,"
 # which are collection of settings which apply to a given task, such as a
@@ -582,11 +543,6 @@ CYCLE_CAPITALIZATION_STYLE = _("Cycle to the next capitalization style")
 # choose which type of echo is being used.
 CYCLE_KEY_ECHO = _("Cycle to the next key echo level")
 
-# Translators: When the user is navigating through text, Orca can optionally
-# announce formatting changes such as bold, italic, etc. This command cycles
-# through the available modes: off, editable text only, and always.
-CYCLE_TEXT_ATTRIBUTE_CHANGE_MODE = _("Cycle to the next text attribute change mode")
-
 # Translators: this is a debug message that Orca users will not normally see. It
 # describes a debug routine that allows the user to adjust the level of debug
 # information that Orca generates at run time.
@@ -618,10 +574,6 @@ PRESENT_CURRENT_TIME = _("Present current time")
 # Translators: Orca has a command to present the current date in speech and in
 # braille.
 PRESENT_CURRENT_DATE = _("Present current date")
-
-# Translators: Orca has a command to present the state of modifier keys such as
-# Caps Lock and Num Lock (e.g. "caps lock on. num lock off.").
-PRESENT_MODIFIER_KEYS_STATE = _("Present the state of modifier keys")
 
 # Translators: Orca has a command to present the pixel size and location of
 # the current object. This string is how this command is described in the list
@@ -879,18 +831,6 @@ STRUCTURAL_NAVIGATION_MODE_CYCLE = _("Cycles to the next structural navigation m
 # which enables/disables this support.
 TABLE_NAVIGATION_TOGGLE = _("Toggle table navigation keys")
 
-# Translators: this is for navigating among annotations in a document.
-# Annotations include content insertions, content deletions, suggestions, and highlights.
-ANNOTATION_PREV = _("Go to previous annotation")
-
-# Translators: this is for navigating among annotations in a document.
-# Annotations include content insertions, content deletions, suggestions, and highlights.
-ANNOTATION_NEXT = _("Go to next annotation")
-
-# Translators: this is for navigating among annotations in a document.
-# Annotations include content insertions, content deletions, suggestions, and highlights.
-ANNOTATION_LIST = _("Display a list of annotations")
-
 # Translators: this is for navigating among blockquotes in a document.
 BLOCKQUOTE_PREV = _("Go to previous blockquote")
 
@@ -1078,15 +1018,6 @@ LIVE_REGION_NEXT = _("Go to next live region")
 # ticker. https://w3c.github.io/aria/#dfn-live-region
 LIVE_REGION_LAST = _("Go to the last live region which made an announcement")
 
-# Translators: this is for navigating among math expressions in a document.
-MATH_PREV = _("Go to previous math expression")
-
-# Translators: this is for navigating among math expressions in a document.
-MATH_NEXT = _("Go to next math expression")
-
-# Translators: this is for navigating among math expressions in a document.
-MATH_LIST = _("Display a list of math expressions")
-
 # Translators: the object navigator allows users to explore UI objects presented
 # as a hierarchy.
 NAVIGATOR_UP = _("Go to the parent of the object with navigator focus.")
@@ -1176,184 +1107,6 @@ TABLE_CELL_TOP_OF_COLUMN = _("Go to the top of the column")
 
 # Translators: this is for navigating among table cells in a document.
 TABLE_CELL_BOTTOM_OF_COLUMN = _("Go to the bottom of the column")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command enters that mode when
-# the user is on a math element.
-MATH_NAV_ENTER = C_("mathcat", "Enter math navigation mode")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command exits that mode.
-MATH_NAV_EXIT = C_("mathcat", "Exit math navigation mode")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the next sibling
-# at the current level of the math expression tree.
-MATH_NAV_MOVE_NEXT = C_("mathcat", "Move to next item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the previous
-# sibling at the current level of the math expression tree.
-MATH_NAV_MOVE_PREVIOUS = C_("mathcat", "Move to previous item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves from an item down
-# into its children, e.g. from a fraction into its numerator and denominator.
-MATH_NAV_ZOOM_IN = C_("mathcat", "Zoom in")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves from an item back
-# up to its parent, e.g. from a numerator back to the containing fraction.
-MATH_NAV_ZOOM_OUT = C_("mathcat", "Zoom out")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command descends as deep as
-# possible into the current item, going straight to the innermost child.
-MATH_NAV_ZOOM_IN_ALL = C_("mathcat", "Zoom in completely")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command goes all the way back
-# up to the root of the math expression.
-MATH_NAV_ZOOM_OUT_ALL = C_("mathcat", "Zoom out completely")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the first item.
-MATH_NAV_MOVE_START = C_("mathcat", "Move to start")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the last item.
-MATH_NAV_MOVE_END = C_("mathcat", "Move to end")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the start of
-# the current line in a multi-line math expression.
-MATH_NAV_MOVE_LINE_START = C_("mathcat", "Move to line start")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the end of
-# the current line in a multi-line math expression.
-MATH_NAV_MOVE_LINE_END = C_("mathcat", "Move to line end")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the top of the
-# current column in a math table (matrix, determinant, etc.).
-MATH_NAV_MOVE_COLUMN_START = C_("mathcat", "Move to column start")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the bottom of
-# the current column in a math table (matrix, determinant, etc.).
-MATH_NAV_MOVE_COLUMN_END = C_("mathcat", "Move to column end")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the previous
-# cell in a math table or columnar arithmetic expression.
-MATH_NAV_MOVE_CELL_PREVIOUS = C_("mathcat", "Move to previous cell")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves to the next cell
-# in a math table or columnar arithmetic expression.
-MATH_NAV_MOVE_CELL_NEXT = C_("mathcat", "Move to next cell")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves up one cell in
-# a math table or columnar arithmetic expression.
-MATH_NAV_MOVE_CELL_UP = C_("mathcat", "Move up one cell")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command moves down one cell in
-# a math table or columnar arithmetic expression.
-MATH_NAV_MOVE_CELL_DOWN = C_("mathcat", "Move down one cell")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command cycles the navigation
-# granularity to coarser (Enhanced, Simple, or Character level).
-MATH_NAV_TOGGLE_ZOOM_LOCK_UP = C_("mathcat", "Increase navigation granularity")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command cycles the navigation
-# granularity to finer (Enhanced, Simple, or Character level).
-MATH_NAV_TOGGLE_ZOOM_LOCK_DOWN = C_("mathcat", "Decrease navigation granularity")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command toggles whether navigation
-# reads the math content or describes its structure.
-MATH_NAV_TOGGLE_SPEECH_MODE = C_("mathcat", "Toggle speech mode")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command speaks the previous math
-# item as you would say it aloud.
-MATH_NAV_READ_PREVIOUS = C_("mathcat", "Read previous item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command speaks the next math
-# item as you would say it aloud.
-MATH_NAV_READ_NEXT = C_("mathcat", "Read next item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command speaks the current math
-# item as you would say it aloud.
-MATH_NAV_READ_CURRENT = C_("mathcat", "Read current item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command speaks the content of
-# the current cell in a math table.
-MATH_NAV_READ_CELL_CURRENT = C_("mathcat", "Read current cell")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command gives a structural
-# summary of the previous math item rather than reading its content.
-MATH_NAV_DESCRIBE_PREVIOUS = C_("mathcat", "Describe previous item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command gives a structural
-# summary of the next math item rather than reading its content.
-MATH_NAV_DESCRIBE_NEXT = C_("mathcat", "Describe next item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command gives a structural
-# summary of the current math item rather than reading its content.
-MATH_NAV_DESCRIBE_CURRENT = C_("mathcat", "Describe current item")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command announces the user's
-# current position within the math expression.
-MATH_NAV_WHERE_AM_I = C_("mathcat", "Where am I")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command announces the user's
-# full context within the math expression.
-MATH_NAV_WHERE_AM_I_ALL = C_("mathcat", "Where am I (detailed)")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command returns to the position
-# the user was at before the last navigation move.
-MATH_NAV_MOVE_LAST_LOCATION = C_("mathcat", "Return to last position")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). Place markers are bookmarks within
-# a math expression, identified by a digit 0-9. This command jumps to one.
-MATH_NAV_GOTO_PLACE_MARKER = C_("mathcat", "Go to place marker")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). Place markers are bookmarks within
-# a math expression, identified by a digit 0-9. This command sets one.
-MATH_NAV_SET_PLACE_MARKER = C_("mathcat", "Set place marker")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). Place markers are bookmarks within
-# a math expression, identified by a digit 0-9. This command reads one.
-MATH_NAV_READ_PLACE_MARKER = C_("mathcat", "Read place marker")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). Place markers are bookmarks within
-# a math expression, identified by a digit 0-9. This command describes one.
-MATH_NAV_DESCRIBE_PLACE_MARKER = C_("mathcat", "Describe place marker")
-
-# Translators: Orca has a modal math navigation mode powered by MathCAT
-# (https://daisy.github.io/MathCAT). This command copies the current
-# navigation node to the clipboard in the user's preferred format
-# (MathML, LaTeX, ASCIIMath, or Speech).
-MATH_NAV_COPY = C_("mathcat", "Copy to clipboard")
 
 # Translators: When presenting the content of a line on a web page, Orca by
 # default presents the full line, including any links or form fields on that

@@ -34,12 +34,9 @@
 /**
  * GtkSeparator:
  *
- * Draws a horizontal or vertical line to separate other widgets.
+ * `GtkSeparator` is a horizontal or vertical separator widget.
  *
- * <picture>
- *   <source srcset="separator-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkSeparator" src="separator.png">
- * </picture>
+ * ![An example GtkSeparator](separator.png)
  *
  * A `GtkSeparator` can be used to group the widgets within a window.
  * It displays a line with a shadow to make it appear sunken into the
@@ -52,7 +49,7 @@
  *
  * # Accessibility
  *
- * `GtkSeparator` uses the [enum@Gtk.AccessibleRole.separator] role.
+ * `GtkSeparator` uses the %GTK_ACCESSIBLE_ROLE_SEPARATOR role.
  */
 
 typedef struct _GtkSeparatorClass GtkSeparatorClass;
@@ -71,12 +68,8 @@ struct _GtkSeparatorClass
 
 enum {
   PROP_0,
-  /* GtkOrientable */
-  PROP_ORIENTATION,
-  N_PROPS
+  PROP_ORIENTATION
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 
 G_DEFINE_TYPE_WITH_CODE (GtkSeparator, gtk_separator, GTK_TYPE_WIDGET,
@@ -97,7 +90,7 @@ gtk_separator_set_orientation (GtkSeparator   *self,
                                       GTK_ACCESSIBLE_PROPERTY_ORIENTATION, orientation,
                                       -1);
 
-      g_object_notify_by_pspec (G_OBJECT (self), props[PROP_ORIENTATION]);
+      g_object_notify (G_OBJECT (self), "orientation");
     }
 }
 
@@ -157,10 +150,7 @@ gtk_separator_class_init (GtkSeparatorClass *class)
   object_class->set_property = gtk_separator_set_property;
   object_class->get_property = gtk_separator_get_property;
 
-  props[PROP_ORIENTATION] = g_param_spec_override ("orientation",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ORIENTABLE), "orientation"));
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_override_property (object_class, PROP_ORIENTATION, "orientation");
 
   gtk_widget_class_set_css_name (widget_class, I_("separator"));
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_SEPARATOR);

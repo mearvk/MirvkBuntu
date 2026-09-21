@@ -4,25 +4,10 @@
 #ifdef HAVE_DRM_FOURCC_H
 #include <drm_fourcc.h>
 #endif
-#ifdef HAVE_DRM_DRM_FOURCC_H
-#include <drm/drm_fourcc.h>
-#endif
-
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
-#endif
-
-#ifndef DRM_FORMAT_MOD_LINEAR
-#define DRM_FORMAT_MOD_LINEAR 0
-#endif
 
 #ifndef fourcc_code
-#define fourcc_code(a, b, c, d) ((guint32)(a) | ((guint32)(b) << 8) | \
-				 ((guint32)(c) << 16) | ((guint32)(d) << 24))
-#endif
-
-#ifndef DRM_FORMAT_INVALID
-#define DRM_FORMAT_INVALID	0
+#define fourcc_code(a, b, c, d) ((__u32)(a) | ((__u32)(b) << 8) | \
+				 ((__u32)(c) << 16) | ((__u32)(d) << 24))
 #endif
 
 #ifndef DRM_FORMAT_C1
@@ -393,32 +378,4 @@
 #endif
 #ifndef DRM_FORMAT_YVU444
 #define DRM_FORMAT_YVU444	fourcc_code('Y', 'V', '2', '4')
-#endif
-
-#ifndef DRM_FORMAT_S010
-#define DRM_FORMAT_S010		fourcc_code('S', '0', '1', '0')
-#endif
-#ifndef DRM_FORMAT_S210
-#define DRM_FORMAT_S210		fourcc_code('S', '2', '1', '0')
-#endif
-#ifndef DRM_FORMAT_S410
-#define DRM_FORMAT_S410		fourcc_code('S', '4', '1', '0')
-#endif
-#ifndef DRM_FORMAT_S012
-#define DRM_FORMAT_S012		fourcc_code('S', '0', '1', '2')
-#endif
-#ifndef DRM_FORMAT_S212
-#define DRM_FORMAT_S212		fourcc_code('S', '2', '1', '2')
-#endif
-#ifndef DRM_FORMAT_S412
-#define DRM_FORMAT_S412		fourcc_code('S', '4', '1', '2')
-#endif
-#ifndef DRM_FORMAT_S016
-#define DRM_FORMAT_S016		fourcc_code('S', '0', '1', '6')
-#endif
-#ifndef DRM_FORMAT_S216
-#define DRM_FORMAT_S216		fourcc_code('S', '2', '1', '6')
-#endif
-#ifndef DRM_FORMAT_S416
-#define DRM_FORMAT_S416		fourcc_code('S', '4', '1', '6')
 #endif

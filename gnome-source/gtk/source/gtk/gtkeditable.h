@@ -44,7 +44,7 @@ typedef struct _GtkEditableInterface GtkEditableInterface;
 
 struct _GtkEditableInterface
 {
-  GTypeInterface                    base_iface;
+  GTypeInterface                   base_iface;
 
   /* signals */
   void (* insert_text)              (GtkEditable    *editable,
@@ -73,20 +73,16 @@ struct _GtkEditableInterface
                                      int             start_pos,
                                      int             end_pos);
   GtkEditable * (* get_delegate)    (GtkEditable    *editable);
-  char * (* get_complete_text) (GtkEditable    *editable);
 };
 
 GDK_AVAILABLE_IN_ALL
-GType    gtk_editable_get_type             (void);
+GType    gtk_editable_get_type             (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 const char * gtk_editable_get_text         (GtkEditable *editable);
 GDK_AVAILABLE_IN_ALL
 void     gtk_editable_set_text             (GtkEditable *editable,
                                             const char  *text);
-GDK_AVAILABLE_IN_4_24
-char * gtk_editable_get_complete_text      (GtkEditable *editable);
-
 GDK_AVAILABLE_IN_ALL
 char *   gtk_editable_get_chars            (GtkEditable *editable,
                                             int          start_pos,
@@ -146,11 +142,6 @@ gboolean gtk_editable_get_enable_undo      (GtkEditable *editable);
 GDK_AVAILABLE_IN_ALL
 void     gtk_editable_set_enable_undo      (GtkEditable *editable,
                                             gboolean     enable_undo);
-GDK_AVAILABLE_IN_4_24
-void gtk_editable_set_input_interceptor (GtkEditable *editable,
-                                         GtkWidget   *interceptor);
-GDK_AVAILABLE_IN_4_24
-GtkWidget * gtk_editable_get_input_interceptor (GtkEditable *editable);
 
 /* api for implementations */
 
@@ -164,8 +155,6 @@ GtkWidget * gtk_editable_get_input_interceptor (GtkEditable *editable);
  * @GTK_EDITABLE_PROP_MAX_WIDTH_CHARS: the property id for [property@Gtk.Editable:max-width-chars]
  * @GTK_EDITABLE_PROP_XALIGN: the property id for [property@Gtk.Editable:xalign]
  * @GTK_EDITABLE_PROP_ENABLE_UNDO: the property id for [property@Gtk.Editable:enable-undo]
- * @GTK_EDITABLE_PROP_COMPLETE_TEXT: the property id for [property@Gtk.Editable:complete-text]
- * @GTK_EDITABLE_PROP_INPUT_INTERCEPTOR: the property id for [property@Gtk.Editable:input-interceptor]
  * @GTK_EDITABLE_NUM_PROPERTIES: the number of properties
  *
  * The identifiers for [iface@Gtk.Editable] properties.
@@ -182,8 +171,6 @@ typedef enum {
   GTK_EDITABLE_PROP_MAX_WIDTH_CHARS,
   GTK_EDITABLE_PROP_XALIGN,
   GTK_EDITABLE_PROP_ENABLE_UNDO,
-  GTK_EDITABLE_PROP_COMPLETE_TEXT,
-  GTK_EDITABLE_PROP_INPUT_INTERCEPTOR,
   GTK_EDITABLE_NUM_PROPERTIES
 } GtkEditableProperties;
 
@@ -213,3 +200,4 @@ gboolean gtk_editable_delegate_get_accessible_platform_state (GtkEditable       
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkEditable, g_object_unref)
 
 G_END_DECLS
+

@@ -29,14 +29,6 @@
 #include <gsk/gskoffloadprivate.h>
 #include "gskrendernodeattach.h"
 
-#ifdef GDK_WINDOWING_WAYLAND
-#include <gdk/wayland/gdkwayland.h>
-#endif
-
-#include <fcntl.h>
-
-#include "../testutils.h"
-
 static char *
 test_get_sibling_file (const char *node_file,
                        const char *old_ext,
@@ -58,6 +50,26 @@ test_get_sibling_file (const char *node_file,
     }
 
   return g_string_free (file, FALSE);
+}
+
+static GBytes *
+diff_with_file (const char  *file1,
+                GBytes      *input,
+                GError     **error)
+{
+  char *buffer;
+  gsize len;
+  static const char msg[] = "The output is not as expected";
+
+  g_file_get_contents (file1, &buffer, &len, NULL);
+  if (strcmp (buffer, (char *) g_bytes_get_data (input, NULL)) == 0)
+    {
+      g_free (buffer);
+      return NULL;
+    }
+
+  g_free (buffer);
+  return g_bytes_new_static (msg, strlen (msg) + 1);
 }
 
 static void
@@ -185,7 +197,10 @@ collect_offload_info (GdkSurface *surface,
       else
         g_snprintf (above, sizeof (above), "-");
 
-      if (info->is_offloaded)
+      /* NOTE: We look at can_offload here, not is_offloaded, since we don't have
+       * dmabuf textures here, so attaching them to subsurfaces won't succeed.
+       */
+      if (info->can_offload)
         {
           g_string_append_printf (s, "%u: offloaded, %s%sabove: %s, ",
                                   i,
@@ -196,16 +211,11 @@ collect_offload_info (GdkSurface *surface,
                                   gdk_texture_get_width (info->texture),
                                   gdk_texture_get_height (info->texture));
           g_string_append_printf (s, "source: %g %g %g %g, ",
-                                  info->source_rect.origin.x, info->source_rect.origin.y,
-                                  info->source_rect.size.width, info->source_rect.size.height);
-          g_string_append_printf (s, "dest: %g %g %g %g",
-                                  info->texture_rect.origin.x, info->texture_rect.origin.y,
-                                  info->texture_rect.size.width, info->texture_rect.size.height);
-          if (info->has_background)
-            g_string_append_printf (s, ", background: %g %g %g %g",
-                                    info->background_rect.origin.x, info->background_rect.origin.y,
-                                    info->background_rect.size.width, info->background_rect.size.height);
-          g_string_append (s, "\n");
+                                  info->source.origin.x, info->source.origin.y,
+                                  info->source.size.width, info->source.size.height);
+          g_string_append_printf (s, "dest: %g %g %g %g\n",
+                                  info->dest.origin.x, info->dest.origin.y,
+                                  info->dest.size.width, info->dest.size.height);
         }
       else
         g_string_append_printf (s, "%u: %snot offloaded\n",
@@ -213,7 +223,7 @@ collect_offload_info (GdkSurface *surface,
                                 info->was_offloaded ? "was offloaded, " : "");
     }
 
-  bytes = g_bytes_new (s->str, s->len);
+  bytes = g_bytes_new (s->str, s->len + 1);
 
   g_string_free (s, TRUE);
 
@@ -352,14 +362,13 @@ parse_node_file (GFile *file, const char *generate)
   GdkSubsurface *subsurface;
   GskOffload *offload;
   GskRenderNode *node, *tmp;
-  GBytes *offload_state;
+  GBytes *offload_state, *diff;
   GError *error = NULL;
   gboolean result = TRUE;
   cairo_region_t *clip, *region;
-  char *path, *diff;
+  char *path;
   GskRenderNode *node2;
   const char *generate_values[] = { "offload", "offload2", "diff", NULL };
-  int udmabuf_fd;
 
   if (generate && !g_strv_contains (generate_values, generate))
     {
@@ -372,33 +381,16 @@ parse_node_file (GFile *file, const char *generate)
 
   surface = make_toplevel ();
 
-  if (!GDK_DISPLAY_DEBUG_CHECK (gdk_display_get_default (), FORCE_OFFLOAD))
-    {
-      g_print ("Offload tests require GDK_DEBUG=force-offload\n");
-      exit (77);
-    }
-
   if (gdk_surface_get_scale (surface) != 1.0)
     {
-      g_print ("Offload tests don't work with scale != 1.0\n");
+      g_print ("Offload tests don't work with fractional scales");
       exit (77);
     }
 
   subsurface = gdk_surface_create_subsurface (surface);
   if (subsurface == NULL)
-    {
-      g_print ("Offload tests don't work without subsurfaces\n");
-      exit (77); /* subsurfaces aren't supported, skip these tests */
-    }
+    exit (77); /* subsurfaces aren't supported, skip these tests */
   g_clear_object (&subsurface);
-
-  udmabuf_fd = open ("/dev/udmabuf", O_RDWR);
-  if (udmabuf_fd == -1)
-    {
-      g_print ("Offload tests don't work without /dev/udmabuf\n");
-      exit (77); /* subsurfaces aren't supported, skip these tests */
-    }
-  close (udmabuf_fd);
 
   node = node_from_file (file);
   if (node == NULL)
@@ -425,20 +417,17 @@ parse_node_file (GFile *file, const char *generate)
   if (reference_file == NULL)
     return FALSE;
 
-  diff = diff_bytes_with_file (reference_file, offload_state, &error);
+  diff = diff_with_file (reference_file, offload_state, &error);
   g_assert_no_error (error);
-  if (diff)
+  if (diff && g_bytes_get_size (diff) > 0)
     {
-      char *basename = g_path_get_basename (reference_file);
-      g_print ("Resulting file doesn't match reference (%s):\n%s\n",
-               basename,
-               diff);
-      g_free (basename);
+      g_print ("Resulting .offload file doesn't match reference:\n%s\n",
+               (const char *) g_bytes_get_data (diff, NULL));
       result = FALSE;
     }
 
   g_clear_pointer (&offload_state, g_bytes_unref);
-  g_clear_pointer (&diff, g_free);
+  g_clear_pointer (&diff, g_bytes_unref);
   g_clear_pointer (&reference_file, g_free);
 
   path = test_get_sibling_file (g_file_peek_path (file), ".node", ".node2");
@@ -464,23 +453,20 @@ parse_node_file (GFile *file, const char *generate)
       if (reference_file == NULL)
         return FALSE;
 
-      diff = diff_bytes_with_file (reference_file, offload_state, &error);
+      diff = diff_with_file (reference_file, offload_state, &error);
       g_assert_no_error (error);
-      if (diff)
+      if (diff && g_bytes_get_size (diff) > 0)
         {
-          char *basename = g_path_get_basename (reference_file);
-          g_print ("Resulting file doesn't match reference (%s):\n%s\n",
-                   basename,
-                   diff);
-          g_free (basename);
+          g_print ("Resulting .offload2 file doesn't match reference:\n%s\n",
+                   (const char *) g_bytes_get_data (diff, NULL));
           result = FALSE;
         }
 
       g_clear_pointer (&offload_state, g_bytes_unref);
-      g_clear_pointer (&diff, g_free);
+      g_clear_pointer (&diff, g_bytes_unref);
       g_clear_pointer (&reference_file, g_free);
 
-      gsk_render_node_diff (node, node2, &(GskDiffData) { clip, NULL, surface });
+      gsk_render_node_diff (node, node2, &(GskDiffData) { clip, surface });
 
       if (g_strcmp0 (generate, "diff") == 0)
         {
@@ -520,34 +506,6 @@ test_file (GFile *file)
 {
   if (g_test_verbose ())
     g_test_message ("%s", g_file_peek_path (file));
-
-  if (g_getenv ("REQUIRE_COLOR_PROTOCOLS"))
-    {
-#ifdef GDK_WINDOWING_WAYLAND
-      GdkDisplay *display = gdk_display_get_default ();
-
-      if (!GDK_IS_WAYLAND_DISPLAY (display))
-        {
-          g_print ("Test requires Wayland display\n");
-          exit (77);
-        }
-
-      if (!gdk_wayland_display_query_registry (display, "wp_color_manager_v1"))
-        {
-          g_print ("Test requires wp_color_manager_v1 protocol\n");
-          exit (77);
-        }
-
-      if (!gdk_wayland_display_query_registry (display, "wp_color_representation_manager_v1"))
-        {
-          g_print ("Test requires wp_color_representation_manager_v1 protocol\n");
-          exit (77);
-        }
-#else
-      g_print ("Test requires Wayland display\n");
-      exit (77);
-#endif
-    }
 
   return parse_node_file (file, NULL);
 }

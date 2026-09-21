@@ -164,11 +164,11 @@ you to inherit from a type to use it, you can do so:
         }
 
         vfunc_paint(paintContext) {
-            const framebuffer = paintContext.get_framebuffer();
-            const coglContext = framebuffer.get_context();
-            const alloc = this.get_allocation_box();
+            let framebuffer = paintContext.get_framebuffer();
+            let coglContext = framebuffer.get_context();
+            let alloc = this.get_allocation_box();
 
-            const pipeline = Cogl.Pipeline.new(coglContext);
+            let pipeline = Cogl.Pipeline.new(coglContext);
             pipeline.set_color4ub(255, 0, 0, 255);
 
             framebuffer.draw_rectangle(pipeline,
@@ -247,8 +247,8 @@ variable that can be captured in closures.
 All closures should be wrapped with Function.prototype.bind or use arrow
 notation.
 ```javascript
-    const closure1 = () => this._fnorbate();
-    const closure2 = this._fnorbate.bind(this);
+    let closure1 = () => this._fnorbate();
+    let closure2 = this._fnorbate.bind(this);
 ```
 
 A more realistic example would be connecting to a signal on a method of a
@@ -258,7 +258,7 @@ prototype:
 
     export class MyClass {
         constructor() {
-            const fnorb = new FnorbLib.Fnorb();
+            let fnorb = new FnorbLib.Fnorb();
             fnorb.connect('frobate', this._onFnorbFrobate.bind(this));
         }
 
@@ -289,16 +289,6 @@ variables." For member variables, use the no-quotes no-brackets syntax:
 If your usage of an object is like a hash table (and thus conceptually the keys
 can have special chars in them), don't use quotes, but use brackets:
 `{bar: 42}`, `foo['bar']`.
-
-## Variable naming
-
-We use javaStyle variable names, with CamelCase for type names and lowerCamelCase
-for variable and method names. However, when calling a C method with underscore-based
-names via introspection, we just keep them looking as they do in C for simplicity.
-
-Private variables, whether object member variables or module-scoped variables,
-should begin with `_`. You must not access private symbols externally, although
-using them from subclasses is acceptable.
 
 ## Animations
 
@@ -339,7 +329,7 @@ actor (or actor meta) properties that cannot use implicit animations:
 
 ```javascript
     desaturateActor(actor, desaturate) {
-        const factor = desaturate ? 1.0 : 0.0;
+        let factor = desaturate ? 1.0 : 0.0;
         actor.ease_property('@effects.desaturate.factor', factor, {
             duration: 500, // ms
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,

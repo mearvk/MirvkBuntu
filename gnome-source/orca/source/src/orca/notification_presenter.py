@@ -38,28 +38,24 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GObject, Gtk
 
 from . import (
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     guilabels,
     input_event,
     messages,
-    notification_presenter_command_definitions,
-    orca_gui_helpers,
     presentation_manager,
 )
-from .extension import Extension
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from .command import Command
     from .scripts import default
 
 
-class NotificationPresenter(Extension):
+class NotificationPresenter:
     """Provides access to the notification history."""
-
-    GROUP_LABEL = guilabels.KB_GROUP_NOTIFICATIONS
 
     def __init__(self) -> None:
         self._gui: NotificationListGUI | None = None
@@ -71,10 +67,60 @@ class NotificationPresenter(Extension):
         # notification message.
         self._notifications: list[tuple[str, float]] = []
         self._current_index: int = -1
-        super().__init__()
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return notification_presenter_command_definitions.get_commands(self)
+        msg = "NOTIFICATION PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("NotificationPresenter", self)
+
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_NOTIFICATIONS
+
+        commands_data = [
+            (
+                "present_last_notification",
+                self.present_last_notification,
+                cmdnames.NOTIFICATION_MESSAGES_LAST,
+            ),
+            (
+                "present_next_notification",
+                self.present_next_notification,
+                cmdnames.NOTIFICATION_MESSAGES_NEXT,
+            ),
+            (
+                "present_previous_notification",
+                self.present_previous_notification,
+                cmdnames.NOTIFICATION_MESSAGES_PREVIOUS,
+            ),
+            (
+                "show_notification_list",
+                self.show_notification_list,
+                cmdnames.NOTIFICATION_MESSAGES_LIST,
+            ),
+        ]
+
+        for name, function, description in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=None,
+                    laptop_keybinding=None,
+                ),
+            )
+
+        msg = "NOTIFICATION PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def save_notification(self, message: str) -> None:
         """Adds message to the list of notification messages."""
@@ -316,17 +362,34 @@ class NotificationListGUI:
         column_headers: list[str],
         rows: list[tuple[str, str]],
     ) -> Gtk.Dialog:
-        dialog, tree = orca_gui_helpers.create_tree_view_dialog(
+        dialog = Gtk.Dialog(
             title,
-            column_headers=column_headers,
-            default_size=(600, 400),
-            buttons=(
-                (guilabels.BTN_CLEAR, Gtk.ResponseType.APPLY),
-                (guilabels.BTN_CLOSE, Gtk.ResponseType.CLOSE),
-            ),
+            None,
+            Gtk.DialogFlags.MODAL,
+            (Gtk.STOCK_CLEAR, Gtk.ResponseType.APPLY, Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE),
         )
+        dialog.set_default_size(600, 400)
+
+        grid = Gtk.Grid()
+        content_area = dialog.get_content_area()
+        content_area.add(grid)
+
+        scrolled_window = Gtk.ScrolledWindow()
+        grid.add(scrolled_window)  # pylint: disable=no-member
+
+        tree = Gtk.TreeView()
+        tree.set_hexpand(True)
+        tree.set_vexpand(True)
+        scrolled_window.add(tree)  # pylint: disable=no-member
 
         cols = len(column_headers) * [GObject.TYPE_STRING]
+        for i, header in enumerate(column_headers):
+            cell = Gtk.CellRendererText()
+            column = Gtk.TreeViewColumn(header, cell, text=i)
+            tree.append_column(column)
+            if header:
+                column.set_sort_column_id(i)
+
         self._model = Gtk.ListStore(*cols)
         for row in rows:
             row_iter = self._model.append(None)

@@ -76,40 +76,49 @@ test_parser (void)
   error = NULL;
   gtk_builder_add_from_string (builder, "<xxx/>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_UNHANDLED_TAG);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface invalid=\"X\"/>", -1, &error);
   g_assert_error (error, G_MARKUP_ERROR, G_MARKUP_ERROR_UNKNOWN_ATTRIBUTE);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><child/></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_TAG);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"GtkBox\" id=\"a\"><object class=\"GtkBox\" id=\"b\"/></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_TAG);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"Unknown\" id=\"a\"></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"GtkWidget\" id=\"a\" constructor=\"none\"></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"GtkButton\" id=\"a\"><child internal-child=\"foobar\"><object class=\"GtkButton\" id=\"int\"/></child></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"GtkButton\" id=\"a\"></object><object class=\"GtkButton\" id=\"a\"/></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_DUPLICATE_ID);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"GtkButton\" id=\"a\"><property name=\"deafbeef\"></property></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_PROPERTY);
-  g_clear_error (&error);
+  g_error_free (error);
 
+  error = NULL;
   gtk_builder_add_from_string (builder, "<interface><object class=\"GtkButton\" id=\"a\"><signal name=\"deafbeef\" handler=\"gtk_true\"/></object></interface>", -1, &error);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_SIGNAL);
   g_error_free (error);
@@ -1755,22 +1764,26 @@ test_value_from_string (void)
   g_assert_true (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, "blaurgh", &value, &error) == FALSE);
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_true (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, "yess", &value, &error) == FALSE);
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_true (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, "trueee", &value, &error) == FALSE);
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_false (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, "", &value, &error));
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_true (gtk_builder_value_from_string_type (builder, G_TYPE_INT, "12345", &value, &error));
   g_assert_true (G_VALUE_HOLDS_INT (&value));
@@ -1805,12 +1818,14 @@ test_value_from_string (void)
   g_assert_false (gtk_builder_value_from_string_type (builder, G_TYPE_FLOAT, "abc", &value, &error));
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_false (gtk_builder_value_from_string_type (builder, G_TYPE_INT, "/-+,abc", &value, &error));
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_true (gtk_builder_value_from_string_type (builder, GTK_TYPE_TEXT_DIRECTION, "rtl", &value, &error));
   g_assert_true (G_VALUE_HOLDS_ENUM (&value));
@@ -1820,12 +1835,14 @@ test_value_from_string (void)
   g_assert_false (gtk_builder_value_from_string_type (builder, GTK_TYPE_TEXT_DIRECTION, "sliff", &value, &error));
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_assert_false (gtk_builder_value_from_string_type (builder, GTK_TYPE_TEXT_DIRECTION, "foobar", &value, &error));
   g_value_unset (&value);
   g_assert_error (error, GTK_BUILDER_ERROR, GTK_BUILDER_ERROR_INVALID_VALUE);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   g_object_unref (builder);
 }
@@ -1985,7 +2002,8 @@ test_pango_attributes (void)
   gtk_builder_add_from_string (builder, err_buffer1, -1, &error);
   g_assert_error (error, G_MARKUP_ERROR, G_MARKUP_ERROR_MISSING_ATTRIBUTE);
   g_object_unref (builder);
-  g_clear_error (&error);
+  g_error_free (error);
+  error = NULL;
 
   builder = gtk_builder_new ();
   gtk_builder_add_from_string (builder, err_buffer2, -1, &error);
@@ -2322,7 +2340,7 @@ test_no_ids (void)
 
   builder = gtk_builder_new ();
   gtk_builder_add_from_string (builder, buffer, -1, &error);
-  g_assert_no_error (error);
+  g_assert_null (error);
 
   obj = gtk_builder_get_object (builder, "button_ok");
   g_assert_true (GTK_IS_BUTTON (obj));
@@ -2635,12 +2653,6 @@ builder_copy_arg (gpointer item, const char *arg)
   return g_strdup (arg);
 }
 
-G_MODULE_EXPORT char *
-builder_get_search_if_null (gpointer item, const char *arg)
-{
-  return (arg == NULL) ? g_strdup (gtk_string_filter_get_search (item)) : g_strdup (arg);
-}
-
 static void
 test_expressions (void)
 {
@@ -2669,30 +2681,6 @@ test_expressions (void)
     "    <property name='expression'><closure type='gchararray' function='builder_copy_arg'>"
     "      <constant type='gchararray'>Hello World</constant>"
     "    </closure></property>"
-    "  </object>"
-    "</interface>",
-    "<interface>"
-    "  <object class='GtkLabel' id='label'></object>"
-    "  <object class='GtkStringFilter' id='filter'>"
-    "    <property name='search'>Hello World</property>"
-    "    <property name='expression'>"
-    "      <try>"
-    "        <lookup name='title' type='GtkWindow'>"
-    "          <lookup name='root' type='GtkLabel'>label</lookup>"
-    "        </lookup>"
-    "        <constant type='gchararray'>Hello World</constant>"
-    "      </try>"
-    "    </property>"
-    "  </object>"
-    "</interface>",
-    "<interface>"
-    "  <object class='GtkStringFilter' id='filter'>"
-    "    <property name='search'>Hello World</property>"
-    "    <property name='expression'>"
-    "      <closure type='gchararray' function='builder_get_search_if_null'>"
-    "        <constant type='gchararray' initial='true' />"
-    "      </closure>"
-    "    </property>"
     "  </object>"
     "</interface>",
   };
@@ -2929,70 +2917,6 @@ test_buildable (void)
   g_object_unref (my_gtk_buildable);
 }
 
-
-static GFile *
-builder_object_get_file_property (GtkBuilder  *builder, const gchar *object_id)
-{
-  GObject *obj = gtk_builder_get_object (builder, object_id);
-  GFile *value = NULL;
-
-  g_assert_nonnull (obj);
-
-  g_object_get (obj, "file", &value, NULL);
-  g_assert_nonnull (value);
-
-  g_assert_true (g_type_is_a (G_OBJECT_TYPE (value), G_TYPE_FILE));
-
-  return value;
-}
-
-static void
-test_picture (void)
-{
-  GtkBuilder *builder;
-  GError *error = NULL;
-  GFile *file_path, *file_uri;
-  gchar *contents = NULL;
-  gchar *path, *uri;
-
-  /* Load from file so builder knows where to read the files from */
-  path = g_test_build_filename (G_TEST_DIST, "ui", "picture.ui", NULL);
-  builder = gtk_builder_new ();
-  gtk_builder_add_from_file (builder, path, &error);
-  if (error)
-    {
-      g_print ("ERROR: %s", error->message);
-      g_error_free (error);
-    }
-  g_assert_null (error);
-
-  file_path = builder_object_get_file_property (builder, "relative_path");
-  path = g_file_get_path (file_path);
-  g_assert_nonnull (path);
-
-  /* Check path is absolute */
-  g_assert_true (g_path_is_absolute (path));
-
-  /* Check contents can be loaded */
-  g_assert_true (g_file_load_contents (file_path, NULL, &contents, NULL, NULL, NULL));
-  g_free (contents);
-
-  file_uri = builder_object_get_file_property (builder, "relative_uri");
-  uri = g_file_get_uri (file_uri);
-  g_assert_nonnull (uri);
-
-  /* Check uri is absolute */
-  g_assert_true (g_str_has_prefix (uri, "file://"));
-  g_assert_true (g_path_is_absolute (uri + strlen("file://")));
-
-  g_assert_true (g_file_load_contents (file_uri, NULL, &contents, NULL, NULL, NULL));
-  g_free (contents);
-
-  g_object_unref (builder);
-  g_free (path);
-  g_free (uri);
-}
-
 int
 main (int argc, char **argv)
 {
@@ -3042,7 +2966,6 @@ main (int argc, char **argv)
   g_test_add_func ("/Builder/Expressions", test_expressions);
   g_test_add_func ("/Builder/Child Dispose Order", test_child_dispose_order);
   g_test_add_func ("/Builder/Buildable", test_buildable);
-  g_test_add_func ("/Builder/Picture", test_picture);
 
   return g_test_run();
 }

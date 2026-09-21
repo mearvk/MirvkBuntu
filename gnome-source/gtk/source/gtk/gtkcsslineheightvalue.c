@@ -34,28 +34,30 @@ static GtkCssValue *gtk_css_value_line_height_new       (GtkCssValue *height);
 static void
 gtk_css_value_line_height_free (GtkCssValue *value)
 {
-  gtk_css_value_unref (value->height);
+  _gtk_css_value_unref (value->height);
   g_free (value);
 }
 
 static GtkCssValue *
-gtk_css_value_line_height_compute (GtkCssValue          *value,
-                                   guint                 property_id,
-                                   GtkCssComputeContext *context)
+gtk_css_value_line_height_compute (GtkCssValue      *value,
+                                   guint             property_id,
+                                   GtkStyleProvider *provider,
+                                   GtkCssStyle      *style,
+                                   GtkCssStyle      *parent_style)
 {
   GtkCssValue *height;
 
-  height = gtk_css_value_compute (value->height, property_id, context);
+  height = _gtk_css_value_compute (value->height, property_id, provider, style, parent_style);
 
   if (gtk_css_number_value_get_dimension (height) == GTK_CSS_DIMENSION_PERCENTAGE)
     {
       double factor;
       GtkCssValue *computed;
 
-      factor = gtk_css_number_value_get (height, 1);
-      computed = gtk_css_number_value_multiply (context->style->core->font_size, factor);
+      factor = _gtk_css_number_value_get (height, 1);
+      computed = gtk_css_number_value_multiply (style->core->font_size, factor);
 
-      gtk_css_value_unref (height);
+      _gtk_css_value_unref (height);
 
       return computed;
     }
@@ -72,7 +74,7 @@ gtk_css_value_line_height_equal (const GtkCssValue *value1,
   if (value1->height == NULL || value2->height == NULL)
     return FALSE;
 
-  return gtk_css_value_equal (value1->height, value2->height);
+  return _gtk_css_value_equal (value1->height, value2->height);
 }
 
 static GtkCssValue *
@@ -86,7 +88,7 @@ gtk_css_value_line_height_transition (GtkCssValue *start,
   if (start->height == NULL || end->height == NULL)
     return NULL;
 
-  height = gtk_css_value_transition (start->height, end->height, property_id, progress);
+  height = _gtk_css_value_transition (start->height, end->height, property_id, progress);
   if (height == NULL)
     return NULL;
 
@@ -100,14 +102,13 @@ gtk_css_value_line_height_print (const GtkCssValue *value,
   if (value->height == NULL)
     g_string_append (string, "normal");
   else
-    gtk_css_value_print (value->height, string);
+    _gtk_css_value_print (value->height, string);
 }
 
 static const GtkCssValueClass GTK_CSS_VALUE_LINE_HEIGHT = {
   "GtkCssLineHeightValue",
   gtk_css_value_line_height_free,
   gtk_css_value_line_height_compute,
-  NULL,
   gtk_css_value_line_height_equal,
   gtk_css_value_line_height_transition,
   NULL,
@@ -120,7 +121,7 @@ gtk_css_value_line_height_new_empty (void)
 {
   GtkCssValue *result;
 
-  result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_LINE_HEIGHT);
+  result = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_LINE_HEIGHT);
   result->height = NULL;
   result->is_computed = TRUE;
 
@@ -132,7 +133,7 @@ gtk_css_value_line_height_new (GtkCssValue *height)
 {
   GtkCssValue *result;
 
-  result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_LINE_HEIGHT);
+  result = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_LINE_HEIGHT);
   result->height = height;
 
   return result;
@@ -153,12 +154,12 @@ gtk_css_line_height_value_parse (GtkCssParser *parser)
   GtkCssValue *height;
 
   if (gtk_css_parser_try_ident (parser, "normal"))
-    return gtk_css_value_ref (gtk_css_line_height_value_get_default ());
+    return _gtk_css_value_ref (gtk_css_line_height_value_get_default ());
 
-  height = gtk_css_number_value_parse (parser, GTK_CSS_PARSE_NUMBER |
-                                               GTK_CSS_PARSE_PERCENT |
-                                               GTK_CSS_PARSE_LENGTH |
-                                               GTK_CSS_POSITIVE_ONLY);
+  height = _gtk_css_number_value_parse (parser, GTK_CSS_PARSE_NUMBER |
+                                                GTK_CSS_PARSE_PERCENT |
+                                                GTK_CSS_PARSE_LENGTH |
+                                                GTK_CSS_POSITIVE_ONLY);
   if (!height)
     return NULL;
 
@@ -171,5 +172,5 @@ gtk_css_line_height_value_get (const GtkCssValue *value)
   if (value->class == &GTK_CSS_VALUE_LINE_HEIGHT)
     return 0.0;
 
-  return gtk_css_number_value_get (value, 1);
+  return _gtk_css_number_value_get (value, 1);
 }

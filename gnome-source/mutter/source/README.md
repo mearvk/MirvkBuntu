@@ -1,11 +1,13 @@
 # Mutter
 
-Mutter is a Wayland display server.
+Mutter is a Wayland display server and X11 window manager and compositor library.
 
-Mutter runs on top of KMS and libinput. It
+When used as a Wayland display server, it runs on top of KMS and libinput. It
 implements the compositor side of the Wayland core protocol as well as various
 protocol extensions. It also has functionality related to running X11
 applications using Xwayland.
+
+When used on top of Xorg it acts as a X11 window manager and compositing manager.
 
 It contains functionality related to, among other things, window management,
 window compositing, focus tracking, workspace management, keybindings and
@@ -36,19 +38,15 @@ documentation and API references below first.
 - [Building and Running](doc/building-and-running.md)
 - [Debugging](doc/debugging.md)
 - [Monitor configuration](doc/monitor-configuration.md)
-- [Multi-GPU](doc/multi-gpu.md)
 
 ## API Reference
 
 - Meta: <https://mutter.gnome.org/meta/>
 - Clutter: <https://mutter.gnome.org/clutter/>
+- Cally: <https://mutter.gnome.org/cally/>
 - Cogl: <https://mutter.gnome.org/cogl/>
+- CoglPango: <https://mutter.gnome.org/cogl-pango/>
 - Mtk: <https://mutter.gnome.org/mtk/>
-
-## Meetings
-
-There are [recurring meetings](https://hedgedoc.gnome.org/s/ymP_L5MUs) to
-discuss development of GNOME Shell, mutter and related components.
 
 ## License
 

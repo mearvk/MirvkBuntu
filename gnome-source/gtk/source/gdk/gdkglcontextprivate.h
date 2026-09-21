@@ -24,22 +24,17 @@
 #include "gdkdrawcontextprivate.h"
 #include "gdkglversionprivate.h"
 #include "gdkdmabufprivate.h"
-#include "gdkdebugprivate.h"
 
 G_BEGIN_DECLS
 
 typedef enum {
   GDK_GL_FEATURE_DEBUG                      = 1 << 0,
-  GDK_GL_FEATURE_BASE_INSTANCE              = 1 << 1,
-  GDK_GL_FEATURE_BUFFER_STORAGE             = 1 << 2,
-  GDK_GL_FEATURE_EXTERNAL_OBJECTS           = 1 << 3,
-  GDK_GL_FEATURE_EXTERNAL_OBJECTS_WIN32     = 1 << 4,
-  GDK_GL_FEATURE_BLEND_FUNC_EXTENDED        = 1 << 5,
+  GDK_GL_FEATURE_UNPACK_SUBIMAGE            = 1 << 1,
+  GDK_GL_FEATURE_VERTEX_HALF_FLOAT          = 1 << 2,
+  GDK_GL_FEATURE_SYNC                       = 1 << 3,
+  GDK_GL_FEATURE_BASE_INSTANCE              = 1 << 4,
+  GDK_GL_FEATURE_BUFFER_STORAGE             = 1 << 5,
 } GdkGLFeatures;
-
-#define GDK_GL_N_FEATURES 3
-
-extern const GdkDebugKey gdk_gl_feature_keys[];
 
 typedef enum {
   GDK_GL_NONE = 0,
@@ -64,6 +59,12 @@ typedef enum {
  * Note that this is equal to the max buffer age value we
  * can provide a damage region for */
 #define GDK_GL_MAX_TRACKED_BUFFERS 4
+
+#define GDK_GL_CONTEXT_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_GL_CONTEXT, GdkGLContextClass))
+#define GDK_IS_GL_CONTEXT_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_GL_CONTEXT))
+#define GDK_GL_CONTEXT_GET_CLASS(obj)	(G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_GL_CONTEXT, GdkGLContextClass))
+
+typedef struct _GdkGLContextClass       GdkGLContextClass;
 
 struct _GdkGLContext
 {
@@ -119,11 +120,10 @@ gboolean                gdk_gl_backend_can_be_used              (GdkGLBackend   
                                                                  GError         **error);
 void                    gdk_gl_backend_use                      (GdkGLBackend     backend_type);
 
-GdkGLContext *          gdk_gl_context_clear_current_if_surface (GdkSurface             *surface) G_GNUC_WARN_UNUSED_RESULT;
+void                    gdk_gl_context_clear_current_if_surface (GdkSurface      *surface);
 
-GdkGLContext *          gdk_gl_context_new                      (GdkDisplay             *display,
-                                                                 GdkSurface             *surface,
-                                                                 gboolean                surface_attached);
+GdkGLContext *          gdk_gl_context_new                      (GdkDisplay      *display,
+                                                                 GdkSurface      *surface);
 
 gboolean                gdk_gl_context_is_api_allowed           (GdkGLContext           *self,
                                                                  GdkGLAPI                api,
@@ -132,16 +132,16 @@ void                    gdk_gl_context_set_version              (GdkGLContext   
                                                                  const GdkGLVersion     *version);
 void                    gdk_gl_context_set_is_legacy            (GdkGLContext           *context,
                                                                  gboolean                is_legacy);
-gboolean                gdk_gl_context_check_gl_version         (GdkGLContext           *self,
+gboolean                gdk_gl_context_check_gl_version         (GdkGLContext           *context,
                                                                  const GdkGLVersion     *gl_version,
                                                                  const GdkGLVersion     *gles_version);
 
 static inline gboolean
-gdk_gl_context_check_version (GdkGLContext *self,
+gdk_gl_context_check_version (GdkGLContext *context,
                               const char   *gl_version,
                               const char   *gles_version)
 {
-  return gdk_gl_context_check_gl_version (self,
+  return gdk_gl_context_check_gl_version (context,
                                           gl_version ? &GDK_GL_VERSION_STRING (gl_version) : NULL,
                                           gles_version ? &GDK_GL_VERSION_STRING (gles_version) : NULL);
 }
@@ -150,11 +150,6 @@ void                    gdk_gl_context_get_matching_version     (GdkGLContext   
                                                                  GdkGLAPI                api,
                                                                  gboolean                legacy,
                                                                  GdkGLVersion           *out_version);
-
-#ifdef HAVE_EGL
-void                    gdk_gl_context_set_egl_native_window    (GdkGLContext           *self,
-                                                                 gpointer                native_window);
-#endif
 
 void                    gdk_gl_context_push_debug_group         (GdkGLContext    *context,
                                                                  const char      *message);
@@ -183,13 +178,13 @@ gboolean                gdk_gl_context_use_es_bgra              (GdkGLContext   
 
 gboolean                gdk_gl_context_has_vertex_arrays        (GdkGLContext    *self) G_GNUC_PURE;
 
-void                    gdk_gl_context_download                 (GdkGLContext    *self,
-                                                                 GLuint           tex_id,
-                                                                 GdkMemoryFormat  tex_format,
-                                                                 GdkColorState   *tex_color_state,
-                                                                 guchar          *dest_data,
-                                                                 const GdkMemoryLayout *dest_layout,
-                                                                 GdkColorState   *dest_color_state);
+double                  gdk_gl_context_get_scale                (GdkGLContext    *self);
+
+guint                   gdk_gl_context_import_dmabuf            (GdkGLContext    *self,
+                                                                 int              width,
+                                                                 int              height,
+                                                                 const GdkDmabuf *dmabuf,
+                                                                 gboolean        *external);
 
 gboolean                gdk_gl_context_export_dmabuf            (GdkGLContext    *self,
                                                                  unsigned int     texture_id,

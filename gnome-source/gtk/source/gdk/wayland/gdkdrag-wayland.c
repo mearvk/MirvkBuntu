@@ -19,14 +19,12 @@
 
 #include "gdkdragprivate.h"
 
+#include "gdkprivate-wayland.h"
 #include "gdkcontentformats.h"
 #include "gdkdisplay-wayland.h"
-#include "gdkdrop-wayland.h"
 #include <glib/gi18n-lib.h>
 #include "gdkseat-wayland.h"
-#include "gdkdragsurface-wayland.h"
 #include "gdksurface-wayland-private.h"
-#include "gdkdevice-wayland-private.h"
 
 #include "gdkdeviceprivate.h"
 
@@ -35,17 +33,12 @@
 #include <gio/gunixoutputstream.h>
 #include <string.h>
 
-#define WL_DATA_DEVICE_MANAGER_SET_DRAG_CURSOR_SINCE_VERSION 4
-
 #define GDK_TYPE_WAYLAND_DRAG              (gdk_wayland_drag_get_type ())
 #define GDK_WAYLAND_DRAG(object)           (G_TYPE_CHECK_INSTANCE_CAST ((object), GDK_TYPE_WAYLAND_DRAG, GdkWaylandDrag))
 #define GDK_WAYLAND_DRAG_CLASS(klass)      (G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_WAYLAND_DRAG, GdkWaylandDragClass))
 #define GDK_IS_WAYLAND_DRAG(object)        (G_TYPE_CHECK_INSTANCE_TYPE ((object), GDK_TYPE_WAYLAND_DRAG))
 #define GDK_IS_WAYLAND_DRAG_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_WAYLAND_DRAG))
 #define GDK_WAYLAND_DRAG_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_WAYLAND_DRAG, GdkWaylandDragClass))
-
-static void gdk_wayland_drag_set_cursor (GdkDrag   *drag,
-                                         GdkCursor *cursor);
 
 typedef struct _GdkWaylandDrag GdkWaylandDrag;
 typedef struct _GdkWaylandDragClass GdkWaylandDragClass;
@@ -81,7 +74,7 @@ gdk_wayland_drag_finalize (GObject *object)
 
   drags = g_list_remove (drags, drag);
 
-  gdk_wayland_drag_set_cursor (drag, NULL);
+  gdk_drag_set_cursor (drag, NULL);
 
   g_clear_pointer (&wayland_drag->data_source, wl_data_source_destroy);
   g_clear_pointer (&wayland_drag->offer, wl_data_offer_destroy);
@@ -116,6 +109,8 @@ gdk_wayland_drag_init (GdkWaylandDrag *drag_wayland)
 
   drag = GDK_DRAG (drag_wayland);
   drags = g_list_prepend (drags, drag);
+
+  gdk_drag_set_selected_action (drag, GDK_ACTION_COPY);
 }
 
 static GdkSurface *
@@ -149,39 +144,24 @@ static void
 gdk_wayland_drag_set_cursor (GdkDrag   *drag,
                              GdkCursor *cursor)
 {
-  GdkDisplay *display = gdk_drag_get_display (drag);
-  GdkWaylandDisplay *display_wayland = GDK_WAYLAND_DISPLAY (display);
   GdkDevice *device = gdk_drag_get_device (drag);
-
-  if (wl_data_device_manager_get_version (display_wayland->data_device_manager) >= WL_DATA_DEVICE_MANAGER_SET_DRAG_CURSOR_SINCE_VERSION)
-    return;
 
   if (device != NULL)
     gdk_wayland_seat_set_global_cursor (gdk_device_get_seat (device), cursor);
 }
 
 static void
-gdk_wayland_drag_update_cursor (GdkDrag *drag)
+gdk_wayland_drag_drop_performed (GdkDrag *drag,
+                                 guint32  time_)
 {
-  GdkDragAction action;
-  GdkCursor *cursor;
-
-  action = gdk_drag_get_selected_action (drag);
-  cursor = gdk_drag_get_cursor (drag, action);
-  gdk_wayland_drag_set_cursor (drag, cursor);
-}
-
-static void
-gdk_wayland_drag_drop_performed (GdkDrag *drag)
-{
-  gdk_wayland_drag_set_cursor (drag, NULL);
+  gdk_drag_set_cursor (drag, NULL);
 }
 
 static void
 gdk_wayland_drag_cancel (GdkDrag             *drag,
                          GdkDragCancelReason  reason)
 {
-  gdk_wayland_drag_set_cursor (drag, NULL);
+  gdk_drag_set_cursor (drag, NULL);
   gdk_drag_drop_done (drag, FALSE);
 }
 
@@ -212,7 +192,7 @@ gdk_wayland_drag_class_init (GdkWaylandDragClass *klass)
   drag_class->get_drag_surface = gdk_wayland_drag_get_drag_surface;
   drag_class->set_hotspot = gdk_wayland_drag_set_hotspot;
   drag_class->drop_done = gdk_wayland_drag_drop_done;
-  drag_class->update_cursor = gdk_wayland_drag_update_cursor;
+  drag_class->set_cursor = gdk_wayland_drag_set_cursor;
   drag_class->drop_performed = gdk_wayland_drag_drop_performed;
   drag_class->cancel = gdk_wayland_drag_cancel;
 }
@@ -270,13 +250,8 @@ data_source_send (void                  *data,
                      "%p: data source send request for %s on fd %d\n",
                      source, mime_type, fd);
 
-  mime_type = gdk_intern_mime_type (mime_type);
-  if (!mime_type)
-    {
-      close (fd);
-      return;
-    }
-
+  //mime_type = gdk_intern_mime_type (mime_type);
+  mime_type = g_intern_string (mime_type);
   stream = g_unix_output_stream_new (fd, TRUE);
 
   gdk_drag_write_async (drag,
@@ -391,6 +366,7 @@ _gdk_wayland_surface_drag_begin (GdkSurface         *surface,
   GdkDrag *drag;
   GdkSeat *seat;
   GdkDisplay *display;
+  GdkCursor *cursor;
 
   display = gdk_device_get_display (device);
   seat = gdk_device_get_seat (device);
@@ -421,7 +397,10 @@ _gdk_wayland_surface_drag_begin (GdkSurface         *surface,
                              gdk_wayland_surface_get_wl_surface (drag_wayland->dnd_surface),
                              _gdk_wayland_seat_get_implicit_grab_serial (seat, device, NULL));
 
-  gdk_drag_update_cursor (drag);
+  cursor = gdk_drag_get_cursor (drag, gdk_drag_get_selected_action (drag));
+  gdk_drag_set_cursor (drag, cursor);
+
+  gdk_seat_ungrab (seat);
 
   return drag;
 }

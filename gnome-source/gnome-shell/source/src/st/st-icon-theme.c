@@ -34,9 +34,9 @@
 #define DEFAULT_ICON_THEME "Adwaita"
 
 /**
- * StIconTheme:
- *
- * Looking up icons by name
+ * SECTION:sticontheme
+ * @Short_description: Looking up icons by name
+ * @Title: StIconTheme
  *
  * #StIconTheme provides a facility for looking up icons by name
  * and size. The main reason for using a name rather than simply
@@ -493,7 +493,7 @@ free_dir_mtime (IconThemeDirMtime *dir_mtime)
   g_free (dir_mtime);
 }
 
-static void
+static gboolean
 theme_changed_idle (gpointer user_data)
 {
   StIconTheme *icon_theme;
@@ -503,6 +503,8 @@ theme_changed_idle (gpointer user_data)
   g_signal_emit (icon_theme, signals[CHANGED], 0);
 
   icon_theme->theme_changed_idle = 0;
+
+  return FALSE;
 }
 
 static void
@@ -510,7 +512,7 @@ queue_theme_changed (StIconTheme *icon_theme)
 {
   if (!icon_theme->theme_changed_idle)
     {
-      icon_theme->theme_changed_idle = g_idle_add_once (theme_changed_idle, icon_theme);
+      icon_theme->theme_changed_idle = g_idle_add (theme_changed_idle, icon_theme);
       g_source_set_name_by_id (icon_theme->theme_changed_idle, "theme_changed_idle");
     }
 }
@@ -1550,17 +1552,18 @@ choose_icon (StIconTheme       *icon_theme,
  * Looks up a named icon and returns a #StIconInfo containing
  * information such as the filename of the icon. The icon
  * can then be rendered into a pixbuf using
- * [method@St.IconInfo.load_icon]. ([method@St.IconTheme.load_icon]
+ * st_icon_info_load_icon(). (st_icon_theme_load_icon()
  * combines these two steps if all you need is the pixbuf.)
  *
  * When rendering on displays with high pixel densities you should not
  * use a @size multiplied by the scaling factor returned by functions
  * like gdk_window_get_scale_factor(). Instead, you should use
- * [method@St.IconTheme.lookup_by_gicon_for_scale], as the assets loaded
+ * st_icon_theme_lookup_icon_for_scale(), as the assets loaded
  * for a given scaling factor may be different.
  *
  * Returns: (nullable) (transfer full): a #StIconInfo object
- *     containing information about the icon.
+ *     containing information about the icon, or %NULL if the
+ *     icon wasn’t found.
  */
 StIconInfo *
 st_icon_theme_lookup_icon (StIconTheme       *icon_theme,
@@ -1590,11 +1593,12 @@ st_icon_theme_lookup_icon (StIconTheme       *icon_theme,
  * Looks up a named icon for a particular window scale and returns a
  * #StIconInfo containing information such as the filename of the
  * icon. The icon can then be rendered into a pixbuf using
- * [method@St.IconInfo.load_icon]. ([method@St.IconTheme.load_icon] combines
+ * st_icon_info_load_icon(). (st_icon_theme_load_icon() combines
  * these two steps if all you need is the pixbuf.)
  *
  * Returns: (nullable) (transfer full): a #StIconInfo object
- *     containing information about the icon.
+ *     containing information about the icon, or %NULL if the
+ *     icon wasn’t found.
  */
 StIconInfo *
 st_icon_theme_lookup_icon_for_scale (StIconTheme       *icon_theme,
@@ -1687,7 +1691,7 @@ st_icon_theme_lookup_icon_for_scale (StIconTheme       *icon_theme,
  * Looks up a named icon and returns a #StIconInfo containing
  * information such as the filename of the icon. The icon
  * can then be rendered into a pixbuf using
- * [method@St.IconInfo.load_icon]. ([method@St.IconTheme.load_icon]
+ * st_icon_info_load_icon(). (st_icon_theme_load_icon()
  * combines these two steps if all you need is the pixbuf.)
  *
  * If @icon_names contains more than one name, this function
@@ -1695,7 +1699,8 @@ st_icon_theme_lookup_icon_for_scale (StIconTheme       *icon_theme,
  * inherited icon themes.
  *
  * Returns: (nullable) (transfer full): a #StIconInfo object
- * containing information about the icon
+ * containing information about the icon, or %NULL if the icon wasn’t
+ * found.
  */
 StIconInfo *
 st_icon_theme_choose_icon (StIconTheme       *icon_theme,
@@ -1724,7 +1729,7 @@ st_icon_theme_choose_icon (StIconTheme       *icon_theme,
  * Looks up a named icon for a particular window scale and returns
  * a #StIconInfo containing information such as the filename of the
  * icon. The icon can then be rendered into a pixbuf using
- * [method@St.IconInfo.load_icon]. ([method@St.IconTheme.load_icon]
+ * st_icon_info_load_icon(). (st_icon_theme_load_icon()
  * combines these two steps if all you need is the pixbuf.)
  *
  * If @icon_names contains more than one name, this function
@@ -1732,7 +1737,8 @@ st_icon_theme_choose_icon (StIconTheme       *icon_theme,
  * inherited icon themes.
  *
  * Returns: (nullable) (transfer full): a #StIconInfo object
- *     containing information about the icon.
+ *     containing information about the icon, or %NULL if the
+ *     icon wasn’t found.
  */
 StIconInfo *
 st_icon_theme_choose_icon_for_scale (StIconTheme       *icon_theme,
@@ -1764,7 +1770,7 @@ st_icon_theme_error_quark (void)
  * @icon_theme: a #StIconTheme
  * @icon_name: the name of the icon to lookup
  * @size: the desired icon size. The resulting icon may not be
- *     exactly this size.
+ *     exactly this size; see st_icon_info_load_icon().
  * @flags: flags modifying the behavior of the icon lookup
  * @error: (allow-none): Location to store error information on failure,
  *     or %NULL.
@@ -1772,7 +1778,7 @@ st_icon_theme_error_quark (void)
  * Looks up an icon in an icon theme, scales it to the given size
  * and renders it into a pixbuf. This is a convenience function;
  * if more details about the icon are needed, use
- * [method@St.IconTheme.lookup_icon] followed by [method@St.IconInfo.load_icon].
+ * st_icon_theme_lookup_icon() followed by st_icon_info_load_icon().
  *
  * Note that you probably want to listen for icon theme changes and
  * update the icon. This is usually done by connecting to the
@@ -1784,7 +1790,8 @@ st_icon_theme_error_quark (void)
  *
  * Returns: (nullable) (transfer full): the rendered icon; this may be
  *     a newly created icon or a new reference to an internal icon, so
- *     you must not modify the icon.
+ *     you must not modify the icon. Use g_object_unref() to release
+ *     your reference to the icon. %NULL if the icon isn’t found.
  */
 GdkPixbuf *
 st_icon_theme_load_icon (StIconTheme       *icon_theme,
@@ -1808,7 +1815,7 @@ st_icon_theme_load_icon (StIconTheme       *icon_theme,
  * @icon_theme: a #StIconTheme
  * @icon_name: the name of the icon to lookup
  * @size: the desired icon size. The resulting icon may not be
- *     exactly this size.
+ *     exactly this size; see st_icon_info_load_icon().
  * @scale: desired scale
  * @flags: flags modifying the behavior of the icon lookup
  * @error: (allow-none): Location to store error information on failure,
@@ -1817,8 +1824,8 @@ st_icon_theme_load_icon (StIconTheme       *icon_theme,
  * Looks up an icon in an icon theme for a particular window scale,
  * scales it to the given size and renders it into a pixbuf. This is a
  * convenience function; if more details about the icon are needed,
- * use [method@St.IconTheme.lookup_icon] followed by
- * [method@St.IconInfo.load_icon].
+ * use st_icon_theme_lookup_icon() followed by
+ * st_icon_info_load_icon().
  *
  * Note that you probably want to listen for icon theme changes and
  * update the icon. This is usually done by connecting to the
@@ -1830,7 +1837,8 @@ st_icon_theme_load_icon (StIconTheme       *icon_theme,
  *
  * Returns: (nullable) (transfer full): the rendered icon; this may be
  *     a newly created icon or a new reference to an internal icon, so
- *     you must not modify the icon.
+ *     you must not modify the icon. Use g_object_unref() to release
+ *     your reference to the icon. %NULL if the icon isn’t found.
  */
 GdkPixbuf *
 st_icon_theme_load_icon_for_scale (StIconTheme       *icon_theme,
@@ -2886,9 +2894,8 @@ st_icon_info_class_init (StIconInfoClass *klass)
  * st_icon_info_get_base_size:
  * @icon_info: a #StIconInfo
  *
- * Gets the base size for the icon.
- *
- * The base size is a size for the icon that was specified by
+ * Gets the base size for the icon. The base size
+ * is a size for the icon that was specified by
  * the icon theme creator. This may be different
  * than the actual size of image; an example of
  * this is small emblem icons that can be attached
@@ -2914,12 +2921,11 @@ st_icon_info_get_base_size (StIconInfo *icon_info)
  * st_icon_info_get_base_scale:
  * @icon_info: a #StIconInfo
  *
- * Gets the base scale for the icon.
- *
- * The base scale is a scale for the icon that was specified by
- * the icon theme creator. For instance an icon drawn for a
- * high-dpi screen with window scale 2 for a base size of 32 will be
- * 64 pixels tall and have a base scale of 2.
+ * Gets the base scale for the icon. The base scale is a scale
+ * for the icon that was specified by the icon theme creator.
+ * For instance an icon drawn for a high-dpi screen with window
+ * scale 2 for a base size of 32 will be 64 pixels tall and have
+ * a base scale of 2.
  *
  * Returns: the base scale
  */
@@ -2937,7 +2943,7 @@ st_icon_info_get_base_scale (StIconInfo *icon_info)
  *
  * Gets the filename for the icon.
  *
- * Returns: (nullable) (type filename): the filename for the icon.
+ * Returns: (nullable) (type filename): the filename for the icon, or %NULL.
  *     The return value is owned by GTK+ and should not be modified
  *     or freed.
  */
@@ -2953,10 +2959,8 @@ st_icon_info_get_filename (StIconInfo *icon_info)
  * st_icon_info_is_symbolic:
  * @icon_info: a #StIconInfo
  *
- * Checks if the icon is symbolic or not.
- *
- * This currently uses only the file name and not
- * the file contents for determining this.
+ * Checks if the icon is symbolic or not. This currently uses only
+ * the file name and not the file contents for determining this.
  * This behaviour may change in the future.
  *
  * Returns: %TRUE if the icon is symbolic, %FALSE otherwise
@@ -3407,13 +3411,13 @@ proxy_pixbuf_destroy (guchar *pixels, gpointer data)
 
 /**
  * st_icon_info_load_icon:
- * @icon_info: a #StIconInfo
+ * @icon_info: a #StIconInfo from st_icon_theme_lookup_icon()
  * @error: (allow-none): location to store error information on failure,
  *     or %NULL.
  *
  * Renders an icon previously looked up in an icon theme using
- * [method@St.IconTheme.lookup_icon]; the size will be based on the size
- * passed to [method@St.IconTheme.lookup_icon]. Note that the resulting
+ * st_icon_theme_lookup_icon(); the size will be based on the size
+ * passed to st_icon_theme_lookup_icon(). Note that the resulting
  * pixbuf may not be exactly this size; an icon theme may have icons
  * that differ slightly from their nominal sizes, and in addition GTK+
  * will avoid scaling icons that it considers sufficiently close to the
@@ -3490,16 +3494,16 @@ load_icon_thread  (GTask        *task,
 
 /**
  * st_icon_info_load_icon_async:
- * @icon_info: a #StIconInfo
+ * @icon_info: a #StIconInfo from st_icon_theme_lookup_icon()
  * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore
- * @callback: (scope async) (closure user_data): a #GAsyncReadyCallback to call when the
+ * @callback: (scope async): a #GAsyncReadyCallback to call when the
  *     request is satisfied
- * @user_data: the data to pass to callback function
+ * @user_data: (closure): the data to pass to callback function
  *
  * Asynchronously load, render and scale an icon previously looked up
- * from the icon theme using [method@St.IconTheme.lookup_icon].
+ * from the icon theme using st_icon_theme_lookup_icon().
  *
- * For more details, see [method@St.IconInfo.load_icon] which is the synchronous
+ * For more details, see st_icon_info_load_icon() which is the synchronous
  * version of this call.
  */
 void
@@ -3514,7 +3518,6 @@ st_icon_info_load_icon_async (StIconInfo          *icon_info,
   GError *error = NULL;
 
   task = g_task_new (icon_info, cancellable, callback, user_data);
-  g_task_set_source_tag (task, st_icon_info_load_icon_async);
 
   if (icon_info_get_pixbuf_ready (icon_info))
     {
@@ -3536,7 +3539,7 @@ st_icon_info_load_icon_async (StIconInfo          *icon_info,
 
 /**
  * st_icon_info_load_icon_finish:
- * @icon_info: a #StIconInfo
+ * @icon_info: a #StIconInfo from st_icon_theme_lookup_icon()
  * @res: a #GAsyncResult
  * @error: (allow-none): location to store error information on failure,
  *     or %NULL.
@@ -3635,7 +3638,7 @@ symbolic_cache_get_proxy (SymbolicPixbufCache *symbolic_cache,
 }
 
 static char *
-color_to_string_noalpha (const CoglColor *color)
+color_to_string_noalpha (const ClutterColor *color)
 {
   return g_strdup_printf ("rgb(%d,%d,%d)",
                           color->red,
@@ -3644,8 +3647,8 @@ color_to_string_noalpha (const CoglColor *color)
 }
 
 static void
-color_to_pixel(const CoglColor *color,
-               uint8_t          pixel[4])
+color_to_pixel(const ClutterColor *color,
+               uint8_t             pixel[4])
 {
   pixel[0] = color->red;
   pixel[1] = color->green;
@@ -3935,7 +3938,7 @@ st_icon_info_load_symbolic_internal (StIconInfo     *icon_info,
  *
  * Loads an icon, modifying it to match the system colours for the foreground,
  * success, warning and error colors provided. If the icon is not a symbolic
- * one, the function will return the result from [method@St.IconInfo.load_icon].
+ * one, the function will return the result from st_icon_info_load_icon().
  *
  * This allows loading symbolic icons that will match the system theme.
  *
@@ -4017,7 +4020,7 @@ load_symbolic_icon_thread (GTask        *task,
                            GCancellable *cancellable)
 {
   AsyncSymbolicData *data = task_data;
-  GError *error = NULL;
+  GError *error;
   GdkPixbuf *pixbuf;
 
   error = NULL;
@@ -4033,17 +4036,17 @@ load_symbolic_icon_thread (GTask        *task,
 
 /**
  * st_icon_info_load_symbolic_async:
- * @icon_info: a #StIconInfo
+ * @icon_info: a #StIconInfo from st_icon_theme_lookup_icon()
  * @colors: an #StIconColors representing the foreground, error and
  *     success colors of the icon
  * @cancellable: (allow-none): optional #GCancellable object,
  *     %NULL to ignore
- * @callback: (scope async) (closure user_data): a #GAsyncReadyCallback to call when the
+ * @callback: (scope async): a #GAsyncReadyCallback to call when the
  *     request is satisfied
- * @user_data: the data to pass to callback function
+ * @user_data: (closure): the data to pass to callback function
  *
  * Asynchronously load, render and scale a symbolic icon previously looked up
- * from the icon theme using [method@St.IconTheme.lookup_icon].
+ * from the icon theme using st_icon_theme_lookup_icon().
  *
  * For more details, see st_icon_info_load_symbolic() which is the synchronous
  * version of this call.
@@ -4064,7 +4067,6 @@ st_icon_info_load_symbolic_async (StIconInfo          *icon_info,
   g_return_if_fail (colors != NULL);
 
   task = g_task_new (icon_info, cancellable, callback, user_data);
-  g_task_set_source_tag (task, st_icon_info_load_symbolic_async);
 
   data = g_new0 (AsyncSymbolicData, 1);
   g_task_set_task_data (task, data, (GDestroyNotify) async_symbolic_data_free);
@@ -4095,7 +4097,7 @@ st_icon_info_load_symbolic_async (StIconInfo          *icon_info,
 
 /**
  * st_icon_info_load_symbolic_finish:
- * @icon_info: a #StIconInfo
+ * @icon_info: a #StIconInfo from st_icon_theme_lookup_icon()
  * @res: a #GAsyncResult
  * @was_symbolic: (out) (allow-none): a #gboolean, returns whether the
  *     loaded icon was a symbolic one and whether the @fg color was
@@ -4158,16 +4160,17 @@ st_icon_info_load_symbolic_finish (StIconInfo    *icon_info,
  *
  * Looks up an icon and returns a #StIconInfo containing information
  * such as the filename of the icon. The icon can then be rendered
- * into a pixbuf using [method@St.IconInfo.load_icon].
+ * into a pixbuf using st_icon_info_load_icon().
  *
  * When rendering on displays with high pixel densities you should not
  * use a @size multiplied by the scaling factor returned by functions
  * like gdk_window_get_scale_factor(). Instead, you should use
- * [method@St.IconTheme.lookup_by_gicon_for_scale], as the assets loaded
+ * st_icon_theme_lookup_by_gicon_for_scale(), as the assets loaded
  * for a given scaling factor may be different.
  *
  * Returns: (nullable) (transfer full): a #StIconInfo containing
- *     information about the icon.
+ *     information about the icon, or %NULL if the icon wasn’t
+ *     found. Unref with g_object_unref()
  */
 StIconInfo *
 st_icon_theme_lookup_by_gicon (StIconTheme       *icon_theme,
@@ -4190,10 +4193,11 @@ st_icon_theme_lookup_by_gicon (StIconTheme       *icon_theme,
  *
  * Looks up an icon and returns a #StIconInfo containing information
  * such as the filename of the icon. The icon can then be rendered into
- * a pixbuf using [method@St.IconInfo.load_icon].
+ * a pixbuf using st_icon_info_load_icon().
  *
  * Returns: (nullable) (transfer full): a #StIconInfo containing
- *     information about the icon.
+ *     information about the icon, or %NULL if the icon wasn’t
+ *     found. Unref with g_object_unref()
  */
 StIconInfo *
 st_icon_theme_lookup_by_gicon_for_scale (StIconTheme       *icon_theme,

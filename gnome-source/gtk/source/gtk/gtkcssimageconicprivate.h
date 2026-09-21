@@ -37,7 +37,6 @@ typedef struct _GtkCssImageConicColorStop  GtkCssImageConicColorStop;
 
 struct _GtkCssImageConicColorStop {
   GtkCssValue        *offset;
-  GtkCssValue        *transition_hint;
   GtkCssValue        *color;
 };
 
@@ -48,9 +47,6 @@ struct _GtkCssImageConic
   GtkCssValue *center;
   GtkCssValue *rotation;
 
-  GtkCssColorSpace color_space;
-  GtkCssHueInterpolation hue_interp;
-
   guint n_stops;
   GtkCssImageConicColorStop *color_stops;
 };
@@ -60,7 +56,7 @@ struct _GtkCssImageConicClass
   GtkCssImageClass parent_class;
 };
 
-GType           gtk_css_image_conic_get_type                    (void);
+GType           gtk_css_image_conic_get_type                    (void) G_GNUC_CONST;
 
 G_END_DECLS
 

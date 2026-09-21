@@ -18,7 +18,8 @@
  * Author: Carlos Garnacho <carlosg@gnome.org>
  */
 
-#pragma once
+#ifndef NA_XEMBED_H
+#define NA_XEMBED_H
 
 #include <meta/meta-x11-display.h>
 #include <glib-object.h>
@@ -35,7 +36,6 @@ struct _NaXembedClass
 
   void (* plug_added) (NaXembed *xembed);
   void (* plug_removed) (NaXembed *xembed);
-  void (* reconfigured) (NaXembed *xembed);
 };
 
 MetaX11Display * na_xembed_get_x11_display (NaXembed *xembed);
@@ -59,11 +59,9 @@ void na_xembed_get_size (NaXembed *xembed,
 			 int      *width,
 			 int      *height);
 
-void na_xembed_set_available_size (NaXembed *xembed,
-                                   int       width,
-                                   int       height);
-
-void na_xembed_set_background_color (NaXembed        *xembed,
-                                     const CoglColor *color);
+void na_xembed_set_background_color (NaXembed           *xembed,
+				     const ClutterColor *color);
 
 G_END_DECLS
+
+#endif /* NA_XEMBED_H */

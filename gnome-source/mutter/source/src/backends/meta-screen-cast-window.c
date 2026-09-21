@@ -51,19 +51,21 @@ meta_screen_cast_window_transform_relative_position (MetaScreenCastWindow *scree
 
 gboolean
 meta_screen_cast_window_transform_cursor_position (MetaScreenCastWindow *screen_cast_window,
-                                                   ClutterCursor        *cursor,
+                                                   MetaCursorSprite     *cursor_sprite,
                                                    graphene_point_t     *cursor_position,
-                                                   graphene_point_t     *out_relative_cursor_position,
-                                                   float                *out_view_scale)
+                                                   float                *out_cursor_scale,
+                                                   MetaMonitorTransform *out_cursor_transform,
+                                                   graphene_point_t     *out_relative_cursor_position)
 {
   MetaScreenCastWindowInterface *iface =
     META_SCREEN_CAST_WINDOW_GET_IFACE (screen_cast_window);
 
   return iface->transform_cursor_position (screen_cast_window,
-                                           cursor,
+                                           cursor_sprite,
                                            cursor_position,
-                                           out_relative_cursor_position,
-                                           out_view_scale);
+                                           out_cursor_scale,
+                                           out_cursor_transform,
+                                           out_relative_cursor_position);
 }
 
 void
@@ -85,6 +87,15 @@ meta_screen_cast_window_blit_to_framebuffer (MetaScreenCastWindow *screen_cast_w
     META_SCREEN_CAST_WINDOW_GET_IFACE (screen_cast_window);
 
   return iface->blit_to_framebuffer (screen_cast_window, bounds, framebuffer);
+}
+
+gboolean
+meta_screen_cast_window_has_damage (MetaScreenCastWindow *screen_cast_window)
+{
+  MetaScreenCastWindowInterface *iface =
+    META_SCREEN_CAST_WINDOW_GET_IFACE (screen_cast_window);
+
+  return iface->has_damage (screen_cast_window);
 }
 
 void

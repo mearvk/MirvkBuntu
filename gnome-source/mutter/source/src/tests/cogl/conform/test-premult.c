@@ -50,20 +50,13 @@ make_texture (uint32_t color,
               MakeTextureFlags flags)
 {
   CoglTexture *tex;
-  guchar *tex_data;
-  g_autoptr (CoglBitmap) bmp = NULL;
-
-  tex_data = gen_tex_data (color);
-  bmp = cogl_bitmap_new_for_data (test_ctx,
-                                  QUAD_WIDTH,
-                                  QUAD_WIDTH,
-                                  src_format,
-                                  QUAD_WIDTH * 4,
-                                  tex_data);
-  g_object_set_data_full (G_OBJECT (bmp),
-                          "tex-data",
-                          tex_data,
-                          g_free);
+  guchar *tex_data = gen_tex_data (color);
+  CoglBitmap *bmp = cogl_bitmap_new_for_data (test_ctx,
+                                              QUAD_WIDTH,
+                                              QUAD_WIDTH,
+                                              src_format,
+                                              QUAD_WIDTH * 4,
+                                              tex_data);
 
   tex = cogl_texture_2d_new_from_bitmap (bmp);
 
@@ -71,6 +64,8 @@ make_texture (uint32_t color,
     cogl_texture_set_premultiplied (tex, TRUE);
   else if (flags & TEXTURE_FLAG_SET_UNPREMULTIPLIED)
     cogl_texture_set_premultiplied (tex, FALSE);
+
+  g_object_unref (bmp);
 
   return tex;
 }
@@ -80,9 +75,7 @@ set_region (CoglTexture *tex,
 	    uint32_t color,
 	    CoglPixelFormat format)
 {
-  g_autofree guchar *tex_data = NULL;
-
-  tex_data = gen_tex_data (color);
+  guchar *tex_data = gen_tex_data (color);
 
   cogl_texture_set_region (tex,
                            0, 0, /* src x, y */
@@ -114,7 +107,7 @@ check_texture (CoglPipeline *pipeline,
 static void
 test_premult (void)
 {
-  g_autoptr (CoglPipeline) pipeline = NULL;
+  CoglPipeline *pipeline;
   CoglTexture *tex;
 
   cogl_framebuffer_orthographic (test_fb, 0, 0,
@@ -145,7 +138,6 @@ test_premult (void)
   check_texture (pipeline, 0, 0, /* position */
 		 tex,
 		 0xff00ff80); /* expected */
-  g_object_unref (tex);
 
   /* If the user explicitly requests a premultiplied internal format and
    * gives unmultiplied src data then Cogl should always premultiply that
@@ -159,7 +151,6 @@ test_premult (void)
   check_texture (pipeline, 1, 0, /* position */
 		 tex,
 		 0x80008080); /* expected */
-  g_object_unref (tex);
 
   /* If the user doesn't explicitly declare that the texture is premultiplied
    * then Cogl should assume it is by default should premultiply
@@ -174,7 +165,6 @@ test_premult (void)
   check_texture (pipeline, 2, 0, /* position */
 		 tex,
 		 0x80008080); /* expected */
-  g_object_unref (tex);
 
   /* If the user requests a premultiplied internal texture format and supplies
    * premultiplied source data, Cogl should never modify that source data...
@@ -189,7 +179,6 @@ test_premult (void)
   check_texture (pipeline, 3, 0, /* position */
 		 tex,
 		 0x80008080); /* expected */
-  g_object_unref (tex);
 
   /* If the user requests an unmultiplied internal texture format, but
    * supplies premultiplied source data, then Cogl should always
@@ -203,7 +192,6 @@ test_premult (void)
   check_texture (pipeline, 4, 0, /* position */
 		 tex,
 		 0xff00ff80); /* expected */
-  g_object_unref (tex);
 
   /* If the user allows any internal texture format and provides premultipled
    * source data then by default Cogl shouldn't modify the source data...
@@ -218,7 +206,6 @@ test_premult (void)
   check_texture (pipeline, 5, 0, /* position */
 		 tex,
 		 0x80008080); /* expected */
-  g_object_unref (tex);
 
   /*
    * Test cogl_texture_set_region() ....
@@ -236,7 +223,6 @@ test_premult (void)
   check_texture (pipeline, 6, 0, /* position */
 		 tex,
 		 0xff00ff80); /* expected */
-  g_object_unref (tex);
 
   /* Updating a texture region for an unmultiplied texture using premultiplied
    * region data should result in Cogl unmultiplying the given region data...
@@ -253,7 +239,7 @@ test_premult (void)
   check_texture (pipeline, 7, 0, /* position */
 		 tex,
 		 0xff00ff80); /* expected */
-  g_object_unref (tex);
+
 
   if (cogl_test_verbose ())
     g_print ("make_texture (0xDEADBEEF, "
@@ -268,7 +254,7 @@ test_premult (void)
   check_texture (pipeline, 8, 0, /* position */
 		 tex,
 		 0x80008080); /* expected */
-  g_object_unref (tex);
+
 
   /* Updating a texture region for a premultiplied texture using unmultiplied
    * region data should result in Cogl premultiplying the given region data...
@@ -286,7 +272,7 @@ test_premult (void)
   check_texture (pipeline, 9, 0, /* position */
 		 tex,
 		 0x80008080); /* expected */
-  g_object_unref (tex);
+
 
   if (cogl_test_verbose ())
     g_print ("OK\n");

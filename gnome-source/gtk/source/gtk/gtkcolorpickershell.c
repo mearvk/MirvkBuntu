@@ -157,7 +157,6 @@ gtk_color_picker_shell_pick (GtkColorPicker      *cp,
     return;
 
   picker->task = g_task_new (picker, NULL, callback, user_data);
-  g_task_set_source_tag (picker->task, gtk_color_picker_shell_pick);
 
   g_dbus_proxy_call (picker->shell_proxy,
                      "PickColor",

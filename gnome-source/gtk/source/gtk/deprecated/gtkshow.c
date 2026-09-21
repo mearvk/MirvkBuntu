@@ -27,89 +27,8 @@
 #include "gtkalertdialog.h"
 #include <glib/gi18n-lib.h>
 
-#ifdef G_OS_WIN32
-#include "gtkshowwin32.h"
-#endif
-
-#ifdef GDK_WINDOWING_ANDROID
-#include "gtknative.h"
-
-#include "android/gdkandroidinit-private.h"
-#include "android/gdkandroidutils-private.h"
-#include "android/gdkandroidtoplevel-private.h"
-#endif // GDK_WINDOWING_ANDROID
-
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
-#if defined (G_OS_WIN32)
-static void
-show_win32_done (GObject      *source,
-                 GAsyncResult *result,
-                 gpointer      user_data)
-{
-  GTask *task = user_data;
-  GError *error = NULL;
-
-  if (gtk_show_uri_win32_finish (GTK_WINDOW (source), result, &error))
-    g_task_return_boolean (task, TRUE);
-  else
-     g_task_return_error (task, error);
-
-  g_object_unref (task);
-}
-
-#elif defined (GDK_WINDOWING_ANDROID)
-static gboolean
-gtk_show_uri_android (const gchar         *uri,
-                      GdkAndroidToplevel  *toplevel,
-                      GError             **error)
-{
-  JNIEnv *env = gdk_android_get_env ();
-
-  (*env)->PushLocalFrame (env, 8);
-
-  jobject juri = (*env)->CallStaticObjectMethod (env, gdk_android_get_java_cache ()->a_uri.klass,
-                                                 gdk_android_get_java_cache ()->a_uri.parse,
-                                                 gdk_android_utf8_to_java (uri));
-  if (gdk_android_check_exception (error))
-    {
-      (*env)->PopLocalFrame (env, NULL);
-      return FALSE;
-    }
-
-  jobject intent = (*env)->NewObject (env, gdk_android_get_java_cache ()->a_intent.klass,
-                                      gdk_android_get_java_cache ()->a_intent.constructor_action,
-                                      gdk_android_get_java_cache ()->a_intent.action_view);
-  (*env)->CallObjectMethod (env, intent,
-                            gdk_android_get_java_cache ()->a_intent.set_data_norm,
-                            juri);
-  (*env)->CallObjectMethod (env, intent,
-                            gdk_android_get_java_cache ()->a_intent.add_flags,
-                            gdk_android_get_java_cache ()->a_intent.flag_grant_read_perm);
-
-  jobject bundle = (*env)->NewObject (env, gdk_android_get_java_cache ()->a_bundle.klass,
-                                      gdk_android_get_java_cache ()->a_bundle.constructor);
-  (*env)->CallVoidMethod (env, bundle,
-                          gdk_android_get_java_cache ()->a_bundle.put_binder,
-                          gdk_android_get_java_cache ()->a_intent.extra_customtabs_session,
-                          NULL);
-  (*env)->CallObjectMethod (env, intent,
-                            gdk_android_get_java_cache ()->a_intent.put_extras_from_bundle,
-                            bundle);
-
-  // TODO: there should probably be a mechanism for defining an accent color, as this right now uses
-  //       gdk_android_toplevel_get_bars_color which returns the default GTK light/dark background color,
-  //       but that wouldn't typically be seen as "accent".
-  (*env)->CallObjectMethod (env, intent,
-                            gdk_android_get_java_cache ()->a_intent.put_extra_int,
-                            gdk_android_get_java_cache ()->a_intent.extra_customtabs_toolbar_color,
-                            gdk_android_utils_color_to_android (gdk_android_toplevel_get_bars_color (toplevel)));
-
-  gboolean launched = gdk_android_toplevel_launch_activity (toplevel, intent, error);
-  (*env)->PopLocalFrame (env, NULL);
-  return launched;
-}
-#else
 typedef struct {
   GtkWindow *parent;
   char *handle;
@@ -167,21 +86,20 @@ window_handle_exported (GtkWindow  *window,
                                            data);
 }
 
-#endif
-
 /**
  * gtk_show_uri_full:
  * @parent: (nullable): parent window
  * @uri: the uri to show
  * @timestamp: timestamp from the event that triggered this call, or %GDK_CURRENT_TIME
  * @cancellable: (nullable): a `GCancellable` to cancel the launch
- * @callback: (scope async) (closure user_data): a callback to call when the action is complete
- * @user_data: data to pass to @callback
+ * @callback: (scope async): a callback to call when the action is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
  * This function launches the default application for showing
  * a given uri.
  *
  * The @callback will be called when the launch is completed.
+ * It should call gtk_show_uri_full_finish() to obtain the result.
  *
  * This is the recommended call to be used as it passes information
  * necessary for sandbox helpers to parent their dialogs properly.
@@ -197,31 +115,6 @@ gtk_show_uri_full (GtkWindow           *parent,
                    GAsyncReadyCallback  callback,
                    gpointer             user_data)
 {
-#if defined (G_OS_WIN32)
-  GTask *task;
-
-  g_return_if_fail (parent == NULL || GTK_IS_WINDOW (parent));
-  g_return_if_fail (uri != NULL);
-
-  task = g_task_new (parent, cancellable, callback, user_data);
-  g_task_set_source_tag (task, gtk_show_uri_full);
-  gtk_show_uri_win32 (parent, uri, FALSE, cancellable, show_win32_done, task);
-
-#elif defined (GDK_WINDOWING_ANDROID)
-  g_return_if_fail (parent == NULL || GTK_IS_WINDOW (parent));
-  g_return_if_fail (uri != NULL);
-
-  GTask *task = g_task_new (parent, cancellable, callback, user_data);
-  g_task_set_source_tag (task, gtk_show_uri_full);
-
-  GdkAndroidToplevel* toplevel = GDK_ANDROID_TOPLEVEL (gtk_native_get_surface (GTK_NATIVE (parent)));
-  GError *err = NULL;
-  if (gtk_show_uri_android (uri, toplevel, &err))
-    g_task_return_boolean (task, TRUE);
-  else
-    g_task_return_error (task, err);
-  g_object_unref (task);
-#else
   GtkShowUriData *data;
   GdkAppLaunchContext *context;
   GdkDisplay *display;
@@ -246,7 +139,6 @@ gtk_show_uri_full (GtkWindow           *parent,
 
   if (!parent || !gtk_window_export_handle (parent, window_handle_exported, data))
     window_handle_exported (parent, NULL, data);
-#endif
 }
 
 /**
@@ -261,8 +153,8 @@ gtk_show_uri_full (GtkWindow           *parent,
  * Returns: %TRUE if the URI was shown successfully.
  *   Otherwise, %FALSE is returned and @error is set
  *
- * Deprecated: 4.10: Use [method@Gtk.FileLauncher.launch] or
- *   [method@Gtk.UriLauncher.launch] instead
+ * Deprecated: 4.10: Use [method@Gtk.FileLauncher.launch_finish] or
+ *   [method@Gtk.UriLauncher.launch_finish] instead
  */
 gboolean
 gtk_show_uri_full_finish (GtkWindow     *parent,

@@ -25,7 +25,7 @@
 
 /**
  * ClutterOffscreenEffect:
- *
+ * 
  * Base class for effects using offscreen buffers
  *
  * #ClutterOffscreenEffect is an abstract class that can be used by
@@ -52,7 +52,7 @@
  * function, which encapsulates the effective painting of the texture that
  * contains the result of the offscreen redirection.
  *
- * The size of the target pipeline is defined to be as big as the
+ * The size of the target material is defined to be as big as the
  * transformed size of the [class@Actor] using the offscreen effect.
  * Sub-classes of #ClutterOffscreenEffect can change the texture creation
  * code to provide bigger textures by overriding the
@@ -122,21 +122,12 @@ typedef struct _ClutterOffscreenEffectPrivate
   int target_width;
   int target_height;
 
-  gulong resource_scale_changed_id;
+  gulong purge_handler_id;
 } ClutterOffscreenEffectPrivate;
 
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (ClutterOffscreenEffect,
                                      clutter_offscreen_effect,
                                      CLUTTER_TYPE_EFFECT)
-
-static void
-real_resource_scale_changed (ClutterOffscreenEffect *self)
-{
-  ClutterOffscreenEffectPrivate *priv =
-    clutter_offscreen_effect_get_instance_private (self);
-
-  g_clear_object (&priv->offscreen);
-}
 
 static void
 clutter_offscreen_effect_set_actor (ClutterActorMeta *meta,
@@ -151,30 +142,21 @@ clutter_offscreen_effect_set_actor (ClutterActorMeta *meta,
   meta_class->set_actor (meta, actor);
 
   /* clear out the previous state */
-  g_clear_signal_handler (&priv->resource_scale_changed_id, priv->actor);
   g_clear_object (&priv->offscreen);
 
   /* we keep a back pointer here, to avoid going through the ActorMeta */
   priv->actor = clutter_actor_meta_get_actor (meta);
-
-  if (priv->actor)
-    {
-      priv->resource_scale_changed_id =
-        g_signal_connect_object (priv->actor, "real-resource-scale-changed",
-                                 G_CALLBACK (real_resource_scale_changed),
-                                 self, G_CONNECT_SWAPPED);
-    }
 }
 
 static CoglTexture*
 clutter_offscreen_effect_real_create_texture (ClutterOffscreenEffect *effect,
-                                              CoglContext            *cogl_context,
                                               gfloat                  width,
                                               gfloat                  height)
 {
-  return cogl_texture_2d_new_with_size (cogl_context,
-                                        (int) MAX (width, 1),
-                                        (int) MAX (height, 1));
+  CoglContext *ctx =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
+
+  return cogl_texture_2d_new_with_size (ctx, MAX (width, 1), MAX (height, 1));
 }
 
 static void
@@ -209,7 +191,8 @@ clutter_offscreen_effect_real_create_pipeline (ClutterOffscreenEffect *effect,
 {
   ClutterOffscreenEffectPrivate *priv =
     clutter_offscreen_effect_get_instance_private (effect);
-  CoglContext *ctx = cogl_texture_get_context (texture);
+  CoglContext *ctx =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
   CoglPipeline *pipeline;
   float resource_scale;
 
@@ -220,6 +203,15 @@ clutter_offscreen_effect_real_create_pipeline (ClutterOffscreenEffect *effect,
   cogl_pipeline_set_layer_texture (pipeline, 0, texture);
 
   return pipeline;
+}
+
+static void
+video_memory_purged (ClutterOffscreenEffect *self)
+{
+  ClutterOffscreenEffectPrivate *priv =
+    clutter_offscreen_effect_get_instance_private (self);
+
+  g_clear_object (&priv->offscreen);
 }
 
 static gboolean
@@ -235,14 +227,25 @@ update_fbo (ClutterEffect *effect,
     clutter_offscreen_effect_get_instance_private (self);
   ClutterActor *stage_actor;
   CoglOffscreen *offscreen;
-  ClutterContext *context;
-  ClutterBackend *backend;
-  CoglContext *cogl_context;
   g_autoptr (GError) error = NULL;
 
   stage_actor = clutter_actor_get_stage (priv->actor);
   if (stage_actor != priv->stage)
-    priv->stage = stage_actor;
+    {
+      g_clear_signal_handler (&priv->purge_handler_id, priv->stage);
+
+      priv->stage = stage_actor;
+
+      if (priv->stage)
+        {
+          priv->purge_handler_id =
+            g_signal_connect_object (priv->stage,
+                                     "gl-video-memory-purged",
+                                     G_CALLBACK (video_memory_purged),
+                                     self,
+                                     G_CONNECT_SWAPPED);
+        }
+    }
 
   if (priv->stage == NULL)
     {
@@ -264,12 +267,8 @@ update_fbo (ClutterEffect *effect,
   g_clear_object (&priv->texture);
   g_clear_object (&priv->offscreen);
 
-  context = clutter_actor_get_context (priv->actor);
-  backend = clutter_context_get_backend (context);
-  cogl_context = clutter_backend_get_cogl_context (backend);
   priv->texture =
-    clutter_offscreen_effect_create_texture (self, cogl_context,
-                                             target_width, target_height);
+    clutter_offscreen_effect_create_texture (self, target_width, target_height);
   if (priv->texture == NULL)
     return FALSE;
 
@@ -343,14 +342,15 @@ clutter_offscreen_effect_pre_paint (ClutterEffect       *effect,
     {
       ClutterPaintVolume mutable_volume;
 
-      clutter_paint_volume_init_from_paint_volume (&mutable_volume, volume);
+      _clutter_paint_volume_copy_static (volume, &mutable_volume);
       _clutter_paint_volume_get_bounding_box (&mutable_volume, &raw_box);
+      clutter_paint_volume_free (&mutable_volume);
 
       box = raw_box;
       _clutter_actor_box_enlarge_for_effects (&box);
 
-      priv->fbo_offset_x = (int) box.x1;
-      priv->fbo_offset_y = (int) box.y1;
+      priv->fbo_offset_x = box.x1;
+      priv->fbo_offset_y = box.y1;
     }
   else
     {
@@ -359,8 +359,8 @@ clutter_offscreen_effect_pre_paint (ClutterEffect       *effect,
       box = raw_box;
       _clutter_actor_box_enlarge_for_effects (&box);
 
-      priv->fbo_offset_x = (int) (box.x1 - raw_box.x1);
-      priv->fbo_offset_y = (int) (box.y1 - raw_box.y1);
+      priv->fbo_offset_x = box.x1 - raw_box.x1;
+      priv->fbo_offset_y = box.y1 - raw_box.y1;
     }
 
   clutter_actor_box_scale (&box, ceiled_resource_scale);
@@ -370,7 +370,7 @@ clutter_offscreen_effect_pre_paint (ClutterEffect       *effect,
   target_height = ceilf (target_height);
 
   /* First assert that the framebuffer is the right size... */
-  if (!update_fbo (effect, (int) target_width, (int) target_height, resource_scale))
+  if (!update_fbo (effect, target_width, target_height, resource_scale))
     goto disable_effect;
 
   offscreen = COGL_FRAMEBUFFER (priv->offscreen);
@@ -427,7 +427,7 @@ clutter_offscreen_effect_real_paint_target (ClutterOffscreenEffect *effect,
   float paint_opacity;
   CoglColor color;
 
-  paint_opacity = clutter_actor_get_paint_opacity (priv->actor) / 255.0f;
+  paint_opacity = clutter_actor_get_paint_opacity (priv->actor) / 255.0;
 
   cogl_color_init_from_4f (&color,
                            paint_opacity, paint_opacity,
@@ -436,7 +436,7 @@ clutter_offscreen_effect_real_paint_target (ClutterOffscreenEffect *effect,
 
   pipeline_node = clutter_pipeline_node_new (priv->pipeline);
   clutter_paint_node_set_static_name (pipeline_node,
-                                      G_OBJECT_TYPE_NAME (effect));
+                                      "ClutterOffscreenEffect (pipeline)");
   clutter_paint_node_add_child (node, pipeline_node);
 
   /* At this point we are in stage coordinates translated so if
@@ -464,12 +464,12 @@ clutter_offscreen_effect_paint_texture (ClutterOffscreenEffect *effect,
   graphene_matrix_t transform;
   float unscale;
 
-  unscale = 1.0f / clutter_actor_get_resource_scale (priv->actor);
-  graphene_matrix_init_scale (&transform, unscale, unscale, 1.0f);
+  unscale = 1.0 / clutter_actor_get_resource_scale (priv->actor);
+  graphene_matrix_init_scale (&transform, unscale, unscale, 1.0);
   graphene_matrix_translate (&transform,
                              &GRAPHENE_POINT3D_INIT (priv->fbo_offset_x,
                                                      priv->fbo_offset_y,
-                                                     0.0f));
+                                                     0.0));
 
   if (!graphene_matrix_is_identity (&transform))
     {
@@ -484,7 +484,7 @@ clutter_offscreen_effect_paint_texture (ClutterOffscreenEffect *effect,
       node = transform_node;
     }
 
-  /* paint the target pipeline; this is virtualized for
+  /* paint the target material; this is virtualized for
    * sub-classes that require special hand-holding
    */
   clutter_offscreen_effect_paint_target (effect, node, paint_context);
@@ -638,7 +638,7 @@ clutter_offscreen_effect_init (ClutterOffscreenEffect *self)
  * implementation should update any references to the texture after
  * chaining-up to the parent's pre_paint implementation. This can be
  * used instead of [method@OffscreenEffect.get_texture] when the
- * effect subclass wants to paint using its own pipeline.
+ * effect subclass wants to paint using its own material.
  *
  * Return value: (transfer none): a #CoglTexture or %NULL. The
  *   returned texture is owned by Clutter and it should not be
@@ -716,16 +716,13 @@ clutter_offscreen_effect_paint_target (ClutterOffscreenEffect *effect,
  */
 CoglTexture*
 clutter_offscreen_effect_create_texture (ClutterOffscreenEffect *effect,
-                                         CoglContext            *context,
                                          gfloat                  width,
                                          gfloat                  height)
 {
   g_return_val_if_fail (CLUTTER_IS_OFFSCREEN_EFFECT (effect),
                         NULL);
-  g_return_val_if_fail (COGL_IS_CONTEXT (context), NULL);
 
   return CLUTTER_OFFSCREEN_EFFECT_GET_CLASS (effect)->create_texture (effect,
-                                                                      context,
                                                                       width,
                                                                       height);
 }

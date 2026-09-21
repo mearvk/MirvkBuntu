@@ -28,7 +28,8 @@
 /**
  * GtkMultiSelection:
  *
- * A selection model that allows selecting multiple elements.
+ * `GtkMultiSelection` is a `GtkSelectionModel` that allows selecting multiple
+ * elements.
  */
 
 struct _GtkMultiSelection
@@ -397,17 +398,17 @@ gtk_multi_selection_class_init (GtkMultiSelectionClass *klass)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkMultiSelection:model:
+   * GtkMultiSelection:model: (attributes org.gtk.Property.get=gtk_multi_selection_get_model org.gtk.Property.set=gtk_multi_selection_set_model)
    *
    * The list managed by this selection.
    */
   properties[PROP_MODEL] =
     g_param_spec_object ("model", NULL, NULL,
                          G_TYPE_LIST_MODEL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkMultiSelection:n-items:
@@ -419,7 +420,7 @@ gtk_multi_selection_class_init (GtkMultiSelectionClass *klass)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -457,7 +458,7 @@ gtk_multi_selection_new (GListModel *model)
 }
 
 /**
- * gtk_multi_selection_get_model:
+ * gtk_multi_selection_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkMultiSelection`
  *
  * Returns the underlying model of @self.
@@ -473,7 +474,7 @@ gtk_multi_selection_get_model (GtkMultiSelection *self)
 }
 
 /**
- * gtk_multi_selection_set_model:
+ * gtk_multi_selection_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkMultiSelection`
  * @model: (nullable): A `GListModel` to wrap
  *

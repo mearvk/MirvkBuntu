@@ -31,12 +31,9 @@
 /**
  * GtkMediaControls:
  *
- * Shows controls for video playback.
+ * `GtkMediaControls` is a widget to show controls for a video.
  *
- * <picture>
- *   <source srcset="media-controls-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkMediaControls" src="media-controls.png">
- * </picture>
+ * ![An example GtkMediaControls](media-controls.png)
  *
  * Usually, `GtkMediaControls` is used as part of [class@Gtk.Video].
  */
@@ -271,14 +268,14 @@ gtk_media_controls_class_init (GtkMediaControlsClass *klass)
   gobject_class->set_property = gtk_media_controls_set_property;
 
   /**
-   * GtkMediaControls:media-stream:
+   * GtkMediaControls:media-stream: (attributes org.gtk.Property.get=gtk_media_controls_get_media_stream org.gtk.Property.set=gtk_media_controls_set_media_stream)
    *
    * The media-stream managed by this object or %NULL if none.
    */
   properties[PROP_MEDIA_STREAM] =
     g_param_spec_object ("media-stream", NULL, NULL,
                          GTK_TYPE_MEDIA_STREAM,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 
@@ -323,7 +320,7 @@ gtk_media_controls_new (GtkMediaStream *stream)
 }
 
 /**
- * gtk_media_controls_get_media_stream:
+ * gtk_media_controls_get_media_stream: (attributes org.gtk.Method.get_property=media-stream)
  * @controls: a `GtkMediaControls`
  *
  * Gets the media stream managed by @controls or %NULL if none.
@@ -488,7 +485,7 @@ gtk_media_controls_notify_cb (GtkMediaStream   *stream,
 }
 
 /**
- * gtk_media_controls_set_media_stream:
+ * gtk_media_controls_set_media_stream: (attributes org.gtk.Method.set_property=media-stream)
  * @controls: a `GtkMediaControls` widget
  * @stream: (nullable):  a `GtkMediaStream`
  *
@@ -509,7 +506,8 @@ gtk_media_controls_set_media_stream (GtkMediaControls *controls,
       g_signal_handlers_disconnect_by_func (controls->stream,
                                             gtk_media_controls_notify_cb,
                                             controls);
-      g_clear_object (&controls->stream);
+      g_object_unref (controls->stream);
+      controls->stream = NULL;
     }
 
   if (stream)

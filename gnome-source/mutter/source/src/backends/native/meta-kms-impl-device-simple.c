@@ -33,7 +33,6 @@
 
 typedef gboolean (* MetaKmsSimpleProcessFunc) (MetaKmsImplDevice  *impl_device,
                                                MetaKmsUpdate      *update,
-                                               GArray             *blob_ids,
                                                gpointer            entry_data,
                                                GError            **error);
 
@@ -139,45 +138,6 @@ get_connector_property (MetaKmsImplDevice     *impl_device,
   return TRUE;
 }
 
-static uint32_t
-store_new_blob (MetaKmsImplDevice  *impl_device,
-                GArray             *blob_ids,
-                const void         *data,
-                size_t              size,
-                GError            **error)
-{
-  int fd = meta_kms_impl_device_get_fd (impl_device);
-  uint32_t blob_id;
-  int ret;
-
-  ret = drmModeCreatePropertyBlob (fd, data, size, &blob_id);
-  if (ret < 0)
-    {
-      g_set_error (error, G_IO_ERROR, g_io_error_from_errno (-ret),
-                   "drmModeCreatePropertyBlob: %s", g_strerror (-ret));
-      return 0;
-    }
-
-  g_array_append_val (blob_ids, blob_id);
-
-  return blob_id;
-}
-
-static void
-release_blob_ids (MetaKmsImplDevice *impl_device,
-                  GArray            *blob_ids)
-{
-  int fd = meta_kms_impl_device_get_fd (impl_device);
-  unsigned int i;
-
-  for (i = 0; i < blob_ids->len; i++)
-    {
-      uint32_t blob_id = g_array_index (blob_ids, uint32_t, i);
-
-      drmModeDestroyPropertyBlob (fd, blob_id);
-    }
-}
-
 static gboolean
 set_connector_property (MetaKmsImplDevice     *impl_device,
                         MetaKmsConnector      *connector,
@@ -263,7 +223,6 @@ set_crtc_property (MetaKmsImplDevice  *impl_device,
 static gboolean
 process_connector_update (MetaKmsImplDevice  *impl_device,
                           MetaKmsUpdate      *update,
-                          GArray             *blob_ids,
                           gpointer            update_entry,
                           GError            **error)
 {
@@ -347,82 +306,12 @@ process_connector_update (MetaKmsImplDevice  *impl_device,
         return FALSE;
     }
 
-  if (connector_update->colorspace.has_update)
-    {
-      meta_topic (META_DEBUG_KMS,
-                  "[simple] Setting colorspace to %u on connector %u (%s)",
-                  connector_update->colorspace.value,
-                  meta_kms_connector_get_id (connector),
-                  meta_kms_impl_device_get_path (impl_device));
-
-      if (!set_connector_property (impl_device,
-                                   connector,
-                                   META_KMS_CONNECTOR_PROP_COLORSPACE,
-                                   meta_output_color_space_to_drm_color_space (
-                                     connector_update->colorspace.value),
-                                   error))
-        return FALSE;
-    }
-
-  if (connector_update->hdr.has_update)
-    {
-      uint32_t hdr_blob_id;
-
-      meta_topic (META_DEBUG_KMS,
-                  "[simple] Setting HDR metadata on connector %u (%s)",
-                  meta_kms_connector_get_id (connector),
-                  meta_kms_impl_device_get_path (impl_device));
-
-      hdr_blob_id = 0;
-      if (connector_update->hdr.value.active)
-        {
-          struct hdr_output_metadata metadata;
-
-          meta_set_drm_hdr_metadata (&connector_update->hdr.value, &metadata);
-
-          hdr_blob_id = store_new_blob (impl_device,
-                                        blob_ids,
-                                        &metadata,
-                                        sizeof (metadata),
-                                        error);
-          if (!hdr_blob_id)
-            return FALSE;
-        }
-
-      if (!set_connector_property (impl_device,
-                                   connector,
-                                   META_KMS_CONNECTOR_PROP_HDR_OUTPUT_METADATA,
-                                   hdr_blob_id,
-                                   error))
-        return FALSE;
-    }
-
-  if (connector_update->broadcast_rgb.has_update)
-    {
-      MetaOutputRGBRange rgb_range = connector_update->broadcast_rgb.value;
-      uint64_t value = meta_output_rgb_range_to_drm_broadcast_rgb (rgb_range);
-
-      meta_topic (META_DEBUG_KMS,
-                  "[simple] Setting Broadcast RGB to %u on connector %u (%s)",
-                  rgb_range,
-                  meta_kms_connector_get_id (connector),
-                  meta_kms_impl_device_get_path (impl_device));
-
-      if (!set_connector_property (impl_device,
-                                   connector,
-                                   META_KMS_CONNECTOR_PROP_BROADCAST_RGB,
-                                   value,
-                                   error))
-        return FALSE;
-    }
-
   return TRUE;
 }
 
 static gboolean
 process_crtc_update (MetaKmsImplDevice  *impl_device,
                      MetaKmsUpdate      *update,
-                     GArray             *blob_ids,
                      gpointer            update_entry,
                      GError            **error)
 {
@@ -535,7 +424,6 @@ set_plane_rotation (MetaKmsImplDevice  *impl_device,
 static gboolean
 process_mode_set (MetaKmsImplDevice  *impl_device,
                   MetaKmsUpdate      *update,
-                  GArray             *blob_ids,
                   gpointer            update_entry,
                   GError            **error)
 {
@@ -679,7 +567,6 @@ process_mode_set (MetaKmsImplDevice  *impl_device,
 static gboolean
 process_crtc_color_updates (MetaKmsImplDevice  *impl_device,
                             MetaKmsUpdate      *update,
-                            GArray             *blob_ids,
                             gpointer            update_entry,
                             GError            **error)
 {
@@ -757,12 +644,15 @@ typedef struct _RetryPageFlipData
   MetaKmsPageFlipData *page_flip_data;
   float refresh_rate;
   uint64_t retry_time_us;
+  MetaKmsCustomPageFlip *custom_page_flip;
 } RetryPageFlipData;
 
 static void
 retry_page_flip_data_free (RetryPageFlipData *retry_page_flip_data)
 {
   g_assert (!retry_page_flip_data->page_flip_data);
+  g_clear_pointer (&retry_page_flip_data->custom_page_flip,
+                   meta_kms_custom_page_flip_free);
   g_free (retry_page_flip_data);
 }
 
@@ -809,6 +699,7 @@ retry_page_flips (gpointer user_data)
       int fd;
       int ret;
       MetaKmsPageFlipData *page_flip_data;
+      MetaKmsCustomPageFlip *custom_page_flip;
 
       if (is_timestamp_earlier_than (now_us,
                                      retry_page_flip_data->retry_time_us))
@@ -817,18 +708,31 @@ retry_page_flips (gpointer user_data)
           continue;
         }
 
-      meta_topic (META_DEBUG_KMS,
-                  "[simple] Retrying page flip on CRTC %u (%s) with %u",
-                  meta_kms_crtc_get_id (crtc),
-                  meta_kms_impl_device_get_path (impl_device),
-                  retry_page_flip_data->fb_id);
+      custom_page_flip = retry_page_flip_data->custom_page_flip;
+      if (custom_page_flip)
+        {
+          meta_topic (META_DEBUG_KMS,
+                      "[simple] Retrying custom page flip on CRTC %u (%s)",
+                      meta_kms_crtc_get_id (crtc),
+                      meta_kms_impl_device_get_path (impl_device));
+          ret = custom_page_flip->func (custom_page_flip->user_data,
+                                        retry_page_flip_data->page_flip_data);
+        }
+      else
+        {
+          meta_topic (META_DEBUG_KMS,
+                      "[simple] Retrying page flip on CRTC %u (%s) with %u",
+                      meta_kms_crtc_get_id (crtc),
+                      meta_kms_impl_device_get_path (impl_device),
+                      retry_page_flip_data->fb_id);
 
-      fd = meta_kms_impl_device_get_fd (impl_device);
-      ret = drmModePageFlip (fd,
-                             meta_kms_crtc_get_id (crtc),
-                             retry_page_flip_data->fb_id,
-                             DRM_MODE_PAGE_FLIP_EVENT,
-                             retry_page_flip_data->page_flip_data);
+          fd = meta_kms_impl_device_get_fd (impl_device);
+          ret = drmModePageFlip (fd,
+                                 meta_kms_crtc_get_id (crtc),
+                                 retry_page_flip_data->fb_id,
+                                 DRM_MODE_PAGE_FLIP_EVENT,
+                                 retry_page_flip_data->page_flip_data);
+        }
 
       if (ret == -EBUSY)
         {
@@ -881,6 +785,7 @@ retry_page_flips (gpointer user_data)
 
   if (impl_device_simple->pending_page_flip_retries)
     {
+      GList *l;
       uint64_t earliest_retry_time_us = 0;
 
       for (l = impl_device_simple->pending_page_flip_retries; l; l = l->next)
@@ -913,7 +818,8 @@ schedule_retry_page_flip (MetaKmsImplDeviceSimple *impl_device_simple,
                           MetaKmsCrtc             *crtc,
                           uint32_t                 fb_id,
                           float                    refresh_rate,
-                          MetaKmsPageFlipData     *page_flip_data)
+                          MetaKmsPageFlipData     *page_flip_data,
+                          MetaKmsCustomPageFlip   *custom_page_flip)
 {
   RetryPageFlipData *retry_page_flip_data;
   uint64_t now_us;
@@ -929,6 +835,7 @@ schedule_retry_page_flip (MetaKmsImplDeviceSimple *impl_device_simple,
     .page_flip_data = page_flip_data,
     .refresh_rate = refresh_rate,
     .retry_time_us = retry_time_us,
+    .custom_page_flip = custom_page_flip,
   };
 
   if (!impl_device_simple->retry_page_flips_source)
@@ -1107,15 +1014,17 @@ dispatch_page_flip (MetaKmsImplDevice    *impl_device,
     META_KMS_IMPL_DEVICE_SIMPLE (impl_device);
   MetaKmsCrtc *crtc;
   MetaKmsPlaneAssignment *plane_assignment;
+  g_autoptr (MetaKmsCustomPageFlip) custom_page_flip = NULL;
   int fd;
   int ret;
-  uint32_t fb_id;
 
   crtc = meta_kms_page_flip_data_get_crtc (page_flip_data);
   plane_assignment = meta_kms_update_get_primary_plane_assignment (update,
                                                                    crtc);
 
-  if (!plane_assignment)
+  custom_page_flip = meta_kms_update_take_custom_page_flip_func (update);
+
+  if (!plane_assignment && !custom_page_flip)
     {
       MetaKmsImpl *impl = meta_kms_impl_device_get_impl (impl_device);
       MetaThreadImpl *thread_impl = META_THREAD_IMPL (impl);
@@ -1139,20 +1048,34 @@ dispatch_page_flip (MetaKmsImplDevice    *impl_device,
     return FALSE;
 
   fd = meta_kms_impl_device_get_fd (impl_device);
-  fb_id = meta_drm_buffer_get_fb_id (plane_assignment->buffer);
+  if (custom_page_flip)
+    {
+      meta_topic (META_DEBUG_KMS,
+                  "[simple] Invoking custom page flip on CRTC %u (%s)",
+                  meta_kms_crtc_get_id (crtc),
+                  meta_kms_impl_device_get_path (impl_device));
+      ret = custom_page_flip->func (custom_page_flip->user_data,
+                                    page_flip_data);
+    }
+  else
+    {
+      uint32_t fb_id;
 
-  meta_topic (META_DEBUG_KMS,
-              "[simple] Page flipping CRTC %u (%s) with %u, data: %p",
-              meta_kms_crtc_get_id (crtc),
-              meta_kms_impl_device_get_path (impl_device),
-              fb_id,
-              page_flip_data);
+      fb_id = meta_drm_buffer_get_fb_id (plane_assignment->buffer);
 
-  ret = drmModePageFlip (fd,
-                         meta_kms_crtc_get_id (crtc),
-                         fb_id,
-                         DRM_MODE_PAGE_FLIP_EVENT,
-                         page_flip_data);
+      meta_topic (META_DEBUG_KMS,
+                  "[simple] Page flipping CRTC %u (%s) with %u, data: %p",
+                  meta_kms_crtc_get_id (crtc),
+                  meta_kms_impl_device_get_path (impl_device),
+                  fb_id,
+                  page_flip_data);
+
+      ret = drmModePageFlip (fd,
+                             meta_kms_crtc_get_id (crtc),
+                             fb_id,
+                             DRM_MODE_PAGE_FLIP_EVENT,
+                             page_flip_data);
+    }
 
   if (ret == -EBUSY)
     {
@@ -1166,22 +1089,23 @@ dispatch_page_flip (MetaKmsImplDevice    *impl_device,
       cached_mode_set = get_cached_mode_set (impl_device_simple, crtc);
       if (cached_mode_set)
         {
-          uint32_t retry_fb_id;
+          uint32_t fb_id;
           drmModeModeInfo *drm_mode;
           float refresh_rate;
 
           if (plane_assignment)
-            retry_fb_id = meta_drm_buffer_get_fb_id (plane_assignment->buffer);
+            fb_id = meta_drm_buffer_get_fb_id (plane_assignment->buffer);
           else
-            retry_fb_id = 0;
+            fb_id = 0;
           drm_mode = cached_mode_set->drm_mode;
           refresh_rate = meta_calculate_drm_mode_refresh_rate (drm_mode);
           meta_kms_impl_device_hold_fd (impl_device);
           schedule_retry_page_flip (impl_device_simple,
                                     crtc,
-                                    retry_fb_id,
+                                    fb_id,
                                     refresh_rate,
-                                    page_flip_data);
+                                    page_flip_data,
+                                    g_steal_pointer (&custom_page_flip));
           return TRUE;
         }
       else
@@ -1345,7 +1269,6 @@ err:
 static gboolean
 process_entries (MetaKmsImplDevice         *impl_device,
                  MetaKmsUpdate             *update,
-                 GArray                    *blob_ids,
                  GList                     *entries,
                  MetaKmsSimpleProcessFunc   func,
                  GError                   **error)
@@ -1354,7 +1277,7 @@ process_entries (MetaKmsImplDevice         *impl_device,
 
   for (l = entries; l; l = l->next)
     {
-      if (!func (impl_device, update, blob_ids, l->data, error))
+      if (!func (impl_device, update, l->data, error))
         return FALSE;
     }
 
@@ -1396,55 +1319,50 @@ process_cursor_plane_assignment (MetaKmsImplDevice       *impl_device,
 
       meta_topic (META_DEBUG_KMS,
                   "[simple] Setting HW cursor of CRTC %u (%s) to %u "
-                  "(size: %dx%d, position: (%d, %d), hot: (%d, %d))",
+                  "(size: %dx%d, hot: (%d, %d))",
                   crtc_id,
                   meta_kms_impl_device_get_path (impl_device),
                   handle_u32,
                   width, height,
-                  plane_assignment->dst_rect.x,
-                  plane_assignment->dst_rect.y,
                   plane_assignment->cursor_hotspot.x,
                   plane_assignment->cursor_hotspot.y);
 
       if (plane_assignment->cursor_hotspot.is_valid)
         {
-          struct drm_mode_cursor2 arg;
-
-          arg.flags = DRM_MODE_CURSOR_BO | DRM_MODE_CURSOR_MOVE;
-          arg.crtc_id = crtc_id;
-          arg.x = plane_assignment->dst_rect.x;
-          arg.y = plane_assignment->dst_rect.y;
-          arg.width = width;
-          arg.height = height;
-          arg.handle = handle_u32;
-          arg.hot_x = plane_assignment->cursor_hotspot.x;
-          arg.hot_y = plane_assignment->cursor_hotspot.y;
-
-          ret = drmIoctl (fd, DRM_IOCTL_MODE_CURSOR2, &arg);
+          ret = drmModeSetCursor2 (fd,
+                                   crtc_id,
+                                   handle_u32,
+                                   width, height,
+                                   plane_assignment->cursor_hotspot.x,
+                                   plane_assignment->cursor_hotspot.y);
         }
 
       if (ret != 0)
         {
-          struct drm_mode_cursor arg;
-
-          arg.flags = DRM_MODE_CURSOR_BO | DRM_MODE_CURSOR_MOVE;
-          arg.crtc_id = crtc_id;
-          arg.x = plane_assignment->dst_rect.x;
-          arg.y = plane_assignment->dst_rect.y;
-          arg.width = width;
-          arg.height = height;
-          arg.handle = handle_u32;
-
-          ret = drmIoctl (fd, DRM_IOCTL_MODE_CURSOR, &arg);
+          ret = drmModeSetCursor (fd, crtc_id,
+                                  handle_u32,
+                                  width, height);
         }
 
       if (ret != 0)
         {
           g_set_error (error, G_IO_ERROR, g_io_error_from_errno (-ret),
-                       "drmIoctl failed: %s", g_strerror (-ret));
+                       "drmModeSetCursor failed: %s", g_strerror (-ret));
           return FALSE;
         }
     }
+
+  meta_topic (META_DEBUG_KMS,
+              "[simple] Moving HW cursor of CRTC %u (%s) to (%d, %d)",
+              crtc_id,
+              meta_kms_impl_device_get_path (impl_device),
+              plane_assignment->dst_rect.x,
+              plane_assignment->dst_rect.y);
+
+  drmModeMoveCursor (fd,
+                     crtc_id,
+                     plane_assignment->dst_rect.x,
+                     plane_assignment->dst_rect.y);
 
   return TRUE;
 }
@@ -1488,7 +1406,7 @@ process_plane_assignment (MetaKmsImplDevice       *impl_device,
         meta_kms_plane_feedback_new_take_error (plane,
                                                 plane_assignment->crtc,
                                                 g_steal_pointer (&error));
-      return FALSE;
+      return TRUE;
     }
 
   g_assert_not_reached ();
@@ -1646,7 +1564,7 @@ perform_update_test (MetaKmsImplDevice *impl_device,
 
   if (failed_planes)
     {
-      GError *error = NULL;
+      GError *error;
 
       error = g_error_new_literal (G_IO_ERROR,
                                    G_IO_ERROR_FAILED,
@@ -1666,9 +1584,6 @@ meta_kms_impl_device_simple_process_update (MetaKmsImplDevice *impl_device,
 {
   GError *error = NULL;
   GList *failed_planes = NULL;
-  g_autoptr (GArray) blob_ids = NULL;
-
-  blob_ids = g_array_new (FALSE, TRUE, sizeof (uint32_t));
 
   meta_topic (META_DEBUG_KMS, "[simple] Processing update");
 
@@ -1677,7 +1592,6 @@ meta_kms_impl_device_simple_process_update (MetaKmsImplDevice *impl_device,
 
   if (!process_entries (impl_device,
                         update,
-                        blob_ids,
                         meta_kms_update_get_mode_sets (update),
                         process_mode_set,
                         &error))
@@ -1685,7 +1599,6 @@ meta_kms_impl_device_simple_process_update (MetaKmsImplDevice *impl_device,
 
   if (!process_entries (impl_device,
                         update,
-                        blob_ids,
                         meta_kms_update_get_connector_updates (update),
                         process_connector_update,
                         &error))
@@ -1693,7 +1606,6 @@ meta_kms_impl_device_simple_process_update (MetaKmsImplDevice *impl_device,
 
   if (!process_entries (impl_device,
                         update,
-                        blob_ids,
                         meta_kms_update_get_crtc_color_updates (update),
                         process_crtc_color_updates,
                         &error))
@@ -1701,7 +1613,6 @@ meta_kms_impl_device_simple_process_update (MetaKmsImplDevice *impl_device,
 
   if (!process_entries (impl_device,
                         update,
-                        blob_ids,
                         meta_kms_update_get_crtc_updates (update),
                         process_crtc_update,
                         &error))
@@ -1714,13 +1625,9 @@ meta_kms_impl_device_simple_process_update (MetaKmsImplDevice *impl_device,
                                   &error))
     goto err;
 
-  release_blob_ids (impl_device, blob_ids);
-
   return meta_kms_feedback_new_passed (failed_planes);
 
 err:
-  release_blob_ids (impl_device, blob_ids);
-
   return meta_kms_feedback_new_failed (failed_planes, error);
 }
 

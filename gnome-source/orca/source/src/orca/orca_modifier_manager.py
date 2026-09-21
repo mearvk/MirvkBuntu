@@ -43,7 +43,7 @@ from gi.repository import (
     GLib,
 )
 
-from . import ax_device_manager, debug, gsettings_registry, keybindings
+from . import debug, gsettings_registry, input_event_manager, keybindings
 
 DESKTOP_MODIFIER_KEYS: list[str] = ["Insert", "KP_Insert"]
 LAPTOP_MODIFIER_KEYS: list[str] = ["Caps_Lock", "Shift_Lock"]
@@ -106,8 +106,8 @@ class OrcaModifierManager:
     def set_pressed_state(self, is_pressed: bool) -> None:
         """Updates the pressed state of the modifier based on event."""
 
-        tokens = ["ORCA MODIFIER MANAGER: Setting pressed state to", is_pressed]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"ORCA MODIFIER MANAGER: Setting pressed state to {is_pressed}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         self._is_pressed = is_pressed
 
     def is_modifier_grabbed(self, modifier: str) -> bool:
@@ -140,8 +140,8 @@ class OrcaModifierManager:
             return
 
         keyval, keycode = keybindings.get_keycodes(modifier)
-        grab_id = ax_device_manager.get_manager().add_grab_for_modifier(modifier, keyval, keycode)
-        if grab_id != 0:
+        grab_id = input_event_manager.get_manager().add_grab_for_modifier(modifier, keyval, keycode)
+        if grab_id != -1:
             self._grabbed_modifiers[modifier] = grab_id
 
     def remove_modifier_grab(self, modifier: str) -> None:
@@ -151,7 +151,7 @@ class OrcaModifierManager:
         if grab_id is None:
             return
 
-        ax_device_manager.get_manager().remove_grab_for_modifier(modifier, grab_id)
+        input_event_manager.get_manager().remove_grab_for_modifier(modifier, grab_id)
         del self._grabbed_modifiers[modifier]
 
     def toggle_modifier(self, keyboard_event: KeyboardEvent) -> None:
@@ -182,8 +182,8 @@ class OrcaModifierManager:
         debug.print_message(debug.LEVEL_INFO, msg, True)
         self.remove_modifier_grab(keyboard_event.keyval_name)
 
-        tokens = ["ORCA MODIFIER MANAGER: Scheduling toggle of", keyboard_event.keyval_name]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"ORCA MODIFIER MANAGER: Scheduling toggle of {keyboard_event.keyval_name}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         GLib.timeout_add(1, toggle, keyboard_event.hw_code)
 
         msg = "ORCA MODIFIER MANAGER: Scheduling re-adding grab post-toggle"
@@ -269,10 +269,10 @@ class OrcaModifierManager:
     def refresh_orca_modifiers(self, reason: str = "") -> None:
         """Refreshes the Orca modifier keys, including grabs and xmodmap."""
 
-        tokens = ["ORCA MODIFIER MANAGER: Refreshing Orca modifiers"]
+        msg = "ORCA MODIFIER MANAGER: Refreshing Orca modifiers"
         if reason:
-            tokens += [":", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg += f": {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         for modifier in list(self._grabbed_modifiers.keys()):
             self.remove_modifier_grab(modifier)
@@ -288,8 +288,8 @@ class OrcaModifierManager:
             return
 
         self._restore_original_xkbcomp()
-        with subprocess.Popen(  # noqa: S603 - xkbcomp is a system dependency, not untrusted input
-            ["xkbcomp", display, "-"],  # noqa: S607 - full path would break across distros
+        with subprocess.Popen(
+            ["xkbcomp", display, "-"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         ) as p:
@@ -313,14 +313,14 @@ class OrcaModifierManager:
     def unset_orca_modifiers(self, reason: str = "") -> None:
         """Turns the Orca modifiers back into their original purpose."""
 
-        tokens = ["ORCA MODIFIER MANAGER: Unsetting Orca modifiers"]
+        msg = "ORCA MODIFIER MANAGER: Unsetting Orca modifiers"
         if reason:
-            tokens += [":", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg += f": {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         self._modifiers_are_set = False
         self._restore_original_xkbcomp()
-        ax_device_manager.get_manager().unmap_all_modifiers()
+        input_event_manager.get_manager().unmap_all_modifiers()
 
     def _restore_original_xkbcomp(self) -> None:
         """Restores the original xkbcomp keymap."""
@@ -337,8 +337,8 @@ class OrcaModifierManager:
             return
 
         self._caps_lock_cleared = False
-        with subprocess.Popen(  # noqa: S603 - xkbcomp is a system dependency, not untrusted input
-            ["xkbcomp", "-w0", "-", display],  # noqa: S607 - full path would break across distros
+        with subprocess.Popen(
+            ["xkbcomp", "-w0", "-", display],
             stdin=subprocess.PIPE,
             stdout=None,
             stderr=None,
@@ -448,8 +448,8 @@ class OrcaModifierManager:
         msg = "ORCA MODIFIER MANAGER: Updating xmodmap"
         debug.print_message(debug.LEVEL_INFO, msg, True)
 
-        with subprocess.Popen(  # noqa: S603 - xkbcomp is a system dependency, not untrusted input
-            ["xkbcomp", "-w0", "-", display],  # noqa: S607 - full path would break across distros
+        with subprocess.Popen(
+            ["xkbcomp", "-w0", "-", display],
             stdin=subprocess.PIPE,
             stdout=None,
             stderr=None,

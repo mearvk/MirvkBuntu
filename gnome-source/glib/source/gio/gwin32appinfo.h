@@ -46,7 +46,7 @@ struct _GWin32AppInfoClass
   GObjectClass parent_class;
 };
 
-GType g_win32_app_info_get_type (void);
+GType g_win32_app_info_get_type (void) G_GNUC_CONST;
 
 G_END_DECLS
 

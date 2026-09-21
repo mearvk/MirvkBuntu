@@ -43,6 +43,11 @@ G_DECLARE_DERIVABLE_TYPE (ClutterShaderEffect,
 
 /**
  * ClutterShaderEffectClass:
+ * @get_static_shader_source: Returns the GLSL source code to use for
+ *  instances of this shader effect. Note that this function is only
+ *  called once per subclass of #ClutterShaderEffect regardless of how
+ *  many instances are used. It is expected that subclasses will return
+ *  a copy of a static string from this function.
  *
  * The #ClutterShaderEffectClass structure contains
  * only private data
@@ -52,21 +57,16 @@ struct _ClutterShaderEffectClass
   /*< private >*/
   ClutterOffscreenEffectClass parent_class;
 
-  /**
-   * ClutterShaderEffectClass::get_static_snippet:
-   * @effect: a shader effect
-   *
-   * Returns the [class@Cogl.Snippet] to use for instances of this shader
-   * effect. This function is only called once per subclass of
-   * #ClutterShaderEffect regardless of how many instances are used.
-   *
-   * Returns: (transfer full): a #CoglSnippet
-   */
-  CoglSnippet * (* get_static_snippet) (ClutterShaderEffect *effect);
+  /*< public >*/
+  gchar * (* get_static_shader_source) (ClutterShaderEffect *effect);
 };
 
 CLUTTER_EXPORT
-ClutterEffect * clutter_shader_effect_new_with_snippet  (CoglSnippet         *snippet);
+ClutterEffect * clutter_shader_effect_new               (ClutterShaderType    shader_type);
+
+CLUTTER_EXPORT
+gboolean        clutter_shader_effect_set_shader_source (ClutterShaderEffect *effect,
+                                                         const gchar         *source);
 
 CLUTTER_EXPORT
 void            clutter_shader_effect_set_uniform       (ClutterShaderEffect *effect,
@@ -80,10 +80,8 @@ void            clutter_shader_effect_set_uniform_value (ClutterShaderEffect *ef
                                                          const GValue        *value);
 
 CLUTTER_EXPORT
-void            clutter_shader_effect_set_uniform_float (ClutterShaderEffect *effect,
-                                                         const gchar         *name,
-                                                         int                  n_components,
-                                                         int                  total_count,
-                                                         const gfloat        *value);
+CoglShader*     clutter_shader_effect_get_shader        (ClutterShaderEffect *effect);
+CLUTTER_EXPORT
+CoglProgram*    clutter_shader_effect_get_program       (ClutterShaderEffect *effect);
 
 G_END_DECLS

@@ -28,7 +28,6 @@
 #include "wayland/meta-wayland-input-device.h"
 #include "wayland/meta-wayland-keyboard.h"
 #include "wayland/meta-wayland-pointer.h"
-#include "wayland/meta-wayland-pointer-warp.h"
 #include "wayland/meta-wayland-tablet-tool.h"
 #include "wayland/meta-wayland-text-input.h"
 #include "wayland/meta-wayland-touch.h"
@@ -37,8 +36,6 @@
 struct _MetaWaylandSeat
 {
   MetaWaylandCompositor *compositor;
-
-  ClutterSeat *clutter_seat;
 
   struct wl_list base_resource_list;
   struct wl_display *wl_display;
@@ -52,7 +49,6 @@ struct _MetaWaylandSeat
   MetaWaylandDataDevicePrimary primary_data_device;
 
   MetaWaylandTextInput *text_input;
-  MetaWaylandPointerWarp *pointer_warp;
 
   MetaWaylandInput *input_handler;
   MetaWaylandEventHandler *default_handler;
@@ -78,13 +74,14 @@ void meta_wayland_seat_set_input_focus (MetaWaylandSeat    *seat,
 
 MetaWaylandSurface * meta_wayland_seat_get_input_focus (MetaWaylandSeat *seat);
 
-gboolean meta_wayland_seat_get_grab_info (MetaWaylandSeat     *seat,
-                                          MetaWaylandSurface  *surface,
-                                          uint32_t             serial,
-                                          gboolean             require_pressed,
-                                          ClutterSprite      **sprite_out,
-                                          float               *x,
-                                          float               *y);
+gboolean meta_wayland_seat_get_grab_info (MetaWaylandSeat       *seat,
+                                          MetaWaylandSurface    *surface,
+                                          uint32_t               serial,
+                                          gboolean               require_pressed,
+                                          ClutterInputDevice   **device_out,
+                                          ClutterEventSequence **sequence_out,
+                                          float                 *x,
+                                          float                 *y);
 gboolean meta_wayland_seat_can_popup     (MetaWaylandSeat *seat,
                                           uint32_t         serial);
 
@@ -98,8 +95,6 @@ MetaWaylandCompositor * meta_wayland_seat_get_compositor (MetaWaylandSeat *seat)
 
 MetaWaylandInput * meta_wayland_seat_get_input (MetaWaylandSeat *seat);
 
-MetaWaylandSurface * meta_wayland_seat_get_current_surface (MetaWaylandSeat *seat,
-                                                            ClutterFocus    *focus);
-
-ClutterCursor * meta_wayland_seat_get_cursor (MetaWaylandSeat *seat,
-                                              ClutterSprite   *sprite);
+MetaWaylandSurface * meta_wayland_seat_get_current_surface (MetaWaylandSeat      *seat,
+                                                            ClutterInputDevice   *device,
+                                                            ClutterEventSequence *sequence);

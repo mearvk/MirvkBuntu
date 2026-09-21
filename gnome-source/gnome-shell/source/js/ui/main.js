@@ -1,5 +1,7 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
-import GioUnix from 'gi://GioUnix';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
@@ -8,8 +10,6 @@ import St from 'gi://St';
 
 import * as AccessDialog from './accessDialog.js';
 import * as AudioDeviceSelection from './audioDeviceSelection.js';
-import * as BreakManager from '../misc/breakManager.js';
-import * as BrightnessManager from '../misc/brightnessManager.js';
 import * as Config from '../misc/config.js';
 import * as Components from './components.js';
 import * as CtrlAltTab from './ctrlAltTab.js';
@@ -20,6 +20,7 @@ import * as InputMethod from '../misc/inputMethod.js';
 import * as Introspect from '../misc/introspect.js';
 import * as Keyboard from './keyboard.js';
 import * as MessageTray from './messageTray.js';
+import * as ModalDialog from './modalDialog.js';
 import * as OsdWindow from './osdWindow.js';
 import * as OsdMonitorLabeler from './osdMonitorLabeler.js';
 import * as Overview from './overview.js';
@@ -37,7 +38,6 @@ import * as ScreenShield from './screenShield.js';
 import * as SessionMode from './sessionMode.js';
 import * as ShellDBus from './shellDBus.js';
 import * as ShellMountOperation from './shellMountOperation.js';
-import * as TimeLimitsManager from '../misc/timeLimitsManager.js';
 import * as WindowManager from './windowManager.js';
 import * as Magnifier from './magnifier.js';
 import * as XdndHandler from './xdndHandler.js';
@@ -77,10 +77,10 @@ export let shellAccessDialogDBusService = null;
 export let shellAudioSelectionDBusService = null;
 export let shellDBusService = null;
 export let shellMountOpDBusService = null;
-export const screenSaverDBus = null;
+export let screenSaverDBus = null;
 export let modalCount = 0;
 export let actionMode = Shell.ActionMode.NONE;
-export const modalActorFocusStack = [];
+export let modalActorFocusStack = [];
 export let uiGroup = null;
 export let magnifier = null;
 export let xdndHandler = null;
@@ -91,13 +91,6 @@ export let inputMethod = null;
 export let introspectService = null;
 export let locatePointer = null;
 export let endSessionDialog = null;
-export let breakManager = null;
-export let screenTimeDBus = null;
-export let breakManagerDispatcher = null;
-export let timeLimitsManager = null;
-export let timeLimitsDispatcher = null;
-export let brightnessManager = null;
-export let brightnessDBus = null;
 
 let _startDate;
 let _defaultCssStylesheet = null;
@@ -135,7 +128,7 @@ function _sessionUpdated() {
             welcomeDialog.close();
     }
 
-    const remoteAccessController = global.backend.get_remote_access_controller();
+    let remoteAccessController = global.backend.get_remote_access_controller();
     if (remoteAccessController && !global.backend.is_headless()) {
         if (sessionMode.allowScreencast && _remoteAccessInhibited) {
             remoteAccessController.uninhibit_remote_access();
@@ -156,7 +149,7 @@ export async function start() {
             // toString() can throw
             if (msg)
                 args.unshift(`${msg}:`);
-        } catch {}
+        } catch (e) {}
 
         console.error(...args);
     };
@@ -166,9 +159,9 @@ export async function start() {
         notifyError(msg, detail);
     });
 
-    const currentDesktop = GLib.getenv('XDG_CURRENT_DESKTOP');
+    let currentDesktop = GLib.getenv('XDG_CURRENT_DESKTOP');
     if (!currentDesktop || !currentDesktop.split(':').includes('GNOME'))
-        GioUnix.DesktopAppInfo.set_desktop_env('GNOME');
+        Gio.DesktopAppInfo.set_desktop_env('GNOME');
 
     sessionMode = new SessionMode.SessionMode();
     sessionMode.connect('updated', _sessionUpdated);
@@ -238,14 +231,11 @@ async function _initializeUI() {
         screenShield = new ScreenShield.ScreenShield();
 
     inputMethod = new InputMethod.InputMethod();
-    global.stage.context.get_backend().set_input_method(inputMethod);
+    Clutter.get_default_backend().set_input_method(inputMethod);
     global.connect('shutdown',
-        () => global.stage.context.get_backend().set_input_method(null));
+        () => Clutter.get_default_backend().set_input_method(null));
 
     screenshotUI = new Screenshot.ScreenshotUI();
-
-    brightnessManager = new BrightnessManager.BrightnessManager();
-    brightnessDBus = new ShellDBus.BrightnessDBus(brightnessManager);
 
     messageTray = new MessageTray.MessageTray();
     panel = new Panel.Panel();
@@ -256,27 +246,6 @@ async function _initializeUI() {
 
     introspectService = new Introspect.IntrospectService();
 
-    // Set up the global default break reminder manager and its D-Bus interface
-    breakManager = new BreakManager.BreakManager();
-    timeLimitsManager = new TimeLimitsManager.TimeLimitsManager();
-    screenTimeDBus = new ShellDBus.ScreenTimeDBus(breakManager);
-    breakManagerDispatcher = new BreakManager.BreakDispatcher(breakManager);
-    timeLimitsDispatcher = new TimeLimitsManager.TimeLimitsDispatcher(timeLimitsManager);
-
-    global.connect('shutdown', () => {
-        // Block shutdown until the session history file has been written
-        const loop = new GLib.MainLoop(null, false);
-        const source = GLib.idle_source_new();
-        source.set_callback(() => {
-            timeLimitsManager.shutdown()
-                .catch(e => console.warn(`Failed to stop time limits manager: ${e.message}`))
-                .finally(() => loop.quit());
-            return GLib.SOURCE_REMOVE;
-        });
-        source.attach(loop.get_context());
-        loop.run();
-    });
-
     layoutManager.init();
     overview.init();
 
@@ -285,6 +254,18 @@ async function _initializeUI() {
     global.connect('locate-pointer', () => {
         locatePointer.show();
     });
+
+    global.display.connect('show-restart-message', (display, message) => {
+        showRestartMessage(message);
+        return true;
+    });
+
+    global.display.connect('restart', () => {
+        global.reexec_self();
+        return true;
+    });
+
+    global.display.connect('gl-video-memory-purged', loadTheme);
 
     global.context.connect('notify::unsafe-mode', () => {
         if (!global.context.unsafe_mode)
@@ -309,9 +290,10 @@ async function _initializeUI() {
     endSessionDialog = new EndSessionDialog.EndSessionDialog();
 
     // We're ready for the session manager to move to the next phase
-    GLib.idle_add_once(GLib.PRIORITY_DEFAULT, () => {
+    GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
         Shell.util_sd_notify();
         global.context.notify_ready();
+        return GLib.SOURCE_REMOVE;
     });
 
     _startDate = new Date();
@@ -319,8 +301,6 @@ async function _initializeUI() {
     ExtensionDownloader.init();
     extensionManager = new ExtensionSystem.ExtensionManager();
     extensionManager.init();
-
-    LoginManager.registerSessionWithGDM();
 
     if (sessionMode.isGreeter && screenShield) {
         layoutManager.connect('startup-prepared', () => {
@@ -354,7 +334,7 @@ async function _initializeUI() {
         }
 
         if (!perfModule) {
-            const credentials = new Gio.Credentials();
+            let credentials = new Gio.Credentials();
             if (credentials.get_unix_user() === 0) {
                 notify(
                     _('Logged in as a privileged user'),
@@ -368,10 +348,10 @@ async function _initializeUI() {
             sessionMode.currentMode !== 'initial-setup')
             _handleLockScreenWarning();
 
-        LoginManager.registerDisplayWithGDM();
+        LoginManager.registerSessionWithGDM();
 
         if (perfModule) {
-            const perfOutput = GLib.getenv('SHELL_PERF_OUTPUT');
+            let perfOutput = GLib.getenv('SHELL_PERF_OUTPUT');
             Scripting.runPerfScript(perfModule, perfOutput);
         }
     });
@@ -407,7 +387,7 @@ async function _handleLockScreenWarning() {
 
         notify(
             _('Screen Lock disabled'),
-            _('Screen Locking requires the GNOME display manager'));
+            _('Screen Locking requires the GNOME display manager.'));
     }
 }
 
@@ -418,9 +398,9 @@ function _getStylesheet(name) {
     if (stylesheet.query_exists(null))
         return stylesheet;
 
-    const dataDirs = GLib.get_system_data_dirs();
+    let dataDirs = GLib.get_system_data_dirs();
     for (let i = 0; i < dataDirs.length; i++) {
-        const path = GLib.build_filenamev([dataDirs[i], 'gnome-shell', 'theme', name]);
+        let path = GLib.build_filenamev([dataDirs[i], 'gnome-shell', 'theme', name]);
         stylesheet = Gio.file_new_for_path(path);
         if (stylesheet.query_exists(null))
             return stylesheet;
@@ -454,7 +434,7 @@ export function getStyleVariant() {
 
 function _getDefaultStylesheet() {
     let stylesheet = null;
-    const name = sessionMode.stylesheetName;
+    let name = sessionMode.stylesheetName;
 
     // Look for a high-contrast variant first
     if (St.Settings.get().high_contrast)
@@ -470,7 +450,7 @@ function _getDefaultStylesheet() {
 }
 
 function _loadDefaultStylesheet() {
-    const stylesheet = _getDefaultStylesheet();
+    let stylesheet = _getDefaultStylesheet();
     if (_defaultCssStylesheet && _defaultCssStylesheet.equal(stylesheet))
         return;
 
@@ -609,10 +589,10 @@ function _loadOskLayouts() {
  * Reloads the theme CSS file
  */
 export function loadTheme() {
-    const themeContext = St.ThemeContext.get_for_stage(global.stage);
-    const previousTheme = themeContext.get_theme();
+    let themeContext = St.ThemeContext.get_for_stage(global.stage);
+    let previousTheme = themeContext.get_theme();
 
-    const theme = new St.Theme({
+    let theme = new St.Theme({
         application_stylesheet: _cssStylesheet,
         default_stylesheet: _defaultCssStylesheet,
     });
@@ -621,7 +601,7 @@ export function loadTheme() {
         throw new Error(`No valid stylesheet found for '${sessionMode.stylesheetName}'`);
 
     if (previousTheme) {
-        const customStylesheets = previousTheme.get_custom_stylesheets();
+        let customStylesheets = previousTheme.get_custom_stylesheets();
 
         for (let i = 0; i < customStylesheets.length; i++)
             theme.load_stylesheet(customStylesheets[i]);
@@ -632,9 +612,9 @@ export function loadTheme() {
 
 /**
  * @param {string} msg A message
- * @param {string=} details Additional information
+ * @param {string} details Additional information
  */
-export function notify(msg, details = null) {
+export function notify(msg, details) {
     const source = MessageTray.getSystemSource();
     const notification = new MessageTray.Notification({
         source,
@@ -698,19 +678,19 @@ export function pushModal(actor, params = {}) {
         ...params,
     };
 
-    const grab = global.stage.grab(actor);
+    let grab = global.stage.grab(actor);
 
     if (modalCount === 0)
-        global.compositor.disable_unredirect();
+        Meta.disable_unredirect_for_display(global.display);
 
     modalCount += 1;
-    const actorDestroyId = actor.connect('destroy', () => {
-        const index = _findModal(grab);
+    let actorDestroyId = actor.connect('destroy', () => {
+        let index = _findModal(grab);
         if (index >= 0)
             popModal(grab);
     });
 
-    const prevFocus = global.stage.get_key_focus();
+    let prevFocus = global.stage.get_key_focus();
     let prevFocusDestroyId;
     if (prevFocus != null) {
         prevFocusDestroyId = prevFocus.connect('destroy', () => {
@@ -731,8 +711,7 @@ export function pushModal(actor, params = {}) {
     });
 
     actionMode = newActionMode;
-    const newFocus = actor === global.stage ? null : actor;
-    global.stage.set_key_focus(newFocus);
+    global.stage.set_key_focus(actor);
     return grab;
 }
 
@@ -744,7 +723,7 @@ export function pushModal(actor, params = {}) {
  * @param {Clutter.Grab} grab - the grab given by pushModal()
  */
 export function popModal(grab) {
-    const focusIndex = _findModal(grab);
+    let focusIndex = _findModal(grab);
     if (focusIndex < 0) {
         global.stage.set_key_focus(null);
         actionMode = Shell.ActionMode.NORMAL;
@@ -754,7 +733,7 @@ export function popModal(grab) {
 
     modalCount -= 1;
 
-    const record = modalActorFocusStack[focusIndex];
+    let record = modalActorFocusStack[focusIndex];
     record.actor.disconnect(record.destroyId);
 
     record.grab.dismiss();
@@ -780,7 +759,7 @@ export function popModal(grab) {
         // record, then the focus stack will be [a, c], rather than the correct
         // [a, b]. Shift the focus stack up before removing the record to ensure
         // that we get the correct result.
-        const t = modalActorFocusStack[modalActorFocusStack.length - 1];
+        let t = modalActorFocusStack[modalActorFocusStack.length - 1];
         if (t.prevFocus)
             t.prevFocus.disconnect(t.prevFocusDestroyId);
         // Remove from the middle, shift the focus chain up
@@ -796,7 +775,7 @@ export function popModal(grab) {
         return;
 
     layoutManager.modalEnded();
-    global.compositor.enable_unredirect();
+    Meta.enable_unredirect_for_display(global.display);
     actionMode = Shell.ActionMode.NORMAL;
 }
 
@@ -840,15 +819,15 @@ export function openWelcomeDialog() {
  * and switching out of the overview if it's currently active
  */
 export function activateWindow(window, time, workspaceNum) {
-    const workspaceManager = global.workspace_manager;
-    const activeWorkspaceNum = workspaceManager.get_active_workspace_index();
-    const windowWorkspaceNum = workspaceNum !== undefined ? workspaceNum : window.get_workspace().index();
+    let workspaceManager = global.workspace_manager;
+    let activeWorkspaceNum = workspaceManager.get_active_workspace_index();
+    let windowWorkspaceNum = workspaceNum !== undefined ? workspaceNum : window.get_workspace().index();
 
     if (!time)
         time = global.get_current_time();
 
     if (windowWorkspaceNum !== activeWorkspaceNum) {
-        const workspace = workspaceManager.get_workspace_by_index(windowWorkspaceNum);
+        let workspace = workspaceManager.get_workspace_by_index(windowWorkspaceNum);
         workspace.activate_with_focus(window, time);
     } else {
         window.activate(time);
@@ -888,9 +867,9 @@ export function moveWindowToMonitorAndWorkspace(window, monitorIndex, workspaceI
 // TODO - replace this timeout with some system to guess when the user might
 // be e.g. just reading the screen and not likely to interact.
 const DEFERRED_TIMEOUT_SECONDS = 20;
-const _deferredWorkData = {};
+let _deferredWorkData = {};
 // Work scheduled for some point in the future
-const _deferredWorkQueue = [];
+let _deferredWorkQueue = [];
 // Work we need to process before the next redraw
 let _beforeRedrawQueue = [];
 // Counter to assign work ids
@@ -900,7 +879,7 @@ let _deferredTimeoutId = 0;
 function _runDeferredWork(workId) {
     if (!_deferredWorkData[workId])
         return;
-    const index = _deferredWorkQueue.indexOf(workId);
+    let index = _deferredWorkQueue.indexOf(workId);
     if (index < 0)
         return;
 
@@ -919,7 +898,7 @@ function _runAllDeferredWork() {
 
 function _runBeforeRedrawQueue() {
     for (let i = 0; i < _beforeRedrawQueue.length; i++) {
-        const workId = _beforeRedrawQueue[i];
+        let workId = _beforeRedrawQueue[i];
         _runDeferredWork(workId);
     }
     _beforeRedrawQueue = [];
@@ -931,7 +910,7 @@ function _queueBeforeRedraw(workId) {
         const laters = global.compositor.get_laters();
         laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
             _runBeforeRedrawQueue();
-            return GLib.SOURCE_REMOVE;
+            return false;
         });
     }
 }
@@ -955,7 +934,7 @@ function _queueBeforeRedraw(workId) {
  */
 export function initializeDeferredWork(actor, callback) {
     // Turn into a string so we can use as an object property
-    const workId = `${++_deferredWorkSequence}`;
+    let workId = `${++_deferredWorkSequence}`;
     _deferredWorkData[workId] = {
         actor,
         callback,
@@ -966,7 +945,7 @@ export function initializeDeferredWork(actor, callback) {
         _queueBeforeRedraw(workId);
     });
     actor.connect('destroy', () => {
-        const index = _deferredWorkQueue.indexOf(workId);
+        let index = _deferredWorkQueue.indexOf(workId);
         if (index >= 0)
             _deferredWorkQueue.splice(index, 1);
         delete _deferredWorkData[workId];
@@ -986,9 +965,9 @@ export function initializeDeferredWork(actor, callback) {
  * changed.
  */
 export function queueDeferredWork(workId) {
-    const data = _deferredWorkData[workId];
+    let data = _deferredWorkData[workId];
     if (!data) {
-        const message = `Invalid work id ${workId}`;
+        let message = `Invalid work id ${workId}`;
         logError(new Error(message), message);
         return;
     }
@@ -997,12 +976,39 @@ export function queueDeferredWork(workId) {
     if (data.actor.mapped) {
         _queueBeforeRedraw(workId);
     } else if (_deferredTimeoutId === 0) {
-        _deferredTimeoutId = GLib.timeout_add_seconds_once(GLib.PRIORITY_DEFAULT, DEFERRED_TIMEOUT_SECONDS, () => {
+        _deferredTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, DEFERRED_TIMEOUT_SECONDS, () => {
             _runAllDeferredWork();
             _deferredTimeoutId = 0;
+            return GLib.SOURCE_REMOVE;
         });
         GLib.Source.set_name_by_id(_deferredTimeoutId, '[gnome-shell] _runAllDeferredWork');
     }
+}
+
+const RestartMessage = GObject.registerClass(
+class RestartMessage extends ModalDialog.ModalDialog {
+    _init(message) {
+        super._init({
+            shellReactive: true,
+            styleClass: 'restart-message headline',
+            shouldFadeIn: false,
+            destroyOnClose: true,
+        });
+
+        let label = new St.Label({
+            text: message,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        this.contentLayout.add_child(label);
+        this.buttonLayout.hide();
+    }
+});
+
+function showRestartMessage(message) {
+    let restartMessage = new RestartMessage(message);
+    restartMessage.open();
 }
 
 class AnimationsSettings {
@@ -1023,11 +1029,11 @@ class AnimationsSettings {
     }
 
     _shouldEnableAnimations() {
-        if (global.force_animations)
-            return true;
-
         if (this._handles.size > 0)
             return false;
+
+        if (global.force_animations)
+            return true;
 
         const backend = global.backend;
         if (!backend.is_rendering_hardware_accelerated())

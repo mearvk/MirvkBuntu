@@ -27,10 +27,9 @@
 #include <wayland-server.h>
 
 #include "compositor/meta-surface-actor-wayland.h"
-#include "wayland/meta-wayland-tablet-seat.h"
 #include "wayland/meta-wayland-private.h"
 
-#include "tablet-v2-server-protocol.h"
+#include "tablet-unstable-v2-server-protocol.h"
 
 static void
 unbind_resource (struct wl_resource *resource)
@@ -83,7 +82,7 @@ meta_wayland_tablet_notify (MetaWaylandTablet  *tablet,
                             struct wl_resource *resource)
 {
   ClutterInputDevice *device = tablet->device;
-  const gchar *node_path;
+  const gchar *node_path, *vendor, *product;
   guint vid, pid;
 
   zwp_tablet_v2_send_name (resource, clutter_input_device_get_device_name (device));
@@ -92,18 +91,12 @@ meta_wayland_tablet_notify (MetaWaylandTablet  *tablet,
   if (node_path)
     zwp_tablet_v2_send_path (resource, node_path);
 
-  vid = clutter_input_device_get_vendor_id (device);
-  pid = clutter_input_device_get_product_id (device);
-  pid = clutter_input_device_get_product_id (device);
+  vendor = clutter_input_device_get_vendor_id (device);
+  product = clutter_input_device_get_product_id (device);
 
-  zwp_tablet_v2_send_id (resource, vid, pid);
-
-  if (wl_resource_get_version (resource) >= ZWP_TABLET_V2_BUSTYPE_SINCE_VERSION)
-    {
-      guint bustype = clutter_input_device_get_bus_type (device);
-      if (bustype)
-        zwp_tablet_v2_send_bustype (resource, bustype);
-    }
+  if (vendor && sscanf (vendor, "%x", &vid) == 1 &&
+      product && sscanf (product, "%x", &pid) == 1)
+    zwp_tablet_v2_send_id (resource, vid, pid);
 
   zwp_tablet_v2_send_done (resource);
 }
@@ -131,29 +124,4 @@ meta_wayland_tablet_lookup_resource (MetaWaylandTablet *tablet,
                                      struct wl_client  *client)
 {
   return wl_resource_find_for_client (&tablet->resource_list, client);
-}
-
-void
-meta_wayland_tablet_update_sprite (MetaWaylandTablet  *tablet,
-                                   const ClutterEvent *event)
-{
-  ClutterSprite *sprite = NULL;
-
-  if (event)
-    {
-      MetaWaylandTabletSeat *tablet_seat = tablet->tablet_seat;
-      MetaWaylandSeat *seat = tablet_seat->seat;
-      MetaContext *context =
-        meta_wayland_compositor_get_context (seat->compositor);
-      MetaBackend *backend = meta_context_get_backend (context);
-      ClutterBackend *clutter_backend =
-        meta_backend_get_clutter_backend (backend);
-      ClutterStage *stage = CLUTTER_STAGE (meta_backend_get_stage (backend));
-
-      sprite = clutter_backend_get_sprite (clutter_backend,
-                                           stage,
-                                           event);
-    }
-
-  tablet->sprite = sprite;
 }

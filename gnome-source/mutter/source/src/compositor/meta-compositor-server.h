@@ -28,3 +28,6 @@ struct _MetaCompositorServerClass
 {
   MetaCompositorClass parent_class;
 };
+
+MetaCompositorServer * meta_compositor_server_new (MetaDisplay *display,
+                                                   MetaBackend *backend);

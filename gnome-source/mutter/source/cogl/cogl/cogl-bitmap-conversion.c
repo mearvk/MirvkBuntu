@@ -30,7 +30,6 @@
 
 #include "config.h"
 
-#include "cogl/driver/gl/cogl-driver-gl-private.h"
 #include "cogl/cogl-private.h"
 #include "cogl/cogl-bitmap-private.h"
 #include "cogl/cogl-context-private.h"
@@ -164,7 +163,7 @@ unpack_flt (uint32_t b)
 #define PACK_10(b) ((uint32_t) ((b) * 1023.5f))
 #define PACK_16(b) ((uint32_t) ((b) * 65535.0f))
 #define PACK_SHORT(b) cogl_float_to_half (b)
-#define PACK_FLOAT(b) pack_flt((b) / 1.0f)
+#define PACK_FLOAT(b) pack_flt((b) / 1.0)
 
 #define component_type float
 #define component_size float
@@ -517,7 +516,6 @@ determine_medium_size (CoglPixelFormat format)
     case COGL_PIXEL_FORMAT_ABGR_2101010_PRE:
     case COGL_PIXEL_FORMAT_R_16:
     case COGL_PIXEL_FORMAT_RG_1616:
-    case COGL_PIXEL_FORMAT_RGBX_16161616:
     case COGL_PIXEL_FORMAT_RGBA_16161616:
     case COGL_PIXEL_FORMAT_RGBA_16161616_PRE:
       return MEDIUM_TYPE_16;
@@ -623,16 +621,16 @@ _cogl_bitmap_convert_into_bitmap (CoglBitmap *src_bmp,
       return TRUE;
     }
 
-  src_data = cogl_bitmap_map (src_bmp, COGL_BUFFER_ACCESS_READ, 0, error);
+  src_data = _cogl_bitmap_map (src_bmp, COGL_BUFFER_ACCESS_READ, 0, error);
   if (src_data == NULL)
     return FALSE;
-  dst_data = cogl_bitmap_map (dst_bmp,
-                              COGL_BUFFER_ACCESS_WRITE,
-                              COGL_BUFFER_MAP_HINT_DISCARD,
-                              error);
+  dst_data = _cogl_bitmap_map (dst_bmp,
+                               COGL_BUFFER_ACCESS_WRITE,
+                               COGL_BUFFER_MAP_HINT_DISCARD,
+                               error);
   if (dst_data == NULL)
     {
-      cogl_bitmap_unmap (src_bmp);
+      _cogl_bitmap_unmap (src_bmp);
       return FALSE;
     }
 
@@ -709,8 +707,8 @@ _cogl_bitmap_convert_into_bitmap (CoglBitmap *src_bmp,
         }
     }
 
-  cogl_bitmap_unmap (src_bmp);
-  cogl_bitmap_unmap (dst_bmp);
+  _cogl_bitmap_unmap (src_bmp);
+  _cogl_bitmap_unmap (dst_bmp);
 
   g_free (tmp_row);
 
@@ -730,10 +728,10 @@ _cogl_bitmap_convert (CoglBitmap *src_bmp,
   width = cogl_bitmap_get_width (src_bmp);
   height = cogl_bitmap_get_height (src_bmp);
 
-  dst_bmp = cogl_bitmap_new_with_malloc_buffer (ctx,
-                                                width, height,
-                                                dst_format,
-                                                error);
+  dst_bmp = _cogl_bitmap_new_with_malloc_buffer (ctx,
+                                                 width, height,
+                                                 dst_format,
+                                                 error);
   if (!dst_bmp)
     return NULL;
 
@@ -747,11 +745,11 @@ _cogl_bitmap_convert (CoglBitmap *src_bmp,
 }
 
 static gboolean
-driver_can_convert (CoglDriver     *driver,
+driver_can_convert (CoglContext *ctx,
                     CoglPixelFormat src_format,
                     CoglPixelFormat internal_format)
 {
-  if (!cogl_driver_has_feature (driver, COGL_FEATURE_ID_FORMAT_CONVERSION))
+  if (!_cogl_has_private_feature (ctx, COGL_PRIVATE_FEATURE_FORMAT_CONVERSION))
     return FALSE;
 
   if (src_format == internal_format)
@@ -760,7 +758,7 @@ driver_can_convert (CoglDriver     *driver,
   /* If the driver doesn't natively support alpha textures then it
    * won't work correctly to convert to/from component-alpha
    * textures */
-  if (!cogl_driver_has_feature (driver, COGL_FEATURE_ID_ALPHA_TEXTURES) &&
+  if (!_cogl_has_private_feature (ctx, COGL_PRIVATE_FEATURE_ALPHA_TEXTURES) &&
       (src_format == COGL_PIXEL_FORMAT_A_8 ||
        internal_format == COGL_PIXEL_FORMAT_A_8))
     return FALSE;
@@ -768,7 +766,7 @@ driver_can_convert (CoglDriver     *driver,
   /* Same for red-green textures. If red-green textures aren't
    * supported then the internal format should never be RG_88 but we
    * should still be able to convert from an RG source image */
-  if (!cogl_driver_has_feature (driver, COGL_FEATURE_ID_TEXTURE_RG) &&
+  if (!cogl_has_feature (ctx, COGL_FEATURE_ID_TEXTURE_RG) &&
       src_format == COGL_PIXEL_FORMAT_RG_88)
     return FALSE;
 
@@ -782,9 +780,6 @@ _cogl_bitmap_convert_for_upload (CoglBitmap *src_bmp,
 {
   CoglContext *ctx = _cogl_bitmap_get_context (src_bmp);
   CoglPixelFormat src_format = cogl_bitmap_get_format (src_bmp);
-  CoglDriver *driver = cogl_context_get_driver (ctx);
-  CoglDriverGL *driver_gl = COGL_DRIVER_GL (driver);
-  CoglDriverGLClass *driver_klass = COGL_DRIVER_GL_GET_CLASS (driver_gl);
   CoglBitmap *dst_bmp;
 
   g_return_val_if_fail (internal_format != COGL_PIXEL_FORMAT_ANY, NULL);
@@ -797,7 +792,7 @@ _cogl_bitmap_convert_for_upload (CoglBitmap *src_bmp,
      limited number of formats so we must convert using the Cogl
      bitmap code instead */
 
-  if (driver_can_convert (driver, src_format, internal_format))
+  if (driver_can_convert (ctx, src_format, internal_format))
     {
       /* If the source format does not have the same premult flag as the
          internal_format then we need to copy and convert it */
@@ -818,11 +813,11 @@ _cogl_bitmap_convert_for_upload (CoglBitmap *src_bmp,
       CoglPixelFormat closest_format;
 
       closest_format =
-        driver_klass->pixel_format_to_gl (driver_gl,
-                                          internal_format,
-                                          NULL, /* ignore gl intformat */
-                                          NULL, /* ignore gl format */
-                                          NULL); /* ignore gl type */
+        ctx->driver_vtable->pixel_format_to_gl (ctx,
+                                                internal_format,
+                                                NULL, /* ignore gl intformat */
+                                                NULL, /* ignore gl format */
+                                                NULL); /* ignore gl type */
 
       if (closest_format != src_format)
         dst_bmp = _cogl_bitmap_convert (src_bmp, closest_format, error);
@@ -849,11 +844,11 @@ _cogl_bitmap_unpremult (CoglBitmap *bmp,
   height = cogl_bitmap_get_height (bmp);
   rowstride = cogl_bitmap_get_rowstride (bmp);
 
-  if ((data = cogl_bitmap_map (bmp,
-                               COGL_BUFFER_ACCESS_READ |
-                               COGL_BUFFER_ACCESS_WRITE,
-                               0,
-                               error)) == NULL)
+  if ((data = _cogl_bitmap_map (bmp,
+                                COGL_BUFFER_ACCESS_READ |
+                                COGL_BUFFER_ACCESS_WRITE,
+                                0,
+                                error)) == NULL)
     return FALSE;
 
   /* If we can't directly unpremult the data inline then we'll
@@ -894,7 +889,7 @@ _cogl_bitmap_unpremult (CoglBitmap *bmp,
 
   g_free (tmp_row);
 
-  cogl_bitmap_unmap (bmp);
+  _cogl_bitmap_unmap (bmp);
 
   _cogl_bitmap_set_format (bmp, format & ~COGL_PREMULT_BIT);
 
@@ -917,11 +912,11 @@ _cogl_bitmap_premult (CoglBitmap *bmp,
   height = cogl_bitmap_get_height (bmp);
   rowstride = cogl_bitmap_get_rowstride (bmp);
 
-  if ((data = cogl_bitmap_map (bmp,
-                               COGL_BUFFER_ACCESS_READ |
-                               COGL_BUFFER_ACCESS_WRITE,
-                               0,
-                               error)) == NULL)
+  if ((data = _cogl_bitmap_map (bmp,
+                                COGL_BUFFER_ACCESS_READ |
+                                COGL_BUFFER_ACCESS_WRITE,
+                                0,
+                                error)) == NULL)
     return FALSE;
 
   /* If we can't directly premult the data inline then we'll allocate
@@ -958,7 +953,7 @@ _cogl_bitmap_premult (CoglBitmap *bmp,
 
   g_free (tmp_row);
 
-  cogl_bitmap_unmap (bmp);
+  _cogl_bitmap_unmap (bmp);
 
   _cogl_bitmap_set_format (bmp, format | COGL_PREMULT_BIT);
 

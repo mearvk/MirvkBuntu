@@ -1,4 +1,4 @@
-app8_resources = gnome.compile_resources('exampleapp8_resources',
+app8_resources = gnome.compile_resources('exampleapp8 resources',
   'exampleapp.gresource.xml',
   source_dir: meson.current_source_dir())
 

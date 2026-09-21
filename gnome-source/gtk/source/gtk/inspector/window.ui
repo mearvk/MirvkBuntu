@@ -10,7 +10,7 @@
   <template class="GtkInspectorWindow" parent="GtkWindow">
     <property name="default-height">500</property>
     <property name="default-width">800</property>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar">
         <child>
           <object class="GtkStack" id="button_stack">
@@ -27,15 +27,7 @@
                         <property name="tooltip-text" translatable="yes">Select an Object</property>
                         <property name="halign">center</property>
                         <property name="valign">center</property>
-                        <property name="child">
-                          <object class="GtkImage">
-                            <property name="paintable">
-                              <object class="GtkSvg">
-                                <property name="resource">/org/gtk/libgtk/icons/find-location-symbolic.svg</property>
-                              </object>
-                            </property>
-                          </object>
-                        </property>
+                        <property name="icon-name">find-location-symbolic</property>
                         <signal name="clicked" handler="gtk_inspector_on_inspect"/>
                       </object>
                     </child>
@@ -50,15 +42,7 @@
                                 <property name="tooltip-text" translatable="yes">Show Details</property>
                                 <property name="halign">center</property>
                                 <property name="valign">center</property>
-                                <property name="child">
-                                  <object class="GtkImage">
-                                    <property name="paintable">
-                                      <object class="GtkSvg" id="dialog-information-symbolic">
-                                        <property name="resource">/org/gtk/libgtk/icons/dialog-information-symbolic.svg</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </property>
+                                <property name="icon-name">dialog-information-symbolic</property>
                                 <signal name="clicked" handler="open_object_details"/>
                               </object>
                             </property>
@@ -73,15 +57,7 @@
                                 <property name="tooltip-text" translatable="yes">Show all Objects</property>
                                 <property name="halign">center</property>
                                 <property name="valign">center</property>
-                                <property name="child">
-                                  <object class="GtkImage">
-                                    <property name="paintable">
-                                      <object class="GtkSvg" id="view-list-symbolic">
-                                        <property name="resource">/org/gtk/libgtk/icons/view-list-symbolic.svg</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </property>
+                                <property name="icon-name">view-list-symbolic</property>
                                 <signal name="clicked" handler="close_object_details"/>
                               </object>
                             </property>
@@ -131,11 +107,7 @@
                                     <property name="tooltip-text" translatable="yes">Show Details</property>
                                     <property name="halign">center</property>
                                     <property name="valign">center</property>
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">dialog-information-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">dialog-information-symbolic</property>
                                   </object>
                                 </property>
                               </object>
@@ -149,11 +121,7 @@
                                     <property name="tooltip-text" translatable="yes">Show all Resources</property>
                                     <property name="halign">center</property>
                                     <property name="valign">center</property>
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">view-list-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">view-list-symbolic</property>
                                   </object>
                                 </property>
                               </object>
@@ -179,15 +147,7 @@
                             <property name="tooltip-text" translatable="yes">Collect Statistics</property>
                             <property name="halign">start</property>
                             <property name="valign">center</property>
-                            <property name="child">
-                              <object class="GtkImage">
-                                <property name="paintable">
-                                  <object class="GtkSvg">
-                                    <property name="resource">/org/gtk/libgtk/icons/media-record-symbolic.svg</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </property>
+                            <property name="icon-name">media-record-symbolic</property>
                           </object>
                         </property>
                       </object>
@@ -230,8 +190,8 @@
           </object>
         </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkStack" id="top_stack">
         <child>
           <object class="GtkStackPage">
@@ -260,22 +220,14 @@
                             <property name="orientation">vertical</property>
                             <child>
                               <object class="GtkCenterBox">
-                                <property name="start-widget">
+                                <child type="start">
                                   <object class="GtkBox">
                                     <style>
                                       <class name="toolbar"/>
                                     </style>
                                     <child>
                                       <object class="GtkToggleButton" id="sidebar_toggle">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">
-                                              <object class="GtkSvg">
-                                                <property name="resource">/org/gtk/libgtk/icons/open-menu-symbolic.svg</property>
-                                              </object>
-                                            </property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">open-menu-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Toggle Sidebar</property>
                                         <property name="active">1</property>
                                       </object>
@@ -297,15 +249,7 @@
                                             <property name="name">actions</property>
                                             <property name="child">
                                               <object class="GtkButton" id="refresh_actions_button">
-                                                <property name="child">
-                                                  <object class="GtkImage">
-                                                    <property name="paintable">
-                                                      <object class="GtkSvg">
-                                                        <property name="resource">/org/gtk/libgtk/icons/view-refresh-symbolic.svg</property>
-                                                      </object>
-                                                    </property>
-                                                  </object>
-                                                </property>
+                                                <property name="icon-name">view-refresh-symbolic</property>
                                                 <property name="tooltip-text" translatable="yes">Refresh action state</property>
                                               </object>
                                             </property>
@@ -330,30 +274,11 @@
                                             </property>
                                           </object>
                                         </child>
-                                        <child>
-                                          <object class="GtkStackPage">
-                                            <property name="name">svg</property>
-                                            <property name="child">
-                                              <object class="GtkToggleButton" id="svg_debug_button">
-                                                <property name="child">
-                                                  <object class="GtkImage">
-                                                    <property name="paintable">
-                                                      <object class="GtkSvg">
-                                                        <property name="resource">/org/gtk/libgtk/icons/insert-object-symbolic.svg</property>
-                                                      </object>
-                                                    </property>
-                                                  </object>
-                                                </property>
-                                                <property name="tooltip-text" translatable="yes">Include debug information</property>
-                                              </object>
-                                            </property>
-                                          </object>
-                                        </child>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
-                                <property name="center-widget">
+                                </child>
+                                <child type="center">
                                   <object class="GtkStack" id="object_center_stack">
                                     <property name="transition-type">crossfade</property>
                                     <property name="hexpand">1</property>
@@ -390,53 +315,29 @@
                                       </object>
                                     </child>
                                   </object>
-                                </property>
-                                <property name="end-widget">
+                                </child>
+                                <child type="end">
                                   <object class="GtkBox">
                                     <style>
                                       <class name="toolbar"/>
                                     </style>
                                     <child>
                                       <object class="GtkButton" id="go_up_button">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">
-                                              <object class="GtkSvg">
-                                                <property name="resource">/org/gtk/libgtk/icons/go-up-symbolic.svg</property>
-                                              </object>
-                                            </property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">go-up-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Previous object</property>
                                         <signal name="clicked" handler="go_up_cb"/>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkButton" id="go_down_button">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">
-                                              <object class="GtkSvg">
-                                                <property name="resource">/org/gtk/libgtk/icons/go-down-symbolic.svg</property>
-                                              </object>
-                                            </property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">go-down-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Child object</property>
                                         <signal name="clicked" handler="go_down_cb"/>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkButton" id="go_previous_button">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">
-                                              <object class="GtkSvg">
-                                                <property name="resource">/org/gtk/libgtk/icons/go-previous-symbolic.svg</property>
-                                              </object>
-                                            </property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">go-previous-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Previous sibling</property>
                                         <signal name="clicked" handler="go_previous_cb"/>
                                       </object>
@@ -444,26 +345,20 @@
                                     <child>
                                       <object class="GtkLabel" id="list_position_label">
                                         <property name="tooltip-text" translatable="yes">List Position</property>
-                                        <property name="attributes">0 -1 font-features "tnum=1"</property>
+                                        <attributes>
+                                          <attribute name="font-features" value="tnum=1"/>
+                                        </attributes>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkButton" id="go_next_button">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">
-                                              <object class="GtkSvg">
-                                                <property name="resource">/org/gtk/libgtk/icons/go-next-symbolic.svg</property>
-                                              </object>
-                                            </property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">go-next-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Next sibling</property>
                                         <signal name="clicked" handler="go_next_cb"/>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
@@ -617,17 +512,6 @@
                                         </property>
                                       </object>
                                     </child>
-                                    <child>
-                                      <object class="GtkStackPage">
-                                        <property name="name">svg</property>
-                                        <property name="title" translatable="yes">SVG</property>
-                                        <property name="child">
-                                          <object class="GtkInspectorSvg" id="svg">
-                                            <property name="button">svg_debug_button</property>
-                                          </object>
-                                        </property>
-                                      </object>
-                                    </child>
                                   </object>
                                 </child>
                               </object>
@@ -741,6 +625,6 @@
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </template>
 </interface>

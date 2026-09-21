@@ -31,9 +31,6 @@
 #include "gdkmacosmonitor-private.h"
 #include "gdkprivate.h"
 
-/* CVDisplayLink functions are deprecated since macOS 15.0 */
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 static gint64 host_to_frame_clock_time (gint64 val);
 
 static gboolean
@@ -278,5 +275,3 @@ host_to_frame_clock_time (gint64 val)
 
   return val;
 }
-
-G_GNUC_END_IGNORE_DEPRECATIONS

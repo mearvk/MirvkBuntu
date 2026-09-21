@@ -21,8 +21,6 @@
 
 """Utilities for accessible component positions."""
 
-from __future__ import annotations
-
 import functools
 
 import gi
@@ -117,12 +115,7 @@ class AXUtilitiesComponent:
         )
 
     @staticmethod
-    def rects_are_on_same_line(
-        rect1: Atspi.Rect,
-        rect2: Atspi.Rect,
-        pixel_delta: int = 5,
-        inline_flow: bool = False,
-    ) -> bool:
+    def rects_are_on_same_line(rect1: Atspi.Rect, rect2: Atspi.Rect, pixel_delta: int = 5) -> bool:
         """Returns True if rect1 and rect2 are on the same horizontal line."""
 
         if AXUtilitiesComponent.is_same_rect(rect1, rect2):
@@ -138,12 +131,6 @@ class AXUtilitiesComponent:
         if lowest_top >= highest_bottom:
             return False
 
-        # Inline siblings share a baseline, not a midpoint, so allow a height difference.
-        if inline_flow:
-            shorter_height = min(rect1.height, rect2.height)
-            if shorter_height and (highest_bottom - lowest_top) >= shorter_height / 2:
-                return True
-
         rect1_middle = rect1.y + rect1.height / 2
         rect2_middle = rect2.y + rect2.height / 2
         return abs(rect1_middle - rect2_middle) <= pixel_delta
@@ -154,15 +141,6 @@ class AXUtilitiesComponent:
 
         intersection = AXUtilitiesComponent.get_rect_intersection(AXComponent.get_rect(obj), rect)
         return not AXUtilitiesComponent.is_empty_rect(intersection)
-
-    @staticmethod
-    def object_is_outside_parent(obj: Atspi.Accessible) -> bool:
-        """Returns True if obj's rect does not intersect its parent's rect."""
-
-        parent = AXObject.get_parent(obj)
-        if parent is None:
-            return False
-        return not AXUtilitiesComponent.object_intersects_rect(obj, AXComponent.get_rect(parent))
 
     @staticmethod
     def object_is_off_screen(obj: Atspi.Accessible) -> bool:
@@ -188,7 +166,7 @@ class AXUtilitiesComponent:
             return False
 
         result = rect.x + rect.width < 0 and rect.y + rect.height < 0
-        tokens = ["AXComponent:", obj, "is off-screen:", result]
+        tokens = ["AXComponent:", obj, f"is off-screen: {result}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
 
@@ -274,7 +252,7 @@ class AXUtilitiesComponent:
         """Returns the deepest descendant of obj at the specified point."""
 
         result = AXUtilitiesComponent._get_descendant_at_point(obj, x, y)
-        tokens = ["AXComponent: Descendant of", obj, "at", x, ",", y, "is", result]
+        tokens = ["AXComponent: Descendant of", obj, f"at {x}, {y} is", result]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
 

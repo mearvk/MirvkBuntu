@@ -43,6 +43,7 @@
 #include "backends/native/meta-kms-update.h"
 #include "backends/native/meta-kms-utils.h"
 #include "backends/native/meta-kms.h"
+#include "backends/native/meta-launcher.h"
 #include "backends/native/meta-output-kms.h"
 
 struct _MetaGpuKms
@@ -53,6 +54,8 @@ struct _MetaGpuKms
 
   uint32_t id;
   int fd;
+
+  gboolean resources_init_failed_before;
 };
 
 G_DEFINE_TYPE (MetaGpuKms, meta_gpu_kms, META_TYPE_GPU)
@@ -127,6 +130,23 @@ meta_gpu_kms_is_platform_device (MetaGpuKms *gpu_kms)
 
   flags = meta_kms_device_get_flags (gpu_kms->kms_device);
   return !!(flags & META_KMS_DEVICE_FLAG_PLATFORM_DEVICE);
+}
+
+gboolean
+meta_gpu_kms_disable_vrr (MetaGpuKms *gpu_kms)
+{
+  MetaGpu *gpu = META_GPU (gpu_kms);
+  MetaBackend *backend = meta_gpu_get_backend (gpu);
+  MetaSettings *settings = meta_backend_get_settings (backend);
+  MetaKmsDeviceFlag flags;
+
+  if (!meta_settings_is_experimental_feature_enabled (
+        settings,
+        META_EXPERIMENTAL_FEATURE_VARIABLE_REFRESH_RATE))
+    return TRUE;
+
+  flags = meta_kms_device_get_flags (gpu_kms->kms_device);
+  return !!(flags & META_KMS_DEVICE_FLAG_DISABLE_VRR);
 }
 
 static int
@@ -217,14 +237,13 @@ setup_output_clones (MetaGpu *gpu)
 }
 
 static void
-update_modes (MetaGpuKms *gpu_kms)
+init_modes (MetaGpuKms *gpu_kms)
 {
   MetaGpu *gpu = META_GPU (gpu_kms);
   MetaKmsDevice *kms_device = gpu_kms->kms_device;
   GHashTable *modes_table;
   GList *l;
   GList *modes;
-  gboolean vrr_capable = FALSE;
   GHashTableIter iter;
   gpointer value;
   uint64_t mode_id;
@@ -243,9 +262,6 @@ update_modes (MetaGpuKms *gpu_kms)
       state = meta_kms_connector_get_current_state (kms_connector);
       if (!state)
         continue;
-
-      if (state->vrr_capable)
-        vrr_capable = TRUE;
 
       for (l_mode = state->modes; l_mode; l_mode = l_mode->next)
         {
@@ -271,14 +287,7 @@ update_modes (MetaGpuKms *gpu_kms)
       MetaKmsMode *kms_mode = value;
       MetaCrtcModeKms *mode;
 
-      mode = meta_crtc_mode_kms_new (kms_mode,
-                                     META_CRTC_REFRESH_RATE_MODE_FIXED,
-                                     mode_id);
-      modes = g_list_append (modes, mode);
-
-      mode_id++;
-
-      if (vrr_capable)
+      if (!meta_gpu_kms_disable_vrr (gpu_kms))
         {
           mode = meta_crtc_mode_kms_new (kms_mode,
                                          META_CRTC_REFRESH_RATE_MODE_VARIABLE,
@@ -287,6 +296,13 @@ update_modes (MetaGpuKms *gpu_kms)
 
           mode_id++;
         }
+
+      mode = meta_crtc_mode_kms_new (kms_mode,
+                                     META_CRTC_REFRESH_RATE_MODE_FIXED,
+                                     mode_id);
+      modes = g_list_append (modes, mode);
+
+      mode_id++;
     }
 
   g_hash_table_destroy (modes_table);
@@ -318,7 +334,7 @@ init_crtcs (MetaGpuKms *gpu_kms)
 }
 
 static void
-update_outputs (MetaGpuKms *gpu_kms)
+init_outputs (MetaGpuKms *gpu_kms)
 {
   MetaGpu *gpu = META_GPU (gpu_kms);
   GList *old_outputs;
@@ -332,16 +348,13 @@ update_outputs (MetaGpuKms *gpu_kms)
   for (l = meta_kms_device_get_connectors (gpu_kms->kms_device); l; l = l->next)
     {
       MetaKmsConnector *kms_connector = l->data;
+      const MetaKmsConnectorState *connector_state;
       MetaOutputKms *output_kms;
       MetaOutput *old_output;
-      g_autoptr (GError) error = NULL;
+      GError *error = NULL;
 
-      meta_unlink_kms_connector (kms_connector);
-
-      if (!meta_kms_connector_get_current_state (kms_connector))
-        continue;
-
-      if (meta_kms_connector_is_non_desktop (kms_connector))
+      connector_state = meta_kms_connector_get_current_state (kms_connector);
+      if (!connector_state || connector_state->non_desktop)
         continue;
 
       old_output =
@@ -352,12 +365,16 @@ update_outputs (MetaGpuKms *gpu_kms)
                                         old_output,
                                         &error);
       if (!output_kms)
-        g_warning ("Failed to create KMS output: %s", error->message);
+        {
+          g_warning ("Failed to create KMS output: %s", error->message);
+          g_error_free (error);
+        }
       else
-        outputs = g_list_prepend (outputs, output_kms);
+        {
+          outputs = g_list_prepend (outputs, output_kms);
+        }
     }
 
-  g_list_foreach (old_outputs, (GFunc) g_object_run_dispose, NULL);
 
   /* Sort the outputs for easier handling in MetaMonitorConfig */
   outputs = g_list_sort (outputs, compare_outputs);
@@ -372,8 +389,14 @@ meta_gpu_kms_read_current (MetaGpu  *gpu,
 {
   MetaGpuKms *gpu_kms = META_GPU_KMS (gpu);
 
-  update_modes (gpu_kms);
-  update_outputs (gpu_kms);
+  /* Note: we must not free the public structures (output, crtc, monitor
+     mode and monitor info) here, they must be kept alive until the API
+     users are done with them after we emit monitors-changed, and thus
+     are freed by the platform-independent layer. */
+
+  init_modes (gpu_kms);
+  init_crtcs (gpu_kms);
+  init_outputs (gpu_kms);
 
   return TRUE;
 }
@@ -396,8 +419,6 @@ meta_gpu_kms_new (MetaBackendNative  *backend_native,
                           NULL);
 
   gpu_kms->kms_device = kms_device;
-
-  init_crtcs (gpu_kms);
 
   meta_gpu_kms_read_current (META_GPU (gpu_kms), NULL);
 

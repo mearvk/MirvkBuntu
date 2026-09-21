@@ -11,7 +11,6 @@
 #endif
 
 #include <gtk/gtkaccessible.h>
-#include <graphene.h>
 
 G_BEGIN_DECLS
 
@@ -256,71 +255,6 @@ struct _GtkAccessibleTextInterface
   void (* get_default_attributes) (GtkAccessibleText *self,
                                    char ***attribute_names,
                                    char ***attribute_values);
-
-  /**
-   * GtkAccessibleTextInterface::get_extents:
-   * @self: the accessible object
-   * @start: the start offset, in characters
-   * @end: the end offset, in characters,
-   * @extents (out caller-allocates): return location for the extents
-   *
-   * Obtains the extents of a range of text, in widget coordinates.
-   *
-   * Returns: true if the extents were filled in, false otherwise
-   *
-   * Since: 4.16
-   */
-  gboolean (* get_extents) (GtkAccessibleText *self,
-                            unsigned int       start,
-                            unsigned int       end,
-                            graphene_rect_t   *extents);
-
-  /**
-   * GtkAccessibleTextInterface::get_offset:
-   * @self: the accessible object
-   * @point: a point in widget coordinates of @self
-   * @offset: (out): return location for the text offset at @point
-   *
-   * Gets the text offset at a given point.
-   *
-   * Returns: true if the offset was set, false otherwise
-   *
-   * Since: 4.16
-   */
-  gboolean (* get_offset) (GtkAccessibleText      *self,
-                           const graphene_point_t *point,
-                           unsigned int           *offset);
-
-  /**
-   * GtkAccessibleTextInterface::set_caret_position:
-   * @self: the accessible object
-   * @offset: the text offset in characters
-   *
-   * Sets the caret position.
-   *
-   * Returns: true if the caret position was updated
-   *
-   * Since: 4.22
-   */
-  gboolean (* set_caret_position) (GtkAccessibleText *self,
-                                   unsigned int       offset);
-
-  /**
-   * GtkAccessibleTextInterface::set_selection:
-   * @self: the accessible object
-   * @i: the selection to set
-   * @range: the range to set the selection to
-   *
-   * Sets the caret position.
-   *
-   * Returns: true if the selection was updated
-   *
-   * Since: 4.22
-   */
-  gboolean (* set_selection) (GtkAccessibleText      *self,
-                              gsize                   i,
-                              GtkAccessibleTextRange *range);
-
 };
 
 GDK_AVAILABLE_IN_4_14

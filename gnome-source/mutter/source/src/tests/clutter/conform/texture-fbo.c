@@ -1,5 +1,4 @@
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 #include <cogl/cogl.h>
 
 #include "test-conform-common.h"
@@ -10,7 +9,7 @@
 #define DIVISION_WIDTH     (SOURCE_SIZE / SOURCE_DIVISIONS_X)
 #define DIVISION_HEIGHT    (SOURCE_SIZE / SOURCE_DIVISIONS_Y)
 
-static const CoglColor
+static const ClutterColor
 corner_colors[SOURCE_DIVISIONS_X * SOURCE_DIVISIONS_Y] =
   {
     { 0xff, 0x00, 0x00, 0xff }, /* red top left */
@@ -19,7 +18,7 @@ corner_colors[SOURCE_DIVISIONS_X * SOURCE_DIVISIONS_Y] =
     { 0xff, 0x00, 0xff, 0xff }  /* purple bottom right */
   };
 
-static const CoglColor stage_color = { 0x0, 0x0, 0x0, 0xff };
+static const ClutterColor stage_color = { 0x0, 0x0, 0x0, 0xff };
 
 typedef struct _TestState
 {
@@ -85,7 +84,7 @@ validate_part (TestState *state,
     for (x = 0; x < SOURCE_DIVISIONS_X; x++)
       {
         guchar *pixels;
-        const CoglColor *correct_color;
+        const ClutterColor *correct_color;
 
         /* Read the center pixels of this division */
         pixels = clutter_stage_read_pixels (CLUTTER_STAGE (state->stage),
@@ -103,7 +102,7 @@ validate_part (TestState *state,
           /* Otherwise it should be the color for this division */
           correct_color = corner_colors + (y * SOURCE_DIVISIONS_X) + x;
 
-        g_assert_nonnull (pixels);
+        g_assert (pixels != NULL);
         g_assert_cmpint (pixels[0], ==, correct_color->red);
         g_assert_cmpint (pixels[1], ==, correct_color->green);
         g_assert_cmpint (pixels[2], ==, correct_color->blue);
@@ -216,10 +215,10 @@ texture_fbo (TestConformSimpleFixture *fixture,
 
   clutter_actor_show (state.stage);
 
-  clutter_threads_add_repaint_func (CLUTTER_REPAINT_FLAGS_POST_PAINT,
-                                    on_paint,
-                                    &state,
-                                    NULL);
+  clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_POST_PAINT,
+                                         on_paint,
+                                         &state,
+                                         NULL);
 
   while (!state.was_painted)
     g_main_context_iteration (NULL, FALSE);

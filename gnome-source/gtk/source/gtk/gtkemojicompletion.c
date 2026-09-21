@@ -17,7 +17,7 @@
 
 #include "config.h"
 
-#include "gtkemojicompletionprivate.h"
+#include "gtkemojicompletion.h"
 
 #include "gtktextprivate.h"
 #include "gtkeditable.h"

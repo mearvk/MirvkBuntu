@@ -35,7 +35,7 @@ typedef struct _GtkCellRendererToggle              GtkCellRendererToggle;
 
 
 GDK_AVAILABLE_IN_ALL
-GType            gtk_cell_renderer_toggle_get_type       (void);
+GType            gtk_cell_renderer_toggle_get_type       (void) G_GNUC_CONST;
 GDK_DEPRECATED_IN_4_10
 GtkCellRenderer *gtk_cell_renderer_toggle_new            (void);
 

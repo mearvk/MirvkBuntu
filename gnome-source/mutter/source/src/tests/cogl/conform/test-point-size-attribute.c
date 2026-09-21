@@ -33,7 +33,7 @@ calc_coord_offset (int pos, int pos_index, int point_size)
 }
 
 static void
-verify_point_size (CoglFramebuffer *framebuffer,
+verify_point_size (CoglFramebuffer *test_fb,
                    int x_pos,
                    int y_pos,
                    int point_size)
@@ -46,7 +46,7 @@ verify_point_size (CoglFramebuffer *framebuffer,
         gboolean in_point = x >= 1 && x <= 2 && y >= 1 && y <= 2;
         uint32_t expected_pixel = in_point ? 0x00ff00ff : 0xff0000ff;
 
-        test_utils_check_pixel (framebuffer,
+        test_utils_check_pixel (test_fb,
                                 calc_coord_offset (x_pos, x, point_size),
                                 calc_coord_offset (y_pos, y, point_size),
                                 expected_pixel);
@@ -93,7 +93,6 @@ create_primitive (const char *attribute_name)
 
   for (i = 0; i < 2; i++)
     g_object_unref (attributes[i]);
-  g_object_unref (buffer);
 
   return prim;
 }

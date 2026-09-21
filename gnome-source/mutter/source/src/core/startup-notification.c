@@ -29,7 +29,6 @@
 #include "core/display-private.h"
 #include "core/startup-notification-private.h"
 #include "core/util-private.h"
-#include "mtk/mtk.h"
 
 /* This should be fairly long, as it should never be required unless
  * apps or .desktop files are buggy, and it's confusing if
@@ -37,6 +36,7 @@
  * might decide they need to launch it again.
  */
 #define STARTUP_TIMEOUT_MS 15000
+#define UPDATE_CURSOR_TIMEOUT_MS 20
 
 enum
 {
@@ -91,6 +91,8 @@ struct _MetaStartupNotification
 
   GSList *startup_sequences;
   guint startup_sequence_timeout_id;
+  guint update_cursor_timeout_id;
+  MetaCursor cursor;
 };
 
 typedef struct
@@ -117,19 +119,68 @@ G_DEFINE_TYPE_WITH_PRIVATE (MetaStartupSequence,
 
 static void meta_startup_notification_ensure_timeout  (MetaStartupNotification *sn);
 
-gboolean
+static gboolean
 meta_startup_notification_has_pending_sequences (MetaStartupNotification *sn)
 {
   GSList *l;
 
   for (l = sn->startup_sequences; l; l = l->next)
     {
-      if (meta_startup_sequence_get_application_id (l->data) &&
-          !meta_startup_sequence_get_completed (l->data))
+      if (!meta_startup_sequence_get_completed (l->data))
         return TRUE;
     }
 
   return FALSE;
+}
+
+static void
+meta_startup_notification_update_cursor (MetaStartupNotification *sn)
+{
+  MetaDisplay *display = sn->display;
+  MetaCursor cursor;
+
+  if (meta_startup_notification_has_pending_sequences (sn))
+    {
+      meta_topic (META_DEBUG_STARTUP,
+                  "Setting busy cursor");
+      cursor = META_CURSOR_BUSY;
+    }
+  else
+    {
+      meta_topic (META_DEBUG_STARTUP,
+                  "Setting default cursor");
+      cursor = META_CURSOR_DEFAULT;
+    }
+
+  if (sn->cursor != cursor)
+    {
+      meta_display_set_cursor (display, cursor);
+      sn->cursor = cursor;
+    }
+}
+
+static gboolean
+meta_startup_notification_cursor_timeout (gpointer user_data)
+{
+  MetaStartupNotification *sn = user_data;
+
+  meta_startup_notification_update_cursor (sn);
+  sn->update_cursor_timeout_id = 0;
+
+  return G_SOURCE_REMOVE;
+}
+
+static void
+meta_startup_notification_update_feedback (MetaStartupNotification *sn)
+{
+  if (sn->update_cursor_timeout_id)
+    return;
+
+  meta_startup_notification_update_cursor (sn);
+  sn->update_cursor_timeout_id =
+    g_timeout_add (UPDATE_CURSOR_TIMEOUT_MS,
+                   meta_startup_notification_cursor_timeout,
+                   sn);
 }
 
 static void
@@ -269,35 +320,43 @@ meta_startup_sequence_class_init (MetaStartupSequenceClass *klass)
   seq_props[PROP_SEQ_DISPLAY] =
     g_param_spec_object ("display", NULL, NULL,
                          META_TYPE_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_ID] =
     g_param_spec_string ("id", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_TIMESTAMP] =
     g_param_spec_uint64 ("timestamp", NULL, NULL,
                          0, G_MAXUINT64, 0,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_ICON_NAME] =
     g_param_spec_string ("icon-name", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_APPLICATION_ID] =
     g_param_spec_string ("application-id", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_WMCLASS] =
     g_param_spec_string ("wmclass", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_WORKSPACE] =
     g_param_spec_int ("workspace", NULL, NULL,
                       G_MININT, G_MAXINT, -1,
-                      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                      G_PARAM_READWRITE |
+                      G_PARAM_CONSTRUCT_ONLY);
   seq_props[PROP_SEQ_NAME] =
     g_param_spec_string ("name", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (object_class, N_SEQ_PROPS, seq_props);
 }
@@ -444,6 +503,7 @@ static void
 on_sequence_completed (MetaStartupSequence     *seq,
                        MetaStartupNotification *sn)
 {
+  meta_startup_notification_update_feedback (sn);
   g_signal_emit (sn, sn_signals[CHANGED], 0, seq);
 }
 
@@ -457,6 +517,7 @@ meta_startup_notification_add_sequence (MetaStartupNotification *sn,
                     G_CALLBACK (on_sequence_completed), sn);
 
   meta_startup_notification_ensure_timeout (sn);
+  meta_startup_notification_update_feedback (sn);
 
   g_signal_emit (sn, sn_signals[CHANGED], 0, seq);
 }
@@ -534,9 +595,9 @@ meta_startup_notification_ensure_timeout (MetaStartupNotification *sn)
    * to compute exactly when we may next time out
    */
   sn->startup_sequence_timeout_id =
-    mtk_timeout_add_seconds (1, startup_sequence_timeout, sn);
-  mtk_source_set_name_by_id (sn->startup_sequence_timeout_id,
-                             "[mutter] startup_sequence_timeout");
+    g_timeout_add_seconds (1, startup_sequence_timeout, sn);
+  g_source_set_name_by_id (sn->startup_sequence_timeout_id,
+                           "[mutter] startup_sequence_timeout");
 }
 
 void
@@ -544,11 +605,12 @@ meta_startup_notification_remove_sequence (MetaStartupNotification *sn,
                                            MetaStartupSequence     *seq)
 {
   sn->startup_sequences = g_slist_remove (sn->startup_sequences, seq);
+  meta_startup_notification_update_feedback (sn);
 
   g_signal_handlers_disconnect_by_func (seq, on_sequence_completed, sn);
 
   if (sn->startup_sequences == NULL)
-    g_clear_handle_id (&sn->startup_sequence_timeout_id, mtk_source_remove);
+    g_clear_handle_id (&sn->startup_sequence_timeout_id, g_source_remove);
 
   g_signal_emit (sn, sn_signals[CHANGED], 0, seq);
   g_object_unref (seq);
@@ -586,7 +648,8 @@ meta_startup_notification_finalize (GObject *object)
 {
   MetaStartupNotification *sn = META_STARTUP_NOTIFICATION (object);
 
-  g_clear_handle_id (&sn->startup_sequence_timeout_id, mtk_source_remove);
+  g_clear_handle_id (&sn->startup_sequence_timeout_id, g_source_remove);
+  g_clear_handle_id (&sn->update_cursor_timeout_id, g_source_remove);
 
   g_slist_free_full (sn->startup_sequences, g_object_unref);
   sn->startup_sequences = NULL;

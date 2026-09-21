@@ -23,7 +23,6 @@
 #include "gtkbinlayout.h"
 #include "gtkbox.h"
 #include "gtkbuildable.h"
-#include "gtkbuilderprivate.h"
 #include "gtkdragsourceprivate.h"
 #include "gtkgestureclick.h"
 #include "gtkgesturedrag.h"
@@ -40,11 +39,10 @@
 /**
  * GtkWindowHandle:
  *
- * Implements titlebar functionality for a window.
+ * `GtkWindowHandle` is a titlebar area widget.
  *
- * When added into a window, it can be dragged to move the window,
- * and it implements the right click, double click and middle click
- * behaviors that are expected of a titlebar.
+ * When added into a window, it can be dragged to move the window, and handles
+ * right click, double click and middle click as expected of a titlebar.
  *
  * # CSS nodes
  *
@@ -52,10 +50,9 @@
  *
  * # Accessibility
  *
- * Until GTK 4.10, `GtkWindowHandle` used the [enum@Gtk.AccessibleRole.group] role.
+ * Until GTK 4.10, `GtkWindowHandle` used the `GTK_ACCESSIBLE_ROLE_GROUP` role.
  *
- * Starting from GTK 4.12, `GtkWindowHandle` uses the [enum@Gtk.AccessibleRole.generic]
- * role.
+ * Starting from GTK 4.12, `GtkWindowHandle` uses the `GTK_ACCESSIBLE_ROLE_GENERIC` role.
  */
 
 struct _GtkWindowHandle {
@@ -539,14 +536,14 @@ gtk_window_handle_class_init (GtkWindowHandleClass *klass)
   widget_class->unrealize = gtk_window_handle_unrealize;
 
   /**
-   * GtkWindowHandle:child:
+   * GtkWindowHandle:child: (attributes org.gtk.Property.get=gtk_window_handle_get_child org.gtk.Property.set=gtk_window_handle_set_child)
    *
    * The child widget.
    */
   props[PROP_CHILD] =
       g_param_spec_object ("child", NULL, NULL,
                            GTK_TYPE_WIDGET,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
 
@@ -579,14 +576,9 @@ gtk_window_handle_buildable_add_child (GtkBuildable *buildable,
                                        const char   *type)
 {
   if (GTK_IS_WIDGET (child))
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-      gtk_window_handle_set_child (GTK_WINDOW_HANDLE (buildable), GTK_WIDGET (child));
-    }
+    gtk_window_handle_set_child (GTK_WINDOW_HANDLE (buildable), GTK_WIDGET (child));
   else
-    {
-      parent_buildable_iface->add_child (buildable, builder, child, type);
-    }
+    parent_buildable_iface->add_child (buildable, builder, child, type);
 }
 
 static void
@@ -611,7 +603,7 @@ gtk_window_handle_new (void)
 }
 
 /**
- * gtk_window_handle_get_child:
+ * gtk_window_handle_get_child: (attributes org.gtk.Method.get_property=child)
  * @self: a `GtkWindowHandle`
  *
  * Gets the child widget of @self.
@@ -627,7 +619,7 @@ gtk_window_handle_get_child (GtkWindowHandle *self)
 }
 
 /**
- * gtk_window_handle_set_child:
+ * gtk_window_handle_set_child: (attributes org.gtk.Method.set_property=child)
  * @self: a `GtkWindowHandle`
  * @child: (nullable): the child widget
  *

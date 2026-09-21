@@ -49,7 +49,7 @@ G_DEFINE_TYPE (GdkMacosMonitor, gdk_macos_monitor, GDK_TYPE_MONITOR)
 /**
  * gdk_macos_monitor_get_workarea:
  * @monitor: a `GdkMonitor`
- * @geometry: (out): a `GdkRectangle` to be filled with the monitor geometry
+ * @workarea: (out): a `GdkRectangle` to be filled with the monitor workarea
  *
  * Retrieves the size and position of the “work area” on a monitor
  * within the display coordinate space.
@@ -163,6 +163,7 @@ GetSubpixelLayout (CGDirectDisplayID screen_id)
 char *
 _gdk_macos_monitor_get_localized_name (NSScreen *screen)
 {
+#ifdef AVAILABLE_MAC_OS_X_VERSION_10_15_AND_LATER
   GDK_BEGIN_MACOS_ALLOC_POOL;
 
   NSString *str;
@@ -176,6 +177,9 @@ _gdk_macos_monitor_get_localized_name (NSScreen *screen)
   GDK_END_MACOS_ALLOC_POOL;
 
   return g_steal_pointer (&name);
+#else
+  return NULL;
+#endif
 }
 
 char *

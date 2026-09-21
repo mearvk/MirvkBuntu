@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -27,14 +29,14 @@ class ButtonBox extends St.Widget {
     }
 
     _onStyleChanged(actor) {
-        const themeNode = actor.get_theme_node();
+        let themeNode = actor.get_theme_node();
 
         this._minHPadding = themeNode.get_length('-minimum-hpadding');
         this._natHPadding = themeNode.get_length('-natural-hpadding');
     }
 
     vfunc_get_preferred_width(_forHeight) {
-        const child = this.get_first_child();
+        let child = this.get_first_child();
         let minimumSize, naturalSize;
 
         if (child)
@@ -49,7 +51,7 @@ class ButtonBox extends St.Widget {
     }
 
     vfunc_get_preferred_height(_forWidth) {
-        const child = this.get_first_child();
+        let child = this.get_first_child();
 
         if (child)
             return child.get_preferred_height(-1);
@@ -60,16 +62,16 @@ class ButtonBox extends St.Widget {
     vfunc_allocate(box) {
         this.set_allocation(box);
 
-        const child = this.get_first_child();
+        let child = this.get_first_child();
         if (!child)
             return;
 
-        const [, natWidth] = child.get_preferred_width(-1);
+        let [, natWidth] = child.get_preferred_width(-1);
 
-        const availWidth = box.x2 - box.x1;
-        const availHeight = box.y2 - box.y1;
+        let availWidth = box.x2 - box.x1;
+        let availHeight = box.y2 - box.y1;
 
-        const childBox = new Clutter.ActorBox();
+        let childBox = new Clutter.ActorBox();
         if (natWidth + 2 * this._natHPadding <= availWidth) {
             childBox.x1 = this._natHPadding;
             childBox.x2 = availWidth - this._natHPadding;
@@ -102,23 +104,13 @@ export const Button = GObject.registerClass({
             accessible_role: Atk.Role.MENU,
         });
 
-        this._clickGesture = new Clutter.ClickGesture();
-        this._clickGesture.set_recognize_on_press(true);
-        this._clickGesture.connect('recognize', () => {
-            this.menu?.toggle();
-        });
-        this._clickGesture.set_enabled(!dontCreateMenu);
-        this.add_action(this._clickGesture);
-
-        this._keyController = new Clutter.KeyController();
-        this._keyController.connect('key-press', () => this._onMenuKeyPress());
-
-        if (dontCreateMenu) {
+        if (dontCreateMenu)
             this.menu = new PopupMenu.PopupDummyMenu(this);
-            this.add_action(this._keyController);
-        } else {
-            this.setMenu(new PopupMenu.PopupMenu(this, menuAlignment, St.Side.TOP));
-        }
+        else
+            this.setMenu(new PopupMenu.PopupMenu(this, menuAlignment, St.Side.TOP, 0));
+
+        this.connect('key-press-event',
+            (o, ev) => global.focus_manager.navigate_from_event(ev));
     }
 
     setSensitive(sensitive) {
@@ -128,43 +120,47 @@ export const Button = GObject.registerClass({
     }
 
     setMenu(menu) {
-        if (this.menu) {
-            this.menu.actor.remove_action(this._keyController);
+        if (this.menu)
             this.menu.destroy();
-        }
 
         this.menu = menu;
         if (this.menu) {
             this.menu.actor.add_style_class_name('panel-menu');
             this.menu.connect('open-state-changed', this._onOpenStateChanged.bind(this));
-            this.menu.actor.add_action(this._keyController);
+            this.menu.actor.connect('key-press-event', this._onMenuKeyPress.bind(this));
 
             Main.uiGroup.add_child(this.menu.actor);
             this.menu.actor.hide();
         }
-        this._clickGesture.set_enabled(this.menu !== null);
         this.emit('menu-set');
+    }
+
+    vfunc_event(event) {
+        if (this.menu &&
+            (event.type() === Clutter.EventType.TOUCH_BEGIN ||
+             event.type() === Clutter.EventType.BUTTON_PRESS))
+            this.menu.toggle();
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     vfunc_hide() {
         super.vfunc_hide();
 
         if (this.menu)
-            this.menu.close({animate: false});
+            this.menu.close();
     }
 
-    _onMenuKeyPress() {
-        const [, symbol] = this._keyController.get_key();
+    _onMenuKeyPress(actor, event) {
+        if (global.focus_manager.navigate_from_event(event))
+            return Clutter.EVENT_STOP;
 
+        let symbol = event.get_key_symbol();
         if (symbol === Clutter.KEY_Left || symbol === Clutter.KEY_Right) {
-            const {keyFocus} = this.get_stage();
-            const focusActor =
-                  this.menu.actor.contains(keyFocus) ? this : keyFocus;
-            const group = global.focus_manager.get_group(focusActor);
-
+            let group = global.focus_manager.get_group(this);
             if (group) {
-                const direction = symbol === Clutter.KEY_Left ? St.DirectionType.LEFT : St.DirectionType.RIGHT;
-                group.navigate_focus(focusActor, direction, false);
+                let direction = symbol === Clutter.KEY_Left ? St.DirectionType.LEFT : St.DirectionType.RIGHT;
+                group.navigate_focus(this, direction, false);
                 return Clutter.EVENT_STOP;
             }
         }
@@ -180,14 +176,14 @@ export const Button = GObject.registerClass({
         // Setting the max-height won't do any good if the minimum height of the
         // menu is higher then the screen; it's useful if part of the menu is
         // scrollable so the minimum height is smaller than the natural height
-        const workArea = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
-        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const verticalMargins = this.menu.actor.margin_top + this.menu.actor.margin_bottom;
+        let workArea = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
+        let scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        let verticalMargins = this.menu.actor.margin_top + this.menu.actor.margin_bottom;
 
         // The workarea and margin dimensions are in physical pixels, but CSS
         // measures are in logical pixels, so make sure to consider the scale
         // factor when computing max-height
-        const maxHeight = Math.round((workArea.height - verticalMargins) / scaleFactor);
+        let maxHeight = Math.round((workArea.height - verticalMargins) / scaleFactor);
         this.menu.actor.style = `max-height: ${maxHeight}px;`;
     }
 

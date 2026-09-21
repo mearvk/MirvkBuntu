@@ -53,7 +53,8 @@ shell_window_preview_set_property (GObject      *gobject,
   switch (property_id)
     {
     case PROP_WINDOW_CONTAINER:
-      g_set_object (&self->window_container, g_value_get_object (value));
+      if (g_set_object (&self->window_container, g_value_get_object (value)))
+        g_object_notify_by_pspec (gobject, obj_props[PROP_WINDOW_CONTAINER]);
       break;
 
     default:
@@ -164,25 +165,13 @@ shell_window_preview_class_init (ShellWindowPreviewClass *klass)
    * ShellWindowPreview:window-container:
    */
   obj_props[PROP_WINDOW_CONTAINER] =
-    g_param_spec_object ("window-container", NULL, NULL,
+    g_param_spec_object ("window-container",
+                         "window-container",
+                         "window-container",
                          CLUTTER_TYPE_ACTOR,
                          G_PARAM_READWRITE |
-                         G_PARAM_CONSTRUCT_ONLY |
                          G_PARAM_EXPLICIT_NOTIFY |
                          G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, PROP_LAST, obj_props);
-}
-
-/**
- * shell_window_preview_get_window_container:
- *
- * Returns: (transfer none):
- */
-ClutterActor *
-shell_window_preview_get_window_container (ShellWindowPreview *preview)
-{
-  g_return_val_if_fail (SHELL_IS_WINDOW_PREVIEW (preview), NULL);
-
-  return preview->window_container;
 }

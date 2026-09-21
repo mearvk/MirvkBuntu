@@ -35,8 +35,6 @@
 
 #define KEY_IS_LIST_MASK (1<<31)
 
-static gboolean path_has_prefix (const char *path, const char *prefix);
-
 static GRWLock metatree_lock;
 
 typedef enum {
@@ -383,7 +381,7 @@ meta_tree_init (MetaTree *tree)
   retried = FALSE;
  retry:
   tree->on_nfs = meta_builder_is_on_nfs (tree->filename);
-  fd = safe_open (tree, tree->filename, O_RDONLY | O_CLOEXEC);
+  fd = safe_open (tree, tree->filename, O_RDONLY);
   if (fd == -1)
     {
       errsv = errno;
@@ -1141,12 +1139,10 @@ meta_journal_open (MetaTree *tree, const char *filename, gboolean for_write, gui
   g_assert (sizeof (MetaJournalHeader) == 20);
   retried = FALSE;
 
-  open_flags = O_CLOEXEC;
-
   if (for_write)
-    open_flags |= O_RDWR;
+    open_flags = O_RDWR;
   else
-    open_flags |= O_RDONLY;
+    open_flags = O_RDONLY;
 
  retry:
   journal_filename = meta_builder_get_journal_filename (filename, tag);
@@ -1665,16 +1661,11 @@ meta_tree_lookup_stringv   (MetaTree                         *tree,
     {
       stringv = verify_array_block (tree, ent->value,
 				    sizeof (guint32));
-      if (stringv)
-	{
-	  num_strings = GUINT32_FROM_BE (stringv->num_strings);
-	  res = g_new (char *, num_strings + 1);
-	  for (i = 0; i < num_strings; i++)
-	    res[i] = g_strdup (verify_string (tree, stringv->strings[i]));
-	  res[i] = NULL;
-	}
-      else
-	res = NULL;
+      num_strings = GUINT32_FROM_BE (stringv->num_strings);
+      res = g_new (char *, num_strings + 1);
+      for (i = 0; i < num_strings; i++)
+	res[i] = g_strdup (verify_string (tree, stringv->strings[i]));
+      res[i] = NULL;
     }
 
  out:
@@ -2095,9 +2086,6 @@ enumerate_data (MetaTree *tree,
 	{
 	  stringv = verify_array_block (tree, ent->value,
 					sizeof (guint32));
-	  if (stringv == NULL)
-	    continue;
-
 	  num_strings = GUINT32_FROM_BE (stringv->num_strings);
 
 	  if (num_strings < 10)
@@ -2850,7 +2838,6 @@ struct _MetaLookupCache {
   dev_t last_parent_dev;
   char *last_parent_mountpoint;
   char *last_parent_mountpoint_extra_prefix;
-  dev_t last_parent_mountpoint_dev;
 
   dev_t last_device;
   char *last_device_tree;
@@ -2957,14 +2944,13 @@ read_contents (int fd)
 static char *
 mountinfo_unescape (const char *escaped)
 {
-  const char *p;
   char *res, *s;
   char c;
   gsize len;
 
-  p = strchr (escaped, ' ');
-  if (p)
-    len = p - escaped;
+  s = strchr (escaped, ' ');
+  if (s)
+    len = s - escaped;
   else
     len = strlen (escaped);
   res = malloc (len + 1);
@@ -3173,13 +3159,8 @@ find_mountpoint_for (MetaLookupCache *cache,
   g_assert (cache->last_parent_expanded != NULL);
   g_assert (strcmp (cache->last_parent_expanded, first_dir) == 0);
 
-  if (cache->last_parent_mountpoint != NULL &&
-      cache->last_parent_mountpoint_dev == dev &&
-      path_has_prefix (file, cache->last_parent_mountpoint))
+  if (cache->last_parent_mountpoint != NULL)
     goto out; /* Cache hit! */
-
-  g_clear_pointer (&cache->last_parent_mountpoint, g_free);
-  g_clear_pointer (&cache->last_parent_mountpoint_extra_prefix, g_free);
 
   dir = g_strdup (first_dir);
   last = g_strdup (file);
@@ -3192,7 +3173,6 @@ find_mountpoint_for (MetaLookupCache *cache,
 	  g_free (dir);
 	  cache->last_parent_mountpoint = last;
 	  cache->last_parent_mountpoint_extra_prefix = get_extra_prefix_for_mount (last);
-	  cache->last_parent_mountpoint_dev = dev;
 	  break;
 	}
 

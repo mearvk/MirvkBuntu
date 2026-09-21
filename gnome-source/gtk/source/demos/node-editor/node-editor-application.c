@@ -67,8 +67,6 @@ activate_about (GSimpleAction *action,
   char *os_name;
   char *os_version;
   GtkWidget *dialog;
-  GFile *logo_file;
-  GtkIconPaintable *logo;
 
   os_name = g_get_os_info (G_OS_INFO_KEY_NAME);
   os_version = g_get_os_info (G_OS_INFO_KEY_VERSION_ID);
@@ -108,31 +106,23 @@ activate_about (GSimpleAction *action,
                              gtk_get_minor_version (),
                              gtk_get_micro_version ());
 
-  logo_file = g_file_new_for_uri ("resource:///org/gtk/gtk4/node-editor/icons/apps/org.gtk.gtk4.NodeEditor.svg");
-  logo = gtk_icon_paintable_new_for_file (logo_file, 64, 1);
   dialog = g_object_new (GTK_TYPE_ABOUT_DIALOG,
                          "transient-for", gtk_application_get_active_window (app),
                          "program-name", g_strcmp0 (PROFILE, "devel") == 0
                                          ? "GTK Node Editor (Development)"
                                          : "GTK Node Editor",
                          "version", version,
-                         "copyright", "© 2019—2024 The GTK Team",
+                         "copyright", "© 2019—2021 The GTK Team",
                          "license-type", GTK_LICENSE_LGPL_2_1,
                          "website", "http://www.gtk.org",
                          "comments", "Program to test GTK rendering",
                          "authors", (const char *[]){ "Benjamin Otte", "Timm Bäder", NULL},
-                         "logo", logo,
+                         "logo-icon-name", "org.gtk.gtk4.NodeEditor",
                          "title", "About GTK Node Editor",
                          "system-information", s->str,
                          NULL);
-  g_object_unref (logo);
-  g_object_unref (logo_file);
-
-  gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG (dialog),
-                                       "Artwork by", (const char *[]) { "Jakub Steiner", NULL });
-  gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG (dialog),
-                                       "Maintained by", (const char *[]) { "The GTK Team", NULL });
-
+    gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG (dialog),
+                                         "Artwork by", (const char *[]) { "Jakub Steiner", NULL });
 
   gtk_window_present (GTK_WINDOW (dialog));
 
@@ -219,8 +209,8 @@ node_editor_application_startup (GApplication *app)
                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
-static NodeEditorWindow *
-create_window (GtkApplication *app)
+static void
+node_editor_application_activate (GApplication *app)
 {
   NodeEditorWindow *win;
 
@@ -228,21 +218,6 @@ create_window (GtkApplication *app)
 
   if (g_strcmp0 (PROFILE, "devel") == 0)
     gtk_widget_add_css_class (GTK_WIDGET (win), "devel");
-
-  return win;
-}
-
-static void
-node_editor_application_activate (GApplication *app)
-{
-  GList *list;
-  NodeEditorWindow *win;
-
-  list = gtk_application_get_windows (GTK_APPLICATION (app));
-  if (list)
-    win = list->data;
-  else
-    win = create_window (GTK_APPLICATION (app));
 
   gtk_window_present (GTK_WINDOW (win));
 }
@@ -258,7 +233,7 @@ node_editor_application_open (GApplication  *app,
 
   for (i = 0; i < n_files; i++)
     {
-      win = create_window (GTK_APPLICATION (app));
+      win = node_editor_window_new (NODE_EDITOR_APPLICATION (app));
       node_editor_window_load (win, files[i]);
       gtk_window_present (GTK_WINDOW (win));
     }
@@ -270,8 +245,17 @@ node_editor_application_class_init (NodeEditorApplicationClass *class)
   GApplicationClass *application_class = G_APPLICATION_CLASS (class);
 
   application_class->startup = node_editor_application_startup;
-  application_class->open = node_editor_application_open;
   application_class->activate = node_editor_application_activate;
+  application_class->open = node_editor_application_open;
+}
+
+static void
+print_version (void)
+{
+  g_print ("gtk4-node-editor %s%s%s\n",
+           PACKAGE_VERSION,
+           g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
+           g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
 }
 
 static int
@@ -279,7 +263,16 @@ local_options (GApplication *app,
                GVariantDict *options,
                gpointer      data)
 {
+  gboolean version = FALSE;
   gboolean reset = FALSE;
+
+  g_variant_dict_lookup (options, "version", "b", &version);
+
+  if (version)
+    {
+      print_version ();
+      return 0;
+    }
 
   g_variant_dict_lookup (options, "reset", "b", &reset);
 
@@ -303,19 +296,13 @@ NodeEditorApplication *
 node_editor_application_new (void)
 {
   NodeEditorApplication *app;
-  char version[80];
-
-  g_snprintf (version, sizeof (version), "%s%s%s\n",
-              PACKAGE_VERSION,
-              g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
-              g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
 
   app = g_object_new (NODE_EDITOR_APPLICATION_TYPE,
                       "application-id", "org.gtk.gtk4.NodeEditor",
-                      "flags", G_APPLICATION_HANDLES_OPEN | G_APPLICATION_NON_UNIQUE,
-                      "version", version,
+                      "flags", G_APPLICATION_HANDLES_OPEN,
                       NULL);
 
+  g_application_add_main_option (G_APPLICATION (app), "version", 0, 0,G_OPTION_ARG_NONE, "Show program version", NULL);
   g_application_add_main_option (G_APPLICATION (app), "reset", 0, 0,G_OPTION_ARG_NONE, "Remove autosave content", NULL);
 
   g_signal_connect (app, "handle-local-options", G_CALLBACK (local_options), NULL);

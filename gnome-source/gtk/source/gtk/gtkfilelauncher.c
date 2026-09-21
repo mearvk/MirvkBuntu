@@ -24,35 +24,21 @@
 #include "gtkdialogerror.h"
 #include "gtkopenuriportal.h"
 #include "deprecated/gtkshow.h"
-#include "gtkprivate.h"
 #include <glib/gi18n-lib.h>
-
-#ifdef G_OS_WIN32
-#include "gtkshowwin32.h"
-#endif
-
-#ifdef GDK_WINDOWING_ANDROID
-#include "gtknative.h"
-
-#include "android/gdkandroidcontentfile.h"
-#include "android/gdkandroidtoplevel.h"
-
-#include "android/gdkandroidinit-private.h"
-#include "android/gdkandroidutils-private.h"
-#endif // GDK_WINDOWING_ANDROID
 
 /**
  * GtkFileLauncher:
  *
- * Asynchronous API to open a file with an application.
- *
- * `GtkFileLauncher` collects the arguments that are needed to open the file.
+ * A `GtkFileLauncher` object collects the arguments that are needed to open a
+ * file with an application.
  *
  * Depending on system configuration, user preferences and available APIs, this
  * may or may not show an app chooser dialog or launch the default application
  * right away.
  *
  * The operation is started with the [method@Gtk.FileLauncher.launch] function.
+ * This API follows the GIO async pattern, and the result can be obtained by
+ * calling [method@Gtk.FileLauncher.launch_finish].
  *
  * To launch uris that don't represent files, use [class@Gtk.UriLauncher].
  *
@@ -163,7 +149,7 @@ gtk_file_launcher_class_init (GtkFileLauncherClass *class)
   object_class->set_property = gtk_file_launcher_set_property;
 
   /**
-   * GtkFileLauncher:file:
+   * GtkFileLauncher:file: (attributes org.gtk.Property.get=gtk_file_launcher_get_file org.gtk.Property.set=gtk_file_launcher_set_file)
    *
    * The file to launch.
    *
@@ -172,10 +158,10 @@ gtk_file_launcher_class_init (GtkFileLauncherClass *class)
   properties[PROP_FILE] =
       g_param_spec_object ("file", NULL, NULL,
                            G_TYPE_FILE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFileLauncher:always-ask:
+   * GtkFileLauncher:always-ask: (attributes org.gtk.Property.get=gtk_file_launcher_get_always_ask org.gtk.Property.set=gtk_file_launcher_set_always_ask)
    *
    * Whether to ask the user to choose an app for opening the file. If `FALSE`,
    * the file might be opened with a default app or the previous choice.
@@ -185,10 +171,10 @@ gtk_file_launcher_class_init (GtkFileLauncherClass *class)
   properties[PROP_ALWAYS_ASK] =
       g_param_spec_boolean ("always-ask", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFileLauncher:writable:
+   * GtkFileLauncher:writable: (attributes org.gtk.Property.get=gtk_file_launcher_get_writable org.gtk.Property.set=gtk_file_launcher_set_writable)
    *
    * Whether to make the file writable for the handler.
    *
@@ -197,7 +183,7 @@ gtk_file_launcher_class_init (GtkFileLauncherClass *class)
   properties[PROP_WRITABLE] =
       g_param_spec_boolean ("writable", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }
@@ -228,7 +214,7 @@ gtk_file_launcher_new (GFile *file)
 
 /**
  * gtk_file_launcher_get_file:
- * @self: a file launcher
+ * @self: a `GtkFileLauncher`
  *
  * Gets the file that will be opened.
  *
@@ -246,8 +232,8 @@ gtk_file_launcher_get_file (GtkFileLauncher *self)
 
 /**
  * gtk_file_launcher_set_file:
- * @self: a file launcher
- * @file: (nullable): the file
+ * @self: a `GtkFileLauncher`
+ * @file: (nullable): a `GFile`
  *
  * Sets the file that will be opened.
  *
@@ -268,11 +254,11 @@ gtk_file_launcher_set_file (GtkFileLauncher *self,
 
 /**
  * gtk_file_launcher_get_always_ask:
- * @self: a file launcher
+ * @self: a `GtkFileLauncher`
  *
- * Returns whether to ask the user which app to use.
+ * Returns whether to ask the user to choose an app for opening the file.
  *
- * Returns: true if always asking the user
+ * Returns: `TRUE` if always asking for app
  *
  * Since: 4.12
  */
@@ -286,13 +272,11 @@ gtk_file_launcher_get_always_ask (GtkFileLauncher *self)
 
 /**
  * gtk_file_launcher_set_always_ask:
- * @self: a file launcher
- * @always_ask: whether to always ask
+ * @self: a `GtkFileLauncher`
+ * @always_ask: a `gboolean`
  *
- * Sets whether to always ask the user which app to use.
- *
- * If false, the file might be opened with a default app
- * or the previous choice.
+ * Sets whether to awlays ask the user to choose an app for opening the file.
+ * If `FALSE`, the file might be opened with a default app or the previous choice.
  *
  * Since: 4.12
  */
@@ -312,11 +296,11 @@ gtk_file_launcher_set_always_ask (GtkFileLauncher *self,
 
 /**
  * gtk_file_launcher_get_writable:
- * @self: a file launcher
+ * @self: a `GtkFileLauncher`
  *
  * Returns whether to make the file writable for the handler.
  *
- * Returns: true if the file will be made writable
+ * Returns: `TRUE` if the file will be made writable
  *
  * Since: 4.14
  */
@@ -330,8 +314,8 @@ gtk_file_launcher_get_writable (GtkFileLauncher *self)
 
 /**
  * gtk_file_launcher_set_writable:
- * @self: a file launcher
- * @writable: whether to make the file writable
+ * @self: a `GtkFileLauncher`
+ * @writable: a `gboolean`
  *
  * Sets whether to make the file writable for the handler.
  *
@@ -354,7 +338,7 @@ gtk_file_launcher_set_writable (GtkFileLauncher *self,
 /* }}} */
 /* {{{ Async implementation */
 
-#ifndef GDK_WINDOWING_ANDROID
+#ifndef G_OS_WIN32
 static void
 open_done (GObject      *source,
            GAsyncResult *result,
@@ -363,19 +347,15 @@ open_done (GObject      *source,
   GTask *task = G_TASK (data);
   GError *error = NULL;
 
-#ifndef G_OS_WIN32
   if (!gtk_openuri_portal_open_finish (result, &error))
-#else
-  if (!gtk_open_containing_folder_win32_finish (result, &error))
-#endif
     g_task_return_error (task, error);
   else
     g_task_return_boolean (task, TRUE);
 
   g_object_unref (task);
 }
+#endif
 
-#ifndef G_OS_WIN32
 static void
 show_item_done (GObject      *source,
                 GAsyncResult *result,
@@ -443,7 +423,6 @@ show_item (GtkWindow    *parent,
                           show_item_done,
                           task);
 }
-#endif /* G_OS_WIN32 */
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 static void
@@ -455,11 +434,7 @@ show_uri_done (GObject      *source,
   GTask *task = G_TASK (data);
   GError *error = NULL;
 
-#ifndef G_OS_WIN32
   if (!gtk_show_uri_full_finish (parent, result, &error))
-#else
-  if (!gtk_show_uri_win32_finish (parent, result, &error))
-#endif
     {
       if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
         g_task_return_new_error (task, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_CANCELLED, "Cancelled by user");
@@ -473,78 +448,25 @@ show_uri_done (GObject      *source,
   g_object_unref (task);
 }
 G_GNUC_END_IGNORE_DEPRECATIONS
-#endif // not GDK_WINDOWING_ANDROID
 
-#ifdef GDK_WINDOWING_ANDROID
-static gboolean
-gtk_show_file_android (GFile               *file,
-                       GdkAndroidToplevel  *toplevel,
-                       gboolean             writable,
-                       gboolean             always_ask,
-                       GError             **error)
-{
-  JNIEnv *env = gdk_android_get_env ();
-
-  (*env)->PushLocalFrame (env, 7);
-
-  jobject uri;
-  if (GDK_IS_ANDROID_CONTENT_FILE (file))
-    uri = gdk_android_content_file_get_uri_object ((GdkAndroidContentFile *)file);
-  else
-    {
-      gchar *curi = g_file_get_uri (file);
-      uri = (*env)->CallStaticObjectMethod (env, gdk_android_get_java_cache ()->a_uri.klass,
-                                            gdk_android_get_java_cache ()->a_uri.parse,
-                                            gdk_android_utf8_to_java (curi));
-      g_free (curi);
-      if (gdk_android_check_exception (error))
-        {
-          (*env)->PopLocalFrame (env, NULL);
-          return FALSE;
-        }
-    }
-
-  jobject intent = (*env)->NewObject (env, gdk_android_get_java_cache ()->a_intent.klass,
-                                      gdk_android_get_java_cache ()->a_intent.constructor_action,
-                                      writable ?
-                                        gdk_android_get_java_cache ()->a_intent.action_edit :
-                                        gdk_android_get_java_cache ()->a_intent.action_view);
-  (*env)->CallObjectMethod (env, intent,
-                            gdk_android_get_java_cache ()->a_intent.set_data_norm,
-                            uri);
-
-  jint flags = gdk_android_get_java_cache ()->a_intent.flag_grant_read_perm;
-  if (writable)
-    flags |= gdk_android_get_java_cache ()->a_intent.flag_grant_write_perm;
-  (*env)->CallObjectMethod (env, intent,
-                            gdk_android_get_java_cache ()->a_intent.add_flags,
-                            flags);
-
-  if (always_ask)
-    intent = (*env)->CallStaticObjectMethod (env, gdk_android_get_java_cache ()->a_intent.klass,
-                                             gdk_android_get_java_cache ()->a_intent.create_chooser,
-                                             intent, NULL);
-
-  gboolean launched = gdk_android_toplevel_launch_activity (toplevel, intent, error);
-  (*env)->PopLocalFrame (env, NULL);
-  return launched;
-}
-#endif // GDK_WINDOWING_ANDROID
  /* }}} */
 /* {{{ Async API */
 
 /**
  * gtk_file_launcher_launch:
- * @self: a file launcher
- * @parent: (nullable): the parent window
- * @cancellable: (nullable): a cancellable to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call when the
- *   operation is complete
- * @user_data: data to pass to @callback
+ * @self: a `GtkFileLauncher`
+ * @parent: (nullable): the parent `GtkWindow`
+ * @cancellable: (nullable): a `GCancellable` to cancel the operation
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
- * Launches an application to open the file.
+ * Launch an application to open the file.
  *
  * This may present an app chooser dialog to the user.
+ *
+ * The @callback will be called when the operation is completed.
+ * It should call [method@Gtk.FileLauncher.launch_finish] to obtain
+ * the result.
  *
  * Since: 4.10
  */
@@ -556,9 +478,6 @@ gtk_file_launcher_launch (GtkFileLauncher     *self,
                           gpointer             user_data)
 {
   GTask *task;
-#if !defined (G_OS_WIN32) && !defined (GDK_WINDOWING_ANDROID)
-  GdkDisplay *display;
-#endif
 
   g_return_if_fail (GTK_IS_FILE_LAUNCHER (self));
 
@@ -575,25 +494,8 @@ gtk_file_launcher_launch (GtkFileLauncher     *self,
       return;
     }
 
-#if defined (G_OS_WIN32)
-  char *path = g_file_get_path (self->file);
-  gtk_show_uri_win32 (parent, path, self->always_ask, cancellable, show_uri_done, task);
-  g_free (path);
-#elif defined (GDK_WINDOWING_ANDROID)
-  GError *err = NULL;
-  GdkAndroidToplevel* toplevel = GDK_ANDROID_TOPLEVEL (gtk_native_get_surface (GTK_NATIVE (parent)));
-  if (gtk_show_file_android (self->file, toplevel, self->writable, self->always_ask, &err))
-    g_task_return_boolean (task, TRUE);
-  else
-    g_task_return_error (task, err);
-  g_object_unref (task);
-#else
-  if (parent)
-    display = gtk_widget_get_display (GTK_WIDGET (parent));
-  else
-    display = gdk_display_get_default ();
-
-  if (gdk_display_should_use_portal (display, PORTAL_OPENURI_INTERFACE, 3))
+#ifndef G_OS_WIN32
+  if (gtk_openuri_portal_is_available ())
     {
       GtkOpenuriFlags flags = 0;
 
@@ -606,6 +508,7 @@ gtk_file_launcher_launch (GtkFileLauncher     *self,
       gtk_openuri_portal_open_async (self->file, FALSE, flags, parent, cancellable, open_done, task);
     }
   else
+#endif
     {
       char *uri = g_file_get_uri (self->file);
 
@@ -615,19 +518,19 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
       g_free (uri);
     }
-#endif
 }
 
 /**
  * gtk_file_launcher_launch_finish:
- * @self: a file launcher
- * @result: the result
+ * @self: a `GtkFileLauncher`
+ * @result: a `GAsyncResult`
  * @error: return location for a [enum@Gtk.DialogError] or [enum@Gio.Error] error
  *
  * Finishes the [method@Gtk.FileLauncher.launch] call and
  * returns the result.
  *
- * Returns: true if an application was launched
+ * Returns: `TRUE` if an application was launched,
+ *     or `FALSE` and @error is set
  *
  * Since: 4.10
  */
@@ -645,17 +548,20 @@ gtk_file_launcher_launch_finish (GtkFileLauncher  *self,
 
 /**
  * gtk_file_launcher_open_containing_folder:
- * @self: a file launcher
- * @parent: (nullable): the parent window
- * @cancellable: (nullable): a cancellable to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call when the
- *   operation is complete
- * @user_data: data to pass to @callback
+ * @self: a `GtkFileLauncher`
+ * @parent: (nullable): the parent `GtkWindow`
+ * @cancellable: (nullable): a `GCancellable` to cancel the operation
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
- * Launches a file manager to show the file in its parent directory.
+ * Launch a file manager to show the file in its parent directory.
  *
- * This is only supported for native files. It will fail if @file
+ * This is only supported native files. It will fail if @file
  * is e.g. a http:// uri.
+ *
+ * The @callback will be called when the operation is completed.
+ * It should call [method@Gtk.FileLauncher.open_containing_folder_finish]
+ * to obtain the result.
  *
  * Since: 4.10
  */
@@ -692,15 +598,7 @@ gtk_file_launcher_open_containing_folder (GtkFileLauncher     *self,
       return;
     }
 
-#if defined (G_OS_WIN32)
-  const char *path = g_file_peek_path (self->file);
-  gtk_open_containing_folder_win32 (path, cancellable, open_done, task);
-#elif defined (GDK_WINDOWING_ANDROID)
-  g_task_return_new_error (task,
-                           GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_FAILED,
-                           "Operation not supported");
-  g_object_unref (task);
-#else
+#ifndef G_OS_WIN32
   if (gtk_openuri_portal_is_available ())
     {
       GtkOpenuriFlags flags = 0;
@@ -708,6 +606,7 @@ gtk_file_launcher_open_containing_folder (GtkFileLauncher     *self,
       gtk_openuri_portal_open_async (self->file, TRUE, flags, parent, cancellable, open_done, task);
     }
   else
+#endif
     {
       char *uri = g_file_get_uri (self->file);
 
@@ -715,19 +614,19 @@ gtk_file_launcher_open_containing_folder (GtkFileLauncher     *self,
 
       g_free (uri);
     }
-#endif
 }
 
 /**
  * gtk_file_launcher_open_containing_folder_finish:
- * @self: a file launcher
- * @result: the result
+ * @self: a `GtkFileLauncher`
+ * @result: a `GAsyncResult`
  * @error: return location for a [enum@Gtk.DialogError] or [enum@Gio.Error] error
  *
  * Finishes the [method@Gtk.FileLauncher.open_containing_folder]
  * call and returns the result.
  *
- * Returns: true if an application was launched
+ * Returns: `TRUE` if an application was launched,
+ *     or `FALSE` and @error is set
  *
  * Since: 4.10
  */
@@ -744,5 +643,4 @@ gtk_file_launcher_open_containing_folder_finish (GtkFileLauncher  *self,
 }
 
 /* }}} */
-
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

@@ -42,7 +42,7 @@ G_BEGIN_DECLS
  * @GTK_DEBUG_GEOMETRY: Information about size allocation
  * @GTK_DEBUG_ICONTHEME: Information about icon themes
  * @GTK_DEBUG_PRINTING: Information about printing
- * @GTK_DEBUG_BUILDER_TRACE: Trace GtkBuilder operation
+ * @GTK_DEBUG_BUILDER: Trace GtkBuilder operation
  * @GTK_DEBUG_SIZE_REQUEST: Information about size requests
  * @GTK_DEBUG_NO_CSS_CACHE: Disable the style property cache
  * @GTK_DEBUG_INTERACTIVE: Open the GTK inspector
@@ -76,47 +76,6 @@ G_BEGIN_DECLS
  * Since: 4.8
  */
 
-/**
- * GTK_DEBUG_CSS:
- *
- * Information about deprecated CSS features.
- *
- * Since: 4.16
- */
-
-/**
- * GTK_DEBUG_BUILDER:
- *
- * Information about deprecated GtkBuilder features.
- *
- * Since: 4.18
- */
-
- /**
-  * GTK_DEBUG_TOUCHSCREEN:
-  *
-  * Show touch UI elements for pointer events.
-  *
-  * Since: 4.20
-  */
-
-/**
- * GTK_DEBUG_SESSION:
- *
- * Information about session saving.
- *
- * Since: 4.22
- */
-
-/**
- * GTK_DEBUG_GENERAL_INFO:
- *
- * Print information from the GTK inspector 'general' page,
- * in markdown format.
- *
- * Since: 4.24
- */
-
 typedef enum {
   GTK_DEBUG_TEXT            = 1 <<  0,
   GTK_DEBUG_TREE            = 1 <<  1,
@@ -125,11 +84,10 @@ typedef enum {
   GTK_DEBUG_GEOMETRY        = 1 <<  4,
   GTK_DEBUG_ICONTHEME       = 1 <<  5,
   GTK_DEBUG_PRINTING        = 1 <<  6,
-  GTK_DEBUG_BUILDER_TRACE   = 1 <<  7,
+  GTK_DEBUG_BUILDER         = 1 <<  7,
   GTK_DEBUG_SIZE_REQUEST    = 1 <<  8,
   GTK_DEBUG_NO_CSS_CACHE    = 1 <<  9,
   GTK_DEBUG_INTERACTIVE     = 1 << 10,
-  GTK_DEBUG_TOUCHSCREEN     = 1 << 11,
   GTK_DEBUG_ACTIONS         = 1 << 12,
   GTK_DEBUG_LAYOUT          = 1 << 13,
   GTK_DEBUG_SNAPSHOT        = 1 << 14,
@@ -138,18 +96,8 @@ typedef enum {
   GTK_DEBUG_A11Y            = 1 << 17,
   GTK_DEBUG_ICONFALLBACK    = 1 << 18,
   GTK_DEBUG_INVERT_TEXT_DIR = 1 << 19,
-  GTK_DEBUG_CSS             = 1 << 20,
-  GTK_DEBUG_BUILDER         = 1 << 21,
-  GTK_DEBUG_SESSION         = 1 << 22,
-  GTK_DEBUG_GENERAL_INFO    = 1 << 23,
 } GtkDebugFlags;
 
-/**
- * GTK_DEBUG_CHECK:
- * @type: type to check
- *
- * Whether the `type` debug flag is set.
- **/
 #define GTK_DEBUG_CHECK(type) G_UNLIKELY (gtk_get_debug_flags () & GTK_DEBUG_##type)
 
 GDK_AVAILABLE_IN_ALL
@@ -158,3 +106,4 @@ GDK_AVAILABLE_IN_ALL
 void          gtk_set_debug_flags (GtkDebugFlags flags);
 
 G_END_DECLS
+

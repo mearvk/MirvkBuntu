@@ -48,8 +48,10 @@ struct _CoglScanoutBufferInterface
 {
   GTypeInterface parent_iface;
 
-  gboolean (*copy_to_framebuffer) (CoglScanout      *scanout,
+  gboolean (*blit_to_framebuffer) (CoglScanout      *scanout,
                                    CoglFramebuffer  *framebuffer,
+                                   int               x,
+                                   int               y,
                                    GError          **error);
 
   int (*get_width) (CoglScanoutBuffer *scanout_buffer);
@@ -57,8 +59,10 @@ struct _CoglScanoutBufferInterface
 };
 
 COGL_EXPORT
-gboolean cogl_scanout_copy_to_framebuffer (CoglScanout      *scanout,
+gboolean cogl_scanout_blit_to_framebuffer (CoglScanout      *scanout,
                                            CoglFramebuffer  *framebuffer,
+                                           int               x,
+                                           int               y,
                                            GError          **error);
 
 int cogl_scanout_buffer_get_width (CoglScanoutBuffer *scanout_buffer);
@@ -77,8 +81,7 @@ void cogl_scanout_notify_failed (CoglScanout  *scanout,
                                  CoglOnscreen *onscreen);
 
 COGL_EXPORT
-CoglScanout * cogl_scanout_new (CoglScanoutBuffer  *scanout_buffer,
-                                const MtkRectangle *dst_rect);
+CoglScanout * cogl_scanout_new (CoglScanoutBuffer *scanout_buffer);
 
 COGL_EXPORT
 void cogl_scanout_get_src_rect (CoglScanout     *scanout,
@@ -90,4 +93,8 @@ void cogl_scanout_set_src_rect (CoglScanout           *scanout,
 
 COGL_EXPORT
 void cogl_scanout_get_dst_rect (CoglScanout  *scanout,
-                                MtkRectangle *dst_rect);
+                                MtkRectangle *rect);
+
+COGL_EXPORT
+void cogl_scanout_set_dst_rect (CoglScanout        *scanout,
+                                const MtkRectangle *rect);

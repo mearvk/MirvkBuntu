@@ -30,9 +30,8 @@
 
 #include "clutter/clutter.h"
 #include "core/keybindings-private.h"
+#include "core/meta-gesture-tracker-private.h"
 #include "core/meta-pad-action-mapper.h"
-#include "core/meta-private-enums.h"
-#include "core/meta-tool-action-mapper.h"
 #include "core/stack-tracker.h"
 #include "core/startup-notification-private.h"
 #include "meta/barrier.h"
@@ -40,9 +39,6 @@
 #include "meta/common.h"
 #include "meta/meta-selection.h"
 #include "meta/prefs.h"
-#ifdef HAVE_XWAYLAND
-#include "meta/meta-x11-types.h"
-#endif
 
 typedef struct _MetaBell       MetaBell;
 typedef struct _MetaStack      MetaStack;
@@ -58,14 +54,16 @@ typedef enum
 #define _NET_WM_STATE_ADD           1    /* add/set property */
 #define _NET_WM_STATE_TOGGLE        2    /* toggle property  */
 
+typedef enum
+{
+  META_TILE_NONE,
+  META_TILE_LEFT,
+  META_TILE_RIGHT,
+  META_TILE_MAXIMIZED
+} MetaTileMode;
+
 typedef void (* MetaDisplayWindowFunc) (MetaWindow *window,
                                         gpointer    user_data);
-
-
-/* To avoid ifdefing MetaX11Display usage when built without X11 support */
-#ifndef HAVE_XWAYLAND
-typedef struct _MetaX11Display MetaX11Display;
-#endif
 
 struct _MetaDisplay
 {
@@ -112,11 +110,11 @@ struct _MetaDisplay
   GSList     *pending_pings;
 
   /* Pending focus change */
-  guint focus_timeout_id;
+  guint       focus_timeout_id;
 
   /* Pending autoraise */
-  guint autoraise_timeout_id;
-  MetaWindow *autoraise_window;
+  guint       autoraise_timeout_id;
+  MetaWindow* autoraise_window;
 
   MetaKeyBindingManager key_binding_manager;
 
@@ -129,20 +127,25 @@ struct _MetaDisplay
   /* Managed by compositor.c */
   MetaCompositor *compositor;
 
+  MetaGestureTracker *gesture_tracker;
+  ClutterEventSequence *pointer_emulating_sequence;
+
   ClutterActor *current_pad_osd;
   MetaPadActionMapper *pad_action_mapper;
-  MetaToolActionMapper *tool_action_mapper;
 
   MetaStartupNotification *startup_notification;
 
+  MetaCursor current_cursor;
+
   MetaStack *stack;
   MetaStackTracker *stack_tracker;
+
+  GSList *startup_sequences;
 
   guint work_area_later;
   guint check_fullscreen_later;
 
   MetaBell *bell;
-  int64_t last_visual_bell_time_us;
   MetaWorkspaceManager *workspace_manager;
 
   MetaSoundPlayer *sound_player;
@@ -175,12 +178,15 @@ struct _MetaDisplayClass
   )
 
 MetaDisplay * meta_display_new (MetaContext  *context,
-                                GVariant     *plugin_options,
                                 GError      **error);
 
-#ifdef HAVE_XWAYLAND
+#ifdef HAVE_X11_CLIENT
 void meta_display_manage_all_xwindows (MetaDisplay *display);
 #endif
+
+/* Utility function to compare the stacking of two windows */
+int           meta_display_stack_cmp           (const void *a,
+                                                const void *b);
 
 /* Each MetaWindow is uniquely identified by a 64-bit "stamp"; unlike a
  * a MetaWindow *, a stamp will never be recycled
@@ -218,6 +224,16 @@ META_EXPORT_TEST
 GSList*     meta_display_list_windows        (MetaDisplay          *display,
                                               MetaListWindowsFlags  flags);
 
+void     meta_display_grab_window_buttons    (MetaDisplay *display,
+                                              MetaWindow  *window);
+void     meta_display_ungrab_window_buttons  (MetaDisplay *display,
+                                              MetaWindow  *window);
+
+void meta_display_grab_focus_window_button   (MetaDisplay *display,
+                                              MetaWindow  *window);
+void meta_display_ungrab_focus_window_button (MetaDisplay *display,
+                                              MetaWindow  *window);
+
 void meta_display_ping_window      (MetaWindow  *window,
                                     guint32      serial);
 void meta_display_pong_for_serial  (MetaDisplay *display,
@@ -228,6 +244,7 @@ MetaGravity meta_resize_gravity_from_grab_op (MetaGrabOp op);
 gboolean meta_grab_op_is_moving   (MetaGrabOp op);
 gboolean meta_grab_op_is_resizing (MetaGrabOp op);
 gboolean meta_grab_op_is_mouse    (MetaGrabOp op);
+gboolean meta_grab_op_is_keyboard (MetaGrabOp op);
 
 void meta_display_queue_autoraise_callback  (MetaDisplay *display,
                                              MetaWindow  *window);
@@ -236,11 +253,8 @@ void meta_display_remove_autoraise_callback (MetaDisplay *display);
 void meta_display_overlay_key_activate (MetaDisplay *display);
 void meta_display_accelerator_activate (MetaDisplay           *display,
                                         guint                  action,
-                                        const ClutterEvent    *event);
-void meta_display_accelerator_deactivate (MetaDisplay           *display,
-                                          guint                  action,
-                                          const ClutterEvent    *event);
-void meta_display_modifiers_accelerator_activate (MetaDisplay *display);
+                                        const ClutterKeyEvent *event);
+gboolean meta_display_modifiers_accelerator_activate (MetaDisplay *display);
 
 void meta_display_update_focus_window (MetaDisplay *display,
                                        MetaWindow  *window);
@@ -251,11 +265,21 @@ void meta_display_sanity_check_timestamps (MetaDisplay *display,
 void meta_display_remove_pending_pings_for_window (MetaDisplay *display,
                                                    MetaWindow  *window);
 
+MetaGestureTracker * meta_display_get_gesture_tracker (MetaDisplay *display);
+
+gboolean meta_display_show_restart_message (MetaDisplay *display,
+                                            const char  *message);
+gboolean meta_display_request_restart      (MetaDisplay *display);
+
 gboolean meta_display_show_resize_popup (MetaDisplay  *display,
                                          gboolean      show,
                                          MtkRectangle *rect,
                                          int           display_w,
                                          int           display_h);
+
+void meta_set_is_restart (gboolean whether);
+
+void meta_display_cancel_touch (MetaDisplay *display);
 
 gboolean meta_display_windows_are_interactable (MetaDisplay *display);
 
@@ -318,7 +342,5 @@ void meta_display_handle_window_enter (MetaDisplay *display,
                                        int          root_x,
                                        int          root_y);
 
-void meta_display_maybe_update_sticky_mouse_focus (MetaDisplay *display);
-
-void meta_display_handle_sticky_mouse_focus_event (MetaDisplay        *display,
-                                                   const ClutterEvent *event);
+void meta_display_handle_window_leave (MetaDisplay *display,
+                                       MetaWindow  *window);

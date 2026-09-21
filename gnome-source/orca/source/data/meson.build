@@ -17,17 +17,14 @@ schema_sources = files(
   '../src/orca/sound_presenter.py',
   '../src/orca/chat_presenter.py',
   '../src/orca/spellcheck_presenter.py',
-  '../src/orca/mouse_presenter.py',
+  '../src/orca/mouse_review.py',
   '../src/orca/live_region_presenter.py',
-  '../src/orca/math_presenter.py',
   '../src/orca/system_information_presenter.py',
   '../src/orca/pronunciation_dictionary_manager.py',
   '../src/orca/command_manager.py',
   '../src/orca/text_attribute_manager.py',
   '../src/orca/profile_manager.py',
   '../src/orca/orca_modifier_manager.py',
-  '../src/orca/sleep_mode_manager.py',
-  '../src/orca/extension_loader.py',
 )
 
 generated_schema = custom_target(

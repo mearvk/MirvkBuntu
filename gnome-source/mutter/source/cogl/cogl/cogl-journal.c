@@ -43,6 +43,7 @@
 #include "cogl/cogl-point-in-poly-private.h"
 #include "cogl/cogl-trace.h"
 #include "cogl/cogl-private.h"
+#include "cogl/cogl1-context.h"
 
 #include <string.h>
 #include <gmodule.h>
@@ -104,12 +105,14 @@ typedef struct _CoglJournalFlushState
 
   CoglAttributeBuffer *attribute_buffer;
   GArray *attributes;
+  int current_attribute;
 
   size_t stride;
   size_t array_offset;
   GLuint current_vertex;
 
   CoglIndices *indices;
+  size_t indices_type_size;
 
   CoglPipeline *pipeline;
 } CoglJournalFlushState;
@@ -120,7 +123,7 @@ typedef void (*CoglJournalBatchCallback) (CoglJournalEntry *start,
 typedef gboolean (*CoglJournalBatchTest) (CoglJournalEntry *entry0,
                                           CoglJournalEntry *entry1);
 
-G_DEFINE_FINAL_TYPE (CoglJournal, cogl_journal, G_TYPE_OBJECT);
+G_DEFINE_TYPE (CoglJournal, cogl_journal, G_TYPE_OBJECT);
 
 static void
 cogl_journal_dispose (GObject *object)
@@ -161,6 +164,8 @@ _cogl_journal_new (CoglFramebuffer *framebuffer)
   journal->framebuffer = framebuffer;
   journal->entries = g_array_new (FALSE, FALSE, sizeof (CoglJournalEntry));
   journal->vertices = g_array_new (FALSE, FALSE, sizeof (float));
+
+  _cogl_list_init (&journal->pending_fences);
 
   return journal;
 }
@@ -339,18 +344,13 @@ _cogl_journal_flush_modelview_and_entries (CoglJournalEntry *batch_start,
   if (G_UNLIKELY (COGL_DEBUG_ENABLED (COGL_DEBUG_RECTANGLES)))
     {
       static CoglPipeline *outline = NULL;
-      uint8_t journal_rectangles_color =
-        cogl_context_get_journal_rectangles_color (ctx);
       float color_intensity;
       int i;
       CoglAttribute *loop_attributes[1];
       CoglColor color;
 
       if (outline == NULL)
-        {
-          outline = cogl_pipeline_new (ctx);
-          cogl_pipeline_set_static_name (outline, "CoglJournal (outline)");
-        }
+        outline = cogl_pipeline_new (ctx);
 
       /* The least significant three bits represent the three
          components so that the order of colours goes red, green,
@@ -359,15 +359,15 @@ _cogl_journal_flush_modelview_and_entries (CoglJournalEntry *batch_start,
          in the order 0xff, 0xcc, 0x99, and 0x66. This gives a total
          of 24 colours. If there are more than 24 batches on the stage
          then it will wrap around */
-      color_intensity = (0xff - 0x33 * (journal_rectangles_color >> 3) ) / 255.0f;
+      color_intensity = (0xff - 0x33 * (ctx->journal_rectangles_color >> 3) ) / 255.0;
       cogl_color_init_from_4f (&color,
-                               (journal_rectangles_color & 1) ?
-                               color_intensity : 0.0f,
-                               (journal_rectangles_color & 2) ?
-                               color_intensity : 0.0f,
-                               (journal_rectangles_color & 4) ?
-                               color_intensity : 0.0f,
-                               1.0f);
+                               (ctx->journal_rectangles_color & 1) ?
+                               color_intensity : 0.0,
+                               (ctx->journal_rectangles_color & 2) ?
+                               color_intensity : 0.0,
+                               (ctx->journal_rectangles_color & 4) ?
+                               color_intensity : 0.0,
+                               1.0);
       cogl_pipeline_set_color (outline, &color);
 
       loop_attributes[0] = attributes[0]; /* we just want the position */
@@ -382,11 +382,11 @@ _cogl_journal_flush_modelview_and_entries (CoglJournalEntry *batch_start,
 
       /* Go to the next color */
       do
-        journal_rectangles_color = ((journal_rectangles_color + 1) & ((1 << 5) - 1));
+        ctx->journal_rectangles_color = ((ctx->journal_rectangles_color + 1) &
+                                         ((1 << 5) - 1));
       /* We don't want to use black or white */
-      while ((journal_rectangles_color & 0x07) == 0 || (journal_rectangles_color & 0x07) == 0x07);
-
-      cogl_context_set_journal_rectangles_color (ctx, journal_rectangles_color);
+      while ((ctx->journal_rectangles_color & 0x07) == 0
+             || (ctx->journal_rectangles_color & 0x07) == 0x07);
     }
 
   state->current_vertex += (4 * batch_len);
@@ -577,7 +577,6 @@ _cogl_journal_flush_vbo_offsets_and_entries (CoglJournalEntry *batch_start,
   CoglJournalFlushState *state = data;
   CoglFramebuffer *framebuffer = state->journal->framebuffer;
   CoglContext *ctx = cogl_framebuffer_get_context (framebuffer);
-  CoglDriver *driver = cogl_context_get_driver (ctx);
   size_t stride;
   int i;
   CoglAttribute **attribute_entry;
@@ -629,7 +628,7 @@ _cogl_journal_flush_vbo_offsets_and_entries (CoglJournalEntry *batch_start,
                         4,
                         COGL_ATTRIBUTE_TYPE_UNSIGNED_BYTE);
 
-  state->indices = cogl_context_get_rectangle_indices (ctx, batch_len);
+  state->indices = cogl_get_rectangle_indices (ctx, batch_len);
 
   /* We only create new Attributes when the stride within the
    * AttributeBuffer changes. (due to a change in the number of pipeline
@@ -640,7 +639,7 @@ _cogl_journal_flush_vbo_offsets_and_entries (CoglJournalEntry *batch_start,
   state->current_vertex = 0;
 
   if (G_UNLIKELY (COGL_DEBUG_ENABLED (COGL_DEBUG_JOURNAL)) &&
-      cogl_driver_has_feature (driver, COGL_FEATURE_ID_MAP_BUFFER_FOR_READ))
+      cogl_has_feature (ctx, COGL_FEATURE_ID_MAP_BUFFER_FOR_READ))
     {
       uint8_t *verts;
 
@@ -720,7 +719,7 @@ _cogl_journal_flush_clip_stacks_and_entries (CoglJournalEntry *batch_start,
    * make sure that the clip state gets updated the next time we flush
    * framebuffer state by marking the current framebuffer's clip state
    * as changed. */
-  cogl_context_add_current_draw_buffer_changes (ctx, COGL_FRAMEBUFFER_STATE_CLIP);
+  ctx->current_draw_buffer_changes |= COGL_FRAMEBUFFER_STATE_CLIP;
 
   /* If we have transformed all our quads at log time then we ensure
    * no further model transform is applied by loading the identity
@@ -728,8 +727,7 @@ _cogl_journal_flush_clip_stacks_and_entries (CoglJournalEntry *batch_start,
    * because the clip stack flushing code can modify the current
    * modelview matrix entry */
   if (G_LIKELY (!(COGL_DEBUG_ENABLED (COGL_DEBUG_DISABLE_SOFTWARE_TRANSFORM))))
-    _cogl_context_set_current_modelview_entry (ctx,
-                                               cogl_context_get_identity_entry (ctx));
+    _cogl_context_set_current_modelview_entry (ctx, &ctx->identity_entry);
 
   /* Setting up the clip state can sometimes also update the current
    * projection matrix entry so we should update it again. This will have
@@ -774,6 +772,11 @@ can_software_clip_entry (CoglJournalEntry *journal_entry,
      entries using the same pipeline as the previous entry */
   if (prev_journal_entry == NULL || pipeline != prev_journal_entry->pipeline)
     {
+      /* If the pipeline has a user program then we can't reliably modify
+         the texture coordinates */
+      if (cogl_pipeline_get_user_program (pipeline))
+        return FALSE;
+
       /* If any of the pipeline layers have a texture matrix then we can't
          reliably modify the texture coordinates */
       for (layer_num = cogl_pipeline_get_n_layers (pipeline) - 1;
@@ -936,7 +939,6 @@ maybe_software_clip_entries (CoglJournalEntry      *batch_start,
   CoglContext *ctx;
   CoglJournal *journal;
   CoglClipStack *clip_stack, *clip_entry;
-  GArray *journal_clip_bounds;
   int entry_num;
 
   /* This tries to find cases where the entry is logged with a clip
@@ -961,7 +963,6 @@ maybe_software_clip_entries (CoglJournalEntry      *batch_start,
       return;
 
   ctx = state->ctx;
-  journal_clip_bounds = cogl_context_get_journal_clip_bounds (ctx);
   journal = state->journal;
 
   /* This scratch buffer is used to store the translation for each
@@ -969,20 +970,16 @@ maybe_software_clip_entries (CoglJournalEntry      *batch_start,
      it's expensive to calculate but at this point we still don't know
      whether we can clip all of the entries so we don't want to do the
      rest of the dependent calculations until we're sure we can. */
-  if (journal_clip_bounds == NULL)
-    {
-      journal_clip_bounds = g_array_new (FALSE, FALSE, sizeof (ClipBounds));
-      cogl_context_set_journal_clip_bounds (ctx, journal_clip_bounds);
-    }
-
-  g_array_set_size (journal_clip_bounds, batch_len);
+  if (ctx->journal_clip_bounds == NULL)
+    ctx->journal_clip_bounds = g_array_new (FALSE, FALSE, sizeof (ClipBounds));
+  g_array_set_size (ctx->journal_clip_bounds, batch_len);
 
   for (entry_num = 0; entry_num < batch_len; entry_num++)
     {
       CoglJournalEntry *journal_entry = batch_start + entry_num;
       CoglJournalEntry *prev_journal_entry =
         entry_num ? batch_start + (entry_num - 1) : NULL;
-      ClipBounds *clip_bounds = &g_array_index (journal_clip_bounds,
+      ClipBounds *clip_bounds = &g_array_index (ctx->journal_clip_bounds,
                                                 ClipBounds, entry_num);
 
       if (!can_software_clip_entry (journal_entry, prev_journal_entry,
@@ -1000,7 +997,7 @@ maybe_software_clip_entries (CoglJournalEntry      *batch_start,
       CoglJournalEntry *journal_entry = batch_start + entry_num;
       float *verts = &g_array_index (journal->vertices, float,
                                      journal_entry->array_offset + 1);
-      ClipBounds *clip_bounds = &g_array_index (journal_clip_bounds,
+      ClipBounds *clip_bounds = &g_array_index (ctx->journal_clip_bounds,
                                                 ClipBounds, entry_num);
 
       software_clip_entry (journal_entry, verts, clip_bounds);
@@ -1059,7 +1056,7 @@ _cogl_journal_flush_dither_and_entries (CoglJournalEntry *batch_start,
     g_print ("BATCHING:  dither batch len = %d\n", batch_len);
 
   cogl_framebuffer_set_dither_enabled (framebuffer, batch_start->dither_enabled);
-  cogl_context_add_current_draw_buffer_changes (ctx, COGL_FRAMEBUFFER_STATE_DITHER);
+  ctx->current_draw_buffer_changes |= COGL_FRAMEBUFFER_STATE_DITHER;
 
   cogl_context_flush_framebuffer_state (ctx,
                                         framebuffer,
@@ -1103,7 +1100,7 @@ _cogl_journal_flush_viewport_and_entries (CoglJournalEntry *batch_start,
   if (G_UNLIKELY (COGL_DEBUG_ENABLED (COGL_DEBUG_BATCHING)))
     g_print ("BATCHING:  viewport batch len = %d\n", batch_len);
 
-  cogl_context_add_current_draw_buffer_changes (ctx, COGL_FRAMEBUFFER_STATE_VIEWPORT);
+  ctx->current_draw_buffer_changes |= COGL_FRAMEBUFFER_STATE_VIEWPORT;
 
   cogl_framebuffer_get_viewport4fv (framebuffer, current_viewport);
   cogl_framebuffer_set_viewport4fv (framebuffer, batch_start->viewport);
@@ -1352,6 +1349,18 @@ _cogl_journal_all_entries_within_bounds (CoglJournal *journal,
   return TRUE;
 }
 
+static void
+post_fences (CoglJournal *journal)
+{
+  CoglFenceClosure *fence, *tmp;
+
+  _cogl_list_for_each_safe (fence, tmp, &journal->pending_fences, link)
+    {
+      _cogl_list_remove (&fence->link);
+      _cogl_fence_submit (fence);
+    }
+}
+
 /* XXX NB: When _cogl_journal_flush() returns all state relating
  * to pipelines, all glEnable flags and current matrix state
  * is undefined.
@@ -1378,6 +1387,7 @@ _cogl_journal_flush (CoglJournal *journal)
 
   if (journal->entries->len == 0)
     {
+      post_fences (journal);
       return;
     }
 
@@ -1410,12 +1420,12 @@ _cogl_journal_flush (CoglJournal *journal)
 
   /* We need to mark the current modelview state of the framebuffer as
    * dirty because we are going to manually replace it */
-  cogl_context_add_current_draw_buffer_changes (ctx, COGL_FRAMEBUFFER_STATE_MODELVIEW);
+  ctx->current_draw_buffer_changes |= COGL_FRAMEBUFFER_STATE_MODELVIEW;
 
   state.ctx = ctx;
   state.journal = journal;
 
-  state.attributes = cogl_context_get_journal_flush_attributes_array (ctx);
+  state.attributes = ctx->journal_flush_attributes_array;
 
   if (G_UNLIKELY ((COGL_DEBUG_ENABLED (COGL_DEBUG_DISABLE_SOFTWARE_CLIP)) == 0))
     {
@@ -1478,6 +1488,8 @@ _cogl_journal_flush (CoglJournal *journal)
   _cogl_journal_discard (journal);
   COGL_TIMER_STOP (_cogl_uprof_context, discard_timer);
 
+  post_fences (journal);
+
   COGL_TIMER_STOP (_cogl_uprof_context, flush_timer);
 }
 
@@ -1514,7 +1526,7 @@ _cogl_journal_log_quad (CoglJournal  *journal,
   int next_entry;
   uint32_t disable_layers;
   CoglJournalEntry *entry;
-  CoglPipeline *final_pipeline, *color_authority;
+  CoglPipeline *final_pipeline;
   CoglClipStack *clip_stack;
   CoglPipelineFlushOptions flush_options;
   CoglMatrixStack *modelview_stack;
@@ -1549,9 +1561,7 @@ _cogl_journal_log_quad (CoglJournal  *journal,
 
   /* FIXME: This is a hacky optimization, since it will break if we
    * change the definition of CoglColor: */
-  color_authority = _cogl_pipeline_get_authority (pipeline,
-                                                  COGL_PIPELINE_STATE_COLOR);
-  memcpy ((uint8_t *) v, &color_authority->color, sizeof (CoglColor));
+  _cogl_pipeline_get_colorubv (pipeline, (uint8_t *) v);
   v++;
 
   memcpy (v, position, sizeof (float) * 2);
@@ -1708,11 +1718,11 @@ entry_to_screen_polygon (CoglFramebuffer *framebuffer,
  * to Cogl window/framebuffer coordinates (ranging from 0 to buffer-size) with
  * (0,0) being top left. */
 #define VIEWPORT_TRANSFORM_X(x, vp_origin_x, vp_width) \
-    (  ( ((x) + 1.0f) * ((vp_width) / 2.0f) ) + (vp_origin_x)  )
+    (  ( ((x) + 1.0) * ((vp_width) / 2.0) ) + (vp_origin_x)  )
 /* Note: for Y we first flip all coordinates around the X axis while in
  * normalized device coordinates */
 #define VIEWPORT_TRANSFORM_Y(y, vp_origin_y, vp_height) \
-    (  ( ((-(y)) + 1.0f) * ((vp_height) / 2.0f) ) + (vp_origin_y)  )
+    (  ( ((-(y)) + 1.0) * ((vp_height) / 2.0) ) + (vp_origin_y)  )
 
   /* Scale from normalized device coordinates (in range [-1,1]) to
    * window coordinates ranging [0,window-size] ... */
@@ -1845,7 +1855,7 @@ _cogl_journal_try_read_pixel (CoglJournal *journal,
       float poly[16];
       CoglFramebuffer *framebuffer = journal->framebuffer;
       uint8_t *pixel;
-      g_autoptr (GError) ignore_error = NULL;
+      GError *ignore_error;
 
       entry_to_screen_polygon (framebuffer, entry, vertices, poly);
 
@@ -1871,8 +1881,7 @@ _cogl_journal_try_read_pixel (CoglJournal *journal,
       /* If we find that the rectangle the point of interest
        * intersects has any state more complex than a constant opaque
        * color then we bail out. */
-      if (!_cogl_pipeline_equal (cogl_context_get_opaque_color_pipeline (ctx),
-                                 entry->pipeline,
+      if (!_cogl_pipeline_equal (ctx->opaque_color_pipeline, entry->pipeline,
                                  (COGL_PIPELINE_STATE_ALL &
                                   ~COGL_PIPELINE_STATE_COLOR),
                                  COGL_PIPELINE_LAYER_STATE_ALL))
@@ -1884,19 +1893,22 @@ _cogl_journal_try_read_pixel (CoglJournal *journal,
       if (color[3] != 0xff)
         return FALSE;
 
-      pixel = cogl_bitmap_map (bitmap,
-                               COGL_BUFFER_ACCESS_WRITE,
-                               COGL_BUFFER_MAP_HINT_DISCARD,
-                               &ignore_error);
+      pixel = _cogl_bitmap_map (bitmap,
+                                COGL_BUFFER_ACCESS_WRITE,
+                                COGL_BUFFER_MAP_HINT_DISCARD,
+                                &ignore_error);
       if (pixel == NULL)
-        return FALSE;
+        {
+          g_error_free (ignore_error);
+          return FALSE;
+        }
 
       pixel[0] = color[0];
       pixel[1] = color[1];
       pixel[2] = color[2];
       pixel[3] = color[3];
 
-      cogl_bitmap_unmap (bitmap);
+      _cogl_bitmap_unmap (bitmap);
 
       goto success;
     }

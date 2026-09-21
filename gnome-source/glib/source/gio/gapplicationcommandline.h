@@ -73,7 +73,7 @@ struct _GApplicationCommandLineClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType                   g_application_command_line_get_type             (void);
+GType                   g_application_command_line_get_type             (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 gchar **                g_application_command_line_get_arguments        (GApplicationCommandLine   *cmdline,

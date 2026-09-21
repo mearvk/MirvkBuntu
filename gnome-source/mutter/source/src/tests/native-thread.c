@@ -58,7 +58,7 @@ impl_func (MetaThreadImpl  *thread_impl,
 {
   gboolean *done = user_data;
 
-  meta_assert_true_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
+  meta_assert_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
 
   *done = TRUE;
   g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Not a real error");
@@ -72,7 +72,7 @@ callback_func (MetaThread *thread,
 {
   int *state = user_data;
 
-  meta_assert_false_in_thread_impl (thread);
+  meta_assert_not_in_thread_impl (thread);
 
   g_assert_cmpint (*state, ==, 1);
   *state = 2;
@@ -83,7 +83,7 @@ user_data_destroy (gpointer user_data)
 {
   int *state = user_data;
 
-  meta_assert_false_in_thread_impl (test_thread);
+  meta_assert_not_in_thread_impl (test_thread);
 
   g_assert_cmpint (*state, ==, 2);
   *state = 3;
@@ -96,7 +96,7 @@ queue_callback_func (MetaThreadImpl  *thread_impl,
 {
   int *state = user_data;
 
-  meta_assert_true_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
+  meta_assert_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
 
   g_assert_cmpint (*state, ==, 0);
   *state = 1;
@@ -125,7 +125,7 @@ dispatch_pipe (MetaThreadImpl  *thread_impl,
 {
   PipeData *pipe_data = user_data;
 
-  meta_assert_true_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
+  meta_assert_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
 
   g_assert_cmpint (read (pipe_data->fd, &pipe_data->read_value,
                          sizeof (pipe_data->read_value)),
@@ -168,7 +168,7 @@ idle_cb (gpointer user_data)
 {
   IdleData *idle_data = user_data;
 
-  meta_assert_true_in_thread_impl (test_thread);
+  meta_assert_in_thread_impl (test_thread);
 
   if (idle_data->state == 1)
     {
@@ -188,7 +188,7 @@ idle_data_destroy (gpointer user_data)
 
   if (meta_thread_get_thread_type (idle_data->thread) ==
       META_THREAD_TYPE_KERNEL)
-    meta_assert_true_in_thread_impl (test_thread);
+    meta_assert_in_thread_impl (test_thread);
 
   g_assert_cmpint (idle_data->state, ==, 2);
   idle_data->state = 3;
@@ -204,7 +204,7 @@ add_idle_func (MetaThreadImpl  *thread_impl,
   IdleData *idle_data = user_data;
   GSource *source;
 
-  meta_assert_true_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
+  meta_assert_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
 
   source = meta_thread_impl_add_source (thread_impl,
                                         idle_cb,
@@ -231,7 +231,7 @@ async_func (MetaThreadImpl  *thread_impl,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_true_in_thread_impl (async_data->thread);
+  meta_assert_in_thread_impl (async_data->thread);
 
   g_mutex_lock (&async_data->mutex);
   g_assert_cmpint (async_data->state, ==, 0);
@@ -260,7 +260,7 @@ async_feedback_func (gpointer      retval,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_false_in_thread_impl (async_data->thread);
+  meta_assert_not_in_thread_impl (async_data->thread);
 
   g_mutex_lock (&async_data->mutex);
   g_assert_cmpint (async_data->state, ==, 1);
@@ -275,7 +275,7 @@ multiple_async_func1 (MetaThreadImpl  *thread_impl,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_true_in_thread_impl (async_data->thread);
+  meta_assert_in_thread_impl (async_data->thread);
 
   g_mutex_lock (&async_data->mutex);
   g_assert_cmpint (async_data->state, ==, 0);
@@ -293,7 +293,7 @@ multiple_async_feedback_func1 (gpointer      retval,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_false_in_thread_impl (async_data->thread);
+  meta_assert_not_in_thread_impl (async_data->thread);
 
   g_assert_true (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_FAILED));
   g_assert_cmpint (GPOINTER_TO_INT (retval), ==, 1);
@@ -306,7 +306,7 @@ multiple_async_func2 (MetaThreadImpl  *thread_impl,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_true_in_thread_impl (async_data->thread);
+  meta_assert_in_thread_impl (async_data->thread);
 
   g_mutex_lock (&async_data->mutex);
   g_assert_cmpint (async_data->state, ==, 1);
@@ -324,7 +324,7 @@ multiple_async_feedback_func2 (gpointer      retval,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_false_in_thread_impl (async_data->thread);
+  meta_assert_not_in_thread_impl (async_data->thread);
 
   g_assert_true (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED));
   g_assert_cmpint (GPOINTER_TO_INT (retval), ==, 2);
@@ -337,7 +337,7 @@ multiple_async_func3 (MetaThreadImpl  *thread_impl,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_true_in_thread_impl (async_data->thread);
+  meta_assert_in_thread_impl (async_data->thread);
 
   g_mutex_lock (&async_data->mutex);
   g_assert_cmpint (async_data->state, ==, 2);
@@ -355,7 +355,7 @@ multiple_async_feedback_func3 (gpointer      retval,
 {
   AsyncData *async_data = user_data;
 
-  meta_assert_false_in_thread_impl (async_data->thread);
+  meta_assert_not_in_thread_impl (async_data->thread);
 
   g_assert_true (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_CONNECTED));
   g_assert_cmpint (GPOINTER_TO_INT (retval), ==, 3);
@@ -378,7 +378,7 @@ mixed_async_func (MetaThreadImpl  *thread_impl,
 {
   MixedData *mixed_data = user_data;
 
-  meta_assert_true_in_thread_impl (mixed_data->thread);
+  meta_assert_in_thread_impl (mixed_data->thread);
 
   g_mutex_lock (&mixed_data->mutex);
   g_assert_cmpint (mixed_data->state, ==, 0);
@@ -396,7 +396,7 @@ mixed_async_feedback_func (gpointer      retval,
 {
   MixedData *mixed_data = user_data;
 
-  meta_assert_false_in_thread_impl (mixed_data->thread);
+  meta_assert_not_in_thread_impl (mixed_data->thread);
 
   g_assert_true (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED));
   g_assert_cmpint (GPOINTER_TO_INT (retval), ==, 1);
@@ -414,7 +414,7 @@ mixed_sync_func (MetaThreadImpl  *thread_impl,
 {
   MixedData *mixed_data = user_data;
 
-  meta_assert_true_in_thread_impl (mixed_data->thread);
+  meta_assert_in_thread_impl (mixed_data->thread);
 
   g_mutex_lock (&mixed_data->mutex);
   g_assert_cmpint (mixed_data->state, ==, 1);
@@ -540,7 +540,7 @@ non_default_thread_callback_func (MetaThread *thread,
 {
   CallbackData *callback_data = user_data;
 
-  g_assert_true (g_thread_self () == callback_data->gthread);
+  g_assert (g_thread_self () == callback_data->gthread);
 
   g_assert_cmpint (callback_data->state, ==, 3);
   callback_data->state = 4;
@@ -551,7 +551,7 @@ callback_destroy_cb (gpointer user_data)
 {
   CallbackData *callback_data = user_data;
 
-  g_assert_true (g_thread_self () == callback_data->gthread);
+  g_assert (g_thread_self () == callback_data->gthread);
 
   g_assert_cmpint (callback_data->state, ==, 4);
   callback_data->state = 5;
@@ -564,7 +564,7 @@ queue_non_default_callback_func (MetaThreadImpl  *thread_impl,
 {
   CallbackData *callback_data = user_data;
 
-  meta_assert_true_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
+  meta_assert_in_thread_impl (meta_thread_impl_get_thread (thread_impl));
 
   g_assert_cmpint (callback_data->state, ==, 2);
   callback_data->state = 3;
@@ -585,7 +585,7 @@ non_default_thread_feedback_func (gpointer      retval,
 {
   CallbackData *callback_data = user_data;
 
-  g_assert_true (g_thread_self () == callback_data->gthread);
+  g_assert (g_thread_self () == callback_data->gthread);
 
   g_assert_cmpint (callback_data->state, ==, 5);
   callback_data->state = 6;
@@ -653,7 +653,7 @@ run_thread_tests (MetaThread *thread)
   LoopUser loop_user;
   CallbackData callback_data;
 
-  meta_assert_false_in_thread_impl (thread);
+  meta_assert_not_in_thread_impl (thread);
 
   /* Test that sync tasks run correctly. */
   g_debug ("Test synchronous tasks");
@@ -860,7 +860,7 @@ meta_test_thread_user_common (void)
   g_object_add_weak_pointer (G_OBJECT (thread), (gpointer *) &thread);
   g_assert_nonnull (thread);
   g_assert_null (error);
-  g_assert_true (meta_thread_get_backend (thread) == backend);
+  g_assert (meta_thread_get_backend (thread) == backend);
   g_assert_cmpstr (meta_thread_get_name (thread), ==, "test user thread");
   test_thread = thread;
 
@@ -887,7 +887,7 @@ meta_test_thread_kernel_common (void)
   g_object_add_weak_pointer (G_OBJECT (thread), (gpointer *) &thread);
   g_assert_nonnull (thread);
   g_assert_null (error);
-  g_assert_true (meta_thread_get_backend (thread) == backend);
+  g_assert (meta_thread_get_backend (thread) == backend);
   g_assert_cmpstr (meta_thread_get_name (thread), ==, "test kernel thread");
   test_thread = thread;
 
@@ -967,7 +967,7 @@ run_task_off_thread_in_impl (MetaThreadImpl  *thread_impl,
 {
   RunTaskOffThreadData *data = user_data;
 
-  g_assert_true (data->gthread != g_thread_self ());
+  g_assert (data->gthread != g_thread_self ());
 
   g_assert_false (data->done);
   data->done = TRUE;
@@ -984,7 +984,7 @@ run_task_off_thread_thread_func (gpointer user_data)
   g_mutex_lock (&data->init_mutex);
   g_mutex_unlock (&data->init_mutex);
 
-  g_assert_true (data->gthread == g_thread_self ());
+  g_assert (data->gthread == g_thread_self ());
 
   result = meta_thread_run_impl_task_sync (data->thread,
                                            run_task_off_thread_in_impl,
@@ -1023,7 +1023,7 @@ meta_test_thread_run_task_off_thread_common (MetaThreadType thread_type)
   data.gthread = g_thread_new ("run task off thread test",
                                run_task_off_thread_thread_func,
                                &data);
-  g_assert_true (data.main_thread != data.gthread);
+  g_assert (data.main_thread != data.gthread);
 
   g_mutex_unlock (&data.init_mutex);
 
@@ -1047,6 +1047,74 @@ static void
 meta_test_thread_kernel_run_task_off_thread (void)
 {
   meta_test_thread_run_task_off_thread_common (META_THREAD_TYPE_KERNEL);
+}
+
+static gpointer
+assert_not_thread (MetaThreadImpl  *thread_impl,
+                   gpointer         user_data,
+                   GError         **error)
+{
+  GThread **thread_to_check = user_data;
+
+  g_assert (g_steal_pointer (thread_to_check) != g_thread_self ());
+
+  return NULL;
+}
+
+static gpointer
+assert_thread (MetaThreadImpl  *thread_impl,
+               gpointer         user_data,
+               GError         **error)
+{
+  GThread **thread_to_check = user_data;
+
+  g_assert (g_steal_pointer (thread_to_check) == g_thread_self ());
+
+  return NULL;
+}
+
+static void
+meta_test_thread_change_thread_type (void)
+{
+  MetaBackend *backend = meta_context_get_backend (test_context);
+  MetaThread *thread;
+  g_autoptr (GError) error = NULL;
+  GThread *main_thread;
+  GThread *test_thread;
+
+  thread = g_initable_new (META_TYPE_THREAD_TEST,
+                           NULL, &error,
+                           "backend", backend,
+                           "name", "test late callback",
+                           "thread-type", META_THREAD_TYPE_KERNEL,
+                           NULL);
+  g_object_add_weak_pointer (G_OBJECT (thread), (gpointer *) &thread);
+  g_assert_nonnull (thread);
+  g_assert_null (error);
+
+  main_thread = g_thread_self ();
+
+  test_thread = main_thread;
+  meta_thread_post_impl_task (thread, assert_not_thread, &test_thread, NULL,
+                              NULL, NULL);
+
+  meta_thread_reset_thread_type (thread, META_THREAD_TYPE_USER);
+  g_assert_null (test_thread);
+
+  test_thread = main_thread;
+  meta_thread_post_impl_task (thread, assert_thread, &test_thread, NULL,
+                              NULL, NULL);
+
+  meta_thread_reset_thread_type (thread, META_THREAD_TYPE_KERNEL);
+  g_assert_null (test_thread);
+
+  test_thread = main_thread;
+  meta_thread_post_impl_task (thread, assert_not_thread, &test_thread, NULL,
+                              NULL, NULL);
+
+  g_object_unref (thread);
+  g_assert_null (thread);
+  g_assert_null (test_thread);
 }
 
 static GVariant *
@@ -1073,41 +1141,22 @@ call_rtkit_mock_method (const char *method,
   return ret;
 }
 
-static void
-assert_thread_levels (uint32_t expected_priority,
-                      int32_t  expected_nice_level)
-{
-  g_autoptr (GVariant) priority_variant = NULL;
-  g_autoptr (GVariant) nice_level_variant = NULL;
-  uint32_t priority = UINT32_MAX;
-  int32_t nice_level = INT32_MAX;
-
-  priority_variant =
-    call_rtkit_mock_method ("GetThreadPriority",
-                            g_variant_new ("(t)", gettid ()));
-
-  g_variant_get (priority_variant, "(u)", &priority);
-  g_assert_cmpint (priority, ==, expected_priority);
-
-  nice_level_variant =
-    call_rtkit_mock_method ("GetThreadNiceLevel",
-                            g_variant_new ("(t)", gettid ()));
-
-  g_variant_get (nice_level_variant, "(i)", &nice_level);
-  g_assert_cmpint (nice_level, ==, expected_nice_level);
-}
-
 static gpointer
 assert_realtime (MetaThreadImpl  *thread_impl,
                  gpointer         user_data,
                  GError         **error)
 {
+  g_autoptr (GVariant) ret = NULL;
+  g_autoptr (GVariant) priority_variant = NULL;
+  uint32_t priority = 0;
 
-  g_assert_cmpint (meta_thread_impl_get_scheduling_priority (thread_impl),
-                   ==,
-                   META_SCHEDULING_PRIORITY_REALTIME);
+  g_assert_true (meta_thread_impl_is_realtime (thread_impl));
 
-  assert_thread_levels (20, 0);
+  ret = call_rtkit_mock_method ("GetThreadPriority",
+                                g_variant_new ("(t)", gettid ()));
+
+  g_variant_get (ret, "(u)", &priority);
+  g_assert_cmpint (priority, ==, 20);
 
   return NULL;
 }
@@ -1127,7 +1176,7 @@ meta_test_thread_realtime (void)
                            "backend", backend,
                            "name", "test realtime",
                            "thread-type", META_THREAD_TYPE_KERNEL,
-                           "preferred-scheduling-priority", META_SCHEDULING_PRIORITY_REALTIME,
+                           "wants-realtime", TRUE,
                            NULL);
   g_object_add_weak_pointer (G_OBJECT (thread), (gpointer *) &thread);
   g_assert_nonnull (thread);
@@ -1142,60 +1191,21 @@ meta_test_thread_realtime (void)
 }
 
 static gpointer
-assert_high_priority (MetaThreadImpl  *thread_impl,
-                      gpointer         user_data,
-                      GError         **error)
-{
-  g_assert_cmpint (meta_thread_impl_get_scheduling_priority (thread_impl),
-                   ==,
-                   META_SCHEDULING_PRIORITY_HIGH_PRIORITY);
-
-  assert_thread_levels (0, -15);
-
-  return NULL;
-}
-
-static void
-meta_test_thread_high_priority (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaThread *thread;
-  g_autoptr (GError) error = NULL;
-  g_autoptr (GVariant) ret = NULL;
-
-  ret = call_rtkit_mock_method ("Reset", NULL);
-
-  thread = g_initable_new (META_TYPE_THREAD_TEST,
-                           NULL, &error,
-                           "backend", backend,
-                           "name", "test realtime",
-                           "thread-type", META_THREAD_TYPE_KERNEL,
-                           "preferred-scheduling-priority", META_SCHEDULING_PRIORITY_HIGH_PRIORITY,
-                           NULL);
-  g_object_add_weak_pointer (G_OBJECT (thread), (gpointer *) &thread);
-  g_assert_nonnull (thread);
-  g_assert_null (error);
-
-  meta_thread_post_impl_task (thread, assert_high_priority, NULL, NULL,
-                              NULL, NULL);
-
-  g_object_unref (thread);
-  g_assert_null (thread);
-  g_assert_null (test_thread);
-}
-
-static gpointer
 assert_no_realtime (MetaThreadImpl  *thread_impl,
                     gpointer         user_data,
                     GError         **error)
 {
   g_autoptr (GVariant) ret = NULL;
+  g_autoptr (GVariant) priority_variant = NULL;
+  uint32_t priority = UINT32_MAX;
 
-  g_assert_cmpint (meta_thread_impl_get_scheduling_priority (thread_impl),
-                   ==,
-                   META_SCHEDULING_PRIORITY_NORMAL);
+  g_assert_false (meta_thread_impl_is_realtime (thread_impl));
 
-  assert_thread_levels (0, 0);
+  ret = call_rtkit_mock_method ("GetThreadPriority",
+                                g_variant_new ("(t)", gettid ()));
+
+  g_variant_get (ret, "(u)", &priority);
+  g_assert_cmpint (priority, ==, 0);
 
   return NULL;
 }
@@ -1215,7 +1225,7 @@ meta_test_thread_no_realtime (void)
                            "backend", backend,
                            "name", "test realtime",
                            "thread-type", META_THREAD_TYPE_USER,
-                           "preferred-scheduling-priority", META_SCHEDULING_PRIORITY_REALTIME,
+                           "wants-realtime", TRUE,
                            NULL);
   g_object_add_weak_pointer (G_OBJECT (thread), (gpointer *) &thread);
   g_assert_nonnull (thread);
@@ -1244,10 +1254,10 @@ init_tests (void)
                    meta_test_thread_user_run_task_off_thread);
   g_test_add_func ("/backends/native/thread/kernel/run-task-off-thread",
                    meta_test_thread_kernel_run_task_off_thread);
+  g_test_add_func ("/backends/native/thread/change-thread-type",
+                   meta_test_thread_change_thread_type);
   g_test_add_func ("/backends/native/thread/realtime",
                    meta_test_thread_realtime);
-  g_test_add_func ("/backends/native/thread/high-priority",
-                   meta_test_thread_high_priority);
   g_test_add_func ("/backends/native/thread/no-realtime",
                    meta_test_thread_no_realtime);
 }
@@ -1260,7 +1270,7 @@ main (int    argc,
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   init_tests ();
 

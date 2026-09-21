@@ -33,7 +33,6 @@ from orca import (
 )
 from orca.ax_text import AXText
 from orca.ax_utilities import AXUtilities
-from orca.ax_utilities_event import TextEventReason
 from orca.scripts import default
 
 from .script_utilities import Utilities
@@ -59,15 +58,22 @@ class Script(default.Script):
 
         return Utilities(self)
 
+    def _on_text_deleted(self, event: Atspi.Event) -> bool:
+        """Callback for object:text-changed:delete accessibility events."""
+
+        if self.utilities.treat_event_as_noise(event):
+            msg = "TERMINAL: Deletion is believed to be noise"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return True
+
+        return super()._on_text_deleted(event)
+
     def _on_text_inserted(self, event: Atspi.Event) -> bool:
         """Callback for object:text-changed:insert accessibility events."""
 
         typing_echo_presenter.get_presenter().echo_delayed_terminal_press(self, event)
 
-        if (
-            AXUtilities.get_text_event_reason(event) == TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-            or not self.utilities.treat_event_as_command(event)
-        ):
+        if not self.utilities.treat_event_as_command(event):
             msg = "TERMINAL: Passing along event to default script."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return super()._on_text_inserted(event)

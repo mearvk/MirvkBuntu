@@ -53,12 +53,10 @@ static void     update_button_sensitivity
 /**
  * GtkColorDialogButton:
  *
- * Opens a color chooser dialog to select a color.
+ * The `GtkColorDialogButton` is a wrapped around a [class@Gtk.ColorDialog]
+ * and allows to open a color chooser dialog to change the color.
  *
- * <picture>
- *   <source srcset="color-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkColorDialogButton" src="color-button.png">
- * </picture>
+ * ![An example GtkColorDialogButton](color-button.png)
  *
  * It is suitable widget for selecting a color in a preference dialog.
  *
@@ -157,10 +155,6 @@ gtk_color_dialog_button_init (GtkColorDialogButton *self)
   gtk_widget_add_css_class (self->button, "color");
 
   gtk_color_dialog_button_set_rgba (self, &(GdkRGBA) { 0.75, 0.25, 0.25, 1.0 });
-
-  gtk_accessible_update_property (GTK_ACCESSIBLE (self->button),
-                                  GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
-                                  -1);
 }
 
 static void
@@ -263,7 +257,7 @@ gtk_color_dialog_button_class_init (GtkColorDialogButtonClass *class)
   widget_class->unroot = gtk_color_dialog_button_unroot;
 
   /**
-   * GtkColorDialogButton:dialog:
+   * GtkColorDialogButton:dialog: (attributes org.gtk.Property.get=gtk_color_dialog_button_get_dialog org.gtk.Property.set=gtk_color_dialog_button_set_dialog)
    *
    * The `GtkColorDialog` that contains parameters for
    * the color chooser dialog.
@@ -273,10 +267,10 @@ gtk_color_dialog_button_class_init (GtkColorDialogButtonClass *class)
   properties[PROP_DIALOG] =
       g_param_spec_object ("dialog", NULL, NULL,
                            GTK_TYPE_COLOR_DIALOG,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkColorDialogButton:rgba:
+   * GtkColorDialogButton:rgba: (attributes org.gtk.Property.get=gtk_color_dialog_button_get_rgba org.gtk.Property.set=gtk_color_dialog_button_set_rgba)
    *
    * The selected color.
    *
@@ -292,7 +286,7 @@ gtk_color_dialog_button_class_init (GtkColorDialogButtonClass *class)
   properties[PROP_RGBA] =
       g_param_spec_boxed ("rgba", NULL, NULL,
                           GDK_TYPE_RGBA,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
@@ -566,4 +560,4 @@ gtk_color_dialog_button_set_rgba (GtkColorDialogButton *self,
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

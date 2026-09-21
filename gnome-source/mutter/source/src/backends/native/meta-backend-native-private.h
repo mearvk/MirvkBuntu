@@ -23,18 +23,12 @@
 #pragma once
 
 #include "backends/native/meta-backend-native.h"
-#include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-barrier-native.h"
-
-struct _MetaBackendNativeClass
-{
-  MetaBackendClass parent_class;
-};
 
 META_EXPORT_TEST
 MetaDevicePool * meta_backend_native_get_device_pool (MetaBackendNative *native);
 
 
-MetaRenderDevice * meta_backend_native_get_render_device (MetaBackendNative  *backend_native,
-                                                          const char         *device_path,
-                                                          GError            **error);
+MetaRenderDevice * meta_backend_native_take_render_device (MetaBackendNative  *backend_native,
+                                                           const char         *device_path,
+                                                           GError            **error);

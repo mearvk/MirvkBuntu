@@ -18,7 +18,6 @@
 #include "config.h"
 #include <string.h>
 #include "gtkimcontext.h"
-#include "gtkimcontextprivate.h"
 #include "gtkprivate.h"
 #include "gtktypebuiltins.h"
 #include "gtkmarshalers.h"
@@ -28,7 +27,7 @@
 /**
  * GtkIMContext:
  *
- * The interface for GTK input methods.
+ * `GtkIMContext` defines the interface for GTK input methods.
  *
  * `GtkIMContext` is used by GTK text input widgets like `GtkText`
  * to map from key events to Unicode character strings.
@@ -66,7 +65,6 @@ enum {
   COMMIT,
   RETRIEVE_SURROUNDING,
   DELETE_SURROUNDING,
-  INVALID_COMPOSITION,
   LAST_SIGNAL
 };
 
@@ -83,8 +81,6 @@ typedef struct _GtkIMContextPrivate GtkIMContextPrivate;
 struct _GtkIMContextPrivate {
   GtkInputPurpose purpose;
   GtkInputHints hints;
-  GtkCssNode *parent_node;
-  GtkWidget *client_widget;
 };
 
 static void     gtk_im_context_real_get_preedit_string (GtkIMContext   *context,
@@ -115,8 +111,6 @@ static void     gtk_im_context_set_property            (GObject        *obj,
                                                         const GValue   *value,
                                                         GParamSpec     *pspec);
 
-static void gtk_im_context_finalize (GObject *object);
-
 
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GtkIMContext, gtk_im_context, G_TYPE_OBJECT)
 
@@ -132,8 +126,8 @@ G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GtkIMContext, gtk_im_context, G_TYPE_OBJECT
  * @delete_surrounding: Default handler of the
  *   [signal@Gtk.IMContext::delete-surrounding] signal.
  * @set_client_widget: Called via [method@Gtk.IMContext.set_client_widget] when
- *   the text input widget attached to the IM context changes. Override this
- *   to keep track of the current text input widget, for instance for the purpose of
+ *   the input window where the entered text will appear changes. Override this
+ *   to keep track of the current input window, for instance for the purpose of
  *   positioning a status display of your input method.
  * @get_preedit_string: Called via [method@Gtk.IMContext.get_preedit_string]
  *   to retrieve the text currently being preedited for display at the cursor
@@ -190,8 +184,6 @@ G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GtkIMContext, gtk_im_context, G_TYPE_OBJECT
  *   behavior. The base implementation emits
  *   [signal@Gtk.IMContext::retrieve-surrounding] and records the context
  *   received by the subsequent invocation of [vfunc@Gtk.IMContext.get_surrounding].
- * @invalid_composition: Default handler of the
- *   [signal@Gtk.IMContext::invalid-composition] signal. Since: 4.22
  */
 static void
 gtk_im_context_class_init (GtkIMContextClass *klass)
@@ -200,7 +192,6 @@ gtk_im_context_class_init (GtkIMContextClass *klass)
 
   object_class->get_property = gtk_im_context_get_property;
   object_class->set_property = gtk_im_context_set_property;
-  object_class->finalize = gtk_im_context_finalize;
 
   klass->get_preedit_string = gtk_im_context_real_get_preedit_string;
   klass->filter_keypress = gtk_im_context_real_filter_keypress;
@@ -334,27 +325,6 @@ gtk_im_context_class_init (GtkIMContextClass *klass)
                               _gtk_marshal_BOOLEAN__INT_INTv);
 
   /**
-   * GtkIMContext::invalid-composition:
-   * @context: the object on which the signal is emitted
-   * @str: the completed character(s) entered by the user
-   *
-   * Emitted when the filtered keys do not compose to a single valid character.
-   *
-   * Returns: true if the IM context avoid beeping on invalid composition
-   *
-   * Since: 4.22
-   */
-  im_context_signals[INVALID_COMPOSITION] =
-    g_signal_new (I_("invalid-composition"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (GtkIMContextClass, invalid_composition),
-                  g_signal_accumulator_first_wins,
-                  NULL, NULL,
-                  G_TYPE_BOOLEAN, 1,
-                  G_TYPE_STRING);
-
-  /**
    * GtkIMContext:input-purpose:
    *
    * The purpose of the text field that the `GtkIMContext is connected to.
@@ -366,7 +336,7 @@ gtk_im_context_class_init (GtkIMContextClass *klass)
     g_param_spec_enum ("input-purpose", NULL, NULL,
                          GTK_TYPE_INPUT_PURPOSE,
                          GTK_INPUT_PURPOSE_FREE_FORM,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkIMContext:input-hints:
@@ -378,7 +348,7 @@ gtk_im_context_class_init (GtkIMContextClass *klass)
     g_param_spec_flags ("input-hints", NULL, NULL,
                          GTK_TYPE_INPUT_HINTS,
                          GTK_INPUT_HINT_NONE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROPERTY, properties);
 }
@@ -480,23 +450,6 @@ gtk_im_context_real_get_surrounding_with_selection (GtkIMContext *context,
   return result;
 }
 
-void
-gtk_im_context_set_parent_node (GtkIMContext *im_context,
-                                GtkCssNode   *css_node)
-{
-  GtkIMContextPrivate *priv = gtk_im_context_get_instance_private (im_context);
-
-  g_set_object (&priv->parent_node, css_node);
-}
-
-GtkCssNode *
-gtk_im_context_get_parent_node (GtkIMContext *im_context)
-{
-  GtkIMContextPrivate *priv = gtk_im_context_get_instance_private (im_context);
-
-  return priv->parent_node;
-}
-
 /**
  * gtk_im_context_set_client_widget:
  * @context: a `GtkIMContext`
@@ -513,47 +466,13 @@ void
 gtk_im_context_set_client_widget (GtkIMContext *context,
                                   GtkWidget    *widget)
 {
-  GtkIMContextPrivate *priv =
-    gtk_im_context_get_instance_private (context);
   GtkIMContextClass *klass;
-
+  
   g_return_if_fail (GTK_IS_IM_CONTEXT (context));
-
-  if (priv->client_widget == widget)
-    return;
-
-  g_clear_weak_pointer (&priv->client_widget);
-
-  priv->client_widget = widget;
-
-  if (priv->client_widget)
-    {
-      g_object_add_weak_pointer (G_OBJECT (priv->client_widget),
-                                 (gpointer*) &priv->client_widget);
-    }
 
   klass = GTK_IM_CONTEXT_GET_CLASS (context);
   if (klass->set_client_widget)
     klass->set_client_widget (context, widget);
-}
-
-/**
- * gtk_im_context_get_client_widget:
- * @context: a `GtkIMContext`
- *
- * Retrieves the client widget for the input context.
- *
- * Returns: (nullable) (transfer none): The client widget
- *
- * Since: 4.24
- **/
-GtkWidget *
-gtk_im_context_get_client_widget (GtkIMContext *context)
-{
-  GtkIMContextPrivate *priv =
-    gtk_im_context_get_instance_private (context);
-
-  return priv->client_widget;
 }
 
 /**
@@ -1085,19 +1004,6 @@ gtk_im_context_set_property (GObject      *obj,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (obj, property_id, pspec);
       break;
     }
-}
-
-static void
-gtk_im_context_finalize (GObject *object)
-{
-  GtkIMContextPrivate *priv =
-    gtk_im_context_get_instance_private (GTK_IM_CONTEXT (object));
-
-  gtk_im_context_set_client_widget (GTK_IM_CONTEXT (object), NULL);
-  g_clear_object (&priv->parent_node);
-  g_clear_object (&priv->client_widget);
-
-  G_OBJECT_CLASS (gtk_im_context_parent_class)->finalize (object);
 }
 
 /**

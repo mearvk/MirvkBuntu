@@ -37,7 +37,7 @@ G_BEGIN_DECLS
 typedef struct _GtkPlacesView GtkPlacesView;
 typedef struct _GtkPlacesViewClass GtkPlacesViewClass;
 
-GType              gtk_places_view_get_type                      (void);
+GType              gtk_places_view_get_type                      (void) G_GNUC_CONST;
 
 GtkPlacesOpenFlags gtk_places_view_get_open_flags                (GtkPlacesView      *view);
 void               gtk_places_view_set_open_flags                (GtkPlacesView      *view,

@@ -121,8 +121,7 @@ g_child_watch_closure_callback (GPid     pid,
 
 #ifdef G_OS_UNIX
   g_value_init (&params[0], G_TYPE_ULONG);
-  G_STATIC_ASSERT (sizeof (pid) <= sizeof (unsigned long));
-  g_value_set_ulong (&params[0], (gulong) pid);
+  g_value_set_ulong (&params[0], pid);
 #endif
 #ifdef G_OS_WIN32
   g_value_init (&params[0], G_TYPE_POINTER);

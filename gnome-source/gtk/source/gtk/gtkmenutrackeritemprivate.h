@@ -37,9 +37,9 @@ typedef enum  {
   GTK_MENU_TRACKER_ITEM_ROLE_RADIO,
 } GtkMenuTrackerItemRole;
 
-GType                   gtk_menu_tracker_item_get_type                  (void);
+GType                   gtk_menu_tracker_item_get_type                  (void) G_GNUC_CONST;
 
-GType                   gtk_menu_tracker_item_role_get_type             (void);
+GType                   gtk_menu_tracker_item_role_get_type             (void) G_GNUC_CONST;
 
 GtkMenuTrackerItem *   _gtk_menu_tracker_item_new                       (GtkActionObservable *observable,
                                                                          GMenuModel          *model,
@@ -47,10 +47,6 @@ GtkMenuTrackerItem *   _gtk_menu_tracker_item_new                       (GtkActi
                                                                          gboolean             mac_os_mode,
                                                                          const char          *action_namespace,
                                                                          gboolean             is_separator);
-
-const char *           gtk_menu_tracker_item_get_action_name           (GtkMenuTrackerItem *self);
-
-GVariant *             gtk_menu_tracker_item_get_action_target         (GtkMenuTrackerItem *self);
 
 const char *           gtk_menu_tracker_item_get_special               (GtkMenuTrackerItem *self);
 

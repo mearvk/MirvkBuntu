@@ -35,12 +35,10 @@
 /**
  * GtkStackSwitcher:
  *
- * Shows a row of buttons to switch between `GtkStack` pages.
+ * The `GtkStackSwitcher` shows a row of buttons to switch between `GtkStack`
+ * pages.
  *
- * <picture>
- *   <source srcset="stackswitcher-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkStackSwitcher" src="stackswitcher.png">
- * </picture>
+ * ![An example GtkStackSwitcher](stackswitcher.png)
  *
  * It acts as a controller for the associated `GtkStack`.
  *
@@ -62,8 +60,8 @@
  *
  * # Accessibility
  *
- * `GtkStackSwitcher` uses the [enum@Gtk.AccessibleRole.tab_list] role
- * and uses the [enum@Gtk.AccessibleRole.tab] role for its buttons.
+ * `GtkStackSwitcher` uses the %GTK_ACCESSIBLE_ROLE_TAB_LIST role
+ * and uses the %GTK_ACCESSIBLE_ROLE_TAB for its buttons.
  *
  * # Orientable
  *
@@ -93,12 +91,8 @@ struct _GtkStackSwitcherClass
 enum {
   PROP_0,
   PROP_STACK,
-  /* GtkOrientable */
-  PROP_ORIENTATION,
-  N_PROPS
+  PROP_ORIENTATION
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE_WITH_CODE (GtkStackSwitcher, gtk_stack_switcher, GTK_TYPE_WIDGET,
                          G_IMPLEMENT_INTERFACE (GTK_TYPE_ORIENTABLE, NULL))
@@ -217,7 +211,7 @@ on_page_updated (GtkStackPage     *page,
   update_button (self, page, button);
 }
 
-static void
+static gboolean
 gtk_stack_switcher_switch_timeout (gpointer data)
 {
   GtkWidget *button = data;
@@ -226,6 +220,8 @@ gtk_stack_switcher_switch_timeout (gpointer data)
 
   if (button)
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button), TRUE);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -245,7 +241,9 @@ gtk_stack_switcher_drag_enter (GtkDropControllerMotion *motion,
 
   if (!gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (button)))
     {
-      guint switch_timer = g_timeout_add_once (TIMEOUT_EXPAND, gtk_stack_switcher_switch_timeout, button);
+      guint switch_timer = g_timeout_add (TIMEOUT_EXPAND,
+                                          gtk_stack_switcher_switch_timeout,
+                                          button);
       gdk_source_set_static_name_by_id (switch_timer, "[gtk] gtk_stack_switcher_switch_timeout");
       g_object_set_data_full (G_OBJECT (button), "-gtk-switch-timer", GUINT_TO_POINTER (switch_timer), clear_timer);
     }
@@ -414,7 +412,7 @@ unset_stack (GtkStackSwitcher *switcher)
 }
 
 /**
- * gtk_stack_switcher_set_stack:
+ * gtk_stack_switcher_set_stack: (attributes org.gtk.Method.set_property=stack)
  * @switcher: a `GtkStackSwitcher`
  * @stack: (nullable): a `GtkStack`
  *
@@ -435,11 +433,11 @@ gtk_stack_switcher_set_stack (GtkStackSwitcher *switcher,
 
   gtk_widget_queue_resize (GTK_WIDGET (switcher));
 
-  g_object_notify_by_pspec (G_OBJECT (switcher), props[PROP_STACK]);
+  g_object_notify (G_OBJECT (switcher), "stack");
 }
 
 /**
- * gtk_stack_switcher_get_stack:
+ * gtk_stack_switcher_get_stack: (attributes org.gtk.Method.get_property=stack)
  * @switcher: a `GtkStackSwitcher`
  *
  * Retrieves the stack.
@@ -544,18 +542,18 @@ gtk_stack_switcher_class_init (GtkStackSwitcherClass *class)
   object_class->finalize = gtk_stack_switcher_finalize;
 
   /**
-   * GtkStackSwitcher:stack:
+   * GtkStackSwitcher:stack: (attributes org.gtk.Property.get=gtk_stack_switcher_get_stack org.gtk.Property.set=gtk_stack_switcher_set_stack)
    *
    * The stack.
    */
-  props[PROP_STACK] = g_param_spec_object ("stack", NULL, NULL,
-                                           GTK_TYPE_STACK,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT);
+  g_object_class_install_property (object_class,
+                                   PROP_STACK,
+                                   g_param_spec_object ("stack", NULL, NULL,
+                                                        GTK_TYPE_STACK,
+                                                        GTK_PARAM_READWRITE |
+                                                        G_PARAM_CONSTRUCT));
 
-  props[PROP_ORIENTATION] = g_param_spec_override ("orientation",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ORIENTABLE), "orientation"));
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_override_property (object_class, PROP_ORIENTATION, "orientation");
 
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BOX_LAYOUT);
   gtk_widget_class_set_css_name (widget_class, I_("stackswitcher"));

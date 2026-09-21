@@ -36,7 +36,8 @@ typedef gboolean (* ClutterEventHandler) (const ClutterEvent *event,
 typedef enum
 {
   CLUTTER_DEVICE_UPDATE_NONE = 0,
-  CLUTTER_DEVICE_UPDATE_IGNORE_CACHE = 1 << 0,
+  CLUTTER_DEVICE_UPDATE_EMIT_CROSSING = 1 << 0,
+  CLUTTER_DEVICE_UPDATE_IGNORE_CACHE = 1 << 1,
 } ClutterDeviceUpdateFlags;
 
 /* stage */
@@ -58,13 +59,7 @@ void                clutter_stage_emit_before_paint      (ClutterStage          
 void                clutter_stage_emit_after_paint       (ClutterStage          *stage,
                                                           ClutterStageView      *view,
                                                           ClutterFrame          *frame);
-void                clutter_stage_emit_skipped_paint     (ClutterStage          *stage,
-                                                          ClutterStageView      *view,
-                                                          ClutterFrame          *frame);
 void                clutter_stage_after_update           (ClutterStage          *stage,
-                                                          ClutterStageView      *view,
-                                                          ClutterFrame          *frame);
-void                clutter_stage_frame_discarded        (ClutterStage          *stage,
                                                           ClutterStageView      *view,
                                                           ClutterFrame          *frame);
 
@@ -109,6 +104,10 @@ GList * clutter_stage_get_views_for_rect (ClutterStage          *stage,
 
 void clutter_stage_set_actor_needs_immediate_relayout (ClutterStage *stage);
 
+void clutter_stage_remove_device_entry (ClutterStage         *self,
+                                        ClutterInputDevice   *device,
+                                        ClutterEventSequence *sequence);
+
 void clutter_stage_unlink_grab (ClutterStage *self,
                                 ClutterGrab  *grab);
 
@@ -121,15 +120,17 @@ void clutter_stage_maybe_invalidate_focus (ClutterStage *self,
 void clutter_stage_emit_event (ClutterStage       *self,
                                const ClutterEvent *event);
 
-void clutter_stage_maybe_lost_implicit_grab (ClutterStage  *self,
-                                             ClutterSprite *sprite);
+void clutter_stage_maybe_lost_implicit_grab (ClutterStage         *self,
+                                             ClutterInputDevice   *device,
+                                             ClutterEventSequence *sequence);
 
 void clutter_stage_implicit_grab_actor_unmapped (ClutterStage *self,
                                                  ClutterActor *actor);
 
 CLUTTER_EXPORT_TEST
-void clutter_stage_notify_action_implicit_grab (ClutterStage  *self,
-                                                ClutterSprite *sprite);
+void clutter_stage_notify_action_implicit_grab (ClutterStage         *self,
+                                                ClutterInputDevice   *device,
+                                                ClutterEventSequence *sequence);
 
 void clutter_stage_add_to_redraw_clip (ClutterStage       *self,
                                        ClutterPaintVolume *clip);
@@ -144,17 +145,17 @@ void clutter_stage_invalidate_devices (ClutterStage *stage);
 
 GPtrArray * clutter_stage_get_active_gestures_array (ClutterStage *self);
 
-void clutter_stage_update_device_for_event (ClutterStage *stage,
-                                            ClutterEvent *event);
+ClutterActor * clutter_stage_update_device_for_event (ClutterStage *stage,
+                                                      ClutterEvent *event);
 
 void clutter_stage_update_devices_in_view (ClutterStage     *stage,
                                            ClutterStageView *view);
 
 CLUTTER_EXPORT
-void clutter_stage_set_grab_chrome (ClutterStage *stage,
-                                    ClutterActor *actor);
+ClutterGrab * clutter_stage_grab_inactive (ClutterStage *stage,
+                                           ClutterActor *actor);
 
 CLUTTER_EXPORT
-ClutterActor * clutter_stage_get_grab_chrome (ClutterStage *stage);
+void clutter_grab_activate (ClutterGrab *grab);
 
 G_END_DECLS

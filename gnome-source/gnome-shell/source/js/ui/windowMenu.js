@@ -1,7 +1,10 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*
+
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 
+import * as BoxPointer from './boxpointer.js';
 import * as Main from './main.js';
 import * as PopupMenu from './popupMenu.js';
 import * as Screenshot from './screenshot.js';
@@ -19,12 +22,12 @@ export class WindowMenu extends PopupMenu.PopupMenu {
     }
 
     _buildMenu(window) {
-        const type = window.get_window_type();
+        let type = window.get_window_type();
 
         let item;
 
         // Translators: entry in the window right click menu.
-        item = this.addAction(C_('window-menu', 'Take Screenshot'), async () => {
+        item = this.addAction(_('Take Screenshot'), async () => {
             try {
                 const actor = window.get_compositor_private();
                 const content = actor.paint_to_content(null);
@@ -42,26 +45,32 @@ export class WindowMenu extends PopupMenu.PopupMenu {
         if (!window.can_minimize())
             item.setSensitive(false);
 
-        if (window.is_maximized()) {
+        if (window.get_maximized()) {
             item = this.addAction(_('Restore'), () => {
-                window.unmaximize();
+                window.unmaximize(Meta.MaximizeFlags.BOTH);
             });
         } else {
             item = this.addAction(_('Maximize'), () => {
-                window.maximize();
+                window.maximize(Meta.MaximizeFlags.BOTH);
             });
         }
         if (!window.can_maximize())
             item.setSensitive(false);
 
         item = this.addAction(_('Move'), event => {
-            const backend = global.stage.get_context().get_backend();
-            const sprite = backend.get_sprite(global.stage, event) ||
-                backend.get_pointer_sprite(global.stage);
+            const device = event.get_device();
+            const seat = device.get_seat();
+            const deviceType = device.get_device_type();
+            const pointer =
+                deviceType === Clutter.InputDeviceType.POINTER_DEVICE ||
+                deviceType === Clutter.InputDeviceType.TABLET_DEVICE ||
+                deviceType === Clutter.InputDeviceType.PEN_DEVICE ||
+                deviceType === Clutter.InputDeviceType.ERASER_DEVICE
+                    ? device : seat.get_pointer();
 
             window.begin_grab_op(
                 Meta.GrabOp.KEYBOARD_MOVING,
-                sprite,
+                pointer, null,
                 event.get_time(),
                 null);
         });
@@ -69,18 +78,30 @@ export class WindowMenu extends PopupMenu.PopupMenu {
             item.setSensitive(false);
 
         item = this.addAction(_('Resize'), event => {
-            const backend = global.stage.get_context().get_backend();
-            const sprite = backend.get_sprite(global.stage, event) ||
-                backend.get_pointer_sprite(global.stage);
+            const device = event.get_device();
+            const seat = device.get_seat();
+            const deviceType = device.get_device_type();
+            const pointer =
+                deviceType === Clutter.InputDeviceType.POINTER_DEVICE ||
+                deviceType === Clutter.InputDeviceType.TABLET_DEVICE ||
+                deviceType === Clutter.InputDeviceType.PEN_DEVICE ||
+                deviceType === Clutter.InputDeviceType.ERASER_DEVICE
+                    ? device : seat.get_pointer();
 
             window.begin_grab_op(
                 Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN,
-                sprite,
+                pointer, null,
                 event.get_time(),
                 null);
         });
         if (!window.allows_resize())
             item.setSensitive(false);
+
+        if (!window.titlebar_is_onscreen() && type !== Meta.WindowType.DOCK && type !== Meta.WindowType.DESKTOP) {
+            this.addAction(_('Move Titlebar Onscreen'), () => {
+                window.shove_titlebar_onscreen();
+            });
+        }
 
         item = this.addAction(_('Always on Top'), () => {
             if (window.is_above())
@@ -90,7 +111,7 @@ export class WindowMenu extends PopupMenu.PopupMenu {
         });
         if (window.is_above())
             item.setOrnament(PopupMenu.Ornament.CHECK);
-        if (window.is_maximized() ||
+        if (window.get_maximized() === Meta.MaximizeFlags.BOTH ||
             type === Meta.WindowType.DOCK ||
             type === Meta.WindowType.DESKTOP ||
             type === Meta.WindowType.SPLASHSCREEN)
@@ -99,7 +120,7 @@ export class WindowMenu extends PopupMenu.PopupMenu {
         if (Main.sessionMode.hasWorkspaces &&
             (!Meta.prefs_get_workspaces_only_on_primary() ||
              window.is_on_primary_monitor())) {
-            const isSticky = window.is_on_all_workspaces();
+            let isSticky = window.is_on_all_workspaces();
 
             item = this.addAction(_('Always on Visible Workspace'), () => {
                 if (isSticky)
@@ -113,42 +134,42 @@ export class WindowMenu extends PopupMenu.PopupMenu {
                 item.setSensitive(false);
 
             if (!isSticky) {
-                const workspace = window.get_workspace();
+                let workspace = window.get_workspace();
                 if (workspace !== workspace.get_neighbor(Meta.MotionDirection.LEFT)) {
                     this.addAction(_('Move to Workspace Left'), () => {
-                        const dir = Meta.MotionDirection.LEFT;
+                        let dir = Meta.MotionDirection.LEFT;
                         window.change_workspace(workspace.get_neighbor(dir));
                     });
                 }
                 if (workspace !== workspace.get_neighbor(Meta.MotionDirection.RIGHT)) {
                     this.addAction(_('Move to Workspace Right'), () => {
-                        const dir = Meta.MotionDirection.RIGHT;
+                        let dir = Meta.MotionDirection.RIGHT;
                         window.change_workspace(workspace.get_neighbor(dir));
                     });
                 }
                 if (workspace !== workspace.get_neighbor(Meta.MotionDirection.UP)) {
                     this.addAction(_('Move to Workspace Up'), () => {
-                        const dir = Meta.MotionDirection.UP;
+                        let dir = Meta.MotionDirection.UP;
                         window.change_workspace(workspace.get_neighbor(dir));
                     });
                 }
                 if (workspace !== workspace.get_neighbor(Meta.MotionDirection.DOWN)) {
                     this.addAction(_('Move to Workspace Down'), () => {
-                        const dir = Meta.MotionDirection.DOWN;
+                        let dir = Meta.MotionDirection.DOWN;
                         window.change_workspace(workspace.get_neighbor(dir));
                     });
                 }
             }
         }
 
-        const display = global.display;
-        const nMonitors = display.get_n_monitors();
-        const monitorIndex = window.get_monitor();
+        let display = global.display;
+        let nMonitors = display.get_n_monitors();
+        let monitorIndex = window.get_monitor();
         if (nMonitors > 1 && monitorIndex >= 0) {
             this.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
             let dir = Meta.DisplayDirection.UP;
-            const upMonitorIndex =
+            let upMonitorIndex =
                 display.get_monitor_neighbor_index(monitorIndex, dir);
             if (upMonitorIndex !== -1) {
                 this.addAction(_('Move to Monitor Up'), () => {
@@ -157,7 +178,7 @@ export class WindowMenu extends PopupMenu.PopupMenu {
             }
 
             dir = Meta.DisplayDirection.DOWN;
-            const downMonitorIndex =
+            let downMonitorIndex =
                 display.get_monitor_neighbor_index(monitorIndex, dir);
             if (downMonitorIndex !== -1) {
                 this.addAction(_('Move to Monitor Down'), () => {
@@ -166,7 +187,7 @@ export class WindowMenu extends PopupMenu.PopupMenu {
             }
 
             dir = Meta.DisplayDirection.LEFT;
-            const leftMonitorIndex =
+            let leftMonitorIndex =
                 display.get_monitor_neighbor_index(monitorIndex, dir);
             if (leftMonitorIndex !== -1) {
                 this.addAction(_('Move to Monitor Left'), () => {
@@ -175,7 +196,7 @@ export class WindowMenu extends PopupMenu.PopupMenu {
             }
 
             dir = Meta.DisplayDirection.RIGHT;
-            const rightMonitorIndex =
+            let rightMonitorIndex =
                 display.get_monitor_neighbor_index(monitorIndex, dir);
             if (rightMonitorIndex !== -1) {
                 this.addAction(_('Move to Monitor Right'), () => {
@@ -205,13 +226,9 @@ export class WindowMenuManager {
         this._manager = new PopupMenu.PopupMenuManager(Main.layoutManager.dummyCursor);
 
         this._sourceActor = new St.Widget({reactive: true, visible: false});
-
-        this._clickGesture = new Clutter.ClickGesture();
-        this._clickGesture.set_recognize_on_press(true);
-        this._clickGesture.connect('recognize', () => {
+        this._sourceActor.connect('button-press-event', () => {
             this._manager.activeMenu.toggle();
         });
-        this._sourceActor.add_action(this._clickGesture);
         Main.uiGroup.add_child(this._sourceActor);
     }
 
@@ -221,22 +238,22 @@ export class WindowMenuManager {
 
         if (type !== Meta.WindowMenuType.WM)
             throw new Error('Unsupported window menu type');
-        const menu = new WindowMenu(window, this._sourceActor);
+        let menu = new WindowMenu(window, this._sourceActor);
 
         this._manager.addMenu(menu);
 
         menu.connect('activate', () => {
             window.check_alive(global.get_current_time());
         });
-        const destroyId = window.connect('unmanaged', () => {
-            menu.close({animate: false});
+        let destroyId = window.connect('unmanaged', () => {
+            menu.close();
         });
 
         this._sourceActor.set_size(Math.max(1, rect.width), Math.max(1, rect.height));
         this._sourceActor.set_position(rect.x, rect.y);
         this._sourceActor.show();
 
-        menu.open({fadeOnly: true});
+        menu.open(BoxPointer.PopupAnimation.FADE);
         menu.actor.navigate_focus(null, St.DirectionType.TAB_FORWARD, false);
         menu.connect('open-state-changed', (menu_, isOpen) => {
             if (isOpen)

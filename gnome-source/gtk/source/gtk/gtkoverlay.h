@@ -35,7 +35,7 @@ G_BEGIN_DECLS
 typedef struct _GtkOverlay         GtkOverlay;
 
 GDK_AVAILABLE_IN_ALL
-GType      gtk_overlay_get_type    (void);
+GType      gtk_overlay_get_type    (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget *gtk_overlay_new         (void);
 GDK_AVAILABLE_IN_ALL

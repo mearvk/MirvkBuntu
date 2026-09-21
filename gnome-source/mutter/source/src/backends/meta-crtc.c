@@ -19,10 +19,7 @@
 
 #include "backends/meta-crtc.h"
 
-#include <math.h>
-
 #include "backends/meta-gpu.h"
-#include "meta/meta-backend.h"
 
 enum
 {
@@ -45,7 +42,7 @@ typedef struct _MetaCrtcPrivate
   MetaBackend *backend;
   MetaGpu *gpu;
 
-  MtkMonitorTransform all_transforms;
+  MetaMonitorTransform all_transforms;
 
   GList *outputs;
   MetaCrtcConfig *config;
@@ -105,7 +102,7 @@ meta_crtc_unassign_output (MetaCrtc   *crtc,
   priv->outputs = g_list_remove (priv->outputs, output);
 }
 
-MtkMonitorTransform
+MetaMonitorTransform
 meta_crtc_get_all_transforms (MetaCrtc *crtc)
 {
   MetaCrtcPrivate *priv = meta_crtc_get_instance_private (crtc);
@@ -133,10 +130,6 @@ void
 meta_crtc_unset_config (MetaCrtc *crtc)
 {
   MetaCrtcPrivate *priv = meta_crtc_get_instance_private (crtc);
-  MetaCrtcClass *klass = META_CRTC_GET_CLASS (crtc);
-
-  if (klass->unset_config)
-    klass->unset_config (crtc);
 
   g_clear_pointer (&priv->config, g_free);
 }
@@ -180,27 +173,6 @@ meta_crtc_set_gamma_lut (MetaCrtc           *crtc,
                          const MetaGammaLut *lut)
 {
   return META_CRTC_GET_CLASS (crtc)->set_gamma_lut (crtc, lut);
-}
-
-gboolean
-meta_crtc_is_ctm_supported (MetaCrtc *crtc)
-{
-  MetaCrtcClass *klass = META_CRTC_GET_CLASS (crtc);
-
-  if (klass->is_ctm_supported)
-    return klass->is_ctm_supported (crtc);
-
-  return FALSE;
-}
-
-void
-meta_crtc_set_ctm (MetaCrtc      *crtc,
-                   const MetaCtm *ctm)
-{
-  MetaCrtcClass *klass = META_CRTC_GET_CLASS (crtc);
-
-  if (klass->set_ctm)
-    klass->set_ctm (crtc, ctm);
 }
 
 void
@@ -260,9 +232,9 @@ meta_gamma_lut_new_identity (int size)
     {
       double value = (i / (double) (size - 1));
 
-      lut->red[i] = (uint16_t) (value * UINT16_MAX);
-      lut->green[i] = (uint16_t) (value * UINT16_MAX);
-      lut->blue[i] = (uint16_t) (value * UINT16_MAX);
+      lut->red[i] = value * UINT16_MAX;
+      lut->green[i] = value * UINT16_MAX;
+      lut->blue[i] = value * UINT16_MAX;
     }
 
   return lut;
@@ -278,7 +250,7 @@ meta_gamma_lut_is_identity (const MetaGammaLut *lut)
 
   for (i = 0; i < lut->size; i++)
     {
-      uint16_t value = (uint16_t) ((i / (double) (lut->size - 1)) * UINT16_MAX);
+      uint16_t value = (i / (double) (lut->size - 1)) * UINT16_MAX;
 
       if (ABS (lut->red[i] - value) > 1 ||
           ABS (lut->green[i] - value) > 1 ||
@@ -370,77 +342,6 @@ meta_gamma_lut_equal (const MetaGammaLut *gamma,
                  gamma->size * sizeof (uint16_t)) == 0;
 }
 
-void
-meta_ctm_free (MetaCtm *ctm)
-{
-  g_free (ctm);
-}
-
-MetaCtm *
-meta_ctm_new (void)
-{
-  MetaCtm *ctm = g_new0 (MetaCtm, 1);
-
-  /* Initialize as identity matrix in S31.32 fixed-point format */
-  ctm->matrix[0] = (int64_t)1 << 32;
-  ctm->matrix[4] = (int64_t)1 << 32;
-  ctm->matrix[8] = (int64_t)1 << 32;
-
-  return ctm;
-}
-
-static uint64_t
-scale_to_s31_32 (float scale)
-{
-  if (!isfinite (scale) || scale < 0.0f)
-    scale = 0.0f;
-  else if (scale > 1.0f)
-    scale = 1.0f;
-
-  return (uint64_t) (scale * (double) ((uint64_t) 1 << 32));
-}
-
-MetaCtm *
-meta_ctm_new_from_rgb_scales (float red,
-                              float green,
-                              float blue)
-{
-  MetaCtm *ctm = g_new0 (MetaCtm, 1);
-
-  /* Diagonal 3x3 matrix in S31.32 fixed-point, row-major */
-  ctm->matrix[0] = scale_to_s31_32 (red);
-  ctm->matrix[4] = scale_to_s31_32 (green);
-  ctm->matrix[8] = scale_to_s31_32 (blue);
-
-  return ctm;
-}
-
-MetaCtm *
-meta_ctm_copy (const MetaCtm *src_ctm)
-{
-  MetaCtm *dst_ctm;
-
-  g_return_val_if_fail (src_ctm != NULL, NULL);
-
-  dst_ctm = g_memdup2 (src_ctm, sizeof (*src_ctm));
-
-  return dst_ctm;
-}
-
-gboolean
-meta_ctm_equal (const MetaCtm *ctm,
-                const MetaCtm *other_ctm)
-{
-  if (ctm == other_ctm)
-    return TRUE;
-
-  if (ctm == NULL || other_ctm == NULL)
-    return FALSE;
-
-  return memcmp (ctm->matrix, other_ctm->matrix,
-                 9 * sizeof (uint64_t)) == 0;
-}
-
 static void
 meta_crtc_set_property (GObject      *object,
                         guint         prop_id,
@@ -514,7 +415,7 @@ meta_crtc_init (MetaCrtc *crtc)
 {
   MetaCrtcPrivate *priv = meta_crtc_get_instance_private (crtc);
 
-  priv->all_transforms = MTK_MONITOR_ALL_TRANSFORMS;
+  priv->all_transforms = META_MONITOR_ALL_TRANSFORMS;
 }
 
 static void
@@ -547,8 +448,8 @@ meta_crtc_class_init (MetaCrtcClass *klass)
   obj_props[PROP_ALL_TRANSFORMS] =
     g_param_spec_uint ("all-transforms", NULL, NULL,
                        0,
-                       MTK_MONITOR_ALL_TRANSFORMS,
-                       MTK_MONITOR_ALL_TRANSFORMS,
+                       META_MONITOR_ALL_TRANSFORMS,
+                       META_MONITOR_ALL_TRANSFORMS,
                        G_PARAM_READWRITE |
                        G_PARAM_CONSTRUCT_ONLY |
                        G_PARAM_STATIC_STRINGS);
@@ -556,9 +457,9 @@ meta_crtc_class_init (MetaCrtcClass *klass)
 }
 
 MetaCrtcConfig *
-meta_crtc_config_new (graphene_rect_t     *layout,
-                      MetaCrtcMode        *mode,
-                      MtkMonitorTransform  transform)
+meta_crtc_config_new (graphene_rect_t      *layout,
+                      MetaCrtcMode         *mode,
+                      MetaMonitorTransform  transform)
 {
   MetaCrtcConfig *config;
 
@@ -568,15 +469,4 @@ meta_crtc_config_new (graphene_rect_t     *layout,
   config->transform = transform;
 
   return config;
-}
-
-gboolean
-meta_crtc_is_leased (MetaCrtc *crtc)
-{
-  MetaCrtcClass *klass = META_CRTC_GET_CLASS (crtc);
-
-  if (klass->is_leased)
-    return klass->is_leased (crtc);
-  else
-    return FALSE;
 }

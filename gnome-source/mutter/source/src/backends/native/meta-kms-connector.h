@@ -49,13 +49,13 @@ typedef struct _MetaKmsConnectorState
   gboolean non_desktop;
   MetaPrivacyScreenState privacy_screen_state;
 
-  MetaSubpixelOrder subpixel_order;
+  CoglSubpixelOrder subpixel_order;
 
   int suggested_x;
   int suggested_y;
   gboolean hotplug_mode_update;
 
-  MtkMonitorTransform panel_orientation_transform;
+  MetaMonitorTransform panel_orientation_transform;
 
   struct {
     uint64_t value;
@@ -101,9 +101,3 @@ MetaKmsMode * meta_kms_connector_get_preferred_mode (MetaKmsConnector *connector
 
 META_EXPORT_TEST
 const MetaKmsConnectorState * meta_kms_connector_get_current_state (MetaKmsConnector *connector);
-
-gboolean meta_kms_connector_is_non_desktop (MetaKmsConnector *connector);
-
-gboolean meta_kms_connector_supports_colorspace (MetaKmsConnector *connector);
-
-gboolean meta_kms_connector_supports_hdr_metadata (MetaKmsConnector *connector);

@@ -26,33 +26,50 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import (
-    bypass_mode_manager_command_definitions,
+    cmdnames,
     command_manager,
     guilabels,
     input_event,
+    keybindings,
     messages,
     orca_modifier_manager,
     presentation_manager,
 )
-from .extension import Extension
 
 if TYPE_CHECKING:
-    from .command import Command
     from .scripts import default
 
 
-class BypassModeManager(Extension):
+class BypassModeManager:
     """Provides means to pass keyboard events to the app being used."""
 
-    GROUP_LABEL = guilabels.KB_GROUP_BYPASS_MODE
     COMMAND_NAME = "bypass_mode_toggle"
 
     def __init__(self) -> None:
         self._is_active: bool = False
-        super().__init__()
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return bypass_mode_manager_command_definitions.get_commands(self)
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_DEFAULT
+        kb = keybindings.KeyBinding("BackSpace", keybindings.ALT_MODIFIER_MASK)
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                self.COMMAND_NAME,
+                self.toggle_enabled,
+                group_label,
+                cmdnames.BYPASS_MODE_TOGGLE,
+                desktop_keybinding=kb,
+                laptop_keybinding=kb,
+            ),
+        )
 
     def is_active(self) -> bool:
         """Returns True if bypass mode is active."""

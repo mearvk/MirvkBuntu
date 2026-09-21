@@ -57,8 +57,6 @@ G_DEFINE_TYPE_WITH_CODE (GDaemonFile, g_daemon_file, G_TYPE_OBJECT,
 			 G_IMPLEMENT_INTERFACE (G_TYPE_FILE,
 						g_daemon_file_file_iface_init))
 
-#define PRIVATE_EDIT_FLAG (1 << 15)
-
 static void
 g_daemon_file_finalize (GObject *object)
 {
@@ -409,13 +407,6 @@ create_proxy_for_file2 (GFile *file1,
   if (path2_out)
     *path2_out = NULL;
 
-  if (!g_mount_spec_get_is_valid (daemon_file1->mount_spec) ||
-      (daemon_file2 && !g_mount_spec_get_is_valid (daemon_file2->mount_spec)))
-    {
-      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME, _("Filename contains invalid characters."));
-      return NULL;
-    }
-
  retry:
   proxy = NULL;
   mount_info2 = NULL;
@@ -649,7 +640,7 @@ async_got_connection_cb (GDBusConnection *connection,
         {
           GDaemonFile *daemon_file = g_task_get_source_object (data->task);
 
-          g_clear_pointer (&data->mount_info, g_mount_info_unref);
+          g_mount_info_unref (data->mount_info);
           _g_daemon_vfs_get_mount_info_async (daemon_file->mount_spec,
                                               daemon_file->path,
                                               async_got_mount_info,
@@ -700,14 +691,6 @@ create_proxy_for_file_async (GFile *file,
 {
   GDaemonFile *daemon_file = G_DAEMON_FILE (file);
   AsyncProxyCreate *data;
-
-  if (!g_mount_spec_get_is_valid (daemon_file->mount_spec))
-    {
-      g_task_return_error (task, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
-                                                      _("Filename contains invalid characters.")));
-      g_object_unref (task);
-      return;
-    }
 
   data = g_new0 (AsyncProxyCreate, 1);
   data->task = task;
@@ -1261,10 +1244,7 @@ g_daemon_file_append_to (GFile *file,
                          GCancellable *cancellable,
                          GError **error)
 {
-  if (flags & PRIVATE_EDIT_FLAG)
-    return file_open_write (file, 3, "", FALSE, flags, cancellable, error);
-  else
-    return file_open_write (file, 1, "", FALSE, flags, cancellable, error);
+  return file_open_write (file, 1, "", FALSE, flags, cancellable, error);
 }
 
 static GFileOutputStream *
@@ -2002,16 +1982,6 @@ g_daemon_file_mount_enclosing_volume (GFile *location,
 
   task = g_task_new (location, cancellable, callback, user_data);
   g_task_set_source_tag (task, g_daemon_file_mount_enclosing_volume);
-
-  if (!g_mount_spec_get_is_valid (G_DAEMON_FILE (location)->mount_spec))
-    {
-      g_task_return_error (task,
-                           g_error_new_literal (G_IO_ERROR,
-                                                G_IO_ERROR_INVALID_FILENAME,
-                                                _("Filename contains invalid characters.")));
-      g_object_unref (task);
-      return;
-    }
 
   data = g_new0 (MountData, 1);
 
@@ -3175,10 +3145,7 @@ g_daemon_file_append_to_async (GFile                      *file,
   g_task_set_source_tag (task, g_daemon_file_append_to_async);
   g_task_set_priority (task, io_priority);
 
-  if (flags & PRIVATE_EDIT_FLAG)
-    file_open_write_async (file, task, 3, "", FALSE, flags);
-  else
-    file_open_write_async (file, task, 1, "", FALSE, flags);
+  file_open_write_async (file, task, 1, "", FALSE, flags);
 }
 
 static GFileOutputStream *

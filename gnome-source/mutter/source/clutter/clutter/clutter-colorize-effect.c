@@ -46,7 +46,7 @@ typedef struct _ClutterColorizeEffectPrivate
   ClutterOffscreenEffect parent_instance;
 
   /* the tint of the colorization */
-  CoglColor tint;
+  ClutterColor tint;
 
   gint tint_uniform;
 
@@ -68,7 +68,7 @@ static const gchar *colorize_glsl_source =
 "cogl_color_out.rgb = gray * tint;\n";
 
 /* a lame sepia */
-static const CoglColor default_tint = { 255, 204, 153, 255 };
+static const ClutterColor default_tint = { 255, 204, 153, 255 };
 
 enum
 {
@@ -122,7 +122,7 @@ clutter_colorize_effect_set_property (GObject      *gobject,
     {
     case PROP_TINT:
       clutter_colorize_effect_set_tint (effect,
-                                        cogl_value_get_color (value));
+                                        clutter_value_get_color (value));
       break;
 
     default:
@@ -144,7 +144,7 @@ clutter_colorize_effect_get_property (GObject    *gobject,
   switch (prop_id)
     {
     case PROP_TINT:
-      cogl_value_set_color (value, &priv->tint);
+      clutter_value_set_color (value, &priv->tint);
       break;
 
     default:
@@ -172,10 +172,10 @@ clutter_colorize_effect_class_init (ClutterColorizeEffectClass *klass)
    * The tint to apply to the actor
    */
   obj_props[PROP_TINT] =
-    cogl_param_spec_color ("tint", NULL, NULL,
-                           &default_tint,
-                           G_PARAM_READWRITE |
-                           G_PARAM_STATIC_STRINGS);
+    clutter_param_spec_color ("tint", NULL, NULL,
+                              &default_tint,
+                              G_PARAM_READWRITE |
+                              G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, PROP_LAST, obj_props);
 }
@@ -188,9 +188,9 @@ update_tint_uniform (ClutterColorizeEffect *self)
   if (priv->tint_uniform > -1)
     {
       float tint[3] = {
-        priv->tint.red / 255.0f,
-        priv->tint.green / 255.0f,
-        priv->tint.blue / 255.0f,
+        priv->tint.red / 255.0,
+        priv->tint.green / 255.0,
+        priv->tint.blue / 255.0
       };
 
       cogl_pipeline_set_uniform_float (priv->pipeline,
@@ -210,12 +210,10 @@ clutter_colorize_effect_init (ClutterColorizeEffect *self)
   if (G_UNLIKELY (klass->base_pipeline == NULL))
     {
       CoglSnippet *snippet;
-      ClutterContext *context = _clutter_context_get_default ();
-      ClutterBackend *backend = clutter_context_get_backend (context);
-      CoglContext *cogl_context = clutter_backend_get_cogl_context (backend);
+      CoglContext *ctx =
+        clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
-      klass->base_pipeline = cogl_pipeline_new (cogl_context);
-      cogl_pipeline_set_static_name (klass->base_pipeline, "ClutterColorize");
+      klass->base_pipeline = cogl_pipeline_new (ctx);
 
       snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT,
                                   colorize_glsl_declarations,
@@ -246,7 +244,7 @@ clutter_colorize_effect_init (ClutterColorizeEffect *self)
  * Return value: the newly created #ClutterColorizeEffect or %NULL
  */
 ClutterEffect *
-clutter_colorize_effect_new (const CoglColor *tint)
+clutter_colorize_effect_new (const ClutterColor *tint)
 {
   return g_object_new (CLUTTER_TYPE_COLORIZE_EFFECT,
                        "tint", tint,
@@ -262,7 +260,7 @@ clutter_colorize_effect_new (const CoglColor *tint)
  */
 void
 clutter_colorize_effect_set_tint (ClutterColorizeEffect *effect,
-                                  const CoglColor       *tint)
+                                  const ClutterColor    *tint)
 {
   ClutterColorizeEffectPrivate *priv;
 
@@ -287,7 +285,7 @@ clutter_colorize_effect_set_tint (ClutterColorizeEffect *effect,
  */
 void
 clutter_colorize_effect_get_tint (ClutterColorizeEffect *effect,
-                                  CoglColor             *tint)
+                                  ClutterColor          *tint)
 {
   ClutterColorizeEffectPrivate *priv;
 

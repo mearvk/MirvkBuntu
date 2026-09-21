@@ -20,7 +20,8 @@
 /**
  * GtkPadController:
  *
- * Handles input from the pads found in drawing tablets.
+ * `GtkPadController` is an event controller for the pads found in drawing
+ * tablets.
  *
  * Pads are the collection of buttons and tactile sensors often found around
  * the stylus-sensitive area.
@@ -63,16 +64,9 @@
  * pad_controller = gtk_pad_controller_new (action_group, NULL);
  * ```
  *
- * The actions belonging to rings/strips/dials will be activated with a parameter
+ * The actions belonging to rings/strips will be activated with a parameter
  * of type %G_VARIANT_TYPE_DOUBLE bearing the value of the given axis, it
  * is required that those are made stateful and accepting this `GVariantType`.
- * For rings the value is the angle of the ring position in degrees with 0
- * facing up. For strips the value is the absolute position on the strip, normalized
- * to the [0.0, 1.0] range.
- * For dials the value is the relative movement of the dial, normalized so that the
- * value 120 represents one logical scroll wheel detent in the positive direction.
- * Devices that support high-resolution scrolling may send events with fractions of
- * 120 to signify a smaller motion.
  */
 
 #include "config.h"
@@ -214,7 +208,6 @@ gtk_pad_controller_filter_event (GtkEventController *controller,
       event_type != GDK_PAD_BUTTON_RELEASE &&
       event_type != GDK_PAD_RING &&
       event_type != GDK_PAD_STRIP &&
-      event_type != GDK_PAD_DIAL &&
       event_type != GDK_PAD_GROUP_MODE)
     return TRUE;
 
@@ -255,15 +248,9 @@ gtk_pad_controller_handle_event (GtkEventController *controller,
       index = gdk_pad_event_get_button (event);
       break;
     case GDK_PAD_RING:
-      type = GTK_PAD_ACTION_RING;
-      gdk_pad_event_get_axis_value (event, &index, &value);
-      break;
     case GDK_PAD_STRIP:
-      type = GTK_PAD_ACTION_STRIP;
-      gdk_pad_event_get_axis_value (event, &index, &value);
-      break;
-    case GDK_PAD_DIAL:
-      type = GTK_PAD_ACTION_DIAL;
+      type = event_type == GDK_PAD_RING ?
+        GTK_PAD_ACTION_RING : GTK_PAD_ACTION_STRIP;
       gdk_pad_event_get_axis_value (event, &index, &value);
       break;
     default:
@@ -275,7 +262,7 @@ gtk_pad_controller_handle_event (GtkEventController *controller,
   if (!entry)
     return GDK_EVENT_PROPAGATE;
 
-  if (event_type == GDK_PAD_RING || event_type == GDK_PAD_STRIP || event_type == GDK_PAD_DIAL)
+  if (event_type == GDK_PAD_RING || event_type == GDK_PAD_STRIP)
     gtk_pad_controller_activate_action_with_axis (pad_controller, entry, value);
   else
     gtk_pad_controller_activate_action (pad_controller, entry);
@@ -379,24 +366,14 @@ gtk_pad_controller_class_init (GtkPadControllerClass *klass)
   object_class->dispose = gtk_pad_controller_dispose;
   object_class->finalize = gtk_pad_controller_finalize;
 
-  /**
-   * GtkPadController:action-group:
-   *
-   * The action group of the controller.
-   */
   pspecs[PROP_ACTION_GROUP] =
     g_param_spec_object ("action-group", NULL, NULL,
                          G_TYPE_ACTION_GROUP,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
-  /**
-   * GtkPadController:pad:
-   *
-   * The pad of the controller.
-   */
+                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   pspecs[PROP_PAD] =
     g_param_spec_object ("pad", NULL, NULL,
                          GDK_TYPE_DEVICE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (object_class, N_PROPS, pspecs);
 }

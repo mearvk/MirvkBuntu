@@ -27,10 +27,7 @@
 #include "clutter/clutter.h"
 #include "meta/meta-dnd.h"
 #include "meta/meta-idle-monitor.h"
-#include "meta/meta-keymap-description.h"
-#include "meta/meta-logical-monitor.h"
 #include "meta/meta-monitor-manager.h"
-#include "meta/meta-orientation-manager.h"
 #include "meta/meta-remote-access-controller.h"
 
 typedef enum _MetaBackendCapabilities
@@ -44,20 +41,15 @@ META_EXPORT
 G_DECLARE_DERIVABLE_TYPE (MetaBackend, meta_backend, META, BACKEND, GObject)
 
 META_EXPORT
-gboolean meta_backend_set_keymap_finish (MetaBackend   *backend,
-                                         GAsyncResult  *result,
-                                         GError       **error);
+void meta_backend_set_keymap (MetaBackend *backend,
+                              const char  *layouts,
+                              const char  *variants,
+                              const char  *options,
+                              const char  *model);
 
 META_EXPORT
-void meta_backend_set_keymap_async (MetaBackend           *backend,
-                                    MetaKeymapDescription *description,
-                                    uint32_t               layout_index,
-                                    GCancellable          *cancellable,
-                                    GAsyncReadyCallback    callback,
-                                    gpointer               user_data);
-
-META_EXPORT
-MetaKeymapDescription * meta_backend_get_keymap_description (MetaBackend *backend);
+void meta_backend_lock_layout_group (MetaBackend *backend,
+                                     guint        idx);
 
 META_EXPORT
 MetaContext * meta_backend_get_context (MetaBackend *backend);
@@ -78,9 +70,6 @@ META_EXPORT
 MetaMonitorManager * meta_backend_get_monitor_manager (MetaBackend *backend);
 
 META_EXPORT
-MetaOrientationManager * meta_backend_get_orientation_manager (MetaBackend *backend);
-
-META_EXPORT
 MetaRemoteAccessController * meta_backend_get_remote_access_controller (MetaBackend *backend);
 
 META_EXPORT
@@ -90,16 +79,16 @@ META_EXPORT
 gboolean meta_backend_is_headless (MetaBackend *backend);
 
 META_EXPORT
+void meta_backend_freeze_keyboard (MetaBackend *backend,
+                                   uint32_t     timestamp);
+
+META_EXPORT
+void meta_backend_ungrab_keyboard (MetaBackend *backend,
+                                   uint32_t     timestamp);
+
+META_EXPORT
+void meta_backend_unfreeze_keyboard (MetaBackend *backend,
+                                     uint32_t     timestamp);
+
+META_EXPORT
 MetaBackendCapabilities meta_backend_get_capabilities (MetaBackend *backend);
-
-META_EXPORT
-void meta_backend_renderdoc_capture (MetaBackend *backend);
-
-META_EXPORT
-MetaCursorTracker * meta_backend_get_cursor_tracker (MetaBackend *backend);
-
-META_EXPORT
-MetaLogicalMonitor * meta_backend_get_current_logical_monitor (MetaBackend *backend);
-
-META_EXPORT
-ClutterInputDevice * meta_backend_get_last_input_device (MetaBackend *backend);

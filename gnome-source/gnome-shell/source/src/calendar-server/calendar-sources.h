@@ -21,7 +21,8 @@
  *     Christian Kellner  <gicmo@xatom.net>
  */
 
-#pragma once
+#ifndef __CALENDAR_SOURCES_H__
+#define __CALENDAR_SOURCES_H__
 
 #include <glib-object.h>
 
@@ -42,15 +43,7 @@ ESourceRegistry *calendar_sources_get_registry       (CalendarSources *sources);
 GSList          *calendar_sources_ref_clients        (CalendarSources *sources);
 gboolean         calendar_sources_has_clients        (CalendarSources *sources);
 
-EClient         *calendar_sources_connect_client_sync(CalendarSources *sources,
-                                                      gboolean is_for_events,
-                                                      ESource *source,
-                                                      ECalClientSourceType source_type,
-                                                      guint32 wait_for_connected_seconds,
-                                                      GCancellable *cancellable,
-                                                      GError **error);
 void             calendar_sources_connect_client     (CalendarSources *sources,
-                                                      gboolean is_for_events,
                                                       ESource *source,
                                                       ECalClientSourceType source_type,
                                                       guint32 wait_for_connected_seconds,
@@ -67,3 +60,5 @@ void            print_debug                          (const gchar *str,
                                                       ...) G_GNUC_PRINTF (1, 2);
 
 G_END_DECLS
+
+#endif /* __CALENDAR_SOURCES_H__ */

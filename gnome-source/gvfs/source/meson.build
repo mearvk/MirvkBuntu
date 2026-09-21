@@ -1,12 +1,12 @@
 project(
   'gvfs', 'c',
-  version: '1.62.1',
+  version: '1.56.1',
   license: 'LGPL2+',
   default_options: [
     'buildtype=debugoptimized',
     'warning_level=1',
   ],
-  meson_version: '>= 0.60.0',
+  meson_version: '>= 0.57.0',
 )
 
 gvfs_name = meson.project_name()
@@ -234,9 +234,11 @@ have_version_script = cc.has_link_argument('@0@,@1@'.format(version_script_ldfla
 
 gio_dep = dependency('gio-2.0')
 gio_unix_dep = dependency('gio-unix-2.0')
-glib_dep = dependency('glib-2.0', version: '>= 2.83.0')
+glib_dep = dependency('glib-2.0', version: '>= 2.70.0')
 gobject_dep = dependency('gobject-2.0')
 gsettings_desktop_schemas_dep = dependency('gsettings-desktop-schemas', version: '>= 3.33.0')
+
+config_h.set('HAVE_G_UNIX_MOUNT_GET_ROOT_PATH', cc.has_function('g_unix_mount_get_root_path', dependencies: gio_dep))
 
 # *** Check for libXML ***
 libxml_dep = dependency('libxml-2.0', required: false)
@@ -306,7 +308,6 @@ if enable_admin
   libcap_dep = dependency('libcap')
   polkit_gobject_dep = dependency('polkit-gobject-1', version: '>= 0.114')
 endif
-config_h.set('HAVE_ADMIN', enable_admin)
 
 # *** Check if we should build with http backend ***
 enable_http = get_option('http')
@@ -344,15 +345,6 @@ if enable_udisks2
   udisks2_dep = dependency('udisks2', version: '>= 1.97')
 endif
 
-# *** Check which command should be used to check processes blocking umount ***
-busy_processes_command = get_option('busy_processes_command')
-config_h.set_quoted('BUSY_PROCESS_COMMAND', busy_processes_command)
-if busy_processes_command == 'lsof'
-  config_h.set('BUSY_PROCESS_SPAWN', '"lsof -t \"%s\""')
-elif busy_processes_command == 'fuser'
-  config_h.set('BUSY_PROCESS_SPAWN', '"fuser -m \"%s\""')
-endif
-
 # *** Check for libsystemd-login ***
 enable_logind = get_option('logind')
 if enable_logind
@@ -378,7 +370,7 @@ endif
 # *** Check if we should build with GOA volume monitor ***
 enable_goa = get_option('goa')
 if enable_goa
-  goa_dep = dependency('goa-1.0', version: '> 3.57.0')
+  goa_dep = dependency('goa-1.0', version: '>= 3.17.1')
 endif
 
 # *** Check for GNOME Keyring ***
@@ -439,7 +431,7 @@ enable_onedrive = get_option('onedrive')
 if enable_onedrive
   assert(enable_goa, 'OneDrive backend requested but GOA is required')
 
-  msgraph_dep = dependency('msgraph-1', version: '>= 0.3.0')
+  msgraph_dep = dependency('msgraph-0.1')
 endif
 
 # *** Check for gphoto2 ***
@@ -480,10 +472,14 @@ enable_sftp = get_option('sftp')
 # *** WSDD backend ***
 enable_wsdd = get_option('wsdd')
 
+# *** burn backend ***
+enable_burn = get_option('burn')
+config_h.set('HAVE_BURN', enable_burn)
+
 # *** Enable development utils ***
+enable_deprecated_apis = get_option('deprecated_apis')
 enable_devel_utils = get_option('devel_utils')
 enable_installed_tests = get_option('installed_tests')
-enable_unit_tests = get_option('unit_tests')
 
 subdir('common')
 subdir('metadata')
@@ -510,7 +506,6 @@ gnome.post_install(
 )
 
 summary({
-  'busy_processes_command': busy_processes_command,
   'systemduserunitdir': systemd_systemduserunitdir,
   'tmpfilesdir': systemd_tmpfilesdir,
   'privileged_group': privileged_group,
@@ -521,6 +516,7 @@ summary({
   'afc': enable_afc,
   'afp': enable_afp,
   'archive': enable_archive,
+  'burn': enable_burn,
   'cdda': enable_cdda,
   'dnssd': enable_dnssd,
   'goa': enable_goa,
@@ -548,6 +544,7 @@ summary({
 }, section: 'Dependencies')
 
 summary({
+  'deprecated_apis': enable_deprecated_apis,
   'devel_utils': enable_devel_utils,
   'installed_tests': enable_installed_tests,
   'man': enable_man,

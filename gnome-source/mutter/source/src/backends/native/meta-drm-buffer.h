@@ -42,10 +42,6 @@ G_DECLARE_DERIVABLE_TYPE (MetaDrmBuffer,
 int meta_drm_buffer_export_fd (MetaDrmBuffer  *buffer,
                                GError        **error);
 
-int meta_drm_buffer_export_fd_for_plane (MetaDrmBuffer  *buffer,
-                                         int             plane,
-                                         GError        **error);
-
 gboolean meta_drm_buffer_ensure_fb_id (MetaDrmBuffer  *buffer,
                                        GError        **error);
 
@@ -58,18 +54,13 @@ int meta_drm_buffer_get_width (MetaDrmBuffer *buffer);
 
 int meta_drm_buffer_get_height (MetaDrmBuffer *buffer);
 
-int meta_drm_buffer_get_n_planes (MetaDrmBuffer *buffer);
-
 int meta_drm_buffer_get_stride (MetaDrmBuffer *buffer);
-
-int meta_drm_buffer_get_stride_for_plane (MetaDrmBuffer *buffer,
-                                          int            plane);
 
 int meta_drm_buffer_get_bpp (MetaDrmBuffer *buffer);
 
 uint32_t meta_drm_buffer_get_format (MetaDrmBuffer *buffer);
 
-int meta_drm_buffer_get_offset_for_plane (MetaDrmBuffer *buffer,
-                                          int            plane);
+int meta_drm_buffer_get_offset (MetaDrmBuffer *buffer,
+                                int            plane);
 
 uint64_t meta_drm_buffer_get_modifier (MetaDrmBuffer *buffer);

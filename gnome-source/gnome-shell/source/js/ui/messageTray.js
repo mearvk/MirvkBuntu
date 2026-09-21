@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -6,6 +8,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import * as Calendar from './calendar.js';
 import * as GnomeSession from '../misc/gnomeSession.js';
 import * as Layout from './layout.js';
 import * as Main from './main.js';
@@ -22,7 +25,7 @@ const HIDE_TIMEOUT = 200;
 const LONGER_HIDE_TIMEOUT = 600;
 
 const MAX_NOTIFICATIONS_IN_QUEUE = 3;
-const MAX_NOTIFICATIONS_PER_SOURCE = 10;
+const MAX_NOTIFICATIONS_PER_SOURCE = 3;
 
 // We delay hiding of the tray if the mouse is within MOUSE_LEFT_ACTOR_THRESHOLD
 // range from the point where it left the tray.
@@ -88,10 +91,6 @@ class FocusGrabber {
 
         this._prevKeyFocusActor = global.stage.get_key_focus();
 
-        this._prevKeyFocusActor?.connectObject('destroy', () => {
-            this._prevKeyFocusActor = null;
-        }, this);
-
         global.stage.connectObject('notify::key-focus',
             this._focusActorChanged.bind(this), this);
 
@@ -105,8 +104,6 @@ class FocusGrabber {
         if (!this._focused)
             return false;
 
-        this._prevKeyFocusActor?.disconnectObject(this);
-
         global.stage.disconnectObject(this);
 
         this._focused = false;
@@ -114,7 +111,7 @@ class FocusGrabber {
     }
 
     _focusActorChanged() {
-        const focusedActor = global.stage.get_key_focus();
+        let focusedActor = global.stage.get_key_focus();
         if (!focusedActor || !this._actor.contains(focusedActor))
             this._focusUngrabbed();
     }
@@ -127,7 +124,7 @@ class FocusGrabber {
             global.stage.set_key_focus(this._prevKeyFocusActor);
             this._prevKeyFocusActor = null;
         } else {
-            const focusedActor = global.stage.get_key_focus();
+            let focusedActor = global.stage.get_key_focus();
             if (focusedActor && this._actor.contains(focusedActor))
                 global.stage.set_key_focus(null);
         }
@@ -143,21 +140,21 @@ export const NotificationPolicy = GObject.registerClass({
     GTypeFlags: GObject.TypeFlags.ABSTRACT,
     Properties: {
         'enable': GObject.ParamSpec.boolean(
-            'enable', null, null, GObject.ParamFlags.READABLE, true),
+            'enable', 'enable', 'enable', GObject.ParamFlags.READABLE, true),
         'enable-sound': GObject.ParamSpec.boolean(
-            'enable-sound', null, null,
+            'enable-sound', 'enable-sound', 'enable-sound',
             GObject.ParamFlags.READABLE, true),
         'show-banners': GObject.ParamSpec.boolean(
-            'show-banners', null, null,
+            'show-banners', 'show-banners', 'show-banners',
             GObject.ParamFlags.READABLE, true),
         'force-expanded': GObject.ParamSpec.boolean(
-            'force-expanded', null, null,
+            'force-expanded', 'force-expanded', 'force-expanded',
             GObject.ParamFlags.READABLE, false),
         'show-in-lock-screen': GObject.ParamSpec.boolean(
-            'show-in-lock-screen', null, null,
+            'show-in-lock-screen', 'show-in-lock-screen', 'show-in-lock-screen',
             GObject.ParamFlags.READABLE, false),
         'details-in-lock-screen': GObject.ParamSpec.boolean(
-            'details-in-lock-screen', null, null,
+            'details-in-lock-screen', 'details-in-lock-screen', 'details-in-lock-screen',
             GObject.ParamFlags.READABLE, false),
     },
 }, class NotificationPolicy extends GObject.Object {
@@ -263,7 +260,7 @@ export const NotificationApplicationPolicy = GObject.registerClass({
     store() {
         this._settings.set_string('application-id', `${this.id}.desktop`);
 
-        const apps = this._masterSettings.get_strv('application-children');
+        let apps = this._masterSettings.get_strv('application-children');
         if (!apps.includes(this._canonicalId)) {
             apps.push(this._canonicalId);
             this._masterSettings.set_strv('application-children', apps);
@@ -372,9 +369,10 @@ export class Notification extends GObject.Object {
                 delete this._updateDatetimeId;
             } else if (!this._updateDatetimeId) {
                 this._updateDatetimeId =
-                    GLib.idle_add_once(GLib.PRIORITY_DEFAULT, () => {
+                    GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                         delete this._updateDatetimeId;
                         this.datetime = GLib.DateTime.new_now_local();
+                        return GLib.SOURCE_REMOVE;
                     });
             }
         });
@@ -443,16 +441,6 @@ export class Notification extends GObject.Object {
         });
         this._actions.push(action);
         this.emit('action-added', action);
-        return action;
-    }
-
-    removeAction(action) {
-        const index = this._actions.indexOf(action);
-        if (index < 0)
-            throw new Error('Action was already removed previously');
-
-        this._actions.splice(index, 1);
-        this.emit('action-removed', action);
     }
 
     clearActions() {
@@ -473,13 +461,7 @@ export class Notification extends GObject.Object {
     }
 
     activate() {
-        console.assert(!this._destroyed, 'Activating a destroyed notification');
-
         this.emit('activated');
-
-        // Avoid double destruction after activation
-        if (this._destroyed)
-            return;
 
         // We don't hide a resident notification when the user invokes one of its actions,
         // because it is common for such notifications to update themselves with new
@@ -494,8 +476,6 @@ export class Notification extends GObject.Object {
     destroy(reason = NotificationDestroyedReason.DISMISSED) {
         this.emit('destroy', reason);
 
-        this._destroyed = true;
-
         if (this._updateDatetimeId)
             GLib.source_remove(this._updateDatetimeId);
         delete this._updateDatetimeId;
@@ -507,11 +487,11 @@ export class Notification extends GObject.Object {
 export const Source = GObject.registerClass({
     Properties: {
         'count': GObject.ParamSpec.int(
-            'count', null, null,
+            'count', 'count', 'count',
             GObject.ParamFlags.READABLE,
             0, GLib.MAXINT32, 0),
         'policy': GObject.ParamSpec.object(
-            'policy', null, null,
+            'policy', 'policy', 'policy',
             GObject.ParamFlags.READWRITE,
             NotificationPolicy.$gtype),
     },
@@ -564,7 +544,7 @@ export const Source = GObject.registerClass({
     }
 
     _onNotificationDestroy(notification) {
-        const index = this.notifications.indexOf(notification);
+        let index = this.notifications.indexOf(notification);
         if (index < 0)
             throw new Error('Notification was already removed previously');
 
@@ -630,63 +610,63 @@ SignalTracker.registerDestroyableType(Source);
 GObject.registerClass({
     Properties: {
         'source': GObject.ParamSpec.object(
-            'source', null, null,
+            'source', 'source', 'source',
             GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
             Source),
         'title': GObject.ParamSpec.string(
-            'title', null, null,
+            'title', 'title', 'title',
             GObject.ParamFlags.READWRITE,
             null),
         'body': GObject.ParamSpec.string(
-            'body', null, null,
+            'body', 'body', 'body',
             GObject.ParamFlags.READWRITE,
             null),
         'use-body-markup': GObject.ParamSpec.boolean(
-            'use-body-markup', null, null,
+            'use-body-markup', 'use-body-markup', 'use-body-markup',
             GObject.ParamFlags.READWRITE,
             false),
         'gicon': GObject.ParamSpec.object(
-            'gicon', null, null,
+            'gicon', 'gicon', 'gicon',
             GObject.ParamFlags.READWRITE,
             Gio.Icon),
         'icon-name': GObject.ParamSpec.string(
-            'icon-name', null, null,
+            'icon-name', 'icon-name', 'icon-name',
             GObject.ParamFlags.READWRITE,
             null),
         'sound': GObject.ParamSpec.object(
-            'sound', null, null,
+            'sound', 'sound', 'sound',
             GObject.ParamFlags.READWRITE,
             Sound),
         'datetime': GObject.ParamSpec.boxed(
-            'datetime', null, null,
+            'datetime', 'datetime', 'datetime',
             GObject.ParamFlags.READWRITE,
             GLib.DateTime),
         // Unfortunately we can't register new enum types in GJS
         // See: https://gitlab.gnome.org/GNOME/gjs/-/issues/573
         'privacy-scope': GObject.ParamSpec.int(
-            'privacy-scope', null, null,
+            'privacy-scope', 'privacy-scope', 'privacy-scope',
             GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT,
             0, GLib.MAXINT32,
             PrivacyScope.User),
         'urgency': GObject.ParamSpec.int(
-            'urgency', null, null,
+            'urgency', 'urgency', 'urgency',
             GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT,
             0, GLib.MAXINT32,
             Urgency.NORMAL),
         'acknowledged': GObject.ParamSpec.boolean(
-            'acknowledged', null, null,
+            'acknowledged', 'acknowledged', 'acknowledged',
             GObject.ParamFlags.READWRITE,
             false),
         'resident': GObject.ParamSpec.boolean(
-            'resident', null, null,
+            'resident', 'resident', 'resident',
             GObject.ParamFlags.READWRITE,
             false),
         'for-feedback': GObject.ParamSpec.boolean(
-            'for-feedback', null, null,
+            'for-feedback', 'for-feedback', 'for-feedback',
             GObject.ParamFlags.READWRITE,
             false),
         'is-transient': GObject.ParamSpec.boolean(
-            'is-transient', null, null,
+            'is-transient', 'is-transient', 'is-transient',
             GObject.ParamFlags.READWRITE,
             false),
     },
@@ -699,27 +679,13 @@ GObject.registerClass({
 }, Notification);
 SignalTracker.registerDestroyableType(Notification);
 
-export class MessageTray extends St.Widget {
-    static [GObject.signals] = {
+export const MessageTray = GObject.registerClass({
+    Signals: {
         'queue-changed': {},
         'source-added': {param_types: [Source.$gtype]},
         'source-removed': {param_types: [Source.$gtype]},
-    };
-
-    static {
-        GObject.registerClass(this);
-
-        const bindingPool = this.get_binding_pool();
-
-        bindingPool.install_closure(
-            'close', Clutter.KEY_Escape, Clutter.RELEASE_MASK,
-            obj => {
-                obj._expireNotification();
-                return Clutter.EVENT_STOP;
-            }
-        );
-    }
-
+    },
+}, class MessageTray extends St.Widget {
     _init() {
         super._init({
             visible: false,
@@ -736,7 +702,7 @@ export class MessageTray extends St.Widget {
             this._onStatusChanged(status);
         });
 
-        const constraint = new Layout.MonitorConstraint({primary: true});
+        let constraint = new Layout.MonitorConstraint({primary: true});
         Main.layoutManager.panelBox.bind_property('visible',
             constraint, 'work-area',
             GObject.BindingFlags.SYNC_CREATE);
@@ -752,6 +718,8 @@ export class MessageTray extends St.Widget {
             x_expand: true,
             layout_manager: new Clutter.BinLayout(),
         });
+        this._bannerBin.connect('key-release-event',
+            this._onNotificationKeyRelease.bind(this));
         this._bannerBin.connect('notify::hover',
             this._onNotificationHoverChanged.bind(this));
         this.add_child(this._bannerBin);
@@ -782,11 +750,10 @@ export class MessageTray extends St.Widget {
         this._notificationTimeoutId = 0;
         this._notificationRemoved = false;
 
-        Main.layoutManager.addChrome(this);
-        Main.layoutManager.trackChrome(this._bannerBin);
+        Main.layoutManager.addChrome(this, {affectsInputRegion: false});
+        Main.layoutManager.trackChrome(this._bannerBin, {affectsInputRegion: true});
 
-        global.display.connectObject('in-fullscreen-changed',
-            () => this._updateState(), this);
+        global.display.connect('in-fullscreen-changed', this._updateState.bind(this));
 
         Main.sessionMode.connect('updated', this._sessionUpdated.bind(this));
 
@@ -838,6 +805,15 @@ export class MessageTray extends St.Widget {
 
     set bannerAlignment(align) {
         this._bannerBin.set_x_align(align);
+    }
+
+    _onNotificationKeyRelease(actor, event) {
+        if (event.get_key_symbol() === Clutter.KEY_Escape && event.get_state() === 0) {
+            this._expireNotification();
+            return Clutter.EVENT_STOP;
+        }
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _expireNotification() {
@@ -898,8 +874,8 @@ export class MessageTray extends St.Widget {
     }
 
     _onSourceEnableChanged(policy, source) {
-        const wasEnabled = this.contains(source);
-        const shouldBeEnabled = policy.enable;
+        let wasEnabled = this.contains(source);
+        let shouldBeEnabled = policy.enable;
 
         if (wasEnabled !== shouldBeEnabled) {
             if (shouldBeEnabled)
@@ -948,8 +924,8 @@ export class MessageTray extends St.Widget {
             // If the queue is "full", we skip banner mode and just show a small
             // indicator in the panel; however do make an exception for CRITICAL
             // notifications, as only banner mode allows expansion.
-            const bannerCount = this._notification ? 1 : 0;
-            const full = this.queueCount + bannerCount >= MAX_NOTIFICATIONS_IN_QUEUE;
+            let bannerCount = this._notification ? 1 : 0;
+            let full = this.queueCount + bannerCount >= MAX_NOTIFICATIONS_IN_QUEUE;
             if (!full || notification.urgency === Urgency.CRITICAL) {
                 this._notificationQueue.push(notification);
                 this._notificationQueue.sort(
@@ -979,7 +955,7 @@ export class MessageTray extends St.Widget {
             this._resetNotificationLeftTimeout();
 
             if (this._showNotificationMouseX >= 0) {
-                const actorAtShowNotificationPosition =
+                let actorAtShowNotificationPosition =
                     global.stage.get_actor_at_pos(Clutter.PickMode.ALL, this._showNotificationMouseX, this._showNotificationMouseY);
                 this._showNotificationMouseX = -1;
                 this._showNotificationMouseY = -1;
@@ -1001,15 +977,15 @@ export class MessageTray extends St.Widget {
             // this._onNotificationLeftTimeout() to determine if the mouse has moved far enough during the initial timeout for us
             // to consider that the user intended to leave the tray and therefore hide the tray. If the mouse is still
             // close to its previous position, we extend the timeout once.
-            const [x, y] = global.get_pointer();
+            let [x, y] = global.get_pointer();
             this._notificationLeftMouseX = x;
             this._notificationLeftMouseY = y;
 
             // We wait just a little before hiding the message tray in case the user quickly moves the mouse back into it.
             // We wait for a longer period if the notification popped up where the mouse pointer was already positioned.
             // That gives the user more time to mouse away from the notification and mouse back in in order to expand it.
-            const timeout = this._useLongerNotificationLeftTimeout ? LONGER_HIDE_TIMEOUT : HIDE_TIMEOUT;
-            this._notificationLeftTimeoutId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, timeout, this._onNotificationLeftTimeout.bind(this));
+            let timeout = this._useLongerNotificationLeftTimeout ? LONGER_HIDE_TIMEOUT : HIDE_TIMEOUT;
+            this._notificationLeftTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeout, this._onNotificationLeftTimeout.bind(this));
             GLib.Source.set_name_by_id(this._notificationLeftTimeoutId, '[gnome-shell] this._onNotificationLeftTimeout');
         }
     }
@@ -1030,7 +1006,7 @@ export class MessageTray extends St.Widget {
     }
 
     _onNotificationLeftTimeout() {
-        const [x, y] = global.get_pointer();
+        let [x, y] = global.get_pointer();
         // We extend the timeout once if the mouse moved no further than MOUSE_LEFT_ACTOR_THRESHOLD to either side.
         if (this._notificationLeftMouseX > -1 &&
             y < this._notificationLeftMouseY + MOUSE_LEFT_ACTOR_THRESHOLD &&
@@ -1038,7 +1014,7 @@ export class MessageTray extends St.Widget {
             x < this._notificationLeftMouseX + MOUSE_LEFT_ACTOR_THRESHOLD &&
             x > this._notificationLeftMouseX - MOUSE_LEFT_ACTOR_THRESHOLD) {
             this._notificationLeftMouseX = -1;
-            this._notificationLeftTimeoutId = GLib.timeout_add_once(
+            this._notificationLeftTimeoutId = GLib.timeout_add(
                 GLib.PRIORITY_DEFAULT,
                 LONGER_HIDE_TIMEOUT,
                 this._onNotificationLeftTimeout.bind(this));
@@ -1050,6 +1026,7 @@ export class MessageTray extends St.Widget {
             this._updateNotificationTimeout(0);
             this._updateState();
         }
+        return GLib.SOURCE_REMOVE;
     }
 
     // All of the logic for what happens when occurs here; the various
@@ -1058,7 +1035,7 @@ export class MessageTray extends St.Widget {
     // _updateState() figures out what (if anything) needs to be done
     // at the present time.
     _updateState() {
-        const hasMonitor = Main.layoutManager.primaryMonitor != null;
+        let hasMonitor = Main.layoutManager.primaryMonitor != null;
         this.visible = !this._bannerBlocked && hasMonitor && this._banner != null;
         if (this._bannerBlocked || !hasMonitor)
             return;
@@ -1080,27 +1057,26 @@ export class MessageTray extends St.Widget {
         if (changed)
             this.emit('queue-changed');
 
-        const hasNotifications = Main.sessionMode.hasNotifications;
+        let hasNotifications = Main.sessionMode.hasNotifications;
 
         if (this._notificationState === State.HIDDEN) {
-            const nextNotification = this._notificationQueue[0] || null;
+            let nextNotification = this._notificationQueue[0] || null;
             if (hasNotifications && nextNotification) {
-                const limited = this._busy || Main.layoutManager.primaryMonitor.inFullscreen;
-                const showNextNotification = !limited || nextNotification.forFeedback || nextNotification.urgency === Urgency.CRITICAL;
+                let limited = this._busy || Main.layoutManager.primaryMonitor.inFullscreen;
+                let showNextNotification = !limited || nextNotification.forFeedback || nextNotification.urgency === Urgency.CRITICAL;
                 if (showNextNotification)
                     this._showNotification();
             }
         } else if (this._notificationState === State.SHOWING ||
                    this._notificationState === State.SHOWN) {
-            const expired = (this._userActiveWhileNotificationShown &&
-                           this._notificationState === State.SHOWN &&
+            let expired = (this._userActiveWhileNotificationShown &&
                            this._notificationTimeoutId === 0 &&
                            this._notification.urgency !== Urgency.CRITICAL &&
                            !this._pointerInNotification) || this._notificationExpired;
-            const mustClose = this._notificationRemoved || !hasNotifications || expired;
+            let mustClose = this._notificationRemoved || !hasNotifications || expired;
 
             if (mustClose) {
-                const animate = hasNotifications && !this._notificationRemoved;
+                let animate = hasNotifications && !this._notificationRemoved;
                 this._hideNotification(animate);
             } else if (this._notificationState === State.SHOWN &&
                        this._pointerInNotification) {
@@ -1135,7 +1111,7 @@ export class MessageTray extends St.Widget {
             this.idleMonitor.add_user_active_watch(this._onIdleMonitorBecameActive.bind(this));
         }
 
-        this._banner = new MessageList.NotificationMessage(this._notification);
+        this._banner = new Calendar.NotificationMessage(this._notification);
         this._banner.can_focus = false;
         this._banner._header.expandButton.visible = false;
         this._banner.add_style_class_name('notification-banner');
@@ -1146,10 +1122,10 @@ export class MessageTray extends St.Widget {
         this._bannerBin.y = -this._banner.height;
         this.show();
 
-        global.compositor.disable_unredirect();
+        Meta.disable_unredirect_for_display(global.display);
         this._updateShowingNotification();
 
-        const [x, y] = global.get_pointer();
+        let [x, y] = global.get_pointer();
         // We save the position of the mouse at the time when we started showing the notification
         // in order to determine if the notification popped up under it. We make that check if
         // the user starts moving the mouse and _onNotificationHoverChanged() gets called. We don't
@@ -1192,15 +1168,10 @@ export class MessageTray extends St.Widget {
         this._bannerBin.ease({
             opacity: 255,
             duration: ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            mode: Clutter.AnimationMode.LINEAR,
         });
-        this._bannerBin.set_pivot_point(0.5, 0.5);
-        this._bannerBin.scale_x = 0.9;
-        this._bannerBin.scale_y = 0.9;
         this._bannerBin.ease({
             y: 0,
-            scale_x: 1,
-            scale_y: 1,
             duration: ANIMATION_TIME,
             mode: Clutter.AnimationMode.EASE_OUT_BACK,
             onComplete: () => {
@@ -1223,14 +1194,14 @@ export class MessageTray extends St.Widget {
         }
         if (timeout > 0) {
             this._notificationTimeoutId =
-                GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, timeout,
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeout,
                     this._notificationTimeout.bind(this));
             GLib.Source.set_name_by_id(this._notificationTimeoutId, '[gnome-shell] this._notificationTimeout');
         }
     }
 
     _notificationTimeout() {
-        const [x, y] = global.get_pointer();
+        let [x, y] = global.get_pointer();
         if (y < this._lastSeenMouseY - 10 && !this._notificationHovered) {
             // The mouse is moving towards the notification, so don't
             // hide it yet. (We just create a new timeout (and destroy
@@ -1250,6 +1221,7 @@ export class MessageTray extends St.Widget {
 
         this._lastSeenMouseX = x;
         this._lastSeenMouseY = y;
+        return GLib.SOURCE_REMOVE;
     }
 
     _hideNotification(animate) {
@@ -1271,7 +1243,7 @@ export class MessageTray extends St.Widget {
             y: -this._bannerBin.height,
             duration,
             mode: Clutter.AnimationMode.EASE_OUT_BACK,
-            onStopped: () => {
+            onComplete: () => {
                 this._notificationState = State.HIDDEN;
                 this._hideNotificationCompleted();
                 this._updateState();
@@ -1280,14 +1252,14 @@ export class MessageTray extends St.Widget {
     }
 
     _hideNotificationCompleted() {
-        const notification = this._notification;
+        let notification = this._notification;
         this._notification = null;
         if (!this._notificationRemoved && notification.isTransient)
             notification.destroy(NotificationDestroyedReason.EXPIRED);
 
         this._pointerInNotification = false;
         this._notificationRemoved = false;
-        global.compositor.enable_unredirect();
+        Meta.enable_unredirect_for_display(global.display);
 
         this._banner.destroy();
         this._banner = null;
@@ -1313,7 +1285,7 @@ export class MessageTray extends St.Widget {
     _ensureBannerFocused() {
         this._notificationFocusGrabber.grabFocus();
     }
-}
+});
 
 let systemNotificationSource = null;
 
@@ -1326,7 +1298,7 @@ export function getSystemSource() {
     if (!systemNotificationSource) {
         systemNotificationSource = new Source({
             title: _('System'),
-            iconName: 'cog-wheel-symbolic',
+            iconName: 'emblem-system-symbolic',
         });
 
         systemNotificationSource.connect('destroy', () => {

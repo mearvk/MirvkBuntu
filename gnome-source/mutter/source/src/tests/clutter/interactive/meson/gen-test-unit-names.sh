@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/bin/sh
 
 outputfile=$1
 shift

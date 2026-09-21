@@ -20,7 +20,8 @@
 /**
  * GtkLayoutManager:
  *
- * Handles the preferred size and allocation for children of a widget.
+ * Layout managers are delegate classes that handle the preferred size
+ * and the allocation of a widget.
  *
  * You typically subclass `GtkLayoutManager` if you want to implement a
  * layout policy for the children of a widget, or if you want to determine
@@ -121,12 +122,7 @@ gtk_layout_manager_real_get_request_mode (GtkLayoutManager *manager,
        child != NULL;
        child = _gtk_widget_get_next_sibling (child))
     {
-      GtkSizeRequestMode res;
-
-      if (!gtk_widget_should_layout (child))
-        continue;
-
-      res = gtk_widget_get_request_mode (child);
+      GtkSizeRequestMode res = gtk_widget_get_request_mode (child);
 
       switch (res)
         {
@@ -147,8 +143,8 @@ gtk_layout_manager_real_get_request_mode (GtkLayoutManager *manager,
  if (hfw == 0 && wfh == 0)
    return GTK_SIZE_REQUEST_CONSTANT_SIZE;
 
- return hfw >= wfh ? GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH
-                   : GTK_SIZE_REQUEST_WIDTH_FOR_HEIGHT;
+ return hfw > wfh ? GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH
+                  : GTK_SIZE_REQUEST_WIDTH_FOR_HEIGHT;
 }
 
 static void

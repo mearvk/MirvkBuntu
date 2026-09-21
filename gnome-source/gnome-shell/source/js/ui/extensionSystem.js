@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
@@ -5,13 +7,10 @@ import St from 'gi://St';
 import Shell from 'gi://Shell';
 import * as Signals from '../misc/signals.js';
 
-import {AsyncMutex} from '../misc/asyncMutex.js';
 import * as Config from '../misc/config.js';
 import * as ExtensionDownloader from './extensionDownloader.js';
 import {formatError} from '../misc/errorUtils.js';
-import {
-    ExtensionState, ExtensionType, loadExtensionMetadata,
-} from '../misc/extensionUtils.js';
+import {ExtensionState, ExtensionType} from '../misc/extensionUtils.js';
 import * as FileUtils from '../misc/fileUtils.js';
 import * as Main from './main.js';
 import * as MessageTray from './messageTray.js';
@@ -31,7 +30,6 @@ export class ExtensionManager extends Signals.EventEmitter {
     constructor() {
         super();
 
-        this._enableExtensionMutex = new AsyncMutex();
         this._initializationPromise = null;
         this._updateNotified = false;
         this._updateInProgress = false;
@@ -47,7 +45,7 @@ export class ExtensionManager extends Signals.EventEmitter {
             () => this._reloadExtensionStylesheets());
 
         Main.sessionMode.connect('updated', () => {
-            this._sessionUpdated().catch(logError);
+            this._sessionUpdated();
         });
     }
 
@@ -56,8 +54,8 @@ export class ExtensionManager extends Signals.EventEmitter {
         // are enabled after start. If it exists, then the systemd unit will
         // disable extensions should gnome-shell crash.
         // Should the file already exist from a previous login, then this is OK.
-        const disableFilename = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'gnome-shell-disable-extensions']);
-        const disableFile = Gio.File.new_for_path(disableFilename);
+        let disableFilename = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'gnome-shell-disable-extensions']);
+        let disableFile = Gio.File.new_for_path(disableFilename);
         try {
             disableFile.create(Gio.FileCreateFlags.REPLACE_DESTINATION, null);
         } catch (e) {
@@ -67,16 +65,17 @@ export class ExtensionManager extends Signals.EventEmitter {
         const shutdownId = global.connect('shutdown',
             () => disableFile.delete(null));
 
-        GLib.timeout_add_seconds_once(GLib.PRIORITY_DEFAULT, 60, () => {
+        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 60, () => {
             global.disconnect(shutdownId);
 
             disableFile.delete(null);
+            return GLib.SOURCE_REMOVE;
         });
 
         this._installExtensionUpdates();
         this._sessionUpdated().then(() => {
             ExtensionDownloader.checkForUpdates();
-        }).catch(logError);
+        });
 
         GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, UPDATE_CHECK_TIMEOUT, () => {
             ExtensionDownloader.checkForUpdates();
@@ -117,7 +116,7 @@ export class ExtensionManager extends Signals.EventEmitter {
                 this._unloadExtensionStylesheet(ext);
                 this._loadExtensionStylesheet(ext);
             } catch (e) {
-                this._callExtensionDisableWithRebase(ext.uuid);
+                this._callExtensionDisable(ext.uuid);
                 this.logExtensionError(ext.uuid, e);
             }
         }
@@ -182,18 +181,8 @@ export class ExtensionManager extends Signals.EventEmitter {
         return false;
     }
 
-    _callExtensionDisable(extension) {
-        try {
-            const res = extension.stateObj.disable();
-            if (res?.then !== undefined)
-                throw new Error('disable() must not be async');
-        } catch (e) {
-            this.logExtensionError(extension.uuid, e);
-        }
-    }
-
-    async _callExtensionDisableWithRebase(uuid) {
-        const extension = this.lookup(uuid);
+    async _callExtensionDisable(uuid) {
+        let extension = this.lookup(uuid);
         if (!extension)
             return;
 
@@ -210,21 +199,30 @@ export class ExtensionManager extends Signals.EventEmitter {
         //   user disables C
         //   this should: disable E, disable D, disable C, enable D, enable E
 
-        const orderIdx = this._extensionOrder.indexOf(uuid);
-        const order = this._extensionOrder.slice(orderIdx + 1);
-        const orderReversed = order.slice().reverse();
+        let orderIdx = this._extensionOrder.indexOf(uuid);
+        let order = this._extensionOrder.slice(orderIdx + 1);
+        let orderReversed = order.slice().reverse();
 
         for (let i = 0; i < orderReversed.length; i++) {
-            const otherUuid = orderReversed[i];
-            console.debug(`Temporarily disable extension ${otherUuid}`);
-            this._callExtensionDisable(this.lookup(otherUuid));
+            let otherUuid = orderReversed[i];
+            try {
+                console.debug(`Temporarily disable extension ${otherUuid}`);
+                this.lookup(otherUuid).stateObj.disable();
+            } catch (e) {
+                this.logExtensionError(otherUuid, e);
+            }
         }
 
-        this._callExtensionDisable(extension);
+        try {
+            extension.stateObj.disable();
+        } catch (e) {
+            this.logExtensionError(uuid, e);
+        }
+
         this._unloadExtensionStylesheet(extension);
 
         for (let i = 0; i < order.length; i++) {
-            const otherUuid = order[i];
+            let otherUuid = order[i];
             try {
                 console.debug(`Re-enable extension ${otherUuid}`);
                 // eslint-disable-next-line no-await-in-loop
@@ -244,7 +242,7 @@ export class ExtensionManager extends Signals.EventEmitter {
         if (!this._extensionSupportsSessionMode(uuid))
             return;
 
-        const extension = this.lookup(uuid);
+        let extension = this.lookup(uuid);
         if (!extension)
             return;
 
@@ -278,7 +276,7 @@ export class ExtensionManager extends Signals.EventEmitter {
         if (!this._extensions.has(uuid))
             return false;
 
-        const enabledExtensions = global.settings.get_strv(ENABLED_EXTENSIONS_KEY);
+        let enabledExtensions = global.settings.get_strv(ENABLED_EXTENSIONS_KEY);
         let disabledExtensions = global.settings.get_strv(DISABLED_EXTENSIONS_KEY);
 
         if (disabledExtensions.includes(uuid)) {
@@ -299,7 +297,7 @@ export class ExtensionManager extends Signals.EventEmitter {
             return false;
 
         let enabledExtensions = global.settings.get_strv(ENABLED_EXTENSIONS_KEY);
-        const disabledExtensions = global.settings.get_strv(DISABLED_EXTENSIONS_KEY);
+        let disabledExtensions = global.settings.get_strv(DISABLED_EXTENSIONS_KEY);
 
         if (enabledExtensions.includes(uuid)) {
             enabledExtensions = enabledExtensions.filter(item => item !== uuid);
@@ -328,7 +326,7 @@ export class ExtensionManager extends Signals.EventEmitter {
             null,
             Gio.DBusCallFlags.NONE,
             -1,
-            null).catch(logError);
+            null);
         return true;
     }
 
@@ -338,7 +336,7 @@ export class ExtensionManager extends Signals.EventEmitter {
             return;
         }
 
-        const extension = this.lookup(uuid);
+        let extension = this.lookup(uuid);
         if (!extension)
             return;
 
@@ -348,13 +346,13 @@ export class ExtensionManager extends Signals.EventEmitter {
         if (!this._updateNotified) {
             this._updateNotified = true;
 
-            const source = new ExtensionUpdateSource();
+            let source = new ExtensionUpdateSource();
             Main.messageTray.add(source);
 
             const notification = new MessageTray.Notification({
                 source,
                 title: _('Extension Updates Available'),
-                body: _('Extension updates are ready to be installed'),
+                body: _('Extension updates are ready to be installed.'),
             });
             notification.connect('activated',
                 () => source.open());
@@ -363,7 +361,7 @@ export class ExtensionManager extends Signals.EventEmitter {
     }
 
     logExtensionError(uuid, error) {
-        const extension = this.lookup(uuid);
+        let extension = this.lookup(uuid);
         if (!extension)
             return;
 
@@ -381,10 +379,55 @@ export class ExtensionManager extends Signals.EventEmitter {
     }
 
     createExtensionObject(uuid, dir, type) {
-        const metadata = loadExtensionMetadata(uuid, dir);
-        const extension = {
-            metadata,
-            uuid,
+        let metadataFile = dir.get_child('metadata.json');
+        if (!metadataFile.query_exists(null))
+            throw new Error('Missing metadata.json');
+
+        let metadataContents, success_;
+        try {
+            [success_, metadataContents] = metadataFile.load_contents(null);
+            metadataContents = new TextDecoder().decode(metadataContents);
+        } catch (e) {
+            throw new Error(`Failed to load metadata.json: ${e}`);
+        }
+        let meta;
+        try {
+            meta = JSON.parse(metadataContents);
+        } catch (e) {
+            throw new Error(`Failed to parse metadata.json: ${e}`);
+        }
+
+        const requiredProperties = [{
+            prop: 'uuid',
+            typeName: 'string',
+        }, {
+            prop: 'name',
+            typeName: 'string',
+        }, {
+            prop: 'description',
+            typeName: 'string',
+        }, {
+            prop: 'shell-version',
+            typeName: 'string array',
+            typeCheck: v => Array.isArray(v) && v.length > 0 && v.every(e => typeof e === 'string'),
+        }];
+        for (let i = 0; i < requiredProperties.length; i++) {
+            const {
+                prop, typeName, typeCheck = v => typeof v === typeName,
+            } = requiredProperties[i];
+
+            if (!meta[prop])
+                throw new Error(`missing "${prop}" property in metadata.json`);
+            if (!typeCheck(meta[prop]))
+                throw new Error(`property "${prop}" is not of type ${typeName}`);
+        }
+
+        if (uuid !== meta.uuid)
+            throw new Error(`uuid "${meta.uuid}" from metadata.json does not match directory name "${uuid}"`);
+
+        let extension = {
+            metadata: meta,
+            uuid: meta.uuid,
             type,
             dir,
             path: dir.get_path(),
@@ -393,7 +436,7 @@ export class ExtensionManager extends Signals.EventEmitter {
             enabled: this._enabledExtensions.includes(uuid),
             hasUpdate: false,
             canChange: false,
-            sessionModes: metadata['session-modes'] ?? ['user'],
+            sessionModes: meta['session-modes'] ? meta['session-modes'] : ['user'],
         };
         this._extensions.set(uuid, extension);
 
@@ -451,7 +494,7 @@ export class ExtensionManager extends Signals.EventEmitter {
         // Try to disable it -- if it's ERROR'd, we can't guarantee that,
         // but it will be removed on next reboot, and hopefully nothing
         // broke too much.
-        await this._callExtensionDisableWithRebase(uuid);
+        await this._callExtensionDisable(uuid);
 
         this._changeExtensionState(extension, ExtensionState.UNINSTALLED);
 
@@ -466,7 +509,7 @@ export class ExtensionManager extends Signals.EventEmitter {
     async reloadExtension(oldExtension) {
         // Grab the things we'll need to pass to createExtensionObject
         // to reload it.
-        const {uuid, dir, type} = oldExtension;
+        let {uuid, dir, type} = oldExtension;
 
         // Then unload the old extension.
         await this.unloadExtension(oldExtension);
@@ -487,12 +530,12 @@ export class ExtensionManager extends Signals.EventEmitter {
         if (!this._extensionSupportsSessionMode(uuid))
             return false;
 
-        const extension = this.lookup(uuid);
+        let extension = this.lookup(uuid);
         if (!extension)
             throw new Error('Extension was not properly created. Call createExtensionObject first');
 
-        const dir = extension.dir;
-        const extensionJs = dir.get_child('extension.js');
+        let dir = extension.dir;
+        let extensionJs = dir.get_child('extension.js');
         if (!extensionJs.query_exists(null)) {
             this.logExtensionError(uuid, new Error('Missing extension.js'));
             return false;
@@ -533,10 +576,10 @@ export class ExtensionManager extends Signals.EventEmitter {
     }
 
     _updateCanChange(extension) {
-        const isMode = this._getModeExtensions().includes(extension.uuid);
-        const modeOnly = global.settings.get_boolean(DISABLE_USER_EXTENSIONS_KEY);
+        let isMode = this._getModeExtensions().includes(extension.uuid);
+        let modeOnly = global.settings.get_boolean(DISABLE_USER_EXTENSIONS_KEY);
 
-        const changeKey = isMode
+        let changeKey = isMode
             ? DISABLE_USER_EXTENSIONS_KEY
             : ENABLED_EXTENSIONS_KEY;
 
@@ -554,7 +597,7 @@ export class ExtensionManager extends Signals.EventEmitter {
         extensions.sort((a, b) => this._compareExtensions(this.lookup(a), this.lookup(b)));
 
         // filter out 'disabled-extensions' which takes precedence
-        const disabledExtensions = global.settings.get_strv(DISABLED_EXTENSIONS_KEY);
+        let disabledExtensions = global.settings.get_strv(DISABLED_EXTENSIONS_KEY);
         return extensions.filter(item => !disabledExtensions.includes(item));
     }
 
@@ -564,28 +607,13 @@ export class ExtensionManager extends Signals.EventEmitter {
     }
 
     async _onEnabledExtensionsChanged() {
-        await this._enableExtensionMutex.hold();
-
-        const newEnabledExtensions = this._getEnabledExtensions();
+        let newEnabledExtensions = this._getEnabledExtensions();
 
         for (const extension of this._extensions.values()) {
             const wasEnabled = extension.enabled;
             extension.enabled = newEnabledExtensions.includes(extension.uuid);
             if (wasEnabled !== extension.enabled)
                 this.emit('extension-state-changed', extension);
-        }
-
-        // Find and disable all the newly disabled extensions: UUIDs found in the
-        // old setting, but not in the new one.
-        const extensionsToDisable = this._extensionOrder
-            .filter(uuid => !newEnabledExtensions.includes(uuid) ||
-                            !this._extensionSupportsSessionMode(uuid));
-        // Reverse mutates the original array, but .filter() creates a new array.
-        extensionsToDisable.reverse();
-
-        for (const uuid of extensionsToDisable) {
-            // eslint-disable-next-line no-await-in-loop
-            await this._callExtensionDisableWithRebase(uuid);
         }
 
         // Find and enable all the newly enabled extensions: UUIDs found in the
@@ -598,13 +626,24 @@ export class ExtensionManager extends Signals.EventEmitter {
             await this._callExtensionEnable(uuid);
         }
 
-        this._enabledExtensions = newEnabledExtensions;
+        // Find and disable all the newly disabled extensions: UUIDs found in the
+        // old setting, but not in the new one.
+        const extensionsToDisable = this._extensionOrder
+            .filter(uuid => !newEnabledExtensions.includes(uuid) ||
+                            !this._extensionSupportsSessionMode(uuid));
+        // Reverse mutates the original array, but .filter() creates a new array.
+        extensionsToDisable.reverse();
 
-        this._enableExtensionMutex.release();
+        for (const uuid of extensionsToDisable) {
+            // eslint-disable-next-line no-await-in-loop
+            await this._callExtensionDisable(uuid);
+        }
+
+        this._enabledExtensions = newEnabledExtensions;
     }
 
     _onSettingsWritableChanged() {
-        for (const extension of this._extensions.values()) {
+        for (let extension of this._extensions.values()) {
             this._updateCanChange(extension);
             this.emit('extension-state-changed', extension);
         }
@@ -618,7 +657,7 @@ export class ExtensionManager extends Signals.EventEmitter {
         this._checkVersion = checkVersion;
 
         // Disabling extensions modifies the order array, so use a copy
-        const extensionOrder = this._extensionOrder.slice();
+        let extensionOrder = this._extensionOrder.slice();
 
         // Disable enabled extensions first to avoid
         // the "rebasing" done in _callExtensionDisable...
@@ -662,25 +701,21 @@ export class ExtensionManager extends Signals.EventEmitter {
         if (!this.updatesSupported)
             return;
 
-        for (const {file: dir, info} of FileUtils.collectFromDatadirs('extension-updates', true)) {
-            const fileType = info.get_file_type();
+        for (const {dir, info} of FileUtils.collectFromDatadirs('extension-updates', true)) {
+            let fileType = info.get_file_type();
             if (fileType !== Gio.FileType.DIRECTORY)
                 continue;
-            const uuid = info.get_name();
-            const extensionDir = Gio.File.new_for_path(
+            let uuid = info.get_name();
+            let extensionDir = Gio.File.new_for_path(
                 GLib.build_filenamev([global.userdatadir, 'extensions', uuid]));
 
             try {
                 FileUtils.recursivelyDeleteDir(extensionDir, false);
                 FileUtils.recursivelyMoveDir(dir, extensionDir);
-            } catch {
-                log(`Failed to install extension updates for ${uuid}`);
-            }
-
-            try {
-                FileUtils.recursivelyDeleteDir(dir, true);
             } catch (e) {
-                console.error(`Failed to delete extension update: ${e.message}`);
+                log(`Failed to install extension updates for ${uuid}`);
+            } finally {
+                FileUtils.recursivelyDeleteDir(dir, true);
             }
         }
     }
@@ -691,23 +726,12 @@ export class ExtensionManager extends Signals.EventEmitter {
         return modesB.length - modesA.length;
     }
 
-
-    _queueEnabledExtensionsChanged() {
-        if (this._idleId)
-            GLib.source_remove(this._idleId);
-        this._idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-            this._idleId = 0;
-            this._onEnabledExtensionsChanged().catch(logError);
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
     async _loadExtensions() {
         global.settings.connect(`changed::${ENABLED_EXTENSIONS_KEY}`, () => {
-            this._queueEnabledExtensionsChanged();
+            this._onEnabledExtensionsChanged();
         });
         global.settings.connect(`changed::${DISABLED_EXTENSIONS_KEY}`, () => {
-            this._queueEnabledExtensionsChanged();
+            this._onEnabledExtensionsChanged();
         });
         global.settings.connect(`changed::${DISABLE_USER_EXTENSIONS_KEY}`, () => {
             this._onUserExtensionsEnabledChanged();
@@ -724,23 +748,23 @@ export class ExtensionManager extends Signals.EventEmitter {
 
         this._enabledExtensions = this._getEnabledExtensions();
 
-        const perUserDir = Gio.File.new_for_path(global.userdatadir);
+        let perUserDir = Gio.File.new_for_path(global.userdatadir);
 
         const includeUserDir = global.settings.get_boolean('allow-extension-installation');
         const extensionFiles = [...FileUtils.collectFromDatadirs('extensions', includeUserDir)];
-        const extensionObjects = extensionFiles.map(({file: dir, info}) => {
-            const fileType = info.get_file_type();
+        const extensionObjects = extensionFiles.map(({dir, info}) => {
+            let fileType = info.get_file_type();
             if (fileType !== Gio.FileType.DIRECTORY)
                 return null;
-            const uuid = info.get_name();
-            const existing = this.lookup(uuid);
+            let uuid = info.get_name();
+            let existing = this.lookup(uuid);
             if (existing) {
                 log(`Extension ${uuid} already installed in ${existing.path}. ${dir.get_path()} will not be loaded`);
                 return null;
             }
 
             let extension;
-            const type = dir.has_prefix(perUserDir)
+            let type = dir.has_prefix(perUserDir)
                 ? ExtensionType.PER_USER
                 : ExtensionType.SYSTEM;
             try {
@@ -793,7 +817,7 @@ export class ExtensionManager extends Signals.EventEmitter {
 
         for (const uuid of extensionsToDisable) {
             // eslint-disable-next-line no-await-in-loop
-            await this._callExtensionDisableWithRebase(uuid);
+            await this._callExtensionDisable(uuid);
         }
     }
 

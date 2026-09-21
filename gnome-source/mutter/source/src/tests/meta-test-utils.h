@@ -25,7 +25,6 @@
 
 #include "backends/meta-backend-types.h"
 #include "backends/meta-virtual-monitor.h"
-#include "meta/meta-x11-types.h"
 #include "meta/window.h"
 
 #define META_TEST_CLIENT_ERROR meta_test_client_error_quark ()
@@ -49,10 +48,6 @@ GQuark meta_test_client_error_quark (void);
 typedef struct _MetaAsyncWaiter MetaAsyncWaiter;
 typedef struct _MetaTestClient MetaTestClient;
 
-typedef gboolean (* MetaTestCommandFunc) (int      argc,
-                                          GStrv    argv,
-                                          gpointer user_data);
-
 META_EXPORT
 gboolean meta_async_waiter_process_x11_event (MetaAsyncWaiter       *waiter,
                                               MetaX11Display        *x11_display,
@@ -71,16 +66,8 @@ META_EXPORT
 char * meta_test_client_get_id (MetaTestClient *client);
 
 META_EXPORT
-MetaWindowClientType meta_test_client_get_client_type (MetaTestClient *client);
-
-META_EXPORT
 gboolean meta_test_client_wait (MetaTestClient  *client,
                                 GError         **error);
-
-META_EXPORT
-gboolean meta_test_client_do_strv (MetaTestClient  *client,
-                                   const char     **args,
-                                   GError         **error);
 
 META_EXPORT
 gboolean meta_test_client_dov (MetaTestClient  *client,
@@ -106,7 +93,8 @@ MetaWindow * meta_test_client_find_window (MetaTestClient  *client,
                                            GError         **error);
 
 META_EXPORT
-void meta_wait_for_window_shown (MetaWindow *window);
+void meta_test_client_wait_for_window_shown (MetaTestClient *client,
+                                             MetaWindow     *window);
 
 META_EXPORT
 gboolean meta_test_client_quit (MetaTestClient  *client,
@@ -130,10 +118,7 @@ META_EXPORT
 void meta_wait_for_monitors_changed (MetaContext *context);
 
 META_EXPORT
-void meta_wait_for_presented (MetaContext *context);
-
-META_EXPORT
-void meta_wait_for_update (MetaContext *context);
+void meta_wait_for_paint (MetaContext *context);
 
 META_EXPORT
 MetaVirtualMonitor * meta_create_test_monitor (MetaContext *context,
@@ -143,44 +128,3 @@ MetaVirtualMonitor * meta_create_test_monitor (MetaContext *context,
 
 META_EXPORT
 void meta_flush_input (MetaContext *context);
-
-META_EXPORT
-GSubprocess * meta_launch_test_executable (GSubprocessFlags  subprocess_flags,
-                                           const char       *name,
-                                           const char       *argv0,
-                                           ...);
-
-META_EXPORT
-void meta_test_process_watch_commands (GSubprocess         *subprocess,
-                                       MetaTestCommandFunc  func,
-                                       gpointer             user_data);
-
-META_EXPORT
-void meta_wait_test_process (GSubprocess *subprocess);
-
-META_EXPORT
-ClutterCursor * meta_get_current_cursor (MetaContext *context);
-
-META_EXPORT
-void meta_wait_for_cursor_change (MetaContext   *context,
-                                  ClutterCursor *initial_cursor);
-
-META_EXPORT
-void meta_wait_for_window_cursor (MetaContext *context);
-
-META_EXPORT
-void meta_wait_for_effects (MetaWindow *window);
-
-META_EXPORT
-void meta_wait_for_paint (ClutterStage *stage);
-
-META_EXPORT
-void meta_wait_wayland_window_reconfigure (MetaWindow *window);
-
-META_EXPORT
-MetaWindow * meta_find_client_window (MetaContext *context,
-                                      const char  *title);
-
-META_EXPORT
-MetaWindow * meta_wait_for_client_window (MetaContext *context,
-                                          const char  *title);

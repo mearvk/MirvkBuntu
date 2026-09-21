@@ -19,12 +19,11 @@
 #include "config.h"
 
 #include "backends/meta-monitor-config-manager.h"
-#include "backends/meta-stage-private.h"
-#include "backends/meta-udev.h"
 #include "backends/meta-virtual-monitor.h"
 #include "backends/native/meta-backend-native.h"
 #include "backends/native/meta-crtc-kms.h"
 #include "backends/native/meta-crtc-virtual.h"
+#include "backends/native/meta-udev.h"
 #include "core/window-private.h"
 #include "meta-test/meta-context-test.h"
 #include "meta/meta-backend.h"
@@ -32,7 +31,9 @@
 #include "tests/meta-test-utils.h"
 #include "tests/meta-wayland-test-driver.h"
 #include "tests/meta-wayland-test-utils.h"
-#include "wayland/meta-cursor-wayland.h"
+#include "tests/native-screen-cast.h"
+#include "tests/native-virtual-monitor.h"
+#include "wayland/meta-cursor-sprite-wayland.h"
 #include "wayland/meta-wayland-private.h"
 #include "wayland/meta-wayland-seat.h"
 
@@ -50,11 +51,12 @@ meta_test_cursor_hotplug (void)
   MetaBackend *backend = meta_context_get_backend (test_context);
   MetaMonitorManager *monitor_manager =
     meta_backend_get_monitor_manager (backend);
+  MetaCursorRenderer *cursor_renderer = meta_backend_get_cursor_renderer (backend);
   MetaWaylandCompositor *wayland_compositor =
     meta_context_get_wayland_compositor (test_context);
   MetaWaylandSeat *wayland_seat = wayland_compositor->seat;
   g_autoptr (MetaWaylandTestDriver) test_driver = NULL;
-  ClutterCursor *cursor;
+  MetaCursorSprite *cursor_sprite;
   g_autoptr (MetaVirtualMonitorInfo) monitor_info = NULL;
   MetaVirtualMonitor *virtual_monitor;
   ClutterSeat *seat;
@@ -72,10 +74,10 @@ meta_test_cursor_hotplug (void)
   meta_set_custom_monitor_config_full (backend, "kms-cursor-hotplug-off.xml",
                                        META_MONITORS_CONFIG_FLAG_NONE);
 
-  monitor_info = meta_virtual_monitor_info_new_simple (100, 100, 60.0,
-                                                       "MetaTestVendor",
-                                                       "MetaVirtualMonitor",
-                                                       "0x1234");
+  monitor_info = meta_virtual_monitor_info_new (100, 100, 60.0,
+                                                "MetaTestVendor",
+                                                "MetaVirtualMonitor",
+                                                "0x1234");
   virtual_monitor = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                  monitor_info,
                                                                  &error);
@@ -101,14 +103,19 @@ meta_test_cursor_hotplug (void)
       g_main_context_iteration (NULL, TRUE);
     }
 
-  cursor = meta_get_current_cursor (test_context);
-
   meta_window_move_frame (window, FALSE, 0, 0);
-  meta_wait_for_presented (test_context);
-  meta_wait_for_cursor_change (test_context, cursor);
+  meta_wait_for_paint (test_context);
 
-  cursor = meta_get_current_cursor (test_context);
-  g_assert_true (META_IS_CURSOR_WAYLAND (cursor));
+  cursor_renderer = meta_backend_get_cursor_renderer (backend);
+
+  while (TRUE)
+    {
+      cursor_sprite = meta_cursor_renderer_get_cursor (cursor_renderer);
+      if (cursor_sprite)
+        break;
+      g_main_context_iteration (NULL, TRUE);
+    }
+  g_assert_true (META_IS_CURSOR_SPRITE_WAYLAND (cursor_sprite));
 
   /*
    * This tests a particular series of events:
@@ -133,14 +140,14 @@ meta_test_cursor_hotplug (void)
   meta_set_custom_monitor_config_full (backend, "kms-cursor-hotplug-on.xml",
                                        META_MONITORS_CONFIG_FLAG_NONE);
   meta_monitor_manager_reload (monitor_manager);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
   meta_wayland_test_driver_emit_sync_event (test_driver, 1);
   meta_wayland_test_client_finish (test_client);
 
   g_clear_object (&virtual_monitor);
   meta_wait_for_monitors_changed (test_context);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 }
 
 static void
@@ -150,13 +157,13 @@ meta_test_hotplug_multi_view_invalidation (void)
   MetaMonitorManager *monitor_manager =
     meta_backend_get_monitor_manager (backend);
   MetaRenderer *renderer = meta_backend_get_renderer (backend);
-  MetaCursorRenderer *cursor_renderer;
+  MetaCursorRenderer *cursor_renderer = meta_backend_get_cursor_renderer (backend);
   ClutterSeat *seat;
   g_autoptr (MetaVirtualMonitorInfo) monitor_info = NULL;
   MetaVirtualMonitor *virtual_monitor;
   g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  ClutterCursor *cursor;
-  gboolean image_changed;
+  MetaCursorSprite *cursor_sprite;
+  gboolean texture_changed;
   gulong texture_changed_handler_id;
   g_autoptr (GError) error = NULL;
   GList *views;
@@ -165,10 +172,10 @@ meta_test_hotplug_multi_view_invalidation (void)
   virtual_pointer = clutter_seat_create_virtual_device (seat,
                                                         CLUTTER_POINTER_DEVICE);
 
-  monitor_info = meta_virtual_monitor_info_new_simple (100, 100, 60.0,
-                                                       "MetaTestVendor",
-                                                       "MetaVirtualMonitor",
-                                                       "0x1234");
+  monitor_info = meta_virtual_monitor_info_new (100, 100, 60.0,
+                                                "MetaTestVendor",
+                                                "MetaVirtualMonitor",
+                                                "0x1234");
   virtual_monitor = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                  monitor_info,
                                                                  &error);
@@ -179,194 +186,30 @@ meta_test_hotplug_multi_view_invalidation (void)
   g_assert_true (META_IS_CRTC_KMS (meta_renderer_view_get_crtc (views->data)));
   g_assert_true (META_IS_CRTC_VIRTUAL (meta_renderer_view_get_crtc (views->next->data)));
 
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
-  cursor_renderer = meta_backend_get_cursor_renderer (backend);
-  g_assert_nonnull (cursor_renderer);
-  cursor = meta_cursor_renderer_get_cursor (cursor_renderer);
-  g_assert_nonnull (cursor);
+  cursor_sprite = meta_cursor_renderer_get_cursor (cursor_renderer);
+  g_assert_nonnull (cursor_sprite);
   texture_changed_handler_id =
-    g_signal_connect_swapped (cursor, "image-changed",
-                              G_CALLBACK (set_true_cb), &image_changed);
+    g_signal_connect_swapped (cursor_sprite, "texture-changed",
+                              G_CALLBACK (set_true_cb), &texture_changed);
 
   /* Trigger a cursor scale change, that causes invalidation on a non-first
    * KMS CRTC based cursor renderer view auxiliary object.
    */
-  image_changed = FALSE;
+  texture_changed = FALSE;
   meta_set_custom_monitor_config_full (backend, "kms-cursor-scale.xml",
                                        META_MONITORS_CONFIG_FLAG_NONE);
   meta_monitor_manager_reload (monitor_manager);
   views = meta_renderer_get_views (renderer);
   g_assert_true (META_IS_CRTC_KMS (meta_renderer_view_get_crtc (views->data)));
   g_assert_true (META_IS_CRTC_VIRTUAL (meta_renderer_view_get_crtc (views->next->data)));
-  g_assert_true (image_changed);
+  g_assert_true (texture_changed);
 
-  g_signal_handler_disconnect (cursor, texture_changed_handler_id);
+  g_signal_handler_disconnect (cursor_sprite, texture_changed_handler_id);
   g_clear_object (&virtual_monitor);
   meta_wait_for_monitors_changed (test_context);
-  meta_wait_for_presented (test_context);
-}
-
-typedef struct
-{
-  MetaStageWatch *watch;
-  GMainLoop *loop;
-  gboolean painted;
-  MtkRectangle cursor_rect;
-} VirtualViewPaintData;
-
-static void
-on_virtual_view_after_paint (MetaStage        *stage,
-                             ClutterStageView *view,
-                             const MtkRegion  *redraw_clip,
-                             ClutterFrame     *frame,
-                             gpointer          user_data)
-{
-  VirtualViewPaintData *data = user_data;
-
-  /* Only count a paint driven by the cursor damage itself. A watch fires for
-   * any paint of the view, so without this an unrelated full-view repaint
-   * would satisfy the assertion below. A NULL clip means a full redraw;
-   * cursor-only damage always arrives as a clip covering the cursor rect. */
-  if (!redraw_clip ||
-      mtk_region_contains_rectangle (redraw_clip,
-                                     &data->cursor_rect) == MTK_REGION_OVERLAP_OUT)
-    return;
-
-  data->painted = TRUE;
-  meta_stage_remove_watch (stage, data->watch);
-  data->watch = NULL;
-  g_main_loop_quit (data->loop);
-}
-
-static gboolean
-on_virtual_view_paint_timeout (gpointer user_data)
-{
-  VirtualViewPaintData *data = user_data;
-
-  g_main_loop_quit (data->loop);
-  return G_SOURCE_REMOVE;
-}
-
-static void
-meta_test_cursor_overlay_visible_per_view (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  MetaRenderer *renderer = meta_backend_get_renderer (backend);
-  MetaStage *stage = META_STAGE (meta_backend_get_stage (backend));
-  MetaCursorRenderer *cursor_renderer;
-  ClutterSeat *seat;
-  g_autoptr (MetaVirtualMonitorInfo) monitor_info = NULL;
-  MetaVirtualMonitor *virtual_monitor;
-  g_autoptr (ClutterVirtualInputDevice) virtual_pointer = NULL;
-  ClutterStageView *kms_view;
-  ClutterStageView *virtual_view;
-  MtkRectangle virtual_layout;
-  g_autoptr (GError) error = NULL;
-  GList *views;
-  VirtualViewPaintData data = { 0 };
-  guint timeout_id;
-
-  seat = meta_backend_get_default_seat (backend);
-  virtual_pointer = clutter_seat_create_virtual_device (seat,
-                                                        CLUTTER_POINTER_DEVICE);
-
-  monitor_info = meta_virtual_monitor_info_new_simple (100, 100, 60.0,
-                                                       "MetaTestVendor",
-                                                       "MetaVirtualMonitor",
-                                                       "0x1234");
-  virtual_monitor = meta_monitor_manager_create_virtual_monitor (monitor_manager,
-                                                                 monitor_info,
-                                                                 &error);
-  g_assert_no_error (error);
-
-  meta_monitor_manager_reload (monitor_manager);
-
-  /* Pin the layout. Without a config of its own the test inherits whatever
-   * arrangement the binary happens to end up with, which depends on what ran
-   * before it in the same process, and the coordinates below would then be on
-   * an arbitrary view. */
-  meta_set_custom_monitor_config_full (backend, "kms-cursor-scale.xml",
-                                       META_MONITORS_CONFIG_FLAG_NONE);
-  meta_monitor_manager_reload (monitor_manager);
-
-  views = meta_renderer_get_views (renderer);
-  g_assert_true (META_IS_CRTC_KMS (meta_renderer_view_get_crtc (views->data)));
-  g_assert_true (META_IS_CRTC_VIRTUAL (meta_renderer_view_get_crtc (views->next->data)));
-  kms_view = CLUTTER_STAGE_VIEW (views->data);
-  virtual_view = CLUTTER_STAGE_VIEW (views->next->data);
-  clutter_stage_view_get_layout (virtual_view, &virtual_layout);
-
-  /* Move the pointer so native's `update_cursor` realizes an actual hardware
-   * cursor on the real KMS-backed view. It does this for every hw-cursor-
-   * capable CRTC whenever any cursor is displayed, regardless of pointer
-   * position, so no special positioning is needed to trigger the
-   * regression's precondition - just a settled cursor + presented frame. */
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer,
-                                                       g_get_monotonic_time (),
-                                                       50, 50);
-  meta_flush_input (test_context);
-  meta_wait_for_presented (test_context);
-
-  cursor_renderer = meta_backend_get_cursor_renderer (backend);
-  g_assert_nonnull (cursor_renderer);
-
-  /* Regression test for the bug where a single, stage-wide "does anything
-   * need a software cursor overlay" flag was OR'd across every CRTC's
-   * hardware-cursor capability: once the real KMS view picked up a hardware
-   * cursor, the flag went FALSE stage-wide, silently disabling the software
-   * overlay the virtual/headless view still needs. This pair of assertions
-   * is unrepresentable with that old single stage-wide flag - the second
-   * one is precisely the bug. */
-  g_assert_false (meta_cursor_renderer_needs_overlay_on_view (cursor_renderer,
-                                                              kms_view));
-  g_assert_true (meta_cursor_renderer_needs_overlay_on_view (cursor_renderer,
-                                                             virtual_view));
-
-  /* Behavioral check: pure cursor movement alone must still schedule a
-   * repaint for the virtual view. Deliberately not using
-   * meta_wait_for_presented() here, which forces a redraw itself and would
-   * pass even on unfixed code - only a real MetaStageWatch firing proves a
-   * paint was actually dispatched purely from the motion below.
-   *
-   * The pointer has to land on the virtual view: cursor overlay damage is
-   * per-view by rectangle intersection, so a motion anywhere else leaves this
-   * view unclipped, its paint skipped, and the watch never fires. */
-  data.cursor_rect = (MtkRectangle) {
-    .x = virtual_layout.x + 10,
-    .y = virtual_layout.y + 10,
-    .width = 1,
-    .height = 1,
-  };
-
-  data.loop = g_main_loop_new (NULL, FALSE);
-  data.watch = meta_stage_watch_view (stage, virtual_view,
-                                      META_STAGE_WATCH_AFTER_PAINT,
-                                      on_virtual_view_after_paint,
-                                      &data);
-  timeout_id = g_timeout_add_seconds (5, on_virtual_view_paint_timeout, &data);
-
-  clutter_virtual_input_device_notify_absolute_motion (virtual_pointer,
-                                                       g_get_monotonic_time (),
-                                                       data.cursor_rect.x,
-                                                       data.cursor_rect.y);
-  meta_flush_input (test_context);
-
-  g_main_loop_run (data.loop);
-  g_main_loop_unref (data.loop);
-
-  if (data.watch)
-    meta_stage_remove_watch (stage, data.watch);
-  else
-    g_source_remove (timeout_id);
-
-  g_assert_true (data.painted);
-
-  g_clear_object (&virtual_monitor);
-  meta_wait_for_monitors_changed (test_context);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 }
 
 static void
@@ -376,8 +219,6 @@ init_tests (void)
                    meta_test_cursor_hotplug);
   g_test_add_func ("/hotplug/multi-view-invalidation",
                    meta_test_hotplug_multi_view_invalidation);
-  g_test_add_func ("/cursor-overlay/visible-per-view",
-                   meta_test_cursor_overlay_visible_per_view);
 }
 
 int
@@ -389,7 +230,7 @@ main (int    argc,
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_VKMS,
                                       META_CONTEXT_TEST_FLAG_NO_X11 |
                                       META_CONTEXT_TEST_FLAG_TEST_CLIENT);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   test_context = context;
 

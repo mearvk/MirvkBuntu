@@ -22,7 +22,7 @@
 /**
  * GtkShortcutTrigger:
  *
- * Tracks how a `GtkShortcut` can be activated.
+ * `GtkShortcutTrigger` tracks how a `GtkShortcut` should be activated.
  *
  * To find out if a `GtkShortcutTrigger` triggers, you can call
  * [method@Gtk.ShortcutTrigger.trigger] on a `GdkEvent`.
@@ -40,16 +40,12 @@
 #include "gtkshortcuttrigger.h"
 
 #include "gtkaccelgroupprivate.h"
-#include "gtktypebuiltins.h"
 #include "gtkprivate.h"
 
 #define GTK_SHORTCUT_TRIGGER_HASH_NEVER         0u
 #define GTK_SHORTCUT_TRIGGER_HASH_KEYVAL        1u
 #define GTK_SHORTCUT_TRIGGER_HASH_MNEMONIC      2u
 #define GTK_SHORTCUT_TRIGGER_HASH_ALTERNATIVE   3u
-
-
-/* {{{ GObject boilerplate */
 
 struct _GtkShortcutTrigger
 {
@@ -84,9 +80,6 @@ static void
 gtk_shortcut_trigger_init (GtkShortcutTrigger *self)
 {
 }
-
-/* }}} */
-/* {{{ Public API */
 
 /**
  * gtk_shortcut_trigger_trigger:
@@ -124,7 +117,7 @@ gtk_shortcut_trigger_trigger (GtkShortcutTrigger *self,
  *   - `never`, for `GtkNeverTrigger`
  *   - a string parsed by gtk_accelerator_parse(), for a `GtkKeyvalTrigger`, e.g. `<Control>C`
  *   - underscore, followed by a single character, for `GtkMnemonicTrigger`, e.g. `_l`
- *   - two or more valid trigger strings, separated by a `|` character, for a
+ *   - two valid trigger strings, separated by a `|` character, for a
  *     `GtkAlternativeTrigger`: `<Control>q|<Control>w`
  *
  * Note that you will have to escape the `<` and `>` characters when specifying
@@ -144,54 +137,42 @@ gtk_shortcut_trigger_parse_string (const char *string)
 
   if ((sep = strchr (string, '|')) != NULL)
     {
-      const char *rest = string;
-      GtkShortcutTrigger *triggers[20];
-      unsigned int n_triggers = 0;
+      char *frag_a = g_strndup (string, sep - string);
+      const char *frag_b = sep + 1;
+      GtkShortcutTrigger *t1, *t2;
 
-      while ((sep = strchr (rest, '|')) != NULL)
+      /* empty first slot */
+      if (*frag_a == '\0')
         {
-          char *frag;
-
-          if (n_triggers + 1 == G_N_ELEMENTS (triggers))
-            {
-              g_warning ("Can't handle more than 20 triggers in GtkAlternativeTrigger");
-              return gtk_alternative_trigger_newv (triggers, n_triggers);
-            }
-
-          frag = g_strndup (rest, sep - rest);
-          rest = sep + 1;
-
-          if (frag[0] == '\0')
-            {
-              g_free (frag);
-              for (unsigned int i = 0; i < n_triggers; i++)
-                g_object_unref (triggers[i]);
-              return NULL;
-            }
-
-          triggers[n_triggers] = gtk_shortcut_trigger_parse_string (frag);
-          if (triggers[n_triggers] == NULL)
-            {
-              for (unsigned int i = 0; i < n_triggers; i++)
-                g_object_unref (triggers[i]);
-              return NULL;
-            }
-
-          n_triggers++;
-          g_free (frag);
-        }
-
-      if (rest[0] == '\0')
-        {
-          for (unsigned int i = 0; i < n_triggers; i++)
-            g_object_unref (triggers[i]);
+          g_free (frag_a);
           return NULL;
         }
-      g_assert (n_triggers < 20);
-      triggers[n_triggers] = gtk_shortcut_trigger_parse_string (rest);
-      n_triggers++;
 
-      return gtk_alternative_trigger_newv (triggers, n_triggers);
+      /* empty second slot */
+      if (*frag_b == '\0')
+        {
+          g_free (frag_a);
+          return NULL;
+        }
+
+      t1 = gtk_shortcut_trigger_parse_string (frag_a);
+      if (t1 == NULL)
+        {
+          g_free (frag_a);
+          return NULL;
+        }
+
+      t2 = gtk_shortcut_trigger_parse_string (frag_b);
+      if (t2 == NULL)
+        {
+          g_object_unref (t1);
+          g_free (frag_a);
+          return NULL;
+        }
+
+      g_free (frag_a);
+
+      return gtk_alternative_trigger_new (t1, t2);
     }
 
   if (g_str_equal (string, "never"))
@@ -417,9 +398,6 @@ gtk_shortcut_trigger_compare (gconstpointer trigger1,
     }
 }
 
-/* }}} */
-/* {{{ Never trigger */
-
 struct _GtkNeverTrigger
 {
   GtkShortcutTrigger parent_instance;
@@ -432,29 +410,12 @@ struct _GtkNeverTriggerClass
 
 G_DEFINE_TYPE (GtkNeverTrigger, gtk_never_trigger, GTK_TYPE_SHORTCUT_TRIGGER)
 
-static GtkShortcutTrigger *never_singleton;
-
 static void G_GNUC_NORETURN
 gtk_never_trigger_finalize (GObject *gobject)
 {
   g_assert_not_reached ();
 
   G_OBJECT_CLASS (gtk_never_trigger_parent_class)->finalize (gobject);
-}
-
-static GObject *
-gtk_never_trigger_constructor (GType                  type,
-                               guint                  n_construct_params,
-                               GObjectConstructParam *construct_params)
-{
-  if (G_UNLIKELY (never_singleton == NULL))
-    {
-      GObjectClass *parent_class = G_OBJECT_CLASS (gtk_never_trigger_parent_class);
-      never_singleton = GTK_SHORTCUT_TRIGGER (parent_class->constructor (type,
-                                                                         n_construct_params,
-                                                                         construct_params));
-    }
-  return g_object_ref (G_OBJECT (never_singleton));
 }
 
 static GdkKeyMatch
@@ -499,7 +460,6 @@ gtk_never_trigger_class_init (GtkNeverTriggerClass *klass)
   GtkShortcutTriggerClass *trigger_class = GTK_SHORTCUT_TRIGGER_CLASS (klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
-  gobject_class->constructor = gtk_never_trigger_constructor;
   gobject_class->finalize = gtk_never_trigger_finalize;
 
   trigger_class->trigger = gtk_never_trigger_trigger;
@@ -512,8 +472,6 @@ gtk_never_trigger_class_init (GtkNeverTriggerClass *klass)
 static void
 gtk_never_trigger_init (GtkNeverTrigger *self)
 {
-  /* We are the singleton being constructed */
-  g_assert (!never_singleton);
 }
 
 /**
@@ -530,18 +488,13 @@ gtk_never_trigger_init (GtkNeverTrigger *self)
 GtkShortcutTrigger *
 gtk_never_trigger_get (void)
 {
-  if (G_UNLIKELY (never_singleton == NULL))
-    {
-      GtkShortcutTrigger *never = g_object_new (GTK_TYPE_NEVER_TRIGGER, NULL);
-      g_assert (never == never_singleton);
-      g_object_unref (never);
-    }
+  static GtkShortcutTrigger *never = NULL;
 
-  return never_singleton;
+  if (G_UNLIKELY (never == NULL))
+    never = g_object_new (GTK_TYPE_NEVER_TRIGGER, NULL);
+
+  return never;
 }
-
-/* }}} */
-/* {{{ Keyval trigger */
 
 struct _GtkKeyvalTrigger
 {
@@ -698,28 +651,28 @@ gtk_keyval_trigger_class_init (GtkKeyvalTriggerClass *klass)
   trigger_class->print_label = gtk_keyval_trigger_print_label;
 
   /**
-   * GtkKeyvalTrigger:keyval:
+   * GtkKeyvalTrigger:keyval: (attributes org.gtk.Property.get=gtk_keyval_trigger_get_keyval)
    *
    * The key value for the trigger.
    */
   keyval_props[KEYVAL_PROP_KEYVAL] =
-    g_param_spec_uint ("keyval", NULL, NULL,
+    g_param_spec_uint (I_("keyval"), NULL, NULL,
                        0, G_MAXINT,
                        0,
-                       G_PARAM_STATIC_NAME |
+                       G_PARAM_STATIC_STRINGS |
                        G_PARAM_CONSTRUCT_ONLY |
                        G_PARAM_READWRITE);
 
   /**
-   * GtkKeyvalTrigger:modifiers:
+   * GtkKeyvalTrigger:modifiers: (attributes org.gtk.Property.get=gtk_keyval_trigger_get_modifiers)
    *
    * The key modifiers for the trigger.
    */
   keyval_props[KEYVAL_PROP_MODIFIERS] =
-    g_param_spec_flags ("modifiers", NULL, NULL,
+    g_param_spec_flags (I_("modifiers"), NULL, NULL,
                         GDK_TYPE_MODIFIER_TYPE,
                         GDK_NO_MODIFIER_MASK,
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_CONSTRUCT_ONLY |
                         G_PARAM_READWRITE);
 
@@ -752,7 +705,7 @@ gtk_keyval_trigger_new (guint           keyval,
 }
 
 /**
- * gtk_keyval_trigger_get_modifiers:
+ * gtk_keyval_trigger_get_modifiers: (attributes org.gtk.Method.get_property=modifiers)
  * @self: a keyval `GtkShortcutTrigger`
  *
  * Gets the modifiers that must be present to succeed
@@ -769,7 +722,7 @@ gtk_keyval_trigger_get_modifiers (GtkKeyvalTrigger *self)
 }
 
 /**
- * gtk_keyval_trigger_get_keyval:
+ * gtk_keyval_trigger_get_keyval: (attributes org.gtk.Method.get_property=keyval)
  * @self: a keyval `GtkShortcutTrigger`
  *
  * Gets the keyval that must be pressed to succeed
@@ -785,8 +738,7 @@ gtk_keyval_trigger_get_keyval (GtkKeyvalTrigger *self)
   return self->keyval;
 }
 
-/* }}} */
-/* {{{ Mnemonic trigger */
+/*** GTK_MNEMONIC_TRIGGER ***/
 
 struct _GtkMnemonicTrigger
 {
@@ -951,15 +903,15 @@ gtk_mnemonic_trigger_class_init (GtkMnemonicTriggerClass *klass)
   trigger_class->print_label = gtk_mnemonic_trigger_print_label;
 
   /**
-   * GtkMnemonicTrigger:keyval:
+   * GtkMnemonicTrigger:keyval: (attributes org.gtk.Property.get=gtk_mnemonic_trigger_get_keyval)
    *
    * The key value for the trigger.
    */
-  mnemonic_props[MNEMONIC_PROP_KEYVAL] =
-    g_param_spec_uint ("keyval", NULL, NULL,
+  mnemonic_props[KEYVAL_PROP_KEYVAL] =
+    g_param_spec_uint (I_("keyval"), NULL, NULL,
                        0, G_MAXINT,
                        0,
-                       G_PARAM_STATIC_NAME |
+                       G_PARAM_STATIC_STRINGS |
                        G_PARAM_CONSTRUCT_ONLY |
                        G_PARAM_READWRITE);
 
@@ -992,7 +944,7 @@ gtk_mnemonic_trigger_new (guint keyval)
 }
 
 /**
- * gtk_mnemonic_trigger_get_keyval:
+ * gtk_mnemonic_trigger_get_keyval: (attributes org.gtk.Method.get_property=keyval)
  * @self: a mnemonic `GtkShortcutTrigger`
  *
  * Gets the keyval that must be pressed to succeed triggering @self.
@@ -1007,15 +959,14 @@ gtk_mnemonic_trigger_get_keyval (GtkMnemonicTrigger *self)
   return self->keyval;
 }
 
-/* }}} */
-/* {{{ Alternative trigger */
+/*** GTK_ALTERNATIVE_TRIGGER ***/
 
 struct _GtkAlternativeTrigger
 {
   GtkShortcutTrigger parent_instance;
 
-  GtkShortcutTrigger **triggers;
-  unsigned int n_triggers;
+  GtkShortcutTrigger *first;
+  GtkShortcutTrigger *second;
 };
 
 struct _GtkAlternativeTriggerClass
@@ -1023,42 +974,7 @@ struct _GtkAlternativeTriggerClass
   GtkShortcutTriggerClass parent_class;
 };
 
-static GType
-gtk_alternative_trigger_get_item_type (GListModel *model)
-{
-  return GTK_TYPE_SHORTCUT_TRIGGER;
-}
-
-static unsigned int
-gtk_alternative_trigger_get_n_items (GListModel *model)
-{
-  GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (model);
-
-  return self->n_triggers;
-}
-
-static gpointer
-gtk_alternative_trigger_get_item (GListModel   *model,
-                                  unsigned int  position)
-{
-  GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (model);
-
-  if (position < self->n_triggers)
-    return g_object_ref (self->triggers[position]);
-  else
-    return NULL;
-}
-
-static void
-gtk_alternative_trigger_list_model_init (GListModelInterface *iface)
-{
-  iface->get_item_type = gtk_alternative_trigger_get_item_type;
-  iface->get_n_items = gtk_alternative_trigger_get_n_items;
-  iface->get_item = gtk_alternative_trigger_get_item;
-}
-
-G_DEFINE_TYPE_WITH_CODE (GtkAlternativeTrigger, gtk_alternative_trigger, GTK_TYPE_SHORTCUT_TRIGGER,
-                         G_IMPLEMENT_INTERFACE (G_TYPE_LIST_MODEL, gtk_alternative_trigger_list_model_init))
+G_DEFINE_TYPE (GtkAlternativeTrigger, gtk_alternative_trigger, GTK_TYPE_SHORTCUT_TRIGGER)
 
 enum
 {
@@ -1074,11 +990,8 @@ gtk_alternative_trigger_dispose (GObject *gobject)
 {
   GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (gobject);
 
-  for (unsigned int i = 0; i < self->n_triggers; i++)
-    g_object_unref (self->triggers[i]);
-
-  g_clear_pointer (&self->triggers, g_free);
-  self->n_triggers = 0;
+  g_clear_object (&self->first);
+  g_clear_object (&self->second);
 
   G_OBJECT_CLASS (gtk_alternative_trigger_parent_class)->dispose (gobject);
 }
@@ -1089,25 +1002,22 @@ gtk_alternative_trigger_trigger (GtkShortcutTrigger *trigger,
                                  gboolean            enable_mnemonics)
 {
   GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (trigger);
-  GdkKeyMatch match = GDK_KEY_MATCH_NONE;
 
-  for (unsigned int i = 0; i < self->n_triggers; i++)
-    match = MAX (match, gtk_shortcut_trigger_trigger (self->triggers[i], event, enable_mnemonics));
-
-  return match;
+  return MAX (gtk_shortcut_trigger_trigger (self->first, event, enable_mnemonics),
+              gtk_shortcut_trigger_trigger (self->second, event, enable_mnemonics));
 }
 
 static guint
 gtk_alternative_trigger_hash (GtkShortcutTrigger *trigger)
 {
   GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (trigger);
-  guint result = 0;
+  guint result;
 
-  for (unsigned int i = 0; i < self->n_triggers; i++)
-    {
-      result |= gtk_shortcut_trigger_hash (self->triggers[i]);
-      result = result << 5 | result >> 27;
-    }
+  result = gtk_shortcut_trigger_hash (self->first);
+  result <<= 5;
+
+  result |= gtk_shortcut_trigger_hash (self->second);
+  result <<= 5;
 
   return result | GTK_SHORTCUT_TRIGGER_HASH_ALTERNATIVE;
 }
@@ -1120,17 +1030,11 @@ gtk_alternative_trigger_compare (GtkShortcutTrigger  *trigger1,
   GtkAlternativeTrigger *self2 = GTK_ALTERNATIVE_TRIGGER (trigger2);
   int cmp;
 
-  if (self1->n_triggers != self2->n_triggers)
-    return self2->n_triggers - self1->n_triggers;
+  cmp = gtk_shortcut_trigger_compare (self1->first, self2->first);
+  if (cmp != 0)
+    return cmp;
 
-  for (unsigned int i = 0; i < self1->n_triggers; i++)
-    {
-      cmp = gtk_shortcut_trigger_compare (self1->triggers[i], self2->triggers[i]);
-      if (cmp != 0)
-        return cmp;
-    }
-
-  return 0;
+  return gtk_shortcut_trigger_compare (self1->second, self2->second);
 }
 
 static void
@@ -1139,12 +1043,9 @@ gtk_alternative_trigger_print (GtkShortcutTrigger *trigger,
 {
   GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (trigger);
 
-  for (unsigned int i = 0; i < self->n_triggers; i++)
-    {
-      if (i > 0)
-        g_string_append (string, "|");
-      gtk_shortcut_trigger_print (self->triggers[i], string);
-    }
+  gtk_shortcut_trigger_print (self->first, string);
+  g_string_append (string, "|");
+  gtk_shortcut_trigger_print (self->second, string);
 }
 
 static gboolean
@@ -1153,21 +1054,18 @@ gtk_alternative_trigger_print_label (GtkShortcutTrigger *trigger,
                                      GString            *string)
 {
   GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (trigger);
-  gboolean retval = TRUE;
 
-  for (unsigned int i = 0; i < self->n_triggers; i++)
+  if (gtk_shortcut_trigger_print_label (self->first, display, string))
     {
-      if (i > 0)
-        g_string_append (string, ", ");
-      if (!gtk_shortcut_trigger_print_label (self->triggers[i], display, string))
-        {
-          if (i > 0)
-            g_string_truncate (string, string->len - 2);
-          retval = FALSE;
-        }
+      g_string_append (string, ", ");
+      if (!gtk_shortcut_trigger_print_label (self->second, display, string))
+        g_string_truncate (string, string->len - 2);
+      return TRUE;
     }
-
-  return retval;
+  else
+    {
+      return gtk_shortcut_trigger_print_label (self->second, display, string);
+    }
 }
 
 static void
@@ -1177,22 +1075,15 @@ gtk_alternative_trigger_set_property (GObject      *gobject,
                                       GParamSpec   *pspec)
 {
   GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (gobject);
-  GtkShortcutTrigger *trigger;
 
   switch (prop_id)
     {
     case ALTERNATIVE_PROP_FIRST:
-      trigger = g_value_get_object (value);
-      if (!trigger)
-        trigger = gtk_never_trigger_get ();
-      g_set_object (&self->triggers[0], trigger);
+      self->first = g_value_dup_object (value);
       break;
 
     case ALTERNATIVE_PROP_SECOND:
-      trigger = g_value_get_object (value);
-      if (!trigger)
-        trigger = gtk_never_trigger_get ();
-      g_set_object (&self->triggers[1], trigger);
+      self->second = g_value_dup_object (value);
       break;
 
     default:
@@ -1211,11 +1102,11 @@ gtk_alternative_trigger_get_property (GObject    *gobject,
   switch (prop_id)
     {
     case ALTERNATIVE_PROP_FIRST:
-      g_value_set_object (value, self->triggers[0]);
+      g_value_set_object (value, self->first);
       break;
 
     case ALTERNATIVE_PROP_SECOND:
-      g_value_set_object (value, self->triggers[1]);
+      g_value_set_object (value, self->second);
       break;
 
     default:
@@ -1224,11 +1115,27 @@ gtk_alternative_trigger_get_property (GObject    *gobject,
 }
 
 static void
+gtk_alternative_trigger_constructed (GObject *gobject)
+{
+  GtkAlternativeTrigger *self = GTK_ALTERNATIVE_TRIGGER (gobject);
+
+  if (self->first == NULL || self->second == NULL)
+    {
+      g_critical ("Invalid alternative trigger, disabling");
+      self->first = g_object_ref (gtk_never_trigger_get ());
+      self->second = g_object_ref (gtk_never_trigger_get ());
+    }
+
+  G_OBJECT_CLASS (gtk_alternative_trigger_parent_class)->constructed (gobject);
+}
+
+static void
 gtk_alternative_trigger_class_init (GtkAlternativeTriggerClass *klass)
 {
   GtkShortcutTriggerClass *trigger_class = GTK_SHORTCUT_TRIGGER_CLASS (klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
+  gobject_class->constructed = gtk_alternative_trigger_constructed;
   gobject_class->set_property = gtk_alternative_trigger_set_property;
   gobject_class->get_property = gtk_alternative_trigger_get_property;
   gobject_class->dispose = gtk_alternative_trigger_dispose;
@@ -1240,26 +1147,26 @@ gtk_alternative_trigger_class_init (GtkAlternativeTriggerClass *klass)
   trigger_class->print_label = gtk_alternative_trigger_print_label;
 
   /**
-   * GtkAlternativeTrigger:first:
+   * GtkAlternativeTrigger:first: (attributes org.gtk.Property.get=gtk_alternative_trigger_get_first)
    *
    * The first `GtkShortcutTrigger` to check.
    */
   alternative_props[ALTERNATIVE_PROP_FIRST] =
-    g_param_spec_object ("first", NULL, NULL,
+    g_param_spec_object (I_("first"), NULL, NULL,
                          GTK_TYPE_SHORTCUT_TRIGGER,
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_CONSTRUCT_ONLY |
                          G_PARAM_READWRITE);
 
   /**
-   * GtkAlternativeTrigger:second:
+   * GtkAlternativeTrigger:second: (attributes org.gtk.Property.get=gtk_alternative_trigger_get_second)
    *
    * The second `GtkShortcutTrigger` to check.
    */
   alternative_props[ALTERNATIVE_PROP_SECOND] =
-    g_param_spec_object ("second", NULL, NULL,
+    g_param_spec_object (I_("second"), NULL, NULL,
                          GTK_TYPE_SHORTCUT_TRIGGER,
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_CONSTRUCT_ONLY |
                          G_PARAM_READWRITE);
 
@@ -1269,10 +1176,6 @@ gtk_alternative_trigger_class_init (GtkAlternativeTriggerClass *klass)
 static void
 gtk_alternative_trigger_init (GtkAlternativeTrigger *self)
 {
-  self->n_triggers = 2;
-  self->triggers = g_new (GtkShortcutTrigger *, 2);
-  self->triggers[0] = g_object_ref (gtk_never_trigger_get ());
-  self->triggers[1] = g_object_ref (gtk_never_trigger_get ());
 }
 
 /**
@@ -1309,7 +1212,7 @@ gtk_alternative_trigger_new (GtkShortcutTrigger *first,
 }
 
 /**
- * gtk_alternative_trigger_get_first:
+ * gtk_alternative_trigger_get_first: (attributes org.gtk.Method.get_property=first)
  * @self: an alternative `GtkShortcutTrigger`
  *
  * Gets the first of the two alternative triggers that may
@@ -1325,11 +1228,11 @@ gtk_alternative_trigger_get_first (GtkAlternativeTrigger *self)
 {
   g_return_val_if_fail (GTK_IS_ALTERNATIVE_TRIGGER (self), NULL);
 
-  return self->triggers[0];
+  return self->first;
 }
 
 /**
- * gtk_alternative_trigger_get_second:
+ * gtk_alternative_trigger_get_second: (attributes org.gtk.Method.get_property=second)
  * @self: an alternative `GtkShortcutTrigger`
  *
  * Gets the second of the two alternative triggers that may
@@ -1345,122 +1248,5 @@ gtk_alternative_trigger_get_second (GtkAlternativeTrigger *self)
 {
   g_return_val_if_fail (GTK_IS_ALTERNATIVE_TRIGGER (self), NULL);
 
-  return self->triggers[1];
+  return self->second;
 }
-
-/**
- * gtk_alternative_trigger_newv:
- * @triggers: (array length=n_triggers) (transfer full): the triggers
- * @n_triggers: the number of triggers
- *
- * Creates a `GtkShortcutTrigger` that will trigger whenever
- * any of the given triggers gets triggered.
- *
- * Returns: a new `GtkShortcutTrigger`
- *
- * Since: 4.24
- */
-GtkShortcutTrigger *
-gtk_alternative_trigger_newv (GtkShortcutTrigger **triggers,
-                              size_t               n_triggers)
-{
-  GtkAlternativeTrigger *self;
-
-  self = g_object_new (GTK_TYPE_ALTERNATIVE_TRIGGER, NULL);
-
-  g_object_unref (self->triggers[0]);
-  g_object_unref (self->triggers[1]);
-  g_free (self->triggers);
-
-  self->n_triggers = MAX (n_triggers, 2);
-  self->triggers = g_new (GtkShortcutTrigger *, self->n_triggers);
-
-  for (unsigned int i = 0; i < self->n_triggers; i++)
-    {
-      if (i < n_triggers)
-        self->triggers[i] = triggers[i];
-      else
-        self->triggers[i] = g_object_ref (gtk_never_trigger_get ());
-    }
-
-  return GTK_SHORTCUT_TRIGGER (self);
-}
-
-/* }}} */
-/* {{{ Convenience API */
-
-/**
- * gtk_shortcut_trigger_create_with_aliases:
- * @keyval: The keyval to trigger for
- * @modifiers: the modifiers that need to be present
- *
- * Creates a shortcut trigger that will trigger for
- * any alias of the given key.
- *
- * See [func@Gdk.keyval_get_aliases] for more information
- * on aliases.
- *
- * Returns: (transfer full): a new `GtkShortcutTrigger`
- *
- * Since: 4.24
- */
-GtkShortcutTrigger *
-gtk_shortcut_trigger_create_with_aliases (unsigned int    keyval,
-                                          GdkModifierType modifiers)
-{
-  const unsigned int *keys;
-  unsigned int n_keys;
-  GtkShortcutTrigger **triggers;
-
-  keys = gdk_keyval_get_aliases (keyval, &n_keys);
-
-  if (n_keys < 2)
-    return gtk_keyval_trigger_new (keyval, modifiers);
-
-  triggers = g_newa (GtkShortcutTrigger *, n_keys);
-  for (unsigned int i = 0; i < n_keys; i++)
-    triggers[i] = gtk_keyval_trigger_new (keys[i], modifiers);
-
-  return gtk_alternative_trigger_newv (triggers, n_keys);
-}
-
-/**
- * gtk_shortcut_trigger_create_for_menu:
- *
- * Creates a shortcut trigger that will trigger for
- * the usual key combinations that trigger a context
- * menu, such as <kbd>Menu</kbd> or
- * <kbd>Shift</kbd>+<kbd>F10</kbd>.
- *
- * Returns: (transfer full): a new `GtkShortcutTrigger`
- *
- * Since: 4.24
- */
-GtkShortcutTrigger *
-gtk_shortcut_trigger_create_for_menu (void)
-{
-  static GtkShortcutTrigger *menu_trigger = NULL;
-
-  if (menu_trigger == NULL)
-    {
-      const unsigned int *keys;
-      unsigned int n_keys;
-      GtkShortcutTrigger **triggers;
-
-      keys = gdk_keyval_get_aliases (GDK_KEY_Menu, &n_keys);
-
-      triggers = g_newa (GtkShortcutTrigger *, n_keys + 1);
-      for (unsigned int i = 0; i < n_keys; i++)
-        triggers[i] = gtk_keyval_trigger_new (keys[i], 0);
-
-      triggers[n_keys] = gtk_keyval_trigger_new (GDK_KEY_F10, GDK_SHIFT_MASK);
-
-      menu_trigger = gtk_alternative_trigger_newv (triggers, n_keys + 1);
-    }
-
-  return g_object_ref (menu_trigger);
-}
-
-/* }}} */
-
-/* vim:set foldmethod=marker: */

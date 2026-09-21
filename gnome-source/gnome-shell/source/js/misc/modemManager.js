@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import NM from 'gi://NM';
@@ -60,9 +62,9 @@ function _findProviderForMccMnc(operatorName, operatorCode) {
     else // nothing to search
         return null;
 
-    const mpd = _getMobileProvidersDatabase();
+    let mpd = _getMobileProvidersDatabase();
     if (mpd) {
-        const provider = mpd.lookup_3gpp_mcc_mnc(needle);
+        let provider = mpd.lookup_3gpp_mcc_mnc(needle);
         if (provider)
             return provider.get_name();
     }
@@ -78,9 +80,9 @@ function _findProviderForSid(sid) {
     if (!sid)
         return null;
 
-    const mpd = _getMobileProvidersDatabase();
+    let mpd = _getMobileProvidersDatabase();
     if (mpd) {
-        const provider = mpd.lookup_cdma_sid(sid);
+        let provider = mpd.lookup_cdma_sid(sid);
         if (provider)
             return provider.get_name();
     }
@@ -106,11 +108,11 @@ const ModemBase = GObject.registerClass({
     GTypeFlags: GObject.TypeFlags.ABSTRACT,
     Properties: {
         'operator-name': GObject.ParamSpec.string(
-            'operator-name', null, null,
+            'operator-name', 'operator-name', 'operator-name',
             GObject.ParamFlags.READABLE,
             null),
         'signal-quality': GObject.ParamSpec.int(
-            'signal-quality', null, null,
+            'signal-quality', 'signal-quality', 'signal-quality',
             GObject.ParamFlags.READABLE,
             0, 100, 0),
     },
@@ -171,7 +173,7 @@ class ModemGsm extends ModemBase {
             ]);
             this._setOperatorName(_findProviderForMccMnc(name, code));
             this._setSignalQuality(quality);
-        } catch {
+        } catch (err) {
             // it will return an error if the device is not connected
             this._setSignalQuality(0);
         }
@@ -199,7 +201,7 @@ class ModemCdma extends ModemBase {
         try {
             const [quality] = await this._proxy.GetSignalQualityAsync();
             this._setSignalQuality(quality);
-        } catch {
+        } catch (err) {
             // it will return an error if the device is not connected
             this._setSignalQuality(0);
         }
@@ -210,7 +212,7 @@ class ModemCdma extends ModemBase {
             const [bandClass_, band_, sid] =
                 await this._proxy.GetServingSystemAsync();
             this._setOperatorName(_findProviderForSid(sid));
-        } catch {
+        } catch (err) {
             // it will return an error if the device is not connected
             this._setOperatorName(null);
         }
@@ -234,7 +236,7 @@ const BroadbandModemCdmaProxy = Gio.DBusProxy.makeProxyWrapper(BroadbandModemCdm
 export const BroadbandModem = GObject.registerClass({
     Properties: {
         'capabilities': GObject.ParamSpec.flags(
-            'capabilities', null, null,
+            'capabilities', 'capabilities', 'capabilities',
             GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
             NM.DeviceModemCapabilities.$gtype,
             NM.DeviceModemCapabilities.NONE),
@@ -254,14 +256,14 @@ export const BroadbandModem = GObject.registerClass({
         this._reloadSignalQuality();
 
         this._proxy_3gpp.connect('g-properties-changed', (proxy, properties) => {
-            const unpacked = properties.deepUnpack();
+            let unpacked = properties.deepUnpack();
             if ('OperatorName' in unpacked || 'OperatorCode' in unpacked)
                 this._reload3gppOperatorName();
         });
         this._reload3gppOperatorName();
 
         this._proxy_cdma.connect('g-properties-changed', (proxy, properties) => {
-            const unpacked = properties.deepUnpack();
+            let unpacked = properties.deepUnpack();
             if ('Nid' in unpacked || 'Sid' in unpacked)
                 this._reloadCdmaOperatorName();
         });
@@ -269,7 +271,7 @@ export const BroadbandModem = GObject.registerClass({
     }
 
     _reloadSignalQuality() {
-        const [quality, recent_] = this._proxy.SignalQuality;
+        let [quality, recent_] = this._proxy.SignalQuality;
         this._setSignalQuality(quality);
     }
 
@@ -288,14 +290,14 @@ export const BroadbandModem = GObject.registerClass({
     }
 
     _reload3gppOperatorName() {
-        const name = this._proxy_3gpp.OperatorName;
-        const code = this._proxy_3gpp.OperatorCode;
+        let name = this._proxy_3gpp.OperatorName;
+        let code = this._proxy_3gpp.OperatorCode;
         this.operator_name_3gpp = _findProviderForMccMnc(name, code);
         this._reloadOperatorName();
     }
 
     _reloadCdmaOperatorName() {
-        const sid = this._proxy_cdma.Sid;
+        let sid = this._proxy_cdma.Sid;
         this.operator_name_cdma = _findProviderForSid(sid);
         this._reloadOperatorName();
     }

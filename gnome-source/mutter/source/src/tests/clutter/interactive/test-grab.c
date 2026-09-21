@@ -1,6 +1,5 @@
 #include <gmodule.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-mutter.h>
 
 #include "tests/clutter-test-utils.h"
 
@@ -15,11 +14,8 @@ debug_event_cb (ClutterActor *actor,
                 ClutterEvent *event,
                 gpointer      data)
 {
-  ClutterContext *context = clutter_actor_get_context (actor);
-  ClutterBackend *backend = clutter_context_get_backend (context);
   gchar keybuf[9], *source = (gchar*)data;
   ClutterActor *target;
-  ClutterSprite *sprite;
   uint32_t keyval;
   int len = 0;
 
@@ -96,19 +92,14 @@ debug_event_cb (ClutterActor *actor,
     case CLUTTER_PAD_RING:
       g_print ("[%s] PAD RING", source);
       break;
-    case CLUTTER_PAD_DIAL:
-      g_print ("[%s] PAD DIAL", source);
-      break;
     case CLUTTER_NOTHING:
     default:
       return FALSE;
     }
 
-  sprite = clutter_backend_get_sprite (backend,
-                                       CLUTTER_STAGE (clutter_actor_get_stage (actor)),
-                                       event);
-  target = clutter_focus_get_current_actor (CLUTTER_FOCUS (sprite));
-
+  target = clutter_stage_get_device_actor (CLUTTER_STAGE (clutter_actor_get_stage (actor)),
+                                           clutter_event_get_device (event),
+                                           clutter_event_get_event_sequence (event));
   if (target == actor)
     printf(" *target*");
 
@@ -158,18 +149,16 @@ toggle_grab_pointer_cb (ClutterActor    *actor,
                         ClutterEvent    *event,
                         gpointer         data)
 {
-  ClutterStage *stage = CLUTTER_STAGE (clutter_actor_get_stage (actor));
-  ClutterContext *context = clutter_actor_get_context (actor);
-  ClutterBackend *backend = clutter_context_get_backend (context);
   ClutterActor *target;
-  ClutterSprite *sprite;
-
-  sprite = clutter_backend_get_sprite (backend, stage, event);
-  target = clutter_focus_get_current_actor (CLUTTER_FOCUS (sprite));
 
   /* we only deal with the event if the source is ourself */
+  target = clutter_stage_get_device_actor (CLUTTER_STAGE (clutter_actor_get_stage (actor)),
+                                           clutter_event_get_device (event),
+                                           clutter_event_get_event_sequence (event));
+
   if (target == actor)
     {
+      ClutterStage *stage = CLUTTER_STAGE (clutter_actor_get_stage (actor));
       ClutterGrab *grab;
 
       grab = g_object_get_data (G_OBJECT (actor), "grab-data");
@@ -211,10 +200,10 @@ G_MODULE_EXPORT int
 test_grab_main (int argc, char *argv[])
 {
   ClutterActor   *stage, *actor;
-  CoglColor rcol = { 0xff, 0, 0, 0xff},
-            bcol = { 0, 0, 0xff, 0xff },
-            ccol = { 0, 0xff, 0xff, 0xff },
-            ycol = { 0xff, 0xff, 0, 0xff };
+  ClutterColor    rcol = { 0xff, 0, 0, 0xff},
+                  bcol = { 0, 0, 0xff, 0xff },
+                  ccol = { 0, 0xff, 0xff, 0xff },
+                  ycol = { 0xff, 0xff, 0, 0xff };
 
   clutter_test_init (&argc, &argv);
 
@@ -225,6 +214,7 @@ test_grab_main (int argc, char *argv[])
   g_print ("Cyan  box:  toggle grab (from cyan box) for keyboard events.\n\n");
 
   stage = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Grabs");
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_test_quit), NULL);
   g_signal_connect (stage, "event",
                     G_CALLBACK (debug_event_cb), (char *) "stage");

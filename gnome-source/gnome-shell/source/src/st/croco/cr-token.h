@@ -21,7 +21,8 @@
  * See COPYRIGHTS file for copyright information.
  */
 
-#pragma once
+#ifndef __CR_TOKEN_H__
+#define __CR_TOKEN_H__
 
 #include "cr-utils.h"
 #include "cr-input.h"
@@ -207,3 +208,5 @@ cr_token_destroy (CRToken *a_this) ;
         
 	
 G_END_DECLS
+
+#endif /*__CR_TOKEN_H__*/

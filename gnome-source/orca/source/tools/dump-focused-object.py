@@ -1,10 +1,9 @@
 #!/usr/bin/python
 # dump-focused-object.py
 #
-# Command-line tool to dump the focused object, optionally with its ancestors.
-# This tool listens for focus events and prints the focused object. Pass -a
-# (or --ancestry) to also print the accessibility tree from the application
-# down to the focused object.
+# Command-line tool to dump the focused object and its ancestors.
+# This tool listens for focus events and displays the accessibility tree
+# from the application down to the focused object.
 #
 # Copyright 2025 Igalia, S.L.
 # Author: Joanmarie Diggs <jdiggs@igalia.com>
@@ -27,10 +26,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=wrong-import-position
 
-"""Command-line tool to dump the focused object, optionally with its ancestors."""
-
-import argparse
-import signal
+"""Command-line tool to dump the focused object and its ancestors."""
 
 import gi
 
@@ -38,22 +34,15 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, GLib
 
 
-def safe_call(func, default=""):
-    """Calls func() and returns its result, or default if Atspi raises GError."""
-
-    try:
-        return func()
-    except GLib.GError as error:
-        return f"({error})" if default == "" else default
-
-
 def as_string(obj):
     """Convert an accessible object to a string representation."""
 
-    role = safe_call(lambda: Atspi.Accessible.get_role(obj).value_name)
-    help_text = safe_call(lambda: Atspi.Accessible.get_help_text(obj))
+    try:
+        help_text = Atspi.Accessible.get_help_text(obj)
+    except GLib.GError as error:
+        help_text = f"({error})"
     return (
-        f"{role} "
+        f"{Atspi.Accessible.get_role(obj).value_name} "
         f"name:'{get_name(obj)}' "
         f"description:'{get_description(obj)}' "
         f"help text: '{help_text}'"
@@ -63,87 +52,70 @@ def as_string(obj):
 def get_name(obj):
     """Get the name of an accessible object."""
 
-    return _name_or_description_from(obj, Atspi.Accessible.get_name, Atspi.RelationType.LABELLED_BY)
+    name = Atspi.Accessible.get_name(obj)
+    if name:
+        return name
+
+    relations = Atspi.Accessible.get_relation_set(obj)
+    for relation in relations:
+        if relation.get_relation_type() != Atspi.RelationType.LABELLED_BY:
+            continue
+        targets = [relation.get_target(i) for i in range(relation.get_n_targets())]
+        return " ".join([target.name for target in targets])
+
+    return ""
 
 
 def get_description(obj):
     """Get the description of an accessible object."""
 
-    return _name_or_description_from(
-        obj, Atspi.Accessible.get_description, Atspi.RelationType.DESCRIBED_BY
-    )
+    description = Atspi.Accessible.get_description(obj)
+    if description:
+        return description
 
-
-def _name_or_description_from(obj, getter, relation_type):
-    """Returns the result of getter(obj), falling back to relation targets' names."""
-
-    value = safe_call(lambda: getter(obj))
-    if value:
-        return value
-
-    relations = safe_call(lambda: Atspi.Accessible.get_relation_set(obj), default=[])
+    relations = Atspi.Accessible.get_relation_set(obj)
     for relation in relations:
-        if relation.get_relation_type() != relation_type:
+        if relation.get_relation_type() != Atspi.RelationType.DESCRIBED_BY:
             continue
         targets = [relation.get_target(i) for i in range(relation.get_n_targets())]
-        names = [safe_call(lambda t=t: Atspi.Accessible.get_name(t)) or "" for t in targets]
-        return " ".join(names)
+        return " ".join([target.name for target in targets])
 
     return ""
 
 
-def make_event_handler(dump_ancestry):
-    """Returns a focus event handler that optionally dumps the ancestry."""
+def on_event(e):
+    """Handle focus events."""
 
-    def on_event(e):
-        if not e.detail1:
-            return
+    if not e.detail1:
+        return
 
-        print(f"\n{as_string(e.source)} is now focused")
-        if dump_ancestry:
-            ancestors = []
-            parent = e.source
-            while parent:
-                grandparent = Atspi.Accessible.get_parent(parent)
-                ancestors.append(as_string(parent))
-                if Atspi.Accessible.get_role(parent) == Atspi.Role.APPLICATION:
-                    break
-                parent = grandparent
+    print(f"\n{as_string(e.source)} is now focused")
+    ancestors = []
+    parent = e.source
+    while parent:
+        grandparent = Atspi.Accessible.get_parent(parent)
+        ancestors.append(as_string(parent))
+        if Atspi.Accessible.get_role(parent) == Atspi.Role.APPLICATION:
+            break
+        parent = grandparent
 
-            ancestors.reverse()
-            indent = 0
-            for ancestor in ancestors:
-                print(f"{' ' * indent}--> {ancestor}")
-                indent += 2
+    ancestors.reverse()
+    indent = 0
+    for ancestor in ancestors:
+        print(f"{' ' * indent}--> {ancestor}")
+        indent += 2
 
-        if Atspi.Accessible.get_role(e.source) == Atspi.Role.TERMINAL:
-            print("Exiting.")
-            Atspi.event_quit()
-
-    return on_event
+    if Atspi.Accessible.get_role(e.source) == Atspi.Role.TERMINAL:
+        print("Exiting.")
+        Atspi.event_quit()
 
 
 def main():
     """Starts the focus dumper and waits for events."""
 
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "-a",
-        "--ancestry",
-        action="store_true",
-        help="Also dump the ancestry of the focused object.",
-    )
-    args = parser.parse_args()
-
-    listener = Atspi.EventListener.new(make_event_handler(args.ancestry))
+    listener = Atspi.EventListener.new(on_event)
     listener.register("object:state-changed:focused")
-
-    def on_sigint():
-        Atspi.event_quit()
-        return GLib.SOURCE_REMOVE
-
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, on_sigint)
-    print("Listening for focus events. Press Ctrl+C or focus the terminal to exit.")
+    print("Listening for focus events. Return focus to your terminal to exit.")
     Atspi.event_main()
 
 

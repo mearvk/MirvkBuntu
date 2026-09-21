@@ -28,7 +28,8 @@
 /**
  * GtkNoSelection:
  *
- * A selection model that does not allow selecting anything.
+ * `GtkNoSelection` is a `GtkSelectionModel` that does not allow selecting
+ * anything.
  *
  * This model is meant to be used as a simple wrapper around a `GListModel`
  * when a `GtkSelectionModel` is required.
@@ -258,17 +259,17 @@ gtk_no_selection_class_init (GtkNoSelectionClass *klass)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkNoSelection:model:
+   * GtkNoSelection:model: (attributes org.gtk.property.get=gtk_no_selection_get_model org.gtk.Property.set=gtk_no_selection_set_model)
    *
    * The model being managed.
    */
   properties[PROP_MODEL] =
     g_param_spec_object ("model", NULL, NULL,
                        G_TYPE_LIST_MODEL,
-                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkNoSelection:n-items:
@@ -280,7 +281,7 @@ gtk_no_selection_class_init (GtkNoSelectionClass *klass)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -316,7 +317,7 @@ gtk_no_selection_new (GListModel *model)
 }
 
 /**
- * gtk_no_selection_get_model:
+ * gtk_no_selection_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkNoSelection`
  *
  * Gets the model that @self is wrapping.
@@ -332,7 +333,7 @@ gtk_no_selection_get_model (GtkNoSelection *self)
 }
 
 /**
- * gtk_no_selection_set_model:
+ * gtk_no_selection_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkNoSelection`
  * @model: (nullable): A `GListModel` to wrap
  *

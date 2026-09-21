@@ -46,18 +46,6 @@ struct _MetaPointerLockWayland
 G_DEFINE_TYPE (MetaPointerLockWayland, meta_pointer_lock_wayland,
                META_TYPE_POINTER_CONFINEMENT_WAYLAND)
 
-static void
-maybe_scale_for_xwayland (MetaWaylandSurface *surface,
-                          float              *x,
-                          float              *y)
-{
-  if (meta_wayland_surface_is_xwayland (surface))
-    {
-      *x /= surface->applied_state.scale;
-      *y /= surface->applied_state.scale;
-    }
-}
-
 static MetaPointerConstraint *
 meta_pointer_lock_wayland_create_constraint (MetaPointerConfinementWayland *confinement)
 {
@@ -70,20 +58,20 @@ meta_pointer_lock_wayland_create_constraint (MetaPointerConfinementWayland *conf
   MetaBackend *backend = meta_context_get_backend (context);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   ClutterSeat *seat = clutter_backend_get_default_seat (clutter_backend);
+  ClutterInputDevice *pointer = clutter_seat_get_pointer (seat);
   MetaPointerConstraint *constraint;
   graphene_point_t point;
   MtkRectangle rect;
   g_autoptr (MtkRegion) region = NULL;
   float sx, sy, x, y;
 
-  clutter_seat_query_state (seat, NULL, &point, NULL);
+  clutter_seat_query_state (seat, pointer, NULL, &point, NULL);
   wayland_constraint =
     meta_pointer_confinement_wayland_get_wayland_pointer_constraint (confinement);
   surface = meta_wayland_pointer_constraint_get_surface (wayland_constraint);
   meta_wayland_surface_get_relative_coordinates (surface,
                                                  point.x, point.y,
                                                  &sx, &sy);
-  maybe_scale_for_xwayland (surface, &sx, &sy);
 
   meta_wayland_surface_get_absolute_coordinates (surface, sx, sy, &x, &y);
   rect = (MtkRectangle) { .x = 0, .y = 0, .width = 0, .height = 0 };

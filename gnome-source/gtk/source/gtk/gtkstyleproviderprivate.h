@@ -28,8 +28,6 @@
 
 G_BEGIN_DECLS
 
-#define GTK_STYLE_PROVIDER_PRIORITY_INSPECTOR  1000
-
 #define GTK_STYLE_PROVIDER_GET_INTERFACE(o)  (G_TYPE_INSTANCE_GET_INTERFACE ((o), GTK_TYPE_STYLE_PROVIDER, GtkStyleProviderInterface))
 
 typedef struct _GtkStyleProviderInterface GtkStyleProviderInterface;
@@ -54,8 +52,6 @@ struct _GtkStyleProviderInterface
                                                  const GError            *error);
   /* signal */
   void                  (* changed)             (GtkStyleProvider        *provider);
-  gboolean              (* has_section)         (GtkStyleProvider        *provider,
-                                                 GtkCssSection           *section);
 };
 
 GtkSettings *           gtk_style_provider_get_settings          (GtkStyleProvider        *provider);
@@ -75,8 +71,6 @@ void                    gtk_style_provider_changed               (GtkStyleProvid
 void                    gtk_style_provider_emit_error            (GtkStyleProvider        *provider,
                                                                   GtkCssSection           *section,
                                                                   GError                  *error);
-gboolean                gtk_style_provider_has_section           (GtkStyleProvider        *provider,
-                                                                  GtkCssSection           *section);
 
 G_END_DECLS
 

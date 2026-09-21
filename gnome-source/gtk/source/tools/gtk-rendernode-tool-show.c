@@ -28,7 +28,6 @@
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 #include "gtk-rendernode-tool.h"
-#include "gtk-tool-utils.h"
 
 
 static void
@@ -43,56 +42,56 @@ set_window_title (GtkWindow  *window,
 }
 
 static void
-show_node (GskRenderNode *node,
-           const char    *filename,
-           gboolean       decorated,
-           gboolean       offload)
+quit_cb (GtkWidget *widget,
+         gpointer   user_data)
 {
-  graphene_rect_t node_bounds;
+  gboolean *is_done = user_data;
+
+  *is_done = TRUE;
+
+  g_main_context_wakeup (NULL);
+}
+
+static void
+show_file (const char *filename,
+           gboolean    decorated)
+{
+  GskRenderNode *node;
   GdkPaintable *paintable;
   GtkWidget *sw;
-  GtkWidget *handle;
   GtkWidget *window;
+  gboolean done = FALSE;
   GtkSnapshot *snapshot;
   GtkWidget *picture;
 
-  gsk_render_node_get_bounds (node, &node_bounds);
+  node = load_node_file (filename);
 
   snapshot = gtk_snapshot_new ();
-  gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (- node_bounds.origin.x, - node_bounds.origin.y));
   gtk_snapshot_append_node (snapshot, node);
   paintable = gtk_snapshot_free_to_paintable (snapshot, NULL);
 
   picture = gtk_picture_new_for_paintable (paintable);
   gtk_picture_set_can_shrink (GTK_PICTURE (picture), FALSE);
   gtk_picture_set_content_fit (GTK_PICTURE (picture), GTK_CONTENT_FIT_SCALE_DOWN);
-  gtk_picture_set_isolate_contents (GTK_PICTURE (picture), decorated);
-
-  if (offload)
-    picture = gtk_graphics_offload_new (picture);
 
   sw = gtk_scrolled_window_new ();
   gtk_scrolled_window_set_propagate_natural_width (GTK_SCROLLED_WINDOW (sw), TRUE);
   gtk_scrolled_window_set_propagate_natural_height (GTK_SCROLLED_WINDOW (sw), TRUE);
   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sw), picture);
 
-  handle = gtk_window_handle_new ();
-  gtk_window_handle_set_child (GTK_WINDOW_HANDLE (handle), sw);
-
   window = gtk_window_new ();
   gtk_window_set_decorated (GTK_WINDOW (window), decorated);
-  gtk_window_set_resizable (GTK_WINDOW (window), decorated);
-  if (!decorated)
-    gtk_widget_remove_css_class (window, "background");
-  if (filename)
-    set_window_title (GTK_WINDOW (window), filename);
-  gtk_window_set_child (GTK_WINDOW (window), handle);
+  set_window_title (GTK_WINDOW (window), filename);
+  gtk_window_set_child (GTK_WINDOW (window), sw);
 
   gtk_window_present (GTK_WINDOW (window));
-  gtk_tool_inhibit ();
-  g_signal_connect (window, "destroy", G_CALLBACK (gtk_tool_uninhibit), NULL);
+  g_signal_connect (window, "destroy", G_CALLBACK (quit_cb), &done);
+
+  while (!done)
+    g_main_context_iteration (NULL, TRUE);
 
   g_clear_object (&paintable);
+  g_clear_pointer (&node, gsk_render_node_unref);
 }
 
 void
@@ -101,15 +100,12 @@ do_show (int          *argc,
 {
   GOptionContext *context;
   char **filenames = NULL;
-  gboolean decorate = FALSE;
-  gboolean offload = FALSE;
+  gboolean decorated = TRUE;
   const GOptionEntry entries[] = {
-    { "offload", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &offload, N_("Put node into offload container"), NULL },
-    { "decorate", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &decorate, N_("Add a titlebar"), NULL },
+    { "undecorated", 0, G_OPTION_FLAG_REVERSE, G_OPTION_ARG_NONE, &decorated, N_("Don't add a titlebar"), NULL },
     { G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_FILENAME_ARRAY, &filenames, NULL, N_("FILE") },
     { NULL, }
   };
-  GskRenderNode *node;
   GError *error = NULL;
 
   if (gdk_display_get_default () == NULL)
@@ -145,46 +141,7 @@ do_show (int          *argc,
       exit (1);
     }
 
-  node = load_node_file (filenames[0]);
-
-  show_node (node, filenames[0], decorate, offload);
-
-  gtk_tool_run ();
+  show_file (filenames[0], decorated);
 
   g_strfreev (filenames);
-  g_clear_pointer (&node, gsk_render_node_unref);
-}
-
-GskRenderNode *
-filter_show (GskRenderNode  *node,
-             int             argc,
-             const char    **argv)
-{
-  GOptionContext *context;
-  gboolean decorate = FALSE;
-  gboolean offload = FALSE;
-  const GOptionEntry entries[] = {
-    { "offload", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &offload, N_("Put node into offload container"), NULL },
-    { "decorate", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &decorate, N_("Add a titlebar"), NULL },
-    { NULL, }
-  };
-  GError *error = NULL;
-
-  context = g_option_context_new (NULL);
-  g_option_context_set_translation_domain (context, GETTEXT_PACKAGE);
-  g_option_context_add_main_entries (context, entries, NULL);
-  g_option_context_set_summary (context, _("Show the render node."));
-
-  if (!g_option_context_parse (context, &argc, (char ***) &argv, &error))
-    {
-      g_printerr ("show: %s\n", error->message);
-      g_error_free (error);
-      exit (1);
-    }
-
-  g_option_context_free (context);
-
-  show_node (node, NULL, decorate, offload);
-
-  return node;
 }

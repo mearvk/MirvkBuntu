@@ -105,19 +105,9 @@ content_images = [
   "images/nwse_resize_cursor.png",
   "images/zoom_in_cursor.png",
   "images/zoom_out_cursor.png",
-  "images/dnd_ask_cursor.png",
-  "images/all_resize_cursor.png",
   "images/popup-anchors.png",
   "images/popup-flip.png",
   "images/popup-slide.png",
 ]
 content_base_url = "https://gitlab.gnome.org/GNOME/gtk/-/blob/main/docs/reference/gdk/"
 urlmap_file = "urlmap.js"
-
-[[object]]
-name = "DECLARE_INTERNAL_TYPE"
-hidden = true
-
-[[object]]
-pattern = "KEY_*"
-check_ignore = true

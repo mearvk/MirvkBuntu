@@ -1,0 +1,1009 @@
+# Orca
+#
+# Copyright 2005-2009 Sun Microsystems Inc.
+# Copyright 2011-2026 Igalia, S.L.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., Franklin Street, Fifth Floor,
+# Boston MA  02110-1301 USA.
+
+# pylint: disable=no-member
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-statements
+# pylint: disable=too-many-lines
+
+"""Displays a GUI for the user to set Orca preferences."""
+
+from __future__ import annotations
+
+import os
+import time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import (
+    Gdk,  # pylint: disable=no-name-in-module
+    Gio,
+    GLib,
+    GObject,
+    Gtk,  # pylint: disable=no-name-in-module
+)
+
+from . import (
+    braille_presenter,
+    chat_presenter,
+    command_manager,
+    debug,
+    document_presenter,
+    event_manager,
+    focus_manager,
+    gsettings_registry,
+    guilabels,
+    learn_mode_presenter,
+    messages,
+    mouse_review,
+    orca,
+    preferences_grid_base,
+    presentation_manager,
+    profile_manager,
+    pronunciation_dictionary_manager,
+    say_all_presenter,
+    sound_presenter,
+    speech_presenter,
+    spellcheck_presenter,
+    system_information_presenter,
+    text_attribute_manager,
+    typing_echo_presenter,
+)
+from .ax_object import AXObject
+
+if TYPE_CHECKING:
+    from .scripts import default
+
+
+@dataclass
+class _AppearanceProviders:
+    """CSS providers for conditional appearance settings."""
+
+    hc: Gtk.CssProvider
+    dark: Gtk.CssProvider
+    shapes: Gtk.CssProvider | None = None
+
+
+class NavigationRow(Gtk.ListBoxRow):
+    """ListBoxRow with a panel_id attribute for navigation."""
+
+    def __init__(self, panel_id: str | None = None) -> None:
+        super().__init__()
+        self.panel_id = panel_id
+
+
+class OrcaSetupGUI(Gtk.ApplicationWindow):  # pylint: disable=too-many-instance-attributes
+    """Preferences window for configuring Orca screen reader settings."""
+
+    WINDOW: OrcaSetupGUI | None = None
+
+    _EVENTS_TO_SUSPEND: tuple[str, ...] = (
+        "object:state-changed:checked",
+        "object:state-changed:sensitive",
+        "object:state-changed:showing",
+        "object:children-changed:add",
+        "object:children-changed:remove",
+        "object:selection-changed",
+        "object:property-change:accessible-name",
+        "object:property-change:accessible-description",
+    )
+
+    def __init__(self, script: default.Script) -> None:
+        if OrcaSetupGUI.WINDOW is not None:
+            return
+
+        msg = "PREFERENCES: Initializing UI"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        appearance_refs = self._sync_appearance()
+        super().__init__(title=guilabels.DIALOG_SCREEN_READER_PREFERENCES)
+        self._appearance_refs = appearance_refs
+
+        self.connect("destroy", self.window_destroyed)
+        self.connect("delete-event", self.window_closed)
+
+        self._profile_name: str = profile_manager.get_manager().get_active_profile()
+        self.script = script
+        self._app_name: str | None = None
+        if script.app is not None:
+            self._app_name = AXObject.get_name(script.app) or None
+        self._current_page_title: str = ""
+        self._current_panel_id: str | None = None
+        self._original_profile: str = profile_manager.get_manager().get_active_profile()
+
+        titlebar_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+        self.left_headerbar = Gtk.HeaderBar()
+        self.left_headerbar.set_show_close_button(True)
+        self.left_headerbar.set_title(guilabels.DIALOG_SCREEN_READER_PREFERENCES)
+        self.left_headerbar.get_style_context().add_class("orca-left-headerbar")
+
+        self._app_icon = Gtk.Image.new_from_icon_name("orca", Gtk.IconSize.MENU)
+        self._app_icon.set_margin_start(2)
+
+        self.menu_button = Gtk.MenuButton()
+        menu_image = Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON)
+        self.menu_button.set_image(menu_image)
+        self.menu_button.get_accessible().set_name(guilabels.MENU_BUTTON_OPTIONS)
+
+        popover = Gtk.Popover()
+        menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        help_item = Gtk.ModelButton()
+        help_item.set_property("text", guilabels.DIALOG_HELP)
+        help_item.connect("clicked", lambda _: self.help_button_clicked(None))
+        menu_box.pack_start(help_item, False, False, 0)
+
+        self.apply_item = Gtk.ModelButton()
+        self.apply_item.set_property("text", guilabels.DIALOG_APPLY)
+        self.apply_item.connect("clicked", lambda _: self.apply_button_clicked(None))
+        menu_box.pack_start(self.apply_item, False, False, 0)
+
+        self.save_item = Gtk.ModelButton()
+        self.save_item.set_property("text", guilabels.BTN_SAVE)
+        self.save_item.connect("clicked", lambda _: self.ok_button_clicked(None))
+        menu_box.pack_start(self.save_item, False, False, 0)
+
+        # Save Profile As is only for global preferences (profiles are global)
+        if not self._app_name:
+            save_as_item = Gtk.ModelButton()
+            save_as_item.set_property("text", guilabels.PROFILE_SAVE_AS_TITLE)
+            save_as_item.connect("clicked", lambda _: self._on_save_profile_as())
+            menu_box.pack_start(save_as_item, False, False, 0)
+
+        cancel_item = Gtk.ModelButton()
+        cancel_item.set_property("text", guilabels.DIALOG_CANCEL)
+        cancel_item.connect("clicked", lambda _: self.cancel_button_clicked(None))
+        menu_box.pack_start(cancel_item, False, False, 0)
+
+        menu_box.show_all()
+        popover.add(menu_box)
+        self.menu_button.set_popover(popover)
+
+        self.left_headerbar.pack_end(self.menu_button)
+
+        titlebar_box.pack_start(self.left_headerbar, False, False, 0)
+
+        titlebar_separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        titlebar_box.pack_start(titlebar_separator, False, False, 0)
+
+        self.panel_headerbar = Gtk.HeaderBar()
+        self.panel_headerbar.set_show_close_button(True)
+        self.panel_headerbar.set_title("")
+        self.panel_headerbar.get_style_context().add_class("orca-panel-headerbar")
+
+        titlebar_box.pack_start(self.panel_headerbar, True, True, 0)
+
+        self._apply_decoration_layout()
+        gtk_settings = Gtk.Settings.get_default()  # pylint: disable=no-value-for-parameter
+        if gtk_settings is not None:
+            gtk_settings.connect(
+                "notify::gtk-decoration-layout",
+                lambda *_: self._apply_decoration_layout(),
+            )
+
+        self.set_titlebar(titlebar_box)
+
+        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        self.hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+        self.sidebar_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.sidebar_vbox.get_style_context().add_class("orca-sidebar")
+
+        self.sidebar_scrolled = Gtk.ScrolledWindow()
+        self.sidebar_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.listbox = Gtk.ListBox()
+        self.listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.listbox.get_accessible().set_name(guilabels.PREFERENCES_CATEGORIES)
+        self.listbox.connect("row-selected", self._on_row_selected)
+        self.sidebar_scrolled.add(self.listbox)
+        self.sidebar_vbox.pack_start(self.sidebar_scrolled, True, True, 0)
+
+        self.listbox.connect("key-press-event", self._on_listbox_key_press)
+
+        self.hbox.pack_start(self.sidebar_vbox, False, False, 0)
+
+        separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        self.hbox.pack_start(separator, False, False, 0)
+
+        self.content_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        self.stack = Gtk.Stack()
+        self.stack.set_hexpand(True)
+        self.stack.set_vhomogeneous(False)
+        stack_scrolled = Gtk.ScrolledWindow()
+        stack_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        stack_scrolled.add(self.stack)
+        self.content_vbox.pack_start(stack_scrolled, True, True, 0)
+
+        self.hbox.pack_start(self.content_vbox, True, True, 0)
+
+        main_vbox.pack_start(self.hbox, True, True, 0)
+
+        self.add(main_vbox)
+
+        # Ignore runtime overrides while creating preference grids so that
+        # on-the-fly changes (e.g. speech rate) don't influence the values shown.
+        registry = gsettings_registry.get_registry()
+        registry.set_ignore_runtime(True)
+
+        # Create all preference grids
+        # Profiles grid controls are insensitive for app-specific prefs
+        prof_manager = profile_manager.get_manager()
+        self.profiles_grid = prof_manager.create_preferences_grid(
+            profile_loaded_callback=self._on_profile_loaded,
+            is_app_specific=bool(self._app_name),
+            labels_update_callback=self.update_menu_labels,
+            unsaved_changes_checker=self._has_unsaved_changes,
+        )
+        self.stack.add_named(self.profiles_grid, "profiles")
+        self._add_navigation_row("profiles", self.profiles_grid.get_label().get_text())
+        self.update_menu_labels()
+
+        presenter = speech_presenter.get_presenter()
+
+        def update_title(title: str) -> None:
+            """Update the panel header title and window accessible name."""
+
+            self._set_page_title(title)
+
+        self.speech_grid = presenter.create_speech_preferences_grid(
+            title_change_callback=update_title,
+            app_name=self._app_name or "",
+        )
+        self.stack.add_named(self.speech_grid, "speech")
+        self._add_navigation_row("speech", self.speech_grid.get_label().get_text())
+
+        braille_pres = braille_presenter.get_presenter()
+        self.braille_grid = braille_pres.create_preferences_grid(title_change_callback=update_title)
+        self.stack.add_named(self.braille_grid, "braille")
+        self._add_navigation_row("braille", self.braille_grid.get_label().get_text())
+
+        sound_pres = sound_presenter.get_presenter()
+        self.sound_grid = sound_pres.create_preferences_grid(title_change_callback=update_title)
+        self.stack.add_named(self.sound_grid, "sound")
+        self._add_navigation_row("sound", self.sound_grid.get_label().get_text())
+
+        cmd_manager = command_manager.get_manager()
+        self.keybindings_grid = cmd_manager.create_preferences_grid(
+            self.script,
+            title_change_callback=update_title,
+        )
+        self.stack.add_named(self.keybindings_grid, "keybindings")
+        self._add_navigation_row("keybindings", self.keybindings_grid.get_label().get_text())
+
+        typing_pres = typing_echo_presenter.get_presenter()
+        self.typing_echo_grid = typing_pres.create_preferences_grid()
+        self.stack.add_named(self.typing_echo_grid, "typing_echo")
+        self._add_navigation_row("typing_echo", self.typing_echo_grid.get_label().get_text())
+
+        mouse_reviewer = mouse_review.get_reviewer()
+        self.mouse_grid = mouse_reviewer.create_preferences_grid()
+        self.stack.add_named(self.mouse_grid, "mouse")
+        self._add_navigation_row("mouse", self.mouse_grid.get_label().get_text())
+
+        doc_presenter = document_presenter.get_presenter()
+        self.document_grid = doc_presenter.create_preferences_grid(update_title)
+        self.stack.add_named(self.document_grid, "documents")
+        self._add_navigation_row("documents", self.document_grid.get_label().get_text())
+
+        say_all_pres = say_all_presenter.get_presenter()
+        self.say_all_grid = say_all_pres.create_preferences_grid()
+        self.stack.add_named(self.say_all_grid, "say_all")
+        self._add_navigation_row("say_all", self.say_all_grid.get_label().get_text())
+
+        pronunciation_manager = pronunciation_dictionary_manager.get_manager()
+        self.pronunciation_grid = pronunciation_manager.create_preferences_grid(self.script)
+        self.stack.add_named(self.pronunciation_grid, "pronunciation")
+        self._add_navigation_row("pronunciation", self.pronunciation_grid.get_label().get_text())
+
+        spellcheck_pres = spellcheck_presenter.get_presenter()
+        self.spellcheck_grid = spellcheck_pres.create_preferences_grid()
+        self.stack.add_named(self.spellcheck_grid, "spellcheck")
+        self._add_navigation_row("spellcheck", self.spellcheck_grid.get_label().get_text())
+
+        chat_pres = chat_presenter.get_presenter()
+        self.chat_grid = chat_pres.create_preferences_grid()
+        self.stack.add_named(self.chat_grid, "chat")
+        self._add_navigation_row("chat", self.chat_grid.get_label().get_text())
+
+        text_attr_mgr = text_attribute_manager.get_manager()
+        self.text_attributes_grid = text_attr_mgr.create_preferences_grid()
+        self.stack.add_named(self.text_attributes_grid, "text_attributes")
+        self._add_navigation_row(
+            "text_attributes",
+            self.text_attributes_grid.get_label().get_text(),
+        )
+
+        system_info_presenter = system_information_presenter.get_presenter()
+        self.time_and_date_grid = system_info_presenter.create_time_and_date_preferences_grid()
+        self.stack.add_named(self.time_and_date_grid, "time_and_date")
+        self._add_navigation_row("time_and_date", self.time_and_date_grid.get_label().get_text())
+
+        registry.set_ignore_runtime(False)
+
+        self._page_to_grid = {
+            "speech": self.speech_grid,
+            "braille": self.braille_grid,
+            "keybindings": self.keybindings_grid,
+            "typing_echo": self.typing_echo_grid,
+            "say_all": self.say_all_grid,
+            "spellcheck": self.spellcheck_grid,
+            "chat": self.chat_grid,
+            "mouse": self.mouse_grid,
+            "documents": self.document_grid,
+            "pronunciation": self.pronunciation_grid,
+            "sound": self.sound_grid,
+            "time_and_date": self.time_and_date_grid,
+            "text_attributes": self.text_attributes_grid,
+            "profiles": self.profiles_grid,
+        }
+
+        for grid in self._page_to_grid.values():
+            grid.set_focus_sidebar_callback(self._focus_sidebar)
+
+        first_row = self.listbox.get_row_at_index(0)
+        if first_row:
+            self.listbox.select_row(first_row)
+
+        msg = "PREFERENCES: Initializing UI complete"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+    def _apply_decoration_layout(self) -> None:
+        """Syncs headerbar button placement and app icon with the system layout."""
+
+        gtk_settings = Gtk.Settings.get_default()  # pylint: disable=no-value-for-parameter
+        if gtk_settings is None:
+            return
+
+        layout = gtk_settings.get_property("gtk-decoration-layout") or ":minimize,maximize,close"
+        left_layout, _, right_layout = layout.partition(":")
+
+        self.left_headerbar.set_decoration_layout(f"{left_layout}:")
+        self.panel_headerbar.set_decoration_layout(f":{right_layout}")
+
+        parent = self._app_icon.get_parent()
+        if parent:
+            parent.remove(self._app_icon)
+
+        if "close" in left_layout:
+            self.panel_headerbar.pack_end(self._app_icon)
+        else:
+            self.left_headerbar.pack_start(self._app_icon)
+        self._app_icon.show()
+
+        if self.get_visible():
+            GLib.idle_add(self._sync_headerbar_widths)
+
+    def _sync_headerbar_widths(self) -> None:
+        headerbar_width = self.left_headerbar.get_allocated_width()
+        sidebar_width = self.sidebar_vbox.get_allocated_width()
+        max_width = max(headerbar_width, sidebar_width)
+
+        self.left_headerbar.set_size_request(max_width, -1)
+        self.sidebar_vbox.set_size_request(max_width, -1)
+
+    def _set_height_from_sidebar(self) -> None:
+        """Set window height to fit the sidebar items, capped at 800px."""
+
+        sidebar_height = self.listbox.get_preferred_height()[1]
+        headerbar_height = self.left_headerbar.get_allocated_height()
+        height = min(sidebar_height + headerbar_height, 800)
+        self.resize(self.get_allocated_width(), height)
+
+    def _on_listbox_key_press(self, _widget: Gtk.Widget, event: Gdk.EventKey) -> bool:
+        if event.keyval == Gdk.KEY_Tab:
+            self.stack.child_focus(Gtk.DirectionType.TAB_FORWARD)
+            return True
+        if event.keyval == Gdk.KEY_ISO_Left_Tab:
+            # Shift+Tab from listbox should go back to menu button
+            self.menu_button.grab_focus()
+            return True
+        return False
+
+    def _focus_sidebar(self) -> None:
+        """Move focus to the sidebar navigation listbox."""
+
+        selected_row = self.listbox.get_selected_row()
+        if selected_row:
+            selected_row.grab_focus()
+        else:
+            self.listbox.grab_focus()
+
+    def _add_navigation_row(self, panel_id: str, label_text: str) -> NavigationRow:
+        """Add a navigation row to the sidebar listbox and return it."""
+
+        row = NavigationRow(panel_id=panel_id)
+
+        label = Gtk.Label(label=label_text, xalign=0)
+        label.set_margin_start(12)
+        label.set_margin_end(12)
+        label.set_margin_top(6)
+        label.set_margin_bottom(6)
+        row.add(label)
+
+        self.listbox.add(row)
+        return row
+
+    def _on_row_selected(self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
+        """Handle listbox row selection and switch to the selected panel."""
+
+        if row is None or not isinstance(row, NavigationRow):
+            return
+
+        # Skip if this is a non-selectable header row
+        if row.panel_id is None:
+            return
+
+        panel_id = row.panel_id
+
+        # Update the panel title in headerbar and accessible name
+        if panel_id == "application":
+            title = AXObject.get_name(self.script.app)
+        else:
+            child = self.stack.get_child_by_name(panel_id)
+            title = child.get_label().get_text()
+
+        self._set_page_title(title)
+
+        self.stack.set_visible_child_name(panel_id)
+
+        # Only reset multi-page grids when switching to a different panel.
+        # This preserves sub-category state when focus returns to the
+        # sidebar via Shift-Tab without changing the selected row.
+        child = self.stack.get_child_by_name(panel_id)
+        if isinstance(child, preferences_grid_base.PreferencesGridBase):
+            if panel_id != self._current_panel_id:
+                child.on_becoming_visible()
+
+        self._current_panel_id = panel_id
+
+    def _init_gui_state(self, include_profiles: bool = False) -> None:
+        """Adjust the settings of the various widgets based on user settings."""
+
+        self._reload_all_grids(include_profiles=include_profiles)
+
+    def show_gui(self) -> None:
+        """Show the Orca configuration GUI window."""
+
+        def enable_configuring_mode():
+            focus_manager.get_manager().set_in_preferences_window(True)
+            return False
+
+        if OrcaSetupGUI.WINDOW is not None:
+            OrcaSetupGUI.WINDOW.present()
+            return
+
+        OrcaSetupGUI.WINDOW = self
+
+        accel_group = Gtk.AccelGroup()
+        OrcaSetupGUI.WINDOW.add_accel_group(accel_group)
+
+        # Select first row and set visible child before showing dialog
+        first_row = self.listbox.get_row_at_index(0)
+        if first_row and isinstance(first_row, NavigationRow) and first_row.panel_id:
+            self.listbox.select_row(first_row)
+            panel_id = first_row.panel_id
+            # Set initial panel title in headerbar
+            if panel_id == "application":
+                title = AXObject.get_name(self.script.app)
+            else:
+                child = self.stack.get_child_by_name(panel_id)
+                title = child.get_label().get_text()
+            self._set_page_title(title)
+            self.stack.set_visible_child_name(panel_id)
+
+        self.suspend_events("Window being shown.")
+        OrcaSetupGUI.WINDOW.show_all()
+        self._sync_headerbar_widths()
+        self._set_height_from_sidebar()
+        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.stack.set_transition_duration(150)
+        OrcaSetupGUI.WINDOW.present_with_time(time.time())
+        GLib.timeout_add(500, self.resume_events)
+
+        # Set accessible name after window is realized
+        def set_accessible_name() -> bool:
+            self.update_menu_labels()
+            return False
+
+        GLib.idle_add(set_accessible_name)
+
+        # Enable configuring mode after a brief delay to allow initial setup to complete
+        GLib.timeout_add(100, enable_configuring_mode)
+
+    def help_button_clicked(self, _widget: Gtk.Button) -> None:
+        """Handle Help button click to show preferences help."""
+
+        learn_mode_presenter.get_presenter().show_help(page="preferences")
+
+    def _reload_all_grids(self, include_profiles: bool = False) -> None:
+        """Reload all preference grids from settings."""
+
+        registry = gsettings_registry.get_registry()
+        registry.set_ignore_runtime(True)
+        for grid in self._page_to_grid.values():
+            if grid is self.profiles_grid and not include_profiles:
+                continue
+            grid.reload()
+        registry.set_ignore_runtime(False)
+
+    def apply_button_clicked(self, _widget: Gtk.Button) -> None:
+        """Handle Apply button click to save and apply preferences."""
+
+        msg = "PREFERENCES: Apply button clicked"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        save_app = self._app_name or ""
+
+        # Save profiles first so any renames happen before saving other settings
+        # (profiles are global, not saved for app-specific preferences)
+        if not self._app_name:
+            self.profiles_grid.save_settings()
+            self._profile_name = profile_manager.get_manager().get_active_profile()
+
+        for grid in self._page_to_grid.values():
+            if grid is not self.profiles_grid:
+                grid.save_settings(self._profile_name, save_app)
+
+        orca.load_user_settings(self.script, skip_reload_message=True)
+
+        # Speak the settings reloaded message after a delay to ensure speech has fully started.
+        def speak_settings_reloaded() -> bool:
+            presentation_manager.get_manager().speak_message(messages.SETTINGS_RELOADED)
+            return False
+
+        GLib.timeout_add(100, speak_settings_reloaded)
+
+        self._reload_all_grids()
+
+        # Re-apply user keybinding overrides and refresh grabs so changes work immediately.
+        command_manager.get_manager().activate_commands("Applied preferences")
+
+        msg = "PREFERENCES: Handling Apply button click complete"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+    def cancel_button_clicked(self, _widget: Gtk.Button) -> None:
+        """Handle Cancel button click to close window without saving."""
+
+        msg = "PREFERENCES: Cancel button clicked"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        for grid in self._page_to_grid.values():
+            grid.revert_changes()
+        self.destroy()
+
+        msg = "PREFERENCES: Handling Cancel button click complete"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+    def ok_button_clicked(self, widget: Gtk.Button | None = None) -> None:
+        """Handle OK button click to save preferences and close window."""
+
+        msg = "PREFERENCES: OK button clicked"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        self.apply_button_clicked(widget)  # type: ignore[arg-type]
+        self.destroy()
+
+        msg = "PREFERENCES: Handling OK button click complete"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+    def _on_save_profile_as(self) -> None:
+        """Handle Save Profile As menu item."""
+
+        new_profile = self.profiles_grid.get_new_profile_name()
+        if new_profile is None:
+            return
+
+        self._profile_name = new_profile[1]
+        self.apply_button_clicked(None)
+        self._on_profile_loaded(new_profile)
+
+    def window_closed(self, _widget: Gtk.Widget, _event: Any) -> bool:
+        """Handle window close signal by suspending events temporarily."""
+
+        msg = "PREFERENCES: Window is being closed"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        has_unsaved_changes = self._has_unsaved_changes(
+            include_profiles=not self._app_name,
+        )
+
+        # Check if profile was switched during this session
+        current_profile = profile_manager.get_manager().get_active_profile()
+        profile_was_switched = current_profile != self._original_profile
+
+        if has_unsaved_changes:
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.NONE,
+                text=guilabels.PREFERENCES_CLOSE_WITHOUT_SAVE,
+            )
+            dialog.format_secondary_text(guilabels.PREFERENCES_CHANGES_WILL_BE_LOST)
+
+            profile_label = self._get_current_profile_label()
+            save_button = dialog.add_button(
+                guilabels.MENU_SAVE_PROFILE % profile_label,
+                Gtk.ResponseType.YES,
+            )
+            save_button.get_style_context().add_class("suggested-action")
+
+            # Only show "New Profile" for global preferences (profiles are global)
+            if not self._app_name:
+                dialog.add_button(guilabels.PROFILE_CREATE_NEW, Gtk.ResponseType.APPLY)
+
+            dialog.add_button(guilabels.BTN_CLOSE_WITHOUT_SAVING, Gtk.ResponseType.NO)
+            dialog.add_button(guilabels.DIALOG_CANCEL, Gtk.ResponseType.CANCEL)
+
+            dialog.show_all()
+            dialog.present()
+            save_button.grab_focus()
+            response = dialog.run()
+            dialog.destroy()
+
+            if response == Gtk.ResponseType.YES:
+                self.apply_button_clicked(None)
+            elif response == Gtk.ResponseType.APPLY:
+                self._on_save_profile_as()
+            elif response in (Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT):
+                return True
+            else:
+                for grid in self._page_to_grid.values():
+                    grid.revert_changes()
+
+        elif profile_was_switched:
+            # Profile was switched but no other changes - show simple dialog
+            current_label = self._get_current_profile_label()
+            original_label = self.profiles_grid.get_profile_label(self._original_profile)
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.NONE,
+                text=guilabels.PREFERENCES_PROFILE_SWITCHED,
+            )
+
+            use_button = dialog.add_button(
+                guilabels.PROFILE_USE % current_label,
+                Gtk.ResponseType.YES,
+            )
+            use_button.get_style_context().add_class("suggested-action")
+            dialog.add_button(
+                guilabels.PROFILE_SWITCH_BACK_TO % original_label,
+                Gtk.ResponseType.NO,
+            )
+
+            dialog.show_all()
+            dialog.present()
+            use_button.grab_focus()
+            response = dialog.run()
+            dialog.destroy()
+
+            if response == Gtk.ResponseType.NO:
+                profile_manager.get_manager().load_profile(self._original_profile)
+
+        self.suspend_events("Window being closed.")
+        GObject.timeout_add(1000, self.resume_events)
+
+        msg = "PREFERENCES: Window closure complete"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        return False
+
+    _BASE_CSS = b"""
+        decoration {
+            border-radius: 15px;
+        }
+        @define-color orca_sidebar_bg shade(@theme_bg_color, 0.98);
+        list.frame {
+            border-color: alpha(@theme_fg_color, 0.15);
+        }
+        .orca-left-headerbar {
+            background-color: @orca_sidebar_bg;
+            background-image: none;
+            border-bottom-width: 0;
+        }
+        .orca-panel-headerbar {
+            background-color: @theme_bg_color;
+            background-image: none;
+            border-bottom-width: 0;
+        }
+        .orca-sidebar {
+            background-color: @orca_sidebar_bg;
+        }
+        .orca-sidebar scrolledwindow,
+        .orca-sidebar list {
+            background-color: transparent;
+        }
+        .orca-sidebar list {
+            padding: 6px 0;
+        }
+        .orca-sidebar list row {
+            border-radius: 9px;
+            min-height: 36px;
+            padding: 0 8px;
+            margin: 0 6px 2px;
+        }
+        .orca-sidebar list row:selected {
+            background-color: alpha(@theme_fg_color, 0.10);
+        }
+        .orca-sidebar list row:selected,
+        .orca-sidebar list row:selected label {
+            color: @theme_fg_color;
+        }
+        .orca-sidebar list row:hover {
+            background-color: alpha(@theme_fg_color, 0.07);
+        }
+        .orca-sidebar list row:selected:hover {
+            background-color: alpha(@theme_fg_color, 0.13);
+        }
+        .orca-sidebar list row:active,
+        .orca-sidebar list row:selected:active {
+            background-color: alpha(@theme_fg_color, 0.19);
+        }
+        list.frame row:focus {
+            box-shadow: inset 0 0 0 2px alpha(@theme_selected_bg_color, 0.5);
+        }
+    """
+
+    _HIGH_CONTRAST_CSS = b"""
+        list.frame {
+            border-color: alpha(@theme_fg_color, 0.4);
+        }
+        list separator {
+            background-color: alpha(@theme_fg_color, 0.4);
+        }
+        .dim-label {
+            opacity: 1.0;
+        }
+    """
+
+    _DARK_MODE_CSS = b"""
+        @define-color orca_sidebar_bg @theme_bg_color;
+        window.background {
+            background-color: @theme_base_color;
+        }
+        .orca-panel-headerbar {
+            background-color: @theme_base_color;
+        }
+        switch slider {
+            background-image: image(white);
+        }
+    """
+
+    _GNOME_DARK_CSS = b"""
+        @define-color theme_bg_color #303030;
+        @define-color theme_base_color #242424;
+        @define-color orca_sidebar_bg #2e2e32;
+    """
+
+    _STATUS_SHAPES_CSS = b"""
+        switch image {
+            color: @theme_fg_color;
+        }
+        switch:checked image {
+            color: white;
+        }
+    """
+
+    @staticmethod
+    def _sync_appearance() -> tuple | None:
+        """Bridges GNOME's color-scheme and high-contrast gsettings to GTK3."""
+
+        gtk_settings = Gtk.Settings.get_default()  # pylint: disable=no-value-for-parameter
+        screen = Gdk.Screen.get_default()  # pylint: disable=no-value-for-parameter
+        if gtk_settings is None or screen is None:
+            return None
+
+        base_provider = Gtk.CssProvider()
+        base_provider.load_from_data(OrcaSetupGUI._BASE_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            screen,
+            base_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
+        providers = _AppearanceProviders(
+            hc=Gtk.CssProvider(),
+            dark=Gtk.CssProvider(),
+        )
+        providers.hc.load_from_data(OrcaSetupGUI._HIGH_CONTRAST_CSS)
+        dark_css = OrcaSetupGUI._DARK_MODE_CSS
+        if "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", ""):
+            dark_css += OrcaSetupGUI._GNOME_DARK_CSS
+        providers.dark.load_from_data(dark_css)
+
+        try:
+            interface_settings = Gio.Settings(schema_id="org.gnome.desktop.interface")
+            a11y_settings = Gio.Settings(schema_id="org.gnome.desktop.a11y.interface")
+            if "show-status-shapes" in a11y_settings.list_keys():
+                shapes_provider = Gtk.CssProvider()
+                shapes_provider.load_from_data(OrcaSetupGUI._STATUS_SHAPES_CSS)
+                providers.shapes = shapes_provider
+            OrcaSetupGUI._apply_appearance(
+                interface_settings,
+                a11y_settings,
+                gtk_settings,
+                screen,
+                providers,
+            )
+
+            def on_setting_changed(*_args):
+                OrcaSetupGUI._apply_appearance(
+                    interface_settings,
+                    a11y_settings,
+                    gtk_settings,
+                    screen,
+                    providers,
+                )
+
+            interface_settings.connect("changed::color-scheme", on_setting_changed)
+            a11y_settings.connect("changed::high-contrast", on_setting_changed)
+            if providers.shapes is not None:
+                a11y_settings.connect("changed::show-status-shapes", on_setting_changed)
+            gtk_settings.connect("notify::gtk-theme-name", on_setting_changed)
+            return interface_settings, a11y_settings, base_provider, providers
+        except GLib.Error as error:
+            msg = f"PREFERENCES WINDOW: Exception syncing appearance: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return None
+
+    @staticmethod
+    def _apply_appearance(
+        interface_settings: Gio.Settings,
+        a11y_settings: Gio.Settings,
+        gtk_settings: Gtk.Settings,
+        screen: Gdk.Screen,
+        providers: _AppearanceProviders,
+    ) -> None:
+        """Applies color-scheme, high-contrast, and status-shapes settings."""
+
+        prefer_dark = interface_settings.get_string("color-scheme") == "prefer-dark"
+        gtk_settings.set_property("gtk-application-prefer-dark-theme", prefer_dark)
+
+        theme = gtk_settings.get_property("gtk-theme-name")
+        if prefer_dark and theme == "HighContrast":
+            gtk_settings.set_property("gtk-theme-name", "HighContrastInverse")
+        elif not prefer_dark and theme == "HighContrastInverse":
+            gtk_settings.set_property("gtk-theme-name", "HighContrast")
+
+        priority = Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+        conditional_providers: list[tuple[Gtk.CssProvider, bool]] = [
+            (providers.hc, a11y_settings.get_boolean("high-contrast")),
+            (providers.dark, prefer_dark),
+        ]
+        if providers.shapes is not None:
+            conditional_providers.append(
+                (providers.shapes, a11y_settings.get_boolean("show-status-shapes")),
+            )
+        for provider, enabled in conditional_providers:
+            if enabled:
+                Gtk.StyleContext.add_provider_for_screen(screen, provider, priority)
+            else:
+                Gtk.StyleContext.remove_provider_for_screen(screen, provider)
+
+    def window_destroyed(self, _widget: Gtk.Widget) -> None:
+        """Handle window destroyed signal by clearing window reference."""
+
+        msg = "PREFERENCES WINDOW: Window is being destroyed"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        OrcaSetupGUI.WINDOW = None
+
+        msg = "PREFERENCES WINDOW: Window destruction complete"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        focus_manager.get_manager().set_in_preferences_window(False)
+
+    def _has_unsaved_changes(self, include_profiles: bool = False) -> bool:
+        """Returns True if any preference grid has unsaved changes."""
+
+        for name, grid in self._page_to_grid.items():
+            if grid is self.profiles_grid and not include_profiles:
+                continue
+            if grid.has_changes():
+                msg = f"PREFERENCES: Grid '{name}' has unsaved changes"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return True
+        return False
+
+    def resume_events(self, reason: str = "") -> bool:
+        """Re-register event listeners suspended during UI creation and teardown."""
+
+        msg = f"PREFERENCES: Re-registering events. {reason}"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        manager = event_manager.get_manager()
+        for event in self._EVENTS_TO_SUSPEND:
+            manager.register_listener(event)
+        return False
+
+    def suspend_events(self, reason: str = "") -> None:
+        """Deregister event listeners that flood Orca during UI creation and teardown."""
+
+        msg = f"PREFERENCES: Suspending events. {reason}"
+        debug.print_message(debug.LEVEL_ALL, msg, True)
+
+        manager = event_manager.get_manager()
+        for event in self._EVENTS_TO_SUSPEND:
+            manager.deregister_listener(event)
+
+    def _get_current_profile_label(self) -> str:
+        """Get the display label for the current profile, including pending renames."""
+
+        return self.profiles_grid.get_current_profile_label()
+
+    def _get_panel_title(self, page_title: str) -> str:
+        """Build the panel header title with profile in parentheses."""
+
+        profile_label = self._get_current_profile_label()
+        return f"{page_title} ({profile_label})"
+
+    def _set_page_title(self, title: str) -> None:
+        """Set the current page title, updating panel header and accessible name."""
+
+        self._current_page_title = title
+        self.panel_headerbar.set_title(self._get_panel_title(title))
+        self.get_accessible().set_name(self._get_accessible_name(title))
+
+    def _get_accessible_name(self, page_title: str = "") -> str:
+        """Build the accessible name for the window."""
+
+        if self._app_name:
+            base_title = guilabels.PREFERENCES_APPLICATION_TITLE % self._app_name
+        else:
+            base_title = guilabels.DIALOG_SCREEN_READER_PREFERENCES_ACCESSIBLE
+
+        profile_label = self._get_current_profile_label()
+
+        if page_title:
+            return f"{base_title}, {page_title}, {profile_label}"
+        return f"{base_title}, {profile_label}"
+
+    def update_menu_labels(self) -> None:
+        """Update Apply and Save menu items and panel title to show the current profile."""
+
+        profile_label = self._get_current_profile_label()
+        self.apply_item.set_property("text", guilabels.MENU_APPLY_PROFILE % profile_label)
+        self.save_item.set_property("text", guilabels.MENU_SAVE_PROFILE % profile_label)
+
+        if self._app_name:
+            self.left_headerbar.set_subtitle(self._app_name)
+        else:
+            self.left_headerbar.set_subtitle(None)
+
+        if self._current_page_title:
+            self._set_page_title(self._current_page_title)
+
+    def _on_profile_loaded(self, profile: list[str]) -> None:
+        """Handle profile loaded callback and reload all preference grids."""
+
+        if not self.get_realized():
+            return
+
+        self._profile_name = profile[1]
+        self._init_gui_state(include_profiles=False)
+        self.update_menu_labels()

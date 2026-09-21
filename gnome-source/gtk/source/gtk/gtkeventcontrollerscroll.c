@@ -20,7 +20,8 @@
 /**
  * GtkEventControllerScroll:
  *
- * Handles scroll events.
+ * `GtkEventControllerScroll` is an event controller that handles scroll
+ * events.
  *
  * It is capable of handling both discrete and continuous scroll
  * events from mice or touchpads, abstracting them both with the
@@ -274,7 +275,7 @@ gtk_event_controller_scroll_end (GtkEventController *controller)
     }
 }
 
-static void
+static gboolean
 gtk_event_controller_scroll_hold_timeout (gpointer user_data)
 {
   GtkEventController *controller;
@@ -285,6 +286,8 @@ gtk_event_controller_scroll_hold_timeout (gpointer user_data)
 
   gtk_event_controller_scroll_end (controller);
   scroll->hold_timeout_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
 static gboolean
@@ -321,7 +324,9 @@ gtk_event_controller_scroll_handle_hold_event (GtkEventController *controller,
       if (scroll->hold_timeout_id == 0)
         {
           scroll->hold_timeout_id =
-              g_timeout_add_once (HOLD_TIMEOUT_MS, gtk_event_controller_scroll_hold_timeout, controller);
+              g_timeout_add (HOLD_TIMEOUT_MS,
+                             gtk_event_controller_scroll_hold_timeout,
+                             controller);
         }
       break;
 
@@ -373,25 +378,17 @@ gtk_event_controller_scroll_handle_event (GtkEventController *controller,
 
   scroll_unit = gdk_scroll_event_get_unit (event);
 
-  gdk_scroll_event_get_deltas (event, &dx, &dy);
-
-  if ((scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_VERTICAL) == 0)
-    dy = 0;
-  if ((scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL) == 0)
-    dx = 0;
-
-  if (!!(scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_PHYSICAL_DIRECTION) &&
-      gdk_scroll_event_get_relative_direction (event) == GDK_SCROLL_RELATIVE_DIRECTION_INVERTED)
-    {
-      dx *= -1;
-      dy *= -1;
-    }
-
   /* FIXME: Handle device changes */
   direction = gdk_scroll_event_get_direction (event);
   if (direction == GDK_SCROLL_SMOOTH)
     {
+      gdk_scroll_event_get_deltas (event, &dx, &dy);
       gtk_event_controller_scroll_begin (controller);
+
+      if ((scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_VERTICAL) == 0)
+        dy = 0;
+      if ((scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL) == 0)
+        dx = 0;
 
       if (scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_DISCRETE)
         {
@@ -437,6 +434,13 @@ gtk_event_controller_scroll_handle_event (GtkEventController *controller,
     }
   else
     {
+      gdk_scroll_event_get_deltas (event, &dx, &dy);
+
+      if ((scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_VERTICAL) == 0)
+        dy = 0;
+      if ((scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL) == 0)
+        dx = 0;
+
       if (scroll->flags & GTK_EVENT_CONTROLLER_SCROLL_DISCRETE)
         {
           int steps;
@@ -517,7 +521,7 @@ gtk_event_controller_scroll_class_init (GtkEventControllerScrollClass *klass)
   controller_class->handle_event = gtk_event_controller_scroll_handle_event;
 
   /**
-   * GtkEventControllerScroll:flags:
+   * GtkEventControllerScroll:flags: (attributes org.gtk.Property.get=gtk_event_controller_scroll_get_flags org.gtk.Property.set=gtk_event_controller_scroll_set_flags)
    *
    * The flags affecting event controller behavior.
    */
@@ -525,7 +529,7 @@ gtk_event_controller_scroll_class_init (GtkEventControllerScrollClass *klass)
     g_param_spec_flags ("flags", NULL, NULL,
                         GTK_TYPE_EVENT_CONTROLLER_SCROLL_FLAGS,
                         GTK_EVENT_CONTROLLER_SCROLL_NONE,
-                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkEventControllerScroll::scroll-begin:
@@ -637,7 +641,7 @@ gtk_event_controller_scroll_new (GtkEventControllerScrollFlags flags)
 }
 
 /**
- * gtk_event_controller_scroll_set_flags:
+ * gtk_event_controller_scroll_set_flags: (attributes org.gtk.Method.set_property=flags)
  * @scroll: a `GtkEventControllerScroll`
  * @flags: flags affecting the controller behavior
  *
@@ -657,7 +661,7 @@ gtk_event_controller_scroll_set_flags (GtkEventControllerScroll      *scroll,
 }
 
 /**
- * gtk_event_controller_scroll_get_flags:
+ * gtk_event_controller_scroll_get_flags: (attributes org.gtk.Method.get_property=flags)
  * @scroll: a `GtkEventControllerScroll`
  *
  * Gets the flags conditioning the scroll controller behavior.

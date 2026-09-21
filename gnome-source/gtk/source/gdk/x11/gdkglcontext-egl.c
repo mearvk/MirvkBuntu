@@ -28,8 +28,6 @@
 
 #include <epoxy/egl.h>
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 struct _GdkX11GLContextEGL
 {
   GdkX11GLContext parent_instance;
@@ -52,8 +50,6 @@ G_DEFINE_TYPE (GdkX11GLContextEGL, gdk_x11_gl_context_egl, GDK_TYPE_X11_GL_CONTE
  * Returns: (nullable): the EGL display object
  *
  * Since: 4.4
- *
- * Deprecated: 4.18
  */
 gpointer
 gdk_x11_display_get_egl_display (GdkDisplay *display)
@@ -97,29 +93,14 @@ gdk_x11_gl_context_egl_make_current (GdkGLContext *context,
   return TRUE;
 }
 
-static gboolean
-gdk_x11_gl_context_egl_surface_attach (GdkDrawContext  *context,
-                                       GError         **error)
-{
-  GdkSurface *surface = gdk_draw_context_get_surface (context);
-
-  gdk_gl_context_set_egl_native_window (GDK_GL_CONTEXT (context),
-                                        (void *) gdk_x11_surface_get_xid (surface));
-
-  return TRUE;
-}
-
 static void
 gdk_x11_gl_context_egl_class_init (GdkX11GLContextEGLClass *klass)
 {
-  GdkDrawContextClass *draw_context_class = GDK_DRAW_CONTEXT_CLASS (klass);
   GdkGLContextClass *context_class = GDK_GL_CONTEXT_CLASS (klass);
 
   context_class->backend_type = GDK_GL_EGL;
 
   context_class->make_current = gdk_x11_gl_context_egl_make_current;
-
-  draw_context_class->surface_attach = gdk_x11_gl_context_egl_surface_attach;
 }
 
 static void
@@ -139,8 +120,6 @@ gdk_x11_gl_context_egl_init (GdkX11GLContextEGL *self)
  * Returns: %TRUE if EGL is available
  *
  * Since: 4.4
- *
- * Deprecated: 4.18
  */
 gboolean
 gdk_x11_display_get_egl_version (GdkDisplay *display,

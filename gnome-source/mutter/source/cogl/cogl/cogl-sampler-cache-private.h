@@ -30,18 +30,8 @@
 
 #pragma once
 
-#if !defined(HAVE_GL) && !defined(HAVE_GLES2)
-#error "config.h must be included before this header"
-#endif
-
 #include "cogl/cogl-context.h"
-
-#if defined(HAVE_GL)
-#include <GL/gl.h>
-#elif defined(HAVE_GLES2)
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#endif
+#include "cogl/cogl-gl-header.h"
 
 /* These aren't defined in the GLES headers */
 #ifndef GL_CLAMP_TO_BORDER
@@ -59,6 +49,8 @@
  */
 typedef enum _CoglSamplerCacheWrapMode
 {
+  COGL_SAMPLER_CACHE_WRAP_MODE_REPEAT = GL_REPEAT,
+  COGL_SAMPLER_CACHE_WRAP_MODE_MIRRORED_REPEAT = GL_MIRRORED_REPEAT,
   COGL_SAMPLER_CACHE_WRAP_MODE_CLAMP_TO_EDGE = GL_CLAMP_TO_EDGE,
   COGL_SAMPLER_CACHE_WRAP_MODE_CLAMP_TO_BORDER = GL_CLAMP_TO_BORDER,
   COGL_SAMPLER_CACHE_WRAP_MODE_AUTOMATIC = GL_ALWAYS

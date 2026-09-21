@@ -5,54 +5,36 @@
 
 #include "gdk/gdkmemoryformatprivate.h"
 
+#define GSK_GPU_PATTERN_STACK_SIZE 16
+
+typedef struct _GskGLDescriptors        GskGLDescriptors;
 typedef struct _GskGpuBuffer            GskGpuBuffer;
-typedef struct _GskGpuCache             GskGpuCache;
-typedef struct _GskGpuCachePrivate      GskGpuCachePrivate;
-typedef struct _GskGpuClip              GskGpuClip;
-typedef guint32                         GskGpuColorStates;
+typedef struct _GskGpuDescriptors       GskGpuDescriptors;
 typedef struct _GskGpuDevice            GskGpuDevice;
 typedef struct _GskGpuFrame             GskGpuFrame;
-typedef struct _GskGpuGlobalsInstance   GskGpuGlobalsInstance;
 typedef struct _GskGpuImage             GskGpuImage;
-typedef struct _GskGpuOcclusion         GskGpuOcclusion;
 typedef struct _GskGpuOp                GskGpuOp;
 typedef struct _GskGpuOpClass           GskGpuOpClass;
-typedef struct _GskGpuRenderPass        GskGpuRenderPass;
-typedef guint32                         GskGpuShaderFlags;
 typedef struct _GskGpuShaderOp          GskGpuShaderOp;
 typedef struct _GskGpuShaderOpClass     GskGpuShaderOpClass;
+typedef struct _GskVulkanDescriptors    GskVulkanDescriptors;
 typedef struct _GskVulkanSemaphores     GskVulkanSemaphores;
-
-#define GSK_GPU_SHADER_OP_SHIFT 4
-#define GSK_GPU_SHADER_OP_MASK ((1 << GSK_GPU_SHADER_OP_SHIFT) - 1)
 
 typedef enum {
   GSK_GPU_IMAGE_EXTERNAL       = (1 << 0),
   GSK_GPU_IMAGE_TOGGLE_REF     = (1 << 1),
-  GSK_GPU_IMAGE_BLIT           = (1 << 2),
-  GSK_GPU_IMAGE_CAN_MIPMAP     = (1 << 3),
-  GSK_GPU_IMAGE_MIPMAP         = (1 << 4),
-  GSK_GPU_IMAGE_FILTERABLE     = (1 << 5),
-  GSK_GPU_IMAGE_RENDERABLE     = (1 << 6),
-  GSK_GPU_IMAGE_DOWNLOADABLE   = (1 << 7),
+  GSK_GPU_IMAGE_STRAIGHT_ALPHA = (1 << 2),
+  GSK_GPU_IMAGE_NO_BLIT        = (1 << 3),
+  GSK_GPU_IMAGE_CAN_MIPMAP     = (1 << 4),
+  GSK_GPU_IMAGE_MIPMAP         = (1 << 5),
+  GSK_GPU_IMAGE_FILTERABLE     = (1 << 6),
+  GSK_GPU_IMAGE_RENDERABLE     = (1 << 7),
 } GskGpuImageFlags;
-
-typedef enum {
-  GSK_GPU_CONVERSION_NONE,
-  GSK_GPU_CONVERSION_SRGB,
-  GSK_GPU_CONVERSION_BT601,
-  GSK_GPU_CONVERSION_BT601_NARROW,
-  GSK_GPU_CONVERSION_BT709,
-  GSK_GPU_CONVERSION_BT709_NARROW,
-  GSK_GPU_CONVERSION_BT2020,
-  GSK_GPU_CONVERSION_BT2020_NARROW,
-} GskGpuConversion;
 
 typedef enum {
   GSK_GPU_SAMPLER_DEFAULT,
   GSK_GPU_SAMPLER_TRANSPARENT,
   GSK_GPU_SAMPLER_REPEAT,
-  GSK_GPU_SAMPLER_REFLECT,
   GSK_GPU_SAMPLER_NEAREST,
   GSK_GPU_SAMPLER_MIPMAP_DEFAULT,
   /* add more */
@@ -64,36 +46,12 @@ typedef enum {
   GSK_GPU_SHADER_CLIP_RECT,
   GSK_GPU_SHADER_CLIP_ROUNDED
 } GskGpuShaderClip;
-/* includes 1 bit for the has_clip_mask flag */
-#define GSK_GPU_SHADER_CLIP_SHIFT 4
-#define GSK_GPU_SHADER_CLIP_MASK ((1 << (GSK_GPU_SHADER_CLIP_SHIFT - 1)) - 1)
 
 typedef enum {
-  GSK_GPU_BLEND_NONE,
   GSK_GPU_BLEND_OVER,
   GSK_GPU_BLEND_ADD,
-  GSK_GPU_BLEND_CLEAR,
-  GSK_GPU_BLEND_MASK,
-  /* dual blend modes start here */
-  GSK_GPU_BLEND_MASK_ONE,
-  GSK_GPU_BLEND_MASK_ALPHA,
-  GSK_GPU_BLEND_MASK_INV_ALPHA,
+  GSK_GPU_BLEND_CLEAR
 } GskGpuBlend;
-
-/* We only need this for the final VkImageLayout, but don't tell anyone */
-typedef enum
-{
-  GSK_RENDER_PASS_OFFSCREEN,
-  GSK_RENDER_PASS_PRESENT,
-  GSK_RENDER_PASS_EXPORT
-} GskRenderPassType;
-
-typedef enum
-{
-  GSK_GPU_LOAD_OP_LOAD,
-  GSK_GPU_LOAD_OP_CLEAR,
-  GSK_GPU_LOAD_OP_DONT_CARE
-} GskGpuLoadOp;
 
 typedef enum {
   GSK_GPU_PATTERN_DONE,
@@ -154,16 +112,11 @@ G_STATIC_ASSERT (GSK_GPU_PATTERN_BLEND_SATURATION == GSK_GPU_PATTERN_BLEND_DEFAU
 G_STATIC_ASSERT (GSK_GPU_PATTERN_BLEND_LUMINOSITY == GSK_GPU_PATTERN_BLEND_DEFAULT + GSK_BLEND_MODE_LUMINOSITY);
 
 typedef enum {
-  GSK_GPU_OPTIMIZE_CLEAR                = 1 <<  0,
-  GSK_GPU_OPTIMIZE_MERGE                = 1 <<  1,
-  GSK_GPU_OPTIMIZE_BLIT                 = 1 <<  2,
-  GSK_GPU_OPTIMIZE_GRADIENTS            = 1 <<  3,
-  GSK_GPU_OPTIMIZE_MIPMAP               = 1 <<  4,
-  GSK_GPU_OPTIMIZE_TO_IMAGE             = 1 <<  5,
-  GSK_GPU_OPTIMIZE_OCCLUSION_CULLING    = 1 <<  6,
-  GSK_GPU_OPTIMIZE_REPEAT               = 1 <<  7,
-  GSK_GPU_OPTIMIZE_DUAL_BLEND           = 1 <<  8,
-  GSK_GPU_OPTIMIZE_DAMAGE               = 1 <<  9,
-  GSK_GPU_OPTIMIZE_PROFILE              = 1 << 10,
+  GSK_GPU_OPTIMIZE_UBER                 = 1 <<  0,
+  GSK_GPU_OPTIMIZE_CLEAR                = 1 <<  1,
+  GSK_GPU_OPTIMIZE_MERGE                = 1 <<  2,
+  GSK_GPU_OPTIMIZE_BLIT                 = 1 <<  3,
+  GSK_GPU_OPTIMIZE_GRADIENTS            = 1 <<  4,
+  GSK_GPU_OPTIMIZE_MIPMAP               = 1 <<  5,
 } GskGpuOptimizations;
 

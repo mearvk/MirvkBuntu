@@ -42,7 +42,7 @@ struct _GDaemonFileOutputStreamClass
   GFileOutputStreamClass parent_class;
 };
 
-GType g_daemon_file_output_stream_get_type (void);
+GType g_daemon_file_output_stream_get_type (void) G_GNUC_CONST;
 
 GFileOutputStream *g_daemon_file_output_stream_new (int fd,
 						    guint32 flags,

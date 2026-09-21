@@ -53,8 +53,9 @@ gboolean gdk_rectangle_contains_point (const GdkRectangle *rect,
                                        int                 y) G_GNUC_PURE;
 
 GDK_AVAILABLE_IN_ALL
-GType gdk_rectangle_get_type (void);
+GType gdk_rectangle_get_type (void) G_GNUC_CONST;
 
 #define GDK_TYPE_RECTANGLE (gdk_rectangle_get_type ())
 
 G_END_DECLS
+

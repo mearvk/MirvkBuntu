@@ -150,6 +150,9 @@ void     _gtk_text_btree_get_iter_at_line_byte    (GtkTextBTree       *tree,
                                                    GtkTextIter        *iter,
                                                    int                 line_number,
                                                    int                 byte_index);
+gboolean _gtk_text_btree_get_iter_from_string     (GtkTextBTree       *tree,
+                                                   GtkTextIter        *iter,
+                                                   const char         *string);
 gboolean _gtk_text_btree_get_iter_at_mark_name    (GtkTextBTree       *tree,
                                                    GtkTextIter        *iter,
                                                    const char         *mark_name);
@@ -165,10 +168,6 @@ void     _gtk_text_btree_get_iter_at_line         (GtkTextBTree       *tree,
                                                    GtkTextIter        *iter,
                                                    GtkTextLine        *line,
                                                    int                 byte_offset);
-void     _gtk_text_btree_get_iter_at_line_ptr_char (GtkTextBTree       *tree,
-                                                    GtkTextIter        *iter,
-                                                    GtkTextLine        *line,
-                                                    int                 char_offset);
 gboolean _gtk_text_btree_get_iter_at_first_toggle (GtkTextBTree       *tree,
                                                    GtkTextIter        *iter,
                                                    GtkTextTag         *tag);

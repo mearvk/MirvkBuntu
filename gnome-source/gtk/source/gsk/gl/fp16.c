@@ -22,6 +22,38 @@
 
 #include "fp16private.h"
 
+static inline guint
+as_uint (const float x)
+{
+  return *(guint*)&x;
+}
+
+static inline float
+as_float (const guint x)
+{
+  return *(float*)&x;
+}
+
+// IEEE-754 16-bit floating-point format (without infinity): 1-5-10
+
+static inline float
+half_to_float_one (const guint16 x)
+{
+  const guint e = (x&0x7C00)>>10; // exponent
+  const guint m = (x&0x03FF)<<13; // mantissa
+  const guint v = as_uint((float)m)>>23;
+  return as_float((x&0x8000)<<16 | (e!=0)*((e+112)<<23|m) | ((e==0)&(m!=0))*((v-37)<<23|((m<<(150-v))&0x007FE000)));
+}
+
+static inline guint16
+float_to_half_one (const float x)
+{
+  const guint b = as_uint(x)+0x00001000; // round-to-nearest-even
+  const guint e = (b&0x7F800000)>>23; // exponent
+  const guint m = b&0x007FFFFF; // mantissa
+  return (b&0x80000000)>>16 | (e>112)*((((e-112)<<10)&0x7C00)|m>>13) | ((e<113)&(e>101))*((((0x007FF000+m)>>(125-e))+1)>>1) | (e>143)*0x7FFF; // sign : normalized : denormalized : saturate
+}
+
 void
 float_to_half4_c (const float f[4],
                   guint16     h[4])
@@ -133,7 +165,7 @@ void half_to_float4 (const guint16 h[4], float f[4]) __attribute__((ifunc ("reso
 void float_to_half (const float *f, guint16 *h, int n) __attribute__((ifunc ("resolve_float_to_half")));
 void half_to_float (const guint16 *h, float *f, int n) __attribute__((ifunc ("resolve_half_to_float")));
 
-static void * __attribute__ ((no_sanitize_address)) G_GNUC_UNUSED
+static void * __attribute__ ((no_sanitize_address))
 resolve_float_to_half4 (void)
 {
   __builtin_cpu_init ();
@@ -143,7 +175,7 @@ resolve_float_to_half4 (void)
     return float_to_half4_c;
 }
 
-static void * __attribute__ ((no_sanitize_address)) G_GNUC_UNUSED
+static void * __attribute__ ((no_sanitize_address))
 resolve_half_to_float4 (void)
 {
   __builtin_cpu_init ();
@@ -153,7 +185,7 @@ resolve_half_to_float4 (void)
     return half_to_float4_c;
 }
 
-static void * __attribute__ ((no_sanitize_address)) G_GNUC_UNUSED
+static void * __attribute__ ((no_sanitize_address))
 resolve_float_to_half (void)
 {
   __builtin_cpu_init ();
@@ -163,7 +195,7 @@ resolve_float_to_half (void)
     return float_to_half_c;
 }
 
-static void * __attribute__ ((no_sanitize_address)) G_GNUC_UNUSED
+static void * __attribute__ ((no_sanitize_address))
 resolve_half_to_float (void)
 {
   __builtin_cpu_init ();

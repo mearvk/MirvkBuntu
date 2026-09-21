@@ -14,6 +14,11 @@
         <attribute name="label" translatable="yes">Style</attribute>
         <section>
           <item>
+            <attribute name="label" translatable="yes">Current</attribute>
+            <attribute name="action">win.theme</attribute>
+            <attribute name="target">current</attribute>
+          </item>
+          <item>
             <attribute name="label" translatable="yes">Default</attribute>
             <attribute name="action">win.theme</attribute>
             <attribute name="target">default</attribute>
@@ -426,13 +431,13 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
   </object>
   <object class="GtkApplicationWindow" id="window">
     <property name="title">GTK Widget Factory</property>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar" id="headerbar1">
-        <property name="title-widget">
+        <child type="title">
           <object class="GtkStackSwitcher" id="stack_switcher">
             <property name="stack">toplevel_stack</property>
           </object>
-        </property>
+        </child>
         <child type="end">
           <object class="GtkMenuButton" id="gear_menu_button">
             <property name="valign">3</property>
@@ -455,16 +460,12 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                 </child>
               </object>
             </property>
-            <property name="child">
-              <object class="GtkImage">
-                <property name="paintable">open-menu-symbolic</property>
-              </object>
-            </property>
+            <property name="icon-name">open-menu-symbolic</property>
           </object>
         </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkBox" id="box1">
         <property name="orientation">1</property>
         <property name="margin-start">10</property>
@@ -523,12 +524,7 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                 <property name="enable-emoji-completion">1</property>
                                 <property name="invisible_char">•</property>
                                 <property name="placeholder-text" translatable="1">Click icon to change mode</property>
-                                <property name="secondary-icon-paintable">
-                                  <object class="GtkSvg" id="view_refresh_paintable">
-                                    <property name="resource">/org/gtk/WidgetFactory4/icons/view-refresh.gpa</property>
-                                    <property name="playing">1</property>
-                                  </object>
-                                </property>
+                                <property name="secondary-icon-name">view-refresh-symbolic</property>
                                 <property name="secondary-icon-tooltip-text">Change mode</property>
                                 <signal name="icon-release" handler="on_entry_icon_release" swapped="no"/>
                               </object>
@@ -553,11 +549,7 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="button224">
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">window-close-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">window-close-symbolic</property>
                                   </object>
                                 </child>
                               </object>
@@ -1056,29 +1048,30 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                             <property name="hexpand">1</property>
                             <child>
                               <object class="GtkFrame">
-                                <property name="child">
-                                  <object class="GtkVideo" id="video">
+                                <child>
+                                  <object class="GtkVideo">
                                     <property name="autoplay">1</property>
                                     <property name="loop">1</property>
+                                    <property name="file">resource:///org/gtk/WidgetFactory4/gtk-logo.webm</property>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
                               <object class="GtkFrame">
-                                <property name="label-widget">
+                                <child type="label">
                                   <object class="GtkLabel" id="label1">
                                     <property name="label" translatable="1">&lt;b&gt;Text Styles&lt;/b&gt;</property>
                                     <property name="use-markup">1</property>
                                   </object>
-                                </property>
-                                <property name="child">
+                                </child>
+                                <child>
                                   <object class="GtkScrolledWindow">
                                     <property name="vexpand">1</property>
                                     <property name="hscrollbar-policy">2</property>
                                     <property name="propagate-natural-height">1</property>
                                     <property name="propagate-natural-width">1</property>
-                                    <property name="child">
+                                    <child>
                                       <object class="GtkBox">
                                         <property name="orientation">1</property>
                                         <property name="spacing">10</property>
@@ -1155,9 +1148,9 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                           </object>
                                         </child>
                                       </object>
-                                    </property>
+                                    </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                           </object>
@@ -1173,7 +1166,7 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                 <property name="vscrollbar-policy">0</property>
                                 <property name="has-frame">1</property>
                                 <property name="vexpand">1</property>
-                                <property name="child">
+                                <child>
                                   <object class="GtkTreeView" id="treeview1">
                                     <property name="model">liststore1</property>
                                     <property name="headers-clickable">0</property>
@@ -1240,21 +1233,21 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
                               <object class="GtkScrolledWindow" id="scrolledwindow2">
                                 <property name="has-frame">1</property>
                                 <property name="vexpand">1</property>
-                                <property name="child">
+                                <child>
                                   <object class="GtkTextView" id="textview1">
                                     <property name="buffer">textbuffer1</property>
                                     <property name="wrap-mode">2</property>
                                     <property name="left-margin">10</property>
                                     <property name="right-margin">10</property>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                           </object>
@@ -1272,7 +1265,6 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                 <property name="child">
                                   <object class="GtkPicture" id="notebook_sunset">
                                     <property name="content-fit">cover</property>
-                                    <property name="alternative-text">Sunset on the pond</property>
                                     <child>
                                       <object class="GtkDragSource">
                                         <signal name="prepare" handler="on_picture_drag_prepare" swapped="no"/>
@@ -1298,7 +1290,6 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                               <object class="GtkNotebookPage">
                                 <property name="child">
                                   <object class="GtkPicture" id="notebook_nyc">
-                                    <property name="alternative-text">New York from above</property>
                                     <child>
                                       <object class="GtkDragSource">
                                         <signal name="prepare" handler="on_picture_drag_prepare" swapped="no"/>
@@ -1324,7 +1315,6 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                               <object class="GtkNotebookPage">
                                 <property name="child">
                                   <object class="GtkPicture" id="notebook_beach">
-                                    <property name="alternative-text">Rodeo beach</property>
                                     <child>
                                       <object class="GtkDragSource">
                                         <signal name="prepare" handler="on_picture_drag_prepare" swapped="no"/>
@@ -1513,12 +1503,12 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                         <property name="transition-type">9</property>
                         <property name="halign">3</property>
                         <property name="valign">1</property>
-                        <property name="child">
+                        <child>
                           <object class="GtkFrame" id="page2frame">
                             <style>
                               <class name="app-notification"/>
                             </style>
-                            <property name="child">
+                            <child>
                               <object class="GtkBox" id="page2box">
                                 <property name="spacing">20</property>
                                 <property name="margin-start">10</property>
@@ -1542,20 +1532,16 @@ Suspendisse feugiat quam quis dolor accumsan cursus.</property>
                                   <object class="GtkButton" id="page2dismiss">
                                     <property name="focus-on-click">0</property>
                                     <property name="has-frame">0</property>
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">window-close-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">window-close-symbolic</property>
                                   </object>
                                 </child>
                               </object>
-                            </property>
+                            </child>
                           </object>
-                        </property>
+                        </child>
                       </object>
                     </child>
-                    <property name="child">
+                    <child>
                       <object class="GtkBox">
                         <property name="spacing">10</property>
                         <child>
@@ -1625,7 +1611,7 @@ microphone-sensitivity-medium-symbolic</property>
                             </child>
                             <child>
                               <object class="GtkFrame" id="page2frame1">
-                                <property name="child">
+                                <child>
                                   <object class="GtkBox">
                                     <property name="orientation">1</property>
                                     <child>
@@ -1640,13 +1626,13 @@ microphone-sensitivity-medium-symbolic</property>
                                             <property name="child">
                                               <object class="GtkScrolledWindow" id="swo">
                                                 <property name="hscrollbar-policy">2</property>
-                                                <property name="child">
+                                                <child>
                                                   <object class="GtkTextView" id="tvo">
                                                     <property name="buffer">textbuffer2</property>
                                                     <property name="left-margin">10</property>
                                                     <property name="right-margin">10</property>
                                                   </object>
-                                                </property>
+                                                </child>
                                               </object>
                                             </property>
                                           </object>
@@ -1658,7 +1644,7 @@ microphone-sensitivity-medium-symbolic</property>
                                             <property name="title">Logo</property>
                                             <property name="child">
                                               <object class="GtkImage" id="imageo">
-                                                <property name="paintable">resource:///org/gtk/WidgetFactory4/icons/scalable/apps/org.gtk.WidgetFactory4.svg</property>
+                                                <property name="icon-name">org.gtk.WidgetFactory4</property>
                                                 <property name="pixel-size">256</property>
                                                 <style>
                                                   <class name="icon-dropshadow"/>
@@ -1682,17 +1668,13 @@ microphone-sensitivity-medium-symbolic</property>
                                             <property name="menu-model">dinner_menu</property>
                                             <property name="halign">3</property>
                                             <property name="valign">3</property>
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">emblem-system-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">emblem-system-symbolic</property>
                                           </object>
                                         </child>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
@@ -1702,7 +1684,7 @@ microphone-sensitivity-medium-symbolic</property>
                                 <property name="min-content-height">200</property>
                                 <property name="hexpand">0</property>
                                 <property name="vexpand">1</property>
-                                <property name="child">
+                                <child>
                                   <object class="GtkListBox" id="listbox">
                                     <property name="selection-mode">0</property>
                                     <property name="show-separators">1</property>
@@ -1777,14 +1759,10 @@ microphone-sensitivity-medium-symbolic</property>
                                             </child>
                                             <child>
                                               <object class="GtkImage" id="listboxrow3image">
-                                                <property name="paintable">
-                                                  <object class="GtkSvg" id="checked_paintable">
-                                                    <property name="resource">/org/gtk/WidgetFactory4/icons/checked.gpa</property>
-                                                    <property name="playing">1</property>
-                                                  </object>
-                                                </property>
+                                                <property name="icon-name">object-select-symbolic</property>
                                                 <property name="halign">2</property>
                                                 <property name="valign">3</property>
+                                                <property name="opacity">0</property>
                                               </object>
                                             </child>
                                           </object>
@@ -1833,11 +1811,7 @@ microphone-sensitivity-medium-symbolic</property>
                                               <object class="GtkButton" id="listboxrow5button">
                                                 <property name="halign">2</property>
                                                 <property name="valign">3</property>
-                                                <property name="child">
-                                                  <object class="GtkImage">
-                                                    <property name="paintable">appointment-soon-symbolic</property>
-                                                  </object>
-                                                </property>
+                                                <property name="icon-name">appointment-soon-symbolic</property>
                                               </object>
                                             </child>
                                           </object>
@@ -1900,7 +1874,7 @@ microphone-sensitivity-medium-symbolic</property>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                           </object>
@@ -1911,7 +1885,7 @@ microphone-sensitivity-medium-symbolic</property>
                             <property name="spacing">10</property>
                             <child>
                               <object class="GtkFrame" id="page2frame2">
-                                <property name="child">
+                                <child>
                                   <object class="GtkBox">
                                     <property name="orientation">1</property>
                                     <child>
@@ -1927,23 +1901,14 @@ microphone-sensitivity-medium-symbolic</property>
                                         <child>
                                           <object class="GtkButton">
                                             <property name="label" translatable="1">New</property>
-
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">document-new-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">document-new</property>
                                             <property name="tooltip-text" translatable="1">Create a new document</property>
                                           </object>
                                         </child>
                                         <child>
                                           <object class="GtkButton">
                                             <property name="label" translatable="1">Save</property>
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">document-save-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">document-save</property>
                                             <property name="tooltip-text" translatable="1">Save the current document</property>
                                           </object>
                                         </child>
@@ -1953,11 +1918,7 @@ microphone-sensitivity-medium-symbolic</property>
                                         <child>
                                           <object class="GtkButton">
                                             <property name="label" translatable="1">Search</property>
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">edit-find-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">edit-find</property>
                                             <property name="action-name">win.search</property>
                                             <property name="tooltip-text" translatable="1">Search for it</property>
                                           </object>
@@ -1966,11 +1927,7 @@ microphone-sensitivity-medium-symbolic</property>
                                           <object class="GtkButton">
                                             <property name="sensitive">0</property>
                                             <property name="label" translatable="1">Insert</property>
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">insert-image-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">insert-image</property>
                                             <property name="tooltip-text" translatable="1">Insert something</property>
                                           </object>
                                         </child>
@@ -1984,9 +1941,9 @@ microphone-sensitivity-medium-symbolic</property>
                                     </child>
                                     <child>
                                       <object class="GtkSearchBar" id="searchbar">
-                                        <property name="child">
+                                        <child>
                                           <object class="GtkSearchEntry"/>
-                                        </property>
+                                        </child>
                                       </object>
                                     </child>
                                     <child>
@@ -2007,7 +1964,7 @@ microphone-sensitivity-medium-symbolic</property>
                                     <child>
                                       <object class="GtkScrolledWindow">
                                         <property name="vexpand">1</property>
-                                        <property name="child">
+                                        <child>
                                           <object class="MyTextView" id="text3">
                                             <property name="visible">True</property>
                                             <property name="buffer">textbuffer1</property>
@@ -2015,7 +1972,7 @@ microphone-sensitivity-medium-symbolic</property>
                                             <property name="left-margin">10</property>
                                             <property name="right-margin">10</property>
                                           </object>
-                                        </property>
+                                        </child>
                                       </object>
                                     </child>
                                     <child>
@@ -2025,7 +1982,7 @@ microphone-sensitivity-medium-symbolic</property>
                                       <object class="GtkStatusbar" id="statusbar"/>
                                     </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
@@ -2039,47 +1996,47 @@ microphone-sensitivity-medium-symbolic</property>
                                       <object class="GtkFrame" id="panedframe1">
                                         <property name="hexpand">1</property>
                                         <property name="vexpand">1</property>
-                                        <property name="child">
+                                        <child>
                                           <object class="GtkPaned">
                                             <style>
                                               <class name="view"/>
                                             </style>
-                                            <property name="start-child">
+                                            <child>
                                               <object class="GtkLabel">
                                                 <property name="label">Left</property>
                                               </object>
-                                            </property>
-                                            <property name="end-child">
+                                            </child>
+                                            <child>
                                               <object class="GtkLabel">
                                                 <property name="label">Right</property>
                                               </object>
-                                            </property>
+                                            </child>
                                           </object>
-                                        </property>
+                                        </child>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkFrame" id="panedframe2">
                                         <property name="hexpand">1</property>
                                         <property name="vexpand">1</property>
-                                        <property name="child">
+                                        <child>
                                           <object class="GtkPaned">
                                             <property name="orientation">1</property>
                                             <style>
                                               <class name="view"/>
                                             </style>
-                                            <property name="start-child">
+                                            <child>
                                               <object class="GtkLabel">
                                                 <property name="label">Top</property>
                                               </object>
-                                            </property>
-                                            <property name="end-child">
+                                            </child>
+                                            <child>
                                               <object class="GtkLabel">
                                                 <property name="label">Bottom</property>
                                               </object>
-                                            </property>
+                                            </child>
                                           </object>
-                                        </property>
+                                        </child>
                                       </object>
                                     </child>
                                   </object>
@@ -2100,7 +2057,7 @@ microphone-sensitivity-medium-symbolic</property>
                             <child>
                               <object class="GtkExpander" id="expander1">
                                 <property name="expanded">1</property>
-                                <property name="child">
+                                <child>
                                   <object class="GtkBox">
                                     <property name="orientation">1</property>
                                     <child>
@@ -2108,7 +2065,7 @@ microphone-sensitivity-medium-symbolic</property>
                                         <property name="has-frame">1</property>
                                         <property name="margin-top">6</property>
                                         <property name="height-request">226</property>
-                                        <property name="child">
+                                        <child>
                                           <object class="GtkIconView" id="iconview1">
                                             <property name="selection-mode">3</property>
                                             <property name="model">iconsmodel</property>
@@ -2119,7 +2076,7 @@ microphone-sensitivity-medium-symbolic</property>
                                               </attributes>
                                             </child>
                                           </object>
-                                        </property>
+                                        </child>
                                       </object>
                                     </child>
                                     <child>
@@ -2129,33 +2086,21 @@ microphone-sensitivity-medium-symbolic</property>
                                         </style>
                                         <child>
                                           <object class="GtkButton" id="decrease_button">
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">zoom-out-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">zoom-out-symbolic</property>
                                             <property name="tooltip-text">Normal icons</property>
                                             <signal name="clicked" handler="decrease_icon_size" object="iconview1" swapped="yes"/>
                                           </object>
                                         </child>
                                         <child>
                                           <object class="GtkButton" id="increase_button">
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">zoom-in-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">zoom-in-symbolic</property>
                                             <property name="tooltip-text">Large icons</property>
                                             <signal name="clicked" handler="increase_icon_size" object="iconview1" swapped="yes"/>
                                           </object>
                                         </child>
                                         <child>
                                           <object class="GtkButton" id="reset_button">
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">zoom-original-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">zoom-original-symbolic</property>
                                             <property name="tooltip-text">Inherited icon size</property>
                                             <signal name="clicked" handler="reset_icon_size" object="iconview1" swapped="yes"/>
                                           </object>
@@ -2163,12 +2108,12 @@ microphone-sensitivity-medium-symbolic</property>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
-                                <property name="label-widget">
+                                </child>
+                                <child type="label">
                                   <object class="GtkLabel" id="label19">
                                     <property name="label" translatable="1">Expander</property>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
@@ -2198,7 +2143,7 @@ microphone-sensitivity-medium-symbolic</property>
                           </object>
                         </child>
                       </object>
-                    </property>
+                    </child>
                   </object>
                 </property>
               </object>
@@ -2225,7 +2170,7 @@ microphone-sensitivity-medium-symbolic</property>
                                 <property name="vscrollbar-policy">0</property>
                                 <property name="height-request">300</property>
                                 <property name="has-frame">1</property>
-                                <property name="child">
+                                <child>
                                   <object class="GtkTreeView" id="charletree">
                                     <property name="enable-grid-lines">2</property>
                                     <property name="enable-tree-lines">1</property>
@@ -2270,7 +2215,7 @@ microphone-sensitivity-medium-symbolic</property>
                                       </object>
                                     </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
@@ -2288,12 +2233,12 @@ microphone-sensitivity-medium-symbolic</property>
                             <property name="hscrollbar-policy">2</property>
                             <property name="vexpand">1</property>
                             <property name="has-frame">1</property>
-                            <property name="child">
+                            <child>
                               <object class="GtkListBox" id="munsell">
                                 <property name="selection-mode">3</property>
                                 <property name="activate-on-single-click">0</property>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -2329,14 +2274,14 @@ microphone-sensitivity-medium-symbolic</property>
                                       <class name="image-button"/>
                                       <class name="destructive-action"/>
                                     </style>
-                                    <property name="child">
+                                    <child>
                                       <object class="GtkBox">
                                         <property name="spacing">6</property>
                                         <property name="valign">center</property>
                                         <child>
                                           <object class="GtkImage">
                                             <property name="valign">4</property>
-                                            <property name="paintable">media-record-symbolic</property>
+                                            <property name="icon-name">media-record-symbolic</property>
                                             <property name="valign">center</property>
                                           </object>
                                         </child>
@@ -2348,7 +2293,7 @@ microphone-sensitivity-medium-symbolic</property>
                                           </object>
                                         </child>
                                       </object>
-                                    </property>
+                                    </child>
                                   </object>
                                 </child>
                                 <child>
@@ -2360,22 +2305,14 @@ microphone-sensitivity-medium-symbolic</property>
                                     <child>
                                       <object class="GtkToggleButton" id="grid_button">
                                         <property name="active">1</property>
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">view-grid-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">view-grid-symbolic</property>
                                         <property name="valign">center</property>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkToggleButton" id="list_button">
                                         <property name="group">grid_button</property>
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">view-list-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">view-list-symbolic</property>
                                         <property name="valign">center</property>
                                       </object>
                                     </child>
@@ -2383,11 +2320,7 @@ microphone-sensitivity-medium-symbolic</property>
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="circular_button">
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">emblem-system-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">emblem-system-symbolic</property>
                                     <property name="valign">center</property>
                                     <style>
                                       <class name="circular"/>
@@ -2403,11 +2336,7 @@ microphone-sensitivity-medium-symbolic</property>
                             </child>
                             <child>
                               <object class="GtkMenuButton">
-                                <property name="child">
-                                  <object class="GtkImage">
-                                    <property name="paintable">view-more-symbolic</property>
-                                  </object>
-                                </property>
+                                <property name="icon-name">view-more-symbolic</property>
                                 <property name="menu-model">new_style_menu_model</property>
                                 <property name="valign">center</property>
                               </object>
@@ -2416,7 +2345,7 @@ microphone-sensitivity-medium-symbolic</property>
                         </child>
                         <child>
                           <object class="GtkFrame">
-                            <property name="child">
+                            <child>
                               <object class="GtkBox">
                                 <child>
                                   <object class="GtkStackSidebar">
@@ -2627,7 +2556,7 @@ microphone-sensitivity-medium-symbolic</property>
                                   </object>
                                 </child>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                         <child>
@@ -2640,44 +2569,28 @@ microphone-sensitivity-medium-symbolic</property>
                                 </style>
                                 <child>
                                   <object class="GtkButton" id="toolbutton1">
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">document-open-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">document-open-symbolic</property>
                                     <property name="focus-on-click">0</property>
                                     <property name="tooltip-text" translatable="1">Insert ⌘</property>
                                   </object>
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="toolbutton2">
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">send-to-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">send-to-symbolic</property>
                                     <property name="focus-on-click">0</property>
                                     <property name="tooltip-text" translatable="1">Insert ⚽</property>
                                   </object>
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="toolbutton3">
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">view-fullscreen-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">view-fullscreen-symbolic</property>
                                     <property name="focus-on-click">0</property>
                                     <property name="tooltip-text" translatable="1">Insert ⤢</property>
                                   </object>
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="toolbutton4">
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">start-new-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">star-new-symbolic</property>
                                     <property name="focus-on-click">0</property>
                                     <property name="tooltip-text" translatable="1">Insert ☆</property>
                                   </object>
@@ -2688,9 +2601,9 @@ microphone-sensitivity-medium-symbolic</property>
                               <object class="GtkScrolledWindow">
                                 <property name="has-frame">1</property>
                                 <property name="hexpand">1</property>
-                                <property name="child">
+                                <child>
                                   <object class="GtkTextView" id="tooltextview"/>
-                                </property>
+                                </child>
                               </object>
                             </child>
                             <child>
@@ -2705,11 +2618,7 @@ microphone-sensitivity-medium-symbolic</property>
                                     <child>
                                       <object class="GtkButton" id="cutbutton">
                                         <property name="sensitive">0</property>
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">edit-cut-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">edit-cut-symbolic</property>
                                         <property name="focus-on-click">0</property>
                                         <property name="tooltip-text" translatable="1">Cut</property>
                                       </object>
@@ -2717,11 +2626,7 @@ microphone-sensitivity-medium-symbolic</property>
                                     <child>
                                       <object class="GtkButton" id="copybutton">
                                         <property name="sensitive">0</property>
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">edit-copy-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">edit-copy-symbolic</property>
                                         <property name="focus-on-click">0</property>
                                         <property name="tooltip-text" translatable="1">Copy</property>
                                       </object>
@@ -2729,11 +2634,7 @@ microphone-sensitivity-medium-symbolic</property>
                                     <child>
                                       <object class="GtkButton" id="pastebutton">
                                         <property name="sensitive">0</property>
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">edit-paste-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">edit-paste-symbolic</property>
                                         <property name="focus-on-click">0</property>
                                         <property name="tooltip-text" translatable="1">Paste</property>
                                       </object>
@@ -2744,11 +2645,7 @@ microphone-sensitivity-medium-symbolic</property>
                                   <object class="GtkButton" id="deletebutton">
                                     <property name="sensitive">0</property>
                                     <property name="valign">2</property>
-                                    <property name="child">
-                                      <object class="GtkImage">
-                                        <property name="paintable">edit-delete-symbolic</property>
-                                      </object>
-                                    </property>
+                                    <property name="icon-name">edit-delete-symbolic</property>
                                     <property name="focus-on-click">0</property>
                                     <property name="tooltip-text" translatable="1">Delete</property>
                                   </object>
@@ -2778,20 +2675,12 @@ microphone-sensitivity-medium-symbolic</property>
                                     </style>
                                     <child>
                                       <object class="GtkButton">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">go-previous-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">go-previous-symbolic</property>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkButton">
-                                        <property name="child">
-                                          <object class="GtkImage">
-                                            <property name="paintable">go-next-symbolic</property>
-                                          </object>
-                                        </property>
+                                        <property name="icon-name">go-next-symbolic</property>
                                       </object>
                                     </child>
                                   </object>
@@ -2813,23 +2702,19 @@ microphone-sensitivity-medium-symbolic</property>
                                 </child>
                               </object>
                             </child>
-                            <property name="child">
+                            <child>
                               <object class="GtkFrame" id="osd_frame">
-                                <property name="child">
+                                <child>
                                   <object class="GtkPaned">
                                     <property name="wide-handle">1</property>
-                                    <property name="start-child">
+                                    <child>
                                       <object class="GtkNotebook">
                                         <property name="show-border">0</property>
                                         <child type="action-end">
                                           <object class="GtkMenuButton">
                                             <property name="valign">3</property>
                                             <property name="popover">notebook_info_popover2</property>
-                                            <property name="child">
-                                              <object class="GtkImage">
-                                                <property name="paintable">emblem-important-symbolic</property>
-                                              </object>
-                                            </property>
+                                            <property name="icon-name">emblem-important-symbolic</property>
                                             <property name="has-frame">0</property>
                                             <style>
                                               <class name="circular"/>
@@ -2857,11 +2742,7 @@ microphone-sensitivity-medium-symbolic</property>
                                                   <object class="GtkButton">
                                                     <property name="has-frame">0</property>
                                                     <property name="focus-on-click">0</property>
-                                                    <property name="child">
-                                                      <object class="GtkImage">
-                                                        <property name="paintable">window-close-symbolic</property>
-                                                      </object>
-                                                    </property>
+                                                    <property name="icon-name">window-close-symbolic</property>
                                                     <signal name="clicked" handler="tab_close_cb" object="closable_page_1"/>
                                                     <style>
                                                       <class name="small-button"/>
@@ -2893,11 +2774,7 @@ microphone-sensitivity-medium-symbolic</property>
                                                   <object class="GtkButton">
                                                     <property name="has-frame">0</property>
                                                     <property name="focus-on-click">0</property>
-                                                    <property name="child">
-                                                      <object class="GtkImage">
-                                                        <property name="paintable">window-close-symbolic</property>
-                                                      </object>
-                                                    </property>
+                                                    <property name="icon-name">window-close-symbolic</property>
                                                     <signal name="clicked" handler="tab_close_cb" object="closable_page_2"/>
                                                     <style>
                                                       <class name="small-button"/>
@@ -2909,8 +2786,8 @@ microphone-sensitivity-medium-symbolic</property>
                                           </object>
                                         </child>
                                       </object>
-                                    </property>
-                                    <property name="end-child">
+                                    </child>
+                                    <child>
                                       <object class="GtkNotebook">
                                         <property name="show-border">0</property>
                                         <child>
@@ -2928,16 +2805,16 @@ microphone-sensitivity-medium-symbolic</property>
                                           </object>
                                         </child>
                                       </object>
-                                    </property>
+                                    </child>
                                   </object>
-                                </property>
+                                </child>
                                 <child>
                                   <object class="GtkGestureClick">
                                     <signal name="pressed" handler="osd_frame_pressed" object="osd_frame" swapped="no"/>
                                   </object>
                                 </child>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -2975,11 +2852,7 @@ microphone-sensitivity-medium-symbolic</property>
                               <object class="GtkMenuButton">
                                 <property name="valign">3</property>
                                 <property name="popover">notebook_info_popover</property>
-                                <property name="child">
-                                  <object class="GtkImage">
-                                    <property name="paintable">emblem-important-symbolic</property>
-                                  </object>
-                                </property>
+                                <property name="icon-name">emblem-important-symbolic</property>
                                 <property name="has-frame">0</property>
                                 <style>
                                   <class name="circular"/>
@@ -3071,7 +2944,7 @@ microphone-sensitivity-medium-symbolic</property>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
   <object class="GtkMessageDialog" id="info_dialog">
     <property name="transient-for">window</property>
@@ -3323,7 +3196,7 @@ bad things might happen.</property>
     </action-widgets>
   </object>
   <object class="GtkPopover" id="open_popover">
-    <property name="child">
+    <child>
       <object class="GtkGrid">
         <property name="margin-start">10</property>
         <property name="margin-end">10</property>
@@ -3356,9 +3229,9 @@ bad things might happen.</property>
             <property name="max-content-height">120</property>
             <property name="min-content-width">100</property>
             <property name="max-content-width">100</property>
-            <property name="child">
+            <child>
               <object class="GtkTextView" id="open_popover_textview"/>
-            </property>
+            </child>
             <layout>
               <property name="column">1</property>
               <property name="row">1</property>
@@ -3378,17 +3251,17 @@ bad things might happen.</property>
         </child>
         <child>
           <object class="GtkExpander">
-            <property name="label-widget">
+            <child type="label">
               <object class="GtkLabel">
                 <property name="label">Extra Info</property>
               </object>
-            </property>
-            <property name="child">
+            </child>
+            <child>
               <object class="GtkEntry" id="extra_info_entry">
                 <property name="placeholder-text">Tell me anything…</property>
                 <property name="progress-fraction">0.2</property>
               </object>
-            </property>
+            </child>
             <layout>
               <property name="column">1</property>
               <property name="row">2</property>
@@ -3399,11 +3272,7 @@ bad things might happen.</property>
         <child>
           <object class="GtkMenuButton">
             <property name="halign">2</property>
-            <property name="child">
-              <object class="GtkImage">
-                <property name="paintable">emblem-system-symbolic</property>
-              </object>
-            </property>
+            <property name="icon-name">emblem-system-symbolic</property>
             <property name="menu-model">gear_menu_model</property>
             <property name="tooltip-text">This is a menu button</property>
             <layout>
@@ -3427,7 +3296,7 @@ bad things might happen.</property>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
   <object class="GtkSizeGroup">
     <property name="mode">2</property>
@@ -3451,23 +3320,23 @@ bad things might happen.</property>
   </object>
   <object class="GtkPopover" id="notebook_info_popover">
     <property name="autohide">0</property>
-    <property name="child">
+    <child>
       <object class="GtkLabel">
         <property name="label">No updates at this time</property>
       </object>
-    </property>
+    </child>
   </object>
   <object class="GtkPopover" id="notebook_info_popover3">
     <property name="autohide">0</property>
-    <property name="child">
+    <child>
       <object class="GtkLabel">
         <property name="label">You&apos;re in too deep!</property>
       </object>
-    </property>
+    </child>
   </object>
   <object class="GtkPopover" id="notebook_info_popover2">
     <property name="autohide">0</property>
-    <property name="child">
+    <child>
       <object class="GtkBox">
         <child>
           <object class="GtkLabel">
@@ -3478,11 +3347,7 @@ bad things might happen.</property>
           <object class="GtkMenuButton">
             <property name="valign">3</property>
             <property name="popover">notebook_info_popover3</property>
-            <property name="child">
-              <object class="GtkImage">
-                <property name="paintable">emblem-important-symbolic</property>
-              </object>
-            </property>
+            <property name="icon-name">emblem-important-symbolic</property>
             <property name="has-frame">0</property>
             <style>
               <class name="circular"/>
@@ -3490,7 +3355,7 @@ bad things might happen.</property>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
   <menu id="new_style_menu_model">
     <section>

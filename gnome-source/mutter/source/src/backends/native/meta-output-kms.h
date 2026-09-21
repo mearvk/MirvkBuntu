@@ -30,16 +30,14 @@ G_DECLARE_FINAL_TYPE (MetaOutputKms, meta_output_kms,
                       META, OUTPUT_KMS,
                       MetaOutputNative)
 
+gboolean meta_output_kms_is_privacy_screen_invalid (MetaOutputKms *output_kms);
+
 gboolean meta_output_kms_can_clone (MetaOutputKms *output_kms,
                                     MetaOutputKms *other_output_kms);
 
 MetaKmsConnector * meta_output_kms_get_kms_connector (MetaOutputKms *output_kms);
 
 uint32_t meta_output_kms_get_connector_id (MetaOutputKms *output_kms);
-
-MetaOutputKms * meta_output_kms_from_kms_connector (MetaKmsConnector *connector);
-
-void meta_unlink_kms_connector (MetaKmsConnector *connector);
 
 MetaOutputKms * meta_output_kms_new (MetaGpuKms        *gpu_kms,
                                      MetaKmsConnector  *kms_connector,

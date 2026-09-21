@@ -37,9 +37,6 @@
 #include "gtksnapshotprivate.h"
 
 #include "gdk/gdkhslaprivate.h"
-#include "gdk/gdkrgbaprivate.h"
-#include "gdk/gdkcolorprivate.h"
-#include "gdk/gdkcairoprivate.h"
 #include "gsk/gskroundedrectprivate.h"
 #include "gsk/gskrectprivate.h"
 
@@ -57,7 +54,7 @@ static gboolean
 gtk_border_image_init (GtkBorderImage *image,
                        GtkCssStyle    *style)
 {
-  image->source = _gtk_css_image_value_get_image (style->used->border_image_source);
+  image->source = _gtk_css_image_value_get_image (style->border->border_image_source);
   if (image->source == NULL)
     return FALSE;
 
@@ -86,13 +83,13 @@ gtk_border_image_compute_border_size (GtkBorderImageSliceSize  sizes[3],
   double start, end;
 
   if (gtk_css_number_value_get_dimension (start_border) == GTK_CSS_DIMENSION_NUMBER)
-    start = start_border_width * gtk_css_number_value_get (start_border, 100);
+    start = start_border_width * _gtk_css_number_value_get (start_border, 100);
   else
-    start = gtk_css_number_value_get (start_border, area_size);
+    start = _gtk_css_number_value_get (start_border, area_size);
   if (gtk_css_number_value_get_dimension (end_border) == GTK_CSS_DIMENSION_NUMBER)
-    end = end_border_width * gtk_css_number_value_get (end_border, 100);
+    end = end_border_width * _gtk_css_number_value_get (end_border, 100);
   else
-    end = gtk_css_number_value_get (end_border, area_size);
+    end = _gtk_css_number_value_get (end_border, area_size);
 
   /* XXX: reduce vertical and horizontal by the same factor */
   if (start + end > area_size)
@@ -274,12 +271,12 @@ gtk_border_image_render (GtkBorderImage        *image,
 
   gtk_border_image_compute_slice_size (horizontal_slice,
                                        source_width, 
-                                       gtk_css_number_value_get (_gtk_css_border_value_get_left (image->slice), source_width),
-                                       gtk_css_number_value_get (_gtk_css_border_value_get_right (image->slice), source_width));
+                                       _gtk_css_number_value_get (_gtk_css_border_value_get_left (image->slice), source_width),
+                                       _gtk_css_number_value_get (_gtk_css_border_value_get_right (image->slice), source_width));
   gtk_border_image_compute_slice_size (vertical_slice,
                                        source_height, 
-                                       gtk_css_number_value_get (_gtk_css_border_value_get_top (image->slice), source_height),
-                                       gtk_css_number_value_get (_gtk_css_border_value_get_bottom (image->slice), source_height));
+                                       _gtk_css_number_value_get (_gtk_css_border_value_get_top (image->slice), source_height),
+                                       _gtk_css_number_value_get (_gtk_css_border_value_get_bottom (image->slice), source_height));
   gtk_border_image_compute_border_size (horizontal_border,
                                         rect->origin.x,
                                         rect->size.width,
@@ -338,30 +335,27 @@ static void
 snapshot_frame_fill (GtkSnapshot          *snapshot,
                      const GskRoundedRect *outline,
                      const float           border_width[4],
-                     const GdkColor        colors[4],
+                     const GdkRGBA         colors[4],
                      guint                 hidden_side)
 {
   if (hidden_side)
     {
-      GdkColor real_colors[4];
+      GdkRGBA real_colors[4];
       guint i;
 
       for (i = 0; i < 4; i++)
         {
           if (hidden_side & (1 << i))
-            gdk_color_init_from_rgba (&real_colors[i], &GDK_RGBA_TRANSPARENT);
+            real_colors[i] = (GdkRGBA) { 0, 0, 0, 0 };
           else
-            gdk_color_init_copy (&real_colors[i], &colors[i]);
+            real_colors[i] = colors[i];
         }
 
       snapshot_frame_fill (snapshot, outline, border_width, real_colors, 0);
-
-      for (i = 0; i < 4; i++)
-        gdk_color_finish (&real_colors[i]);
       return;
     }
 
-  gtk_snapshot_add_border (snapshot, outline, border_width, GSK_RECT_SNAP_NONE, colors);
+  gtk_snapshot_append_border (snapshot, outline, border_width, colors);
 }
 
 static void
@@ -415,7 +409,7 @@ static void
 render_frame_stroke (cairo_t              *cr,
                      const GskRoundedRect *border_box,
                      const double          border_width[4],
-                     const GdkColor        colors[4],
+                     GdkRGBA               colors[4],
                      guint                 hidden_side,
                      GtkBorderStyle        stroke_style)
 {
@@ -423,9 +417,9 @@ render_frame_stroke (cairo_t              *cr,
   GskRoundedRect stroke_box;
   guint i;
 
-  different_colors = !gdk_color_equal (&colors[0], &colors[1]) ||
-                     !gdk_color_equal (&colors[0], &colors[2]) ||
-                     !gdk_color_equal (&colors[0], &colors[3]);
+  different_colors = !gdk_rgba_equal (&colors[0], &colors[1]) ||
+                     !gdk_rgba_equal (&colors[0], &colors[2]) ||
+                     !gdk_rgba_equal (&colors[0], &colors[3]);
   different_borders = border_width[0] != border_width[1] ||
                       border_width[0] != border_width[2] ||
                       border_width[0] != border_width[3] ;
@@ -442,15 +436,14 @@ render_frame_stroke (cairo_t              *cr,
       double length = 0;
 
       /* FAST PATH:
-       * Mostly expected to trigger for focus rectangles
-       */
-      for (i = 0; i < 4; i++)
+       * Mostly expected to trigger for focus rectangles */
+      for (i = 0; i < 4; i++) 
         {
           length += _gtk_rounded_box_guess_length (&stroke_box, i);
         }
 
       gsk_rounded_rect_path (&stroke_box, cr);
-      gdk_cairo_set_source_color (cr, GDK_COLOR_STATE_SRGB, &colors[0]);
+      gdk_cairo_set_source_rgba (cr, &colors[0]);
       set_stroke_style (cr, border_width[0], stroke_style, length);
       cairo_stroke (cr);
     }
@@ -487,7 +480,7 @@ render_frame_stroke (cairo_t              *cr,
 
           _gtk_rounded_box_path_side (&stroke_box, cr, i);
 
-          gdk_cairo_set_source_color (cr, GDK_COLOR_STATE_SRGB, &colors[i]);
+          gdk_cairo_set_source_rgba (cr, &colors[i]);
           set_stroke_style (cr,
                             border_width[i],
                             stroke_style,
@@ -503,38 +496,36 @@ static void
 snapshot_frame_stroke (GtkSnapshot          *snapshot,
                        const GskRoundedRect *outline,
                        const float           border_width[4],
-                       const GdkColor        colors[4],
+                       GdkRGBA               colors[4],
                        guint                 hidden_side,
                        GtkBorderStyle        stroke_style)
 {
   double double_width[4] = { border_width[0], border_width[1], border_width[2], border_width[3] };
   cairo_t *cr;
 
-  cr = gtk_snapshot_append_cairo (snapshot, &outline->bounds);
+  cr = gtk_snapshot_append_cairo (snapshot,
+                                  &outline->bounds);
   render_frame_stroke (cr, outline, double_width, colors, hidden_side, stroke_style);
   cairo_destroy (cr);
 }
 
 static void
-color_shade (const GdkColor *color,
-             double          factor,
-             GdkColor       *color_return)
+color_shade (const GdkRGBA *color,
+             double         factor,
+             GdkRGBA       *color_return)
 {
-  GdkRGBA rgba;
   GdkHSLA hsla;
 
-  gdk_color_to_float (color, GDK_COLOR_STATE_SRGB, (float *) &rgba);
-  _gdk_hsla_init_from_rgba (&hsla, &rgba);
+  _gdk_hsla_init_from_rgba (&hsla, color);
   _gdk_hsla_shade (&hsla, &hsla, factor);
-  _gdk_rgba_init_from_hsla (&rgba, &hsla);
-  gdk_color_from_rgba (color_return, color->color_state, &rgba);
+  _gdk_rgba_init_from_hsla (color_return, &hsla);
 }
 
 static void
 snapshot_border (GtkSnapshot          *snapshot,
                  const GskRoundedRect *border_box,
                  const float           border_width[4],
-                 GdkColor              colors[4],
+                 GdkRGBA               colors[4],
                  GtkBorderStyle        border_style[4])
 {
   guint hidden_side = 0;
@@ -578,7 +569,7 @@ snapshot_border (GtkSnapshot          *snapshot,
                 else
                   dont_draw |= (1 << j);
               }
-
+            
             snapshot_frame_stroke (snapshot, border_box, border_width, colors, dont_draw, border_style[i]);
           }
           break;
@@ -594,12 +585,12 @@ snapshot_border (GtkSnapshot          *snapshot,
                   hidden_side |= (1 << j);
                 else
                   dont_draw |= (1 << j);
-
+                
                 other_border[j] = border_width[j] / 3;
               }
-
+            
             snapshot_frame_fill (snapshot, border_box, other_border, colors, dont_draw);
-
+            
             other_box = *border_box;
             gsk_rounded_rect_shrink (&other_box,
                                      2 * other_border[GTK_CSS_TOP],
@@ -613,7 +604,7 @@ snapshot_border (GtkSnapshot          *snapshot,
         case GTK_BORDER_STYLE_RIDGE:
           {
             GskRoundedRect other_box;
-            GdkColor other_colors[4];
+            GdkRGBA other_colors[4];
             guint dont_draw = hidden_side;
             float other_border[4];
 
@@ -631,9 +622,9 @@ snapshot_border (GtkSnapshot          *snapshot,
                   dont_draw |= (1 << j);
                 other_border[j] = border_width[j] / 2;
               }
-
+            
             snapshot_frame_fill (snapshot, border_box, other_border, colors, dont_draw);
-
+            
             other_box = *border_box;
             gsk_rounded_rect_shrink (&other_box,
                                      other_border[GTK_CSS_TOP],
@@ -648,7 +639,7 @@ snapshot_border (GtkSnapshot          *snapshot,
           break;
         }
     }
-
+  
   snapshot_frame_fill (snapshot, border_box, border_width, colors, hidden_side);
 }
 
@@ -656,22 +647,22 @@ void
 gtk_css_style_snapshot_border (GtkCssBoxes *boxes,
                                GtkSnapshot *snapshot)
 {
-  GtkCssStyle *style = boxes->style;
+  const GtkCssBorderValues *border = boxes->style->border;
   GtkBorderImage border_image;
   float border_width[4];
 
-  if (style->border->base.type == GTK_CSS_BORDER_INITIAL_VALUES)
+  if (border->base.type == GTK_CSS_BORDER_INITIAL_VALUES)
     return;
 
-  if (gtk_border_image_init (&border_image, style))
+  if (gtk_border_image_init (&border_image, boxes->style))
     {
       cairo_t *cr;
       const graphene_rect_t *bounds;
 
-      border_width[0] = gtk_css_number_value_get (style->border->border_top_width, 100);
-      border_width[1] = gtk_css_number_value_get (style->border->border_right_width, 100);
-      border_width[2] = gtk_css_number_value_get (style->border->border_bottom_width, 100);
-      border_width[3] = gtk_css_number_value_get (style->border->border_left_width, 100);
+      border_width[0] = _gtk_css_number_value_get (border->border_top_width, 100);
+      border_width[1] = _gtk_css_number_value_get (border->border_right_width, 100);
+      border_width[2] = _gtk_css_number_value_get (border->border_bottom_width, 100);
+      border_width[3] = _gtk_css_number_value_get (border->border_left_width, 100);
 
       bounds = gtk_css_boxes_get_border_rect (boxes);
 
@@ -684,7 +675,7 @@ gtk_css_style_snapshot_border (GtkCssBoxes *boxes,
   else
     {
       GtkBorderStyle border_style[4];
-      GdkColor colors[4];
+      GdkRGBA colors[4];
       graphene_simd4f_t alpha_test_vector;
 
       /* Optimize the most common case of "This widget has no border" */
@@ -692,55 +683,46 @@ gtk_css_style_snapshot_border (GtkCssBoxes *boxes,
                           gtk_css_boxes_get_padding_rect (boxes)))
         return;
 
-      gtk_css_color_to_color (gtk_css_color_value_get_color (style->used->border_top_color), &colors[0]);
-      gtk_css_color_to_color (gtk_css_color_value_get_color (style->used->border_right_color), &colors[1]);
-      gtk_css_color_to_color (gtk_css_color_value_get_color (style->used->border_bottom_color), &colors[2]);
-      gtk_css_color_to_color (gtk_css_color_value_get_color (style->used->border_left_color), &colors[3]);
+      colors[0] = *gtk_css_color_value_get_rgba (border->border_top_color ? border->border_top_color : boxes->style->core->color);
+      colors[1] = *gtk_css_color_value_get_rgba (border->border_right_color ? border->border_right_color : boxes->style->core->color);
+      colors[2] = *gtk_css_color_value_get_rgba (border->border_bottom_color ? border->border_bottom_color : boxes->style->core->color);
+      colors[3] = *gtk_css_color_value_get_rgba (border->border_left_color ? border->border_left_color : boxes->style->core->color);
 
-      alpha_test_vector = graphene_simd4f_init (colors[0].alpha,
-                                                colors[1].alpha,
-                                                colors[2].alpha,
-                                                colors[3].alpha);
-      if (!graphene_simd4f_is_zero4 (alpha_test_vector))
+      alpha_test_vector = graphene_simd4f_init (colors[0].alpha, colors[1].alpha, colors[2].alpha, colors[3].alpha);
+      if (graphene_simd4f_is_zero4 (alpha_test_vector))
+        return;
+
+      border_style[0] = _gtk_css_border_style_value_get (border->border_top_style);
+      border_style[1] = _gtk_css_border_style_value_get (border->border_right_style);
+      border_style[2] = _gtk_css_border_style_value_get (border->border_bottom_style);
+      border_style[3] = _gtk_css_border_style_value_get (border->border_left_style);
+
+      border_width[0] = _gtk_css_number_value_get (border->border_top_width, 100);
+      border_width[1] = _gtk_css_number_value_get (border->border_right_width, 100);
+      border_width[2] = _gtk_css_number_value_get (border->border_bottom_width, 100);
+      border_width[3] = _gtk_css_number_value_get (border->border_left_width, 100);
+
+      gtk_snapshot_push_debug (snapshot, "CSS border");
+      if (border_style[0] <= GTK_BORDER_STYLE_SOLID &&
+          border_style[1] <= GTK_BORDER_STYLE_SOLID &&
+          border_style[2] <= GTK_BORDER_STYLE_SOLID &&
+          border_style[3] <= GTK_BORDER_STYLE_SOLID)
         {
-          border_style[0] = _gtk_css_border_style_value_get (style->border->border_top_style);
-          border_style[1] = _gtk_css_border_style_value_get (style->border->border_right_style);
-          border_style[2] = _gtk_css_border_style_value_get (style->border->border_bottom_style);
-          border_style[3] = _gtk_css_border_style_value_get (style->border->border_left_style);
-
-          border_width[0] = gtk_css_number_value_get (style->border->border_top_width, 100);
-          border_width[1] = gtk_css_number_value_get (style->border->border_right_width, 100);
-          border_width[2] = gtk_css_number_value_get (style->border->border_bottom_width, 100);
-          border_width[3] = gtk_css_number_value_get (style->border->border_left_width, 100);
-
-          gtk_snapshot_push_debug (snapshot, "CSS border");
-          if (border_style[0] <= GTK_BORDER_STYLE_SOLID &&
-              border_style[1] <= GTK_BORDER_STYLE_SOLID &&
-              border_style[2] <= GTK_BORDER_STYLE_SOLID &&
-              border_style[3] <= GTK_BORDER_STYLE_SOLID)
-            {
-              /* The most common case of a solid border */
-              gtk_snapshot_add_border (snapshot,
-                                       gtk_css_boxes_get_border_box (boxes),
-                                       border_width,
-                                       GSK_RECT_SNAP_NONE,
-                                       colors);
-            }
-          else
-            {
-              snapshot_border (snapshot,
-                               gtk_css_boxes_get_border_box (boxes),
-                               border_width,
-                               colors,
-                               border_style);
-            }
-           gtk_snapshot_pop (snapshot);
+          /* The most common case of a solid border */
+          gtk_snapshot_append_border (snapshot,
+                                      gtk_css_boxes_get_border_box (boxes),
+                                      border_width,
+                                      colors);
         }
-
-      gdk_color_finish (&colors[0]);
-      gdk_color_finish (&colors[1]);
-      gdk_color_finish (&colors[2]);
-      gdk_color_finish (&colors[3]);
+      else
+        {
+          snapshot_border (snapshot,
+                           gtk_css_boxes_get_border_box (boxes),
+                           border_width,
+                           colors,
+                           border_style);
+        }
+       gtk_snapshot_pop (snapshot);
     }
 }
 
@@ -748,32 +730,28 @@ void
 gtk_css_style_snapshot_outline (GtkCssBoxes *boxes,
                                 GtkSnapshot *snapshot)
 {
-  GtkCssStyle *style = boxes->style;
+  GtkCssOutlineValues *outline = boxes->style->outline;
   GtkBorderStyle border_style[4];
   float border_width[4];
-  GdkColor colors[4];
+  GdkRGBA colors[4];
 
-  border_style[0] = _gtk_css_border_style_value_get (style->outline->outline_style);
+  border_style[0] = _gtk_css_border_style_value_get (outline->outline_style);
   if (border_style[0] != GTK_BORDER_STYLE_NONE)
     {
-      GdkColor color;
+      const GdkRGBA *color = gtk_css_color_value_get_rgba (outline->outline_color ?
+                                                           outline->outline_color :
+                                                           boxes->style->core->color);
+      if (gdk_rgba_is_clear (color))
+        return;
 
-      gtk_css_color_to_color (gtk_css_color_value_get_color (style->used->outline_color), &color);
-
-      if (gdk_color_is_clear (&color))
-        {
-          gdk_color_finish (&color);
-          return;
-        }
-
-      border_width[0] = gtk_css_number_value_get (style->outline->outline_width, 100);
+      border_width[0] = _gtk_css_number_value_get (outline->outline_width, 100);
 
       if (G_APPROX_VALUE (border_width[0], 0, FLT_EPSILON))
         return;
 
       border_style[1] = border_style[2] = border_style[3] = border_style[0];
       border_width[3] = border_width[2] = border_width[1] = border_width[0];
-      colors[0] = colors[1] = colors[2] = colors[3] = color;
+      colors[0] = colors[1] = colors[2] = colors[3] = *color;
 
       gtk_snapshot_push_debug (snapshot, "CSS outline");
       snapshot_border (snapshot,
@@ -782,6 +760,5 @@ gtk_css_style_snapshot_outline (GtkCssBoxes *boxes,
                        colors,
                        border_style);
       gtk_snapshot_pop (snapshot);
-      gdk_color_finish (&color);
     }
 }

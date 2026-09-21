@@ -28,7 +28,7 @@
   </object>
   <object class="GtkWindow" id="window1">
     <property name="title" translatable="yes">Filter Model</property>
-    <property name="child">
+    <child>
       <object class="GtkGrid" id="grid1">
         <property name="margin-start">10</property>
         <property name="margin-end">10</property>
@@ -41,7 +41,9 @@
           <object class="GtkLabel" id="label1">
             <property name="label" translatable="yes">Original</property>
             <property name="xalign">0</property>
-            <property name="attributes">0 -1 weight bold</property>
+            <attributes>
+              <attribute name="weight" value="bold"></attribute>
+            </attributes>
             <layout>
               <property name="column">0</property>
               <property name="row">0</property>
@@ -134,7 +136,9 @@
           <object class="GtkLabel" id="label2">
             <property name="label" translatable="yes">Computed Columns</property>
             <property name="xalign">0</property>
-            <property name="attributes">0 -1 weight bold</property>
+            <attributes>
+              <attribute name="weight" value="bold"></attribute>
+            </attributes>
             <layout>
               <property name="column">1</property>
               <property name="row">0</property>
@@ -145,7 +149,9 @@
           <object class="GtkLabel" id="label3">
             <property name="label" translatable="yes">Filtered</property>
             <property name="xalign">0</property>
-            <property name="attributes">0 -1 weight bold</property>
+            <attributes>
+              <attribute name="weight" value="bold"></attribute>
+            </attributes>
             <layout>
               <property name="column">0</property>
               <property name="row">2</property>
@@ -182,6 +188,6 @@
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
 </interface>

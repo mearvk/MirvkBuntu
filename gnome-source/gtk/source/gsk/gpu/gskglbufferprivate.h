@@ -20,10 +20,8 @@ GskGpuBuffer *          gsk_gl_copied_buffer_new                        (GLenum 
                                                                          gsize                   size);
 
 void                    gsk_gl_buffer_bind                              (GskGLBuffer            *self);
-void                    gsk_gl_buffer_bind_range                        (GskGLBuffer            *self,
-                                                                         GLuint                  index,
-                                                                         GLintptr                offset,
-                                                                         GLsizeiptr              size);
+void                    gsk_gl_buffer_bind_base                         (GskGLBuffer            *self,
+                                                                         GLuint                  index);
 
 G_END_DECLS
 

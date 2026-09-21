@@ -1104,12 +1104,10 @@ handle_unregister_mount (GVfsDBusMountTracker *object,
                          gpointer user_data)
 {
   const char *id;
-  VfsMount *mount;
 
   id = g_dbus_method_invocation_get_sender (invocation);
-  mount = find_vfs_mount (id, arg_obj_path);
 
-  if (mount == NULL) {
+  if (find_vfs_mount (id, arg_obj_path) == NULL) {
     g_dbus_method_invocation_return_error_literal (invocation,
                                                    G_IO_ERROR,
                                                    G_IO_ERROR_NOT_MOUNTED,
@@ -1117,9 +1115,7 @@ handle_unregister_mount (GVfsDBusMountTracker *object,
     return TRUE;
   }
 
-  signal_mounted_unmounted (mount, FALSE);
-  mounts = g_list_remove (mounts, mount);
-  vfs_mount_free (mount);
+  dbus_client_disconnected (id);
 
   gvfs_dbus_mount_tracker_complete_unregister_mount (object, invocation);
 

@@ -24,6 +24,8 @@
 #include "meta-test/meta-context-test.h"
 #include "meta/meta-backend.h"
 #include "tests/meta-test-utils.h"
+#include "tests/native-screen-cast.h"
+#include "tests/native-virtual-monitor.h"
 
 static MetaContext *test_context;
 
@@ -65,10 +67,10 @@ meta_test_warp_on_hotplug (void)
   meta_set_custom_monitor_config_full (backend, "pointer-constraint.xml",
                                        META_MONITORS_CONFIG_FLAG_NONE);
 
-  monitor_info1 = meta_virtual_monitor_info_new_simple (100, 100, 60.0,
-                                                        "MetaTestVendor",
-                                                        "MetaVirtualMonitor",
-                                                        "0x1234");
+  monitor_info1 = meta_virtual_monitor_info_new (100, 100, 60.0,
+                                                 "MetaTestVendor",
+                                                 "MetaVirtualMonitor",
+                                                 "0x1234");
   virtual_monitor1 = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                   monitor_info1,
                                                                   &error);
@@ -79,16 +81,16 @@ meta_test_warp_on_hotplug (void)
   clutter_virtual_input_device_notify_absolute_motion (virtual_pointer,
                                                        g_get_monotonic_time (),
                                                        50, 50);
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
   meta_cursor_tracker_get_pointer (meta_backend_get_cursor_tracker (backend),
                                    &coords, NULL);
   g_assert_nonnull (meta_backend_get_current_logical_monitor (backend));
 
-  monitor_info2 = meta_virtual_monitor_info_new_simple (200, 200, 60.0,
-                                                        "MetaTestVendor",
-                                                        "MetaVirtualMonitor",
-                                                        "0x1235");
+  monitor_info2 = meta_virtual_monitor_info_new (200, 200, 60.0,
+                                                 "MetaTestVendor",
+                                                 "MetaVirtualMonitor",
+                                                 "0x1235");
   virtual_monitor2 = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                   monitor_info2,
                                                                   &error);
@@ -107,7 +109,7 @@ meta_test_warp_on_hotplug (void)
   run_test_client_command (test_client, "show", "1", NULL);
   run_test_client_command (test_client, "sync", NULL);
 
-  meta_wait_for_presented (test_context);
+  meta_wait_for_paint (test_context);
 
   meta_cursor_tracker_get_pointer (meta_backend_get_cursor_tracker (backend),
                                    &coords, NULL);
@@ -133,7 +135,7 @@ main (int    argc,
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11 |
                                       META_CONTEXT_TEST_FLAG_TEST_CLIENT);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   test_context = context;
 

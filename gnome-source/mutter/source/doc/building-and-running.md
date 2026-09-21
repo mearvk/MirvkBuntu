@@ -23,7 +23,7 @@ Most dependencies from the `main` branch will be satisfied like this but sometim
 ⬢ cd gnome-desktop
 ⬢ meson setup builddir --prefix=/usr
 ⬢ meson compile -C builddir
-⬢ sudo meson install -C builddir
+⬢ sudo meson install -C
 ```
 
 Note: the above should not be run outside the Toolbx container, it may make your system unusable.
@@ -33,7 +33,7 @@ Note: the above should not be run outside the Toolbx container, it may make your
 When build in a Toolbx container, we can safely install Mutter into the `/usr` prefix as well:
 ```sh
 ⬢ meson configure builddir --prefix=/usr
-⬢ meson compile -C builddir && sudo meson install -C builddir
+⬢ meson compile -C builddir && sudo meson install -C
 ```
 
 Like any meson project, the available build options are in the `meson_options.txt` file. The defaults are usually fine but when developing for the `native backend`, it's a good idea to turn on additional tests:
@@ -76,28 +76,35 @@ This makes sure a software renderer is being used and the reference image of the
 
 ## Running a nested instance
 
-While the test suite helps to catch mistakes, there are a lot of cases where we actually need to run and interact with Mutter. The least invasive method is running a nested instance using Devkit.
+While the test suite helps to catch mistakes, there are a lot of cases where we actually need to run and interact with Mutter. The least invasive method is running a "nested" instance.
 ```sh
-⬢ dbus-run-session mutter --wayland --devkit
+⬢ dbus-run-session mutter --wayland --nested
 ```
 
-This starts a nested Mutter instance in a new dbus session with the default plugin, displayed via a dedicated GTK Devkit application. Often we want to run Mutter with a real plugin, such as `gnome-shell`:
+This starts a nested Mutter instance in a new dbus session with the default plugin. Often we want to run Mutter with a real plugin, such as `gnome-shell`:
 ```sh
-⬢ dbus-run-session gnome-shell --wayland --devkit
+⬢ dbus-run-session gnome-shell --wayland --nested
 ```
 
 But sometimes running Mutter with the default plugin is preferred but there is nothing to interact with by default. We can either start something, like a terminal directly when invoking Mutter
 ```sh
-⬢ dbus-run-session mutter --wayland --devkit -- vte-2.91
+⬢ dbus-run-session mutter --wayland --nested vte-2.91
 ```
 
-or via the Launchers menu in the Devkit application menu, or by opening apps on the nested compositor by setting `WAYLAND_DISPLAY` to the display of the nested session. This is usually just `wayland-1` but Mutter should print this to the terminal:
+or open apps on the nested compositor by setting `WAYLAND_DISPLAY` to the display of the nested session. This is usually just `wayland-1` but Mutter should print this to the terminal:
 ```
 libmutter-Message: 21:01:37.323: Using Wayland display name 'wayland-1'
 ```
 
 ```sh
 $ WAYLAND_DISPLAY=wayland-1 vte-2.91
+```
+
+Getting some apps to open on the desired nested compositor can sometimes be an issue. A lot of GNOME apps for example use d-bus to avoid starting multiple instances of the same app.
+
+Changing the size of the nested session can be done with the `MUTTER_DEBUG_DUMMY_MODE_SPECS` environment variable.
+```sh
+⬢ MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080 dbus-run-session mutter --wayland --nested
 ```
 
 ## D-Bus session
@@ -148,23 +155,16 @@ This will create a D-Bus session, and attach to it. To attach to the same sessio
 
 There are limitations to the nested instance, such as keyboard shortcuts usually not getting to the nested compositor. The remote-desktop feature can help working around this.
 
-First create a [nested D-Bus session](#d-bus-session). In this, run gnome-shell in headless mode. E.g.
+First create a [nested D-Bus session](#d-bus-session). In this, run gnome-shell in headless mode with a virtual monitor. E.g.
 ```sh
 ⬢ dbus-session.sh new
-⬢ gnome-shell --headless
+⬢ gnome-shell --headless --virtual-monitor 1280x720
 ```
 
-Build `gnome-remote-desktop` and run:
 ```sh
 ⬢ dbus-session.sh attach
-⬢ ./build/src/grdctl rdp set-credentials test test
-⬢ ./build/src/grdctl rdp enable
-⬢ ./build/src/gnome-remote-desktop-daemon --headless --rdp-port 12345
+⬢ ./build/src/gnome-remote-desktop-daemon
 ```
-
-Warning: This turns on rdp access for the entire system with weak credentials! For quick testing, `GNOME_REMOTE_DESKTOP_TEST_RDP_USERNAME` and `GNOME_REMOTE_DESKTOP_TEST_RDP_PASSWORD` might be useful.
-
-Finally, connect to `localhost:12345` with username and password `test` using an RDP client, like xfreerdp or Remmina.
 
 ## Native
 

@@ -2129,8 +2129,8 @@ gtk_tree_model_foreach_helper (GtkTreeModel            *model,
 /**
  * gtk_tree_model_foreach:
  * @model: a `GtkTreeModel`
- * @func: (scope call) (closure user_data): a function to be called on each row
- * @user_data: user data to passed to @func
+ * @func: (scope call): a function to be called on each row
+ * @user_data: (closure): user data to passed to @func
  *
  * Calls @func on each node in model in a depth-first fashion.
  *
@@ -2304,7 +2304,8 @@ gtk_tree_row_ref_deleted (RowRefList  *refs,
                 gtk_tree_row_reference_unref_path (reference->path, reference->model, path->depth - 1);
               else
                 gtk_tree_row_reference_unref_path (reference->path, reference->model, reference->path->depth - 1);
-              g_clear_pointer (&reference->path, gtk_tree_path_free);
+              gtk_tree_path_free (reference->path);
+              reference->path = NULL;
             }
           else if (path->indices[i] < reference->path->indices[i])
             {

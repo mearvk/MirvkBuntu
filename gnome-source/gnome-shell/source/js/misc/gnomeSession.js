@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 
 import {loadInterfaceXML} from './fileUtils.js';
@@ -61,11 +63,4 @@ export const InhibitFlags = {
     SUSPEND: 1 << 2,
     IDLE: 1 << 3,
     AUTOMOUNT: 1 << 4,
-};
-
-export const ActionAvailability = {
-    UNAVAILABLE: 0,
-    BLOCKED: 1,
-    CHALLENGE: 2,
-    AVAILABLE: 3,
 };

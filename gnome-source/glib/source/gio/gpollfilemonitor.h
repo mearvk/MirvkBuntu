@@ -41,7 +41,7 @@ struct _GPollFileMonitorClass
   GFileMonitorClass parent_class;
 };
 
-GType          _g_poll_file_monitor_get_type (void);
+GType          _g_poll_file_monitor_get_type (void) G_GNUC_CONST;
 
 GFileMonitor * _g_poll_file_monitor_new      (GFile *file);
 

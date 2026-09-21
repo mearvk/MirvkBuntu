@@ -74,6 +74,9 @@ struct _ClutterSeatClass
 {
   GObjectClass parent_class;
 
+  ClutterInputDevice * (* get_pointer)  (ClutterSeat *seat);
+  ClutterInputDevice * (* get_keyboard) (ClutterSeat *seat);
+
   const GList * (* peek_devices) (ClutterSeat *seat);
 
   void (* bell_notify) (ClutterSeat *seat);
@@ -91,23 +94,27 @@ struct _ClutterSeatClass
                                   float        x,
                                   float        y);
 
-  gboolean (* query_state) (ClutterSeat         *seat,
-                            ClutterSprite       *sprite,
-                            graphene_point_t    *coords,
-                            ClutterModifierType *modifiers);
+  gboolean (* query_state) (ClutterSeat          *seat,
+                            ClutterInputDevice   *device,
+                            ClutterEventSequence *sequence,
+                            graphene_point_t     *coords,
+                            ClutterModifierType  *modifiers);
 
-  void (*is_unfocus_inhibited_changed) (ClutterSeat *seat);
+  ClutterGrabState (* grab) (ClutterSeat *seat,
+                             uint32_t     time);
+  void (* ungrab) (ClutterSeat *seat,
+                   uint32_t     time);
 
   /* Virtual devices */
   ClutterVirtualInputDevice * (* create_virtual_device) (ClutterSeat            *seat,
                                                          ClutterInputDeviceType  device_type);
   ClutterVirtualDeviceType (* get_supported_virtual_device_types) (ClutterSeat *seat);
-
-  ClutterInputDevice * (* get_virtual_source_pointer) (ClutterSeat *seat);
 };
 
 CLUTTER_EXPORT
-ClutterContext * clutter_seat_get_context (ClutterSeat *seat);
+ClutterInputDevice * clutter_seat_get_pointer  (ClutterSeat *seat);
+CLUTTER_EXPORT
+ClutterInputDevice * clutter_seat_get_keyboard (ClutterSeat *seat);
 CLUTTER_EXPORT
 GList * clutter_seat_list_devices (ClutterSeat *seat);
 const GList * clutter_seat_peek_devices (ClutterSeat *seat);
@@ -157,6 +164,13 @@ gboolean clutter_seat_get_touch_mode (ClutterSeat *seat);
 
 CLUTTER_EXPORT
 gboolean clutter_seat_has_touchscreen (ClutterSeat *seat);
+
+CLUTTER_EXPORT
+gboolean clutter_seat_query_state (ClutterSeat          *seat,
+                                   ClutterInputDevice   *device,
+                                   ClutterEventSequence *sequence,
+                                   graphene_point_t     *coords,
+                                   ClutterModifierType  *modifiers);
 
 CLUTTER_EXPORT
 const char * clutter_seat_get_name (ClutterSeat *seat);

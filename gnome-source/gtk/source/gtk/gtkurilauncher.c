@@ -24,21 +24,21 @@
 #include "gtkdialogerror.h"
 #include "gtkopenuriportal.h"
 #include "deprecated/gtkshow.h"
-#include "gtkprivate.h"
 #include <glib/gi18n-lib.h>
 
 /**
  * GtkUriLauncher:
  *
- * Asynchronous API to open a uri with an application.
- *
- * `GtkUriLauncher` collects the arguments that are needed to open the uri.
+ * A `GtkUriLauncher` object collects the arguments that are needed to open a uri
+ * with an application.
  *
  * Depending on system configuration, user preferences and available APIs, this
  * may or may not show an app chooser dialog or launch the default application
  * right away.
  *
  * The operation is started with the [method@Gtk.UriLauncher.launch] function.
+ * This API follows the GIO async pattern, and the result can be obtained by
+ * calling [method@Gtk.UriLauncher.launch_finish].
  *
  * To launch a file, use [class@Gtk.FileLauncher].
  *
@@ -129,7 +129,7 @@ gtk_uri_launcher_class_init (GtkUriLauncherClass *class)
   object_class->set_property = gtk_uri_launcher_set_property;
 
   /**
-   * GtkUriLauncher:uri:
+   * GtkUriLauncher:uri: (attributes org.gtk.Property.get=gtk_uri_launcher_get_uri org.gtk.Property.set=gtk_uri_launcher_set_uri)
    *
    * The uri to launch.
    *
@@ -138,7 +138,7 @@ gtk_uri_launcher_class_init (GtkUriLauncherClass *class)
   properties[PROP_URI] =
       g_param_spec_string ("uri", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }
@@ -169,7 +169,7 @@ gtk_uri_launcher_new (const char *uri)
 
 /**
  * gtk_uri_launcher_get_uri:
- * @self: an uri launcher
+ * @self: a `GtkUriLauncher`
  *
  * Gets the uri that will be opened.
  *
@@ -187,7 +187,7 @@ gtk_uri_launcher_get_uri (GtkUriLauncher *self)
 
 /**
  * gtk_uri_launcher_set_uri:
- * @self: an uri launcher
+ * @self: a `GtkUriLauncher`
  * @uri: (nullable): the uri
  *
  * Sets the uri that will be opened.
@@ -253,52 +253,26 @@ show_uri_done (GObject      *source,
 
   g_object_unref (task);
 }
-
-static gboolean
-gtk_can_show_uri (const char *uri)
-{
-  const char *scheme;
-  GAppInfo *app_info;
-
-  scheme = g_uri_peek_scheme (uri);
-  if (!scheme)
-    return FALSE;
-
-  app_info = g_app_info_get_default_for_uri_scheme (scheme);
-
-  if (!app_info)
-    {
-      GFile *file = g_file_new_for_uri (uri);
-      app_info = g_file_query_default_handler (file, NULL, NULL);
-      g_object_unref (file);
-    }
-
-  if (app_info)
-    {
-      g_object_unref (app_info);
-      return TRUE;
-    }
-
-  return FALSE;
-}
-
 G_GNUC_END_IGNORE_DEPRECATIONS
 
-  /* }}} */
+ /* }}} */
 /* {{{ Async API */
 
 /**
  * gtk_uri_launcher_launch:
- * @self: an uri launcher
- * @parent: (nullable): the parent window
- * @cancellable: (nullable): a cancellable to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call when the
- *   operation is complete
- * @user_data: data to pass to @callback
+ * @self: a `GtkUriLauncher`
+ * @parent: (nullable): the parent `GtkWindow`
+ * @cancellable: (nullable): a `GCancellable` to cancel the operation
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
- * Launches an application to open the uri.
+ * Launch an application to open the uri.
  *
  * This may present an app chooser dialog to the user.
+ *
+ * The @callback will be called when the operation is completed.
+ * It should call [method@Gtk.UriLauncher.launch_finish] to obtain
+ * the result.
  *
  * Since: 4.10
  */
@@ -310,9 +284,6 @@ gtk_uri_launcher_launch (GtkUriLauncher      *self,
                          gpointer             user_data)
 {
   GTask *task;
-#ifndef G_OS_WIN32
-  GdkDisplay *display;
-#endif
   GError *error = NULL;
 
   g_return_if_fail (GTK_IS_URI_LAUNCHER (self));
@@ -341,15 +312,8 @@ gtk_uri_launcher_launch (GtkUriLauncher      *self,
     }
 
 #ifndef G_OS_WIN32
-  if (parent)
-    display = gtk_widget_get_display (GTK_WIDGET (parent));
-  else
-    display = gdk_display_get_default ();
-
-  if (gdk_display_should_use_portal (display, PORTAL_OPENURI_INTERFACE, 3))
-    {
-      gtk_openuri_portal_open_uri_async (self->uri, parent, cancellable, open_done, task);
-    }
+  if (gtk_openuri_portal_is_available ())
+    gtk_openuri_portal_open_uri_async (self->uri, parent, cancellable, open_done, task);
   else
 #endif
     {
@@ -361,14 +325,15 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
 /**
  * gtk_uri_launcher_launch_finish:
- * @self: an uri launcher
- * @result: the result
+ * @self: a `GtkUriLauncher`
+ * @result: a `GAsyncResult`
  * @error: return location for a [enum@Gtk.DialogError] or [enum@Gio.Error] error
  *
  * Finishes the [method@Gtk.UriLauncher.launch] call and
  * returns the result.
  *
- * Returns: true if an application was launched
+ * Returns: `TRUE` if an application was launched,
+ *     or `FALSE` and @error is set
  *
  * Since: 4.10
  */
@@ -384,52 +349,5 @@ gtk_uri_launcher_launch_finish (GtkUriLauncher  *self,
   return g_task_propagate_boolean (G_TASK (result), error);
 }
 
-/* }}}  */
-/* {{{ Misc API */
-
-/**
- * gtk_uri_launcher_can_launch:
- * @self: an uri launcher
- * @parent: (nullable): the parent window
- *
- * Returns whether the launcher is likely to succeed
- * in launching an application for its uri.
- *
- * This can be used to disable controls that trigger
- * the launcher when they are known not to work.
- *
- * Returns: false if the launcher is known not to support
- *   the uri, true otherwise
- *
- * Since: 4.20
- */
-gboolean
-gtk_uri_launcher_can_launch (GtkUriLauncher *self,
-                             GtkWindow      *parent)
-{
-#ifndef G_OS_WIN32
-  GdkDisplay *display;
-#endif
-
-  if (self->uri == NULL)
-    return FALSE;
-
-  if (!g_uri_is_valid (self->uri, G_URI_FLAGS_NONE, NULL))
-    return FALSE;
-
-#ifndef G_OS_WIN32
-  if (parent)
-    display = gtk_widget_get_display (GTK_WIDGET (parent));
-  else
-    display = gdk_display_get_default ();
-
-  if (gdk_display_should_use_portal (display, PORTAL_OPENURI_INTERFACE, 3))
-    return gtk_openuri_portal_can_open (self->uri);
-#endif
-
-  return gtk_can_show_uri (self->uri);
-}
-
 /* }}} */
-
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

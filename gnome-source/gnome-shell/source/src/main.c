@@ -10,10 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <cogl-pango/cogl-pango.h>
 #include <clutter/clutter.h>
 #include <glib-unix.h>
 #include <glib/gi18n-lib.h>
-#include <girepository/girepository.h>
+#include <girepository.h>
 #include <meta/meta-context.h>
 #include <meta/meta-plugin.h>
 #include <meta/prefs.h>
@@ -52,7 +53,6 @@ enum {
 };
 static int _shell_debug;
 static gboolean _tracked_signals[NSIG] = { 0 };
-static GThread *main_thread;
 
 static void
 shell_dbus_acquire_name (GDBusProxy  *bus,
@@ -83,7 +83,7 @@ shell_dbus_acquire_name (GDBusProxy  *bus,
 }
 
 static void
-shell_dbus_init ()
+shell_dbus_init (gboolean replace)
 {
   GDBusConnection *session;
   GDBusProxy *bus;
@@ -114,6 +114,8 @@ shell_dbus_init ()
     }
 
   request_name_flags = G_BUS_NAME_OWNER_FLAGS_ALLOW_REPLACEMENT;
+  if (replace)
+    request_name_flags |= G_BUS_NAME_OWNER_FLAGS_REPLACE;
 
   shell_dbus_acquire_name (bus,
                            request_name_flags,
@@ -122,7 +124,7 @@ shell_dbus_init ()
   if (!(request_name_result == DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER
         || request_name_result == DBUS_REQUEST_NAME_REPLY_ALREADY_OWNER))
     {
-      g_printerr (SHELL_DBUS_SERVICE " already exists on bus\n");
+      g_printerr (SHELL_DBUS_SERVICE " already exists on bus and --replace not specified\n");
       exit (1);
     }
 
@@ -132,7 +134,7 @@ shell_dbus_init ()
 
 #ifdef HAVE_EXE_INTROSPECTION
 static void
-maybe_add_rpath_introspection_paths (GIRepository *repo)
+maybe_add_rpath_introspection_paths (void)
 {
   ElfW (Dyn) *dyn;
   ElfW (Dyn) *rpath = NULL;
@@ -209,8 +211,8 @@ maybe_add_rpath_introspection_paths (GIRepository *repo)
       g_debug ("Prepending RPATH directory '%s' "
                "to introsepciton library search path",
                rpath_dir->str);
-      gi_repository_prepend_search_path (repo, rpath_dir->str);
-      gi_repository_prepend_library_path (repo, rpath_dir->str);
+      g_irepository_prepend_search_path (rpath_dir->str);
+      g_irepository_prepend_library_path (rpath_dir->str);
     }
 }
 #endif /* HAVE_EXE_INTROSPECTION */
@@ -218,24 +220,35 @@ maybe_add_rpath_introspection_paths (GIRepository *repo)
 static void
 shell_introspection_init (void)
 {
-  g_autoptr (GIRepository) repo = NULL;
 
-  repo = gi_repository_dup_default ();
-
-  gi_repository_prepend_search_path (repo, MUTTER_TYPELIB_DIR);
-  gi_repository_prepend_search_path (repo, SHELL_TYPELIB_DIR);
+  g_irepository_prepend_search_path (MUTTER_TYPELIB_DIR);
+  g_irepository_prepend_search_path (GNOME_SHELL_PKGLIBDIR);
 
   /* We need to explicitly add the directories where the private libraries are
    * installed to the GIR's library path, so that they can be found at runtime
    * when linking using DT_RUNPATH (instead of DT_RPATH), which is the default
    * for some linkers (e.g. gold) and in some distros (e.g. Debian).
    */
-  gi_repository_prepend_library_path (repo, MUTTER_TYPELIB_DIR);
-  gi_repository_prepend_library_path (repo, GNOME_SHELL_PKGLIBDIR);
+  g_irepository_prepend_library_path (MUTTER_TYPELIB_DIR);
+  g_irepository_prepend_library_path (GNOME_SHELL_PKGLIBDIR);
 
 #ifdef HAVE_EXE_INTROSPECTION
-  maybe_add_rpath_introspection_paths (repo);
+  maybe_add_rpath_introspection_paths ();
 #endif
+}
+
+static void
+shell_fonts_init (void)
+{
+  CoglPangoFontMap *fontmap;
+
+  /* Disable text mipmapping; it causes problems on pre-GEM Intel
+   * drivers and we should just be rendering text at the right
+   * size rather than scaling it. If we do effects where we dynamically
+   * zoom labels, then we might want to reconsider.
+   */
+  fontmap = COGL_PANGO_FONT_MAP (clutter_get_font_map ());
+  cogl_pango_font_map_set_use_mipmapping (fontmap, FALSE);
 }
 
 static void
@@ -347,6 +360,8 @@ shell_perf_log_init (void)
 static void
 shell_a11y_init (void)
 {
+  cally_accessibility_init ();
+
   if (clutter_get_accessibility_enabled () == FALSE)
     {
       g_warning ("Accessibility: clutter has no accessibility enabled"
@@ -383,8 +398,7 @@ default_log_writer (GLogLevelFlags   log_level,
 
   if ((_shell_debug & SHELL_DEBUG_BACKTRACE_WARNINGS) &&
       ((log_level & G_LOG_LEVEL_CRITICAL) ||
-       (log_level & G_LOG_LEVEL_WARNING)) &&
-      g_thread_self () == main_thread)
+       (log_level & G_LOG_LEVEL_WARNING)))
     {
       const char *log_domain = NULL;
 
@@ -575,7 +589,6 @@ init_signal_handlers (MetaContext *context)
     g_warning ("Failed to register SIGXFSZ handler: %s", g_strerror (errno));
 #endif
 
-  g_unix_signal_add (SIGINT, on_sigterm, context);
   g_unix_signal_add (SIGTERM, on_sigterm, context);
 }
 
@@ -611,12 +624,10 @@ main (int argc, char **argv)
   g_setenv ("GJS_DEBUG_OUTPUT", "stderr", TRUE);
   g_setenv ("GJS_DEBUG_TOPICS", "JS ERROR;JS LOG", TRUE);
 
-  main_thread = g_thread_self ();
-
   context = meta_create_context (WM_NAME);
   meta_context_add_option_entries (context, gnome_shell_options,
                                    GETTEXT_PACKAGE);
-  meta_context_add_option_group (context, gi_repository_get_option_group ());
+  meta_context_add_option_group (context, g_irepository_get_option_group ());
 
   session_mode = (char *) g_getenv ("GNOME_SHELL_SESSION_MODE");
 
@@ -670,21 +681,18 @@ main (int argc, char **argv)
 
   shell_init_debug (g_getenv ("SHELL_DEBUG"));
 
-  shell_dbus_init ();
+  shell_dbus_init (meta_context_is_replacing (context));
   shell_a11y_init ();
   shell_perf_log_init ();
   shell_introspection_init ();
-
-  /* Ensure the GNOME Shell cursor implementation registers itself as
-   * a GIO extension.
-   */
-  g_type_ensure (ST_TYPE_CURSOR);
+  shell_fonts_init ();
 
   g_log_set_writer_func (default_log_writer, NULL, NULL);
 
   shell_profiler_init ();
 
-  meta_context_raise_rlimit_nofile (context, NULL);
+  if (meta_context_get_compositor_type (context) == META_COMPOSITOR_TYPE_WAYLAND)
+    meta_context_raise_rlimit_nofile (context, NULL);
 
   if (!meta_context_start (context, &error))
     {

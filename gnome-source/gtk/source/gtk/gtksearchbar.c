@@ -31,7 +31,6 @@
 
 #include "gtkbinlayout.h"
 #include "gtkbuildable.h"
-#include "gtkbuilderprivate.h"
 #include "gtkbutton.h"
 #include "gtkcenterbox.h"
 #include "gtkentryprivate.h"
@@ -45,12 +44,9 @@
 /**
  * GtkSearchBar:
  *
- * Reveals a search entry when search is started.
+ * `GtkSearchBar` is a container made to have a search entry.
  *
- * <picture>
- *   <source srcset="search-bar-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkSearchBar" src="search-bar.png">
- * </picture>
+ * ![An example GtkSearchBar](search-bar.png)
  *
  * It can also contain additional widgets, such as drop-down menus,
  * or buttons.  The search bar would appear when a search is started
@@ -74,12 +70,6 @@
  *
  * [A simple example](https://gitlab.gnome.org/GNOME/gtk/tree/main/examples/search-bar.c)
  *
- * # Shortcuts and Gestures
- *
- * `GtkSearchBar` supports the following keyboard shortcuts:
- *
- * - <kbd>Escape</kbd> hides the search bar.
- *
  * # CSS nodes
  *
  * ```
@@ -97,7 +87,7 @@
  *
  * # Accessibility
  *
- * `GtkSearchBar` uses the [enum@Gtk.AccessibleRole.search] role.
+ * `GtkSearchBar` uses the %GTK_ACCESSIBLE_ROLE_SEARCH role.
  */
 
 typedef struct _GtkSearchBarClass   GtkSearchBarClass;
@@ -149,14 +139,9 @@ gtk_search_bar_buildable_add_child (GtkBuildable *buildable,
                                     const char   *type)
 {
   if (GTK_IS_WIDGET (child))
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-      gtk_search_bar_set_child (GTK_SEARCH_BAR (buildable), GTK_WIDGET (child));
-    }
+    gtk_search_bar_set_child (GTK_SEARCH_BAR (buildable), GTK_WIDGET (child));
   else
-    {
-      parent_buildable_iface->add_child (buildable, builder, child, type);
-    }
+    parent_buildable_iface->add_child (buildable, builder, child, type);
 }
 
 static void
@@ -206,18 +191,6 @@ close_button_clicked_cb (GtkWidget    *button,
                          GtkSearchBar *bar)
 {
   gtk_revealer_set_reveal_child (GTK_REVEALER (bar->revealer), FALSE);
-}
-
-static void
-input_intercepted_cb (GtkEditable  *editable,
-                      GtkSearchBar *bar)
-{
-  gtk_revealer_set_reveal_child (GTK_REVEALER (bar->revealer), TRUE);
-
-  if (GTK_IS_ENTRY (editable))
-    gtk_entry_grab_focus_without_selecting (GTK_ENTRY (editable));
-  else if (GTK_IS_SEARCH_ENTRY (editable))
-    gtk_widget_grab_focus (GTK_WIDGET (editable));
 }
 
 static void
@@ -329,41 +302,41 @@ gtk_search_bar_class_init (GtkSearchBarClass *klass)
   widget_class->focus = gtk_widget_focus_child;
 
   /**
-   * GtkSearchBar:search-mode-enabled: (getter get_search_mode) (setter set_search_mode)
+   * GtkSearchBar:search-mode-enabled: (attributes org.gtk.Property.get=gtk_search_bar_get_search_mode org.gtk.Property.set=gtk_search_bar_set_search_mode)
    *
    * Whether the search mode is on and the search bar shown.
    */
   widget_props[PROP_SEARCH_MODE_ENABLED] = g_param_spec_boolean ("search-mode-enabled", NULL, NULL,
                                                                  FALSE,
-                                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                                                                 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkSearchBar:show-close-button:
+   * GtkSearchBar:show-close-button: (attributes org.gtk.Property.get=gtk_search_bar_get_show_close_button org.gtk.Property.set=gtk_search_bar_set_show_close_button)
    *
    * Whether to show the close button in the search bar.
    */
   widget_props[PROP_SHOW_CLOSE_BUTTON] = g_param_spec_boolean ("show-close-button", NULL, NULL,
                                                                FALSE,
-                                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                                                               GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkSearchBar:child:
+   * GtkSearchBar:child: (attributes org.gtk.Property.get=gtk_search_bar_get_child org.gtk.Property.set=gtk_search_bar_set_child)
    *
    * The child widget.
    */
   widget_props[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
                                                   GTK_TYPE_WIDGET,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                                                  GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkSearchBar:key-capture-widget:
+   * GtkSearchBar:key-capture-widget: (attributes org.gtk.Property.get=gtk_search_bar_get_key_capture_widget org.gtk.Property.set=gtk_search_bar_set_key_capture_widget)
    *
    * The key capture widget.
    */
   widget_props[PROP_KEY_CAPTURE_WIDGET]
       = g_param_spec_object ("key-capture-widget", NULL, NULL,
                              GTK_TYPE_WIDGET,
-                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                             GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROPERTY, widget_props);
 
@@ -421,10 +394,10 @@ gtk_search_bar_set_entry (GtkSearchBar *bar,
   if (bar->entry != NULL)
     {
       if (GTK_IS_SEARCH_ENTRY (bar->entry))
-        g_signal_handlers_disconnect_by_func (bar->entry, stop_search_cb, bar);
-
-      gtk_editable_set_input_interceptor (GTK_EDITABLE (bar->entry), NULL);
-      g_signal_handlers_disconnect_by_func (bar->entry, input_intercepted_cb, bar);
+        {
+          gtk_search_entry_set_key_capture_widget (GTK_SEARCH_ENTRY (bar->entry), NULL);
+          g_signal_handlers_disconnect_by_func (bar->entry, stop_search_cb, bar);
+        }
       g_object_remove_weak_pointer (G_OBJECT (bar->entry), (gpointer *) &bar->entry);
     }
 
@@ -433,17 +406,14 @@ gtk_search_bar_set_entry (GtkSearchBar *bar,
   if (bar->entry != NULL)
     {
       g_object_add_weak_pointer (G_OBJECT (bar->entry), (gpointer *) &bar->entry);
-      g_signal_connect (bar->entry, "input-intercepted",
-                        G_CALLBACK (input_intercepted_cb), bar);
-
       if (GTK_IS_SEARCH_ENTRY (bar->entry))
         {
           g_signal_connect (bar->entry, "stop-search",
                             G_CALLBACK (stop_search_cb), bar);
+          gtk_search_entry_set_key_capture_widget (GTK_SEARCH_ENTRY (bar->entry),
+                                                   GTK_WIDGET (bar));
         }
 
-      if (bar->capture_widget)
-        gtk_editable_set_input_interceptor (GTK_EDITABLE (bar->entry), bar->capture_widget);
     }
 }
 
@@ -470,7 +440,7 @@ gtk_search_bar_connect_entry (GtkSearchBar *bar,
 }
 
 /**
- * gtk_search_bar_get_search_mode: (get-property search-mode-enabled)
+ * gtk_search_bar_get_search_mode: (attributes org.gtk.Method.get_property=search-mode-enabled)
  * @bar: a `GtkSearchBar`
  *
  * Returns whether the search mode is on or off.
@@ -486,7 +456,7 @@ gtk_search_bar_get_search_mode (GtkSearchBar *bar)
 }
 
 /**
- * gtk_search_bar_set_search_mode: (set-property search-mode-enabled)
+ * gtk_search_bar_set_search_mode: (attributes org.gtk.Method.set_property=search-mode-enabled)
  * @bar: a `GtkSearchBar`
  * @search_mode: the new state of the search mode
  *
@@ -502,7 +472,7 @@ gtk_search_bar_set_search_mode (GtkSearchBar *bar,
 }
 
 /**
- * gtk_search_bar_get_show_close_button:
+ * gtk_search_bar_get_show_close_button: (attributes org.gtk.Method.get_property=show-close-button)
  * @bar: a `GtkSearchBar`
  *
  * Returns whether the close button is shown.
@@ -518,7 +488,7 @@ gtk_search_bar_get_show_close_button (GtkSearchBar *bar)
 }
 
 /**
- * gtk_search_bar_set_show_close_button:
+ * gtk_search_bar_set_show_close_button: (attributes org.gtk.Method.set_property=show-close-button)
  * @bar: a `GtkSearchBar`
  * @visible: whether the close button will be shown or not
  *
@@ -543,8 +513,87 @@ gtk_search_bar_set_show_close_button (GtkSearchBar *bar,
     }
 }
 
+static void
+changed_cb (gboolean *changed)
+{
+  *changed = TRUE;
+}
+
+static gboolean
+capture_widget_key_handled (GtkEventControllerKey *controller,
+                            guint                  keyval,
+                            guint                  keycode,
+                            GdkModifierType        state,
+                            GtkSearchBar          *bar)
+{
+  gboolean handled;
+
+  if (!gtk_widget_get_mapped (GTK_WIDGET (bar)))
+    return GDK_EVENT_PROPAGATE;
+
+  if (bar->reveal_child)
+    return GDK_EVENT_PROPAGATE;
+
+  if (bar->entry == NULL)
+    {
+      g_warning ("The search bar does not have an entry connected to it. Call gtk_search_bar_connect_entry() to connect one.");
+      return GDK_EVENT_PROPAGATE;
+    }
+
+  if (GTK_IS_SEARCH_ENTRY (bar->entry))
+    {
+      /* The search entry was told to listen to events from the search bar, so
+       * just forward the event to self, so the search entry has an opportunity
+       * to intercept those.
+       */
+      handled = gtk_event_controller_key_forward (controller, GTK_WIDGET (bar));
+    }
+  else
+    {
+      gboolean preedit_changed, buffer_changed;
+      guint preedit_change_id, buffer_change_id;
+      gboolean res;
+
+      if (gtk_search_entry_is_keynav (keyval, state) ||
+          keyval == GDK_KEY_space ||
+          keyval == GDK_KEY_Menu)
+        return GDK_EVENT_PROPAGATE;
+
+      if (keyval == GDK_KEY_Escape)
+        {
+          if (gtk_revealer_get_reveal_child (GTK_REVEALER (bar->revealer)))
+            {
+              stop_search_cb (bar->entry, bar);
+              return GDK_EVENT_STOP;
+            }
+
+          return GDK_EVENT_PROPAGATE;
+        }
+
+      handled = GDK_EVENT_PROPAGATE;
+      preedit_changed = buffer_changed = FALSE;
+      preedit_change_id = g_signal_connect_swapped (bar->entry, "preedit-changed",
+                                                    G_CALLBACK (changed_cb), &preedit_changed);
+      buffer_change_id = g_signal_connect_swapped (bar->entry, "changed",
+                                                   G_CALLBACK (changed_cb), &buffer_changed);
+
+      res = gtk_event_controller_key_forward (controller, bar->entry);
+
+      g_signal_handler_disconnect (bar->entry, preedit_change_id);
+      g_signal_handler_disconnect (bar->entry, buffer_change_id);
+
+      if ((res && buffer_changed) || preedit_changed)
+        handled = GDK_EVENT_STOP;
+    }
+
+  if (handled == GDK_EVENT_STOP)
+    gtk_revealer_set_reveal_child (GTK_REVEALER (bar->revealer), TRUE);
+
+  return handled;
+}
+
 /**
- * gtk_search_bar_set_key_capture_widget:
+ * gtk_search_bar_set_key_capture_widget: (attributes org.gtk.Method.set_property=key-capture-widget)
  * @bar: a `GtkSearchBar`
  * @widget: (nullable) (transfer none): a `GtkWidget`
  *
@@ -573,26 +622,34 @@ gtk_search_bar_set_key_capture_widget (GtkSearchBar *bar,
 
   if (bar->capture_widget)
     {
+      gtk_widget_remove_controller (bar->capture_widget,
+                                    bar->capture_widget_controller);
       g_object_remove_weak_pointer (G_OBJECT (bar->capture_widget),
                                     (gpointer *) &bar->capture_widget);
     }
 
   bar->capture_widget = widget;
 
-  if (bar->entry)
-    gtk_editable_set_input_interceptor (GTK_EDITABLE (bar->entry), bar->capture_widget);
-
   if (widget)
     {
       g_object_add_weak_pointer (G_OBJECT (bar->capture_widget),
                                  (gpointer *) &bar->capture_widget);
+
+      bar->capture_widget_controller = gtk_event_controller_key_new ();
+      gtk_event_controller_set_propagation_phase (bar->capture_widget_controller,
+                                                  GTK_PHASE_BUBBLE);
+      g_signal_connect (bar->capture_widget_controller, "key-pressed",
+                        G_CALLBACK (capture_widget_key_handled), bar);
+      g_signal_connect (bar->capture_widget_controller, "key-released",
+                        G_CALLBACK (capture_widget_key_handled), bar);
+      gtk_widget_add_controller (widget, bar->capture_widget_controller);
     }
 
   g_object_notify_by_pspec (G_OBJECT (bar), widget_props[PROP_KEY_CAPTURE_WIDGET]);
 }
 
 /**
- * gtk_search_bar_get_key_capture_widget:
+ * gtk_search_bar_get_key_capture_widget: (attributes org.gtk.Method.get_property=key-capture-widget)
  * @bar: a `GtkSearchBar`
  *
  * Gets the widget that @bar is capturing key events from.
@@ -608,7 +665,7 @@ gtk_search_bar_get_key_capture_widget (GtkSearchBar *bar)
 }
 
 /**
- * gtk_search_bar_set_child:
+ * gtk_search_bar_set_child: (attributes org.gtk.Method.set_property=child)
  * @bar: a `GtkSearchBar`
  * @child: (nullable): the child widget
  *
@@ -646,7 +703,7 @@ gtk_search_bar_set_child (GtkSearchBar *bar,
 }
 
 /**
- * gtk_search_bar_get_child:
+ * gtk_search_bar_get_child: (attributes org.gtk.Method.get_property=child)
  * @bar: a `GtkSearchBar`
  *
  * Gets the child widget of @bar.

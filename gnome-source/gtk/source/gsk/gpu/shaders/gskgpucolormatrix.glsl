@@ -1,49 +1,34 @@
-#ifdef GSK_PREAMBLE
-textures = 1;
-var_name = "gsk_gpu_color_matrix";
-struct_name = "GskGpuColorMatrix";
-
-graphene_matrix_t color_matrix;
-graphene_vec4_t color_offset;
-graphene_rect_t bounds;
-graphene_rect_t tex_rect;
-float opacity;
-#endif /* GSK_PREAMBLE */
-
-#include "gskgpucolormatrixinstance.glsl"
+#include "common.glsl"
 
 PASS_FLAT(0) mat4 _color_matrix;
 PASS_FLAT(4) vec4 _color_offset;
 PASS(5) vec2 _pos;
-PASS_FLAT(6) Rect _bounds;
-PASS_FLAT(7) Rect _tex_rect;
-PASS(8) vec2 _tex_coord;
+PASS_FLAT(6) Rect _rect;
+PASS(7) vec2 _tex_coord;
+PASS_FLAT(8) uint _tex_id;
 
 
 #ifdef GSK_VERTEX_SHADER
 
+IN(0) mat4 in_color_matrix;
+IN(4) vec4 in_color_offset;
+IN(5) vec4 in_rect;
+IN(6) vec4 in_tex_rect;
+IN(7) uint in_tex_id;
+
 void
 run (out vec2 pos)
 {
-  Rect b = rect_from_gsk (in_bounds);
+  Rect r = rect_from_gsk (in_rect);
   
-  pos = rect_get_position (b);
+  pos = rect_get_position (r);
 
   _pos = pos;
-  _bounds = b;
+  _rect = r;
   _tex_coord = rect_get_coord (rect_from_gsk (in_tex_rect), pos);
-  mat4 cm = in_color_matrix;
-  if (in_opacity < 1.0)
-    {
-      cm *= mat4(1.0, 0.0, 0.0, 0.0,
-                 0.0, 1.0, 0.0, 0.0,
-                 0.0, 0.0, 1.0, 0.0,
-                 0.0, 0.0, 0.0, in_opacity);
-    }
-    
-  _color_matrix = cm;
+  _tex_id = in_tex_id;
+  _color_matrix = in_color_matrix;
   _color_offset = in_color_offset;
-  _tex_rect = rect_from_gsk (in_tex_rect);
 }
 
 #endif
@@ -56,16 +41,16 @@ void
 run (out vec4 color,
      out vec2 position)
 {
-  vec4 pixel = texture (GSK_TEXTURE0, _tex_coord) *
-               rect_coverage (_tex_rect, _pos);
-  pixel = alt_color_from_output (pixel);
-
+#if 0
+  vec4 pixel = gsk_texture_straight_alpha (_tex_id, _tex_coord);
+#else
+  vec4 pixel = gsk_texture (_tex_id, _tex_coord);
+  pixel = color_unpremultiply (pixel);
+#endif
   pixel = _color_matrix * pixel + _color_offset;
   pixel = clamp (pixel, 0.0, 1.0);
 
-  pixel = output_color_from_alt (pixel);
-
-  color = output_color_alpha (pixel, rect_coverage (_bounds, _pos));
+  color = color_premultiply (pixel) * rect_coverage (_rect, _pos);
   position = _pos;
 }
 

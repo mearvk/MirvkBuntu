@@ -6,9 +6,8 @@ gtk_css_public_sources = files([
 gtk_css_private_sources = files([
   'gtkcssdataurl.c',
   'gtkcssparser.c',
-  'gtkcssserializer.c',
   'gtkcsstokenizer.c',
-  'gtkcssvariablevalue.c',
+  'gtkcssserializer.c',
 ])
 
 gtk_css_public_headers = files([
@@ -51,7 +50,6 @@ libgtk_css = static_library('gtk_css',
     '-DGTK_COMPILATION',
     '-DG_LOG_DOMAIN="Gtk"',
   ] + common_cflags,
-  gnu_symbol_visibility: symbol_visibility,
 )
 
 # We don't have link_with: to internal static libs here on purpose, just

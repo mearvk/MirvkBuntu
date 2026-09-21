@@ -221,29 +221,29 @@ gtk_menu_tracker_item_class_init (GtkMenuTrackerItemClass *class)
   class->finalize = gtk_menu_tracker_item_finalize;
 
   gtk_menu_tracker_item_pspecs[PROP_IS_SEPARATOR] =
-    g_param_spec_boolean ("is-separator", NULL, NULL, FALSE, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_boolean ("is-separator", NULL, NULL, FALSE, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_LABEL] =
-    g_param_spec_string ("label", NULL, NULL, NULL, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_string ("label", NULL, NULL, NULL, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_USE_MARKUP] =
-    g_param_spec_boolean ("use-markup", NULL, NULL, FALSE, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_boolean ("use-markup", NULL, NULL, FALSE, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_ICON] =
-    g_param_spec_object ("icon", NULL, NULL, G_TYPE_ICON, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_object ("icon", NULL, NULL, G_TYPE_ICON, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_VERB_ICON] =
-    g_param_spec_object ("verb-icon", NULL, NULL, G_TYPE_ICON, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_object ("verb-icon", NULL, NULL, G_TYPE_ICON, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_SENSITIVE] =
-    g_param_spec_boolean ("sensitive", NULL, NULL, FALSE, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_boolean ("sensitive", NULL, NULL, FALSE, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_ROLE] =
     g_param_spec_enum ("role", NULL, NULL,
                        GTK_TYPE_MENU_TRACKER_ITEM_ROLE, GTK_MENU_TRACKER_ITEM_ROLE_NORMAL,
-                       G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+                       G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_TOGGLED] =
-    g_param_spec_boolean ("toggled", NULL, NULL, FALSE, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_boolean ("toggled", NULL, NULL, FALSE, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_ACCEL] =
-    g_param_spec_string ("accel", NULL, NULL, NULL, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_string ("accel", NULL, NULL, NULL, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_SUBMENU_SHOWN] =
-    g_param_spec_boolean ("submenu-shown", NULL, NULL, FALSE, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_boolean ("submenu-shown", NULL, NULL, FALSE, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
   gtk_menu_tracker_item_pspecs[PROP_IS_VISIBLE] =
-    g_param_spec_boolean ("is-visible", NULL, NULL, FALSE, G_PARAM_STATIC_NAME | G_PARAM_READABLE);
+    g_param_spec_boolean ("is-visible", NULL, NULL, FALSE, G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
 
   g_object_class_install_properties (class, N_PROPS, gtk_menu_tracker_item_pspecs);
 }
@@ -738,27 +738,11 @@ gtk_menu_tracker_item_get_accel (GtkMenuTrackerItem *self)
 }
 
 const char *
-gtk_menu_tracker_item_get_action_name (GtkMenuTrackerItem *self)
-{
-
-  if (!self->action_and_target)
-    return NULL;
-
-  return strrchr (self->action_and_target, '|') + 1;
-}
-
-GVariant *
-gtk_menu_tracker_item_get_action_target (GtkMenuTrackerItem *self)
-{
-  return g_menu_item_get_attribute_value (self->item, G_MENU_ATTRIBUTE_TARGET, NULL);
-}
-
-const char *
 gtk_menu_tracker_item_get_special (GtkMenuTrackerItem *self)
 {
   const char *special = NULL;
 
-  g_menu_item_get_attribute (self->item, "gtk-macos-special", "&s", &special);
+  g_menu_item_get_attribute (self->item, "x-gtk-private-special", "&s", &special);
 
   return special;
 }
@@ -873,7 +857,7 @@ typedef struct {
 
 static void gtk_menu_tracker_opener_observer_iface_init (GtkActionObserverInterface *iface);
 
-GType gtk_menu_tracker_opener_get_type (void);
+GType gtk_menu_tracker_opener_get_type (void) G_GNUC_CONST;
 
 G_DEFINE_TYPE_WITH_CODE (GtkMenuTrackerOpener, gtk_menu_tracker_opener, G_TYPE_OBJECT,
                          G_IMPLEMENT_INTERFACE (GTK_TYPE_ACTION_OBSERVER, gtk_menu_tracker_opener_observer_iface_init))

@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 // the following is a modified version of bolt/contrib/js/client.js
 
 import Gio from 'gi://Gio';
@@ -62,7 +64,7 @@ class Client extends Signals.EventEmitter {
     }
 
     async _getProxy() {
-        const nodeInfo = Gio.DBusNodeInfo.new_for_xml(BoltClientInterface);
+        let nodeInfo = Gio.DBusNodeInfo.new_for_xml(BoltClientInterface);
         try {
             this._proxy = await Gio.DBusProxy.new(
                 Gio.DBus.system,
@@ -94,8 +96,8 @@ class Client extends Signals.EventEmitter {
     }
 
     _onDeviceAdded(proxy, emitter, params) {
-        const [path] = params;
-        const device = new BoltDeviceProxy(Gio.DBus.system, BOLT_DBUS_NAME, path);
+        let [path] = params;
+        let device = new BoltDeviceProxy(Gio.DBus.system, BOLT_DBUS_NAME, path);
         this.emit('device-added', device);
     }
 
@@ -139,6 +141,7 @@ class AuthRobot extends Signals.EventEmitter {
     }
 
     close() {
+        this.disconnectAll();
         this._client = null;
     }
 
@@ -159,7 +162,7 @@ class AuthRobot extends Signals.EventEmitter {
             return;
 
         /* check if we should enroll the device */
-        const res = [false];
+        let res = [false];
         this.emit('enroll-device', dev, res);
         if (res[0] !== true)
             return;
@@ -181,16 +184,16 @@ class AuthRobot extends Signals.EventEmitter {
             return;
 
         this._enrolling = true;
-        GLib.idle_add_once(GLib.PRIORITY_DEFAULT,
+        GLib.idle_add(GLib.PRIORITY_DEFAULT,
             this._enrollDevicesIdle.bind(this));
     }
 
     async _enrollDevicesIdle() {
-        const devices = this._devicesToEnroll;
+        let devices = this._devicesToEnroll;
 
-        const dev = devices.shift();
+        let dev = devices.shift();
         if (dev === undefined)
-            return;
+            return GLib.SOURCE_REMOVE;
 
         try {
             await this._client.enrollDevice(dev.Uid, Policy.DEFAULT);
@@ -202,12 +205,13 @@ class AuthRobot extends Signals.EventEmitter {
             this._enrolling = this._devicesToEnroll.length > 0;
 
             if (this._enrolling) {
-                GLib.idle_add_once(GLib.PRIORITY_DEFAULT,
+                GLib.idle_add(GLib.PRIORITY_DEFAULT,
                     this._enrollDevicesIdle.bind(this));
             }
         } catch (error) {
             this.emit('enroll-failed', null, error);
         }
+        return GLib.SOURCE_REMOVE;
     }
 }
 
@@ -222,16 +226,12 @@ class Indicator extends SystemIndicator {
         this._indicator.icon_name = 'thunderbolt-symbolic';
 
         this._client = new Client();
-        this._client.connectObject(
-            'probing-changed', this._onProbing.bind(this), this);
+        this._client.connect('probing-changed', this._onProbing.bind(this));
 
         this._robot =  new AuthRobot(this._client);
-        this._robot.connectObject(
-            'enroll-device', this._onEnrollDevice.bind(this),
-            'enroll-failed', this._onEnrollFailed.bind(this),
-            this);
 
-        this.connect('destroy', () => this._onDestroy());
+        this._robot.connect('enroll-device', this._onEnrollDevice.bind(this));
+        this._robot.connect('enroll-failed', this._onEnrollFailed.bind(this));
 
         Main.sessionMode.connect('updated', this._sync.bind(this));
         this._sync();
@@ -277,7 +277,7 @@ class Indicator extends SystemIndicator {
 
     /* Session callbacks */
     _sync() {
-        const active = !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter;
+        let active = !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter;
         this._indicator.visible = active && this._client.probing;
     }
 
@@ -294,11 +294,11 @@ class Indicator extends SystemIndicator {
     /* AuthRobot callbacks */
     _onEnrollDevice(obj, device, policy) {
         /* only authorize new devices when in an unlocked user session */
-        const unlocked = !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter;
+        let unlocked = !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter;
         /* and if we have the permission to do so, otherwise we trigger a PolKit dialog */
-        const allowed = this._perm && this._perm.allowed;
+        let allowed = this._perm && this._perm.allowed;
 
-        const auth = unlocked && allowed;
+        let auth = unlocked && allowed;
         policy[0] = auth;
 
         log(`thunderbolt: [${device.Name}] auto enrollment: ${auth ? 'yes' : 'no'} (allowed: ${allowed ? 'yes' : 'no'})`);
@@ -312,7 +312,7 @@ class Indicator extends SystemIndicator {
             this._notify(title, body);
         } else {
             const title = _('Unauthorized Thunderbolt device');
-            const body = _('New device has been detected and needs to be authorized by an administrator');
+            const body = _('New device has been detected and needs to be authorized by an administrator.');
             this._notify(title, body);
         }
     }

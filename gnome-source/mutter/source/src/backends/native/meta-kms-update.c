@@ -20,8 +20,6 @@
 #include "backends/native/meta-kms-update.h"
 #include "backends/native/meta-kms-update-private.h"
 
-#include <glib/gstdio.h>
-
 #include "backends/meta-display-config-shared.h"
 #include "backends/native/meta-kms-connector.h"
 #include "backends/native/meta-kms-crtc.h"
@@ -34,6 +32,8 @@ struct _MetaKmsUpdate
 {
   MetaKmsDevice *device;
 
+  gboolean is_sealed;
+
   gboolean is_latchable;
   MetaKmsCrtc *latch_crtc;
 
@@ -43,16 +43,14 @@ struct _MetaKmsUpdate
   GList *crtc_updates;
   GList *crtc_color_updates;
 
+  MetaKmsCustomPageFlip *custom_page_flip;
+
   GList *page_flip_listeners;
   GList *result_listeners;
 
   gboolean needs_modeset;
 
   MetaKmsImplDevice *impl_device;
-
-  int sync_fd;
-
-  int64_t target_presentation_time_us;
 };
 
 void
@@ -84,7 +82,7 @@ meta_kms_plane_feedback_new_failed (MetaKmsPlane *plane,
                                     MetaKmsCrtc  *crtc,
                                     const char   *error_message)
 {
-  GError *error = NULL;
+  GError *error;
 
   error = g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED, error_message);
   return meta_kms_plane_feedback_new_take_error (plane, crtc, error);
@@ -153,23 +151,33 @@ meta_kms_feedback_did_pass (const MetaKmsFeedback *feedback)
   return feedback->result == META_KMS_FEEDBACK_PASSED;
 }
 
+GList *
+meta_kms_feedback_get_failed_planes (const MetaKmsFeedback *feedback)
+{
+  return feedback->failed_planes;
+}
+
 const GError *
 meta_kms_feedback_get_error (const MetaKmsFeedback *feedback)
 {
   return feedback->error;
 }
 
-int64_t
-meta_kms_feedback_get_ready_time_us (const MetaKmsFeedback *feedback)
-{
-  return feedback->ready_time_us;
-}
-
 void
-meta_kms_feedback_set_ready_time_us (MetaKmsFeedback *feedback,
-                                     int64_t          ready_time_us)
+meta_kms_feedback_dispatch_result (MetaKmsFeedback *feedback,
+                                   MetaKms         *kms,
+                                   GList           *result_listeners)
 {
-  feedback->ready_time_us = ready_time_us;
+  GList *l;
+
+  for (l = result_listeners; l; l = l->next)
+    {
+      MetaKmsResultListener *listener = l->data;
+
+      meta_kms_result_listener_set_feedback (listener, feedback);
+      meta_kms_queue_result_callback (kms, listener);
+    }
+  g_list_free (result_listeners);
 }
 
 static void
@@ -539,50 +547,6 @@ ensure_color_update (MetaKmsUpdate *update,
 }
 
 void
-meta_kms_update_set_crtc_degamma (MetaKmsUpdate      *update,
-                                  MetaKmsCrtc        *crtc,
-                                  const MetaGammaLut *degamma)
-{
-  MetaKmsCrtcColorUpdate *color_update;
-  MetaGammaLut *degamma_update = NULL;
-  const MetaKmsCrtcState *crtc_state = meta_kms_crtc_get_current_state (crtc);
-
-  g_assert (meta_kms_crtc_get_device (crtc) == update->device);
-
-  if (degamma)
-    {
-      degamma_update = meta_gamma_lut_copy_to_size (degamma,
-                                                    crtc_state->degamma.size);
-    }
-
-  color_update = ensure_color_update (update, crtc);
-  color_update->degamma.state = degamma_update;
-  color_update->degamma.has_update = TRUE;
-
-  update_latch_crtc (update, crtc);
-}
-
-void
-meta_kms_update_set_crtc_ctm (MetaKmsUpdate *update,
-                              MetaKmsCrtc   *crtc,
-                              const MetaCtm *ctm)
-{
-  MetaKmsCrtcColorUpdate *color_update;
-  MetaCtm *ctm_update = NULL;
-
-  g_assert (meta_kms_crtc_get_device (crtc) == update->device);
-
-  if (ctm)
-    ctm_update = meta_ctm_copy (ctm);
-
-  color_update = ensure_color_update (update, crtc);
-  color_update->ctm.state = ctm_update;
-  color_update->ctm.has_update = TRUE;
-
-  update_latch_crtc (update, crtc);
-}
-
-void
 meta_kms_update_set_crtc_gamma (MetaKmsUpdate      *update,
                                 MetaKmsCrtc        *crtc,
                                 const MetaGammaLut *gamma)
@@ -606,10 +570,6 @@ meta_kms_update_set_crtc_gamma (MetaKmsUpdate      *update,
 static void
 meta_kms_crtc_color_updates_free (MetaKmsCrtcColorUpdate *color_update)
 {
-  if (color_update->degamma.has_update)
-    g_clear_pointer (&color_update->degamma.state, meta_gamma_lut_free);
-  if (color_update->ctm.has_update)
-    g_clear_pointer (&color_update->ctm.state, meta_ctm_free);
   if (color_update->gamma.has_update)
     g_clear_pointer (&color_update->gamma.state, meta_gamma_lut_free);
   g_free (color_update);
@@ -627,6 +587,9 @@ meta_kms_update_add_page_flip_listener (MetaKmsUpdate                       *upd
 
   g_assert (meta_kms_crtc_get_device (crtc) == update->device);
 
+  if (!main_context)
+    main_context = g_main_context_default ();
+
   listener = g_new0 (MetaKmsPageFlipListener, 1);
   *listener = (MetaKmsPageFlipListener) {
     .crtc = crtc,
@@ -642,23 +605,35 @@ meta_kms_update_add_page_flip_listener (MetaKmsUpdate                       *upd
 }
 
 void
+meta_kms_update_set_custom_page_flip (MetaKmsUpdate             *update,
+                                      MetaKmsCustomPageFlipFunc  func,
+                                      gpointer                   user_data)
+{
+  MetaKmsCustomPageFlip *custom_page_flip;
+
+  custom_page_flip = g_new0 (MetaKmsCustomPageFlip, 1);
+  custom_page_flip->func = func;
+  custom_page_flip->user_data = user_data;
+
+  update->custom_page_flip = custom_page_flip;
+}
+
+void
 meta_kms_plane_assignment_set_fb_damage (MetaKmsPlaneAssignment *plane_assignment,
-                                         const MtkRegion        *region)
+                                         const int              *rectangles,
+                                         int                     n_rectangles)
 {
   MetaKmsFbDamage *fb_damage;
   struct drm_mode_rect *mode_rects;
-  int n_rectangles;
   int i;
 
-  n_rectangles = mtk_region_num_rectangles (region);
   mode_rects = g_new0 (struct drm_mode_rect, n_rectangles);
   for (i = 0; i < n_rectangles; ++i)
     {
-      mtk_region_get_box (region, i,
-                          &mode_rects[i].x1,
-                          &mode_rects[i].y1,
-                          &mode_rects[i].x2,
-                          &mode_rects[i].y2);
+      mode_rects[i].x1 = rectangles[i * 4];
+      mode_rects[i].y1 = rectangles[i * 4 + 1];
+      mode_rects[i].x2 = mode_rects[i].x1 + rectangles[i * 4 + 2];
+      mode_rects[i].y2 = mode_rects[i].y1 + rectangles[i * 4 + 3];
     }
 
   fb_damage = g_new0 (MetaKmsFbDamage, 1);
@@ -677,22 +652,6 @@ meta_kms_plane_assignment_set_rotation (MetaKmsPlaneAssignment *plane_assignment
   g_warn_if_fail (rotation);
 
   plane_assignment->rotation = rotation;
-}
-
-void
-meta_kms_plane_assignment_set_color_encoding (MetaKmsPlaneAssignment         *plane_assignment,
-                                              MetaKmsPlaneYCbCrColorEncoding  encoding)
-{
-  plane_assignment->color_encoding.has_update = TRUE;
-  plane_assignment->color_encoding.value = encoding;
-}
-
-void
-meta_kms_plane_assignment_set_color_range (MetaKmsPlaneAssignment      *plane_assignment,
-                                           MetaKmsPlaneYCbCrColorRange  range)
-{
-  plane_assignment->color_range.has_update = TRUE;
-  plane_assignment->color_range.value = range;
 }
 
 void
@@ -844,6 +803,18 @@ MetaKmsDevice *
 meta_kms_update_get_device (MetaKmsUpdate *update)
 {
   return update->device;
+}
+
+MetaKmsCustomPageFlip *
+meta_kms_update_take_custom_page_flip_func (MetaKmsUpdate *update)
+{
+  return g_steal_pointer (&update->custom_page_flip);
+}
+
+void
+meta_kms_custom_page_flip_free (MetaKmsCustomPageFlip *custom_page_flip)
+{
+  g_free (custom_page_flip);
 }
 
 static GList *
@@ -1109,8 +1080,6 @@ merge_connector_updates_from (MetaKmsUpdate *update,
             {
               connector_update->hdr = other_connector_update->hdr;
             }
-
-          g_list_free_full (l, g_free);
         }
       else
         {
@@ -1120,6 +1089,19 @@ merge_connector_updates_from (MetaKmsUpdate *update,
                                        l);
         }
     }
+}
+
+static void
+merge_custom_page_flip_from (MetaKmsUpdate *update,
+                             MetaKmsUpdate *other_update)
+{
+  g_warn_if_fail ((!update->custom_page_flip &&
+                   !other_update->custom_page_flip) ||
+                  ((!!update->custom_page_flip) ^
+                   (!!other_update->custom_page_flip)));
+
+  g_clear_pointer (&update->custom_page_flip, meta_kms_custom_page_flip_free);
+  update->custom_page_flip = g_steal_pointer (&other_update->custom_page_flip);
 }
 
 static void
@@ -1151,13 +1133,9 @@ meta_kms_update_merge_from (MetaKmsUpdate *update,
   merge_crtc_updates_from (update, other_update);
   merge_crtc_color_updates_from (update, other_update);
   merge_connector_updates_from (update, other_update);
+  merge_custom_page_flip_from (update, other_update);
   merge_page_flip_listeners_from (update, other_update);
   merge_result_listeners_from (update, other_update);
-
-  meta_kms_update_set_sync_fd (update, g_steal_fd (&other_update->sync_fd));
-  update->target_presentation_time_us =
-    MAX (update->target_presentation_time_us,
-         other_update->target_presentation_time_us);
 }
 
 gboolean
@@ -1174,7 +1152,6 @@ meta_kms_update_new (MetaKmsDevice *device)
   update = g_new0 (MetaKmsUpdate, 1);
   update->device = device;
   update->is_latchable = TRUE;
-  update->sync_fd = -1;
 
   return update;
 }
@@ -1197,7 +1174,7 @@ meta_kms_update_free (MetaKmsUpdate *update)
   g_list_free_full (update->crtc_updates, g_free);
   g_list_free_full (update->crtc_color_updates,
                     (GDestroyNotify) meta_kms_crtc_color_updates_free);
-  g_clear_fd (&update->sync_fd, NULL);
+  g_clear_pointer (&update->custom_page_flip, meta_kms_custom_page_flip_free);
 
   g_free (update);
 }
@@ -1221,38 +1198,6 @@ MetaKmsCrtc *
 meta_kms_update_get_latch_crtc (MetaKmsUpdate *update)
 {
   return update->latch_crtc;
-}
-
-int
-meta_kms_update_get_sync_fd (MetaKmsUpdate *update)
-{
-  return update->sync_fd;
-}
-
-int64_t
-meta_kms_update_get_target_presentation_time (MetaKmsUpdate *update)
-{
-  return update->target_presentation_time_us;
-}
-
-void
-meta_kms_update_set_target_presentation_time (MetaKmsUpdate *update,
-                                              int64_t        target_presentation_time_us)
-{
-  g_return_if_fail (update->target_presentation_time_us == 0);
-
-  update->target_presentation_time_us = target_presentation_time_us;
-}
-
-void
-meta_kms_update_set_sync_fd (MetaKmsUpdate *update,
-                             int            sync_fd)
-{
-  if (update->sync_fd == sync_fd)
-    return;
-
-  g_clear_fd (&update->sync_fd, NULL);
-  update->sync_fd = sync_fd;
 }
 
 gboolean

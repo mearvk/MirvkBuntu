@@ -65,10 +65,10 @@ typedef enum _MetaKmsConnectorUnderscan
 
 typedef enum _MetaKmsConnectorPrivacyScreen
 {
-  META_KMS_CONNECTOR_PRIVACY_SCREEN_DISABLED = 0,
-  META_KMS_CONNECTOR_PRIVACY_SCREEN_ENABLED,
-  META_KMS_CONNECTOR_PRIVACY_SCREEN_DISABLED_LOCKED,
+  META_KMS_CONNECTOR_PRIVACY_SCREEN_ENABLED = 0,
+  META_KMS_CONNECTOR_PRIVACY_SCREEN_DISABLED,
   META_KMS_CONNECTOR_PRIVACY_SCREEN_ENABLED_LOCKED,
+  META_KMS_CONNECTOR_PRIVACY_SCREEN_DISABLED_LOCKED,
   META_KMS_CONNECTOR_PRIVACY_SCREEN_N_PROPS,
   META_KMS_CONNECTOR_PRIVACY_SCREEN_UNKNOWN,
 } MetaKmsConnectorPrivacyScreen;
@@ -161,3 +161,7 @@ void meta_set_drm_hdr_metadata (MetaOutputHdrMetadata      *metadata,
 META_EXPORT_TEST
 gboolean set_output_hdr_metadata (struct hdr_output_metadata *drm_metadata,
                                   MetaOutputHdrMetadata      *metadata);
+
+META_EXPORT_TEST
+gboolean hdr_metadata_equal (MetaOutputHdrMetadata *metadata,
+                             MetaOutputHdrMetadata *other_metadata);

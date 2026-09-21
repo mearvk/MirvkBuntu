@@ -26,9 +26,9 @@
 
 #include "gdkcairocontext-broadway.h"
 #include "gdkdisplay.h"
-#include "gdkeventsourceprivate.h"
+#include "gdkeventsource.h"
 #include "gdkmonitor-broadway.h"
-#include "gdkseat-broadway.h"
+#include "gdkseatdefaultprivate.h"
 #include "gdkdevice-broadway.h"
 #include "gdkdeviceprivate.h"
 #include <gdk/gdktextureprivate.h>
@@ -196,13 +196,13 @@ _gdk_broadway_display_open (const char *display_name)
   _gdk_device_set_associated_device (broadway_display->touchscreen, broadway_display->core_pointer);
   _gdk_device_add_physical_device (broadway_display->core_pointer, broadway_display->touchscreen);
 
-  seat = gdk_broadway_seat_new_for_logical_pair (broadway_display->core_pointer,
-                                                 broadway_display->core_keyboard);
+  seat = gdk_seat_default_new_for_logical_pair (broadway_display->core_pointer,
+                                                broadway_display->core_keyboard);
 
   gdk_display_add_seat (display, seat);
-  gdk_broadway_seat_add_physical_device (GDK_BROADWAY_SEAT (seat), broadway_display->pointer);
-  gdk_broadway_seat_add_physical_device (GDK_BROADWAY_SEAT (seat), broadway_display->keyboard);
-  gdk_broadway_seat_add_physical_device (GDK_BROADWAY_SEAT (seat), broadway_display->touchscreen);
+  gdk_seat_default_add_physical_device (GDK_SEAT_DEFAULT (seat), broadway_display->pointer);
+  gdk_seat_default_add_physical_device (GDK_SEAT_DEFAULT (seat), broadway_display->keyboard);
+  gdk_seat_default_add_physical_device (GDK_SEAT_DEFAULT (seat), broadway_display->touchscreen);
   g_object_unref (seat);
 
   gdk_event_init (display);
@@ -257,6 +257,12 @@ gdk_broadway_display_flush (GdkDisplay *display)
   _gdk_broadway_server_flush (broadway_display->server);
 }
 
+static gboolean
+gdk_broadway_display_has_pending (GdkDisplay *display)
+{
+  return FALSE;
+}
+
 static void
 gdk_broadway_display_dispose (GObject *object)
 {
@@ -265,7 +271,8 @@ gdk_broadway_display_dispose (GObject *object)
   if (self->event_source)
     {
       g_source_destroy (self->event_source);
-      g_clear_pointer (&self->event_source, g_source_unref);
+      g_source_unref (self->event_source);
+      self->event_source = NULL;
     }
   if (self->monitors)
     {
@@ -307,14 +314,6 @@ gdk_broadway_display_get_next_serial (GdkDisplay *display)
   return _gdk_broadway_server_get_next_serial (broadway_display->server);
 }
 
-/**
- * gdk_broadway_display_show_keyboard:
- * @display: the broadway display
- *
- * Shows the keyboard.
- *
- * Deprecated: 4.18: The Broadway backend will be removed in GTK 5
- **/
 void
 gdk_broadway_display_show_keyboard (GdkBroadwayDisplay *display)
 {
@@ -323,14 +322,6 @@ gdk_broadway_display_show_keyboard (GdkBroadwayDisplay *display)
   _gdk_broadway_server_set_show_keyboard (display->server, TRUE);
 }
 
-/**
- * gdk_broadway_display_hide_keyboard:
- * @display: the broadway display
- *
- * Hides the keyboard.
- *
- * Deprecated: 4.18: The Broadway backend will be removed in GTK 5
- **/
 void
 gdk_broadway_display_hide_keyboard (GdkBroadwayDisplay *display)
 {
@@ -353,7 +344,6 @@ gdk_broadway_display_hide_keyboard (GdkBroadwayDisplay *display)
  * response to later user configuration changes.
  *
  * Since: 4.4
- * Deprecated: 4.18: The Broadway backend will be removed in GTK 5
  */
 void
 gdk_broadway_display_set_surface_scale (GdkDisplay *display,
@@ -381,7 +371,6 @@ gdk_broadway_display_set_surface_scale (GdkDisplay *display,
  * Returns: the scale for surfaces
  *
  * Since: 4.4
- * Deprecated: 4.18: The Broadway backend will be removed in GTK 5
  */
 int
 gdk_broadway_display_get_surface_scale (GdkDisplay *display)
@@ -454,7 +443,7 @@ gdk_broadway_display_ensure_texture (GdkDisplay *display,
   return data->id;
 }
 
-static void
+static gboolean
 flush_idle (gpointer data)
 {
   GdkDisplay *display = data;
@@ -462,6 +451,8 @@ flush_idle (gpointer data)
 
   broadway_display->idle_flush_id = 0;
   gdk_display_flush (display);
+
+  return FALSE;
 }
 
 void
@@ -471,7 +462,7 @@ gdk_broadway_display_flush_in_idle (GdkDisplay *display)
 
   if (broadway_display->idle_flush_id == 0)
     {
-      broadway_display->idle_flush_id = g_idle_add_once (flush_idle, g_object_ref (display));
+      broadway_display->idle_flush_id = g_idle_add (flush_idle, g_object_ref (display));
       gdk_source_set_static_name_by_id (broadway_display->idle_flush_id, "[gtk] flush_idle");
     }
 }
@@ -494,6 +485,7 @@ gdk_broadway_display_class_init (GdkBroadwayDisplayClass * class)
   display_class->beep = gdk_broadway_display_beep;
   display_class->sync = gdk_broadway_display_sync;
   display_class->flush = gdk_broadway_display_flush;
+  display_class->has_pending = gdk_broadway_display_has_pending;
   display_class->queue_events = _gdk_broadway_display_queue_events;
 
   display_class->get_next_serial = gdk_broadway_display_get_next_serial;

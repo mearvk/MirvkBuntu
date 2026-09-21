@@ -106,7 +106,6 @@ typedef struct _ClutterProximityEvent   ClutterProximityEvent;
 typedef struct _ClutterPadButtonEvent   ClutterPadButtonEvent;
 typedef struct _ClutterPadStripEvent    ClutterPadStripEvent;
 typedef struct _ClutterPadRingEvent     ClutterPadRingEvent;
-typedef struct _ClutterPadDialEvent     ClutterPadDialEvent;
 typedef struct _ClutterDeviceEvent      ClutterDeviceEvent;
 typedef struct _ClutterIMEvent          ClutterIMEvent;
 
@@ -129,10 +128,10 @@ typedef gboolean (* ClutterEventFilterFunc) (const ClutterEvent *event,
                                              gpointer            user_data);
 
 CLUTTER_EXPORT
-GType clutter_event_get_type (void);
+GType clutter_event_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
-GType clutter_event_sequence_get_type (void);
+GType clutter_event_sequence_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 gboolean                clutter_events_pending                  (void);
@@ -162,6 +161,8 @@ CLUTTER_EXPORT
 guint32                 clutter_event_get_time                  (const ClutterEvent     *event);
 CLUTTER_EXPORT
 ClutterModifierType     clutter_event_get_state                 (const ClutterEvent     *event);
+CLUTTER_EXPORT
+ClutterInputDevice *    clutter_event_get_device                (const ClutterEvent     *event);
 
 CLUTTER_EXPORT
 ClutterInputDevice *    clutter_event_get_source_device         (const ClutterEvent     *event);
@@ -171,6 +172,8 @@ ClutterInputDeviceTool *clutter_event_get_device_tool           (const ClutterEv
 
 CLUTTER_EXPORT
 ClutterActor *          clutter_event_get_source                (const ClutterEvent     *event);
+CLUTTER_EXPORT
+ClutterInputDeviceType  clutter_event_get_device_type           (const ClutterEvent     *event);
 CLUTTER_EXPORT
 void                    clutter_event_get_coords                (const ClutterEvent     *event,
                                                                  gfloat                 *x,
@@ -257,9 +260,6 @@ CLUTTER_EXPORT
 ClutterScrollFinishFlags clutter_event_get_scroll_finish_flags       (const ClutterEvent     *event);
 
 CLUTTER_EXPORT
-ClutterScrollFlags       clutter_event_get_scroll_flags              (const ClutterEvent     *event);
-
-CLUTTER_EXPORT
 guint                    clutter_event_get_mode_group                (const ClutterEvent     *event);
 
 CLUTTER_EXPORT
@@ -295,10 +295,5 @@ CLUTTER_EXPORT
 uint32_t clutter_event_get_im_delete_length (const ClutterEvent  *event);
 CLUTTER_EXPORT
 ClutterPreeditResetMode clutter_event_get_im_preedit_reset_mode (const ClutterEvent *event);
-
-CLUTTER_EXPORT
-gboolean clutter_event_get_im_preedit_hints (const ClutterEvent       *event,
-                                             ClutterPreeditAttribute **preedit_hints,
-                                             unsigned int             *n_preedit_hints);
 
 G_END_DECLS

@@ -17,12 +17,15 @@
 
 #pragma once
 
-#include "gdkwaylandsurface.h"
-#include "gdkfractionalscale-private.h"
-#include "gdkwaylandcolor-private.h"
-#include "gdkwaylandpresentationtime-private.h"
-#include "gdkseat-wayland.h"
+#include "gdkprivate-wayland.h"
 
+typedef enum _PopupState
+{
+  POPUP_STATE_IDLE,
+  POPUP_STATE_WAITING_FOR_REPOSITIONED,
+  POPUP_STATE_WAITING_FOR_CONFIGURE,
+  POPUP_STATE_WAITING_FOR_FRAME,
+} PopupState;
 
 struct _GdkWaylandSurface
 {
@@ -33,10 +36,9 @@ struct _GdkWaylandSurface
     struct wl_surface *wl_surface;
     struct xdg_surface *xdg_surface;
     struct zxdg_surface_v6 *zxdg_surface_v6;
+    struct wl_egl_window *egl_window;
     struct wp_fractional_scale_v1 *fractional_scale;
     struct wp_viewport *viewport;
-    struct ext_background_effect_surface_v1 *background_effect;
-    GdkWaylandColorSurface *color;
   } display_server;
 
   struct wl_event_queue *event_queue;
@@ -44,7 +46,6 @@ struct _GdkWaylandSurface
 
   GdkWaylandPresentationTime *presentation_time;
 
-  unsigned int color_state_changed : 1;
   unsigned int initial_configure_received : 1;
   unsigned int has_uncommitted_ack_configure : 1;
   unsigned int has_pending_subsurface_commits : 1;
@@ -70,9 +71,6 @@ struct _GdkWaylandSurface
 
   cairo_region_t *input_region;
   gboolean input_region_dirty;
-
-  cairo_region_t *background_blur;
-  gboolean background_effect_dirty;
 
   GdkRectangle last_sent_window_geometry;
 
@@ -100,6 +98,8 @@ struct _GdkWaylandSurfaceClass
 
   void (* handle_configure) (GdkWaylandSurface *surface);
 
+  void (* handle_frame) (GdkWaylandSurface *surface);
+
   void (* hide_surface) (GdkWaylandSurface *surface);
 };
 
@@ -112,6 +112,7 @@ void gdk_wayland_surface_update_size       (GdkSurface               *surface,
                                             int32_t                   height,
                                             const GdkFractionalScale *scale);
 void gdk_wayland_surface_create_xdg_surface_resources (GdkSurface *surface);
+void _gdk_wayland_surface_save_size (GdkSurface *surface);
 
 void gdk_wayland_surface_hide_surface (GdkSurface *surface);
 void gdk_wayland_surface_move_resize (GdkSurface *surface,
@@ -127,45 +128,6 @@ void gdk_wayland_surface_thaw_state   (GdkSurface *surface);
 void gdk_wayland_surface_frame_callback (GdkSurface *surface,
                                          uint32_t    time);
 
-void            gdk_wayland_surface_update_content         (GdkSurface           *surface);
-void            gdk_wayland_surface_sync                   (GdkSurface           *surface);
-void            gdk_wayland_surface_handle_empty_frame     (GdkSurface           *surface);
-void            gdk_wayland_surface_commit                 (GdkSurface           *surface);
-void            gdk_wayland_surface_notify_committed       (GdkSurface           *surface);
-void            gdk_wayland_surface_request_frame          (GdkSurface           *surface);
-gboolean        gdk_wayland_surface_has_surface            (GdkSurface           *surface);
-void            gdk_wayland_surface_attach_image           (GdkSurface           *surface,
-                                                            cairo_surface_t      *cairo_surface,
-                                                            const cairo_region_t *damage);
 
-GdkDrag        *_gdk_wayland_surface_drag_begin            (GdkSurface *surface,
-                                                            GdkDevice *device,
-                                                            GdkContentProvider *content,
-                                                            GdkDragAction actions,
-                                                            double     dx,
-                                                            double     dy);
-void            _gdk_wayland_surface_offset_next_wl_buffer (GdkSurface *surface,
-                                                            int        x,
-                                                            int        y);
-void _gdk_wayland_surface_set_grab_seat (GdkSurface      *surface,
-                                         GdkSeat         *seat);
-
-struct wl_output *gdk_wayland_surface_get_wl_output (GdkSurface *surface);
-
-void gdk_wayland_surface_inhibit_shortcuts (GdkSurface *surface,
-                                           GdkSeat   *gdk_seat);
-void gdk_wayland_surface_restore_shortcuts (GdkSurface *surface,
-                                           GdkSeat   *gdk_seat);
-
-#define XDG_SHELL_CALL(obj,func,surface,...) \
-  switch (GDK_WAYLAND_DISPLAY (gdk_surface_get_display (GDK_SURFACE (surface)))->shell_variant) \
-    { \
-    case GDK_WAYLAND_SHELL_VARIANT_XDG_SHELL: \
-      obj ## _ ## func (surface->display_server.obj __VA_OPT__(,) __VA_ARGS__ ); \
-      break; \
-    case GDK_WAYLAND_SHELL_VARIANT_ZXDG_SHELL_V6: \
-      z ## obj ## _v6_ ## func (surface->display_server.z ## obj ## _v6 __VA_OPT__(,) __VA_ARGS__ ); \
-      break; \
-    default: \
-      g_assert_not_reached (); \
-    }
+#define GDK_TYPE_WAYLAND_DRAG_SURFACE (gdk_wayland_drag_surface_get_type ())
+GType gdk_wayland_drag_surface_get_type (void) G_GNUC_CONST;

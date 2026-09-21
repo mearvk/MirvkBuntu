@@ -25,19 +25,9 @@
  * dvalue=-1: generate random value within value range
  * dvalue=+2: initialize value from default_value
  */
-/* SELECT_VALUE computes in double, so the result may not be representable in
- * the property's type (e.g. (double) G_MAXUINT64 rounds up to 2^64). Assign
- * the bounds directly when we hit them.
- */
 #define ASSIGN_VALUE(__g_value_set_func, value__, PSPECTYPE, __pspec, __default_value, __minimum, __maximum, __dvalue) do { \
   PSPECTYPE __p = (PSPECTYPE) __pspec; \
-  double __v = SELECT_VALUE (__dvalue, (double) __p->__default_value, (double) __p->__minimum, (double) __p->__maximum); \
-  if (__v >= (double) __p->__maximum) \
-    __g_value_set_func (value__, __p->__maximum); \
-  else if (__v <= (double) __p->__minimum) \
-    __g_value_set_func (value__, __p->__minimum); \
-  else \
-    __g_value_set_func (value__, __v); \
+  __g_value_set_func (value__, SELECT_VALUE (__dvalue, __p->__default_value, __p->__minimum, __p->__maximum)); \
 } while (0)
 #define SELECT_VALUE(__dvalue, __default_value, __minimum, __maximum) ( \
   __dvalue >= 0 && __dvalue <= 1 ? __minimum * (1 - __dvalue) + __dvalue * __maximum : \
@@ -50,7 +40,7 @@
         __dvalue == 0.5 ? "medium" : \
           __dvalue > 0 && __dvalue < 1 ? "fractional" : \
             "random")
-#define MATCH_ANY_VALUE         ((void*) (gsize) 0xf1874c23)
+#define MATCH_ANY_VALUE         ((void*) 0xf1874c23)
 
 /* --- ignored property names --- */
 typedef struct {
@@ -64,19 +54,19 @@ list_ignore_properties (gboolean buglist)
   /* currently untestable properties */
   static const IgnoreProperty ignore_properties[] = {
     { "GtkWidget",              "parent",               NULL, },                        /* needs working parent widget */
-    { "GtkWidget",              "has-default",          (void*) (gsize) TRUE, },                /* conflicts with toplevel-less widgets */
-    { "GtkWidget",              "display",              (void*) (gsize) MATCH_ANY_VALUE },
+    { "GtkWidget",              "has-default",          (void*) TRUE, },                /* conflicts with toplevel-less widgets */
+    { "GtkWidget",              "display",              (void*) MATCH_ANY_VALUE },
     { "GtkCellView",            "background",           (void*) "", },                  /* "" is not a valid background color */
     { "GtkFileChooserWidget",   "select-multiple",      (void*) 0x1 },                  /* property conflicts */
-    { "GtkFileChooserDialog",   "select-multiple",      (void*) (gsize) MATCH_ANY_VALUE },      /* property disabled */
-    { "GtkTextView",            "overwrite",            (void*) (gsize) MATCH_ANY_VALUE },      /* needs text buffer */
-    { "GtkTreeView",            "expander-column",      (void*) (gsize) MATCH_ANY_VALUE },      /* assertion list != NULL */
-    { "GtkWindow",              "display",              (void*) (gsize) MATCH_ANY_VALUE },
+    { "GtkFileChooserDialog",   "select-multiple",      (void*) MATCH_ANY_VALUE },      /* property disabled */
+    { "GtkTextView",            "overwrite",            (void*) MATCH_ANY_VALUE },      /* needs text buffer */
+    { "GtkTreeView",            "expander-column",      (void*) MATCH_ANY_VALUE },      /* assertion list != NULL */
+    { "GtkWindow",              "display",              (void*) MATCH_ANY_VALUE },
     { NULL, NULL, NULL }
   };
   /* properties suspected to be Gdk/Gtk+ bugs */
   static const IgnoreProperty bug_properties[] = {
-    { "GtkComboBox",            "active",               (void*) (gsize) MATCH_ANY_VALUE },      /* FIXME: triggers NULL model bug */
+    { "GtkComboBox",            "active",               (void*) MATCH_ANY_VALUE },      /* FIXME: triggers NULL model bug */
     { NULL, NULL, NULL }
   };
   if (buglist)
@@ -126,7 +116,7 @@ pspec_select_value (GParamSpec *pspec,
       if (dvalue > 0 && sspec->cset_first && sspec->cset_nth)
         g_value_take_string (value, g_strdup_printf ("%c%c", sspec->cset_first[0], sspec->cset_nth[0]));
       else /* if (sspec->ensure_non_null) */
-        g_value_set_static_string (value, "");
+        g_value_set_string (value, "");
     }
   else if (G_IS_PARAM_SPEC_ENUM (pspec))
     {
@@ -154,7 +144,6 @@ pspec_select_value (GParamSpec *pspec,
       if (!G_TYPE_IS_ABSTRACT (pspec->value_type) &&
           !G_TYPE_IS_INTERFACE (pspec->value_type))
         {
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
           if (g_type_is_a (pspec->value_type, GDK_TYPE_PIXBUF))
             object = gdk_pixbuf_new (GDK_COLORSPACE_RGB, FALSE, 8, 32, 32);
           else if (g_type_is_a (pspec->value_type, GDK_TYPE_PIXBUF_ANIMATION))
@@ -163,7 +152,6 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
             object = g_object_new (pspec->value_type, NULL);
           g_object_ref_sink (object);
           g_value_take_object (value, object);
-G_GNUC_END_IGNORE_DEPRECATIONS
         }
     }
   /* unimplemented:
@@ -222,7 +210,7 @@ object_test_property (GObject           *object,
       /* ignore untestable properties */
       ignore_properties = list_ignore_properties (FALSE);
       for (i = 0; ignore_properties[i].name; i++)
-        if (g_strcmp0 ("", ignore_properties[i].name) != 0 ||
+        if (g_strcmp0 ("", ignore_properties[i].name) ||
             (g_type_is_a (G_OBJECT_TYPE (object), g_type_from_name (ignore_properties[i].type_name)) &&
              strcmp (pspec->name, ignore_properties[i].name) == 0 &&
              (MATCH_ANY_VALUE == ignore_properties[i].value ||
@@ -310,35 +298,6 @@ widget_property_tests (gconstpointer test_data)
   g_object_unref (widget);
 }
 
-static gboolean
-skip_type (GType type)
-{
-  if (type == GDK_TYPE_CLIPBOARD)
-    return TRUE; /* construct-only display */
-
-  if (g_type_is_a (type, GDK_TYPE_TEXTURE))
-    return TRUE; /* non-nullable color-state */
-
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-  if (type == GSK_TYPE_GL_SHADER)
-    return TRUE; /* non-nullable bytes */
-G_GNUC_END_IGNORE_DEPRECATIONS
-
-  if (type == GTK_TYPE_ALTERNATIVE_TRIGGER)
-    return TRUE; /* criticals on null */
-
-  if (g_type_is_a (type, GTK_TYPE_LAYOUT_CHILD))
-    return TRUE; /* criticals in constructed */
-
-  if (g_type_is_a (type, GTK_TYPE_SHORTCUT_ACTION))
-    return TRUE; /* criticals in constructed */
-
-  if (type == GTK_TYPE_STACK_PAGE)
-    return TRUE; /* can't set null child */
-
-  return FALSE;
-}
-
 /* --- main test program --- */
 int
 main (int   argc,
@@ -356,7 +315,7 @@ main (int   argc,
   /* install a property test for each widget type */
   otypes = gtk_test_list_all_types (NULL);
   for (i = 0; otypes[i]; i++)
-    if (!skip_type (otypes[i]) &&
+    if (g_type_is_a (otypes[i], GTK_TYPE_WIDGET) &&
         G_TYPE_IS_OBJECT (otypes[i]) &&
         !G_TYPE_IS_ABSTRACT (otypes[i]))
       {

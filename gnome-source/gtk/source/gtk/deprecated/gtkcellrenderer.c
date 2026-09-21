@@ -153,8 +153,7 @@ enum {
   PROP_CELL_BACKGROUND,
   PROP_CELL_BACKGROUND_RGBA,
   PROP_CELL_BACKGROUND_SET,
-  PROP_EDITING,
-  N_PROPS
+  PROP_EDITING
 };
 
 /* Signal IDs */
@@ -166,7 +165,6 @@ enum {
 
 static int GtkCellRenderer_private_offset;
 static guint  cell_renderer_signals[LAST_SIGNAL] = { 0 };
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static inline gpointer
 gtk_cell_renderer_get_instance_private (GtkCellRenderer *self)
@@ -249,8 +247,7 @@ gtk_cell_renderer_class_init (GtkCellRendererClass *class)
    * continue to use the same kind of widget for editing in future
    * releases, therefore you should check the type of @editable
    * before doing any specific setup, as in the following example:
-   *
-   * ```c
+   * |[<!-- language="C" -->
    * static void
    * text_editing_started (GtkCellRenderer *cell,
    *                       GtkCellEditable *editable,
@@ -266,7 +263,7 @@ gtk_cell_renderer_class_init (GtkCellRendererClass *class)
    *       gtk_entry_set_completion (entry, completion);
    *     }
    * }
-   * ```
+   * ]|
    */
   cell_renderer_signals[EDITING_STARTED] =
     g_signal_new (I_("editing-started"),
@@ -282,85 +279,112 @@ gtk_cell_renderer_class_init (GtkCellRendererClass *class)
                               G_TYPE_FROM_CLASS (object_class),
                               _gtk_marshal_VOID__OBJECT_STRINGv);
 
-  props[PROP_MODE] = g_param_spec_enum ("mode", NULL, NULL,
-                                        GTK_TYPE_CELL_RENDERER_MODE,
-                                        GTK_CELL_RENDERER_MODE_INERT,
-                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_MODE,
+				   g_param_spec_enum ("mode", NULL, NULL,
+						      GTK_TYPE_CELL_RENDERER_MODE,
+						      GTK_CELL_RENDERER_MODE_INERT,
+						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_VISIBLE] = g_param_spec_boolean ("visible", NULL, NULL,
-                                              TRUE,
-                                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-  props[PROP_SENSITIVE] = g_param_spec_boolean ("sensitive", NULL, NULL,
-                                                TRUE,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_VISIBLE,
+				   g_param_spec_boolean ("visible", NULL, NULL,
+							 TRUE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
+  g_object_class_install_property (object_class,
+				   PROP_SENSITIVE,
+				   g_param_spec_boolean ("sensitive", NULL, NULL,
+							 TRUE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_XALIGN] = g_param_spec_float ("xalign", NULL, NULL,
-                                           0.0,
-                                           1.0,
-                                           0.5,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_XALIGN,
+				   g_param_spec_float ("xalign", NULL, NULL,
+						       0.0,
+						       1.0,
+						       0.5,
+						       GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_YALIGN] = g_param_spec_float ("yalign", NULL, NULL,
-                                           0.0,
-                                           1.0,
-                                           0.5,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_YALIGN,
+				   g_param_spec_float ("yalign", NULL, NULL,
+						       0.0,
+						       1.0,
+						       0.5,
+						       GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_XPAD] = g_param_spec_uint ("xpad", NULL, NULL,
-                                        0,
-                                        G_MAXUINT,
-                                        0,
-                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_XPAD,
+				   g_param_spec_uint ("xpad", NULL, NULL,
+						      0,
+						      G_MAXUINT,
+						      0,
+						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_YPAD] = g_param_spec_uint ("ypad", NULL, NULL,
-                                        0,
-                                        G_MAXUINT,
-                                        0,
-                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_YPAD,
+				   g_param_spec_uint ("ypad", NULL, NULL,
+						      0,
+						      G_MAXUINT,
+						      0,
+						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_WIDTH] = g_param_spec_int ("width", NULL, NULL,
-                                        -1,
-                                        G_MAXINT,
-                                        -1,
-                                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_WIDTH,
+				   g_param_spec_int ("width", NULL, NULL,
+						     -1,
+						     G_MAXINT,
+						     -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_HEIGHT] = g_param_spec_int ("height", NULL, NULL,
-                                         -1,
-                                         G_MAXINT,
-                                         -1,
-                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_HEIGHT,
+				   g_param_spec_int ("height", NULL, NULL,
+						     -1,
+						     G_MAXINT,
+						     -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_IS_EXPANDER] = g_param_spec_boolean ("is-expander", NULL, NULL,
-                                                  FALSE,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_IS_EXPANDER,
+				   g_param_spec_boolean ("is-expander", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 
-  props[PROP_IS_EXPANDED] = g_param_spec_boolean ("is-expanded", NULL, NULL,
-                                                  FALSE,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (object_class,
+				   PROP_IS_EXPANDED,
+				   g_param_spec_boolean ("is-expanded", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  props[PROP_CELL_BACKGROUND] = g_param_spec_string ("cell-background", NULL, NULL,
-                                                     NULL,
-                                                     G_PARAM_WRITABLE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+				   PROP_CELL_BACKGROUND,
+				   g_param_spec_string ("cell-background", NULL, NULL,
+							NULL,
+							GTK_PARAM_WRITABLE));
 
   /**
    * GtkCellRenderer:cell-background-rgba:
    *
    * Cell background as a `GdkRGBA`
    */
-  props[PROP_CELL_BACKGROUND_RGBA] = g_param_spec_boxed ("cell-background-rgba", NULL, NULL,
-                                                         GDK_TYPE_RGBA,
-                                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+				   PROP_CELL_BACKGROUND_RGBA,
+				   g_param_spec_boxed ("cell-background-rgba", NULL, NULL,
+						       GDK_TYPE_RGBA,
+						       GTK_PARAM_READWRITE));
 
-  props[PROP_EDITING] = g_param_spec_boolean ("editing", NULL, NULL,
-                                              FALSE,
-                                              G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (object_class,
+				   PROP_EDITING,
+				   g_param_spec_boolean ("editing", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READABLE));
 
-  props[PROP_CELL_BACKGROUND_SET] = g_param_spec_boolean ("cell-background-set", NULL, NULL,
-                                                          FALSE,
-                                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
-  g_object_class_install_properties (object_class, N_PROPS, props);
+#define ADD_SET_PROP(propname, propval, nick, blurb) g_object_class_install_property (object_class, propval, g_param_spec_boolean (propname, nick, blurb, FALSE, GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY))
+
+  ADD_SET_PROP ("cell-background-set", PROP_CELL_BACKGROUND_SET, NULL, NULL);
 
   if (GtkCellRenderer_private_offset != 0)
     g_type_class_adjust_private_offset (class, &GtkCellRenderer_private_offset);
@@ -556,7 +580,7 @@ gtk_cell_renderer_set_property (GObject      *object,
         else
           g_warning ("Don't know color '%s'", g_value_get_string (value));
 
-        g_object_notify_by_pspec (object, props[PROP_CELL_BACKGROUND]);
+        g_object_notify (object, "cell-background");
       }
       break;
     case PROP_CELL_BACKGROUND_RGBA:
@@ -566,7 +590,7 @@ gtk_cell_renderer_set_property (GObject      *object,
       if (priv->cell_background_set != g_value_get_boolean (value))
         {
           priv->cell_background_set = g_value_get_boolean (value);
-          g_object_notify_by_pspec (object, props[PROP_CELL_BACKGROUND_SET]);
+          g_object_notify (object, "cell-background-set");
         }
       break;
     default:
@@ -586,7 +610,7 @@ set_cell_bg_color (GtkCellRenderer *cell,
       if (!priv->cell_background_set)
         {
           priv->cell_background_set = TRUE;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_CELL_BACKGROUND_SET]);
+          g_object_notify (G_OBJECT (cell), "cell-background-set");
         }
 
       priv->cell_background = *rgba;
@@ -596,10 +620,10 @@ set_cell_bg_color (GtkCellRenderer *cell,
       if (priv->cell_background_set)
         {
 	  priv->cell_background_set = FALSE;
-	  g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_CELL_BACKGROUND_SET]);
+	  g_object_notify (G_OBJECT (cell), "cell-background-set");
 	}
     }
-  g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_CELL_BACKGROUND_RGBA]);
+  g_object_notify (G_OBJECT (cell), "cell-background-rgba");
 }
 
 /**
@@ -819,13 +843,13 @@ gtk_cell_renderer_set_fixed_size (GtkCellRenderer *cell,
       if (width != priv->width)
         {
           priv->width = width;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_WIDTH]);
+          g_object_notify (G_OBJECT (cell), "width");
         }
 
       if (height != priv->height)
         {
           priv->height = height;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_HEIGHT]);
+          g_object_notify (G_OBJECT (cell), "height");
         }
 
       g_object_thaw_notify (G_OBJECT (cell));
@@ -889,13 +913,13 @@ gtk_cell_renderer_set_alignment (GtkCellRenderer *cell,
       if (xalign != priv->xalign)
         {
           priv->xalign = xalign;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_XALIGN]);
+          g_object_notify (G_OBJECT (cell), "xalign");
         }
 
       if (yalign != priv->yalign)
         {
           priv->yalign = yalign;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_YALIGN]);
+          g_object_notify (G_OBJECT (cell), "yalign");
         }
 
       g_object_thaw_notify (G_OBJECT (cell));
@@ -958,13 +982,13 @@ gtk_cell_renderer_set_padding (GtkCellRenderer *cell,
       if (xpad != priv->xpad)
         {
           priv->xpad = xpad;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_XPAD]);
+          g_object_notify (G_OBJECT (cell), "xpad");
         }
 
       if (ypad != priv->ypad)
         {
           priv->ypad = ypad;
-          g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_YPAD]);
+          g_object_notify (G_OBJECT (cell), "ypad");
         }
 
       g_object_thaw_notify (G_OBJECT (cell));
@@ -1020,7 +1044,7 @@ gtk_cell_renderer_set_visible (GtkCellRenderer *cell,
   if (priv->visible != visible)
     {
       priv->visible = visible ? TRUE : FALSE;
-      g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_VISIBLE]);
+      g_object_notify (G_OBJECT (cell), "visible");
     }
 }
 
@@ -1064,7 +1088,7 @@ gtk_cell_renderer_set_sensitive (GtkCellRenderer *cell,
   if (priv->sensitive != sensitive)
     {
       priv->sensitive = sensitive ? TRUE : FALSE;
-      g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_SENSITIVE]);
+      g_object_notify (G_OBJECT (cell), "sensitive");
     }
 }
 
@@ -1224,33 +1248,6 @@ gtk_cell_renderer_real_get_preferred_width_for_height (GtkCellRenderer *cell,
 }
 
 
-/* An internal convenience function for some containers to peek at the
- * cell alignment in a target allocation (used to draw focus and align
- * cells in the icon view).
- *
- * Note this is only a trivial “align * (allocation - request)” operation.
- */
-static void
-gtk_cell_renderer_calc_offset (GtkCellRenderer    *cell,
-                               const GdkRectangle *cell_area,
-                               GtkTextDirection    direction,
-                               int                 width,
-                               int                 height,
-                               int                *x_offset,
-                               int                *y_offset)
-{
-  GtkCellRendererPrivate *priv = cell->priv;
-
-  *x_offset = (((direction == GTK_TEXT_DIR_RTL) ?
-                (1.0 - priv->xalign) : priv->xalign) *
-               (cell_area->width - width));
-  *x_offset = MAX (*x_offset, 0);
-
-  *y_offset = (priv->yalign *
-               (cell_area->height - height));
-  *y_offset = MAX (*y_offset, 0);
-}
-
 /* Default implementation assumes that a cell renderer will never use more
  * space than its natural size (this is fine for toggles and pixbufs etc
  * but needs to be overridden from wrapping/ellipsizing text renderers) */
@@ -1300,14 +1297,53 @@ gtk_cell_renderer_real_get_aligned_area (GtkCellRenderer         *cell,
     }
 
   /* offset the cell position */
-  gtk_cell_renderer_calc_offset (cell, cell_area,
-                                 gtk_widget_get_direction (widget),
-                                 aligned_area->width,
-                                 aligned_area->height,
-                                 &x_offset, &y_offset);
+  _gtk_cell_renderer_calc_offset (cell, cell_area,
+				  gtk_widget_get_direction (widget),
+				  aligned_area->width,
+				  aligned_area->height,
+				  &x_offset, &y_offset);
 
   aligned_area->x += x_offset;
   aligned_area->y += y_offset;
+}
+
+
+/* An internal convenience function for some containers to peek at the
+ * cell alignment in a target allocation (used to draw focus and align
+ * cells in the icon view).
+ *
+ * Note this is only a trivial “align * (allocation - request)” operation.
+ */
+void
+_gtk_cell_renderer_calc_offset    (GtkCellRenderer      *cell,
+				   const GdkRectangle   *cell_area,
+				   GtkTextDirection      direction,
+				   int                   width,
+				   int                   height,
+				   int                  *x_offset,
+				   int                  *y_offset)
+{
+  GtkCellRendererPrivate *priv;
+
+  g_return_if_fail (GTK_IS_CELL_RENDERER (cell));
+  g_return_if_fail (cell_area != NULL);
+  g_return_if_fail (x_offset || y_offset);
+
+  priv = cell->priv;
+
+  if (x_offset)
+    {
+      *x_offset = (((direction == GTK_TEXT_DIR_RTL) ?
+		    (1.0 - priv->xalign) : priv->xalign) *
+		   (cell_area->width - width));
+      *x_offset = MAX (*x_offset, 0);
+    }
+  if (y_offset)
+    {
+      *y_offset = (priv->yalign *
+		   (cell_area->height - height));
+      *y_offset = MAX (*y_offset, 0);
+    }
 }
 
 /**
@@ -1697,7 +1733,7 @@ gtk_cell_renderer_set_is_expander (GtkCellRenderer *cell,
     {
       priv->is_expander = is_expander;
 
-      g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_IS_EXPANDER]);
+      g_object_notify (G_OBJECT (cell), "is-expander");
     }
 }
 
@@ -1744,7 +1780,7 @@ gtk_cell_renderer_set_is_expanded (GtkCellRenderer *cell,
     {
       priv->is_expanded = is_expanded;
 
-      g_object_notify_by_pspec (G_OBJECT (cell), props[PROP_IS_EXPANDED]);
+      g_object_notify (G_OBJECT (cell), "is-expanded");
     }
 }
 

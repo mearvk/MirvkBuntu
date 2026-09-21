@@ -32,7 +32,7 @@
 /**
  * GdkToplevel:
  *
- * A freestanding toplevel surface.
+ * A `GdkToplevel` is a freestanding toplevel surface.
  *
  * The `GdkToplevel` interface provides useful APIs for interacting with
  * the windowing system, such as controlling maximization and size of the
@@ -122,7 +122,6 @@ gdk_toplevel_default_export_handle (GdkToplevel          *toplevel,
   GTask *task;
 
   task = g_task_new (toplevel, cancellable, callback, user_data);
-  g_task_set_source_tag (task, gdk_toplevel_default_export_handle);
   g_task_return_pointer (task, NULL, NULL);
   g_object_unref (task);
 }
@@ -158,27 +157,27 @@ gdk_toplevel_default_init (GdkToplevelInterface *iface)
   iface->unexport_handle = gdk_toplevel_default_unexport_handle;
 
   /**
-   * GdkToplevel:state:
+   * GdkToplevel:state: (attributes org.gtk.Property.get=gdk_toplevel_get_state)
    *
    * The state of the toplevel.
    */
   g_object_interface_install_property (iface,
       g_param_spec_flags ("state", NULL, NULL,
                           GDK_TYPE_TOPLEVEL_STATE, 0,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME));
+                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /**
-   * GdkToplevel:title:
+   * GdkToplevel:title: (attributes org.gtk.Property.set=gdk_toplevel_set_title)
    *
    * The title of the surface.
    */
   g_object_interface_install_property (iface,
       g_param_spec_string ("title", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GdkToplevel:startup-id:
+   * GdkToplevel:startup-id: (attributes org.gtk.Property.set=gdk_toplevel_set_startup_id)
    *
    * The startup ID of the surface.
    *
@@ -188,56 +187,56 @@ gdk_toplevel_default_init (GdkToplevelInterface *iface)
   g_object_interface_install_property (iface,
       g_param_spec_string ("startup-id", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GdkToplevel:transient-for:
+   * GdkToplevel:transient-for: (attributes org.gtk.Property.set=gdk_toplevel_set_transient_for)
    *
    * The transient parent of the surface.
    */
   g_object_interface_install_property (iface,
       g_param_spec_object ("transient-for", NULL, NULL,
                            GDK_TYPE_SURFACE,
-                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GdkToplevel:modal:
+   * GdkToplevel:modal: (attributes org.gtk.Property.set=gdk_toplevel_set_modal)
    *
    * Whether the surface is modal.
    */
   g_object_interface_install_property (iface,
       g_param_spec_boolean ("modal", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GdkToplevel:icon-list:
+   * GdkToplevel:icon-list: (attributes org.gtk.Property.set=gdk_toplevel_set_icon_list)
    *
    * A list of textures to use as icon.
    */
   g_object_interface_install_property (iface,
       g_param_spec_pointer ("icon-list", NULL, NULL,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GdkToplevel:decorated:
+   * GdkToplevel:decorated: (attributes org.gtk.Property.set=gdk_toplevel_set_decorated)
    *
    * Whether the window manager should add decorations.
    */
   g_object_interface_install_property (iface,
       g_param_spec_boolean ("decorated", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GdkToplevel:deletable:
+   * GdkToplevel:deletable: (attributes org.gtk.Property.set=gdk_toplevel_set_deletable)
    *
    * Whether the window manager should allow to close the surface.
    */
   g_object_interface_install_property (iface,
       g_param_spec_boolean ("deletable", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GdkToplevel:fullscreen-mode:
@@ -248,7 +247,7 @@ gdk_toplevel_default_init (GdkToplevelInterface *iface)
       g_param_spec_enum ("fullscreen-mode", NULL, NULL,
                          GDK_TYPE_FULLSCREEN_MODE,
                          GDK_FULLSCREEN_ON_CURRENT_MONITOR,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GdkToplevel:shortcuts-inhibited:
@@ -258,42 +257,7 @@ gdk_toplevel_default_init (GdkToplevelInterface *iface)
   g_object_interface_install_property (iface,
       g_param_spec_boolean ("shortcuts-inhibited", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
-
-  /**
-   * GdkToplevel:capabilities:
-   *
-   * The capabilities that are available for this toplevel.
-   *
-   * Since: 4.20
-   */
-  g_object_interface_install_property (iface,
-      g_param_spec_flags ("capabilities", NULL, NULL,
-                          GDK_TYPE_TOPLEVEL_CAPABILITIES,
-                          0,
-                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
-
-  /**
-   * GdkToplevel:gravity:
-   *
-   * The gravity to use when resizing a surface programmatically.
-   *
-   * Gravity describes which point of the surface we want to keep
-   * fixed (meaning that the surface will grow in the opposite direction).
-   * For example, a gravity of `GDK_GRAVITY_NORTH_EAST` means that we
-   * want to fix top right corner of the surface.
-   *
-   * This property is just a hint that may affect the result when negotiating
-   * toplevel sizes with the windowing system. It does not affect interactive
-   * resizes started with [method@Gdk.Toplevel.begin_resize].
-   *
-   * Since: 4.20
-   */
-  g_object_interface_install_property (iface,
-      g_param_spec_enum ("gravity", NULL, NULL,
-                         GDK_TYPE_GRAVITY,
-                         GDK_GRAVITY_NORTH_EAST,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME));
+                            G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GdkToplevel::compute-size:
@@ -339,8 +303,6 @@ gdk_toplevel_install_properties (GObjectClass *object_class,
   g_object_class_override_property (object_class, first_prop + GDK_TOPLEVEL_PROP_DELETABLE, "deletable");
   g_object_class_override_property (object_class, first_prop + GDK_TOPLEVEL_PROP_FULLSCREEN_MODE, "fullscreen-mode");
   g_object_class_override_property (object_class, first_prop + GDK_TOPLEVEL_PROP_SHORTCUTS_INHIBITED, "shortcuts-inhibited");
-  g_object_class_override_property (object_class, first_prop + GDK_TOPLEVEL_PROP_CAPABILITIES, "capabilities");
-  g_object_class_override_property (object_class, first_prop + GDK_TOPLEVEL_PROP_GRAVITY, "gravity");
 
   return GDK_TOPLEVEL_NUM_PROPERTIES;
 }
@@ -429,7 +391,7 @@ gdk_toplevel_focus (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_get_state:
+ * gdk_toplevel_get_state: (attributes org.gtk.Method.get_property=state)
  * @toplevel: a `GdkToplevel`
  *
  * Gets the bitwise or of the currently active surface state flags,
@@ -450,7 +412,7 @@ gdk_toplevel_get_state (GdkToplevel *toplevel)
 }
 
 /**
- * gdk_toplevel_set_title:
+ * gdk_toplevel_set_title: (attributes org.gtk.Method.set_property=title)
  * @toplevel: a `GdkToplevel`
  * @title: title of @surface
  *
@@ -469,7 +431,7 @@ gdk_toplevel_set_title (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_set_startup_id:
+ * gdk_toplevel_set_startup_id: (attributes org.gtk.Method.set_property=startup-id)
  * @toplevel: a `GdkToplevel`
  * @startup_id: a string with startup-notification identifier
  *
@@ -489,7 +451,7 @@ gdk_toplevel_set_startup_id (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_set_transient_for:
+ * gdk_toplevel_set_transient_for: (attributes org.gtk.Method.set_property=transient-for)
  * @toplevel: a `GdkToplevel`
  * @parent: another toplevel `GdkSurface`
  *
@@ -513,7 +475,7 @@ gdk_toplevel_set_transient_for (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_set_modal:
+ * gdk_toplevel_set_modal: (attributes org.gtk.Method.set_property=modal)
  * @toplevel: a `GdkToplevel`
  * @modal: %TRUE if the surface is modal, %FALSE otherwise.
  *
@@ -537,7 +499,7 @@ gdk_toplevel_set_modal (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_set_icon_list:
+ * gdk_toplevel_set_icon_list: (attributes org.gtk.Method.set_property=icon-list)
  * @toplevel: a `GdkToplevel`
  * @surfaces: (transfer none) (element-type GdkTexture):
  *   A list of textures to use as icon, of different sizes
@@ -585,7 +547,7 @@ gdk_toplevel_show_window_menu (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_set_decorated:
+ * gdk_toplevel_set_decorated: (attributes org.gtk.Method.set_property=decorated)
  * @toplevel: a `GdkToplevel`
  * @decorated: %TRUE to request decorations
  *
@@ -605,7 +567,7 @@ gdk_toplevel_set_decorated (GdkToplevel *toplevel,
 }
 
 /**
- * gdk_toplevel_set_deletable:
+ * gdk_toplevel_set_deletable: (attributes org.gtk.Method.set_property=deletable)
  * @toplevel: a `GdkToplevel`
  * @deletable: %TRUE to request a delete button
  *
@@ -783,10 +745,6 @@ gdk_toplevel_begin_move (GdkToplevel *toplevel,
  * @toplevel: a `GdkToplevel`
  * @gesture: a `GdkTitlebarGesture`
  *
- * Performs a title bar gesture.
- *
- * Returns: whether the gesture was performed
- *
  * Since: 4.4
  */
 gboolean
@@ -808,6 +766,9 @@ gdk_toplevel_titlebar_gesture (GdkToplevel        *toplevel,
  *
  * This function asynchronously obtains a handle for a toplevel surface
  * that can be passed to other processes.
+ *
+ * When a handle has been obtained, @callback will be called, and can
+ * receive the handle via [method@Gdk.Toplevel.export_handle_finish].
  *
  * It is an error to call this function on a surface that is already
  * exported.
@@ -865,68 +826,4 @@ gdk_toplevel_unexport_handle (GdkToplevel *toplevel,
                               const char  *handle)
 {
   GDK_TOPLEVEL_GET_IFACE (toplevel)->unexport_handle (toplevel, handle);
-}
-
-/**
- * gdk_toplevel_get_capabilities:
- * @toplevel: a `GdkToplevel`
- *
- * The capabilities that are available for this toplevel.
- *
- * Returns: the capabilities of the `GdkToplevel`.
- *
- * Since: 4.20
- */
-GdkToplevelCapabilities
-gdk_toplevel_get_capabilities (GdkToplevel *toplevel)
-{
-  GdkToplevelCapabilities caps;
-
-  g_return_val_if_fail (GDK_IS_TOPLEVEL (toplevel), 0);
-
-  g_object_get (toplevel, "capabilities", &caps, NULL);
-
-  return caps;
-}
-
-/**
- * gdk_toplevel_get_gravity:
- * @toplevel: a toplevel
- *
- * Returns the gravity that is used when changing the toplevel
- * size programmatically.
- *
- * Returns: the gravity
- *
- * Since: 4.20
- */
-GdkGravity
-gdk_toplevel_get_gravity (GdkToplevel *toplevel)
-{
-  GdkGravity gravity;
-
-  g_return_val_if_fail (GDK_IS_TOPLEVEL (toplevel), GDK_GRAVITY_NORTH_WEST);
-
-  g_object_get (toplevel, "gravity", &gravity, NULL);
-
-  return gravity;
-}
-
-/**
- * gdk_toplevel_set_gravity:
- * @toplevel: a toplevel
- * @gravity: the new gravity
- *
- * Sets the gravity that is used when changing the toplevel
- * size programmatically.
- *
- * Since: 4.20
- */
-void
-gdk_toplevel_set_gravity (GdkToplevel *toplevel,
-                          GdkGravity   gravity)
-{
-  g_return_if_fail (GDK_IS_TOPLEVEL (toplevel));
-
-  g_object_set (toplevel, "gravity", gravity, NULL);
 }

@@ -126,7 +126,8 @@ clutter_texture_content_new_from_texture (CoglTexture  *texture,
                                           MtkRectangle *clip)
 {
   ClutterTextureContent *texture_content;
-  CoglContext *cogl_context = cogl_texture_get_context (texture);
+  CoglContext *cogl_context =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
   g_return_val_if_fail (texture != NULL, NULL);
 

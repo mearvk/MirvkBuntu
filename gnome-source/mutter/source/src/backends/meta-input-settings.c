@@ -34,8 +34,8 @@
 #include "backends/meta-input-device-private.h"
 #include "backends/meta-input-settings-private.h"
 #include "backends/meta-input-mapper-private.h"
-#include "backends/meta-logical-monitor-private.h"
-#include "backends/meta-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
+#include "backends/meta-monitor.h"
 #include "core/display-private.h"
 #include "meta/util.h"
 
@@ -80,6 +80,7 @@ struct _MetaInputSettingsPrivate
   MetaBackend *backend;
 
   ClutterSeat *seat;
+  gulong monitors_changed_id;
 
   GSettings *mouse_settings;
   GSettings *touchpad_settings;
@@ -153,6 +154,9 @@ meta_input_settings_get_devices (MetaInputSettings        *settings,
   for (l = priv->devices; l; l = l->next)
     {
       ClutterInputDevice *device = l->data;
+
+      if (clutter_input_device_get_device_mode (device) == CLUTTER_INPUT_MODE_LOGICAL)
+        continue;
 
       if (!device_matches_capabilities (device,
                                         require_capabilities,
@@ -376,8 +380,7 @@ static void
 do_update_pointer_accel_profile (MetaInputSettings          *input_settings,
                                  GSettings                  *settings,
                                  ClutterInputDevice         *device,
-                                 GDesktopPointerAccelProfile profile,
-                                 MetaCustomAccelConfig      *accel_config)
+                                 GDesktopPointerAccelProfile profile)
 {
   MetaInputSettingsPrivate *priv =
     meta_input_settings_get_instance_private (input_settings);
@@ -387,23 +390,19 @@ do_update_pointer_accel_profile (MetaInputSettings          *input_settings,
   if (settings == priv->mouse_settings)
     input_settings_class->set_mouse_accel_profile (input_settings,
                                                    device,
-                                                   profile,
-                                                   accel_config);
+                                                   profile);
   else if (settings == priv->touchpad_settings)
     input_settings_class->set_touchpad_accel_profile (input_settings,
                                                       device,
-                                                      profile,
-                                                      accel_config);
+                                                      profile);
   else if (settings == priv->trackball_settings)
     input_settings_class->set_trackball_accel_profile (input_settings,
                                                        device,
-                                                       profile,
-                                                       accel_config);
+                                                       profile);
   else if (settings == priv->pointing_stick_settings)
     input_settings_class->set_pointing_stick_accel_profile (input_settings,
                                                             device,
-                                                            profile,
-                                                            accel_config);
+                                                            profile);
 }
 
 static void
@@ -412,72 +411,13 @@ update_pointer_accel_profile (MetaInputSettings  *input_settings,
                               ClutterInputDevice *device)
 {
   GDesktopPointerAccelProfile profile;
-  MetaCustomAccelConfig pointer_accel_config = { 0 };
-  g_autoptr (GVariant) custom_accel_config = NULL;
-  g_autoptr (GVariant) step_variant = NULL;
-  g_autoptr (GVariant) speeds_variant = NULL;
-  double default_points[] = { 0.0, 1.0 };
-  MetaCustomAccelConfig fallback_accel_config = {
-    .step = 1.0,
-    .points = default_points,
-    .points_len = G_N_ELEMENTS (default_points)
-  };
-  gboolean use_fallback = FALSE;
 
   profile = g_settings_get_enum (settings, "accel-profile");
-  custom_accel_config = g_settings_get_value (settings, "custom-accel-config");
-
-  step_variant = g_variant_lookup_value (custom_accel_config, "pointer-step",
-                                         G_VARIANT_TYPE ("d"));
-  speeds_variant = g_variant_lookup_value (custom_accel_config, "pointer-speeds",
-                                           G_VARIANT_TYPE ("ad"));
-
-  if (!step_variant || !speeds_variant)
-    {
-      g_warning ("Failed to find entries for either pointer-step of type d, "
-                 "or pointer-speeds of type ad.");
-      g_warning ("They could exist, but their types might not be right; make "
-                 "sure all numbers have decimals. If pointer-step doesn't have "
-                 "a decimal, it won't be recognized, and if any numbers in "
-                 "pointer-speeds are missing a decimal, it also might not work "
-                 "correctly. pointer-speeds also needs to be an array. Make "
-                 "sure your variants are set up properly!");
-      use_fallback = TRUE;
-    }
-  else
-    {
-      pointer_accel_config.step = g_variant_get_double (step_variant);
-      pointer_accel_config.points =
-        g_variant_get_fixed_array (speeds_variant,
-                                   &pointer_accel_config.points_len,
-                                   sizeof(double));
-
-      if (pointer_accel_config.step <= 0.0)
-        {
-          g_warning ("Invalid step set for custom pointer acceleration, "
-                     "the step needs to be higher than 0.");
-          use_fallback = TRUE;
-        }
-      if (pointer_accel_config.points_len < 2)
-        {
-          g_warning ("Failed to find required minimum of 2 custom pointer acceleration points.");
-          use_fallback = TRUE;
-        }
-    }
-
-  if (use_fallback)
-    {
-      g_warning ("Falling back to default step of 1.0 and speeds [0.0, 1.0]");
-      pointer_accel_config = fallback_accel_config;
-    }
 
   if (device)
     {
-      do_update_pointer_accel_profile (input_settings,
-                                       settings,
-                                       device,
-                                       profile,
-                                       &pointer_accel_config);
+      do_update_pointer_accel_profile (input_settings, settings,
+                                       device, profile);
     }
   else
     {
@@ -489,13 +429,30 @@ update_pointer_accel_profile (MetaInputSettings  *input_settings,
         {
           device = l->data;
 
-          do_update_pointer_accel_profile (input_settings,
-                                           settings,
-                                           device,
-                                           profile,
-                                           &pointer_accel_config);
+          if (clutter_input_device_get_device_mode (device) ==
+              CLUTTER_INPUT_MODE_LOGICAL)
+            continue;
+
+          do_update_pointer_accel_profile (input_settings, settings,
+                                           device, profile);
         }
     }
+}
+
+static GSettings *
+get_settings_for_capabilities (MetaInputSettings        *input_settings,
+                               ClutterInputCapabilities  capabilities)
+{
+  MetaInputSettingsPrivate *priv;
+
+  priv = meta_input_settings_get_instance_private (input_settings);
+
+  if (capabilities & CLUTTER_INPUT_CAPABILITY_TOUCHPAD)
+    return priv->touchpad_settings;
+  if (capabilities & CLUTTER_INPUT_CAPABILITY_POINTER)
+    return priv->mouse_settings;
+
+  return NULL;
 }
 
 static void
@@ -538,8 +495,7 @@ static void
 update_device_speed (MetaInputSettings      *input_settings,
                      ClutterInputDevice     *device)
 {
-  MetaInputSettingsPrivate *priv =
-    meta_input_settings_get_instance_private (input_settings);
+  GSettings *settings;
   ConfigDoubleFunc func;
   const gchar *key = "speed";
 
@@ -547,18 +503,8 @@ update_device_speed (MetaInputSettings      *input_settings,
 
   if (device)
     {
-      ClutterInputCapabilities capabilities;
-      GSettings *settings = NULL;
-
-      capabilities = clutter_input_device_get_capabilities (device);
-
-      if (capabilities & CLUTTER_INPUT_CAPABILITY_TOUCHPAD)
-        settings = priv->touchpad_settings;
-      else if (capabilities & CLUTTER_INPUT_CAPABILITY_TRACKPOINT)
-        settings = priv->pointing_stick_settings;
-      else if (capabilities & CLUTTER_INPUT_CAPABILITY_POINTER)
-        settings = priv->mouse_settings;
-
+      settings = get_settings_for_capabilities (input_settings,
+                                                clutter_input_device_get_capabilities (device));
       if (!settings)
         return;
 
@@ -567,24 +513,21 @@ update_device_speed (MetaInputSettings      *input_settings,
     }
   else
     {
+      settings = get_settings_for_capabilities (input_settings,
+                                                CLUTTER_INPUT_CAPABILITY_POINTER);
       settings_set_double_setting (input_settings,
                                    CLUTTER_INPUT_CAPABILITY_POINTER,
-                                   (CLUTTER_INPUT_CAPABILITY_TOUCHPAD |
-                                    CLUTTER_INPUT_CAPABILITY_TRACKPOINT),
+                                   CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
                                    func,
-                                   g_settings_get_double (priv->mouse_settings, key));
+                                   g_settings_get_double (settings, key));
 
+      settings = get_settings_for_capabilities (input_settings,
+                                                CLUTTER_INPUT_CAPABILITY_TOUCHPAD);
       settings_set_double_setting (input_settings,
                                    CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
                                    CLUTTER_INPUT_CAPABILITY_NONE,
                                    func,
-                                   g_settings_get_double (priv->touchpad_settings, key));
-
-      settings_set_double_setting (input_settings,
-                                   CLUTTER_INPUT_CAPABILITY_TRACKPOINT,
-                                   CLUTTER_INPUT_CAPABILITY_NONE,
-                                   func,
-                                   g_settings_get_double (priv->pointing_stick_settings, key));
+                                   g_settings_get_double (settings, key));
     }
 }
 
@@ -592,8 +535,7 @@ static void
 update_device_natural_scroll (MetaInputSettings      *input_settings,
                               ClutterInputDevice     *device)
 {
-  MetaInputSettingsPrivate *priv =
-    meta_input_settings_get_instance_private (input_settings);
+  GSettings *settings;
   ConfigBoolFunc func;
   const gchar *key = "natural-scroll";
 
@@ -601,16 +543,8 @@ update_device_natural_scroll (MetaInputSettings      *input_settings,
 
   if (device)
     {
-      ClutterInputCapabilities capabilities;
-      GSettings *settings = NULL;
-
-      capabilities = clutter_input_device_get_capabilities (device);
-
-      if (capabilities & CLUTTER_INPUT_CAPABILITY_TOUCHPAD)
-        settings = priv->touchpad_settings;
-      else if (capabilities & CLUTTER_INPUT_CAPABILITY_POINTER)
-        settings = priv->mouse_settings;
-
+      settings = get_settings_for_capabilities (input_settings,
+                                                clutter_input_device_get_capabilities (device));
       if (!settings)
         return;
 
@@ -619,17 +553,21 @@ update_device_natural_scroll (MetaInputSettings      *input_settings,
     }
   else
     {
+      settings = get_settings_for_capabilities (input_settings,
+                                                CLUTTER_INPUT_CAPABILITY_POINTER);
       settings_set_bool_setting (input_settings,
                                  CLUTTER_INPUT_CAPABILITY_POINTER,
                                  CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
                                  NULL, func,
-                                 g_settings_get_boolean (priv->mouse_settings, key));
+                                 g_settings_get_boolean (settings, key));
 
+      settings = get_settings_for_capabilities (input_settings,
+                                                CLUTTER_INPUT_CAPABILITY_TOUCHPAD);
       settings_set_bool_setting (input_settings,
                                  CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
                                  CLUTTER_INPUT_CAPABILITY_NONE,
                                  NULL, func,
-                                 g_settings_get_boolean (priv->touchpad_settings, key));
+                                 g_settings_get_boolean (settings, key));
     }
 }
 
@@ -637,12 +575,11 @@ static void
 update_touchpad_disable_while_typing (MetaInputSettings  *input_settings,
                                       ClutterInputDevice *device)
 {
+  GSettings *settings;
   MetaInputSettingsClass *input_settings_class;
   MetaInputSettingsPrivate *priv;
   gboolean enabled;
-  uint32_t timeout_ms;
-  const char *key_dwt = "disable-while-typing";
-  const char *key_timeout = "disable-while-typing-timeout";
+  const gchar *key = "disable-while-typing";
 
   if (device &&
       !device_matches_capabilities (device,
@@ -652,17 +589,19 @@ update_touchpad_disable_while_typing (MetaInputSettings  *input_settings,
 
   priv = meta_input_settings_get_instance_private (input_settings);
   input_settings_class = META_INPUT_SETTINGS_GET_CLASS (input_settings);
-  enabled = g_settings_get_boolean (priv->touchpad_settings, key_dwt);
-  timeout_ms = g_settings_get_uint (priv->touchpad_settings, key_timeout);
+  enabled = g_settings_get_boolean (priv->touchpad_settings, key);
 
   if (device)
-    {
+   {
+      settings = get_settings_for_capabilities (input_settings,
+                                                clutter_input_device_get_capabilities (device));
+
+      if (!settings)
+        return;
+
       settings_device_set_bool_setting (input_settings, device,
                                         input_settings_class->set_disable_while_typing,
                                         enabled);
-      settings_device_set_uint_setting (input_settings, device,
-                                        input_settings_class->set_disable_while_typing_timeout,
-                                        timeout_ms);
     }
   else
     {
@@ -672,11 +611,6 @@ update_touchpad_disable_while_typing (MetaInputSettings  *input_settings,
                                  NULL,
                                  input_settings_class->set_disable_while_typing,
                                  enabled);
-      settings_set_uint_setting (input_settings,
-                                 CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
-                                 CLUTTER_INPUT_CAPABILITY_NONE,
-                                 input_settings_class->set_disable_while_typing_timeout,
-                                 timeout_ms);
     }
 }
 
@@ -1013,85 +947,48 @@ update_touchpad_send_events (MetaInputSettings  *input_settings,
 }
 
 static void
-update_scroll_button (MetaInputSettings        *input_settings,
-                      GSettings                *settings,
-                      ClutterInputDevice       *device,
-                      ClutterInputCapabilities  require_capabilities,
-                      ClutterInputCapabilities  reject_capabilities)
+update_trackball_scroll_button (MetaInputSettings  *input_settings,
+                                ClutterInputDevice *device)
 {
   MetaInputSettingsClass *input_settings_class;
   MetaInputSettingsPrivate *priv;
   guint button;
   gboolean button_lock;
+  ClutterInputCapabilities caps;
 
   priv = meta_input_settings_get_instance_private (input_settings);
   input_settings_class = META_INPUT_SETTINGS_GET_CLASS (input_settings);
 
   if (device)
     {
-      if (!device_matches_capabilities (device,
-                                        require_capabilities,
-                                        reject_capabilities))
+      caps = clutter_input_device_get_capabilities (device);
+
+      if ((caps & CLUTTER_INPUT_CAPABILITY_TRACKBALL) == 0)
         return;
     }
 
   /* This key is 'i' in the schema but it also specifies a minimum
    * range of 0 so the cast here is safe. */
-  button = (guint) g_settings_get_int (settings, "scroll-wheel-emulation-button");
-  button_lock = g_settings_get_boolean (settings, "scroll-wheel-emulation-button-lock");
+  button = (guint) g_settings_get_int (priv->trackball_settings, "scroll-wheel-emulation-button");
+  button_lock = g_settings_get_boolean (priv->trackball_settings, "scroll-wheel-emulation-button-lock");
 
   if (device)
     {
       input_settings_class->set_scroll_button (input_settings, device, button, button_lock);
     }
-  else
+  else if (!device)
     {
       GList *l;
 
       for (l = priv->devices; l; l = l->next)
         {
           device = l->data;
+          caps = clutter_input_device_get_capabilities (device);
 
-          if (device_matches_capabilities (device,
-                                           require_capabilities,
-                                           reject_capabilities))
+          if ((caps & CLUTTER_INPUT_CAPABILITY_TRACKBALL) != 0)
             input_settings_class->set_scroll_button (input_settings, device, button, button_lock);
         }
     }
-}
-
-static void
-update_mouse_scroll_button (MetaInputSettings  *input_settings,
-                            ClutterInputDevice *device)
-{
-  MetaInputSettingsPrivate *priv;
-
-  priv = meta_input_settings_get_instance_private (input_settings);
-
-  update_scroll_button (input_settings,
-                        priv->mouse_settings,
-                        device,
-                        CLUTTER_INPUT_CAPABILITY_POINTER,
-                        CLUTTER_INPUT_CAPABILITY_TOUCHPAD |
-                        CLUTTER_INPUT_CAPABILITY_TRACKBALL |
-                        CLUTTER_INPUT_CAPABILITY_TRACKPOINT);
-}
-
-static void
-update_trackball_scroll_button (MetaInputSettings  *input_settings,
-                                ClutterInputDevice *device)
-{
-  MetaInputSettingsPrivate *priv;
-
-  priv = meta_input_settings_get_instance_private (input_settings);
-
-  update_scroll_button (input_settings,
-                        priv->trackball_settings,
-                        device,
-                        CLUTTER_INPUT_CAPABILITY_POINTER |
-                        CLUTTER_INPUT_CAPABILITY_TRACKBALL,
-                        CLUTTER_INPUT_CAPABILITY_TOUCHPAD |
-                        CLUTTER_INPUT_CAPABILITY_TRACKPOINT);
 }
 
 static void
@@ -1304,14 +1201,10 @@ meta_input_settings_changed_cb (GSettings  *settings,
         update_device_speed (input_settings, NULL);
       else if (strcmp (key, "natural-scroll") == 0)
         update_device_natural_scroll (input_settings, NULL);
-      else if (strcmp (key, "accel-profile") == 0 ||
-               strcmp (key, "custom-accel-config") == 0)
+      else if (strcmp (key, "accel-profile") == 0)
         update_pointer_accel_profile (input_settings, settings, NULL);
       else if (strcmp (key, "middle-click-emulation") == 0)
         update_middle_click_emulation (input_settings, settings, NULL);
-      else if (strcmp (key, "scroll-wheel-emulation-button") == 0 ||
-               strcmp (key, "scroll-wheel-emulation-button-lock") == 0)
-        update_mouse_scroll_button (input_settings, NULL);
     }
   else if (settings == priv->touchpad_settings)
     {
@@ -1321,8 +1214,7 @@ meta_input_settings_changed_cb (GSettings  *settings,
         update_device_speed (input_settings, NULL);
       else if (strcmp (key, "natural-scroll") == 0)
         update_device_natural_scroll (input_settings, NULL);
-      else if (strcmp (key, "accel-profile") == 0 ||
-               strcmp (key, "custom-accel-config") == 0)
+      else if (strcmp (key, "accel-profile") == 0)
         update_pointer_accel_profile (input_settings, settings, NULL);
       else if (strcmp (key, "tap-to-click") == 0)
         update_touchpad_tap_enabled (input_settings, NULL);
@@ -1332,8 +1224,7 @@ meta_input_settings_changed_cb (GSettings  *settings,
         update_touchpad_tap_and_drag_enabled (input_settings, NULL);
       else if (strcmp (key, "tap-and-drag-lock") == 0)
         update_touchpad_tap_and_drag_lock_enabled (input_settings, NULL);
-      else if (strcmp (key, "disable-while-typing") == 0 ||
-               strcmp (key, "disable-while-typing-timeout") == 0)
+      else if (strcmp (key, "disable-while-typing") == 0)
         update_touchpad_disable_while_typing (input_settings, NULL);
       else if (strcmp (key, "send-events") == 0)
         update_touchpad_send_events (input_settings, NULL);
@@ -1351,8 +1242,7 @@ meta_input_settings_changed_cb (GSettings  *settings,
       if (strcmp (key, "scroll-wheel-emulation-button") == 0 ||
           strcmp (key, "scroll-wheel-emulation-button-lock") == 0)
         update_trackball_scroll_button (input_settings, NULL);
-      else if (strcmp (key, "accel-profile") == 0 ||
-               strcmp (key, "custom-accel-config") == 0)
+      else if (strcmp (key, "accel-profile") == 0)
         update_pointer_accel_profile (input_settings, settings, NULL);
       else if (strcmp (key, "middle-click-emulation") == 0)
         update_middle_click_emulation (input_settings, settings, NULL);
@@ -1361,8 +1251,7 @@ meta_input_settings_changed_cb (GSettings  *settings,
     {
       if (strcmp (key, "speed") == 0)
         update_device_speed (input_settings, NULL);
-      else if (strcmp (key, "accel-profile") == 0 ||
-               strcmp (key, "custom-accel-config") == 0)
+      else if (strcmp (key, "accel-profile") == 0)
         update_pointer_accel_profile (input_settings, settings, NULL);
       else if (strcmp (key, "scroll-method") == 0)
         update_pointing_stick_scroll_method (input_settings, settings, NULL);
@@ -1491,8 +1380,7 @@ meta_input_keyboard_a11y_settings_changed (GSettings  *settings,
 static GSettings *
 lookup_device_settings (ClutterInputDevice *device)
 {
-  const gchar *group, *schema;
-  guint vendor, product;
+  const gchar *group, *schema, *vendor, *product;
   ClutterInputCapabilities capabilities;
   GSettings *settings;
   gchar *path;
@@ -1518,7 +1406,7 @@ lookup_device_settings (ClutterInputDevice *device)
 
   vendor = clutter_input_device_get_vendor_id (device);
   product = clutter_input_device_get_product_id (device);
-  path = g_strdup_printf ("/org/gnome/desktop/peripherals/%s/%.4x:%.4x/",
+  path = g_strdup_printf ("/org/gnome/desktop/peripherals/%s/%s:%s/",
                           group, vendor, product);
 
   settings = g_settings_new_with_path (schema, path);
@@ -1545,7 +1433,7 @@ lookup_tool_settings (ClutterInputDeviceTool *tool,
    * real serial, so let's custom-case this */
   if (serial == 0 || serial == 1)
     {
-      path = g_strdup_printf ("/org/gnome/desktop/peripherals/stylus/default-%.4x:%.4x/",
+      path = g_strdup_printf ("/org/gnome/desktop/peripherals/stylus/default-%s:%s/",
                               clutter_input_device_get_vendor_id (device),
                               clutter_input_device_get_product_id (device));
     }
@@ -1645,11 +1533,7 @@ apply_device_settings (MetaInputSettings  *input_settings,
   update_touchpad_two_finger_scroll (input_settings, device);
   update_touchpad_edge_scroll (input_settings, device);
   update_touchpad_click_method (input_settings, device);
-  update_pointer_accel_profile (input_settings,
-                                priv->touchpad_settings,
-                                device);
 
-  update_mouse_scroll_button (input_settings, device);
   update_trackball_scroll_button (input_settings, device);
   update_pointer_accel_profile (input_settings,
                                 priv->trackball_settings,
@@ -1678,8 +1562,6 @@ update_stylus_pressure (MetaInputSettings      *input_settings,
   MetaInputSettingsClass *input_settings_class;
   GSettings *tool_settings;
   const gint32 *curve;
-  const guint32 *percent;
-  gdouble range[2];
   GVariant *variant;
   gsize n_elems;
 
@@ -1702,24 +1584,8 @@ update_stylus_pressure (MetaInputSettings      *input_settings,
   if (n_elems != 4)
     return;
 
-  if (clutter_input_device_tool_get_tool_type (tool) ==
-      CLUTTER_INPUT_DEVICE_TOOL_ERASER)
-    variant = g_settings_get_value (tool_settings, "eraser-pressure-range");
-  else
-    variant = g_settings_get_value (tool_settings, "pressure-range");
-
-  percent = g_variant_get_fixed_array (variant, &n_elems, sizeof (guint32));
-  if (n_elems != 2)
-    return;
-
-  range[0] = CLAMP (percent[0] / 100.0, 0.0, 1.0);
-  range[1] = CLAMP (percent[1] / 100.0, 0.0, 1.0);
-
-  if (range[0] >= range[1])
-    return;
-
   input_settings_class = META_INPUT_SETTINGS_GET_CLASS (input_settings);
-  input_settings_class->set_stylus_pressure (input_settings, device, tool, curve, range);
+  input_settings_class->set_stylus_pressure (input_settings, device, tool, curve);
 }
 
 static void
@@ -1750,40 +1616,12 @@ update_stylus_buttonmap (MetaInputSettings      *input_settings,
 }
 
 static void
-update_stylus_eraserbutton (MetaInputSettings      *input_settings,
-                            ClutterInputDevice     *device,
-                            ClutterInputDeviceTool *tool)
-{
-  MetaInputSettingsClass *input_settings_class;
-  GDesktopStylusEraserButtonMode mode;
-  GDesktopStylusButtonAction action;
-  GSettings *tool_settings;
-
-  if ((clutter_input_device_get_capabilities (device) &
-       CLUTTER_INPUT_CAPABILITY_TABLET_TOOL) == 0)
-    return;
-
-  if (!tool || !clutter_input_device_tool_has_eraser_button (tool))
-    return;
-
-  tool_settings = lookup_tool_settings (tool, device);
-
-  mode = g_settings_get_enum (tool_settings, "eraser-button-mode");
-  action = g_settings_get_enum (tool_settings, "eraser-button-action");
-
-  input_settings_class = META_INPUT_SETTINGS_GET_CLASS (input_settings);
-  input_settings_class->set_eraser_button_action (input_settings, device, tool,
-                                                  mode, action);
-}
-
-static void
 apply_stylus_settings (MetaInputSettings      *input_settings,
                        ClutterInputDevice     *device,
                        ClutterInputDeviceTool *tool)
 {
   update_stylus_pressure (input_settings, device, tool);
   update_stylus_buttonmap (input_settings, device, tool);
-  update_stylus_eraserbutton (input_settings, device, tool);
 }
 
 static void
@@ -1810,6 +1648,9 @@ meta_input_settings_add_device (MetaInputSettings  *input_settings,
 {
   MetaInputSettingsPrivate *priv =
     meta_input_settings_get_instance_private (input_settings);
+
+  if (clutter_input_device_get_device_mode (device) == CLUTTER_INPUT_MODE_LOGICAL)
+    return;
 
   priv->devices = g_list_prepend (priv->devices, device);
   evaluate_two_finger_scrolling (input_settings, device);
@@ -1906,6 +1747,9 @@ check_mappable_devices (MetaInputSettings *input_settings)
     {
       ClutterInputDevice *device = l->data;
 
+      if (clutter_input_device_get_device_mode (device) == CLUTTER_INPUT_MODE_LOGICAL)
+        continue;
+
       check_add_mappable_device (input_settings, device);
     }
 }
@@ -1915,8 +1759,6 @@ meta_input_settings_constructed (GObject *object)
 {
   MetaInputSettings *input_settings = META_INPUT_SETTINGS (object);
   GSList *devices, *d;
-
-  G_OBJECT_CLASS (meta_input_settings_parent_class)->constructed (object);
 
   devices = meta_input_settings_get_devices (input_settings,
                                              CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
@@ -2127,106 +1969,4 @@ meta_input_settings_get_backend (MetaInputSettings *settings)
     meta_input_settings_get_instance_private (settings);
 
   return priv->backend;
-}
-
-GDesktopStylusButtonAction
-meta_input_settings_get_tool_button_action (MetaInputSettings       *input_settings,
-                                            ClutterInputDevice      *device,
-                                            ClutterInputDeviceTool  *tool,
-                                            uint32_t                 clutter_button,
-                                            char                   **keybinding)
-{
-  MetaInputSettingsPrivate *priv =
-    meta_input_settings_get_instance_private (input_settings);
-  GDesktopStylusButtonAction action;
-  GSettings *settings;
-  const char *prefix = NULL;
-  g_autofree char *key = NULL;
-  ClutterInputDeviceToolType tool_type;
-
-  g_return_val_if_fail (META_IS_INPUT_SETTINGS (input_settings), G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT);
-
-  tool_type = clutter_input_device_tool_get_tool_type (tool);
-
-  if (tool_type == CLUTTER_INPUT_DEVICE_TOOL_MOUSE ||
-      tool_type == CLUTTER_INPUT_DEVICE_TOOL_LENS)
-    {
-      gboolean mouse_is_left_handed;
-
-      mouse_is_left_handed =
-        g_settings_get_boolean (priv->mouse_settings, "left-handed");
-
-      /* These tools are mouse-like, thus are not re-mappable and
-       * follow mouse settings
-       */
-      switch (clutter_button)
-        {
-        case CLUTTER_BUTTON_PRIMARY:
-          action = mouse_is_left_handed ?
-            G_DESKTOP_STYLUS_BUTTON_ACTION_RIGHT :
-            G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT;
-          break;
-        case CLUTTER_BUTTON_SECONDARY:
-          action = mouse_is_left_handed ?
-            G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT :
-            G_DESKTOP_STYLUS_BUTTON_ACTION_RIGHT;
-          break;
-        case CLUTTER_BUTTON_MIDDLE:
-          action = G_DESKTOP_STYLUS_BUTTON_ACTION_MIDDLE;
-          break;
-        default:
-          action = G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT;
-          break;
-        }
-    }
-  else
-    {
-      switch (clutter_button)
-        {
-        case CLUTTER_BUTTON_MIDDLE:     /* BTN_STYLUS */
-          prefix = "button";
-          break;
-        case CLUTTER_BUTTON_SECONDARY:  /* BTN_STYLUS2 */
-          prefix = "secondary-button";
-          break;
-        case 8:                         /* BTN_STYLUS3 */
-          prefix = "tertiary-button";
-          break;
-
-          /* BUTTON_PRIMARY is tip down and has no mapping */
-        case CLUTTER_BUTTON_PRIMARY:
-        default:
-          return G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT;
-        }
-
-      key = g_strdup_printf ("%s-action", prefix);
-      settings = lookup_tool_settings (tool, device);
-      action = g_settings_get_enum (settings, key);
-      if (keybinding && action == G_DESKTOP_STYLUS_BUTTON_ACTION_KEYBINDING)
-        {
-          g_autofree char *binding_key = g_strdup_printf ("%s-keybinding", prefix);
-          *keybinding = g_settings_get_string (settings, binding_key);
-        }
-    }
-
-  return action;
-}
-
-GDesktopStylusButtonAction
-meta_input_settings_get_eraser_button_action (MetaInputSettings       *input_settings,
-                                              ClutterInputDevice      *device,
-                                              ClutterInputDeviceTool  *tool,
-                                              char                   **keybinding)
-{
-  GDesktopStylusButtonAction action;
-  GSettings *settings;
-
-  g_return_val_if_fail (META_IS_INPUT_SETTINGS (input_settings), G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT);
-
-  settings = lookup_tool_settings (tool, device);
-  action = g_settings_get_enum (settings, "eraser-button-action");
-  if (keybinding && action == G_DESKTOP_STYLUS_BUTTON_ACTION_KEYBINDING)
-    *keybinding = g_settings_get_string (settings, "eraser-button-keybinding");
-
-  return action;
 }

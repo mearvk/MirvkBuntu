@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -58,7 +60,7 @@ export const WindowClone = GObject.registerClass({
     },
 }, class WindowClone extends Clutter.Actor {
     _init(realWindow) {
-        const clone = new Clutter.Clone({source: realWindow});
+        let clone = new Clutter.Clone({source: realWindow});
         super._init({
             layout_manager: new PrimaryActorLayout(clone),
             reactive: true,
@@ -86,20 +88,18 @@ export const WindowClone = GObject.registerClass({
             dragActorMaxSize: Workspace.WINDOW_DND_SIZE,
             dragActorOpacity: Workspace.DRAGGING_WINDOW_OPACITY,
         });
-        this._draggable.connectObject(
-            'drag-begin', this._onDragBegin.bind(this),
-            'drag-cancelled', this._onDragCancelled.bind(this),
-            'drag-end', this._onDragEnd.bind(this),
-            this);
+        this._draggable.connect('drag-begin', this._onDragBegin.bind(this));
+        this._draggable.connect('drag-cancelled', this._onDragCancelled.bind(this));
+        this._draggable.connect('drag-end', this._onDragEnd.bind(this));
         this.inDrag = false;
 
-        const clickGesture = new Clutter.ClickGesture();
-        clickGesture.connect('recognize',
+        const clickAction = new Clutter.ClickAction();
+        clickAction.connect('clicked',
             () => this.emit('selected', Clutter.get_current_event_time()));
-        this.add_action(clickGesture);
+        this._draggable.addClickAction(clickAction);
 
-        const iter = win => {
-            const actor = win.get_compositor_private();
+        let iter = win => {
+            let actor = win.get_compositor_private();
 
             if (!actor)
                 return false;
@@ -138,8 +138,8 @@ export const WindowClone = GObject.registerClass({
         if (actor.inDrag)
             return;
 
-        const parent = this.get_parent();
-        const actualAbove = this.getActualStackAbove();
+        let parent = this.get_parent();
+        let actualAbove = this.getActualStackAbove();
         if (actualAbove == null)
             parent.set_child_below_sibling(this, null);
         else
@@ -151,7 +151,7 @@ export const WindowClone = GObject.registerClass({
     }
 
     _doAddAttachedDialog(metaDialog, realDialog) {
-        const clone = new Clutter.Clone({source: realDialog});
+        let clone = new Clutter.Clone({source: realDialog});
         this._updateDialogPosition(realDialog, clone);
 
         realDialog.connectObject(
@@ -161,9 +161,9 @@ export const WindowClone = GObject.registerClass({
     }
 
     _updateDialogPosition(realDialog, cloneDialog) {
-        const metaDialog = realDialog.meta_window;
-        const dialogRect = metaDialog.get_frame_rect();
-        const rect = this.metaWindow.get_frame_rect();
+        let metaDialog = realDialog.meta_window;
+        let dialogRect = metaDialog.get_frame_rect();
+        let rect = this.metaWindow.get_frame_rect();
 
         cloneDialog.set_position(dialogRect.x - rect.x, dialogRect.y - rect.y);
     }
@@ -196,7 +196,7 @@ export const WindowClone = GObject.registerClass({
         // We may not have a parent if DnD completed successfully, in
         // which case our clone will shortly be destroyed and replaced
         // with a new one on the target workspace.
-        const parent = this.get_parent();
+        let parent = this.get_parent();
         if (parent !== null) {
             if (this._stackAbove == null)
                 parent.set_child_below_sibling(this, null);
@@ -226,11 +226,11 @@ export const ThumbnailState = {
 export const WorkspaceThumbnail = GObject.registerClass({
     Properties: {
         'collapse-fraction': GObject.ParamSpec.double(
-            'collapse-fraction', null, null,
+            'collapse-fraction', 'collapse-fraction', 'collapse-fraction',
             GObject.ParamFlags.READWRITE,
             0, 1, 0),
         'slide-position': GObject.ParamSpec.double(
-            'slide-position', null, null,
+            'slide-position', 'slide-position', 'slide-position',
             GObject.ParamFlags.READWRITE,
             0, 1, 0),
     },
@@ -260,11 +260,11 @@ export const WorkspaceThumbnail = GObject.registerClass({
 
         this.connect('destroy', this._onDestroy.bind(this));
 
-        const workArea = Main.layoutManager.getWorkAreaForMonitor(this.monitorIndex);
+        let workArea = Main.layoutManager.getWorkAreaForMonitor(this.monitorIndex);
         this.setPorthole(workArea.x, workArea.y, workArea.width, workArea.height);
 
-        const windows = global.get_window_actors().filter(actor => {
-            const win = actor.meta_window;
+        let windows = global.get_window_actors().filter(actor => {
+            let win = actor.meta_window;
             return win.located_on_workspace(metaWorkspace);
         });
 
@@ -304,13 +304,13 @@ export const WorkspaceThumbnail = GObject.registerClass({
 
     syncStacking(stackIndices) {
         this._windows.sort((a, b) => {
-            const indexA = stackIndices[a.metaWindow.get_stable_sequence()];
-            const indexB = stackIndices[b.metaWindow.get_stable_sequence()];
+            let indexA = stackIndices[a.metaWindow.get_stable_sequence()];
+            let indexB = stackIndices[b.metaWindow.get_stable_sequence()];
             return indexA - indexB;
         });
 
         for (let i = 1; i < this._windows.length; i++) {
-            const clone = this._windows[i];
+            let clone = this._windows[i];
             const previousClone = this._windows[i - 1];
             clone.setStackAbove(previousClone);
         }
@@ -346,7 +346,7 @@ export const WorkspaceThumbnail = GObject.registerClass({
     }
 
     _doRemoveWindow(metaWin) {
-        const clone = this._removeWindowClone(metaWin);
+        let clone = this._removeWindowClone(metaWin);
         if (clone)
             clone.destroy();
     }
@@ -355,16 +355,17 @@ export const WorkspaceThumbnail = GObject.registerClass({
         if (this._removed)
             return;
 
-        const win = metaWin.get_compositor_private();
+        let win = metaWin.get_compositor_private();
 
         if (!win) {
             // Newly-created windows are added to a workspace before
             // the compositor finds out about them...
-            const id = GLib.idle_add_once(GLib.PRIORITY_DEFAULT, () => {
+            let id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                 if (!this._removed &&
                     metaWin.get_compositor_private() &&
                     metaWin.get_workspace() === this.metaWorkspace)
                     this._doAddWindow(metaWin);
+                return GLib.SOURCE_REMOVE;
             });
             GLib.Source.set_name_by_id(id, '[gnome-shell] this._doAddWindow');
             return;
@@ -391,14 +392,14 @@ export const WorkspaceThumbnail = GObject.registerClass({
             while (parent.is_attached_dialog())
                 parent = parent.get_transient_for();
 
-            const idx = this._lookupIndex(parent);
+            let idx = this._lookupIndex(parent);
             if (idx < 0) {
                 // parent was not created yet, it will take care
                 // of the dialog when created
                 return;
             }
 
-            const clone = this._windows[idx];
+            let clone = this._windows[idx];
             clone.addAttachedDialog(metaWin);
         }
     }
@@ -408,7 +409,7 @@ export const WorkspaceThumbnail = GObject.registerClass({
     }
 
     _windowRemoved(metaWorkspace, metaWin) {
-        const index = this._allWindows.indexOf(metaWin);
+        let index = this._allWindows.indexOf(metaWin);
         if (index !== -1) {
             metaWin.disconnectObject(this);
             this._allWindows.splice(index, 1);
@@ -452,7 +453,7 @@ export const WorkspaceThumbnail = GObject.registerClass({
 
     // Tests if @actor belongs to this workspace and monitor
     _isMyWindow(actor) {
-        const win = actor.meta_window;
+        let win = actor.meta_window;
         return win.located_on_workspace(this.metaWorkspace) &&
             (win.get_monitor() === this.monitorIndex);
     }
@@ -465,7 +466,7 @@ export const WorkspaceThumbnail = GObject.registerClass({
 
     // Create a clone of a (non-desktop) window and add it to the window list
     _addWindowClone(win) {
-        const clone = new WindowClone(win);
+        let clone = new WindowClone(win);
 
         clone.connect('selected', (o, time) => {
             this.activate(time);
@@ -494,7 +495,7 @@ export const WorkspaceThumbnail = GObject.registerClass({
 
     _removeWindowClone(metaWin) {
         // find the position of the window in our list
-        const index = this._lookupIndex(metaWin);
+        let index = this._lookupIndex(metaWin);
 
         if (index === -1)
             return null;
@@ -539,11 +540,11 @@ export const WorkspaceThumbnail = GObject.registerClass({
             return false;
 
         if (source.metaWindow) {
-            const win = source.metaWindow.get_compositor_private();
+            let win = source.metaWindow.get_compositor_private();
             if (this._isMyWindow(win))
                 return false;
 
-            const metaWindow = win.get_meta_window();
+            let metaWindow = win.get_meta_window();
             Main.moveWindowToMonitorAndWorkspace(metaWindow,
                 this.monitorIndex, this.metaWorkspace.index());
             return true;
@@ -575,15 +576,15 @@ export const WorkspaceThumbnail = GObject.registerClass({
 export const ThumbnailsBox = GObject.registerClass({
     Properties: {
         'expand-fraction': GObject.ParamSpec.double(
-            'expand-fraction', null, null,
+            'expand-fraction', 'expand-fraction', 'expand-fraction',
             GObject.ParamFlags.READWRITE,
             0, 1, 1),
         'scale': GObject.ParamSpec.double(
-            'scale', null, null,
+            'scale', 'scale', 'scale',
             GObject.ParamFlags.READWRITE,
             0, Infinity, 0),
         'should-show': GObject.ParamSpec.boolean(
-            'should-show', null, null,
+            'should-show', 'should-show', 'should-show',
             GObject.ParamFlags.READABLE,
             true),
     },
@@ -598,7 +599,7 @@ export const ThumbnailsBox = GObject.registerClass({
 
         this._delegate = this;
 
-        const indicator = new St.Bin({style_class: 'workspace-thumbnail-indicator'});
+        let indicator = new St.Bin({style_class: 'workspace-thumbnail-indicator'});
 
         // We don't want the indicator to affect drag-and-drop
         Shell.util_set_hidden_from_pick(indicator, true);
@@ -625,19 +626,18 @@ export const ThumbnailsBox = GObject.registerClass({
         this._shouldShow = true;
 
         this._stateCounts = {};
-        for (const key in ThumbnailState)
+        for (let key in ThumbnailState)
             this._stateCounts[ThumbnailState[key]] = 0;
 
         this._thumbnails = [];
 
-        const clickGesture = new Clutter.ClickGesture();
-        clickGesture.connect('recognize', () => {
-            const coords = clickGesture.get_coords();
+        const clickAction = new Clutter.ClickAction();
+        clickAction.connect('clicked', () => {
             this._activateThumbnailAtPoint(
-                coords.x, coords.y,
+                ...clickAction.get_coords(),
                 Clutter.get_current_event_time());
         });
-        this.add_action(clickGesture);
+        this.add_action(clickAction);
 
         Main.overview.connectObject(
             'showing', () => this._createThumbnails(),
@@ -687,7 +687,6 @@ export const ThumbnailsBox = GObject.registerClass({
     _onDestroy() {
         this._destroyThumbnails();
         this._unqueueUpdateStates();
-        this._clearDropPlaceholderLater();
 
         if (this._settings)
             this._settings.run_dispose();
@@ -720,7 +719,9 @@ export const ThumbnailsBox = GObject.registerClass({
         this.queue_relayout();
     }
 
-    _activateThumbnailAtPoint(x, y, time) {
+    _activateThumbnailAtPoint(stageX, stageY, time) {
+        const [r_, x] = this.transform_stage_point(stageX, stageY);
+
         const thumbnail = this._thumbnails.find(t => x >= t.x && x <= t.x + t.width);
         if (thumbnail)
             thumbnail.activate(time);
@@ -767,14 +768,6 @@ export const ThumbnailsBox = GObject.registerClass({
 
         this._dropPlaceholderPos = -1;
         this.queue_relayout();
-    }
-
-    _clearDropPlaceholderLater() {
-        if (!this._dropPlaceholderLater)
-            return;
-
-        global.compositor.get_laters().remove(this._dropPlaceholderLater);
-        delete this._dropPlaceholderLater;
     }
 
     _getPlaceholderTarget(index, spacing, rtl) {
@@ -836,12 +829,12 @@ export const ThumbnailsBox = GObject.registerClass({
             return DND.DragMotionResult.CONTINUE;
 
         const rtl = Clutter.get_default_text_direction() === Clutter.TextDirection.RTL;
-        const canCreateWorkspaces = Meta.prefs_get_dynamic_workspaces();
-        const spacing = this.get_theme_node().get_length('spacing');
+        let canCreateWorkspaces = Meta.prefs_get_dynamic_workspaces();
+        let spacing = this.get_theme_node().get_length('spacing');
 
         this._dropWorkspace = -1;
         let placeholderPos = -1;
-        const length = this._thumbnails.length;
+        let length = this._thumbnails.length;
         for (let i = 0; i < length; i++) {
             const index = rtl ? length - i - 1 : i;
 
@@ -883,7 +876,7 @@ export const ThumbnailsBox = GObject.registerClass({
                 (source.app || !source.shellWorkspaceLaunch))
                 return false;
 
-            const isWindow = !!source.metaWindow;
+            let isWindow = !!source.metaWindow;
 
             let newWorkspaceIndex;
             [newWorkspaceIndex, this._dropPlaceholderPos] = [this._dropPlaceholderPos, -1];
@@ -893,7 +886,7 @@ export const ThumbnailsBox = GObject.registerClass({
 
             if (isWindow) {
                 // Move the window to our monitor first if necessary.
-                const thumbMonitor = this._thumbnails[newWorkspaceIndex].monitorIndex;
+                let thumbMonitor = this._thumbnails[newWorkspaceIndex].monitorIndex;
                 Main.moveWindowToMonitorAndWorkspace(source.metaWindow,
                     thumbMonitor, newWorkspaceIndex, true);
             } else if (source.app && source.app.can_open_new_window()) {
@@ -915,14 +908,14 @@ export const ThumbnailsBox = GObject.registerClass({
                 // to open its first window within some time, as tracked by Shell.WindowTracker.
                 // Here, we only add a very brief timeout to avoid the _immediate_ removal of the
                 // workspace while we wait for the startup sequence to load.
-                const workspaceManager = global.workspace_manager;
+                let workspaceManager = global.workspace_manager;
                 Main.wm.keepWorkspaceAlive(workspaceManager.get_workspace_by_index(newWorkspaceIndex),
                     WORKSPACE_KEEP_ALIVE_TIME);
             }
 
             // Start the animation on the workspace (which is actually
             // an old one which just became empty)
-            const thumbnail = this._thumbnails[newWorkspaceIndex];
+            let thumbnail = this._thumbnails[newWorkspaceIndex];
             this._setThumbnailState(thumbnail, ThumbnailState.NEW);
             thumbnail.slide_position = 1;
             thumbnail.collapse_fraction = 1;
@@ -959,7 +952,7 @@ export const ThumbnailsBox = GObject.registerClass({
         this._unqueueUpdateStates();
 
         this._stateCounts = {};
-        for (const key in ThumbnailState)
+        for (let key in ThumbnailState)
             this._stateCounts[ThumbnailState[key]] = 0;
 
         this.addThumbnails(0, workspaceManager.n_workspaces);
@@ -980,19 +973,19 @@ export const ThumbnailsBox = GObject.registerClass({
     }
 
     _workspacesChanged() {
-        const validThumbnails =
+        let validThumbnails =
             this._thumbnails.filter(t => t.state <= ThumbnailState.NORMAL);
-        const workspaceManager = global.workspace_manager;
-        const oldNumWorkspaces = validThumbnails.length;
-        const newNumWorkspaces = workspaceManager.n_workspaces;
+        let workspaceManager = global.workspace_manager;
+        let oldNumWorkspaces = validThumbnails.length;
+        let newNumWorkspaces = workspaceManager.n_workspaces;
 
         if (newNumWorkspaces > oldNumWorkspaces) {
             this.addThumbnails(oldNumWorkspaces, newNumWorkspaces - oldNumWorkspaces);
         } else {
             let removedIndex;
-            const removedNum = oldNumWorkspaces - newNumWorkspaces;
+            let removedNum = oldNumWorkspaces - newNumWorkspaces;
             for (let w = 0; w < oldNumWorkspaces; w++) {
-                const metaWorkspace = workspaceManager.get_workspace_by_index(w);
+                let metaWorkspace = workspaceManager.get_workspace_by_index(w);
                 if (this._thumbnails[w].metaWorkspace !== metaWorkspace) {
                     removedIndex = w;
                     break;
@@ -1006,11 +999,11 @@ export const ThumbnailsBox = GObject.registerClass({
     }
 
     addThumbnails(start, count) {
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
 
         for (let k = start; k < start + count; k++) {
-            const metaWorkspace = workspaceManager.get_workspace_by_index(k);
-            const thumbnail = new WorkspaceThumbnail(metaWorkspace, this._monitorIndex);
+            let metaWorkspace = workspaceManager.get_workspace_by_index(k);
+            let thumbnail = new WorkspaceThumbnail(metaWorkspace, this._monitorIndex);
             thumbnail.setPorthole(
                 this._porthole.x, this._porthole.y,
                 this._porthole.width, this._porthole.height);
@@ -1042,7 +1035,7 @@ export const ThumbnailsBox = GObject.registerClass({
     removeThumbnails(start, count) {
         let currentPos = 0;
         for (let k = 0; k < this._thumbnails.length; k++) {
-            const thumbnail = this._thumbnails[k];
+            let thumbnail = this._thumbnails[k];
 
             if (thumbnail.state > ThumbnailState.NORMAL)
                 continue;
@@ -1109,7 +1102,7 @@ export const ThumbnailsBox = GObject.registerClass({
 
             thumbnail.ease_property('slide-position', 1, {
                 duration: SLIDE_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                mode: Clutter.AnimationMode.LINEAR,
                 onComplete: () => {
                     this._setThumbnailState(thumbnail, ThumbnailState.ANIMATED_OUT);
                     this._queueUpdateStates();
@@ -1132,7 +1125,7 @@ export const ThumbnailsBox = GObject.registerClass({
                     this._stateCounts[thumbnail.state]--;
                     thumbnail.state = ThumbnailState.DESTROYED;
 
-                    const index = this._thumbnails.indexOf(thumbnail);
+                    let index = this._thumbnails.indexOf(thumbnail);
                     this._thumbnails.splice(index, 1);
                     thumbnail.destroy();
 
@@ -1187,10 +1180,7 @@ export const ThumbnailsBox = GObject.registerClass({
 
         const laters = global.compositor.get_laters();
         this._updateStateId = laters.add(
-            Meta.LaterType.BEFORE_REDRAW, () => {
-                this._updateStates();
-                return GLib.SOURCE_REMOVE;
-            });
+            Meta.LaterType.BEFORE_REDRAW, () => this._updateStates());
     }
 
     _unqueueUpdateStates() {
@@ -1202,13 +1192,13 @@ export const ThumbnailsBox = GObject.registerClass({
     }
 
     vfunc_get_preferred_height(forWidth) {
-        const themeNode = this.get_theme_node();
+        let themeNode = this.get_theme_node();
 
         forWidth = themeNode.adjust_for_width(forWidth);
 
-        const spacing = themeNode.get_length('spacing');
-        const nWorkspaces = this._thumbnails.length;
-        const totalSpacing = (nWorkspaces - 1) * spacing;
+        let spacing = themeNode.get_length('spacing');
+        let nWorkspaces = this._thumbnails.length;
+        let totalSpacing = (nWorkspaces - 1) * spacing;
 
         const avail = forWidth - totalSpacing;
 
@@ -1223,11 +1213,11 @@ export const ThumbnailsBox = GObject.registerClass({
         // Note that for getPreferredHeight/Width we cheat a bit and skip propagating
         // the size request to our children because we know how big they are and know
         // that the actors aren't depending on the virtual functions being called.
-        const themeNode = this.get_theme_node();
+        let themeNode = this.get_theme_node();
 
-        const spacing = themeNode.get_length('spacing');
-        const nWorkspaces = this._thumbnails.length;
-        const totalSpacing = (nWorkspaces - 1) * spacing;
+        let spacing = themeNode.get_length('spacing');
+        let nWorkspaces = this._thumbnails.length;
+        let totalSpacing = (nWorkspaces - 1) * spacing;
 
         const naturalWidth = this._thumbnails.reduce((accumulator, thumbnail, index) => {
             let workspaceSpacing = 0;
@@ -1260,12 +1250,12 @@ export const ThumbnailsBox = GObject.registerClass({
     vfunc_allocate(box) {
         this.set_allocation(box);
 
-        const rtl = Clutter.get_default_text_direction() === Clutter.TextDirection.RTL;
+        let rtl = Clutter.get_default_text_direction() === Clutter.TextDirection.RTL;
 
         if (this._thumbnails.length === 0) // not visible
             return;
 
-        const themeNode = this.get_theme_node();
+        let themeNode = this.get_theme_node();
         box = themeNode.get_content_box(box);
 
         const portholeWidth = this._porthole.width;
@@ -1319,20 +1309,20 @@ export const ThumbnailsBox = GObject.registerClass({
         box.x1 += Math.round(extraWidth / 2);
         box.x2 -= Math.round(extraWidth / 2);
 
-        const indicatorValue = this._scrollAdjustment.value;
-        const indicatorUpperWs = Math.ceil(indicatorValue);
-        const indicatorLowerWs = Math.floor(indicatorValue);
+        let indicatorValue = this._scrollAdjustment.value;
+        let indicatorUpperWs = Math.ceil(indicatorValue);
+        let indicatorLowerWs = Math.floor(indicatorValue);
 
         let indicatorLowerX1 = 0;
         let indicatorLowerX2 = 0;
         let indicatorUpperX1 = 0;
         let indicatorUpperX2 = 0;
 
-        const indicatorThemeNode = this._indicator.get_theme_node();
-        const indicatorTopFullBorder = indicatorThemeNode.get_padding(St.Side.TOP) + indicatorThemeNode.get_border_width(St.Side.TOP);
-        const indicatorBottomFullBorder = indicatorThemeNode.get_padding(St.Side.BOTTOM) + indicatorThemeNode.get_border_width(St.Side.BOTTOM);
-        const indicatorLeftFullBorder = indicatorThemeNode.get_padding(St.Side.LEFT) + indicatorThemeNode.get_border_width(St.Side.LEFT);
-        const indicatorRightFullBorder = indicatorThemeNode.get_padding(St.Side.RIGHT) + indicatorThemeNode.get_border_width(St.Side.RIGHT);
+        let indicatorThemeNode = this._indicator.get_theme_node();
+        let indicatorTopFullBorder = indicatorThemeNode.get_padding(St.Side.TOP) + indicatorThemeNode.get_border_width(St.Side.TOP);
+        let indicatorBottomFullBorder = indicatorThemeNode.get_padding(St.Side.BOTTOM) + indicatorThemeNode.get_border_width(St.Side.BOTTOM);
+        let indicatorLeftFullBorder = indicatorThemeNode.get_padding(St.Side.LEFT) + indicatorThemeNode.get_border_width(St.Side.LEFT);
+        let indicatorRightFullBorder = indicatorThemeNode.get_padding(St.Side.RIGHT) + indicatorThemeNode.get_border_width(St.Side.RIGHT);
 
         let x = box.x1;
 
@@ -1340,19 +1330,13 @@ export const ThumbnailsBox = GObject.registerClass({
             this._dropPlaceholder.allocate_preferred_size(
                 ...this._dropPlaceholder.get_position());
 
-            this._clearDropPlaceholderLater();
-            if (this._dropPlaceholder.visible) {
-                const laters = global.compositor.get_laters();
-                this._dropPlaceholderLater = laters.add(
-                    Meta.LaterType.BEFORE_REDRAW, () => {
-                        this._dropPlaceholder.hide();
-                        delete this._dropPlaceholderLater;
-                        return GLib.SOURCE_REMOVE;
-                    });
-            }
+            const laters = global.compositor.get_laters();
+            laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
+                this._dropPlaceholder.hide();
+            });
         }
 
-        const childBox = new Clutter.ActorBox();
+        let childBox = new Clutter.ActorBox();
 
         for (let i = 0; i < this._thumbnails.length; i++) {
             const thumbnail = this._thumbnails[i];
@@ -1377,16 +1361,10 @@ export const ThumbnailsBox = GObject.registerClass({
 
                 this._dropPlaceholder.allocate(childBox);
 
-                this._clearDropPlaceholderLater();
-                if (!this._dropPlaceholder.visible) {
-                    const laters = global.compositor.get_laters();
-                    this._dropPlaceholderLater = laters.add(
-                        Meta.LaterType.BEFORE_REDRAW, () => {
-                            this._dropPlaceholder.show();
-                            delete this._dropPlaceholderLater;
-                            return GLib.SOURCE_REMOVE;
-                        });
-                }
+                const laters = global.compositor.get_laters();
+                laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
+                    this._dropPlaceholder.show();
+                });
                 x += placeholderWidth + spacing;
             }
 

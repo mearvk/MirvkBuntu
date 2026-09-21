@@ -57,19 +57,12 @@ def profile_id_from_path(mock, path):
 class ColordAlreadyExistsException(dbus.DBusException):
     _dbus_error_name = 'org.freedesktop.ColorManager.AlreadyExists'
 
-    def __init__(self, message=''):
-        super().__init__(message)
-
 class ColordNotFoundException(dbus.DBusException):
     _dbus_error_name = 'org.freedesktop.ColorManager.NotFound'
 
 
 @dbus.service.method(MAIN_IFACE, in_signature='ssa{sv}', out_signature='o')
 def CreateDevice(self, device_id, scope, props):
-    if device_id in self.devices:
-        raise ColordAlreadyExistsException(
-            f"device id '{device_id}' already exists")
-
     uid = os.getuid()
     username = get_username(uid)
     device_path = PATH_PREFIX + '/devices/' + \
@@ -98,13 +91,7 @@ def DeleteDevice(self, device_path):
 
 @dbus.service.method(MAIN_IFACE, in_signature='s', out_signature='o')
 def FindDeviceById(self, device_id):
-    try:
-        return self.devices[device_id]
-    except KeyError:
-        raise dbus.exceptions.DBusException(
-            f"Device {device_id} not found",
-            name="org.freedesktop.ColorManager.NotFound"
-        )
+    return self.devices[device_id]
 
 
 @dbus.service.method(MAIN_IFACE, in_signature='ssha{sv}', out_signature='o')
@@ -116,8 +103,7 @@ def CreateProfileWithFd(self, profile_id, scope, handle, props):
         '_' + escape_unit_name(username) + '_' + str(uid)
 
     if profile_id in self.profiles:
-        raise ColordAlreadyExistsException(
-            f"profile id '{profile_id}' already exists")
+        raise ColordAlreadyExistsException()
 
     self.profiles[profile_id] = profile_path
     self.AddObject(profile_path,
@@ -141,8 +127,8 @@ def DeleteProfile(self, profile_path):
 
 @dbus.service.method(MAIN_IFACE, in_signature='s', out_signature='o')
 def FindProfileById(self, profile_id):
-    if profile_id in self.profiles:
-        return self.profiles[profile_id]
+    if profile_id in self.devices:
+        return self.devices[profile_id]
     else:
         raise ColordNotFoundException()
 

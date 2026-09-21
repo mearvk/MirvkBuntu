@@ -27,7 +27,8 @@ G_BEGIN_DECLS
 
 typedef struct _GtkPathBar GtkPathBar;
 
-GType    gtk_path_bar_get_type (void);
+GDK_AVAILABLE_IN_ALL
+GType    gtk_path_bar_get_type (void) G_GNUC_CONST;
 void     _gtk_path_bar_set_file        (GtkPathBar         *path_bar,
                                         GFile              *file,
                                         gboolean            keep_trail);

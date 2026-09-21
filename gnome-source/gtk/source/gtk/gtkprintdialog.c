@@ -50,7 +50,8 @@
 /**
  * GtkPrintSetup:
  *
- * An auxiliary object for printing that allows decoupling the setup from the printing.
+ * A `GtkPrintSetup` is an auxiliary object for printing that allows decoupling
+ * the setup from the printing.
  *
  * A print setup is obtained by calling [method@Gtk.PrintDialog.setup],
  * and can later be passed to print functions such as [method@Gtk.PrintDialog.print].
@@ -77,7 +78,6 @@ G_DEFINE_BOXED_TYPE (GtkPrintSetup, gtk_print_setup,
                      gtk_print_setup_ref,
                      gtk_print_setup_unref)
 
-#ifdef HAVE_GIO_UNIX
 static GtkPrintSetup *
 gtk_print_setup_new (void)
 {
@@ -89,7 +89,6 @@ gtk_print_setup_new (void)
 
   return setup;
 }
-#endif
 
 /**
  * gtk_print_setup_ref:
@@ -143,7 +142,7 @@ gtk_print_setup_unref (GtkPrintSetup *setup)
  * They may be different from the `GtkPrintDialog`'s settings
  * if the user changed them during the setup process.
  *
- * Returns: (transfer none): the print settings, or `NULL`
+ * Returns: (nullable) (transfer none): the print settings, or `NULL`
  *
  * Since: 4.14
  */
@@ -153,14 +152,12 @@ gtk_print_setup_get_print_settings (GtkPrintSetup *setup)
   return setup->print_settings;
 }
 
-#ifdef HAVE_GIO_UNIX
 static void
 gtk_print_setup_set_print_settings (GtkPrintSetup    *setup,
                                     GtkPrintSettings *print_settings)
 {
   g_set_object (&setup->print_settings, print_settings);
 }
-#endif
 
 /**
  * gtk_print_setup_get_page_setup:
@@ -171,7 +168,7 @@ gtk_print_setup_set_print_settings (GtkPrintSetup    *setup,
  * It may be different from the `GtkPrintDialog`'s page setup
  * if the user changed it during the setup process.
  *
- * Returns: (transfer none): the page setup, or `NULL`
+ * Returns: (nullable) (transfer none): the page setup, or `NULL`
  *
  * Since: 4.14
  */
@@ -181,7 +178,6 @@ gtk_print_setup_get_page_setup (GtkPrintSetup *setup)
   return setup->page_setup;
 }
 
-#ifdef HAVE_GIO_UNIX
 static void
 gtk_print_setup_set_page_setup (GtkPrintSetup *setup,
                                 GtkPageSetup  *page_setup)
@@ -212,7 +208,6 @@ gtk_print_setup_set_printer (GtkPrintSetup *setup,
 {
   g_set_object (&setup->printer, printer);
 }
-#endif
 
 /* }}} */
 /* {{{ GObject implementation */
@@ -220,14 +215,11 @@ gtk_print_setup_set_printer (GtkPrintSetup *setup,
 /**
  * GtkPrintDialog:
  *
- * Asynchronous API to present a print dialog to the user.
- *
- * `GtkPrintDialog` collects the arguments that are needed to present
- *  the dialog, such as a title for the dialog and whether it should
- *  be modal.
+ * A `GtkPrintDialog` object collects the arguments that
+ * are needed to present a print dialog to the user, such
+ * as a title for the dialog and whether it should be modal.
  *
  * The dialog is shown with the [method@Gtk.PrintDialog.setup] function.
- *
  * The actual printing can be done with [method@Gtk.PrintDialog.print] or
  * [method@Gtk.PrintDialog.print_file]. These APIs follows the GIO async pattern,
  * and the results can be obtained by calling the corresponding finish methods.
@@ -367,7 +359,7 @@ gtk_print_dialog_class_init (GtkPrintDialogClass *class)
   object_class->set_property = gtk_print_dialog_set_property;
 
   /**
-   * GtkPrintDialog:accept-label:
+   * GtkPrintDialog:accept-label: (attributes org.gtk.Property.get=gtk_print_dialog_get_accept_label org.gtk.Property.set=gtk_print_dialog_set_accept_label)
    *
    * A label that may be shown on the accept button of a print dialog
    * that is presented by [method@Gtk.PrintDialog.setup].
@@ -377,10 +369,10 @@ gtk_print_dialog_class_init (GtkPrintDialogClass *class)
   properties[PROP_ACCEPT_LABEL] =
       g_param_spec_string ("accept-label", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPrintDialog:page-setup:
+   * GtkPrintDialog:page-setup: (attributes org.gtk.Property.get=gtk_print_dialog_get_page_setup org.gtk.Property.set=gtk_print_dialog_set_page_setup)
    *
    * The page setup to use.
    *
@@ -389,10 +381,10 @@ gtk_print_dialog_class_init (GtkPrintDialogClass *class)
   properties[PROP_PAGE_SETUP] =
       g_param_spec_object ("page-setup", NULL, NULL,
                            GTK_TYPE_PAGE_SETUP,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPrintDialog:modal:
+   * GtkPrintDialog:modal: (attributes org.gtk.Property.get=gtk_print_dialog_get_modal org.gtk.Property.set=gtk_print_dialog_set_modal)
    *
    * Whether the print dialog is modal.
    *
@@ -401,10 +393,10 @@ gtk_print_dialog_class_init (GtkPrintDialogClass *class)
   properties[PROP_MODAL] =
       g_param_spec_boolean ("modal", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPrintDialog:print-settings:
+   * GtkPrintDialog:print-settings: (attributes org.gtk.Property.get=gtk_print_dialog_get_print_settings org.gtk.Property.set=gtk_print_dialog_set_print_settings)
    *
    * The print settings to use.
    *
@@ -413,10 +405,10 @@ gtk_print_dialog_class_init (GtkPrintDialogClass *class)
   properties[PROP_PRINT_SETTINGS] =
       g_param_spec_object ("print-settings", NULL, NULL,
                            GTK_TYPE_PRINT_SETTINGS,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPrintDialog:title:
+   * GtkPrintDialog:title: (attributes org.gtk.Property.get=gtk_print_dialog_get_title org.gtk.Property.set=gtk_print_dialog_set_title)
    *
    * A title that may be shown on the print dialog that is
    * presented by [method@Gtk.PrintDialog.setup].
@@ -426,7 +418,7 @@ gtk_print_dialog_class_init (GtkPrintDialogClass *class)
   properties[PROP_TITLE] =
       g_param_spec_string ("title", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }
@@ -593,7 +585,7 @@ gtk_print_dialog_set_modal (GtkPrintDialog *self,
  *
  * Returns the page setup.
  *
- * Returns: (nullable) (transfer none): the page setup
+ * Returns: (transfer none): the page setup
  *
  * Since: 4.14
  */
@@ -631,7 +623,7 @@ gtk_print_dialog_set_page_setup (GtkPrintDialog *self,
  *
  * Returns the print settings for the print dialog.
  *
- * Returns: (nullable) (transfer none): the settings
+ * Returns: (transfer none): the settings
  *
  * Since: 4.14
  */
@@ -760,7 +752,6 @@ gtk_print_output_stream_set_print_done (GtkPrintOutputStream *stream,
 typedef struct
 {
   GtkWindow *exported_window;
-  char *exported_window_handle;
   char *portal_handle;
   unsigned int response_signal_id;
   unsigned int token;
@@ -785,9 +776,6 @@ print_task_data_free (gpointer data)
   PrintTaskData *ptd = data;
 
   g_free (ptd->portal_handle);
-  if (ptd->exported_window && ptd->exported_window_handle)
-    gtk_window_unexport_handle (ptd->exported_window, ptd->exported_window_handle);
-  g_clear_pointer (&ptd->exported_window_handle, g_free);
   g_clear_object (&ptd->exported_window);
   if (ptd->fds[0] != -1)
     close (ptd->fds[0]);
@@ -829,11 +817,10 @@ send_close (GTask *task)
 
 static gboolean
 ensure_portal_proxy (GtkPrintDialog  *self,
-                     GtkWindow       *parent,
                      GError         **error)
 {
-  if (self->portal)
-    return TRUE;
+  if (gdk_display_get_debug_flags (NULL) & GDK_DEBUG_NO_PORTALS)
+    return FALSE;
 
   if (!self->portal)
     self->portal = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
@@ -883,12 +870,8 @@ cleanup_portal_call_data (GTask *task)
       ptd->response_signal_id = 0;
     }
 
-  if (ptd->exported_window && ptd->exported_window_handle)
-    gtk_window_unexport_handle (ptd->exported_window, ptd->exported_window_handle);
-
   g_clear_pointer (&ptd->portal_handle, g_free);
   g_clear_object (&ptd->exported_window);
-  g_clear_pointer (&ptd->exported_window_handle, g_free);
 }
 
 /* }}} */
@@ -941,8 +924,6 @@ prepare_print_response (GDBusConnection *connection,
         setup->token = token;
 
         g_task_return_pointer (task, gtk_print_setup_ref (setup), (GDestroyNotify) gtk_print_setup_unref);
-
-        gtk_print_setup_unref (setup);
       }
       break;
 
@@ -963,6 +944,7 @@ prepare_print_response (GDBusConnection *connection,
     }
 
   g_variant_unref (options);
+
   g_object_unref (task);
 }
 
@@ -990,7 +972,7 @@ prepare_print_called (GObject      *source,
 
   g_variant_get (ret, "(o)", &path);
   if (strcmp (path, ptd->portal_handle) != 0)
-    {
+   {
       g_free (ptd->portal_handle);
       ptd->portal_handle = g_steal_pointer (&path);
 
@@ -1006,7 +988,7 @@ prepare_print_called (GObject      *source,
                                             NULL,
                                             G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
                                             prepare_print_response,
-                                            g_object_ref (task), g_object_unref);
+                                            self, NULL);
 
     }
 
@@ -1032,12 +1014,6 @@ setup_window_handle_exported (GtkWindow  *window,
   g_assert (ptd->portal_handle == NULL);
   ptd->portal_handle = gtk_get_portal_request_path (connection, &handle_token);
 
-  if (window)
-    {
-      ptd->exported_window = g_object_ref (window);
-      ptd->exported_window_handle = g_strdup (window_handle);
-    }
-
   g_assert (ptd->response_signal_id == 0);
   ptd->response_signal_id =
     g_dbus_connection_signal_subscribe (connection,
@@ -1048,7 +1024,7 @@ setup_window_handle_exported (GtkWindow  *window,
                                         NULL,
                                         G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
                                         prepare_print_response,
-                                        g_object_ref (task), g_object_unref);
+                                        task, NULL);
 
   g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
   g_variant_builder_add (&opt_builder, "{sv}", "handle_token", g_variant_new_string (handle_token));
@@ -1141,7 +1117,6 @@ print_response (GDBusConnection *connection,
         {
         case 0:
           g_task_return_boolean (task, TRUE);
-          g_object_unref (task);
           break;
 
         case 1:
@@ -1149,7 +1124,6 @@ print_response (GDBusConnection *connection,
                                    GTK_DIALOG_ERROR,
                                    GTK_DIALOG_ERROR_DISMISSED,
                                    "Dismissed by user");
-          g_object_unref (task);
           break;
 
         case 2:
@@ -1158,10 +1132,11 @@ print_response (GDBusConnection *connection,
                                    GTK_DIALOG_ERROR,
                                    GTK_DIALOG_ERROR_FAILED,
                                    "Operation failed");
-          g_object_unref (task);
           break;
         }
     }
+
+  g_object_unref (task);
 }
 
 static void
@@ -1204,7 +1179,7 @@ print_called (GObject      *source,
                                             NULL,
                                             G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
                                             print_response,
-                                            g_object_ref (task), g_object_unref);
+                                            task, NULL);
 
     }
 
@@ -1218,7 +1193,6 @@ print_called (GObject      *source,
       ptd->has_returned = TRUE;
       g_object_add_weak_pointer (G_OBJECT (ptd->stream), (gpointer *)&ptd->stream);
       g_task_return_pointer (task, ptd->stream, g_object_unref);
-      g_object_unref (task);
     }
 }
 
@@ -1237,10 +1211,7 @@ print_window_handle_exported (GtkWindow  *window,
   int idx;
 
   if (window)
-    {
-      ptd->exported_window = g_object_ref (window);
-      ptd->exported_window_handle = g_strdup (window_handle);
-    }
+    ptd->exported_window = g_object_ref (window);
 
   g_assert (ptd->fds[0] != -1);
 
@@ -1255,7 +1226,7 @@ print_window_handle_exported (GtkWindow  *window,
                                         NULL,
                                         G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
                                         print_response,
-                                        g_object_ref (task), g_object_unref);
+                                        task, NULL);
 
   fd_list = g_unix_fd_list_new ();
   idx = g_unix_fd_list_append (fd_list, ptd->fds[0], NULL);
@@ -1445,23 +1416,24 @@ print_response_cb (GtkPrintUnixDialog *window,
 #endif /* HAVE_GIO_UNIX */
 
 /* }}} */
-/* {{{ Async API */
+ /* {{{ Async API */
 
 /**
  * gtk_print_dialog_setup:
  * @self: a `GtkPrintDialog`
  * @parent: (nullable): the parent `GtkWindow`
  * @cancellable: (nullable): a `GCancellable` to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call when the
- *   operation is complete
- * @user_data: data to pass to @callback
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
  * This function presents a print dialog to let the user select a printer,
  * and set up print settings and page setup.
  *
  * The @callback will be called when the dialog is dismissed.
- * The obtained [struct@Gtk.PrintSetup] can then be passed
- * to [method@Gtk.PrintDialog.print] or [method@Gtk.PrintDialog.print_file].
+ * It should call [method@Gtk.PrintDialog.setup_finish]
+ * to obtain the results in the form of a [struct@Gtk.PrintSetup],
+ * that can then be passed to [method@Gtk.PrintDialog.print]
+ * or [method@Gtk.PrintDialog.print_file].
  *
  * One possible use for this method is to have the user select a printer,
  * then show a page setup UI in the application (e.g. to arrange images
@@ -1478,9 +1450,6 @@ gtk_print_dialog_setup (GtkPrintDialog       *self,
                         gpointer              user_data)
 {
   GTask *task;
-#ifdef HAVE_GIO_UNIX
-  GdkDisplay *display;
-#endif
   G_GNUC_UNUSED GError *error = NULL;
 
   g_return_if_fail (GTK_IS_PRINT_DIALOG (self));
@@ -1494,26 +1463,13 @@ gtk_print_dialog_setup (GtkPrintDialog       *self,
   if (cancellable)
     g_signal_connect (cancellable, "cancelled", G_CALLBACK (cancelled_cb), task);
 
-  if (parent)
-    display = gtk_widget_get_display (GTK_WIDGET (parent));
-  else
-    display = gdk_display_get_default ();
-
-  if (!gdk_display_should_use_portal (display, PORTAL_PRINT_INTERFACE, 0))
+  if (!ensure_portal_proxy (self, &error))
     {
       GtkPrintUnixDialog *window;
 
       window = create_print_dialog (self, self->print_settings, self->page_setup, parent);
       g_signal_connect (window, "response", G_CALLBACK (setup_response_cb), task);
       gtk_window_present (GTK_WINDOW (window));
-    }
-  else if (!ensure_portal_proxy (self, parent, &error))
-    {
-      g_task_return_new_error (task,
-                               GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_FAILED,
-                               "The print portal is not available: %s", error->message);
-      g_error_free (error);
-      g_object_unref (task);
     }
   else
     {
@@ -1546,10 +1502,8 @@ gtk_print_dialog_setup (GtkPrintDialog       *self,
  * which contains the print settings and page setup information that
  * will be used to print.
  *
- * Note that this function returns a [error@Gtk.DialogError.DISMISSED]
- * error if the user cancels the dialog.
- *
- * Returns: (transfer full): the resulting `[struct@Gtk.PrintSetup]`
+ * Returns: (nullable): The `GtkPrintSetup` object that resulted from the call,
+ *   or `NULL` if the call was not successful
  *
  * Since: 4.14
  */
@@ -1571,16 +1525,16 @@ gtk_print_dialog_setup_finish (GtkPrintDialog    *self,
  * @parent: (nullable): the parent `GtkWindow`
  * @setup: (nullable): the `GtkPrintSetup` to use
  * @cancellable: (nullable): a `GCancellable` to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call when the
- *   operation is complete
- * @user_data: data to pass to @callback
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
  * This function prints content from a stream.
  *
  * If you pass `NULL` as @setup, then this method will present a print dialog.
  * Otherwise, it will attempt to print directly, without user interaction.
  *
- * The @callback will be called when the printing is done.
+ * The @callback will be called when the printing is done. It should call
+ * [method@Gtk.PrintDialog.print_finish] to obtain the results.
  *
  * Since: 4.14
  */
@@ -1595,7 +1549,6 @@ gtk_print_dialog_print (GtkPrintDialog       *self,
   GTask *task;
   G_GNUC_UNUSED GError *error = NULL;
 #ifdef HAVE_GIO_UNIX
-  GdkDisplay *display;
   PrintTaskData *ptd;
 #endif
 
@@ -1621,12 +1574,7 @@ gtk_print_dialog_print (GtkPrintDialog       *self,
   if (cancellable)
     g_signal_connect (cancellable, "cancelled", G_CALLBACK (cancelled_cb), task);
 
-  if (parent)
-    display = gtk_widget_get_display (GTK_WIDGET (parent));
-  else
-    display = gdk_display_get_default ();
-
-  if (!gdk_display_should_use_portal (display, PORTAL_PRINT_INTERFACE, 0))
+  if (!ensure_portal_proxy (self, &error))
     {
       if (setup == NULL || gtk_print_setup_get_printer (setup) == NULL)
         {
@@ -1643,14 +1591,6 @@ gtk_print_dialog_print (GtkPrintDialog       *self,
         {
           print_content (setup, task);
         }
-    }
-  else if (!ensure_portal_proxy (self, parent, &error))
-    {
-      g_task_return_new_error (task,
-                               GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_FAILED,
-                               "The print portal is not available: %s", error->message);
-      g_error_free (error);
-      g_object_unref (task);
     }
   else
     {
@@ -1688,10 +1628,7 @@ gtk_print_dialog_print (GtkPrintDialog       *self,
  * call may not be instant as it operation will for the printer to finish
  * printing.
  *
- * Note that this function returns a [error@Gtk.DialogError.DISMISSED]
- * error if the user cancels the dialog.
- *
- * Returns: (transfer full): a [class@Gio.OutputStream]
+ * Returns: (nullable) (transfer full): a [class@Gio.OutputStream]
  *
  * Since: 4.14
  */
@@ -1714,14 +1651,16 @@ gtk_print_dialog_print_finish (GtkPrintDialog  *self,
  * @setup: (nullable):  the `GtkPrintSetup` to use
  * @file: the `GFile` to print
  * @cancellable: (nullable): a `GCancellable` to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call when the
- *   operation is complete
- * @user_data: data to pass to @callback
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
  * This function prints a file.
  *
  * If you pass `NULL` as @setup, then this method will present a print dialog.
  * Otherwise, it will attempt to print directly, without user interaction.
+ *
+ * The @callback will be called when the printing is done. It should call
+ * [method@Gtk.PrintDialog.print_file_finish] to obtain the results.
  *
  * Since: 4.14
  */
@@ -1736,11 +1675,10 @@ gtk_print_dialog_print_file (GtkPrintDialog       *self,
 {
   GTask *task;
 #ifdef HAVE_GIO_UNIX
-  GdkDisplay *display;
   PrintTaskData *ptd;
   GFileInputStream *content;
-  GError *error = NULL;
 #endif
+  GError *error = NULL;
 
   g_return_if_fail (GTK_IS_PRINT_DIALOG (self));
   g_return_if_fail (parent == NULL || GTK_IS_WINDOW (parent));
@@ -1764,7 +1702,7 @@ gtk_print_dialog_print_file (GtkPrintDialog       *self,
     {
       g_task_return_new_error (task,
                                GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_FAILED,
-                               _("Failed to create the read file descriptor"));
+                               "Failed to create read fd");
       g_object_unref (task);
       return;
     }
@@ -1772,12 +1710,7 @@ gtk_print_dialog_print_file (GtkPrintDialog       *self,
  if (cancellable)
     g_signal_connect (cancellable, "cancelled", G_CALLBACK (cancelled_cb), task);
 
-  if (parent)
-    display = gtk_widget_get_display (GTK_WIDGET (parent));
-  else
-    display = gdk_display_get_default ();
-
-  if (!gdk_display_should_use_portal (display, PORTAL_PRINT_INTERFACE, 0))
+  if (!ensure_portal_proxy (self, &error))
     {
       if (setup == NULL || gtk_print_setup_get_printer (setup) == NULL)
         {
@@ -1794,14 +1727,6 @@ gtk_print_dialog_print_file (GtkPrintDialog       *self,
         {
           print_content (setup, task);
         }
-    }
-  else if (!ensure_portal_proxy (self, parent, &error))
-    {
-      g_task_return_new_error (task,
-                               GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_FAILED,
-                               "The print portal is not available: %s", error->message);
-      g_error_free (error);
-      g_object_unref (task);
     }
   else
     {
@@ -1829,9 +1754,6 @@ gtk_print_dialog_print_file (GtkPrintDialog       *self,
  * Finishes the [method@Gtk.PrintDialog.print_file] call and
  * returns the results.
  *
- * Note that this function returns a [error@Gtk.DialogError.DISMISSED]
- * error if the user cancels the dialog.
- *
  * Returns: Whether the call was successful
  *
  * Since: 4.14
@@ -1850,4 +1772,4 @@ gtk_print_dialog_print_file_finish (GtkPrintDialog  *self,
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

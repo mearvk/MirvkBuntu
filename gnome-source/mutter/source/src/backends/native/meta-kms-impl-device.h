@@ -38,7 +38,6 @@ typedef struct _MetaKmsDeviceCaps
   gboolean prefers_shadow_buffer;
   gboolean uses_monotonic_clock;
   gboolean addfb2_modifiers;
-  gboolean supports_color_modes;
 } MetaKmsDeviceCaps;
 
 
@@ -123,7 +122,7 @@ GList * meta_kms_impl_device_peek_planes (MetaKmsImplDevice *impl_device);
 gboolean meta_kms_impl_device_has_cursor_plane_for (MetaKmsImplDevice *impl_device,
                                                     MetaKmsCrtc       *crtc);
 
-MetaKmsDeviceCaps * meta_kms_impl_device_get_caps (MetaKmsImplDevice *impl_device);
+const MetaKmsDeviceCaps * meta_kms_impl_device_get_caps (MetaKmsImplDevice *impl_device);
 
 GList * meta_kms_impl_device_copy_fallback_modes (MetaKmsImplDevice *impl_device);
 
@@ -132,23 +131,6 @@ const char * meta_kms_impl_device_get_driver_name (MetaKmsImplDevice *impl_devic
 const char * meta_kms_impl_device_get_driver_description (MetaKmsImplDevice *impl_device);
 
 const char * meta_kms_impl_device_get_path (MetaKmsImplDevice *impl_device);
-
-gboolean meta_kms_impl_device_lease_objects (MetaKmsImplDevice  *impl_device,
-                                             GList              *connectors,
-                                             GList              *crtcs,
-                                             GList              *planes,
-                                             int                *out_fd,
-                                             uint32_t           *out_lessee_id,
-                                             GError            **error);
-
-gboolean meta_kms_impl_device_revoke_lease (MetaKmsImplDevice  *impl_device,
-                                            uint32_t            lessee_id,
-                                            GError            **error);
-
-gboolean meta_kms_impl_device_list_lessees (MetaKmsImplDevice  *impl_device,
-                                            uint32_t          **out_lessee_ids,
-                                            int                *out_num_lessee_ids,
-                                            GError            **error);
 
 gboolean meta_kms_impl_device_dispatch (MetaKmsImplDevice  *impl_device,
                                         GError            **error);
@@ -165,8 +147,6 @@ int meta_kms_impl_device_get_fd (MetaKmsImplDevice *impl_device);
 void meta_kms_impl_device_hold_fd (MetaKmsImplDevice *impl_device);
 
 void meta_kms_impl_device_unhold_fd (MetaKmsImplDevice *impl_device);
-
-int meta_kms_impl_device_open_non_privileged_fd (MetaKmsImplDevice *impl_device);
 
 int meta_kms_impl_device_get_signaled_sync_file (MetaKmsImplDevice *impl_device);
 
@@ -187,14 +167,17 @@ void meta_kms_impl_device_update_prop_table (MetaKmsImplDevice *impl_device,
                                              MetaKmsProp       *props,
                                              int                n_props);
 
+void meta_kms_impl_device_reload_prop_values (MetaKmsImplDevice *impl_device,
+                                              uint32_t          *drm_props,
+                                              uint64_t          *drm_prop_values,
+                                              int                n_drm_props,
+                                              gpointer           user_data,
+                                              ...);
+
 MetaKmsFeedback * meta_kms_impl_device_process_update (MetaKmsImplDevice *impl_device,
                                                        MetaKmsUpdate     *update,
                                                        MetaKmsUpdateFlag  flags)
   G_GNUC_WARN_UNUSED_RESULT;
-
-META_EXPORT_TEST
-void meta_kms_impl_device_set_updates_inhibited (MetaKmsImplDevice    *impl_device,
-                                                 MetaKmsInhibitSubset  inhibited_subset);
 
 void meta_kms_impl_device_handle_update (MetaKmsImplDevice *impl_device,
                                          MetaKmsUpdate     *update,

@@ -4,7 +4,7 @@ GNOME Shell provides core user interface functions for the GNOME desktop,
 like switching to windows and launching applications. GNOME Shell takes
 advantage of the capabilities of modern graphics hardware and introduces
 innovative user interface concepts to provide a visually attractive and
-easy-to-use experience.
+easy to use experience.
 
 All interactions with the project should follow the [Code of Conduct][conduct].
 
@@ -30,7 +30,7 @@ The [GNOME handbook][bug-handbook] has useful information for creating
 effective issue reports.
 
 If you are using extensions, please confirm that an issue still happens
-without extensions. To properly disable extensions, you can use the
+without extensions. To properly disable extensions you can use the
 [extensions-app] and then restart your session. Disabling extensions
 without a restart is not sufficient to rule out extensions as the
 cause of a bug. If an issue can only be reproduced with a certain
@@ -53,7 +53,7 @@ you can use:
 
 ## Feature requests
 
-gnome-shell is a core component of the GNOME desktop experience.
+gnome-shell is a core compoment of the GNOME desktop experience.
 As such, any changes in behavior or appearance only happen in
 accordance with the [GNOME design team][design-team].
 
@@ -61,7 +61,7 @@ For major changes, it is best to start a discussion on [discourse]
 and reach out on the [#gnome-design matrix room][design-room],
 and only involve the issue tracker once agreement has been reached.
 
-In particular, mockups must be approved by the design team to be
+In particular mockups must be approved by the design team to be
 considered for implementation.
 
 For enhancements that are limited in scope and well-defined,
@@ -80,7 +80,7 @@ To contribute, open merge requests at https://gitlab.gnome.org/GNOME/gnome-shell
 It can be useful to first look at the [GNOME handbook][mr-handbook].
 
 If a change likely requires discussion beyond code review, it is probably better to
-open an issue first or follow the process for [feature requests](#feature-requests).
+open an issue first, or follow the process for [feature requests](#feature-requests).
 Otherwise, creating a separate issue is not required.
 
 The following guidelines will help your change to be successfully merged:
@@ -93,16 +93,12 @@ The following guidelines will help your change to be successfully merged:
  * Pay attention to the CI results. Merge requests cannot be merged until the
    CI passes.
 
-There's also a [small guide for newcomers][newcomers-contribution-guide] with
-a few more basic tips and tricks.
-
 [mr-handbook]: https://handbook.gnome.org/development/change-submission.html
 [commit-messages]: docs/commit-messages.md
-[newcomers-contribution-guide]: docs/newcomers-contribution-guide.md
 
 ## Documentation
 
- * [Coding style and conventions for JavaScript][js-style]
+ * [Coding style and conventions for javascript][js-style]
  * [Coding style and conventions for C code][c-style]
  * [The GJS Developer Guide][gjs-guide]
  * [Building and Running][building]

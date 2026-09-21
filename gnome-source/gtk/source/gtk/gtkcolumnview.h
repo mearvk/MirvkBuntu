@@ -44,7 +44,7 @@ typedef struct _GtkColumnViewClass GtkColumnViewClass;
 typedef struct _GtkColumnViewColumn GtkColumnViewColumn;
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_column_view_get_type                        (void);
+GType           gtk_column_view_get_type                        (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkWidget *     gtk_column_view_new                             (GtkSelectionModel      *model);
@@ -135,8 +135,6 @@ void            gtk_column_view_scroll_to                       (GtkColumnView  
                                                                  GtkColumnViewColumn    *column,
                                                                  GtkListScrollFlags      flags,
                                                                  GtkScrollInfo          *scroll);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkColumnView, g_object_unref)
 
 G_END_DECLS
 

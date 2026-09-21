@@ -191,12 +191,10 @@ gtk_list_factory_widget_update (GtkListItemBase *base,
 
   if (priv->object)
     {
-      gpointer old_item = gtk_list_item_base_get_item (GTK_LIST_ITEM_BASE (self));
-
       gtk_list_item_factory_update (priv->factory,
                                     priv->object,
-                                    item != old_item && old_item != NULL,
-                                    item != old_item && item != NULL,
+                                    gtk_list_item_base_get_item (GTK_LIST_ITEM_BASE (self)) != NULL,
+                                    item != NULL,
                                     gtk_list_factory_widget_update_func,
                                     &update);
     }
@@ -313,22 +311,22 @@ gtk_list_factory_widget_class_init (GtkListFactoryWidgetClass *klass)
   properties[PROP_ACTIVATABLE] =
     g_param_spec_boolean ("activatable", NULL, NULL,
                           FALSE,
-                          G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_FACTORY] =
     g_param_spec_object ("factory", NULL, NULL,
                          GTK_TYPE_LIST_ITEM_FACTORY,
-                         G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_SELECTABLE] =
     g_param_spec_boolean ("selectable", NULL, NULL,
                           FALSE,
-                          G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_SINGLE_CLICK_ACTIVATE] =
     g_param_spec_boolean ("single-click-activate", NULL, NULL,
                           FALSE,
-                          G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_WRITABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 
@@ -372,16 +370,16 @@ gtk_list_factory_widget_class_init (GtkListFactoryWidgetClass *klass)
                                    NULL,
                                    gtk_list_factory_widget_scroll_to_action);
 
-  gtk_widget_class_add_binding_signal (widget_class, GDK_KEY_Return, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_signal (widget_class, GDK_KEY_Return, 0,
                                        "activate-keybinding", 0);
-  gtk_widget_class_add_binding_signal (widget_class, GDK_KEY_ISO_Enter, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_signal (widget_class, GDK_KEY_ISO_Enter, 0,
                                        "activate-keybinding", 0);
-  gtk_widget_class_add_binding_signal (widget_class, GDK_KEY_KP_Enter, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_signal (widget_class, GDK_KEY_KP_Enter, 0,
                                        "activate-keybinding", 0);
 
   /* note that some of these may get overwritten by child widgets,
    * such as GtkTreeExpander */
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_space, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_space, 0,
                                        "listitem.select", "(bb)", TRUE, FALSE);
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_space, GDK_CONTROL_MASK,
                                        "listitem.select", "(bb)", TRUE, FALSE);
@@ -389,7 +387,7 @@ gtk_list_factory_widget_class_init (GtkListFactoryWidgetClass *klass)
                                        "listitem.select", "(bb)", TRUE, FALSE);
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_space, GDK_CONTROL_MASK | GDK_SHIFT_MASK,
                                        "listitem.select", "(bb)", TRUE, FALSE);
-  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Space, GDK_NO_MODIFIER_MASK,
+  gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Space, 0,
                                        "listitem.select", "(bb)", TRUE, FALSE);
   gtk_widget_class_add_binding_action (widget_class, GDK_KEY_KP_Space, GDK_CONTROL_MASK,
                                        "listitem.select", "(bb)", TRUE, FALSE);
@@ -443,6 +441,19 @@ gtk_list_factory_widget_click_gesture_released (GtkGestureClick      *gesture,
 {
   GtkListFactoryWidgetPrivate *priv = gtk_list_factory_widget_get_instance_private (self);
 
+  if (priv->activatable)
+    {
+      if (n_press == 1 && priv->single_click_activate)
+        {
+          gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+          gtk_widget_activate_action (GTK_WIDGET (self),
+                                      "list.activate-item",
+                                      "u",
+                                      gtk_list_item_base_get_position (GTK_LIST_ITEM_BASE (self)));
+          return;
+        }
+    }
+
   if (priv->selectable)
     {
       GdkModifierType state;
@@ -454,28 +465,12 @@ gtk_list_factory_widget_click_gesture_released (GtkGestureClick      *gesture,
       state = gdk_event_get_modifier_state (event);
       extend = (state & GDK_SHIFT_MASK) != 0;
       modify = (state & GDK_CONTROL_MASK) != 0;
-#ifdef __APPLE__
-      modify = modify | ((state & GDK_META_MASK) != 0);
-#endif
 
       gtk_widget_activate_action (GTK_WIDGET (self),
                                   "list.select-item",
                                   "(ubb)",
                                   gtk_list_item_base_get_position (GTK_LIST_ITEM_BASE (self)), modify, extend);
     }
-
-  if (priv->activatable)
-    {
-      if (n_press == 1 && priv->single_click_activate)
-        {
-          gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
-          gtk_widget_activate_action (GTK_WIDGET (self),
-                                      "list.activate-item",
-                                      "u",
-                                      gtk_list_item_base_get_position (GTK_LIST_ITEM_BASE (self)));
-        }
-    }
-
 }
 
 static void

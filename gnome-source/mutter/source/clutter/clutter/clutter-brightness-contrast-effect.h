@@ -28,6 +28,7 @@
 #error "Only <clutter/clutter.h> can be included directly."
 #endif
 
+#include "clutter/clutter-color.h"
 #include "clutter/clutter-effect.h"
 #include "clutter/clutter-offscreen-effect.h"
 

@@ -64,7 +64,7 @@ struct _GtkAdjustmentClass
 
 
 GDK_AVAILABLE_IN_ALL
-GType      gtk_adjustment_get_type              (void);
+GType      gtk_adjustment_get_type              (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkAdjustment*   gtk_adjustment_new             (double           value,
                                                  double           lower,

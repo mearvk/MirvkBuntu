@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -25,7 +27,7 @@ export const State = {
 export const ModalDialog = GObject.registerClass({
     Properties: {
         'state': GObject.ParamSpec.int(
-            'state', null, null,
+            'state', 'Dialog state', 'state',
             GObject.ParamFlags.READABLE,
             Math.min(...Object.values(State)),
             Math.max(...Object.values(State)),
@@ -110,6 +112,20 @@ export const ModalDialog = GObject.registerClass({
         this.notify('state');
     }
 
+    vfunc_key_press_event(event) {
+        if (global.focus_manager.navigate_from_event(event))
+            return Clutter.EVENT_STOP;
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    vfunc_captured_event(event) {
+        if (Main.keyboard.maybeHandleEvent(event))
+            return Clutter.EVENT_STOP;
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
     clearButtons() {
         this.dialogLayout.clearButtons();
     }
@@ -117,7 +133,7 @@ export const ModalDialog = GObject.registerClass({
     setButtons(buttons) {
         this.clearButtons();
 
-        for (const buttonInfo of buttons)
+        for (let buttonInfo of buttons)
             this.addButton(buttonInfo);
     }
 
@@ -202,7 +218,7 @@ export const ModalDialog = GObject.registerClass({
         if (!this._hasModal)
             return;
 
-        const focus = global.stage.key_focus;
+        let focus = global.stage.key_focus;
         if (focus && this.contains(focus))
             this._savedKeyFocus = focus;
         else
@@ -220,6 +236,11 @@ export const ModalDialog = GObject.registerClass({
             return true;
 
         const grab = Main.pushModal(this, {actionMode: this._actionMode});
+        if (grab.get_seat_state() !== Clutter.GrabState.ALL) {
+            Main.popModal(grab);
+            return false;
+        }
+
         this._grab = grab;
         Main.layoutManager.emit('system-modal-opened');
 
@@ -228,7 +249,7 @@ export const ModalDialog = GObject.registerClass({
             this._savedKeyFocus.grab_key_focus();
             this._savedKeyFocus = null;
         } else {
-            const focus = this._initialKeyFocus || this.dialogLayout.initialKeyFocus;
+            let focus = this._initialKeyFocus || this.dialogLayout.initialKeyFocus;
             focus.grab_key_focus();
         }
 

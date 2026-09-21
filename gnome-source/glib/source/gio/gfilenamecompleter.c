@@ -211,7 +211,7 @@ got_more_files (GObject *source_object,
 	  if (append_slash)
 	    {
 	      t = basename;
-	      basename = g_strconcat (basename, G_DIR_SEPARATOR_S, NULL);
+	      basename = g_strconcat (basename, "/", NULL);
 	      g_free (t);
 	    }
 	  
@@ -342,13 +342,11 @@ init_completion (GFilenameCompleter *completer,
 		 char **basename_out)
 {
   gboolean should_escape;
-  GFile *file = NULL, *parent = NULL;
+  GFile *file, *parent;
   char *basename;
   char *t;
-  size_t len;
-  GList *basenames;
+  int len;
 
-  basenames = NULL;
   *basename_out = NULL;
   
   should_escape = ! (g_path_is_absolute (initial_text) || *initial_text == '~');
@@ -357,20 +355,23 @@ init_completion (GFilenameCompleter *completer,
   
   if (len > 0 &&
       initial_text[len - 1] == '/')
-    goto out;
+    return NULL;
   
   file = g_file_parse_name (initial_text);
   parent = g_file_get_parent (file);
   if (parent == NULL)
-    goto out;
+    {
+      g_object_unref (file);
+      return NULL;
+    }
 
   if (completer->basenames_dir == NULL ||
       completer->basenames_are_escaped != should_escape ||
       !g_file_equal (parent, completer->basenames_dir))
     {
       schedule_load_basenames (completer, parent, should_escape);
-
-      goto out;
+      g_object_unref (file);
+      return NULL;
     }
   
   basename = g_file_get_basename (file);
@@ -387,17 +388,12 @@ init_completion (GFilenameCompleter *completer,
       g_free (t);
       
       if (basename == NULL)
-        goto out;
+	return NULL;
     }
 
-  basenames = completer->basenames;
   *basename_out = basename;
 
-out:
-  g_clear_object (&file);
-  g_clear_object (&parent);
-
-  return basenames;
+  return completer->basenames;
 }
 
 /**
@@ -405,13 +401,11 @@ out:
  * @completer: the filename completer.
  * @initial_text: text to be completed.
  *
- * Obtains a suffix completion for @initial_text from @completer.
- *
- * Suffix will be an empty string if there's no shared suffix among matching
- * completions. If there's no matching completions anyway, `NULL` is returned.
+ * Obtains a completion for @initial_text from @completer.
  *  
- * Returns: (nullable) (transfer full): a suffix completion string, or `NULL` if no
- *     completion exists.
+ * Returns: (nullable) (transfer full): a completed string, or %NULL if no
+ *     completion exists. This string is not owned by GIO, so remember to g_free()
+ *     it when finished.
  **/
 char *
 g_filename_completer_get_completion_suffix (GFilenameCompleter *completer,
@@ -463,10 +457,8 @@ g_filename_completer_get_completion_suffix (GFilenameCompleter *completer,
  * 
  * Gets an array of completion strings for a given initial text.
  * 
- * The strings are returned in an undefined order.
- *
- * Returns: (array zero-terminated=1) (transfer full): array of strings with
- *   possible completions for @initial_text
+ * Returns: (array zero-terminated=1) (transfer full): array of strings with possible completions for @initial_text.
+ * This array must be freed by g_strfreev() when finished. 
  **/
 char **
 g_filename_completer_get_completions (GFilenameCompleter *completer,
@@ -506,9 +498,6 @@ g_filename_completer_get_completions (GFilenameCompleter *completer,
  * 
  * If @dirs_only is %TRUE, @completer will only 
  * complete directory names, and not file names.
- *
- * This function needs to be called before waiting for results from the
- * completer to be populated.
  **/
 void
 g_filename_completer_set_dirs_only (GFilenameCompleter *completer,

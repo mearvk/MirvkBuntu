@@ -36,6 +36,9 @@
 #define INITGUID
 #endif
 
+/* For C-style COM wrapper macros */
+#define COBJMACROS
+
 #include "gdkdropprivate.h"
 
 #include "gdkdrag.h"
@@ -130,7 +133,7 @@ struct _drop_target_context
    */
   GdkSurface                     *surface;
   /* This is given to us by the OS, we store it here
-   * until the drag leaves our surface HWND. It is referenced
+   * until the drag leaves our window. It is referenced
    * (using COM reference counting).
    */
   IDataObject                    *data_object;
@@ -177,7 +180,11 @@ gdk_drop_new (GdkDisplay        *display,
                              "surface", surface,
                              NULL);
 
-  drop_win32->scale = gdk_win32_display_get_monitor_scale_factor (display_win32, NULL, NULL);
+  if (display_win32->has_fixed_scale)
+    drop_win32->scale = display_win32->surface_scale;
+  else
+    drop_win32->scale = gdk_win32_display_get_monitor_scale_factor (display_win32, NULL, NULL);
+
   drop_win32->protocol = protocol;
 
   return GDK_DROP (drop_win32);
@@ -262,8 +269,7 @@ idroptarget_release (LPDROPTARGET This)
 }
 
 static GdkContentFormats *
-query_object_formats (GdkDisplay   *display,
-                      LPDATAOBJECT  pDataObj,
+query_object_formats (LPDATAOBJECT  pDataObj,
                       GArray       *w32format_contentformat_map)
 {
   IEnumFORMATETC *pfmt = NULL;
@@ -272,12 +278,12 @@ query_object_formats (GdkDisplay   *display,
   GdkContentFormatsBuilder *builder;
   GdkContentFormats *result_formats;
 
-  hr = IDataObject_EnumFormatEtc (pDataObj, DATADIR_GET, &pfmt);
-  if (FAILED (hr))
-    return gdk_content_formats_new (NULL, 0);
-
   builder = gdk_content_formats_builder_new ();
-  hr = IEnumFORMATETC_Next (pfmt, 1, &fmt, NULL);
+
+  hr = IDataObject_EnumFormatEtc (pDataObj, DATADIR_GET, &pfmt);
+
+  if (SUCCEEDED (hr))
+    hr = IEnumFORMATETC_Next (pfmt, 1, &fmt, NULL);
 
   while (SUCCEEDED (hr) && hr != S_FALSE)
     {
@@ -292,11 +298,12 @@ query_object_formats (GdkDisplay   *display,
         GDK_NOTE (DND, g_print ("supported unnamed? source format 0x%x\n", fmt.cfFormat));
 
       g_free (registered_name);
-      gdk_win32_clipdrop_add_win32_format_to_pairs (gdk_win32_display_get_clipdrop (display), fmt.cfFormat, w32format_contentformat_map, builder);
+      _gdk_win32_add_w32format_to_pairs (fmt.cfFormat, w32format_contentformat_map, builder);
       hr = IEnumFORMATETC_Next (pfmt, 1, &fmt, NULL);
     }
 
-  gdk_win32_com_clear (&pfmt);
+  if (pfmt)
+    IEnumFORMATETC_Release (pfmt);
 
   result_formats = gdk_content_formats_builder_free_to_formats (builder);
 
@@ -306,7 +313,8 @@ query_object_formats (GdkDisplay   *display,
 static void
 set_data_object (LPDATAOBJECT *location, LPDATAOBJECT data_object)
 {
-  gdk_win32_com_clear (location);
+  if (*location != NULL)
+    IDataObject_Release (*location);
 
   *location = data_object;
 
@@ -468,7 +476,7 @@ idroptarget_dragenter (LPDROPTARGET This,
   GArray *droptarget_w32format_contentformat_map;
 
   GDK_NOTE (DND, g_print ("idroptarget_dragenter %p @ %ld : %ld"
-                          " for dest surface 0x%p"
+                          " for dest window 0x%p"
                           ". dwOKEffects = %lu\n",
                           This, pt.x, pt.y,
                           ctx->surface,
@@ -482,12 +490,12 @@ idroptarget_dragenter (LPDROPTARGET This,
   drag = NULL;
 
   if (ctx->surface)
-    drag = gdk_win32_find_drag_for_dest_surface (ctx->surface);
+    drag = _gdk_win32_find_drag_for_dest_window (GDK_SURFACE_HWND (ctx->surface));
 
   display = gdk_surface_get_display (ctx->surface);
 
   droptarget_w32format_contentformat_map = g_array_new (FALSE, FALSE, sizeof (GdkWin32ContentFormatPair));
-  formats = query_object_formats (display, pDataObj, droptarget_w32format_contentformat_map);
+  formats = query_object_formats (pDataObj, droptarget_w32format_contentformat_map);
   drop = gdk_drop_new (display,
                        gdk_seat_get_pointer (gdk_display_get_default_seat (display)),
                        drag,
@@ -529,7 +537,7 @@ idroptarget_dragenter (LPDROPTARGET This,
 
 /* NOTE: This method is called continuously, even if nothing is
  * happening, as long as the drag operation is in progress and
- * the cursor is above our surface.
+ * the cursor is above our window.
  * It is OK to return a "safe" dropeffect value (DROPEFFECT_NONE,
  * to indicate that the drop is not possible here), when we
  * do not yet have any real information about acceptability of
@@ -648,13 +656,6 @@ idroptarget_drop (LPDROPTARGET This,
 
   gdk_drop_emit_leave_event (ctx->drop, TRUE, GDK_CURRENT_TIME);
 
-  if (drop_win32->actions == GDK_ACTION_NONE)
-    {
-      g_clear_object (&ctx->drop);
-      set_data_object (&ctx->data_object, NULL);
-      return E_UNEXPECTED;
-    }
-
   while (!drop_win32->drop_finished)
     g_main_context_iteration (NULL, FALSE);
 
@@ -684,7 +685,7 @@ static IDropTargetVtbl idt_vtbl = {
 };
 
 static drop_target_context *
-target_context_new (GdkSurface *surface)
+target_context_new (GdkSurface *window)
 {
   drop_target_context *result;
 
@@ -692,11 +693,11 @@ target_context_new (GdkSurface *surface)
   result->idt.lpVtbl = &idt_vtbl;
   result->ref_count = 0;
 
-  result->surface = surface;
+  result->surface = window;
 
   idroptarget_addref (&result->idt);
 
-  GDK_NOTE (DND, g_print ("target_context_new: %p (surface %p)\n", result, result->surface));
+  GDK_NOTE (DND, g_print ("target_context_new: %p (window %p)\n", result, result->surface));
 
   return result;
 }
@@ -879,35 +880,35 @@ gdk_destroy_filter (GdkXEvent *xev,
 #endif
 
 void
-_gdk_win32_surface_register_dnd (GdkSurface *surface)
+_gdk_win32_surface_register_dnd (GdkSurface *window)
 {
   drop_target_context *ctx;
   HRESULT hr;
   GdkWin32Surface *impl;
 
-  g_return_if_fail (surface != NULL);
+  g_return_if_fail (window != NULL);
 
-  if (g_object_get_data (G_OBJECT (surface), "gdk-dnd-registered") != NULL)
+  if (g_object_get_data (G_OBJECT (window), "gdk-dnd-registered") != NULL)
     return;
   else
-    g_object_set_data (G_OBJECT (surface), "gdk-dnd-registered", GINT_TO_POINTER (TRUE));
+    g_object_set_data (G_OBJECT (window), "gdk-dnd-registered", GINT_TO_POINTER (TRUE));
 
-  GDK_NOTE (DND, g_print ("gdk_win32_surface_register_dnd: %p\n", GDK_SURFACE_HWND (surface)));
+  GDK_NOTE (DND, g_print ("gdk_win32_surface_register_dnd: %p\n", GDK_SURFACE_HWND (window)));
 
-  impl = GDK_WIN32_SURFACE (surface);
+  impl = GDK_WIN32_SURFACE (window);
 
-  /* Return if surface is already setup for DND. */
+  /* Return if window is already setup for DND. */
   if (impl->drop_target != NULL)
     return;
 
-  ctx = target_context_new (surface);
+  ctx = target_context_new (window);
 
   hr = CoLockObjectExternal ((IUnknown *) &ctx->idt, TRUE, FALSE);
   if (!SUCCEEDED (hr))
     OTHER_API_FAILED ("CoLockObjectExternal");
   else
     {
-      hr = RegisterDragDrop (GDK_SURFACE_HWND (surface), &ctx->idt);
+      hr = RegisterDragDrop (GDK_SURFACE_HWND (window), &ctx->idt);
       if (hr == DRAGDROP_E_ALREADYREGISTERED)
         {
           g_print ("DRAGDROP_E_ALREADYREGISTERED\n");
@@ -923,9 +924,9 @@ _gdk_win32_surface_register_dnd (GdkSurface *surface)
 }
 
 void
-_gdk_win32_surface_unregister_dnd (GdkSurface *surface)
+_gdk_win32_surface_unregister_dnd (GdkSurface *window)
 {
-  GdkWin32Surface *impl = GDK_WIN32_SURFACE (surface);
+  GdkWin32Surface *impl = GDK_WIN32_SURFACE (window);
 
   if (impl->drop_target)
     idroptarget_release (&impl->drop_target->idt);
@@ -1109,12 +1110,7 @@ gdk_win32_drop_read_async (GdkDrop             *drop,
     }
   else
     {
-      GdkDisplay *display = gdk_drop_get_display (drop);
-      gdk_win32_clipdrop_transmute_windows_data (gdk_win32_display_get_clipdrop (display),
-                                                 pair->w32format, pair->contentformat,
-                                                 storage.hGlobal,
-                                                 &data,
-                                                 &data_len);
+      _gdk_win32_transmute_windows_data (pair->w32format, pair->contentformat, storage.hGlobal, &data, &data_len);
     }
 
   ReleaseStgMedium (&storage);

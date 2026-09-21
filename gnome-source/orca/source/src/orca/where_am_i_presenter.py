@@ -22,76 +22,175 @@
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
-import gi
-
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, Gtk  # pylint: disable=no-name-in-module
-
 from . import (
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     flat_review_presenter,
     focus_manager,
     guilabels,
     input_event,
-    math_navigator,
-    math_presenter,
+    keybindings,
     messages,
     presentation_manager,
+    speech_presenter,
     spellcheck_presenter,
     text_attribute_manager,
-    text_selection_presenter,
-    where_am_i_presenter_command_definitions,
 )
 from .ax_component import AXComponent
 from .ax_object import AXObject
 from .ax_text import AXText, AXTextAttribute
 from .ax_utilities import AXUtilities
-from .extension import Extension
-from .generator import PresentationReason
+from .generator import WhereAmI
 
 if TYPE_CHECKING:
+    import gi
+
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
 
-    from .command import Command
     from .scripts import default
 
 
-class WhereAmIPresenter(Extension):
+class WhereAmIPresenter:
     """Module for commands related to the current accessible object."""
 
-    GROUP_LABEL = guilabels.KB_GROUP_WHERE_AM_I
-
     def __init__(self) -> None:
-        super().__init__()
-        self._char_attributes_gui: CharacterAttributesGUI | None = None
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return where_am_i_presenter_command_definitions.get_commands(self)
+        msg = "WHERE AM I PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("WhereAmIPresenter", self)
 
-    def _get_current_character_info(self, script: default.Script) -> tuple[dict[str, str], str]:
-        """Returns the text attributes and string for the current character."""
+    # pylint: disable-next=too-many-locals
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
 
-        reviewer = flat_review_presenter.get_presenter()
-        if reviewer.is_active():
-            context = reviewer.get_or_create_context(script)
-            obj = context.get_current_object()
-            offset = context.get_current_text_offset()
-        else:
-            obj = focus_manager.get_manager().get_locus_of_focus()
-            offset = None
+        if self._initialized:
+            return
+        self._initialized = True
 
-        attrs = AXText.get_text_attributes_at_offset(obj, offset)[0]
-        char = AXText.get_character_at_offset(obj, offset)[0]
-        return attrs, char
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_WHERE_AM_I
 
-    def _localize_text_attribute(self, key: str, value: str | None) -> str:
-        """Returns a localized description of the text attribute for Orca+F readout."""
+        # Common keybindings (same for desktop and laptop)
+        kb_f = keybindings.KeyBinding("f", keybindings.ORCA_MODIFIER_MASK)
+        kb_e = keybindings.KeyBinding("e", keybindings.ORCA_MODIFIER_MASK)
+        kb_up = keybindings.KeyBinding("Up", keybindings.ORCA_SHIFT_MODIFIER_MASK)
 
+        # Desktop-specific keybindings
+        kb_equal = keybindings.KeyBinding("equal", keybindings.ORCA_MODIFIER_MASK)
+        kb_kp_enter_orca = keybindings.KeyBinding("KP_Enter", keybindings.ORCA_MODIFIER_MASK)
+        kb_kp_enter_orca_2 = keybindings.KeyBinding(
+            "KP_Enter",
+            keybindings.ORCA_MODIFIER_MASK,
+            click_count=2,
+        )
+        kb_kp_enter = keybindings.KeyBinding("KP_Enter", keybindings.NO_MODIFIER_MASK)
+        kb_kp_enter_2 = keybindings.KeyBinding(
+            "KP_Enter",
+            keybindings.NO_MODIFIER_MASK,
+            click_count=2,
+        )
+
+        # Laptop-specific keybindings
+        kb_slash = keybindings.KeyBinding("slash", keybindings.ORCA_MODIFIER_MASK)
+        kb_slash_2 = keybindings.KeyBinding("slash", keybindings.ORCA_MODIFIER_MASK, click_count=2)
+        kb_return = keybindings.KeyBinding("Return", keybindings.ORCA_MODIFIER_MASK)
+        kb_return_2 = keybindings.KeyBinding(
+            "Return",
+            keybindings.ORCA_MODIFIER_MASK,
+            click_count=2,
+        )
+
+        # (name, function, description, desktop_kb, laptop_kb)
+        commands_data = [
+            (
+                "readCharAttributesHandler",
+                self.present_character_attributes,
+                cmdnames.READ_CHAR_ATTRIBUTES,
+                kb_f,
+                kb_f,
+            ),
+            (
+                "presentSizeAndPositionHandler",
+                self.present_size_and_position,
+                cmdnames.PRESENT_SIZE_AND_POSITION,
+                None,
+                None,
+            ),
+            (
+                "getTitleHandler",
+                self.present_title,
+                cmdnames.PRESENT_TITLE,
+                kb_kp_enter_orca,
+                kb_slash,
+            ),
+            (
+                "getStatusBarHandler",
+                self.present_status_bar,
+                cmdnames.PRESENT_STATUS_BAR,
+                kb_kp_enter_orca_2,
+                kb_slash_2,
+            ),
+            (
+                "present_default_button",
+                self.present_default_button,
+                cmdnames.PRESENT_DEFAULT_BUTTON,
+                kb_e,
+                kb_e,
+            ),
+            (
+                "present_cell_formula",
+                self.present_cell_formula,
+                cmdnames.PRESENT_CELL_FORMULA,
+                kb_equal,
+                None,
+            ),
+            (
+                "whereAmIBasicHandler",
+                self.where_am_i_basic,
+                cmdnames.WHERE_AM_I_BASIC,
+                kb_kp_enter,
+                kb_return,
+            ),
+            (
+                "whereAmIDetailedHandler",
+                self.where_am_i_detailed,
+                cmdnames.WHERE_AM_I_DETAILED,
+                kb_kp_enter_2,
+                kb_return_2,
+            ),
+            ("whereAmILinkHandler", self.present_link, cmdnames.WHERE_AM_I_LINK, None, None),
+            (
+                "whereAmISelectionHandler",
+                self.present_selection,
+                cmdnames.WHERE_AM_I_SELECTION,
+                kb_up,
+                kb_up,
+            ),
+        ]
+
+        for name, function, description, desktop_kb, laptop_kb in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=desktop_kb,
+                    laptop_keybinding=laptop_kb,
+                ),
+            )
+
+        msg = "WHERE AM I PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+
+    def _localize_text_attribute(self, key, value):
         if value is None:
             return ""
 
@@ -102,42 +201,9 @@ class WhereAmIPresenter(Extension):
             return messages.MISSPELLED
 
         ax_text_attribute = AXTextAttribute.from_string(key)
-        if ax_text_attribute is None:
-            return ""
-
         localized_key = ax_text_attribute.get_localized_name()
         localized_value = ax_text_attribute.get_localized_value(value)
         return f"{localized_key}: {localized_value}"
-
-    def _get_all_available_text_attributes(self, attrs: dict[str, str]) -> list[str]:
-        """Returns localized descriptions of all available text attributes."""
-
-        result = []
-        seen = set()
-        for key, value in attrs.items():
-            ax_text_attribute = AXTextAttribute.from_string(key)
-            sort_key = ax_text_attribute.get_localized_name() if ax_text_attribute else key
-            canonical_key = ax_text_attribute.get_attribute_name() if ax_text_attribute else key
-
-            if canonical_key in seen or value is None:
-                continue
-
-            if ax_text_attribute is not None:
-                localized_key = ax_text_attribute.get_localized_name()
-                localized_value = ax_text_attribute.get_localized_value(value)
-                description = f"{localized_key}: {localized_value}"
-            else:
-                description = f"{key}: {value}"
-
-            result.append((sort_key.casefold(), description))
-            seen.add(canonical_key)
-
-        return [description for _sort_key, description in sorted(result)]
-
-    def _get_character_formatting_text(self, attrs: dict[str, str]) -> str:
-        """Returns text for the character-formatting window."""
-
-        return "\n".join(self._get_all_available_text_attributes(attrs))
 
     @dbus_service.command
     def present_character_attributes(
@@ -158,64 +224,30 @@ class WhereAmIPresenter(Extension):
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
-        attrs, _char = self._get_current_character_info(script)
-        attr_list = text_attribute_manager.get_manager().get_resolved_attributes_to_speak()
-        presented = False
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        attrs = AXText.get_text_attributes_at_offset(focus)[0]
+
+        # Get a dictionary of text attributes that the user cares about, falling back on the
+        # default presentable attributes if the user has not specified any.
+        attr_list = list(
+            filter(
+                None,
+                map(
+                    AXTextAttribute.from_string,
+                    text_attribute_manager.get_manager().get_attributes_to_speak(),
+                ),
+            ),
+        )
+        if not attr_list:
+            attr_list = AXUtilities.get_all_supported_text_attributes()
 
         for ax_text_attr in attr_list:
             key = ax_text_attr.get_attribute_name()
-            value = ax_text_attr.get_value_from_attrs(attrs)
+            value = attrs.get(key)
             if not ax_text_attr.value_is_default(value):
-                presentation_manager.get_manager().present_message(
+                presentation_manager.get_manager().speak_message(
                     self._localize_text_attribute(key, value),
                 )
-                presented = True
-
-        if not presented:
-            msg = (
-                messages.CHARACTER_FORMATTING_DEFAULT
-                if attrs
-                else messages.CHARACTER_FORMATTING_NOT_AVAILABLE
-            )
-            presentation_manager.get_manager().present_message(
-                msg,
-            )
-
-        return True
-
-    @dbus_service.command
-    def show_character_attributes(
-        self,
-        script: default.Script,
-        event: input_event.InputEvent | None = None,
-        notify_user: bool = True,
-    ) -> bool:
-        """Shows the font and formatting details for the current character."""
-
-        tokens = [
-            "WHERE AM I PRESENTER: show_character_attributes. Script:",
-            script,
-            "Event:",
-            event,
-            "notify_user:",
-            notify_user,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        attrs, char = self._get_current_character_info(script)
-        descriptions = self._get_all_available_text_attributes(attrs)
-        if not descriptions:
-            presentation_manager.get_manager().present_message(
-                messages.CHARACTER_FORMATTING_NOT_AVAILABLE,
-            )
-            return True
-
-        title = guilabels.CHARACTER_FORMATTING
-        if char:
-            title = guilabels.CHARACTER_FORMATTING_FOR % char
-        text = self._get_character_formatting_text(attrs)
-        self._char_attributes_gui = CharacterAttributesGUI(title, text)
-        self._char_attributes_gui.show_gui()
 
         return True
 
@@ -389,16 +421,15 @@ class WhereAmIPresenter(Extension):
         if frame:
             statusbar = AXUtilities.get_status_bar(frame)
             if statusbar:
-                presentation_manager.get_manager().interrupt_if_needed_for_object_presentation()
-                script.present_object(statusbar)
+                script.present_object(statusbar, interrupt=True)
             else:
                 full = messages.STATUS_BAR_NOT_FOUND_FULL
                 brief = messages.STATUS_BAR_NOT_FOUND_BRIEF
                 presentation_manager.get_manager().present_message(full, brief)
 
             infobar = AXUtilities.get_info_bar(frame)
-            if infobar and AXUtilities.is_showing_and_visible(infobar):
-                script.present_object(infobar)
+            if infobar and AXUtilities.is_showing(infobar) and AXUtilities.is_visible(infobar):
+                script.present_object(infobar, interrupt=statusbar is None)
 
         return True
 
@@ -429,6 +460,31 @@ class WhereAmIPresenter(Extension):
 
         return self._do_where_am_i(script, True, link)
 
+    def _get_all_selected_text(self, script: default.Script, obj: Atspi.Accessible) -> str:
+        """Returns the selected text of obj plus any adjacent text objects."""
+
+        string = AXUtilities.get_selected_text(obj)[0]
+        if AXUtilities.is_spreadsheet_cell(obj):
+            return string
+
+        prev_obj = script.utilities.find_previous_object(obj)
+        while prev_obj:
+            selection = AXUtilities.get_selected_text(prev_obj)[0]
+            if not selection:
+                break
+            string = f"{selection} {string}"
+            prev_obj = script.utilities.find_previous_object(prev_obj)
+
+        next_obj = script.utilities.find_next_object(obj)
+        while next_obj:
+            selection = AXUtilities.get_selected_text(next_obj)[0]
+            if not selection:
+                break
+            string = f"{string} {selection}"
+            next_obj = script.utilities.find_next_object(next_obj)
+
+        return string
+
     @dbus_service.command
     def present_selected_text(
         self,
@@ -453,7 +509,17 @@ class WhereAmIPresenter(Extension):
             presentation_manager.get_manager().speak_message(messages.LOCATION_NOT_FOUND_FULL)
             return True
 
-        return text_selection_presenter.get_presenter().present_selected_text(script, obj)
+        text = self._get_all_selected_text(script, obj)
+        if not text:
+            presentation_manager.get_manager().speak_message(messages.NO_SELECTED_TEXT)
+            return True
+
+        manager = speech_presenter.get_presenter()
+        indentation = manager.get_indentation_description(text, only_if_changed=False)
+        text = manager.adjust_for_presentation(obj, text)
+        msg = messages.SELECTED_TEXT_IS % f"{indentation} {text}"
+        presentation_manager.get_manager().speak_message(msg)
+        return True
 
     @dbus_service.command
     def present_selection(
@@ -491,7 +557,7 @@ class WhereAmIPresenter(Extension):
         if container is None:
             tokens = ["WHERE AM I PRESENTER: Selection container not found for", obj]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return text_selection_presenter.get_presenter().present_selected_text(script, obj)
+            return self.present_selected_text(script, event, obj)
 
         selected_count = AXUtilities.selected_child_count(container)
         child_count = AXUtilities.selectable_child_count(container)
@@ -519,15 +585,6 @@ class WhereAmIPresenter(Extension):
         if presenter.is_active():
             presenter.present_error_details(not basic_only, script)
 
-        if math_navigator.get_navigator().is_active():
-            if basic_only:
-                speech = math_presenter.get_presenter().get_where_am_i()
-            else:
-                speech = math_presenter.get_presenter().get_where_am_i_all()
-            if speech:
-                presentation_manager.get_manager().present_message(speech)
-            return True
-
         if obj is None:
             obj = focus_manager.get_manager().get_locus_of_focus()
         if AXObject.is_dead(obj):
@@ -539,9 +596,9 @@ class WhereAmIPresenter(Extension):
             return True
 
         if basic_only:
-            reason = PresentationReason.WHERE_AM_I_BASIC
+            where_am_i_type = WhereAmI.BASIC
         else:
-            reason = PresentationReason.WHERE_AM_I_DETAILED
+            where_am_i_type = WhereAmI.DETAILED
 
         def real_object(acc: Atspi.Accessible) -> Atspi.Accessible:
             if AXUtilities.is_focused(acc):
@@ -560,7 +617,12 @@ class WhereAmIPresenter(Extension):
 
         script.present_object(
             real_object(obj),
-            reason=reason,
+            alreadyFocused=True,
+            where_am_i_type=where_am_i_type,
+            forceMnemonic=True,
+            forceList=True,
+            forceTutorial=True,
+            speechOnly=True,
         )
 
         return True
@@ -610,64 +672,6 @@ class WhereAmIPresenter(Extension):
         # first one.
         presentation_manager.get_manager().interrupt_presentation()
         return self._do_where_am_i(script, False, notify_user=notify_user)
-
-
-class CharacterAttributesGUI:
-    """Presents character attributes in a text view."""
-
-    def __init__(self, title: str, text: str) -> None:
-        self._gui: Gtk.Dialog = self._create_dialog(title, text)
-
-    def _create_dialog(self, title: str, text: str) -> Gtk.Dialog:
-        """Creates the dialog."""
-
-        dialog = Gtk.Dialog(
-            title,
-            None,
-            Gtk.DialogFlags.MODAL,
-            (Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE),
-        )
-        dialog.set_default_size(600, 400)
-
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_hexpand(True)
-        scrolled_window.set_vexpand(True)
-
-        textbuffer = Gtk.TextBuffer()
-        textbuffer.set_text(text)
-        textbuffer.place_cursor(textbuffer.get_start_iter())
-
-        textview = Gtk.TextView(buffer=textbuffer)
-        textview.set_editable(False)
-        textview.set_cursor_visible(True)
-        textview.set_wrap_mode(Gtk.WrapMode.WORD)
-        scrolled_window.add(textview)  # pylint: disable=no-member
-        dialog.get_content_area().pack_start(scrolled_window, True, True, 0)
-        dialog.set_focus(textview)
-        dialog.connect("response", self.on_response)
-        dialog.connect("key-press-event", self.on_key_press)
-        return dialog
-
-    def on_response(self, _dialog: Gtk.Dialog, response: Gtk.ResponseType) -> None:
-        """Handler for the 'response' signal of the dialog."""
-
-        if response == Gtk.ResponseType.CLOSE:
-            self._gui.destroy()
-
-    def on_key_press(self, _dialog: Gtk.Dialog, event: Gdk.EventKey) -> bool:
-        """Handler for the 'key-press-event' signal of the dialog."""
-
-        if event.keyval == Gdk.KEY_Escape:
-            self._gui.destroy()
-            return True
-        return False
-
-    def show_gui(self) -> None:
-        """Shows the dialog."""
-
-        self._gui.show_all()  # pylint: disable=no-member
-        self._gui.present_with_time(time.time())
 
 
 _presenter = WhereAmIPresenter()

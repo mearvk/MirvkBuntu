@@ -17,11 +17,8 @@
 
 #pragma once
 
-#if !defined (__GSK_H_INSIDE__) && !defined (GTK_COMPILATION)
-#error "Only <gsk/gsk.h> can be included directly."
-#endif
-
-#include <gsk/gsktypes.h>
+#include <gdk/gdk.h>
+#include <gsk/gsk.h>
 
 G_BEGIN_DECLS
 
@@ -36,7 +33,7 @@ G_BEGIN_DECLS
 /**
  * GskVulkanRenderer:
  *
- * Renders a GSK rendernode tree with Vulkan.
+ * A GSK renderer that is using Vulkan.
  *
  * This renderer will fail to realize if Vulkan is not supported.
  */
@@ -44,7 +41,7 @@ typedef struct _GskVulkanRenderer                GskVulkanRenderer;
 typedef struct _GskVulkanRendererClass           GskVulkanRendererClass;
 
 GDK_AVAILABLE_IN_ALL
-GType                   gsk_vulkan_renderer_get_type            (void);
+GType                   gsk_vulkan_renderer_get_type            (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GskRenderer *           gsk_vulkan_renderer_new                 (void);

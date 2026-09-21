@@ -6,17 +6,12 @@
 #include <stdio.h>
 #include <wayland-client.h>
 
-#include "color-management-v1-client-protocol.h"
-#include "color-representation-v1-client-protocol.h"
-#include "cursor-shape-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "linux-dmabuf-v1-client-protocol.h"
 #include "single-pixel-buffer-v1-client-protocol.h"
 #include "test-driver-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
-#include "xdg-toplevel-tag-v1-client-protocol.h"
-#include "xdg-activation-v1-client-protocol.h"
 
 typedef enum _WaylandDisplayCapabilities
 {
@@ -24,10 +19,7 @@ typedef enum _WaylandDisplayCapabilities
   WAYLAND_DISPLAY_CAPABILITY_TEST_DRIVER = 1 << 0,
   WAYLAND_DISPLAY_CAPABILITY_XDG_SHELL_V4 = 1 << 1,
   WAYLAND_DISPLAY_CAPABILITY_XDG_SHELL_V6 = 1 << 2,
-  WAYLAND_DISPLAY_CAPABILITY_CURSOR_SHAPE_V2 = 1 << 3,
 } WaylandDisplayCapabilities;
-
-typedef struct _WaylandSurface WaylandSurface;
 
 typedef struct _DmaBufFormat
 {
@@ -42,55 +34,26 @@ typedef struct _WaylandDisplay
 
   WaylandDisplayCapabilities capabilities;
 
-  GSource *source;
-
   struct wl_display *display;
   struct wl_registry *registry;
   struct wl_compositor *compositor;
   struct wl_subcompositor *subcompositor;
   struct wl_shm *shm;
   struct zwp_linux_dmabuf_v1 *linux_dmabuf;
-  struct wp_color_representation_manager_v1 *color_representation;
   struct wp_fractional_scale_manager_v1 *fractional_scale_mgr;
   struct wp_single_pixel_buffer_manager_v1 *single_pixel_mgr;
-  struct wp_color_manager_v1 *color_management_mgr;
-  struct wp_cursor_shape_manager_v1 *cursor_shape_mgr;
   struct wp_viewporter *viewporter;
   struct xdg_wm_base *xdg_wm_base;
-  struct xdg_toplevel_tag_manager_v1 *toplevel_tag_manager;
-  struct xdg_activation_v1 *xdg_activation;
-  struct wl_seat *wl_seat;
-  struct wl_pointer *wl_pointer;
-  struct wl_keyboard *wl_keyboard;
-  struct wl_touch *wl_touch;
   struct test_driver *test_driver;
-  struct wl_data_device_manager *data_device_manager;
-
-  WaylandSurface *pointer_focus;
-  WaylandSurface *keyboard_focus;
-  WaylandSurface *data_focus;
-  uint32_t last_input_serial;
-
-  gboolean needs_roundtrip;
 
   uint32_t sync_event_serial_next;
 
   GHashTable *properties;
 
-  GHashTable *buffers;
-
   struct gbm_device *gbm_device;
 
   /* format to DmaBufFormat mapping */
   GHashTable *formats;
-
-  gpointer test_state;
-  GDestroyNotify destroy_test_state;
-
-  GHashTable *selection;
-  struct wl_data_device *data_device;
-  struct wl_data_source *selection_source;
-  struct wl_data_offer  *offer;
 } WaylandDisplay;
 
 #define WAYLAND_TYPE_DISPLAY (wayland_display_get_type ())
@@ -98,7 +61,7 @@ G_DECLARE_FINAL_TYPE (WaylandDisplay, wayland_display,
                       WAYLAND, DISPLAY,
                       GObject)
 
-struct _WaylandSurface
+typedef struct _WaylandSurface
 {
   GObject parent;
 
@@ -111,22 +74,14 @@ struct _WaylandSurface
   GHashTable *pending_state;
   GHashTable *current_state;
 
-  uint32_t last_serial;
-
   int default_width;
   int default_height;
   int width;
   int height;
-  gboolean fixed_size;
 
   uint32_t color;
-
-  int32_t preferred_buffer_scale;
-
-  gboolean manual_paint;
-  gboolean has_alpha;
-  gboolean set_input_region;
-};
+  gboolean is_opaque;
+} WaylandSurface;
 
 #define WAYLAND_TYPE_SURFACE (wayland_surface_get_type ())
 G_DECLARE_FINAL_TYPE (WaylandSurface, wayland_surface,
@@ -153,14 +108,10 @@ WaylandSurface * wayland_surface_new (WaylandDisplay *display,
                                       int             default_height,
                                       uint32_t        color);
 
-WaylandSurface * wayland_surface_new_unassigned (WaylandDisplay *display);
-
 gboolean wayland_surface_has_state (WaylandSurface          *surface,
                                     enum xdg_toplevel_state  state);
 
-void wayland_surface_fixate_size (WaylandSurface *surface);
-
-void wayland_surface_commit (WaylandSurface *surface);
+void wayland_surface_set_opaque (WaylandSurface *surface);
 
 void draw_surface (WaylandDisplay    *display,
                    struct wl_surface *surface,
@@ -168,20 +119,14 @@ void draw_surface (WaylandDisplay    *display,
                    int                height,
                    uint32_t           color);
 
-const char * lookup_property_string (WaylandDisplay *display,
-                                     const char     *name);
-
-int32_t lookup_property_int (WaylandDisplay *display,
-                             const char     *name);
+const char * lookup_property_value (WaylandDisplay *display,
+                                    const char     *name);
 
 void wait_for_effects_completed (WaylandDisplay    *display,
                                  struct wl_surface *surface);
 
 void wait_for_window_shown (WaylandDisplay    *display,
                             struct wl_surface *surface);
-
-void wait_for_window_configured (WaylandDisplay *display,
-                                 WaylandSurface *surface);
 
 void wait_for_view_verified (WaylandDisplay *display,
                              int             sequence);
@@ -211,11 +156,3 @@ void wayland_buffer_draw_pixel (WaylandBuffer *buffer,
 void * wayland_buffer_mmap_plane (WaylandBuffer *buffer,
                                   int            plane,
                                   size_t        *stride_out);
-
-void wayland_display_set_selection (WaylandDisplay *display,
-                                    ...);
-
-char * wayland_display_read_selection (WaylandDisplay *display,
-                                       const char     *mime_type);
-
-void wayland_surface_set_input_region (WaylandSurface *surface);

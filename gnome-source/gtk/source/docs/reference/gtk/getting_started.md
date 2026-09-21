@@ -1,7 +1,7 @@
 Title: Getting Started with GTK
 Slug: gtk-getting-started
 
-GTK is a [widget toolkit](https://en.wikipedia.org/wiki/Widget_toolkit).
+GTK is a [widget toolkit](http://en.wikipedia.org/wiki/Widget_toolkit).
 Each user interface created by GTK consists of widgets. This is implemented
 in C using [class@GObject.Object], an object-oriented framework for C. Widgets
 are organized in a hierarchy. The window widget is the main container.
@@ -33,7 +33,7 @@ Create a new file with the following content named `example-0.c`.
 #include <gtk/gtk.h>
 
 static void
-activate (GtkApplication *app,
+activate (GtkApplication* app,
           gpointer        user_data)
 {
   GtkWidget *window;
@@ -66,6 +66,10 @@ You can compile the program above with GCC using:
 gcc $( pkg-config --cflags gtk4 ) -o example-0 example-0.c $( pkg-config --libs gtk4 )
 ```
 
+**Note**: If the above compilation does not work due to an error regarding `G_APPLICATION_DEFAULT_FLAGS`
+this could be due to your OS providing an older version of GLib. For GLib versions older than 2.74 you
+will need to replace `G_APPLICATION_DEFAULT_FLAGS` with `G_APPLICATION_FLAGS_NONE` in this example, and
+others in this documentation.
 For more information on how to compile a GTK application, please
 refer to the [Compiling GTK Applications](compiling.html)
 section in this reference.
@@ -75,11 +79,12 @@ functions, types and macros required by GTK applications.
 
 Even if GTK installs multiple header files, only the top-level `gtk/gtk.h`
 header can be directly included by third-party code. The compiler will abort
-with an error if any other GTK header is directly included.
+with an error if any other header is directly included.
 
 In a GTK application, the purpose of the `main()` function is to create a
-[class@Gtk.Application] object and run it. In this example a [class@Gtk.Application]
-pointer named `app` is declared and then initialized using `gtk_application_new()`.
+[class@Gtk.Application] object and run it. In this example a
+[class@Gtk.Application] pointer named `app` is declared and then initialized
+using `gtk_application_new()`.
 
 When creating a [class@Gtk.Application], you need to pick an application
 identifier (a name) and pass it to [ctor@Gtk.Application.new] as parameter. For
@@ -100,8 +105,8 @@ Within `g_application_run()` the activate signal is sent and we then proceed
 into the activate() function of the application. This is where we construct
 our GTK window, so that a window is shown when the application is launched.
 The call to [ctor@Gtk.ApplicationWindow.new] will create a new
-[class@Gtk.ApplicationWindow] and store a pointer to it in the `window` variable.
-The window will have a frame, a title bar, and window controls depending on the
+[class@Gtk.ApplicationWindow] and store it inside the `window` pointer. The
+window will have a frame, a title bar, and window controls depending on the
 platform.
 
 A window title is set using [`method@Gtk.Window.set_title`]. This function
@@ -114,7 +119,7 @@ warning if the check fails. More information about this convention can be
 found [in the GObject documentation](https://docs.gtk.org/gobject/concepts.html#conventions).
 
 Finally the window size is set using [`method@Gtk.Window.set_default_size`]
-and the window is then shown by GTK via [method@Gtk.Window.present].
+and the window is then shown by GTK via [method@Gtk.Widget.show].
 
 When you close the window, by (for example) pressing the X button, the
 `g_application_run()` call returns with a number which is saved inside an
@@ -207,8 +212,8 @@ gcc $( pkg-config --cflags gtk4 ) -o example-1 example-1.c $( pkg-config --libs 
 As seen above, `example-1.c` builds further upon `example-0.c` by adding a
 button to our window, with the label "Hello World". Two new `GtkWidget`
 pointers are declared to accomplish this, `button` and `box`. The box
-variable is created to store a [class@Gtk.Box], which is one of GTK's ways
-of controlling the size and layout of widgets.
+variable is created to store a [class@Gtk.Box], which is GTK's way of
+controlling the size and layout of buttons.
 
 The `GtkBox` widget is created with [ctor@Gtk.Box.new], which takes a
 [enum@Gtk.Orientation] enumeration value as parameter. The buttons which
@@ -239,6 +244,9 @@ GTK window is destroyed. In contrast if a normal `g_signal_connect()` were used
 to connect the "clicked" signal with [method@Gtk.Window.destroy], then the function
 would be called on `button` (which would not go well, since the function expects
 a `GtkWindow` as argument).
+
+More information about creating buttons can be found
+[here](https://wiki.gnome.org/HowDoI/Buttons).
 
 The rest of the code in `example-1.c` is identical to `example-0.c`. The next
 section will elaborate further on how to add several [class@Gtk.Widget]s to your
@@ -408,9 +416,10 @@ resize_cb (GtkWidget *widget,
 
   if (gtk_native_get_surface (gtk_widget_get_native (widget)))
     {
-      surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
-                                            gtk_widget_get_width (widget),
-                                            gtk_widget_get_height (widget));
+      surface = gdk_surface_create_similar_surface (gtk_native_get_surface (gtk_widget_get_native (widget)),
+                                                    CAIRO_CONTENT_COLOR,
+                                                    gtk_widget_get_width (widget),
+                                                    gtk_widget_get_height (widget));
 
       /* Initialize the surface to white */
       clear_surface ();

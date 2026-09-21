@@ -13,15 +13,15 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gnome-shell.master.hi\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gnome-shell/issues/\n"
-"POT-Creation-Date: 2024-07-26 11:36+0000\n"
-"PO-Revision-Date: 2024-07-27 13:49+0530\n"
+"POT-Creation-Date: 2024-05-27 20:45+0000\n"
+"PO-Revision-Date: 2024-06-25 15:37+0530\n"
 "Last-Translator: Scrambled777 <weblate.scrambled777@simplelogin.com>\n"
 "Language-Team: Hindi <indlinux-hindi@lists.sourceforge.net>\n"
 "Language: hi\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "X-Generator: Gtranslator 46.1\n"
 
 #: data/50-gnome-shell-launchers.xml:6
@@ -66,39 +66,39 @@ msgstr "पिन किया गया ऐप 9 को सक्रिय क�
 
 #: data/50-gnome-shell-launchers.xml:46
 msgid "Open new window of pinned app 1"
-msgstr "पिन किए गए ऐप 1 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 1 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:50
 msgid "Open new window of pinned app 2"
-msgstr "पिन किए गए ऐप 2 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 2 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:54
 msgid "Open new window of pinned app 3"
-msgstr "पिन किए गए ऐप 3 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 3 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:58
 msgid "Open new window of pinned app 4"
-msgstr "पिन किए गए ऐप 4 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 4 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:62
 msgid "Open new window of pinned app 5"
-msgstr "पिन किए गए ऐप 5 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 5 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:66
 msgid "Open new window of pinned app 6"
-msgstr "पिन किए गए ऐप 6 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 6 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:70
 msgid "Open new window of pinned app 7"
-msgstr "पिन किए गए ऐप 7 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 7 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:74
 msgid "Open new window of pinned app 8"
-msgstr "पिन किए गए ऐप 8 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 8 की नई खिड़की खोलें"
 
 #: data/50-gnome-shell-launchers.xml:78
 msgid "Open new window of pinned app 9"
-msgstr "पिन किए गए ऐप 9 की नई विंडो खोलें"
+msgstr "पिन किए गए ऐप 9 की नई खिड़की खोलें"
 
 #. Translators: name of the folder under ~/Pictures for screenshots.
 #: data/50-gnome-shell-screenshots.xml:6 js/ui/screenshot.js:2276
@@ -118,14 +118,14 @@ msgstr "स्क्रीनशॉट लें"
 #: data/50-gnome-shell-screenshots.xml:15
 #: data/org.gnome.shell.gschema.xml.in:295
 msgid "Take a screenshot of a window"
-msgstr "एक विंडो का स्क्रीनशॉट लें"
+msgstr "एक खिड़की का स्क्रीनशॉट लें"
 
 #: data/50-gnome-shell-screenshots.xml:18
 #: data/org.gnome.shell.gschema.xml.in:291
 msgid "Record a screencast interactively"
 msgstr "परस्पर रूप से स्क्रीनकास्ट रिकॉर्ड करें"
 
-#: data/50-gnome-shell-system.xml:6 js/ui/messageTray.js:1300
+#: data/50-gnome-shell-system.xml:6 js/ui/messageTray.js:1295
 msgid "System"
 msgstr "सिस्टम"
 
@@ -155,7 +155,7 @@ msgstr "गनोम शैल"
 
 #: data/org.gnome.Shell.desktop.in.in:5
 msgid "Window management and application launching"
-msgstr "विंडो प्रबंधन और अनुप्रयोग लॉन्चिंग"
+msgstr "खिड़की प्रबंधन और अनुप्रयोग लॉन्चिंग"
 
 #: data/org.gnome.shell.gschema.xml.in:6
 msgid "Enable internal tools useful for developers and testers from Alt-F2"
@@ -346,11 +346,11 @@ msgstr "सारांश की स्थितियों के बीच �
 
 #: data/org.gnome.shell.gschema.xml.in:166
 msgid "Keybinding to shift between session, window picker and app grid"
-msgstr "सत्र, विंडो चयनकर्ता और ऐप ग्रिड के बीच बदलने के लिए कीबाइंडिंग"
+msgstr "सत्र, खिड़की चयनकर्ता और ऐप ग्रिड के बीच बदलने के लिए कीबाइंडिंग"
 
 #: data/org.gnome.shell.gschema.xml.in:173
 msgid "Keybinding to shift between app grid, window picker and session"
-msgstr "ऐप ग्रिड, विंडो चयनकर्ता और सत्र के बीच बदलने के लिए कीबाइंडिंग"
+msgstr "ऐप ग्रिड, खिड़की चयनकर्ता और सत्र के बीच बदलने के लिए कीबाइंडिंग"
 
 #: data/org.gnome.shell.gschema.xml.in:179
 msgid "Keybinding to open the “Show Applications” view"
@@ -475,7 +475,7 @@ msgid ""
 "If true, only applications that have windows on the current workspace are "
 "shown in the switcher. Otherwise, all applications are included."
 msgstr ""
-"यदि सही है, तो जिन अनुप्रयोग की सक्रिय कार्यस्थान पर विंडो है, वे स्विचर में दिखेंगी। "
+"यदि सही है, तो जिन अनुप्रयोग की सक्रिय कार्यस्थान पर खिड़की है, वे स्विचर में दिखेंगी। "
 "अन्यथा, सभी अनुप्रयोग शामिल किए जाएंगे।"
 
 #: data/org.gnome.shell.gschema.xml.in:326
@@ -497,8 +497,8 @@ msgid ""
 "If true, only windows from the current workspace are shown in the switcher. "
 "Otherwise, all windows are included."
 msgstr ""
-"यदि सही है, तो मौजूदा कार्यस्थान में उपस्थित विंडो इस स्विचर में दिखेगीं। अन्यथा, सभी विंडो "
-"शामिल की जाएंगी।"
+"यदि सही है, तो मौजूदा कार्यस्थान में उपस्थित खिड़की इस स्विचर में दिखेगीं। अन्यथा, सभी "
+"खिड़की शामिल की जाएंगी।"
 
 #: data/org.gnome.shell.gschema.xml.in:346
 msgid "Locations"
@@ -631,10 +631,10 @@ msgstr "सत्र पहले से चल रहा है"
 #: js/gdm/loginDialog.js:454
 msgid ""
 "Force stopping will quit any running apps and processes, and could result in "
-"data loss"
+"data loss."
 msgstr ""
 "बलपूर्वक रोकने से सभी चल रहे ऐप्स और प्रक्रियाएं बंद हो जाएंगी और इसके परिणामस्वरूप डेटा "
-"हानि हो सकती है"
+"हानि हो सकती है।"
 
 #: js/gdm/loginDialog.js:474
 msgid "Force Stop"
@@ -666,7 +666,7 @@ msgstr "लॉगिन करने में बहुत अधिक सम�
 
 #: js/gdm/loginDialog.js:1427
 msgid "Login Window"
-msgstr "लॉगिन विंडो"
+msgstr "लॉगिन खिड़की"
 
 #: js/gdm/util.js:498
 msgid "Authentication error"
@@ -931,15 +931,15 @@ msgstr "हॉटस्पॉट लॉगिन"
 
 #. No support for non-modal system dialogs, so ignore the option
 #. let modal = options['modal'] || true;
-#: js/ui/accessDialog.js:51 js/ui/inhibitShortcutsDialog.js:92
+#: js/ui/accessDialog.js:45 js/ui/inhibitShortcutsDialog.js:92
 msgid "Deny"
 msgstr "नकारें"
 
-#: js/ui/accessDialog.js:52 js/ui/inhibitShortcutsDialog.js:101
+#: js/ui/accessDialog.js:46 js/ui/inhibitShortcutsDialog.js:101
 msgid "Allow"
 msgstr "स्वीकारें"
 
-#: js/ui/appDisplay.js:1771
+#: js/ui/appDisplay.js:1775
 msgid "Unnamed Folder"
 msgstr "अनाम फोल्डर"
 
@@ -960,7 +960,7 @@ msgstr "खुली खिड़कियां"
 
 #: js/ui/appMenu.js:59
 msgid "New Window"
-msgstr "नई विंडो"
+msgstr "नई खिड़की"
 
 #: js/ui/appMenu.js:86
 msgid "App Details"
@@ -1132,16 +1132,16 @@ msgstr "सभी अधिसूचनाएं साफ़ करें"
 #. Translators: %s is an application name
 #: js/ui/closeDialog.js:44
 #, javascript-format
-msgid "“%s” Is Not Responding"
-msgstr "“%s” कोई प्रतिक्रिया नहीं दे रहा है"
+msgid "“%s” is not responding."
+msgstr "“%s” कोई प्रतिक्रिया नहीं दे रहा है।"
 
 #: js/ui/closeDialog.js:45
 msgid ""
 "You may choose to wait a short while for it to continue or force the app to "
-"quit entirely"
+"quit entirely."
 msgstr ""
 "आप इसे जारी रखने के लिए थोड़ी देर प्रतीक्षा कर सकते हैं या ऐप को बलपूर्वक पूरी तरह से बंद "
-"कर सकते हैं"
+"कर सकते हैं।"
 
 #: js/ui/closeDialog.js:73
 msgid "Force Quit"
@@ -1168,28 +1168,18 @@ msgstr "वॉल्यूम को खोलने में अक्षम"
 msgid "The installed udisks version does not support the PIM setting"
 msgstr "संस्थापित udisks संस्करण PIM सेटिंग का समर्थन नहीं करता है"
 
-#. Translators: %s is the name of a partition on a external drive
-#: js/ui/components/autorunManager.js:191
-#, javascript-format
-msgid "“%s” connected"
-msgstr "“%s” जुड़ा"
-
-#: js/ui/components/autorunManager.js:192
-msgid "Disk can now be used"
-msgstr "डिस्क का अब उपयोग किया जा सकता है"
-
-#: js/ui/components/autorunManager.js:204
+#: js/ui/components/autorunManager.js:200
 #, javascript-format
 msgid "Open with %s"
 msgstr "%s के साथ खोलें"
 
 #: js/ui/components/networkAgent.js:97
 msgid ""
-"Alternatively you can connect by pushing the “WPS” button on your router"
-msgstr "वैकल्पिक रूप से आप अपने राउटर पर \"WPS\" बटन दबाकर जुड़ सकते हैं"
+"Alternatively you can connect by pushing the “WPS” button on your router."
+msgstr "वैकल्पिक रूप से आप अपने राउटर पर \"WPS\" बटन दबाकर जुड़ सकते हैं।"
 
 #: js/ui/components/networkAgent.js:109 js/ui/status/bluetooth.js:246
-#: js/ui/status/network.js:362 js/ui/status/network.js:446
+#: js/ui/status/network.js:360 js/ui/status/network.js:444
 msgid "Connect"
 msgstr "जुड़ें"
 
@@ -1217,8 +1207,9 @@ msgstr "प्रमाणीकरण आवश्यक"
 #: js/ui/components/networkAgent.js:373 js/ui/components/networkAgent.js:746
 #, javascript-format
 msgid ""
-"Passwords or encryption keys are required to access the wireless network “%s”"
-msgstr "वायरलेस नेटवर्क “%s” तक पहुंचने के लिए पासवर्ड या कूटलेखन कुंजी की आवश्यकता होती है"
+"Passwords or encryption keys are required to access the wireless network "
+"“%s”."
+msgstr "वायरलेस नेटवर्क “%s” तक पहुंचने के लिए पासवर्ड या कूटलेखन कुंजी की आवश्यकता होती है।"
 
 #: js/ui/components/networkAgent.js:377 js/ui/components/networkAgent.js:750
 msgid "Wired 802.1X authentication"
@@ -1248,8 +1239,8 @@ msgstr "पिन"
 #: js/ui/components/networkAgent.js:755 js/ui/components/networkAgent.js:767
 #: js/ui/components/networkAgent.js:771
 #, javascript-format
-msgid "A password is required to connect to “%s”"
-msgstr "“%s” से जुड़ने के लिए पासवर्ड की आवश्यकता है"
+msgid "A password is required to connect to “%s”."
+msgstr "“%s” से जुड़ने के लिए पासवर्ड की आवश्यकता है।"
 
 #: js/ui/components/networkAgent.js:770
 msgid "VPN password"
@@ -1275,7 +1266,7 @@ msgstr "प्रमाणित करें"
 msgid "Sorry, that didn’t work. Please try again."
 msgstr "माफ करें, वह काम नहीं किया। कृपया फिर कोशिश करें।"
 
-#: js/ui/ctrlAltTab.js:25 js/ui/overviewControls.js:406
+#: js/ui/ctrlAltTab.js:25 js/ui/overviewControls.js:418
 msgid "Windows"
 msgstr "खिड़कियां"
 
@@ -1346,7 +1337,7 @@ msgid "No Events"
 msgstr "कोई कार्यक्रम नहीं"
 
 #: js/ui/dateMenu.js:413
-msgid "Add World Clocks…"
+msgid "Add world clocks…"
 msgstr "विश्व घड़ियां जोड़ें…"
 
 #: js/ui/dateMenu.js:414
@@ -1358,19 +1349,19 @@ msgid "Loading…"
 msgstr "लोड हो रहा है…"
 
 #: js/ui/dateMenu.js:714
-msgid "Go Online for Weather Information"
+msgid "Go online for weather information"
 msgstr "मौसम की जानकारी के लिए ऑनलाइन जाएं"
 
 #: js/ui/dateMenu.js:716
-msgid "Weather Information Unavailable"
-msgstr "मौसम संबंधी जानकारी उपलब्ध नहीं"
+msgid "Weather information is currently unavailable"
+msgstr "मौसम की जानकारी अभी उपलब्ध नहीं है"
 
 #: js/ui/dateMenu.js:726
 msgid "Weather"
 msgstr "मौसम"
 
 #: js/ui/dateMenu.js:728
-msgid "Select Weather Location…"
+msgid "Select weather location…"
 msgstr "मौसम स्थान चुनें…"
 
 #: js/ui/endSessionDialog.js:48
@@ -1386,17 +1377,17 @@ msgstr "लॉग आउट"
 
 #: js/ui/endSessionDialog.js:52
 #, javascript-format
-msgid "%s will be logged out automatically in %d second"
-msgid_plural "%s will be logged out automatically in %d seconds"
-msgstr[0] "%s को %d सेकेंड में स्वतः लॉग आउट कर दिया जाएगा"
-msgstr[1] "%s को %d सेकेंडों में स्वतः लॉग आउट कर दिया जाएगा"
+msgid "%s will be logged out automatically in %d second."
+msgid_plural "%s will be logged out automatically in %d seconds."
+msgstr[0] "%s को %d सेकेंड में स्वतः लॉग आउट कर दिया जाएगा।"
+msgstr[1] "%s को %d सेकेंडों में स्वतः लॉग आउट कर दिया जाएगा."
 
 #: js/ui/endSessionDialog.js:58
 #, javascript-format
-msgid "You will be logged out automatically in %d second"
-msgid_plural "You will be logged out automatically in %d seconds"
-msgstr[0] "आपको %d सेकेंड में स्वतः लॉग आउट कर दिया जाएगा"
-msgstr[1] "आपको %d सेकेंडों में स्वतः लॉग आउट कर दिया जाएगा"
+msgid "You will be logged out automatically in %d second."
+msgid_plural "You will be logged out automatically in %d seconds."
+msgstr[0] "आपको %d सेकेंड में स्वतः लॉग आउट कर दिया जाएगा।"
+msgstr[1] "आपको %d सेकेंडों में स्वतः लॉग आउट कर दिया जाएगा।"
 
 #: js/ui/endSessionDialog.js:65
 msgctxt "button"
@@ -1415,10 +1406,10 @@ msgstr "अद्यतन संस्थापित करें और ब�
 
 #: js/ui/endSessionDialog.js:75
 #, javascript-format
-msgid "The system will power off automatically in %d second"
-msgid_plural "The system will power off automatically in %d seconds"
-msgstr[0] "यह सिस्टम %d सेकेंड में स्वतः बंद हो जाएगा"
-msgstr[1] "यह सिस्टम %d सेकेंडों में स्वतः बंद हो जाएगा"
+msgid "The system will power off automatically in %d second."
+msgid_plural "The system will power off automatically in %d seconds."
+msgstr[0] "यह सिस्टम %d सेकेंड में स्वतः बंद हो जाएगा।"
+msgstr[1] "यह तंत्र %d सेकेंडों में स्वतः बंद हो जाएगा।"
 
 #: js/ui/endSessionDialog.js:79 js/ui/endSessionDialog.js:98
 msgctxt "checkbox"
@@ -1442,10 +1433,10 @@ msgstr "अद्यतन संस्थापित करें और ब�
 
 #: js/ui/endSessionDialog.js:94
 #, javascript-format
-msgid "The system will restart automatically in %d second"
-msgid_plural "The system will restart automatically in %d seconds"
-msgstr[0] "यह सिस्टम %d सेकेंड में स्वतः फिर आरंभ हो जाएगा"
-msgstr[1] "यह सिस्टम %d सेकेंडों में स्वतः फिर आरंभ हो जाएगा"
+msgid "The system will restart automatically in %d second."
+msgid_plural "The system will restart automatically in %d seconds."
+msgstr[0] "यह सिस्टम %d सेकेंड में स्वतः फिर आरंभ हो जाएगा।"
+msgstr[1] "यह तंत्र %d सेकेंडों में स्वतः फिर आरंभ हो जाएगा।"
 
 #: js/ui/endSessionDialog.js:102
 msgctxt "button"
@@ -1459,11 +1450,11 @@ msgstr "पुनः आरंभ करें और अद्यतन स्�
 
 #: js/ui/endSessionDialog.js:113
 #, javascript-format
-msgid "The system will automatically restart and install updates in %d second"
+msgid "The system will automatically restart and install updates in %d second."
 msgid_plural ""
-"The system will automatically restart and install updates in %d seconds"
-msgstr[0] "यह सिस्टम %d सेकेंड में स्वतः फिर आरंभ हो जाएगा और अद्यतन संस्थापित करेगा"
-msgstr[1] "यह सिस्टम %d सेकेंड में स्वतः फिर आरंभ हो जाएगा और अद्यतन संस्थापित करेगा"
+"The system will automatically restart and install updates in %d seconds."
+msgstr[0] "यह सिस्टम %d सेकेंड में स्वतः फिर आरंभ हो जाएगा और अद्यतन संस्थापित करेगा।"
+msgstr[1] "यह तंत्र %d सेकेंड में स्वतः फिर आरंभ हो जाएगा और अद्यतन संस्थापित करेगा।"
 
 #: js/ui/endSessionDialog.js:120 js/ui/endSessionDialog.js:141
 msgctxt "button"
@@ -1498,8 +1489,8 @@ msgstr ""
 "सुनिश्चित करें कि आपने बैकअप ले लिया है और कंप्यूटर बिजली से जुङा हुआ है।"
 
 #: js/ui/endSessionDialog.js:284
-msgid "Low battery power: please plug in before installing updates"
-msgstr "कम बैटरी पावर: अद्यतन संस्थापित करने से पहले कृपया प्लग इन करें"
+msgid "Low battery power: please plug in before installing updates."
+msgstr "कम बैटरी पावर: अद्यतन संस्थापित करने से पहले कृपया प्लग इन करें।"
 
 #: js/ui/endSessionDialog.js:293
 msgid "Some applications are busy or have unsaved work"
@@ -1544,8 +1535,8 @@ msgid "Extension Updates Available"
 msgstr "एक्सटेंशन अद्यतन उपलब्ध हैं"
 
 #: js/ui/extensionSystem.js:355
-msgid "Extension updates are ready to be installed"
-msgstr "एक्सटेंशन अद्यतन संस्थापित करने के लिए तैयार हैं"
+msgid "Extension updates are ready to be installed."
+msgstr "एक्सटेंशन अद्यतन संस्थापित करने के लिए तैयार हैं।"
 
 #: js/ui/inhibitShortcutsDialog.js:70
 msgid "Allow inhibiting shortcuts"
@@ -1564,8 +1555,8 @@ msgstr "एक एप शॉर्टकट का निषेध करना 
 #. Translators: %s is a keyboard shortcut like "Super+x"
 #: js/ui/inhibitShortcutsDialog.js:81
 #, javascript-format
-msgid "You can restore shortcuts by pressing %s"
-msgstr "आप %s दबाकर शॉर्टकट पहले जैसे कर सकते हैं"
+msgid "You can restore shortcuts by pressing %s."
+msgstr "आप %s दबाकर शॉर्टकट पहले जैसे कर सकते हैं।"
 
 #: js/ui/kbdA11yDialog.js:34
 msgid "Slow Keys Turned On"
@@ -1616,7 +1607,7 @@ msgstr "चालू रखें"
 msgid "Turn On"
 msgstr "चालू करें"
 
-#: js/ui/kbdA11yDialog.js:67 js/ui/status/network.js:457
+#: js/ui/kbdA11yDialog.js:67 js/ui/status/network.js:455
 msgid "Turn Off"
 msgstr "बन्द करें"
 
@@ -1628,57 +1619,57 @@ msgstr "बंद रखें"
 msgid "Keyboard Settings"
 msgstr "कुंजीपट सेंटिग्स"
 
-#: js/ui/lookingGlass.js:729
+#: js/ui/lookingGlass.js:724
 msgid "No extensions installed"
 msgstr "कोई एक्सटेंशन संस्थापित नहीं"
 
 #. Translators: argument is an extension UUID.
-#: js/ui/lookingGlass.js:790
+#: js/ui/lookingGlass.js:785
 #, javascript-format
-msgid "%s has not emitted any errors"
-msgstr "%s ने कोई त्रुटि नहीं दी है"
+msgid "%s has not emitted any errors."
+msgstr "%s ने कोई त्रुटि नहीं दी है।"
 
-#: js/ui/lookingGlass.js:796
+#: js/ui/lookingGlass.js:791
 msgid "Hide Errors"
 msgstr "त्रुटियां छुपाएं"
 
-#: js/ui/lookingGlass.js:800 js/ui/lookingGlass.js:877
+#: js/ui/lookingGlass.js:795 js/ui/lookingGlass.js:872
 msgid "Show Errors"
 msgstr "त्रुटियां दिखाएं"
 
-#: js/ui/lookingGlass.js:809
+#: js/ui/lookingGlass.js:804
 msgid "Active"
 msgstr "सक्रिय"
 
-#: js/ui/lookingGlass.js:812
+#: js/ui/lookingGlass.js:807
 msgid "Inactive"
 msgstr "निष्क्रिय"
 
-#: js/ui/lookingGlass.js:814
+#: js/ui/lookingGlass.js:809
 msgid "Error"
 msgstr "त्रुटि"
 
-#: js/ui/lookingGlass.js:816
+#: js/ui/lookingGlass.js:811
 msgid "Out of date"
 msgstr "अप्रचलित"
 
-#: js/ui/lookingGlass.js:818
+#: js/ui/lookingGlass.js:813
 msgid "Downloading"
 msgstr "डाउनलोड हो रहा है"
 
-#: js/ui/lookingGlass.js:820
+#: js/ui/lookingGlass.js:815
 msgid "Deactivating"
 msgstr "निष्क्रिय किया जा रहा है"
 
-#: js/ui/lookingGlass.js:822
+#: js/ui/lookingGlass.js:817
 msgid "Activating"
 msgstr "सक्रिय किया जा रहा है"
 
-#: js/ui/lookingGlass.js:855
+#: js/ui/lookingGlass.js:850
 msgid "View Source"
 msgstr "स्त्रोत दिखाएं"
 
-#: js/ui/lookingGlass.js:866
+#: js/ui/lookingGlass.js:861
 msgid "Web Page"
 msgstr "वेब पृष्ठ"
 
@@ -1711,12 +1702,12 @@ msgid "Screen Lock disabled"
 msgstr "स्क्रीन लॉक अक्षम"
 
 #: js/ui/main.js:390
-msgid "Screen Locking requires the GNOME display manager"
-msgstr "स्क्रीन लॉकिंग के लिए गनोम डिस्प्ले प्रबंधक की आवश्यकता है"
+msgid "Screen Locking requires the GNOME display manager."
+msgstr "स्क्रीन लॉकिंग के लिए गनोम डिस्प्ले प्रबंधक की आवश्यकता है।"
 
 #. Translators: this is the string displayed in the header when a message
 #. source doesn't have a name
-#: js/ui/messageList.js:374
+#: js/ui/messageList.js:400
 msgid "Unknown App"
 msgstr "अज्ञात ऐप"
 
@@ -1736,11 +1727,11 @@ msgstr "अज्ञात शीर्षक"
 #. in the search entry when no search is
 #. active; it should not exceed ~30
 #. characters.
-#: js/ui/overviewControls.js:330
+#: js/ui/overviewControls.js:342
 msgid "Type to search"
 msgstr "खोजने के लिए टाइप करें"
 
-#: js/ui/overviewControls.js:394
+#: js/ui/overviewControls.js:406
 msgid "Apps"
 msgstr "ऐप्स"
 
@@ -1809,7 +1800,7 @@ msgstr "सिस्टम"
 msgid "Top Bar"
 msgstr "शीर्ष पट्टी"
 
-#: js/ui/quickSettings.js:188
+#: js/ui/quickSettings.js:187
 msgid "Open menu"
 msgstr "मेनू खोलें"
 
@@ -1859,11 +1850,11 @@ msgstr "स्क्रीन चयन"
 
 #: js/ui/screenshot.js:1284
 msgid "Window"
-msgstr "विंडो"
+msgstr "खिड़की"
 
 #: js/ui/screenshot.js:1294
 msgid "Window Selection"
-msgstr "विंडो चयन"
+msgstr "खिड़की चयन"
 
 #. Translators: entry in the window right click menu.
 #: js/ui/screenshot.js:1319 js/ui/status/system.js:113 js/ui/windowMenu.js:30
@@ -1892,10 +1883,10 @@ msgstr "स्क्रीनकॉस्ट"
 
 #. Translators: this is a filename used for screencast
 #. * recording, where "%d" and "%t" date and time, e.g.
-#. * "Screencast From 07-17-2013 10:00:46 PM"
+#. * "Screencast from 07-17-2013 10:00:46 PM"
 #: js/ui/screenshot.js:2003
 #, no-c-format
-msgid "Screencast From %d %t"
+msgid "Screencast from %d %t"
 msgstr "%d %t से स्क्रीनकास्ट"
 
 #. Translators: notification title.
@@ -1945,7 +1936,7 @@ msgstr "फाइल्स में दिखाएं"
 #. saved to. The placeholder is a timestamp, e.g. "2017-05-21 12-24-03".
 #: js/ui/screenshot.js:2289
 #, javascript-format
-msgid "Screenshot From %s"
+msgid "Screenshot from %s"
 msgstr "%s से स्क्रीनशॉट"
 
 #. Translators: notification title.
@@ -1967,8 +1958,8 @@ msgid "Searching…"
 msgstr "खोजा जा रहा है…"
 
 #: js/ui/search.js:833
-msgid "No results"
-msgstr "कोई परिणाम नहीं"
+msgid "No results."
+msgstr "कोई परिणाम नहीं।"
 
 #: js/ui/search.js:964
 #, javascript-format
@@ -1999,8 +1990,8 @@ msgid "Hide Text"
 msgstr "पाठ छिपाएं"
 
 #: js/ui/shellEntry.js:176
-msgid "Caps lock is on"
-msgstr "कैप्स लॉक ऑन है"
+msgid "Caps lock is on."
+msgstr "कैप्स लॉक ऑन है।"
 
 #: js/ui/shellMountOperation.js:288
 msgid "Hidden Volume"
@@ -2018,17 +2009,17 @@ msgstr "कीफाइल्स का उपयोग करती है"
 #: js/ui/shellMountOperation.js:302
 #, javascript-format
 msgid ""
-"To unlock a volume that uses keyfiles, use the <i>%s</i> utility instead"
+"To unlock a volume that uses keyfiles, use the <i>%s</i> utility instead."
 msgstr ""
-"कीफाइल्स का उपयोग करने वाले वॉल्यूम को खोलने के लिए, <i>%s</i> यूटिलिटी का उपयोग करें"
+"कीफाइल्स का उपयोग करने वाले वॉल्यूम को खोलने के लिए, <i>%s</i> यूटिलिटी का उपयोग करें।"
 
 #: js/ui/shellMountOperation.js:306
 msgid ""
 "You need an external utility like <i>Disks</i> to unlock a volume that uses "
-"keyfiles"
+"keyfiles."
 msgstr ""
 "कीफाइल्स का उपयोग करने वाले वॉल्यूम को अनलॉक करने के लिए आपको <i>डिस्क</i> जैसी बाहरी "
-"एप की आवश्यकता होगी"
+"एप की आवश्यकता होगी।"
 
 #: js/ui/shellMountOperation.js:314
 msgid "PIM Number"
@@ -2049,8 +2040,8 @@ msgid "Open %s"
 msgstr "%s खोलें"
 
 #: js/ui/shellMountOperation.js:438
-msgid "The PIM must be a number or empty"
-msgstr "PIM एक नंबर या खाली होना चाहिए"
+msgid "The PIM must be a number or empty."
+msgstr "PIM एक नंबर या खाली होना चाहिए।"
 
 #: js/ui/status/accessibility.js:36
 msgid "Accessibility"
@@ -2111,7 +2102,7 @@ msgstr "पृष्ठभूमि ऐप्स"
 
 #: js/ui/status/backgroundApps.js:171
 msgid "Apps known to be running without a window"
-msgstr "ज्ञात ऐप्स बिना विंडो के चल रहे हैं"
+msgstr "ज्ञात ऐप्स बिना खिड़की के चल रहे हैं"
 
 #: js/ui/status/backgroundApps.js:182
 msgid "App Settings"
@@ -2148,7 +2139,7 @@ msgstr "उच्च"
 msgid "Keyboard"
 msgstr "कुंजीपट"
 
-#: js/ui/status/bluetooth.js:246 js/ui/status/network.js:362
+#: js/ui/status/bluetooth.js:246 js/ui/status/network.js:360
 msgid "Disconnect"
 msgstr "संबंध हटाएं"
 
@@ -2156,7 +2147,7 @@ msgstr "संबंध हटाएं"
 msgid "Bluetooth"
 msgstr "ब्लूटूथ"
 
-#: js/ui/status/bluetooth.js:288 js/ui/status/network.js:1902
+#: js/ui/status/bluetooth.js:288 js/ui/status/network.js:1900
 msgid "Bluetooth Settings"
 msgstr "ब्लूटूथ सेटिंग्स"
 
@@ -2220,8 +2211,8 @@ msgid "The app %s wants to access your location"
 msgstr "ऐप %s आपके स्थान पता करना चाहता है"
 
 #: js/ui/status/location.js:351
-msgid "Location access can be changed at any time from the privacy settings"
-msgstr "गोपनीयता सेटिंग्स से किसी भी समय स्थान पता करने के अधिकारों को बदला जा सकता है"
+msgid "Location access can be changed at any time from the privacy settings."
+msgstr "गोपनीयता सेटिंग्स से किसी भी समय स्थान पता करने के अधिकारों को बदला जा सकता है।"
 
 #: js/ui/status/location.js:359
 msgid "Deny Access"
@@ -2231,109 +2222,105 @@ msgstr "अधिकार देना अस्वीकारें"
 msgid "Grant Access"
 msgstr "अधिकार प्रदान करें"
 
-#: js/ui/status/network.js:64
+#: js/ui/status/network.js:62
 msgid "<unknown>"
 msgstr "<unknown>"
 
 #. Translators: %s is a device name like "MyPhone"
-#: js/ui/status/network.js:356
+#: js/ui/status/network.js:354
 #, javascript-format
 msgid "Disconnect %s"
 msgstr "%s को निकालें"
 
 #. Translators: %s is a device name like "MyPhone"
-#: js/ui/status/network.js:358
+#: js/ui/status/network.js:356
 #, javascript-format
 msgid "Connect to %s"
 msgstr "%s से जुड़ें"
 
-#: js/ui/status/network.js:1052
+#: js/ui/status/network.js:1050
 msgid "Secure"
 msgstr "सुरक्षित"
 
-#: js/ui/status/network.js:1052
+#: js/ui/status/network.js:1050
 msgid "Not secure"
 msgstr "सुरक्षित नहीं है"
 
-#: js/ui/status/network.js:1053
+#: js/ui/status/network.js:1051
 #, javascript-format
 msgid "Signal strength %s%%"
 msgstr "सिग्नल शक्ति %s%%"
 
 #. translators: The first placeholder is the network name, the second and indication whether it is secure, and the last the signal strength indication
-#: js/ui/status/network.js:1055
+#: js/ui/status/network.js:1053
 #, javascript-format
 msgid "%s, %s, %s"
 msgstr "%s, %s, %s"
 
 #. Translators: %s is a network identifier
-#: js/ui/status/network.js:1157
+#: js/ui/status/network.js:1155
 #, javascript-format
 msgid "%s Hotspot"
 msgstr "%s हॉटस्पॉट"
 
-#: js/ui/status/network.js:1428
+#: js/ui/status/network.js:1426
 #, javascript-format
 msgid "%d connected"
 msgid_plural "%d connected"
 msgstr[0] "%d जुड़ा"
 msgstr[1] "%d जुड़ा"
 
-#: js/ui/status/network.js:1526 js/ui/status/network.js:1542
+#: js/ui/status/network.js:1524 js/ui/status/network.js:1540
 msgid "VPN"
 msgstr "VPN"
 
-#: js/ui/status/network.js:1527
+#: js/ui/status/network.js:1525
 msgid "VPN Settings"
 msgstr "VPN सेटिंग्स"
 
-#: js/ui/status/network.js:1787
+#: js/ui/status/network.js:1785
 msgid "Wi–Fi"
 msgstr "वाई-फाई"
 
-#: js/ui/status/network.js:1789
+#: js/ui/status/network.js:1787
 msgid "All Networks"
 msgstr "सभी नेटवर्क"
 
-#: js/ui/status/network.js:1886
+#: js/ui/status/network.js:1884
 msgid "Wired Connections"
 msgstr "तारयुक्त कनेक्शन"
 
-#: js/ui/status/network.js:1887
+#: js/ui/status/network.js:1885
 msgid "Wired Settings"
 msgstr "तारयुक्त सेटिंग्स"
 
-#: js/ui/status/network.js:1901
+#: js/ui/status/network.js:1899
 msgid "Bluetooth Tethers"
 msgstr "ब्लूटूथ टेथर्स"
 
 #. Translators: "Tether" from "Bluetooth Tether"
-#: js/ui/status/network.js:1908
+#: js/ui/status/network.js:1906
 msgid "Tether"
 msgstr "टीथर"
 
-#: js/ui/status/network.js:1921
+#: js/ui/status/network.js:1919
 msgid "Mobile Connections"
 msgstr "मोबाइल कनेक्शन"
 
-#: js/ui/status/network.js:1923
+#: js/ui/status/network.js:1921
 msgid "Mobile Broadband Settings"
 msgstr "मोबाइल ब्रॉडबैंड सेटिंग्स"
 
 #. Translators: "Mobile" from "Mobile Broadband"
-#: js/ui/status/network.js:1932
+#: js/ui/status/network.js:1930
 msgid "Mobile"
 msgstr "मोबाइल"
 
-#: js/ui/status/network.js:1966
-msgid "Sign Into Wi–Fi Network"
-msgstr "वाई-फाई नेटवर्क में साइन इन करें"
-
-#: js/ui/status/network.js:2153
+#: js/ui/status/network.js:2035
 msgid "Connection failed"
 msgstr "कनेक्शन विफल"
 
-#: js/ui/status/network.js:2154
+#: js/ui/status/network.js:2036
 msgid "Activation of network connection failed"
 msgstr "नेटवर्क कनेक्शन को सक्रिय करना विफल"
 
@@ -2425,8 +2412,8 @@ msgstr "अनधिकृत थंडरबोल्ट उपकरण"
 
 #: js/ui/status/thunderbolt.js:315
 msgid ""
-"New device has been detected and needs to be authorized by an administrator"
-msgstr "नया उपकरण पाया गया है और इसे व्यवस्थापक द्वारा अधिकृत करने की आवश्यकता है"
+"New device has been detected and needs to be authorized by an administrator."
+msgstr "नया उपकरण पाया गया है और इसे व्यवस्थापक द्वारा अधिकृत करने की आवश्यकता है।"
 
 #: js/ui/status/thunderbolt.js:321
 msgid "Thunderbolt authorization error"
@@ -2506,7 +2493,7 @@ msgstr "खोलने के लिए एक कुंजी दबाएं 
 
 #: js/ui/unlockDialog.js:570
 msgid "Unlock Window"
-msgstr "विंडो खोलें"
+msgstr "खिड़की खोलें"
 
 #: js/ui/unlockDialog.js:579
 msgid "Log in as another user"
@@ -2524,8 +2511,8 @@ msgstr "%s में आपका स्वागत है"
 
 # GNOME Tour has been translated as 'दौरा' in its translation, hence the same name here.
 #: js/ui/welcomeDialog.js:54
-msgid "If you want to learn your way around, check out the tour"
-msgstr "यदि आप सीखना चाहते हैं, तो 'दौरा' देखें"
+msgid "If you want to learn your way around, check out the tour."
+msgstr "यदि आप सीखना चाहते हैं, तो 'दौरा' देखें।"
 
 #: js/ui/welcomeDialog.js:63
 msgid "Skip"
@@ -2541,19 +2528,19 @@ msgid "“%s” is ready"
 msgstr "“%s” तैयार है"
 
 #. Translators: This string should be shorter than 30 characters
-#: js/ui/windowManager.js:70
+#: js/ui/windowManager.js:69
 msgid "Keep these display settings?"
 msgstr "इन प्रदर्शन सेटिंग को रखें?"
 
-#: js/ui/windowManager.js:80
+#: js/ui/windowManager.js:79
 msgid "Revert Settings"
 msgstr "सेटिंग्स पूर्ववत करें"
 
-#: js/ui/windowManager.js:85
+#: js/ui/windowManager.js:84
 msgid "Keep Changes"
 msgstr "परिवर्तन बनाए रखें"
 
-#: js/ui/windowManager.js:105
+#: js/ui/windowManager.js:104
 #, javascript-format
 msgid "Settings changes will revert in %d second"
 msgid_plural "Settings changes will revert in %d seconds"
@@ -2562,7 +2549,7 @@ msgstr[1] "सेटिंग बदलाव %d सेकेंडों मे
 
 #. Translators: This represents the size of a window. The first number is
 #. * the width of the window and the second is the height.
-#: js/ui/windowManager.js:502
+#: js/ui/windowManager.js:496
 #, javascript-format
 msgid "%d × %d"
 msgstr "%d × %d"
@@ -2587,47 +2574,51 @@ msgstr "स्थानान्तर"
 msgid "Resize"
 msgstr "आकार बदलें"
 
-#: js/ui/windowMenu.js:100
+#: js/ui/windowMenu.js:101
+msgid "Move Titlebar Onscreen"
+msgstr "शीर्षकपट्टी को स्क्रीन पर ले जाएं"
+
+#: js/ui/windowMenu.js:106
 msgid "Always on Top"
 msgstr "हमेशा ऊपर"
 
-#: js/ui/windowMenu.js:119
+#: js/ui/windowMenu.js:125
 msgid "Always on Visible Workspace"
 msgstr "हमेशा दृश्यमान कार्यस्थान पर"
 
-#: js/ui/windowMenu.js:133
+#: js/ui/windowMenu.js:139
 msgid "Move to Workspace Left"
 msgstr "बाएं कार्यस्थान में ले जाएं"
 
-#: js/ui/windowMenu.js:139
+#: js/ui/windowMenu.js:145
 msgid "Move to Workspace Right"
 msgstr "दाएं कार्यस्थान में ले जाएं"
 
-#: js/ui/windowMenu.js:145
+#: js/ui/windowMenu.js:151
 msgid "Move to Workspace Up"
 msgstr "ऊपरी कार्यस्थान में ले जाएं"
 
-#: js/ui/windowMenu.js:151
+#: js/ui/windowMenu.js:157
 msgid "Move to Workspace Down"
 msgstr "निचले कार्यस्थान में ले जाएं"
 
-#: js/ui/windowMenu.js:169
+#: js/ui/windowMenu.js:175
 msgid "Move to Monitor Up"
 msgstr "ऊपरी मॉनीटर में ले जाएं"
 
-#: js/ui/windowMenu.js:178
+#: js/ui/windowMenu.js:184
 msgid "Move to Monitor Down"
 msgstr "निचले मॉनीटर में ले जाएं"
 
-#: js/ui/windowMenu.js:187
+#: js/ui/windowMenu.js:193
 msgid "Move to Monitor Left"
 msgstr "बाएं मॉनीटर में ले जाएं"
 
-#: js/ui/windowMenu.js:196
+#: js/ui/windowMenu.js:202
 msgid "Move to Monitor Right"
 msgstr "दाएं मॉनीटर में ले जाएं"
 
-#: js/ui/windowMenu.js:204
+#: js/ui/windowMenu.js:210
 msgid "Close"
 msgstr "बंद करें"
 
@@ -2651,19 +2642,19 @@ msgstr "संभव अवस्थाएं सूचीबद्ध करे
 msgid "Force animations to be enabled"
 msgstr "एनिमेशन को सक्षम होने के लिए बाध्य करें"
 
-#: src/shell-app.c:252
+#: src/shell-app.c:253
 msgctxt "program"
 msgid "Unknown"
 msgstr "अज्ञात"
 
-#: src/shell-app.c:503
+#: src/shell-app.c:504
 #, c-format
 msgid "Failed to launch “%s”"
 msgstr "“%s” शुरू करने में विफल"
 
 #: src/shell-keyring-prompt.c:764
-msgid "Passwords do not match"
-msgstr "पासवर्ड मेल नहीं खाते"
+msgid "Passwords do not match."
+msgstr "पासवर्ड मेल नहीं खाते।"
 
 #: src/shell-keyring-prompt.c:772
 msgid "Password cannot be blank"
@@ -2699,15 +2690,15 @@ msgstr ""
 "'गनोम एक्सटेंशन्स' एक्सटेंशन को अद्यतन करने, एक्सटेंशन वरीयताओं को विन्यस्त करने और अवांछित "
 "एक्सटेंशन को हटाने या अक्षम करने का काम संभालता है।"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:63
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:77
 msgid "Main Window"
-msgstr "मुख्य विंडो"
+msgstr "मुख्य खिड़की"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:67
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:81
 msgid "Available Updates"
 msgstr "उपलब्ध अद्यतन"
 
-#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:71
+#: subprojects/extensions-app/data/metainfo/org.gnome.Extensions.metainfo.xml.in:85
 msgid "Search View"
 msgstr "खोज दृश्य"
 
@@ -2864,8 +2855,8 @@ msgid "No Results Found"
 msgstr "कोई परिणाम नहीं मिला"
 
 #: subprojects/extensions-app/data/ui/extensions-window.ui:253
-msgid "Try a different search"
-msgstr "भिन्न खोज का प्रयास करें"
+msgid "Try a different search."
+msgstr "भिन्न खोज का प्रयास करें।"
 
 #: subprojects/extensions-app/data/ui/extensions-window.ui:264
 msgid "No Installed Extensions"

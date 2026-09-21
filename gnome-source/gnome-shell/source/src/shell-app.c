@@ -2,13 +2,9 @@
 
 #include "config.h"
 
-#include <errno.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <glib/gi18n-lib.h>
-#include <glib/gstdio.h>
-#include <systemd/sd-journal.h>
 
 #include <meta/display.h>
 #include <meta/meta-context.h>
@@ -19,10 +15,17 @@
 #include "shell-global.h"
 #include "shell-util.h"
 #include "shell-app-system-private.h"
+#include "shell-window-tracker-private.h"
 #include "st.h"
 #include "gtkactionmuxer.h"
 #include "org-gtk-application.h"
 #include "switcheroo-control.h"
+
+#ifdef HAVE_SYSTEMD
+#include <systemd/sd-journal.h>
+#include <errno.h>
+#include <unistd.h>
+#endif
 
 /* This is mainly a memory usage optimization - the user is going to
  * be running far fewer of the applications at one time than they have
@@ -54,9 +57,8 @@ typedef struct {
 } ShellAppRunningState;
 
 /**
- * ShellApp:
- *
- * Object representing an application
+ * SECTION:shell-app
+ * @short_description: Object representing an application
  *
  * This object wraps a #GDesktopAppInfo, providing methods and signals
  * primarily useful for running applications.
@@ -134,7 +136,8 @@ shell_app_get_property (GObject    *gobject,
       g_value_set_object (value, shell_app_get_icon (app));
       break;
     case PROP_ACTION_GROUP:
-      g_value_set_object (value, shell_app_get_action_group (app));
+      if (app->running_state)
+        g_value_set_object (value, app->running_state->muxer);
       break;
     case PROP_APP_INFO:
       if (app->info)
@@ -205,21 +208,6 @@ shell_app_get_icon (ShellApp *app)
     app->fallback_icon = g_themed_icon_new ("application-x-executable");
 
   return app->fallback_icon;
-}
-
-/**
- * shell_app_get_action_group:
- *
- * Return value: (transfer none) (nullable):
- */
-GActionGroup *
-shell_app_get_action_group (ShellApp *app)
-{
-  g_return_val_if_fail (SHELL_IS_APP (app), NULL);
-
-  if (app->running_state)
-    return G_ACTION_GROUP (app->running_state->muxer);
-  return NULL;
 }
 
 /**
@@ -331,7 +319,8 @@ find_most_recent_transient_on_same_workspace (MetaDisplay *display,
    * returned from the sort_windows_by_stacking function)
    */
   transients_sorted = g_slist_reverse (transients_sorted);
-  g_clear_slist (&transients, NULL);
+  g_slist_free (transients);
+  transients = NULL;
 
   result = NULL;
   for (iter = transients_sorted; iter; iter = iter->next)
@@ -531,38 +520,6 @@ shell_app_activate_full (ShellApp      *app,
     }
 }
 
-static GVariant *
-get_platform_data (ShellApp *app,
-                   guint     timestamp,
-                   int       workspace)
-{
-  GVariantBuilder builder;
-  ShellGlobal *global;
-  g_autoptr (GAppLaunchContext) context = NULL;
-  gchar *startup_id;
-
-  g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
-
-  global = shell_global_get ();
-  context = shell_global_create_app_launch_context (global, timestamp, workspace);
-
-  if (!context)
-    return g_variant_builder_end (&builder);
-
-  startup_id = g_app_launch_context_get_startup_notify_id (context, NULL, NULL);
-
-  if (!startup_id)
-    return g_variant_builder_end (&builder);
-
-
-  g_variant_builder_add (&builder, "{sv}",
-      "desktop-startup-id", g_variant_new_string (startup_id));
-  g_variant_builder_add (&builder, "{sv}",
-      "activation-token", g_variant_new_take_string (g_steal_pointer (&startup_id)));
-
-  return g_variant_builder_end (&builder);
-}
-
 /**
  * shell_app_open_new_window:
  * @app: a #ShellApp
@@ -603,8 +560,8 @@ shell_app_open_new_window (ShellApp      *app,
       g_action_group_has_action (group, "app.new-window") &&
       g_action_group_get_action_parameter_type (group, "app.new-window") == NULL)
     {
-      gtk_action_muxer_activate_action_full (GTK_ACTION_MUXER (group), "app.new-window",
-                                             NULL, get_platform_data (app, 0, workspace));
+      g_action_group_activate_action (group, "app.new-window", NULL);
+
       return;
     }
 
@@ -1296,11 +1253,8 @@ apply_discrete_gpu_env (GAppLaunchContext *context,
                         ShellGlobal       *global)
 {
   GDBusProxy *proxy;
-  GVariant *variant;
+  GVariant* variant;
   guint num_children, i;
-  g_autoptr(GVariant) first_nondefault_discrete = NULL;
-  g_autoptr(GVariant) first_discrete = NULL;
-  g_autoptr(GVariant) first_nondefault = NULL;
 
   proxy = shell_global_get_switcheroo_control (global);
   if (!proxy)
@@ -1320,47 +1274,19 @@ apply_discrete_gpu_env (GAppLaunchContext *context,
   for (i = 0; i < num_children; i++)
     {
       g_autoptr(GVariant) gpu = NULL;
+      g_autoptr(GVariant) env = NULL;
       g_autoptr(GVariant) default_variant = NULL;
-      g_autoptr(GVariant) discrete_variant = NULL;
-      gboolean is_default = FALSE;
-      gboolean is_discrete = FALSE;
+      g_autofree const char **env_s = NULL;
+      guint j;
 
       gpu = g_variant_get_child_value (variant, i);
       if (!gpu ||
           !g_variant_is_of_type (gpu, G_VARIANT_TYPE ("a{s*}")))
         continue;
 
-      default_variant = g_variant_lookup_value (gpu, "Default", G_VARIANT_TYPE_BOOLEAN);
-      if (default_variant)
-        is_default = g_variant_get_boolean (default_variant);
-
-      discrete_variant = g_variant_lookup_value (gpu, "Discrete", G_VARIANT_TYPE_BOOLEAN);
-      if (discrete_variant)
-        is_discrete = g_variant_get_boolean (discrete_variant);
-
-      if (is_discrete)
-        {
-          if (first_nondefault_discrete == NULL && !is_default)
-            first_nondefault_discrete = g_variant_ref (gpu);
-
-          if (first_discrete == NULL)
-            first_discrete = g_variant_ref (gpu);
-        }
-
-      if (first_nondefault == NULL && !is_default)
-        first_nondefault = g_variant_ref (gpu);
-    }
-
-  GVariant *gpu_list[] = { first_nondefault_discrete, first_discrete, first_nondefault };
-
-  for (i = 0; i < G_N_ELEMENTS (gpu_list); ++i)
-    {
-      GVariant *gpu = gpu_list[i];
-      g_autoptr(GVariant) env = NULL;
-      g_autofree const char **env_s = NULL;
-      guint j;
-
-      if (!gpu)
+      /* Skip over the default GPU */
+      default_variant = g_variant_lookup_value (gpu, "Default", NULL);
+      if (!default_variant || g_variant_get_boolean (default_variant))
         continue;
 
       env = g_variant_lookup_value (gpu, "Environment", NULL);
@@ -1368,7 +1294,7 @@ apply_discrete_gpu_env (GAppLaunchContext *context,
         continue;
 
       env_s = g_variant_get_strv (env, NULL);
-      for (j = 0; env_s[j] != NULL && env_s[j+1] != NULL; j = j + 2)
+      for (j = 0; env_s[j] != NULL; j = j + 2)
         g_app_launch_context_setenv (context, env_s[j], env_s[j+1]);
       return;
     }
@@ -1429,9 +1355,11 @@ shell_app_launch (ShellApp           *app,
 
   /* Optimized spawn path, avoiding a child_setup function */
   {
-    g_autofd int journalfd = -1;
+    int journalfd = -1;
 
+#ifdef HAVE_SYSTEMD
     journalfd = sd_journal_stream_fd (shell_app_get_id (app), LOG_INFO, FALSE);
+#endif /* HAVE_SYSTEMD */
 
     ret = g_desktop_app_info_launch_uris_as_manager_with_fds (app->info, NULL,
                                                               context,
@@ -1442,6 +1370,9 @@ shell_app_launch (ShellApp           *app,
                                                               journalfd,
                                                               journalfd,
                                                               error);
+
+    if (journalfd >= 0)
+      (void) close (journalfd);
   }
   g_object_unref (context);
 
@@ -1492,12 +1423,46 @@ object_path_from_app_id (const gchar *app_id)
   return app_id_path;
 }
 
+static GVariant *
+get_platform_data (ShellApp *app,
+                   guint     timestamp,
+                   int       workspace)
+{
+  GVariantBuilder builder;
+  ShellGlobal *global;
+  g_autoptr (GAppLaunchContext) context = NULL;
+  gchar *startup_id;
+
+  g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
+  if (!app->info)
+    return g_variant_builder_end (&builder);
+
+  global = shell_global_get ();
+  context = shell_global_create_app_launch_context (global, timestamp, workspace);
+
+  if (!context)
+    return g_variant_builder_end (&builder);
+
+  startup_id = g_app_launch_context_get_startup_notify_id (context, G_APP_INFO (app->info), NULL);
+
+  if (!startup_id)
+    return g_variant_builder_end (&builder);
+
+
+  g_variant_builder_add (&builder, "{sv}",
+      "desktop-startup-id", g_variant_new_string (startup_id));
+  g_variant_builder_add (&builder, "{sv}",
+      "activation-token", g_variant_new_take_string (g_steal_pointer (&startup_id)));
+
+  return g_variant_builder_end (&builder);
+}
+
 static void
 on_activate_action_cb (GObject      *source,
                        GAsyncResult *res,
                        gpointer      user_data)
 {
-  g_autoptr (GTask) task = G_TASK (user_data);
+  GTask *task = G_TASK (user_data);
   g_autoptr (GVariant) value = NULL;
   g_autoptr (GError) error = NULL;
 
@@ -1515,14 +1480,12 @@ activate_action_get_bus_cb (GObject      *object,
                             GAsyncResult *result,
                             gpointer      user_data)
 {
-  g_autoptr (GTask) task = G_TASK (user_data);
+  GTask *task = G_TASK (user_data);
   ShellApp *app = NULL;
   g_autoptr (GDBusConnection) session_bus = NULL;
   g_autoptr (GError) error = NULL;
   g_autofree gchar *object_path = NULL;
   g_autofree gchar *app_id = NULL;
-  GVariant *task_data = NULL;
-  GCancellable *cancellable = NULL;
   gchar *last_dot;
 
   session_bus = g_bus_get_finish (result, &error);
@@ -1541,16 +1504,14 @@ activate_action_get_bus_cb (GObject      *object,
       *last_dot = '\0';
 
   object_path = object_path_from_app_id (app_id);
-  task_data = g_task_get_task_data (task);
-  cancellable = g_task_get_cancellable (task);
 
   g_dbus_connection_call (session_bus,
-                          app_id, object_path,
-                          "org.freedesktop.Application", "ActivateAction",
-                          task_data,
-                          NULL, G_DBUS_CALL_FLAGS_NONE, -1,
-                          cancellable,
-                          on_activate_action_cb, g_steal_pointer (&task));
+                           app_id, object_path,
+                           "org.freedesktop.Application", "ActivateAction",
+                           g_task_get_task_data (task),
+                           NULL, G_DBUS_CALL_FLAGS_NONE, -1,
+                           g_task_get_cancellable (task),
+                           on_activate_action_cb, task);
 }
 
 
@@ -1694,7 +1655,8 @@ shell_app_update_app_actions (ShellApp   *app,
       if (application_object_path == NULL || unique_bus_name == NULL)
         return;
 
-      g_set_str (&app->running_state->unique_bus_name, unique_bus_name);
+      g_clear_pointer (&app->running_state->unique_bus_name, g_free);
+      app->running_state->unique_bus_name = g_strdup (unique_bus_name);
       actions = g_dbus_action_group_get (app->running_state->session, unique_bus_name, application_object_path);
       gtk_action_muxer_insert (app->running_state->muxer, "app", G_ACTION_GROUP (actions));
       g_object_unref (actions);
@@ -1808,7 +1770,9 @@ shell_app_class_init(ShellAppClass *klass)
    * running or not, or transitioning between those states.
    */
   props[PROP_STATE] =
-    g_param_spec_enum ("state", NULL, NULL,
+    g_param_spec_enum ("state",
+                       "State",
+                       "Application state",
                        SHELL_TYPE_APP_STATE,
                        SHELL_APP_STATE_STOPPED,
                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
@@ -1819,7 +1783,9 @@ shell_app_class_init(ShellAppClass *klass)
    * Whether the application has marked itself as busy.
    */
   props[PROP_BUSY] =
-    g_param_spec_boolean ("busy", NULL, NULL,
+    g_param_spec_boolean ("busy",
+                          "Busy",
+                          "Busy state",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -1830,7 +1796,9 @@ shell_app_class_init(ShellAppClass *klass)
    * like window:0xabcd1234)
    */
   props[PROP_ID] =
-    g_param_spec_string ("id", NULL, NULL,
+    g_param_spec_string ("id",
+                         "Application id",
+                         "The desktop file id of this ShellApp",
                          NULL,
                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -1840,7 +1808,9 @@ shell_app_class_init(ShellAppClass *klass)
    * The #GIcon representing this ShellApp
    */
   props[PROP_ICON] =
-    g_param_spec_object ("icon", NULL, NULL,
+    g_param_spec_object ("icon",
+                         "GIcon",
+                         "The GIcon representing this app",
                          G_TYPE_ICON,
                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -1851,7 +1821,9 @@ shell_app_class_init(ShellAppClass *klass)
    * documentation of #GApplication and #GActionGroup for details.
    */
   props[PROP_ACTION_GROUP] =
-    g_param_spec_object ("action-group", NULL, NULL,
+    g_param_spec_object ("action-group",
+                         "Application Action Group",
+                         "The action group exported by the remote application",
                          G_TYPE_ACTION_GROUP,
                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -1861,7 +1833,9 @@ shell_app_class_init(ShellAppClass *klass)
    * The #GDesktopAppInfo associated with this ShellApp, if any.
    */
   props[PROP_APP_INFO] =
-    g_param_spec_object ("app-info", NULL, NULL,
+    g_param_spec_object ("app-info",
+                         "DesktopAppInfo",
+                         "The DesktopAppInfo associated with this app",
                          G_TYPE_DESKTOP_APP_INFO,
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 

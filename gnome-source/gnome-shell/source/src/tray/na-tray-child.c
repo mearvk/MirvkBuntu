@@ -149,7 +149,7 @@ latin1_to_utf8 (const char *latin1)
       ++p;
     }
 
-  return g_string_free_and_steal (str);
+  return g_string_free (str, FALSE);
 }
 
 /* derived from libwnck/xutils.c, comes as LGPLv2+ */
@@ -260,9 +260,9 @@ na_tray_child_emulate_event (NaTrayChild *tray_child,
                              ClutterEvent *event)
 {
   MetaX11Display *x11_display;
-  XKeyEvent xkevent = {0};
-  XButtonEvent xbevent = {0};
-  XCrossingEvent xcevent = {0};
+  XKeyEvent xkevent;
+  XButtonEvent xbevent;
+  XCrossingEvent xcevent;
   Display *xdisplay;
   Window xwindow, xrootwindow;
   ClutterEventType event_type = clutter_event_type (event);

@@ -25,7 +25,8 @@
 #error "Only <st/st.h> can be included directly.h"
 #endif
 
-#pragma once
+#ifndef __ST_WIDGET_H__
+#define __ST_WIDGET_H__
 
 #include <clutter/clutter.h>
 #include <st/st-types.h>
@@ -85,6 +86,8 @@ struct _StWidgetClass
   gboolean (* navigate_focus)      (StWidget         *self,
                                     ClutterActor     *from,
                                     StDirectionType   direction);
+  GType    (* get_accessible_type) (void);
+
   GList *  (* get_focus_chain)     (StWidget         *widget);
 };
 
@@ -116,7 +119,7 @@ void                  st_widget_set_track_hover           (StWidget        *widg
 gboolean              st_widget_get_track_hover           (StWidget        *widget);
 void                  st_widget_set_hover                 (StWidget        *widget,
                                                            gboolean         hover);
-void                  st_widget_sync_hover                (StWidget        *widget) G_GNUC_DEPRECATED;
+void                  st_widget_sync_hover                (StWidget        *widget);
 gboolean              st_widget_get_hover                 (StWidget        *widget);
 void                  st_widget_popup_menu                (StWidget        *self);
 
@@ -134,10 +137,6 @@ ClutterActor *        st_widget_get_label_actor           (StWidget        *widg
 void                  st_widget_set_label_actor           (StWidget        *widget,
                                                            ClutterActor    *label);
 
-StKeynavFlags         st_widget_get_keynav_flags          (StWidget        *widget);
-void                  st_widget_set_keynav_flags          (StWidget        *widget,
-                                                           StKeynavFlags    flags);
-
 /* Only to be used by sub-classes of StWidget */
 void                  st_widget_style_changed             (StWidget        *widget);
 StThemeNode *         st_widget_get_theme_node            (StWidget        *widget);
@@ -145,10 +144,24 @@ StThemeNode *         st_widget_peek_theme_node           (StWidget        *widg
 
 GList *               st_widget_get_focus_chain           (StWidget        *widget);
 void                  st_widget_paint_background          (StWidget            *widget,
-                                                           ClutterPaintNode    *node,
                                                            ClutterPaintContext *paint_context);
 
 /* debug methods */
 char  *st_describe_actor       (ClutterActor *actor);
 
+/* accessibility methods */
+void                  st_widget_set_accessible_role      (StWidget    *widget,
+                                                          AtkRole      role);
+AtkRole               st_widget_get_accessible_role      (StWidget    *widget);
+void                  st_widget_add_accessible_state     (StWidget    *widget,
+                                                          AtkStateType state);
+void                  st_widget_remove_accessible_state  (StWidget    *widget,
+                                                          AtkStateType state);
+void                  st_widget_set_accessible_name      (StWidget    *widget,
+                                                          const gchar *name);
+const gchar *         st_widget_get_accessible_name      (StWidget    *widget);
+void                  st_widget_set_accessible           (StWidget    *widget,
+                                                          AtkObject   *accessible);
 G_END_DECLS
+
+#endif /* __ST_WIDGET_H__ */

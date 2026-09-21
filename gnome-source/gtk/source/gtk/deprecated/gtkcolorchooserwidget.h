@@ -32,7 +32,7 @@ G_BEGIN_DECLS
 typedef struct _GtkColorChooserWidget        GtkColorChooserWidget;
 
 GDK_AVAILABLE_IN_ALL
-GType       gtk_color_chooser_widget_get_type (void);
+GType       gtk_color_chooser_widget_get_type (void) G_GNUC_CONST;
 
 GDK_DEPRECATED_IN_4_10
 GtkWidget * gtk_color_chooser_widget_new      (void);

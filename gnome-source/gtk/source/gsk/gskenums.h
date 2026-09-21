@@ -21,11 +21,6 @@
 #error "Only <gsk/gsk.h> can be included directly."
 #endif
 
-#include <glib.h>
-#include <gdk/version/gdkversionmacros.h>
-
-G_BEGIN_DECLS
-
 /**
  * GskRenderNodeType:
  * @GSK_NOT_A_RENDER_NODE: Error type. No node will ever have this type.
@@ -98,71 +93,6 @@ G_BEGIN_DECLS
  * Since: 4.14
  */
 
-/**
- * GSK_COMPONENT_TRANSFER_NODE:
- *
- * A node that applies some function to each color component.
- *
- * Since: 4.20
- */
-
-/**
- * GSK_COPY_NODE:
- *
- * A node that copies the rendering canvas to be pasted later.
- *
- * Since: 4.22
- */
-
-/**
- * GSK_PASTE_NODE:
- *
- * A node that pastes a previously copied canvas.
- *
- * Since: 4.22
- */
-
-/**
- * GSK_COMPOSITE_NODE:
- *
- * A node that combines a child with the background using Porter/Duff
- * operations.
- *
- * Since: 4.22
- */
-
-/**
- * GSK_ISOLATION_NODE:
- *
- * A node that isolated content of its child from previous content.
- *
- * Since: 4.22
- */
-
-/**
- * GSK_DISPLACEMENT_NODE:
- *
- * A node that displaces content according to some mask.
- *
- * Since: 4.22
- */
-
-/**
- * GSK_ARITHMETIC_NODE:
- *
- * A node that combines two child nodes in an arithmetic way.
- *
- * Since: 4.22
- */
-
-/**
- * GSK_TURBULENCE_NODE:
- *
- * A node that generates a Perlin noise or fractal Brownian motion pattern.
- *
- * Since: 4.24
- */
-
 typedef enum {
   GSK_NOT_A_RENDER_NODE = 0,
   GSK_CONTAINER_NODE,
@@ -195,14 +125,6 @@ typedef enum {
   GSK_FILL_NODE,
   GSK_STROKE_NODE,
   GSK_SUBSURFACE_NODE,
-  GSK_COMPONENT_TRANSFER_NODE,
-  GSK_COPY_NODE,
-  GSK_PASTE_NODE,
-  GSK_COMPOSITE_NODE,
-  GSK_ISOLATION_NODE,
-  GSK_DISPLACEMENT_NODE,
-  GSK_ARITHMETIC_NODE,
-  GSK_TURBULENCE_NODE,
 } GskRenderNodeType;
 
 /**
@@ -275,44 +197,6 @@ typedef enum {
 } GskBlendMode;
 
 /**
- * GskPorterDuff:
- * GSK_PORTER_DUFF_SOURCE:
- * GSK_PORTER_DUFF_DEST:
- * GSK_PORTER_DUFF_SOURCE_OVER_DEST:
- * GSK_PORTER_DUFF_DEST_OVER_SOURCE:
- * GSK_PORTER_DUFF_SOURCE_IN_DEST:
- * GSK_PORTER_DUFF_DEST_IN_SOURCE:
- * GSK_PORTER_DUFF_SOURCE_OUT_DEST:
- * GSK_PORTER_DUFF_DEST_OUT_SOURCE:
- * GSK_PORTER_DUFF_SOURCE_ATOP_DEST:
- * GSK_PORTER_DUFF_DEST_ATOP_SOURCE:
- * GSK_PORTER_DUFF_XOR:
- * GSK_PORTER_DUFF_CLEAR:
- *
- * The 12 compositing modes defined by the seminal paper
- * by Thomas Porter and Tom Duff.
- *
- * They are used in SVG, PDF and in Cairo with `cairo_operator_t`.
- *
- * Since: 4.22
- */
-typedef enum
-{
-  GSK_PORTER_DUFF_SOURCE,
-  GSK_PORTER_DUFF_DEST,
-  GSK_PORTER_DUFF_SOURCE_OVER_DEST,
-  GSK_PORTER_DUFF_DEST_OVER_SOURCE,
-  GSK_PORTER_DUFF_SOURCE_IN_DEST,
-  GSK_PORTER_DUFF_DEST_IN_SOURCE,
-  GSK_PORTER_DUFF_SOURCE_OUT_DEST,
-  GSK_PORTER_DUFF_DEST_OUT_SOURCE,
-  GSK_PORTER_DUFF_SOURCE_ATOP_DEST,
-  GSK_PORTER_DUFF_DEST_ATOP_SOURCE,
-  GSK_PORTER_DUFF_XOR,
-  GSK_PORTER_DUFF_CLEAR
-} GskPorterDuff;
-
-/**
  * GskCorner:
  * @GSK_CORNER_TOP_LEFT: The top left corner
  * @GSK_CORNER_TOP_RIGHT: The top right corner
@@ -329,26 +213,6 @@ typedef enum {
 } GskCorner;
 
 /**
- * GskSide:
- * @GSK_SIDE_TOP: The top side
- * @GSK_SIDE_RIGHT: The right side
- * @GSK_SIDE_BOTTOM: The bottom side
- * @GSK_SIDE_LEFT: The left side
- *
- * The sides of a rectangle as used by `GskRectSnap` or `GskBorderNode`.
- * 
- * This is the order used by CSS shorthand arguments.
- *
- * Since: 4.24
- */
-typedef enum {
-  GSK_SIDE_TOP GDK_AVAILABLE_ENUMERATOR_IN_4_24 = 0,
-  GSK_SIDE_RIGHT GDK_AVAILABLE_ENUMERATOR_IN_4_24 = 1,
-  GSK_SIDE_BOTTOM GDK_AVAILABLE_ENUMERATOR_IN_4_24 = 2,
-  GSK_SIDE_LEFT GDK_AVAILABLE_ENUMERATOR_IN_4_24 = 3
-} GskSide;
-
-/**
  * GskFillRule:
  * @GSK_FILL_RULE_WINDING: If the path crosses the ray from
  *   left-to-right, counts +1. If the path crosses the ray
@@ -360,7 +224,7 @@ typedef enum {
  *   the total number of intersections is odd, the point will be
  *   filled.
  *
- * Specifies how paths are filled.
+ * `GskFillRule` is used to select how paths are filled.
  *
  * Whether or not a point is included in the fill is determined by taking
  * a ray from that point to infinity and looking at intersections with the
@@ -379,32 +243,6 @@ typedef enum {
   GSK_FILL_RULE_WINDING,
   GSK_FILL_RULE_EVEN_ODD
 } GskFillRule;
-
-/**
- * GskIsolation:
- * @GSK_ISOLATION_NONE: No isolation is defined.
- * @GSK_ISOLATION_BACKGROUND: If the background should be made available.
- *   If the background is not available, future operations will be rendered
- *   to a transparent background and added to the existing background later.
- * @GSK_ISOLATION_COPY_PASTE: If copies should be available to paste nodes.
- *   If copies are not available, paste nodes can only paste from copies that
- *   are made inside the isolated contents.
- * @GSK_ISOLATION_ALL: Isolate everything. This will include features that
- *   are added in the future.
- *
- * These flags describe the types of isolations possible with a
- * [class@Gsk.IsolationNode].
- *
- * More isolation options may be added in the future.
- *
- * Since: 4.22
- */
-typedef enum {
-  GSK_ISOLATION_NONE       = 0,
-  GSK_ISOLATION_BACKGROUND = 1 << 0,
-  GSK_ISOLATION_COPY_PASTE = 1 << 1,
-  GSK_ISOLATION_ALL        = -1
-} GskIsolation;
 
 /**
  * GskLineCap:
@@ -485,7 +323,7 @@ typedef enum {
  *   the start point, control point and end point of the curve. A weight for the
  *   curve will be passed, too.
  *
- * Describes the segments of a `GskPath`.
+ * Path operations are used to describe the segments of a `GskPath`.
  *
  * More values may be added in the future.
  *
@@ -511,7 +349,8 @@ typedef enum {
  * @GSK_PATH_FROM_END: The tangent against path direction of the outgoing
  *   side of the path
  *
- * Used to pick one of the four tangents at a given point on the path.
+ * The values of the `GskPathDirection` enum are used to pick one
+ * of the four tangents at a given point on the path.
  *
  * Note that the directions for @GSK_PATH_FROM_START/@GSK_PATH_TO_END and
  * @GSK_PATH_TO_START/@GSK_PATH_FROM_END will coincide for smooth points.
@@ -597,12 +436,11 @@ typedef enum
  * @GSK_GL_UNIFORM_TYPE_VEC3: A GLSL vec3 / graphene_vec3_t uniform
  * @GSK_GL_UNIFORM_TYPE_VEC4: A GLSL vec4 / graphene_vec4_t uniform
  *
- * Defines the types of the uniforms that `GskGLShaders` declare.
+ * This defines the types of the uniforms that `GskGLShaders`
+ * declare.
  *
  * It defines both what the type is called in the GLSL shader
  * code, and what the corresponding C type is on the Gtk side.
- *
- * Deprecated: 4.16
  */
 typedef enum
 {
@@ -636,27 +474,3 @@ typedef enum
   GSK_MASK_MODE_LUMINANCE,
   GSK_MASK_MODE_INVERTED_LUMINANCE
 } GskMaskMode;
-
-/**
- * GskSnapDirection:
- * @GSK_SNAP_NONE: Don't snap the value
- * @GSK_SNAP_FLOOR: Use floor() to snap
- * @GSK_SNAP_CEIL: Use ceil() to snap
- * @GSK_SNAP_ROUND: Use round() to snap
- *
- * Specifies how a coordinate should be snapped to the pixel grid.
- *
- * Note that the top and left sides of rectangles need to be snapped
- * in the opposite direction from the bottom and right sides to make
- * the rectangle grow or shrink.
- *
- * Since: 4.24
- */
-typedef enum {
-  GSK_SNAP_NONE,
-  GSK_SNAP_FLOOR,
-  GSK_SNAP_CEIL,
-  GSK_SNAP_ROUND
-} GskSnapDirection;
-
-G_END_DECLS

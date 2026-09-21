@@ -25,7 +25,6 @@
 
 #include <gdk/gdk.h>
 #include <cairo.h>
-#include "gdkcolorprivate.h"
 
 G_BEGIN_DECLS
 
@@ -38,16 +37,15 @@ typedef enum {
 
 void            gsk_cairo_blur_surface          (cairo_surface_t *surface,
                                                  double           radius,
-                                                 GskBlurFlags     flags);
-int             gsk_cairo_blur_compute_pixels   (double           radius);
+						 GskBlurFlags     flags);
+int             gsk_cairo_blur_compute_pixels   (double           radius) G_GNUC_CONST;
 
 cairo_t *       gsk_cairo_blur_start_drawing    (cairo_t         *cr,
                                                  float            radius,
                                                  GskBlurFlags     blur_flags);
 cairo_t *       gsk_cairo_blur_finish_drawing   (cairo_t         *cr,
-                                                 GdkColorState   *ccs,
                                                  float            radius,
-                                                 const GdkColor  *color,
+                                                 const GdkRGBA   *color,
                                                  GskBlurFlags     blur_flags);
 
 G_END_DECLS

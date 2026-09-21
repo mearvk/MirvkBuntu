@@ -6,8 +6,6 @@
 # Copyright (C) 2008-2011 Red Hat, Inc.
 # Copyright (C) 2018 Iñigo Martínez <inigomartinez@gmail.com>
 #
-# SPDX-License-Identifier: LGPL-2.1-or-later
-#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -26,8 +24,6 @@
 import argparse
 import os
 import sys
-import importlib.util
-import traceback
 from contextlib import contextmanager
 
 from . import config
@@ -38,16 +34,6 @@ from . import codegen_docbook
 from . import codegen_md
 from . import codegen_rst
 from .utils import print_error, print_warning
-
-
-def import_from_path(module_name, file_path):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    if not spec:
-        raise Exception("Not a Python file")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def find_arg(arg_list, arg_name):
@@ -286,12 +272,6 @@ def codegen_main():
         help="Additional define required for decorator specified by "
         "--symbol-decorator",
     )
-    arg_parser.add_argument(
-        "--extension-path",
-        metavar="EXTENSION_PATH",
-        default="",
-        help="Path to a gdbus-codegen Python extension file (unstable API)",
-    )
 
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -322,20 +302,6 @@ def codegen_main():
     )
 
     args = arg_parser.parse_args()
-
-    codegen_ext = {}
-    if args.extension_path:
-        try:
-            codegen_ext = import_from_path("GDBusCodegenExt", args.extension_path)
-            codegen_ext.init(
-                args,
-                {
-                    "version": 1,
-                },
-            )
-        except Exception:
-            print_warning(traceback.format_exc())
-            print_error("Loading extension ‘{}’ failed".format(args.extension_path))
 
     if len(args.xml_files) > 0:
         print_warning(
@@ -511,7 +477,6 @@ def codegen_main():
                 args.symbol_decorator,
                 args.symbol_decorator_header,
                 outfile,
-                codegen_ext,
             )
             gen.generate()
 
@@ -527,7 +492,6 @@ def codegen_main():
                 glib_min_required,
                 args.symbol_decorator_define,
                 outfile,
-                codegen_ext,
             )
             gen.generate()
 

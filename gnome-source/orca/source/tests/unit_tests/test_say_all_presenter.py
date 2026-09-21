@@ -52,7 +52,6 @@ class TestSayAllPresenter:
 
         additional_modules = [
             "orca.ax_event_synthesizer",
-            "orca.caret_navigator",
             "orca.structural_navigator",
             "orca.input_event",
             "orca.keybindings",
@@ -191,12 +190,12 @@ class TestSayAllPresenter:
         """Test SayAllPresenter._parse_utterances with various input formats."""
 
         self._setup_dependencies(test_context)
-        from orca.acss import ACSS
+        from orca import speech
         from orca.say_all_presenter import SayAllPresenter
 
         presenter = SayAllPresenter()
 
-        mock_acss = test_context.Mock(spec=ACSS)
+        mock_acss = test_context.Mock(spec=speech.ACSS)
 
         elements, voices = presenter._parse_utterances([])
         assert len(elements) == 0
@@ -268,41 +267,6 @@ class TestSayAllPresenter:
 
         pres_manager.interrupt_presentation.assert_called_once()
         pres_manager.present_message.assert_called_once_with("Location not found")
-
-    def test_say_all_can_preserve_existing_presentation(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test SayAllPresenter.say_all can start without interrupting queued presentation."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca.say_all_presenter import SayAllPresenter
-
-        presenter = SayAllPresenter()
-        mock_script = test_context.Mock()
-        focus_obj = test_context.Mock(spec=Atspi.Accessible)
-
-        focus_manager_mock = essential_modules["orca.focus_manager"]
-        manager_instance = test_context.Mock()
-        focus_manager_mock.get_manager.return_value = manager_instance
-        manager_instance.get_locus_of_focus.return_value = focus_obj
-
-        essential_modules["orca.AXObject"].is_dead.return_value = False
-
-        from orca import speech_presenter
-
-        speech_pres = speech_presenter.get_presenter()
-        speech_pres.say_all.reset_mock()
-
-        pres_manager = essential_modules["orca.presentation_manager"].get_manager()
-        pres_manager.interrupt_presentation.reset_mock()
-        result = presenter.say_all(mock_script, obj=focus_obj, interrupt=False)
-        assert result is True
-
-        pres_manager.interrupt_presentation.assert_not_called()
-        manager_instance.emit_region_changed.assert_called_once_with(
-            focus_obj, mode=focus_manager_mock.SAY_ALL
-        )
-        speech_pres.say_all.assert_called_once()
 
     @pytest.mark.parametrize(
         "direction,enabled,contents_available,obj_valid,expected_result",
@@ -432,6 +396,7 @@ class TestSayAllPresenter:
         result = command(mock_script, mock_event, notify_user=True)
 
         assert result is True
+        debug_mock.print_tokens.assert_called_once()
         private_method = getattr(presenter, private_method_name)
         private_method.assert_called_once_with(None, True)
 
@@ -612,9 +577,9 @@ class TestSayAllPresenter:
         debug_mock.LEVEL_INFO = 800
         debug_mock.print_tokens = test_context.Mock()
 
-        from orca import speech_presenter
+        from orca import speech
 
-        test_context.patch_object(speech_presenter.get_presenter(), "say_all", return_value=None)
+        test_context.patch_object(speech, "say_all", return_value=None)
 
         mock_script.utilities.get_caret_context.return_value = ("obj", 10)
 
@@ -742,15 +707,15 @@ class TestSayAllPresenter:
             "say-all",
         )
 
-    def test_progress_callback_native_navigation_uses_focus_tracking_mode(
+    def test_progress_callback_uses_focus_tracking_mode_when_interrupted(
         self,
         test_context: OrcaTestContext,
     ) -> None:
-        """Test native navigation uses the normal interrupted-speech cleanup path."""
+        """Test that _progress_callback uses FOCUS_TRACKING mode when interrupted by keyboard."""
 
         self._setup_dependencies(test_context)
-        from orca import caret_navigator, input_event_manager, speechserver, structural_navigator
         from orca import focus_manager as fm
+        from orca import input_event_manager, speechserver
         from orca.ax_text import AXText
         from orca.say_all_presenter import SayAllPresenter
 
@@ -775,20 +740,7 @@ class TestSayAllPresenter:
         iem_instance.last_event_was_keyboard.return_value = True
         iem_instance.last_event_was_down.return_value = False
         iem_instance.last_event_was_up.return_value = False
-        iem_instance.last_event_was_caret_navigation.return_value = True
         test_context.patch_object(input_event_manager, "get_manager", return_value=iem_instance)
-
-        caret_navigator_instance = test_context.Mock()
-        caret_navigator_instance.last_input_event_was_navigation_command.return_value = False
-        test_context.patch_object(
-            caret_navigator, "get_navigator", return_value=caret_navigator_instance
-        )
-
-        navigator_instance = test_context.Mock()
-        navigator_instance.last_input_event_was_navigation_command.return_value = False
-        test_context.patch_object(
-            structural_navigator, "get_navigator", return_value=navigator_instance
-        )
 
         presenter._progress_callback(mock_context, speechserver.SayAllContext.INTERRUPTED)
 
@@ -800,143 +752,109 @@ class TestSayAllPresenter:
             fm.FOCUS_TRACKING,
         )
 
-    def test_progress_callback_non_keyboard_interrupt_stops_say_all(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test a non-keyboard interruption stops Say All without changing the caret."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca import input_event_manager, speechserver
-        from orca.say_all_presenter import SayAllPresenter
-
-        presenter = SayAllPresenter()
-        mock_script = test_context.Mock()
-        presenter._script = mock_script
-
-        mock_context = test_context.Mock(spec=speechserver.SayAllContext)
-        mock_context.obj = test_context.Mock()
-        mock_context.current_offset = 5
-        mock_context.current_end_offset = 10
-
-        focus_manager_mock = essential_modules["orca.focus_manager"]
-        focus_instance = test_context.Mock()
-        focus_manager_mock.get_manager.return_value = focus_instance
-
-        iem_instance = test_context.Mock()
-        iem_instance.last_event_was_keyboard.return_value = False
-        test_context.patch_object(input_event_manager, "get_manager", return_value=iem_instance)
-
-        presenter._progress_callback(mock_context, speechserver.SayAllContext.INTERRUPTED)
-
-        assert presenter._say_all_is_running is False
-        focus_instance.reset_active_mode.assert_called_once_with(
-            "SAY ALL PRESENTER: Stopped Say All.",
-        )
-        focus_instance.emit_region_changed.assert_not_called()
-        mock_script.utilities.set_caret_context.assert_not_called()
-
     @pytest.mark.parametrize(
-        "caret_navigation, structural_navigation",
+        "end_offset, expected_next_context_offset",
         [
-            pytest.param(True, False, id="caret_navigation"),
-            pytest.param(False, True, id="structural_navigation"),
+            pytest.param(16, 15, id="normal_offset_passes_end_minus_one"),
+            pytest.param(1, 0, id="small_offset_passes_end_minus_one"),
+            pytest.param(0, 0, id="zero_offset_passes_zero_not_negative"),
+            pytest.param(100, 99, id="large_offset_passes_end_minus_one"),
         ],
     )
-    def test_progress_callback_navigation_interrupt_ends_say_all(
-        self,
-        test_context: OrcaTestContext,
-        caret_navigation: bool,
-        structural_navigation: bool,
-    ) -> None:
-        """Test that a navigation command interrupting Say All ends it without re-presenting."""
-
-        self._setup_dependencies(test_context)
-        from orca import caret_navigator, input_event_manager, speechserver, structural_navigator
-        from orca import focus_manager as fm
-        from orca.say_all_presenter import SayAllPresenter
-
-        presenter = SayAllPresenter()
-        presenter._script = test_context.Mock()
-
-        mock_context = test_context.Mock(spec=speechserver.SayAllContext)
-        mock_context.obj = test_context.Mock()
-        mock_context.current_offset = 5
-        mock_context.current_end_offset = 10
-
-        focus_instance = test_context.Mock()
-        test_context.patch_object(fm, "get_manager", return_value=focus_instance)
-
-        iem_instance = test_context.Mock()
-        iem_instance.last_event_was_keyboard.return_value = True
-        iem_instance.last_event_was_down.return_value = False
-        iem_instance.last_event_was_up.return_value = False
-        test_context.patch_object(input_event_manager, "get_manager", return_value=iem_instance)
-
-        caret_navigator_instance = test_context.Mock()
-        caret_navigator_instance.last_input_event_was_navigation_command.return_value = (
-            caret_navigation
-        )
-        test_context.patch_object(
-            caret_navigator, "get_navigator", return_value=caret_navigator_instance
-        )
-
-        navigator_instance = test_context.Mock()
-        navigator_instance.last_input_event_was_navigation_command.return_value = (
-            structural_navigation
-        )
-        test_context.patch_object(
-            structural_navigator, "get_navigator", return_value=navigator_instance
-        )
-
-        presenter._progress_callback(mock_context, speechserver.SayAllContext.INTERRUPTED)
-
-        assert presenter._say_all_is_running is False
-        focus_instance.emit_region_changed.assert_not_called()
-        focus_instance.reset_active_mode.assert_called_once_with(
-            "SAY ALL PRESENTER: Stopped Say All.",
-        )
-
-    @pytest.mark.parametrize(
-        "end_offset,is_eoc,expected_offset",
-        [
-            pytest.param(16, False, 16, id="text-end-offset"),
-            pytest.param(16, True, 15, id="embedded-object-at-end-offset"),
-            pytest.param(0, True, 0, id="embedded-object-at-zero-offset"),
-        ],
-    )
-    def test_get_next_context_skips_space_and_preserves_offset_handling(
+    def test_say_all_iter_next_context_uses_end_offset_minus_one(
         self,
         test_context: OrcaTestContext,
         end_offset: int,
-        is_eoc: bool,
-        expected_offset: int,
+        expected_next_context_offset: int,
     ) -> None:
-        """Tests advancing past whitespace without skipping embedded objects."""
+        """Test that _say_all_iter passes end_offset - 1 to next_context.
 
-        self._setup_dependencies(test_context)
-        from orca.ax_utilities import AXUtilities
+        The end offset from sentence contents is exclusive (position end is NOT
+        part of the content). find_next_caret_in_order looks at offset + 1, so
+        passing end directly would skip position end. We must pass end - 1 so
+        that find_next_caret_in_order looks at position end, which is where
+        embedded object characters (FFFC) representing child elements may be.
+        """
+
+        essential_modules = self._setup_dependencies(test_context)
+        from orca import gsettings_registry
         from orca.say_all_presenter import SayAllPresenter
 
         presenter = SayAllPresenter()
         mock_script = test_context.Mock()
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
+
+        # Set up the presenter's script
         presenter._script = mock_script
+
+        # Set up settings for sentence-by-sentence say all
+        gsettings_registry.get_registry().set_runtime_value("say-all", "style", "sentence")
+
+        # Mock utilities - return contents once, then return empty to exit loop
+        call_count = [0]
+
+        def mock_get_sentence_contents(_obj, _offset):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return [(mock_obj, 0, end_offset, "Test sentence.")]
+            return []
+
+        mock_script.utilities.get_sentence_contents_at_offset.side_effect = (
+            mock_get_sentence_contents
+        )
+        mock_script.utilities.filter_contents_for_presentation.side_effect = lambda x: x
+
+        # next_context returns None to end the loop
         mock_script.utilities.next_context.return_value = (None, -1)
+
+        # Mock speech presenter to return something so the content is processed
+        speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
+        speech_pres.generate_speech_contents.return_value = [["Test"], []]
+
+        # Mock AXUtilities
+        ax_utilities_mock = essential_modules["orca.ax_utilities"]
+        ax_utilities_mock.is_text.return_value = False
+        ax_utilities_mock.is_terminal.return_value = False
+
+        # Mock _say_all_should_skip_content to avoid dependency issues
         test_context.patch_object(
-            AXUtilities,
-            "character_at_offset_is_eoc",
-            return_value=is_eoc,
+            presenter,
+            "_say_all_should_skip_content",
+            return_value=(False, ""),
         )
 
-        contents = [(mock_obj, 0, end_offset, "Test sentence.")]
-        presenter._get_next_context(mock_obj, contents, None)
+        # Mock debug
+        debug_mock = essential_modules["orca.debug"]
+        debug_mock.LEVEL_INFO = 800
+        debug_mock.print_tokens = test_context.Mock()
+        debug_mock.print_message = test_context.Mock()
 
-        mock_script.utilities.next_context.assert_called_once_with(
-            mock_obj,
-            expected_offset,
-            skip_space=True,
-            restrict_to=None,
+        # Mock focus_manager for set_locus_of_focus
+        focus_manager_mock = essential_modules["orca.focus_manager"]
+        manager_instance = test_context.Mock()
+        focus_manager_mock.get_manager.return_value = manager_instance
+
+        # Mock event_synthesizer
+        essential_modules[
+            "orca.ax_event_synthesizer"
+        ].get_synthesizer.return_value.scroll_into_view = test_context.Mock()
+
+        # Mock utilities.set_caret_offset
+        mock_script.utilities.set_caret_offset = test_context.Mock()
+
+        # Consume the generator to trigger next_context call
+        generator = presenter._say_all_iter(mock_obj, 0)
+        for _ in generator:
+            pass
+
+        # Verify next_context was called with end_offset - 1 (or 0 if that would be negative)
+        mock_script.utilities.next_context.assert_called_once()
+        call_args = mock_script.utilities.next_context.call_args
+        # next_context is called with positional args: (last_obj, offset, restrict_to=...)
+        actual_offset = call_args[0][1]
+        assert actual_offset == expected_next_context_offset, (
+            f"Expected next_context to be called with offset {expected_next_context_offset}, "
+            f"but was called with {actual_offset}"
         )
 
     def test_stop_clears_all_state(self, test_context: OrcaTestContext) -> None:

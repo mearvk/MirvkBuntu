@@ -28,7 +28,8 @@
  *
  */
 
-#pragma once
+#ifndef COGL_CPU_CAPS_H
+#define COGL_CPU_CAPS_H
 
 #include "cogl/cogl-types.h"
 
@@ -49,3 +50,5 @@ cogl_cpu_has_cap (CoglCpuCaps cap)
 {
   return !!(cogl_cpu_caps & cap);
 }
+
+#endif /* COGL_CPU_CAPS_H */

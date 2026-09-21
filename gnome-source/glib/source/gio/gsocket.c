@@ -480,35 +480,15 @@ g_socket_details_from_fd (GSocket *socket)
   socklen_t addrlen;
   int value, family;
   int errsv;
-#ifdef G_OS_WIN32
-  WSAPROTOCOL_INFO wsa_info;
-  socklen_t wsa_info_len = sizeof (wsa_info);
-#endif
 
   memset (&address, 0, sizeof (address));
 
   fd = socket->priv->fd;
-#ifndef G_OS_WIN32
   if (!g_socket_get_option (socket, SOL_SOCKET, SO_TYPE, &value, NULL))
     {
       errsv = get_socket_errno ();
       goto err;
     }
-#else
-  /* On Windows, getsockname() fails on unbound sockets with WSAEINVAL,
-   * so the only universal way to get socket family is via SO_PROTOCOL_INFO.
-   * WSAPROTOCOL_INFO also carries socket type, so one getsockopt() call
-   * is enough for all the info.
-   */
-  if (getsockopt (fd, SOL_SOCKET, SO_PROTOCOL_INFO, &wsa_info,
-                  &wsa_info_len) == SOCKET_ERROR)
-    {
-      errsv = get_socket_errno ();
-      goto err;
-    }
-
-  value = wsa_info.iSocketType;
-#endif
 
   switch (value)
     {
@@ -529,7 +509,6 @@ g_socket_details_from_fd (GSocket *socket)
       break;
     }
 
-#ifndef G_OS_WIN32
   addrlen = sizeof address;
   if (getsockname (fd, &address.sa, &addrlen) != 0)
     {
@@ -560,15 +539,12 @@ g_socket_details_from_fd (GSocket *socket)
       goto err;
 #endif
     }
-#else  /* G_OS_WIN32 */
-  family = wsa_info.iAddressFamily;
-#endif /* G_OS_WIN32 */
 
   switch (family)
     {
      case G_SOCKET_FAMILY_IPV4:
      case G_SOCKET_FAMILY_IPV6:
-       socket->priv->family = family;
+       socket->priv->family = address.storage.ss_family;
        switch (socket->priv->type)
 	 {
 	 case G_SOCKET_TYPE_STREAM:
@@ -2038,18 +2014,15 @@ g_socket_get_protocol (GSocket *socket)
 
 /**
  * g_socket_get_fd:
- * @socket: a socket
+ * @socket: a #GSocket.
  *
- * Gets the underlying OS socket descriptor.
+ * Returns the underlying OS socket object. On unix this
+ * is a socket file descriptor, and on Windows this is
+ * a Winsock2 SOCKET handle. This may be useful for
+ * doing platform specific or otherwise unusual operations
+ * on the socket.
  *
- * On Unix this is a socket file descriptor, and on Windows this is
- * a Winsock2 `SOCKET` handle.
- *
- * This may be useful for doing platform specific or otherwise unusual
- * operations on the socket.
- *
- * Returns: the file descriptor of the socket, or `-1` if the socket has not yet
- *   been initialised or has been closed
+ * Returns: the file descriptor of the socket.
  *
  * Since: 2.22
  */
@@ -2429,42 +2402,6 @@ g_socket_w32_get_adapter_ipv4_addr (const gchar *name_or_ip)
 
   return ip_result;
 }
-#elif (defined(HAVE_SIOCGIFADDR) && (!(defined(HAVE_IP_MREQN) && !defined(__APPLE__)) || defined(IP_ADD_SOURCE_MEMBERSHIP)))
-static gulong
-g_socket_get_adapter_ipv4_addr (GSocket     *socket,
-                                const char  *iface,
-                                GError     **error)
-{
-  int ret;
-  struct ifreq ifr;
-  struct sockaddr_in *iface_addr;
-  size_t if_name_len = strlen (iface);
-
-  memset (&ifr, 0, sizeof (ifr));
-
-  if (if_name_len >= sizeof (ifr.ifr_name))
-    {
-      g_set_error (error, G_IO_ERROR,  G_IO_ERROR_FILENAME_TOO_LONG,
-                   _("Interface name too long"));
-      return ULONG_MAX;
-    }
-
-  memcpy (ifr.ifr_name, iface, if_name_len);
-
-  /* Get the IPv4 address of the given network interface name. */
-  ret = ioctl (socket->priv->fd, SIOCGIFADDR, &ifr);
-  if (ret < 0)
-    {
-      int errsv = errno;
-
-      g_set_error (error, G_IO_ERROR,  g_io_error_from_errno (errsv),
-                   _("Interface not found: %s"), g_strerror (errsv));
-      return ULONG_MAX;
-    }
-
-  iface_addr = (struct sockaddr_in *) &ifr.ifr_addr;
-  return iface_addr->sin_addr.s_addr;
-}
 #endif
 
 static gboolean
@@ -2481,7 +2418,6 @@ g_socket_multicast_group_operation (GSocket       *socket,
   g_return_val_if_fail (G_IS_SOCKET (socket), FALSE);
   g_return_val_if_fail (socket->priv->type == G_SOCKET_TYPE_DATAGRAM, FALSE);
   g_return_val_if_fail (G_IS_INET_ADDRESS (group), FALSE);
-  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   if (!check_socket (socket, error))
     return FALSE;
@@ -2489,7 +2425,7 @@ g_socket_multicast_group_operation (GSocket       *socket,
   native_addr = g_inet_address_to_bytes (group);
   if (g_inet_address_get_family (group) == G_SOCKET_FAMILY_IPV4)
     {
-#if defined(HAVE_IP_MREQN) && !defined(__APPLE__)
+#ifdef HAVE_IP_MREQN
       struct ip_mreqn mc_req;
 #else
       struct ip_mreq mc_req;
@@ -2498,11 +2434,7 @@ g_socket_multicast_group_operation (GSocket       *socket,
       memset (&mc_req, 0, sizeof (mc_req));
       memcpy (&mc_req.imr_multiaddr, native_addr, sizeof (struct in_addr));
 
-      /* mc_req.imr_ifindex is not used correctly by the XNU kernel, and
-       * causes us to bind to the default interface; so fallback to ip_mreq
-       * and set the iface source address (not SSM).
-       * See: https://gitlab.gnome.org/GNOME/glib/-/issues/3489 */
-#if defined(HAVE_IP_MREQN) && !defined(__APPLE__)
+#ifdef HAVE_IP_MREQN
       if (iface)
         mc_req.imr_ifindex = if_nametoindex (iface);
       else
@@ -2512,22 +2444,6 @@ g_socket_multicast_group_operation (GSocket       *socket,
         mc_req.imr_interface.s_addr = g_socket_w32_get_adapter_ipv4_addr (iface);
       else
         mc_req.imr_interface.s_addr = g_htonl (INADDR_ANY);
-#elif defined(HAVE_SIOCGIFADDR)
-      if (iface)
-        {
-          GError *local_error = NULL;
-
-          mc_req.imr_interface.s_addr = g_socket_get_adapter_ipv4_addr (socket, iface, &local_error);
-          if (local_error != NULL)
-            {
-              g_propagate_error (error, g_steal_pointer (&local_error));
-              return FALSE;
-            }
-        }
-      else
-        {
-          mc_req.imr_interface.s_addr = g_htonl (INADDR_ANY);
-        }
 #else
       mc_req.imr_interface.s_addr = g_htonl (INADDR_ANY);
 #endif
@@ -2726,15 +2642,36 @@ g_socket_multicast_group_operation_ssm (GSocket       *socket,
           {
 #if defined(G_OS_WIN32)
             S_ADDR_FIELD(mc_req_src) = g_socket_w32_get_adapter_ipv4_addr (iface);
-#elif defined(HAVE_SIOCGIFADDR)
-            GError *local_error = NULL;
+#elif defined (HAVE_SIOCGIFADDR)
+            int ret;
+            struct ifreq ifr;
+            struct sockaddr_in *iface_addr;
+            size_t if_name_len = strlen (iface);
 
-            S_ADDR_FIELD(mc_req_src) = g_socket_get_adapter_ipv4_addr (socket, iface, &local_error);
-            if (local_error != NULL)
+            memset (&ifr, 0, sizeof (ifr));
+
+            if (if_name_len >= sizeof (ifr.ifr_name))
               {
-                g_propagate_error (error, g_steal_pointer (&local_error));
+                g_set_error (error, G_IO_ERROR,  G_IO_ERROR_FILENAME_TOO_LONG,
+                             _("Interface name too long"));
                 return FALSE;
               }
+
+            memcpy (ifr.ifr_name, iface, if_name_len);
+
+            /* Get the IPv4 address of the given network interface name. */
+            ret = ioctl (socket->priv->fd, SIOCGIFADDR, &ifr);
+            if (ret < 0)
+              {
+                int errsv = errno;
+
+                g_set_error (error, G_IO_ERROR,  g_io_error_from_errno (errsv),
+                             _("Interface not found: %s"), g_strerror (errsv));
+                return FALSE;
+              }
+
+            iface_addr = (struct sockaddr_in *) &ifr.ifr_addr;
+            S_ADDR_FIELD(mc_req_src) = iface_addr->sin_addr.s_addr;
 #endif  /* defined(G_OS_WIN32) && defined (HAVE_IF_NAMETOINDEX) */
           }
 
@@ -3001,9 +2938,6 @@ g_socket_accept (GSocket       *socket,
   if (!check_timeout (socket, error))
     return NULL;
 
-  if (g_cancellable_set_error_if_cancelled (cancellable, error))
-    return NULL;
-
   while (TRUE)
     {
       gboolean try_accept = TRUE;
@@ -3144,9 +3078,6 @@ g_socket_connect (GSocket         *socket,
     return FALSE;
 
   if (!g_socket_address_to_native (address, &buffer.storage, sizeof buffer, error))
-    return FALSE;
-
-  if (g_cancellable_set_error_if_cancelled (cancellable, error))
     return FALSE;
 
   if (socket->priv->remote_address)
@@ -4176,8 +4107,9 @@ update_condition_unlocked (GSocket *socket)
   GIOCondition condition;
 
   if (!socket->priv->closed &&
-      (WSAWaitForMultipleEvents (1, &socket->priv->event, FALSE, 0, FALSE) == WSA_WAIT_EVENT_0) &&
-      (WSAEnumNetworkEvents (socket->priv->fd, socket->priv->event, &events) == 0))
+      WSAEnumNetworkEvents (socket->priv->fd,
+			    socket->priv->event,
+			    &events) == 0)
     {
       socket->priv->current_events |= events.lNetworkEvents;
       if (events.lNetworkEvents & FD_WRITE &&
@@ -6495,7 +6427,7 @@ g_socket_get_credentials (GSocket   *socket,
  * getsockopt(). (If you need to fetch a  non-integer-valued option,
  * you will need to call getsockopt() directly.)
  *
- * The [`<gio/gnetworking.h>`](networking.html)
+ * The [<gio/gnetworking.h>][gio-gnetworking.h]
  * header pulls in system headers that will define most of the
  * standard/portable socket options. For unusual socket protocols or
  * platform-dependent options, you may need to include additional
@@ -6567,7 +6499,7 @@ g_socket_get_option (GSocket  *socket,
  * setsockopt(). (If you need to set a non-integer-valued option,
  * you will need to call setsockopt() directly.)
  *
- * The [`<gio/gnetworking.h>`](networking.html)
+ * The [<gio/gnetworking.h>][gio-gnetworking.h]
  * header pulls in system headers that will define most of the
  * standard/portable socket options. For unusual socket protocols or
  * platform-dependent options, you may need to include additional

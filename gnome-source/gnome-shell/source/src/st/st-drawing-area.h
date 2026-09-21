@@ -18,7 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef __ST_DRAWING_AREA_H__
+#define __ST_DRAWING_AREA_H__
 
 #include "st-widget.h"
 #include <cairo.h>
@@ -39,3 +40,5 @@ cairo_t *st_drawing_area_get_context      (StDrawingArea *area);
 void     st_drawing_area_get_surface_size (StDrawingArea *area,
                                            guint         *width,
                                            guint         *height);
+
+#endif /* __ST_DRAWING_AREA_H__ */

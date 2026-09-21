@@ -63,8 +63,7 @@ OPTIONS
 ``--sourcedir <DIRECTORY>``
 
   The files referenced in ``FILE`` are loaded from this directory. If not
-  specified, the current directory is used. If ``--sourcedir`` is used more
-  than once, the specified directories are searched in order.
+  specified, the current directory is used.
 
 ``--generate``
 

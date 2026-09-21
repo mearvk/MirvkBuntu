@@ -28,20 +28,16 @@ typedef struct _ClutterInputFocusPrivate ClutterInputFocusPrivate;
 static void clutter_input_focus_delete_surrounding (ClutterInputFocus *focus,
                                                     int                offset,
                                                     guint              len);
-static void clutter_input_focus_set_preedit_text (ClutterInputFocus       *focus,
-                                                  const gchar             *preedit,
-                                                  unsigned int             cursor,
-                                                  unsigned int             anchor,
-                                                  ClutterPreeditAttribute *style_hints,
-                                                  unsigned int             n_style_hints);
-
+static void clutter_input_focus_set_preedit_text (ClutterInputFocus *focus,
+                                                  const gchar       *preedit,
+                                                  unsigned int       cursor,
+                                                  unsigned int       anchor);
 
 struct _ClutterInputFocusPrivate
 {
   ClutterInputMethod *im;
   char *preedit;
   ClutterPreeditResetMode mode;
-  ClutterInputActionFlags actions;
 };
 
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (ClutterInputFocus, clutter_input_focus, G_TYPE_OBJECT)
@@ -63,7 +59,6 @@ clutter_input_focus_real_focus_out (ClutterInputFocus  *focus)
 
   priv = clutter_input_focus_get_instance_private (focus);
   priv->im = NULL;
-  priv->actions = 0;
 }
 
 static void
@@ -119,7 +114,7 @@ clutter_input_focus_reset (ClutterInputFocus *focus)
       if (priv->mode == CLUTTER_PREEDIT_RESET_COMMIT)
         clutter_input_focus_commit (focus, priv->preedit);
 
-      clutter_input_focus_set_preedit_text (focus, NULL, 0, 0, NULL, 0);
+      clutter_input_focus_set_preedit_text (focus, NULL, 0, 0);
       g_clear_pointer (&priv->preedit, g_free);
     }
 
@@ -240,23 +235,15 @@ clutter_input_focus_process_event (ClutterInputFocus  *focus,
     }
   else if (event_type == CLUTTER_IM_PREEDIT)
     {
-      ClutterPreeditAttribute *preedit_hints = NULL;
-      unsigned int n_preedit_hints = 0;
       int32_t offset, anchor;
 
-      g_set_str (&priv->preedit, clutter_event_get_im_text (event));
+      g_clear_pointer (&priv->preedit, g_free);
+      priv->preedit = g_strdup (clutter_event_get_im_text (event));
       priv->mode = clutter_event_get_im_preedit_reset_mode (event);
       clutter_event_get_im_location (event, &offset, &anchor);
-
-      clutter_event_get_im_preedit_hints (event,
-                                          &preedit_hints,
-                                          &n_preedit_hints);
-
       clutter_input_focus_set_preedit_text (focus,
                                             priv->preedit,
-                                            offset, anchor,
-                                            preedit_hints,
-                                            n_preedit_hints);
+                                            offset, anchor);
       return TRUE;
     }
 
@@ -337,47 +324,13 @@ clutter_input_focus_request_surrounding (ClutterInputFocus *focus)
 }
 
 void
-clutter_input_focus_set_preedit_text (ClutterInputFocus       *focus,
-                                      const gchar             *preedit,
-                                      unsigned int             cursor,
-                                      unsigned int             anchor,
-                                      ClutterPreeditAttribute *style_hints,
-                                      unsigned int             n_style_hints)
+clutter_input_focus_set_preedit_text (ClutterInputFocus *focus,
+                                      const gchar       *preedit,
+                                      unsigned int       cursor,
+                                      unsigned int       anchor)
 {
   g_return_if_fail (CLUTTER_IS_INPUT_FOCUS (focus));
 
   CLUTTER_INPUT_FOCUS_GET_CLASS (focus)->set_preedit_text (focus, preedit,
-                                                           cursor, anchor,
-                                                           style_hints,
-                                                           n_style_hints);
-}
-
-void
-clutter_input_focus_set_handled_actions (ClutterInputFocus       *focus,
-                                         ClutterInputActionFlags  actions)
-{
-  ClutterInputFocusPrivate *priv;
-
-  g_return_if_fail (CLUTTER_IS_INPUT_FOCUS (focus));
-  g_return_if_fail (clutter_input_focus_is_focused (focus));
-
-  priv = clutter_input_focus_get_instance_private (focus);
-  priv->actions = actions;
-  clutter_input_method_set_handled_actions (priv->im, actions);
-}
-
-void
-clutter_input_focus_trigger_action (ClutterInputFocus  *focus,
-                                    ClutterInputAction  action)
-{
-  ClutterInputFocusPrivate *priv;
-
-  g_return_if_fail (CLUTTER_IS_INPUT_FOCUS (focus));
-  g_return_if_fail (action < CLUTTER_INPUT_ACTION_LAST);
-
-  priv = clutter_input_focus_get_instance_private (focus);
-  g_return_if_fail ((priv->actions & (1 << action)) != 0);
-
-  if (CLUTTER_INPUT_FOCUS_GET_CLASS (focus)->action)
-    CLUTTER_INPUT_FOCUS_GET_CLASS (focus)->action (focus, action);
+                                                           cursor, anchor);
 }

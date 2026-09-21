@@ -38,8 +38,7 @@
         will contain a user-facing name for the GPU, the "Environment" (as) key will
         contain an array of even number of strings, each being an environment
         variable to set to use the GPU, followed by its value, the "Default" (b) key
-        will tag the default GPU, the "Discrete" (b) key tags if the GPU is a
-        dedicated component.
+        will tag the default (usually integrated) GPU.
     -->
     <property name="GPUs" type="aa{sv}" access="read"/>
 

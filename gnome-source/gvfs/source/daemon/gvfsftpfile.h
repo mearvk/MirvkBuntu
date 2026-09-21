@@ -27,12 +27,11 @@
 
 G_BEGIN_DECLS
 
+
 GVfsFtpFile *     g_vfs_ftp_file_new_from_gvfs          (GVfsBackendFtp *       ftp,
-                                                         const char *           gvfs_path,
-                                                         GError **              error);
+                                                         const char *           gvfs_path);
 GVfsFtpFile *     g_vfs_ftp_file_new_from_ftp           (GVfsBackendFtp *       ftp,
-                                                         const char *           ftp_path,
-                                                         GError **              error);
+                                                         const char *           ftp_path);
 GVfsFtpFile *     g_vfs_ftp_file_new_parent             (const GVfsFtpFile *    file);
 GVfsFtpFile *     g_vfs_ftp_file_new_child              (const GVfsFtpFile *    parent,
                                                          const char *           display_name,

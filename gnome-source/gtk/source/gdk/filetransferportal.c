@@ -26,9 +26,7 @@
 #include "gdkcontentformats.h"
 #include "gdkcontentserializer.h"
 #include "gdkcontentdeserializer.h"
-#include "gdkdisplay.h"
 #include "gdkdebugprivate.h"
-#include "gdkprivate.h"
 
 #include <gio/gio.h>
 
@@ -201,7 +199,6 @@ file_transfer_portal_register_files (const char          **files,
   GVariantBuilder options;
 
   task = g_task_new (NULL, NULL, callback, data);
-  g_task_set_source_tag (task, file_transfer_portal_register_files);
 
   if (file_transfer_proxy == NULL)
     {
@@ -261,14 +258,13 @@ retrieve_files_done (GObject      *object,
       return;
     }
 
-  g_variant_get (ret, "(^as)", &files);
+  g_variant_get (ret, "(^a&s)", &files);
 
-  g_object_set_data_full (G_OBJECT (task), "files", files, (GDestroyNotify)g_strfreev);
+  g_object_set_data_full (G_OBJECT (task), "files", g_strdupv (files), (GDestroyNotify)g_strfreev);
 
   g_variant_unref (ret);
 
   g_task_return_boolean (task, TRUE);
-  g_object_unref (task);
 }
 
 void
@@ -280,7 +276,6 @@ file_transfer_portal_retrieve_files (const char          *key,
   GVariantBuilder options;
 
   task = g_task_new (NULL, NULL, callback, data);
-  g_task_set_source_tag (task, file_transfer_portal_retrieve_files);
 
   if (file_transfer_proxy == NULL)
     {
@@ -605,18 +600,16 @@ file_transfer_portal_register (void)
     {
       called = TRUE;
 
-      /* Cheating a bit, since the document portal is special */
-      if (gdk_display_should_use_portal (gdk_display_get_default (), NULL, 0))
-        file_transfer_proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
-                                  G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES
-                                  | G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS
-                                  | G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START,
-                                  NULL,
-                                  "org.freedesktop.portal.Documents",
-                                  "/org/freedesktop/portal/documents",
-                                  "org.freedesktop.portal.FileTransfer",
-                                  NULL,
-                                  NULL);
+      file_transfer_proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
+                                G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES
+                                | G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS
+                                | G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START,
+                                NULL,
+                                "org.freedesktop.portal.Documents",
+                                "/org/freedesktop/portal/documents",
+                                "org.freedesktop.portal.FileTransfer",
+                                NULL,
+                                NULL);
 
       if (file_transfer_proxy && !proxy_has_owner (file_transfer_proxy))
         g_clear_object (&file_transfer_proxy);

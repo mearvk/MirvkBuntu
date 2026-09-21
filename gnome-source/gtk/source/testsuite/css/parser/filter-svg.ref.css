@@ -1,7 +1,0 @@
-a {
-  filter: url("data:image/svg+xml,<svg><filter id='yay'></filter></svg>#yay");
-}
-
-b {
-  filter: url("filters.svg#myfirstfilter");
-}

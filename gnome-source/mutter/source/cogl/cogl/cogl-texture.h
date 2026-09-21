@@ -52,16 +52,22 @@ G_BEGIN_DECLS
  * API that tries to hide all the various complexities of creating,
  * loading and manipulating textures.
  */
-COGL_EXPORT
-G_DECLARE_DERIVABLE_TYPE (CoglTexture,
-                          cogl_texture,
-                          COGL,
-                          TEXTURE,
-                          GObject)
 
 #define COGL_TYPE_TEXTURE            (cogl_texture_get_type ())
+#define COGL_TEXTURE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), COGL_TYPE_TEXTURE, CoglTexture))
+#define COGL_TEXTURE_CONST(obj)      (G_TYPE_CHECK_INSTANCE_CAST ((obj), COGL_TYPE_TEXTURE, CoglTexture const))
+#define COGL_TEXTURE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass),  COGL_TYPE_TEXTURE, CoglTextureClass))
+#define COGL_IS_TEXTURE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), COGL_TYPE_TEXTURE))
+#define COGL_IS_TEXTURE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass),  COGL_TYPE_TEXTURE))
+#define COGL_TEXTURE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  COGL_TYPE_TEXTURE, CoglTextureClass))
 
 typedef struct _CoglTextureClass CoglTextureClass;
+typedef struct _CoglTexture CoglTexture;
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglTexture, g_object_unref)
+
+COGL_EXPORT
+GType       cogl_texture_get_type (void) G_GNUC_CONST;
 
 #define COGL_TEXTURE_MAX_WASTE  127
 
@@ -229,6 +235,17 @@ cogl_texture_get_width (CoglTexture *texture);
 COGL_EXPORT unsigned int
 cogl_texture_get_height (CoglTexture *texture);
 
+/**
+ * cogl_texture_get_max_waste:
+ * @texture: a #CoglTexture pointer.
+ *
+ * Queries the maximum wasted (unused) pixels in one dimension of a GPU side
+ * texture.
+ *
+ * Return value: the maximum waste
+ */
+COGL_EXPORT int
+cogl_texture_get_max_waste (CoglTexture *texture);
 
 /**
  * cogl_texture_is_sliced:
@@ -260,7 +277,7 @@ cogl_texture_is_sliced (CoglTexture *texture);
  *   if the handle was invalid
  */
 COGL_EXPORT gboolean
-cogl_texture_get_gl_texture (CoglTexture  *texture,
+cogl_texture_get_gl_texture (CoglTexture *texture,
                              unsigned int *out_gl_handle,
                              unsigned int *out_gl_target);
 
@@ -448,16 +465,5 @@ cogl_texture_allocate (CoglTexture *texture,
  */
 COGL_EXPORT gboolean
 cogl_texture_is_get_data_supported (CoglTexture *texture);
-
-COGL_EXPORT CoglPixelFormat
-cogl_texture_get_format (CoglTexture *texture);
-
-/**
- * cogl_texture_get_context:
- *
- * Returns: (transfer none): The associated %CoglContext
- */
-COGL_EXPORT CoglContext *
-cogl_texture_get_context (CoglTexture *texture);
 
 G_END_DECLS

@@ -161,10 +161,12 @@ GType gdk_pixbuf_get_type (void) G_GNUC_CONST;
 
 /* Reference counting */
 
+#ifndef GDK_PIXBUF_DISABLE_DEPRECATED
 GDK_PIXBUF_DEPRECATED_IN_2_0_FOR(g_object_ref)
 GdkPixbuf *gdk_pixbuf_ref      (GdkPixbuf *pixbuf);
 GDK_PIXBUF_DEPRECATED_IN_2_0_FOR(g_object_unref)
 void       gdk_pixbuf_unref    (GdkPixbuf *pixbuf);
+#endif
 
 /* GdkPixbuf accessors */
 
@@ -288,14 +290,17 @@ GdkPixbuf *gdk_pixbuf_new_from_bytes (GBytes *data,
 				      int width, int height,
 				      int rowstride);
 
-GDK_PIXBUF_DEPRECATED_IN_2_44
+GDK_PIXBUF_AVAILABLE_IN_ALL
 GdkPixbuf *gdk_pixbuf_new_from_xpm_data (const char **data);
 
+#ifndef GDK_PIXBUF_DISABLE_DEPRECATED
 GDK_PIXBUF_DEPRECATED_IN_2_32
 GdkPixbuf* gdk_pixbuf_new_from_inline	(gint          data_length,
 					 const guint8 *data,
 					 gboolean      copy_pixels,
 					 GError      **error);
+#endif
+
 /* Mutations */
 GDK_PIXBUF_AVAILABLE_IN_ALL
 void       gdk_pixbuf_fill              (GdkPixbuf    *pixbuf,
@@ -514,8 +519,7 @@ gboolean gdk_pixbuf_copy_options (GdkPixbuf *src_pixbuf,
                                   GdkPixbuf *dest_pixbuf);
 
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkPixbuf, g_object_unref)
-
 G_END_DECLS
+
 
 #endif /* GDK_PIXBUF_CORE_H */

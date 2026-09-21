@@ -36,11 +36,10 @@
 #include "cogl/cogl-meta-texture.h"
 #include "cogl/cogl-framebuffer.h"
 #include "cogl/cogl-texture-2d.h"
-#include "cogl/cogl-texture-driver.h"
 
-typedef void (* CoglLeafTextureCallback) (CoglTexture2D *leaf_texture,
-                                          void          *user_data);
-
+#ifdef HAVE_EGL
+#include "cogl/cogl-egl.h"
+#endif
 
 /* Encodes three possibiloities result of transforming a quad */
 typedef enum
@@ -69,6 +68,7 @@ typedef enum _CoglTextureSourceType {
   COGL_TEXTURE_SOURCE_TYPE_SIZE = 1,
   COGL_TEXTURE_SOURCE_TYPE_BITMAP,
   COGL_TEXTURE_SOURCE_TYPE_EGL_IMAGE,
+  COGL_TEXTURE_SOURCE_TYPE_EGL_IMAGE_EXTERNAL
 } CoglTextureSourceType;
 
 typedef struct _CoglTextureLoader
@@ -78,11 +78,13 @@ typedef struct _CoglTextureLoader
     struct {
       int width;
       int height;
+      int depth; /* for 3d textures */
       CoglPixelFormat format;
     } sized;
     struct {
       CoglBitmap *bitmap;
       int height; /* for 3d textures */
+      int depth; /* for 3d textures */
     } bitmap;
 #if defined (HAVE_EGL) && defined (EGL_KHR_image_base)
     struct {
@@ -93,14 +95,43 @@ typedef struct _CoglTextureLoader
       CoglEglImageFlags flags;
     } egl_image;
 #endif
+#if defined (HAVE_EGL)
     struct {
       int width;
       int height;
+      CoglTexture2DEGLImageExternalAlloc alloc;
+      CoglPixelFormat format;
+    } egl_image_external;
+#endif
+    struct {
+      int width;
+      int height;
+      unsigned int gl_handle;
       CoglPixelFormat format;
     } gl_foreign;
   } src;
 } CoglTextureLoader;
 
+struct _CoglTexture
+{
+  GObject parent_instance;
+
+  CoglContext *context;
+  gboolean is_primitive;
+  CoglTextureLoader *loader;
+  GList *framebuffers;
+  int max_level_set;
+  int max_level_requested;
+  int width;
+  int height;
+  gboolean allocated;
+
+  /*
+   * Internal format
+   */
+  CoglTextureComponents components;
+  unsigned int premultiplied : 1;
+};
 
 struct _CoglTextureClass
 {
@@ -124,9 +155,11 @@ struct _CoglTextureClass
                            CoglBitmap  *bitmap,
                            GError     **error);
 
+  gboolean (* is_get_data_supported) (CoglTexture *texture);
+
   /* This should copy the image data of the texture into @data. The
      requested format will have been first passed through
-     TextureDriverClass.find_best_gl_get_data_format so it should
+     ctx->texture_driver->find_best_gl_get_data_format so it should
      always be a format that is valid for GL (ie, no conversion should
      be necessary). */
   gboolean (* get_data) (CoglTexture    *tex,
@@ -134,46 +167,95 @@ struct _CoglTextureClass
                          int             rowstride,
                          uint8_t        *data);
 
-  void (* foreach_sub_texture_in_region) (CoglTexture                *tex,
-                                          float                       virtual_tx_1,
-                                          float                       virtual_ty_1,
-                                          float                       virtual_tx_2,
-                                          float                       virtual_ty_2,
-                                          CoglTextureForeachCallback  callback,
-                                          void                       *user_data);
+  void (* foreach_sub_texture_in_region) (CoglTexture            *tex,
+                                          float                   virtual_tx_1,
+                                          float                   virtual_ty_1,
+                                          float                   virtual_tx_2,
+                                          float                   virtual_ty_2,
+                                          CoglMetaTextureCallback callback,
+                                          void                   *user_data);
+
+  int (* get_max_waste) (CoglTexture *tex);
+
+  gboolean (* is_sliced) (CoglTexture *tex);
 
   gboolean (* can_hardware_repeat) (CoglTexture *tex);
 
-  void (* transform_coords) (CoglTexture *tex,
-                             float       *s,
-                             float       *t);
-  CoglTransformResult (* transform_quad_coords) (CoglTexture *tex,
-                                                 float       *coords);
+  void (* transform_coords_to_gl) (CoglTexture *tex,
+                                   float       *s,
+                                   float       *t);
+  CoglTransformResult (* transform_quad_coords_to_gl) (CoglTexture *tex,
+                                                       float       *coords);
+
+  gboolean (* get_gl_texture) (CoglTexture *tex,
+                               GLuint      *out_gl_handle,
+                               GLenum      *out_gl_target);
+
+  /* OpenGL driver specific virtual function */
+  void (* gl_flush_legacy_texobj_filters) (CoglTexture *tex,
+                                           GLenum       min_filter,
+                                           GLenum       mag_filter);
 
   void (* pre_paint) (CoglTexture             *tex,
                       CoglTexturePrePaintFlags flags);
   void (* ensure_non_quad_rendering) (CoglTexture *tex);
 
-  CoglPixelFormat (* get_format) (CoglTexture *tex);
+  /* OpenGL driver specific virtual function */
+  void (* gl_flush_legacy_texobj_wrap_modes) (CoglTexture *tex,
+                                              GLenum       wrap_mode_s,
+                                              GLenum       wrap_mode_t);
 
-  void (* foreach_leaf_texture) (CoglTexture             *texture,
-                                 CoglLeafTextureCallback  callback,
-                                 void                    *user_data);
+  CoglPixelFormat (* get_format) (CoglTexture *tex);
+  GLenum (* get_gl_format) (CoglTexture *tex);
+
+  /* Only needs to be implemented if is_primitive == TRUE */
+  void (* set_auto_mipmap) (CoglTexture *texture,
+                            gboolean     value);
 };
 
-void
-cogl_texture_foreach_leaf (CoglTexture             *texture,
-                           CoglLeafTextureCallback  callback,
-                           void                    *user_data);
+typedef enum _CoglTextureChangeFlags
+{
+  /* Whenever the internals of a texture are changed such that the
+   * underlying GL textures that represent the CoglTexture change then
+   * we notify cogl-material.c via
+   * _cogl_pipeline_texture_pre_change_notify
+   */
+  COGL_TEXTURE_CHANGE_GL_TEXTURES
 
-CoglTexture2D *
-cogl_texture_get_first_leaf (CoglTexture *texture);
+} CoglTextureChangeFlags;
+
+typedef struct _CoglTexturePixel  CoglTexturePixel;
+
+/* This is used by the texture backends to store the first pixel of
+   each GL texture. This is only used when glGenerateMipmap is not
+   available so that we can temporarily set GL_GENERATE_MIPMAP and
+   reupload a pixel */
+struct _CoglTexturePixel
+{
+  /* We need to store the format of the pixel because we store the
+     data in the source format which might end up being different for
+     each slice if a subregion is updated with a different format */
+  GLenum gl_format;
+  GLenum gl_type;
+  uint8_t data[4];
+};
 
 gboolean
 _cogl_texture_can_hardware_repeat (CoglTexture *texture);
 
 void
+_cogl_texture_transform_coords_to_gl (CoglTexture *texture,
+                                      float *s,
+                                      float *t);
+CoglTransformResult
+_cogl_texture_transform_quad_coords_to_gl (CoglTexture *texture,
+                                           float *coords);
+
+void
 _cogl_texture_pre_paint (CoglTexture *texture, CoglTexturePrePaintFlags flags);
+
+void
+_cogl_texture_ensure_non_quad_rendering (CoglTexture *texture);
 
 /*
  * This determines a CoglPixelFormat according to texture::components
@@ -219,18 +301,18 @@ void
 _cogl_texture_flush_journal_rendering (CoglTexture *texture);
 
 void
-_cogl_texture_spans_foreach_in_region (CoglSpan                    *x_spans,
-                                       int                          n_x_spans,
-                                       CoglSpan                    *y_spans,
-                                       int                          n_y_spans,
-                                       CoglTexture                **textures,
-                                       float                       *virtual_coords,
-                                       float                        x_normalize_factor,
-                                       float                        y_normalize_factor,
-                                       CoglPipelineWrapMode         wrap_x,
-                                       CoglPipelineWrapMode         wrap_y,
-                                       CoglTextureForeachCallback   callback,
-                                       void                        *user_data);
+_cogl_texture_spans_foreach_in_region (CoglSpan *x_spans,
+                                       int n_x_spans,
+                                       CoglSpan *y_spans,
+                                       int n_y_spans,
+                                       CoglTexture **textures,
+                                       float *virtual_coords,
+                                       float x_normalize_factor,
+                                       float y_normalize_factor,
+                                       CoglPipelineWrapMode wrap_x,
+                                       CoglPipelineWrapMode wrap_y,
+                                       CoglMetaTextureCallback callback,
+                                       void *user_data);
 
 COGL_EXPORT gboolean
 _cogl_texture_set_region (CoglTexture *texture,
@@ -280,12 +362,18 @@ _cogl_texture_set_allocated (CoglTexture *texture,
                              int width,
                              int height);
 
+COGL_EXPORT CoglPixelFormat
+_cogl_texture_get_format (CoglTexture *texture);
+
 CoglTextureLoader *
-cogl_texture_loader_new (CoglTextureSourceType type);
+_cogl_texture_create_loader (void);
 
 void
 _cogl_texture_copy_internal_format (CoglTexture *src,
                                     CoglTexture *dest);
+
+CoglContext *
+cogl_texture_get_context (CoglTexture *texture);
 
 CoglTextureLoader *
 cogl_texture_get_loader (CoglTexture *texture);
@@ -296,7 +384,3 @@ cogl_texture_get_max_level_set (CoglTexture *texture);
 void
 cogl_texture_set_max_level_set (CoglTexture *texture,
                                 int          max_level_set);
-
-gboolean cogl_texture_is_allocated (CoglTexture *texture);
-
-CoglTextureDriver * cogl_texture_get_driver (CoglTexture *texture);

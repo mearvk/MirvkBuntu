@@ -124,6 +124,14 @@ struct _GtkTextLayout
   PangoContext *ltr_context;
   PangoContext *rtl_context;
 
+  /* A cache of one style; this is used to ensure
+   * we don't constantly regenerate the style
+   * over long runs with the same style. */
+  GtkTextAttributes *one_style_cache;
+
+  /* Whether we are allowed to wrap right now */
+  int wrap_loop_count;
+
   /* Whether to show the insertion cursor */
   guint cursor_visible : 1;
 
@@ -132,10 +140,10 @@ struct _GtkTextLayout
    */
   guint cursor_direction : 2;
 
-  /* The default direction is used for alignment when
+  /* The keyboard direction is used to default the alignment when
      there are no strong characters.
   */
-  guint default_direction : 2;
+  guint keyboard_direction : 2;
 
   guint overwrite_mode : 1;
 
@@ -212,7 +220,7 @@ struct _GtkTextLineDisplay
 extern G_GNUC_INTERNAL PangoAttrType gtk_text_attr_appearance_type;
 #endif
 
-GType         gtk_text_layout_get_type    (void);
+GType         gtk_text_layout_get_type    (void) G_GNUC_CONST;
 
 GtkTextLayout*     gtk_text_layout_new                   (void);
 void               gtk_text_layout_set_buffer            (GtkTextLayout     *layout,
@@ -227,8 +235,8 @@ void               gtk_text_layout_set_cursor_direction  (GtkTextLayout     *lay
                                                           GtkTextDirection   direction);
 void		   gtk_text_layout_set_overwrite_mode	 (GtkTextLayout     *layout,
 							  gboolean           overwrite);
-void               gtk_text_layout_set_default_direction (GtkTextLayout     *layout,
-							   GtkTextDirection default_dir);
+void               gtk_text_layout_set_keyboard_direction (GtkTextLayout     *layout,
+							   GtkTextDirection keyboard_dir);
 void               gtk_text_layout_default_style_changed (GtkTextLayout     *layout);
 
 void gtk_text_layout_set_screen_width       (GtkTextLayout     *layout,
@@ -245,6 +253,9 @@ gboolean gtk_text_layout_get_cursor_visible (GtkTextLayout     *layout);
 void    gtk_text_layout_get_size  (GtkTextLayout  *layout,
                                    int            *width,
                                    int            *height);
+
+void gtk_text_layout_wrap_loop_start (GtkTextLayout *layout);
+void gtk_text_layout_wrap_loop_end   (GtkTextLayout *layout);
 
 GtkTextLineDisplay* gtk_text_layout_get_line_display  (GtkTextLayout      *layout,
                                                        GtkTextLine        *line,
@@ -361,12 +372,11 @@ void gtk_text_anchored_child_set_layout     (GtkWidget          *child,
 
 void gtk_text_layout_spew (GtkTextLayout *layout);
 
-void gtk_text_layout_snapshot (GtkTextLayout         *layout,
-                               GtkWidget             *widget,
-                               GtkSnapshot           *snapshot,
-                               const graphene_rect_t *clip,
-                               gboolean               selection_style_changed,
-                               float                  cursor_alpha);
+void gtk_text_layout_snapshot (GtkTextLayout        *layout,
+                               GtkWidget            *widget,
+                               GtkSnapshot          *snapshot,
+                               const GdkRectangle   *clip,
+                               float                 cursor_alpha);
 
 void gtk_text_layout_set_mru_size (GtkTextLayout *layout,
                                    guint          mru_size);

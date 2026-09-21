@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import gi
 
@@ -39,8 +39,10 @@ from orca import (
     debug,
     focus_manager,
     gsettings_registry,
+    guilabels,
     messages,
     object_properties,
+    preferences_grid_base,
     presentation_manager,
     speech_presenter,
 )
@@ -50,7 +52,6 @@ from orca.ax_utilities import AXUtilities
 
 if TYPE_CHECKING:
     from .scripts import default
-    from .spellcheck_presenter_preferences_grid import SpellCheckPreferencesGrid
 
 
 @dataclass
@@ -132,8 +133,8 @@ class SpellCheckPresenter:
         if self.get_spell_error() == value:
             return True
 
-        tokens = ["SPELLCHECK PRESENTER: Setting spell error to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPELLCHECK PRESENTER: Setting spell error to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_SPELL_ERROR, value
         )
@@ -160,8 +161,8 @@ class SpellCheckPresenter:
         if self.get_spell_suggestion() == value:
             return True
 
-        tokens = ["SPELLCHECK PRESENTER: Setting spell suggestion to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPELLCHECK PRESENTER: Setting spell suggestion to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_SPELL_SUGGESTION, value
         )
@@ -188,8 +189,8 @@ class SpellCheckPresenter:
         if self.get_present_context() == value:
             return True
 
-        tokens = ["SPELLCHECK PRESENTER: Setting present context to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPELLCHECK PRESENTER: Setting present context to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_PRESENT_CONTEXT, value
         )
@@ -197,9 +198,6 @@ class SpellCheckPresenter:
 
     def create_preferences_grid(self) -> SpellCheckPreferencesGrid:
         """Create and return the spell check preferences grid."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .spellcheck_presenter_preferences_grid import SpellCheckPreferencesGrid
 
         return SpellCheckPreferencesGrid(self)
 
@@ -512,12 +510,8 @@ class SpellCheckPresenter:
 
         if self._widgets is None or self._state.completion_announced:
             reason = "Not active" if self._widgets is None else "Completion already announced"
-            tokens: list[Any] = [
-                "SPELL CHECK PRESENTER:",
-                reason,
-                "; not checking for error change",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"SPELL CHECK PRESENTER: {reason}; not checking for error change"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         if self._is_complete():
@@ -549,13 +543,11 @@ class SpellCheckPresenter:
             current_context_line = AXText.get_line_at_offset(self._widgets.document)
         context_changed = current_context_line != self._state.context_line
 
-        tokens = [
-            "SPELL CHECK PRESENTER: error_text_changed=",
-            error_text_changed,
-            "context_changed=",
-            context_changed,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = (
+            f"SPELL CHECK PRESENTER: error_text_changed={error_text_changed} "
+            f"context_changed={context_changed}"
+        )
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         if not error_text_changed and not context_changed:
             msg = "SPELL CHECK PRESENTER: Error text and context unchanged; not presenting"
@@ -626,7 +618,7 @@ class SpellCheckPresenter:
 
         error_text = AXText.get_all_text(self._widgets.error_widget)
         if error_text and word in error_text and len(error_text.split()) > 1:
-            tokens: list[Any] = ["SPELL CHECK PRESENTER: Using error widget text as context"]
+            tokens = ["SPELL CHECK PRESENTER: Using error widget text as context"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return error_text
 
@@ -634,8 +626,8 @@ class SpellCheckPresenter:
             return ""
 
         string, start, end = AXText.get_line_at_offset(self._widgets.document)
-        tokens = ["SPELL CHECK PRESENTER: Line at offset", start, "-", end, ":", string]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SPELL CHECK PRESENTER: Line at offset {start}-{end}: {string}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         if not string or word not in string:
             return ""
@@ -930,6 +922,40 @@ class SpellCheckPresenter:
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return error_widget, suggestions_list, change_to_entry
+
+
+class SpellCheckPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Spell Check preferences page."""
+
+    _gsettings_schema = "spellcheck"
+
+    def __init__(self, presenter: SpellCheckPresenter) -> None:
+        controls = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.SPELL_CHECK_SPELL_ERROR,
+                getter=presenter.get_spell_error,
+                setter=presenter.set_spell_error,
+                prefs_key=SpellCheckPresenter.KEY_SPELL_ERROR,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.SPELL_CHECK_SPELL_SUGGESTION,
+                getter=presenter.get_spell_suggestion,
+                setter=presenter.set_spell_suggestion,
+                prefs_key=SpellCheckPresenter.KEY_SPELL_SUGGESTION,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.SPELL_CHECK_PRESENT_CONTEXT,
+                getter=presenter.get_present_context,
+                setter=presenter.set_present_context,
+                prefs_key=SpellCheckPresenter.KEY_PRESENT_CONTEXT,
+            ),
+        ]
+
+        super().__init__(
+            guilabels.SPELL_CHECK,
+            controls,
+            info_message=guilabels.SPELL_CHECK_DESCRIPTION,
+        )
 
 
 _presenter: SpellCheckPresenter = SpellCheckPresenter()

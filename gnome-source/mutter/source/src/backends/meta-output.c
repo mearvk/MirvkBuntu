@@ -17,12 +17,10 @@
 
 #include "config.h"
 
+#include "backends/edid.h"
 #include "backends/meta-output.h"
 
-#include "backends/edid.h"
 #include "backends/meta-crtc.h"
-#include "backends/meta-monitor-manager-private.h"
-#include "clutter/clutter-mutter.h"
 
 enum
 {
@@ -37,6 +35,16 @@ enum
 };
 
 static GParamSpec *obj_props[N_PROPS];
+
+enum
+{
+  COLOR_SPACE_CHANGED,
+  HDR_METADATA_CHANGED,
+
+  N_SIGNALS
+};
+
+static guint signals[N_SIGNALS];
 
 typedef struct _MetaOutputPrivate
 {
@@ -59,9 +67,13 @@ typedef struct _MetaOutputPrivate
   gboolean has_max_bpc;
   unsigned int max_bpc;
 
+  int backlight;
+
+  MetaPrivacyScreenState privacy_screen_state;
   gboolean is_privacy_screen_enabled;
 
-  MetaColorMode color_mode;
+  MetaOutputHdrMetadata hdr_metadata;
+  MetaOutputColorspace color_space;
   MetaOutputRGBRange rgb_range;
 } MetaOutputPrivate;
 
@@ -99,9 +111,7 @@ meta_output_info_unref (MetaOutputInfo *output_info)
       g_free (output_info->product);
       g_free (output_info->serial);
       g_free (output_info->edid_checksum_md5);
-      g_clear_pointer (&output_info->edid_info, meta_edid_info_free);
-      for (int i = 0; i < output_info->n_modes; i++)
-        g_object_unref (output_info->modes[i]);
+      g_free (output_info->edid_info);
       g_free (output_info->modes);
       g_free (output_info->possible_crtcs);
       g_free (output_info->possible_clones);
@@ -130,6 +140,8 @@ meta_output_get_monitor (MetaOutput *output)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
+  g_warn_if_fail (priv->monitor);
+
   return priv->monitor;
 }
 
@@ -139,7 +151,7 @@ meta_output_set_monitor (MetaOutput  *output,
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
-  g_warn_if_fail (!priv->monitor || monitor == priv->monitor);
+  g_warn_if_fail (!priv->monitor);
 
   priv->monitor = monitor;
 }
@@ -148,6 +160,8 @@ void
 meta_output_unset_monitor (MetaOutput *output)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
+
+  g_warn_if_fail (priv->monitor);
 
   priv->monitor = NULL;
 }
@@ -196,20 +210,21 @@ meta_output_get_max_bpc (MetaOutput   *output,
   return priv->has_max_bpc;
 }
 
-MetaBacklight *
-meta_output_create_backlight (MetaOutput  *output,
-                              GError     **error)
+void
+meta_output_set_backlight (MetaOutput *output,
+                           int         backlight)
 {
-  MetaOutputClass *output_class = META_OUTPUT_GET_CLASS (output);
+  MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
-  if (!output_class->create_backlight)
-    {
-      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                           "Output does not support creating a backlight");
-      return NULL;
-    }
+  priv->backlight = backlight;
+}
 
-  return output_class->create_backlight (output, error);
+int
+meta_output_get_backlight (MetaOutput *output)
+{
+  MetaOutputPrivate *priv = meta_output_get_instance_private (output);
+
+  return priv->backlight;
 }
 
 void
@@ -260,8 +275,6 @@ meta_output_assign_crtc (MetaOutput                 *output,
   priv->has_max_bpc = output_assignment->has_max_bpc;
   if (priv->has_max_bpc)
     priv->max_bpc = output_assignment->max_bpc;
-
-  priv->color_mode = output_assignment->color_mode;
 }
 
 void
@@ -287,29 +300,29 @@ meta_output_get_assigned_crtc (MetaOutput *output)
   return priv->crtc;
 }
 
-MtkMonitorTransform
-meta_output_logical_to_crtc_transform (MetaOutput          *output,
-                                       MtkMonitorTransform  transform)
+MetaMonitorTransform
+meta_output_logical_to_crtc_transform (MetaOutput           *output,
+                                       MetaMonitorTransform  transform)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
-  MtkMonitorTransform panel_orientation_transform;
+  MetaMonitorTransform panel_orientation_transform;
 
   panel_orientation_transform = priv->info->panel_orientation_transform;
-  return mtk_monitor_transform_transform (transform,
-                                          panel_orientation_transform);
+  return meta_monitor_transform_transform (transform,
+                                           panel_orientation_transform);
 }
 
-MtkMonitorTransform
-meta_output_crtc_to_logical_transform (MetaOutput          *output,
-                                       MtkMonitorTransform  transform)
+MetaMonitorTransform
+meta_output_crtc_to_logical_transform (MetaOutput           *output,
+                                       MetaMonitorTransform  transform)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
-  MtkMonitorTransform inverted_panel_orientation_transform;
+  MetaMonitorTransform inverted_panel_orientation_transform;
 
   inverted_panel_orientation_transform =
-    mtk_monitor_transform_invert (priv->info->panel_orientation_transform);
-  return mtk_monitor_transform_transform (transform,
-                                          inverted_panel_orientation_transform);
+    meta_monitor_transform_invert (priv->info->panel_orientation_transform);
+  return meta_monitor_transform_transform (transform,
+                                           inverted_panel_orientation_transform);
 }
 
 static void
@@ -427,8 +440,6 @@ meta_output_dispose (GObject *object)
   MetaOutput *output = META_OUTPUT (object);
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
-  meta_output_unassign_crtc (output);
-  priv->monitor = NULL;
   g_clear_object (&priv->crtc);
 
   G_OBJECT_CLASS (meta_output_parent_class)->dispose (object);
@@ -461,7 +472,7 @@ meta_output_is_privacy_screen_enabled (MetaOutput *output)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
-  return priv->is_privacy_screen_enabled;
+  return priv->privacy_screen_state;
 }
 
 gboolean
@@ -472,7 +483,7 @@ meta_output_set_privacy_screen_enabled (MetaOutput  *output,
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
   MetaPrivacyScreenState state;
 
-  state = meta_output_get_privacy_screen_state (output);
+  state = priv->privacy_screen_state;
 
   if (state == META_PRIVACY_SCREEN_UNAVAILABLE)
     {
@@ -489,7 +500,7 @@ meta_output_set_privacy_screen_enabled (MetaOutput  *output,
       return FALSE;
     }
 
-  if ((state == META_PRIVACY_SCREEN_ENABLED) == enabled)
+  if (priv->is_privacy_screen_enabled == enabled)
     return TRUE;
 
   priv->is_privacy_screen_enabled = enabled;
@@ -517,70 +528,57 @@ meta_output_info_get_min_refresh_rate (const MetaOutputInfo *output_info,
   return TRUE;
 }
 
-gboolean
-meta_output_info_is_builtin (const MetaOutputInfo *output_info)
+void
+meta_output_set_color_space (MetaOutput           *output,
+                             MetaOutputColorspace  color_space)
 {
-  switch (output_info->connector_type)
+  MetaOutputPrivate *priv = meta_output_get_instance_private (output);
+
+  priv->color_space = color_space;
+
+  g_signal_emit (output, signals[COLOR_SPACE_CHANGED], 0);
+}
+
+MetaOutputColorspace
+meta_output_peek_color_space (MetaOutput *output)
+{
+  MetaOutputPrivate *priv = meta_output_get_instance_private (output);
+
+  return priv->color_space;
+}
+
+const char *
+meta_output_colorspace_get_name (MetaOutputColorspace color_space)
+{
+  switch (color_space)
     {
-    case META_CONNECTOR_TYPE_eDP:
-    case META_CONNECTOR_TYPE_LVDS:
-    case META_CONNECTOR_TYPE_DSI:
-    case META_CONNECTOR_TYPE_DPI:
-      return TRUE;
-    default:
-      return FALSE;
+    case META_OUTPUT_COLORSPACE_UNKNOWN:
+      return "Unknown";
+    case META_OUTPUT_COLORSPACE_DEFAULT:
+      return "Default";
+    case META_OUTPUT_COLORSPACE_BT2020:
+      return "bt.2020";
     }
+  g_assert_not_reached ();
 }
 
 void
-meta_output_get_color_metadata (MetaOutput            *output,
-                                MetaOutputHdrMetadata *hdr_metadata,
-                                MetaOutputColorspace  *colorspace)
+meta_output_set_hdr_metadata (MetaOutput            *output,
+                              MetaOutputHdrMetadata *metadata)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
-  switch (priv->color_mode)
-    {
-    case META_COLOR_MODE_DEFAULT:
-    case META_COLOR_MODE_SDR_NATIVE:
-      *hdr_metadata = (MetaOutputHdrMetadata) {
-        .active = FALSE
-      };
-      *colorspace = META_OUTPUT_COLORSPACE_DEFAULT;
-      break;
-    case META_COLOR_MODE_BT2100:
-      {
-        const ClutterPrimaries *primaries =
-          clutter_colorspace_to_primaries (CLUTTER_COLORSPACE_BT2020);
+  priv->hdr_metadata = *metadata;
 
-        /* Some sinks tone map differently when the mastering display
-         * chromaticity is left undescribed.
-         */
-        *hdr_metadata = (MetaOutputHdrMetadata) {
-          .active = TRUE,
-          .eotf = META_OUTPUT_HDR_METADATA_EOTF_PQ,
-          .mastering_display_primaries = {
-            { .x = primaries->r_x, .y = primaries->r_y },
-            { .x = primaries->g_x, .y = primaries->g_y },
-            { .x = primaries->b_x, .y = primaries->b_y },
-          },
-          .mastering_display_white_point = {
-            .x = primaries->w_x,
-            .y = primaries->w_y,
-          },
-        };
-        *colorspace = META_OUTPUT_COLORSPACE_BT2020;
-      }
-      break;
-    }
+  g_signal_emit (output, signals[HDR_METADATA_CHANGED], 0);
 }
 
-MetaColorMode
-meta_output_get_color_mode (MetaOutput *output)
+MetaOutputHdrMetadata *
+meta_output_peek_hdr_metadata (MetaOutput *output)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
-  return priv->color_mode;
+  return &priv->hdr_metadata;
 }
 
 MetaOutputRGBRange
@@ -618,9 +616,12 @@ meta_output_init (MetaOutput *output)
 {
   MetaOutputPrivate *priv = meta_output_get_instance_private (output);
 
+  priv->backlight = -1;
   priv->is_primary = FALSE;
   priv->is_presentation = FALSE;
   priv->is_underscanning = FALSE;
+  priv->color_space = META_OUTPUT_COLORSPACE_DEFAULT;
+  priv->hdr_metadata.active = FALSE;
   priv->has_max_bpc = FALSE;
   priv->max_bpc = 0;
   priv->rgb_range = META_OUTPUT_RGB_RANGE_AUTO;
@@ -660,6 +661,21 @@ meta_output_class_init (MetaOutputClass *klass)
                           G_PARAM_READWRITE |
                           G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (object_class, N_PROPS, obj_props);
+
+  signals[COLOR_SPACE_CHANGED] =
+    g_signal_new ("color-space-changed",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_LAST,
+                  0,
+                  NULL, NULL, NULL,
+                  G_TYPE_NONE, 0);
+  signals[HDR_METADATA_CHANGED] =
+    g_signal_new ("hdr-metadata-changed",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_LAST,
+                  0,
+                  NULL, NULL, NULL,
+                  G_TYPE_NONE, 0);
 }
 
 gboolean
@@ -696,70 +712,6 @@ meta_tile_info_equal (MetaTileInfo *a,
   return TRUE;
 }
 
-static gboolean
-hdr_primaries_equal (double x1, double x2)
-{
-  return fabs (x1 - x2) < (0.00002 - DBL_EPSILON);
-}
-
-static gboolean
-hdr_nits_equal (double x1, double x2)
-{
-  return fabs (x1 - x2) < (1.0 - DBL_EPSILON);
-}
-
-static gboolean
-hdr_min_luminance_equal (double x1, double x2)
-{
-  return fabs (x1 - x2) < (0.0001 - DBL_EPSILON);
-}
-
-gboolean
-meta_output_hdr_metadata_equal (MetaOutputHdrMetadata *metadata,
-                                MetaOutputHdrMetadata *other_metadata)
-{
-  if (!metadata->active && !other_metadata->active)
-    return TRUE;
-
-  if (metadata->active != other_metadata->active)
-    return FALSE;
-
-  if (metadata->eotf != other_metadata->eotf)
-      return FALSE;
-
-  if (!hdr_primaries_equal (metadata->mastering_display_primaries[0].x,
-                            other_metadata->mastering_display_primaries[0].x) ||
-      !hdr_primaries_equal (metadata->mastering_display_primaries[0].y,
-                            other_metadata->mastering_display_primaries[0].y) ||
-      !hdr_primaries_equal (metadata->mastering_display_primaries[1].x,
-                            other_metadata->mastering_display_primaries[1].x) ||
-      !hdr_primaries_equal (metadata->mastering_display_primaries[1].y,
-                            other_metadata->mastering_display_primaries[1].y) ||
-      !hdr_primaries_equal (metadata->mastering_display_primaries[2].x,
-                            other_metadata->mastering_display_primaries[2].x) ||
-      !hdr_primaries_equal (metadata->mastering_display_primaries[2].y,
-                            other_metadata->mastering_display_primaries[2].y) ||
-      !hdr_primaries_equal (metadata->mastering_display_white_point.x,
-                            other_metadata->mastering_display_white_point.x) ||
-      !hdr_primaries_equal (metadata->mastering_display_white_point.y,
-                            other_metadata->mastering_display_white_point.y))
-    return FALSE;
-
-  if (!hdr_nits_equal (metadata->mastering_display_max_luminance,
-                       other_metadata->mastering_display_max_luminance))
-    return FALSE;
-
-  if (!hdr_min_luminance_equal (metadata->mastering_display_min_luminance,
-                                other_metadata->mastering_display_min_luminance))
-    return FALSE;
-
-  if (!hdr_nits_equal (metadata->max_cll, other_metadata->max_cll) ||
-      !hdr_nits_equal (metadata->max_fall, other_metadata->max_fall))
-    return FALSE;
-
-  return TRUE;
-}
-
 void
 meta_output_update_modes (MetaOutput    *output,
                           MetaCrtcMode  *preferred_mode,
@@ -776,23 +728,4 @@ meta_output_update_modes (MetaOutput    *output,
   priv->info->preferred_mode = preferred_mode;
   priv->info->modes = modes;
   priv->info->n_modes = n_modes;
-}
-
-gboolean
-meta_output_matches (MetaOutput *output,
-                     MetaOutput *other_output)
-{
-  MetaOutputPrivate *priv =
-    meta_output_get_instance_private (output);
-  MetaOutputPrivate *other_priv =
-    meta_output_get_instance_private (other_output);
-
-  if (output == other_output)
-    return TRUE;
-
-  return (priv->gpu == other_priv->gpu &&
-          g_strcmp0 (priv->info->name, other_priv->info->name) == 0 &&
-          g_strcmp0 (priv->info->vendor, other_priv->info->vendor) == 0 &&
-          g_strcmp0 (priv->info->product, other_priv->info->product) == 0 &&
-          g_strcmp0 (priv->info->serial, other_priv->info->serial) == 0);
 }

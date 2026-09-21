@@ -233,7 +233,6 @@ g_themed_icon_init (GThemedIcon *themed)
  * construction, or later added with g_themed_icon_prepend_name() and
  * g_themed_icon_append_name()).
  * The order of the list matters, indicating priority:
- *
  * - The first requested icon is first in priority.
  * - If "use-default-fallbacks" is #TRUE, then it is followed by all its
  *   fallbacks (starting from top to lower context levels).
@@ -296,7 +295,7 @@ g_themed_icon_update_names (GThemedIcon *themed)
               gchar *tmp = last;
               gchar *fallback;
 
-              last = g_strndup (last, (size_t) (dashp - last));
+              last = g_strndup (last, dashp - last);
               if (is_symbolic)
                 {
                   g_free (tmp);
@@ -391,11 +390,11 @@ g_themed_icon_new_from_names (char **iconnames,
   if (len >= 0)
     {
       char **names;
-      size_t i;
+      int i;
 
-      names = g_new (char *, (size_t) len + 1);
+      names = g_new (char *, len + 1);
 
-      for (i = 0; i < (size_t) len; i++)
+      for (i = 0; i < len; i++)
         names[i] = iconnames[i];
 
       names[i] = NULL;
@@ -579,10 +578,7 @@ g_themed_icon_from_tokens (gchar  **tokens,
 {
   GIcon *icon;
   gchar **names;
-  size_t n;
-
-  /* This is guaranteed by the GIcon interface */
-  g_assert (num_tokens >= 0);
+  int n;
 
   icon = NULL;
 
@@ -596,8 +592,8 @@ g_themed_icon_from_tokens (gchar  **tokens,
       goto out;
     }
   
-  names = g_new0 (gchar *, (size_t) num_tokens + 1);
-  for (n = 0; n < (size_t) num_tokens; n++)
+  names = g_new0 (gchar *, num_tokens + 1);
+  for (n = 0; n < num_tokens; n++)
     names[n] = tokens[n];
   names[n] = NULL;
 

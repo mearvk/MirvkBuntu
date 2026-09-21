@@ -1,34 +1,18 @@
 mtk_mtk_includesubdir = mtk_includesubdir / 'mtk'
 
 mtk_headers = [
-  'mtk-anonymous-file.h',
-  'mtk-dbus.h',
-  'mtk-dispose-bin.h',
-  'mtk-file-utils.h',
-  'mtk-idle.h',
+  'mtk.h',
   'mtk-macros.h',
-  'mtk-monitor-transform.h',
   'mtk-rectangle.h',
   'mtk-region.h',
-  'mtk-time-utils.h',
-  'mtk-utils.h',
-  'mtk.h',
 ]
 
 mtk_sources = [
-  'mtk-anonymous-file.c',
-  'mtk-dbus.c',
-  'mtk-dispose-bin.c',
-  'mtk-file-utils.c',
-  'mtk-idle.c',
-  'mtk-monitor-transform.c',
   'mtk-rectangle.c',
   'mtk-region.c',
-  'mtk-time-utils.c',
-  'mtk-utils.c',
 ]
 
-if have_xwayland
+if have_x11
   mtk_sources += 'mtk-x11-errors.c'
   mtk_headers += [
     'mtk-x11-errors.h',
@@ -41,7 +25,7 @@ mtk_private_headers = [
 
 
 libmutter_mtk_name = 'mutter-mtk-' + libmutter_api_version
-libmutter_mtk = library(libmutter_mtk_name,
+libmutter_mtk = shared_library(libmutter_mtk_name,
   sources: [
     mtk_sources,
     mtk_headers,
@@ -76,13 +60,12 @@ if have_introspection
     ],
     nsversion: libmutter_api_version,
     namespace: 'Mtk',
-    header: 'mtk/mtk.h',
     export_packages: [libmutter_mtk_name],
     includes: [
       'GObject-2.0',
       'Graphene-1.0',
     ],
-    extra_args: mtk_introspection_args,
+    extra_args: mtk_introspection_args + ['--c-include=mtk/mtk.h'],
     kwargs: introspection_common,
   )
 

@@ -38,7 +38,7 @@ typedef struct _GtkBuilderListItemFactory GtkBuilderListItemFactory;
 typedef struct _GtkBuilderListItemFactoryClass GtkBuilderListItemFactoryClass;
 
 GDK_AVAILABLE_IN_ALL
-GType                   gtk_builder_list_item_factory_get_type          (void);
+GType                   gtk_builder_list_item_factory_get_type          (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkListItemFactory *    gtk_builder_list_item_factory_new_from_bytes    (GtkBuilderScope                *scope,
@@ -53,8 +53,6 @@ GDK_AVAILABLE_IN_ALL
 const char *            gtk_builder_list_item_factory_get_resource      (GtkBuilderListItemFactory      *self) G_GNUC_PURE;
 GDK_AVAILABLE_IN_ALL
 GtkBuilderScope *       gtk_builder_list_item_factory_get_scope         (GtkBuilderListItemFactory      *self) G_GNUC_PURE;
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkBuilderListItemFactory, g_object_unref)
 
 G_END_DECLS
 

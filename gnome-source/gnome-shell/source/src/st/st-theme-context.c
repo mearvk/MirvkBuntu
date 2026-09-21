@@ -28,27 +28,10 @@
 #include "st-theme-context.h"
 #include "st-theme-node-private.h"
 
-#define ACCENT_COLOR_BLUE   "#3584e4"
-#define ACCENT_COLOR_TEAL   "#2190a4"
-#define ACCENT_COLOR_GREEN  "#3a944a"
-#define ACCENT_COLOR_YELLOW "#c88800"
-#define ACCENT_COLOR_ORANGE "#ed5b00"
-#define ACCENT_COLOR_RED    "#e62d42"
-#define ACCENT_COLOR_PINK   "#d56199"
-#define ACCENT_COLOR_PURPLE "#9141ac"
-#define ACCENT_COLOR_SLATE  "#6f8396"
-
-#define ACCENT_FG_COLOR     "#ffffff"
-
 struct _StThemeContext {
   GObject parent;
 
-  ClutterBackend *clutter_backend;
-
   PangoFontDescription *font;
-  CoglColor accent_color;
-  CoglColor accent_fg_color;
-
   StThemeNode *root_node;
   StTheme *theme;
 
@@ -85,7 +68,6 @@ static PangoFontDescription *get_interface_font_description (void);
 static void on_font_name_changed (StSettings     *settings,
                                   GParamSpec     *pspec,
                                   StThemeContext *context);
-static void update_accent_colors (StThemeContext *context);
 static void on_icon_theme_changed (StTextureCache *cache,
                                    StThemeContext *context);
 static void st_theme_context_changed (StThemeContext *context);
@@ -99,6 +81,18 @@ static void st_theme_context_get_property (GObject      *object,
                                            GValue       *value,
                                            GParamSpec   *pspec);
 
+static void
+st_theme_context_set_scale_factor (StThemeContext *context,
+                                   int             scale_factor)
+{
+  if (scale_factor == context->scale_factor)
+    return;
+
+  context->scale_factor = scale_factor;
+  g_object_notify_by_pspec (G_OBJECT (context), props[PROP_SCALE_FACTOR]);
+  st_theme_context_changed (context);
+}
+
 
 static void
 st_theme_context_finalize (GObject *object)
@@ -108,13 +102,10 @@ st_theme_context_finalize (GObject *object)
   g_signal_handlers_disconnect_by_func (st_settings_get (),
                                         (gpointer) on_font_name_changed,
                                         context);
-  g_signal_handlers_disconnect_by_func (st_settings_get (),
-                                        (gpointer) update_accent_colors,
-                                        context);
   g_signal_handlers_disconnect_by_func (st_texture_cache_get_default (),
                                        (gpointer) on_icon_theme_changed,
                                        context);
-  g_signal_handlers_disconnect_by_func (context->clutter_backend,
+  g_signal_handlers_disconnect_by_func (clutter_get_default_backend (),
                                         (gpointer) st_theme_context_changed,
                                         context);
 
@@ -147,7 +138,9 @@ st_theme_context_class_init (StThemeContextClass *klass)
    * The scaling factor used for HiDPI scaling.
    */
   props[PROP_SCALE_FACTOR] =
-    g_param_spec_int ("scale-factor", NULL, NULL,
+    g_param_spec_int ("scale-factor",
+                      "Scale factor",
+                      "Integer scale factor used for HiDPI scaling",
                       0, G_MAXINT, 1,
                       ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -178,21 +171,19 @@ st_theme_context_init (StThemeContext *context)
                     "notify::font-name",
                     G_CALLBACK (on_font_name_changed),
                     context);
-  g_signal_connect_swapped (st_settings_get (),
-                            "notify::accent-color",
-                            G_CALLBACK (update_accent_colors),
-                            context);
   g_signal_connect (st_texture_cache_get_default (),
                     "icon-theme-changed",
                     G_CALLBACK (on_icon_theme_changed),
                     context);
+  g_signal_connect_swapped (clutter_get_default_backend (),
+                            "resolution-changed",
+                            G_CALLBACK (st_theme_context_changed),
+                            context);
 
   context->nodes = g_hash_table_new_full ((GHashFunc) st_theme_node_hash,
                                           (GEqualFunc) st_theme_node_equal,
                                           g_object_unref, NULL);
   context->scale_factor = 1;
-
-  update_accent_colors (context);
 }
 
 static void
@@ -233,6 +224,26 @@ st_theme_context_get_property (GObject    *object,
     }
 }
 
+/**
+ * st_theme_context_new:
+ *
+ * Create a new theme context not associated with any #ClutterStage.
+ * This can be useful in testing scenarios, or if using StThemeContext
+ * with something other than #ClutterActor objects, but you generally
+ * should use st_theme_context_get_for_stage() instead.
+ *
+ * Returns: (transfer full): a new #StThemeContext
+ */
+StThemeContext *
+st_theme_context_new (void)
+{
+  StThemeContext *context;
+
+  context = g_object_new (ST_TYPE_THEME_CONTEXT, NULL);
+
+  return context;
+}
+
 static PangoFontDescription *
 get_interface_font_description (void)
 {
@@ -241,63 +252,6 @@ get_interface_font_description (void)
 
   g_object_get (settings, "font-name", &font_name, NULL);
   return pango_font_description_from_string (font_name);
-}
-
-static void
-update_accent_colors (StThemeContext *context)
-{
-  StSettings *settings = st_settings_get ();
-  StSystemAccentColor accent_color;
-
-  g_object_get (settings, "accent-color", &accent_color, NULL);
-
-  switch (accent_color)
-    {
-    case ST_SYSTEM_ACCENT_COLOR_BLUE:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_BLUE);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_TEAL:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_TEAL);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_GREEN:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_GREEN);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_YELLOW:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_YELLOW);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_ORANGE:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_ORANGE);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_RED:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_RED);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_PINK:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_PINK);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_PURPLE:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_PURPLE);
-      break;
-
-    case ST_SYSTEM_ACCENT_COLOR_SLATE:
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_SLATE);
-      break;
-
-    default:
-      g_warning ("Unsupported accent color: %d", accent_color);
-      cogl_color_from_string (&context->accent_color, ACCENT_COLOR_BLUE);
-      break;
-    }
-
-  cogl_color_from_string (&context->accent_fg_color, ACCENT_FG_COLOR);
-
-  st_theme_context_changed (context);
 }
 
 static void
@@ -313,23 +267,10 @@ static void
 st_theme_context_changed (StThemeContext *context)
 {
   StThemeNode *old_root = context->root_node;
-  g_autoptr (GPtrArray) old_nodes = NULL;
-
   context->root_node = NULL;
-  old_nodes = g_hash_table_steal_all_keys (context->nodes);
+  g_hash_table_remove_all (context->nodes);
 
   g_signal_emit (context, signals[CHANGED], 0);
-
-  /* Force a run of the dispose() vfuncs of theme nodes so that their references
-   * into the theme CSS data get cleared. While theme nodes might outlive this
-   * function (in case buggy user code is holding a reference to them), the theme
-   * CSS data definitely gets freed after this function returns.
-   *
-   * Note that we can't do this before emitting ::changed because during the
-   * signal emission, StWidget needs to access the theme nodes (and therefore the
-   * theme CSS data) for its old/new theme node comparisons.
-   */
-  g_ptr_array_foreach (old_nodes, (GFunc) g_object_run_dispose, NULL);
 
   if (old_root)
     g_object_unref (old_root);
@@ -346,6 +287,13 @@ on_font_name_changed (StSettings     *settings,
   pango_font_description_free (font_desc);
 }
 
+static gboolean
+changed_idle (gpointer userdata)
+{
+  st_theme_context_changed (userdata);
+  return FALSE;
+}
+
 static void
 on_icon_theme_changed (StTextureCache *cache,
                        StThemeContext *context)
@@ -357,8 +305,8 @@ on_icon_theme_changed (StTextureCache *cache,
    * icon_name => icon lookup, faking a theme context change is a good way
    * to force users such as StIcon to look up icons again.
    */
-  id = g_idle_add_once ((GSourceOnceFunc) st_theme_context_changed, context);
-  g_source_set_name_by_id (id, "[gnome-shell] st_theme_context_changed");
+  id = g_idle_add ((GSourceFunc) changed_idle, context);
+  g_source_set_name_by_id (id, "[gnome-shell] changed_idle");
 }
 
 /**
@@ -373,7 +321,6 @@ StThemeContext *
 st_theme_context_get_for_stage (ClutterStage *stage)
 {
   StThemeContext *context;
-  ClutterContext *clutter_context;
 
   g_return_val_if_fail (CLUTTER_IS_STAGE (stage), NULL);
 
@@ -381,18 +328,10 @@ st_theme_context_get_for_stage (ClutterStage *stage)
   if (context)
     return context;
 
-  clutter_context = clutter_actor_get_context (CLUTTER_ACTOR (stage));
-
-  context = g_object_new (ST_TYPE_THEME_CONTEXT, NULL);
-  context->clutter_backend = clutter_context_get_backend (clutter_context);
-
+  context = st_theme_context_new ();
   g_object_set_data (G_OBJECT (stage), "st-theme-context", context);
   g_signal_connect (stage, "destroy",
                     G_CALLBACK (on_stage_destroy), NULL);
-  g_signal_connect_swapped (context->clutter_backend,
-                            "resolution-changed",
-                            G_CALLBACK (st_theme_context_changed),
-                            context);
 
   return context;
 }
@@ -493,28 +432,6 @@ st_theme_context_get_font (StThemeContext *context)
 }
 
 /**
- * st_theme_context_get_accent_color:
- * @context: a #StThemeContext
- * @color: (out) (nullable): the accent color
- * @fg_color: (out) (nullable): the foreground accent color
- *
- * Gets the current accent color for the theme context.
- */
-void
-st_theme_context_get_accent_color (StThemeContext *context,
-                                   CoglColor      *color,
-                                   CoglColor      *fg_color)
-{
-  g_return_if_fail (ST_IS_THEME_CONTEXT (context));
-
-  if (color)
-    memcpy (color, &context->accent_color, sizeof (CoglColor));
-
-  if (fg_color)
-    memcpy (fg_color, &context->accent_fg_color, sizeof (CoglColor));
-}
-
-/**
  * st_theme_context_get_root_node:
  * @context: a #StThemeContext
  *
@@ -572,39 +489,4 @@ st_theme_context_get_scale_factor (StThemeContext *context)
   g_return_val_if_fail (ST_IS_THEME_CONTEXT (context), -1);
 
   return context->scale_factor;
-}
-
-/**
- * st_theme_context_set_scale_factor:
- * @context: a #StThemeContext
- * @factor: the new factor
- *
- * Set the new scale factor of @context.
- */
-void
-st_theme_context_set_scale_factor (StThemeContext *context,
-                                   int             scale_factor)
-{
-  g_return_if_fail (ST_IS_THEME_CONTEXT (context));
-
-  if (scale_factor == context->scale_factor)
-    return;
-
-  context->scale_factor = scale_factor;
-  g_object_notify_by_pspec (G_OBJECT (context), props[PROP_SCALE_FACTOR]);
-  st_theme_context_changed (context);
-}
-
-/**
- * st_theme_context_get_resolution:
- * @context: a #StThemeContext
- *
- * Returns: The font resolution
- */
-double
-st_theme_context_get_resolution (StThemeContext *context)
-{
-  g_return_val_if_fail (ST_IS_THEME_CONTEXT (context), -1);
-
-  return clutter_backend_get_resolution (context->clutter_backend);
 }

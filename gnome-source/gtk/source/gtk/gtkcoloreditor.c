@@ -88,13 +88,9 @@ struct _GtkColorEditorClass
 enum
 {
   PROP_ZERO,
-  /* GtkColorChooser */
   PROP_RGBA,
-  PROP_USE_ALPHA,
-  N_PROPS
+  PROP_USE_ALPHA
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void gtk_color_editor_iface_init (GtkColorChooserInterface *iface);
 
@@ -199,7 +195,7 @@ hsv_changed (GtkColorEditor *editor)
 
   update_color (editor, &color);
 
-  g_object_notify_by_pspec (G_OBJECT (editor), props[PROP_RGBA]);
+  g_object_notify (G_OBJECT (editor), "rgba");
 }
 
 static void
@@ -225,7 +221,7 @@ popup_edit (GtkWidget  *widget,
             GVariant   *parameters)
 {
   GtkColorEditor *editor = GTK_COLOR_EDITOR (widget);
-  GtkWidget *popup;
+  GtkWidget *popup = NULL;
   GtkRoot *root;
   GtkWidget *focus;
   int position;
@@ -257,9 +253,6 @@ popup_edit (GtkWidget  *widget,
   else
     {
       g_warning ("unsupported popup_edit parameter %s", param);
-      popup = NULL;
-      focus = NULL;
-      position = 0;
     }
 
   if (popup == editor->current_popup)
@@ -529,14 +522,6 @@ gtk_color_editor_set_property (GObject      *object,
     }
 }
 
-static gboolean
-gtk_color_editor_grab_focus (GtkWidget *widget)
-{
-  GtkColorEditor *ce = GTK_COLOR_EDITOR (widget);
-
-  return gtk_widget_grab_focus (ce->entry);
-}
-
 static void
 gtk_color_editor_class_init (GtkColorEditorClass *class)
 {
@@ -547,14 +532,8 @@ gtk_color_editor_class_init (GtkColorEditorClass *class)
   object_class->get_property = gtk_color_editor_get_property;
   object_class->set_property = gtk_color_editor_set_property;
 
-  widget_class->grab_focus = gtk_color_editor_grab_focus;
-
-  props[PROP_RGBA] = g_param_spec_override ("rgba",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "rgba"));
-  props[PROP_USE_ALPHA] = g_param_spec_override ("use-alpha",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "use-alpha"));
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_override_property (object_class, PROP_RGBA, "rgba");
+  g_object_class_override_property (object_class, PROP_USE_ALPHA, "use-alpha");
 
   /* Bind class to template
    */
@@ -628,7 +607,7 @@ gtk_color_editor_set_rgba (GtkColorChooser *chooser,
 
   update_color (editor, color);
 
-  g_object_notify_by_pspec (G_OBJECT (editor), props[PROP_RGBA]);
+  g_object_notify (G_OBJECT (editor), "rgba");
 }
 
 static void

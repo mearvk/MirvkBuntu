@@ -53,7 +53,8 @@
 /**
  * GtkRange:
  *
- * Base class for widgets which visualize an adjustment.
+ * `GtkRange` is the common base class for widgets which visualize an
+ * adjustment.
  *
  * Widgets that are derived from `GtkRange` include
  * [class@Gtk.Scale] and [class@Gtk.Scrollbar].
@@ -61,12 +62,6 @@
  * Apart from signals for monitoring the parameters of the adjustment,
  * `GtkRange` provides properties and methods for setting a
  * “fill level” on range widgets. See [method@Gtk.Range.set_fill_level].
- *
- * # Shortcuts and Gestures
- *
- * The `GtkRange` slider is draggable. Holding the <kbd>Shift</kbd> key while
- * dragging, or initiating the drag with a long-press will enable the
- * fine-tuning mode.
  */
 
 
@@ -99,8 +94,6 @@ struct _GtkRangePrivate
 
   double   fill_level;
   double *marks;
-  double initial_scroll_value;
-  double scroll_delta_accum;
 
   int *mark_pos;
   int   n_marks;
@@ -122,8 +115,6 @@ struct _GtkRangePrivate
 
   /* Whether dragging is ongoing */
   guint in_drag                : 1;
-  /* Whether scroll is ongoing */
-  guint in_scroll              : 1;
 
   GtkOrientation     orientation;
 
@@ -140,9 +131,8 @@ enum {
   PROP_RESTRICT_TO_FILL_LEVEL,
   PROP_FILL_LEVEL,
   PROP_ROUND_DIGITS,
-  /* GtkOrientable */
   PROP_ORIENTATION,
-  LAST_PROP
+  LAST_PROP = PROP_ORIENTATION
 };
 
 enum {
@@ -161,7 +151,6 @@ static void gtk_range_get_property   (GObject          *object,
                                       guint             prop_id,
                                       GValue           *value,
                                       GParamSpec       *pspec);
-static void gtk_range_constructed    (GObject          *object);
 static void gtk_range_finalize       (GObject          *object);
 static void gtk_range_dispose        (GObject          *object);
 static void gtk_range_measure        (GtkWidget      *widget,
@@ -250,10 +239,6 @@ static void          gtk_range_allocate_trough          (GtkGizmo            *gi
 static void          gtk_range_render_trough            (GtkGizmo     *gizmo,
                                                          GtkSnapshot  *snapshot);
 
-static void          gtk_range_scroll_controller_scroll_begin (GtkEventControllerScroll *scroll,
-                                                               GtkRange                 *range);
-static void          gtk_range_scroll_controller_scroll_end (GtkEventControllerScroll *scroll,
-                                                             GtkRange                 *range);
 static gboolean      gtk_range_scroll_controller_scroll (GtkEventControllerScroll *scroll,
                                                          double                    dx,
                                                          double                    dy,
@@ -285,7 +270,6 @@ gtk_range_class_init (GtkRangeClass *class)
 
   gobject_class->set_property = gtk_range_set_property;
   gobject_class->get_property = gtk_range_get_property;
-  gobject_class->constructed = gtk_range_constructed;
   gobject_class->finalize = gtk_range_finalize;
   gobject_class->dispose = gtk_range_dispose;
 
@@ -385,31 +369,30 @@ gtk_range_class_init (GtkRangeClass *class)
                               G_TYPE_FROM_CLASS (gobject_class),
                               _gtk_marshal_BOOLEAN__ENUM_DOUBLEv);
 
-  properties[PROP_ORIENTATION] = g_param_spec_override ("orientation",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ORIENTABLE), "orientation"));
+  g_object_class_override_property (gobject_class, PROP_ORIENTATION, "orientation");
 
   /**
-   * GtkRange:adjustment:
+   * GtkRange:adjustment: (attributes org.gtk.Property.get=gtk_range_get_adjustment org.gtk.Property.set=gtk_range_set_adjustment)
    *
    * The adjustment that is controlled by the range.
    */
   properties[PROP_ADJUSTMENT] =
       g_param_spec_object ("adjustment", NULL, NULL,
                            GTK_TYPE_ADJUSTMENT,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkRange:inverted:
+   * GtkRange:inverted: (attributes org.gtk.Property.get=gtk_range_get_inverted org.gtk.Property.set=gtk_range_set_inverted)
    *
    * If %TRUE, the direction in which the slider moves is inverted.
    */
   properties[PROP_INVERTED] =
       g_param_spec_boolean ("inverted", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkRange:show-fill-level:
+   * GtkRange:show-fill-level: (attributes org.gtk.Property.get=gtk_range_get_show_fill_level org.gtk.Property.set=gtk_range_set_show_fill_level)
    *
    * Controls whether fill level indicator graphics are displayed
    * on the trough.
@@ -417,10 +400,10 @@ gtk_range_class_init (GtkRangeClass *class)
   properties[PROP_SHOW_FILL_LEVEL] =
       g_param_spec_boolean ("show-fill-level", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkRange:restrict-to-fill-level:
+   * GtkRange:restrict-to-fill-level: (attributes org.gtk.Property.get=gtk_range_get_restrict_to_fill_level org.gtk.Property.set=gtk_range_set_restrict_to_fill_level)
    *
    * Controls whether slider movement is restricted to an
    * upper boundary set by the fill level.
@@ -428,10 +411,10 @@ gtk_range_class_init (GtkRangeClass *class)
   properties[PROP_RESTRICT_TO_FILL_LEVEL] =
       g_param_spec_boolean ("restrict-to-fill-level", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkRange:fill-level:
+   * GtkRange:fill-level: (attributes org.gtk.Property.get=gtk_range_get_fill_level org.gtk.Property.set=gtk_range_set_fill_level)
    *
    * The fill level (e.g. prebuffering of a network stream).
    */
@@ -439,10 +422,10 @@ gtk_range_class_init (GtkRangeClass *class)
       g_param_spec_double ("fill-level", NULL, NULL,
                            -G_MAXDOUBLE, G_MAXDOUBLE,
                            G_MAXDOUBLE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkRange:round-digits:
+   * GtkRange:round-digits: (attributes org.gtk.Property.get=gtk_range_get_round_digits org.gtk.Property.set=gtk_range_set_round_digits)
    *
    * The number of digits to round the value to when
    * it changes.
@@ -453,7 +436,7 @@ gtk_range_class_init (GtkRangeClass *class)
       g_param_spec_int ("round-digits", NULL, NULL,
                         -1, G_MAXINT,
                         -1,
-                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, LAST_PROP, properties);
 
@@ -613,6 +596,11 @@ gtk_range_init (GtkRange *range)
   gtk_widget_add_controller (GTK_WIDGET (range), GTK_EVENT_CONTROLLER (gesture));
   gtk_gesture_group (gesture, priv->drag_gesture);
 
+  controller = gtk_event_controller_scroll_new (GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
+  g_signal_connect (controller, "scroll",
+                    G_CALLBACK (gtk_range_scroll_controller_scroll), range);
+  gtk_widget_add_controller (GTK_WIDGET (range), controller);
+
   controller = gtk_event_controller_key_new ();
   g_signal_connect (controller, "key-pressed",
                     G_CALLBACK (gtk_range_key_controller_key_pressed), range);
@@ -636,12 +624,12 @@ gtk_range_set_orientation (GtkRange       *range,
       gtk_widget_update_orientation (GTK_WIDGET (range), priv->orientation);
       gtk_widget_queue_resize (GTK_WIDGET (range));
 
-      g_object_notify_by_pspec (G_OBJECT (range), properties[PROP_ORIENTATION]);
+      g_object_notify (G_OBJECT (range), "orientation");
     }
 }
 
 /**
- * gtk_range_get_adjustment:
+ * gtk_range_get_adjustment: (attributes org.gtk.Method.get_property=adjustment)
  * @range: a `GtkRange`
  *
  * Get the adjustment which is the “model” object for `GtkRange`.
@@ -662,7 +650,7 @@ gtk_range_get_adjustment (GtkRange *range)
 }
 
 /**
- * gtk_range_set_adjustment:
+ * gtk_range_set_adjustment: (attributes org.gtk.Method.set_property=adjustment)
  * @range: a `GtkRange`
  * @adjustment: a `GtkAdjustment`
  *
@@ -691,8 +679,6 @@ gtk_range_set_adjustment (GtkRange      *range,
 
   if (priv->adjustment != adjustment)
     {
-      double accessible_max;
-
       if (priv->adjustment)
 	{
 	  g_signal_handlers_disconnect_by_func (priv->adjustment,
@@ -714,14 +700,8 @@ gtk_range_set_adjustment (GtkRange      *range,
 			G_CALLBACK (gtk_range_adjustment_value_changed),
 			range);
 
-      accessible_max = gtk_adjustment_get_upper (adjustment) -
-                       gtk_adjustment_get_page_size (adjustment);
-
-      if (priv->restrict_to_fill_level)
-        accessible_max = MIN (accessible_max, priv->fill_level);
-
       gtk_accessible_update_property (GTK_ACCESSIBLE (range),
-                                      GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, accessible_max,
+                                      GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, gtk_adjustment_get_upper (adjustment),
                                       GTK_ACCESSIBLE_PROPERTY_VALUE_MIN, gtk_adjustment_get_lower (adjustment),
                                       GTK_ACCESSIBLE_PROPERTY_VALUE_NOW, gtk_adjustment_get_value (adjustment),
                                       -1);
@@ -731,24 +711,6 @@ gtk_range_set_adjustment (GtkRange      *range,
 
       g_object_notify_by_pspec (G_OBJECT (range), properties[PROP_ADJUSTMENT]);
     }
-}
-
-static void
-update_accessible_range (GtkRange *range)
-{
-  GtkRangePrivate *priv = gtk_range_get_instance_private (range);
-  double upper = gtk_adjustment_get_upper (priv->adjustment);
-  double lower = gtk_adjustment_get_lower (priv->adjustment);
-  double page_size = gtk_adjustment_get_page_size (priv->adjustment);
-  double accessible_max = upper - page_size;
-
-  if (priv->restrict_to_fill_level)
-    accessible_max = MIN (accessible_max, priv->fill_level);
-
-  gtk_accessible_update_property (GTK_ACCESSIBLE (range),
-                                  GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, accessible_max,
-                                  GTK_ACCESSIBLE_PROPERTY_VALUE_MIN, lower,
-                                  -1);
 }
 
 static gboolean
@@ -824,7 +786,7 @@ update_fill_position (GtkRange *range)
 }
 
 /**
- * gtk_range_set_inverted:
+ * gtk_range_set_inverted: (attributes org.gtk.Method.set_property=inverted)
  * @range: a `GtkRange`
  * @setting: %TRUE to invert the range
  *
@@ -859,7 +821,7 @@ gtk_range_set_inverted (GtkRange *range,
 }
 
 /**
- * gtk_range_get_inverted:
+ * gtk_range_get_inverted: (attributes org.gtk.Method.get_property=inverted)
  * @range: a `GtkRange`
  *
  * Gets whether the range is inverted.
@@ -1176,7 +1138,7 @@ gtk_range_get_value (GtkRange *range)
 }
 
 /**
- * gtk_range_set_show_fill_level:
+ * gtk_range_set_show_fill_level: (attributes org.gtk.Method.set_property=show-fill-level)
  * @range: A `GtkRange`
  * @show_fill_level: Whether a fill level indicator graphics is shown.
  *
@@ -1216,7 +1178,7 @@ gtk_range_set_show_fill_level (GtkRange *range,
 }
 
 /**
- * gtk_range_get_show_fill_level:
+ * gtk_range_get_show_fill_level: (attributes org.gtk.Method.get_property=show-fill-level)
  * @range: A `GtkRange`
  *
  * Gets whether the range displays the fill level graphically.
@@ -1234,7 +1196,7 @@ gtk_range_get_show_fill_level (GtkRange *range)
 }
 
 /**
- * gtk_range_set_restrict_to_fill_level:
+ * gtk_range_set_restrict_to_fill_level: (attributes org.gtk.Method.set_property=restrict-to-fill-level)
  * @range: A `GtkRange`
  * @restrict_to_fill_level: Whether the fill level restricts slider movement.
  *
@@ -1259,13 +1221,11 @@ gtk_range_set_restrict_to_fill_level (GtkRange *range,
       g_object_notify_by_pspec (G_OBJECT (range), properties[PROP_RESTRICT_TO_FILL_LEVEL]);
 
       gtk_range_set_value (range, gtk_range_get_value (range));
-
-      update_accessible_range (range);
     }
 }
 
 /**
- * gtk_range_get_restrict_to_fill_level:
+ * gtk_range_get_restrict_to_fill_level: (attributes org.gtk.Method.get_property=restrict-to-fill-level)
  * @range: A `GtkRange`
  *
  * Gets whether the range is restricted to the fill level.
@@ -1283,7 +1243,7 @@ gtk_range_get_restrict_to_fill_level (GtkRange *range)
 }
 
 /**
- * gtk_range_set_fill_level:
+ * gtk_range_set_fill_level: (attributes org.gtk.Method.set_property=fill-level)
  * @range: a `GtkRange`
  * @fill_level: the new position of the fill level indicator
  *
@@ -1322,15 +1282,12 @@ gtk_range_set_fill_level (GtkRange *range,
         gtk_widget_queue_allocate (GTK_WIDGET (range));
 
       if (priv->restrict_to_fill_level)
-        {
-          gtk_range_set_value (range, gtk_range_get_value (range));
-          update_accessible_range (range);
-        }
+        gtk_range_set_value (range, gtk_range_get_value (range));
     }
 }
 
 /**
- * gtk_range_get_fill_level:
+ * gtk_range_get_fill_level: (attributes org.gtk.Method.get_property=fill-level)
  * @range: A `GtkRange`
  *
  * Gets the current position of the fill level indicator.
@@ -1363,41 +1320,20 @@ gtk_range_dispose (GObject *object)
       g_signal_handlers_disconnect_by_func (priv->adjustment,
 					    gtk_range_adjustment_value_changed,
 					    range);
-      g_clear_object (&priv->adjustment);
+      g_object_unref (priv->adjustment);
+      priv->adjustment = NULL;
     }
 
   if (priv->n_marks)
     {
-      g_clear_pointer (&priv->marks, g_free);
-      g_clear_pointer (&priv->mark_pos, g_free);
+      g_free (priv->marks);
+      priv->marks = NULL;
+      g_free (priv->mark_pos);
+      priv->mark_pos = NULL;
       priv->n_marks = 0;
     }
 
   G_OBJECT_CLASS (gtk_range_parent_class)->dispose (object);
-}
-
-static void
-gtk_range_constructed (GObject *object)
-{
-  GtkRange *range = GTK_RANGE (object);
-  GtkEventController *controller;
-  GtkEventControllerScrollFlags flags;
-
-  flags = GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES;
-
-  if (GTK_IS_SCALE (object))
-    flags |= GTK_EVENT_CONTROLLER_SCROLL_PHYSICAL_DIRECTION;
-
-  controller = gtk_event_controller_scroll_new (flags);
-  g_signal_connect (controller, "scroll-begin",
-                    G_CALLBACK (gtk_range_scroll_controller_scroll_begin), range);
-  g_signal_connect (controller, "scroll",
-                    G_CALLBACK (gtk_range_scroll_controller_scroll), range);
-  g_signal_connect (controller, "scroll-end",
-                    G_CALLBACK (gtk_range_scroll_controller_scroll_end), range);
-  gtk_widget_add_controller (GTK_WIDGET (range), controller);
-
-  G_OBJECT_CLASS (gtk_range_parent_class)->constructed (object);
 }
 
 static void
@@ -1885,54 +1821,6 @@ coord_to_value (GtkRange *range,
   return value;
 }
 
-static double
-scroll_delta_to_value (GtkRange      *range,
-                       GdkScrollUnit  scroll_unit,
-                       double         delta)
-{
-  GtkRangePrivate *priv = gtk_range_get_instance_private (range);
-
-  if (scroll_unit == GDK_SCROLL_UNIT_WHEEL)
-    return delta * gtk_adjustment_get_page_increment (priv->adjustment);
-  else if (scroll_unit == GDK_SCROLL_UNIT_SURFACE && GTK_IS_SCALE (range))
-    {
-      double frac;
-      int trough_length, slider_length;
-      graphene_rect_t slider_bounds;
-
-      if (!gtk_widget_compute_bounds (priv->slider_widget, priv->slider_widget, &slider_bounds))
-        {
-          graphene_rect_init (&slider_bounds, 0, 0,
-                              gtk_widget_get_width (priv->trough_widget),
-                              gtk_widget_get_height (priv->trough_widget));
-        }
-
-      if (priv->orientation == GTK_ORIENTATION_HORIZONTAL)
-        {
-          trough_length = gtk_widget_get_width (priv->trough_widget);
-          slider_length = slider_bounds.size.width;
-        }
-      else
-        {
-          trough_length = gtk_widget_get_height (priv->trough_widget);
-          slider_length = slider_bounds.size.height;
-        }
-
-      if (trough_length == slider_length)
-        frac = 1.0;
-      else if (priv->slider_size_fixed)
-        frac = delta / (double) trough_length;
-      else
-        frac = delta / (double) (trough_length - slider_length);
-
-      return frac * (gtk_adjustment_get_upper (priv->adjustment) -
-                     gtk_adjustment_get_lower (priv->adjustment) -
-                     gtk_adjustment_get_page_size (priv->adjustment));
-    }
-
-  return delta;
-}
-
 static gboolean
 gtk_range_key_controller_key_pressed (GtkEventControllerKey *controller,
                                       guint                  keyval,
@@ -2335,26 +2223,6 @@ stop_scrolling (GtkRange *range)
   remove_autoscroll (range);
 }
 
-static void
-gtk_range_scroll_controller_scroll_begin (GtkEventControllerScroll *scroll,
-                                          GtkRange                 *range)
-{
-  GtkRangePrivate *priv = gtk_range_get_instance_private (range);
-
-  priv->in_scroll = TRUE;
-  priv->initial_scroll_value = gtk_adjustment_get_value (priv->adjustment);
-  priv->scroll_delta_accum = 0;
-}
-
-static void
-gtk_range_scroll_controller_scroll_end (GtkEventControllerScroll *scroll,
-                                        GtkRange                 *range)
-{
-  GtkRangePrivate *priv = gtk_range_get_instance_private (range);
-
-  priv->in_scroll = FALSE;
-}
-
 static gboolean
 gtk_range_scroll_controller_scroll (GtkEventControllerScroll *scroll,
                                     double                    dx,
@@ -2362,15 +2230,12 @@ gtk_range_scroll_controller_scroll (GtkEventControllerScroll *scroll,
                                     GtkRange                 *range)
 {
   GtkRangePrivate *priv = gtk_range_get_instance_private (range);
-  double delta, value;
+  double delta;
   gboolean handled;
   GtkOrientation move_orientation;
   GdkScrollUnit scroll_unit;
 
-  scroll_unit = gtk_event_controller_scroll_get_unit (scroll);
-
-  if (priv->orientation == GTK_ORIENTATION_HORIZONTAL &&
-      scroll_unit == GDK_SCROLL_UNIT_SURFACE)
+  if (priv->orientation == GTK_ORIENTATION_HORIZONTAL && dx != 0)
     {
       move_orientation = GTK_ORIENTATION_HORIZONTAL;
       delta = dx;
@@ -2381,21 +2246,18 @@ gtk_range_scroll_controller_scroll (GtkEventControllerScroll *scroll,
       delta = dy;
     }
 
-  delta = scroll_delta_to_value (range, scroll_unit, delta);
+  scroll_unit = gtk_event_controller_scroll_get_unit (scroll);
+
+  if (scroll_unit == GDK_SCROLL_UNIT_WHEEL)
+    {
+      delta *= gtk_adjustment_get_page_increment (priv->adjustment);
+    }
 
   if (delta != 0 && should_invert_move (range, move_orientation))
     delta = - delta;
 
-  if (priv->in_scroll)
-    {
-      priv->scroll_delta_accum += delta;
-      value = priv->initial_scroll_value + priv->scroll_delta_accum;
-    }
-  else
-    value = gtk_adjustment_get_value (priv->adjustment) + delta;
-
   g_signal_emit (range, signals[CHANGE_VALUE], 0,
-                 GTK_SCROLL_JUMP, value,
+                 GTK_SCROLL_JUMP, gtk_adjustment_get_value (priv->adjustment) + delta,
                  &handled);
 
   return GDK_EVENT_STOP;
@@ -2429,9 +2291,9 @@ update_autoscroll_mode (GtkRange *range,
         }
 
       if (pos < SCROLL_EDGE_SIZE)
-        mode = should_invert (range) ? GTK_SCROLL_STEP_FORWARD : GTK_SCROLL_STEP_BACKWARD;
+        mode = priv->inverted ? GTK_SCROLL_STEP_FORWARD : GTK_SCROLL_STEP_BACKWARD;
       else if (pos > (size - SCROLL_EDGE_SIZE))
-        mode = should_invert (range) ? GTK_SCROLL_STEP_BACKWARD : GTK_SCROLL_STEP_FORWARD;
+        mode = priv->inverted ? GTK_SCROLL_STEP_BACKWARD : GTK_SCROLL_STEP_FORWARD;
     }
 
   if (mode != priv->autoscroll_mode)
@@ -2503,7 +2365,10 @@ gtk_range_adjustment_changed (GtkAdjustment *adjustment,
 
   gtk_widget_queue_allocate (priv->trough_widget);
 
-  update_accessible_range (range);
+  gtk_accessible_update_property (GTK_ACCESSIBLE (range),
+                                  GTK_ACCESSIBLE_PROPERTY_VALUE_MAX, upper,
+                                  GTK_ACCESSIBLE_PROPERTY_VALUE_MIN, lower,
+                                  -1);
 
   /* Note that we don't round off to priv->round_digits here.
    * that's because it's really broken to change a value
@@ -2914,7 +2779,7 @@ second_timeout (gpointer data)
   return G_SOURCE_CONTINUE;
 }
 
-static void
+static gboolean
 initial_timeout (gpointer data)
 {
   GtkRange *range = GTK_RANGE (data);
@@ -2922,6 +2787,7 @@ initial_timeout (gpointer data)
 
   priv->timer->timeout_id = g_timeout_add (TIMEOUT_REPEAT, second_timeout, range);
   gdk_source_set_static_name_by_id (priv->timer->timeout_id, "[gtk] second_timeout");
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -2935,7 +2801,7 @@ gtk_range_add_step_timer (GtkRange      *range,
 
   priv->timer = g_new (GtkRangeStepTimer, 1);
 
-  priv->timer->timeout_id = g_timeout_add_once (TIMEOUT_INITIAL, initial_timeout, range);
+  priv->timer->timeout_id = g_timeout_add (TIMEOUT_INITIAL, initial_timeout, range);
   gdk_source_set_static_name_by_id (priv->timer->timeout_id, "[gtk] initial_timeout");
   priv->timer->step = step;
 
@@ -2952,8 +2818,9 @@ gtk_range_remove_step_timer (GtkRange *range)
       if (priv->timer->timeout_id != 0)
         g_source_remove (priv->timer->timeout_id);
 
-      g_clear_pointer (&priv->timer, g_free);
+      g_free (priv->timer);
 
+      priv->timer = NULL;
     }
 }
 
@@ -3021,7 +2888,7 @@ _gtk_range_get_stop_positions (GtkRange  *range,
 }
 
 /**
- * gtk_range_set_round_digits:
+ * gtk_range_set_round_digits: (attributes org.gtk.Method.set_property=round-digits)
  * @range: a `GtkRange`
  * @round_digits: the precision in digits, or -1
  *
@@ -3047,7 +2914,7 @@ gtk_range_set_round_digits (GtkRange *range,
 }
 
 /**
- * gtk_range_get_round_digits:
+ * gtk_range_get_round_digits: (attributes org.gtk.Method.get_property=round-digits)
  * @range: a `GtkRange`
  *
  * Gets the number of digits to round the value to when

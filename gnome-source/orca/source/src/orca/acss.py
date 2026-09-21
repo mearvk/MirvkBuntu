@@ -45,7 +45,6 @@ class ACSS(dict):
     STRESS = "stress"
     RICHNESS = "richness"
     PUNCTUATIONS = "punctuations"
-    VOICE_TYPE = "voice-type"
 
     settings: ClassVar[dict[str, str | int | None]] = {
         FAMILY: None,  # None means use the engine's default value.
@@ -77,9 +76,6 @@ class ACSS(dict):
         if self.get(ACSS.RATE) != other.get(ACSS.RATE):
             return False
         return self.get(ACSS.AVERAGE_PITCH) == other.get(ACSS.AVERAGE_PITCH)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
 
     # Mutable: dict items are modified after construction.
     __hash__ = dict.__hash__

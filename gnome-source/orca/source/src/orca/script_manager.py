@@ -22,24 +22,18 @@
 
 """Manages Orca's scripts."""
 
-from __future__ import annotations
-
 import contextlib
 import importlib
 
 import gi
 
 gi.require_version("Atspi", "2.0")
-
-from typing import TYPE_CHECKING
+from gi.repository import Atspi
 
 from . import command_manager, debug, gsettings_registry, sleep_mode_manager, speech_manager
 from .ax_object import AXObject
 from .ax_utilities import AXUtilities
 from .scripts import apps, default, sleepmode, toolkits
-
-if TYPE_CHECKING:
-    from gi.repository import Atspi
 
 
 class ScriptManager:
@@ -109,7 +103,6 @@ class ScriptManager:
             "metacity": "switcher",
             "budgie-daemon": "switcher",
             "xfce4-notifyd": "notification-daemon",
-            "servoshell": "Servo",
         }
         alt_names = list(app_names.keys())
         if name.endswith((".py", ".bin")):
@@ -134,7 +127,7 @@ class ScriptManager:
     def _toolkit_for_object(self, obj: Atspi.Accessible) -> str | None:
         """Returns the name of the toolkit associated with obj."""
 
-        names = {"GTK": "gtk", "GAIL": "gtk", "WPEWebKit": "WebKitGTK"}
+        names = {"GTK": "gtk", "GAIL": "gtk"}
         name = AXObject.get_attribute(obj, "toolkit")
         return names.get(name, name)
 
@@ -333,10 +326,7 @@ class ScriptManager:
         if self._active_script is not None:
             tokens = ["SCRIPT MANAGER: Deactivating", self._active_script, "reason:", reason]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            old_app = self._active_script.app
             self._active_script.deactivate()
-            if old_app is not None and (new_script is None or new_script.app != old_app):
-                sleep_mode_manager.get_manager().on_app_deactivated(old_app)
 
         self._active_script = new_script
         if new_script is None:

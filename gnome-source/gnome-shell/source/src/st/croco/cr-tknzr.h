@@ -27,7 +27,8 @@
  *class.
  */
 
-#pragma once
+#ifndef __CR_TKNZR_H__
+#define __CR_TKNZR_H__
 
 #include "cr-utils.h"
 #include "cr-input.h"
@@ -53,7 +54,11 @@ struct _CRTknzr
 
 CRTknzr * cr_tknzr_new (CRInput *a_input) ;
 
+CRTknzr * cr_tknzr_new_from_uri (const guchar *a_file_uri,
+                                 enum CREncoding a_enc) ;
+
 CRTknzr * cr_tknzr_new_from_buf (guchar *a_buf, gulong a_len,
+                                 enum CREncoding a_enc,
                                  gboolean a_free_at_destroy) ;
 
 gboolean cr_tknzr_unref (CRTknzr *a_this) ;
@@ -73,6 +78,8 @@ guchar cr_tknzr_peek_byte2 (CRTknzr *a_this, gulong a_offset,
                             gboolean *a_eof) ;
 
 enum CRStatus cr_tknzr_set_cur_pos (CRTknzr *a_this, CRInputPos *a_pos) ;
+
+glong cr_tknzr_get_nb_bytes_left (CRTknzr *a_this) ;
 
 enum CRStatus cr_tknzr_get_cur_pos (CRTknzr *a_this, CRInputPos *a_pos) ;
 
@@ -104,3 +111,5 @@ enum CRStatus cr_tknzr_get_input (CRTknzr *a_this, CRInput **a_input) ;
 void cr_tknzr_destroy (CRTknzr *a_this) ;
 	
 G_END_DECLS
+
+#endif /*__CR_TKZNR_H__*/

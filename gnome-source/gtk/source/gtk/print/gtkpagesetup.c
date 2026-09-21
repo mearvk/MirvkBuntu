@@ -29,7 +29,7 @@
 /**
  * GtkPageSetup:
  *
- * Stores page size, orientation and margins for printing.
+ * A `GtkPageSetup` object stores the page size, orientation and margins.
  *
  * The idea is that you can get one of these from the page setup dialog
  * and then pass it to the `GtkPrintOperation` when printing.
@@ -544,7 +544,8 @@ gtk_page_setup_new_from_file (const char   *file_name,
 
   if (!gtk_page_setup_load_file (setup, file_name, error))
     {
-      g_clear_object (&setup);
+      g_object_unref (setup);
+      setup = NULL;
     }
 
   return setup;
@@ -682,7 +683,8 @@ gtk_page_setup_new_from_key_file (GKeyFile     *key_file,
 
   if (!gtk_page_setup_load_key_file (setup, key_file, group_name, error))
     {
-      g_clear_object (&setup);
+      g_object_unref (setup);
+      setup = NULL;
     }
 
   return setup;

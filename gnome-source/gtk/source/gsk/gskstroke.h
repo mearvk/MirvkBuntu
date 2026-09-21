@@ -31,7 +31,7 @@ G_BEGIN_DECLS
 #define GSK_TYPE_STROKE (gsk_stroke_get_type ())
 
 GDK_AVAILABLE_IN_4_14
-GType                   gsk_stroke_get_type                     (void);
+GType                   gsk_stroke_get_type                     (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_4_14
 GskStroke *             gsk_stroke_new                          (float                   line_width);
 GDK_AVAILABLE_IN_4_14
@@ -83,6 +83,5 @@ GDK_AVAILABLE_IN_4_14
 void                    gsk_stroke_to_cairo                     (const GskStroke        *self,
                                                                  cairo_t                *cr);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskStroke, gsk_stroke_free)
 
 G_END_DECLS

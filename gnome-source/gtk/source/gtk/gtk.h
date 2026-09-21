@@ -27,14 +27,12 @@
 #define __GTK_H_INSIDE__
 
 #include <gtk/css/gtkcss.h>
-#include <gtk/svg/gtksvg.h>
 #include <gdk/gdk.h>
 #include <gsk/gsk.h>
 
 #include <gtk/gtkaboutdialog.h>
 #include <gtk/gtkaccelgroup.h>
 #include <gtk/gtkaccessible.h>
-#include <gtk/gtkaccessiblehypertext.h>
 #include <gtk/gtkaccessiblerange.h>
 #include <gtk/gtkaccessibletext.h>
 #include <gtk/gtkactionable.h>
@@ -118,7 +116,6 @@
 #include <gtk/gtkentry.h>
 #include <gtk/gtkentrybuffer.h>
 #include <gtk/deprecated/gtkentrycompletion.h>
-#include <gtk/gtkenumlist.h>
 #include <gtk/gtkenums.h>
 #include <gtk/gtkeventcontroller.h>
 #include <gtk/gtkeventcontrollerfocus.h>
@@ -166,7 +163,6 @@
 #include <gtk/gtkgridview.h>
 #include <gtk/gtkheaderbar.h>
 #include <gtk/gtkicontheme.h>
-#include <gtk/gtkiconpaintable.h>
 #include <gtk/deprecated/gtkiconview.h>
 #include <gtk/gtkimage.h>
 #include <gtk/gtkimcontext.h>
@@ -214,7 +210,6 @@
 #include <gtk/gtkpasswordentrybuffer.h>
 #include <gtk/gtkpicture.h>
 #include <gtk/gtkpopover.h>
-#include <gtk/gtkpopoverbin.h>
 #include <gtk/gtkpopovermenu.h>
 #include <gtk/gtkpopovermenubar.h>
 #include <gtk/gtkprintdialog.h>
@@ -244,12 +239,12 @@
 #include <gtk/gtkshortcut.h>
 #include <gtk/gtkshortcutaction.h>
 #include <gtk/gtkshortcutcontroller.h>
+#include <gtk/gtkshortcutlabel.h>
 #include <gtk/gtkshortcutmanager.h>
-#include <gtk/deprecated/gtkshortcutlabel.h>
-#include <gtk/deprecated/gtkshortcutsgroup.h>
-#include <gtk/deprecated/gtkshortcutssection.h>
-#include <gtk/deprecated/gtkshortcutsshortcut.h>
-#include <gtk/deprecated/gtkshortcutswindow.h>
+#include <gtk/gtkshortcutsgroup.h>
+#include <gtk/gtkshortcutssection.h>
+#include <gtk/gtkshortcutsshortcut.h>
+#include <gtk/gtkshortcutswindow.h>
 #include <gtk/gtkshortcuttrigger.h>
 #include <gtk/deprecated/gtkshow.h>
 #include <gtk/gtksignallistitemfactory.h>
@@ -271,7 +266,6 @@
 #include <gtk/gtkstringsorter.h>
 #include <gtk/deprecated/gtkstylecontext.h>
 #include <gtk/gtkstyleprovider.h>
-#include <gtk/gtksvgwidget.h>
 #include <gtk/gtkswitch.h>
 #include <gtk/gtksymbolicpaintable.h>
 #include <gtk/gtktext.h>

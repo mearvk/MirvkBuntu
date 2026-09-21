@@ -46,9 +46,7 @@ typedef struct _GtkCellLayoutIface      GtkCellLayoutIface;
  * @data: (closure): user data passed to gtk_cell_layout_set_cell_data_func()
  *
  * A function which should set the value of @cell_layout’s cell renderer(s)
- * as appropriate.
- *
- * Deprecated: 4.20: There is no replacement
+ * as appropriate. 
  */
 typedef void (* GtkCellLayoutDataFunc) (GtkCellLayout   *cell_layout,
                                         GtkCellRenderer *cell,
@@ -110,7 +108,7 @@ struct _GtkCellLayoutIface
 };
 
 GDK_AVAILABLE_IN_ALL
-GType gtk_cell_layout_get_type           (void);
+GType gtk_cell_layout_get_type           (void) G_GNUC_CONST;
 GDK_DEPRECATED_IN_4_10
 void  gtk_cell_layout_pack_start         (GtkCellLayout         *cell_layout,
                                           GtkCellRenderer       *cell,
@@ -147,6 +145,22 @@ void  gtk_cell_layout_reorder            (GtkCellLayout         *cell_layout,
                                           int                    position);
 GDK_DEPRECATED_IN_4_10
 GtkCellArea *gtk_cell_layout_get_area    (GtkCellLayout         *cell_layout);
+
+gboolean _gtk_cell_layout_buildable_custom_tag_start (GtkBuildable       *buildable,
+                                                      GtkBuilder         *builder,
+                                                      GObject            *child,
+                                                      const char         *tagname,
+                                                      GtkBuildableParser *parser,
+                                                      gpointer           *data);
+gboolean _gtk_cell_layout_buildable_custom_tag_end   (GtkBuildable       *buildable,
+                                                      GtkBuilder         *builder,
+                                                      GObject            *child,
+                                                      const char         *tagname,
+                                                      gpointer           *data);
+void     _gtk_cell_layout_buildable_add_child        (GtkBuildable       *buildable,
+                                                      GtkBuilder         *builder,
+                                                      GObject            *child,
+                                                      const char         *type);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkCellLayout, g_object_unref)
 

@@ -192,17 +192,17 @@ gtk_zoom_class_init (GtkZoomClass *class)
   object_class->set_property = gtk_zoom_set_property;
   object_class->get_property = gtk_zoom_get_property;
 
-  props[PROP_SCALE] = g_param_spec_float ("scale", NULL, NULL,
+  props[PROP_SCALE] = g_param_spec_float ("scale", "", "",
                                           0.0, 100.0, 1.0,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                          G_PARAM_READWRITE);
 
-  props[PROP_ANGLE] = g_param_spec_float ("angle", NULL, NULL,
+  props[PROP_ANGLE] = g_param_spec_float ("angle", "", "",
                                           0.0, 360.0, 1.0,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                          G_PARAM_READWRITE);
 
-  props[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
+  props[PROP_CHILD] = g_param_spec_object ("child", "", "",
                                            GTK_TYPE_WIDGET,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                                           G_PARAM_READWRITE);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, props);
 

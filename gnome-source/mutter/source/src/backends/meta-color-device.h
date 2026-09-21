@@ -31,6 +31,8 @@ G_DECLARE_FINAL_TYPE (MetaColorDevice, meta_color_device,
 MetaColorDevice * meta_color_device_new (MetaColorManager *color_manager,
                                          MetaMonitor      *monitor);
 
+void meta_color_device_destroy (MetaColorDevice *color_device);
+
 void meta_color_device_update_monitor (MetaColorDevice *color_device,
                                        MetaMonitor     *monitor);
 
@@ -39,8 +41,6 @@ const char * meta_color_device_get_id (MetaColorDevice *color_device);
 
 META_EXPORT_TEST
 MetaMonitor * meta_color_device_get_monitor (MetaColorDevice *color_device);
-
-ClutterColorState * meta_color_device_get_color_state (MetaColorDevice *color_device);
 
 META_EXPORT_TEST
 MetaColorProfile * meta_color_device_get_device_profile (MetaColorDevice *color_device);
@@ -61,22 +61,8 @@ MetaColorProfile * meta_color_device_generate_profile_finish (MetaColorDevice  *
 META_EXPORT_TEST
 gboolean meta_color_device_is_ready (MetaColorDevice *color_device);
 
-void meta_color_device_update (MetaColorDevice *color_device);
-
-float meta_color_device_get_reference_luminance_factor (MetaColorDevice *color_device);
-
-void meta_color_device_set_reference_luminance_factor (MetaColorDevice *color_device,
-                                                       float            factor);
+void meta_color_device_update (MetaColorDevice *color_device,
+                               unsigned int     temperature);
 
 META_EXPORT_TEST
 void meta_set_color_efivar_test_path (const char *path);
-
-gboolean meta_color_device_start_calibration (MetaColorDevice  *color_device,
-                                              GError          **error);
-
-void meta_color_device_stop_calibration (MetaColorDevice *color_device);
-
-size_t meta_color_device_get_calibration_lut_size (MetaColorDevice *color_device);
-
-void meta_color_device_set_calibration_lut (MetaColorDevice    *color_device,
-                                            const MetaGammaLut *lut);

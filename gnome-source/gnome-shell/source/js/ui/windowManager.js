@@ -1,5 +1,6 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
-import Cogl from 'gi://Cogl';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -16,30 +17,38 @@ import * as InhibitShortcutsDialog from './inhibitShortcutsDialog.js';
 import * as ModalDialog from './modalDialog.js';
 import * as WindowMenu from './windowMenu.js';
 import * as PadOsd from './padOsd.js';
+import * as EdgeDragAction from './edgeDragAction.js';
 import * as CloseDialog from './closeDialog.js';
 import * as SwitchMonitor from './switchMonitor.js';
 import * as IBusManager from '../misc/ibusManager.js';
 import * as WorkspaceAnimation from './workspaceAnimation.js';
 
+import {loadInterfaceXML} from '../misc/fileUtils.js';
 import * as Main from './main.js';
 
 export const SHELL_KEYBINDINGS_SCHEMA = 'org.gnome.shell.keybindings';
 
-export const MINIMIZE_WINDOW_ANIMATION_TIME = 400;
-export const MINIMIZE_WINDOW_ANIMATION_MODE = Clutter.AnimationMode.EASE_OUT_EXPO;
-export const SHOW_WINDOW_ANIMATION_TIME = 150;
-export const DIALOG_SHOW_WINDOW_ANIMATION_TIME = 100;
-export const DESTROY_WINDOW_ANIMATION_TIME = 150;
-export const DIALOG_DESTROY_WINDOW_ANIMATION_TIME = 100;
-export const WINDOW_ANIMATION_TIME = 250;
+const MINIMIZE_WINDOW_ANIMATION_TIME = 400;
+const MINIMIZE_WINDOW_ANIMATION_MODE = Clutter.AnimationMode.EASE_OUT_EXPO;
+const SHOW_WINDOW_ANIMATION_TIME = 150;
+const DIALOG_SHOW_WINDOW_ANIMATION_TIME = 100;
+const DESTROY_WINDOW_ANIMATION_TIME = 150;
+const DIALOG_DESTROY_WINDOW_ANIMATION_TIME = 100;
+const WINDOW_ANIMATION_TIME = 250;
 export const SCROLL_TIMEOUT_TIME = 150;
-export const DIM_BRIGHTNESS = -0.3;
-export const DIM_TIME = 500;
-export const UNDIM_TIME = 250;
+const DIM_BRIGHTNESS = -0.3;
+const DIM_TIME = 500;
+const UNDIM_TIME = 250;
 
 const ONE_SECOND = 1000; // in ms
 
 const MIN_NUM_WORKSPACES = 2;
+
+const GSD_WACOM_BUS_NAME = 'org.gnome.SettingsDaemon.Wacom';
+const GSD_WACOM_OBJECT_PATH = '/org/gnome/SettingsDaemon/Wacom';
+
+const GsdWacomIface = loadInterfaceXML('org.gnome.SettingsDaemon.Wacom');
+const GsdWacomProxy = Gio.DBusProxy.makeProxyWrapper(GsdWacomIface);
 
 const WINDOW_DIMMER_EFFECT_NAME = 'gnome-shell-window-dimmer';
 
@@ -57,8 +66,8 @@ class DisplayChangeDialog extends ModalDialog.ModalDialog {
         this._countDown = monitorManager.get_display_configuration_timeout();
 
         // Translators: This string should be shorter than 30 characters
-        const title = _('Keep these display settings?');
-        const description = this._formatCountDown();
+        let title = _('Keep these display settings?');
+        let description = this._formatCountDown();
 
         this._content = new Dialog.MessageDialogContent({title, description});
         this.contentLayout.add_child(this._content);
@@ -133,22 +142,17 @@ class WindowDimmer extends Clutter.BrightnessContrastEffect {
     }
 
     _syncEnabled(dimmed) {
-        const animating = this.actor.get_transition(`@effects.${this.name}.brightness`) !== null;
+        let animating = this.actor.get_transition(`@effects.${this.name}.brightness`) !== null;
 
         this.enabled = Meta.prefs_get_attach_modal_dialogs() && (animating || dimmed);
     }
 
     setDimmed(dimmed, animate) {
-        const val = 127 * (1 + (dimmed ? 1 : 0) * DIM_BRIGHTNESS);
-        const color = new Cogl.Color({
-            red: val,
-            green: val,
-            blue: val,
-            alpha: 255,
-        });
+        let val = 127 * (1 + (dimmed ? 1 : 0) * DIM_BRIGHTNESS);
+        let color = Clutter.Color.new(val, val, val, 255);
 
         this.actor.ease_property(`@effects.${this.name}.brightness`, color, {
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            mode: Clutter.AnimationMode.LINEAR,
             duration: (dimmed ? DIM_TIME : UNDIM_TIME) * (animate ? 1 : 0),
             onStopped: () => this._syncEnabled(dimmed),
         });
@@ -187,10 +191,10 @@ class WorkspaceTracker {
 
         this._pauseWorkspaceCheck = false;
 
-        const tracker = Shell.WindowTracker.get_default();
+        let tracker = Shell.WindowTracker.get_default();
         tracker.connect('startup-sequence-changed', this._queueCheckWorkspaces.bind(this));
 
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
         workspaceManager.connect('notify::n-workspaces',
             this._nWorkspacesChanged.bind(this));
         workspaceManager.connect('workspaces-reordered', () => {
@@ -219,21 +223,21 @@ class WorkspaceTracker {
     }
 
     _checkWorkspaces() {
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
         let i;
-        const emptyWorkspaces = [];
+        let emptyWorkspaces = [];
 
         if (!Meta.prefs_get_dynamic_workspaces()) {
             this._checkWorkspacesId = 0;
-            return GLib.SOURCE_REMOVE;
+            return false;
         }
 
         // Update workspaces only if Dynamic Workspace Management has not been paused by some other function
         if (this._pauseWorkspaceCheck)
-            return GLib.SOURCE_CONTINUE;
+            return true;
 
         for (i = 0; i < this._workspaces.length; i++) {
-            const lastRemoved = this._workspaces[i]._lastRemovedWindow;
+            let lastRemoved = this._workspaces[i]._lastRemovedWindow;
             if ((lastRemoved &&
                  (lastRemoved.get_window_type() === Meta.WindowType.SPLASHSCREEN ||
                   lastRemoved.get_window_type() === Meta.WindowType.DIALOG ||
@@ -244,22 +248,22 @@ class WorkspaceTracker {
                 emptyWorkspaces[i] = true;
         }
 
-        const sequences = Shell.WindowTracker.get_default().get_startup_sequences();
+        let sequences = Shell.WindowTracker.get_default().get_startup_sequences();
         for (i = 0; i < sequences.length; i++) {
-            const index = sequences[i].get_workspace();
+            let index = sequences[i].get_workspace();
             if (index >= 0 && index <= workspaceManager.n_workspaces)
                 emptyWorkspaces[index] = false;
         }
 
-        const windows = global.get_window_actors();
+        let windows = global.get_window_actors();
         for (i = 0; i < windows.length; i++) {
-            const actor = windows[i];
-            const win = actor.get_meta_window();
+            let actor = windows[i];
+            let win = actor.get_meta_window();
 
             if (win.is_on_all_workspaces())
                 continue;
 
-            const workspaceIndex = win.get_workspace().index();
+            let workspaceIndex = win.get_workspace().index();
             emptyWorkspaces[workspaceIndex] = false;
         }
 
@@ -275,9 +279,9 @@ class WorkspaceTracker {
             emptyWorkspaces.push(true);
         }
 
-        const lastIndex = emptyWorkspaces.length - 1;
-        const lastEmptyIndex = emptyWorkspaces.lastIndexOf(false) + 1;
-        const activeWorkspaceIndex = workspaceManager.get_active_workspace_index();
+        let lastIndex = emptyWorkspaces.length - 1;
+        let lastEmptyIndex = emptyWorkspaces.lastIndexOf(false) + 1;
+        let activeWorkspaceIndex = workspaceManager.get_active_workspace_index();
         emptyWorkspaces[activeWorkspaceIndex] = false;
 
         // Delete empty workspaces except for the last one; do it from the end
@@ -290,16 +294,17 @@ class WorkspaceTracker {
         }
 
         this._checkWorkspacesId = 0;
-        return GLib.SOURCE_REMOVE;
+        return false;
     }
 
     keepWorkspaceAlive(workspace, duration) {
         if (workspace._keepAliveId)
             GLib.source_remove(workspace._keepAliveId);
 
-        workspace._keepAliveId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, duration, () => {
+        workspace._keepAliveId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration, () => {
             workspace._keepAliveId = 0;
             this._queueCheckWorkspaces();
+            return GLib.SOURCE_REMOVE;
         });
         GLib.Source.set_name_by_id(workspace._keepAliveId, '[gnome-shell] this._queueCheckWorkspaces');
     }
@@ -307,11 +312,12 @@ class WorkspaceTracker {
     _windowRemoved(workspace, window) {
         workspace._lastRemovedWindow = window;
         this._queueCheckWorkspaces();
-        const id = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, LAST_WINDOW_GRACE_TIME, () => {
+        let id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LAST_WINDOW_GRACE_TIME, () => {
             if (workspace._lastRemovedWindow === window) {
                 workspace._lastRemovedWindow = null;
                 this._queueCheckWorkspaces();
             }
+            return GLib.SOURCE_REMOVE;
         });
         GLib.Source.set_name_by_id(id, '[gnome-shell] this._queueCheckWorkspaces');
     }
@@ -339,9 +345,9 @@ class WorkspaceTracker {
     }
 
     _nWorkspacesChanged() {
-        const workspaceManager = global.workspace_manager;
-        const oldNumWorkspaces = this._workspaces.length;
-        const newNumWorkspaces = workspaceManager.n_workspaces;
+        let workspaceManager = global.workspace_manager;
+        let oldNumWorkspaces = this._workspaces.length;
+        let newNumWorkspaces = workspaceManager.n_workspaces;
 
         if (oldNumWorkspaces === newNumWorkspaces)
             return false;
@@ -362,16 +368,16 @@ class WorkspaceTracker {
             // Assume workspaces are only removed sequentially
             // (e.g. 2,3,4 - not 2,4,7)
             let removedIndex;
-            const removedNum = oldNumWorkspaces - newNumWorkspaces;
+            let removedNum = oldNumWorkspaces - newNumWorkspaces;
             for (let w = 0; w < oldNumWorkspaces; w++) {
-                const workspace = workspaceManager.get_workspace_by_index(w);
+                let workspace = workspaceManager.get_workspace_by_index(w);
                 if (this._workspaces[w] !== workspace) {
                     removedIndex = w;
                     break;
                 }
             }
 
-            const lostWorkspaces = this._workspaces.splice(removedIndex, removedNum);
+            let lostWorkspaces = this._workspaces.splice(removedIndex, removedNum);
             lostWorkspaces.forEach(workspace => workspace.disconnectObject(this));
         }
 
@@ -392,7 +398,7 @@ class TilePreview extends St.Widget {
     }
 
     open(window, tileRect, monitorIndex) {
-        const windowActor = window.get_compositor_private();
+        let windowActor = window.get_compositor_private();
         if (!windowActor)
             return;
 
@@ -401,13 +407,13 @@ class TilePreview extends St.Widget {
         if (this._rect && this._rect.equal(tileRect))
             return;
 
-        const changeMonitor = this._monitorIndex === -1 ||
+        let changeMonitor = this._monitorIndex === -1 ||
                              this._monitorIndex !== monitorIndex;
 
         this._monitorIndex = monitorIndex;
         this._rect = tileRect;
 
-        const monitor = Main.layoutManager.monitors[monitorIndex];
+        let monitor = Main.layoutManager.monitors[monitorIndex];
 
         this._updateStyle(monitor);
 
@@ -418,7 +424,7 @@ class TilePreview extends St.Widget {
                 width: monitor.width,
                 height: monitor.height,
             });
-            const [, rect] = window.get_frame_rect().intersect(monitorRect);
+            let [, rect] = window.get_frame_rect().intersect(monitorRect);
             this.set_size(rect.width, rect.height);
             this.set_position(rect.x, rect.y);
             this.opacity = 0;
@@ -457,7 +463,7 @@ class TilePreview extends St.Widget {
     }
 
     _updateStyle(monitor) {
-        const styles = ['tile-preview'];
+        let styles = ['tile-preview'];
         if (this._monitorIndex === Main.layoutManager.primaryIndex)
             styles.push('on-primary');
         if (this._rect.x === monitor.x)
@@ -487,7 +493,7 @@ class ResizePopup extends St.Widget {
     set(rect, displayW, displayH) {
         /* Translators: This represents the size of a window. The first number is
          * the width of the window and the second is the height. */
-        const text = _('%d × %d').format(displayW, displayH);
+        let text = _('%d × %d').format(displayW, displayH);
         this._label.set_text(text);
 
         this.set_position(rect.x, rect.y);
@@ -512,7 +518,6 @@ export class WindowManager {
 
         this._isWorkspacePrepended = false;
         this._canScroll = true; // limiting scrolling speed
-        this._blockCount = 0;
 
         this._shellwm.connect('kill-window-effects', (shellwm, actor) => {
             this._minimizeWindowDone(shellwm, actor);
@@ -874,8 +879,7 @@ export class WindowManager {
             if (this._workspaceAnimation.canHandleScrollEvent(event))
                 return Clutter.EVENT_PROPAGATE;
 
-            const {compositorModifiers} = global.display;
-            if ((event.get_state() & compositorModifiers) !== compositorModifiers)
+            if ((event.get_state() & global.display.compositor_modifiers) === 0)
                 return Clutter.EVENT_PROPAGATE;
 
             return this.handleWorkspaceScroll(event);
@@ -884,8 +888,28 @@ export class WindowManager {
         global.display.connect('show-resize-popup', this._showResizePopup.bind(this));
         global.display.connect('show-pad-osd', this._showPadOsd.bind(this));
         global.display.connect('show-osd', (display, monitorIndex, iconName, label) => {
-            const icon = Gio.Icon.new_for_string(iconName);
-            Main.osdWindowManager.showOne(monitorIndex, icon, label);
+            let icon = Gio.Icon.new_for_string(iconName);
+            Main.osdWindowManager.show(monitorIndex, icon, label, null);
+        });
+
+        this._gsdWacomProxy = new GsdWacomProxy(Gio.DBus.session,
+            GSD_WACOM_BUS_NAME, GSD_WACOM_OBJECT_PATH,
+            (proxy, error) => {
+                if (error)
+                    log(error.message);
+            });
+
+        global.display.connect('pad-mode-switch', (display, pad, _group, _mode) => {
+            let labels = [];
+
+            // FIXME: Fix num buttons
+            for (let i = 0; i < 50; i++) {
+                let str = display.get_pad_action_label(pad, Meta.PadActionType.BUTTON, i);
+                labels.push(str ?? '');
+            }
+
+            this._gsdWacomProxy?.SetOLEDLabelsAsync(
+                pad.get_device_node(), labels).catch(logError);
         });
 
         global.display.connect('init-xserver', (display, task) => {
@@ -896,6 +920,9 @@ export class WindowManager {
             return true;
         });
         global.display.connect('x11-display-closing', () => {
+            if (!Meta.is_wayland_compositor())
+                return;
+
             this._stopX11Services(null);
 
             IBusManager.getIBusManager().restartDaemon();
@@ -906,30 +933,24 @@ export class WindowManager {
         if (Main.sessionMode.hasWorkspaces)
             this._workspaceTracker = new WorkspaceTracker(this);
 
-        const allowedModes = Shell.ActionMode.NORMAL;
-        const topDragGesture = new Shell.EdgeDragGesture({
-            name: 'Window unfullscreen top drag',
-            side: St.Side.TOP,
-        });
-        topDragGesture.connect('may-recognize', () => {
-            return allowedModes & Main.actionMode;
-        });
-        topDragGesture.connect('end', () => {
-            const currentWindow = global.display.focus_window;
+        let mode = Shell.ActionMode.NORMAL;
+        let topDragAction = new EdgeDragAction.EdgeDragAction(St.Side.TOP, mode);
+        topDragAction.connect('activated',  () => {
+            let currentWindow = global.display.focus_window;
             if (currentWindow)
                 currentWindow.unmake_fullscreen();
         });
 
-        const updateUnfullscreenGesture = () => {
-            const currentWindow = global.display.focus_window;
-            topDragGesture.enabled = currentWindow && currentWindow.is_fullscreen();
+        let updateUnfullscreenGesture = () => {
+            let currentWindow = global.display.focus_window;
+            topDragAction.enabled = currentWindow && currentWindow.is_fullscreen();
         };
 
         global.display.connect('notify::focus-window', updateUnfullscreenGesture);
         global.display.connect('in-fullscreen-changed', updateUnfullscreenGesture);
         updateUnfullscreenGesture();
 
-        global.stage.add_action(topDragGesture);
+        global.stage.add_action_full('unfullscreen', Clutter.EventPhase.CAPTURE, topDragAction);
 
         this._workspaceAnimation =
             new WorkspaceAnimation.WorkspaceAnimationController();
@@ -989,10 +1010,10 @@ export class WindowManager {
     }
 
     _switchApp() {
-        const windows = global.get_window_actors().filter(actor => {
-            const win = actor.metaWindow;
-            const workspaceManager = global.workspace_manager;
-            const activeWorkspace = workspaceManager.get_active_workspace();
+        let windows = global.get_window_actors().filter(actor => {
+            let win = actor.metaWindow;
+            let workspaceManager = global.workspace_manager;
+            let activeWorkspace = workspaceManager.get_active_workspace();
             return !win.is_override_redirect() &&
                     win.located_on_workspace(activeWorkspace);
         });
@@ -1000,7 +1021,7 @@ export class WindowManager {
         if (windows.length === 0)
             return;
 
-        const focusWindow = global.display.focus_window;
+        let focusWindow = global.display.focus_window;
         let nextWindow;
 
         if (focusWindow == null) {
@@ -1018,14 +1039,14 @@ export class WindowManager {
     }
 
     insertWorkspace(pos) {
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
 
         if (!Meta.prefs_get_dynamic_workspaces())
             return;
 
         workspaceManager.append_new_workspace(false, global.get_current_time());
 
-        const windows = global.get_window_actors().map(a => a.meta_window);
+        let windows = global.get_window_actors().map(a => a.meta_window);
 
         // To create a new workspace, we slide all the windows on workspaces
         // below us to the next workspace, leaving a blank workspace for us
@@ -1043,7 +1064,7 @@ export class WindowManager {
             if (window.on_all_workspaces)
                 return;
             // Windows on workspaces below pos don't need moving
-            const index = window.get_workspace().index();
+            let index = window.get_workspace().index();
             if (index < pos)
                 return;
             window.change_workspace_by_index(index + 1, true);
@@ -1051,9 +1072,9 @@ export class WindowManager {
 
         // If the new workspace was inserted before the active workspace,
         // activate the workspace to which its windows went
-        const activeIndex = workspaceManager.get_active_workspace_index();
+        let activeIndex = workspaceManager.get_active_workspace_index();
         if (activeIndex >= pos) {
-            const newWs = workspaceManager.get_workspace_by_index(activeIndex + 1);
+            let newWs = workspaceManager.get_workspace_by_index(activeIndex + 1);
             this._blockAnimations = true;
             newWs.activate(global.get_current_time());
             this._blockAnimations = false;
@@ -1067,33 +1088,6 @@ export class WindowManager {
         this._workspaceTracker.keepWorkspaceAlive(workspace, duration);
     }
 
-    blockWorkspaceUpdates() {
-        if (++this._blockCount > 1)
-            return;
-
-        if (!this._workspaceTracker)
-            return;
-
-        this._workspaceTracker.blockUpdates();
-    }
-
-    unblockWorkspaceUpdates() {
-        console.assert(this._blockCount > 0,
-            'Unmatched call to unblockWorkspaceUpdates()');
-        if (this._blockCount === 0)
-            return;
-
-        this._blockCount -= 1;
-
-        if (this._blockCount !== 0)
-            return;
-
-        if (!this._workspaceTracker)
-            return;
-
-        this._workspaceTracker.unblockUpdates();
-    }
-
     skipNextEffect(actor) {
         this._skippedActors.add(actor);
     }
@@ -1104,7 +1098,7 @@ export class WindowManager {
     }
 
     addKeybinding(name, settings, flags, modes, handler) {
-        const action = global.display.add_keybinding(name, settings, flags, handler);
+        let action = global.display.add_keybinding(name, settings, flags, handler);
         if (action !== Meta.KeyBindingAction.NONE)
             this.allowKeybinding(name, modes);
         return action;
@@ -1168,10 +1162,7 @@ export class WindowManager {
 
         this._minimizing.add(actor);
 
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
-
-        if (actor.meta_window.is_monitor_sized() || !useMotion) {
+        if (actor.meta_window.is_monitor_sized()) {
             actor.ease({
                 opacity: 0,
                 duration: MINIMIZE_WINDOW_ANIMATION_TIME,
@@ -1180,14 +1171,14 @@ export class WindowManager {
             });
         } else {
             let xDest, yDest, xScale, yScale;
-            const [success, geom] = actor.meta_window.get_icon_geometry();
+            let [success, geom] = actor.meta_window.get_icon_geometry();
             if (success) {
                 xDest = geom.x;
                 yDest = geom.y;
                 xScale = geom.width / actor.width;
                 yScale = geom.height / actor.height;
             } else {
-                const monitor = Main.layoutManager.monitors[actor.meta_window.get_monitor()];
+                let monitor = Main.layoutManager.monitors[actor.meta_window.get_monitor()];
                 if (!monitor) {
                     this._minimizeWindowDone();
                     return;
@@ -1237,10 +1228,7 @@ export class WindowManager {
 
         this._unminimizing.add(actor);
 
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
-
-        if (actor.meta_window.is_monitor_sized() || !useMotion) {
+        if (actor.meta_window.is_monitor_sized()) {
             actor.opacity = 0;
             actor.set_scale(1.0, 1.0);
             actor.ease({
@@ -1250,14 +1238,14 @@ export class WindowManager {
                 onStopped: () => this._unminimizeWindowDone(shellwm, actor),
             });
         } else {
-            const [success, geom] = actor.meta_window.get_icon_geometry();
+            let [success, geom] = actor.meta_window.get_icon_geometry();
             if (success) {
                 actor.set_position(geom.x, geom.y);
                 actor.set_scale(
                     geom.width / actor.width,
                     geom.height / actor.height);
             } else {
-                const monitor = Main.layoutManager.monitors[actor.meta_window.get_monitor()];
+                let monitor = Main.layoutManager.monitors[actor.meta_window.get_monitor()];
                 if (!monitor) {
                     actor.show();
                     this._unminimizeWindowDone();
@@ -1269,8 +1257,8 @@ export class WindowManager {
                 actor.set_scale(0, 0);
             }
 
-            const rect = actor.meta_window.get_buffer_rect();
-            const [xDest, yDest] = [rect.x, rect.y];
+            let rect = actor.meta_window.get_buffer_rect();
+            let [xDest, yDest] = [rect.x, rect.y];
 
             actor.show();
             actor.ease({
@@ -1312,8 +1300,8 @@ export class WindowManager {
     _prepareAnimationInfo(shellwm, actor, oldFrameRect, _change) {
         // Position a clone of the window on top of the old position,
         // while actor updates are frozen.
-        const actorContent = actor.paint_to_content(oldFrameRect);
-        const actorClone = new St.Widget({content: actorContent});
+        let actorContent = actor.paint_to_content(oldFrameRect);
+        let actorClone = new St.Widget({content: actorContent});
         actorClone.set_offscreen_redirect(Clutter.OffscreenRedirect.ALWAYS);
         actorClone.set_position(oldFrameRect.x, oldFrameRect.y);
         actorClone.set_size(oldFrameRect.width, oldFrameRect.height);
@@ -1342,17 +1330,12 @@ export class WindowManager {
         if (this._resizing.has(actor))
             return;
 
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
+        let actorClone = actor.__animationInfo.clone;
+        let targetRect = actor.meta_window.get_frame_rect();
+        let sourceRect = actor.__animationInfo.oldRect;
 
-        const actorClone = actor.__animationInfo.clone;
-        const sourceRect = actor.__animationInfo.oldRect;
-        const targetRect = useMotion
-            ? actor.meta_window.get_frame_rect()
-            : sourceRect;
-
-        const scaleX = targetRect.width / sourceRect.width;
-        const scaleY = targetRect.height / sourceRect.height;
+        let scaleX = targetRect.width / sourceRect.width;
+        let scaleY = targetRect.height / sourceRect.height;
 
         this._resizePending.delete(actor);
         this._resizing.add(actor);
@@ -1441,20 +1424,20 @@ export class WindowManager {
     }
 
     _dimWindow(window) {
-        const actor = window.get_compositor_private();
+        let actor = window.get_compositor_private();
         if (!actor)
             return;
-        const dimmer = getWindowDimmer(actor);
+        let dimmer = getWindowDimmer(actor);
         if (!dimmer)
             return;
         dimmer.setDimmed(true, this._shouldAnimate());
     }
 
     _undimWindow(window) {
-        const actor = window.get_compositor_private();
+        let actor = window.get_compositor_private();
         if (!actor)
             return;
-        const dimmer = getWindowDimmer(actor);
+        let dimmer = getWindowDimmer(actor);
         if (!dimmer)
             return;
         dimmer.setDimmed(false, this._shouldAnimate());
@@ -1475,12 +1458,12 @@ export class WindowManager {
     async _mapWindow(shellwm, actor) {
         actor._windowType = actor.meta_window.get_window_type();
         actor.meta_window.connectObject('notify::window-type', () => {
-            const type = actor.meta_window.get_window_type();
+            let type = actor.meta_window.get_window_type();
             if (type === actor._windowType)
                 return;
             if (type === Meta.WindowType.MODAL_DIALOG ||
                 actor._windowType === Meta.WindowType.MODAL_DIALOG) {
-                const parent = actor.get_meta_window().get_transient_for();
+                let parent = actor.get_meta_window().get_transient_for();
                 if (parent)
                     this._checkDimming(parent);
             }
@@ -1488,7 +1471,7 @@ export class WindowManager {
             actor._windowType = type;
         }, actor);
         actor.meta_window.connect('unmanaged', window => {
-            const parent = window.get_transient_for();
+            let parent = window.get_transient_for();
             if (parent)
                 this._checkDimming(parent);
         });
@@ -1506,16 +1489,11 @@ export class WindowManager {
             return;
         }
 
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
-
         switch (this._getAnimationWindowType(actor)) {
         case Meta.WindowType.NORMAL:
             actor.set_pivot_point(0.5, 1.0);
-            if (useMotion) {
-                actor.scale_x = 0.01;
-                actor.scale_y = 0.05;
-            }
+            actor.scale_x = 0.01;
+            actor.scale_y = 0.05;
             actor.opacity = 0;
             actor.show();
             this._mapping.add(actor);
@@ -1533,10 +1511,8 @@ export class WindowManager {
         case Meta.WindowType.MODAL_DIALOG:
         case Meta.WindowType.DIALOG:
             actor.set_pivot_point(0.5, 0.5);
-            if (useMotion) {
-                actor.scale_y = 0;
-                actor.opacity = 0;
-            }
+            actor.scale_y = 0;
+            actor.opacity = 0;
             actor.show();
             this._mapping.add(actor);
 
@@ -1569,7 +1545,7 @@ export class WindowManager {
     }
 
     _destroyWindow(shellwm, actor) {
-        const window = actor.meta_window;
+        let window = actor.meta_window;
         window.disconnectObject(actor);
 
         if (window.is_attached_dialog())
@@ -1585,24 +1561,15 @@ export class WindowManager {
             return;
         }
 
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
-
-        let params;
-
         switch (this._getAnimationWindowType(actor)) {
         case Meta.WindowType.NORMAL:
             actor.set_pivot_point(0.5, 0.5);
             this._destroying.add(actor);
 
-            params = {
-                opacity: 0,
-                scale_x: useMotion ? 0.8 : 1.0,
-                scale_y: useMotion ? 0.8 : 1.0,
-            };
-
             actor.ease({
-                ...params,
+                opacity: 0,
+                scale_x: 0.8,
+                scale_y: 0.8,
                 duration: DESTROY_WINDOW_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: () => this._destroyWindowDone(shellwm, actor),
@@ -1614,21 +1581,15 @@ export class WindowManager {
             this._destroying.add(actor);
 
             if (window.is_attached_dialog()) {
-                const parent = window.get_transient_for();
+                let parent = window.get_transient_for();
                 parent.connectObject('unmanaged', () => {
                     actor.remove_all_transitions();
                     this._destroyWindowDone(shellwm, actor);
                 }, actor);
             }
 
-            params = useMotion ? {
-                scale_y: 0,
-            } : {
-                opacity: 0,
-            };
-
             actor.ease({
-                ...params,
+                scale_y: 0,
                 duration: DIALOG_DESTROY_WINDOW_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: () => this._destroyWindowDone(shellwm, actor),
@@ -1700,7 +1661,7 @@ export class WindowManager {
         this._windowMenuManager.showWindowMenuForWindow(window, menu, rect);
     }
 
-    _startSwitcher(display, window, event, binding) {
+    _startSwitcher(display, window, binding) {
         let constructor = null;
         switch (binding.get_name()) {
         case 'switch-applications':
@@ -1729,17 +1690,17 @@ export class WindowManager {
         if (!constructor)
             return;
 
-        /* prevent a corner case where both tab and workspace switcher popups show up at once */
+        /* prevent a corner case where both popups show up at once */
         if (this._workspaceSwitcherPopup != null)
             this._workspaceSwitcherPopup.destroy();
 
-        const tabPopup = new constructor();
+        let tabPopup = new constructor();
 
         if (!tabPopup.show(binding.is_reversed(), binding.get_name(), binding.get_mask()))
             tabPopup.destroy();
     }
 
-    _startA11ySwitcher(display, window, event, binding) {
+    _startA11ySwitcher(display, window, binding) {
         Main.ctrlAltTabManager.popup(binding.is_reversed(), binding.get_name(), binding.get_mask());
     }
 
@@ -1755,7 +1716,7 @@ export class WindowManager {
         return apps[n];
     }
 
-    _switchToApplication(display, window, event, binding) {
+    _switchToApplication(display, window, binding) {
         const [, , , target] = binding.get_name().split('-');
         const app = this._getNthFavoriteApp(target - 1);
         if (app) {
@@ -1764,7 +1725,7 @@ export class WindowManager {
         }
     }
 
-    _openNewApplicationWindow(display, window, event, binding) {
+    _openNewApplicationWindow(display, window, binding) {
         const [, , , , target] = binding.get_name().split('-');
         const app = this._getNthFavoriteApp(target - 1);
         if (app)
@@ -1779,8 +1740,8 @@ export class WindowManager {
         Main.panel.toggleQuickSettings();
     }
 
-    _showWorkspaceSwitcher(display, window, event, binding) {
-        const workspaceManager = display.get_workspace_manager();
+    _showWorkspaceSwitcher(display, window, binding) {
+        let workspaceManager = display.get_workspace_manager();
 
         if (!Main.sessionMode.hasWorkspaces)
             return;
@@ -1791,8 +1752,8 @@ export class WindowManager {
         let [action,,, target] = binding.get_name().split('-');
         let newWs;
         let direction;
-        const vertical = workspaceManager.layout_rows === -1;
-        const rtl = Clutter.get_default_text_direction() === Clutter.TextDirection.RTL;
+        let vertical = workspaceManager.layout_rows === -1;
+        let rtl = Clutter.get_default_text_direction() === Clutter.TextDirection.RTL;
 
         if (action === 'move') {
             // "Moving" a window to another workspace doesn't make sense when
@@ -1868,10 +1829,10 @@ export class WindowManager {
 
         if (!Main.overview.visible) {
             if (this._workspaceSwitcherPopup == null) {
-                this.blockWorkspaceUpdates();
+                this._workspaceTracker.blockUpdates();
                 this._workspaceSwitcherPopup = new WorkspaceSwitcherPopup.WorkspaceSwitcherPopup();
                 this._workspaceSwitcherPopup.connect('destroy', () => {
-                    this.unblockWorkspaceUpdates();
+                    this._workspaceTracker.unblockUpdates();
                     this._workspaceSwitcherPopup = null;
                     this._isWorkspacePrepended = false;
                 });
@@ -1949,16 +1910,17 @@ export class WindowManager {
         this.actionMoveWorkspace(ws);
 
         this._canScroll = false;
-        GLib.timeout_add_once(GLib.PRIORITY_DEFAULT,
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT,
             SCROLL_TIMEOUT_TIME, () => {
                 this._canScroll = true;
+                return GLib.SOURCE_REMOVE;
             });
 
         return Clutter.EVENT_STOP;
     }
 
     _confirmDisplayChange() {
-        const dialog = new DisplayChangeDialog(this._shellwm);
+        let dialog = new DisplayChangeDialog(this._shellwm);
         dialog.open();
     }
 

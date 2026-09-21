@@ -21,8 +21,6 @@
 #include "gdkprivate-x11.h"
 #include "gdkdisplay-x11.h"
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 /* Defines for VCP/VCK, to be used too
  * for the core protocol device manager
  */
@@ -76,8 +74,6 @@ _gdk_x11_device_manager_new (GdkDisplay *display)
  * Returns: (transfer none) (nullable) (type GdkX11DeviceXI2): The
  *   `GdkDevice` wrapping the device ID, or %NULL if the given ID
  *   doesn’t currently represent a device.
- *
- * Deprecated: 4.18
  */
 GdkDevice *
 gdk_x11_device_manager_lookup (GdkX11DeviceManagerXI2 *device_manager,
@@ -96,8 +92,6 @@ gdk_x11_device_manager_lookup (GdkX11DeviceManagerXI2 *device_manager,
  * Returns the device ID as seen by XInput2.
  *
  * Returns: the XInput2 device ID
- *
- * Deprecated: 4.18
  */
 int
 gdk_x11_device_get_id (GdkDevice *device)

@@ -46,6 +46,9 @@
 #include <unistd.h>
 
 #include "backends/meta-backend-private.h"
+#include "backends/meta-egl-ext.h"
+#include "backends/meta-egl.h"
+#include "cogl/cogl-egl.h"
 #include "cogl/cogl.h"
 #include "common/meta-cogl-drm-formats.h"
 #include "common/meta-drm-format-helpers.h"
@@ -56,12 +59,14 @@
 #include "wayland/meta-wayland-versions.h"
 #include "wayland/meta-wayland-linux-drm-syncobj.h"
 
+#ifdef HAVE_NATIVE_BACKEND
 #include "backends/native/meta-drm-buffer-gbm.h"
 #include "backends/native/meta-kms-device.h"
 #include "backends/native/meta-kms-plane.h"
 #include "backends/native/meta-kms-utils.h"
 #include "backends/native/meta-onscreen-native.h"
 #include "backends/native/meta-renderer-native.h"
+#endif
 
 #include "linux-dmabuf-v1-server-protocol.h"
 
@@ -119,7 +124,7 @@ struct _MetaWaylandDmaBufManager
   dev_t main_device_id;
 
   GArray *formats;
-  MtkAnonymousFile *format_table_file;
+  MetaAnonymousFile *format_table_file;
   MetaWaylandDmaBufFeedback *default_feedback;
 };
 
@@ -146,6 +151,7 @@ G_DEFINE_TYPE (MetaWaylandDmaBufManager, meta_wayland_dma_buf_manager,
 
 static GQuark quark_dma_buf_surface_feedback;
 
+#ifdef HAVE_NATIVE_BACKEND
 static gboolean
 should_send_modifiers_native (MetaBackend *backend)
 {
@@ -159,25 +165,30 @@ should_send_modifiers_native (MetaBackend *backend)
 
   return meta_renderer_native_send_modifiers (renderer_native);
 }
+#endif
 
 static gboolean
 should_send_modifiers (MetaBackend *backend)
 {
+  MetaEgl *egl = meta_backend_get_egl (backend);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context =
     clutter_backend_get_cogl_context (clutter_backend);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (cogl_context_get_renderer (cogl_context));
+  EGLDisplay egl_display = cogl_egl_context_get_egl_display (cogl_context);
 
+#ifdef HAVE_NATIVE_BACKEND
   if (META_IS_BACKEND_NATIVE (backend))
     return should_send_modifiers_native (backend);
+#endif
 
-  return cogl_renderer_egl_has_extensions (renderer_egl,
-                                           NULL,
-                                           "EGL_EXT_image_dma_buf_import_modifiers",
-                                           NULL);
+  return meta_egl_has_extensions (egl,
+                                  egl_display,
+                                  NULL,
+                                  "EGL_EXT_image_dma_buf_import_modifiers",
+                                  NULL);
 }
 
+#ifdef HAVE_NATIVE_BACKEND
 static gboolean
 should_send_modifiers_scanout_tranches (MetaBackend *backend)
 {
@@ -189,6 +200,7 @@ should_send_modifiers_scanout_tranches (MetaBackend *backend)
   renderer_native = META_RENDERER_NATIVE (meta_backend_get_renderer (backend));
   return meta_renderer_native_has_addfb2 (renderer_native);
 }
+#endif
 
 static gint
 compare_tranches (gconstpointer a,
@@ -275,30 +287,20 @@ meta_wayland_dma_buf_tranche_send (MetaWaylandDmaBufTranche *tranche,
 }
 
 static void
-meta_wayland_dma_buf_feedback_send_format_table (MetaWaylandDmaBufFeedback *feedback,
-                                                 MetaWaylandDmaBufManager  *dma_buf_manager,
-                                                 struct wl_resource        *resource)
-{
-  size_t size;
-  int fd;
-
-  fd = mtk_anonymous_file_open_fd (dma_buf_manager->format_table_file,
-                                   MTK_ANONYMOUS_FILE_MAPMODE_PRIVATE);
-  if (fd < 0)
-    return;
-
-  size = mtk_anonymous_file_size (dma_buf_manager->format_table_file);
-  zwp_linux_dmabuf_feedback_v1_send_format_table (resource, fd, size);
-  mtk_anonymous_file_close_fd (fd);
-}
-
-static void
 meta_wayland_dma_buf_feedback_send (MetaWaylandDmaBufFeedback *feedback,
                                     MetaWaylandDmaBufManager  *dma_buf_manager,
                                     struct wl_resource        *resource)
 {
+  size_t size;
+  int fd;
   struct wl_array main_device_buf;
   dev_t *device_id_ptr;
+
+  fd = meta_anonymous_file_open_fd (dma_buf_manager->format_table_file,
+                                    META_ANONYMOUS_FILE_MAPMODE_PRIVATE);
+  size = meta_anonymous_file_size (dma_buf_manager->format_table_file);
+  zwp_linux_dmabuf_feedback_v1_send_format_table (resource, fd, size);
+  meta_anonymous_file_close_fd (fd);
 
   wl_array_init (&main_device_buf);
   device_id_ptr = wl_array_add (&main_device_buf, sizeof (*device_id_ptr));
@@ -361,10 +363,10 @@ meta_wayland_dma_buf_realize_texture (MetaWaylandBuffer  *buffer,
   MetaContext *context =
     meta_wayland_compositor_get_context (buffer->compositor);
   MetaBackend *backend = meta_context_get_backend (context);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context = clutter_backend_get_cogl_context (clutter_backend);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (cogl_context_get_renderer (cogl_context));
+  EGLDisplay egl_display = cogl_egl_context_get_egl_display (cogl_context);
   MetaWaylandDmaBufBuffer *dma_buf = buffer->dma_buf.dma_buf;
   MetaMultiTextureFormat multi_format;
   CoglPixelFormat cogl_format;
@@ -410,21 +412,22 @@ meta_wayland_dma_buf_realize_texture (MetaWaylandBuffer  *buffer,
           modifiers[n_planes] = dma_buf->drm_modifier;
         }
 
-      egl_image = cogl_renderer_egl_create_dmabuf_image (renderer_egl,
-                                                         dma_buf->width,
-                                                         dma_buf->height,
-                                                         dma_buf->drm_format,
-                                                         n_planes,
-                                                         dma_buf->fds,
-                                                         dma_buf->strides,
-                                                         dma_buf->offsets,
-                                                         modifiers,
-                                                         error);
+      egl_image = meta_egl_create_dmabuf_image (egl,
+                                                egl_display,
+                                                dma_buf->width,
+                                                dma_buf->height,
+                                                dma_buf->drm_format,
+                                                n_planes,
+                                                dma_buf->fds,
+                                                dma_buf->strides,
+                                                dma_buf->offsets,
+                                                modifiers,
+                                                error);
       if (egl_image == EGL_NO_IMAGE_KHR)
         return FALSE;
 
       flags = COGL_EGL_IMAGE_FLAG_NO_GET_DATA;
-      cogl_texture = cogl_texture_2d_new_from_egl_image (cogl_context,
+      cogl_texture = cogl_egl_texture_2d_new_from_image (cogl_context,
                                                          dma_buf->width,
                                                          dma_buf->height,
                                                          cogl_format,
@@ -432,7 +435,7 @@ meta_wayland_dma_buf_realize_texture (MetaWaylandBuffer  *buffer,
                                                          flags,
                                                          error);
 
-      cogl_renderer_egl_destroy_image (renderer_egl, egl_image, NULL);
+      meta_egl_destroy_image (egl, egl_display, egl_image, NULL);
 
       if (!cogl_texture)
         return FALSE;
@@ -459,33 +462,34 @@ meta_wayland_dma_buf_realize_texture (MetaWaylandBuffer  *buffer,
           CoglEglImageFlags flags;
           CoglTexture *cogl_texture;
           uint32_t drm_format = 0;
-          const MetaFormatInfo *plane_format_info;
+          const MetaFormatInfo *format_info;
           int plane_index = mt_format_info->plane_indices[i];
           CoglPixelFormat subformat = mt_format_info->subformats[i];
           int horizontal_factor = mt_format_info->hsub[i];
           int vertical_factor = mt_format_info->vsub[i];
 
-          plane_format_info = meta_format_info_from_cogl_format (subformat);
-          g_return_val_if_fail (plane_format_info != NULL, FALSE);
-          drm_format = plane_format_info->drm_format;
+          format_info = meta_format_info_from_cogl_format (subformat);
+          g_return_val_if_fail (format_info != NULL, FALSE);
+          drm_format = format_info->drm_format;
 
-          egl_image = cogl_renderer_egl_create_dmabuf_image (renderer_egl,
-                                                             dma_buf->width /
-                                                             horizontal_factor,
-                                                             dma_buf->height /
-                                                             vertical_factor,
-                                                             drm_format,
-                                                             1,
-                                                             &dma_buf->fds[plane_index],
-                                                             &dma_buf->strides[plane_index],
-                                                             &dma_buf->offsets[plane_index],
-                                                             &dma_buf->drm_modifier,
-                                                             error);
+          egl_image = meta_egl_create_dmabuf_image (egl,
+                                                    egl_display,
+                                                    dma_buf->width /
+                                                    horizontal_factor,
+                                                    dma_buf->height /
+                                                    vertical_factor,
+                                                    drm_format,
+                                                    1,
+                                                    &dma_buf->fds[plane_index],
+                                                    &dma_buf->strides[plane_index],
+                                                    &dma_buf->offsets[plane_index],
+                                                    &dma_buf->drm_modifier,
+                                                    error);
           if (egl_image == EGL_NO_IMAGE_KHR)
             return FALSE;
 
           flags = COGL_EGL_IMAGE_FLAG_NO_GET_DATA;
-          cogl_texture = cogl_texture_2d_new_from_egl_image (cogl_context,
+          cogl_texture = cogl_egl_texture_2d_new_from_image (cogl_context,
                                                              dma_buf->width,
                                                              dma_buf->height,
                                                              subformat,
@@ -493,7 +497,7 @@ meta_wayland_dma_buf_realize_texture (MetaWaylandBuffer  *buffer,
                                                              flags,
                                                              error);
 
-          cogl_renderer_egl_destroy_image (renderer_egl, egl_image, NULL);
+          meta_egl_destroy_image (egl, egl_display, egl_image, NULL);
 
           if (!cogl_texture)
             return FALSE;
@@ -525,11 +529,11 @@ meta_wayland_dma_buf_buffer_attach (MetaWaylandBuffer  *buffer,
   return TRUE;
 }
 
+#ifdef HAVE_NATIVE_BACKEND
 static struct gbm_bo *
 import_scanout_gbm_bo (MetaWaylandDmaBufBuffer  *dma_buf,
                        MetaGpuKms               *gpu_kms,
                        int                       n_planes,
-                       uint32_t                  drm_format,
                        gboolean                 *use_modifier,
                        GError                  **error)
 {
@@ -553,7 +557,7 @@ import_scanout_gbm_bo (MetaWaylandDmaBufBuffer  *dma_buf,
       import_with_modifier = (struct gbm_import_fd_modifier_data) {
         .width = dma_buf->width,
         .height = dma_buf->height,
-        .format = drm_format,
+        .format = dma_buf->drm_format,
         .num_fds = n_planes,
         .modifier = dma_buf->drm_modifier,
       };
@@ -580,7 +584,7 @@ import_scanout_gbm_bo (MetaWaylandDmaBufBuffer  *dma_buf,
       import_legacy = (struct gbm_import_fd_data) {
         .width = dma_buf->width,
         .height = dma_buf->height,
-        .format = drm_format,
+        .format = dma_buf->drm_format,
         .stride = dma_buf->strides[0],
         .fd = dma_buf->fds[0],
       };
@@ -600,55 +604,16 @@ import_scanout_gbm_bo (MetaWaylandDmaBufBuffer  *dma_buf,
 
   return gbm_bo;
 }
-
-static gboolean
-has_modifier (GArray   *modifiers,
-              uint64_t  drm_modifier)
-{
-  int i;
-
-  for (i = 0; i < modifiers->len; i++)
-    {
-      if (drm_modifier == g_array_index (modifiers, uint64_t, i))
-        return TRUE;
-    }
-  return FALSE;
-}
-
-static gboolean
-crtc_supports_modifier (MetaCrtcKms *crtc_kms,
-                        uint32_t     drm_format,
-                        uint64_t     drm_modifier)
-{
-  MetaKmsPlane *plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
-  GArray *crtc_modifiers;
-
-  g_return_val_if_fail (plane, FALSE);
-
-  if (!meta_kms_plane_is_format_supported (plane, drm_format))
-    return FALSE;
-
-  if (drm_modifier == DRM_FORMAT_MOD_INVALID)
-    return TRUE;
-
-  crtc_modifiers = meta_kms_plane_get_modifiers_for_format (plane, drm_format);
-  if (!crtc_modifiers)
-    return FALSE;
-
-  return has_modifier (crtc_modifiers, drm_modifier);
-}
+#endif
 
 CoglScanout *
 meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
                                           CoglOnscreen          *onscreen,
-                                          ClutterStageView      *stage_view,
                                           const graphene_rect_t *src_rect,
                                           const MtkRectangle    *dst_rect)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaWaylandDmaBufBuffer *dma_buf;
-  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
-  MetaCrtc *crtc;
-  MetaCrtcKms *crtc_kms;
   MetaContext *context;
   MetaBackend *backend;
   MetaRenderer *renderer;
@@ -660,43 +625,12 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
   g_autoptr (CoglScanout) scanout = NULL;
   g_autoptr (GError) error = NULL;
   MetaDrmBufferFlags flags;
-  const MetaFormatInfo *format_info;
-  uint32_t drm_format;
   gboolean use_modifier;
   int n_planes;
 
   dma_buf = meta_wayland_dma_buf_from_buffer (buffer);
   if (!dma_buf)
     return NULL;
-
-  crtc = meta_renderer_view_get_crtc (renderer_view);
-  g_return_val_if_fail (META_IS_CRTC_KMS (crtc), NULL);
-  crtc_kms = META_CRTC_KMS (crtc);
-
-  format_info = meta_format_info_from_drm_format (dma_buf->drm_format);
-  g_assert (format_info);
-
-  if (format_info->opaque_substitute != DRM_FORMAT_INVALID &&
-      crtc_supports_modifier (crtc_kms,
-                              format_info->opaque_substitute,
-                              dma_buf->drm_modifier))
-    {
-      drm_format = format_info->opaque_substitute;
-    }
-  else if (crtc_supports_modifier (crtc_kms,
-                                   dma_buf->drm_format,
-                                   dma_buf->drm_modifier))
-    {
-      drm_format = dma_buf->drm_format;
-    }
-  else
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "DRM format 0x%x (0x%lx) not supported by primary plane",
-                  dma_buf->drm_format,
-                  dma_buf->drm_modifier);
-      return NULL;
-    }
 
   context = meta_wayland_compositor_get_context (dma_buf->manager->compositor);
   backend = meta_context_get_backend (context);
@@ -711,11 +645,7 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
 
   device_file = meta_renderer_native_get_primary_device_file (renderer_native);
   gpu_kms = meta_renderer_native_get_primary_gpu (renderer_native);
-  gbm_bo = import_scanout_gbm_bo (dma_buf,
-                                  gpu_kms,
-                                  n_planes,
-                                  drm_format,
-                                  &use_modifier,
+  gbm_bo = import_scanout_gbm_bo (dma_buf, gpu_kms, n_planes, &use_modifier,
                                   &error);
   if (!gbm_bo)
     {
@@ -737,9 +667,9 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
       return NULL;
     }
 
-  scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)),
-                              dst_rect);
+  scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)));
   cogl_scanout_set_src_rect (scanout, src_rect);
+  cogl_scanout_set_dst_rect (scanout, dst_rect);
 
   if (!meta_onscreen_native_is_buffer_scanout_compatible (onscreen, scanout))
     {
@@ -749,6 +679,9 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
     }
 
   return g_steal_pointer (&scanout);
+#else
+  return NULL;
+#endif
 }
 
 static void
@@ -854,6 +787,7 @@ static const struct wl_buffer_interface dma_buf_buffer_impl =
 MetaWaylandDmaBufBuffer *
 meta_wayland_dma_buf_fds_for_wayland_buffer (MetaWaylandBuffer *buffer)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaContext *context =
     meta_wayland_compositor_get_context (buffer->compositor);
   MetaBackend *backend = meta_context_get_backend (context);
@@ -891,6 +825,9 @@ meta_wayland_dma_buf_fds_for_wayland_buffer (MetaWaylandBuffer *buffer)
 
   gbm_bo_destroy (gbm_bo);
   return dma_buf;
+#else
+  return NULL;
+#endif
 }
 
 /**
@@ -919,7 +856,7 @@ meta_wayland_dma_buf_from_buffer (MetaWaylandBuffer *buffer)
 
 typedef struct _MetaWaylandDmaBufSource
 {
-  GSource parent;
+  GSource base;
 
   MetaWaylandDmaBufSourceDispatch dispatch;
   MetaWaylandBuffer *buffer;
@@ -928,6 +865,21 @@ typedef struct _MetaWaylandDmaBufSource
   gpointer fd_tags[META_WAYLAND_DMA_BUF_MAX_FDS];
   int owned_sync_fd[META_WAYLAND_DMA_BUF_MAX_FDS];
 } MetaWaylandDmaBufSource;
+
+static gboolean
+is_fd_readable (int fd)
+{
+  GPollFD poll_fd;
+
+  poll_fd.fd = fd;
+  poll_fd.events = G_IO_IN;
+  poll_fd.revents = 0;
+
+  if (!g_poll (&poll_fd, 1, 0))
+    return FALSE;
+
+  return (poll_fd.revents & (G_IO_IN | G_IO_NVAL)) != 0;
+}
 
 static gboolean
 meta_wayland_dma_buf_source_dispatch (GSource     *base,
@@ -955,13 +907,13 @@ meta_wayland_dma_buf_source_dispatch (GSource     *base,
       if (fd < 0)
         fd = dma_buf->fds[i];
 
-      if (!mtk_is_fd_readable (fd))
+      if (!is_fd_readable (fd))
         {
           ready = FALSE;
           continue;
         }
 
-      g_source_remove_unix_fd (&source->parent, fd_tag);
+      g_source_remove_unix_fd (&source->base, fd_tag);
       source->fd_tags[i] = NULL;
       g_clear_fd (&source->owned_sync_fd[i], NULL);
     }
@@ -988,7 +940,7 @@ meta_wayland_dma_buf_source_finalize (GSource *base)
 
       if (fd_tag)
         {
-          g_source_remove_unix_fd (&source->parent, fd_tag);
+          g_source_remove_unix_fd (&source->base, fd_tag);
           source->fd_tags[i] = NULL;
           g_clear_fd (&source->owned_sync_fd[i], NULL);
         }
@@ -1076,7 +1028,7 @@ meta_wayland_dma_buf_create_source (MetaWaylandBuffer               *buffer,
       if (fd < 0)
         break;
 
-      if (mtk_is_fd_readable (fd))
+      if (is_fd_readable (fd))
         continue;
 
       if (!source)
@@ -1086,13 +1038,13 @@ meta_wayland_dma_buf_create_source (MetaWaylandBuffer               *buffer,
       if (source->owned_sync_fd[i] >= 0)
         fd = source->owned_sync_fd[i];
 
-      source->fd_tags[i] = g_source_add_unix_fd (&source->parent, fd, G_IO_IN);
+      source->fd_tags[i] = g_source_add_unix_fd (&source->base, fd, G_IO_IN);
     }
 
   if (!source)
     return NULL;
 
-  return &source->parent;
+  return &source->base;
 }
 
 GSource *
@@ -1113,7 +1065,7 @@ meta_wayland_drm_syncobj_create_source (MetaWaylandBuffer                *buffer
       return NULL;
     }
 
-  if (mtk_is_fd_readable (sync_fd))
+  if (is_fd_readable (sync_fd))
     {
       return NULL;
     }
@@ -1122,10 +1074,10 @@ meta_wayland_drm_syncobj_create_source (MetaWaylandBuffer                *buffer
   if (!source)
     return NULL;
 
-  source->fd_tags[0] = g_source_add_unix_fd (&source->parent, sync_fd, G_IO_IN);
+  source->fd_tags[0] = g_source_add_unix_fd (&source->base, sync_fd, G_IO_IN);
   source->owned_sync_fd[0] = g_steal_fd (&sync_fd);
 
-  return &source->parent;
+  return &source->base;
 }
 
 static void
@@ -1140,7 +1092,7 @@ buffer_params_create_common (struct wl_client   *client,
   MetaWaylandDmaBufBuffer *dma_buf;
   MetaWaylandBuffer *buffer;
   struct wl_resource *buffer_resource;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
 
   dma_buf = wl_resource_get_user_data (params_resource);
   if (!dma_buf)
@@ -1328,14 +1280,12 @@ dma_buf_handle_get_default_feedback (struct wl_client   *client,
                                   NULL,
                                   feedback_destructor);
 
-  meta_wayland_dma_buf_feedback_send_format_table (dma_buf_manager->default_feedback,
-                                                   dma_buf_manager,
-                                                   feedback_resource);
   meta_wayland_dma_buf_feedback_send (dma_buf_manager->default_feedback,
                                       dma_buf_manager,
                                       feedback_resource);
 }
 
+#ifdef HAVE_NATIVE_BACKEND
 static int
 find_scanout_tranche_func (gconstpointer a,
                            gconstpointer b)
@@ -1346,6 +1296,37 @@ find_scanout_tranche_func (gconstpointer a,
     return 0;
   else
     return -1;
+}
+
+static gboolean
+has_modifier (GArray   *modifiers,
+              uint64_t  drm_modifier)
+{
+  int i;
+
+  for (i = 0; i < modifiers->len; i++)
+    {
+      if (drm_modifier == g_array_index (modifiers, uint64_t, i))
+        return TRUE;
+    }
+  return FALSE;
+}
+
+static gboolean
+crtc_supports_modifier (MetaCrtcKms *crtc_kms,
+                        uint32_t     drm_format,
+                        uint64_t     drm_modifier)
+{
+  MetaKmsPlane *plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
+  GArray *crtc_modifiers;
+
+  g_return_val_if_fail (plane, FALSE);
+
+  crtc_modifiers = meta_kms_plane_get_modifiers_for_format (plane, drm_format);
+  if (!crtc_modifiers)
+    return FALSE;
+
+  return has_modifier (crtc_modifiers, drm_modifier);
 }
 
 static void
@@ -1395,24 +1376,10 @@ ensure_scanout_tranche (MetaWaylandDmaBufSurfaceFeedback *surface_feedback,
                            MetaWaylandDmaBufFormat,
                            i);
 
-          if (format.drm_modifier == DRM_FORMAT_MOD_INVALID)
-            continue;
-
           if (!crtc_supports_modifier (crtc_kms,
                                        format.drm_format,
                                        format.drm_modifier))
-            {
-              const MetaFormatInfo *format_info;
-
-              format_info = meta_format_info_from_drm_format (format.drm_format);
-              g_assert (format_info);
-
-              if (format_info->opaque_substitute == DRM_FORMAT_INVALID ||
-                  !crtc_supports_modifier (crtc_kms,
-                                           format_info->opaque_substitute,
-                                           format.drm_modifier))
-                continue;
-            }
+            continue;
 
           g_array_append_val (formats, format);
         }
@@ -1467,10 +1434,12 @@ clear_scanout_tranche (MetaWaylandDmaBufSurfaceFeedback *surface_feedback)
   meta_wayland_dma_buf_tranche_free (tranche);
   feedback->tranches = g_list_delete_link (feedback->tranches, el);
 }
+#endif /* HAVE_NATIVE_BACKEND */
 
 static void
 update_surface_feedback_tranches (MetaWaylandDmaBufSurfaceFeedback *surface_feedback)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaCrtc *crtc;
 
   crtc = meta_wayland_surface_get_scanout_candidate (surface_feedback->surface);
@@ -1478,6 +1447,7 @@ update_surface_feedback_tranches (MetaWaylandDmaBufSurfaceFeedback *surface_feed
     ensure_scanout_tranche (surface_feedback, crtc);
   else
     clear_scanout_tranche (surface_feedback);
+#endif /* HAVE_NATIVE_BACKEND */
 }
 
 static void
@@ -1592,9 +1562,6 @@ dma_buf_handle_get_surface_feedback (struct wl_client   *client,
   surface_feedback->resources = g_list_prepend (surface_feedback->resources,
                                                 feedback_resource);
 
-  meta_wayland_dma_buf_feedback_send_format_table (surface_feedback->feedback,
-                                                   dma_buf_manager,
-                                                   feedback_resource);
   meta_wayland_dma_buf_feedback_send (surface_feedback->feedback,
                                       dma_buf_manager,
                                       feedback_resource);
@@ -1668,11 +1635,12 @@ dma_buf_bind (struct wl_client *client,
 
 static void
 add_format (MetaWaylandDmaBufManager *dma_buf_manager,
-            CoglRendererEGL          *renderer_egl,
+            EGLDisplay                egl_display,
             uint32_t                  drm_format)
 {
   MetaContext *context = dma_buf_manager->compositor->context;
   MetaBackend *backend = meta_context_get_backend (context);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   EGLint num_modifiers;
   g_autofree EGLuint64KHR *modifiers = NULL;
   g_autoptr (GError) error = NULL;
@@ -1684,19 +1652,17 @@ add_format (MetaWaylandDmaBufManager *dma_buf_manager,
 
   /* First query the number of available modifiers, then allocate an array,
    * then fill the array. */
-  if (!cogl_renderer_egl_query_dma_buf_modifiers (renderer_egl, drm_format, 0,
-                                                  NULL, NULL, &num_modifiers,
-                                                  NULL))
+  if (!meta_egl_query_dma_buf_modifiers (egl, egl_display, drm_format, 0, NULL,
+                                         NULL, &num_modifiers, NULL))
     goto add_fallback;
 
   if (num_modifiers == 0)
     goto add_fallback;
 
   modifiers = g_new0 (uint64_t, num_modifiers);
-  if (!cogl_renderer_egl_query_dma_buf_modifiers (renderer_egl, drm_format,
-                                                  num_modifiers, modifiers,
-                                                  NULL, &num_modifiers,
-                                                  &error))
+  if (!meta_egl_query_dma_buf_modifiers (egl, egl_display, drm_format,
+                                         num_modifiers, modifiers, NULL,
+                                         &num_modifiers, &error))
     {
       g_warning ("Failed to query modifiers for format 0x%" PRIu32 ": %s",
                  drm_format, error->message);
@@ -1761,15 +1727,17 @@ init_format_table (MetaWaylandDmaBufManager *dma_buf_manager)
     }
 
   dma_buf_manager->format_table_file =
-    mtk_anonymous_file_new ("dmabuf-format-table",
-                            size, (uint8_t *) format_table);
+    meta_anonymous_file_new (size, (uint8_t *) format_table);
 }
 
 static gboolean
 init_formats (MetaWaylandDmaBufManager  *dma_buf_manager,
-              CoglRendererEGL           *renderer_egl,
+              EGLDisplay                 egl_display,
               GError                   **error)
 {
+  MetaContext *context = dma_buf_manager->compositor->context;
+  MetaBackend *backend = meta_context_get_backend (context);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   EGLint num_formats;
   g_autofree EGLint *driver_formats = NULL;
   int i;
@@ -1778,8 +1746,8 @@ init_formats (MetaWaylandDmaBufManager  *dma_buf_manager,
   dma_buf_manager->formats = g_array_new (FALSE, FALSE,
                                           sizeof (MetaWaylandDmaBufFormat));
 
-  if (!cogl_renderer_egl_query_dma_buf_formats (renderer_egl, 0, NULL,
-                                                &num_formats, error))
+  if (!meta_egl_query_dma_buf_formats (egl, egl_display, 0, NULL, &num_formats,
+                                       error))
     return FALSE;
 
   if (num_formats == 0)
@@ -1790,9 +1758,8 @@ init_formats (MetaWaylandDmaBufManager  *dma_buf_manager,
     }
 
   driver_formats = g_new0 (EGLint, num_formats);
-  if (!cogl_renderer_egl_query_dma_buf_formats (renderer_egl, num_formats,
-                                                driver_formats, &num_formats,
-                                                error))
+  if (!meta_egl_query_dma_buf_formats (egl, egl_display, num_formats,
+                                       driver_formats, &num_formats, error))
     return FALSE;
 
   for (i = 0; i < num_formats; i++)
@@ -1800,7 +1767,7 @@ init_formats (MetaWaylandDmaBufManager  *dma_buf_manager,
       format_info = meta_format_info_from_drm_format (driver_formats[i]);
       if (format_info && format_info->multi_texture_format !=
           META_MULTI_TEXTURE_FORMAT_INVALID)
-        add_format (dma_buf_manager, renderer_egl, driver_formats[i]);
+        add_format (dma_buf_manager, egl_display, driver_formats[i]);
     }
 
   if (dma_buf_manager->formats->len == 0)
@@ -1850,10 +1817,10 @@ meta_wayland_dma_buf_manager_new (MetaWaylandCompositor  *compositor,
   MetaContext *context =
     meta_wayland_compositor_get_context (compositor);
   MetaBackend *backend = meta_context_get_backend (context);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context = clutter_backend_get_cogl_context (clutter_backend);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (cogl_context_get_renderer (cogl_context));
+  EGLDisplay egl_display = cogl_egl_context_get_egl_display (cogl_context);
   dev_t device_id = 0;
   int protocol_version;
   EGLDeviceEXT egl_device;
@@ -1863,20 +1830,20 @@ meta_wayland_dma_buf_manager_new (MetaWaylandCompositor  *compositor,
   const char *device_path = NULL;
   struct stat device_stat;
 
-  g_assert (backend && clutter_backend && cogl_context);
+  g_assert (backend && egl && clutter_backend && cogl_context && egl_display);
 
-  if (!cogl_renderer_egl_has_extensions (renderer_egl, NULL,
-                                         "EGL_EXT_image_dma_buf_import_modifiers",
-                                         NULL))
+  if (!meta_egl_has_extensions (egl, egl_display, NULL,
+                                "EGL_EXT_image_dma_buf_import_modifiers",
+                                NULL))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
                    "Missing 'EGL_EXT_image_dma_buf_import_modifiers'");
       return NULL;
     }
 
-  if (!cogl_renderer_egl_query_display_attrib (renderer_egl,
-                                               EGL_DEVICE_EXT, &attrib,
-                                               &local_error))
+  if (!meta_egl_query_display_attrib (egl, egl_display,
+                                      EGL_DEVICE_EXT, &attrib,
+                                      &local_error))
     {
       g_warning ("Failed to query EGL device from primary EGL display: %s",
                  local_error->message);
@@ -1885,13 +1852,13 @@ meta_wayland_dma_buf_manager_new (MetaWaylandCompositor  *compositor,
     }
   egl_device = (EGLDeviceEXT) attrib;
 
-  if (cogl_renderer_egl_device_has_extensions (renderer_egl, egl_device, NULL,
-                                               "EGL_EXT_device_drm_render_node",
-                                               NULL))
+  if (meta_egl_egl_device_has_extensions (egl, egl_device, NULL,
+                                          "EGL_EXT_device_drm_render_node",
+                                          NULL))
     {
-      if (!cogl_renderer_egl_query_device_string (renderer_egl, egl_device,
-                                                  EGL_DRM_RENDER_NODE_FILE_EXT,
-                                                  &device_path, &local_error))
+      if (!meta_egl_query_device_string (egl, egl_device,
+                                         EGL_DRM_RENDER_NODE_FILE_EXT,
+                                         &device_path, &local_error))
         {
           g_warning ("Failed to query EGL render node path: %s",
                      local_error->message);
@@ -1900,13 +1867,13 @@ meta_wayland_dma_buf_manager_new (MetaWaylandCompositor  *compositor,
     }
 
   if (!device_path &&
-      cogl_renderer_egl_device_has_extensions (renderer_egl, egl_device, NULL,
-                                               "EGL_EXT_device_drm",
-                                               NULL))
+      meta_egl_egl_device_has_extensions (egl, egl_device, NULL,
+                                          "EGL_EXT_device_drm",
+                                          NULL))
     {
-      if (!cogl_renderer_egl_query_device_string (renderer_egl, egl_device,
-                                                  EGL_DRM_DEVICE_FILE_EXT,
-                                                  &device_path, &local_error))
+      if (!meta_egl_query_device_string (egl, egl_device,
+                                         EGL_DRM_DEVICE_FILE_EXT,
+                                         &device_path, &local_error))
         {
           g_warning ("Failed to query EGL render node path: %s",
                      local_error->message);
@@ -1943,7 +1910,7 @@ initialize:
   dma_buf_manager->compositor = compositor;
   dma_buf_manager->main_device_id = device_id;
 
-  if (!init_formats (dma_buf_manager, renderer_egl, &local_error))
+  if (!init_formats (dma_buf_manager, egl_display, &local_error))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                    "No supported formats detected: %s", local_error->message);
@@ -2004,7 +1971,7 @@ meta_wayland_dma_buf_manager_finalize (GObject *object)
     META_WAYLAND_DMA_BUF_MANAGER (object);
 
   g_clear_pointer (&dma_buf_manager->format_table_file,
-                   mtk_anonymous_file_free);
+                   meta_anonymous_file_free);
   g_clear_pointer (&dma_buf_manager->formats, g_array_unref);
   g_clear_pointer (&dma_buf_manager->default_feedback,
                    meta_wayland_dma_buf_feedback_free);

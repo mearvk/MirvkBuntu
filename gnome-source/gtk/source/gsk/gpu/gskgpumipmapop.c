@@ -3,9 +3,7 @@
 #include "gskgpumipmapopprivate.h"
 
 #include "gskglimageprivate.h"
-#include "gskgpuframeprivate.h"
 #include "gskgpuprintprivate.h"
-#include "gskgpuutilsprivate.h"
 #ifdef GDK_RENDERING_VULKAN
 #include "gskvulkanimageprivate.h"
 #endif
@@ -56,7 +54,7 @@ gsk_gpu_mipmap_op_vk_command (GskGpuOp              *op,
   vk_image = gsk_vulkan_image_get_vk_image (image);
   width = gsk_gpu_image_get_width (self->image);
   height = gsk_gpu_image_get_height (self->image);
-  n_levels = gsk_gpu_mipmap_levels (width, height);
+  n_levels = gsk_vulkan_mipmap_levels (width, height);
 
   /* optimize me: only transition mipmap layers 1..n, but not 0 */
   gsk_vulkan_image_transition (image,
@@ -158,9 +156,10 @@ gsk_gpu_mipmap_op_gl_command (GskGpuOp          *op,
 {
   GskGpuMipmapOp *self = (GskGpuMipmapOp *) op;
 
-  gsk_gl_image_bind_textures (GSK_GL_IMAGE (self->image), GL_TEXTURE0);
+  glActiveTexture (GL_TEXTURE0);
+  gsk_gl_image_bind_texture (GSK_GL_IMAGE (self->image));
   /* need to reset the images again */
-  state->current_images[0] = NULL;
+  state->desc = NULL;
 
   glGenerateMipmap (GL_TEXTURE_2D);
 
@@ -186,7 +185,7 @@ gsk_gpu_mipmap_op (GskGpuFrame *frame,
 
   g_assert ((gsk_gpu_image_get_flags (image) & (GSK_GPU_IMAGE_CAN_MIPMAP | GSK_GPU_IMAGE_MIPMAP)) == GSK_GPU_IMAGE_CAN_MIPMAP);
 
-  self = (GskGpuMipmapOp *) gsk_gpu_frame_alloc_op (frame, &GSK_GPU_MIPMAP_OP_CLASS);
+  self = (GskGpuMipmapOp *) gsk_gpu_op_alloc (frame, &GSK_GPU_MIPMAP_OP_CLASS);
 
   self->image = g_object_ref (image);
 

@@ -21,11 +21,6 @@
 
 G_BEGIN_DECLS
 
-/**
- * GTK_IM_MODULE_EXTENSION_POINT_NAME:
- *
- * The default name of the extension point.
- */
 #define GTK_IM_MODULE_EXTENSION_POINT_NAME "gtk-im-module"
 
 G_END_DECLS

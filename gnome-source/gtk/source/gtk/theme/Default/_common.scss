@@ -1,11 +1,10 @@
 @function gtkalpha($c,$a) {
-  @return unquote("rgb(from #{$c} r g b / calc(alpha * #{$a}))");
+  @return unquote("alpha(#{$c},#{$a})");
 }
 
 $ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 $asset_suffix: if($variant=='dark', '-dark', '');
-$asset_prefix: if($contrast=='normal', '', 'hc-');
-$assets: 'assets';
+$assets: if($contrast=='normal', 'assets', 'assets-hc');
 $backdrop_transition: 200ms ease-out;
 $button_transition: all 200ms $ease-out-quad;
 $focus_transition: outline-width 200ms $ease-out-quad, outline-offset 200ms $ease-out-quad;
@@ -87,35 +86,6 @@ textview {
   }
 }
 
-preedit {
-  &.whole {
-    text-decoration: underline;
-  }
-
-  &.selection {
-    background-color: $backdrop_selected_bg_color;
-    color: transparent;
-  }
-
-  &.prediction {
-    font-style: italic;
-  }
-
-  &.prefix, &.suffix {
-    color: gtkalpha(currentColor, 0.5);
-  }
-
-  &.spelling-error {
-    text-decoration: $error_color underline wavy;
-  }
-
-  &.compose-error {
-    text-decoration: $error_color line-through;
-  }
-}
-
-textview > text > preedit { @extend preedit; }
-
 textview > border { background-color: mix($bg_color, $base_color, 50%); }
 
 iconview {
@@ -181,6 +151,11 @@ gridview {
         box-shadow: inset 0 0 0 1px $borders_color;
       }
 
+    }
+
+    box { //cells
+      border-spacing: 8px; //label separation
+      margin: 12px;
     }
   }
 }
@@ -261,11 +236,18 @@ window.aboutdialog image.large-icons {
 /*********************
  * Spinner Animation *
  *********************/
+@keyframes spin {
+  to { transform: rotate(1turn); }
+}
+
 spinner {
   background: none;
+  opacity: 0; // non spinning spinner makes no sense
+  -gtk-icon-source: -gtk-icontheme('process-working-symbolic');
 
   &:checked {
     opacity: 1;
+    animation: spin 1s linear infinite;
 
     &:disabled { opacity: 0.5; }
   }
@@ -371,10 +353,6 @@ entry {
         background-color: $selected_text_bg_color;
         color: $fg_color;
       }
-    }
-
-    > text > preedit {
-      @extend preedit;
     }
 
     // entry error and warning style
@@ -1493,30 +1471,22 @@ windowcontrols {
   }
 
   button {
+    @extend %button_basic;
+
     @extend %button_basic_flat;
 
-    box-shadow: none;
-    border: none;
-    min-width: 34px;
-    padding: 0;
 
-    > image {
-        border-radius: 9999px;
-        min-height: 30px;
-        min-width: 30px;
-    }
-    &:hover > image {
+    border-radius: 9999px;
+    padding: 6px;
+    margin: 0 2px;
+    min-width: 0;
+    min-height: 0;
+    &:hover {
       //special case hover colors inside a headerbar
       @include button(undecorated-hover,$c:darken($headerbar_bg_color,6%));
     }
-    &:active > image,
-    &:checked > image { @include button(undecorated-active,$c:darken($headerbar_bg_color,10%)); }
-
-    &:hover,
     &:active,
-    &:checked {
-        background: none;
-    }
+    &:checked { @include button(undecorated-active,$c:darken($headerbar_bg_color,10%)); }
   }
 }
 
@@ -1636,24 +1606,6 @@ headerbar {
   menubutton {
     margin-top: 6px;
     margin-bottom: 6px;
-  }
-
-  windowcontrols {
-    > button {
-      margin: 0;
-    }
-
-    &.start > image.icon {
-      -gtk-icon-size: 20px;
-    }
-
-    &.end {
-      margin-right: -6px;
-
-      > button:last-child {
-        padding-right: 6px;
-      }
-    }
   }
 
   // Reset margins for buttons inside menubutton
@@ -2660,9 +2612,11 @@ check {
   border-radius: 3px;
   -gtk-icon-size: 14px;
 
-  &:checked { -gtk-icon-source: -gtk-recolor(url("#{$assets}/#{$asset_prefix}check-symbolic.svg")); }
+  &:checked { -gtk-icon-source: -gtk-scaled(-gtk-recolor(url("#{$assets}/check-symbolic.symbolic.png")),
+                                            -gtk-recolor(url("#{$assets}/check@2-symbolic.symbolic.png"))); }
 
-  &:indeterminate { -gtk-icon-source: -gtk-recolor(url("#{$assets}/#{$asset_prefix}dash-symbolic.svg")); }
+  &:indeterminate { -gtk-icon-source: -gtk-scaled(-gtk-recolor(url("#{$assets}/dash-symbolic.symbolic.png")),
+                                                  -gtk-recolor(url("#{$assets}/dash@2-symbolic.symbolic.png"))); }
 }
 
 %radio,
@@ -2670,9 +2624,11 @@ radio {
   border-radius: 100%;
   -gtk-icon-size: 14px;
 
-  &:checked { -gtk-icon-source: -gtk-recolor(url("#{$assets}/#{$asset_prefix}bullet-symbolic.svg")); }
+  &:checked { -gtk-icon-source: -gtk-scaled(-gtk-recolor(url("#{$assets}/bullet-symbolic.symbolic.png")),
+                                            -gtk-recolor(url("#{$assets}/bullet@2-symbolic.symbolic.png"))); }
 
-  &:indeterminate { -gtk-icon-source: -gtk-recolor(url("#{$assets}/#{$asset_prefix}dash-symbolic.svg")); }
+  &:indeterminate { -gtk-icon-source: -gtk-scaled(-gtk-recolor(url("#{$assets}/dash-symbolic.symbolic.png")),
+                                                  -gtk-recolor(url("#{$assets}/dash@2-symbolic.symbolic.png"))); }
 }
 
 treeview.view check,
@@ -2746,7 +2702,6 @@ scale {
   // sizing
   $_marks_length: 6px;
   $_marks_distance: 6px;
-  $_marks_size: $_marks_length + $_marks_distance;
 
   min-height: 10px;
   min-width: 10px;
@@ -2772,8 +2727,19 @@ scale {
 
   // click-and-hold the slider to activate
   &.fine-tune {
+    &.horizontal {
+      padding-top: 9px;
+      padding-bottom: 9px;
+      min-height: 16px;
+    }
+
+    &.vertical {
+      padding-left: 9px;
+      padding-right: 9px;
+      min-width: 16px;
+    }
+
     // to make the trough grow in fine-tune mode
-    > trough { margin: -3px; }
     > trough > slider { margin: -6px; }
 
     > trough > fill,
@@ -2871,14 +2837,6 @@ scale {
       }
     }
 
-    &:not(.marks-before) {
-      > value.top { margin-bottom: $_marks_size; }
-    }
-
-    &:not(.marks-after) {
-      > value.bottom { margin-top: $_marks_size; }
-    }
-
     > value.left  { margin-right: 9px; }
     > value.right { margin-left: 9px; }
 
@@ -2903,14 +2861,6 @@ scale {
       }
     }
 
-    &:not(.marks-before) {
-      > value.left { margin-right: $_marks_size; }
-    }
-
-    &:not(.marks-after) {
-      > value.right { margin-left: $_marks_size; }
-    }
-
     > value.top    { margin-bottom: 9px; }
     > value.bottom { margin-top: 9px; }
 
@@ -2918,13 +2868,14 @@ scale {
       &.top { margin-left: 3px; }
       &.bottom { margin-right: 3px; }
 
-      indicator { min-width: ($_marks_length - 3px); }
+      indicator { min-height: ($_marks_length - 3px); }
     }
   }
 
   // *WARNING* scale with marks madness following
 
   // FIXME: OSD and selected list rows missing, I don't feel like adding the other 144 assets needed for those...
+  $suffix: if($variant == 'light', '', '-dark');
 
   @each $dir_class, $dir_infix in ('horizontal', 'horz'),
                                   ('vertical', 'vert') {
@@ -2941,7 +2892,7 @@ scale {
               // an asymmetric slider asset is used here, so the margins are uneven, the smaller
               // margin is set on the point side.
               margin: -10px;
-              $_scale_asset: '#{$assets}/#{$asset_prefix}slider-#{$dir_infix}-#{$marks_infix}#{$state_infix}#{$asset_suffix}';
+              $_scale_asset: '#{$assets}/slider-#{$dir_infix}-#{$marks_infix}#{$state_infix}#{$suffix}';
               border-style: none;
               border-radius: 0;
 
@@ -2989,7 +2940,7 @@ scale {
           &.fine-tune > trough > slider {
             @if $dir_class == 'horizontal' {
               // bigger negative margins to make the trough grow here as well
-              margin: -7px;
+              margin: -7px -10px;
 
               @if $marks_infix == 'scale-has-marks-above' { margin-top: -11px; }
 
@@ -2997,7 +2948,7 @@ scale {
             }
 
             @else {
-              margin: -7px;
+              margin: -10px -7px;
 
               @if $marks_infix == 'scale-has-marks-above' { margin-left: -11px; }
 
@@ -3221,21 +3172,18 @@ levelbar {
  * Print dialog *
 *****************/
 window.dialog.print {
-  page-thumbnail {
-    background: white;
-    color: #2e3436;
-    border: 1px solid $borders_color;
-
-    label {
-      color: #2e3436;
-    }
-  }
-
-  .drawing {
+  drawing {
     color: $fg_color;
     background: none;
     border: none;
     padding: 0;
+
+    paper {
+      background: white;
+      color: #2e3436;
+      border: 1px solid $borders_color;
+    }
+
   }
 
   .dialog-action-box { margin: 12px; }
@@ -3363,10 +3311,6 @@ row {
 
     @extend %selected_items;
   }
-}
-
-listview:not(:focus-within) > row:selected {
-  background-color: $backdrop_selected_bg_color;
 }
 
 columnview {
@@ -3690,11 +3634,6 @@ filechooser {
     border-radius: 12px;
     margin: 12px;
 
-    > filelistcell > box { //cells
-      border-spacing: 8px; //label separation
-      margin: 12px;
-    }
-
     &:hover {
       background-color: gtkalpha(currentColor, .04);
     }
@@ -4001,6 +3940,7 @@ video {
     min-height: 64px;
     border-radius: 32px;
   }
+  background: black;
 }
 
 /************
@@ -4334,19 +4274,19 @@ cursor-handle {
                   (':hover','-hover'),
                   (':active','-active') { //no need for insensitive and backdrop
     &.top#{$s}:dir(ltr), &.bottom#{$s}:dir(rtl) {
-      $_url: '#{$assets}/#{$asset_prefix}text-select-start#{$as}#{$asset_suffix}';
+      $_url: '#{$assets}/text-select-start#{$as}#{$asset_suffix}';
       -gtk-icon-source: -gtk-scaled(url('#{$_url}.png'),
                                     url('#{$_url}@2.png'));
     }
 
     &.bottom#{$s}:dir(ltr), &.top#{$s}:dir(rtl) {
-      $_url: '#{$assets}/#{$asset_prefix}text-select-end#{$as}#{$asset_suffix}';
+      $_url: '#{$assets}/text-select-end#{$as}#{$asset_suffix}';
       -gtk-icon-source: -gtk-scaled(url('#{$_url}.png'),
                                     url('#{$_url}@2.png'));
     }
 
     &.insertion-cursor#{$s}:dir(ltr), &.insertion-cursor#{$s}:dir(rtl) {
-      $_url: '#{$assets}/#{$asset_prefix}slider-horz-scale-has-marks-above#{$as}#{$asset_suffix}';
+      $_url: '#{$assets}/slider-horz-scale-has-marks-above#{$as}#{$asset_suffix}';
       -gtk-icon-source: -gtk-scaled(url('#{$_url}.png'),
                                     url('#{$_url}@2.png'));
     }

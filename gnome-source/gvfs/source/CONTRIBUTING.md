@@ -1,6 +1,6 @@
 # Contributing to GVfs
 
-Thank you for your interest in contributing to the GVfs project!
+For more GVfs development resources see https://wiki.gnome.org/Projects/gvfs.
 
 ## Source Repository
 
@@ -8,14 +8,6 @@ GVfs source repository is at https://gitlab.gnome.org/GNOME/gvfs.
 
 ## Code Contribution
 
-See https://handbook.gnome.org/development/change-submission.html for general
-information about GitLab workflow for code contribution. GVfs still uses linear
-GIT history without merge commits, please see general commit guidelines at
-https://handbook.gnome.org/development/commit-messages.html.
-
-## Developer Documentation
-
-For more info about GVfs internals, please check out our
-[Developer Documentation](docs/documentation.md). See also the
-[Debugging Guide](docs/debugging.md) for tips on collecting debug logs,
-testing custom builds, and spawning backends manually.
+See https://wiki.gnome.org/GitLab for general information about GitLab workflow
+for code contribution. GVfs still uses linear GIT history without merge commits,
+please see general commit guidelines at https://wiki.gnome.org/Git/CommitMessages.

@@ -20,7 +20,8 @@
 /**
  * GtkEventControllerFocus:
  *
- * Tracks keyboard focus.
+ * `GtkEventControllerFocus` is an event controller to keep track of
+ * keyboard focus.
  *
  * The event controller offers [signal@Gtk.EventControllerFocus::enter]
  * and [signal@Gtk.EventControllerFocus::leave] signals, as well as
@@ -127,13 +128,13 @@ update_focus (GtkEventController    *controller,
   if (focus->is_focus != is_focus)
     {
       focus->is_focus = is_focus;
-      g_object_notify_by_pspec (G_OBJECT (focus), props[PROP_IS_FOCUS]);
+      g_object_notify (G_OBJECT (focus), "is-focus");
     }
 
   if (focus->contains_focus != contains_focus)
     {
       focus->contains_focus = contains_focus;
-      g_object_notify_by_pspec (G_OBJECT (focus), props[PROP_CONTAINS_FOCUS]);
+      g_object_notify (G_OBJECT (focus), "contains-focus");
     }
   g_object_thaw_notify (G_OBJECT (focus));
 
@@ -186,7 +187,7 @@ gtk_event_controller_focus_class_init (GtkEventControllerFocusClass *klass)
   controller_class->handle_crossing = gtk_event_controller_focus_handle_crossing;
 
   /**
-   * GtkEventControllerFocus:is-focus:
+   * GtkEventControllerFocus:is-focus: (attributes org.gtk.Property.get=gtk_event_controller_focus_is_focus)
    *
    * %TRUE if focus is in the controllers widget itself,
    * as opposed to in a descendent widget.
@@ -200,10 +201,10 @@ gtk_event_controller_focus_class_init (GtkEventControllerFocusClass *klass)
   props[PROP_IS_FOCUS] =
       g_param_spec_boolean ("is-focus", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READABLE);
 
   /**
-   * GtkEventControllerFocus:contains-focus:
+   * GtkEventControllerFocus:contains-focus: (attributes org.gtk.Property.get=gtk_event_controller_focus_contains_focus)
    *
    * %TRUE if focus is contained in the controllers widget.
    *
@@ -217,7 +218,7 @@ gtk_event_controller_focus_class_init (GtkEventControllerFocusClass *klass)
   props[PROP_CONTAINS_FOCUS] =
       g_param_spec_boolean ("contains-focus", NULL, NULL,
                             FALSE,
-                            G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                            G_PARAM_READABLE);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, props);
 
@@ -286,7 +287,7 @@ gtk_event_controller_focus_new (void)
 }
 
 /**
- * gtk_event_controller_focus_contains_focus:
+ * gtk_event_controller_focus_contains_focus: (attributes org.gtk.Method.get_property=contains-focus)
  * @self: a `GtkEventControllerFocus`
  *
  * Returns %TRUE if focus is within @self or one of its children.
@@ -302,7 +303,7 @@ gtk_event_controller_focus_contains_focus (GtkEventControllerFocus *self)
 }
 
 /**
- * gtk_event_controller_focus_is_focus:
+ * gtk_event_controller_focus_is_focus: (attributes org.gtk.Method.get_property=is-focus)
  * @self: a `GtkEventControllerFocus`
  *
  * Returns %TRUE if focus is within @self, but not one of its children.

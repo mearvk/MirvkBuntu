@@ -94,13 +94,8 @@ The "no block for single statements" rule has only four exceptions:
                                               and_another_one,
                                               plus_one);
     }
-
-  /* invalid */
-  if (condition)
-    a_single_statement_with_many_arguments (some_lengthy_argument,
-                                            another_lengthy_argument,
-                                            and_another_one,
-                                            plus_one);
+  else
+    another_single_statement (arg1, arg2);
 ```
 
   2. if the condition is composed of many lines:
@@ -114,13 +109,6 @@ The "no block for single statements" rule has only four exceptions:
     {
       a_single_statement ();
     }
-
-  /* invalid */
-  if (condition1 ||
-      (condition2 && condition3) ||
-      condition4 ||
-      (condition5 && (condition6 || condition7)))
-    a_single_statement ();
 ```
 
   3. Nested if's, in which case the block should be placed on the
@@ -470,12 +458,6 @@ You might also find the git-stripspace utility helpful which acts as a
 filter to remove trailing whitespace as well as initial, final, and
 duplicate blank lines.
 
-### Naming
-
-Keep in mind that identifiers in most languages cannot start with numbers,
-and language bindings often construct identifiers by stripping the prefix,
-so an enum value named `GDK_2BUTTON_PRESS` is problematic.
-
 ### Headers
 
 Headers are special, for GTK, in that they don't have to obey the
@@ -542,7 +524,7 @@ Additionally, public headers should use C++ guards around their declarations:
   G_BEGIN_DECLS
 
   GDK_AVAILABLE_IN_ALL
-  GType         gtk_foo_get_type        (void);
+  GType         gtk_foo_get_type        (void) G_GNUC_CONST;
 
   GDK_AVAILABLE_IN_ALL
   GtkWidget *   gtk_foo_new             (void);

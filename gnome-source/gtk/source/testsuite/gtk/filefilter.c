@@ -90,7 +90,7 @@ static void
 test_mime_type (void)
 {
   GtkFileFilter *filter;
-  char *attrs, *content_type;
+  char *attrs;
   GFileInfo *info;
 
   filter = gtk_file_filter_new ();
@@ -100,21 +100,15 @@ test_mime_type (void)
   info = g_file_info_new ();
 
   g_file_info_set_display_name (info, "abracadabra");
-  content_type = g_content_type_from_mime_type ("text/plain");
-  g_file_info_set_content_type (info, content_type);
-  g_free (content_type);
+  g_file_info_set_content_type (info, "text/plain");
   g_assert_false (gtk_filter_match (GTK_FILTER (filter), info));
 
   g_file_info_set_display_name (info, "dro.png");
-  content_type = g_content_type_from_mime_type ("image/png");
-  g_file_info_set_content_type (info, content_type);
-  g_free (content_type);
+  g_file_info_set_content_type (info, "image/png");
   g_assert_true (gtk_filter_match (GTK_FILTER (filter), info));
 
   g_file_info_set_display_name (info, "dro.PNG");
-  content_type = g_content_type_from_mime_type ("image/png");
-  g_file_info_set_content_type (info, content_type);
-  g_free (content_type);
+  g_file_info_set_content_type (info, "image/png");
   g_assert_true (gtk_filter_match (GTK_FILTER (filter), info));
 
   g_object_unref (info);
@@ -144,11 +138,7 @@ test_buildable (void)
   filter = GTK_FILE_FILTER (gtk_builder_get_object (builder, "filter"));
 
   v1 = gtk_file_filter_to_gvariant (filter);
-  s1 = g_content_type_from_mime_type ("audio/*");
-  s2 = g_strdup_printf ("('Audio Files', [(1, '%s')])", s1);
-  v2 = g_variant_parse (NULL, s2, NULL, NULL, NULL);
-  g_free (s2);
-  g_free (s1);
+  v2 = g_variant_parse (NULL, "('Audio Files', [(1, 'audio/*')])", NULL, NULL, NULL);
 
   s1 = g_variant_print (v1, FALSE);
   s2 = g_variant_print (v2, FALSE);
@@ -186,11 +176,7 @@ test_builder (void)
   filter = GTK_FILE_FILTER (gtk_builder_get_object (builder, "filter"));
 
   v1 = gtk_file_filter_to_gvariant (filter);
-  s1 = g_content_type_from_mime_type ("audio/*");
-  s2 = g_strdup_printf ("('Audio Files', [(0, '*.x'), (0, '*.y'), (1, '%s'), (0, '*.[bB][lL][aA][hH]')])", s1);
-  v2 = g_variant_parse (NULL, s2, NULL, NULL, NULL);
-  g_free (s2);
-  g_free (s1);
+  v2 = g_variant_parse (NULL, "('Audio Files', [(0, '*.x'), (0, '*.y'), (1, 'audio/*'), (0, '*.[bB][lL][aA][hH]')])", NULL, NULL, NULL);
 
   s1 = g_variant_print (v1, FALSE);
   s2 = g_variant_print (v2, FALSE);
@@ -233,13 +219,6 @@ test_variant_no_name (void)
   g_object_unref (filter);
 
   filter = gtk_file_filter_new ();
-  gtk_file_filter_add_mime_types (filter,
-                                  (const char *[3]){"image/png", "image/jpeg", NULL});
-  variant = gtk_file_filter_to_gvariant (filter);
-  g_variant_unref (variant);
-  g_object_unref (filter);
-
-  filter = gtk_file_filter_new ();
   gtk_file_filter_add_suffix (filter, "txt");
   variant = gtk_file_filter_to_gvariant (filter);
   g_variant_unref (variant);
@@ -253,18 +232,14 @@ test_variant_no_name (void)
   g_object_unref (filter);
 
   filter = gtk_file_filter_new ();
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gtk_file_filter_add_pixbuf_formats (filter);
-G_GNUC_END_IGNORE_DEPRECATIONS
   variant = gtk_file_filter_to_gvariant (filter);
   g_variant_unref (variant);
   g_object_unref (filter);
 
   filter = gtk_file_filter_new ();
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gtk_file_filter_add_pixbuf_formats (filter);
   gtk_file_filter_add_pixbuf_formats (filter);
-G_GNUC_END_IGNORE_DEPRECATIONS
   variant = gtk_file_filter_to_gvariant (filter);
   g_variant_unref (variant);
   g_object_unref (filter);
@@ -289,9 +264,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
   filter = gtk_file_filter_new ();
   gtk_file_filter_add_mime_type (filter, "image/png");
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gtk_file_filter_add_pixbuf_formats (filter);
-G_GNUC_END_IGNORE_DEPRECATIONS
   gtk_file_filter_add_suffix (filter, "txt");
   gtk_file_filter_add_pattern (filter, "*.*");
   variant = gtk_file_filter_to_gvariant (filter);
@@ -299,9 +272,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   g_object_unref (filter);
 
   filter = gtk_file_filter_new ();
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gtk_file_filter_add_pixbuf_formats (filter);
-G_GNUC_END_IGNORE_DEPRECATIONS
   gtk_file_filter_add_suffix (filter, "txt");
   gtk_file_filter_add_pattern (filter, "*.*");
   gtk_file_filter_add_mime_type (filter, "image/png");
@@ -313,9 +284,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   gtk_file_filter_add_suffix (filter, "txt");
   gtk_file_filter_add_pattern (filter, "*.*");
   gtk_file_filter_add_mime_type (filter, "image/png");
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gtk_file_filter_add_pixbuf_formats (filter);
-G_GNUC_END_IGNORE_DEPRECATIONS
   variant = gtk_file_filter_to_gvariant (filter);
   g_variant_unref (variant);
   g_object_unref (filter);

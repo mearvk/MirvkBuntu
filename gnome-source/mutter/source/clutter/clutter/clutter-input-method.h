@@ -50,9 +50,6 @@ struct _ClutterInputMethodClass
 
   gboolean (* filter_key_event) (ClutterInputMethod *im,
                                  const ClutterEvent *key);
-
-  void (* set_handled_actions) (ClutterInputMethod      *im,
-                                ClutterInputActionFlags  actions);
 };
 
 CLUTTER_EXPORT
@@ -70,15 +67,6 @@ void clutter_input_method_delete_surrounding (ClutterInputMethod *im,
                                               guint               len);
 CLUTTER_EXPORT
 void clutter_input_method_request_surrounding (ClutterInputMethod *im);
-
-CLUTTER_EXPORT
-void clutter_input_method_set_preedit_text_with_attrs (ClutterInputMethod      *im,
-                                                       const gchar             *preedit,
-                                                       unsigned int             cursor,
-                                                       unsigned int             anchor,
-                                                       ClutterPreeditResetMode  mode,
-                                                       ClutterPreeditAttribute *preedit_hints,
-                                                       unsigned int             n_preedit_hints);
 
 CLUTTER_EXPORT
 void clutter_input_method_set_preedit_text (ClutterInputMethod      *im,
@@ -102,7 +90,3 @@ void clutter_input_method_forward_key (ClutterInputMethod *im,
                                        uint32_t            state,
                                        uint64_t            time_,
                                        gboolean            press);
-
-CLUTTER_EXPORT
-void clutter_input_method_trigger_action (ClutterInputMethod *im,
-                                          ClutterInputAction  action);

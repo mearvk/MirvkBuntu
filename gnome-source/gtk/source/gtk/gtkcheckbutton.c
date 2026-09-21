@@ -36,17 +36,13 @@
 #include "gtkshortcuttrigger.h"
 #include "gtkcssnodeprivate.h"
 #include "gtkwidgetprivate.h"
-#include <gdk/gdkkeysyms.h>
 
 /**
  * GtkCheckButton:
  *
- * Places a label next to an indicator.
+ * A `GtkCheckButton` places a label next to an indicator.
  *
- * <picture>
- *   <source srcset="check-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="Example GtkCheckButtons" src="check-button.png">
- * </picture>
+ * ![Example GtkCheckButtons](check-button.png)
  *
  * A `GtkCheckButton` is created by calling either [ctor@Gtk.CheckButton.new]
  * or [ctor@Gtk.CheckButton.new_with_label].
@@ -75,10 +71,7 @@
  * Grouped check buttons use a different indicator, and are commonly referred
  * to as *radio buttons*.
  *
- * <picture>
- *   <source srcset="radio-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="Example GtkRadioButtons" src="radio-button.png">
- * </picture>
+ * ![Example GtkCheckButtons](radio-button.png)
  *
  * To add a `GtkCheckButton` to a group, use [method@Gtk.CheckButton.set_group].
  *
@@ -87,16 +80,10 @@
  * `GAction` with a target for each button. Using the `toggled` signals to keep
  * track of the group changes and state is discouraged.
  *
- * # Shortcuts and Gestures
- *
- * `GtkCheckButton` supports the following keyboard shortcuts:
- *
- * - <kbd>␣</kbd> or <kbd>Enter</kbd> activates the button.
- *
  * # CSS nodes
  *
  * ```
- * checkbutton[.text-button][.grouped]
+ * checkbutton[.text-button]
  * ├── check
  * ╰── [label]
  * ```
@@ -109,7 +96,7 @@
  *
  * # Accessibility
  *
- * `GtkCheckButton` uses the [enum@Gtk.AccessibleRole.checkbox] role.
+ * `GtkCheckButton` uses the %GTK_ACCESSIBLE_ROLE_CHECKBOX role.
  */
 
 typedef struct {
@@ -135,10 +122,11 @@ enum {
   PROP_INCONSISTENT,
   PROP_USE_UNDERLINE,
   PROP_CHILD,
-  /* GtkActionable */
+
+  /* actionable properties */
   PROP_ACTION_NAME,
   PROP_ACTION_TARGET,
-  LAST_PROP
+  LAST_PROP = PROP_ACTION_NAME
 };
 
 enum {
@@ -177,59 +165,16 @@ gtk_check_button_dispose (GObject *object)
 }
 
 static void
-force_set_accessible_role (GtkCheckButton *button, GtkAccessibleRole role)
-{
-  gboolean was_realized;
-  GtkWidget *widget = GTK_WIDGET (button);
-  GtkATContext *context = gtk_accessible_get_at_context (GTK_ACCESSIBLE (widget));
-  if (context)
-    was_realized = gtk_at_context_is_realized (context);
-  else
-    was_realized = FALSE;
-  if (was_realized)
-    gtk_at_context_unrealize (context);
-  gtk_widget_set_accessible_role (widget, role);
-  if (was_realized)
-    gtk_at_context_realize (context);
-  if (context)
-    g_object_unref (context);
-}
-
-static void
-update_button_role (GtkCheckButton *self,
-                    GtkButtonRole   role)
-{
-  GtkCheckButtonPrivate *priv = gtk_check_button_get_instance_private (self);
-
-  if (priv->indicator_widget == NULL)
-    return;
-
-  if (role == GTK_BUTTON_ROLE_RADIO)
-    {
-      gtk_css_node_set_name (gtk_widget_get_css_node (priv->indicator_widget),
-                             g_quark_from_static_string ("radio"));
-
-      gtk_widget_add_css_class (GTK_WIDGET (self), "grouped");
-
-      force_set_accessible_role (self, GTK_ACCESSIBLE_ROLE_RADIO);
-    }
-  else
-    {
-      gtk_css_node_set_name (gtk_widget_get_css_node (priv->indicator_widget),
-                             g_quark_from_static_string ("check"));
-
-      gtk_widget_remove_css_class (GTK_WIDGET (self), "grouped");
-
-      force_set_accessible_role (self, GTK_ACCESSIBLE_ROLE_CHECKBOX);
-    }
-}
-
-static void
 button_role_changed (GtkCheckButton *self)
 {
   GtkCheckButtonPrivate *priv = gtk_check_button_get_instance_private (self);
 
-  update_button_role (self, gtk_action_helper_get_role (priv->action_helper));
+  if (gtk_action_helper_get_role (priv->action_helper) == GTK_BUTTON_ROLE_RADIO)
+    gtk_css_node_set_name (gtk_widget_get_css_node (priv->indicator_widget),
+                           g_quark_from_static_string("radio"));
+  else
+    gtk_css_node_set_name (gtk_widget_get_css_node (priv->indicator_widget),
+                           g_quark_from_static_string("check"));
 }
 
 static void
@@ -425,30 +370,6 @@ update_accessible_state (GtkCheckButton *check_button)
                                -1);
 }
 
-static void
-update_accessible_mnemonic (GtkCheckButton *check_button)
-{
-  GtkCheckButtonPrivate *priv = gtk_check_button_get_instance_private (check_button);
-
-  if (priv->child_type == LABEL_CHILD && priv->child != NULL && priv->use_underline)
-    {
-      guint keyval = gtk_label_get_mnemonic_keyval (GTK_LABEL (priv->child));
-      if (keyval != GDK_KEY_VoidSymbol)
-        {
-          const char *name = gdk_keyval_name (gdk_keyval_to_upper (keyval));
-          char *shortcut = g_strdup_printf ("Alt+%s", name);
-          gtk_accessible_update_property (GTK_ACCESSIBLE (check_button),
-                                          GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS, shortcut,
-                                          -1);
-          g_free (shortcut);
-          return;
-        }
-    }
-
-  /* No mnemonic - clear the property */
-  gtk_accessible_reset_property (GTK_ACCESSIBLE (check_button),
-                                 GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS);
-}
 
 static GtkCheckButton *
 get_group_next (GtkCheckButton *self)
@@ -630,10 +551,16 @@ gtk_check_button_real_activate (GtkCheckButton *self)
 static void
 gtk_check_button_class_init (GtkCheckButtonClass *class)
 {
+  const guint activate_keyvals[] = {
+    GDK_KEY_space,
+    GDK_KEY_KP_Space,
+    GDK_KEY_Return,
+    GDK_KEY_ISO_Enter,
+    GDK_KEY_KP_Enter
+  };
   GObjectClass *object_class = G_OBJECT_CLASS (class);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
-  GtkShortcutTrigger *trigger;
-  GtkShortcut *activate_shortcut;
+  GtkShortcutAction *activate_action;
 
   object_class->dispose = gtk_check_button_dispose;
   object_class->set_property = gtk_check_button_set_property;
@@ -645,7 +572,7 @@ gtk_check_button_class_init (GtkCheckButtonClass *class)
   class->activate = gtk_check_button_real_activate;
 
   /**
-   * GtkCheckButton:active:
+   * GtkCheckButton:active: (attributes org.gtk.Property.get=gtk_check_button_get_active org.gtk.Property.set=gtk_check_button_set_active)
    *
    * If the check button is active.
    *
@@ -655,30 +582,30 @@ gtk_check_button_class_init (GtkCheckButtonClass *class)
   props[PROP_ACTIVE] =
       g_param_spec_boolean ("active", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkCheckButton:group:
+   * GtkCheckButton:group: (attributes org.gtk.Property.set=gtk_check_button_set_group)
    *
    * The check button whose group this widget belongs to.
    */
   props[PROP_GROUP] =
       g_param_spec_object ("group", NULL, NULL,
                            GTK_TYPE_CHECK_BUTTON,
-                           G_PARAM_WRITABLE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_WRITABLE);
 
   /**
-   * GtkCheckButton:label:
+   * GtkCheckButton:label: (attributes org.gtk.Property.get=gtk_check_button_get_label org.gtk.Property.set=gtk_check_button_set_label)
    *
    * Text of the label inside the check button, if it contains a label widget.
    */
   props[PROP_LABEL] =
     g_param_spec_string ("label", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkCheckButton:inconsistent:
+   * GtkCheckButton:inconsistent: (attributes org.gtk.Property.get=gtk_check_button_get_inconsistent org.gtk.Property.set=gtk_check_button_set_inconsistent)
    *
    * If the check button is in an “in between” state.
    *
@@ -688,10 +615,10 @@ gtk_check_button_class_init (GtkCheckButtonClass *class)
   props[PROP_INCONSISTENT] =
       g_param_spec_boolean ("inconsistent", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkCheckButton:use-underline:
+   * GtkCheckButton:use-underline: (attributes org.gtk.Property.get=gtk_check_button_get_use_underline org.gtk.Property.set=gtk_check_button_set_use_underline)
    *
    * If set, an underline in the text indicates that the following
    * character is to be used as mnemonic.
@@ -699,10 +626,10 @@ gtk_check_button_class_init (GtkCheckButtonClass *class)
   props[PROP_USE_UNDERLINE] =
       g_param_spec_boolean ("use-underline", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkCheckButton:child:
+   * GtkCheckButton:child: (attributes org.gtk.Property.get=gtk_check_button_get_child org.gtk.Property.set=gtk_check_button_set_child)
    *
    * The child widget.
    *
@@ -711,14 +638,12 @@ gtk_check_button_class_init (GtkCheckButtonClass *class)
   props[PROP_CHILD] =
       g_param_spec_object ("child", NULL, NULL,
                            GTK_TYPE_WIDGET,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  props[PROP_ACTION_NAME] = g_param_spec_override ("action-name",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-name"));
-  props[PROP_ACTION_TARGET] = g_param_spec_override ("action-target",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-target"));
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
+
+  g_object_class_override_property (object_class, PROP_ACTION_NAME, "action-name");
+  g_object_class_override_property (object_class, PROP_ACTION_TARGET, "action-target");
 
   /**
    * GtkCheckButton::toggled:
@@ -763,11 +688,16 @@ gtk_check_button_class_init (GtkCheckButtonClass *class)
 
   gtk_widget_class_set_activate_signal (widget_class, signals[ACTIVATE]);
 
-  trigger = gtk_alternative_trigger_new (gtk_shortcut_trigger_create_with_aliases (GDK_KEY_Return, 0),
-                                         gtk_shortcut_trigger_create_with_aliases (GDK_KEY_space, 0));
-  activate_shortcut = gtk_shortcut_new (trigger, gtk_signal_action_new ("activate"));
-  gtk_widget_class_add_shortcut (widget_class, activate_shortcut);
-  g_object_unref (activate_shortcut);
+  activate_action = gtk_signal_action_new ("activate");
+  for (guint i = 0; i < G_N_ELEMENTS (activate_keyvals); i++)
+    {
+      GtkShortcut *activate_shortcut = gtk_shortcut_new (gtk_keyval_trigger_new (activate_keyvals[i], 0),
+                                                         g_object_ref (activate_action));
+
+      gtk_widget_class_add_shortcut (widget_class, activate_shortcut);
+      g_object_unref (activate_shortcut);
+    }
+  g_object_unref (activate_action);
 
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BOX_LAYOUT);
   gtk_widget_class_set_css_name (widget_class, I_("checkbutton"));
@@ -846,7 +776,7 @@ gtk_check_button_new_with_mnemonic (const char *label)
 }
 
 /**
- * gtk_check_button_set_inconsistent:
+ * gtk_check_button_set_inconsistent: (attributes org.gtk.Method.set_property=inconsistent)
  * @check_button: a `GtkCheckButton`
  * @inconsistent: %TRUE if state is inconsistent
  *
@@ -886,7 +816,7 @@ gtk_check_button_set_inconsistent (GtkCheckButton *check_button,
 }
 
 /**
- * gtk_check_button_get_inconsistent:
+ * gtk_check_button_get_inconsistent: (attributes org.gtk.Method.get_property=inconsistent)
  * @check_button: a `GtkCheckButton`
  *
  * Returns whether the check button is in an inconsistent state.
@@ -904,7 +834,7 @@ gtk_check_button_get_inconsistent (GtkCheckButton *check_button)
 }
 
 /**
- * gtk_check_button_get_active:
+ * gtk_check_button_get_active: (attributes org.gtk.Method.get_property=active)
  * @self: a `GtkCheckButton`
  *
  * Returns whether the check button is active.
@@ -922,7 +852,7 @@ gtk_check_button_get_active (GtkCheckButton *self)
 }
 
 /**
- * gtk_check_button_set_active:
+ * gtk_check_button_set_active: (attributes org.gtk.Method.set_property=active)
  * @self: a `GtkCheckButton`
  * @setting: the new value to set
  *
@@ -974,7 +904,7 @@ gtk_check_button_set_active (GtkCheckButton *self,
 }
 
 /**
- * gtk_check_button_get_label:
+ * gtk_check_button_get_label: (attributes org.gtk.Method.get_property=label)
  * @self: a `GtkCheckButton`
  *
  * Returns the label of the check button or `NULL` if [property@CheckButton:child] is set.
@@ -996,7 +926,7 @@ gtk_check_button_get_label (GtkCheckButton *self)
 }
 
 /**
- * gtk_check_button_set_label:
+ * gtk_check_button_set_label: (attributes org.gtk.Method.set_property=label)
  * @self: a `GtkCheckButton`
  * @label: (nullable): The text shown next to the indicator, or %NULL
  *   to show no text
@@ -1039,23 +969,10 @@ gtk_check_button_set_label (GtkCheckButton *self,
       gtk_label_set_label (GTK_LABEL (priv->child), label);
     }
 
-  /* Use the processed text from the label widget for accessibility,
-   * which strips mnemonics when use_underline is enabled */
-  if (priv->child_type == LABEL_CHILD && priv->child != NULL)
-    {
-      const char *text = gtk_label_get_text (GTK_LABEL (priv->child));
-      gtk_accessible_update_property (GTK_ACCESSIBLE (self),
-                                      GTK_ACCESSIBLE_PROPERTY_LABEL, text,
-                                      -1);
-    }
-  else
-    {
-      gtk_accessible_update_property (GTK_ACCESSIBLE (self),
-                                      GTK_ACCESSIBLE_PROPERTY_LABEL, label,
-                                      -1);
-    }
 
-  update_accessible_mnemonic (self);
+  gtk_accessible_update_property (GTK_ACCESSIBLE (self),
+                                  GTK_ACCESSIBLE_PROPERTY_LABEL, label,
+                                  -1);
 
   g_object_notify_by_pspec (G_OBJECT (self), props[PROP_LABEL]);
 
@@ -1063,7 +980,7 @@ gtk_check_button_set_label (GtkCheckButton *self,
 }
 
 /**
- * gtk_check_button_set_group:
+ * gtk_check_button_set_group: (attributes org.gtk.Method.set_property=group)
  * @self: a `GtkCheckButton`
  * @group: (nullable) (transfer none): another `GtkCheckButton` to
  *   form a group with
@@ -1110,9 +1027,9 @@ gtk_check_button_set_group (GtkCheckButton *self,
       priv->group_next = NULL;
       priv->group_prev = NULL;
 
-      update_button_role (self, GTK_BUTTON_ROLE_CHECK);
-
-      force_set_accessible_role (self, GTK_ACCESSIBLE_ROLE_CHECKBOX);
+      if (priv->indicator_widget)
+        gtk_css_node_set_name (gtk_widget_get_css_node (priv->indicator_widget),
+                               g_quark_from_static_string("check"));
 
       return;
     }
@@ -1134,17 +1051,18 @@ gtk_check_button_set_group (GtkCheckButton *self,
   group_priv->group_prev = self;
   priv->group_next = group;
 
-  update_button_role (self, GTK_BUTTON_ROLE_RADIO);
-  update_button_role (group, GTK_BUTTON_ROLE_RADIO);
+  if (priv->indicator_widget)
+    gtk_css_node_set_name (gtk_widget_get_css_node (priv->indicator_widget),
+                           g_quark_from_static_string("radio"));
 
-  force_set_accessible_role (self, GTK_ACCESSIBLE_ROLE_RADIO);
-  force_set_accessible_role (group, GTK_ACCESSIBLE_ROLE_RADIO);
+  gtk_css_node_set_name (gtk_widget_get_css_node (group_priv->indicator_widget),
+                         g_quark_from_static_string("radio"));
 
   g_object_notify_by_pspec (G_OBJECT (self), props[PROP_GROUP]);
 }
 
 /**
- * gtk_check_button_get_use_underline:
+ * gtk_check_button_get_use_underline: (attributes org.gtk.Method.get_property=use-underline)
  * @self: a `GtkCheckButton`
  *
  * Returns whether underlines in the label indicate mnemonics.
@@ -1164,7 +1082,7 @@ gtk_check_button_get_use_underline (GtkCheckButton *self)
 }
 
 /**
- * gtk_check_button_set_use_underline:
+ * gtk_check_button_set_use_underline: (attributes org.gtk.Method.set_property=use-underline)
  * @self: a `GtkCheckButton`
  * @setting: the new value to set
  *
@@ -1189,22 +1107,13 @@ gtk_check_button_set_use_underline (GtkCheckButton *self,
 
   priv->use_underline = setting;
   if (priv->child_type == LABEL_CHILD && priv->child != NULL)
-    {
-      gtk_label_set_use_underline (GTK_LABEL (priv->child), priv->use_underline);
-
-      const char *text = gtk_label_get_text (GTK_LABEL (priv->child));
-      gtk_accessible_update_property (GTK_ACCESSIBLE (self),
-                                      GTK_ACCESSIBLE_PROPERTY_LABEL, text,
-                                      -1);
-    }
-
-  update_accessible_mnemonic (self);
+    gtk_label_set_use_underline (GTK_LABEL (priv->child), priv->use_underline);
 
   g_object_notify_by_pspec (G_OBJECT (self), props[PROP_USE_UNDERLINE]);
 }
 
 /**
- * gtk_check_button_set_child:
+ * gtk_check_button_set_child: (attributes org.gtk.Method.set_property=child)
  * @button: a `GtkCheckButton`
  * @child: (nullable): the child widget
  *
@@ -1236,15 +1145,13 @@ gtk_check_button_set_child (GtkCheckButton *button,
 
   gtk_check_button_real_set_child (button, child, WIDGET_CHILD);
 
-  update_accessible_mnemonic (button);
-
   g_object_notify_by_pspec (G_OBJECT (button), props[PROP_CHILD]);
 
   g_object_thaw_notify (G_OBJECT (button));
 }
 
 /**
- * gtk_check_button_get_child:
+ * gtk_check_button_get_child: (attributes org.gtk.Method.get_property=child)
  * @button: a `GtkCheckButton`
  *
  * Gets the child widget of @button or `NULL` if [property@CheckButton:label] is set.

@@ -37,10 +37,10 @@ CLUTTER_EXPORT
 G_DECLARE_FINAL_TYPE (ClutterGrab, clutter_grab, CLUTTER, GRAB, GObject)
 
 CLUTTER_EXPORT
-void clutter_grab_activate (ClutterGrab *grab);
+void clutter_grab_dismiss (ClutterGrab *grab);
 
 CLUTTER_EXPORT
-void clutter_grab_dismiss (ClutterGrab *grab);
+ClutterGrabState clutter_grab_get_seat_state (ClutterGrab *grab);
 
 CLUTTER_EXPORT
 gboolean clutter_grab_is_revoked (ClutterGrab *grab);

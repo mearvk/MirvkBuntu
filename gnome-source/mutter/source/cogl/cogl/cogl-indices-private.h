@@ -41,10 +41,15 @@ struct _CoglIndices
   GObject parent_instance;
 
   CoglIndexBuffer *buffer;
+  size_t offset;
 
   CoglIndicesType type;
 
+  int immutable_ref;
 };
 
-size_t
-cogl_indices_type_get_size (CoglIndicesType type);
+CoglIndices *
+_cogl_indices_immutable_ref (CoglIndices *indices);
+
+void
+_cogl_indices_immutable_unref (CoglIndices *indices);

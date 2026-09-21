@@ -29,7 +29,8 @@
 /**
  * GtkWidgetPaintable:
  *
- * A `GdkPaintable` that displays the contents of a widget.
+ * `GtkWidgetPaintable` is a `GdkPaintable` that displays the contents
+ * of a widget.
  *
  * `GtkWidgetPaintable` will also take care of the widget not being in a
  * state where it can be drawn (like when it isn't shown) and just draw
@@ -199,7 +200,11 @@ gtk_widget_paintable_unset_widget (GtkWidgetPaintable *self)
   self->widget = NULL;
 
   g_clear_object (&self->pending_image);
-  g_clear_handle_id (&self->pending_update_cb, g_source_remove);
+  if (self->pending_update_cb)
+    {
+      g_source_remove (self->pending_update_cb);
+      self->pending_update_cb = 0;
+    }
 }
 
 static void
@@ -233,14 +238,14 @@ gtk_widget_paintable_class_init (GtkWidgetPaintableClass *klass)
   gobject_class->finalize = gtk_widget_paintable_finalize;
 
   /**
-   * GtkWidgetPaintable:widget:
+   * GtkWidgetPaintable:widget: (attributes org.gtk.Property.get=gtk_widget_paintable_get_widget org.gtk.Property.set=gtk_widget_paintable_set_widget)
    *
    * The observed widget or %NULL if none.
    */
   properties[PROP_WIDGET] =
     g_param_spec_object ("widget", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -287,7 +292,7 @@ gtk_widget_paintable_snapshot_widget (GtkWidgetPaintable *self)
 }
 
 /**
- * gtk_widget_paintable_get_widget:
+ * gtk_widget_paintable_get_widget: (attributes org.gtk.Method.get_property=widget)
  * @self: a `GtkWidgetPaintable`
  *
  * Returns the widget that is observed or %NULL if none.
@@ -303,7 +308,7 @@ gtk_widget_paintable_get_widget (GtkWidgetPaintable *self)
 }
 
 /**
- * gtk_widget_paintable_set_widget:
+ * gtk_widget_paintable_set_widget: (attributes org.gtk.Method.set_property=widget)
  * @self: a `GtkWidgetPaintable`
  * @widget: (nullable): the widget to observe
  *

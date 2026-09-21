@@ -37,11 +37,10 @@
 
 #include "cogl/cogl-util.h"
 #include "cogl/cogl-context-private.h"
-#include "cogl/cogl-context-egl-private.h"
 #include "cogl/cogl-pipeline-private.h"
 #include "cogl/cogl-offscreen.h"
-#include "cogl/driver/gl/cogl-driver-gl-private.h"
-#include "cogl/driver/gl/cogl-pipeline-gl-private.h"
+#include "cogl/driver/gl/cogl-util-gl-private.h"
+#include "cogl/driver/gl/cogl-pipeline-opengl-private.h"
 
 #include "cogl/cogl-context-private.h"
 #include "cogl/cogl-pipeline-cache.h"
@@ -51,6 +50,8 @@
 #include "cogl/driver/gl/cogl-pipeline-fragend-glsl-private.h"
 #include "cogl/driver/gl/cogl-pipeline-vertend-glsl-private.h"
 #include "cogl/driver/gl/cogl-pipeline-progend-glsl-private.h"
+#include "deprecated/cogl-program-private.h"
+#include "deprecated/cogl-shader-private.h"
 
 /* These are used to generalise updating some uniforms that are
    required when building for drivers missing some fixed function
@@ -82,6 +83,8 @@ static BuiltinUniformData builtin_uniforms[] =
       COGL_PIPELINE_STATE_ALPHA_FUNC_REFERENCE },
   };
 
+const CoglPipelineProgend _cogl_pipeline_glsl_progend;
+
 typedef struct _UnitState
 {
   unsigned int dirty_combine_constant:1;
@@ -95,6 +98,10 @@ typedef struct _UnitState
 typedef struct
 {
   unsigned int ref_count;
+
+  /* Age that the user program had last time we generated a GL
+     program. If it's different then we need to relink the program */
+  unsigned int user_program_age;
 
   GLuint program;
 
@@ -116,10 +123,6 @@ typedef struct
      location. We are careful only to allocated this array if a custom
      uniform is actually set */
   GArray *uniform_locations;
-
-  /* Stores the updated uniform values only for debugging purposes.
-   * key: uniform_name from CoglContext, value: boxed value  */
-  GHashTable *uniform_values;
 
   /* Array of attribute locations. */
   GArray *attribute_locations;
@@ -185,8 +188,8 @@ _cogl_pipeline_progend_glsl_get_attrib_location (CoglPipeline *pipeline,
 {
   CoglPipelineProgramState *program_state = get_program_state (pipeline);
   int *locations;
-  CoglContext *ctx = pipeline->context;
-  CoglDriver *driver = cogl_context_get_driver (ctx);
+
+  _COGL_GET_CONTEXT (ctx, -1);
 
   g_return_val_if_fail (program_state != NULL, -1);
   g_return_val_if_fail (program_state->program != 0, -1);
@@ -209,14 +212,14 @@ _cogl_pipeline_progend_glsl_get_attrib_location (CoglPipeline *pipeline,
   if (locations[name_index] == ATTRIBUTE_LOCATION_UNKNOWN)
     {
       CoglAttributeNameState *name_state =
-        g_array_index (cogl_context_get_attribute_name_index_map (ctx),
+        g_array_index (ctx->attribute_name_index_map,
                        CoglAttributeNameState *, name_index);
 
       g_return_val_if_fail (name_state != NULL, 0);
 
-      GE_RET (locations[name_index],
-              driver, glGetAttribLocation (program_state->program,
-                                           name_state->name));
+      GE_RET( locations[name_index],
+              ctx, glGetAttribLocation (program_state->program,
+                                        name_state->name) );
     }
 
   return locations[name_index];
@@ -241,13 +244,6 @@ clear_flushed_matrix_stacks (CoglPipelineProgramState *program_state)
   _cogl_matrix_entry_cache_init (&program_state->modelview_cache);
 }
 
-static void
-_cogl_boxed_value_free (CoglBoxedValue *bv)
-{
-  _cogl_boxed_value_destroy (bv);
-  g_free (bv);
-}
-
 static CoglPipelineProgramState *
 program_state_new (int n_layers,
                    CoglPipelineCacheEntry *cache_entry)
@@ -260,9 +256,6 @@ program_state_new (int n_layers,
   program_state->unit_state = g_new (UnitState, n_layers);
   program_state->uniform_locations = NULL;
   program_state->attribute_locations = NULL;
-  program_state->uniform_values =
-    g_hash_table_new_full (NULL, NULL, NULL,
-                           (GDestroyNotify) _cogl_boxed_value_free);
   program_state->cache_entry = cache_entry;
   _cogl_matrix_entry_cache_init (&program_state->modelview_cache);
   _cogl_matrix_entry_cache_init (&program_state->projection_cache);
@@ -275,7 +268,8 @@ destroy_program_state (void *user_data)
 {
   CoglPipelineProgramStateCache *cache = user_data;
   CoglPipelineProgramState *program_state = cache->program_state;
-  CoglContext *ctx = cache->instance->context;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   /* If the program state was last used for this pipeline then clear
      it so that if same address gets used again for a new pipeline
@@ -285,7 +279,6 @@ destroy_program_state (void *user_data)
     program_state->last_used_for_pipeline = NULL;
 
   if (program_state->cache_entry &&
-      program_state->cache_entry->pipeline &&
       program_state->cache_entry->pipeline != cache->instance)
     program_state->cache_entry->usage_count--;
 
@@ -297,18 +290,12 @@ destroy_program_state (void *user_data)
       _cogl_matrix_entry_cache_destroy (&program_state->modelview_cache);
 
       if (program_state->program)
-        {
-          CoglDriver *driver = cogl_context_get_driver (ctx);
-
-          GE (driver, glDeleteProgram (program_state->program));
-        }
+        GE( ctx, glDeleteProgram (program_state->program) );
 
       g_free (program_state->unit_state);
 
       if (program_state->uniform_locations)
         g_array_free (program_state->uniform_locations, TRUE);
-
-      g_hash_table_destroy (program_state->uniform_values);
 
       g_free (program_state);
     }
@@ -351,15 +338,15 @@ dirty_program_state (CoglPipeline *pipeline)
 }
 
 static void
-link_program (CoglContext *ctx,
-              GLint        gl_program)
+link_program (GLint gl_program)
 {
-  CoglDriver *driver = cogl_context_get_driver (ctx);
   GLint link_status;
 
-  GE (driver, glLinkProgram (gl_program));
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
-  GE (driver, glGetProgramiv (gl_program, GL_LINK_STATUS, &link_status));
+  GE( ctx, glLinkProgram (gl_program) );
+
+  GE( ctx, glGetProgramiv (gl_program, GL_LINK_STATUS, &link_status) );
 
   if (!link_status)
     {
@@ -367,12 +354,12 @@ link_program (CoglContext *ctx,
       GLsizei out_log_length;
       char *log;
 
-      GE (driver, glGetProgramiv (gl_program, GL_INFO_LOG_LENGTH, &log_length));
+      GE( ctx, glGetProgramiv (gl_program, GL_INFO_LOG_LENGTH, &log_length) );
 
       log = g_malloc (log_length);
 
-      GE (driver, glGetProgramInfoLog (gl_program, log_length,
-                                       &out_log_length, log));
+      GE( ctx, glGetProgramInfoLog (gl_program, log_length,
+                                    &out_log_length, log) );
 
       g_warning ("Failed to link GLSL program:\n%.*s\n",
                  log_length, log);
@@ -398,45 +385,43 @@ get_uniform_cb (CoglPipeline *pipeline,
   CoglPipelineProgramState *program_state = state->program_state;
   UnitState *unit_state = &program_state->unit_state[state->unit];
   GLint uniform_location;
-  CoglContext *ctx = pipeline->context;
-  CoglContextEGL *context_egl = COGL_CONTEXT_EGL (ctx);
-  CoglDriver *driver = cogl_context_get_driver (ctx);
-  GString *source_buffer = cogl_context_egl_get_codegen_source_buffer (context_egl);
+
+  _COGL_GET_CONTEXT (ctx, FALSE);
 
   /* We can reuse the source buffer to create the uniform name because
      the program has now been linked */
-  g_string_set_size (source_buffer, 0);
-  g_string_append_printf (source_buffer,
+  g_string_set_size (ctx->codegen_source_buffer, 0);
+  g_string_append_printf (ctx->codegen_source_buffer,
                           "cogl_sampler%i", layer_index);
 
-  GE_RET (uniform_location,
-          driver, glGetUniformLocation (state->gl_program,
-                                        source_buffer->str));
+  GE_RET( uniform_location,
+          ctx, glGetUniformLocation (state->gl_program,
+                                     ctx->codegen_source_buffer->str) );
 
   /* We can set the uniform immediately because the samplers are the
      unit index not the texture object number so it will never
      change. Unfortunately GL won't let us use a constant instead of a
      uniform */
   if (uniform_location != -1)
-    GE (driver, glUniform1i (uniform_location, state->unit));
+    GE( ctx, glUniform1i (uniform_location, state->unit) );
 
-  g_string_set_size (source_buffer, 0);
-  g_string_append_printf (source_buffer,
+  g_string_set_size (ctx->codegen_source_buffer, 0);
+  g_string_append_printf (ctx->codegen_source_buffer,
                           "_cogl_layer_constant_%i", layer_index);
 
-  GE_RET (uniform_location,
-          driver, glGetUniformLocation (state->gl_program,
-                                        source_buffer->str));
+  GE_RET( uniform_location,
+          ctx, glGetUniformLocation (state->gl_program,
+                                     ctx->codegen_source_buffer->str) );
 
   unit_state->combine_constant_uniform = uniform_location;
 
-  g_string_set_size (source_buffer, 0);
-  g_string_append_printf (source_buffer,
+  g_string_set_size (ctx->codegen_source_buffer, 0);
+  g_string_append_printf (ctx->codegen_source_buffer,
                           "cogl_texture_matrix[%i]", layer_index);
 
-  GE_RET (uniform_location,
-          driver, glGetUniformLocation (state->gl_program,
-                                        source_buffer->str));
+  GE_RET( uniform_location,
+          ctx, glGetUniformLocation (state->gl_program,
+                                     ctx->codegen_source_buffer->str) );
 
   unit_state->texture_matrix_uniform = uniform_location;
 
@@ -453,8 +438,8 @@ update_constants_cb (CoglPipeline *pipeline,
   UpdateUniformsState *state = user_data;
   CoglPipelineProgramState *program_state = state->program_state;
   UnitState *unit_state = &program_state->unit_state[state->unit++];
-  CoglContext *ctx = pipeline->context;
-  CoglDriver *driver = cogl_context_get_driver (ctx);
+
+  _COGL_GET_CONTEXT (ctx, FALSE);
 
   if (unit_state->combine_constant_uniform != -1 &&
       (state->update_all || unit_state->dirty_combine_constant))
@@ -463,8 +448,8 @@ update_constants_cb (CoglPipeline *pipeline,
       _cogl_pipeline_get_layer_combine_constant (pipeline,
                                                  layer_index,
                                                  constant);
-      GE (driver, glUniform4fv (unit_state->combine_constant_uniform,
-                                1, constant));
+      GE (ctx, glUniform4fv (unit_state->combine_constant_uniform,
+                             1, constant));
       unit_state->dirty_combine_constant = FALSE;
     }
 
@@ -476,8 +461,8 @@ update_constants_cb (CoglPipeline *pipeline,
 
       matrix = _cogl_pipeline_get_layer_matrix (pipeline, layer_index);
       graphene_matrix_to_float (matrix, array);
-      GE (driver, glUniformMatrix4fv (unit_state->texture_matrix_uniform,
-                                      1, FALSE, array));
+      GE (ctx, glUniformMatrix4fv (unit_state->texture_matrix_uniform,
+                                   1, FALSE, array));
       unit_state->dirty_texture_matrix = FALSE;
     }
 
@@ -508,7 +493,6 @@ update_builtin_uniforms (CoglContext *context,
 
 typedef struct
 {
-  CoglPipeline *pipeline;
   CoglPipelineProgramState *program_state;
   unsigned long *uniform_differences;
   int n_differences;
@@ -521,8 +505,6 @@ static gboolean
 flush_uniform_cb (int uniform_num, void *user_data)
 {
   FlushUniformsClosure *data = user_data;
-  GPtrArray *uniform_names = cogl_context_get_uniform_names (data->ctx);
-  char *uniform_name = g_ptr_array_index (uniform_names, uniform_num);
 
   if (COGL_FLAGS_GET (data->uniform_differences, uniform_num))
     {
@@ -553,49 +535,20 @@ flush_uniform_cb (int uniform_num, void *user_data)
 
       if (uniform_location == UNIFORM_LOCATION_UNKNOWN)
         {
-          CoglDriver *driver = cogl_context_get_driver (data->ctx);
+          const char *uniform_name =
+            g_ptr_array_index (data->ctx->uniform_names, uniform_num);
 
-          GE_RET (uniform_location, driver,
-                  glGetUniformLocation (data->program_state->program,
-                                        uniform_name));
+          uniform_location =
+            data->ctx->glGetUniformLocation (data->program_state->program,
+                                             uniform_name);
           g_array_index (uniform_locations, GLint, uniform_num) =
             uniform_location;
         }
 
       if (uniform_location != -1)
-        {
-          if (G_UNLIKELY (COGL_DEBUG_ENABLED (COGL_DEBUG_SHOW_UNIFORMS)))
-            {
-              const CoglBoxedValue *pipeline_uniform;
-              CoglBoxedValue *program_uniform;
-              CoglBoxedValue *pipeline_uniform_copy;
-
-              pipeline_uniform = data->values + data->value_index;
-              program_uniform =
-                g_hash_table_lookup (data->program_state->uniform_values,
-                                     uniform_name);
-
-              if (!_cogl_boxed_value_equal (pipeline_uniform, program_uniform))
-                {
-                  pipeline_uniform_copy = g_malloc (sizeof (CoglBoxedValue));
-                  _cogl_boxed_value_copy (pipeline_uniform_copy,
-                                          pipeline_uniform);
-                  g_hash_table_insert (data->program_state->uniform_values,
-                                       uniform_name,
-                                       pipeline_uniform_copy);
-
-                  g_message ("Updated uniform on pipeline %s (program %i): %s;",
-                             data->pipeline->name ? data->pipeline->name : "N\\A",
-                             data->program_state->program,
-                             _cogl_boxed_value_to_string (pipeline_uniform,
-                                                          uniform_name));
-                }
-            }
-
-          _cogl_boxed_value_set_uniform (data->ctx,
-                                         uniform_location,
-                                         data->values + data->value_index);
-      }
+        _cogl_boxed_value_set_uniform (data->ctx,
+                                       uniform_location,
+                                       data->values + data->value_index);
 
       data->n_differences--;
       COGL_FLAGS_SET (data->uniform_differences, uniform_num, FALSE);
@@ -616,20 +569,18 @@ _cogl_pipeline_progend_glsl_flush_uniforms (CoglPipeline *pipeline,
   CoglPipelineUniformsState *uniforms_state;
   FlushUniformsClosure data;
   int n_uniform_longs;
-  CoglContext *ctx = pipeline->context;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   if (pipeline->differences & COGL_PIPELINE_STATE_UNIFORMS)
     uniforms_state = &pipeline->big_state->uniforms_state;
   else
     uniforms_state = NULL;
 
-  data.pipeline = pipeline;
   data.program_state = program_state;
   data.ctx = ctx;
 
-  n_uniform_longs = COGL_FLAGS_N_LONGS_FOR_SIZE (
-    cogl_context_get_n_uniform_names (ctx)
-  );
+  n_uniform_longs = COGL_FLAGS_N_LONGS_FOR_SIZE (ctx->n_uniform_names);
 
   data.uniform_differences = g_newa (unsigned long, n_uniform_longs);
 
@@ -676,7 +627,7 @@ _cogl_pipeline_progend_glsl_flush_uniforms (CoglPipeline *pipeline,
 
       for (i = 0; i < n_uniform_longs; i++)
         data.n_differences +=
-          __builtin_popcountl (data.uniform_differences[i]);
+          _cogl_util_popcountl (data.uniform_differences[i]);
     }
 
   while (pipeline && data.n_differences > 0)
@@ -701,26 +652,103 @@ _cogl_pipeline_progend_glsl_flush_uniforms (CoglPipeline *pipeline,
     _cogl_bitmask_clear_all (&uniforms_state->changed_mask);
 }
 
-gboolean
-cogl_pipeline_progend_glsl_start (CoglPipeline *pipeline)
+static gboolean
+_cogl_pipeline_progend_glsl_start (CoglPipeline *pipeline)
 {
   return TRUE;
 }
 
-void
-cogl_pipeline_progend_glsl_end (CoglPipeline  *pipeline,
-                                unsigned long  pipelines_difference)
+static void
+_cogl_shader_compile_real (CoglShader   *shader,
+                           CoglPipeline *pipeline)
+{
+  GLenum gl_type;
+  GLint status;
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
+
+  if (shader->gl_handle)
+    {
+      CoglPipeline *prev = shader->compilation_pipeline;
+
+      /* XXX: currently the only things that will affect the
+       * boilerplate for user shaders, apart from driver features,
+       * are the pipeline layer-indices and texture-unit-indices
+       */
+      if (pipeline == prev ||
+          _cogl_pipeline_layer_and_unit_numbers_equal (prev, pipeline))
+        return;
+
+      GE (ctx, glDeleteShader (shader->gl_handle));
+      shader->gl_handle = 0;
+
+      if (shader->compilation_pipeline)
+        {
+          g_object_unref (shader->compilation_pipeline);
+          shader->compilation_pipeline = NULL;
+        }
+    }
+
+  switch (shader->type)
+    {
+    case COGL_SHADER_TYPE_VERTEX:
+      gl_type = GL_VERTEX_SHADER;
+      break;
+    case COGL_SHADER_TYPE_FRAGMENT:
+      gl_type = GL_FRAGMENT_SHADER;
+      break;
+    default:
+      g_assert_not_reached ();
+      break;
+    }
+
+  shader->gl_handle = ctx->glCreateShader (gl_type);
+
+  _cogl_glsl_shader_set_source_with_boilerplate (ctx,
+                                                 shader->gl_handle,
+                                                 gl_type,
+                                                 pipeline,
+                                                 1,
+                                                 (const char **)
+                                                  &shader->source,
+                                                 NULL);
+  GE (ctx, glCompileShader (shader->gl_handle));
+
+  shader->compilation_pipeline = g_object_ref (pipeline);
+
+  GE (ctx, glGetShaderiv (shader->gl_handle, GL_COMPILE_STATUS, &status));
+  if (!status)
+    {
+      char buffer[512];
+      int len = 0;
+
+      ctx->glGetShaderInfoLog (shader->gl_handle, 511, &len, buffer);
+      buffer[len] = '\0';
+
+      g_warning ("Failed to compile GLSL program:\n"
+                 "src:\n%s\n"
+                 "error:\n%s\n",
+                 shader->source,
+                 buffer);
+    }
+}
+
+static void
+_cogl_pipeline_progend_glsl_end (CoglPipeline *pipeline,
+                                 unsigned long pipelines_difference)
 {
   CoglPipelineProgramState *program_state;
   GLuint gl_program;
   gboolean program_changed = FALSE;
   UpdateUniformsState state;
+  CoglProgram *user_program;
   CoglPipelineCacheEntry *cache_entry = NULL;
-  CoglContext *ctx = pipeline->context;
-  CoglContextEGL *ctx_egl = COGL_CONTEXT_EGL (ctx);
-  CoglDriver *driver = cogl_context_get_driver (ctx);
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   program_state = get_program_state (pipeline);
+
+  user_program = cogl_pipeline_get_user_program (pipeline);
 
   if (program_state == NULL)
     {
@@ -747,7 +775,7 @@ cogl_pipeline_progend_glsl_end (CoglPipeline  *pipeline,
                           (COGL_DEBUG_DISABLE_PROGRAM_CACHES))))
             {
               cache_entry =
-                _cogl_pipeline_cache_get_combined_template (cogl_context_get_pipeline_cache (ctx),
+                _cogl_pipeline_cache_get_combined_template (ctx->pipeline_cache,
                                                             authority);
 
               program_state = get_program_state (cache_entry->pipeline);
@@ -772,42 +800,68 @@ cogl_pipeline_progend_glsl_end (CoglPipeline  *pipeline,
         set_program_state (pipeline, program_state);
     }
 
+  /* If the program has changed since the last link then we do
+   * need to relink */
+  if (program_state->program && user_program &&
+       user_program->age != program_state->user_program_age)
+    {
+      GE( ctx, glDeleteProgram (program_state->program) );
+      program_state->program = 0;
+    }
+
   if (program_state->program == 0)
     {
       GLuint backend_shader;
+      GSList *l;
 
-      GE_RET (program_state->program, driver, glCreateProgram ());
+      GE_RET( program_state->program, ctx, glCreateProgram () );
+
+      /* Attach all of the shader from the user program */
+      if (user_program)
+        {
+          for (l = user_program->attached_shaders; l; l = l->next)
+            {
+              CoglShader *shader = l->data;
+
+              _cogl_shader_compile_real (shader, pipeline);
+
+              GE( ctx, glAttachShader (program_state->program,
+                                       shader->gl_handle) );
+            }
+
+          program_state->user_program_age = user_program->age;
+        }
 
       /* Attach any shaders from the GLSL backends */
       if ((backend_shader = _cogl_pipeline_fragend_glsl_get_shader (pipeline)))
-        GE (driver, glAttachShader (program_state->program, backend_shader));
+        GE( ctx, glAttachShader (program_state->program, backend_shader) );
       if ((backend_shader = _cogl_pipeline_vertend_glsl_get_shader (pipeline)))
-        GE (driver, glAttachShader (program_state->program, backend_shader));
+        GE( ctx, glAttachShader (program_state->program, backend_shader) );
 
       /* XXX: OpenGL as a special case requires the vertex position to
        * be bound to generic attribute 0 so for simplicity we
        * unconditionally bind the cogl_position_in attribute here...
        */
-      GE (driver, glBindAttribLocation (program_state->program,
-                                        0, "cogl_position_in"));
+      GE( ctx, glBindAttribLocation (program_state->program,
+                                     0, "cogl_position_in"));
 
-      link_program (ctx, program_state->program);
+      link_program (program_state->program);
 
       program_changed = TRUE;
     }
 
   gl_program = program_state->program;
 
-  if (cogl_context_egl_get_current_gl_program (ctx_egl) != gl_program)
+  if (ctx->current_gl_program != gl_program)
     {
-      cogl_driver_gl_clear_gl_errors (COGL_DRIVER_GL (driver));
-      GE (driver, glUseProgram (gl_program));
-      if (cogl_driver_gl_get_gl_error (COGL_DRIVER_GL (driver)) == GL_NO_ERROR)
-        cogl_context_egl_set_current_gl_program (ctx_egl, gl_program);
+      _cogl_gl_util_clear_gl_errors (ctx);
+      ctx->glUseProgram (gl_program);
+      if (_cogl_gl_util_get_error (ctx) == GL_NO_ERROR)
+        ctx->current_gl_program = gl_program;
       else
         {
-          GE (driver, glUseProgram (0));
-          cogl_context_egl_set_current_gl_program (ctx_egl, 0);
+          GE( ctx, glUseProgram (0) );
+          ctx->current_gl_program = 0;
         }
     }
 
@@ -823,7 +877,7 @@ cogl_pipeline_progend_glsl_end (CoglPipeline  *pipeline,
       clear_attribute_cache (program_state);
 
       GE_RET (program_state->flip_uniform,
-              driver, glGetUniformLocation (gl_program, "_cogl_flip_vector"));
+              ctx, glGetUniformLocation (gl_program, "_cogl_flip_vector"));
       program_state->flushed_flip_state = -1;
     }
 
@@ -842,21 +896,21 @@ cogl_pipeline_progend_glsl_end (CoglPipeline  *pipeline,
       clear_flushed_matrix_stacks (program_state);
 
       for (i = 0; i < G_N_ELEMENTS (builtin_uniforms); i++)
-        GE_RET (program_state->builtin_uniform_locations[i], driver,
+        GE_RET( program_state->builtin_uniform_locations[i], ctx,
                 glGetUniformLocation (gl_program,
-                                      builtin_uniforms[i].uniform_name));
+                                      builtin_uniforms[i].uniform_name) );
 
-      GE_RET (program_state->modelview_uniform, driver,
+      GE_RET( program_state->modelview_uniform, ctx,
               glGetUniformLocation (gl_program,
-                                    "cogl_modelview_matrix"));
+                                    "cogl_modelview_matrix") );
 
-      GE_RET (program_state->projection_uniform, driver,
+      GE_RET( program_state->projection_uniform, ctx,
               glGetUniformLocation (gl_program,
-                                    "cogl_projection_matrix"));
+                                    "cogl_projection_matrix") );
 
-      GE_RET (program_state->mvp_uniform, driver,
+      GE_RET( program_state->mvp_uniform, ctx,
               glGetUniformLocation (gl_program,
-                                    "cogl_modelview_projection_matrix"));
+                                    "cogl_modelview_projection_matrix") );
     }
 
   if (program_changed ||
@@ -870,17 +924,22 @@ cogl_pipeline_progend_glsl_end (CoglPipeline  *pipeline,
                                               gl_program,
                                               program_changed);
 
+  if (user_program)
+    _cogl_program_flush_uniforms (user_program,
+                                  gl_program,
+                                  program_changed);
+
   /* We need to track the last pipeline that the program was used with
    * so know if we need to update all of the uniforms */
   program_state->last_used_for_pipeline = pipeline;
 }
 
-void
-cogl_pipeline_progend_glsl_pre_change_notify (CoglPipeline      *pipeline,
-                                              CoglPipelineState  change,
-                                              const CoglColor   *new_color)
+static void
+_cogl_pipeline_progend_glsl_pre_change_notify (CoglPipeline *pipeline,
+                                               CoglPipelineState change,
+                                               const CoglColor *new_color)
 {
-  CoglContext *ctx = pipeline->context;
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   if ((change & (_cogl_pipeline_get_state_for_vertex_codegen (ctx) |
                  _cogl_pipeline_get_state_for_fragment_codegen (ctx))))
@@ -911,13 +970,14 @@ cogl_pipeline_progend_glsl_pre_change_notify (CoglPipeline      *pipeline,
  * XXX: Don't forget this is *pre* change, we can't read the new value
  * yet!
  */
-void
-cogl_pipeline_progend_glsl_layer_pre_change_notify (CoglPipeline           *owner,
-                                                    CoglPipelineLayer      *layer,
-                                                    CoglPipelineLayerState  change)
+static void
+_cogl_pipeline_progend_glsl_layer_pre_change_notify (
+                                                CoglPipeline *owner,
+                                                CoglPipelineLayer *layer,
+                                                CoglPipelineLayerState change)
 {
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
   CoglTextureUnit *unit;
-  CoglContext *ctx = owner->context;
 
   if ((change & (_cogl_pipeline_get_layer_state_for_fragment_codegen (ctx) |
                  COGL_PIPELINE_LAYER_STATE_AFFECTS_VERTEX_CODEGEN)))
@@ -948,14 +1008,14 @@ cogl_pipeline_progend_glsl_layer_pre_change_notify (CoglPipeline           *owne
    * the changes so we can try to minimize redundant OpenGL calls if
    * the same layer is flushed again.
    */
-  unit = _cogl_get_texture_unit (ctx, _cogl_pipeline_layer_get_unit_index (layer));
+  unit = _cogl_get_texture_unit (_cogl_pipeline_layer_get_unit_index (layer));
   if (unit->layer == layer)
     unit->layer_changes_since_flush |= change;
 }
 
-void
-cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
-                                      CoglFramebuffer *framebuffer)
+static void
+_cogl_pipeline_progend_glsl_pre_paint (CoglPipeline *pipeline,
+                                       CoglFramebuffer *framebuffer)
 {
   gboolean needs_flip;
   CoglMatrixEntry *projection_entry;
@@ -966,13 +1026,13 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
   gboolean need_modelview;
   gboolean need_projection;
   graphene_matrix_t modelview, projection;
-  CoglContext *ctx = pipeline->context;
-  CoglDriver *driver = cogl_context_get_driver (ctx);
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   program_state = get_program_state (pipeline);
 
-  projection_entry = cogl_context_get_current_projection_entry (ctx);
-  modelview_entry = cogl_context_get_current_modelview_entry (ctx);
+  projection_entry = ctx->current_projection_entry;
+  modelview_entry = ctx->current_modelview_entry;
 
   /* An initial pipeline is flushed while creating the context. At
      this point there are no matrices selected so we can't do
@@ -980,7 +1040,7 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
   if (modelview_entry == NULL || projection_entry == NULL)
     return;
 
-  needs_flip = cogl_framebuffer_is_y_flipped (cogl_context_get_current_draw_buffer (ctx));
+  needs_flip = cogl_framebuffer_is_y_flipped (ctx->current_draw_buffer);
 
   projection_changed =
     _cogl_matrix_entry_cache_maybe_update (&program_state->projection_cache,
@@ -1018,7 +1078,7 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
               graphene_matrix_t tmp_matrix;
               cogl_matrix_entry_get (projection_entry, &tmp_matrix);
               graphene_matrix_multiply (&tmp_matrix,
-                                        cogl_context_get_y_flip_matrix (ctx),
+                                        &ctx->y_flip_matrix,
                                         &projection);
             }
           else
@@ -1028,19 +1088,19 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
       if (projection_changed && program_state->projection_uniform != -1)
         {
           graphene_matrix_to_float (&projection, v);
-          GE (driver, glUniformMatrix4fv (program_state->projection_uniform,
-                                          1, /* count */
-                                          FALSE, /* transpose */
-                                          v));
+          GE (ctx, glUniformMatrix4fv (program_state->projection_uniform,
+                                       1, /* count */
+                                       FALSE, /* transpose */
+                                       v));
         }
 
       if (modelview_changed && program_state->modelview_uniform != -1)
         {
           graphene_matrix_to_float (&modelview,v);
-          GE (driver, glUniformMatrix4fv (program_state->modelview_uniform,
-                                          1, /* count */
-                                          FALSE, /* transpose */
-                                          v));
+          GE (ctx, glUniformMatrix4fv (program_state->modelview_uniform,
+                                       1, /* count */
+                                       FALSE, /* transpose */
+                                       v));
         }
 
       if (program_state->mvp_uniform != -1)
@@ -1051,7 +1111,7 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
           if (cogl_matrix_entry_is_identity (modelview_entry))
             {
               graphene_matrix_to_float (&projection, v);
-              GE (driver,
+              GE (ctx,
                   glUniformMatrix4fv (program_state->mvp_uniform,
                                       1, /* count */
                                       FALSE, /* transpose */
@@ -1064,7 +1124,7 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
               graphene_matrix_multiply (&modelview, &projection, &combined);
               graphene_matrix_to_float (&combined, v);
 
-              GE (driver,
+              GE (ctx,
                   glUniformMatrix4fv (program_state->mvp_uniform,
                                       1, /* count */
                                       FALSE, /* transpose */
@@ -1078,9 +1138,9 @@ cogl_pipeline_progend_glsl_pre_paint (CoglPipeline    *pipeline,
     {
       static const float do_flip[4] = { 1.0f, -1.0f, 1.0f, 1.0f };
       static const float dont_flip[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-      GE (driver, glUniform4fv (program_state->flip_uniform,
-                                1, /* count */
-                                needs_flip ? do_flip : dont_flip));
+      GE( ctx, glUniform4fv (program_state->flip_uniform,
+                             1, /* count */
+                             needs_flip ? do_flip : dont_flip) );
       program_state->flushed_flip_state = needs_flip;
     }
 }
@@ -1092,9 +1152,18 @@ update_float_uniform (CoglPipeline *pipeline,
 {
   float (* float_getter_func) (CoglPipeline *) = getter_func;
   float value;
-  CoglContext *ctx = pipeline->context;
-  CoglDriver *driver = cogl_context_get_driver (ctx);
+
+  _COGL_GET_CONTEXT (ctx, NO_RETVAL);
 
   value = float_getter_func (pipeline);
-  GE (driver, glUniform1f (uniform_location, value));
+  GE( ctx, glUniform1f (uniform_location, value) );
 }
+
+const CoglPipelineProgend _cogl_pipeline_glsl_progend =
+  {
+    _cogl_pipeline_progend_glsl_start,
+    _cogl_pipeline_progend_glsl_end,
+    _cogl_pipeline_progend_glsl_pre_change_notify,
+    _cogl_pipeline_progend_glsl_layer_pre_change_notify,
+    _cogl_pipeline_progend_glsl_pre_paint
+  };

@@ -4,7 +4,6 @@
 
 #include <graphene.h>
 
-#include "backends/meta-backend-private.h"
 #include "clutter/clutter-mutter.h"
 #include "clutter/clutter.h"
 #include "compositor/meta-compositor-view.h"
@@ -13,26 +12,9 @@
 #include "compositor/meta-window-drag.h"
 #include "meta/compositor.h"
 #include "meta/display.h"
-#include "meta/prefs.h"
 
 /* Wait 2ms after vblank before starting to draw next frame */
 #define META_SYNC_DELAY 2
-
-typedef enum _MetaMappingType MetaMappingType;
-
-enum _MetaMappingType
-{
-  META_MAPPING_TYPE_BUTTON,
-  META_MAPPING_TYPE_KEY,
-};
-
-typedef enum _MetaMappingState MetaMappingState;
-
-enum _MetaMappingState
-{
-  META_MAPPING_STATE_PRE_CHANGE,
-  META_MAPPING_STATE_POST_CHANGE,
-};
 
 typedef struct _MetaLaters MetaLaters;
 
@@ -44,13 +26,9 @@ struct _MetaCompositorClass
                        GError         **error);
   void (* unmanage) (MetaCompositor *compositor);
   void (* before_paint) (MetaCompositor     *compositor,
-                         MetaCompositorView *compositor_view,
-                         ClutterFrame       *frame);
+                         MetaCompositorView *compositor_view);
   void (* after_paint) (MetaCompositor     *compositor,
-                        MetaCompositorView *compositor_view,
-                        ClutterFrame       *frame);
-  void (* add_window) (MetaCompositor *compositor,
-                       MetaWindow     *window);
+                        MetaCompositorView *compositor_view);
   void (* remove_window) (MetaCompositor *compositor,
                           MetaWindow     *window);
   int64_t (* monotonic_to_high_res_xserver_time) (MetaCompositor *compositor,
@@ -58,10 +36,6 @@ struct _MetaCompositorClass
 
   MetaCompositorView * (* create_view) (MetaCompositor   *compositor,
                                         ClutterStageView *stage_view);
-
-  void (* notify_mapping_change) (MetaCompositor   *compositor,
-                                  MetaMappingType   type,
-                                  MetaMappingState  state);
 };
 
 void meta_compositor_remove_window_actor (MetaCompositor  *compositor,
@@ -71,15 +45,13 @@ void meta_compositor_window_actor_stage_views_changed (MetaCompositor *composito
 
 void meta_switch_workspace_completed (MetaCompositor *compositor);
 
-META_EXPORT_TEST
 MetaPluginManager * meta_compositor_get_plugin_manager (MetaCompositor *compositor);
 
 int64_t meta_compositor_monotonic_to_high_res_xserver_time (MetaCompositor *compositor,
                                                             int64_t         monotonic_time_us);
 
 void meta_compositor_flash_window (MetaCompositor *compositor,
-                                   MetaWindow     *window,
-                                   int             n_flashes);
+                                   MetaWindow     *window);
 
 MetaCloseDialog * meta_compositor_create_close_dialog (MetaCompositor *compositor,
                                                        MetaWindow     *window);
@@ -93,24 +65,31 @@ gboolean meta_compositor_is_unredirect_inhibited (MetaCompositor *compositor);
 
 MetaDisplay * meta_compositor_get_display (MetaCompositor *compositor);
 
+MetaBackend * meta_compositor_get_backend (MetaCompositor *compositor);
+
 MetaWindowActor * meta_compositor_get_top_window_actor (MetaCompositor *compositor);
+
+ClutterStage * meta_compositor_get_stage (MetaCompositor *compositor);
+
 gboolean meta_compositor_is_switching_workspace (MetaCompositor *compositor);
 
-gboolean meta_compositor_drag_window (MetaCompositor      *compositor,
-                                      MetaWindow          *window,
-                                      MetaGrabOp           grab_op,
-                                      MetaDragWindowFlags  flags,
-                                      ClutterSprite       *sprite,
-                                      uint32_t             timestamp,
-                                      graphene_point_t    *pos_hint);
+gboolean meta_compositor_drag_window (MetaCompositor       *compositor,
+                                      MetaWindow           *window,
+                                      MetaGrabOp            grab_op,
+                                      ClutterInputDevice   *device,
+                                      ClutterEventSequence *sequence,
+                                      uint32_t              timestamp,
+                                      graphene_point_t     *pos_hint);
 
-META_EXPORT_TEST
 MetaWindowDrag * meta_compositor_get_current_window_drag (MetaCompositor *compositor);
+
+void meta_compositor_grab_begin (MetaCompositor *compositor);
+
+void meta_compositor_grab_end (MetaCompositor *compositor);
 
 void meta_compositor_destroy (MetaCompositor *compositor);
 
 gboolean meta_compositor_manage (MetaCompositor  *compositor,
-                                 GVariant        *plugin_options,
                                  GError         **error);
 
 void meta_compositor_unmanage (MetaCompositor *compositor);
@@ -164,8 +143,7 @@ void meta_compositor_sync_stack (MetaCompositor *compositor,
                                  GList          *stack);
 
 void meta_compositor_flash_display (MetaCompositor *compositor,
-                                    MetaDisplay    *display,
-                                    int             n_flashes);
+                                    MetaDisplay    *display);
 
 void meta_compositor_show_tile_preview (MetaCompositor *compositor,
                                         MetaWindow     *window,
@@ -179,10 +157,6 @@ void meta_compositor_show_window_menu (MetaCompositor     *compositor,
 				       MetaWindowMenuType  menu,
                                        int                 x,
                                        int                 y);
-
-void meta_compositor_notify_mapping_change (MetaCompositor   *compositor,
-                                            MetaMappingType   type,
-                                            MetaMappingState  state);
 
 /*
  * This function takes a 64 bit time stamp from the monotonic clock, and clamps
@@ -199,7 +173,3 @@ meta_translate_to_high_res_xserver_time (int64_t time_us)
 
   return ms2us (ms & 0xffffffff) + us;
 }
-
-gboolean meta_compositor_query_pointer_a11y (MetaCompositor    *compositor,
-                                             GVariant         **data_out,
-                                             graphene_point_t  *rel_coords);

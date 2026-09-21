@@ -23,8 +23,8 @@
 
 #include "wayland-test-client-utils.h"
 
-static struct wl_seat *wl_seat;
-static struct wl_pointer *wl_pointer;
+static struct wl_seat *seat;
+static struct wl_pointer *pointer;
 
 static struct wl_surface *toplevel_surface;
 static struct xdg_surface *toplevel_xdg_surface;
@@ -183,7 +183,7 @@ pointer_handle_button (void              *data,
   xdg_popup = xdg_surface_get_popup (popup_xdg_surface, toplevel_xdg_surface,
                                      positioner);
   xdg_positioner_destroy (positioner);
-  xdg_popup_grab (xdg_popup, wl_seat, serial);
+  xdg_popup_grab (xdg_popup, seat, serial);
   wl_surface_commit (popup_surface);
 
   if (click_count == 1)
@@ -218,15 +218,15 @@ static const struct wl_pointer_listener pointer_listener = {
 
 static void
 seat_handle_capabilities (void                    *data,
-                          struct wl_seat          *seat,
+                          struct wl_seat          *wl_seat,
                           enum wl_seat_capability  caps)
 {
   WaylandDisplay *display = data;
 
   if (caps & WL_SEAT_CAPABILITY_POINTER)
     {
-      wl_pointer = wl_seat_get_pointer (seat);
-      wl_pointer_add_listener (wl_pointer, &pointer_listener, display);
+      pointer = wl_seat_get_pointer (wl_seat);
+      wl_pointer_add_listener (pointer, &pointer_listener, display);
     }
 }
 
@@ -246,7 +246,7 @@ static void
 on_sync_event (WaylandDisplay *display,
                uint32_t        serial)
 {
-  g_assert_cmpint (serial, ==, 0);
+  g_assert (serial == 0);
 
   /* Sync event 0 is sent when the popup window actor is destroyed;
    * prepare for opening a popup for the same wl_surface.
@@ -271,8 +271,8 @@ handle_registry_global (void               *data,
 
   if (strcmp (interface, "wl_seat") == 0)
     {
-      wl_seat = wl_registry_bind (registry, id, &wl_seat_interface, 1);
-      wl_seat_add_listener (wl_seat, &seat_listener, display);
+      seat = wl_registry_bind (registry, id, &wl_seat_interface, 1);
+      wl_seat_add_listener (seat, &seat_listener, display);
     }
 }
 

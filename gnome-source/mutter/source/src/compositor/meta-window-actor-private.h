@@ -4,6 +4,7 @@
 
 #include "compositor/meta-plugin-manager.h"
 #include "compositor/meta-surface-actor.h"
+#include "meta/compositor-mutter.h"
 
 struct _MetaWindowActorClass
 {
@@ -22,11 +23,9 @@ struct _MetaWindowActorClass
                              gboolean         skip_sync_delay);
 
   void (*before_paint) (MetaWindowActor  *actor,
-                        ClutterStageView *stage_view,
-                        ClutterFrame     *frame);
+                        ClutterStageView *stage_view);
   void (*after_paint) (MetaWindowActor  *actor,
-                       ClutterStageView *stage_view,
-                       ClutterFrame     *frame);
+                       ClutterStageView *stage_view);
 
   void (*queue_destroy) (MetaWindowActor *actor);
   void (*set_frozen) (MetaWindowActor *actor,
@@ -57,11 +56,9 @@ void meta_window_actor_size_change   (MetaWindowActor *self,
                                       MtkRectangle    *old_buffer_rect);
 
 void meta_window_actor_before_paint   (MetaWindowActor    *self,
-                                       ClutterStageView   *stage_view,
-                                       ClutterFrame       *frame);
+                                       ClutterStageView   *stage_view);
 void meta_window_actor_after_paint    (MetaWindowActor    *self,
-                                       ClutterStageView   *stage_view,
-                                       ClutterFrame       *frame);
+                                       ClutterStageView   *stage_view);
 void meta_window_actor_frame_complete (MetaWindowActor    *self,
                                        ClutterFrameInfo   *frame_info,
                                        gint64              presentation_time);
@@ -82,7 +79,6 @@ void     meta_window_actor_queue_frame_drawn   (MetaWindowActor *self,
 void meta_window_actor_effect_completed (MetaWindowActor  *actor,
                                          MetaPluginEffect  event);
 
-META_EXPORT_TEST
 MetaSurfaceActor *meta_window_actor_get_surface (MetaWindowActor *self);
 
 MetaSurfaceActor *meta_window_actor_get_scanout_candidate (MetaWindowActor *self);
@@ -118,10 +114,3 @@ void meta_window_actor_add_surface_actor (MetaWindowActor  *window_actor,
 
 void meta_window_actor_remove_surface_actor (MetaWindowActor  *window_actor,
                                              MetaSurfaceActor *surface_actor);
-
-void meta_window_actor_invalidate_background_blur (MetaWindowActor *window_actor);
-
-void meta_window_actor_set_tied_to_drag (MetaWindowActor *window_actor,
-                                         gboolean         tied_to_drag);
-
-gboolean meta_window_actor_is_tied_to_drag (MetaWindowActor *window_actor);

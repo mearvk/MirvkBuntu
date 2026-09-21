@@ -535,7 +535,17 @@ add_plane_property (MetaKmsImplDevice  *impl_device,
 static const char *
 get_plane_type_string (MetaKmsPlane *plane)
 {
-  return meta_kms_plane_type_to_string (meta_kms_plane_get_plane_type (plane));
+  switch (meta_kms_plane_get_plane_type (plane))
+    {
+    case META_KMS_PLANE_TYPE_PRIMARY:
+      return "primary";
+    case META_KMS_PLANE_TYPE_CURSOR:
+      return "cursor";
+    case META_KMS_PLANE_TYPE_OVERLAY:
+      return "overlay";
+    }
+
+  g_assert_not_reached ();
 }
 
 static gboolean
@@ -633,8 +643,7 @@ process_plane_assignment (MetaKmsImplDevice  *impl_device,
             return FALSE;
         }
 
-      if (plane_assignment->flags & META_KMS_ASSIGN_PLANE_FLAG_DISABLE_IMPLICIT_SYNC &&
-          !meta_kms_update_get_mode_sets (update))
+      if (plane_assignment->flags & META_KMS_ASSIGN_PLANE_FLAG_DIRECT_SCANOUT)
         {
           int signaled_sync_file;
 
@@ -663,7 +672,7 @@ process_plane_assignment (MetaKmsImplDevice  *impl_device,
           struct {
             MetaKmsPlaneProp prop;
             uint64_t value;
-          } cursor_props[] = {
+          } props[] = {
             {
               .prop = META_KMS_PLANE_PROP_HOTSPOT_X,
               .value = plane_assignment->cursor_hotspot.is_valid ?
@@ -678,12 +687,12 @@ process_plane_assignment (MetaKmsImplDevice  *impl_device,
             },
           };
 
-          for (i = 0; i < G_N_ELEMENTS (cursor_props); i++)
+          for (i = 0; i < G_N_ELEMENTS (props); i++)
             {
               if (!add_plane_property (impl_device,
                                        plane, req,
-                                       cursor_props[i].prop,
-                                       cursor_props[i].value,
+                                       props[i].prop,
+                                       props[i].value,
                                        error))
                 return FALSE;
             }
@@ -741,33 +750,6 @@ process_plane_assignment (MetaKmsImplDevice  *impl_device,
                   fb_damage->n_rects,
                   meta_kms_plane_get_id (plane));
 
-      if (meta_is_topic_enabled (META_DEBUG_KMS))
-        {
-          int buffer_width, buffer_height;
-
-          buffer_width = meta_drm_buffer_get_width (buffer);
-          buffer_height = meta_drm_buffer_get_height (buffer);
-
-          for (int i = 0; i < fb_damage->n_rects; i++)
-            {
-              int rect_width = fb_damage->rects[i].x2 - fb_damage->rects[i].x1;
-              int rect_height = fb_damage->rects[i].y2 - fb_damage->rects[i].y1;
-
-              meta_topic (META_DEBUG_KMS,
-                          "[atomic] Adding damage clip %hdx%hd+%hd+%hd on %u",
-                          rect_width, rect_height,
-                          fb_damage->rects[i].x1, fb_damage->rects[i].y1,
-                          meta_kms_plane_get_id (plane));
-
-              g_warn_if_fail (fb_damage->rects[i].x1 >= 0);
-              g_warn_if_fail (fb_damage->rects[i].y1 >= 0);
-              g_warn_if_fail (rect_width > 0);
-              g_warn_if_fail (rect_height > 0);
-              g_warn_if_fail (fb_damage->rects[i].x2 <= buffer_width);
-              g_warn_if_fail (fb_damage->rects[i].y2 <= buffer_height);
-            }
-        }
-
       prop_id = store_new_blob (impl_device,
                                 blob_ids,
                                 fb_damage->rects,
@@ -784,87 +766,6 @@ process_plane_assignment (MetaKmsImplDevice  *impl_device,
                                error))
         return FALSE;
     }
-
-  if (plane_assignment->color_encoding.has_update)
-    {
-      meta_topic (META_DEBUG_KMS,
-                  "[atomic] Setting plane (%u, %s) color encoding to %u",
-                  meta_kms_plane_get_id (plane),
-                  meta_kms_impl_device_get_path (impl_device),
-                  plane_assignment->color_encoding.value);
-
-      if (!add_plane_property (impl_device,
-                               plane, req,
-                               META_KMS_PLANE_PROP_YCBCR_COLOR_ENCODING,
-                               plane_assignment->color_encoding.value,
-                               error))
-        return FALSE;
-    }
-
-  if (plane_assignment->color_range.has_update)
-    {
-      meta_topic (META_DEBUG_KMS,
-                  "[atomic] Setting plane (%u, %s) color range to %u",
-                  meta_kms_plane_get_id (plane),
-                  meta_kms_impl_device_get_path (impl_device),
-                  plane_assignment->color_range.value);
-
-      if (!add_plane_property (impl_device,
-                               plane, req,
-                               META_KMS_PLANE_PROP_YCBCR_COLOR_RANGE,
-                               plane_assignment->color_range.value,
-                               error))
-        return FALSE;
-    }
-
-  return TRUE;
-}
-
-static gboolean
-update_lut_blob (MetaKmsImplDevice  *impl_device,
-                 GArray             *blob_ids,
-                 MetaGammaLut       *lut,
-                 const char         *name,
-                 MetaKmsCrtc        *crtc,
-                 uint32_t           *out_blob_id,
-                 GError            **error)
-{
-  int i;
-  size_t color_lut_size;
-  g_autofree struct drm_color_lut *drm_color_lut = NULL;
-
-  if (!lut || lut->size == 0)
-    {
-      meta_topic (META_DEBUG_KMS,
-                  "[atomic] Setting CRTC (%u, %s) %s to bypass",
-                  meta_kms_crtc_get_id (crtc),
-                  meta_kms_impl_device_get_path (impl_device),
-                  name);
-      *out_blob_id = 0;
-      return TRUE;
-    }
-
-  color_lut_size = sizeof(struct drm_color_lut) * lut->size;
-  drm_color_lut = g_malloc (color_lut_size);
-
-  for (i = 0; i < lut->size; i++)
-    {
-      drm_color_lut[i].red = lut->red[i];
-      drm_color_lut[i].green = lut->green[i];
-      drm_color_lut[i].blue = lut->blue[i];
-    }
-
-  *out_blob_id = store_new_blob (impl_device, blob_ids,
-                                 drm_color_lut, color_lut_size, error);
-  if (*out_blob_id == 0)
-    return FALSE;
-
-  meta_topic (META_DEBUG_KMS,
-              "[atomic] Setting CRTC (%u, %s) %s, size: %zu",
-              meta_kms_crtc_get_id (crtc),
-              meta_kms_impl_device_get_path (impl_device),
-              name, lut->size);
-
   return TRUE;
 }
 
@@ -880,71 +781,52 @@ process_crtc_color_updates (MetaKmsImplDevice  *impl_device,
   MetaKmsCrtcColorUpdate *color_update = update_entry;
   MetaKmsCrtc *crtc = color_update->crtc;
 
-  if (color_update->degamma.has_update)
+  if (color_update->gamma.has_update)
     {
-      uint32_t degamma_blob_id;
+      MetaGammaLut *gamma = color_update->gamma.state;
+      uint32_t color_lut_blob_id = 0;
 
-      if (!update_lut_blob (impl_device, blob_ids,
-                            color_update->degamma.state,
-                            "degamma", crtc, &degamma_blob_id, error))
-        return FALSE;
-
-      if (!add_crtc_property (impl_device, crtc, req,
-                              META_KMS_CRTC_PROP_DEGAMMA_LUT,
-                              degamma_blob_id, error))
-        return FALSE;
-    }
-
-  if (color_update->ctm.has_update)
-    {
-      MetaCtm *ctm = color_update->ctm.state;
-      uint32_t ctm_blob_id = 0;
-
-      if (ctm)
+      if (gamma && gamma->size > 0)
         {
-          struct drm_color_ctm drm_color_ctm;
+          g_autofree struct drm_color_lut *drm_color_lut = NULL;
+          size_t color_lut_size;
           int i;
 
-          for (i = 0; i < 9; i++)
-            drm_color_ctm.matrix[i] = ctm->matrix[i];
+          color_lut_size = sizeof(struct drm_color_lut) * gamma->size;
+          drm_color_lut = g_malloc (color_lut_size);
 
-          ctm_blob_id = store_new_blob (impl_device, blob_ids,
-                                        &drm_color_ctm, sizeof drm_color_ctm,
-                                        error);
-          if (!ctm_blob_id)
-            return FALSE;
+          for (i = 0; i < gamma->size; i++)
+            {
+              drm_color_lut[i].red = gamma->red[i];
+              drm_color_lut[i].green = gamma->green[i];
+              drm_color_lut[i].blue = gamma->blue[i];
+            }
+
+          color_lut_blob_id = store_new_blob (impl_device,
+                                              blob_ids,
+                                              drm_color_lut,
+                                              color_lut_size,
+                                              error);
 
           meta_topic (META_DEBUG_KMS,
-                      "[atomic] Setting CRTC (%u, %s) ctm",
+                      "[atomic] Setting CRTC (%u, %s) gamma, size: %zu",
                       meta_kms_crtc_get_id (crtc),
-                      meta_kms_impl_device_get_path (impl_device));
+                      meta_kms_impl_device_get_path (impl_device),
+                      gamma->size);
         }
       else
         {
           meta_topic (META_DEBUG_KMS,
-                      "[atomic] Setting CRTC (%u, %s) ctm to bypass",
+                      "[atomic] Setting CRTC (%u, %s) gamma to bypass",
                       meta_kms_crtc_get_id (crtc),
                       meta_kms_impl_device_get_path (impl_device));
         }
 
-      if (!add_crtc_property (impl_device, crtc, req,
-                              META_KMS_CRTC_PROP_CTM,
-                              ctm_blob_id, error))
-        return FALSE;
-    }
-
-  if (color_update->gamma.has_update)
-    {
-      uint32_t gamma_blob_id;
-
-      if (!update_lut_blob (impl_device, blob_ids,
-                            color_update->gamma.state,
-                            "gamma", crtc, &gamma_blob_id, error))
-        return FALSE;
-
-      if (!add_crtc_property (impl_device, crtc, req,
+      if (!add_crtc_property (impl_device,
+                              crtc, req,
                               META_KMS_CRTC_PROP_GAMMA_LUT,
-                              gamma_blob_id, error))
+                              color_lut_blob_id,
+                              error))
         return FALSE;
     }
 
@@ -1517,9 +1399,6 @@ meta_kms_impl_device_atomic_initable_init (GInitable     *initable,
                                            GError       **error)
 {
   MetaKmsImplDevice *impl_device = META_KMS_IMPL_DEVICE (initable);
-  MetaKmsDeviceCaps *caps = meta_kms_impl_device_get_caps (impl_device);
-
-  caps->supports_color_modes = TRUE;
 
   if (!initable_parent_iface->init (initable, cancellable, error))
     return FALSE;

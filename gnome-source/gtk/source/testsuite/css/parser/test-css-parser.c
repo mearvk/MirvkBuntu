@@ -40,7 +40,7 @@ test_get_reference_file (const char *css_file)
     g_string_append_len (file, css_file, strlen (css_file) - 4);
   else
     g_string_append (file, css_file);
-
+  
   g_string_append (file, ".ref.css");
 
   if (!g_file_test (file->str, G_FILE_TEST_EXISTS))
@@ -61,7 +61,7 @@ test_get_errors_file (const char *css_file)
     g_string_append_len (file, css_file, strlen (css_file) - 4);
   else
     g_string_append (file, css_file);
-
+  
   g_string_append (file, ".errors");
 
   if (!g_file_test (file->str, G_FILE_TEST_EXISTS))
@@ -109,8 +109,8 @@ parsing_error_cb (GtkCssProvider *provider,
   else if (error->domain == GTK_CSS_PARSER_WARNING)
     append_error_value (errors, GTK_TYPE_CSS_PARSER_WARNING, error->code);
   else
-    g_string_append_printf (errors,
-                            "%s %u",
+    g_string_append_printf (errors, 
+                            "%s %u\n",
                             g_quark_to_string (error->domain),
                             error->code);
 
@@ -130,11 +130,7 @@ parse_css_file (GFile *file, gboolean generate)
   errors = g_string_new ("");
 
   provider = gtk_css_provider_new ();
-  g_object_set (provider,
-                "prefers-color-scheme", GTK_INTERFACE_COLOR_SCHEME_LIGHT,
-                NULL);
-
-  g_signal_connect (provider,
+  g_signal_connect (provider, 
                     "parsing-error",
                     G_CALLBACK (parsing_error_cb),
                     errors);
@@ -150,7 +146,7 @@ parse_css_file (GFile *file, gboolean generate)
 
   reference_file = test_get_reference_file (css_file);
 
-  diff = diff_string_with_file (reference_file, css, -1, &error);
+  diff = diff_with_file (reference_file, css, -1, &error);
   g_assert_no_error (error);
 
   if (diff && diff[0])
@@ -165,7 +161,7 @@ parse_css_file (GFile *file, gboolean generate)
 
   if (errors_file)
     {
-      diff = diff_string_with_file (errors_file, errors->str, errors->len, &error);
+      diff = diff_with_file (errors_file, errors->str, errors->len, &error);
       g_assert_no_error (error);
 
       if (diff && diff[0])
@@ -261,7 +257,7 @@ add_tests_for_files_in_directory (GFile *dir)
 
       g_object_unref (info);
     }
-
+  
   g_assert_no_error (error);
   g_object_unref (enumerator);
 
@@ -273,17 +269,6 @@ add_tests_for_files_in_directory (GFile *dir)
 int
 main (int argc, char **argv)
 {
-  if (argc >= 2 && strcmp (argv[1], "--generate") == 0)
-    {
-      GFile *file;
-
-      file = g_file_new_for_commandline_arg (argv[2]);
-      parse_css_file (file, TRUE);
-      g_object_unref (file);
-
-      return 0;
-    }
-
   gtk_test_init (&argc, &argv);
 
   if (argc < 2)
@@ -297,14 +282,27 @@ main (int argc, char **argv)
 
       g_object_unref (dir);
     }
+  else if (strcmp (argv[1], "--generate") == 0)
+    {
+      if (argc >= 3)
+        {
+          GFile *file = g_file_new_for_commandline_arg (argv[2]);
+
+          parse_css_file (file, TRUE);
+
+          g_object_unref (file);
+        }
+    }
   else
     {
-      for (guint i = 1; i < argc; i++)
-        {
-          GFile *file;
+      guint i;
 
-          file = g_file_new_for_commandline_arg (argv[i]);
+      for (i = 1; i < argc; i++)
+        {
+          GFile *file = g_file_new_for_commandline_arg (argv[i]);
+
           add_test_for_file (file);
+
           g_object_unref (file);
         }
     }

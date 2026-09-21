@@ -21,58 +21,21 @@
 
 #include "core/meta-service-channel.h"
 #include "core/util-private.h"
-
 #include "meta/meta-wayland-client.h"
 
-typedef enum _MetaWaylandClientKind
-{
-  META_WAYLAND_CLIENT_KIND_PUBLIC,
-  META_WAYLAND_CLIENT_KIND_CREATED,
-  META_WAYLAND_CLIENT_KIND_SUBPROCESS,
-} MetaWaylandClientKind;
-
-typedef enum _MetaWaylandClientCaps
-{
-  META_WAYLAND_CLIENT_CAPS_X11_INTEROP = (1 << 0),
-} MetaWaylandClientCaps;
+META_EXPORT_TEST
+MetaWaylandClient * meta_wayland_client_new_indirect (MetaContext  *context,
+                                                      GError      **error);
 
 META_EXPORT_TEST
-MetaWaylandClient * meta_wayland_client_new_from_wl (MetaContext      *context,
-                                                     struct wl_client *wayland_client);
+int meta_wayland_client_setup_fd (MetaWaylandClient  *client,
+                                  GError            **error);
 
 META_EXPORT_TEST
-MetaWaylandClient * meta_wayland_client_new_create (MetaContext  *context,
-                                                    pid_t         pid,
-                                                    GError      **error);
+gboolean meta_wayland_client_matches (MetaWaylandClient      *client,
+                                      const struct wl_client *wayland_client);
 
-META_EXPORT_TEST
-void meta_wayland_client_destroy (MetaWaylandClient *wayland_client);
+void meta_wayland_client_assign_service_client_type (MetaWaylandClient     *client,
+                                                     MetaServiceClientType  service_client_type);
 
-META_EXPORT_TEST
-MetaContext * meta_wayland_client_get_context (MetaWaylandClient *wayland_client);
-
-META_EXPORT_TEST
-struct wl_client * meta_wayland_client_get_wl_client (MetaWaylandClient *wayland_client);
-
-META_EXPORT_TEST
-gboolean meta_wayland_client_matches (MetaWaylandClient      *wayland_client,
-                                      const struct wl_client *wl_client);
-
-META_EXPORT_TEST
-void meta_wayland_client_set_caps (MetaWaylandClient     *wayland_client,
-                                   MetaWaylandClientCaps  caps);
-
-META_EXPORT_TEST
-gboolean meta_wayland_client_has_caps (MetaWaylandClient     *wayland_client,
-                                       MetaWaylandClientCaps  caps);
-
-META_EXPORT_TEST
-int meta_wayland_client_take_client_fd (MetaWaylandClient *client);
-
-META_EXPORT_TEST
-MetaWaylandClient * meta_get_wayland_client (const struct wl_client *wl_client);
-
-void meta_wayland_client_set_window_tag (MetaWaylandClient *client,
-                                         const char *window_tag);
-
-const char * meta_wayland_client_get_window_tag (MetaWaylandClient *client);
+MetaServiceClientType  meta_wayland_client_get_service_client_type (MetaWaylandClient *client);

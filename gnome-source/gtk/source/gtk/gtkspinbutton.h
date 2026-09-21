@@ -98,7 +98,7 @@ typedef enum
 typedef struct _GtkSpinButton              GtkSpinButton;
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_spin_button_get_type           (void);
+GType           gtk_spin_button_get_type           (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 void            gtk_spin_button_configure          (GtkSpinButton  *spin_button,

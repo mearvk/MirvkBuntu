@@ -34,6 +34,8 @@
 
 void     meta_set_verbose (gboolean setting);
 
+void     meta_set_is_wayland_compositor (gboolean setting);
+
 char *   meta_generate_random_id (GRand *rand,
                                   int    length);
 
@@ -45,8 +47,11 @@ meta_timeval_to_microseconds (const struct timeval *tv)
   return ((int64_t) tv->tv_sec) * G_USEC_PER_SEC + tv->tv_usec;
 }
 
+#define META_POINT_IN_RECT(xcoord, ycoord, rect) \
+  ((xcoord) >= (rect).x &&                   \
+   (xcoord) <  ((rect).x + (rect).width) &&  \
+   (ycoord) >= (rect).y &&                   \
+   (ycoord) <  ((rect).y + (rect).height))
+
 #define META_CONTAINER_OF(ptr, type, member) \
   (type *) ((uint8_t *) (ptr) - G_STRUCT_OFFSET (type, member))
-
-char * meta_encode_hex (gpointer data,
-                        size_t   size);

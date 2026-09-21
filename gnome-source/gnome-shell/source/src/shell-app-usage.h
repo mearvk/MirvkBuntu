@@ -1,5 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
-#pragma once
+#ifndef __SHELL_APP_USAGE_H__
+#define __SHELL_APP_USAGE_H__
 
 #include "shell-app.h"
 #include "shell-window-tracker.h"
@@ -18,3 +19,5 @@ int shell_app_usage_compare (ShellAppUsage *self,
                              const char    *id_b);
 
 G_END_DECLS
+
+#endif /* __SHELL_APP_USAGE_H__ */

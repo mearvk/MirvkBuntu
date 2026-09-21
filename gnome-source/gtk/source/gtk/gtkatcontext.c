@@ -21,7 +21,8 @@
 /**
  * GtkATContext:
  *
- * Communicates with platform-specific assistive technologies API.
+ * `GtkATContext` is an abstract class provided by GTK to communicate to
+ * platform-specific assistive technologies API.
  *
  * Each platform supported by GTK implements a `GtkATContext` subclass, and
  * is responsible for updating the accessible state in response to state
@@ -48,9 +49,6 @@
 #include "gtkscalebutton.h"
 #include "print/gtkprinteroptionwidgetprivate.h"
 
-#ifdef HAVE_ACCESSKIT
-#include "a11y/gtkaccesskitcontextprivate.h"
-#endif
 #if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
 #include "a11y/gtkatspicontextprivate.h"
 #endif
@@ -62,7 +60,6 @@ enum
   PROP_ACCESSIBLE_ROLE = 1,
   PROP_ACCESSIBLE,
   PROP_DISPLAY,
-  PROP_REALIZED,
 
   N_PROPS
 };
@@ -100,9 +97,19 @@ gtk_at_context_dispose (GObject *gobject)
 
   gtk_at_context_unrealize (self);
 
-  g_clear_weak_pointer (&self->accessible_parent);
+  if (self->accessible_parent != NULL)
+    {
+      g_object_remove_weak_pointer (G_OBJECT (self->accessible_parent),
+                                    (gpointer *) &self->accessible_parent);
+      self->accessible_parent = NULL;
+    }
 
-  g_clear_weak_pointer (&self->next_accessible_sibling);
+  if (self->next_accessible_sibling != NULL)
+    {
+      g_object_remove_weak_pointer (G_OBJECT (self->next_accessible_sibling),
+                                    (gpointer *) &self->next_accessible_sibling);
+      self->next_accessible_sibling = NULL;
+    }
 
   G_OBJECT_CLASS (gtk_at_context_parent_class)->dispose (gobject);
 }
@@ -154,10 +161,6 @@ gtk_at_context_get_property (GObject    *gobject,
 
     case PROP_DISPLAY:
       g_value_set_object (value, self->display);
-      break;
-
-    case PROP_REALIZED:
-      g_value_set_boolean (value, self->realized);
       break;
 
     default:
@@ -243,7 +246,7 @@ gtk_at_context_class_init (GtkATContextClass *klass)
   klass->update_text_contents = gtk_at_context_real_update_text_contents;
 
   /**
-   * GtkATContext:accessible-role:
+   * GtkATContext:accessible-role: (attributes org.gtk.Property.get=gtk_at_context_get_accessible_role)
    *
    * The accessible role used by the AT context.
    *
@@ -256,10 +259,10 @@ gtk_at_context_class_init (GtkATContextClass *klass)
                        GTK_ACCESSIBLE_ROLE_NONE,
                        G_PARAM_READWRITE |
                        G_PARAM_CONSTRUCT |
-                       G_PARAM_STATIC_NAME);
+                       G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkATContext:accessible:
+   * GtkATContext:accessible: (attributes org.gtk.Property.get=gtk_at_context_get_accessible)
    *
    * The `GtkAccessible` that created the `GtkATContext` instance.
    */
@@ -268,7 +271,7 @@ gtk_at_context_class_init (GtkATContextClass *klass)
                          GTK_TYPE_ACCESSIBLE,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME);
+                         G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkATContext:display:
@@ -279,20 +282,8 @@ gtk_at_context_class_init (GtkATContextClass *klass)
     g_param_spec_object ("display", NULL, NULL,
                          GDK_TYPE_DISPLAY,
                          G_PARAM_READWRITE |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
-
-  /**
-   * GtkATContext:realized:
-   *
-   * Whether the `GtkATContext` has been realized or not.
-   *
-   * Since: 4.24
-   */
-  obj_props[PROP_REALIZED] =
-    g_param_spec_boolean ("realized", NULL, NULL,
-                          FALSE,
-                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
 
   /**
    * GtkATContext::state-change:
@@ -314,7 +305,7 @@ gtk_at_context_class_init (GtkATContextClass *klass)
 }
 
 #define N_PROPERTIES    (GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT + 1)
-#define N_RELATIONS     (GTK_ACCESSIBLE_RELATION_FLOW_FROM + 1)
+#define N_RELATIONS     (GTK_ACCESSIBLE_RELATION_SET_SIZE + 1)
 #define N_STATES        (GTK_ACCESSIBLE_STATE_SELECTED + 1)
 
 static const char *property_attrs[] = {
@@ -337,7 +328,6 @@ static const char *property_attrs[] = {
   [GTK_ACCESSIBLE_PROPERTY_VALUE_MIN]           = "valuemin",
   [GTK_ACCESSIBLE_PROPERTY_VALUE_NOW]           = "valuenow",
   [GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT]          = "valuetext",
-  [GTK_ACCESSIBLE_PROPERTY_HELP_TEXT]           = "helptext",
 };
 
 /*< private >
@@ -352,7 +342,7 @@ const char *
 gtk_accessible_property_get_attribute_name (GtkAccessibleProperty property)
 {
   g_return_val_if_fail (property >= GTK_ACCESSIBLE_PROPERTY_AUTOCOMPLETE &&
-                        property <= GTK_ACCESSIBLE_PROPERTY_HELP_TEXT,
+                        property <= GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT,
                         "<none>");
 
   return property_attrs[property];
@@ -377,12 +367,6 @@ static const char *relation_attrs[] = {
   [GTK_ACCESSIBLE_RELATION_ROW_INDEX_TEXT]      = "rowindextext",
   [GTK_ACCESSIBLE_RELATION_ROW_SPAN]            = "rowspan",
   [GTK_ACCESSIBLE_RELATION_SET_SIZE]            = "setsize",
-  [GTK_ACCESSIBLE_RELATION_LABEL_FOR]           = "labelfor",
-  [GTK_ACCESSIBLE_RELATION_DESCRIPTION_FOR]     = "descriptionfor",
-  [GTK_ACCESSIBLE_RELATION_CONTROLLED_BY]       = "controlledby",
-  [GTK_ACCESSIBLE_RELATION_DETAILS_FOR]         = "detailsfor",
-  [GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE_FOR]   = "errormessagefor",
-  [GTK_ACCESSIBLE_RELATION_FLOW_FROM]           = "flowfrom",
 };
 
 /*< private >
@@ -397,7 +381,7 @@ const char *
 gtk_accessible_relation_get_attribute_name (GtkAccessibleRelation relation)
 {
   g_return_val_if_fail (relation >= GTK_ACCESSIBLE_RELATION_ACTIVE_DESCENDANT &&
-                        relation <= GTK_ACCESSIBLE_RELATION_FLOW_FROM,
+                        relation <= GTK_ACCESSIBLE_RELATION_SET_SIZE,
                         "<none>");
 
   return relation_attrs[relation];
@@ -412,7 +396,7 @@ static const char *state_attrs[] = {
   [GTK_ACCESSIBLE_STATE_INVALID]        = "invalid",
   [GTK_ACCESSIBLE_STATE_PRESSED]        = "pressed",
   [GTK_ACCESSIBLE_STATE_SELECTED]       = "selected",
-  [GTK_ACCESSIBLE_STATE_VISITED]        = "visited",
+  [GTK_ACCESSIBLE_STATE_VISITED] = "visited",
 };
 
 /*< private >
@@ -453,7 +437,7 @@ gtk_at_context_init (GtkATContext *self)
 }
 
 /**
- * gtk_at_context_get_accessible:
+ * gtk_at_context_get_accessible: (attributes org.gtk.Method.get_property=accessible)
  * @self: a `GtkATContext`
  *
  * Retrieves the `GtkAccessible` using this context.
@@ -493,7 +477,7 @@ gtk_at_context_set_accessible_role (GtkATContext      *self,
 }
 
 /**
- * gtk_at_context_get_accessible_role:
+ * gtk_at_context_get_accessible_role: (attributes org.gtk.Method.get_property=accessible-role)
  * @self: a `GtkATContext`
  *
  * Retrieves the accessible role of this context.
@@ -527,40 +511,6 @@ gtk_at_context_get_accessible_parent (GtkATContext *self)
 
 static GtkATContext * get_parent_context (GtkATContext *self);
 
-static inline void
-maybe_realize_context (GtkATContext *self)
-{
-  if (GTK_IS_WIDGET (self->accessible))
-    {
-      GtkATContext *parent_context = get_parent_context (self);
-
-      if (parent_context && parent_context->realized)
-        gtk_at_context_realize (self);
-
-      g_clear_object (&parent_context);
-    }
-  else
-    {
-      GtkAccessible *accessible_parent;
-
-      gtk_at_context_realize (self);
-
-      accessible_parent = self->accessible_parent;
-      while (accessible_parent && !GTK_IS_WIDGET (accessible_parent))
-        {
-          GtkATContext *parent_context = gtk_accessible_get_at_context (accessible_parent);
-
-          if (!parent_context)
-            break;
-
-          gtk_at_context_realize (parent_context);
-          accessible_parent = parent_context->accessible_parent;
-
-          g_clear_object (&parent_context);
-        }
-    }
-}
-
 /*< private >
  * gtk_at_context_set_accessible_parent:
  * @self: a `GtkAtContext`
@@ -583,10 +533,15 @@ gtk_at_context_set_accessible_parent (GtkATContext *self,
       self->accessible_parent = parent;
       if (self->accessible_parent != NULL)
         {
+          GtkATContext *parent_context = NULL;
+
           g_object_add_weak_pointer (G_OBJECT (self->accessible_parent),
                                      (gpointer *) &self->accessible_parent);
 
-          maybe_realize_context (self);
+          parent_context = get_parent_context (self);
+          if (parent_context && parent_context->realized)
+            gtk_at_context_realize (self);
+          g_clear_object (&parent_context);
         }
     }
 }
@@ -688,9 +643,6 @@ static const struct {
 #if defined(GDK_WINDOWING_WAYLAND) || defined(GDK_WINDOWING_X11)
   { "AT-SPI", "atspi", gtk_at_spi_create_context },
 #endif
-#ifdef HAVE_ACCESSKIT
-  { "AccessKit", "accesskit", gtk_accesskit_create_context },
-#endif
   { "Test", "test", gtk_test_at_context_new },
 };
 
@@ -725,19 +677,13 @@ gtk_at_context_create (GtkAccessibleRole  accessible_role,
       if (g_ascii_strcasecmp (gtk_a11y_env, "help") == 0)
         {
           g_print ("Supported arguments for GTK_A11Y environment variable:\n");
-#ifdef HAVE_ACCESSKIT
-          g_print ("   accesskit - Use the AccessKit accessibility backend\n");
-#else
-          g_print ("   accesskit - Disabled during GTK build\n");
-#endif
+
 #if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
-          g_print ("       atspi - Use the AT-SPI accessibility backend\n");
-#else
-          g_print ("       atspi - Not available on this platform\n");
+          g_print ("   atspi - Use the AT-SPI accessibility backend\n");
 #endif
-          g_print ("        test - Use the test accessibility backend\n");
-          g_print ("        none - Disable the accessibility backend\n");
-          g_print ("        help - Print this help\n\n");
+          g_print ("    test - Use the test accessibility backend\n");
+          g_print ("    none - Disable the accessibility backend\n");
+          g_print ("    help - Print this help\n\n");
           g_print ("Other arguments will cause a warning and be ignored.\n");
 
           gtk_a11y_env = "0";
@@ -767,7 +713,7 @@ gtk_at_context_create (GtkAccessibleRole  accessible_role,
   /* Fall back to the test context, so we can get debugging data */
   if (res == NULL)
     res = g_object_new (GTK_TYPE_TEST_AT_CONTEXT,
-                        "accessible-role", accessible_role,
+                        "accessible_role", accessible_role,
                         "accessible", accessible,
                         "display", display,
                         NULL);
@@ -846,8 +792,6 @@ gtk_at_context_realize (GtkATContext *self)
   GTK_AT_CONTEXT_GET_CLASS (self)->realize (self);
 
   self->realized = TRUE;
-
-  g_object_notify_by_pspec (G_OBJECT (self), obj_props[PROP_REALIZED]);
 }
 
 void
@@ -1027,98 +971,6 @@ gtk_at_context_get_accessible_property (GtkATContext          *self,
   return gtk_accessible_attribute_set_get_value (self->properties, property);
 }
 
-static void
-append_to_accessible_relation (GtkATContext          *self,
-                               GtkAccessibleRelation  relation,
-                               GtkAccessible         *accessible)
-{
-  g_return_if_fail (GTK_IS_AT_CONTEXT (self));
-  GtkAccessibleValue *target_value;
-
-  if (gtk_accessible_attribute_set_contains (self->relations, relation))
-    {
-      target_value = gtk_accessible_value_ref (gtk_accessible_attribute_set_get_value (self->relations, relation));
-    }
-  else
-    {
-      target_value = gtk_reference_list_accessible_value_new (NULL);
-      gtk_accessible_attribute_set_add (self->relations, relation, target_value);
-    }
-
-  gtk_reference_list_accessible_value_append (target_value, accessible);
-
-  gtk_accessible_value_unref (target_value);
-
-  self->updated_relations |= (1 << relation);
-}
-
-static void
-remove_from_accessible_relation (GtkATContext          *self,
-                                 GtkAccessibleRelation  relation,
-                                 GtkAccessible         *accessible)
-{
-  g_return_if_fail (GTK_IS_AT_CONTEXT (self));
-  GtkAccessibleValue * target_value;
-
-  if (!gtk_accessible_attribute_set_contains (self->relations, relation))
-    return;
-
-  target_value = gtk_accessible_attribute_set_get_value (self->relations, relation);
-  gtk_reference_list_accessible_value_remove (target_value, accessible);
-
-  self->updated_relations |= (1 << relation);
-}
-
-static void
-update_reverse_relation (GtkATContext *self, GtkAccessibleRelation relation, GtkAccessibleValue *value)
-{
-  struct {
-    GtkAccessibleRelation rel;
-    GtkAccessibleRelation reverse_rel;
-  } reverse_rels_map[] = {
-    { GTK_ACCESSIBLE_RELATION_LABELLED_BY, GTK_ACCESSIBLE_RELATION_LABEL_FOR },
-    { GTK_ACCESSIBLE_RELATION_DESCRIBED_BY, GTK_ACCESSIBLE_RELATION_DESCRIPTION_FOR },
-    { GTK_ACCESSIBLE_RELATION_CONTROLS, GTK_ACCESSIBLE_RELATION_CONTROLLED_BY },
-    { GTK_ACCESSIBLE_RELATION_DETAILS, GTK_ACCESSIBLE_RELATION_DETAILS_FOR },
-    { GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE, GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE_FOR },
-    { GTK_ACCESSIBLE_RELATION_FLOW_TO, GTK_ACCESSIBLE_RELATION_FLOW_FROM },
-  };
-
-  GList *l;
-  GtkATContext *related_context;
-  for (int i = 0; i < G_N_ELEMENTS (reverse_rels_map); i++)
-    {
-      if (relation == reverse_rels_map[i].rel)
-        {
-          if (value)
-            {
-              for (l = gtk_reference_list_accessible_value_get (value); l; l = l->next)
-                {
-                  related_context = gtk_accessible_get_at_context (l->data);
-                  append_to_accessible_relation (related_context, reverse_rels_map[i].reverse_rel, self->accessible);
-                  g_clear_object (&related_context);
-                }
-            }
-          else
-            {
-              if (gtk_accessible_attribute_set_contains (self->relations, relation))
-                {
-                  GtkAccessibleValue *val = gtk_accessible_attribute_set_get_value (self->relations, relation);
-                  for (l = gtk_reference_list_accessible_value_get (val); l; l = l->next)
-                    {
-                      related_context = gtk_accessible_get_at_context (l->data);
-                      if (!related_context)
-                        continue;
-                      remove_from_accessible_relation (related_context, reverse_rels_map[i].reverse_rel, self->accessible);
-                      g_clear_object (&related_context);
-                    }
-                }
-            }
-          break;
-        }
-    }
-}
-
 /*< private >
  * gtk_at_context_set_accessible_relation:
  * @self: a `GtkATContext`
@@ -1141,14 +993,6 @@ gtk_at_context_set_accessible_relation (GtkATContext          *self,
 
   gboolean res = FALSE;
 
-  /* We are setting the relation to a new value,
-  * so we must get rid of the reverse relations first.
-  */
-  update_reverse_relation (self, relation, NULL);
-  /* Now, we can create the new reverse relations if it makes sense. */
-  if (value != NULL)
-    update_reverse_relation (self, relation, value);
-
   if (value != NULL)
     res = gtk_accessible_attribute_set_add (self->relations, relation, value);
   else
@@ -1156,7 +1000,6 @@ gtk_at_context_set_accessible_relation (GtkATContext          *self,
 
   if (res)
     self->updated_relations |= (1 << relation);
-
 }
 
 /*< private >
@@ -1214,7 +1057,7 @@ static guint8 naming[] = {
   [GTK_ACCESSIBLE_ROLE_ALERT_DIALOG] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_APPLICATION] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_ARTICLE] = NAME_FROM_AUTHOR,
-  [GTK_ACCESSIBLE_ROLE_BANNER] = NAME_FROM_AUTHOR,
+  [GTK_ACCESSIBLE_ROLE_BANNER] = GTK_ACCESSIBLE_NAME_PROHIBITED,
   [GTK_ACCESSIBLE_ROLE_BLOCK_QUOTE] = NAME_FROM_AUTHOR,
   [GTK_ACCESSIBLE_ROLE_BUTTON] = NAME_FROM_AUTHOR|NAME_FROM_CONTENT|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_CAPTION] = GTK_ACCESSIBLE_NAME_PROHIBITED,
@@ -1276,7 +1119,7 @@ static guint8 naming[] = {
   [GTK_ACCESSIBLE_ROLE_SEPARATOR] = NAME_FROM_AUTHOR,
   [GTK_ACCESSIBLE_ROLE_SLIDER] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_SPIN_BUTTON] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
-  [GTK_ACCESSIBLE_ROLE_STATUS] = NAME_FROM_AUTHOR,
+  [GTK_ACCESSIBLE_ROLE_STATUS] = GTK_ACCESSIBLE_NAME_PROHIBITED,
   [GTK_ACCESSIBLE_ROLE_STRUCTURE] = GTK_ACCESSIBLE_NAME_PROHIBITED,
   [GTK_ACCESSIBLE_ROLE_SWITCH] = NAME_FROM_AUTHOR|NAME_FROM_CONTENT|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_TAB] = NAME_FROM_AUTHOR|NAME_FROM_CONTENT|GTK_ACCESSIBLE_NAME_REQUIRED,
@@ -1285,11 +1128,11 @@ static guint8 naming[] = {
   [GTK_ACCESSIBLE_ROLE_TAB_PANEL] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_TERMINAL] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_TEXT_BOX] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
-  [GTK_ACCESSIBLE_ROLE_TIME] = NAME_FROM_AUTHOR,
+  [GTK_ACCESSIBLE_ROLE_TIME] = GTK_ACCESSIBLE_NAME_PROHIBITED,
   [GTK_ACCESSIBLE_ROLE_TIMER] = NAME_FROM_AUTHOR,
   [GTK_ACCESSIBLE_ROLE_TOGGLE_BUTTON] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_TOOLBAR] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_RECOMMENDED,
-  [GTK_ACCESSIBLE_ROLE_TOOLTIP] = NAME_FROM_AUTHOR|NAME_FROM_CONTENT| GTK_ACCESSIBLE_NAME_REQUIRED,
+  [GTK_ACCESSIBLE_ROLE_TOOLTIP] = NAME_FROM_AUTHOR|NAME_FROM_CONTENT,
   [GTK_ACCESSIBLE_ROLE_TREE] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_TREE_GRID] = NAME_FROM_AUTHOR|GTK_ACCESSIBLE_NAME_REQUIRED,
   [GTK_ACCESSIBLE_ROLE_TREE_ITEM] = NAME_FROM_AUTHOR|NAME_FROM_CONTENT|GTK_ACCESSIBLE_NAME_REQUIRED,
@@ -1342,8 +1185,8 @@ gtk_accessible_role_get_naming (GtkAccessibleRole role)
   return (GtkAccessibleNaming) (naming[role] & ~(NAME_FROM_AUTHOR|NAME_FROM_CONTENT));
 }
 
-gboolean
-gtk_at_context_is_nested_button (GtkATContext *self)
+static gboolean
+is_nested_button (GtkATContext *self)
 {
   GtkAccessible *accessible;
   GtkWidget *widget, *parent;
@@ -1591,11 +1434,11 @@ gboolean              check_duplicates)
    * ui file and carries all the a11y attributes, but the
    * focus ends up on the toggle button.
    */
-  if (gtk_at_context_is_nested_button (self))
+  if (is_nested_button (self))
     {
       parent = get_parent_context (self);
       self = parent;
-      if (gtk_at_context_is_nested_button (self))
+      if (is_nested_button (self))
         {
           parent = get_parent_context (parent);
           g_object_unref (self);

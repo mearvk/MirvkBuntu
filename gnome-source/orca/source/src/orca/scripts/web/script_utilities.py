@@ -31,11 +31,11 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import time
 import urllib
-from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import gi
 
@@ -43,316 +43,25 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
 
 from orca import (
-    ax_cache_manager,
     caret_navigator,
     debug,
     document_presenter,
+    flat_review_presenter,
     focus_manager,
     input_event_manager,
     script_utilities,
     speech_presenter,
 )
 from orca.ax_component import AXComponent
+from orca.ax_document import AXDocument
 from orca.ax_hypertext import AXHypertext
 from orca.ax_object import AXObject
 from orca.ax_text import AXText
 from orca.ax_utilities import AXUtilities
 from orca.ax_utilities_debugging import AXUtilitiesDebugging
-from orca.ax_utilities_hypertext import CaretPolicy
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable, Iterator
-
-    from orca.ax_utilities_text import CaretSetReason
-
     from .script import Script
-
-
-class _WebUtilitiesCache:
-    """Provides web-utility access to manager-backed cached values."""
-
-    IN_DOCUMENT_CONTENT = "WebUtilities.in-document-content"
-    IS_DOCUMENT = "WebUtilities.is-document"
-    IS_TOP_LEVEL_DOCUMENT = "WebUtilities.is-top-level-document"
-    DOCUMENT_FOR_OBJECT = "WebUtilities.document-for-object"
-    TOP_LEVEL_DOCUMENT_FOR_OBJECT = "WebUtilities.top-level-document-for-object"
-    IS_CONTENT_EDITABLE_WITH_EMBEDDED_OBJECTS = (
-        "WebUtilities.is-content-editable-with-embedded-objects"
-    )
-    HAS_GRID_DESCENDANT = "WebUtilities.has-grid-descendant"
-    IS_OFF_SCREEN_LABEL = "WebUtilities.is-off-screen-label"
-    LINES_ARE_SINGLE_CHARS = "WebUtilities.lines-are-single-chars"
-    LINES_ARE_SINGLE_WORDS = "WebUtilities.lines-are-single-words"
-    IS_CLICKABLE_ELEMENT = "WebUtilities.is-clickable-element"
-    IS_LINK = "WebUtilities.is-link"
-    IS_USELESS_IMAGE = "WebUtilities.is-useless-image"
-    IS_REDUNDANT_SVG = "WebUtilities.is-redundant-svg"
-    IS_USELESS_EMPTY_ELEMENT = "WebUtilities.is-useless-empty-element"
-    HAS_NAME_AND_ACTION_AND_NO_USEFUL_CHILDREN = (
-        "WebUtilities.has-name-and-action-and-no-useful-children"
-    )
-    WRAPS_ONLY_SKIPPABLE_ELEMENTS = "WebUtilities.wraps-only-skippable-elements"
-    INFERRED_LABEL = "WebUtilities.inferred-label"
-    SHOULD_FILTER = "WebUtilities.should-filter"
-    SHOULD_INFER_LABEL_FOR = "WebUtilities.should-infer-label-for"
-    TREAT_AS_TEXT_OBJECT = "WebUtilities.treat-as-text-object"
-    TREAT_AS_DIV = "WebUtilities.treat-as-div"
-    OBJECT_CONTENTS = "WebUtilities.object-contents"
-    SENTENCE_CONTENTS = "WebUtilities.sentence-contents"
-    LINE_CONTENTS = "WebUtilities.line-contents"
-    WORD_CONTENTS = "WebUtilities.word-contents"
-    CHARACTER_CONTENTS = "WebUtilities.character-contents"
-    CAN_HAVE_CARET_CONTEXT = "WebUtilities.can-have-caret-context"
-    CARET_CONTEXTS = "WebUtilities.caret-contexts"
-    PRIOR_CONTEXTS = "WebUtilities.prior-contexts"
-    FIND_CONTAINER = "WebUtilities.find-container"
-
-    OBJECT_DECISION_NAMESPACES = (
-        IN_DOCUMENT_CONTENT,
-        IS_DOCUMENT,
-        IS_TOP_LEVEL_DOCUMENT,
-        DOCUMENT_FOR_OBJECT,
-        TOP_LEVEL_DOCUMENT_FOR_OBJECT,
-        IS_CONTENT_EDITABLE_WITH_EMBEDDED_OBJECTS,
-        HAS_GRID_DESCENDANT,
-        IS_OFF_SCREEN_LABEL,
-        LINES_ARE_SINGLE_CHARS,
-        LINES_ARE_SINGLE_WORDS,
-        IS_CLICKABLE_ELEMENT,
-        IS_LINK,
-        IS_USELESS_IMAGE,
-        IS_REDUNDANT_SVG,
-        IS_USELESS_EMPTY_ELEMENT,
-        HAS_NAME_AND_ACTION_AND_NO_USEFUL_CHILDREN,
-        WRAPS_ONLY_SKIPPABLE_ELEMENTS,
-        INFERRED_LABEL,
-        SHOULD_FILTER,
-        SHOULD_INFER_LABEL_FOR,
-        TREAT_AS_TEXT_OBJECT,
-        TREAT_AS_DIV,
-    )
-
-    CONTENT_NAMESPACES = (
-        OBJECT_CONTENTS,
-        SENTENCE_CONTENTS,
-        LINE_CONTENTS,
-        WORD_CONTENTS,
-        CHARACTER_CONTENTS,
-    )
-
-    TEMPORARY_CONTEXT_NAMESPACES = (CAN_HAVE_CARET_CONTEXT,)
-
-    _CONTENT_KEY = "contents"
-    _CONTEXTS_KEY = "contexts"
-    _FIND_CONTAINER_KEY = "container"
-
-    def __init__(self) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        for namespace in (
-            self.OBJECT_DECISION_NAMESPACES
-            + self.CONTENT_NAMESPACES
-            + self.TEMPORARY_CONTEXT_NAMESPACES
-            + (
-                self.CARET_CONTEXTS,
-                self.PRIOR_CONTEXTS,
-                self.FIND_CONTAINER,
-            )
-        ):
-            self._manager.register_cache(
-                self,
-                namespace,
-                lifetime=ax_cache_manager.Lifetime.OWNER,
-                clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-                clear_interval_seconds=None,
-            )
-        self._caches = {
-            namespace: self._manager.get_cache(self, namespace)
-            for namespace in (
-                self.OBJECT_DECISION_NAMESPACES
-                + self.CONTENT_NAMESPACES
-                + self.TEMPORARY_CONTEXT_NAMESPACES
-                + (
-                    self.CARET_CONTEXTS,
-                    self.PRIOR_CONTEXTS,
-                    self.FIND_CONTAINER,
-                )
-            )
-        }
-
-    def get_for_object(
-        self, namespace: str, obj: Atspi.Accessible, default: Any = ax_cache_manager.MISSING
-    ) -> Any:
-        """Returns a cached value for obj, or default on a miss."""
-
-        cache = self._caches.get(namespace)
-        if cache is None:
-            return default
-
-        value = cache.get(ax_cache_manager.get_object_key(obj), default)
-        if isinstance(value, list):
-            return list(value)
-        return value
-
-    def set_for_object(self, namespace: str, obj: Atspi.Accessible, value: object) -> None:
-        """Stores a cached value for obj."""
-
-        cache = self._caches.get(namespace)
-        if cache is not None:
-            if isinstance(value, list):
-                value = list(value)
-            cache.put(ax_cache_manager.get_object_key(obj), value)
-
-    def clear_object_decisions(self, reason: str = "") -> None:
-        """Clears cached web object decisions."""
-
-        for namespace in self.OBJECT_DECISION_NAMESPACES:
-            if cache := self._caches.get(namespace):
-                cache.invalidate(reason)
-
-    def clear_namespace(self, namespace: str, reason: str = "") -> None:
-        """Clears one cached web namespace."""
-
-        if cache := self._caches.get(namespace):
-            cache.invalidate(reason)
-
-    def get_content(
-        self,
-        namespace: str,
-    ) -> list[tuple[Atspi.Accessible, int, int, str]] | None:
-        """Returns cached web contents for namespace."""
-
-        cache = self._caches.get(namespace)
-        if cache is None:
-            return None
-
-        contents = cache.get(self._CONTENT_KEY, ax_cache_manager.MISSING)
-        if contents is ax_cache_manager.MISSING:
-            return None
-        return list(contents)
-
-    def set_content(
-        self,
-        namespace: str,
-        contents: list[tuple[Atspi.Accessible, int, int, str]],
-    ) -> None:
-        """Stores web contents for namespace."""
-
-        cache = self._caches.get(namespace)
-        if cache is not None:
-            cache.put(self._CONTENT_KEY, list(contents))
-
-    def clear_content(self, reason: str = "") -> None:
-        """Clears cached web contents."""
-
-        for namespace in self.CONTENT_NAMESPACES:
-            if cache := self._caches.get(namespace):
-                cache.invalidate(reason)
-
-    def get_caret_context_decision(self, obj: Atspi.Accessible) -> bool | None:
-        """Returns the cached caret-context decision for obj."""
-
-        cache = self._caches.get(self.CAN_HAVE_CARET_CONTEXT)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_caret_context_decision(self, obj: Atspi.Accessible, decision: bool) -> None:
-        """Stores the caret-context decision for obj."""
-
-        cache = self._caches.get(self.CAN_HAVE_CARET_CONTEXT)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), decision)
-
-    def clear_caret_context_decisions(self, reason: str = "") -> None:
-        """Clears cached caret-context decisions."""
-
-        cache = self._caches.get(self.CAN_HAVE_CARET_CONTEXT)
-        if cache is not None:
-            cache.invalidate(reason)
-
-    def _get_contexts(self, namespace: str) -> dict[Hashable, tuple[Atspi.Accessible | None, int]]:
-        """Returns a copy of the cached context map."""
-
-        cache = self._caches.get(namespace)
-        if cache is None:
-            return {}
-
-        return dict(cache.get(self._CONTEXTS_KEY, {}))
-
-    def get_context_for_parent(
-        self,
-        namespace: str,
-        parent: Atspi.Accessible | None,
-    ) -> tuple[Atspi.Accessible | None, int] | None:
-        """Returns the cached context for parent."""
-
-        return self._get_contexts(namespace).get(ax_cache_manager.get_object_key(parent))
-
-    def set_context_for_parent(
-        self,
-        namespace: str,
-        parent: Atspi.Accessible | None,
-        context: tuple[Atspi.Accessible | None, int],
-    ) -> None:
-        """Stores the context for parent."""
-
-        contexts = self._get_contexts(namespace)
-        contexts[ax_cache_manager.get_object_key(parent)] = context
-        cache = self._caches.get(namespace)
-        if cache is not None:
-            cache.put(self._CONTEXTS_KEY, contexts)
-
-    def discard_context_for_parent(
-        self,
-        namespace: str,
-        parent: Atspi.Accessible | None,
-    ) -> None:
-        """Removes the cached context for parent."""
-
-        contexts = self._get_contexts(namespace)
-        contexts.pop(ax_cache_manager.get_object_key(parent), None)
-        cache = self._caches.get(namespace)
-        if cache is not None:
-            cache.put(self._CONTEXTS_KEY, contexts)
-
-    def get_caret_contexts(self) -> dict[Hashable, tuple[Atspi.Accessible | None, int]]:
-        """Returns cached caret contexts."""
-
-        return self._get_contexts(self.CARET_CONTEXTS)
-
-    def replace_caret_contexts(
-        self,
-        contexts: dict[Hashable, tuple[Atspi.Accessible | None, int]],
-    ) -> None:
-        """Replaces cached caret contexts."""
-
-        cache = self._caches.get(self.CARET_CONTEXTS)
-        if cache is not None:
-            cache.put(self._CONTEXTS_KEY, contexts)
-
-    def clear_prior_contexts(self, reason: str = "") -> None:
-        """Clears cached prior caret contexts."""
-
-        cache = self._caches.get(self.PRIOR_CONTEXTS)
-        if cache is not None:
-            cache.invalidate(reason)
-
-    def get_find_container(self) -> Atspi.Accessible | None:
-        """Returns the cached find-in-page container."""
-
-        cache = self._caches.get(self.FIND_CONTAINER)
-        if cache is None:
-            return None
-
-        return cache.get(self._FIND_CONTAINER_KEY, None)
-
-    def set_find_container(self, container: Atspi.Accessible) -> None:
-        """Stores the find-in-page container."""
-
-        cache = self._caches.get(self.FIND_CONTAINER)
-        if cache is not None:
-            cache.put(self._FIND_CONTAINER_KEY, container)
 
 
 class Utilities(script_utilities.Utilities):
@@ -360,25 +69,55 @@ class Utilities(script_utilities.Utilities):
 
     def __init__(self, script: Script) -> None:
         super().__init__(script)
-        self._cache = _WebUtilitiesCache()
-        self.caret_policy = CaretPolicy(
-            can_have_caret_context=self._can_have_caret_context,
-            treat_as_text_object=self.treat_as_text_object,
-            treat_as_whole=self._treat_object_as_whole,
-            in_document_content=self.in_document_content,
-            is_boundary=self.is_top_level_document,
-            is_text_block_element=self.is_text_block_element,
+        self._cached_caret_contexts: dict[int, tuple[Atspi.Accessible, int]] = {}
+        self._cached_prior_contexts: dict[int, tuple[Atspi.Accessible, int]] = {}
+        self._cached_can_have_caret_context_decision: dict[int, bool] = {}
+        self._cached_context_paths_roles_and_names: dict[int, tuple] = {}
+        self._cached_paths: dict[int, list] = {}
+        self._cached_in_document_content: dict[int, bool] = {}
+        self._cached_is_text_block_element: dict[int, bool] = {}
+        self._cached_is_content_editable_with_embedded_objects: dict[int, bool] = {}
+        self._cached_has_grid_descendant: dict[int, bool] = {}
+        self._cached_is_off_screen_label: dict[int, bool] = {}
+        self._cached_element_lines_are_single_chars: dict[int, bool] = {}
+        self._cached_element_lines_are_single_words: dict[int, bool] = {}
+        self._cached_is_clickable_element: dict[int, bool] = {}
+        self._selection_anchor_and_focus: tuple[
+            Atspi.Accessible | None, Atspi.Accessible | None
+        ] = (
+            None,
+            None,
         )
+        self._cached_is_link: dict[int, bool] = {}
+        self._cached_is_custom_image: dict[int, bool] = {}
+        self._cached_is_useless_image: dict[int, bool] = {}
+        self._cached_is_redundant_svg: dict[int, bool] = {}
+        self._cached_is_useless_empty_element: dict[int, bool] = {}
+        self._cachedhas_name_and_action_and_no_useful_children: dict[int, bool] = {}
+        self._cached_inferred_labels: dict[int, tuple[str, list[Atspi.Accessible]]] = {}
+        self._cached_should_filter: dict[int, bool] = {}
+        self._cached_should_infer_label_for: dict[int, bool] = {}
+        self._cached_treat_as_text_object: dict[int, bool] = {}
+        self._cached_treat_as_div: dict[int, bool] = {}
+        self._cached_object_contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None
+        self._cached_sentence_contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None
+        self._cached_line_contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None
+        self._cached_word_contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None
+        self._cached_character_contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None
+        self._cached_find_container: Atspi.Accessible | None = None
         self._valid_child_roles: dict[Atspi.Role, list[Atspi.Role]] = {
             Atspi.Role.LIST: [Atspi.Role.LIST_ITEM],
         }
+        self._find_container: Atspi.Accessible | None = None
 
     def _cleanup_contexts(self) -> None:
-        contexts = self._cache.get_caret_contexts()
-        contexts = {
-            key: context for key, context in contexts.items() if AXObject.is_valid(context[0])
-        }
-        self._cache.replace_caret_contexts(contexts)
+        to_remove = []
+        for key, [obj, _offset] in self._cached_caret_contexts.items():
+            if not AXObject.is_valid(obj):
+                to_remove.append(key)
+
+        for key in to_remove:
+            self._cached_caret_contexts.pop(key, None)
 
     def dump_cache(
         self,
@@ -391,10 +130,7 @@ class Utilities(script_utilities.Utilities):
             document = self.active_document()
 
         document_parent = AXObject.get_parent(document)
-        context = self._cache.get_context_for_parent(
-            self._cache.CARET_CONTEXTS,
-            document_parent,
-        )
+        context = self._cached_caret_contexts.get(hash(document_parent))
         tokens = [
             "WEB: Clearing all cached info for",
             document,
@@ -411,11 +147,7 @@ class Utilities(script_utilities.Utilities):
         if preserve_context and context:
             tokens = ["WEB: Preserving context of", context[0], ",", context[1]]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            self._cache.set_context_for_parent(
-                self._cache.CARET_CONTEXTS,
-                document_parent,
-                context,
-            )
+            self._cached_caret_contexts[hash(document_parent)] = context
 
     def clear_cached_objects(self) -> None:
         """Clears cached object details."""
@@ -423,28 +155,51 @@ class Utilities(script_utilities.Utilities):
         # TODO - JD: Should callers instead call dump_cache with preserve_context=True?
 
         debug.print_message(debug.LEVEL_INFO, "WEB: cleaning up cached objects", True)
-        self._cache.clear_object_decisions("web clear cached objects")
-        self._cache.clear_caret_context_decisions("web clear cached objects")
+        self._cached_in_document_content = {}
+        self._cached_is_text_block_element = {}
+        self._cached_is_content_editable_with_embedded_objects = {}
+        self._cached_has_grid_descendant = {}
+        self._cached_is_off_screen_label = {}
+        self._cached_element_lines_are_single_chars = {}
+        self._cached_element_lines_are_single_words = {}
+        self._cached_is_clickable_element = {}
+        self._cached_is_link = {}
+        self._cached_is_custom_image = {}
+        self._cached_is_useless_image = {}
+        self._cached_is_redundant_svg = {}
+        self._cached_is_useless_empty_element = {}
+        self._cachedhas_name_and_action_and_no_useful_children = {}
+        self._cached_inferred_labels = {}
+        self._cached_should_filter = {}
+        self._cached_should_infer_label_for = {}
+        self._cached_treat_as_text_object = {}
+        self._cached_treat_as_div = {}
+        self._cached_paths = {}
+        self._cached_context_paths_roles_and_names = {}
+        self._cached_can_have_caret_context_decision = {}
         self._cleanup_contexts()
-        self._cache.clear_prior_contexts("web clear cached objects")
+        self._cached_prior_contexts = {}
+        self._cached_find_container = None
 
     def clear_content_cache(self) -> None:
         """Clears the cached line, word, object, character contents."""
 
-        self._cache.clear_content("web clear content cache")
+        self._cached_object_contents = None
+        self._cached_sentence_contents = None
+        self._cached_line_contents = None
+        self._cached_word_contents = None
+        self._cached_character_contents = None
 
-    def is_document(self, obj: Atspi.Accessible) -> bool:
+    def is_document(self, obj: Atspi.Accessible, exclude_document_frame: bool = True) -> bool:
         """Returns True if obj is a document."""
 
-        namespace = self._cache.IS_DOCUMENT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if AXUtilities.is_document_web(obj) or AXUtilities.is_embedded(obj):
+            return True
 
-        role = AXObject.get_role(obj)
-        rv = AXUtilities.is_document_web(obj, role) or AXUtilities.is_embedded(obj, role)
-        self._cache.set_for_object(namespace, obj, rv)
-        return rv
+        if not exclude_document_frame:
+            return AXUtilities.is_document_frame(obj)
+
+        return False
 
     def in_document_content(self, obj: Atspi.Accessible | None = None) -> bool:
         if not obj:
@@ -453,53 +208,13 @@ class Utilities(script_utilities.Utilities):
         if self.is_document(obj):
             return True
 
-        namespace = self._cache.IN_DOCUMENT_CONTENT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_in_document_content.get(hash(obj))
+        if rv is not None:
+            return rv
 
         document = self.get_document_for_object(obj)
         rv = document is not None
-        self._cache.set_for_object(namespace, obj, rv)
-        return rv
-
-    def get_document_for_object(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
-        """Returns the nearest document ancestor of obj, or obj if it is a document."""
-
-        namespace = self._cache.DOCUMENT_FOR_OBJECT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
-
-        rv = super().get_document_for_object(obj)
-        self._cache.set_for_object(namespace, obj, rv)
-        return rv
-
-    def is_top_level_document(self, obj: Atspi.Accessible) -> bool:
-        """Returns true if obj is a top-level document."""
-
-        namespace = self._cache.IS_TOP_LEVEL_DOCUMENT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
-
-        rv = super().is_top_level_document(obj)
-        self._cache.set_for_object(namespace, obj, rv)
-        return rv
-
-    def get_top_level_document_for_object(
-        self,
-        obj: Atspi.Accessible,
-    ) -> Atspi.Accessible | None:
-        """Returns the top-level document containing obj."""
-
-        namespace = self._cache.TOP_LEVEL_DOCUMENT_FOR_OBJECT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
-
-        rv = super().get_top_level_document_for_object(obj)
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_in_document_content[hash(obj)] = rv
         return rv
 
     def grab_focus_when_setting_caret(self, obj: Atspi.Accessible) -> bool:
@@ -522,22 +237,21 @@ class Utilities(script_utilities.Utilities):
         obj: Atspi.Accessible,
         offset: int,
         document: Atspi.Accessible | None = None,
-        *,
-        reason: CaretSetReason,
     ) -> None:
+        if flat_review_presenter.get_presenter().is_active():
+            flat_review_presenter.get_presenter().quit()
         grab_focus = self.grab_focus_when_setting_caret(obj)
 
         obj, offset = self.first_context(obj, offset)
         self.set_caret_context(obj, offset, document)
 
         old_focus = focus_manager.get_manager().get_locus_of_focus()
-        if not reason.is_text_selection():
-            AXUtilities.clear_all_selected_text(old_focus)
+        AXUtilities.clear_all_selected_text(old_focus)
         focus_manager.get_manager().set_locus_of_focus(None, obj, notify_script=False)
         if grab_focus:
             AXObject.grab_focus(obj)
 
-        AXUtilities.set_caret_offset_with_reason(obj, offset, reason)
+        AXText.set_caret_offset(obj, offset)
 
         # If we return earlier than here, braille cursor routing fails in sticky focus mode.
         presenter = document_presenter.get_presenter()
@@ -546,6 +260,10 @@ class Utilities(script_utilities.Utilities):
 
         if presenter.use_focus_mode(obj, old_focus) != presenter.in_focus_mode(self._script.app):
             presenter.toggle_presentation_mode(self._script)
+
+        # TODO - JD: Can we remove this?
+        if obj:
+            AXObject.clear_cache(obj, False, "Set caret in object.")
 
     def in_find_container(self, obj: Atspi.Accessible | None = None) -> bool:
         """Returns True if obj is in a find-in-page container."""
@@ -567,13 +285,13 @@ class Utilities(script_utilities.Utilities):
             )
 
         container = AXUtilities.find_ancestor(obj, is_find_bar)
-        if container is not None and container == self._cache.get_find_container():
+        if container is not None and container == self._find_container:
             return True
 
         if container:
             tokens = ["WEB:", obj, "believed to be find-in-page widget"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            self._cache.set_find_container(container)
+            self._find_container = container
             return True
 
         return False
@@ -581,7 +299,7 @@ class Utilities(script_utilities.Utilities):
     def get_find_results_count(self, root: Atspi.Accessible | None = None) -> str:
         """Returns a string description of the number of find-in-page results in root."""
 
-        root = root or self._cache.get_find_container()
+        root = root or self._find_container
         if not root:
             return ""
 
@@ -599,14 +317,12 @@ class Utilities(script_utilities.Utilities):
         AXObject.clear_cache(match, False, "Ensuring we have correct name for find results.")
         return AXObject.get_name(match)
 
-    def set_caret_offset(
-        self, obj: Atspi.Accessible, offset: int, *, reason: CaretSetReason
-    ) -> None:
+    def set_caret_offset(self, obj: Atspi.Accessible, offset: int) -> None:
         """Sets the caret offset via AtspiText."""
 
         # TODO - JD: Audit callers and see if this can be merged into the default logic.
 
-        self.set_caret_position(obj, offset, reason=reason)
+        self.set_caret_position(obj, offset)
         self._script.update_braille(obj)
 
     def next_context(
@@ -621,16 +337,14 @@ class Utilities(script_utilities.Utilities):
         if obj is None:
             obj, offset = self.get_caret_context()
 
-        next_obj, next_offset = AXUtilities.find_next_context(obj, offset, self.caret_policy)
+        next_obj, next_offset = self.find_next_caret_in_order(obj, offset)
         if skip_space:
             seen = {(next_obj, next_offset)}
             while (
                 self.treat_as_text_object(next_obj)
                 and AXText.get_character_at_offset(next_obj, next_offset)[0].isspace()
             ):
-                next_obj, next_offset = AXUtilities.find_next_context(
-                    next_obj, next_offset, self.caret_policy
-                )
+                next_obj, next_offset = self.find_next_caret_in_order(next_obj, next_offset)
                 if (next_obj, next_offset) in seen:
                     msg = "WEB: Cycle detected in next_context skip_space. Breaking."
                     debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -651,16 +365,14 @@ class Utilities(script_utilities.Utilities):
         if obj is None:
             obj, offset = self.get_caret_context()
 
-        prev_obj, prev_offset = AXUtilities.find_previous_context(obj, offset, self.caret_policy)
+        prev_obj, prev_offset = self.find_previous_caret_in_order(obj, offset)
         if skip_space:
             seen = {(prev_obj, prev_offset)}
             while (
                 self.treat_as_text_object(prev_obj)
                 and AXText.get_character_at_offset(prev_obj, prev_offset)[0].isspace()
             ):
-                prev_obj, prev_offset = AXUtilities.find_previous_context(
-                    prev_obj, prev_offset, self.caret_policy
-                )
+                prev_obj, prev_offset = self.find_previous_caret_in_order(prev_obj, prev_offset)
                 if (prev_obj, prev_offset) in seen:
                     msg = "WEB: Cycle detected in previous_context skip_space. Breaking."
                     debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -728,21 +440,31 @@ class Utilities(script_utilities.Utilities):
         ):
             return AXComponent.get_rect(parent)
 
-        # A non-text embedded object reports an absolute Component rect, but Chromium's
-        # text-range extents are web-area-relative; use its parent-relative embedded-character
-        # rect so both sides of a same-line comparison share one coordinate space. Firefox can
-        # briefly collapse that height for an image mid-relayout, so use the image's own box height
-        # when it is taller.
-        offset = AXHypertext.get_character_offset_in_parent(obj)
-        if offset >= 0:
-            rect = AXText.get_range_rect(parent, offset, offset + 1)
-            if rect.width and rect.height:
-                if AXUtilities.is_image_or_canvas(obj):
-                    component = AXComponent.get_rect(obj)
-                    rect.height = max(rect.height, component.height)
-                return rect
-
         return AXComponent.get_rect(obj)
+
+    def expand_eocs(
+        self,
+        obj: Atspi.Accessible,
+        start_offset: int = 0,
+        end_offset: int = -1,
+    ) -> str:
+        """Expands the current object replacing embedded object characters with their text."""
+
+        if not self.in_document_content(obj):
+            return super().expand_eocs(obj, start_offset, end_offset)
+
+        if self._has_grid_descendant(obj):
+            tokens = ["WEB: not expanding EOCs:", obj, "has grid descendant"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return ""
+
+        if not self.treat_as_text_object(obj):
+            return ""
+
+        if AXUtilities.is_math(obj) and AXObject.get_child_count(obj):
+            return speech_presenter.get_presenter().generate_speech_string(self._script, obj)
+
+        return super().expand_eocs(obj, start_offset, end_offset)
 
     def _adjust_contents_for_language(
         self,
@@ -804,7 +526,7 @@ class Utilities(script_utilities.Utilities):
         if not self.is_text_block_element(obj):
             return -1
 
-        child = AXUtilities.find_child_at_offset(obj, offset)
+        child = AXHypertext.find_child_at_offset(obj, offset)
         if child and not self.is_text_block_element(child):
             matches = [x for x in contents if x[0] == child]
             if len(matches) == 1:
@@ -818,10 +540,9 @@ class Utilities(script_utilities.Utilities):
         if not obj or AXObject.is_dead(obj):
             return False
 
-        namespace = self._cache.TREAT_AS_TEXT_OBJECT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_treat_as_text_object.get(hash(obj))
+        if rv is not None:
+            return rv
 
         if not AXObject.supports_text(obj):
             return False
@@ -829,9 +550,6 @@ class Utilities(script_utilities.Utilities):
         if not self.in_document_content(
             obj,
         ) or document_presenter.get_presenter().browse_mode_is_sticky(self._script.app):
-            return True
-
-        if AXUtilities.is_live_region(obj):
             return True
 
         rv = AXText.get_character_count(obj) > 0 or AXUtilities.is_editable(obj)
@@ -845,20 +563,15 @@ class Utilities(script_utilities.Utilities):
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = False
 
-        elif rv:
-            not_text_roles = [
-                Atspi.Role.LIST_BOX,
-                Atspi.Role.TABLE,
-                Atspi.Role.TABLE_ROW,
-                Atspi.Role.MATH,
-            ]
+        elif rv and not AXUtilities.is_live_region(obj):
+            not_text_roles = [Atspi.Role.LIST_BOX, Atspi.Role.TABLE, Atspi.Role.TABLE_ROW]
             role = AXObject.get_role(obj)
             if rv and role in not_text_roles:
                 tokens = ["WEB: Treating", obj, "as non-text due to role."]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 rv = False
-            if rv and self._is_off_screen_label(obj):
-                tokens = ["WEB: Treating", obj, "as non-text: is off-screen label."]
+            if rv and (AXUtilities.is_hidden(obj) or self._is_off_screen_label(obj)):
+                tokens = ["WEB: Treating", obj, "as non-text: is hidden or off-screen label."]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 rv = False
             if rv and self._is_non_navigable_embedded_document(obj):
@@ -870,22 +583,21 @@ class Utilities(script_utilities.Utilities):
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 rv = False
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_treat_as_text_object[hash(obj)] = rv
         return rv
 
     def has_name_and_action_and_no_useful_children(self, obj: Atspi.Accessible) -> bool:
         if not (obj and self.in_document_content(obj)):
             return False
 
-        namespace = self._cache.HAS_NAME_AND_ACTION_AND_NO_USEFUL_CHILDREN
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cachedhas_name_and_action_and_no_useful_children.get(hash(obj))
+        if rv is not None:
+            return rv
 
         rv = False
         if AXUtilities.has_explicit_name(obj) and AXObject.supports_action(obj):
             for child in AXObject.iter_children(obj):
-                if not (self._is_useless_empty_element(child) or self._is_useless_image(child)):
+                if not self._is_useless_empty_element(child) or self._is_useless_image(child):
                     break
             else:
                 rv = True
@@ -894,30 +606,7 @@ class Utilities(script_utilities.Utilities):
             tokens = ["WEB:", obj, "has name and action and no useful children"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
-        self._cache.set_for_object(namespace, obj, rv)
-        return rv
-
-    def _wraps_only_skippable_elements(self, obj: Atspi.Accessible) -> bool:
-        """Returns True if obj contains only named sections and otherwise useless elements."""
-
-        namespace = self._cache.WRAPS_ONLY_SKIPPABLE_ELEMENTS
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
-
-        rv = False
-        for child in AXObject.iter_children(obj):
-            if self._is_useless_empty_element(child) or self._is_useless_image(child):
-                continue
-            if AXUtilities.is_section(child) and self.has_name_and_action_and_no_useful_children(
-                child
-            ):
-                rv = True
-                continue
-            rv = False
-            break
-
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cachedhas_name_and_action_and_no_useful_children[hash(obj)] = rv
         return rv
 
     def _treat_object_as_whole(self, obj: Atspi.Accessible, offset: int | None = None) -> bool:
@@ -926,7 +615,6 @@ class Utilities(script_utilities.Utilities):
             Atspi.Role.CHECK_BOX,
             Atspi.Role.CHECK_MENU_ITEM,
             Atspi.Role.LIST_BOX,
-            Atspi.Role.MATH,
             Atspi.Role.MENU_ITEM,
             Atspi.Role.PAGE_TAB,
             Atspi.Role.RADIO_MENU_ITEM,
@@ -981,11 +669,7 @@ class Utilities(script_utilities.Utilities):
             return not document_presenter.get_presenter().browse_mode_is_sticky(self._script.app)
 
         if role == Atspi.Role.LINK:
-            return (
-                AXUtilities.has_explicit_name(obj)
-                or self.has_useless_canvas_descendant(obj)
-                or self._wraps_only_skippable_elements(obj)
-            )
+            return AXUtilities.has_explicit_name(obj) or self.has_useless_canvas_descendant(obj)
 
         if self._is_non_navigable_embedded_document(obj):
             return True
@@ -993,13 +677,13 @@ class Utilities(script_utilities.Utilities):
         if self._is_fake_placeholder_for_entry(obj):
             return True
 
-        if AXUtilities.is_custom_image(obj):
+        if self.is_custom_image(obj):
             return True
 
         # Example: Some StackExchange instances have a focusable "note"/comment role
         # with a name (e.g. "Accepted"), and a single child div which is empty.
         if (
-            AXUtilities.is_text_block(obj, role)
+            role in self._text_block_element_roles()
             and AXUtilities.is_focusable(obj)
             and AXUtilities.has_explicit_name(obj)
         ):
@@ -1023,9 +707,7 @@ class Utilities(script_utilities.Utilities):
             tokens = [
                 "WEB:",
                 granularity,
-                "at offset",
-                offset,
-                "for",
+                f"at offset {offset} for",
                 obj,
                 ":",
                 "'', Start: 0, End: 0. (obj is None)",
@@ -1037,9 +719,7 @@ class Utilities(script_utilities.Utilities):
             tokens = [
                 "WEB:",
                 granularity,
-                "at offset",
-                offset,
-                "for",
+                f"at offset {offset} for",
                 obj,
                 ":",
                 "'', Start: 0, End: 1. (treat_as_text_object() returned False)",
@@ -1047,31 +727,22 @@ class Utilities(script_utilities.Utilities):
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return "", 0, 1
 
+        all_text = AXText.get_all_text(obj)
         if granularity is None:
-            all_text = AXText.get_all_text(obj)
             string, start, end = all_text, 0, len(all_text)
             s = string_for_debug(string)
             tokens = [
                 "WEB:",
                 granularity,
-                "at offset",
-                offset,
-                "for",
+                f"at offset {offset} for",
                 obj,
                 ":",
-                "'",
-                s,
-                "', Start:",
-                start,
-                ", End:",
-                end,
-                ".",
+                f"'{s}', Start: {start}, End: {end}.",
             ]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return string, start, end
 
         if granularity == Atspi.TextGranularity.SENTENCE and not AXUtilities.is_editable(obj):
-            all_text = AXText.get_all_text(obj)
             if AXObject.get_role(obj) in [Atspi.Role.LIST_ITEM, Atspi.Role.HEADING] or not (
                 re.search(r"\w", all_text) and self.is_text_block_element(obj)
             ):
@@ -1080,18 +751,10 @@ class Utilities(script_utilities.Utilities):
                 tokens = [
                     "WEB:",
                     granularity,
-                    "at offset",
-                    offset,
-                    "for",
+                    f"at offset {offset} for",
                     obj,
                     ":",
-                    "'",
-                    s,
-                    "', Start:",
-                    start,
-                    ", End:",
-                    end,
-                    ".",
+                    f"'{s}', Start: {start}, End: {end}.",
                 ]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 return string, start, end
@@ -1113,13 +776,9 @@ class Utilities(script_utilities.Utilities):
         elif granularity == Atspi.TextGranularity.SENTENCE:
             string, start, end = AXText.get_sentence_at_offset(obj, offset)
         elif granularity == Atspi.TextGranularity.WORD:
-            string, start, end = AXText.get_word_at_offset(
-                obj, offset, ensure_whole_characters=True
-            )
+            string, start, end = AXText.get_word_at_offset(obj, offset)
         elif granularity == Atspi.TextGranularity.CHAR:
-            string, start, end = AXText.get_character_at_offset(
-                obj, offset, ensure_whole_characters=True
-            )
+            string, start, end = AXText.get_character_at_offset(obj, offset)
         else:
             string, start, end = AXText.get_line_at_offset(obj, offset)
 
@@ -1127,18 +786,10 @@ class Utilities(script_utilities.Utilities):
         tokens = [
             "WEB:",
             granularity,
-            "at offset",
-            offset,
-            "for",
+            f"at offset {offset} for",
             obj,
             ":",
-            "'",
-            s,
-            "', Start:",
-            start,
-            ", End:",
-            end,
-            ".",
+            f"'{s}', Start: {start}, End: {end}.",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return string, start, end
@@ -1160,6 +811,10 @@ class Utilities(script_utilities.Utilities):
                 return [(obj, 0, len(string), string)]
 
         if granularity == Atspi.TextGranularity.LINE:
+            if AXUtilities.is_math_related(obj):
+                math = AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_math)
+                return [(math, 0, 1, "")]
+
             treat_as_text = self.treat_as_text_object(obj)
             if self._element_lines_are_single_chars(obj):
                 if AXObject.get_name(obj) and treat_as_text:
@@ -1192,11 +847,11 @@ class Utilities(script_utilities.Utilities):
         try:
             char = string[string_offset]
         except IndexError:
-            tokens = ["WEB: Could not get char", string_offset, "for '", string, "'"]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"WEB: Could not get char {string_offset} for '{string}'"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
         else:
             if char == "\ufffc":
-                if child := AXUtilities.find_child_at_offset(obj, offset):
+                if child := AXHypertext.find_child_at_offset(obj, offset):
                     return self._get_contents_for_obj(child, 0, granularity)
 
         ranges = [m.span() for m in re.finditer("[^\ufffc]+", string)]
@@ -1220,9 +875,9 @@ class Utilities(script_utilities.Utilities):
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
         """Returns the sentence contents for the specified offset."""
 
-        self._cache.clear_caret_context_decisions("web sentence contents")
+        self._cached_can_have_caret_context_decision = {}
         rv = self._get_sentence_contents_at_offset_internal(obj, offset, use_cache)
-        self._cache.clear_caret_context_decisions("web sentence contents")
+        self._cached_can_have_caret_context_decision = {}
         return rv
 
     def _get_sentence_contents_at_offset_internal(
@@ -1236,10 +891,17 @@ class Utilities(script_utilities.Utilities):
 
         offset = max(0, offset)
 
-        if use_cache:
-            cached = self._cache.get_content(self._cache.SENTENCE_CONTENTS)
-            if cached and self.find_object_in_contents(obj, offset, cached, use_cache=True) != -1:
-                return cached
+        if use_cache and self._cached_sentence_contents:
+            if (
+                self.find_object_in_contents(
+                    obj,
+                    offset,
+                    self._cached_sentence_contents,
+                    use_cache=True,
+                )
+                != -1
+            ):
+                return self._cached_sentence_contents or []
 
         granularity = Atspi.TextGranularity.SENTENCE
         objects = self._get_contents_for_obj(obj, offset, granularity)
@@ -1272,9 +934,7 @@ class Utilities(script_utilities.Utilities):
                 if AXHypertext.get_character_offset_in_parent(first_obj) == 0:
                     break
 
-            prev_object, prev_offset = AXUtilities.find_previous_context(
-                first_obj, first_start, self.caret_policy
-            )
+            prev_object, prev_offset = self.find_previous_caret_in_order(first_obj, first_start)
             on_left = self._get_contents_for_obj(prev_object, prev_offset, granularity)
             on_left = list(filter(lambda x: x not in objects, on_left))
             ends_on_left = list(filter(_treat_as_sentence_end, on_left))
@@ -1291,9 +951,7 @@ class Utilities(script_utilities.Utilities):
         # Check for things in the same sentence after this object.
         while not _treat_as_sentence_end(objects[-1]):
             last_obj, _last_start, last_end, _last_string = objects[-1]
-            next_obj, next_offset = AXUtilities.find_next_context(
-                last_obj, last_end - 1, self.caret_policy
-            )
+            next_obj, next_offset = self.find_next_caret_in_order(last_obj, last_end - 1)
             on_right = self._get_contents_for_obj(next_obj, next_offset, granularity)
             on_right = list(filter(lambda x: x not in objects, on_right))
             if not on_right:
@@ -1302,7 +960,7 @@ class Utilities(script_utilities.Utilities):
             objects.extend(on_right)
 
         if use_cache:
-            self._cache.set_content(self._cache.SENTENCE_CONTENTS, objects)
+            self._cached_sentence_contents = objects
 
         return objects
 
@@ -1314,9 +972,9 @@ class Utilities(script_utilities.Utilities):
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
         """Returns the character contents for obj at the specified offset."""
 
-        self._cache.clear_caret_context_decisions("web character contents")
+        self._cached_can_have_caret_context_decision = {}
         rv = self._get_character_contents_at_offset_internal(obj, offset, use_cache)
-        self._cache.clear_caret_context_decisions("web character contents")
+        self._cached_can_have_caret_context_decision = {}
         return rv
 
     def _get_character_contents_at_offset_internal(
@@ -1330,15 +988,22 @@ class Utilities(script_utilities.Utilities):
 
         offset = max(0, offset)
 
-        if use_cache:
-            cached = self._cache.get_content(self._cache.CHARACTER_CONTENTS)
-            if cached and self.find_object_in_contents(obj, offset, cached, use_cache=True) != -1:
-                return cached
+        if use_cache and self._cached_character_contents:
+            if (
+                self.find_object_in_contents(
+                    obj,
+                    offset,
+                    self._cached_character_contents,
+                    use_cache=True,
+                )
+                != -1
+            ):
+                return self._cached_character_contents or []
 
         granularity = Atspi.TextGranularity.CHAR
         objects = self._get_contents_for_obj(obj, offset, granularity)
         if use_cache:
-            self._cache.set_content(self._cache.CHARACTER_CONTENTS, objects)
+            self._cached_character_contents = objects
 
         return objects
 
@@ -1350,9 +1015,9 @@ class Utilities(script_utilities.Utilities):
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
         """Returns a list of (obj, start, end, string) tuples for the word at offset."""
 
-        self._cache.clear_caret_context_decisions("web word contents")
+        self._cached_can_have_caret_context_decision = {}
         rv = self._get_word_contents_at_offset(obj, offset, use_cache)
-        self._cache.clear_caret_context_decisions("web word contents")
+        self._cached_can_have_caret_context_decision = {}
         return rv
 
     def _get_word_contents_at_offset(
@@ -1366,20 +1031,22 @@ class Utilities(script_utilities.Utilities):
 
         offset = max(0, offset)
 
-        if use_cache:
-            cached = self._cache.get_content(self._cache.WORD_CONTENTS)
-            if cached and self.find_object_in_contents(obj, offset, cached, use_cache=True) != -1:
-                self._debug_contents_info(obj, offset, cached, "Word (cached)")
-                return cached
+        if use_cache and self._cached_word_contents:
+            if (
+                self.find_object_in_contents(
+                    obj,
+                    offset,
+                    self._cached_word_contents,
+                    use_cache=True,
+                )
+                != -1
+            ):
+                self._debug_contents_info(obj, offset, self._cached_word_contents, "Word (cached)")
+                return self._cached_word_contents or []
 
         granularity = Atspi.TextGranularity.WORD
         objects = self._get_contents_for_obj(obj, offset, granularity)
         rect = self._get_extents(obj, offset, offset + 1)
-
-        if AXUtilities.is_table_cell_or_header(obj):
-            obj_cell = obj
-        else:
-            obj_cell = AXUtilities.find_ancestor(obj, AXUtilities.is_table_cell_or_header)
 
         def _include(x):
             if x in objects:
@@ -1392,20 +1059,19 @@ class Utilities(script_utilities.Utilities):
             if x_start == x_end or not x_string:
                 return False
 
-            if obj != x_obj:
-                if AXUtilities.is_list_item(obj) and AXUtilities.is_list_item(x_obj):
-                    return False
-                if obj_cell is not None and not AXUtilities.is_ancestor(x_obj, obj_cell, True):
-                    return False
+            if (
+                AXUtilities.is_table_cell_or_header(obj)
+                and AXUtilities.is_table_cell_or_header(x_obj)
+                and obj != x_obj
+            ):
+                return False
 
             x_rect = self._get_extents(x_obj, x_start, x_start + 1)
             return AXUtilities.rects_are_on_same_line(rect, x_rect)
 
         # Check for things in the same word to the left of this object.
         first_obj, first_start, _first_end, first_string = objects[0]
-        prev_obj, prev_offset = AXUtilities.find_previous_context(
-            first_obj, first_start, self.caret_policy
-        )
+        prev_obj, prev_offset = self.find_previous_caret_in_order(first_obj, first_start)
         while prev_obj and first_string and prev_obj != first_obj:
             char = AXText.get_character_at_offset(prev_obj, prev_offset)[0]
             if not char or char.isspace():
@@ -1416,22 +1082,24 @@ class Utilities(script_utilities.Utilities):
             if not on_left:
                 break
 
+            if self._content_is_subset_of(objects[0], on_left[-1]):
+                objects.pop(0)
+
             objects[0:0] = on_left
             first_obj, first_start, _first_end, first_string = objects[0]
-            prev_obj, prev_offset = AXUtilities.find_previous_context(
-                first_obj, first_start, self.caret_policy
-            )
+            prev_obj, prev_offset = self.find_previous_caret_in_order(first_obj, first_start)
 
         # Check for things in the same word to the right of this object.
         last_obj, _last_start, last_end, last_string = objects[-1]
         while last_obj and last_string and not last_string[-1].isspace():
-            next_obj, next_offset = AXUtilities.find_next_context(
-                last_obj, last_end - 1, self.caret_policy
-            )
+            next_obj, next_offset = self.find_next_caret_in_order(last_obj, last_end - 1)
             if next_obj == last_obj:
                 break
 
             on_right = self._get_contents_for_obj(next_obj, next_offset, granularity)
+            if on_right and self._content_is_subset_of(objects[0], on_right[-1]):
+                on_right = on_right[0:-1]
+
             on_right = list(filter(_include, on_right))
             if not on_right:
                 break
@@ -1445,7 +1113,7 @@ class Utilities(script_utilities.Utilities):
             objects = [objects[0]]
 
         if use_cache:
-            self._cache.set_content(self._cache.WORD_CONTENTS, objects)
+            self._cached_word_contents = objects
 
         self._debug_contents_info(obj, offset, objects, "Word (not cached)")
         return objects
@@ -1458,9 +1126,9 @@ class Utilities(script_utilities.Utilities):
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
         """Returns a list of (obj, start, end, string) tuples for the object at offset."""
 
-        self._cache.clear_caret_context_decisions("web object contents")
+        self._cached_can_have_caret_context_decision = {}
         rv = self._get_object_contents_at_offset(obj, offset, use_cache)
-        self._cache.clear_caret_context_decisions("web object contents")
+        self._cached_can_have_caret_context_decision = {}
         return rv
 
     def _get_object_contents_at_offset(
@@ -1479,11 +1147,23 @@ class Utilities(script_utilities.Utilities):
 
         offset = max(0, offset)
 
-        if use_cache:
-            cached = self._cache.get_content(self._cache.OBJECT_CONTENTS)
-            if cached and self.find_object_in_contents(obj, offset, cached, use_cache=True) != -1:
-                self._debug_contents_info(obj, offset, cached, "Object (cached)")
-                return cached
+        if use_cache and self._cached_object_contents:
+            if (
+                self.find_object_in_contents(
+                    obj,
+                    offset,
+                    self._cached_object_contents,
+                    use_cache=True,
+                )
+                != -1
+            ):
+                self._debug_contents_info(
+                    obj,
+                    offset,
+                    self._cached_object_contents,
+                    "Object (cached)",
+                )
+                return self._cached_object_contents or []
 
         obj_is_landmark = AXUtilities.is_landmark(obj)
         obj_list = AXUtilities.find_ancestor(obj, AXUtilities.is_list)
@@ -1515,14 +1195,12 @@ class Utilities(script_utilities.Utilities):
 
         objects = self._get_contents_for_obj(obj, offset, None)
         if not objects:
-            tokens = ["ERROR: Cannot get object contents for", obj, "at offset", offset]
+            tokens = ["ERROR: Cannot get object contents for", obj, f"at offset {offset}"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return []
 
         last_obj, _last_start, last_end, _last_string = objects[-1]
-        next_obj, next_offset = AXUtilities.find_next_context(
-            last_obj, last_end - 1, self.caret_policy
-        )
+        next_obj, next_offset = self.find_next_caret_in_order(last_obj, last_end - 1)
         while next_obj:
             on_right = self._get_contents_for_obj(next_obj, next_offset, None)
             on_right = list(filter(_include, on_right))
@@ -1531,15 +1209,27 @@ class Utilities(script_utilities.Utilities):
 
             objects.extend(on_right)
             last_obj, last_end = objects[-1][0], objects[-1][2]
-            next_obj, next_offset = AXUtilities.find_next_context(
-                last_obj, last_end - 1, self.caret_policy
-            )
+            next_obj, next_offset = self.find_next_caret_in_order(last_obj, last_end - 1)
 
         if use_cache:
-            self._cache.set_content(self._cache.OBJECT_CONTENTS, objects)
+            self._cached_object_contents = objects
 
         self._debug_contents_info(obj, offset, objects, "Object (not cached)")
         return objects
+
+    def _content_is_subset_of(
+        self,
+        content_a: tuple[Atspi.Accessible, int, int, str],
+        content_b: tuple[Atspi.Accessible, int, int, str],
+    ) -> bool:
+        obj_a, start_a, end_a, _string_a = content_a
+        obj_b, start_b, end_b, _string_b = content_b
+        if obj_a == obj_b:
+            set_a = set(range(start_a, end_a))
+            set_b = set(range(start_b, end_b))
+            return set_a.issubset(set_b)
+
+        return False
 
     def _debug_contents_info(
         self,
@@ -1557,30 +1247,12 @@ class Utilities(script_utilities.Utilities):
         indent = " " * 8
         for i, (acc, start, end, string) in enumerate(contents):
             rect = self._get_extents(acc, start, end)
-            tokens = [
-                "     ",
-                i,
-                ". chars: ",
-                start,
-                "-",
-                end,
-                ": '",
-                string,
-                "' extents=(",
-                rect.x,
-                ",",
-                rect.y,
-                ",",
-                rect.width,
-                ",",
-                rect.height,
-                ")",
-                # The details are still one string. They become tokens when the debug value
-                # tree can carry them.
-                "\n",
-                AXUtilitiesDebugging.object_details_as_string(acc, indent, False),
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = (
+                f"     {i}. chars: {start}-{end}: '{string}' "
+                f"extents=({rect.x}, {rect.y}, {rect.width}, {rect.height})\n"
+            )
+            msg += AXUtilitiesDebugging.object_details_as_string(acc, indent, False)
+            debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def treat_as_end_of_line(self, obj: Atspi.Accessible, offset: int) -> bool:
         """Returns true if the offset in obj should be treated as the end of the line."""
@@ -1624,14 +1296,6 @@ class Utilities(script_utilities.Utilities):
 
         return False
 
-    @staticmethod
-    @contextmanager
-    def _hypertext_content_building_scope() -> Iterator[None]:
-        """Caches the AT-SPI reads made while assembling line contents, until the scope ends."""
-
-        with ax_cache_manager.stable_tree_scope():
-            yield
-
     def get_line_contents_at_offset(
         self,
         obj: Atspi.Accessible,
@@ -1639,10 +1303,9 @@ class Utilities(script_utilities.Utilities):
         layout_mode: bool | None = None,
         use_cache: bool = True,
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
-        self._cache.clear_caret_context_decisions("web line contents")
-        with self._hypertext_content_building_scope():
-            rv = self._get_line_contents_at_offset(obj, offset, layout_mode, use_cache)
-        self._cache.clear_caret_context_decisions("web line contents")
+        self._cached_can_have_caret_context_decision = {}
+        rv = self._get_line_contents_at_offset(obj, offset, layout_mode, use_cache)
+        self._cached_can_have_caret_context_decision = {}
         return rv
 
     def _get_line_contents_at_offset(
@@ -1652,9 +1315,7 @@ class Utilities(script_utilities.Utilities):
         layout_mode: bool | None = None,
         use_cache: bool = True,
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
-        tokens = ["WEB: _get_line_contents_at_offset for", obj, "at offset", offset]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
+        start_time = time.time()
         if not obj:
             return []
 
@@ -1667,16 +1328,23 @@ class Utilities(script_utilities.Utilities):
         if (
             AXUtilities.is_tool_bar(obj) or AXUtilities.is_menu_bar(obj)
         ) and not self._treat_object_as_whole(obj):
-            child = AXUtilities.find_child_at_offset(obj, offset)
+            child = AXHypertext.find_child_at_offset(obj, offset)
             if child:
                 obj = child
                 offset = 0
 
-        if use_cache:
-            cached = self._cache.get_content(self._cache.LINE_CONTENTS)
-            if cached and self.find_object_in_contents(obj, offset, cached, use_cache=True) != -1:
-                self._debug_contents_info(obj, offset, cached, "Line (cached)")
-                return cached
+        if use_cache and self._cached_line_contents:
+            if (
+                self.find_object_in_contents(
+                    obj,
+                    offset,
+                    self._cached_line_contents,
+                    use_cache=True,
+                )
+                != -1
+            ):
+                self._debug_contents_info(obj, offset, self._cached_line_contents, "Line (cached)")
+                return self._cached_line_contents or []
 
         if layout_mode is None:
             layout_mode = (
@@ -1684,122 +1352,64 @@ class Utilities(script_utilities.Utilities):
                 or document_presenter.get_presenter().in_focus_mode(self._script.app)
             )
 
-        # An overlaid label supplies the visual position of its associated control.
-        if layout_mode and (label := AXUtilities.get_label_covering_object(obj)) is not None:
-            obj, offset = label, 0
-
-        objects: list[tuple[Atspi.Accessible, int, int, str]] = []
-        if offset > 0 and (
-            self.treat_as_end_of_line(obj, offset)
-            or AXUtilities.is_whitespace_at_end_of_line(obj, offset)
-        ):
+        objects = []
+        if offset > 0 and self.treat_as_end_of_line(obj, offset):
             rect = self._get_extents(obj, offset - 1, offset)
-            # The preceding character can be an embedded object spanning multiple
-            # lines; when it is, the character at offset identifies this line.
-            end_rect = self._get_extents(obj, offset, offset + 1)
-            if 0 < end_rect.height * 2 <= rect.height:
-                rect = end_rect
         else:
             rect = self._get_extents(obj, offset, offset + 1)
 
+        if AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_inline_list_item) is not None:
+            container = AXUtilities.find_ancestor(obj, AXUtilities.is_list)
+            if container:
+                rect = self._get_extents(container, 0, 1)
+
+        obj_banner = AXUtilities.find_ancestor(obj, AXUtilities.is_landmark_banner)
+        obj_row = AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_table_row)
+
         def _include(x):
-            if x in seen:
+            if x in objects:
                 return False
 
             x_obj, x_start, x_end, _x_string = x
-
-            if (label := AXUtilities.get_label_covering_object(x_obj)) is not None:
-                return any(
-                    item in seen or _include(item)
-                    for item in self._get_contents_for_obj(label, 0, Atspi.TextGranularity.LINE)
-                )
-
-            # A lone newline at obj's end offset ends obj's line if obj is inline content.
-            # After a block element it starts a blank line instead.
-            if (
-                _x_string == "\n"
-                and x_start == AXHypertext.get_link_end_offset(obj)
-                and AXUtilities.is_ancestor(obj, x_obj)
-                and AXUtilities.is_inline_element(obj)
-            ):
-                return True
-
-            # Trailing whitespace at a line break can report extents which extend into the
-            # next line, so measure the candidate's range without it.
-            stripped = _x_string.rstrip()
-            if stripped and len(stripped) < len(_x_string):
-                x_rect = self._get_extents(x_obj, x_start, x_start + len(stripped))
-            else:
-                x_rect = self._get_extents(x_obj, x_start, x_end)
-
-            if x_obj == obj:
-                # Contiguous ranges from the same text object are different AT-SPI lines;
-                # character extents at wrap boundaries can be unreliable.
-                if AXObject.supports_text(obj):
-                    for existing_obj, e_start, e_end, _e_string in objects:
-                        if existing_obj == x_obj and (x_start == e_end or x_end == e_start):
-                            return False
-
-                return AXUtilities.rects_are_on_same_line(rect, x_rect)
-
-            x_obj_block = AXUtilities.get_nearest_block_ancestor(x_obj)
-            if obj_block == x_obj_block:
-                if abs(rect.x - x_rect.x) <= 1 and abs(rect.y - x_rect.y) <= 1:
-                    # Coinciding position is stacked (skip links) unless one contains the other.
-                    return AXUtilities.get_common_ancestor(obj, x_obj) in (obj, x_obj)
-                if not AXUtilities.rects_are_on_same_line(rect, x_rect, inline_flow=True):
-                    return False
-                # A tall image can vertically overlap text on the line below it; a text run joins
-                # this line only if it also shares the line with text already on it, not merely
-                # with the image (e.g. an icon beside a name must not pull in the description).
-                if _x_string.strip():
-                    for e_obj, e_start, e_end, e_string in objects:
-                        if e_string.strip():
-                            e_rect = self._get_extents(e_obj, e_start, e_end)
-                            return AXUtilities.rects_are_on_same_line(
-                                e_rect, x_rect, inline_flow=True
-                            )
-                return True
-
-            # A focusable tab-order control that is hidden but still holds its place (an
-            # off-screen or clipped dropdown toggle) is an inline sibling; keep it on the line
-            # when its parent shares obj's block. Non-focusable hidden content (e.g. off-screen
-            # labels) is left out.
-            x_obj_parent = AXObject.get_parent(x_obj)
-            if (
-                x_obj_parent is not None
-                and AXUtilities.is_focusable(x_obj)
-                and AXUtilities.get_nearest_block_ancestor(x_obj_parent) == obj_block
-                and (
-                    AXUtilities.object_is_outside_parent(x_obj)
-                    or (AXUtilities.is_visible(x_obj) and not AXUtilities.is_showing(x_obj))
-                )
-            ):
-                return True
-
-            reason = None
-            if obj_row is None:
-                reason = "different block ancestor"
-            elif obj_row != AXUtilities.get_nearest_table_row(x_obj_block):
-                reason = "different table row"
-
-            if reason:
-                tokens = ["WEB: Excluding", x_obj, "from line contents:", reason]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            if x_start == x_end:
                 return False
 
-            # A clipped element is not laid out where its text appears, so its position cannot
-            # be used to split the row it belongs to.
-            if AXUtilities.clips_its_own_text(obj) or AXUtilities.clips_its_own_text(x_obj):
-                return True
+            x_rect = self._get_extents(x_obj, x_start, x_start + 1)
 
-            return AXUtilities.rects_are_on_same_line(rect, x_rect, inline_flow=False)
+            if obj != x_obj:
+                if AXUtilities.is_landmark(obj) and AXUtilities.is_landmark(x_obj):
+                    return False
+                if self.is_link(obj) and self.is_link(x_obj):
+                    x_obj_banner = AXUtilities.find_ancestor(x_obj, AXUtilities.is_landmark_banner)
+                    if (obj_banner or x_obj_banner) and obj_banner != x_obj_banner:
+                        return False
+                    if abs(rect.x - x_rect.x) <= 1 and abs(rect.y - x_rect.y) <= 1:
+                        # This happens with dynamic skip links such as found on Wikipedia.
+                        return False
+                elif (
+                    self._is_block_list_descendant(obj) != self._is_block_list_descendant(x_obj)
+                    or (AXUtilities.is_tree_related(obj) and AXUtilities.is_tree_related(x_obj))
+                    or (AXUtilities.is_heading(obj) and AXUtilities.has_no_size(obj))
+                    or (AXUtilities.is_heading(x_obj) and AXUtilities.has_no_size(x_obj))
+                ):
+                    return False
+
+            if AXUtilities.is_math(x_obj) or AXUtilities.is_math_related(obj):
+                on_same_line = AXUtilities.rects_are_on_same_line(rect, x_rect, rect.height)
+            elif AXUtilities.find_ancestor_inclusive(
+                x_obj,
+                AXUtilities.is_subscript_or_superscript_text,
+            ):
+                on_same_line = AXUtilities.rects_are_on_same_line(rect, x_rect, x_rect.height)
+            else:
+                on_same_line = AXUtilities.rects_are_on_same_line(rect, x_rect)
+            return on_same_line
 
         granularity = Atspi.TextGranularity.LINE
         objects = self._get_contents_for_obj(obj, offset, granularity)
         if not layout_mode:
             if use_cache:
-                self._cache.set_content(self._cache.LINE_CONTENTS, objects)
+                self._cached_line_contents = objects
 
             self._debug_contents_info(obj, offset, objects, "Line (not layout mode)")
             return objects
@@ -1809,78 +1419,83 @@ class Utilities(script_utilities.Utilities):
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return []
 
-        obj_block = AXUtilities.get_nearest_block_ancestor(obj)
-        obj_row = AXUtilities.get_nearest_table_row(obj_block)
-        seen = set(objects)
-
-        first_obj, first_start, first_end, _first_string = objects[0]
-        if rect.width == 0 and rect.height == 0:
+        first_obj, first_start, first_end, first_string = objects[0]
+        if (rect.width == 0 and rect.height == 0) or AXUtilities.is_math_related(first_obj):
             rect = self._get_extents(first_obj, first_start, first_end)
 
-        last_obj, last_start, last_end, _last_string = objects[-1]
+        last_obj, _last_start, last_end, _last_string = objects[-1]
         if AXUtilities.is_math(last_obj):
             last_obj, last_end = self.last_context(last_obj)
             last_end += 1
 
         document = self.get_document_for_object(obj)
-        prev_obj, prev_offset = AXUtilities.find_previous_context(
-            first_obj, first_start, self.caret_policy
-        )
-        next_obj, next_offset = AXUtilities.find_next_context(
-            last_obj, max(last_end - 1, last_start), self.caret_policy
-        )
+        prev_obj, prev_offset = self.find_previous_caret_in_order(first_obj, first_start)
+        next_obj, next_offset = self.find_next_caret_in_order(last_obj, last_end - 1)
 
         # Check for things on the same line to the left of this object.
+        prev_start_time = time.time()
         while prev_obj and self.get_document_for_object(prev_obj) == document:
+            if obj_row != AXUtilities.find_ancestor_inclusive(prev_obj, AXUtilities.is_table_row):
+                break
+
             on_left = self._get_contents_for_obj(prev_obj, prev_offset, granularity)
             on_left = list(filter(_include, on_left))
             if not on_left:
                 break
 
+            if self._content_is_subset_of(objects[0], on_left[-1]):
+                objects.pop(0)
+
             objects[0:0] = on_left
-            seen.update(on_left)
             first_obj, first_start = objects[0][0], objects[0][1]
-            prev_obj, prev_offset = AXUtilities.find_previous_context(
-                first_obj, first_start, self.caret_policy
-            )
+            prev_obj, prev_offset = self.find_previous_caret_in_order(first_obj, first_start)
+
+        prev_end_time = time.time()
+        msg = f"INFO: Time to get line contents on left: {prev_end_time - prev_start_time:.4f}s"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         # Check for things on the same line to the right of this object.
+        next_start_time = time.time()
         while next_obj and self.get_document_for_object(next_obj) == document:
+            if obj_row != AXUtilities.find_ancestor_inclusive(next_obj, AXUtilities.is_table_row):
+                break
+
             on_right = self._get_contents_for_obj(next_obj, next_offset, granularity)
+            if on_right and self._content_is_subset_of(objects[0], on_right[-1]):
+                on_right = on_right[0:-1]
+
             on_right = list(filter(_include, on_right))
             if not on_right:
                 break
 
             objects.extend(on_right)
-            seen.update(on_right)
-            last_obj, last_start, last_end = objects[-1][0], objects[-1][1], objects[-1][2]
+            last_obj, last_end = objects[-1][0], objects[-1][2]
             if AXUtilities.is_math(last_obj):
                 last_obj, last_end = self.last_context(last_obj)
                 last_end += 1
 
-            next_obj, next_offset = AXUtilities.find_next_context(
-                last_obj, max(last_end - 1, last_start), self.caret_policy
-            )
+            next_obj, next_offset = self.find_next_caret_in_order(last_obj, last_end - 1)
+
+        next_end_time = time.time()
+        msg = f"INFO: Time to get line contents on right: {next_end_time - next_start_time:.4f}s"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        first_obj, first_start, first_end, first_string = objects[0]
+        if first_string == "\n" and len(objects) > 1:
+            objects.pop(0)
 
         if use_cache:
-            self._cache.set_content(self._cache.LINE_CONTENTS, objects)
+            self._cached_line_contents = objects
+
+        msg = f"INFO: Time to get line contents: {time.time() - start_time:.4f}s"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
         self._debug_contents_info(obj, offset, objects, "Line (layout mode)")
+
+        self._cached_can_have_caret_context_decision = {}
         return objects
 
     def get_previous_line_contents(
-        self,
-        obj: Atspi.Accessible | None = None,
-        offset: int = -1,
-        layout_mode: bool | None = None,
-        use_cache: bool = True,
-    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
-        """Returns a list of (obj, start, end, string) tuples for the previous line."""
-
-        with self._hypertext_content_building_scope():
-            return self._get_previous_line_contents(obj, offset, layout_mode, use_cache)
-
-    def _get_previous_line_contents(
         self,
         obj: Atspi.Accessible | None = None,
         offset: int = -1,
@@ -1954,18 +1569,6 @@ class Utilities(script_utilities.Utilities):
     ) -> list[tuple[Atspi.Accessible, int, int, str]]:
         """Returns a list of (obj, start, end, string) tuples for the next line."""
 
-        with self._hypertext_content_building_scope():
-            return self._get_next_line_contents(obj, offset, layout_mode, use_cache)
-
-    def _get_next_line_contents(
-        self,
-        obj: Atspi.Accessible | None = None,
-        offset: int = -1,
-        layout_mode: bool | None = None,
-        use_cache: bool = True,
-    ) -> list[tuple[Atspi.Accessible, int, int, str]]:
-        """Returns a list of (obj, start, end, string) tuples for the next line."""
-
         if obj is None:
             obj, offset = self.get_caret_context()
 
@@ -2025,6 +1628,170 @@ class Utilities(script_utilities.Utilities):
 
         return contents
 
+    def _find_selection_boundary_object(
+        self,
+        root: Atspi.Accessible,
+        find_start: bool = True,
+    ) -> Atspi.Accessible | None:
+        string = AXUtilities.get_selected_text(root)[0]
+        if not string:
+            return None
+
+        if find_start and not string.startswith("\ufffc"):
+            return root
+
+        if not find_start and not string.endswith("\ufffc"):
+            return root
+
+        indices = list(range(AXObject.get_child_count(root)))
+        if not find_start:
+            indices.reverse()
+
+        for i in indices:
+            result = self._find_selection_boundary_object(AXObject.get_child(root, i), find_start)
+            if result:
+                return result
+
+        return None
+
+    def _get_selection_anchor_and_focus(
+        self,
+        root: Atspi.Accessible,
+    ) -> tuple[Atspi.Accessible | None, Atspi.Accessible | None]:
+        obj1 = self._find_selection_boundary_object(root, True)
+        obj2 = self._find_selection_boundary_object(root, False)
+        return obj1, obj2
+
+    def _get_subtree(
+        self,
+        start_obj: Atspi.Accessible,
+        end_obj: Atspi.Accessible,
+    ) -> list[Atspi.Accessible]:
+        if not (start_obj and end_obj):
+            return []
+
+        if AXObject.is_dead(start_obj):
+            msg = "INFO: Cannot get subtree: Start object is dead."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return []
+
+        def _include(x):
+            return x is not None
+
+        def _exclude(x):
+            return not AXUtilities.is_web_element(x)
+
+        subtree = []
+        start_obj_parent = AXObject.get_parent(start_obj)
+        for i in range(
+            AXObject.get_index_in_parent(start_obj),
+            AXObject.get_child_count(start_obj_parent),
+        ):
+            child = AXObject.get_child(start_obj_parent, i)
+            if not AXUtilities.is_web_element(child):
+                continue
+            subtree.append(child)
+            subtree.extend(self._find_all_descendants(child, _include, _exclude))
+            if end_obj in subtree:
+                break
+
+        if end_obj == start_obj:
+            return subtree
+
+        if end_obj not in subtree:
+            subtree.append(end_obj)
+            subtree.extend(self._find_all_descendants(end_obj, _include, _exclude))
+
+        end_obj_parent = AXObject.get_parent(end_obj)
+        end_obj_index = AXObject.get_index_in_parent(end_obj)
+        last_obj = AXObject.get_child(end_obj_parent, end_obj_index + 1) or end_obj
+
+        try:
+            end_index = subtree.index(last_obj)
+        except ValueError:
+            pass
+        else:
+            if last_obj == end_obj:
+                end_index += 1
+            subtree = subtree[:end_index]
+
+        return subtree
+
+    def handle_text_selection_change(
+        self,
+        obj: Atspi.Accessible,
+        speak_message: bool = True,
+    ) -> bool:
+        """Handles a change in the selected text."""
+
+        if not self.in_document_content(obj) or document_presenter.get_presenter().in_focus_mode(
+            self._script.app,
+        ):
+            return super().handle_text_selection_change(obj)
+
+        old_start, old_end = self._selection_anchor_and_focus
+        start, end = self._get_selection_anchor_and_focus(obj)
+        self._selection_anchor_and_focus = (start, end)
+
+        def _cmp(obj1, obj2):
+            return self.path_comparison(AXObject.get_path(obj1), AXObject.get_path(obj2))
+
+        old_subtree = self._get_subtree(old_start, old_end)
+        if start == old_start and end == old_end:
+            descendants = old_subtree
+        else:
+            new_subtree = self._get_subtree(start, end)
+            descendants = sorted(
+                set(old_subtree).union(new_subtree),
+                key=functools.cmp_to_key(_cmp),
+            )
+
+        if not descendants:
+            return False
+
+        for descendant in descendants:
+            if descendant not in (old_start, old_end, start, end) and AXUtilities.find_ancestor(
+                descendant,
+                lambda x: x in descendants,
+            ):
+                AXUtilities.update_cached_selected_text(descendant)
+            else:
+                super().handle_text_selection_change(descendant, speak_message)
+
+        return True
+
+    def _text_block_element_roles(self) -> list[Atspi.Role]:
+        # TODO - JD: Move to AXUtilities.
+        roles = [
+            Atspi.Role.ARTICLE,
+            Atspi.Role.CAPTION,
+            Atspi.Role.COLUMN_HEADER,
+            Atspi.Role.COMMENT,
+            Atspi.Role.CONTENT_DELETION,
+            Atspi.Role.CONTENT_INSERTION,
+            Atspi.Role.DEFINITION,
+            Atspi.Role.DESCRIPTION_LIST,
+            Atspi.Role.DESCRIPTION_TERM,
+            Atspi.Role.DESCRIPTION_VALUE,
+            Atspi.Role.DOCUMENT_FRAME,
+            Atspi.Role.DOCUMENT_WEB,
+            Atspi.Role.FOOTER,
+            Atspi.Role.FORM,
+            Atspi.Role.HEADING,
+            Atspi.Role.LIST,
+            Atspi.Role.LIST_ITEM,
+            Atspi.Role.MARK,
+            Atspi.Role.PARAGRAPH,
+            Atspi.Role.ROW_HEADER,
+            Atspi.Role.SECTION,
+            Atspi.Role.STATIC,
+            Atspi.Role.SUGGESTION,
+            Atspi.Role.TEXT,
+            Atspi.Role.TABLE_CELL,
+        ]
+
+        return roles
+
     def unrelated_labels(
         self,
         root: Atspi.Accessible | None = None,
@@ -2036,6 +1803,56 @@ class Utilities(script_utilities.Utilities):
         if not (root and self.in_document_content(root)):
             return super().unrelated_labels(root, only_showing, minimum_words)
         return []
+
+    def is_focusable_with_math_child(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if obj is focusable, not a document, and has a math child."""
+
+        # TODO - JD: This could go in the AXUtilities.
+        if not (obj and self.in_document_content(obj)):
+            return False
+
+        return (
+            AXUtilities.is_focusable(obj)
+            and not self.is_document(obj)
+            and any(AXObject.iter_children(obj, AXUtilities.is_math))
+        )
+
+    def is_focused_with_math_child(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if obj is focused, not a document, and has a math child."""
+
+        # TODO - JD: This could go in the AXUtilities.
+        if not self.is_focusable_with_math_child(obj):
+            return False
+        return AXUtilities.is_focused(obj)
+
+    def is_text_block_element(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if obj is a text block element."""
+
+        if not (obj and self.in_document_content(obj)):
+            return False
+
+        rv = self._cached_is_text_block_element.get(hash(obj))
+        if rv is not None:
+            return rv
+
+        if (
+            AXObject.get_role(obj) not in self._text_block_element_roles()
+            or not AXObject.supports_text(obj)
+            or AXUtilities.is_editable(obj)
+            or AXUtilities.is_grid_cell(obj)
+        ):
+            rv = False
+        elif AXUtilities.is_document(obj):
+            rv = True
+        elif self.is_custom_image(obj):
+            rv = False
+        elif not AXUtilities.is_focusable(obj):
+            rv = not self.has_name_and_action_and_no_useful_children(obj)
+        else:
+            rv = False
+
+        self._cached_is_text_block_element[hash(obj)] = rv
+        return rv
 
     def _advance_caret_in_empty_object(self, obj: Atspi.Accessible) -> bool:
         if AXUtilities.is_table_cell(obj) and not self.treat_as_text_object(obj):
@@ -2057,14 +1874,13 @@ class Utilities(script_utilities.Utilities):
             if string and string != "\ufffc":
                 return True
 
-        namespace = self._cache.TREAT_AS_DIV
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
-
         child_count = AXObject.get_child_count(obj)
         if AXUtilities.is_panel(obj) and not child_count:
             return True
+
+        rv = self._cached_treat_as_div.get(hash(obj))
+        if rv is not None:
+            return rv
 
         rv = False
 
@@ -2089,7 +1905,7 @@ class Utilities(script_utilities.Utilities):
 
                 rv = bool(list(AXObject.iter_children(parent, pred2)))
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_treat_as_div[hash(obj)] = rv
         return rv
 
     def filter_contents_for_presentation(
@@ -2106,70 +1922,66 @@ class Utilities(script_utilities.Utilities):
             if not obj or AXObject.is_dead(obj):
                 return False
 
-            namespace = self._cache.SHOULD_FILTER
-            cached = self._cache.get_for_object(namespace, obj)
-            if cached is not ax_cache_manager.MISSING:
-                return cached
+            rv = self._cached_should_filter.get(hash(obj))
+            if rv is not None:
+                return rv
 
             text = string or AXObject.get_name(obj)
             rv = True
             # TODO - JD: Audit this to see if they are now redundant.
-            reason = None
-            if (self.is_text_block_element(obj) or self.is_link(obj)) and not text:
-                reason = "empty text block or link"
-            elif self.is_content_editable_with_embedded_objects(obj) and not string.strip():
-                reason = "empty editable host"
-            elif self._is_empty_anchor(obj):
-                reason = "empty anchor"
-            elif AXUtilities.has_no_size(obj) and not text:
-                reason = "sizeless and nameless"
-            elif self._is_off_screen_label(obj):
-                reason = "off-screen label"
-            elif self._is_useless_image(obj):
-                reason = "useless image"
-            elif AXUtilities.is_error_for_contents(obj, contents):
-                reason = "error for contents"
-            elif self._is_labelling_contents(obj, contents):
-                reason = "labels other contents"
+            if (
+                ((self.is_text_block_element(obj) or self.is_link(obj)) and not text)
+                or (self.is_content_editable_with_embedded_objects(obj) and not string.strip())
+                or self._is_empty_anchor(obj)
+                or (AXUtilities.has_no_size(obj) and not text)
+                or AXUtilities.is_hidden(obj)
+                or self._is_off_screen_label(obj)
+                or self._is_useless_image(obj)
+                or self.is_link_ancestor_of_image_in_contents(obj, contents)
+                or self.is_error_for_contents(obj, contents)
+                or self._is_labelling_contents(obj, contents)
+            ):
+                rv = False
             elif AXUtilities.is_table_row(obj):
-                rv = AXUtilities.is_focused(obj) or AXUtilities.has_explicit_name(obj)
+                rv = AXUtilities.has_explicit_name(obj)
             else:
                 widget = self.is_inferred_label_for_contents(x, contents)
                 always_filter = [Atspi.Role.RADIO_BUTTON, Atspi.Role.CHECK_BOX]
                 if widget and (infer_labels or AXObject.get_role(widget) in always_filter):
                     rv = False
 
-            if reason:
-                tokens = ["WEB: Excluding", obj, "from presentation:", reason]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                rv = False
-
-            self._cache.set_for_object(namespace, obj, rv)
+            self._cached_should_filter[hash(obj)] = rv
             return rv
 
         if len(contents) == 1:
             return contents
 
         rv = list(filter(_include, contents))
-        self._cache.clear_namespace(self._cache.SHOULD_FILTER, "web filter complete")
+        self._cached_should_filter = {}
         return rv
 
     def _has_grid_descendant(self, obj: Atspi.Accessible) -> bool:
         if not obj:
             return False
 
-        namespace = self._cache.HAS_GRID_DESCENDANT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_has_grid_descendant.get(hash(obj))
+        if rv is not None:
+            return rv
 
-        document = self.active_document()
-        if obj != document and not self._has_grid_descendant(document):
+        if not AXObject.get_child_count(obj):
             rv = False
         else:
-            rv = bool(AXUtilities.find_all_grids(obj))
+            document = self.active_document()
+            if obj != document:
+                document_has_grids = self._has_grid_descendant(document)
+                if not document_has_grids:
+                    rv = False
 
-        self._cache.set_for_object(namespace, obj, rv)
+        if rv is None:
+            grids = AXUtilities.find_all_grids(obj)
+            rv = bool(grids)
+
+        self._cached_has_grid_descendant[hash(obj)] = rv
         return rv
 
     def _is_cell_with_name_from_header(self, obj: Atspi.Accessible) -> bool:
@@ -2199,7 +2011,7 @@ class Utilities(script_utilities.Utilities):
         if not super().should_read_full_row(obj, previous_object):
             return False
 
-        if AXUtilities.is_grid_descendant(obj) or AXUtilities.is_tree_or_tree_table_descendant(obj):
+        if AXUtilities.find_ancestor(obj, AXUtilities.is_grid) is not None:
             return not document_presenter.get_presenter().in_focus_mode(self._script.app)
 
         if input_event_manager.get_manager().last_event_was_line_navigation():
@@ -2207,134 +2019,181 @@ class Utilities(script_utilities.Utilities):
 
         return not input_event_manager.get_manager().last_event_was_mouse_button()
 
-    def _check_element_line_pattern(self, obj: Atspi.Accessible) -> None:
-        """Checks if element lines are single words or single chars, caching both results."""
+    def _element_lines_are_single_words(self, obj: Atspi.Accessible) -> bool:
+        if not (obj and self.in_document_content(obj)):
+            return False
 
-        if not (obj and self.in_document_content(obj)) or self.is_document(obj):
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, False)
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, False)
-            return
+        if AXUtilities.is_code(obj):
+            return False
+
+        if self.is_document(obj):
+            return False
+
+        rv = self._cached_element_lines_are_single_words.get(hash(obj))
+        if rv is not None:
+            return rv
 
         if AXUtilities.has_non_inline_children(obj):
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, False)
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, False)
-            return
+            return False
 
         n_chars = AXText.get_character_count(obj)
-        if not n_chars or not self.treat_as_text_object(obj):
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, False)
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, False)
-            return
+        if not n_chars:
+            return False
+
+        if not self.treat_as_text_object(obj):
+            return False
 
         # If we have a series of embedded object characters, there's a reasonable chance
-        # they'll look like the one-word/char-per-line CSSified text we're trying to detect.
-        # We don't want that false positive. By the same token, the one-word/char-per-line
+        # they'll look like the one-word-per-line CSSified text we're trying to detect.
+        # We don't want that false positive. By the same token, the one-word-per-line
         # CSSified text we're trying to detect can have embedded object characters. So
         # if we have more than 30% EOCs, don't use this workaround. (The 30% is based on
         # testing with problematic text.)
-        string = AXText.get_all_text(obj, n_chars)
-        if string.count("\ufffc") / n_chars > 0.3:
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, False)
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, False)
-            return
+        string = AXText.get_all_text(obj)
+        eocs = re.findall("\ufffc", string)
+        if len(eocs) / n_chars > 0.3:
+            return False
 
-        # An actual newline is a genuine hard line break (e.g. from a br element) whose
-        # per-line structure must be honored. The CSSed-into-brokenness text we are trying
-        # to detect is given to us a word/char at a time without any real line breaks.
-        if "\n" in string:
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, False)
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, False)
-            return
+        # TODO - JD: Can we remove this?
+        AXObject.clear_cache(obj, False, "Checking if element lines are single words.")
+        tokens = list(filter(lambda x: x, re.split(r"[\s\ufffc]", string)))
 
         # Note: We cannot check for the editable-text interface, because Gecko
         # seems to be exposing that for non-editable things. Thanks Gecko.
-        is_editable = AXUtilities.is_editable(obj) or AXUtilities.is_text_input(obj)
-        if is_editable:
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, False)
-            self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, False)
-            return
+        rv = len(tokens) > 1 and not (
+            AXUtilities.is_editable(obj) or AXUtilities.is_text_input(obj)
+        )
+        if rv:
+            i = 0
+            while i < n_chars:
+                string, _start, end = AXText.get_line_at_offset(obj, i)
+                if len(string.split()) != 1:
+                    rv = False
+                    break
+                i = max(i + 1, end)
 
-        # Check for single-char lines.
-        is_single_chars = True
-        for i, char in enumerate(string):
-            if char.isspace() or char in ["\ufffc", "\ufffd"]:
-                continue
-            line_string = AXText.get_line_at_offset(obj, i)[0]
-            if len(line_string.strip()) > 1:
-                is_single_chars = False
-                break
-
-        # Check for single-word lines (also requires not being code).
-        is_single_words = False
-        if not AXUtilities.is_code(obj):
-            tokens = list(filter(None, re.split(r"[\s\ufffc]", string)))
-            if len(tokens) > 1:
-                is_single_words = True
-                i = 0
-                while i < n_chars:
-                    line_string, _start, end = AXText.get_line_at_offset(obj, i)
-                    if len(line_string.split()) != 1:
-                        is_single_words = False
-                        break
-                    i = max(i + 1, end)
-
-        # A tall, narrow column is CSSed brokenness; a wider-than-tall element merely wrapped.
-        # An element shorter than its own text is clipping it, so its shape proves nothing.
-        if is_single_chars or is_single_words:
-            rect = AXComponent.get_rect(obj)
-            if rect.width > rect.height and not AXUtilities.clips_its_own_text(obj):
-                is_single_chars = False
-                is_single_words = False
-
-        self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_CHARS, obj, is_single_chars)
-        self._cache.set_for_object(self._cache.LINES_ARE_SINGLE_WORDS, obj, is_single_words)
-
-    def _element_lines_are_single_words(self, obj: Atspi.Accessible) -> bool:
-        """Returns True if each line of obj's text contains a single word."""
-
-        namespace = self._cache.LINES_ARE_SINGLE_WORDS
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
-
-        self._check_element_line_pattern(obj)
-        return self._cache.get_for_object(namespace, obj, False)
+        self._cached_element_lines_are_single_words[hash(obj)] = rv
+        return rv
 
     def _element_lines_are_single_chars(self, obj: Atspi.Accessible) -> bool:
-        """Returns True if each line of obj's text contains a single character."""
+        if not (obj and self.in_document_content(obj)):
+            return False
 
-        namespace = self._cache.LINES_ARE_SINGLE_CHARS
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if self.is_document(obj):
+            return False
 
-        self._check_element_line_pattern(obj)
-        return self._cache.get_for_object(namespace, obj, False)
+        rv = self._cached_element_lines_are_single_chars.get(hash(obj))
+        if rv is not None:
+            return rv
+
+        if AXUtilities.has_non_inline_children(obj):
+            return False
+
+        n_chars = AXText.get_character_count(obj)
+        if not n_chars:
+            return False
+
+        if not self.treat_as_text_object(obj):
+            return False
+
+        # If we have a series of embedded object characters, there's a reasonable chance
+        # they'll look like the one-char-per-line CSSified text we're trying to detect.
+        # We don't want that false positive. By the same token, the one-char-per-line
+        # CSSified text we're trying to detect can have embedded object characters. So
+        # if we have more than 30% EOCs, don't use this workaround. (The 30% is based on
+        # testing with problematic text.)
+        string = AXText.get_all_text(obj)
+        eocs = re.findall("\ufffc", string)
+        if len(eocs) / n_chars > 0.3:
+            return False
+
+        # TODO - JD: Can we remove this?
+        AXObject.clear_cache(obj, False, "Checking if element lines are single chars.")
+
+        # Note: We cannot check for the editable-text interface, because Gecko
+        # seems to be exposing that for non-editable things. Thanks Gecko.
+        rv = not (AXUtilities.is_editable(obj) or AXUtilities.is_text_input(obj))
+        if rv:
+            for i in range(n_chars):
+                char = AXText.get_character_at_offset(obj, i)[0]
+                if char.isspace() or char in ["\ufffc", "\ufffd"]:
+                    continue
+
+                string = AXText.get_line_at_offset(obj, i)[0]
+                if len(string.strip()) > 1:
+                    rv = False
+                    break
+
+        self._cached_element_lines_are_single_chars[hash(obj)] = rv
+        return rv
+
+    def _label_is_ancestor_of_labelled(self, label: Atspi.Accessible) -> bool:
+        # TODO - JD: Move into AXUtilities.
+        for labelled in AXUtilities.get_is_label_for(label):
+            if AXUtilities.is_ancestor(labelled, label):
+                return True
+        return False
 
     def _is_off_screen_label(self, obj: Atspi.Accessible) -> bool:
         if not (obj and self.in_document_content(obj)):
             return False
 
-        namespace = self._cache.IS_OFF_SCREEN_LABEL
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_off_screen_label.get(hash(obj))
+        if rv is not None:
+            return rv
 
-        labelled_objects = AXUtilities.get_is_label_for(obj)
-        if AXUtilities.label_is_ancestor_of_labelled(obj, labelled_objects):
+        if self._label_is_ancestor_of_labelled(obj):
             return False
 
         rv = False
-        if labelled_objects:
+        if AXUtilities.get_is_label_for(obj):
             end = max(1, AXText.get_character_count(obj))
             rect = AXText.get_range_rect(obj, 0, end)
-            box = AXComponent.get_rect(obj)
-            box_is_collapsed = box.width <= 1 and box.height <= 1
-            if rect.x < 0 or rect.y < 0 or box_is_collapsed:
+            if rect.x < 0 or rect.y < 0:
                 rv = True
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_off_screen_label[hash(obj)] = rv
         return rv
+
+    def _is_detached_document(self, obj: Atspi.Accessible) -> bool:
+        if AXUtilities.is_document(obj) and not AXObject.is_valid(AXObject.get_parent(obj)):
+            tokens = ["WEB:", obj, "is a detached document"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return True
+
+        return False
+
+    def _iframe_for_detached_document(
+        self,
+        obj: Atspi.Accessible,
+        root: Atspi.Accessible | None = None,
+    ) -> Atspi.Accessible | None:
+        root = root or self.active_document()
+        for iframe in AXUtilities.find_all_internal_frames(root):
+            if AXObject.get_parent(obj) == iframe:
+                tokens = ["WEB: Returning", iframe, "as iframe parent of detached", obj]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                return iframe
+
+        return None
+
+    def is_link_ancestor_of_image_in_contents(
+        self,
+        link: Atspi.Accessible,
+        contents: list[tuple[Atspi.Accessible, int, int, str]],
+    ) -> bool:
+        """Returns true if link is an ancestor of an image in contents."""
+
+        if not self.is_link(link):
+            return False
+
+        for obj, _start, _end, _string in contents:
+            if not AXUtilities.is_image(obj):
+                continue
+            if AXUtilities.find_ancestor(obj, lambda x: x == link):
+                return True
+
+        return False
 
     def is_inferred_label_for_contents(
         self,
@@ -2360,17 +2219,14 @@ class Utilities(script_utilities.Utilities):
         obj: Atspi.Accessible,
         contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None,
     ) -> bool:
-        if AXUtilities.is_widget(obj):
-            return False
-
-        if AXUtilities.is_heading(obj) or AXUtilities.is_caption(obj):
+        if document_presenter.get_presenter().is_focus_mode_widget(self._script, obj):
             return False
 
         targets = AXUtilities.get_is_label_for(obj)
         if not contents:
             if targets:
                 return True
-            return AXUtilities.is_label_or_caption_descendant(obj)
+            return AXUtilities.find_ancestor(obj, AXUtilities.is_label_or_caption) is not None
 
         for acc, _start, _end, _string in contents:
             if acc in targets:
@@ -2379,11 +2235,11 @@ class Utilities(script_utilities.Utilities):
         if not self.is_text_block_element(obj):
             return False
 
-        if not AXUtilities.is_label_or_caption_descendant(obj):
+        if AXUtilities.find_ancestor(obj, AXUtilities.is_label_or_caption) is None:
             return False
 
         for acc, _start, _end, _string in contents:
-            if not AXUtilities.is_label_or_caption_descendant(acc):
+            if AXUtilities.find_ancestor(acc, AXUtilities.is_label_or_caption) is None:
                 continue
             if self.is_text_block_element(acc):
                 continue
@@ -2395,6 +2251,9 @@ class Utilities(script_utilities.Utilities):
 
     def _is_empty_anchor(self, obj: Atspi.Accessible) -> bool:
         return AXUtilities.is_anchor(obj) and not self.treat_as_text_object(obj)
+
+    def _is_empty_tool_tip(self, obj: Atspi.Accessible) -> bool:
+        return AXUtilities.is_tool_tip(obj) and not self.treat_as_text_object(obj)
 
     def is_browser_ui_alert(self, obj: Atspi.Accessible) -> bool:
         """Returns true if obj is an alert outside of document content."""
@@ -2408,12 +2267,11 @@ class Utilities(script_utilities.Utilities):
         if not (obj and self.in_document_content(obj)):
             return False
 
-        namespace = self._cache.IS_CLICKABLE_ELEMENT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_clickable_element.get(hash(obj))
+        if rv is not None:
+            return rv
 
-        if AXUtilities.label_is_ancestor_of_labelled(obj, AXUtilities.get_is_label_for(obj)):
+        if self._label_is_ancestor_of_labelled(obj):
             return False
 
         if self._has_grid_descendant(obj):
@@ -2437,7 +2295,7 @@ class Utilities(script_utilities.Utilities):
             elif not text.strip():
                 rv = not (AXUtilities.is_static(obj) or AXUtilities.is_link(obj))
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_clickable_element[hash(obj)] = rv
         return rv
 
     def is_item_for_editable_combo_box(
@@ -2469,9 +2327,6 @@ class Utilities(script_utilities.Utilities):
         if AXUtilities.is_editable(obj):
             return False
 
-        if not AXUtilities.is_entry_descendant(obj):
-            return False
-
         entry_name = AXObject.get_name(AXUtilities.find_ancestor(obj, AXUtilities.is_entry))
         if not entry_name:
             return False
@@ -2487,14 +2342,20 @@ class Utilities(script_utilities.Utilities):
 
         return AXUtilities.find_descendant(obj, _is_match) is not None
 
+    def _is_block_list_descendant(self, obj: Atspi.Accessible) -> bool:
+        # TODO - JD: Move into AXUtilities.
+        if AXUtilities.find_ancestor(obj, AXUtilities.is_list) is None:
+            return False
+
+        return AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_inline_list_item) is None
+
     def is_link(self, obj: Atspi.Accessible) -> bool:
         if not obj:
             return False
 
-        namespace = self._cache.IS_LINK
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_link.get(hash(obj))
+        if rv is not None:
+            return rv
 
         rv = bool(
             (AXUtilities.is_link(obj) and not AXUtilities.is_anchor(obj))
@@ -2505,7 +2366,7 @@ class Utilities(script_utilities.Utilities):
             ),
         )
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_link[hash(obj)] = rv
         return rv
 
     def has_useless_canvas_descendant(self, obj: Atspi.Accessible) -> bool:
@@ -2522,10 +2383,9 @@ class Utilities(script_utilities.Utilities):
         if not AXUtilities.is_svg(obj) or AXObject.get_child_count(AXObject.get_parent(obj)) == 1:
             return False
 
-        namespace = self._cache.IS_REDUNDANT_SVG
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_redundant_svg.get(hash(obj))
+        if rv is not None:
+            return rv
 
         rv = False
         parent = AXObject.get_parent(obj)
@@ -2539,17 +2399,45 @@ class Utilities(script_utilities.Utilities):
                 rv = intersection == obj_extents
 
         rv = bool(rv)
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_redundant_svg[hash(obj)] = rv
+        return rv
+
+    def is_custom_image(self, obj: Atspi.Accessible) -> bool:
+        """Returns true if obj is a custom image."""
+
+        # TODO - JD: Move into the AXUtilities.
+
+        if not (obj and self.in_document_content(obj)):
+            return False
+
+        rv = self._cached_is_custom_image.get(hash(obj))
+        if rv is not None:
+            return rv
+
+        rv = False
+        if (
+            AXUtilities.is_web_element_custom(obj)
+            and AXUtilities.has_explicit_name(obj)
+            and AXUtilities.is_section(obj)
+            and AXObject.supports_text(obj)
+            and not re.search(r"[^\s\ufffc]", AXText.get_all_text(obj))
+        ):
+            for child in AXObject.iter_children(obj):
+                if not (AXUtilities.is_image_or_canvas(child) or AXUtilities.is_svg(child)):
+                    break
+            else:
+                rv = True
+
+        self._cached_is_custom_image[hash(obj)] = rv
         return rv
 
     def _is_useless_image(self, obj: Atspi.Accessible) -> bool:
         if not (obj and self.in_document_content(obj)):
             return False
 
-        namespace = self._cache.IS_USELESS_IMAGE
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_useless_image.get(hash(obj))
+        if rv is not None:
+            return rv
 
         rv = True
         has_explicit_name = AXUtilities.has_explicit_name(obj)
@@ -2583,7 +2471,7 @@ class Utilities(script_utilities.Utilities):
                     rv = False
                     break
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_useless_image[hash(obj)] = rv
         return rv
 
     def has_valid_name(self, obj: Atspi.Accessible) -> bool:
@@ -2613,35 +2501,26 @@ class Utilities(script_utilities.Utilities):
         if not (obj and self.in_document_content(obj)):
             return False
 
-        namespace = self._cache.IS_USELESS_EMPTY_ELEMENT
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_useless_empty_element.get(hash(obj))
+        if rv is not None:
+            return rv
 
         roles = [Atspi.Role.PARAGRAPH, Atspi.Role.SECTION, Atspi.Role.STATIC, Atspi.Role.TABLE_ROW]
         role = AXObject.get_role(obj)
-        reason = None
-        if role not in roles and not AXUtilities.is_aria_alert(obj):
-            reason = "ineligible role"
-        elif AXUtilities.is_focusable(obj):
-            reason = "focusable"
-        elif AXUtilities.is_editable(obj):
-            reason = "editable"
-        elif self.has_valid_name(obj):
-            reason = "has valid name"
-        elif AXObject.get_description(obj):
-            reason = "has description"
-        elif AXObject.get_child_count(obj):
-            reason = "has children"
-        elif (char_count := AXText.get_character_count(obj)) and (
-            char_count > len(name := AXObject.get_name(obj))
-            or AXText.get_all_text(obj, char_count) != name
+        if (
+            (role not in roles and not AXUtilities.is_aria_alert(obj))
+            or AXUtilities.is_focusable(obj)
+            or AXUtilities.is_editable(obj)
+            or (
+                self.has_valid_name(obj)
+                or AXObject.get_description(obj)
+                or AXObject.get_child_count(obj)
+            )
+            or (
+                AXText.get_character_count(obj)
+                and AXText.get_all_text(obj) != AXObject.get_name(obj)
+            )
         ):
-            reason = "has text content"
-
-        if reason:
-            tokens = ["WEB:", obj, "is not a useless empty element:", reason]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = False
         elif AXObject.supports_action(obj):
             names = AXUtilities.get_action_names(obj)
@@ -2651,7 +2530,7 @@ class Utilities(script_utilities.Utilities):
         else:
             rv = True
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_useless_empty_element[hash(obj)] = rv
         return rv
 
     def has_long_desc(self, obj: Atspi.Accessible) -> bool:
@@ -2667,31 +2546,25 @@ class Utilities(script_utilities.Utilities):
         if not self._should_infer_label_for(obj):
             return None, []
 
-        namespace = self._cache.INFERRED_LABEL
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            label, sources = cached
-            return label, list(sources)
+        rv = self._cached_inferred_labels.get(hash(obj))
+        if rv is not None:
+            return rv
 
-        label, sources = self._script.label_inference.infer(obj, False)
-        self._cache.set_for_object(namespace, obj, (label, list(sources)))
-        return label, sources
+        rv = self._script.label_inference.infer(obj, False)
+        self._cached_inferred_labels[hash(obj)] = rv
+        return rv
 
     def _should_infer_label_for(self, obj: Atspi.Accessible) -> bool:
-        if not self.in_document_content():
+        if not self.in_document_content() or AXUtilities.find_ancestor(
+            obj, AXUtilities.is_embedded
+        ):
             return False
 
-        namespace = self._cache.SHOULD_INFER_LABEL_FOR
-        cached = self._cache.get_for_object(namespace, obj)
-        rv = None if cached is ax_cache_manager.MISSING else cached
+        rv = self._cached_should_infer_label_for.get(hash(obj))
         if rv and not caret_navigator.get_navigator().last_input_event_was_navigation_command():
             return not focus_manager.get_manager().in_say_all()
         if rv is False:
             return rv
-
-        if AXUtilities.is_embedded_descendant(obj):
-            self._cache.set_for_object(namespace, obj, False)
-            return False
 
         role = AXObject.get_role(obj)
         if AXObject.get_name(obj) or AXUtilities.has_role_from_aria(obj):
@@ -2707,7 +2580,7 @@ class Utilities(script_utilities.Utilities):
             ]
             rv = role in roles and not AXUtilities.get_displayed_label(obj)
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_should_infer_label_for[hash(obj)] = rv
         if (
             caret_navigator.get_navigator().last_input_event_was_navigation_command()
             and role not in [Atspi.Role.RADIO_BUTTON, Atspi.Role.CHECK_BOX]
@@ -2912,13 +2785,12 @@ class Utilities(script_utilities.Utilities):
 
         # There may be other roles where we need to do this. For now, solve the known one.
         if AXUtilities.is_page_tab_list(event.source):
-            if debug.debugLevel <= debug.LEVEL_INFO:
-                tokens = [
-                    "WEB: Selection changed event is irrelevant (unrelated",
-                    AXObject.get_role_name(event.source),
-                    ")",
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            tokens = [
+                "WEB: Selection changed event is irrelevant (unrelated",
+                AXObject.get_role_name(event.source),
+                ")",
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return True
 
         msg = "WEB: Selection changed event is relevant (no reason found to ignore it)"
@@ -2940,10 +2812,10 @@ class Utilities(script_utilities.Utilities):
             return False
 
         old_focus = old_focus or focus_manager.get_manager().get_locus_of_focus()
-        if not AXUtilities.is_grid_descendant(old_focus):
+        if AXUtilities.find_ancestor(old_focus, AXUtilities.is_grid) is None:
             return False
 
-        return not AXUtilities.is_grid_descendant(event.source)
+        return AXUtilities.find_ancestor(event.source, AXUtilities.is_grid) is None
 
     def caret_moved_to_same_page_fragment(self, event, old_focus=None):
         """Returns true if the caret moved to a same-page fragment."""
@@ -2955,7 +2827,7 @@ class Utilities(script_utilities.Utilities):
             return False
 
         document = self.active_document()
-        fragment = AXUtilities.get_document_uri_fragment(document)
+        fragment = AXDocument.get_document_uri_fragment(document)
         if not fragment:
             return False
 
@@ -2969,12 +2841,12 @@ class Utilities(script_utilities.Utilities):
         else:
             link = AXUtilities.find_ancestor(old_focus, self.is_link)
 
-        return link and AXHypertext.get_link_uri(link) == AXUtilities.get_uri(document)
+        return link and AXHypertext.get_link_uri(link) == AXDocument.get_uri(document)
 
     def is_child_of_current_fragment(self, obj: Atspi.Accessible) -> bool:
         """Returns true if obj is a child of the current document fragment."""
 
-        fragment = AXUtilities.get_document_uri_fragment(self.active_document())
+        fragment = AXDocument.get_document_uri_fragment(self.active_document())
         if not fragment:
             return False
 
@@ -2991,16 +2863,15 @@ class Utilities(script_utilities.Utilities):
         if not (obj and self.in_document_content(obj)):
             return False
 
-        namespace = self._cache.IS_CONTENT_EDITABLE_WITH_EMBEDDED_OBJECTS
-        cached = self._cache.get_for_object(namespace, obj)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        rv = self._cached_is_content_editable_with_embedded_objects.get(hash(obj))
+        if rv is not None:
+            return rv
 
         rv = False
 
         def has_text_block_role(x):
             return (
-                AXUtilities.is_text_block(x)
+                AXObject.get_role(x) in self._text_block_element_roles()
                 and not self._is_fake_placeholder_for_entry(x)
                 and AXUtilities.is_web_element(x)
             )
@@ -3016,11 +2887,21 @@ class Utilities(script_utilities.Utilities):
             if document:
                 rv = self.is_content_editable_with_embedded_objects(document)
 
-        self._cache.set_for_object(namespace, obj, rv)
+        self._cached_is_content_editable_with_embedded_objects[hash(obj)] = rv
         return rv
 
+    def _range_in_parent_with_length(self, obj: Atspi.Accessible) -> tuple[int, int, int]:
+        # TODO - JD: Is this still needed?
+        parent = AXObject.get_parent(obj)
+        if not self.treat_as_text_object(parent):
+            return -1, -1, 0
+
+        start = AXHypertext.get_link_start_offset(obj)
+        end = AXHypertext.get_link_end_offset(obj)
+        return start, end, AXText.get_character_count(parent)
+
     def _can_have_caret_context(self, obj: Atspi.Accessible) -> bool:
-        rv = self._cache.get_caret_context_decision(obj)
+        rv = self._cached_can_have_caret_context_decision.get(hash(obj))
         if rv is not None:
             return rv
 
@@ -3077,12 +2958,23 @@ class Utilities(script_utilities.Utilities):
             tokens = ["WEB: Empty anchor cannot have caret context", obj]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = False
+        elif self._is_empty_tool_tip(obj):
+            tokens = ["WEB: Empty tool tip cannot have caret context", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            rv = False
         elif self._is_fake_placeholder_for_entry(obj):
             tokens = ["WEB: Fake placeholder for entry cannot have caret context", obj]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = False
-        elif AXUtilities.is_presentational_child(obj):
+        elif AXUtilities.find_ancestor(obj, AXUtilities.children_are_presentational):
             tokens = ["WEB: Presentational child cannot have caret context", obj]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            rv = False
+        elif AXUtilities.is_hidden(obj):
+            # We try to do this check only if needed because getting object attributes is
+            # not as performant, and we cannot use the cached attribute because aria-hidden
+            # can change frequently depending on the app.
+            tokens = ["WEB: Hidden object cannot have caret context", obj]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = False
         elif AXUtilities.has_no_size(obj):
@@ -3090,18 +2982,47 @@ class Utilities(script_utilities.Utilities):
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = True
         else:
-            tokens = ["WEB: ", obj, "can have caret context."]
+            tokens = ["WEB: ", obj, f"can have caret context. ({time.time() - start_time:.4f}s)"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             rv = True
 
-        self._cache.set_caret_context_decision(obj, rv)
-        tokens = ["INFO: _can_have_caret_context took", round(time.time() - start_time, 4), "s"]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        self._cached_can_have_caret_context_decision[hash(obj)] = rv
+        msg = f"INFO: _canHaveCaretContext took {time.time() - start_time:.4f}s"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return rv
+
+    def search_for_caret_context(self, obj: Atspi.Accessible) -> tuple[Atspi.Accessible, int]:
+        """Searches inside obj for the caret context."""
+
+        tokens = ["WEB: Searching for caret context in", obj]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        container = obj
+        context_obj, context_offset = None, -1
+        while obj:
+            offset = AXText.get_caret_offset(obj)
+            if offset < 0:
+                obj = None
+            else:
+                context_obj, context_offset = obj, offset
+                child = AXHypertext.find_child_at_offset(obj, offset)
+                if child:
+                    obj = child
+                else:
+                    break
+
+        if context_obj and not AXUtilities.is_hidden(context_obj):
+            return self.find_next_caret_in_order(context_obj, max(-1, context_offset - 1))
+
+        if self.is_document(container):
+            return container, 0
+
+        return None, -1
 
     def get_caret_context(
         self,
         document: Atspi.Accessible | None = None,
+        get_replicant: bool = False,
         search_if_needed: bool = True,
     ) -> tuple[Atspi.Accessible, int]:
         """Returns an (obj, offset) tuple representing the current location."""
@@ -3128,10 +3049,7 @@ class Utilities(script_utilities.Utilities):
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return obj, offset
 
-        context = self._cache.get_context_for_parent(
-            self._cache.CARET_CONTEXTS,
-            AXObject.get_parent(document),
-        )
+        context = self._cached_caret_contexts.get(hash(AXObject.get_parent(document)))
         if context is not None:
             tokens = ["WEB: Cached context of", document, "is", context[0], ", ", context[1]]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -3148,9 +3066,17 @@ class Utilities(script_utilities.Utilities):
                 )
                 debug.print_message(debug.LEVEL_INFO, msg, True)
                 return None, -1
-            obj, offset = AXUtilities.search_for_caret_context(
-                document, self.caret_policy, self.is_document
-            )
+            obj, offset = self.search_for_caret_context(document)
+        elif not get_replicant:
+            obj, offset = context
+        elif not AXObject.is_valid(context[0]):
+            msg = "WEB: Context is not valid. Searching for replicant."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            obj, offset = self._find_context_replicant_deprecated()
+            if obj:
+                caret_obj, caret_offset = self.search_for_caret_context(AXObject.get_parent(obj))
+                if caret_obj and AXObject.is_valid(caret_obj):
+                    obj, offset = caret_obj, caret_offset
         else:
             obj, offset = context
 
@@ -3158,6 +3084,20 @@ class Utilities(script_utilities.Utilities):
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         self.set_caret_context(obj, offset, document)
         return obj, offset
+
+    def _get_caret_context_path_role_and_name(
+        self,
+        document: Atspi.Accessible | None = None,
+    ) -> tuple[list[int], Atspi.Role | None, str | None]:
+        document = document or self.active_document()
+        if not document:
+            return [-1], None, None
+
+        rv = self._cached_context_paths_roles_and_names.get(hash(AXObject.get_parent(document)))
+        if not rv:
+            return [-1], None, None
+
+        return rv
 
     def clear_caret_context(self, document: Atspi.Accessible | None = None) -> None:
         """Clears the caret context."""
@@ -3169,8 +3109,86 @@ class Utilities(script_utilities.Utilities):
             return
 
         parent = AXObject.get_parent(document)
-        self._cache.discard_context_for_parent(self._cache.CARET_CONTEXTS, parent)
-        self._cache.discard_context_for_parent(self._cache.PRIOR_CONTEXTS, parent)
+        self._cached_caret_contexts.pop(hash(parent), None)
+        self._cached_prior_contexts.pop(hash(parent), None)
+
+    def handle_event_from_context_replicant(self, event, replicant):
+        """Attempts to clean up when we can an event from a replacement of the focused object."""
+
+        if AXObject.is_dead(replicant):
+            msg = "WEB: Context replicant is dead."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if not focus_manager.get_manager().focus_is_dead():
+            msg = "WEB: Not event from context replicant, locus of focus is not dead."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        path, role, name = self._get_caret_context_path_role_and_name()
+        replicant_path = AXObject.get_path(replicant)
+        if path != replicant_path:
+            tokens = [
+                "WEB: Not event from context replicant. Path",
+                path,
+                " != replicant path",
+                replicant_path,
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        replicant_role = AXObject.get_role(replicant)
+        if role != replicant_role:
+            tokens = [
+                "WEB: Not event from context replicant. Role",
+                role,
+                " != replicant role",
+                replicant_role,
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return False
+
+        notify = AXObject.get_name(replicant) != name
+        document = self.active_document()
+        _obj, offset = self._cached_caret_contexts.get(hash(AXObject.get_parent(document)))
+
+        tokens = ["WEB: Is event from context replicant. Notify:", notify]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        focus_manager.get_manager().set_locus_of_focus(event, replicant, notify)
+        self.set_caret_context(replicant, offset, document)
+        return True
+
+    def _handle_event_for_removed_selectable_child(self, event):
+        container = None
+        if AXUtilities.is_list_box(event.source) or AXUtilities.is_tree(event.source):
+            container = event.source
+        else:
+            container = AXUtilities.find_ancestor(
+                event.source,
+                AXUtilities.is_list_box,
+            ) or AXUtilities.find_ancestor(event.source, AXUtilities.is_tree)
+        if container is None:
+            msg = "WEB: Could not find listbox or tree to recover from removed child."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        tokens = ["WEB: Checking", container, "for focused child."]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        # TODO - JD: Can we remove this? If it's needed, should it be recursive?
+        AXObject.clear_cache(container, False, "Handling event for removed selectable child.")
+        item = AXUtilities.get_focused_object(container)
+        if not (AXUtilities.is_list_item(item) or AXUtilities.is_tree_item):
+            msg = "WEB: Could not find focused item to recover from removed child."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        tokens = ["WEB: Recovered from removed child. New focus is: ", item, "0"]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        focus_manager.get_manager().set_locus_of_focus(event, item)
+        self.set_caret_context(item, 0)
+        return True
 
     def handle_event_for_removed_child(self, event):
         """Attempts to recover when the current object has been removed from the document."""
@@ -3191,6 +3209,9 @@ class Utilities(script_utilities.Utilities):
             msg = "WEB: Event detail1 is useless."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
+
+        if self._handle_event_for_removed_selectable_child(event):
+            return True
 
         obj, offset = None, -1
         notify = True
@@ -3246,14 +3267,11 @@ class Utilities(script_utilities.Utilities):
             # cache in _handleEventForRemovedSelectableChild. Also, if it is needed, should
             # it be recursive?
             AXObject.clear_cache(event.source, False, "Handling event for removed child.")
-            obj, offset = AXUtilities.search_for_caret_context(
-                event.source, self.caret_policy, self.is_document
-            )
+            obj, offset = self.search_for_caret_context(event.source)
             if obj is None:
                 obj = AXUtilities.get_focused_object(event.source)
 
-            # If what we found in the removed child's place has focus, focus really moved.
-            if obj is not None and AXUtilities.is_focused(obj):
+            if obj and focus_manager.get_manager().focus_is_dead() and AXUtilities.is_focused(obj):
                 notify = True
 
         if obj:
@@ -3266,6 +3284,28 @@ class Utilities(script_utilities.Utilities):
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return False
 
+    def _find_context_replicant_deprecated(
+        self,
+        document: Atspi.Accessible | None = None,
+        match_role: bool = True,
+        match_name: bool = True,
+    ) -> tuple[Atspi.Accessible | None, int]:
+        path, old_role, old_name = self._get_caret_context_path_role_and_name(document)
+        obj = self._get_object_from_path(path)
+        if obj and match_role:
+            if AXObject.get_role(obj) != old_role:
+                obj = None
+        if obj and match_name:
+            if AXObject.get_name(obj) != old_name:
+                obj = None
+        if not obj:
+            return None, -1
+
+        obj, offset = self.first_context(obj, 0)
+        tokens = ["WEB: Context replicant is", obj, ", ", offset]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return obj, offset
+
     def get_prior_context(
         self,
         document: Atspi.Accessible | None = None,
@@ -3276,14 +3316,20 @@ class Utilities(script_utilities.Utilities):
             document = self.active_document()
 
         if document:
-            context = self._cache.get_context_for_parent(
-                self._cache.PRIOR_CONTEXTS,
-                AXObject.get_parent(document),
-            )
+            context = self._cached_prior_contexts.get(hash(AXObject.get_parent(document)))
             if context:
                 return context
 
         return None, -1
+
+    def _get_path(self, obj: Atspi.Accessible) -> list[int]:
+        rv = self._cached_paths.get(hash(obj))
+        if rv is not None:
+            return rv
+
+        rv = AXObject.get_path(obj) or [-1]
+        self._cached_paths[hash(obj)] = rv
+        return rv
 
     def set_caret_context(
         self,
@@ -3298,32 +3344,24 @@ class Utilities(script_utilities.Utilities):
             return
 
         parent = AXObject.get_parent(document)
-        old_obj, old_offset = self._cache.get_context_for_parent(
-            self._cache.CARET_CONTEXTS,
-            parent,
-        ) or (obj, offset)
-        self._cache.set_context_for_parent(
-            self._cache.PRIOR_CONTEXTS,
-            parent,
-            (old_obj, old_offset),
-        )
-        self._cache.set_context_for_parent(
-            self._cache.CARET_CONTEXTS,
-            parent,
-            (obj, offset),
-        )
+        old_obj, old_offset = self._cached_caret_contexts.get(hash(parent), (obj, offset))
+        self._cached_prior_contexts[hash(parent)] = old_obj, old_offset
+        self._cached_caret_contexts[hash(parent)] = obj, offset
+
+        path = self._get_path(obj)
+        role = AXObject.get_role(obj)
+        name = AXObject.get_name(obj)
+        self._cached_context_paths_roles_and_names[hash(parent)] = path, role, name
 
     def first_context(self, obj: Atspi.Accessible, offset: int) -> tuple[Atspi.Accessible, int]:
         """Returns the first viable/valid caret context given obj and offset."""
 
-        self._cache.clear_caret_context_decisions("web first context")
+        self._cached_can_have_caret_context_decision = {}
         rv = self._first_context(obj, offset)
-        self._cache.clear_caret_context_decisions("web first context")
+        self._cached_can_have_caret_context_decision = {}
         return rv
 
-    def _first_context(self, obj: Atspi.Accessible, offset: int) -> tuple[Atspi.Accessible, int]:
-        """Returns the first viable caret context at or after obj, offset."""
-
+    def _first_context(self, obj, offset):
         tokens = ["WEB: Looking for first caret context for", obj, ", ", offset]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
@@ -3345,79 +3383,70 @@ class Utilities(script_utilities.Utilities):
             return self._first_context(first_child, 0)
 
         treat_as_text = self.treat_as_text_object(obj)
+        if not treat_as_text and self._can_have_caret_context(obj):
+            tokens = ["WEB: First caret context for non-text context is", obj, "0"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return obj, 0
 
         length = AXText.get_character_count(obj)
         if treat_as_text and offset >= length:
-            return self._first_context_at_text_end(obj, offset, length)
+            if (
+                self.is_content_editable_with_embedded_objects(obj)
+                and input_event_manager.get_manager().last_event_was_character_navigation()
+            ):
+                next_obj, next_offset = self.next_context(obj, length)
+                if not next_obj:
+                    tokens = ["WEB: No next object found at end of contenteditable", obj]
+                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                elif not self.is_content_editable_with_embedded_objects(next_obj):
+                    tokens = [
+                        "WEB: Next object",
+                        next_obj,
+                        "found at end of contenteditable",
+                        obj,
+                        "is not editable",
+                    ]
+                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                else:
+                    tokens = [
+                        "WEB: First caret context at end of contenteditable",
+                        obj,
+                        "is next context",
+                        next_obj,
+                        ", ",
+                        next_offset,
+                    ]
+                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                    return next_obj, next_offset
+
+            tokens = [
+                "WEB: First caret context at end of",
+                obj,
+                ", ",
+                offset,
+                "is",
+                obj,
+                ", ",
+                length,
+            ]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return obj, length
 
         offset = max(0, offset)
-        if AXUtilities.is_valid_position(obj, offset, self.caret_policy):
-            if not treat_as_text:
-                offset = 0
-            tokens = ["WEB: First caret context is", obj, ", ", offset]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return obj, offset
+        if treat_as_text:
+            all_text = AXText.get_all_text(obj)
+            if (all_text and all_text[offset] != "\ufffc") or role == Atspi.Role.ENTRY:
+                msg = "WEB: First caret context is unchanged"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return obj, offset
 
-        if treat_as_text and self._element_lines_are_single_chars(obj):
-            msg = "WEB: EOC in single-char-lines element. Returning context unchanged."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return obj, offset
+            # Descending an element that we're treating as whole can lead to looping/getting stuck.
+            if self._element_lines_are_single_chars(obj):
+                msg = "WEB: EOC in single-char-lines element. Returning context unchanged."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                return obj, offset
 
-        return self._first_context_in_child(obj, offset)
-
-    def _first_context_at_text_end(
-        self, obj: Atspi.Accessible, offset: int, length: int
-    ) -> tuple[Atspi.Accessible, int]:
-        """Returns the first caret context when offset is at or past the end of obj's text."""
-
-        if (
-            self.is_content_editable_with_embedded_objects(obj)
-            and input_event_manager.get_manager().last_event_was_character_navigation()
-        ):
-            next_obj, next_offset = self.next_context(obj, length)
-            if not next_obj:
-                tokens = ["WEB: No next object found at end of contenteditable", obj]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            elif not self.is_content_editable_with_embedded_objects(next_obj):
-                tokens = [
-                    "WEB: Next object",
-                    next_obj,
-                    "found at end of contenteditable",
-                    obj,
-                    "is not editable",
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            else:
-                tokens = [
-                    "WEB: First caret context at end of contenteditable",
-                    obj,
-                    "is next context",
-                    next_obj,
-                    ", ",
-                    next_offset,
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                return next_obj, next_offset
-
-        tokens = [
-            "WEB: First caret context at end of",
-            obj,
-            ", ",
-            offset,
-            "is",
-            obj,
-            ", ",
-            length,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return obj, length
-
-    def _first_context_in_child(
-        self, obj: Atspi.Accessible, offset: int
-    ) -> tuple[Atspi.Accessible, int]:
-        """Returns the first caret context found by descending into the child at offset."""
-
-        child = AXUtilities.find_child_at_offset(obj, offset)
+        child = AXHypertext.find_child_at_offset(obj, offset)
         if not child:
             msg = "WEB: Child at offset is null. Returning context unchanged."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -3428,7 +3457,7 @@ class Utilities(script_utilities.Utilities):
                 tokens = ["WEB: Child", child, "of", obj, "at offset", offset, "cannot be context."]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 offset += 1
-                child = AXUtilities.find_child_at_offset(obj, offset)
+                child = AXHypertext.find_child_at_offset(obj, offset)
 
         if self._is_empty_anchor(child):
             next_obj, next_offset = self.next_context(obj, offset)
@@ -3452,3 +3481,188 @@ class Utilities(script_utilities.Utilities):
         tokens = ["WEB: Looking in child", child, "for first caret context for", obj, ", ", offset]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return self._first_context(child, 0)
+
+    def find_next_caret_in_order(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+    ) -> tuple[Atspi.Accessible, int]:
+        """Returns the next (obj, offset) to the specified one."""
+
+        start_time = time.time()
+        rv = self._find_next_caret_in_order_internal(obj, offset)
+        tokens = [
+            "WEB: Next caret in order for",
+            obj,
+            ", ",
+            offset,
+            ":",
+            rv[0],
+            ", ",
+            rv[1],
+            f"({time.time() - start_time:.4f}s)",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return rv
+
+    def _find_next_caret_in_order_internal(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+    ) -> tuple[Atspi.Accessible, int]:
+        if not obj:
+            obj, offset = self.get_caret_context()
+
+        if not obj or not self.in_document_content(obj):
+            return None, -1
+
+        if self._can_have_caret_context(obj):
+            if self.treat_as_text_object(obj) and AXText.get_character_count(obj):
+                all_text = AXText.get_all_text(obj)
+                for i in range(offset + 1, len(all_text)):
+                    child = AXHypertext.find_child_at_offset(obj, i)
+                    if child and all_text[i] != "\ufffc":
+                        tokens = [
+                            "ERROR: Child",
+                            child,
+                            "found at offset with char '",
+                            all_text[i].replace("\n", "\\n"),
+                            "'",
+                        ]
+                        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                        if offset == AXHypertext.get_character_offset_in_parent(child):
+                            tokens = ["WEB: Handling error by returning", obj, i]
+                            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                            return obj, i
+                    if self._can_have_caret_context(child):
+                        if self._treat_object_as_whole(child, -1):
+                            return child, 0
+                        return self._find_next_caret_in_order_internal(child, -1)
+                    if all_text[i] not in ("\ufffc", self.ZERO_WIDTH_NO_BREAK_SPACE):
+                        return obj, i
+            elif AXObject.get_child_count(obj) and not self._treat_object_as_whole(obj, offset):
+                return self._find_next_caret_in_order_internal(AXObject.get_child(obj, 0), -1)
+            elif offset < 0 and not self.is_text_block_element(obj):
+                return obj, 0
+
+        # If we're here, start looking up the tree, up to the document.
+        if self.is_top_level_document(obj):
+            return None, -1
+
+        while obj and (parent := AXObject.get_parent(obj)):
+            # TODO - JD: Is this detached document logic still needed?
+            if self._is_detached_document(parent):
+                obj = self._iframe_for_detached_document(parent)
+                continue
+
+            if not AXObject.is_valid(parent):
+                msg = "WEB: Finding next caret in order. Parent is not valid."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                if AXObject.get_parent(parent):
+                    obj = parent
+                    continue
+                break
+
+            start, end, length = self._range_in_parent_with_length(obj)
+            if start + 1 == end and 0 <= start < end <= length:
+                return self._find_next_caret_in_order_internal(parent, start)
+
+            child = AXObject.get_next_sibling(obj)
+            if child:
+                return self._find_next_caret_in_order_internal(child, -1)
+            obj = parent
+
+        return None, -1
+
+    def find_previous_caret_in_order(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+    ) -> tuple[Atspi.Accessible, int]:
+        """Returns the previous (obj, offset) to the specified one."""
+
+        start_time = time.time()
+        rv = self._find_previous_caret_in_order_internal(obj, offset)
+        tokens = [
+            "WEB: Previous caret in order for",
+            obj,
+            ", ",
+            offset,
+            ":",
+            rv[0],
+            ", ",
+            rv[1],
+            f"({time.time() - start_time:.4f}s)",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        return rv
+
+    def _find_previous_caret_in_order_internal(
+        self,
+        obj: Atspi.Accessible | None = None,
+        offset: int = -1,
+    ) -> tuple[Atspi.Accessible, int]:
+        if not obj:
+            obj, offset = self.get_caret_context()
+
+        if not obj or not self.in_document_content(obj):
+            return None, -1
+
+        if self._can_have_caret_context(obj):
+            if self.treat_as_text_object(obj) and AXText.get_character_count(obj):
+                all_text = AXText.get_all_text(obj)
+                if offset == -1 or offset > len(all_text):
+                    offset = len(all_text)
+                for i in range(offset - 1, -1, -1):
+                    child = AXHypertext.find_child_at_offset(obj, i)
+                    if child and all_text[i] != "\ufffc":
+                        tokens = [
+                            "ERROR: Child",
+                            child,
+                            "found at offset with char '",
+                            all_text[i].replace("\n", "\\n"),
+                            "'",
+                        ]
+                        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                    if self._can_have_caret_context(child):
+                        if self._treat_object_as_whole(child, -1):
+                            return child, 0
+                        return self._find_previous_caret_in_order_internal(child, -1)
+                    if all_text[i] not in ("\ufffc", self.ZERO_WIDTH_NO_BREAK_SPACE):
+                        return obj, i
+            elif AXObject.get_child_count(obj) and not self._treat_object_as_whole(obj, offset):
+                return self._find_previous_caret_in_order_internal(
+                    AXObject.get_child(obj, AXObject.get_child_count(obj) - 1),
+                    -1,
+                )
+            elif offset < 0 and not self.is_text_block_element(obj):
+                return obj, 0
+
+        # If we're here, start looking up the tree, up to the document.
+        if self.is_top_level_document(obj):
+            return None, -1
+
+        while obj and (parent := AXObject.get_parent(obj)):
+            # TODO - JD: Is this detached document logic still needed?
+            if self._is_detached_document(parent):
+                obj = self._iframe_for_detached_document(parent)
+                continue
+
+            if not AXObject.is_valid(parent):
+                msg = "WEB: Finding previous caret in order. Parent is not valid."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
+                if AXObject.get_parent(parent):
+                    obj = parent
+                    continue
+                break
+
+            start, end, length = self._range_in_parent_with_length(obj)
+            if start + 1 == end and 0 <= start < end <= length:
+                return self._find_previous_caret_in_order_internal(parent, start)
+
+            child = AXObject.get_previous_sibling(obj)
+            if child:
+                return self._find_previous_caret_in_order_internal(child, -1)
+            obj = parent
+
+        return None, -1

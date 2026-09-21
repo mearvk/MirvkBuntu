@@ -33,7 +33,6 @@
 #include <stdio.h>
 
 #include "glib.h"
-#include "glib/gstdio.h"
 
 #include "glib/gunidecomp.h"
 
@@ -141,7 +140,7 @@ test_unichar_break_type (void)
     { G_UNICODE_BREAK_NON_BREAKING_GLUE,   0x00A0 },
     { G_UNICODE_BREAK_CONTINGENT,          0xFFFC },
     { G_UNICODE_BREAK_SPACE,               0x0020 },
-    { G_UNICODE_BREAK_AFTER,               0x1680 },
+    { G_UNICODE_BREAK_AFTER,               0x05BE },
     { G_UNICODE_BREAK_BEFORE,              0x02C8 },
     { G_UNICODE_BREAK_BEFORE_AND_AFTER,    0x2014 },
     { G_UNICODE_BREAK_HYPHEN,              0x002D },
@@ -179,7 +178,6 @@ test_unichar_break_type (void)
     { G_UNICODE_BREAK_AKSARA_START,        0x11F50 },
     { G_UNICODE_BREAK_VIRAMA_FINAL,        0x1BF3 },
     { G_UNICODE_BREAK_VIRAMA,              0xA9C0 },
-    { G_UNICODE_BREAK_UNAMBIGUOUS_HYPHEN,  0x05BE },
   };
 
   for (i = 0; i < G_N_ELEMENTS (examples); i++)
@@ -366,13 +364,6 @@ test_unichar_script (void)
     { G_UNICODE_SCRIPT_VITHKUQI,               0x10570 },
     { G_UNICODE_SCRIPT_KAWI,                   0x11F00 },
     { G_UNICODE_SCRIPT_NAG_MUNDARI,            0x1E4D0 },
-    { G_UNICODE_SCRIPT_TODHRI,                 0x105C8 },
-    { G_UNICODE_SCRIPT_GARAY,                  0x10D40 },
-    { G_UNICODE_SCRIPT_TULU_TIGALARI,          0x11387 },
-    { G_UNICODE_SCRIPT_SUNUWAR,                0x11BC0 },
-    { G_UNICODE_SCRIPT_GURUNG_KHEMA,           0x16139 },
-    { G_UNICODE_SCRIPT_KIRAT_RAI,              0x16D40 },
-    { G_UNICODE_SCRIPT_OL_ONAL,                0x1E5D0 },
   };
   for (i = 0; i < G_N_ELEMENTS (examples); i++)
     g_assert_cmpint (g_unichar_get_script (examples[i].c), ==, examples[i].script);
@@ -420,15 +411,7 @@ test_combining_class (void)
     { 233, 0x0362 },
     { 234, 0x0360 },
     { 234, 0x1DCD },
-    { 240, 0x0345 },
-    /* These are all (currently) unassigned, but exercise various branches in
-     * the combining class lookup tables: */
-    { 0, 0x323FF },
-    { 0, 0x32400 },
-    { 0, 0xDFFFF },
-    { 0, 0xE0000 },
-    { 0, G_UNICODE_LAST_CHAR },
-    { 0, G_UNICODE_LAST_CHAR + 1 },
+    { 240, 0x0345 }
   };
   for (i = 0; i < G_N_ELEMENTS (examples); i++)
     {
@@ -542,7 +525,8 @@ test_turkish_strupdown (void)
   if (oldlocale == NULL)
     {
       g_test_skip ("locale tr_TR not available");
-      goto out;
+      g_free (old_lang);
+      return;
     }
 
 #ifdef G_OS_WIN32
@@ -567,12 +551,9 @@ test_turkish_strupdown (void)
   g_free (str_up);
   g_free (str_down);
 
-out:
-  if (oldlocale != NULL)
-    setlocale (LC_ALL, oldlocale);
+  setlocale (LC_ALL, oldlocale);
 #ifdef G_OS_WIN32
-  if (oldlocale != NULL)
-    SetThreadLocale (old_lcid);
+  SetThreadLocale (old_lcid);
 #endif
   g_free (oldlocale);
   if (old_lc_all)
@@ -625,7 +606,6 @@ test_casemap_and_casefold (void)
   const char *locale;
   const char *test;
   const char *expected;
-  size_t line = 0;
   char *convert;
   char *current_locale = setlocale (LC_CTYPE, NULL);
   char *old_lc_all, *old_lc_messages, *old_lang;
@@ -641,12 +621,11 @@ test_casemap_and_casefold (void)
   save_and_clear_env ("LANG", &old_lang);
 
   filename = g_test_build_filename (G_TEST_DIST, "casemap.txt", NULL);
-  infile = g_fopen (filename, "re");
+  infile = fopen (filename, "r");
   g_assert (infile != NULL);
 
   while (fgets (buffer, sizeof (buffer), infile))
     {
-      line++;
       if (buffer[0] == '#')
         continue;
 
@@ -672,8 +651,6 @@ test_casemap_and_casefold (void)
         SetThreadLocale (MAKELCID (MAKELANGID (LANG_LITHUANIAN, SUBLANG_LITHUANIAN), SORT_DEFAULT));
       else if (strstr (locale, "tr_TR"))
         SetThreadLocale (MAKELCID (MAKELANGID (LANG_TURKISH, SUBLANG_TURKISH_TURKEY), SORT_DEFAULT));
-      else if (strstr (locale, "az_AZ"))
-        SetThreadLocale (MAKELCID (MAKELANGID (LANG_AZERBAIJANI, SUBLANG_AZERBAIJANI_AZERBAIJAN_LATIN), SORT_DEFAULT));
       else
         SetThreadLocale (old_lcid);
 #endif
@@ -691,10 +668,6 @@ test_casemap_and_casefold (void)
 
       convert = g_utf8_strup (test, -1);
       expected = strings[4][0] ? strings[4] : test;
-      g_test_message ("Converting '%s' => '%s' [expected '%s'] "
-                      "(line %" G_GSIZE_FORMAT ")",
-                      test, convert, expected, line);
-
       g_assert_cmpstr (convert, ==, expected);
       g_free (convert);
 
@@ -712,13 +685,11 @@ test_casemap_and_casefold (void)
   g_free (filename);
   filename = g_test_build_filename (G_TEST_DIST, "casefold.txt", NULL);
 
-  infile = g_fopen (filename, "re");
+  infile = fopen (filename, "r");
   g_assert (infile != NULL);
-  line = 0;
 
   while (fgets (buffer, sizeof (buffer), infile))
     {
-      line++;
       if (buffer[0] == '#')
         continue;
 
@@ -728,10 +699,6 @@ test_casemap_and_casefold (void)
       test = strings[0];
 
       convert = g_utf8_casefold (test, -1);
-      g_test_message ("Converting '%s' => '%s' [expected '%s'] "
-                      "(line %" G_GSIZE_FORMAT ")",
-                      test, convert, strings[1], line);
-
       g_assert_cmpstr (convert, ==, strings[1]);
       g_free (convert);
 
@@ -1443,141 +1410,41 @@ test_wide (void)
     }
 };
 
-/* Test g_unichar_to_utf8(). */
-static void
-test_unichar_to_utf8 (void)
-{
-  const struct
-    {
-      gunichar unichar;
-      int expected_length;
-      const char *expected_output;  /* must be of length `expected_length` */
-    }
-  vectors[] =
-    {
-      { 0x21, 1, "!" },
-      { 0x00A1, 2, "\xc2\xa1" },
-      { 0x0800, 3, "\xe0\xa0\x80" },
-      { 0x10000, 4, "\xf0\x90\x80\x80" },
-      { 0x200000, 5, "\xf8\x88\x80\x80\x80" },
-      { 0x4000000, 6, "\xfc\x84\x80\x80\x80\x80" },
-    };
-
-  for (size_t i = 0; i < G_N_ELEMENTS (vectors); i++)
-    {
-      int length;
-      char output[6];
-
-      length = g_unichar_to_utf8 (vectors[i].unichar, NULL);
-      g_assert_cmpint (length, ==, vectors[i].expected_length);
-
-      length = g_unichar_to_utf8 (vectors[i].unichar, output);
-      g_assert_cmpint (length, ==, vectors[i].expected_length);
-      g_assert_cmpmem (output, length, vectors[i].expected_output, vectors[i].expected_length);
-    }
-}
-
 /* Test that g_unichar_compose() returns the correct value for various
  * ASCII and Unicode alphabetic, numeric, and other, codepoints. */
 static void
 test_compose (void)
 {
-  const struct
-    {
-      gunichar a;
-      gunichar b;
-      gunichar expected_result;  /* 0 for failure */
-    }
-  vectors[] =
-    {
-      /* Not composable */
-      { 0x0041, 0x0042, 0 },
-      { 0x0041, 0x0000, 0 },
-      { 0x0066, 0x0069, 0 },
+  gunichar ch;
 
-      /* Tricky non-composable */
-      { 0x0308, 0x0301, 0 }, /* !0x0344 */
-      { 0x0F71, 0x0F72, 0 }, /* !0x0F73 */
+  /* Not composable */
+  g_assert_false (g_unichar_compose (0x0041, 0x0042, &ch) && ch == 0);
+  g_assert_false (g_unichar_compose (0x0041, 0, &ch) && ch == 0);
+  g_assert_false (g_unichar_compose (0x0066, 0x0069, &ch) && ch == 0);
 
-      /* Singletons should not compose */
-      { 0x212B, 0x0000, 0 },
-      { 0x00C5, 0x0000, 0 },
-      { 0x2126, 0x0000, 0 },
-      { 0x03A9, 0x0000, 0 },
+  /* Tricky non-composable */
+  g_assert_false (g_unichar_compose (0x0308, 0x0301, &ch) && ch == 0); /* !0x0344 */
+  g_assert_false (g_unichar_compose (0x0F71, 0x0F72, &ch) && ch == 0); /* !0x0F73 */
 
-      /* Pairs */
-      { 0x0041, 0x030A, 0x00C5 },
-      { 0x006F, 0x0302, 0x00F4 },
-      { 0x1E63, 0x0307, 0x1E69 },
-      { 0x0073, 0x0323, 0x1E63 },
-      { 0x0064, 0x0307, 0x1E0B },
-      { 0x0064, 0x0323, 0x1E0D },
+  /* Singletons should not compose */
+  g_assert_false (g_unichar_compose (0x212B, 0, &ch) && ch == 0);
+  g_assert_false (g_unichar_compose (0x00C5, 0, &ch) && ch == 0);
+  g_assert_false (g_unichar_compose (0x2126, 0, &ch) && ch == 0);
+  g_assert_false (g_unichar_compose (0x03A9, 0, &ch) && ch == 0);
 
-       /* Hangul */
-      { 0xD4CC, 0x11B6, 0xD4DB },
-      { 0x1111, 0x1171, 0xD4CC },
-      { 0xCE20, 0x11B8, 0xCE31 },
-      { 0x110E, 0x1173, 0xCE20 },
+  /* Pairs */
+  g_assert_true (g_unichar_compose (0x0041, 0x030A, &ch) && ch == 0x00C5);
+  g_assert_true (g_unichar_compose (0x006F, 0x0302, &ch) && ch == 0x00F4);
+  g_assert_true (g_unichar_compose (0x1E63, 0x0307, &ch) && ch == 0x1E69);
+  g_assert_true (g_unichar_compose (0x0073, 0x0323, &ch) && ch == 0x1E63);
+  g_assert_true (g_unichar_compose (0x0064, 0x0307, &ch) && ch == 0x1E0B);
+  g_assert_true (g_unichar_compose (0x0064, 0x0323, &ch) && ch == 0x1E0D);
 
-      /* Hangul non-compositions (testing various exit conditions in combine_hangul()) */
-      { 0x1100, 0x1160, 0 },
-      { 0x1100, 0x1177, 0 },
-      { 0xABFF, 0x11B6, 0 },
-      { 0xD7A5, 0x11B6, 0 },
-      { 0xAC01, 0x11B6, 0 },
-      { 0xD4CC, 0x11A6, 0 },
-      { 0xD4CC, 0x11C4, 0 },
-
-      /* Primary composite above U+FFFF (a significant boundary value in our implementation) */
-      { 0x1611E, 0x1611E, 0x16121 },  /* first and second char equal */
-      { 0x1611E, 0x1611F, 0x16123 },
-
-      /* First singletons */
-      { 0x00F6, 0x0304, 0x022B },
-
-      /* Second singletons */
-      { 0x0B47, 0x0B57, 0x0B4C },
-      { 0x00A0, 0x0B57, 0 },
-
-      /* Very high values (exercising some branches in COMPOSE_INDEX) */
-      { 0x16E00, 0x030A, 0 },
-      { 0x212B, 0x16E00, 0 },
-
-      /* Exercise some failure paths in the lookup tables */
-      { 0x1E63, 0x0306, 0 },
-      { 0x1E63, 0x0304, 0 },
-      { 0x1E63, 0x0B57, 0 },
-      { 0x1E63, 0x0000, 0 },
-      { 0x1E63, 0x113C2, 0 },
-      { 0x1F01, 0x113C2, 0 },
-      { 0x006E, 0x0302, 0 },
-      { 0x1E63, 0x1611F, 0 },
-      { 0x1138E, 0x113B8, 0 },
-      { 0x1611E, 0x0000, 0 },
-      { 0x0000, 0x1611F, 0 },
-      { 0x11390, 0x113C2, 0 },
-    };
-
-  for (size_t i = 0; i < G_N_ELEMENTS (vectors); i++)
-    {
-      gunichar ch;
-      gboolean result;
-
-      g_test_message ("Composing U+%06x and U+%06x; expecting U+%06x",
-                      vectors[i].a, vectors[i].b, vectors[i].expected_result);
-
-      result = g_unichar_compose (vectors[i].a, vectors[i].b, &ch);
-      if (vectors[i].expected_result != 0)
-        {
-          g_assert_cmpuint (ch, ==, vectors[i].expected_result);
-          g_assert_true (result);
-        }
-      else
-        {
-          g_assert_cmpuint (ch, ==, 0);
-          g_assert_false (result);
-        }
-    }
+  /* Hangul */
+  g_assert_true (g_unichar_compose (0xD4CC, 0x11B6, &ch) && ch == 0xD4DB);
+  g_assert_true (g_unichar_compose (0x1111, 0x1171, &ch) && ch == 0xD4CC);
+  g_assert_true (g_unichar_compose (0xCE20, 0x11B8, &ch) && ch == 0xCE31);
+  g_assert_true (g_unichar_compose (0x110E, 0x1173, &ch) && ch == 0xCE20);
 }
 
 /* Test that g_unichar_decompose() returns the correct value for various
@@ -1612,10 +1479,6 @@ test_decompose (void)
   g_assert_true (g_unichar_decompose (0xD4CC, &a, &b) && a == 0x1111 && b == 0x1171);
   g_assert_true (g_unichar_decompose (0xCE31, &a, &b) && a == 0xCE20 && b == 0x11B8);
   g_assert_true (g_unichar_decompose (0xCE20, &a, &b) && a == 0x110E && b == 0x1173);
-
-  /* Primary composite above U+FFFF (a significant boundary value in our implementation) */
-  g_assert_true (g_unichar_decompose (0x16121, &a, &b) && a == 0x1611E && b == 0x1611E);  /* first and second char equal */
-  g_assert_true (g_unichar_decompose (0x16123, &a, &b) && a == 0x1611E && b == 0x1611F);
 }
 
 /* Test that g_unichar_fully_decompose() returns the correct value for
@@ -1623,76 +1486,50 @@ test_decompose (void)
 static void
 test_fully_decompose_canonical (void)
 {
-  const struct
-    {
-      gunichar input;
-      size_t expected_len;
-      gunichar expected_decomposition[4];
-    }
-  vectors[] =
-    {
-#define TEST0(ch)		{ ch, 1, { ch, 0, 0, 0 }}
-#define TEST1(ch, a)		{ ch, 1, { a, 0, 0, 0 }}
-#define TEST2(ch, a, b)		{ ch, 2, { a, b, 0, 0 }}
-#define TEST3(ch, a, b, c)	{ ch, 3, { a, b, c, 0 }}
-#define TEST4(ch, a, b, c, d)	{ ch, 4, { a, b, c, d }}
+  gunichar decomp[5];
+  gsize len;
 
-      /* Not decomposable */
-      TEST0 (0x0041),
-      TEST0 (0xFB01),
+#define TEST_DECOMP(ch, expected_len, a, b, c, d) \
+  len = g_unichar_fully_decompose (ch, FALSE, decomp, G_N_ELEMENTS (decomp)); \
+  g_assert_cmpint (expected_len, ==, len); \
+  if (expected_len >= 1) g_assert_cmphex (decomp[0], ==, a); \
+  if (expected_len >= 2) g_assert_cmphex (decomp[1], ==, b); \
+  if (expected_len >= 3) g_assert_cmphex (decomp[2], ==, c); \
+  if (expected_len >= 4) g_assert_cmphex (decomp[3], ==, d); \
 
-      /* Singletons */
-      TEST2 (0x212B, 0x0041, 0x030A),
-      TEST1 (0x2126, 0x03A9),
+#define TEST0(ch)		TEST_DECOMP (ch, 1, ch, 0, 0, 0)
+#define TEST1(ch, a)		TEST_DECOMP (ch, 1, a, 0, 0, 0)
+#define TEST2(ch, a, b)		TEST_DECOMP (ch, 2, a, b, 0, 0)
+#define TEST3(ch, a, b, c)	TEST_DECOMP (ch, 3, a, b, c, 0)
+#define TEST4(ch, a, b, c, d)	TEST_DECOMP (ch, 4, a, b, c, d)
 
-      /* Tricky pairs */
-      TEST2 (0x0344, 0x0308, 0x0301),
-      TEST2 (0x0F73, 0x0F71, 0x0F72),
+  /* Not decomposable */
+  TEST0 (0x0041);
+  TEST0 (0xFB01);
 
-      /* General */
-      TEST2 (0x00C5, 0x0041, 0x030A),
-      TEST2 (0x00F4, 0x006F, 0x0302),
-      TEST3 (0x1E69, 0x0073, 0x0323, 0x0307),
-      TEST2 (0x1E63, 0x0073, 0x0323),
-      TEST2 (0x1E0B, 0x0064, 0x0307),
-      TEST2 (0x1E0D, 0x0064, 0x0323),
+  /* Singletons */
+  TEST2 (0x212B, 0x0041, 0x030A);
+  TEST1 (0x2126, 0x03A9);
 
-      /* Hangul */
-      TEST3 (0xD4DB, 0x1111, 0x1171, 0x11B6),
-      TEST2 (0xD4CC, 0x1111, 0x1171),
-      TEST3 (0xCE31, 0x110E, 0x1173, 0x11B8),
-      TEST2 (0xCE20, 0x110E, 0x1173),
+  /* Tricky pairs */
+  TEST2 (0x0344, 0x0308, 0x0301);
+  TEST2 (0x0F73, 0x0F71, 0x0F72);
 
-#undef TEST4
-#undef TEST3
-#undef TEST2
-#undef TEST1
-#undef TEST0
-    };
+  /* General */
+  TEST2 (0x00C5, 0x0041, 0x030A);
+  TEST2 (0x00F4, 0x006F, 0x0302);
+  TEST3 (0x1E69, 0x0073, 0x0323, 0x0307);
+  TEST2 (0x1E63, 0x0073, 0x0323);
+  TEST2 (0x1E0B, 0x0064, 0x0307);
+  TEST2 (0x1E0D, 0x0064, 0x0323);
 
-  for (size_t i = 0; i < G_N_ELEMENTS (vectors); i++)
-    {
-      gunichar decomp[5];
-      size_t len;
+  /* Hangul */
+  TEST3 (0xD4DB, 0x1111, 0x1171, 0x11B6);
+  TEST2 (0xD4CC, 0x1111, 0x1171);
+  TEST3 (0xCE31, 0x110E, 0x1173, 0x11B8);
+  TEST2 (0xCE20, 0x110E, 0x1173);
 
-      g_test_message ("Fully decomposing U+%06x; expecting %" G_GSIZE_FORMAT " codepoints",
-                      vectors[i].input, vectors[i].expected_len);
-
-      /* Test with all possible output array sizes, to check that the function
-       * can write partial results OK. */
-      for (size_t j = 0; j <= G_N_ELEMENTS (decomp); j++)
-        {
-          len = g_unichar_fully_decompose (vectors[i].input, FALSE, decomp, G_N_ELEMENTS (decomp) - j);
-          g_assert_cmpuint (len, ==, vectors[i].expected_len);
-          if (len >= j)
-            g_assert_cmpmem (decomp, (len - j) * sizeof (*decomp),
-                             vectors[i].expected_decomposition, (vectors[i].expected_len - j) * sizeof (*vectors[i].expected_decomposition));
-        }
-
-      /* And again with no result array at all, just to get the length. */
-      len = g_unichar_fully_decompose (vectors[i].input, FALSE, NULL, 0);
-      g_assert_cmpuint (len, ==, vectors[i].expected_len);
-    }
+#undef TEST_DECOMP
 }
 
 /* Test that g_unicode_canonical_decomposition() returns the correct
@@ -1748,7 +1585,7 @@ test_canonical_decomposition (void)
 #undef TEST_DECOMP
 }
 
-/* Test that g_unichar_decompose() whenever encountering a char ch
+/* Test that g_unichar_decompose() whenever encouttering a char ch
  * decomposes into a and b, b itself won't decompose any further. */
 static void
 test_decompose_tail (void)
@@ -2038,15 +1875,6 @@ test_iso15924 (void)
     /* Unicode 15.0 additions */
     { G_UNICODE_SCRIPT_KAWI,                   "Kawi" },
     { G_UNICODE_SCRIPT_NAG_MUNDARI,            "Nagm" },
-
-    /* Unicode 16.0 additions */
-    { G_UNICODE_SCRIPT_TODHRI,                 "Todr" },
-    { G_UNICODE_SCRIPT_GARAY,                  "Gara" },
-    { G_UNICODE_SCRIPT_TULU_TIGALARI,          "Tutg" },
-    { G_UNICODE_SCRIPT_SUNUWAR,                "Sunu" },
-    { G_UNICODE_SCRIPT_GURUNG_KHEMA,           "Gukh" },
-    { G_UNICODE_SCRIPT_KIRAT_RAI,              "Krai" },
-    { G_UNICODE_SCRIPT_OL_ONAL,                "Onao" },
   };
   guint i;
 
@@ -2118,118 +1946,6 @@ test_normalize (void)
 #undef TEST
 }
 
-static void
-test_unknown_scripts (void)
-{
-  gunichar ch;
-  GUnicodeScript max_script;
-
-  max_script = G_UNICODE_SCRIPT_INVALID_CODE;
-  for (ch = 0; ch <= 0x10FFFF; ch++)
-    max_script = MAX (max_script, g_unichar_get_script (ch));
-
-#define PACK(a, b, c, d) \
-  ((guint32) ((((guint8) (a)) << 24) | (((guint8) (b)) << 16) | (((guint8) (c)) << 8) | ((guint8) (d))))
-
-  for (GUnicodeScript i = 0; i <= max_script; i++)
-    {
-      g_test_message ("Testing script %d", i);
-
-      guint32 tag = g_unicode_script_to_iso15924 (i);
-      if (i == G_UNICODE_SCRIPT_UNKNOWN)
-        g_assert_cmphex (tag, ==, PACK ('Z', 'z', 'z', 'z'));
-      else
-        g_assert_cmphex (tag, !=, PACK ('Z', 'z', 'z', 'z'));
-
-      GUnicodeScript script = g_unicode_script_from_iso15924 (tag);
-      g_assert_cmpint (script, ==, i);
-    }
-
-#undef PACK
-}
-
-static void
-test_strupdown_length (void)
-{
-  char *result;
-  char *oldlocale;
-  char *old_lc_all, *old_lc_messages, *old_lang;
-#ifdef G_OS_WIN32
-  LCID old_lcid;
-
-  old_lcid = GetThreadLocale ();
-#endif
-
-  /* U+0345 COMBINING GREEK YPOGEGRAMMENI triggers append_mark() in strup.
-   * Verify that a combining mark (U+0308) placed after max_len is not
-   * picked up by append_mark().
-   */
-  result = g_utf8_strup ("a" "\xCD\x85" "\xCC\x88", 3);
-  g_assert_cmpstr (result, ==, "A" "\xCE\x99");
-  g_free (result);
-
-  save_and_clear_env ("LC_ALL", &old_lc_all);
-  save_and_clear_env ("LC_MESSAGES", &old_lc_messages);
-  save_and_clear_env ("LANG", &old_lang);
-
-  /* Turkic locale: I + COMBINING DOT ABOVE => i, but only when the
-   * combining dot is within max_len.  With max_len=1 the dot is past
-   * the limit, so I should become DOTLESS I (U+0131) instead of i.
-   */
-  oldlocale = g_strdup (setlocale (LC_ALL, "tr_TR"));
-  if (oldlocale != NULL)
-    {
-#ifdef G_OS_WIN32
-      SetThreadLocale (MAKELCID (MAKELANGID (LANG_TURKISH, SUBLANG_TURKISH_TURKEY), SORT_DEFAULT));
-#endif
-
-      result = g_utf8_strdown ("I" "\xCC\x87", 1);
-      g_assert_cmpstr (result, ==, "\xC4\xB1");
-      g_free (result);
-
-      setlocale (LC_ALL, oldlocale);
-    }
-  else
-    g_test_message ("locale tr_TR not available, skipping Turkic test");
-  g_free (oldlocale);
-
-  /* Lithuanian locale: I + COMBINING ACUTE ACCENT (class 230) makes
-   * has_more_above() return TRUE and inserts a dot above.  With
-   * max_len=1 the accent is past the limit, so the result should be
-   * just a plain lowercase 'i'.
-   */
-  oldlocale = g_strdup (setlocale (LC_ALL, "lt_LT"));
-  if (oldlocale != NULL)
-    {
-#ifdef G_OS_WIN32
-      SetThreadLocale (MAKELCID (MAKELANGID (LANG_LITHUANIAN, SUBLANG_LITHUANIAN), SORT_DEFAULT));
-#endif
-
-      result = g_utf8_strdown ("I" "\xCC\x81", 1);
-      g_assert_cmpstr (result, ==, "i");
-      g_free (result);
-
-      setlocale (LC_ALL, oldlocale);
-    }
-  else
-    g_test_message ("locale lt_LT not available, skipping Lithuanian test");
-  g_free (oldlocale);
-
-#ifdef G_OS_WIN32
-  SetThreadLocale (old_lcid);
-#endif
-
-  if (old_lc_all)
-    g_setenv ("LC_ALL", old_lc_all, TRUE);
-  if (old_lc_messages)
-    g_setenv ("LC_MESSAGES", old_lc_messages, TRUE);
-  if (old_lang)
-    g_setenv ("LANG", old_lang, TRUE);
-  g_free (old_lc_all);
-  g_free (old_lc_messages);
-  g_free (old_lang);
-}
-
 int
 main (int   argc,
       char *argv[])
@@ -2266,18 +1982,15 @@ main (int   argc,
   g_test_add_func ("/unicode/space", test_space);
   g_test_add_func ("/unicode/strdown", test_strdown);
   g_test_add_func ("/unicode/strup", test_strup);
-  g_test_add_func ("/unicode/strupdown-length", test_strupdown_length);
   g_test_add_func ("/unicode/turkish-strupdown", test_turkish_strupdown);
   g_test_add_func ("/unicode/title", test_title);
   g_test_add_func ("/unicode/upper", test_upper);
   g_test_add_func ("/unicode/validate", test_unichar_validate);
   g_test_add_func ("/unicode/wide", test_wide);
-  g_test_add_func ("/unicode/unichar-to-utf8", test_unichar_to_utf8);
   g_test_add_func ("/unicode/xdigit", test_xdigit);
   g_test_add_func ("/unicode/xdigit-value", test_xdigit_value);
   g_test_add_func ("/unicode/zero-width", test_zerowidth);
   g_test_add_func ("/unicode/normalize", test_normalize);
-  g_test_add_func ("/unicode/unknown-scripts", test_unknown_scripts);
 
   return g_test_run();
 }

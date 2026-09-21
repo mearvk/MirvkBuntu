@@ -224,29 +224,6 @@ class TestAXTable:
             side_effect=result_func or (lambda table, index: default_result),
         )
 
-    def test_import_registers_table_cache_namespaces(self, test_context: OrcaTestContext) -> None:
-        """Test importing AXTable registers its cache namespaces."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-
-        manager = ax_cache_manager.get_manager()
-        register = test_context.patch_object(
-            manager,
-            "register_cache",
-            wraps=manager.register_cache,
-        )
-
-        from orca.ax_table import AXTable
-
-        assert register.call_count == 11
-        assert {call.args[0] for call in register.call_args_list} == {AXTable._CACHE}
-        for call in register.call_args_list:
-            assert call.kwargs["lifetime"] is ax_cache_manager.Lifetime.PROCESS
-            assert call.kwargs["clear_on_demand"] is ax_cache_manager.ClearPolicy.PRESERVE
-            assert call.kwargs["invalidation_groups"] == {AXTable.CACHE_INVALIDATION_GROUP}
-            assert "clear_interval_seconds" not in call.kwargs
-
     def _setup_row_headers_mocks(
         self,
         test_context: OrcaTestContext,
@@ -383,6 +360,12 @@ class TestAXTable:
             assert result is not None
         else:
             assert result == case["expected_result"]
+
+        if case["should_log"]:
+            if case["raises_error"]:
+                essential_modules["orca.debug"].print_message.assert_called()
+            else:
+                essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -584,6 +567,15 @@ class TestAXTable:
             result = count_method(mock_table)
         assert result == case["expected_result"]
 
+        if (
+            (case["attribute_count"] is None or not case["prefer_attribute"])
+            and case["supports_table"]
+            and not case["raises_error"]
+        ):
+            essential_modules["orca.debug"].print_tokens.assert_called()
+        if case["raises_error"] and case["supports_table"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
         attrs = {case["attr_name"]: case["attr_value"]} if case["attr_value"] else {}
         test_context.patch_object(AXObject, "get_attributes_dict", side_effect=lambda obj: attrs)
         attr_result = attr_method(mock_table)
@@ -679,6 +671,7 @@ class TestAXTable:
         )
         result = AXTable.is_non_uniform_table(mock_table)
         assert result is False
+        essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -743,6 +736,11 @@ class TestAXTable:
 
         result = AXTable.get_selected_column_count(mock_table)
         assert result == case["expected_result"]
+
+        if case["supports_table"] and not case["raises_error"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+        elif case["raises_error"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -809,6 +807,11 @@ class TestAXTable:
         result = AXTable.get_selected_columns(mock_table)
         assert result == case["expected_result"]
 
+        if case["supports_table"] and not case["raises_error"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+        elif case["raises_error"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
     @pytest.mark.parametrize(
         "case",
         [
@@ -868,6 +871,11 @@ class TestAXTable:
 
         result = AXTable.get_selected_row_count(mock_table)
         assert result == case["expected_result"]
+
+        if case["supports_table"] and not case["raises_error"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+        elif case["raises_error"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -929,6 +937,11 @@ class TestAXTable:
 
         result = AXTable.get_selected_rows(mock_table)
         assert result == case["expected_result"]
+
+        if case["supports_table"] and not case["raises_error"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+        elif case["raises_error"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1046,7 +1059,7 @@ class TestAXTable:
 
         mock_table = test_context.Mock(spec=Atspi.Accessible)
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_table import AXTable
 
@@ -1073,8 +1086,11 @@ class TestAXTable:
 
         if case["expected_result_type"] == "mock_cell":
             assert result == mock_cell
+            essential_modules["orca.debug"].print_tokens.assert_called()
         else:
             assert result is None
+            if case["raises_error"]:
+                essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1253,7 +1269,7 @@ class TestAXTable:
         """Test AXTable._get_cell_spans_from_attribute."""
 
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_table import AXTable
 
@@ -1265,6 +1281,7 @@ class TestAXTable:
         test_context.patch_object(AXObject, "get_attributes_dict", side_effect=lambda obj: attrs)
         result = AXTable._get_cell_spans_from_attribute(mock_cell)
         assert result == case["expected_spans"]
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1326,6 +1343,11 @@ class TestAXTable:
 
         result = AXTable._get_cell_spans_from_table_cell(mock_cell)
         assert result == case["expected_result"]
+
+        if case["supports_table_cell"] and not case["raises_error"]:
+            essential_modules["orca.debug"].print_tokens.assert_called()
+        elif case["raises_error"]:
+            essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -1433,11 +1455,14 @@ class TestAXTable:
         else:
             assert result == case["expected_result"]
 
+        if case["expects_debug"]:
+            essential_modules["orca.debug"].print_message.assert_called()
+
     def test_is_layout_table_with_layout_guess(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilitiesTable.is_layout_table with layout-guess attribute."""
 
         mock_table = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_utilities_role import AXUtilitiesRole
         from orca.ax_utilities_table import AXUtilitiesTable
@@ -1447,12 +1472,13 @@ class TestAXTable:
         test_context.patch_object(AXUtilitiesRole, "is_table", return_value=True)
         result = AXUtilitiesTable.is_layout_table(mock_table)
         assert result is True
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_layout_table_without_table_support(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilitiesTable.is_layout_table without table support."""
 
         mock_table = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_utilities_role import AXUtilitiesRole
         from orca.ax_utilities_table import AXUtilitiesTable
@@ -1463,12 +1489,13 @@ class TestAXTable:
         test_context.patch_object(AXObject, "supports_table", return_value=False)
         result = AXUtilitiesTable.is_layout_table(mock_table)
         assert result is True
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_layout_table_with_headers(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilitiesTable.is_layout_table with headers present."""
 
         mock_table = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_utilities_role import AXUtilitiesRole
         from orca.ax_utilities_table import AXUtilitiesTable
@@ -1481,12 +1508,13 @@ class TestAXTable:
         test_context.patch_object(AXUtilitiesTable, "has_row_headers", return_value=False)
         result = AXUtilitiesTable.is_layout_table(mock_table)
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_layout_table_with_name(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilitiesTable.is_layout_table with table name present."""
 
         mock_table = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_utilities_table import AXUtilitiesTable
 
@@ -1497,11 +1525,12 @@ class TestAXTable:
         test_context.patch_object(AXObject, "get_attributes_dict", side_effect=lambda obj: attrs)
         result = AXUtilitiesTable.is_layout_table(mock_table)
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_layout_table_with_caption(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilitiesTable.is_layout_table with table caption present."""
 
-        self._setup_dependencies(test_context)
+        essential_modules = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_utilities_table import AXUtilitiesTable
 
@@ -1517,6 +1546,7 @@ class TestAXTable:
 
         result = AXUtilitiesTable.is_layout_table(mock_table)
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_get_first_cell(self, test_context: OrcaTestContext) -> None:
         """Test AXTable.get_first_cell."""
@@ -2116,48 +2146,43 @@ class TestAXTable:
         result = AXUtilitiesTable.get_table_description_for_presentation(mock_table)
         assert result == ""
 
-    def test_manager_clear_cache_now_preserves_table_cache(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test routine manager clearing does not clear cached table results."""
+    def test_clear_cache_now(self, test_context: OrcaTestContext) -> None:
+        """Test AXTable.clear_cache_now."""
 
         self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
         from orca.ax_table import AXTable
 
-        mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        AXTable._CACHE.set_physical_spans_from_cell(mock_cell, (1, 1))
+        clear_called = []
 
-        ax_cache_manager.get_manager().clear_cache_now("test reason")
+        def mock_clear(reason):
+            clear_called.append(reason)
 
-        assert AXTable._CACHE.get_physical_spans_from_cell(mock_cell) == (1, 1)
+        test_context.patch("orca.ax_table.AXTable._clear_all_dictionaries", new=mock_clear)
+        AXTable.clear_cache_now("test reason")
+        assert clear_called == ["test reason"]
 
-    def test_manager_invalidate_group_clears_table_cache(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test table-group invalidation clears all representative table results."""
+    def test_clear_all_dictionaries(self, test_context: OrcaTestContext) -> None:
+        """Test AXTable._clear_all_dictionaries."""
 
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca import debug
         from orca.ax_table import AXTable
 
-        mock_table = test_context.Mock(spec=Atspi.Accessible)
-        mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        AXTable._CACHE.set_caption(mock_table, test_context.Mock(spec=Atspi.Accessible))
-        AXTable._CACHE.set_physical_coordinates_from_cell(mock_cell, (1, 2))
-        AXTable._CACHE.set_physical_spans_from_cell(mock_cell, (1, 1))
-        AXTable._CACHE.set_presentable_spans(mock_cell, ("1", "2"))
-
-        ax_cache_manager.get_manager().invalidate_group(
-            AXTable.CACHE_INVALIDATION_GROUP, "test clear"
+        AXTable.CAPTIONS[123] = test_context.Mock()
+        AXTable.PHYSICAL_COORDINATES_FROM_CELL[456] = (1, 2)
+        AXTable.PHYSICAL_SPANS_FROM_CELL[789] = (1, 1)
+        AXTable.PRESENTABLE_SPANS[321] = ("1", "2")
+        test_context.patch_object(
+            debug,
+            "print_message",
+            new=essential_modules["orca.debug"].print_message,
         )
-
-        assert AXTable._CACHE.get_caption(mock_table) is ax_cache_manager.MISSING
-        assert (
-            AXTable._CACHE.get_physical_coordinates_from_cell(mock_cell) is ax_cache_manager.MISSING
-        )
-        assert AXTable._CACHE.get_physical_spans_from_cell(mock_cell) is ax_cache_manager.MISSING
-        assert AXTable._CACHE.get_presentable_spans(mock_cell) is ax_cache_manager.MISSING
+        AXTable._clear_all_dictionaries("test clear")
+        assert len(AXTable.CAPTIONS) == 0
+        assert len(AXTable.PHYSICAL_COORDINATES_FROM_CELL) == 0
+        assert len(AXTable.PHYSICAL_SPANS_FROM_CELL) == 0
+        assert len(AXTable.PRESENTABLE_SPANS) == 0
+        essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2214,6 +2239,7 @@ class TestAXTable:
             )
             result = AXTable.get_cell_spans_from_table(mock_cell)
             assert result == case["expected_result"]
+            essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_cell_spans_from_table_no_table(self, test_context: OrcaTestContext) -> None:
         """Test AXTable.get_cell_spans_from_table with no table found."""
@@ -2262,7 +2288,7 @@ class TestAXTable:
 
         mock_table = test_context.Mock(spec=Atspi.Accessible)
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_table import AXTable
         from orca.ax_utilities_role import AXUtilitiesRole
@@ -2293,6 +2319,7 @@ class TestAXTable:
         )
         result = AXTable.get_cell_spans_from_table(mock_cell)
         assert result == (1, 1)
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2324,6 +2351,7 @@ class TestAXTable:
             )
             result = AXTable.get_column_headers_from_table(mock_table, 2)
             assert result == [mock_header]
+            essential_modules["orca.debug"].print_tokens.assert_called()
         else:  # glib_error
             from orca import debug
 
@@ -2343,6 +2371,7 @@ class TestAXTable:
             )
             result = AXTable.get_column_headers_from_table(mock_table, 2)
             assert not result
+            essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_column_headers_from_table_without_support(
         self,
@@ -2383,7 +2412,7 @@ class TestAXTable:
         """Test AXTable.get_column_headers_from_table_cell with table cell support."""
 
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_table import AXTable
 
@@ -2399,6 +2428,7 @@ class TestAXTable:
         )
         result = AXTable.get_column_headers_from_table_cell(mock_cell)
         assert result == mock_headers
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_get_column_headers_from_table_cell_without_support(
         self,
@@ -2443,6 +2473,7 @@ class TestAXTable:
         )
         result = AXTable.get_column_headers_from_table_cell(mock_cell)
         assert result == []
+        essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -2474,6 +2505,7 @@ class TestAXTable:
             )
             result = AXTable.get_row_headers_from_table(mock_table, 1)
             assert result == [mock_header]
+            essential_modules["orca.debug"].print_tokens.assert_called()
         else:  # glib_error
             from orca import debug
 
@@ -2489,6 +2521,7 @@ class TestAXTable:
             )
             result = AXTable.get_row_headers_from_table(mock_table, 1)
             assert not result
+            essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_row_headers_from_table_without_support(
         self,
@@ -2526,7 +2559,7 @@ class TestAXTable:
         """Test AXTable.get_row_headers_from_table_cell with table cell support."""
 
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_table import AXTable
 
@@ -2542,6 +2575,7 @@ class TestAXTable:
         )
         result = AXTable.get_row_headers_from_table_cell(mock_cell)
         assert result == mock_headers
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_get_row_headers_from_table_cell_without_support(
         self,
@@ -2586,6 +2620,7 @@ class TestAXTable:
         )
         result = AXTable.get_row_headers_from_table_cell(mock_cell)
         assert result == []
+        essential_modules["orca.debug"].print_message.assert_called()
 
     @pytest.mark.parametrize(
         "case",
@@ -3204,18 +3239,20 @@ class TestAXTable:
             )
             result = AXTable.get_cell_coordinates_from_table(mock_cell)
             assert result == expected_result
+            essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_cell_coordinates_from_table_no_table(self, test_context: OrcaTestContext) -> None:
         """Test AXTable.get_cell_coordinates_from_table with no table found."""
 
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_table import AXTable
 
         test_context.patch_object(AXTable, "_get_cell_index", return_value=5)
         test_context.patch_object(AXTable, "_find_ancestor_table", return_value=None)
         result = AXTable.get_cell_coordinates_from_table(mock_cell)
         assert result == (-1, -1)
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_get_cell_coordinates_from_table_cell_without_support(
         self,
@@ -3256,6 +3293,7 @@ class TestAXTable:
         )
         result = AXTable._get_cell_coordinates_from_table_cell(mock_cell)
         assert result == (-1, -1)
+        essential_modules["orca.debug"].print_message.assert_called()
 
     def test_get_cell_coordinates_from_table_cell_failed_result(
         self,
@@ -3292,7 +3330,7 @@ class TestAXTable:
         """Test AXTable._get_cell_coordinates_from_attribute from row ancestor."""
 
         mock_cell = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_object import AXObject
         from orca.ax_table import AXTable
         from orca.ax_utilities_object import AXUtilitiesObject
@@ -3314,6 +3352,7 @@ class TestAXTable:
         test_context.patch_object(AXUtilitiesObject, "find_ancestor", return_value=mock_row)
         result = AXTable._get_cell_coordinates_from_attribute(mock_cell)
         assert result == ("2", "5")
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_get_presentable_sort_order_from_header_not_header(
         self,

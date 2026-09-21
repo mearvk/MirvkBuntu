@@ -27,34 +27,37 @@
 #include <X11/Xatom.h>
 #include <X11/XKBlib.h>
 #include <X11/extensions/Xdamage.h>
-#include <X11/extensions/XInput2.h>
 #include <X11/extensions/shape.h>
 
 #include "backends/meta-cursor-tracker-private.h"
+#include "backends/x11/meta-backend-x11.h"
+#include "backends/x11/meta-cursor-tracker-x11.h"
+#include "compositor/meta-compositor-x11.h"
 #include "cogl/cogl.h"
 #include "core/bell.h"
 #include "core/display-private.h"
 #include "core/meta-workspace-manager-private.h"
 #include "core/window-private.h"
 #include "core/workspace-private.h"
+#include "meta/group.h"
 #include "meta/meta-backend.h"
 #include "meta/meta-context.h"
-#include "mtk/mtk.h"
 #include "mtk/mtk-x11.h"
 #include "x11/meta-startup-notification-x11.h"
 #include "x11/meta-x11-display-private.h"
 #include "x11/meta-x11-event-source.h"
-#include "x11/meta-x11-frame.h"
-#include "x11/meta-x11-group-private.h"
 #include "x11/meta-x11-selection-private.h"
 #include "x11/meta-x11-selection-input-stream-private.h"
 #include "x11/meta-x11-selection-output-stream-private.h"
 #include "x11/window-x11.h"
 #include "x11/window-x11-private.h"
 #include "x11/xprops.h"
+
+#ifdef HAVE_XWAYLAND
 #include "wayland/meta-wayland-private.h"
 #include "wayland/meta-xwayland-private.h"
 #include "wayland/meta-xwayland.h"
+#endif
 
 static XIEvent *
 get_input_event (MetaX11Display *x11_display,
@@ -800,18 +803,15 @@ handle_window_focus_event (MetaX11Display *x11_display,
   MetaWindow *focus_window;
 #ifdef WITH_VERBOSE_MODE
   const char *window_type;
-  MetaFrame *frame;
 
   /* Note the event can be on either the window or the frame,
    * we focus the frame for output-only windows
    */
   if (window)
     {
-      frame = meta_window_x11_get_frame (window);
-
       if (event->event == meta_window_x11_get_xwindow (window))
         window_type = "client window";
-      else if (frame && event->event == frame->xwindow)
+      else if (window->frame && event->event == window->frame->xwindow)
         window_type = "frame window";
       else
         window_type = "unknown client window";
@@ -930,6 +930,9 @@ handle_input_xevent (MetaX11Display *x11_display,
   MetaWindow *window;
   MetaDisplay *display = x11_display->display;
   MetaWorkspaceManager *workspace_manager = display->workspace_manager;
+  MetaContext *context = meta_display_get_context (display);
+  MetaBackend *backend = meta_context_get_backend (context);
+  ClutterStage *stage = CLUTTER_STAGE (meta_backend_get_stage (backend));
 
   if (input_event == NULL)
     return FALSE;
@@ -952,6 +955,38 @@ handle_input_xevent (MetaX11Display *x11_display,
 
   switch (input_event->evtype)
     {
+    case XI_Enter:
+      if (clutter_stage_get_grab_actor (stage) != NULL)
+        break;
+
+      /* Check if we've entered a window; do this even if window->has_focus to
+       * avoid races.
+       */
+      if (window &&
+          enter_event->mode != XINotifyGrab &&
+          enter_event->mode != XINotifyUngrab &&
+          enter_event->detail != XINotifyInferior &&
+          !meta_is_wayland_compositor () &&
+          enter_event->sourceid != enter_event->deviceid)
+        {
+          meta_display_handle_window_enter (display,
+                                            window,
+                                            enter_event->time,
+                                            enter_event->root_x,
+                                            enter_event->root_y);
+        }
+      break;
+    case XI_Leave:
+      if (clutter_stage_get_grab_actor (stage) != NULL)
+        break;
+
+      if (window != NULL &&
+          enter_event->mode != XINotifyGrab &&
+          enter_event->mode != XINotifyUngrab)
+        {
+          meta_display_handle_window_leave (display, window);
+        }
+      break;
     case XI_FocusIn:
     case XI_FocusOut:
       if (handle_window_focus_event (x11_display, window, enter_event, serial) &&
@@ -1039,7 +1074,7 @@ convert_property (MetaX11Display *x11_display,
 		     (unsigned char *)icccm_version, 2);
   else
     {
-      mtk_x11_error_trap_pop (x11_display->xdisplay);
+      mtk_x11_error_trap_pop_with_return (x11_display->xdisplay);
       return FALSE;
     }
 
@@ -1073,10 +1108,8 @@ process_selection_request (MetaX11Display *x11_display,
                           event->xselectionrequest.selection);
       mtk_x11_error_trap_pop (x11_display->xdisplay);
 
-      meta_topic (META_DEBUG_X11,
-                  "Selection request with selection %s window 0x%lx "
-                  "not a WM_Sn selection we recognize",
-                  str ? str : "(bad atom)", event->xselectionrequest.owner);
+      meta_verbose ("Selection request with selection %s window 0x%lx not a WM_Sn selection we recognize",
+                    str ? str : "(bad atom)", event->xselectionrequest.owner);
 
       meta_XFree (str);
 
@@ -1107,7 +1140,7 @@ process_selection_request (MetaX11Display *x11_display,
                                   x11_display->atom_ATOM_PAIR,
                                   &type, &format, &num, &rest, &data) != Success)
             {
-              mtk_x11_error_trap_pop (x11_display->xdisplay);
+              mtk_x11_error_trap_pop_with_return (x11_display->xdisplay);
               return;
             }
 
@@ -1151,16 +1184,14 @@ process_selection_request (MetaX11Display *x11_display,
         reply.property = event->xselectionrequest.property;
     }
 
-  mtk_x11_error_trap_push (x11_display->xdisplay);
   XSendEvent (x11_display->xdisplay,
               event->xselectionrequest.requestor,
               False, 0L, (XEvent*)&reply);
-  mtk_x11_error_trap_pop (x11_display->xdisplay);
 
-  meta_topic (META_DEBUG_X11, "Handled selection request");
+  meta_verbose ("Handled selection request");
 }
 
-static void
+static gboolean
 close_display_idle_cb (gpointer user_data)
 {
   MetaX11Display *x11_display = META_X11_DISPLAY (user_data);
@@ -1171,6 +1202,8 @@ close_display_idle_cb (gpointer user_data)
                       x11_display->xselectionclear_timestamp);
   x11_display->display_close_idle = 0;
   meta_context_terminate (context);
+
+  return G_SOURCE_REMOVE;
 }
 
 static gboolean
@@ -1187,26 +1220,22 @@ process_selection_clear (MetaX11Display *x11_display,
                           event->xselectionclear.selection);
       mtk_x11_error_trap_pop (x11_display->xdisplay);
 
-      meta_topic (META_DEBUG_X11,
-                  "Selection clear with selection %s window 0x%lx "
-                  "not a WM_Sn selection we recognize",
-                  str ? str : "(bad atom)", event->xselectionclear.window);
+      meta_verbose ("Selection clear with selection %s window 0x%lx not a WM_Sn selection we recognize",
+                    str ? str : "(bad atom)", event->xselectionclear.window);
 
       meta_XFree (str);
 
       return FALSE;
     }
 
-  meta_topic (META_DEBUG_X11, "Got selection clear for on display %s",
-              x11_display->name);
+  meta_verbose ("Got selection clear for on display %s",
+                x11_display->name);
 
   /* We can't close a Display in an event handler. */
   if (!x11_display->display_close_idle)
     {
       x11_display->xselectionclear_timestamp = event->xselectionclear.time;
-      x11_display->display_close_idle = mtk_idle_add_once (close_display_idle_cb, x11_display);
-      mtk_source_set_name_by_id (x11_display->display_close_idle,
-                                 "[mutter] close_display_idle_cb [x11]");
+      x11_display->display_close_idle = g_idle_add (close_display_idle_cb, x11_display);
     }
 
   return TRUE;
@@ -1219,16 +1248,12 @@ notify_bell (MetaX11Display *x11_display,
   MetaDisplay *display = x11_display->display;
   XkbBellNotifyEvent *xkb_bell_event = (XkbBellNotifyEvent*) xkb_ev;
   MetaWindow *window;
-  MetaFrame *frame;
 
   window = meta_x11_display_lookup_x_window (x11_display,
                                              xkb_bell_event->window);
-  if (!window && display->focus_window)
-    {
-      frame = meta_window_x11_get_frame (display->focus_window);
-      if (frame)
-        window = display->focus_window;
-    }
+  if (!window && display->focus_window && display->focus_window->frame)
+    window = display->focus_window;
+
   x11_display->last_bell_time = xkb_ev->time;
   if (!meta_bell_notify (display, window) &&
       meta_prefs_bell_is_audible ())
@@ -1252,13 +1277,10 @@ handle_other_xevent (MetaX11Display *x11_display,
   MetaWindow *window;
   MetaWindow *property_for_window;
   gboolean frame_was_receiver;
-  MetaFrame *frame = NULL;
 
   modified = event_get_modified_window (x11_display, event);
   window = modified != None ? meta_x11_display_lookup_x_window (x11_display, modified) : NULL;
-  if (window)
-    frame = meta_window_x11_get_frame (window);
-  frame_was_receiver = frame && modified == frame->xwindow;
+  frame_was_receiver = (window && window->frame && modified == window->frame->xwindow);
 
   /* We only want to respond to _NET_WM_USER_TIME property notify
    * events on _NET_WM_USER_TIME_WINDOW windows; in particular,
@@ -1266,7 +1288,10 @@ handle_other_xevent (MetaX11Display *x11_display,
    */
   property_for_window = NULL;
   if (window && modified == meta_window_x11_get_user_time_window (window))
-    property_for_window = g_steal_pointer (&window);
+    {
+      property_for_window = window;
+      window = NULL;
+    }
 
   if (META_X11_DISPLAY_HAS_XSYNC (x11_display) &&
       event->type == (x11_display->xsync_event_base + XSyncAlarmNotify))
@@ -1316,7 +1341,7 @@ handle_other_xevent (MetaX11Display *x11_display,
         }
       else
         {
-          meta_topic (META_DEBUG_X11,
+          meta_topic (META_DEBUG_SHAPES,
                       "ShapeNotify not on a client window (window 0x%lx)",
                       modified);
         }
@@ -1362,7 +1387,7 @@ handle_other_xevent (MetaX11Display *x11_display,
           if (frame_was_receiver)
             {
               mtk_x11_error_trap_push (x11_display->xdisplay);
-              meta_window_destroy_frame (frame->window);
+              meta_window_destroy_frame (window->frame->window);
               mtk_x11_error_trap_pop (x11_display->xdisplay);
             }
           else
@@ -1414,8 +1439,6 @@ handle_other_xevent (MetaX11Display *x11_display,
         {
           window = meta_window_x11_new (display, event->xmap.window,
                                         FALSE, META_COMP_EFFECT_CREATE);
-          if (window)
-            meta_window_x11_configure (window);
         }
       else if (window && window->restore_focus_on_map &&
                window->reparents_pending == 0)
@@ -1459,7 +1482,7 @@ handle_other_xevent (MetaX11Display *x11_display,
               window = meta_x11_display_lookup_x_window (x11_display,
                                                          client_window);
 
-              if (window != NULL && window->decorated && !meta_window_x11_is_ssd (window))
+              if (window != NULL && window->decorated && !window->frame)
                 {
                   meta_window_x11_set_frame_xwindow (window,
                                                      event->xmaprequest.window);
@@ -1472,24 +1495,19 @@ handle_other_xevent (MetaX11Display *x11_display,
 
           window = meta_window_x11_new (display, event->xmaprequest.window,
                                         FALSE, META_COMP_EFFECT_CREATE);
-          if (window)
-            meta_window_x11_configure (window);
         }
       else
         {
-          meta_topic (META_DEBUG_X11,
-                      "MapRequest on %s mapped = %d minimized = %d",
-                      window->desc, window->mapped, window->minimized);
+          meta_verbose ("MapRequest on %s mapped = %d minimized = %d",
+                        window->desc, window->mapped, window->minimized);
 
           if (window->minimized && !frame_was_receiver)
             {
               meta_window_unminimize (window);
               if (window->workspace != workspace_manager->active_workspace)
                 {
-                  meta_topic (META_DEBUG_X11,
-                              "Changing workspace due to MapRequest "
-                              "mapped = %d minimized = %d",
-                              window->mapped, window->minimized);
+                  meta_verbose ("Changing workspace due to MapRequest mapped = %d minimized = %d",
+                                window->mapped, window->minimized);
                   meta_window_change_workspace (window,
                                                 workspace_manager->active_workspace);
                 }
@@ -1499,11 +1517,7 @@ handle_other_xevent (MetaX11Display *x11_display,
     case ReparentNotify:
       {
         if (window && window->reparents_pending > 0)
-          {
-            window->reparents_pending -= 1;
-            if (window->reparents_pending == 0)
-              meta_window_queue (window, META_QUEUE_MOVE_RESIZE);
-          }
+          window->reparents_pending -= 1;
         if (event->xreparent.event == x11_display->xroot)
           meta_stack_tracker_reparent_event (display->stack_tracker,
                                              &event->xreparent);
@@ -1544,10 +1558,8 @@ handle_other_xevent (MetaX11Display *x11_display,
           xwc.height = event->xconfigurerequest.height;
           xwc.border_width = event->xconfigurerequest.border_width;
 
-          meta_topic (META_DEBUG_X11,
-                      "Configuring withdrawn window to %d,%d %dx%d border %d "
-                      "(some values may not be in mask)",
-                      xwc.x, xwc.y, xwc.width, xwc.height, xwc.border_width);
+          meta_verbose ("Configuring withdrawn window to %d,%d %dx%d border %d (some values may not be in mask)",
+                        xwc.x, xwc.y, xwc.width, xwc.height, xwc.border_width);
           mtk_x11_error_trap_push (x11_display->xdisplay);
           XConfigureWindow (x11_display->xdisplay, event->xconfigurerequest.window,
                             xwcm, &xwc);
@@ -1557,9 +1569,9 @@ handle_other_xevent (MetaX11Display *x11_display,
         {
           meta_window_x11_configure_request (window, event);
         }
-      else if (frame_was_receiver && frame)
+      else if (frame_was_receiver && window->frame)
         {
-          meta_frame_handle_xevent (frame, event);
+          meta_frame_handle_xevent (window->frame, event);
         }
       break;
     case GravityNotify:
@@ -1579,7 +1591,7 @@ handle_other_xevent (MetaX11Display *x11_display,
         else if (property_for_window && !frame_was_receiver)
           meta_window_x11_property_notify (property_for_window, event);
         else if (frame_was_receiver)
-          meta_frame_handle_xevent (frame, event);
+          meta_frame_handle_xevent (window->frame, event);
 
         group = meta_x11_display_lookup_group (x11_display,
                                                event->xproperty.window);
@@ -1607,6 +1619,7 @@ handle_other_xevent (MetaX11Display *x11_display,
     case ClientMessage:
       if (window)
         {
+#ifdef HAVE_XWAYLAND
           if (event->xclient.message_type == x11_display->atom_WL_SURFACE_ID)
             {
               guint32 surface_id = event->xclient.data.l[0];
@@ -1615,11 +1628,13 @@ handle_other_xevent (MetaX11Display *x11_display,
           else if (event->xclient.message_type ==
                    x11_display->atom__XWAYLAND_MAY_GRAB_KEYBOARD)
             {
-              g_object_set (G_OBJECT (window),
-                            "xwayland-may-grab-keyboard", (event->xclient.data.l[0] != 0),
-                            NULL);
+              if (meta_is_wayland_compositor ())
+                g_object_set (G_OBJECT (window),
+                              "xwayland-may-grab-keyboard", (event->xclient.data.l[0] != 0),
+                              NULL);
             }
           else
+#endif
             meta_window_x11_client_message (window, event);
         }
       else
@@ -1636,10 +1651,9 @@ handle_other_xevent (MetaX11Display *x11_display,
                   space = event->xclient.data.l[0];
                   time = event->xclient.data.l[1];
 
-                  meta_topic (META_DEBUG_X11,
-                              "Request to change current workspace to %d with "
-                              "specified timestamp of %u",
-                              space, time);
+                  meta_verbose ("Request to change current workspace to %d with "
+                                "specified timestamp of %u",
+                                space, time);
 
                   workspace = meta_workspace_manager_get_workspace_by_index (workspace_manager, space);
 
@@ -1653,7 +1667,7 @@ handle_other_xevent (MetaX11Display *x11_display,
                     }
                   else
                     {
-                      meta_topic (META_DEBUG_X11, "Don't know about workspace %d", space);
+                      meta_verbose ("Don't know about workspace %d", space);
                     }
                 }
               else if (event->xclient.message_type ==
@@ -1663,8 +1677,8 @@ handle_other_xevent (MetaX11Display *x11_display,
 
                   num_spaces = event->xclient.data.l[0];
 
-                  meta_topic (META_DEBUG_X11, "Request to set number of workspaces to %d",
-                              num_spaces);
+                  meta_verbose ("Request to set number of workspaces to %d",
+                                num_spaces);
 
                   meta_prefs_set_num_workspaces (num_spaces);
                 }
@@ -1677,8 +1691,8 @@ handle_other_xevent (MetaX11Display *x11_display,
                   showing_desktop = event->xclient.data.l[0] != 0;
                   /* FIXME: Braindead protocol doesn't have a timestamp */
                   timestamp = meta_x11_display_get_current_time_roundtrip (x11_display);
-                  meta_topic (META_DEBUG_X11, "Request to %s desktop",
-                              showing_desktop ? "show" : "hide");
+                  meta_verbose ("Request to %s desktop",
+                                showing_desktop ? "show" : "hide");
 
                   if (showing_desktop)
                     meta_workspace_manager_show_desktop (workspace_manager, timestamp);
@@ -1691,7 +1705,7 @@ handle_other_xevent (MetaX11Display *x11_display,
               else if (event->xclient.message_type ==
                        x11_display->atom_WM_PROTOCOLS)
                 {
-                  meta_topic (META_DEBUG_X11, "Received WM_PROTOCOLS message");
+                  meta_verbose ("Received WM_PROTOCOLS message");
 
                   if ((Atom)event->xclient.data.l[0] == x11_display->atom__NET_WM_PING)
                     {
@@ -1705,8 +1719,7 @@ handle_other_xevent (MetaX11Display *x11_display,
           if (event->xclient.message_type ==
               x11_display->atom__NET_REQUEST_FRAME_EXTENTS)
             {
-              meta_topic (META_DEBUG_X11,
-                          "Received _NET_REQUEST_FRAME_EXTENTS message");
+              meta_verbose ("Received _NET_REQUEST_FRAME_EXTENTS message");
               process_request_frame_extents (x11_display, event);
             }
         }
@@ -1767,13 +1780,10 @@ static gboolean
 window_has_xwindow (MetaWindow *window,
                     Window      xwindow)
 {
-  MetaFrame *frame;
-
   if (meta_window_x11_get_xwindow (window) == xwindow)
     return TRUE;
 
-  frame = meta_window_x11_get_frame (window);
-  if (frame && frame->xwindow == xwindow)
+  if (window->frame && window->frame->xwindow == xwindow)
     return TRUE;
 
   return FALSE;
@@ -1826,9 +1836,14 @@ meta_x11_display_handle_xevent (MetaX11Display *x11_display,
 {
   MetaDisplay *display = x11_display->display;
   MetaContext *context = meta_display_get_context (display);
-  gboolean bypass_compositor G_GNUC_UNUSED = FALSE;
+  MetaBackend *backend = meta_context_get_backend (context);
+  Window modified;
+  gboolean bypass_compositor = FALSE;
   XIEvent *input_event;
+  MetaCursorTracker *cursor_tracker;
+#ifdef HAVE_XWAYLAND
   MetaWaylandCompositor *wayland_compositor;
+#endif
 
   COGL_TRACE_BEGIN_SCOPED (MetaX11DisplayHandleXevent,
                            "Meta::X11Display::handle_xevent()");
@@ -1848,14 +1863,17 @@ meta_x11_display_handle_xevent (MetaX11Display *x11_display,
       goto out;
     }
 
+#ifdef HAVE_XWAYLAND
   wayland_compositor = meta_context_get_wayland_compositor (context);
 
-  if (meta_xwayland_manager_handle_xevent (&wayland_compositor->xwayland_manager,
+  if (meta_is_wayland_compositor () &&
+      meta_xwayland_manager_handle_xevent (&wayland_compositor->xwayland_manager,
                                            event))
     {
       bypass_compositor = TRUE;
       goto out;
     }
+#endif
 
   if (process_selection_event (x11_display, event))
     {
@@ -1864,6 +1882,9 @@ meta_x11_display_handle_xevent (MetaX11Display *x11_display,
     }
 
   display->current_time = event_get_time (x11_display, event);
+
+  if (META_IS_BACKEND_X11 (backend))
+    meta_backend_x11_reset_cached_logical_monitor (META_BACKEND_X11 (backend));
 
   if (x11_display->focused_by_us &&
       event->xany.serial > x11_display->focus_serial &&
@@ -1879,6 +1900,24 @@ meta_x11_display_handle_xevent (MetaX11Display *x11_display,
                                     meta_display_get_current_time_roundtrip (display));
       x11_display->is_server_focus = FALSE;
     }
+
+  if (event->xany.window == x11_display->xroot)
+    {
+      cursor_tracker = meta_backend_get_cursor_tracker (backend);
+      if (META_IS_CURSOR_TRACKER_X11 (cursor_tracker))
+        {
+          MetaCursorTrackerX11 *cursor_tracker_x11 =
+            META_CURSOR_TRACKER_X11 (cursor_tracker);
+
+          if (meta_cursor_tracker_x11_handle_xevent (cursor_tracker_x11, event))
+            {
+              bypass_compositor = TRUE;
+              goto out;
+            }
+        }
+    }
+
+  modified = event_get_modified_window (x11_display, event);
 
   input_event = get_input_event (x11_display, event);
 
@@ -1897,6 +1936,19 @@ meta_x11_display_handle_xevent (MetaX11Display *x11_display,
     }
 
  out:
+  if (!bypass_compositor && META_IS_COMPOSITOR_X11 (display->compositor))
+    {
+      MetaCompositorX11 *compositor_x11 =
+        META_COMPOSITOR_X11 (display->compositor);
+      MetaWindow *window;
+
+      if (modified != None)
+        window = meta_x11_display_lookup_x_window (x11_display, modified);
+      else
+        window = NULL;
+
+      meta_compositor_x11_process_xevent (compositor_x11, event, window);
+    }
 
   display->current_time = META_CURRENT_TIME;
 
@@ -1922,15 +1974,11 @@ xevent_func (XEvent   *xevent,
 void
 meta_x11_display_init_events (MetaX11Display *x11_display)
 {
-  g_autoptr (GMainContext) main_context = NULL;
-
-  main_context = g_main_context_ref_thread_default ();
-
   x11_display->event_source = meta_x11_event_source_new (x11_display->xdisplay);
   g_source_set_callback (x11_display->event_source,
                          (GSourceFunc) xevent_func,
                          x11_display, NULL);
-  g_source_attach (x11_display->event_source, main_context);
+  g_source_attach (x11_display->event_source, NULL);
 }
 
 void

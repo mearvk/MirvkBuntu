@@ -20,9 +20,8 @@
 
 #include "visual.h"
 
-#include "a11yoverlay.h"
 #include "fpsoverlay.h"
-#include "frametimeoverlay.h"
+#include "a11yoverlay.h"
 #include "updatesoverlay.h"
 #include "layoutoverlay.h"
 #include "focusoverlay.h"
@@ -37,7 +36,7 @@
 #include "gtkcssproviderprivate.h"
 #include "gtkdebug.h"
 #include "gtkprivate.h"
-#include "gtksettingsprivate.h"
+#include "gtksettings.h"
 #include "gtkswitch.h"
 #include "gtkscale.h"
 #include "gtkwindow.h"
@@ -49,15 +48,12 @@
 #include "gtkeditable.h"
 #include "gtkentry.h"
 #include "gtkstringlist.h"
-#include "gtklabel.h"
-#include "gtktypebuiltins.h"
 
 #ifdef GDK_WINDOWING_X11
 #include "x11/gdkx.h"
 #endif
 #ifdef GDK_WINDOWING_WAYLAND
 #include "wayland/gdkwayland.h"
-#include "wayland/gdkdisplay-wayland.h"
 #endif
 #ifdef GDK_WINDOWING_MACOS
 #include "macos/gdkmacos.h"
@@ -79,15 +75,15 @@ struct _GtkInspectorVisual
 
   GtkWidget *visual_box;
   GtkWidget *theme_combo;
-  GtkWidget *color_scheme_combo;
-  GtkWidget *contrast_combo;
-  GtkWidget *motion_combo;
+  GtkWidget *dark_switch;
   GtkWidget *icon_combo;
   GtkWidget *cursor_combo;
   GtkWidget *cursor_size_spin;
   GtkWidget *direction_combo;
   GtkWidget *font_button;
-  GtkWidget *font_rendering_combo;
+  GtkWidget *font_aa_switch;
+  GtkWidget *font_hinting_combo;
+  GtkWidget *metrics_hinting_switch;
   GtkWidget *animation_switch;
   GtkWidget *font_scale_entry;
   GtkAdjustment *font_scale_adjustment;
@@ -97,8 +93,6 @@ struct _GtkInspectorVisual
 
   GtkWidget *debug_box;
   GtkWidget *fps_switch;
-  GtkWidget *frametime_switch;
-  GtkWidget *frametime_config;
   GtkWidget *updates_switch;
   GtkWidget *cairo_switch;
   GtkWidget *baselines_switch;
@@ -107,11 +101,7 @@ struct _GtkInspectorVisual
   GtkWidget *a11y_switch;
   GtkWidget *subsurface_switch;
 
-  GtkWidget *misc_box;
-  GtkWidget *touchscreen_switch;
-
   GtkInspectorOverlay *fps_overlay;
-  GtkInspectorOverlay *frametime_overlay;
   GtkInspectorOverlay *updates_overlay;
   GtkInspectorOverlay *layout_overlay;
   GtkInspectorOverlay *focus_overlay;
@@ -247,24 +237,109 @@ font_scale_adjustment_changed (GtkAdjustment      *adjustment,
   update_font_scale (vis, factor, FALSE, TRUE, TRUE);
 }
 
-static GtkFontRendering
-get_font_rendering (GtkInspectorVisual *vis)
+static gboolean
+get_font_aa (GtkInspectorVisual *vis)
 {
-  GtkFontRendering font_rendering;
+  int aa;
 
-  g_object_get (vis->settings, "gtk-font-rendering", &font_rendering, NULL);
+  g_object_get (vis->settings, "gtk-xft-antialias", &aa, NULL);
 
-  return font_rendering;
+  return aa != 0;
+}
+
+static gboolean
+get_metrics_hinting (GtkInspectorVisual *vis)
+{
+  gboolean hinting;
+
+  g_object_get (vis->settings, "gtk-hint-font-metrics", &hinting, NULL);
+
+  return hinting;
+}
+
+static unsigned int
+get_font_hinting (GtkInspectorVisual *vis)
+{
+  int hinting;
+  char *hint_style_str;
+  unsigned int hint_style;
+
+  g_object_get (vis->settings,
+                "gtk-xft-hinting", &hinting,
+                "gtk-xft-hintstyle", &hint_style_str,
+                NULL);
+
+  hint_style = 1;
+  if (hinting == 0)
+    {
+      hint_style = 0;
+    }
+  else if (hint_style_str != NULL)
+    {
+      if (strcmp (hint_style_str, "hintnone") == 0)
+        hint_style = 0;
+      else if (strcmp (hint_style_str, "hintslight") == 0)
+        hint_style = 1;
+      else if (strcmp (hint_style_str, "hintmedium") == 0)
+        hint_style = 2;
+      else if (strcmp (hint_style_str, "hintfull") == 0)
+        hint_style = 3;
+    }
+
+  if (hint_style_str != NULL)
+    g_free (hint_style_str);
+
+  return hint_style;
 }
 
 static void
-update_font_rendering (GtkInspectorVisual *vis,
-                       GtkFontRendering    font_rendering)
+update_font_hinting (GtkInspectorVisual *vis,
+                     unsigned int        hint_style)
 {
-  if (get_font_rendering (vis) == font_rendering)
-    return;
+  const char *styles[] = { "hintnone", "hintslight", "hintmedium", "hintfull" };
+  int hinting;
+  const char *style;
 
-  g_object_set (vis->settings, "gtk-font-rendering", font_rendering, NULL);
+  g_object_get (vis->settings,
+                "gtk-xft-hinting", &hinting,
+                "gtk-xft-hintstyle", &style,
+                NULL);
+
+  if (hinting != (hint_style != 0) || strcmp (style, styles[hint_style]) != 0)
+    g_object_set (vis->settings,
+                  "gtk-xft-hinting", hint_style != 0,
+                  "gtk-xft-hintstyle", styles[hint_style],
+                  NULL);
+}
+
+static void
+font_aa_activate (GtkSwitch          *sw,
+                  GParamSpec         *pspec,
+                  GtkInspectorVisual *vis)
+{
+  int val, new_val;
+
+  g_object_get (vis->settings, "gtk-xft-antialias", &val, NULL);
+
+  new_val = gtk_switch_get_active (sw) ? 1 : 0;
+
+  if (val != new_val)
+    g_object_set (vis->settings, "gtk-xft-antialias", new_val, NULL);
+}
+
+static void
+metrics_hinting_activate (GtkSwitch          *sw,
+                          GParamSpec         *pspec,
+                          GtkInspectorVisual *vis)
+{
+  gboolean val, new_val;
+
+  g_object_get (vis->settings, "gtk-hint-font-metrics", &val, NULL);
+
+  new_val = gtk_switch_get_active (sw);
+
+  if (val != new_val)
+    g_object_set (vis->settings, "gtk-hint-font-metrics", new_val, NULL);
 }
 
 static void
@@ -307,45 +382,6 @@ fps_activate (GtkSwitch          *sw,
         {
           gtk_inspector_window_remove_overlay (iw, vis->fps_overlay);
           vis->fps_overlay = NULL;
-        }
-    }
-
-  redraw_everything ();
-}
-
-static void
-frametime_activate (GtkSwitch          *sw,
-                    GParamSpec         *pspec,
-                    GtkInspectorVisual *vis)
-{
-  GtkInspectorWindow *iw;
-  gboolean active;
-
-  active = gtk_switch_get_active (sw);
-  iw = GTK_INSPECTOR_WINDOW (gtk_widget_get_root (GTK_WIDGET (vis)));
-  if (iw == NULL)
-    return;
-
-  if (active)
-    {
-      if (vis->frametime_overlay == NULL)
-        {
-          vis->frametime_overlay = gtk_frame_time_overlay_new ();
-          gtk_inspector_window_add_overlay (iw, vis->frametime_overlay);
-          g_object_unref (vis->frametime_overlay);
-          gtk_editable_set_text (GTK_EDITABLE (vis->frametime_config),
-                                 gtk_frame_time_overlay_get_config (GTK_FRAME_TIME_OVERLAY (vis->frametime_overlay)));
-          g_object_bind_property (vis->frametime_config, "text",
-                                  vis->frametime_overlay, "config",
-                                  G_BINDING_DEFAULT);
-        }
-    }
-  else
-    {
-      if (vis->frametime_overlay != NULL)
-        {
-          gtk_inspector_window_remove_overlay (iw, vis->frametime_overlay);
-          vis->frametime_overlay = NULL;
         }
     }
 
@@ -736,36 +772,28 @@ init_theme (GtkInspectorVisual *vis)
       GtkWidget *row;
 
       /* theme is hardcoded, nothing we can do */
-      row = gtk_widget_get_parent (vis->theme_combo);
-      gtk_widget_unparent (vis->theme_combo);
-      vis->theme_combo = gtk_label_new (_("Set via GTK_THEME"));
-      gtk_widget_add_css_class (vis->theme_combo, "dim-label");
-      gtk_box_append (GTK_BOX (row), vis->theme_combo);
+      gtk_widget_set_sensitive (vis->theme_combo, FALSE);
+      row = gtk_widget_get_ancestor (vis->theme_combo, GTK_TYPE_LIST_BOX_ROW);
+      gtk_widget_set_tooltip_text (row, _("Theme is hardcoded by GTK_THEME"));
     }
 }
 
 static void
-init_colorscheme (GtkInspectorVisual *vis)
+init_dark (GtkInspectorVisual *vis)
 {
-  g_object_bind_property (vis->settings, "gtk-interface-color-scheme",
-                          vis->color_scheme_combo, "selected",
+  g_object_bind_property (vis->settings, "gtk-application-prefer-dark-theme",
+                          vis->dark_switch, "active",
                           G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
-}
 
-static void
-init_contrast (GtkInspectorVisual *vis)
-{
-  g_object_bind_property (vis->settings, "gtk-interface-contrast",
-                          vis->contrast_combo, "selected",
-                          G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
-}
+  if (g_getenv ("GTK_THEME") != NULL)
+    {
+      GtkWidget *row;
 
-static void
-init_reduced_motion (GtkInspectorVisual *vis)
-{
-  g_object_bind_property (vis->settings, "gtk-interface-reduced-motion",
-                          vis->motion_combo, "selected",
-                          G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+      /* theme is hardcoded, nothing we can do */
+      gtk_widget_set_sensitive (vis->dark_switch, FALSE);
+      row = gtk_widget_get_ancestor (vis->theme_combo, GTK_TYPE_LIST_BOX_ROW);
+      gtk_widget_set_tooltip_text (row, _("Theme is hardcoded by GTK_THEME"));
+    }
 }
 
 static void
@@ -915,20 +943,6 @@ init_cursors (GtkInspectorVisual *vis)
                                vis->cursor_combo, "selected",
                                G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE,
                                theme_to_pos, pos_to_theme, names, (GDestroyNotify)g_object_unref);
-
-#ifdef GDK_WINDOWING_WAYLAND
-  if (GDK_IS_WAYLAND_DISPLAY (vis->display) &&
-      GDK_WAYLAND_DISPLAY (vis->display)->cursor_shape != NULL)
-    {
-      GtkWidget *row;
-
-      row = gtk_widget_get_parent (vis->cursor_combo);
-      gtk_widget_unparent (vis->cursor_combo);
-      vis->cursor_combo = gtk_label_new (_("Set by Compositor"));
-      gtk_widget_add_css_class (vis->cursor_combo, "dim-label");
-      gtk_box_append (GTK_BOX (row), vis->cursor_combo);
-    }
-#endif
 }
 
 static void
@@ -952,20 +966,6 @@ init_cursor_size (GtkInspectorVisual *vis)
   gtk_adjustment_set_value (vis->cursor_size_adjustment, (double)size);
   g_signal_connect (vis->cursor_size_adjustment, "value-changed",
                     G_CALLBACK (cursor_size_changed), vis);
-
-#ifdef GDK_WINDOWING_WAYLAND
-  if (GDK_IS_WAYLAND_DISPLAY (vis->display) &&
-      GDK_WAYLAND_DISPLAY (vis->display)->cursor_shape != NULL)
-    {
-      GtkWidget *row;
-
-      row = gtk_widget_get_parent (vis->cursor_size_spin);
-      gtk_widget_unparent (vis->cursor_size_spin);
-      vis->cursor_size_spin = gtk_label_new (_("Set by Compositor"));
-      gtk_widget_add_css_class (vis->cursor_size_spin, "dim-label");
-      gtk_box_append (GTK_BOX (row), vis->cursor_size_spin);
-    }
-#endif
 }
 
 static gboolean
@@ -1027,17 +1027,29 @@ init_font_scale (GtkInspectorVisual *vis)
 }
 
 static void
-font_rendering_changed (GtkDropDown        *combo,
-                        GParamSpec         *pspec,
-                        GtkInspectorVisual *vis)
+init_font_aa (GtkInspectorVisual *vis)
 {
-  update_font_rendering (vis, gtk_drop_down_get_selected (combo));
+  gtk_switch_set_active (GTK_SWITCH (vis->font_aa_switch), get_font_aa (vis));
 }
 
 static void
-init_font_rendering (GtkInspectorVisual *vis)
+font_hinting_changed (GtkDropDown        *combo,
+                      GParamSpec         *pspec,
+                      GtkInspectorVisual *vis)
 {
-  gtk_drop_down_set_selected (GTK_DROP_DOWN (vis->font_rendering_combo), get_font_rendering (vis));
+  update_font_hinting (vis, gtk_drop_down_get_selected (combo));
+}
+
+static void
+init_font_hinting (GtkInspectorVisual *vis)
+{
+  gtk_drop_down_set_selected (GTK_DROP_DOWN (vis->font_hinting_combo), get_font_hinting (vis));
+}
+
+static void
+init_metrics_hinting (GtkInspectorVisual *vis)
+{
+  gtk_switch_set_active (GTK_SWITCH (vis->metrics_hinting_switch), get_metrics_hinting (vis));
 }
 
 static void
@@ -1104,29 +1116,6 @@ init_slowdown (GtkInspectorVisual *vis)
                     G_CALLBACK (slowdown_entry_activated), vis);
 }
 
-static void
-update_touchscreen (GtkSwitch *sw)
-{
-  GtkDebugFlags flags;
-
-  flags = gtk_get_debug_flags ();
-
-  if (gtk_switch_get_active (sw))
-    flags |= GTK_DEBUG_TOUCHSCREEN;
-  else
-    flags &= ~GTK_DEBUG_TOUCHSCREEN;
-
-  gtk_set_debug_flags (flags);
-}
-
-static void
-init_touchscreen (GtkInspectorVisual *vis)
-{
-  gtk_switch_set_active (GTK_SWITCH (vis->touchscreen_switch), (gtk_get_debug_flags () & GTK_DEBUG_TOUCHSCREEN) != 0);
-  g_signal_connect (vis->touchscreen_switch, "notify::active",
-                    G_CALLBACK (update_touchscreen), NULL);
-}
-
 static gboolean
 keynav_failed (GtkWidget *widget, GtkDirectionType direction, GtkInspectorVisual *vis)
 {
@@ -1135,15 +1124,9 @@ keynav_failed (GtkWidget *widget, GtkDirectionType direction, GtkInspectorVisual
   if (direction == GTK_DIR_DOWN &&
       widget == vis->visual_box)
     next = vis->debug_box;
-  else if (direction == GTK_DIR_DOWN &&
-      widget == vis->debug_box)
-    next = vis->misc_box;
   else if (direction == GTK_DIR_UP &&
            widget == vis->debug_box)
     next = vis->visual_box;
-  else if (direction == GTK_DIR_UP &&
-           widget == vis->misc_box)
-    next = vis->debug_box;
   else
     next = NULL;
 
@@ -1161,7 +1144,12 @@ row_activated (GtkListBox         *box,
                GtkListBoxRow      *row,
                GtkInspectorVisual *vis)
 {
-  if (gtk_widget_is_ancestor (vis->animation_switch, GTK_WIDGET (row)))
+  if (gtk_widget_is_ancestor (vis->dark_switch, GTK_WIDGET (row)))
+    {
+      GtkSwitch *sw = GTK_SWITCH (vis->dark_switch);
+      gtk_switch_set_active (sw, !gtk_switch_get_active (sw));
+    }
+  else if (gtk_widget_is_ancestor (vis->animation_switch, GTK_WIDGET (row)))
     {
       GtkSwitch *sw = GTK_SWITCH (vis->animation_switch);
       gtk_switch_set_active (sw, !gtk_switch_get_active (sw));
@@ -1169,11 +1157,6 @@ row_activated (GtkListBox         *box,
   else if (gtk_widget_is_ancestor (vis->fps_switch, GTK_WIDGET (row)))
     {
       GtkSwitch *sw = GTK_SWITCH (vis->fps_switch);
-      gtk_switch_set_active (sw, !gtk_switch_get_active (sw));
-    }
-  else if (gtk_widget_is_ancestor (vis->frametime_switch, GTK_WIDGET (row)))
-    {
-      GtkSwitch *sw = GTK_SWITCH (vis->frametime_switch);
       gtk_switch_set_active (sw, !gtk_switch_get_active (sw));
     }
   else if (gtk_widget_is_ancestor (vis->updates_switch, GTK_WIDGET (row)))
@@ -1199,11 +1182,6 @@ row_activated (GtkListBox         *box,
   else if (gtk_widget_is_ancestor (vis->focus_switch, GTK_WIDGET (row)))
     {
       GtkSwitch *sw = GTK_SWITCH (vis->focus_switch);
-      gtk_switch_set_active (sw, !gtk_switch_get_active (sw));
-    }
-  else if (gtk_widget_is_ancestor (vis->touchscreen_switch, GTK_WIDGET (row)))
-    {
-      GtkSwitch *sw = GTK_SWITCH (vis->touchscreen_switch);
       gtk_switch_set_active (sw, !gtk_switch_get_active (sw));
     }
   else if (gtk_widget_is_ancestor (vis->a11y_switch, GTK_WIDGET (row)))
@@ -1248,10 +1226,8 @@ gtk_inspector_visual_constructed (GObject *object)
 
   g_signal_connect (vis->visual_box, "keynav-failed", G_CALLBACK (keynav_failed), vis);
   g_signal_connect (vis->debug_box, "keynav-failed", G_CALLBACK (keynav_failed), vis);
-  g_signal_connect (vis->misc_box, "keynav-failed", G_CALLBACK (keynav_failed), vis);
   g_signal_connect (vis->visual_box, "row-activated", G_CALLBACK (row_activated), vis);
   g_signal_connect (vis->debug_box, "row-activated", G_CALLBACK (row_activated), vis);
-  g_signal_connect (vis->misc_box, "row-activated", G_CALLBACK (row_activated), vis);
 }
 
 static void
@@ -1315,9 +1291,7 @@ gtk_inspector_visual_class_init (GtkInspectorVisualClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, box);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, direction_combo);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, theme_combo);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, color_scheme_combo);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, contrast_combo);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, motion_combo);
+  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, dark_switch);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, cursor_combo);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, cursor_size_spin);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, cursor_size_adjustment);
@@ -1325,17 +1299,15 @@ gtk_inspector_visual_class_init (GtkInspectorVisualClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, animation_switch);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, slowdown_adjustment);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, slowdown_entry);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, touchscreen_switch);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, visual_box);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, font_rendering_combo);
+  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, font_aa_switch);
+  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, font_hinting_combo);
+  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, metrics_hinting_switch);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, debug_box);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, font_button);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, misc_box);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, font_scale_entry);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, font_scale_adjustment);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, fps_switch);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, frametime_switch);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, frametime_config);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, updates_switch);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, cairo_switch);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, baselines_switch);
@@ -1345,11 +1317,12 @@ gtk_inspector_visual_class_init (GtkInspectorVisualClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorVisual, subsurface_switch);
 
   gtk_widget_class_bind_template_callback (widget_class, fps_activate);
-  gtk_widget_class_bind_template_callback (widget_class, frametime_activate);
   gtk_widget_class_bind_template_callback (widget_class, updates_activate);
   gtk_widget_class_bind_template_callback (widget_class, cairo_activate);
   gtk_widget_class_bind_template_callback (widget_class, direction_changed);
-  gtk_widget_class_bind_template_callback (widget_class, font_rendering_changed);
+  gtk_widget_class_bind_template_callback (widget_class, font_aa_activate);
+  gtk_widget_class_bind_template_callback (widget_class, font_hinting_changed);
+  gtk_widget_class_bind_template_callback (widget_class, metrics_hinting_activate);
   gtk_widget_class_bind_template_callback (widget_class, baselines_activate);
   gtk_widget_class_bind_template_callback (widget_class, layout_activate);
   gtk_widget_class_bind_template_callback (widget_class, focus_activate);
@@ -1369,18 +1342,17 @@ gtk_inspector_visual_set_display (GtkInspectorVisual *vis,
 
   init_direction (vis);
   init_theme (vis);
-  init_colorscheme (vis);
-  init_contrast (vis);
-  init_reduced_motion (vis);
+  init_dark (vis);
   init_icons (vis);
   init_cursors (vis);
   init_cursor_size (vis);
   init_font (vis);
   init_font_scale (vis);
-  init_font_rendering (vis);
+  init_font_aa (vis);
+  init_font_hinting (vis);
+  init_metrics_hinting (vis);
   init_animation (vis);
   init_slowdown (vis);
-  init_touchscreen (vis);
   init_gl (vis);
 }
 

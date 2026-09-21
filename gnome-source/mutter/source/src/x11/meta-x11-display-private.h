@@ -40,8 +40,6 @@
 typedef struct _MetaGroupPropHooks  MetaGroupPropHooks;
 typedef struct _MetaWindowPropHooks MetaWindowPropHooks;
 
-#define meta_XFree(p) do { if ((p)) XFree ((p)); } while (0)
-
 typedef gboolean (*MetaAlarmFilter) (MetaX11Display        *x11_display,
                                      XSyncAlarmNotifyEvent *event,
                                      gpointer               data);
@@ -63,6 +61,8 @@ struct _MetaX11Display
 
   Display *xdisplay;
   Window xroot;
+  int default_depth;
+  Visual *default_xvisual;
 
   guint32 timestamp;
 
@@ -154,6 +154,8 @@ struct _MetaX11Display
 
   guint is_server_focus : 1;
 
+  guint keys_grabbed : 1;
+
   guint closing : 1;
 
   int composite_event_base;
@@ -161,6 +163,7 @@ struct _MetaX11Display
   int composite_major_version;
   int composite_minor_version;
   int damage_event_base;
+  int damage_error_base;
   int xfixes_event_base;
   int xfixes_error_base;
   int xinput_error_base;
@@ -182,7 +185,7 @@ struct _MetaX11Display
   MetaX11StartupNotification *startup_notification;
   MetaX11Stack *x11_stack;
 
-  XserverRegion stage_input_region;
+  XserverRegion empty_region;
 
   unsigned int reload_x11_cursor_later;
 };
@@ -243,5 +246,9 @@ void meta_x11_display_run_event_funcs (MetaX11Display *x11_display,
 
 int meta_x11_display_get_screen_number (MetaX11Display *x11_display);
 
+int meta_x11_display_get_damage_event_base (MetaX11Display *x11_display);
+
 gboolean meta_x11_display_xwindow_is_a_no_focus_window (MetaX11Display *x11_display,
                                                         Window xwindow);
+
+void meta_x11_display_clear_stage_input_region (MetaX11Display *x11_display);

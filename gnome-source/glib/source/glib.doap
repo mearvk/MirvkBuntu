@@ -14,7 +14,7 @@
 
   <homepage rdf:resource="http://www.gtk.org" />
   <license rdf:resource="http://usefulinc.com/doap/licenses/lgpl" />
-  <bug-database rdf:resource="https://gitlab.gnome.org/GNOME/glib/-/issues"/>
+  <bug-database rdf:resource="https://gitlab.gnome.org/GNOME/glib/issues/new"/>
   <download-page rdf:resource="http://download.gnome.org/sources/glib/" />
   <developer-forum rdf:resource="https://discourse.gnome.org/tags/glib/" />
   <category rdf:resource="http://api.gnome.org/doap-extensions#core" />
@@ -104,6 +104,22 @@
 
   <maintainer>
     <foaf:Person>
+      <foaf:name>Jonathan Matthew</foaf:name>
+      <foaf:mbox rdf:resource="mailto:jonathan@d14n.org"/>
+      <gnome:userid>jmatthew</gnome:userid>
+    </foaf:Person>
+  </maintainer>
+
+  <maintainer>
+    <foaf:Person>
+      <foaf:name>Antoine Jacoutot</foaf:name>
+      <foaf:mbox rdf:resource="mailto:ajacoutot@gnome.org"/>
+<!--      <gnome:userid>ajacoutot</gnome:userid> -->
+    </foaf:Person>
+  </maintainer>
+
+  <maintainer>
+    <foaf:Person>
       <foaf:name>Ting-Wei Lan</foaf:name>
       <foaf:mbox rdf:resource="mailto:lantw@src.gnome.org"/>
       <gnome:userid>lantw</gnome:userid>
@@ -152,25 +168,9 @@
 
   <maintainer>
     <foaf:Person>
-      <foaf:name>Thomas Haller</foaf:name>
-      <foaf:mbox rdf:resource="mailto:thaller@redhat.com"/>
-      <gnome:userid>thaller</gnome:userid>
-    </foaf:Person>
-  </maintainer>
-
-  <maintainer>
-    <foaf:Person>
       <foaf:name>Xavier Claessens</foaf:name>
       <foaf:mbox rdf:resource="mailto:xclaesse@gmail.com"/>
       <gnome:userid>xclaesse</gnome:userid>
-    </foaf:Person>
-  </maintainer>
-
-  <maintainer>
-    <foaf:Person>
-      <foaf:name>Luca Bacci</foaf:name>
-      <foaf:mbox rdf:resource="mailto:luca.bacci982@gmail.com"/>
-      <gnome:userid>lbacci</gnome:userid>
     </foaf:Person>
   </maintainer>
 

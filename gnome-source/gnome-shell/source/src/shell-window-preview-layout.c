@@ -337,28 +337,14 @@ shell_window_preview_layout_class_init (ShellWindowPreviewLayoutClass *klass)
    * ShellWindowPreviewLayout:bounding-box:
    */
   obj_props[PROP_BOUNDING_BOX] =
-    g_param_spec_boxed ("bounding-box", NULL, NULL,
+    g_param_spec_boxed ("bounding-box",
+                        "Bounding Box",
+                        "Bounding Box",
                         CLUTTER_TYPE_ACTOR_BOX,
                         G_PARAM_READABLE |
                         G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, PROP_LAST, obj_props);
-}
-
-/**
- * shell_window_preview_layout_get_bounding_box:
- *
- * Returns: (transfer none):
- */
-ClutterActorBox *
-shell_window_preview_layout_get_bounding_box (ShellWindowPreviewLayout *self)
-{
-  ShellWindowPreviewLayoutPrivate *priv;
-
-  g_return_val_if_fail (SHELL_IS_WINDOW_PREVIEW_LAYOUT (self), NULL);
-
-  priv = shell_window_preview_layout_get_instance_private (self);
-  return &priv->bounding_box;
 }
 
 /**

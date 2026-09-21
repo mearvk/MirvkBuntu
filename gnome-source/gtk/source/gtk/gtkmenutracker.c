@@ -44,7 +44,7 @@
  *
  * Certain properties on the GtkMenuTrackerItem are mutable, and you must
  * listen for changes in the item. For more details, see the documentation
- * for GtkMenuTrackerItem along with GMenuModel's reference.
+ * for GtkMenuTrackerItem along with https://wiki.gnome.org/Projects/GLib/GApplication/GMenuModel.
  *
  * The idea of @with_separators is for special cases where menu models may
  * be tracked in places where separators are not available, like in toplevel
@@ -281,8 +281,6 @@ gtk_menu_tracker_remove_items (GtkMenuTracker  *tracker,
 {
   int i;
 
-  g_return_if_fail (change_point != NULL);
-
   for (i = 0; i < n_items; i++)
     {
       GtkMenuTrackerSection *subsection;
@@ -308,8 +306,6 @@ gtk_menu_tracker_add_items (GtkMenuTracker         *tracker,
                             int                     position,
                             int                     n_items)
 {
-  g_return_if_fail (change_point != NULL);
-
   while (n_items--)
     {
       GMenuModel *submenu;

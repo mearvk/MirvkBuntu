@@ -76,7 +76,6 @@ class TestCommand:
         assert command.get_name() == "testCommand"
         assert command.get_function() == function
         assert command.get_group_label() == "Test Group"
-        assert command.get_activation_group() == "Test Group"
         assert command.get_description() == ""
 
     def test_init_full(self, test_context: OrcaTestContext) -> None:
@@ -93,13 +92,11 @@ class TestCommand:
             "Full description",
             enabled=False,
             suspended=True,
-            activation_group="Full activation group",
         )
 
         assert command.get_name() == "fullCommand"
         assert command.get_function() == function
         assert command.get_group_label() == "Full Group"
-        assert command.get_activation_group() == "Full activation group"
         assert command.get_description() == "Full description"
         assert command.is_enabled() is False
         assert command.is_suspended() is True
@@ -117,7 +114,6 @@ class TestCommand:
 
         command.set_group_label("New Group")
         assert command.get_group_label() == "New Group"
-        assert command.get_activation_group() == "New Group"
 
     def test_init_enabled_suspended_defaults(self, test_context: OrcaTestContext) -> None:
         """Test that enabled defaults to True and suspended defaults to False."""
@@ -448,7 +444,7 @@ class TestBrailleCommand:
 
 
 @pytest.mark.unit
-class TestCommandManager:  # pylint: disable=too-many-public-methods
+class TestCommandManager:
     """Test CommandManager class methods."""
 
     def _setup_dependencies(self, test_context: OrcaTestContext) -> dict[str, Mock]:
@@ -492,7 +488,6 @@ class TestCommandManager:  # pylint: disable=too-many-public-methods
         kb.keyval = keyval
         kb.keycode = keycode
         kb.keysymstring = "a"
-        kb.as_string.return_value = "a"
         return kb
 
     def test_init(self, test_context: OrcaTestContext) -> None:
@@ -504,112 +499,6 @@ class TestCommandManager:  # pylint: disable=too-many-public-methods
         manager = CommandManager()
         assert not manager.get_all_keyboard_commands()
         assert not manager.get_all_braille_commands()
-
-    def test_set_modal_handler_refuses_user_extension_replacing_active_handler(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test a user extension cannot replace another active modal handler."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager
-
-        manager = CommandManager()
-        first_handler = test_context.Mock()
-        second_handler = test_context.Mock()
-        manager.register_user_extension(first_handler)
-        manager.register_user_extension(second_handler)
-
-        assert manager.set_modal_handler(first_handler) is True
-        assert manager.get_modal_handler() is first_handler
-        assert manager.set_modal_handler(first_handler) is True
-        assert manager.get_modal_handler() is first_handler
-        assert manager.set_modal_handler(second_handler) is False
-        assert manager.get_modal_handler() is first_handler
-        assert manager.clear_modal_handler(first_handler) is True
-        assert manager.get_modal_handler() is None
-        assert manager.set_modal_handler(second_handler) is True
-        assert manager.get_modal_handler() is second_handler
-
-    def test_clear_modal_handler_refuses_to_clear_handler_owned_by_another_handler(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test a modal handler cannot clear another handler's modal state."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager
-
-        manager = CommandManager()
-        first_handler = test_context.Mock()
-        second_handler = test_context.Mock()
-        manager.register_user_extension(first_handler)
-        manager.register_user_extension(second_handler)
-
-        assert manager.set_modal_handler(first_handler) is True
-        assert manager.get_modal_handler() is first_handler
-        assert manager.clear_modal_handler(second_handler) is False
-        assert manager.get_modal_handler() is first_handler
-        assert manager.clear_modal_handler(first_handler) is True
-        assert manager.get_modal_handler() is None
-
-    def test_set_modal_handler_allows_orca_handler_to_replace_user_extension(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test an Orca modal handler can replace a user extension modal handler."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager
-
-        manager = CommandManager()
-        user_extension_handler = test_context.Mock()
-        orca_handler = test_context.Mock()
-        manager.register_user_extension(user_extension_handler)
-
-        assert manager.set_modal_handler(user_extension_handler) is True
-        assert manager.get_modal_handler() is user_extension_handler
-        assert manager.set_modal_handler(orca_handler) is True
-        assert manager.get_modal_handler() is orca_handler
-
-    def test_set_modal_handler_refuses_user_extension_replacing_orca_handler(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test a user extension modal handler cannot replace an Orca modal handler."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager
-
-        manager = CommandManager()
-        orca_handler = test_context.Mock()
-        user_extension_handler = test_context.Mock()
-        manager.register_user_extension(user_extension_handler)
-
-        assert manager.set_modal_handler(orca_handler) is True
-        assert manager.get_modal_handler() is orca_handler
-        assert manager.set_modal_handler(user_extension_handler) is False
-        assert manager.get_modal_handler() is orca_handler
-
-    def test_user_extension_modal_handler_requires_command(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test user extension modal handlers are only consulted for commands."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager, KeyboardCommand
-
-        manager = CommandManager()
-        user_extension_handler = test_context.Mock()
-        orca_handler = test_context.Mock()
-        command = KeyboardCommand("testCommand", test_context.Mock(), "Test Group")
-        manager.register_user_extension(user_extension_handler)
-
-        assert manager.can_modal_handler_handle_event(user_extension_handler, None) is False
-        assert manager.can_modal_handler_handle_event(user_extension_handler, command) is True
-        assert manager.can_modal_handler_handle_event(orca_handler, None) is True
-        assert manager.can_modal_handler_handle_event(orca_handler, command) is True
 
     def test_add_and_get_keyboard_command(self, test_context: OrcaTestContext) -> None:
         """Test CommandManager.add_command and get_keyboard_command."""
@@ -628,44 +517,6 @@ class TestCommandManager:  # pylint: disable=too-many-public-methods
 
         assert manager.get_keyboard_command("nonexistent") is None
 
-    def test_remove_command_clears_registry_and_key_index(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test remove_command drops a bound command from the registry and the key index."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager, KeyboardCommand
-
-        manager = CommandManager()
-
-        function = self._create_mock_function(test_context)
-        kb = self._create_mock_keybinding(test_context)
-        kb.matches.return_value = True
-        kb.modifiers = 4
-        kb.click_count = 1
-
-        cmd = KeyboardCommand("cmd", function, "Test Group", desktop_keybinding=kb)
-        cmd.set_keybinding(kb)
-        manager.add_command(cmd)
-
-        event = test_context.Mock()
-        event.get_click_count.return_value = 1
-        event.id = 65
-        event.hw_code = 38
-        event.modifiers = 4
-        event.is_keypad_key_with_numlock_on.return_value = False
-
-        assert manager.get_keyboard_command("cmd") == cmd
-        assert manager.get_command_for_event(event) == cmd
-
-        manager.remove_command("cmd")
-
-        assert manager.get_keyboard_command("cmd") is None
-        assert manager.get_command_for_event(event) is None
-
-        # Removing an unknown command is a no-op rather than an error.
-        manager.remove_command("cmd")
-
     def test_get_all_keyboard_commands(self, test_context: OrcaTestContext) -> None:
         """Test CommandManager.get_all_keyboard_commands."""
 
@@ -677,109 +528,20 @@ class TestCommandManager:  # pylint: disable=too-many-public-methods
         function1 = self._create_mock_function(test_context)
         function2 = self._create_mock_function(test_context)
         function3 = self._create_mock_function(test_context)
-        hidden_function = self._create_mock_function(test_context)
 
         cmd1 = KeyboardCommand("cmd1", function1, "Group A")
         cmd2 = KeyboardCommand("cmd2", function2, "Group B")
         cmd3 = KeyboardCommand("cmd3", function3, "Group A")
-        hidden_cmd = KeyboardCommand(
-            "hidden",
-            hidden_function,
-            "Group A",
-            user_visible=False,
-        )
 
         manager.add_command(cmd1)
         manager.add_command(cmd2)
         manager.add_command(cmd3)
-        manager.add_command(hidden_cmd)
 
         all_commands = manager.get_all_keyboard_commands()
-        assert len(all_commands) == 4
+        assert len(all_commands) == 3
         assert cmd1 in all_commands
         assert cmd2 in all_commands
         assert cmd3 in all_commands
-        assert hidden_cmd in all_commands
-
-        assert manager.get_user_visible_keyboard_commands() == (cmd1, cmd2, cmd3)
-
-    def test_user_extension_command_conflicting_with_orca_command_is_unbound(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test user-extension keybindings do not override existing Orca commands."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager, KeyboardCommand
-
-        manager = CommandManager()
-
-        orca_binding = self._create_mock_keybinding(test_context)
-        orca_binding.modifiers = 256
-        orca_binding.click_count = 1
-        user_binding = self._create_mock_keybinding(test_context)
-        user_binding.modifiers = 256
-        user_binding.click_count = 1
-
-        orca_command = KeyboardCommand(
-            "orcaCommand",
-            self._create_mock_function(test_context),
-            "Orca",
-            desktop_keybinding=orca_binding,
-        )
-        user_command = KeyboardCommand(
-            "userCommand",
-            self._create_mock_function(test_context),
-            "User",
-            desktop_keybinding=user_binding,
-        )
-
-        manager.add_command(orca_command)
-        manager.add_user_extension_command("DemoExtension", user_command)
-
-        assert orca_command.get_keybinding() is orca_binding
-        assert user_command.get_keybinding() is None
-        assert manager.has_user_extension_keybinding_conflicts("DemoExtension")
-        assert not manager.has_user_extension_keybinding_conflicts("OtherExtension")
-
-    def test_user_extension_command_conflicting_with_user_extension_command_is_unbound(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test later user-extension commands do not override earlier user-extension commands."""
-
-        self._setup_dependencies(test_context)
-        from orca.command_manager import CommandManager, KeyboardCommand
-
-        manager = CommandManager()
-
-        first_binding = self._create_mock_keybinding(test_context)
-        first_binding.modifiers = 256
-        first_binding.click_count = 1
-        second_binding = self._create_mock_keybinding(test_context)
-        second_binding.modifiers = 256
-        second_binding.click_count = 1
-
-        first_command = KeyboardCommand(
-            "firstCommand",
-            self._create_mock_function(test_context),
-            "First",
-            desktop_keybinding=first_binding,
-        )
-        second_command = KeyboardCommand(
-            "secondCommand",
-            self._create_mock_function(test_context),
-            "Second",
-            desktop_keybinding=second_binding,
-        )
-
-        manager.add_user_extension_command("FirstExtension", first_command)
-        manager.add_user_extension_command("SecondExtension", second_command)
-
-        assert first_command.get_keybinding() is first_binding
-        assert second_command.get_keybinding() is None
-        assert not manager.has_user_extension_keybinding_conflicts("FirstExtension")
-        assert manager.has_user_extension_keybinding_conflicts("SecondExtension")
 
     def test_get_command_for_event_finds_match(self, test_context: OrcaTestContext) -> None:
         """Test get_command_for_event returns matching command."""
@@ -1297,7 +1059,6 @@ class TestDiffBasedGrabUpdates:
         kb.remove_grabs = test_context.Mock()
         kb.get_grab_ids = test_context.Mock(return_value=[])
         kb.set_grab_ids = test_context.Mock()
-        kb.as_string.return_value = keysymstring
         return kb
 
     def test_binding_key_returns_tuple(self, test_context: OrcaTestContext) -> None:

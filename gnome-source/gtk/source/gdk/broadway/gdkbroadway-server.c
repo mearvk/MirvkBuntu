@@ -1,5 +1,9 @@
 #include "config.h"
 
+#ifdef HAVE_LINUX_MEMFD_H
+#include <linux/memfd.h>
+#endif
+
 #ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
@@ -328,7 +332,11 @@ process_input_messages (GdkBroadwayServer *server)
 {
   BroadwayReply *reply;
 
-  g_clear_handle_id (&server->process_input_idle, g_source_remove);
+  if (server->process_input_idle != 0)
+    {
+      g_source_remove (server->process_input_idle);
+      server->process_input_idle = 0;
+    }
 
   while (server->incoming)
     {
@@ -571,16 +579,16 @@ open_shared_memory (void)
   static gboolean force_shm_open = FALSE;
   int ret = -1;
 
-#if !defined (HAVE_MEMFD_CREATE)
+#if !defined (__NR_memfd_create)
   force_shm_open = TRUE;
 #endif
 
   do
     {
-#if defined (HAVE_MEMFD_CREATE)
+#if defined (__NR_memfd_create)
       if (!force_shm_open)
         {
-          ret = memfd_create ("gdk-broadway", MFD_CLOEXEC);
+          ret = syscall (__NR_memfd_create, "gdk-broadway", MFD_CLOEXEC);
 
           /* fall back to shm_open until debian stops shipping 3.16 kernel
            * See bug 766341
@@ -714,6 +722,7 @@ GdkGrabStatus
 _gdk_broadway_server_grab_pointer (GdkBroadwayServer *server,
                                    int id,
                                    gboolean owner_events,
+                                   guint32 event_mask,
                                    guint32 time_)
 {
   BroadwayRequestGrabPointer msg;
@@ -722,6 +731,7 @@ _gdk_broadway_server_grab_pointer (GdkBroadwayServer *server,
 
   msg.id = id;
   msg.owner_events = owner_events;
+  msg.event_mask = event_mask;
   msg.time_ = time_;
 
   serial = gdk_broadway_server_send_message (server, msg,

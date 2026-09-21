@@ -29,12 +29,9 @@
 G_DECLARE_FINAL_TYPE (MetaWaylandOutput, meta_wayland_output,
                       META, WAYLAND_OUTPUT, GObject)
 
-META_EXPORT_TEST
 const GList * meta_wayland_output_get_resources (MetaWaylandOutput *wayland_output);
 
-MetaMonitor * meta_wayland_output_get_monitor (MetaWaylandOutput *wayland_output);
-
-MetaMonitorMode * meta_wayland_output_get_monitor_mode (MetaWaylandOutput *wayland_output);
+MetaLogicalMonitor * meta_wayland_output_get_logical_monitor (MetaWaylandOutput *wayland_output);
 
 void meta_wayland_outputs_finalize (MetaWaylandCompositor *compositor);
 

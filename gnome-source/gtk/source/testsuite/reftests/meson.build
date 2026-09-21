@@ -8,10 +8,6 @@ foreach flag: common_cflags
   endif
 endforeach
 
-reftest_resources = gnome.compile_resources('reftest_resources',
-  'reftest.gresource.xml',
-  source_dir: meson.current_source_dir()
-)
 
 libgtkreftestprivate = library('gtkreftestprivate',
   sources: [ 'reftest-compare.c', 'reftest-module.c', 'reftest-snapshot.c', ],
@@ -29,6 +25,7 @@ libreftest = library('reftest',
     'textview-border-windows.c',
     'textview-tags.c',
     'animation-direction.c',
+    'icon-theme-hicolor.c',
   ],
   link_with: libgtkreftestprivate,
   c_args: reftest_cflags,
@@ -45,7 +42,7 @@ tcdata.set('libexecdir', join_paths(get_option('prefix'), get_option('libexecdir
 #endforeach
 
 gtk_reftest = executable('gtk-reftest',
-  sources: [ 'gtk-reftest.c', reftest_resources ],
+  sources: 'gtk-reftest.c',
   c_args: common_cflags,
   link_with : [libgtkreftestprivate, libreftest],
   dependencies : libgtk_dep,
@@ -71,9 +68,6 @@ testdata = [
   'animation-fill-mode-iteration-count.css',
   'animation-fill-mode-iteration-count.ref.ui',
   'animation-fill-mode-iteration-count.ui',
-  'backdrop-opacity.css',
-  'backdrop-opacity.ref.ui',
-  'backdrop-opacity.ui',
   'background-area.css',
   'background-area.ref.ui',
   'background-area.ui',
@@ -159,10 +153,6 @@ testdata = [
   'border-style.ui',
   'boxlayout-invisible-child.ref.ui',
   'boxlayout-invisible-child.ui',
-  'box-opposite-natural-size1.ref.ui',
-  'box-opposite-natural-size1.ui',
-  'box-opposite-natural-size2.ref.ui',
-  'box-opposite-natural-size2.ui',
   'box-pseudo-classes.css',
   'box-pseudo-classes.ref.ui',
   'box-pseudo-classes.ui',
@@ -312,13 +302,10 @@ testdata = [
   'default-size-with-titlebar.ref.ui',
   'default-size-without-titlebar.ui',
   'default-size-without-titlebar.ref.ui',
-  'filter-before-opacity.ui',
   'fixed-widget-stacking.ref.ui',
   'fixed-widget-stacking.ui',
   'flipping-icons.ref.ui',
   'flipping-icons.ui',
-  'flowbox-basics.ref.ui',
-  'flowbox-basics.ui',
   'font-sizes-names.css',
   'font-sizes-names.ref.ui',
   'font-sizes-names.ui',
@@ -381,8 +368,6 @@ testdata = [
   'image-load-from-file.css',
   'image-load-from-file.ref.ui',
   'image-load-from-file.ui',
-  'image-sizing.ref.ui',
-  'image-sizing.ui',
   'inscription-markup.ref.ui',
   'inscription-markup.ui',
   'inscription-overflow.ref.ui',
@@ -605,8 +590,6 @@ testdata = [
   'wrap-margin-align-critical.ui',
   'wrapping-in-boxes-in-boxes.ref.ui',
   'wrapping-in-boxes-in-boxes.ui',
-  'wrapping-label-in-nested-boxes.ref.ui',
-  'wrapping-label-in-nested-boxes.ui',
 ]
 
 xfails = [
@@ -620,9 +603,6 @@ xfails = [
   'border-image-url.ui',
   'label-background.ui',
   'label-wrap-justify.ui',
-
-  # https://gitlab.freedesktop.org/mesa/mesa/-/issues/11773
-  'glarea-gl-only.ui',
 ]
 
 flaky = [
@@ -668,7 +648,6 @@ foreach testname : testdata
         '-o', join_paths(meson.current_build_dir(), 'output'),
         join_paths(meson.current_source_dir(), testname),
       ],
-      is_parallel: false,
       protocol: 'tap',
       env: reftest_env,
       suite: suites,

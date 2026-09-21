@@ -36,10 +36,10 @@ _cogl_texture_gl_prep_alignment_for_pixels_upload (CoglContext *ctx,
                                                    int pixels_rowstride);
 
 void
-_cogl_texture_gl_prep_alignment_for_pixels_download (CoglDriver *driver,
-                                                     int         bpp,
-                                                     int         width,
-                                                     int         rowstride);
+_cogl_texture_gl_prep_alignment_for_pixels_download (CoglContext *ctx,
+                                                     int bpp,
+                                                     int width,
+                                                     int rowstride);
 
 void
 _cogl_texture_gl_flush_legacy_texobj_wrap_modes (CoglTexture *texture,
@@ -50,6 +50,13 @@ void
 _cogl_texture_gl_flush_legacy_texobj_filters (CoglTexture *texture,
                                               unsigned int min_filter,
                                               unsigned int mag_filter);
+
+void
+cogl_texture_gl_set_max_level (CoglTexture *texture,
+                               int max_level);
+
+void
+_cogl_texture_gl_generate_mipmaps (CoglTexture *texture);
 
 GLenum
 _cogl_texture_gl_get_format (CoglTexture *texture);

@@ -52,7 +52,6 @@ typedef struct _ClutterLayoutManager            ClutterLayoutManager;
 typedef struct _ClutterActorIter                ClutterActorIter;
 typedef struct _ClutterPaintContext             ClutterPaintContext;
 typedef struct _ClutterPaintNode                ClutterPaintNode;
-typedef struct _ClutterPipelineCache            ClutterPipelineCache;
 typedef struct _ClutterContent                  ClutterContent; /* dummy */
 typedef struct _ClutterScrollActor	        ClutterScrollActor;
 typedef struct _ClutterFrameClock               ClutterFrameClock;
@@ -71,6 +70,8 @@ typedef struct _ClutterConstraint               ClutterConstraint;
 typedef struct _ClutterEffect                   ClutterEffect;
 
 typedef struct _ClutterActorBox                 ClutterActorBox;
+typedef struct _ClutterColor                    ClutterColor;
+typedef struct _ClutterColorState               ClutterColorState;
 typedef struct _ClutterMargin                   ClutterMargin;
 typedef struct _ClutterPerspective              ClutterPerspective;
 
@@ -80,19 +81,10 @@ typedef struct _ClutterVirtualInputDevice       ClutterVirtualInputDevice;
 
 typedef struct _ClutterInputMethod              ClutterInputMethod;
 typedef struct _ClutterInputFocus               ClutterInputFocus;
-typedef struct _ClutterPreeditAttribute         ClutterPreeditAttribute;
-typedef struct _ClutterFocus                    ClutterFocus;
-typedef struct _ClutterKeyFocus                 ClutterKeyFocus;
-typedef struct _ClutterSprite                   ClutterSprite;
 
 typedef union _ClutterEvent                     ClutterEvent;
 
 typedef enum _ClutterPaintFlag                  ClutterPaintFlag;
-
-typedef struct _ClutterColorState               ClutterColorState;
-typedef struct _ClutterColorOp                  ClutterColorOp;
-typedef struct _ClutterColorPipeline            ClutterColorPipeline;
-typedef struct _ClutterColorTransform           ClutterColorTransform;
 
 /**
  * ClutterEventSequence:
@@ -182,7 +174,7 @@ struct _ClutterActorBox
 #define CLUTTER_ACTOR_BOX_UNINITIALIZED { .x1 = INFINITY, .y1 = INFINITY, .x2 = -INFINITY, .y2 = -INFINITY }
 
 CLUTTER_EXPORT
-GType            clutter_actor_box_get_type      (void);
+GType            clutter_actor_box_get_type      (void) G_GNUC_CONST;
 CLUTTER_EXPORT
 ClutterActorBox *clutter_actor_box_new           (gfloat                 x_1,
                                                   gfloat                 y_1,
@@ -269,7 +261,7 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (ClutterActorBox, clutter_actor_box_free)
  */
 
 CLUTTER_EXPORT
-GType clutter_paint_volume_get_type (void);
+GType clutter_paint_volume_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 ClutterPaintVolume *clutter_paint_volume_copy                (const ClutterPaintVolume *pv);
@@ -297,11 +289,6 @@ void                clutter_paint_volume_set_depth           (ClutterPaintVolume
                                                               gfloat                    depth);
 CLUTTER_EXPORT
 gfloat              clutter_paint_volume_get_depth           (const ClutterPaintVolume *pv);
-CLUTTER_EXPORT
-void                clutter_paint_volume_scale               (ClutterPaintVolume       *pv,
-                                                              float                     x_scale,
-                                                              float                     y_scale,
-                                                              float                     z_scale);
 CLUTTER_EXPORT
 void                clutter_paint_volume_union               (ClutterPaintVolume       *pv,
                                                               const ClutterPaintVolume *another_pv);
@@ -333,7 +320,7 @@ struct _ClutterMargin
 };
 
 CLUTTER_EXPORT
-GType clutter_margin_get_type (void);
+GType clutter_margin_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 ClutterMargin * clutter_margin_new      (void) G_GNUC_MALLOC;

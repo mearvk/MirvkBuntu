@@ -46,7 +46,7 @@ static State state;
 static void
 init_surface (void)
 {
-  xdg_toplevel_set_title (xdg_toplevel, "subsurface-remap-toplevel-test");
+  xdg_toplevel_set_title (xdg_toplevel, "gradient-test");
   wl_surface_commit (surface);
 }
 
@@ -96,16 +96,16 @@ draw_subsurface (WaylandDisplay    *display,
 
 static void
 handle_xdg_toplevel_configure (void                *data,
-                               struct xdg_toplevel *test_xdg_toplevel,
+                               struct xdg_toplevel *xdg_toplevel,
                                int32_t              width,
                                int32_t              height,
-                               struct wl_array     *configure_state)
+                               struct wl_array     *state)
 {
 }
 
 static void
 handle_xdg_toplevel_close(void                *data,
-                          struct xdg_toplevel *test_xdg_toplevel)
+                          struct xdg_toplevel *xdg_toplevel)
 {
   g_assert_not_reached ();
 }

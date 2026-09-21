@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include <math.h>
+
 #include "gskpathbuilder.h"
 
 #include "gskpathprivate.h"
@@ -26,17 +28,15 @@
 #include "gskpathpointprivate.h"
 #include "gskcontourprivate.h"
 
-#include <math.h>
-#include <pango/pangocairo.h>
-
 /**
  * GskPathBuilder:
  *
- * Constructs `GskPath` objects.
+ * `GskPathBuilder` is an auxiliary object for constructing
+ * `GskPath` objects.
  *
  * A path is constructed like this:
  *
- * ```c
+ * |[<!-- language="C" -->
  * GskPath *
  * construct_path (void)
  * {
@@ -47,7 +47,7 @@
  *   // add contours to the path here
  *
  *   return gsk_path_builder_free_to_path (builder);
- * ```
+ * ]|
  *
  * Adding contours to the path can be done in two ways.
  * The easiest option is to use the `gsk_path_builder_add_*` group
@@ -74,23 +74,6 @@
  * Since: 4.14
  */
 
-#define GDK_ARRAY_NAME gsk_path_ops
-#define GDK_ARRAY_TYPE_NAME GskPathOps
-#define GDK_ARRAY_ELEMENT_TYPE gskpathop
-#define GDK_ARRAY_BY_VALUE 1
-#define GDK_ARRAY_PREALLOC 150
-#define GDK_ARRAY_NO_MEMSET 1
-#include "gdk/gdkarrayimpl.c"
-
-#define GDK_ARRAY_NAME gsk_points
-#define GDK_ARRAY_TYPE_NAME GskPoints
-#define GDK_ARRAY_ELEMENT_TYPE GskAlignedPoint
-#define GDK_ARRAY_BY_VALUE 1
-#define GDK_ARRAY_PREALLOC 350
-#define GDK_ARRAY_NO_MEMSET 1
-#include "gdk/gdkarrayimpl.c"
-
-
 struct _GskPathBuilder
 {
   int ref_count;
@@ -98,18 +81,16 @@ struct _GskPathBuilder
   GSList *contours; /* (reverse) list of already recorded contours */
 
   GskPathFlags flags; /* flags for the current path */
-  GskAlignedPoint current_point; /* the point all drawing ops start from */
-  GskPathOps ops; /* operations for current contour - size == 0 means no current contour */
-  GskPoints points; /* points for the operations */
+  graphene_point_t current_point; /* the point all drawing ops start from */
+  GArray *ops; /* operations for current contour - size == 0 means no current contour */
+  GArray *points; /* points for the operations */
 };
-
-/* We want to choose the array preallocations above so that the struct fits in 1 page */
-G_STATIC_ASSERT (sizeof (GskPathBuilder) < 4096);
 
 G_DEFINE_BOXED_TYPE (GskPathBuilder,
                      gsk_path_builder,
                      gsk_path_builder_ref,
                      gsk_path_builder_unref)
+
 
 /**
  * gsk_path_builder_new:
@@ -131,25 +112,25 @@ gsk_path_builder_new (void)
   self = g_slice_new0 (GskPathBuilder);
   self->ref_count = 1;
 
-  gsk_path_ops_init (&self->ops);
-  gsk_points_init (&self->points);
+  self->ops = g_array_new (FALSE, FALSE, sizeof (gskpathop));
+  self->points = g_array_new (FALSE, FALSE, sizeof (graphene_point_t));
 
   /* Be explicit here */
-  self->current_point.pt = GRAPHENE_POINT_INIT (0, 0);
+  self->current_point = GRAPHENE_POINT_INIT (0, 0);
 
   return self;
 }
 
 /**
  * gsk_path_builder_ref:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  *
  * Acquires a reference on the given builder.
  *
  * This function is intended primarily for language bindings.
  * `GskPathBuilder` objects should not be kept around.
  *
- * Returns: (transfer none): the given path builder with
+ * Returns: (transfer none): the given `GskPathBuilder` with
  *   its reference count increased
  *
  * Since: 4.14
@@ -166,7 +147,7 @@ gsk_path_builder_ref (GskPathBuilder *self)
 }
 
 /* We're cheating here. Out pathops are relative to the NULL pointer,
- * so that we can not care about the points array reallocating itself
+ * so that we can not care about the points GArray reallocating itself
  * until we create the contour.
  * This does however mean that we need to not use gsk_pathop_get_points()
  * without offsetting the returned pointer.
@@ -175,31 +156,30 @@ static inline gskpathop
 gsk_pathop_encode_index (GskPathOperation op,
                          gsize            index)
 {
-  return gsk_pathop_encode (op, GSIZE_TO_POINTER (index * sizeof (GskAlignedPoint)));
+  return gsk_pathop_encode (op, ((graphene_point_t *) NULL) + index);
 }
 
 static void
 gsk_path_builder_ensure_current (GskPathBuilder *self)
 {
-  if (gsk_path_ops_get_size (&self->ops) != 0)
+  if (self->ops->len != 0)
     return;
 
-  self->flags = GSK_PATH_FLAT | GSK_PATH_ZERO_LENGTH;
-
-  gsk_path_ops_append (&self->ops, (gskpathop[1]) { gsk_pathop_encode_index (GSK_PATH_MOVE, 0) });
-  gsk_points_append (&self->points, &self->current_point);
+  self->flags = GSK_PATH_FLAT;
+  g_array_append_vals (self->ops, (gskpathop[1]) { gsk_pathop_encode_index (GSK_PATH_MOVE, 0) }, 1);
+  g_array_append_val (self->points, self->current_point);
 }
 
 static void
 gsk_path_builder_append_current (GskPathBuilder         *self,
                                  GskPathOperation        op,
                                  gsize                   n_points,
-                                 const GskAlignedPoint  *points)
+                                 const graphene_point_t *points)
 {
   gsk_path_builder_ensure_current (self);
 
-  gsk_path_ops_append (&self->ops, (gskpathop[1]) { gsk_pathop_encode_index (op, gsk_points_get_size (&self->points) - 1) } );
-  gsk_points_splice (&self->points, gsk_points_get_size (&self->points), 0, FALSE, points, n_points);
+  g_array_append_vals (self->ops, (gskpathop[1]) { gsk_pathop_encode_index (op, self->points->len - 1) }, 1);
+  g_array_append_vals (self->points, points, n_points);
 
   self->current_point = points[n_points - 1];
 }
@@ -208,38 +188,19 @@ static void
 gsk_path_builder_end_current (GskPathBuilder *self)
 {
   GskContour *contour;
-  graphene_point_t *a, *b;
 
-  if (gsk_path_ops_get_size (&self->ops) == 0)
+  if (self->ops->len == 0)
    return;
 
-  if (gsk_path_ops_get_size (&self->ops) == 1)
-    {
-      /* empty paths aren't zero-length */
-      self->flags &= ~GSK_PATH_ZERO_LENGTH;
-    }
-  else
-    {
-      a = &gsk_points_index (&self->points, 0)->pt;
-      for (size_t i = 1; i < gsk_points_get_size (&self->points); i++)
-        {
-          b = &gsk_points_index (&self->points, i)->pt;
-          if (a->x != b->x || a->y != b->y)
-            {
-              self->flags &= ~GSK_PATH_ZERO_LENGTH;
-              break;
-            }
-        }
-    }
   contour = gsk_standard_contour_new (self->flags,
-                                      gsk_points_get_data (&self->points),
-                                      gsk_points_get_size (&self->points),
-                                      (gskpathop *) gsk_path_ops_get_data (&self->ops),
-                                      gsk_path_ops_get_size (&self->ops),
-                                      gsk_points_get_data (&self->points) - (GskAlignedPoint *) NULL);
+                                      (graphene_point_t *) self->points->data,
+                                      self->points->len,
+                                      (gskpathop *) self->ops->data,
+                                      self->ops->len,
+                                      (graphene_point_t *) self->points->data - (graphene_point_t *) NULL);
 
-  gsk_path_ops_set_size (&self->ops, 0);
-  gsk_points_set_size (&self->points, 0);
+  g_array_set_size (self->ops, 0);
+  g_array_set_size (self->points, 0);
 
   /* do this at the end to avoid inflooping when add_contour calls back here */
   gsk_path_builder_add_contour (self, contour);
@@ -250,12 +211,13 @@ gsk_path_builder_clear (GskPathBuilder *self)
 {
   gsk_path_builder_end_current (self);
 
-  g_clear_slist (&self->contours, g_free);
+  g_slist_free_full (self->contours, g_free);
+  self->contours = NULL;
 }
 
 /**
  * gsk_path_builder_unref:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  *
  * Releases a reference on the given builder.
  *
@@ -273,19 +235,19 @@ gsk_path_builder_unref (GskPathBuilder *self)
     return;
 
   gsk_path_builder_clear (self);
-  gsk_path_ops_clear (&self->ops);
-  gsk_points_clear (&self->points);
+  g_array_unref (self->ops);
+  g_array_unref (self->points);
   g_slice_free (GskPathBuilder, self);
 }
 
 /**
  * gsk_path_builder_free_to_path: (skip)
- * @self: (transfer full): a path builder
+ * @self: a `GskPathBuilder`
  *
- * Creates a new path from the current state of the
- * builder, and unrefs the builder.
+ * Creates a new `GskPath` from the current state of the
+ * given builder, and unrefs the @builder instance.
  *
- * Returns: (transfer full): the newly created path
+ * Returns: (transfer full): the newly created `GskPath`
  *   with all the contours added to the builder
  *
  * Since: 4.14
@@ -306,19 +268,18 @@ gsk_path_builder_free_to_path (GskPathBuilder *self)
 
 /**
  * gsk_path_builder_to_path:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  *
- * Creates a new path from the given builder.
+ * Creates a new `GskPath` from the given builder.
  *
- * The given `GskPathBuilder` is reset to the initial state once this
- * function returns. Calling this function again on the same builder
- * instance will therefore produce an empty path, not a copy of the same
- * path.
+ * The given `GskPathBuilder` is reset once this function returns;
+ * you cannot call this function multiple times on the same builder
+ * instance.
  *
  * This function is intended primarily for language bindings.
  * C code should use [method@Gsk.PathBuilder.free_to_path].
  *
- * Returns: (transfer full): the newly created path
+ * Returns: (transfer full): the newly created `GskPath`
  *   with all the contours added to the builder
  *
  * Since: 4.14
@@ -352,7 +313,7 @@ gsk_path_builder_add_contour (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_get_current_point:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  *
  * Gets the current point.
  *
@@ -363,7 +324,7 @@ gsk_path_builder_add_contour (GskPathBuilder *self,
  * to `0, 0`. Note that this is different from cairo, which starts
  * out without a current point.
  *
- * Returns: (transfer none): the current point
+ * Returns: (transfer none): The current point
  *
  * Since: 4.14
  */
@@ -372,12 +333,12 @@ gsk_path_builder_get_current_point (GskPathBuilder *self)
 {
   g_return_val_if_fail (self != NULL, NULL);
 
-  return &self->current_point.pt;
+  return &self->current_point;
 }
 
 /**
  * gsk_path_builder_add_path:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @path: (transfer none): the path to append
  *
  * Appends all of @path to the builder.
@@ -401,7 +362,7 @@ gsk_path_builder_add_path (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_add_reverse_path:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @path: (transfer none): the path to append
  *
  * Appends all of @path to the builder, in reverse order.
@@ -425,8 +386,7 @@ gsk_path_builder_add_reverse_path (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_add_cairo_path:
- * @self: a path builder
- * @path: a path
+ * @self: a `GskPathBuilder`
  *
  * Adds a Cairo path to the builder.
  *
@@ -439,7 +399,7 @@ void
 gsk_path_builder_add_cairo_path (GskPathBuilder     *self,
                                  const cairo_path_t *path)
 {
-  GskAlignedPoint current;
+  graphene_point_t current;
 
   g_return_if_fail (self != NULL);
   g_return_if_fail (path != NULL);
@@ -483,10 +443,10 @@ gsk_path_builder_add_cairo_path (GskPathBuilder     *self,
 
 /**
  * gsk_path_builder_add_rect:
- * @self: a path builder
- * @rect: the rectangle to create a path for
+ * @self: A `GskPathBuilder`
+ * @rect: The rectangle to create a path for
  *
- * Adds a rectangle as a new contour.
+ * Adds @rect as a new contour to the path built by the builder.
  *
  * The path is going around the rectangle in clockwise direction.
  *
@@ -510,10 +470,10 @@ gsk_path_builder_add_rect (GskPathBuilder        *self,
 
 /**
  * gsk_path_builder_add_rounded_rect:
- * @self: a path builder
+ * @self: a #GskPathBuilder
  * @rect: the rounded rect
  *
- * Adds a rounded rectangle as a new contour.
+ * Adds @rect as a new contour to the path built in @self.
  *
  * The path is going around the rectangle in clockwise direction.
  *
@@ -531,11 +491,11 @@ gsk_path_builder_add_rounded_rect (GskPathBuilder       *self,
 
 /**
  * gsk_path_builder_add_circle:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @center: the center of the circle
  * @radius: the radius of the circle
  *
- * Adds a circle as a new contour.
+ * Adds a circle with the @center and @radius.
  *
  * The path is going around the circle in clockwise direction.
  *
@@ -557,7 +517,7 @@ gsk_path_builder_add_circle (GskPathBuilder         *self,
 
 /**
  * gsk_path_builder_move_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x: x coordinate
  * @y: y coordinate
  *
@@ -578,14 +538,14 @@ gsk_path_builder_move_to (GskPathBuilder *self,
 
   gsk_path_builder_end_current (self);
 
-  self->current_point.pt = GRAPHENE_POINT_INIT(x, y);
+  self->current_point = GRAPHENE_POINT_INIT(x, y);
 
   gsk_path_builder_ensure_current (self);
 }
 
 /**
  * gsk_path_builder_rel_move_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x: x offset
  * @y: y offset
  *
@@ -604,13 +564,13 @@ gsk_path_builder_rel_move_to (GskPathBuilder *self,
   g_return_if_fail (self != NULL);
 
   gsk_path_builder_move_to (self,
-                            self->current_point.pt.x + x,
-                            self->current_point.pt.y + y);
+                            self->current_point.x + x,
+                            self->current_point.y + y);
 }
 
 /**
  * gsk_path_builder_line_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x: x coordinate
  * @y: y coordinate
  *
@@ -631,16 +591,21 @@ gsk_path_builder_line_to (GskPathBuilder *self,
 {
   g_return_if_fail (self != NULL);
 
+  /* skip the line if it goes to the same point */
+  if (graphene_point_equal (&self->current_point,
+                            &GRAPHENE_POINT_INIT (x, y)))
+    return;
+
   gsk_path_builder_append_current (self,
                                    GSK_PATH_LINE,
-                                   1, (GskAlignedPoint[1]) {{
+                                   1, (graphene_point_t[1]) {
                                      GRAPHENE_POINT_INIT (x, y)
-                                   }});
+                                   });
 }
 
 /**
  * gsk_path_builder_rel_line_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x: x offset
  * @y: y offset
  *
@@ -659,8 +624,8 @@ gsk_path_builder_rel_line_to (GskPathBuilder *self,
   g_return_if_fail (self != NULL);
 
   gsk_path_builder_line_to (self,
-                            self->current_point.pt.x + x,
-                            self->current_point.pt.y + y);
+                            self->current_point.x + x,
+                            self->current_point.y + y);
 }
 
 static inline void
@@ -699,7 +664,7 @@ collinear (const graphene_point_t *p,
 
 /**
  * gsk_path_builder_quad_to:
- * @self: a path builder
+ * @self: a #GskPathBuilder
  * @x1: x coordinate of control point
  * @y1: y coordinate of control point
  * @x2: x coordinate of the end of the curve
@@ -724,7 +689,7 @@ gsk_path_builder_quad_to (GskPathBuilder *self,
                           float           x2,
                           float           y2)
 {
-  graphene_point_t p0 = self->current_point.pt;
+  graphene_point_t p0 = self->current_point;
   graphene_point_t p1 = GRAPHENE_POINT_INIT (x1, y1);
   graphene_point_t p2 = GRAPHENE_POINT_INIT (x2, y2);
 
@@ -766,12 +731,12 @@ gsk_path_builder_quad_to (GskPathBuilder *self,
   self->flags &= ~GSK_PATH_FLAT;
   gsk_path_builder_append_current (self,
                                    GSK_PATH_QUAD,
-                                   2, (GskAlignedPoint[2]) {{ p1 }, { p2 }});
+                                   2, (graphene_point_t[2]) { p1, p2 });
 }
 
 /**
  * gsk_path_builder_rel_quad_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x offset of control point
  * @y1: y offset of control point
  * @x2: x offset of the end of the curve
@@ -796,10 +761,10 @@ gsk_path_builder_rel_quad_to (GskPathBuilder *self,
   g_return_if_fail (self != NULL);
 
   gsk_path_builder_quad_to (self,
-                            self->current_point.pt.x + x1,
-                            self->current_point.pt.y + y1,
-                            self->current_point.pt.x + x2,
-                            self->current_point.pt.y + y2);
+                            self->current_point.x + x1,
+                            self->current_point.y + y1,
+                            self->current_point.x + x2,
+                            self->current_point.y + y2);
 }
 
 static gboolean
@@ -836,7 +801,7 @@ bounding_box_corner_between (const GskBoundingBox   *bb,
 
 /**
  * gsk_path_builder_cubic_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x coordinate of first control point
  * @y1: y coordinate of first control point
  * @x2: x coordinate of second control point
@@ -866,7 +831,7 @@ gsk_path_builder_cubic_to (GskPathBuilder *self,
                            float           x3,
                            float           y3)
 {
-  graphene_point_t p0 = self->current_point.pt;
+  graphene_point_t p0 = self->current_point;
   graphene_point_t p1 = GRAPHENE_POINT_INIT (x1, y1);
   graphene_point_t p2 = GRAPHENE_POINT_INIT (x2, y2);
   graphene_point_t p3 = GRAPHENE_POINT_INIT (x3, y3);
@@ -942,14 +907,65 @@ gsk_path_builder_cubic_to (GskPathBuilder *self,
     }
 
   self->flags &= ~GSK_PATH_FLAT;
+
+  /* At this point, we are dealing with a cubic that can't be reduced to
+   * lines or quadratics. Check for cusps.
+   */
+    {
+      GskCurve c, c1, c2, c3, c4;
+      float t[2];
+      int n;
+
+      gsk_curve_init_foreach (&c,
+                              GSK_PATH_CUBIC,
+                              (const graphene_point_t[]) { p0, p1, p2, p3 },
+                              4,
+                              0.f);
+
+      n = gsk_curve_get_cusps (&c, t);
+      if (n == 1)
+        {
+          gsk_curve_split (&c, t[0], &c1, &c2);
+          gsk_path_builder_append_current (self,
+                                           GSK_PATH_CUBIC,
+                                           3, &c1.cubic.points[1]);
+          gsk_path_builder_append_current (self,
+                                           GSK_PATH_CUBIC,
+                                           3, &c2.cubic.points[1]);
+          return;
+        }
+      else if (n == 2)
+        {
+          if (t[1] < t[0])
+            {
+              float s = t[0];
+              t[0] = t[1];
+              t[1] = s;
+            }
+
+          gsk_curve_split (&c, t[0], &c1, &c2);
+          gsk_curve_split (&c2, (t[1] - t[0]) / (1 - t[0]), &c3, &c4);
+          gsk_path_builder_append_current (self,
+                                           GSK_PATH_CUBIC,
+                                           3, &c1.cubic.points[1]);
+          gsk_path_builder_append_current (self,
+                                           GSK_PATH_CUBIC,
+                                           3, &c3.cubic.points[1]);
+          gsk_path_builder_append_current (self,
+                                           GSK_PATH_CUBIC,
+                                           3, &c4.cubic.points[1]);
+          return;
+        }
+    }
+
   gsk_path_builder_append_current (self,
                                    GSK_PATH_CUBIC,
-                                   3, (GskAlignedPoint[3]) {{ p1 }, { p2 }, { p3 }});
+                                   3, (graphene_point_t[3]) { p1, p2, p3 });
 }
 
 /**
  * gsk_path_builder_rel_cubic_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x offset of first control point
  * @y1: y offset of first control point
  * @x2: x offset of second control point
@@ -979,31 +995,29 @@ gsk_path_builder_rel_cubic_to (GskPathBuilder *self,
   g_return_if_fail (self != NULL);
 
   gsk_path_builder_cubic_to (self,
-                             self->current_point.pt.x + x1,
-                             self->current_point.pt.y + y1,
-                             self->current_point.pt.x + x2,
-                             self->current_point.pt.y + y2,
-                             self->current_point.pt.x + x3,
-                             self->current_point.pt.y + y3);
+                             self->current_point.x + x1,
+                             self->current_point.y + y1,
+                             self->current_point.x + x2,
+                             self->current_point.y + y2,
+                             self->current_point.x + x3,
+                             self->current_point.y + y3);
 }
 
 /**
  * gsk_path_builder_conic_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x coordinate of control point
  * @y1: y coordinate of control point
  * @x2: x coordinate of the end of the curve
  * @y2: y coordinate of the end of the curve
- * @weight: weight of the control point, must be non-negative
+ * @weight: weight of the control point, must be greater than zero
  *
  * Adds a [conic curve](https://en.wikipedia.org/wiki/Non-uniform_rational_B-spline)
  * from the current point to @x2, @y2 with the given @weight and @x1, @y1 as the
  * control point.
  *
  * The weight determines how strongly the curve is pulled towards the control point.
- * A conic with weight 1 is identical to a quadratic Bézier curve with the same points,
- * a conic with weight 0 is identical to a straight line from the start point to
- * the end point.
+ * A conic with weight 1 is identical to a quadratic Bézier curve with the same points.
  *
  * Conic curves can be used to draw ellipses and circles. They are also known as
  * rational quadratic Bézier curves.
@@ -1025,18 +1039,12 @@ gsk_path_builder_conic_to (GskPathBuilder *self,
                            float           y2,
                            float           weight)
 {
-  graphene_point_t p0 = self->current_point.pt;
+  graphene_point_t p0 = self->current_point;
   graphene_point_t p1 = GRAPHENE_POINT_INIT (x1, y1);
   graphene_point_t p2 = GRAPHENE_POINT_INIT (x2, y2);
 
   g_return_if_fail (self != NULL);
-  g_return_if_fail (weight >= 0);
-
-  if (weight == 0)
-    {
-      gsk_path_builder_line_to (self, x2, y2);
-      return;
-    }
+  g_return_if_fail (weight > 0);
 
   if (weight == 1)
     {
@@ -1082,21 +1090,21 @@ gsk_path_builder_conic_to (GskPathBuilder *self,
   self->flags &= ~GSK_PATH_FLAT;
   gsk_path_builder_append_current (self,
                                    GSK_PATH_CONIC,
-                                   3, (GskAlignedPoint[3]) {
-                                     { GRAPHENE_POINT_INIT (x1, y1) },
-                                     { GRAPHENE_POINT_INIT (weight, 0) },
-                                     { GRAPHENE_POINT_INIT (x2, y2) }
+                                   3, (graphene_point_t[3]) {
+                                     GRAPHENE_POINT_INIT (x1, y1),
+                                     GRAPHENE_POINT_INIT (weight, 0),
+                                     GRAPHENE_POINT_INIT (x2, y2)
                                    });
 }
 
 /**
  * gsk_path_builder_rel_conic_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x offset of control point
  * @y1: y offset of control point
  * @x2: x offset of the end of the curve
  * @y2: y offset of the end of the curve
- * @weight: weight of the curve, must be non-negative
+ * @weight: weight of the curve, must be greater than zero
  *
  * Adds a [conic curve](https://en.wikipedia.org/wiki/Non-uniform_rational_B-spline)
  * from the current point to @x2, @y2 with the given @weight and @x1, @y1 as the
@@ -1117,19 +1125,19 @@ gsk_path_builder_rel_conic_to (GskPathBuilder *self,
                                float           weight)
 {
   g_return_if_fail (self != NULL);
-  g_return_if_fail (weight >= 0);
+  g_return_if_fail (weight > 0);
 
   gsk_path_builder_conic_to (self,
-                             self->current_point.pt.x + x1,
-                             self->current_point.pt.y + y1,
-                             self->current_point.pt.x + x2,
-                             self->current_point.pt.y + y2,
+                             self->current_point.x + x1,
+                             self->current_point.y + y1,
+                             self->current_point.x + x2,
+                             self->current_point.y + y2,
                              weight);
 }
 
 /**
  * gsk_path_builder_arc_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x coordinate of first control point
  * @y1: y coordinate of first control point
  * @x2: x coordinate of second control point
@@ -1166,7 +1174,7 @@ gsk_path_builder_arc_to (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_rel_arc_to:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  * @x1: x coordinate of first control point
  * @y1: y coordinate of first control point
  * @x2: x coordinate of second control point
@@ -1191,15 +1199,15 @@ gsk_path_builder_rel_arc_to (GskPathBuilder *self,
   g_return_if_fail (self != NULL);
 
   gsk_path_builder_arc_to (self,
-                           self->current_point.pt.x + x1,
-                           self->current_point.pt.y + y1,
-                           self->current_point.pt.x + x2,
-                           self->current_point.pt.y + y2);
+                           self->current_point.x + x1,
+                           self->current_point.y + y1,
+                           self->current_point.x + x2,
+                           self->current_point.y + y2);
 }
 
 /**
  * gsk_path_builder_close:
- * @self: a path builder
+ * @self: a `GskPathBuilder`
  *
  * Ends the current contour with a line back to the start point.
  *
@@ -1216,14 +1224,14 @@ gsk_path_builder_close (GskPathBuilder *self)
 {
   g_return_if_fail (self != NULL);
 
-  if (gsk_path_ops_get_size (&self->ops) == 0)
+  if (self->ops->len == 0)
     return;
 
   self->flags |= GSK_PATH_CLOSED;
   gsk_path_builder_append_current (self,
                                    GSK_PATH_CLOSE,
-                                   1, (GskAlignedPoint[1]) {
-                                     *gsk_points_index (&self->points, 0)
+                                   1, (graphene_point_t[1]) {
+                                     g_array_index (self->points, graphene_point_t, 0)
                                    });
 
   gsk_path_builder_end_current (self);
@@ -1276,14 +1284,14 @@ _sincos (double angle,
 
 /**
  * gsk_path_builder_svg_arc_to:
- * @self: a path builder
- * @rx: x radius
- * @ry: y radius
+ * @self: a `GskPathBuilder`
+ * @rx: X radius
+ * @ry: Y radius
  * @x_axis_rotation: the rotation of the ellipsis
  * @large_arc: whether to add the large arc
  * @positive_sweep: whether to sweep in the positive direction
- * @x: x coordinate of the endpoint
- * @y: y coordinate of the endpoint
+ * @x: the X coordinate of the endpoint
+ * @y: the Y coordinate of the endpoint
  *
  * Implements arc-to according to the SVG spec.
  *
@@ -1329,9 +1337,9 @@ gsk_path_builder_svg_arc_to (GskPathBuilder *self,
 
   g_return_if_fail (self != NULL);
 
-  if (gsk_points_get_size (&self->points) > 0)
+  if (self->points->len > 0)
     {
-      current = &gsk_points_index (&self->points, gsk_points_get_size (&self->points) - 1)->pt;
+      current = &g_array_index (self->points, graphene_point_t, self->points->len - 1);
       x1 = current->x;
       y1 = current->y;
     }
@@ -1429,14 +1437,14 @@ gsk_path_builder_svg_arc_to (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_rel_svg_arc_to:
- * @self: a path builder
- * @rx: x radius
- * @ry: y radius
+ * @self: a `GskPathBuilder`
+ * @rx: X radius
+ * @ry: Y radius
  * @x_axis_rotation: the rotation of the ellipsis
  * @large_arc: whether to add the large arc
  * @positive_sweep: whether to sweep in the positive direction
- * @x: x coordinate of the endpoint
- * @y: y coordinate of the endpoint
+ * @x: the X coordinate of the endpoint
+ * @y: the Y coordinate of the endpoint
  *
  * Implements arc-to according to the SVG spec.
  *
@@ -1461,8 +1469,8 @@ gsk_path_builder_rel_svg_arc_to (GskPathBuilder *self,
                                x_axis_rotation,
                                large_arc,
                                positive_sweep,
-                               self->current_point.pt.x + x,
-                               self->current_point.pt.y + y);
+                               self->current_point.x + x,
+                               self->current_point.y + y);
 }
 
 /* Return the angle between t1 and t2 in radians, such that
@@ -1503,12 +1511,12 @@ angle_between_points (const graphene_point_t *c,
 
 /**
  * gsk_path_builder_html_arc_to:
- * @self: a path builder
- * @x1: x coordinate of first control point
- * @y1: y coordinate of first control point
- * @x2: x coordinate of second control point
- * @y2: y coordinate of second control point
- * @radius: radius of the circle
+ * @self: a `GskPathBuilder`
+ * @x1: X coordinate of first control point
+ * @y1: Y coordinate of first control point
+ * @x2: X coordinate of second control point
+ * @y2: Y coordinate of second control point
+ * @radius: Radius of the circle
  *
  * Implements arc-to according to the HTML Canvas spec.
  *
@@ -1538,7 +1546,7 @@ gsk_path_builder_html_arc_to (GskPathBuilder *self,
   g_return_if_fail (radius > 0);
 
   angle = angle_between_points (&GRAPHENE_POINT_INIT (x1, y1),
-                                &self->current_point.pt,
+                                &self->current_point,
                                 &GRAPHENE_POINT_INIT (x2, y2));
 
   if (fabsf (angle) < 3)
@@ -1549,7 +1557,7 @@ gsk_path_builder_html_arc_to (GskPathBuilder *self,
 
   b = radius / tanf (fabsf ((float) DEG_TO_RAD (angle / 2)));
 
-  graphene_vec2_init (&t, self->current_point.pt.x - x1, self->current_point.pt.y - y1);
+  graphene_vec2_init (&t, self->current_point.x - x1, self->current_point.y - y1);
   graphene_vec2_normalize (&t, &t);
 
   p.x = x1 + b * graphene_vec2_get_x (&t);
@@ -1568,12 +1576,12 @@ gsk_path_builder_html_arc_to (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_rel_html_arc_to:
- * @self: a path builder
- * @x1: x coordinate of first control point
- * @y1: y coordinate of first control point
- * @x2: x coordinate of second control point
- * @y2: y coordinate of second control point
- * @radius: radius of the circle
+ * @self: a `GskPathBuilder`
+ * @x1: X coordinate of first control point
+ * @y1: Y coordinate of first control point
+ * @x2: X coordinate of second control point
+ * @y2: Y coordinate of second control point
+ * @radius: Radius of the circle
  *
  * Implements arc-to according to the HTML Canvas spec.
  *
@@ -1592,16 +1600,16 @@ gsk_path_builder_rel_html_arc_to (GskPathBuilder *self,
                                   float           radius)
 {
   gsk_path_builder_html_arc_to (self,
-                                self->current_point.pt.x + x1,
-                                self->current_point.pt.y + y1,
-                                self->current_point.pt.x + x2,
-                                self->current_point.pt.y + y2,
+                                self->current_point.x + x1,
+                                self->current_point.y + y1,
+                                self->current_point.x + x2,
+                                self->current_point.y + y2,
                                 radius);
 }
 
 /**
  * gsk_path_builder_add_layout:
- * @self: a path builder
+ * @self: a #GskPathBuilder
  * @layout: the pango layout to add
  *
  * Adds the outlines for the glyphs in @layout to the builder.
@@ -1631,12 +1639,12 @@ gsk_path_builder_add_layout (GskPathBuilder *self,
 
 /**
  * gsk_path_builder_add_segment:
- * @self: a path builder
- * @path: the path to take the segment to
+ * @self: a `GskPathBuilder`
+ * @path: the `GskPath` to take the segment to
  * @start: the point on @path to start at
  * @end: the point on @path to end at
  *
- * Adds a segment of a path to the builder.
+ * Adds to @self the segment of @path from @start to @end.
  *
  * If @start is equal to or after @end, the path will first add the
  * segment from @start to the end of the path, and then add the segment
@@ -1656,7 +1664,7 @@ gsk_path_builder_add_segment (GskPathBuilder     *self,
 {
   const GskContour *contour;
   gsize n_contours = gsk_path_get_n_contours (path);
-  GskAlignedPoint current;
+  graphene_point_t current;
   gsize n_ops;
 
   g_return_if_fail (self != NULL);
@@ -1708,42 +1716,4 @@ gsk_path_builder_add_segment (GskPathBuilder     *self,
 out:
   gsk_path_builder_end_current (self);
   self->current_point = current;
-}
-
-void
-gsk_path_builder_add_op (GskPathBuilder         *builder,
-                         GskPathOperation        op,
-                         const graphene_point_t *pts,
-                         gsize                   n_pts,
-                         float                   weight)
-{
-  switch (op)
-    {
-    case GSK_PATH_MOVE:
-      gsk_path_builder_move_to (builder, pts[0].x, pts[0].y);
-      break;
-
-    case GSK_PATH_CLOSE:
-      gsk_path_builder_close (builder);
-      break;
-
-    case GSK_PATH_LINE:
-      gsk_path_builder_line_to (builder, pts[1].x, pts[1].y);
-      break;
-
-    case GSK_PATH_CUBIC:
-      gsk_path_builder_cubic_to (builder, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
-      break;
-
-    case GSK_PATH_QUAD:
-      gsk_path_builder_quad_to (builder, pts[1].x, pts[1].y, pts[2].x, pts[2].y);
-      break;
-
-    case GSK_PATH_CONIC:
-      gsk_path_builder_conic_to (builder, pts[1].x, pts[1].y, pts[2].x, pts[2].y, weight);
-      break;
-
-    default:
-      g_assert_not_reached ();
-    }
 }

@@ -38,16 +38,18 @@ gtk_css_value_initial_free (GtkCssValue *value)
 }
 
 static GtkCssValue *
-gtk_css_value_initial_compute (GtkCssValue          *value,
-                               guint                 property_id,
-                               GtkCssComputeContext *context)
+gtk_css_value_initial_compute (GtkCssValue      *value,
+                               guint             property_id,
+                               GtkStyleProvider *provider,
+                               GtkCssStyle      *style,
+                               GtkCssStyle      *parent_style)
 {
   GtkSettings *settings;
 
   switch (property_id)
     {
     case GTK_CSS_PROPERTY_DPI:
-      settings = gtk_style_provider_get_settings (context->provider);
+      settings = gtk_style_provider_get_settings (provider);
       if (settings)
         {
           int dpi_int;
@@ -55,12 +57,12 @@ gtk_css_value_initial_compute (GtkCssValue          *value,
           g_object_get (settings, "gtk-xft-dpi", &dpi_int, NULL);
 
           if (dpi_int > 0.0)
-            return gtk_css_number_value_new (dpi_int / 1024., GTK_CSS_NUMBER);
+            return _gtk_css_number_value_new (dpi_int / 1024., GTK_CSS_NUMBER);
         }
       break;
 
     case GTK_CSS_PROPERTY_FONT_FAMILY:
-      settings = gtk_style_provider_get_settings (context->provider);
+      settings = gtk_style_provider_get_settings (provider);
       if (settings && gtk_settings_get_font_family (settings) != NULL)
         return _gtk_css_array_value_new (_gtk_css_string_value_new (gtk_settings_get_font_family (settings)));
       break;
@@ -69,9 +71,11 @@ gtk_css_value_initial_compute (GtkCssValue          *value,
       break;
     }
 
-  return gtk_css_value_compute (_gtk_css_style_property_get_initial_value (_gtk_css_style_property_lookup_by_id (property_id)),
+  return _gtk_css_value_compute (_gtk_css_style_property_get_initial_value (_gtk_css_style_property_lookup_by_id (property_id)),
                                  property_id,
-                                 context);
+                                 provider,
+                                 style,
+                                 parent_style);
 }
 
 static gboolean
@@ -101,7 +105,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_INITIAL = {
   "GtkCssInitialValue",
   gtk_css_value_initial_free,
   gtk_css_value_initial_compute,
-  NULL,
   gtk_css_value_initial_equal,
   gtk_css_value_initial_transition,
   NULL,
@@ -114,7 +117,7 @@ static GtkCssValue initial = { &GTK_CSS_VALUE_INITIAL, 1 };
 GtkCssValue *
 _gtk_css_initial_value_new (void)
 {
-  return gtk_css_value_ref (&initial);
+  return _gtk_css_value_ref (&initial);
 }
 
 GtkCssValue *
@@ -123,10 +126,14 @@ _gtk_css_initial_value_get (void)
   return &initial;
 }
 GtkCssValue *
-_gtk_css_initial_value_new_compute (guint                 property_id,
-                                    GtkCssComputeContext *context)
+_gtk_css_initial_value_new_compute (guint             property_id,
+                                    GtkStyleProvider *provider,
+                                    GtkCssStyle      *style,
+                                    GtkCssStyle      *parent_style)
 {
   return gtk_css_value_initial_compute (NULL,
                                         property_id,
-                                        context);
+                                        provider,
+                                        style,
+                                        parent_style);
 }

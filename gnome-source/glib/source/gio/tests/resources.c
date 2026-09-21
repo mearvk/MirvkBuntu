@@ -24,7 +24,6 @@
 #include "gconstructor.h"
 #include "test_resources2.h"
 #include "digit_test_resources.h"
-#include "gvdb/gvdb-builder.h"
 
 #ifdef _MSC_VER
 # define MODULE_FILENAME_PREFIX ""
@@ -403,55 +402,6 @@ test_resource_data_empty (void)
 }
 
 static void
-test_resource_data_corrupt_compression (void)
-{
-  GFile *resource_file = NULL;
-  GBytes *resource_bytes = NULL, *corrupt_bytes = NULL, *data_bytes = NULL;
-  guint8 *corrupt_data = NULL;
-  GResource *resource = NULL;
-  GError *local_error = NULL;
-
-  g_test_summary ("Test error handling for corrupt GResource files (specifically, corrupt zlib compression).");
-
-  resource_file = g_file_new_for_path (g_test_get_filename (G_TEST_BUILT, "test6.gresource", NULL));
-  resource_bytes = g_file_load_bytes (resource_file, NULL, NULL, &local_error);
-  g_assert_no_error (local_error);
-  g_clear_object (&resource_file);
-
-  /* Test loading the resource normally, to check it works. */
-  resource = g_resource_new_from_data (resource_bytes, &local_error);
-  g_assert_no_error (local_error);
-
-  data_bytes = g_resource_lookup_data (resource, "/test-corrupt-compression.txt",
-                                       G_RESOURCE_LOOKUP_FLAGS_NONE, &local_error);
-  g_assert_no_error (local_error);
-  g_assert_nonnull (data_bytes);
-  g_clear_pointer (&data_bytes, g_bytes_unref);
-
-  g_clear_pointer (&resource, g_resource_unref);
-
-  /* Modify the data to zero out bytes 0x90 to 0x100. These are comfortably
-   * within the compressed file data, so should break that while not breaking
-   * the GVDB header. */
-  corrupt_data = g_memdup2 (g_bytes_get_data (resource_bytes, NULL), g_bytes_get_size (resource_bytes));
-  memset (corrupt_data + 0x90, 0, 0x10);
-  corrupt_bytes = g_bytes_new_take (g_steal_pointer (&corrupt_data), g_bytes_get_size (resource_bytes));
-
-  resource = g_resource_new_from_data (corrupt_bytes, &local_error);
-  g_assert_no_error (local_error);
-  g_bytes_unref (corrupt_bytes);
-
-  data_bytes = g_resource_lookup_data (resource, "/test-corrupt-compression.txt",
-                                       G_RESOURCE_LOOKUP_FLAGS_NONE, &local_error);
-  g_assert_error (local_error, G_RESOURCE_ERROR, G_RESOURCE_ERROR_INTERNAL);
-  g_assert_null (data_bytes);
-  g_clear_error (&local_error);
-
-  g_clear_pointer (&resource_bytes, g_bytes_unref);
-  g_clear_pointer (&resource, g_resource_unref);
-}
-
-static void
 test_resource_registered (void)
 {
   GResource *resource;
@@ -602,20 +552,6 @@ test_resource_registered (void)
 				&size, &flags, &error);
   g_assert_false (found);
   g_assert_error (error, G_RESOURCE_ERROR, G_RESOURCE_ERROR_NOT_FOUND);
-  g_clear_error (&error);
-
-  data = g_resources_lookup_data ("/test1.txt",
-                                  G_RESOURCE_LOOKUP_FLAGS_NONE,
-                                  &error);
-  g_assert_error (error, G_RESOURCE_ERROR, G_RESOURCE_ERROR_NOT_FOUND);
-  g_assert_null (data);
-  g_clear_error (&error);
-
-  in = g_resources_open_stream ("/test1.txt",
-				G_RESOURCE_LOOKUP_FLAGS_NONE,
-				&error);
-  g_assert_error (error, G_RESOURCE_ERROR, G_RESOURCE_ERROR_NOT_FOUND);
-  g_assert_null (in);
   g_clear_error (&error);
 }
 
@@ -1085,141 +1021,29 @@ test_overlay (void)
 {
   if (g_test_subprocess ())
     {
-      GError *error = NULL;
-      gboolean res;
-      gsize size;
-      char *overlay;
-      char *path;
-      GInputStream *in = NULL;
-      char buffer[128];
-      GBytes *data = NULL;
-      char *expected_overlay_data = NULL;
-      size_t expected_overlay_size = 0;
+       GError *error = NULL;
+       gboolean res;
+       gsize size;
+       char *overlay;
+       char *path;
 
-      path = g_test_build_filename (G_TEST_DIST, "test1.overlay", NULL);
-      res = g_file_get_contents (path, &expected_overlay_data, &expected_overlay_size, NULL);
-      g_assert (res);
+       path = g_test_build_filename (G_TEST_DIST, "test1.overlay", NULL);
+       overlay = g_strconcat ("/auto_loaded/test1.txt=", path, NULL);
 
-      overlay = g_strconcat ("/auto_loaded/test1.txt=", path, NULL);
-      g_setenv ("G_RESOURCE_OVERLAYS", overlay, TRUE);
+       g_setenv ("G_RESOURCE_OVERLAYS", overlay, TRUE);
+       res = g_resources_get_info ("/auto_loaded/test1.txt", 0, &size, NULL, &error);
+       g_assert_true (res);
+       g_assert_no_error (error);
+       /* test1.txt is 6 bytes, test1.overlay is 23 */
+       g_assert_cmpint (size, ==, 23);
 
-      /* Test getting its info. */
-      res = g_resources_get_info ("/auto_loaded/test1.txt", 0, &size, NULL, &error);
-      g_assert_true (res);
-      g_assert_no_error (error);
-      /* test1.txt is 6 bytes, test1.overlay is 23 */
-      g_assert_cmpuint (size, ==, expected_overlay_size);
+       g_free (overlay);
+       g_free (path);
 
-      /* Test it as a stream too. */
-      in = g_resources_open_stream ("/auto_loaded/test1.txt",
-                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
-                                    &error);
-      g_assert_no_error (error);
-      g_assert_nonnull (in);
-
-      res = g_input_stream_read_all (in, buffer, sizeof (buffer) - 1,
-                                     &size,
-                                     NULL, &error);
-      g_assert_no_error (error);
-      g_assert_true (res);
-      g_assert_cmpuint (size, ==, expected_overlay_size);
-
-      g_input_stream_close (in, NULL, &error);
-      g_assert_no_error (error);
-      g_clear_object (&in);
-
-      /* Test data lookup. */
-      data = g_resources_lookup_data ("/auto_loaded/test1.txt",
-                                      G_RESOURCE_LOOKUP_FLAGS_NONE,
-                                      &error);
-      g_assert_nonnull (data);
-      g_assert_no_error (error);
-      size = g_bytes_get_size (data);
-      g_assert_cmpuint (size, ==, expected_overlay_size);
-      g_assert_cmpstr (g_bytes_get_data (data, NULL), ==, expected_overlay_data);
-      g_bytes_unref (data);
-
-      g_free (overlay);
-      g_free (path);
-      g_free (expected_overlay_data);
-
-      return;
+       return;
     }
   g_test_trap_subprocess (NULL, 0, G_TEST_SUBPROCESS_INHERIT_STDERR);
   g_test_trap_assert_passed ();
-}
-
-static void
-test_resource_has_children (void)
-{
-  GResource *resource;
-  GError *error = NULL;
-
-  g_assert_true (g_resources_has_children ("/auto_loaded"));
-  g_assert_true (g_resources_has_children ("/auto_loaded/"));
-  g_assert_false (g_resources_has_children ("/auto_loaded/test1.txt"));
-  g_assert_false (g_resources_has_children ("/no/such/prefix"));
-  g_assert_false (g_resources_has_children (""));
-
-  resource = g_resource_load (g_test_get_filename (G_TEST_BUILT, "test.gresource", NULL), &error);
-  g_assert_nonnull (resource);
-  g_assert_no_error (error);
-
-  g_assert_true (g_resource_has_children (resource, "/a_prefix"));
-  g_assert_true (g_resource_has_children (resource, "/a_prefix/"));
-  g_assert_false (g_resource_has_children (resource, "/a_prefix/test2.txt"));
-  g_assert_false (g_resource_has_children (resource, "/no/such/prefix"));
-  g_assert_false (g_resource_has_children (resource, ""));
-
-  g_resource_unref (resource);
-}
-
-static void
-test_resource_data_empty_entry (void)
-{
-  GHashTable *table;
-  GvdbItem *item;
-  GVariantBuilder builder;
-  GVariant *v_data;
-  GBytes *bytes;
-  GResource *resource;
-  GBytes *data;
-  GError *error = NULL;
-
-  g_test_summary ("Test looking up a resource entry with zero-length data. "
-                   "This is a regression test: the code used to subtract 1 from "
-                   "the data length without checking for zero, causing underflow.");
-
-  table = gvdb_hash_table_new (NULL, NULL);
-
-  item = gvdb_hash_table_insert (table, "/empty/data.txt");
-  gvdb_item_set_parent (item,
-                        gvdb_hash_table_insert (table, "/empty/"));
-
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("(uuay)"));
-  g_variant_builder_add (&builder, "u", GUINT32_TO_LE (5)); /* size (uncompressed) */
-  g_variant_builder_add (&builder, "u", 0); /* flags (not compressed) */
-  v_data = g_variant_new_from_data (G_VARIANT_TYPE ("ay"),
-                                    NULL, 0, TRUE, NULL, NULL);
-  g_variant_builder_add_value (&builder, v_data);
-  gvdb_item_set_value (item, g_variant_builder_end (&builder));
-
-  bytes = gvdb_table_get_contents (table, FALSE);
-  g_hash_table_unref (table);
-
-  resource = g_resource_new_from_data (bytes, &error);
-  g_assert_no_error (error);
-  g_assert_nonnull (resource);
-
-  data = g_resource_lookup_data (resource, "/empty/data.txt",
-                                 G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-  g_assert_no_error (error);
-  g_assert_nonnull (data);
-  g_assert_cmpuint (g_bytes_get_size (data), ==, 0);
-  g_bytes_unref (data);
-
-  g_resource_unref (resource);
-  g_bytes_unref (bytes);
 }
 
 int
@@ -1236,7 +1060,6 @@ main (int   argc,
   g_test_add_func ("/resource/data", test_resource_data);
   g_test_add_func ("/resource/data_unaligned", test_resource_data_unaligned);
   g_test_add_func ("/resource/data-corrupt", test_resource_data_corrupt);
-  g_test_add_func ("/resource/data-corrupt-compression", test_resource_data_corrupt_compression);
   g_test_add_func ("/resource/data-empty", test_resource_data_empty);
   g_test_add_func ("/resource/registered", test_resource_registered);
   g_test_add_func ("/resource/manual", test_resource_manual);
@@ -1252,8 +1075,6 @@ main (int   argc,
   g_test_add_func ("/resource/64k", test_resource_64k);
   g_test_add_func ("/resource/overlay", test_overlay);
   g_test_add_func ("/resource/digits", test_resource_digits);
-  g_test_add_func ("/resource/has-children", test_resource_has_children);
-  g_test_add_func ("/resource/data-empty-entry", test_resource_data_empty_entry);
 
   return g_test_run();
 }

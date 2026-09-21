@@ -20,7 +20,7 @@
 /**
  * GtkGestureDrag:
  *
- * Recognizes drag gestures.
+ * `GtkGestureDrag` is a `GtkGesture` implementation for drags.
  *
  * The drag operation itself can be tracked throughout the
  * [signal@Gtk.GestureDrag::drag-begin],

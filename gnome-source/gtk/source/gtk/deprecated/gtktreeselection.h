@@ -46,8 +46,6 @@ G_BEGIN_DECLS
  * change the selection.
  *
  * Returns: %TRUE, if the selection state of the row can be toggled
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef gboolean (* GtkTreeSelectionFunc)    (GtkTreeSelection  *selection,
 					      GtkTreeModel      *model,
@@ -64,8 +62,6 @@ typedef gboolean (* GtkTreeSelectionFunc)    (GtkTreeSelection  *selection,
  *
  * A function used by gtk_tree_selection_selected_foreach() to map all
  * selected rows.  It will be called on every selected row in the view.
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef void (* GtkTreeSelectionForeachFunc) (GtkTreeModel      *model,
 					      GtkTreePath       *path,
@@ -74,7 +70,7 @@ typedef void (* GtkTreeSelectionForeachFunc) (GtkTreeModel      *model,
 
 
 GDK_AVAILABLE_IN_ALL
-GType            gtk_tree_selection_get_type            (void);
+GType            gtk_tree_selection_get_type            (void) G_GNUC_CONST;
 
 GDK_DEPRECATED_IN_4_10
 void             gtk_tree_selection_set_mode            (GtkTreeSelection            *selection,

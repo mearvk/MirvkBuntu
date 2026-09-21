@@ -26,7 +26,6 @@
 #include "gskpathprivate.h"
 #include "gskpathpoint.h"
 #include "gskstrokeprivate.h"
-#include "gskroundedrectprivate.h"
 
 #include <float.h>
 
@@ -54,8 +53,6 @@ struct _GskContourClass
   void                  (* print)               (const GskContour       *contour,
                                                  GString                *string);
   gboolean              (* get_bounds)          (const GskContour       *contour,
-                                                 GskBoundingBox         *bounds);
-  gboolean              (* get_tight_bounds)    (const GskContour       *contour,
                                                  GskBoundingBox         *bounds);
   gboolean              (* get_stroke_bounds)   (const GskContour       *contour,
                                                  const GskStroke        *stroke,
@@ -100,8 +97,6 @@ struct _GskContourClass
   float                 (* get_distance)        (const GskContour       *contour,
                                                  const GskPathPoint     *point,
                                                  gpointer                measure_data);
-  gboolean              (* equal)               (const GskContour       *contour1,
-                                                 const GskContour       *contour2);
 };
 
 /* {{{ Utilities */
@@ -130,7 +125,7 @@ _g_string_append_float (GString    *string,
   char buf[G_ASCII_DTOSTR_BUF_SIZE];
 
   g_string_append (string, prefix);
-  g_ascii_dtostr (buf, sizeof (buf), f);
+  g_ascii_formatd (buf, G_ASCII_DTOSTR_BUF_SIZE, "%.9g", f);
   g_string_append (string, buf);
 }
 
@@ -243,7 +238,7 @@ typedef struct
   float threshold;
   gsize idx;
   gsize best_idx;
-  float best_t;
+  gsize best_t;
 } ClosestPointData;
 
 static gboolean
@@ -537,7 +532,7 @@ struct _GskStandardContour
 
   gsize n_ops;
   gsize n_points;
-  GskAlignedPoint *points;
+  graphene_point_t *points;
   gskpathop ops[];
 };
 
@@ -545,27 +540,19 @@ static gsize
 gsk_standard_contour_compute_size (gsize n_ops,
                                    gsize n_points)
 {
-  const gsize point_align = G_ALIGNOF (GskAlignedPoint);
-  const gsize align = MAX (G_ALIGNOF (GskAlignedPoint),
-                           MAX (G_ALIGNOF (gpointer),
-                                G_ALIGNOF (GskStandardContour)));
-  gsize s = sizeof (GskStandardContour);
-
-  s += sizeof (gskpathop) * n_ops;
-
-  /* The array of points needs to be 8-byte aligned, but on 32-bit,
-   * a single entry in ops might only be 4 bytes, so we might need
-   * 4 bytes of padding before starting the array of points */
-  s += (point_align - (s % point_align));
-  s += sizeof (GskAlignedPoint) * n_points;
-
+  gsize align = MAX (G_ALIGNOF (graphene_point_t),
+                     MAX (G_ALIGNOF (gpointer),
+                          G_ALIGNOF (GskStandardContour)));
+  gsize s = sizeof (GskStandardContour)
+          + sizeof (gskpathop) * n_ops
+          + sizeof (graphene_point_t) * n_points;
   return s + (align - (s % align));
 }
 
 static void
 gsk_standard_contour_init (GskContour             *contour,
                            GskPathFlags            flags,
-                           const GskAlignedPoint  *points,
+                           const graphene_point_t *points,
                            gsize                   n_points,
                            const gskpathop        *ops,
                            gsize                   n_ops,
@@ -638,8 +625,8 @@ gsk_standard_contour_reverse (const GskContour *contour)
 
   builder = gsk_path_builder_new ();
 
-  gsk_path_builder_move_to (builder, self->points[self->n_points - 1].pt.x,
-                                     self->points[self->n_points - 1].pt.y);
+  gsk_path_builder_move_to (builder, self->points[self->n_points - 1].x,
+                                     self->points[self->n_points - 1].y);
 
   for (int i = self->n_ops - 1; i >= 0; i--)
     gsk_pathop_foreach (self->ops[i], add_reverse, builder);
@@ -676,43 +663,6 @@ gsk_standard_contour_get_bounds (const GskContour *contour,
     return FALSE;
 
   *bounds = self->bounds;
-
-  return bounds->max.x > bounds->min.x && bounds->max.y > bounds->min.y;
-}
-
-static gboolean
-add_tight_bounds (GskPathOperation        op,
-                  const graphene_point_t *pts,
-                  gsize                   n_pts,
-                  float                   weight,
-                  gpointer                user_data)
-{
-  GskBoundingBox *bounds = user_data;
-  GskCurve c;
-  GskBoundingBox b;
-
-  if (op == GSK_PATH_MOVE)
-    return TRUE;
-
-  gsk_curve_init_foreach (&c, op, pts, n_pts, weight);
-  gsk_curve_get_tight_bounds (&c, &b);
-  gsk_bounding_box_union (&b, bounds, bounds);
-
-  return TRUE;
-}
-
-static gboolean
-gsk_standard_contour_get_tight_bounds (const GskContour *contour,
-                                       GskBoundingBox   *bounds)
-{
-  const GskStandardContour *self = (const GskStandardContour *) contour;
-
-  if (self->n_points == 0)
-    return FALSE;
-
-  gsk_bounding_box_init (bounds, &self->points[0].pt, &self->points[0].pt);
-  for (gsize i = 0; i < self->n_ops; i ++)
-    gsk_pathop_foreach (self->ops[i], add_tight_bounds, bounds);
 
   return bounds->max.x > bounds->min.x && bounds->max.y > bounds->min.y;
 }
@@ -764,8 +714,8 @@ gsk_standard_contour_get_winding (const GskContour       *contour,
       GskCurve c;
 
       gsk_curve_init (&c, gsk_pathop_encode (GSK_PATH_CLOSE,
-                                             (const GskAlignedPoint[]) { self->points[self->n_points - 1],
-                                                                         self->points[0] }));
+                                             (const graphene_point_t[]) { self->points[self->n_points - 1],
+                                                                          self->points[0] }));
 
       winding += gsk_curve_get_crossing (&c, point);
     }
@@ -798,7 +748,7 @@ gsk_standard_contour_get_closest_point (const GskContour       *contour,
     {
       float dist;
 
-      dist = graphene_point_distance (point, &self->points[0].pt, NULL, NULL);
+      dist = graphene_point_distance (point, &self->points[0], NULL, NULL);
       if (dist <= threshold)
         {
           *out_dist = dist;
@@ -849,7 +799,7 @@ gsk_standard_contour_get_position (const GskContour   *contour,
 
   if (G_UNLIKELY (point->idx == 0))
     {
-      *position = self->points[0].pt;
+      *position = self->points[0];
       return;
     }
 
@@ -1029,16 +979,12 @@ add_measure (const GskCurve *curve,
              float           tolerance,
              float           t1,
              float           l1,
-             GArray         *array,
-             int             depth)
+             GArray         *array)
 {
   GskCurve c;
   float ll, l0;
   float t0;
   CurvePoint *p;
-
-  if (depth > 10)
-    goto done;
 
   /* Check if we can add (t1, length + l1) without further
    * splitting. We check two things:
@@ -1067,8 +1013,8 @@ done:
     }
   else
     {
-      add_measure (curve, idx, length, tolerance, t0, l0, array, depth + 1);
-      add_measure (curve, idx, length, tolerance, t1, l1, array, depth + 1);
+      add_measure (curve, idx, length, tolerance, t0, l0, array);
+      add_measure (curve, idx, length, tolerance, t1, l1, array);
     }
 }
 
@@ -1109,10 +1055,10 @@ add_samples (const GskStandardContour  *self,
   for (int j = 0; j < n; j++)
     {
       float l = gsk_curve_get_length_to (&curve, t[j]);
-      add_measure (&curve, curve_measure->idx, l0, measure->tolerance, t[j], l, measure->points, 0);
+      add_measure (&curve, curve_measure->idx, l0, measure->tolerance, t[j], l, measure->points);
     }
 
-  add_measure (&curve, curve_measure->idx, l0, measure->tolerance, 1, l1 - l0, measure->points, 0);
+  add_measure (&curve, curve_measure->idx, l0, measure->tolerance, 1, l1 - l0, measure->points);
 
   curve_measure->first = first;
   curve_measure->n_samples = measure->points->len - first;
@@ -1311,32 +1257,6 @@ gsk_standard_contour_get_distance (const GskContour   *contour,
   return p0->length * (1 - fraction) + p1->length * fraction;
 }
 
-static gboolean
-gsk_standard_contour_equal (const GskContour *contour1,
-                            const GskContour *contour2)
-{
-  const GskStandardContour *std1 = (const GskStandardContour *) contour1;
-  const GskStandardContour *std2 = (const GskStandardContour *) contour2;
-
-  if (std1->n_ops != std2->n_ops || std1->n_points != std2->n_points)
-    return FALSE;
-
-  for (gsize i = 0; i < std1->n_ops; i++)
-    {
-      if (gsk_pathop_op (std1->ops[i]) != gsk_pathop_op (std2->ops[i]))
-        return FALSE;
-    }
-
-  for (gsize i = 0; i < std1->n_points; i++)
-    {
-      if (std1->points[i].pt.x != std2->points[i].pt.x ||
-          std1->points[i].pt.y != std2->points[i].pt.y)
-        return FALSE;
-    }
-
-  return TRUE;
-}
-
 static const GskContourClass GSK_STANDARD_CONTOUR_CLASS =
 {
   sizeof (GskStandardContour),
@@ -1346,7 +1266,6 @@ static const GskContourClass GSK_STANDARD_CONTOUR_CLASS =
   gsk_standard_contour_get_flags,
   gsk_contour_print_default,
   gsk_standard_contour_get_bounds,
-  gsk_standard_contour_get_tight_bounds,
   gsk_standard_contour_get_stroke_bounds,
   gsk_standard_contour_foreach,
   gsk_standard_contour_reverse,
@@ -1361,7 +1280,6 @@ static const GskContourClass GSK_STANDARD_CONTOUR_CLASS =
   gsk_standard_contour_free_measure,
   gsk_standard_contour_get_point,
   gsk_standard_contour_get_distance,
-  gsk_standard_contour_equal,
 };
 
 /* You must ensure the contour has enough size allocated,
@@ -1370,47 +1288,36 @@ static const GskContourClass GSK_STANDARD_CONTOUR_CLASS =
 static void
 gsk_standard_contour_init (GskContour             *contour,
                            GskPathFlags            flags,
-                           const GskAlignedPoint  *points,
+                           const graphene_point_t *points,
                            gsize                   n_points,
                            const gskpathop        *ops,
                            gsize                   n_ops,
                            gssize                  offset)
 
 {
-  const gsize align = G_ALIGNOF (GskAlignedPoint);
   GskStandardContour *self = (GskStandardContour *) contour;
-  guint8 *points_addr;
 
   self->contour.klass = &GSK_STANDARD_CONTOUR_CLASS;
 
   self->flags = flags;
   self->n_ops = n_ops;
   self->n_points = n_points;
-  points_addr = (guint8 *) &self->ops[n_ops];
-  /* The array of points needs to be 8-byte aligned, but on 32-bit,
-   * a single entry in ops might only be 4 bytes, so we might need
-   * 4 bytes of padding before starting the array of points. */
-  points_addr += align - (((gsize) points_addr) % align);
-  self->points = (GskAlignedPoint *) points_addr;
+  self->points = (graphene_point_t *) &self->ops[n_ops];
   memcpy (self->points, points, sizeof (graphene_point_t) * n_points);
 
   offset += self->points - points;
-  /* The points of ops[] may be encoded relative to NULL (see gskpathbuilder.c),
-   * so do the offsetting in the integer domain to avoid overflowing a pointer.
-   */
   for (gsize i = 0; i < n_ops; i++)
     self->ops[i] = gsk_pathop_encode (gsk_pathop_op (ops[i]),
-                                      GSIZE_TO_POINTER (GPOINTER_TO_SIZE (gsk_pathop_aligned_points (ops[i])) +
-                                                        (gsize) offset * sizeof (GskAlignedPoint)));
+                                      gsk_pathop_points (ops[i]) + offset);
 
-  gsk_bounding_box_init (&self->bounds,  &self->points[0].pt, &self->points[0].pt);
+  gsk_bounding_box_init (&self->bounds,  &self->points[0], &self->points[0]);
   for (gsize i = 1; i < self->n_points; i ++)
-    gsk_bounding_box_expand (&self->bounds, &self->points[i].pt);
+    gsk_bounding_box_expand (&self->bounds, &self->points[i]);
 }
 
 GskContour *
 gsk_standard_contour_new (GskPathFlags            flags,
-                          const GskAlignedPoint  *points,
+                          const graphene_point_t *points,
                           gsize                   n_points,
                           const gskpathop        *ops,
                           gsize                   n_ops,
@@ -1423,38 +1330,6 @@ gsk_standard_contour_new (GskPathFlags            flags,
   gsk_standard_contour_init (contour, flags, points, n_points, ops, n_ops, offset);
 
   return contour;
-}
-
-size_t
-gsk_contour_get_standard_ops (const GskContour *contour,
-                              size_t            n_ops,
-                              GskPathOperation *ops)
-{
-  const GskStandardContour *self = (const GskStandardContour *) contour;
-
-  if (contour->klass != &GSK_STANDARD_CONTOUR_CLASS)
-    return 0;
-
-  for (size_t i = 0; i < MIN (n_ops, self->n_ops); i++)
-    ops[i] = gsk_pathop_op (self->ops[i]);
-
-  return self->n_ops;
-}
-
-size_t
-gsk_contour_get_standard_points (const GskContour *contour,
-                                 size_t            n_points,
-                                 graphene_point_t *points)
-{
-  const GskStandardContour *self = (const GskStandardContour *) contour;
-
-  if (contour->klass != &GSK_STANDARD_CONTOUR_CLASS)
-    return 0;
-
-  for (size_t i = 0; i < MIN (n_points, self->n_points); i++)
-    points[i] = self->points[i].pt;
-
-  return self->n_points;
 }
 
 /* }}} */
@@ -1483,10 +1358,7 @@ gsk_circle_contour_copy (const GskContour *contour,
 static GskPathFlags
 gsk_circle_contour_get_flags (const GskContour *contour)
 {
-  const GskCircleContour *self = (const GskCircleContour *) contour;
-
-  return GSK_PATH_CLOSED |
-         (self->radius == 0 ? GSK_PATH_ZERO_LENGTH : 0);
+  return GSK_PATH_CLOSED;
 }
 
 static void
@@ -1545,13 +1417,12 @@ gsk_circle_contour_get_stroke_bounds (const GskContour *contour,
                                       GskBoundingBox   *bounds)
 {
   const GskCircleContour *self = (const GskCircleContour *) contour;
-  float offset = stroke->line_width / 2;
 
   gsk_bounding_box_init (bounds,
-                         &GRAPHENE_POINT_INIT (self->center.x - self->radius - offset,
-                                               self->center.y - self->radius - offset),
-                         &GRAPHENE_POINT_INIT (self->center.x + self->radius + offset,
-                                               self->center.y + self->radius + offset));
+                         &GRAPHENE_POINT_INIT (self->center.x - self->radius - stroke->line_width,
+                                               self->center.y - self->radius - stroke->line_width),
+                         &GRAPHENE_POINT_INIT (self->center.x + self->radius + stroke->line_width/2,
+                                               self->center.y + self->radius + stroke->line_width));
 
   return TRUE;
 }
@@ -1632,14 +1503,10 @@ gsk_circle_contour_get_closest_point (const GskContour       *contour,
                                       float                  *out_dist)
 {
   const GskCircleContour *self = (const GskCircleContour *) contour;
-  float d, dist, angle, t;
+  float dist, angle, t;
   gsize idx;
 
-  d = graphene_point_distance (&self->center, point, NULL, NULL);
-  if (d > self->radius)
-    dist = d - self->radius;
-  else
-    dist = self->radius - d;
+  dist = fabsf (graphene_point_distance (&self->center, point, NULL, NULL) - self->radius);
 
   if (dist > threshold)
     return FALSE;
@@ -1665,8 +1532,6 @@ gsk_circle_contour_get_closest_point (const GskContour       *contour,
 
   result->idx = idx;
   result->t = t;
-
-  *out_dist = dist;
 
   return TRUE;
 }
@@ -1724,10 +1589,7 @@ gsk_circle_contour_get_tangent (const GskContour   *contour,
 
   gsk_circle_contour_get_position (contour, point, &p);
 
-  if (direction == GSK_PATH_TO_END || direction == GSK_PATH_FROM_START)
-    graphene_vec2_init (tangent, - p.y + self->center.y, p.x - self->center.x);
-  else
-    graphene_vec2_init (tangent, p.y - self->center.y, - p.x + self->center.x);
+  graphene_vec2_init (tangent, - p.y + self->center.y, p.x - self->center.x);
   graphene_vec2_normalize (tangent, tangent);
 }
 
@@ -1845,19 +1707,6 @@ gsk_circle_contour_get_distance (const GskContour   *contour,
   return M_PI_2 * self->radius * (idx - 1 + t);
 }
 
-static gboolean
-gsk_circle_contour_equal (const GskContour *contour1,
-                          const GskContour *contour2)
-{
-  const GskCircleContour *c1 = (const GskCircleContour *) contour1;
-  const GskCircleContour *c2 = (const GskCircleContour *) contour2;
-
-  return c1->radius == c2->radius &&
-         c1->center.x == c2->center.x &&
-         c1->center.y == c2->center.y &&
-         c1->ccw == c2->ccw;
-}
-
 static const GskContourClass GSK_CIRCLE_CONTOUR_CLASS =
 {
   sizeof (GskCircleContour),
@@ -1866,7 +1715,6 @@ static const GskContourClass GSK_CIRCLE_CONTOUR_CLASS =
   gsk_contour_get_size_default,
   gsk_circle_contour_get_flags,
   gsk_circle_contour_print,
-  gsk_circle_contour_get_bounds,
   gsk_circle_contour_get_bounds,
   gsk_circle_contour_get_stroke_bounds,
   gsk_circle_contour_foreach,
@@ -1882,7 +1730,6 @@ static const GskContourClass GSK_CIRCLE_CONTOUR_CLASS =
   gsk_circle_contour_free_measure,
   gsk_circle_contour_get_point,
   gsk_circle_contour_get_distance,
-  gsk_circle_contour_equal,
 };
 
 GskContour *
@@ -1897,29 +1744,12 @@ gsk_circle_contour_new (const graphene_point_t *center,
 
   self->contour.klass = &GSK_CIRCLE_CONTOUR_CLASS;
 
+  self->contour.klass = &GSK_CIRCLE_CONTOUR_CLASS;
   self->center = *center;
   self->radius = radius;
   self->ccw = FALSE;
 
   return (GskContour *) self;
-}
-
-gboolean
-gsk_contour_get_circle (const GskContour *contour,
-                        graphene_point_t *center,
-                        float            *radius,
-                        gboolean         *ccw)
-{
-  const GskCircleContour *self = (const GskCircleContour *) contour;
-
-  if (contour->klass != &GSK_CIRCLE_CONTOUR_CLASS)
-    return FALSE;
-
-  *center = self->center;
-  *radius = self->radius;
-  *ccw = self->ccw;
-
-  return TRUE;
 }
 
 /* }}} */
@@ -1951,11 +1781,7 @@ gsk_rect_contour_copy (const GskContour *contour,
 static GskPathFlags
 gsk_rect_contour_get_flags (const GskContour *contour)
 {
-  const GskRectContour *self = (const GskRectContour *) contour;
-
-  return GSK_PATH_FLAT |
-         GSK_PATH_CLOSED |
-         (self->width == 0 && self->height == 0 ? GSK_PATH_ZERO_LENGTH : 0);
+  return GSK_PATH_FLAT | GSK_PATH_CLOSED;
 }
 
 static void
@@ -2214,19 +2040,6 @@ gsk_rect_contour_get_distance (const GskContour   *contour,
   return distance;
 }
 
-static gboolean
-gsk_rect_contour_equal (const GskContour *contour1,
-                        const GskContour *contour2)
-{
-  const GskRectContour *c1 = (const GskRectContour *) contour1;
-  const GskRectContour *c2 = (const GskRectContour *) contour2;
-
-  return c1->x == c2->x &&
-         c1->y == c2->y &&
-         c1->width == c2->width &&
-         c1->height == c2->height;
-}
-
 static const GskContourClass GSK_RECT_CONTOUR_CLASS =
 {
   sizeof (GskRectContour),
@@ -2235,7 +2048,6 @@ static const GskContourClass GSK_RECT_CONTOUR_CLASS =
   gsk_contour_get_size_default,
   gsk_rect_contour_get_flags,
   gsk_rect_contour_print,
-  gsk_rect_contour_get_bounds,
   gsk_rect_contour_get_bounds,
   gsk_rect_contour_get_stroke_bounds,
   gsk_rect_contour_foreach,
@@ -2251,7 +2063,6 @@ static const GskContourClass GSK_RECT_CONTOUR_CLASS =
   gsk_rect_contour_free_measure,
   gsk_rect_contour_get_point,
   gsk_rect_contour_get_distance,
-  gsk_rect_contour_equal,
 };
 
 GskContour *
@@ -2271,23 +2082,6 @@ gsk_rect_contour_new (const graphene_rect_t *rect)
   self->n_ops = n_ops[(self->width != 0) + (self->height != 0)];
 
   return (GskContour *) self;
-}
-
-gboolean
-gsk_contour_get_rect (const GskContour *contour,
-                      graphene_rect_t  *rect)
-{
-  const GskRectContour *self = (const GskRectContour *) contour;
-
-  if (contour->klass != &GSK_RECT_CONTOUR_CLASS)
-    return FALSE;
-
-  rect->origin.x = self->x;
-  rect->origin.y = self->y;
-  rect->size.width = self->width;
-  rect->size.height = self->height;
-
-  return TRUE;
 }
 
 /* }}} */
@@ -2330,21 +2124,6 @@ gsk_rounded_rect_contour_get_bounds (const GskContour *contour,
   return TRUE;
 }
 
-static gboolean
-gsk_rounded_rect_contour_get_tight_bounds (const GskContour *contour,
-                                           GskBoundingBox   *bounds)
-{
-  GskPath *path;
-  graphene_rect_t b;
-  gboolean ret;
-
-  path = convert_to_standard_contour (contour);
-  ret = gsk_path_get_tight_bounds (path, &b);
-  gsk_bounding_box_init_from_rect (bounds, &b);
-  gsk_path_unref (path);
-
-  return ret;
-}
 static gboolean
 gsk_rounded_rect_contour_get_stroke_bounds (const GskContour *contour,
                                             const GskStroke  *stroke,
@@ -2543,7 +2322,7 @@ gsk_rounded_rect_contour_add_segment (const GskContour   *contour,
 
 typedef struct
 {
-  GskContour *contour;
+  const GskContour *contour;
   gpointer measure_data;
 } RoundedRectMeasureData;
 
@@ -2571,7 +2350,6 @@ gsk_rounded_rect_contour_free_measure (const GskContour *contour,
   RoundedRectMeasureData *data = measure_data;
 
   gsk_standard_contour_free_measure (data->contour, data->measure_data);
-  g_free (data->contour);
   g_free (data);
 }
 
@@ -2596,16 +2374,6 @@ gsk_rounded_rect_contour_get_distance (const GskContour   *contour,
   return gsk_standard_contour_get_distance (data->contour, point, data->measure_data);
 }
 
-static gboolean
-gsk_rounded_rect_contour_equal (const GskContour *contour1,
-                                const GskContour *contour2)
-{
-  const GskRoundedRectContour *c1 = (const GskRoundedRectContour *) contour1;
-  const GskRoundedRectContour *c2 = (const GskRoundedRectContour *) contour2;
-
-  return gsk_rounded_rect_equal (&c1->rect, &c2->rect) && c1->ccw == c2->ccw;
-}
-
 static const GskContourClass GSK_ROUNDED_RECT_CONTOUR_CLASS =
 {
   sizeof (GskRoundedRectContour),
@@ -2615,7 +2383,6 @@ static const GskContourClass GSK_ROUNDED_RECT_CONTOUR_CLASS =
   gsk_rounded_rect_contour_get_flags,
   gsk_contour_print_default,
   gsk_rounded_rect_contour_get_bounds,
-  gsk_rounded_rect_contour_get_tight_bounds,
   gsk_rounded_rect_contour_get_stroke_bounds,
   gsk_rounded_rect_contour_foreach,
   gsk_rounded_rect_contour_reverse,
@@ -2630,7 +2397,6 @@ static const GskContourClass GSK_ROUNDED_RECT_CONTOUR_CLASS =
   gsk_rounded_rect_contour_free_measure,
   gsk_rounded_rect_contour_get_point,
   gsk_rounded_rect_contour_get_distance,
-  gsk_rounded_rect_contour_equal,
 };
 
 static gsize
@@ -2691,20 +2457,6 @@ gsk_rounded_rect_contour_new (const GskRoundedRect *rect)
   return (GskContour *) self;
 }
 
-gboolean
-gsk_contour_get_rounded_rect (const GskContour *contour,
-                              GskRoundedRect   *rect)
-{
-  const GskRoundedRectContour *self = (const GskRoundedRectContour *) contour;
-
-  if (contour->klass != &GSK_ROUNDED_RECT_CONTOUR_CLASS)
-    return FALSE;
-
-  *rect = self->rect;
-
-  return TRUE;
-}
-
 /* }}} */
 /* {{{ API */
 
@@ -2762,13 +2514,6 @@ gsk_contour_get_bounds (const GskContour *self,
                         GskBoundingBox   *bounds)
 {
   return self->klass->get_bounds (self, bounds);
-}
-
-gboolean
-gsk_contour_get_tight_bounds (const GskContour *self,
-                              GskBoundingBox   *bounds)
-{
-  return self->klass->get_tight_bounds (self, bounds);
 }
 
 gboolean
@@ -2889,16 +2634,6 @@ gsk_contour_get_distance (const GskContour   *self,
   return self->klass->get_distance (self, point, measure_data);
 }
 
-gboolean
-gsk_contour_equal (const GskContour *contour1,
-                   const GskContour *contour2)
-{
-  if (contour1->klass != contour2->klass)
-    return FALSE;
-
-  return contour1->klass->equal (contour1, contour2);
-}
-
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

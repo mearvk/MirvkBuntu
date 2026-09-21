@@ -81,17 +81,10 @@ struct _GVfsBackendPrivate
   GMountSpec *mount_spec;
   gboolean block_requests;
 
-  gboolean autounmount;
-  guint idle_id;
-
-  gint activity_count; /* atomic: counts active jobs, open channels and monitors */
-
   GSettings *lockdown_settings;
   gboolean readonly_lockdown;
 };
 
-
-#define AUTOUNMOUNT_TIMEOUT 600 /* seconds */
 
 /* TODO: Real P_() */
 #define P_(_x) (_x)
@@ -165,8 +158,6 @@ g_vfs_backend_finalize (GObject *object)
   g_free (backend->priv->default_location);
   if (backend->priv->mount_spec)
     g_mount_spec_unref (backend->priv->mount_spec);
-
-  g_clear_handle_id (&backend->priv->idle_id, g_source_remove);
 
   g_clear_object (&backend->priv->lockdown_settings);
 
@@ -645,25 +636,16 @@ g_vfs_backend_invocation_first_handler (GVfsDBusMount *object,
   GDBusConnection *connection;
   GCredentials *credentials;
   pid_t pid = -1;
-  g_autofree gchar *comm = NULL;
 
   connection = g_dbus_method_invocation_get_connection (invocation);
   credentials = g_dbus_connection_get_peer_credentials (connection);
   if (credentials)
     pid = g_credentials_get_unix_pid (credentials, NULL);
 
-  if (pid > 0)
-    {
-      g_autofree gchar *comm_path = g_strdup_printf ("/proc/%ld/comm", (long)pid);
-
-      if (g_file_get_contents (comm_path, &comm, NULL, NULL))
-        g_strstrip (comm);
-    }
-
-  g_debug ("backend_dbus_handler %s:%s (pid=%ld comm=%s)\n",
-            g_dbus_method_invocation_get_interface_name (invocation),
-            g_dbus_method_invocation_get_method_name (invocation),
-            (long)pid, comm ? comm : "");
+  g_debug ("backend_dbus_handler %s:%s (pid=%ld)\n",
+           g_dbus_method_invocation_get_interface_name (invocation),
+           g_dbus_method_invocation_get_method_name (invocation),
+           (long)pid);
 
   if (backend->priv->block_requests)
     {
@@ -1090,99 +1072,6 @@ g_vfs_backend_force_unmount (GVfsBackend *backend)
   g_vfs_backend_unregister_mount (backend,
                                   (GAsyncReadyCallback) forced_unregister_mount_callback,
                                   NULL);
-}
-
-static gboolean
-idle_unmount_cb (gpointer user_data)
-{
-  GVfsBackend *backend = G_VFS_BACKEND (user_data);
-
-  backend->priv->idle_id = 0;
-
-  if (backend->priv->block_requests)
-    return G_SOURCE_REMOVE;
-
-  g_debug ("autounmount: idle timeout expired, force unmounting\n");
-
-  g_vfs_backend_force_unmount (backend);
-
-  return G_SOURCE_REMOVE;
-}
-
-/* Must be called from main thread */
-static void
-backend_check_idle (GVfsBackend *backend)
-{
-  if (!backend->priv->autounmount || backend->priv->block_requests)
-    return;
-
-  if (g_atomic_int_get (&backend->priv->activity_count) == 0)
-    {
-      if (backend->priv->idle_id == 0)
-        backend->priv->idle_id = g_timeout_add_seconds (AUTOUNMOUNT_TIMEOUT,
-                                                        idle_unmount_cb,
-                                                        backend);
-    }
-  else
-    {
-      g_clear_handle_id (&backend->priv->idle_id, g_source_remove);
-    }
-}
-
-void
-g_vfs_backend_set_autounmount (GVfsBackend *backend,
-                               gboolean     autounmount)
-{
-  backend->priv->autounmount = autounmount;
-
-  if (!autounmount)
-    g_clear_handle_id (&backend->priv->idle_id, g_source_remove);
-  else
-    backend_check_idle (backend);
-}
-
-static gboolean
-activity_check_main (gpointer user_data)
-{
-  GVfsBackend *backend = G_VFS_BACKEND (user_data);
-
-  backend_check_idle (backend);
-  g_object_unref (backend);
-
-  return G_SOURCE_REMOVE;
-}
-
-/* May be called from any thread. When called from the main thread, the idle
- * timer is cancelled immediately. When called from a worker thread (e.g.
- * for a channel open), the cancellation is marshalled to the main thread. */
-void
-g_vfs_backend_activity_started (GVfsBackend *backend)
-{
-  g_atomic_int_inc (&backend->priv->activity_count);
-  if (g_main_context_is_owner (g_main_context_default ()))
-    g_clear_handle_id (&backend->priv->idle_id, g_source_remove);
-  else
-    g_main_context_invoke_full (NULL,
-                                G_PRIORITY_DEFAULT,
-                                activity_check_main,
-                                g_object_ref (backend),
-                                NULL);
-}
-
-/* May be called from any thread. The idle check is always run on the main
- * thread because idle_id and the timer are not thread-safe. */
-void
-g_vfs_backend_activity_finished (GVfsBackend *backend)
-{
-  g_atomic_int_add (&backend->priv->activity_count, -1);
-  if (g_main_context_is_owner (g_main_context_default ()))
-    backend_check_idle (backend);
-  else
-    g_main_context_invoke_full (NULL,
-                                G_PRIORITY_DEFAULT,
-                                activity_check_main,
-                                g_object_ref (backend),
-                                NULL);
 }
 
 static void

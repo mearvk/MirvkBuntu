@@ -29,8 +29,10 @@ G_BEGIN_DECLS
 
 #define GDK_TYPE_TEXTURE (gdk_texture_get_type ())
 
-GDK_AVAILABLE_IN_ALL
-GDK_DECLARE_INTERNAL_TYPE (GdkTexture, gdk_texture, GDK, TEXTURE, GObject)
+#define GDK_TEXTURE(obj)               (G_TYPE_CHECK_INSTANCE_CAST ((obj), GDK_TYPE_TEXTURE, GdkTexture))
+#define GDK_IS_TEXTURE(obj)            (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GDK_TYPE_TEXTURE))
+
+typedef struct _GdkTextureClass        GdkTextureClass;
 
 #define GDK_TEXTURE_ERROR       (gdk_texture_error_quark ())
 
@@ -57,7 +59,10 @@ typedef enum
   GDK_TEXTURE_ERROR_UNSUPPORTED_FORMAT,
 } GdkTextureError;
 
-GDK_DEPRECATED_IN_4_20
+GDK_AVAILABLE_IN_ALL
+GType                   gdk_texture_get_type                   (void) G_GNUC_CONST;
+
+GDK_AVAILABLE_IN_ALL
 GdkTexture *            gdk_texture_new_for_pixbuf             (GdkPixbuf       *pixbuf);
 GDK_AVAILABLE_IN_ALL
 GdkTexture *            gdk_texture_new_from_resource          (const char      *resource_path);
@@ -78,9 +83,6 @@ int                     gdk_texture_get_height                 (GdkTexture      
 GDK_AVAILABLE_IN_4_10
 GdkMemoryFormat         gdk_texture_get_format                 (GdkTexture      *self) G_GNUC_PURE;
 
-GDK_AVAILABLE_IN_4_16
-GdkColorState *         gdk_texture_get_color_state            (GdkTexture      *self);
-
 GDK_AVAILABLE_IN_ALL
 void                    gdk_texture_download                   (GdkTexture      *texture,
                                                                 guchar          *data,
@@ -96,4 +98,7 @@ gboolean                gdk_texture_save_to_tiff               (GdkTexture      
 GDK_AVAILABLE_IN_4_6
 GBytes *                gdk_texture_save_to_tiff_bytes         (GdkTexture      *texture);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkTexture, g_object_unref)
+
 G_END_DECLS
+

@@ -92,17 +92,15 @@ ping_mutter (InputCaptureSession *session)
 {
   GDBusProxy *proxy = G_DBUS_PROXY (session->proxy);
   GError *error = NULL;
-  g_autoptr (GVariant) reply = NULL;
 
-  reply = g_dbus_connection_call_sync (g_dbus_proxy_get_connection (proxy),
-                                       "org.gnome.Mutter.InputCapture",
-                                       g_dbus_proxy_get_object_path (proxy),
-                                       "org.freedesktop.DBus.Peer",
-                                       "Ping",
-                                       NULL,
-                                       NULL, G_DBUS_CALL_FLAGS_NO_AUTO_START, -1,
-                                       NULL, &error);
-  if (!reply)
+  if (!g_dbus_connection_call_sync (g_dbus_proxy_get_connection (proxy),
+                                    "org.gnome.Mutter.InputCapture",
+                                    g_dbus_proxy_get_object_path (proxy),
+                                    "org.freedesktop.DBus.Peer",
+                                    "Ping",
+                                    NULL,
+                                    NULL, G_DBUS_CALL_FLAGS_NO_AUTO_START, -1,
+                                    NULL, &error))
     g_error ("Failed to ping D-Bus peer: %s", error->message);
 }
 
@@ -181,13 +179,6 @@ input_capture_new (void)
     g_error ("Failed to acquire proxy: %s", error->message);
 
   return input_capture;
-}
-
-static void
-input_capture_free (InputCapture *input_capture)
-{
-  g_clear_object (&input_capture->proxy);
-  g_free (input_capture);
 }
 
 static InputCaptureSession *
@@ -413,7 +404,7 @@ log_handler (struct ei             *ei,
     g_debug ("libei: %.*s", message_length, message);
 }
 
-static struct ei *
+static void
 input_capture_session_connect_to_eis (InputCaptureSession *session)
 {
   g_autoptr (GVariant) fd_variant = NULL;
@@ -451,8 +442,6 @@ input_capture_session_connect_to_eis (InputCaptureSession *session)
                                               NULL);
   g_source_attach (session->ei_source, NULL);
   g_source_unref (session->ei_source);
-
-  return ei;
 }
 
 static GList *
@@ -592,8 +581,6 @@ test_sanity (void)
   g_test_assert_expected_messages ();
 
   input_capture_session_close (session);
-
-  input_capture_free (input_capture);
 }
 
 static void
@@ -665,7 +652,6 @@ test_zones (void)
   g_clear_list (&zones, g_free);
 
   input_capture_session_close (session);
-  input_capture_free (input_capture);
 }
 
 typedef struct
@@ -674,8 +660,6 @@ typedef struct
   double activated_x;
   double activated_y;
   unsigned int activated_serial;
-
-  unsigned int deactivated_barrier_id;
 } BarriersTestData;
 
 static void
@@ -691,16 +675,6 @@ on_activated (MetaDBusInputCaptureSession *proxy,
   data->activated_serial = serial;
   g_variant_get (cursor_position, "(dd)",
                  &data->activated_x, &data->activated_y);
-}
-
-static void
-on_deactivated (MetaDBusInputCaptureSession *proxy,
-                unsigned int                 barrier_id,
-                BarriersTestData            *data)
-{
-  g_assert_cmpuint (data->deactivated_barrier_id, ==, 0);
-
-  data->deactivated_barrier_id = barrier_id;
 }
 
 static void
@@ -811,7 +785,6 @@ test_barriers (void)
   write_state (session, "3");
 
   input_capture_session_close (session);
-  input_capture_free (input_capture);
 }
 
 static void
@@ -844,7 +817,6 @@ test_clear_barriers (void)
   wait_for_state (session, "1");
 
   input_capture_session_close (session);
-  input_capture_free (input_capture);
 }
 
 static void
@@ -865,7 +837,6 @@ test_cancel_keybinding (void)
   wait_for_state (session, "1");
 
   input_capture_session_close (session);
-  input_capture_free (input_capture);
 }
 
 static void
@@ -929,23 +900,22 @@ test_events (void)
   zones = input_capture_session_get_zones (session);
   input_capture_session_add_barrier (session, 0, 0, 0, 600);
 
+  input_capture_session_enable (session);
+
   while (!session->has_pointer ||
          !session->has_keyboard)
     g_main_context_iteration (NULL, TRUE);
 
-  input_capture_session_enable (session);
+  write_state (session, "1");
 
   set_expected_events (session,
                        expected_events,
                        G_N_ELEMENTS (expected_events));
 
-  write_state (session, "1");
-
   while (session->next_event < session->n_expected_events)
     g_main_context_iteration (NULL, TRUE);
 
   input_capture_session_close (session);
-  input_capture_free (input_capture);
 }
 
 static void
@@ -998,11 +968,6 @@ test_a11y (void)
   input_capture_session_connect_to_eis (session);
   zones = input_capture_session_get_zones (session);
   input_capture_session_add_barrier (session, 0, 0, 0, 600);
-
-  while (!session->has_pointer ||
-         !session->has_keyboard)
-    g_main_context_iteration (NULL, TRUE);
-
   input_capture_session_enable (session);
 
   set_expected_events (session,
@@ -1016,78 +981,6 @@ test_a11y (void)
   wait_for_state (session, "1");
 
   input_capture_session_close (session);
-  input_capture_free (input_capture);
-}
-
-static void
-test_disconnect (void)
-{
-  InputCapture *input_capture;
-  InputCaptureSession *session;
-  g_autolist (Zone) zones = NULL;
-  unsigned int barrier;
-  BarriersTestData data = {};
-  struct ei *ei;
-
-  Event expected_events[] = {
-    {
-      .type = EI_EVENT_POINTER_MOTION,
-      .motion = { .dx = -10.0, .dy = -10.0 },
-    },
-    {
-      .type = EI_EVENT_FRAME,
-    },
-  };
-
-  input_capture = input_capture_new ();
-  session = input_capture_create_session (input_capture);
-  ei = input_capture_session_connect_to_eis (session);
-  ei_ref (ei);
-
-  zones = input_capture_session_get_zones (session);
-  barrier = input_capture_session_add_barrier (session, 0, 0, 0, 600);
-  g_assert_cmpuint (barrier, !=, 0);
-
-  while (!session->has_pointer ||
-         !session->has_keyboard)
-    g_main_context_iteration (NULL, TRUE);
-
-  g_signal_connect (session->proxy, "activated",
-                    G_CALLBACK (on_activated), &data);
-  g_signal_connect (session->proxy, "deactivated",
-                    G_CALLBACK (on_deactivated), &data);
-
-  input_capture_session_enable (session);
-
-  write_state (session, "1");
-
-  set_expected_events (session,
-                       expected_events,
-                       G_N_ELEMENTS (expected_events));
-
-  while (data.activated_barrier_id == 0 ||
-         session->next_event < session->n_expected_events)
-    g_main_context_iteration (NULL, TRUE);
-
-  g_assert_cmpuint (data.activated_serial, !=, 0);
-  g_assert_cmpuint (data.activated_barrier_id, ==, barrier);
-
-  /* Force ei disconnect while session is active but do
-   * not InputCapture.Release */
-  ei_disconnect (ei);
-  ei = ei_unref (ei);
-
-  wait_for_state (session, "1");
-
-  while (data.deactivated_barrier_id == 0)
-    g_main_context_iteration (NULL, TRUE);
-
-  g_assert_cmpuint (data.activated_barrier_id, ==, barrier);
-
-  write_state (session, "2");
-
-  input_capture_session_close (session);
-  input_capture_free (input_capture);
 }
 
 static const struct
@@ -1102,7 +995,6 @@ static const struct
   { "cancel-keybinding", test_cancel_keybinding, },
   { "events", test_events, },
   { "a11y", test_a11y, },
-  { "disconnect", test_disconnect, },
 };
 
 static void

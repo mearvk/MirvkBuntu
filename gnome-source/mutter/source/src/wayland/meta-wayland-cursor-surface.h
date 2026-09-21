@@ -33,10 +33,14 @@ G_DECLARE_DERIVABLE_TYPE (MetaWaylandCursorSurface,
                           META, WAYLAND_CURSOR_SURFACE,
                           MetaWaylandSurfaceRole);
 
-ClutterCursor * meta_wayland_cursor_surface_get_cursor (MetaWaylandCursorSurface *cursor_surface);
+MetaCursorSprite *   meta_wayland_cursor_surface_get_sprite   (MetaWaylandCursorSurface *cursor_surface);
 
 void                 meta_wayland_cursor_surface_set_hotspot  (MetaWaylandCursorSurface *cursor_surface,
                                                                int                       hotspot_x,
                                                                int                       hotspot_y);
+void                 meta_wayland_cursor_surface_get_hotspot  (MetaWaylandCursorSurface *cursor_surface,
+                                                               int                       *hotspot_x,
+                                                               int                       *hotspot_y);
 void                 meta_wayland_cursor_surface_set_renderer (MetaWaylandCursorSurface *cursor_surface,
                                                                MetaCursorRenderer       *renderer);
+MetaCursorRenderer * meta_wayland_cursor_surface_get_renderer (MetaWaylandCursorSurface *cursor_surface);

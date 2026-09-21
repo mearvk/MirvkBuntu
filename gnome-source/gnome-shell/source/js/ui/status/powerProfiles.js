@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 
@@ -8,10 +10,10 @@ import * as PopupMenu from '../popupMenu.js';
 
 import {loadInterfaceXML} from '../../misc/fileUtils.js';
 
-const BUS_NAME = 'org.freedesktop.UPower.PowerProfiles';
-const OBJECT_PATH = '/org/freedesktop/UPower/PowerProfiles';
+const BUS_NAME = 'net.hadess.PowerProfiles';
+const OBJECT_PATH = '/net/hadess/PowerProfiles';
 
-const PowerProfilesIface = loadInterfaceXML('org.freedesktop.UPower.PowerProfiles');
+const PowerProfilesIface = loadInterfaceXML('net.hadess.PowerProfiles');
 const PowerProfilesProxy = Gio.DBusProxy.makeProxyWrapper(PowerProfilesIface);
 
 const PROFILE_PARAMS = {
@@ -31,20 +33,12 @@ const PROFILE_PARAMS = {
     },
 };
 
-const FALLBACK_PARAMS = {
-    name: C_('Power profile', 'Custom'),
-    iconName: 'gnome-power-manager-symbolic',
-};
-
 const LAST_PROFILE_KEY = 'last-selected-power-profile';
 
 const PowerProfilesToggle = GObject.registerClass(
 class PowerProfilesToggle extends QuickMenuToggle {
     _init() {
-        super._init({
-            title: C_('Quick settings button title', 'Power Mode'),
-            menuButtonAccessibleName: _('Open power profiles menu'),
-        });
+        super._init({title: _('Power Mode')});
 
         this._profileItems = new Map();
 
@@ -74,7 +68,7 @@ class PowerProfilesToggle extends QuickMenuToggle {
 
         this._profileSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._profileSection);
-        this.menu.setHeader('power-profile-balanced-symbolic', C_('Quick settings menu header', 'Power Mode'));
+        this.menu.setHeader('power-profile-balanced-symbolic', _('Power Mode'));
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this.menu.addSettingsAction(_('Power Settings'),
             'gnome-power-panel.desktop');
@@ -90,9 +84,6 @@ class PowerProfilesToggle extends QuickMenuToggle {
             .map(p => p.Profile.unpack())
             .reverse();
         for (const profile of profiles) {
-            if (!PROFILE_PARAMS[profile])
-                continue;
-
             const {name, iconName} = PROFILE_PARAMS[profile];
             if (!name)
                 continue;
@@ -121,7 +112,7 @@ class PowerProfilesToggle extends QuickMenuToggle {
                 : PopupMenu.Ornament.NONE);
         }
 
-        const {name: subtitle, iconName} = PROFILE_PARAMS[activeProfile] ?? FALLBACK_PARAMS;
+        const {name: subtitle, iconName} = PROFILE_PARAMS[activeProfile];
         this.set({subtitle, iconName});
 
         this.checked = activeProfile !== 'balanced';
@@ -136,17 +127,6 @@ class Indicator extends SystemIndicator {
     _init() {
         super._init();
 
-        this._indicator = this._addIndicator();
-
-        this._powerProfilesToggle = new PowerProfilesToggle();
-
-        this._powerProfilesToggle.bind_property('icon-name',
-            this._indicator, 'icon-name',
-            GObject.BindingFlags.SYNC_CREATE);
-        this._powerProfilesToggle.bind_property('checked',
-            this._indicator, 'visible',
-            GObject.BindingFlags.SYNC_CREATE);
-
-        this.quickSettingsItems.push(this._powerProfilesToggle);
+        this.quickSettingsItems.push(new PowerProfilesToggle());
     }
 });

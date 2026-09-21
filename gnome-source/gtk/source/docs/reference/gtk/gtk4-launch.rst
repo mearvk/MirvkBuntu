@@ -8,10 +8,6 @@ gtk4-launch
 Launch an application
 ---------------------
 
-:Version: GTK
-:Manual section: 1
-:Manual group: GTK commands
-
 SYNOPSIS
 --------
 

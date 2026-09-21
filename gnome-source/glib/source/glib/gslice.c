@@ -68,8 +68,8 @@ g_slice_get_config_state (GSliceConfig ckey,
  * returned pointer to a pointer of the given type, avoiding a type
  * cast in the source code.
  *
- * This can never return %NULL. If the size of the type is 0, then 1 byte will
- * still be allocated.
+ * This can never return %NULL as the minimum allocation size from
+ * `sizeof (@type)` is 1 byte.
  *
  * Since GLib 2.76 this always uses the system malloc() implementation
  * internally.
@@ -91,8 +91,8 @@ g_slice_get_config_state (GSliceConfig ckey,
  * and casts the returned pointer to a pointer of the given type,
  * avoiding a type cast in the source code.
  *
- * This can never return %NULL. If the size of the type is 0, then 1 byte will
- * still be allocated.
+ * This can never return %NULL as the minimum allocation size from
+ * `sizeof (@type)` is 1 byte.
  *
  * Since GLib 2.76 this always uses the system malloc() implementation
  * internally.
@@ -137,7 +137,7 @@ g_slice_get_config_state (GSliceConfig ckey,
  * It calls g_slice_free1() using `sizeof (type)`
  * as the block size.
  * Note that the exact release behaviour can be changed with the
- * [`G_DEBUG=gc-friendly`](running.html#environment-variables) environment variable.
+ * [`G_DEBUG=gc-friendly`][G_DEBUG] environment variable.
  *
  * If @mem is %NULL, this macro does nothing.
  *
@@ -159,7 +159,7 @@ g_slice_get_config_state (GSliceConfig ckey,
  * a @next pointer (similar to #GSList). The name of the
  * @next field in @type is passed as third argument.
  * Note that the exact release behaviour can be changed with the
- * [`G_DEBUG=gc-friendly`](running.html#environment-variables) environment variable.
+ * [`G_DEBUG=gc-friendly`][G_DEBUG] environment variable.
  *
  * If @mem_chain is %NULL, this function does nothing.
  *
@@ -258,7 +258,7 @@ g_slice_copy (gsize         mem_size,
  * The memory must have been allocated via g_slice_alloc() or
  * g_slice_alloc0() and the @block_size has to match the size
  * specified upon allocation. Note that the exact release behaviour
- * can be changed with the [`G_DEBUG=gc-friendly`](running.html#environment-variables) environment
+ * can be changed with the [`G_DEBUG=gc-friendly`][G_DEBUG] environment
  * variable.
  *
  * If @mem_block is %NULL, this function does nothing.
@@ -291,7 +291,7 @@ g_slice_free1 (gsize    mem_size,
  * @next pointer (similar to #GSList). The offset of the @next
  * field in each block is passed as third argument.
  * Note that the exact release behaviour can be changed with the
- * [`G_DEBUG=gc-friendly`](running.html#environment-variables) environment variable.
+ * [`G_DEBUG=gc-friendly`][G_DEBUG] environment variable.
  *
  * If @mem_chain is %NULL, this function does nothing.
  *

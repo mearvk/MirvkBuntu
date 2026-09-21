@@ -28,16 +28,11 @@
 #include "gdkdisplaymanagerprivate.h"
 #include "gdkdisplayprivate.h"
 #include "gdkkeysprivate.h"
-#include "gdkprivate.h"
 #include <glib/gi18n-lib.h>
 
 #ifdef GDK_WINDOWING_X11
 #include "x11/gdkx.h"
 #include "x11/gdkprivate-x11.h"
-#endif
-
-#ifdef GDK_WINDOWING_ANDROID
-#include "android/gdkandroiddisplay-private.h"
 #endif
 
 #ifdef GDK_WINDOWING_BROADWAY
@@ -54,15 +49,14 @@
 #endif
 
 #ifdef GDK_WINDOWING_WAYLAND
-#include "wayland/gdkdisplay-wayland.h"
+#include "wayland/gdkprivate-wayland.h"
 #endif
 
 /**
  * GdkDisplayManager:
  *
- * Offers notification when displays appear or disappear.
- *
- * `GdkDisplayManager` is a singleton object.
+ * A singleton object that offers notification when displays appear or
+ * disappear.
  *
  * You can use [func@Gdk.DisplayManager.get] to obtain the `GdkDisplayManager`
  * singleton, but that should be rarely necessary. Typically, initializing
@@ -107,11 +101,8 @@
 
 enum {
   PROP_0,
-  PROP_DEFAULT_DISPLAY,
-  N_PROPS
+  PROP_DEFAULT_DISPLAY
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum {
   DISPLAY_OPENED,
@@ -158,15 +149,15 @@ gdk_display_manager_class_init (GdkDisplayManagerClass *klass)
                   GDK_TYPE_DISPLAY);
 
   /**
-   * GdkDisplayManager:default-display:
+   * GdkDisplayManager:default-display: (attributes org.gtk.Property.get=gdk_display_manager_get_default_display)
    *
    * The default display.
    */
-  props[PROP_DEFAULT_DISPLAY] = g_param_spec_object ("default-display", NULL, NULL,
-                                                     GDK_TYPE_DISPLAY,
-                                                     G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_DEFAULT_DISPLAY,
+                                   g_param_spec_object ("default-display", NULL, NULL,
+                                                        GDK_TYPE_DISPLAY,
+                                                        G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -263,12 +254,7 @@ struct _GdkBackend {
   GdkDisplay * (* open_display) (const char *name);
 };
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 static GdkBackend gdk_backends[] = {
-#ifdef GDK_WINDOWING_ANDROID
-  { "android", _gdk_android_display_open },
-#endif
 #ifdef GDK_WINDOWING_MACOS
   { "macos",   _gdk_macos_display_open },
 #endif
@@ -287,8 +273,6 @@ static GdkBackend gdk_backends[] = {
   /* NULL-terminating this array so we can use commas above */
   { NULL, NULL }
 };
-
-G_GNUC_END_IGNORE_DEPRECATIONS
 
 /**
  * gdk_display_manager_get:
@@ -310,8 +294,6 @@ gdk_display_manager_get (void)
 {
   static GdkDisplayManager *manager = NULL;
 
-  gdk_ensure_initialized ();
-
   if (manager == NULL)
     manager = g_object_new (GDK_TYPE_DISPLAY_MANAGER, NULL);
 
@@ -319,7 +301,7 @@ gdk_display_manager_get (void)
 }
 
 /**
- * gdk_display_manager_get_default_display:
+ * gdk_display_manager_get_default_display: (attributes org.gtk.Method.get_property=default-display)
  * @manager: a `GdkDisplayManager`
  *
  * Gets the default `GdkDisplay`.
@@ -347,9 +329,6 @@ gdk_display_manager_get_default_display (GdkDisplayManager *manager)
 GdkDisplay *
 gdk_display_get_default (void)
 {
-  if (!gdk_is_initialized ())
-    return NULL;
-
   return gdk_display_manager_get_default_display (gdk_display_manager_get ());
 }
 
@@ -369,7 +348,7 @@ gdk_display_manager_set_default_display (GdkDisplayManager *manager,
   if (display)
     GDK_DISPLAY_GET_CLASS (display)->make_default (display);
 
-  g_object_notify_by_pspec (G_OBJECT (manager), props[PROP_DEFAULT_DISPLAY]);
+  g_object_notify (G_OBJECT (manager), "default-display");
 }
 
 /**

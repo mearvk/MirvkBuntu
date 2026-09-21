@@ -39,7 +39,6 @@
 #include "core/prefs-private.h"
 #include "core/util-private.h"
 #include "meta/prefs.h"
-#include "mtk/mtk.h"
 
 /* If you add a key, it needs updating in init() and in the gsettings
  * notify listener and of course in the .schemas file.
@@ -78,8 +77,8 @@ static GList *listeners = NULL;
 static GHashTable *settings_schemas;
 
 static ClutterModifierType mouse_button_mods = CLUTTER_MOD1_MASK;
-static MetaKeyCombo overlay_key_combos[2] = { 0 };
-static MetaKeyCombo locate_pointer_key_combos[2] = { 0 };
+static MetaKeyCombo overlay_key_combo = { 0, 0, 0 };
+static MetaKeyCombo locate_pointer_key_combo = { 0, 0, 0 };
 static GDesktopFocusMode focus_mode = G_DESKTOP_FOCUS_MODE_CLICK;
 static GDesktopFocusNewWindows focus_new_windows = G_DESKTOP_FOCUS_NEW_WINDOWS_SMART;
 static gboolean raise_on_click = TRUE;
@@ -934,7 +933,8 @@ changed_idle_handler (gpointer data)
 
   copy = g_list_copy (changes); /* reentrancy paranoia */
 
-  g_clear_list (&changes, NULL);
+  g_list_free (changes);
+  changes = NULL;
 
   tmp = copy;
   while (tmp != NULL)
@@ -965,9 +965,9 @@ queue_changed (MetaPreference pref)
 
   if (changed_idle == 0)
     {
-      changed_idle = mtk_idle_add_full (META_PRIORITY_PREFS_NOTIFY,
-                                        changed_idle_handler, NULL, NULL);
-      mtk_source_set_name_by_id (changed_idle, "[mutter] changed_idle_handler");
+      changed_idle = g_idle_add_full (META_PRIORITY_PREFS_NOTIFY,
+                                      changed_idle_handler, NULL, NULL);
+      g_source_set_name_by_id (changed_idle, "[mutter] changed_idle_handler");
     }
 }
 
@@ -1137,8 +1137,8 @@ maybe_give_disable_workarounds_warning (void)
     {
       first_disable = FALSE;
 
-      g_warning ("Workarounds for broken applications disabled. "
-                 "Some applications may not behave properly.");
+      meta_warning ("Workarounds for broken applications disabled. "
+                    "Some applications may not behave properly.");
     }
 }
 
@@ -1206,11 +1206,6 @@ meta_prefs_get_cursor_theme (void)
 int
 meta_prefs_get_cursor_size (void)
 {
-  if (cursor_size <= 0)
-    {
-      g_warning_once ("Invalid cursor size (%d) in settings, resetting to 24", cursor_size);
-      cursor_size = 24;
-    }
   return cursor_size;
 }
 
@@ -1232,10 +1227,12 @@ mouse_button_mods_handler (GVariant *value,
 
   if (!string_value || !meta_parse_modifier (string_value, &mods))
     {
-      g_warning ("Failed to parse new GSettings value: "
-                 "\"%s\" found in configuration database is "
-                 "not a valid value for mouse button modifier",
-                 string_value);
+      meta_topic (META_DEBUG_KEYBINDINGS,
+                  "Failed to parse new GSettings value");
+
+      meta_warning ("\"%s\" found in configuration database is "
+                    "not a valid value for mouse button modifier",
+                    string_value);
 
       return FALSE;
     }
@@ -1423,7 +1420,7 @@ button_layout_handler (GVariant *value,
   g_strfreev (sides);
 
   /* Invert the button layout for RTL languages */
-  if (clutter_get_text_direction() == CLUTTER_TEXT_DIRECTION_RTL)
+  if (meta_get_locale_direction() == META_LOCALE_DIRECTION_RTL)
     {
       MetaButtonLayout rtl_layout;
       int j;
@@ -1471,55 +1468,32 @@ button_layout_handler (GVariant *value,
 }
 
 static gboolean
-parse_special_key (const gchar  *string_value,
-                   MetaKeyCombo  combos[2])
-{
-  g_autofree gchar *string_value_l = NULL;
-  g_autofree gchar *string_value_r = NULL;
-
-  if (meta_parse_accelerator (string_value, &combos[0]))
-    return TRUE;
-
-  string_value_l = g_strconcat (string_value, "_L", NULL);
-  if (!meta_parse_accelerator (string_value_l, &combos[0]))
-    return FALSE;
-
-  string_value_r = g_strconcat (string_value, "_R", NULL);
-  if (!meta_parse_accelerator (string_value_r, &combos[1]))
-    return FALSE;
-
-  return TRUE;
-}
-
-static gboolean
 overlay_key_handler (GVariant *value,
                      gpointer *result,
                      gpointer  data)
 {
-  MetaKeyCombo combos[2] = { 0 };
+  MetaKeyCombo combo;
   const gchar *string_value;
-  int i;
 
   *result = NULL; /* ignored */
   string_value = g_variant_get_string (value, NULL);
 
-  if (!string_value || !parse_special_key (string_value, combos))
+  if (string_value && meta_parse_accelerator (string_value, &combo))
+    ;
+  else
     {
       meta_topic (META_DEBUG_KEYBINDINGS,
                   "Failed to parse value for overlay-key");
       return FALSE;
     }
 
-  for (i = 0; i < G_N_ELEMENTS (combos); i++)
-    {
-      combos[i].modifiers = 0;
+  combo.modifiers = 0;
 
-      if (overlay_key_combos[i].keysym != combos[i].keysym ||
-          overlay_key_combos[i].keycode != combos[i].keycode)
-        {
-          overlay_key_combos[i] = combos[i];
-          queue_changed (META_PREF_KEYBINDINGS);
-        }
+  if (overlay_key_combo.keysym != combo.keysym ||
+      overlay_key_combo.keycode != combo.keycode)
+    {
+      overlay_key_combo = combo;
+      queue_changed (META_PREF_KEYBINDINGS);
     }
 
   return TRUE;
@@ -1530,30 +1504,26 @@ locate_pointer_key_handler (GVariant *value,
                             gpointer *result,
                             gpointer  data)
 {
-  MetaKeyCombo combos[2] = { 0 };
+  MetaKeyCombo combo;
   const gchar *string_value;
-  int i;
 
   *result = NULL; /* ignored */
   string_value = g_variant_get_string (value, NULL);
 
-  if (!string_value || !parse_special_key (string_value, combos))
+  if (!string_value || !meta_parse_accelerator (string_value, &combo))
     {
       meta_topic (META_DEBUG_KEYBINDINGS,
                   "Failed to parse value for locate-pointer-key");
       return FALSE;
     }
 
-  for (i = 0; i < G_N_ELEMENTS (combos); i++)
-    {
-      combos[i].modifiers = 0;
+  combo.modifiers = 0;
 
-      if (locate_pointer_key_combos[i].keysym != combos[i].keysym ||
-          locate_pointer_key_combos[i].keycode != combos[i].keycode)
-        {
-          locate_pointer_key_combos[i] = combos[i];
-          queue_changed (META_PREF_KEYBINDINGS);
-        }
+  if (locate_pointer_key_combo.keysym != combo.keysym ||
+      locate_pointer_key_combo.keycode != combo.keycode)
+    {
+      locate_pointer_key_combo = combo;
+      queue_changed (META_PREF_KEYBINDINGS);
     }
 
   return TRUE;
@@ -1566,6 +1536,7 @@ iso_next_group_handler (GVariant *value,
 {
   const char **xkb_options, **p;
   const char *option = NULL;
+  gboolean changed = FALSE;
 
   *result = NULL; /* ignored */
   xkb_options = g_variant_get_strv (value, NULL);
@@ -1577,8 +1548,14 @@ iso_next_group_handler (GVariant *value,
         break;
       }
 
-  if (g_set_str (&iso_next_group_option, option))
-    queue_changed (META_PREF_KEYBINDINGS);
+  changed = (g_strcmp0 (option, iso_next_group_option) != 0);
+
+  if (changed)
+    {
+      g_free (iso_next_group_option);
+      iso_next_group_option = g_strdup (option);
+      queue_changed (META_PREF_KEYBINDINGS);
+    }
 
   g_free (xkb_options);
 
@@ -1756,8 +1733,7 @@ init_bindings (void)
   pref = g_new0 (MetaKeyPref, 1);
   pref->name = g_strdup ("overlay-key");
   pref->action = META_KEYBINDING_ACTION_OVERLAY_KEY;
-  pref->combos = g_slist_prepend (pref->combos, &overlay_key_combos[0]);
-  pref->combos = g_slist_prepend (pref->combos, &overlay_key_combos[1]);
+  pref->combos = g_slist_prepend (pref->combos, &overlay_key_combo);
   pref->builtin = 1;
 
   g_hash_table_insert (key_bindings, g_strdup (pref->name), pref);
@@ -1765,8 +1741,7 @@ init_bindings (void)
   pref = g_new0 (MetaKeyPref, 1);
   pref->name = g_strdup ("locate-pointer-key");
   pref->action = META_KEYBINDING_ACTION_LOCATE_POINTER_KEY;
-  pref->combos = g_slist_prepend (pref->combos, &locate_pointer_key_combos[0]);
-  pref->combos = g_slist_prepend (pref->combos, &locate_pointer_key_combos[1]);
+  pref->combos = g_slist_prepend (pref->combos, &locate_pointer_key_combo);
   pref->builtin = 1;
 
   g_hash_table_insert (key_bindings, g_strdup (pref->name), pref);
@@ -1784,7 +1759,8 @@ update_binding (MetaKeyPref *binding,
               "Binding \"%s\" has new GSettings value",
               binding->name);
 
-  old_combos = g_steal_pointer (&binding->combos);
+  old_combos = binding->combos;
+  binding->combos = NULL;
 
   for (i = 0; strokes && strokes[i]; i++)
     {
@@ -1794,10 +1770,10 @@ update_binding (MetaKeyPref *binding,
 
       if (!meta_parse_accelerator (strokes[i], combo))
         {
-          g_warning ("Failed to parse new GSettings value: "
-                     "\"%s\" found in configuration database is not a valid "
-                     "value for keybinding \"%s\"",
-                     strokes[i], binding->name);
+          meta_topic (META_DEBUG_KEYBINDINGS,
+                      "Failed to parse new GSettings value");
+          meta_warning ("\"%s\" found in configuration database is not a valid value for keybinding \"%s\"",
+                        strokes[i], binding->name);
 
           g_free (combo);
 
@@ -1964,7 +1940,7 @@ meta_prefs_add_keybinding (const char           *name,
 
   if (g_hash_table_lookup (key_bindings, name))
     {
-      g_warning ("Trying to re-add keybinding \"%s\".", name);
+      meta_warning ("Trying to re-add keybinding \"%s\".", name);
       return FALSE;
     }
 
@@ -2014,13 +1990,13 @@ meta_prefs_remove_keybinding (const char *name)
   pref = g_hash_table_lookup (key_bindings, name);
   if (!pref)
     {
-      g_warning ("Trying to remove non-existent keybinding \"%s\".", name);
+      meta_warning ("Trying to remove non-existent keybinding \"%s\".", name);
       return FALSE;
     }
 
   if (pref->builtin)
     {
-      g_warning ("Trying to remove builtin keybinding \"%s\".", name);
+      meta_warning ("Trying to remove builtin keybinding \"%s\".", name);
       return FALSE;
     }
 
@@ -2041,17 +2017,21 @@ meta_prefs_get_keybindings (void)
 }
 
 void
-meta_prefs_get_overlay_bindings (MetaKeyCombo combos[2])
+meta_prefs_get_overlay_binding (MetaKeyCombo *combo)
 {
-  combos[0] = overlay_key_combos[0];
-  combos[1] = overlay_key_combos[1];
+  *combo = overlay_key_combo;
 }
 
 void
-meta_prefs_get_locate_pointer_bindings (MetaKeyCombo combos[2])
+meta_prefs_get_locate_pointer_binding (MetaKeyCombo *combo)
 {
-  combos[0] = locate_pointer_key_combos[0];
-  combos[1] = locate_pointer_key_combos[1];
+  *combo = locate_pointer_key_combo;
+}
+
+gboolean
+meta_prefs_is_locate_pointer_enabled (void)
+{
+  return locate_pointer_is_enabled;
 }
 
 unsigned int

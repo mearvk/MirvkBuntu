@@ -32,12 +32,11 @@
 #include "wayland/meta-wayland-tablet-pad-group.h"
 #include "wayland/meta-wayland-tablet-pad-ring.h"
 #include "wayland/meta-wayland-tablet-pad-strip.h"
-#include "wayland/meta-wayland-tablet-pad-dial.h"
 #include "wayland/meta-wayland-tablet-pad.h"
 #include "wayland/meta-wayland-tablet-seat.h"
 #include "wayland/meta-wayland-tablet.h"
 
-#include "tablet-v2-server-protocol.h"
+#include "tablet-unstable-v2-server-protocol.h"
 
 static MetaDisplay *
 display_from_pad (MetaWaylandTabletPad *pad)
@@ -65,7 +64,7 @@ pad_handle_focus_surface_destroy (struct wl_listener *listener,
 }
 
 static void
-group_rings_strips_dials (MetaWaylandTabletPad *pad)
+group_rings_strips (MetaWaylandTabletPad *pad)
 {
   gint n_group, n_elem;
   GList *g, *l;
@@ -94,18 +93,6 @@ group_rings_strips_dials (MetaWaylandTabletPad *pad)
                                                           CLUTTER_PAD_FEATURE_STRIP,
                                                           n_elem) == n_group)
             meta_wayland_tablet_pad_strip_set_group (strip, group);
-
-          n_elem++;
-        }
-
-      for (n_elem = 0, l = pad->dials; l; l = l->next)
-        {
-          MetaWaylandTabletPadDial *dial = l->data;
-
-          if (clutter_input_device_get_pad_feature_group (pad->device,
-                                                          CLUTTER_PAD_FEATURE_DIAL,
-                                                          n_elem) == n_group)
-            meta_wayland_tablet_pad_dial_set_group (dial, group);
 
           n_elem++;
         }
@@ -161,17 +148,7 @@ meta_wayland_tablet_pad_new (ClutterInputDevice    *device,
       pad->strips = g_list_prepend (pad->strips, strip);
     }
 
-  n_elems = clutter_input_device_get_n_dials (pad->device);
-
-  for (i = 0; i < n_elems; i++)
-    {
-      MetaWaylandTabletPadDial *dial;
-
-      dial = meta_wayland_tablet_pad_dial_new (pad);
-      pad->dials = g_list_prepend (pad->dials, dial);
-    }
-
-  group_rings_strips_dials (pad);
+  group_rings_strips (pad);
 
   return pad;
 }
@@ -196,8 +173,6 @@ meta_wayland_tablet_pad_free (MetaWaylandTabletPad *pad)
                     (GDestroyNotify) meta_wayland_tablet_pad_ring_free);
   g_list_free_full (pad->strips,
                     (GDestroyNotify) meta_wayland_tablet_pad_strip_free);
-  g_list_free_full (pad->dials,
-                    (GDestroyNotify) meta_wayland_tablet_pad_dial_free);
 
   g_hash_table_destroy (pad->feedback);
 
@@ -395,7 +370,6 @@ meta_wayland_tablet_pad_handle_event (MetaWaylandTabletPad *pad,
       return handle_pad_button_event (pad, event);
     case CLUTTER_PAD_RING:
     case CLUTTER_PAD_STRIP:
-    case CLUTTER_PAD_DIAL:
       if (group)
         return meta_wayland_tablet_pad_group_handle_event (group, event);
       G_GNUC_FALLTHROUGH;
@@ -601,15 +575,6 @@ meta_wayland_tablet_pad_get_feature_label (MetaWaylandTabletPad *pad,
         strip = g_list_nth_data (pad->strips, action);
         if (strip)
           label = strip->feedback;
-        break;
-      }
-    case META_PAD_FEATURE_DIAL:
-      {
-        MetaWaylandTabletPadDial *dial;
-
-        dial = g_list_nth_data (pad->dials, action);
-        if (dial)
-          label = dial->feedback;
         break;
       }
     }

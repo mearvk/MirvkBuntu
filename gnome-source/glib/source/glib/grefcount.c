@@ -61,7 +61,7 @@
 
 /**
  * g_ref_count_init:
- * @rc: (out): the address of a reference count variable
+ * @rc: the address of a reference count variable
  *
  * Initializes a reference count variable to 1.
  *
@@ -86,7 +86,7 @@ void
 
 /**
  * g_ref_count_inc:
- * @rc: (inout): the address of a reference count variable
+ * @rc: the address of a reference count variable
  *
  * Increases the reference count.
  *
@@ -117,7 +117,7 @@ void
 
 /**
  * g_ref_count_dec:
- * @rc: (inout): the address of a reference count variable
+ * @rc: the address of a reference count variable
  *
  * Decreases the reference count.
  *
@@ -180,7 +180,7 @@ gboolean
 
 /**
  * g_atomic_ref_count_init:
- * @arc: (out): the address of an atomic reference count variable
+ * @arc: the address of an atomic reference count variable
  *
  * Initializes a reference count variable to 1.
  *

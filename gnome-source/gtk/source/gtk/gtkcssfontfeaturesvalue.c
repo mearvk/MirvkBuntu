@@ -53,11 +53,13 @@ gtk_css_value_font_features_free (GtkCssValue *value)
 }
 
 static GtkCssValue *
-gtk_css_value_font_features_compute (GtkCssValue          *specified,
-                                     guint                 property_id,
-                                     GtkCssComputeContext *context)
+gtk_css_value_font_features_compute (GtkCssValue      *specified,
+                                     guint             property_id,
+                                     GtkStyleProvider *provider,
+                                     GtkCssStyle      *style,
+                                     GtkCssStyle      *parent_style)
 {
-  return gtk_css_value_ref (specified);
+  return _gtk_css_value_ref (specified);
 }
 
 static gboolean
@@ -156,7 +158,6 @@ static const GtkCssValueClass GTK_CSS_VALUE_FONT_FEATURES = {
   "GtkCssFontFeaturesValue",
   gtk_css_value_font_features_free,
   gtk_css_value_font_features_compute,
-  NULL,
   gtk_css_value_font_features_equal,
   gtk_css_value_font_features_transition,
   NULL,
@@ -169,7 +170,7 @@ gtk_css_font_features_value_new_empty (void)
 {
   GtkCssValue *result;
 
-  result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_FONT_FEATURES);
+  result = _gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_FONT_FEATURES);
   result->features = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
   result->is_computed = TRUE;
 
@@ -182,7 +183,7 @@ gtk_css_font_features_value_new_default (void)
   if (default_font_features == NULL)
     default_font_features = gtk_css_font_features_value_new_empty ();
 
-  return gtk_css_value_ref (default_font_features);
+  return _gtk_css_value_ref (default_font_features);
 }
 
 static gboolean
@@ -216,7 +217,7 @@ gtk_css_font_features_value_parse (GtkCssParser *parser)
     name = gtk_css_parser_consume_string (parser);
     if (name == NULL)
       {
-        gtk_css_value_unref (result);
+        _gtk_css_value_unref (result);
         return NULL;
       }
 
@@ -224,7 +225,7 @@ gtk_css_font_features_value_parse (GtkCssParser *parser)
       {
         gtk_css_parser_error_value (parser, "Not a valid OpenType tag.");
         g_free (name);
-        gtk_css_value_unref (result);
+        _gtk_css_value_unref (result);
         return NULL;
       }
 
@@ -237,7 +238,7 @@ gtk_css_font_features_value_parse (GtkCssParser *parser)
         if (!gtk_css_parser_consume_integer (parser, &num))
           {
             g_free (name);
-            gtk_css_value_unref (result);
+            _gtk_css_value_unref (result);
             return NULL;
           }
       }

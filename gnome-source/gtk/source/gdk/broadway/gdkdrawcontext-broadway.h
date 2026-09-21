@@ -48,7 +48,7 @@ struct _GdkBroadwayDrawContextClass
 };
 
 GDK_AVAILABLE_IN_ALL
-GType gdk_broadway_draw_context_get_type (void);
+GType gdk_broadway_draw_context_get_type (void) G_GNUC_CONST;
 
 GdkBroadwayDrawContext *gdk_broadway_draw_context_context (GdkSurface *surface);
 

@@ -41,10 +41,7 @@ struct _GskLineCurve
 
   gboolean padding;
 
-  union {
-    graphene_point_t points[2];
-    GskAlignedPoint aligned_points[2];
-  };
+  graphene_point_t points[2];
 };
 
 struct _GskQuadCurve
@@ -53,10 +50,7 @@ struct _GskQuadCurve
 
   gboolean has_coefficients;
 
-  union {
-    graphene_point_t points[3];
-    GskAlignedPoint aligned_points[3];
-  };
+  graphene_point_t points[3];
 
   graphene_point_t coeffs[3];
 };
@@ -67,10 +61,7 @@ struct _GskCubicCurve
 
   gboolean has_coefficients;
 
-  union {
-    graphene_point_t points[4];
-    GskAlignedPoint aligned_points[4];
-  };
+  graphene_point_t points[4];
 
   graphene_point_t coeffs[4];
 };
@@ -84,10 +75,7 @@ struct _GskConicCurve
   /* points[0], points[1], points[3] are the control points,
    * points[2].x is the weight
    */
-  union {
-    graphene_point_t points[4];
-    GskAlignedPoint aligned_points[4];
-  };
+  graphene_point_t points[4];
 
   graphene_point_t num[3];
   graphene_point_t denom[3];
@@ -195,23 +183,9 @@ float                  gsk_curve_at_length                      (const GskCurve 
 
 int                    gsk_curve_get_curvature_points           (const GskCurve         *curve,
                                                                  float                   t[3]);
-int                    gsk_curve_get_extrema                    (const GskCurve         *curve,
-                                                                 float                   t[4]);
+
 int                    gsk_curve_get_cusps                      (const GskCurve         *curve,
                                                                  float                   t[2]);
-
-int                    gsk_curve_intersect                      (const GskCurve         *curve1,
-                                                                 const GskCurve         *curve2,
-                                                                 float                  *t1,
-                                                                 float                  *t2,
-                                                                 graphene_point_t       *p,
-                                                                 GskPathIntersection    *kind,
-                                                                 int                     n);
-
-int                    gsk_curve_self_intersect                 (const GskCurve         *curve,
-                                                                 float                  *t1,
-                                                                 graphene_point_t       *p,
-                                                                 int                     n);
 
 
 G_END_DECLS

@@ -148,7 +148,6 @@ typedef struct _GFileIface    		GFileIface;
  * @measure_disk_usage: Recursively measures the disk usage of @file. Since 2.38
  * @measure_disk_usage_async: Asynchronously recursively measures the disk usage of @file. Since 2.38
  * @measure_disk_usage_finish: Finishes an asynchronous recursive measurement of the disk usage of @file. Since 2.38
- * @query_exists: Queries whether a file exists. Since 2.84
  *
  * An interface for writing VFS file handles.
  **/
@@ -599,13 +598,10 @@ struct _GFileIface
                                                        guint64                       *num_dirs,
                                                        guint64                       *num_files,
                                                        GError                       **error);
-
-  gboolean            (* query_exists)                (GFile                         *file,
-                                                       GCancellable                  *cancellable);
 };
 
 GIO_AVAILABLE_IN_ALL
-GType                   g_file_get_type                   (void);
+GType                   g_file_get_type                   (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GFile *                 g_file_new_for_path               (const char                 *path);
@@ -948,14 +944,6 @@ void                    g_file_copy_async                 (GFile                
 							   gpointer                    progress_callback_data,
 							   GAsyncReadyCallback         callback,
 							   gpointer                    user_data);
-GIO_AVAILABLE_IN_2_82
-void g_file_copy_async_with_closures (GFile *source,
-                                      GFile *destination,
-                                      GFileCopyFlags flags,
-                                      int io_priority,
-                                      GCancellable *cancellable,
-                                      GClosure *progress_callback_closure,
-                                      GClosure *ready_callback_closure);
 GIO_AVAILABLE_IN_ALL
 gboolean                g_file_copy_finish                (GFile                      *file,
 							   GAsyncResult               *res,
@@ -978,14 +966,6 @@ void                    g_file_move_async                 (GFile                
 							                                             gpointer                    progress_callback_data,
 							                                             GAsyncReadyCallback         callback,
 							                                             gpointer                    user_data);
-GIO_AVAILABLE_IN_2_82
-void g_file_move_async_with_closures (GFile *source,
-                                      GFile *destination,
-                                      GFileCopyFlags flags,
-                                      int io_priority,
-                                      GCancellable *cancellable,
-                                      GClosure *progress_callback_closure,
-                                      GClosure *ready_callback_closure);
 GIO_AVAILABLE_IN_2_72
 gboolean                g_file_move_finish                (GFile                      *file,
 							                                             GAsyncResult               *result,

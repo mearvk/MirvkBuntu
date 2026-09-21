@@ -36,11 +36,8 @@
 enum
 {
   PROP_0,
-  PROP_BUTTONS,
-  N_PROPS
+  PROP_BUTTONS
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 struct _GtkInspectorResourceList
 {
@@ -228,7 +225,6 @@ populate_details (GtkInspectorResourceList *rl,
 
       g_free (content_image);
       g_free (content_text);
-      g_free (content_video);
     }
 
   return TRUE;
@@ -698,8 +694,6 @@ constructed (GObject *object)
   GtkSorter *column_sorter;
   GtkSorter *sorter;
 
-  G_OBJECT_CLASS (gtk_inspector_resource_list_parent_class)->constructed (object);
-
   g_signal_connect (rl->open_details_button, "clicked",
                     G_CALLBACK (open_details), rl);
   g_signal_connect (rl->close_details_button, "clicked",
@@ -897,10 +891,9 @@ gtk_inspector_resource_list_class_init (GtkInspectorResourceListClass *klass)
   widget_class->root = root;
   widget_class->unroot = unroot;
 
-  props[PROP_BUTTONS] = g_param_spec_object ("buttons", NULL, NULL,
-                                             GTK_TYPE_WIDGET, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_BUTTONS,
+      g_param_spec_object ("buttons", NULL, NULL,
+                           GTK_TYPE_WIDGET, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gtk/libgtk/inspector/resource-list.ui");
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorResourceList, buffer);

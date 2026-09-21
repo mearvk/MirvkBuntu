@@ -60,7 +60,7 @@ typedef enum {
   G_RESOLVER_NAME_LOOKUP_FLAGS_DEFAULT = 0,
   G_RESOLVER_NAME_LOOKUP_FLAGS_IPV4_ONLY = 1 << 0,
   G_RESOLVER_NAME_LOOKUP_FLAGS_IPV6_ONLY = 1 << 1,
-} G_GNUC_FLAG_ENUM GResolverNameLookupFlags;
+} GResolverNameLookupFlags;
 
 struct _GResolverClass {
   GObjectClass parent_class;
@@ -184,7 +184,7 @@ struct _GResolverClass {
 };
 
 GIO_AVAILABLE_IN_ALL
-GType      g_resolver_get_type                         (void);
+GType      g_resolver_get_type                         (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 GResolver *g_resolver_get_default                      (void);
 GIO_AVAILABLE_IN_ALL

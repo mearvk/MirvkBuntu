@@ -17,9 +17,7 @@
 
 #include "config.h"
 
-#include "gdkdragsurface-wayland.h"
-
-#include "gdksurface-wayland-private.h"
+#include "gdksurface-wayland.h"
 
 #include "gdkdeviceprivate.h"
 #include "gdkdisplay-wayland.h"
@@ -29,6 +27,8 @@
 #include "gdkglcontext-wayland.h"
 #include "gdkmonitor-wayland.h"
 #include "gdkpopupprivate.h"
+#include "gdkprivate-wayland.h"
+#include "gdkprivate-wayland.h"
 #include "gdkseat-wayland.h"
 #include "gdksurfaceprivate.h"
 #include "gdktoplevelprivate.h"
@@ -142,8 +142,6 @@ gdk_wayland_drag_surface_present (GdkDragSurface *drag_surface,
 {
   GdkSurface *surface = GDK_SURFACE (drag_surface);
   GdkWaylandSurface *impl = GDK_WAYLAND_SURFACE (surface);
-
-  impl->mapped = TRUE;
 
   impl->next_layout.configured_width = width;
   impl->next_layout.configured_height = height;

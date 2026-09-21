@@ -38,7 +38,7 @@ typedef struct _GtkListView GtkListView;
 typedef struct _GtkListViewClass GtkListViewClass;
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_list_view_get_type                          (void);
+GType           gtk_list_view_get_type                          (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkWidget *     gtk_list_view_new                               (GtkSelectionModel      *model,

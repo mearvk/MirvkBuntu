@@ -25,10 +25,10 @@ Gio._promisify(Gio.DBusConnection.prototype, 'call');
 
 const BackgroundAppMenuItem = GObject.registerClass({
     Properties: {
-        'app': GObject.ParamSpec.object('app', null, null,
+        'app': GObject.ParamSpec.object('app', '', '',
             GObject.ParamFlags.READWRITE,
             Shell.App),
-        'message': GObject.ParamSpec.string('message', null, null,
+        'message': GObject.ParamSpec.string('message', '', '',
             GObject.ParamFlags.READWRITE,
             null),
     },
@@ -49,7 +49,7 @@ const BackgroundAppMenuItem = GObject.registerClass({
         this.app = app;
 
         const box = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
             x_align: Clutter.ActorAlign.START,
             y_align: Clutter.ActorAlign.CENTER,
@@ -113,16 +113,17 @@ const BackgroundAppMenuItem = GObject.registerClass({
     async _quitApp() {
         this._spinner.play();
         this._spinnerTimeoutId =
-            GLib.timeout_add_seconds_once(GLib.PRIORITY_DEFAULT, SPINNER_TIMEOUT,
+            GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, SPINNER_TIMEOUT,
                 () => {
                     // Assume the quit request has failed, stop the spinner
                     this._spinner.stop();
                     delete this._spinnerTimeoutId;
+                    return GLib.SOURCE_REMOVE;
                 });
 
         try {
             await this.app.activate_action('quit', null, 0, -1, null);
-        } catch {
+        } catch (_error) {
             try {
                 const appId = this.app.get_id().replace(/\.desktop$/, '');
                 Util.trySpawn(['flatpak', 'kill', appId]);

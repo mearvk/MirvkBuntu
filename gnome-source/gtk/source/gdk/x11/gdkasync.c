@@ -50,7 +50,6 @@ in this Software without prior written authorization from The Open Group.
 
 #include <X11/Xlibint.h>
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
 typedef struct _ChildInfoChildState ChildInfoChildState;
 typedef struct _ChildInfoState ChildInfoState;
@@ -123,7 +122,7 @@ struct _RoundtripState
   gpointer data;
 };
 
-static void
+static gboolean
 callback_idle (gpointer data)
 {
   SendEventState *state = (SendEventState *)data;  
@@ -131,6 +130,8 @@ callback_idle (gpointer data)
   state->callback (state->window, !state->have_error, state->data);
 
   g_free (state);
+
+  return FALSE;
 }
 
 static Bool
@@ -170,7 +171,7 @@ send_event_handler (Display *dpy,
       if (state->callback)
         {
           guint id;
-          id = g_idle_add_once (callback_idle, state);
+          id = g_idle_add (callback_idle, state);
           gdk_source_set_static_name_by_id (id, "[gtk] callback_idle");
         }
 
@@ -665,7 +666,7 @@ _gdk_x11_get_window_child_info (GdkDisplay       *display,
   return !state.have_error;
 }
 
-static void
+static gboolean
 roundtrip_callback_idle (gpointer data)
 {
   RoundtripState *state = (RoundtripState *)data;  
@@ -673,6 +674,8 @@ roundtrip_callback_idle (gpointer data)
   state->callback (state->display, state->data, state->get_input_focus_req);
 
   g_free (state);
+
+  return FALSE;
 }
 
 static Bool
@@ -704,7 +707,7 @@ roundtrip_handler (Display *dpy,
       if (state->callback)
         {
           guint id;
-          id = g_idle_add_once (roundtrip_callback_idle, state);
+          id = g_idle_add (roundtrip_callback_idle, state);
           gdk_source_set_static_name_by_id (id, "[gtk] roundtrip_callback_idle");
         }
 

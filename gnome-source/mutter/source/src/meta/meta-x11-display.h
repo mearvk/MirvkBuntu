@@ -26,7 +26,6 @@
 #include "meta/common.h"
 #include "meta/prefs.h"
 #include "meta/types.h"
-#include "meta/meta-x11-types.h"
 
 typedef void (* MetaX11DisplayEventFunc) (MetaX11Display *x11_display,
                                           XEvent         *xev,
@@ -42,6 +41,10 @@ Display *meta_x11_display_get_xdisplay      (MetaX11Display *x11_display);
 
 META_EXPORT
 Window   meta_x11_display_get_xroot         (MetaX11Display *x11_display);
+
+META_EXPORT
+void     meta_x11_display_set_stage_input_region (MetaX11Display *x11_display,
+                                                  XserverRegion   region);
 
 META_EXPORT
 unsigned int meta_x11_display_add_event_func (MetaX11Display          *x11_display,
@@ -60,6 +63,3 @@ void     meta_x11_display_redirect_windows (MetaX11Display *x11_display,
 META_EXPORT
 Window meta_x11_display_lookup_xwindow (MetaX11Display *x11_display,
                                         MetaWindow     *window);
-
-META_EXPORT
-MetaX11Display * meta_display_get_x11_display (MetaDisplay *display);

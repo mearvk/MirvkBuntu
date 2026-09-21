@@ -21,7 +21,6 @@
 #pragma once
 
 #include "gdkx11device-xi2.h"
-#include "gdkdeviceprivate.h"
 
 G_BEGIN_DECLS
 
@@ -35,12 +34,5 @@ GdkX11DeviceType gdk_x11_device_xi2_get_device_type (GdkX11DeviceXI2 *device);
 void             gdk_x11_device_xi2_set_device_type (GdkX11DeviceXI2  *device,
                                                      GdkX11DeviceType  type);
 
-GdkGrabStatus gdk_x11_device_xi2_grab   (GdkDevice     *device,
-                                         GdkSurface    *surface,
-                                         gboolean       owner_events,
-                                         GdkCursor     *cursor,
-                                         guint32        time_);
-void          gdk_x11_device_xi2_ungrab (GdkDevice     *device,
-                                         guint32        time_);
-
 G_END_DECLS
+

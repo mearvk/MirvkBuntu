@@ -34,7 +34,6 @@
 #include "gtktypebuiltins.h"
 #include "gtkwidgetprivate.h"
 #include "gtkbuildable.h"
-#include "gtkbuilderprivate.h"
 #include "gtktext.h"
 
 #include <math.h>
@@ -42,8 +41,8 @@
 /**
  * GtkViewport:
  *
- * Implements scrollability for widgets that don't support scrolling
- * on their own.
+ * `GtkViewport` implements scrollability for widgets that lack their
+ * own scrolling capabilities.
  *
  * Use `GtkViewport` to scroll child widgets such as `GtkGrid`,
  * `GtkBox`, and so on.
@@ -57,9 +56,9 @@
  *
  * # Accessibility
  *
- * Until GTK 4.10, `GtkViewport` used the [enum@Gtk.AccessibleRole.group] role.
+ * Until GTK 4.10, `GtkViewport` used the `GTK_ACCESSIBLE_ROLE_GROUP` role.
  *
- * Starting from GTK 4.12, `GtkViewport` uses the [enum@Gtk.AccessibleRole.generic] role.
+ * Starting from GTK 4.12, `GtkViewport` uses the `GTK_ACCESSIBLE_ROLE_GENERIC` role.
  */
 
 typedef struct _GtkViewportPrivate       GtkViewportPrivate;
@@ -85,17 +84,13 @@ struct _GtkViewportClass
 
 enum {
   PROP_0,
-  PROP_SCROLL_TO_FOCUS,
-  PROP_CHILD,
-  /* GtkScrollable */
   PROP_HADJUSTMENT,
   PROP_VADJUSTMENT,
   PROP_HSCROLL_POLICY,
   PROP_VSCROLL_POLICY,
-  N_PROPS
+  PROP_SCROLL_TO_FOCUS,
+  PROP_CHILD
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 
 static void gtk_viewport_set_property             (GObject         *object,
@@ -138,14 +133,9 @@ gtk_viewport_buildable_add_child (GtkBuildable *buildable,
                                   const char   *type)
 {
   if (GTK_IS_WIDGET (child))
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-      gtk_viewport_set_child (GTK_VIEWPORT (buildable), GTK_WIDGET (child));
-    }
+    gtk_viewport_set_child (GTK_VIEWPORT (buildable), GTK_WIDGET (child));
   else
-    {
-      parent_buildable_iface->add_child (buildable, builder, child, type);
-    }
+    parent_buildable_iface->add_child (buildable, builder, child, type);
 }
 
 static void
@@ -252,7 +242,8 @@ viewport_disconnect_adjustment (GtkViewport    *viewport,
       g_signal_handlers_disconnect_by_func (*adjustmentp,
                                             gtk_viewport_adjustment_value_changed,
                                             viewport);
-      g_clear_object (adjustmentp);
+      g_object_unref (*adjustmentp);
+      *adjustmentp = NULL;
     }
 }
 
@@ -297,9 +288,8 @@ gtk_viewport_unroot (GtkWidget *widget)
 static void
 gtk_viewport_class_init (GtkViewportClass *class)
 {
-  GObjectClass *gobject_class;
+  GObjectClass   *gobject_class;
   GtkWidgetClass *widget_class;
-  gpointer iface;
 
   gobject_class = G_OBJECT_CLASS (class);
   widget_class = (GtkWidgetClass*) class;
@@ -316,18 +306,13 @@ gtk_viewport_class_init (GtkViewportClass *class)
   widget_class->get_request_mode = gtk_viewport_get_request_mode;
 
   /* GtkScrollable implementation */
-  iface = g_type_default_interface_ref (GTK_TYPE_SCROLLABLE);
-  props[PROP_HADJUSTMENT] = g_param_spec_override ("hadjustment",
-                                                   g_object_interface_find_property (iface, "hadjustment"));
-  props[PROP_VADJUSTMENT] = g_param_spec_override ("vadjustment",
-                                                   g_object_interface_find_property (iface, "vadjustment"));
-  props[PROP_HSCROLL_POLICY] = g_param_spec_override ("hscroll-policy",
-                                                      g_object_interface_find_property (iface, "hscroll-policy"));
-  props[PROP_VSCROLL_POLICY] = g_param_spec_override ("vscroll-policy",
-                                                      g_object_interface_find_property (iface, "vscroll-policy"));
+  g_object_class_override_property (gobject_class, PROP_HADJUSTMENT,    "hadjustment");
+  g_object_class_override_property (gobject_class, PROP_VADJUSTMENT,    "vadjustment");
+  g_object_class_override_property (gobject_class, PROP_HSCROLL_POLICY, "hscroll-policy");
+  g_object_class_override_property (gobject_class, PROP_VSCROLL_POLICY, "vscroll-policy");
 
   /**
-   * GtkViewport:scroll-to-focus:
+   * GtkViewport:scroll-to-focus: (attributes org.gtk.Property.get=gtk_viewport_get_scroll_to_focus org.gtk.Property.set=gtk_viewport_set_scroll_to_focus)
    *
    * Whether to scroll when the focus changes.
    *
@@ -335,20 +320,22 @@ gtk_viewport_class_init (GtkViewportClass *class)
    * code needs to work with older versions, consider setting it explicitly to
    * TRUE.
    */
-  props[PROP_SCROLL_TO_FOCUS] = g_param_spec_boolean ("scroll-to-focus", NULL, NULL,
-                                                      TRUE,
-                                                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_SCROLL_TO_FOCUS,
+                                   g_param_spec_boolean ("scroll-to-focus", NULL, NULL,
+                                                         TRUE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkViewport:child:
+   * GtkViewport:child: (attributes org.gtk.Property.get=gtk_viewport_get_child org.gtk.Property.set=gtk_viewport_set_child)
    *
    * The child widget.
    */
-  props[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
-                                           GTK_TYPE_WIDGET,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+                                   PROP_CHILD,
+                                   g_param_spec_object ("child", NULL, NULL,
+                                                        GTK_TYPE_WIDGET,
+                                                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   gtk_widget_class_set_css_name (widget_class, I_("viewport"));
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_GENERIC);
@@ -571,7 +558,7 @@ gtk_viewport_adjustment_value_changed (GtkAdjustment *adjustment,
 }
 
 /**
- * gtk_viewport_get_scroll_to_focus:
+ * gtk_viewport_get_scroll_to_focus: (attributes org.gtk.Method.get_property=scroll-to-focus)
  * @viewport: a `GtkViewport`
  *
  * Gets whether the viewport is scrolling to keep the focused
@@ -588,7 +575,7 @@ gtk_viewport_get_scroll_to_focus (GtkViewport *viewport)
 }
 
 /**
- * gtk_viewport_set_scroll_to_focus:
+ * gtk_viewport_set_scroll_to_focus: (attributes org.gtk.Method.set_property=scroll-to-focus)
  * @viewport: a `GtkViewport`
  * @scroll_to_focus: whether to keep the focus widget scrolled to view
  *
@@ -614,7 +601,7 @@ gtk_viewport_set_scroll_to_focus (GtkViewport *viewport,
         clear_focus_change_handler (viewport);
     }
 
-  g_object_notify_by_pspec (G_OBJECT (viewport), props[PROP_SCROLL_TO_FOCUS]);
+  g_object_notify (G_OBJECT (viewport), "scroll-to-focus");
 }
 
 static void
@@ -635,9 +622,6 @@ focus_change_handler (GtkWidget *widget)
 
   if (GTK_IS_TEXT (focus_widget))
     focus_widget = gtk_widget_get_parent (focus_widget);
-
-  if (gtk_widget_get_native (focus_widget) != gtk_widget_get_native (widget))
-    return;
 
   gtk_viewport_scroll_to (viewport, focus_widget, NULL);
 }
@@ -660,11 +644,15 @@ clear_focus_change_handler (GtkViewport *viewport)
 
   root = gtk_widget_get_root (GTK_WIDGET (viewport));
 
-  g_clear_signal_handler (&viewport->focus_handler, root);
+  if (viewport->focus_handler)
+    {
+      g_signal_handler_disconnect (root, viewport->focus_handler);
+      viewport->focus_handler = 0;
+    }
 }
 
 /**
- * gtk_viewport_set_child:
+ * gtk_viewport_set_child: (attributes org.gtk.Method.set_property=child)
  * @viewport: a `GtkViewport`
  * @child: (nullable): the child widget
  *
@@ -688,11 +676,11 @@ gtk_viewport_set_child (GtkViewport *viewport,
       gtk_widget_set_parent (child, GTK_WIDGET (viewport));
     }
 
-  g_object_notify_by_pspec (G_OBJECT (viewport), props[PROP_CHILD]);
+  g_object_notify (G_OBJECT (viewport), "child");
 }
 
 /**
- * gtk_viewport_get_child:
+ * gtk_viewport_get_child: (attributes org.gtk.Method.get_property=child)
  * @viewport: a `GtkViewport`
  *
  * Gets the child widget of @viewport.

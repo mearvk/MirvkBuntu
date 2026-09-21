@@ -8,17 +8,13 @@ gtk4-path-tool
 GskPath Utility
 -----------------------
 
-:Version: GTK
-:Manual section: 1
-:Manual group: GTK commands
-
 SYNOPSIS
 --------
 |   **gtk4-path-tool** <COMMAND> [OPTIONS...] <PATH>
 |
 |   **gtk4-path-tool** decompose [OPTIONS...] <PATH>
-|   **gtk4-path-tool** show [OPTIONS...] <PATH>...
-|   **gtk4-path-tool** render [OPTIONS...] <PATH>...
+|   **gtk4-path-tool** show [OPTIONS...] <PATH>
+|   **gtk4-path-tool** render [OPTIONS...] <PATH>
 |   **gtk4-path-tool** reverse [OPTIONS...] <PATH>
 |   **gtk4-path-tool** info [OPTIONS...] <PATH>
 
@@ -57,10 +53,7 @@ Showing
 ^^^^^^^
 
 The ``show`` command displays the given path in a window. The interior
-of the path is filled. The window allows some interactive control with
-key bindings: '+'/'-' change the zoom level, 'p' toggles display of points,
-'c' toggles display of controls, 'i' toggles display of intersections and
-'f' changes the fill rule.
+of the path is filled.
 
 ``--fill``
 
@@ -77,11 +70,6 @@ key bindings: '+'/'-' change the zoom level, 'p' toggles display of points,
 ``--controls``
 
   Show control points.
-
-``--intersections``
-
-  If two paths are given, show their intersections. If one path is given,
-  show its self-intersections.
 
 ``--fill-rule=VALUE``
 
@@ -102,11 +90,6 @@ key bindings: '+'/'-' change the zoom level, 'p' toggles display of points,
 
   The color that is used to render the points.
   If not specified, red is used.
-
-``--intersection-color=COLOR``
-
-  The color that is used to render intersections.
-  If not specified, green is used.
 
 ``--line-width=VALUE``
 
@@ -143,14 +126,11 @@ key bindings: '+'/'-' change the zoom level, 'p' toggles display of points,
   The offset into the dash pattern where dashing should begin.
   The default value is 0.
 
-``--zoom=NUMBER``
-
-  Set the zoom level to the given number (between 1 and 20).
-
 Rendering
 ^^^^^^^^^
 
 The ``render`` command renders the given path as a PNG image.
+The interior of the path is filled.
 
 ``--fill``
 
@@ -167,11 +147,6 @@ The ``render`` command renders the given path as a PNG image.
 ``--controls``
 
   Show control points.
-
-``--intersections``
-
-  If two paths are given, show their intersections. If one path is given,
-  show its self-intersections.
 
 ``--fill-rule=VALUE``
 
@@ -192,11 +167,6 @@ The ``render`` command renders the given path as a PNG image.
 
   The color that is used to render the points.
   If not specified, red is used.
-
-``--intersection-color=COLOR``
-
-  The color that is used to render intersections.
-  If not specified, green is used.
 
 ``--output-file=FILE``
 
@@ -237,10 +207,6 @@ The ``render`` command renders the given path as a PNG image.
 
   The offset into the dash pattern where dashing should begin.
   The default value is 0.
-
-``--zoom=NUMBER``
-
-  Set the zoom level to the given number (between 1 and 20).
 
 Reversing
 ^^^^^^^^^

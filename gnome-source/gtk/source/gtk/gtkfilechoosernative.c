@@ -195,7 +195,6 @@ enum {
   MODE_FALLBACK,
   MODE_WIN32,
   MODE_QUARTZ,
-  MODE_ANDROID,
   MODE_PORTAL,
 };
 
@@ -203,10 +202,10 @@ enum {
   PROP_0,
   PROP_ACCEPT_LABEL,
   PROP_CANCEL_LABEL,
-  N_PROPS,
+  LAST_ARG,
 };
 
-static GParamSpec *native_props[N_PROPS] = { NULL, };
+static GParamSpec *native_props[LAST_ARG] = { NULL, };
 
 static void    _gtk_file_chooser_native_iface_init   (GtkFileChooserIface  *iface);
 
@@ -216,7 +215,7 @@ G_DEFINE_TYPE_WITH_CODE (GtkFileChooserNative, gtk_file_chooser_native, GTK_TYPE
 
 
 /**
- * gtk_file_chooser_native_get_accept_label:
+ * gtk_file_chooser_native_get_accept_label: (attributes org.gtk.Method.get_property=accept-label)
  * @self: a `GtkFileChooserNative`
  *
  * Retrieves the custom label text for the accept button.
@@ -234,7 +233,7 @@ gtk_file_chooser_native_get_accept_label (GtkFileChooserNative *self)
 }
 
 /**
- * gtk_file_chooser_native_set_accept_label:
+ * gtk_file_chooser_native_set_accept_label: (attributes org.gtk.Method.set_property=accept-label)
  * @self: a `GtkFileChooserNative`
  * @accept_label: (nullable): custom label
  *
@@ -262,7 +261,7 @@ gtk_file_chooser_native_set_accept_label (GtkFileChooserNative *self,
 }
 
 /**
- * gtk_file_chooser_native_get_cancel_label:
+ * gtk_file_chooser_native_get_cancel_label: (attributes org.gtk.Method.get_property=cancel-label)
  * @self: a `GtkFileChooserNative`
  *
  * Retrieves the custom label text for the cancel button.
@@ -280,7 +279,7 @@ gtk_file_chooser_native_get_cancel_label (GtkFileChooserNative *self)
 }
 
 /**
- * gtk_file_chooser_native_set_cancel_label:
+ * gtk_file_chooser_native_set_cancel_label: (attributes org.gtk.Method.set_property=cancel-label)
  * @self: a `GtkFileChooserNative`
  * @cancel_label: (nullable): custom label
  *
@@ -454,7 +453,7 @@ gtk_file_chooser_native_set_property (GObject      *object,
     case GTK_FILE_CHOOSER_PROP_FILTER:
       self->current_filter = g_value_get_object (value);
       gtk_file_chooser_set_filter (GTK_FILE_CHOOSER (self->dialog), self->current_filter);
-      g_object_notify_by_pspec (G_OBJECT (self), pspec);
+      g_object_notify (G_OBJECT (self), "filter");
       break;
 
     default:
@@ -560,6 +559,13 @@ gtk_file_chooser_native_new (const char           *title,
                          NULL);
 
   return result;
+}
+
+void
+gtk_file_chooser_native_set_use_portal (GtkFileChooserNative *self,
+                                        gboolean              use_portal)
+{
+  self->use_portal = use_portal;
 }
 
 static void
@@ -687,7 +693,6 @@ gtk_file_chooser_native_get_files (GtkFileChooser *chooser)
     case MODE_PORTAL:
     case MODE_WIN32:
     case MODE_QUARTZ:
-    case MODE_ANDROID:
       {
         GListStore *store;
         GSList *l;
@@ -703,6 +708,13 @@ gtk_file_chooser_native_get_files (GtkFileChooser *chooser)
     default:
       return gtk_file_chooser_get_files (GTK_FILE_CHOOSER (self->dialog));
     }
+}
+
+static void
+portal_error_handler (GtkFileChooserNative *self)
+{
+  self->mode = MODE_FALLBACK;
+  show_dialog (self);
 }
 
 static void
@@ -722,13 +734,8 @@ gtk_file_chooser_native_show (GtkNativeDialog *native)
     self->mode = MODE_QUARTZ;
 #endif
 
-#ifdef GDK_WINDOWING_ANDROID
-  if (gtk_file_chooser_native_android_show (self))
-    self->mode = MODE_ANDROID;
-#endif
-
   if (self->mode == MODE_FALLBACK &&
-      gtk_file_chooser_native_portal_show (self))
+      gtk_file_chooser_native_portal_show (self, portal_error_handler))
     self->mode = MODE_PORTAL;
 
   if (self->mode == MODE_FALLBACK)
@@ -755,11 +762,6 @@ gtk_file_chooser_native_hide (GtkNativeDialog *native)
       gtk_file_chooser_native_quartz_hide (self);
 #endif
       break;
-    case MODE_ANDROID:
-#ifdef GDK_WINDOWING_ANDROID
-      gtk_file_chooser_native_android_hide (self);
-#endif
-      break;
     case MODE_PORTAL:
       gtk_file_chooser_native_portal_hide (self);
       break;
@@ -784,7 +786,7 @@ gtk_file_chooser_native_class_init (GtkFileChooserNativeClass *class)
   _gtk_file_chooser_install_properties (gobject_class);
 
   /**
-   * GtkFileChooserNative:accept-label:
+   * GtkFileChooserNative:accept-label: (attributes org.gtk.Property.get=gtk_file_chooser_native_get_accept_label org.gtk.Property.set=gtk_file_chooser_native_set_accept_label)
    *
    * The text used for the label on the accept button in the dialog, or
    * %NULL to use the default text.
@@ -792,10 +794,10 @@ gtk_file_chooser_native_class_init (GtkFileChooserNativeClass *class)
  native_props[PROP_ACCEPT_LABEL] =
       g_param_spec_string ("accept-label", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
-   * GtkFileChooserNative:cancel-label:
+   * GtkFileChooserNative:cancel-label: (attributes org.gtk.Property.get=gtk_file_chooser_native_get_cancel_label org.gtk.Property.set=gtk_file_chooser_native_set_cancel_label)
    *
    * The text used for the label on the cancel button in the dialog, or
    * %NULL to use the default text.
@@ -803,9 +805,9 @@ gtk_file_chooser_native_class_init (GtkFileChooserNativeClass *class)
   native_props[PROP_CANCEL_LABEL] =
       g_param_spec_string ("cancel-label", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
-  g_object_class_install_properties (gobject_class, N_PROPS, native_props);
+  g_object_class_install_properties (gobject_class, LAST_ARG, native_props);
 }
 
 static void

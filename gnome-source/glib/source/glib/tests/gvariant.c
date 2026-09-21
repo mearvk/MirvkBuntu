@@ -313,7 +313,7 @@ invalid_mutation (const gchar *type_string)
 
   /* else, perform a random mutation at a random point */
   {
-    size_t length, n;
+    gint length, n;
     gchar *new;
     gchar p;
 
@@ -1557,22 +1557,16 @@ test_array (void)
     gsize i;
 
     body_ptr = data = align_malloc (needed_size);
+    offset_ptr = body_ptr + needed_size - offset_size * n_children;
 
-    /* An empty array serialises to nothing, and align_malloc() returns NULL
-     * for a zero-sized allocation. */
-    if (needed_size > 0)
+    for (i = 0; i < n_children; i++)
       {
-        offset_ptr = body_ptr + needed_size - offset_size * n_children;
-
-        for (i = 0; i < n_children; i++)
-          {
-            append_instance_data (instances[i], &body_ptr);
-            append_offset (&offset_ptr, body_ptr - data, offset_size);
-          }
-
-        g_assert_true (body_ptr == data + needed_size - offset_size * n_children);
-        g_assert_true (offset_ptr == data + needed_size);
+        append_instance_data (instances[i], &body_ptr);
+        append_offset (&offset_ptr, body_ptr - data, offset_size);
       }
+
+    g_assert_true (body_ptr == data + needed_size - offset_size * n_children);
+    g_assert_true (offset_ptr == data + needed_size);
   }
 
   {
@@ -2333,15 +2327,7 @@ test_byteswap (void)
    * often makes something non-normal but still readable. */
   three_size_copy = three.size + 1;
   three_data_copy = g_malloc (three_size_copy);
-  if (three.data)
-    {
-      g_assert_cmpuint (three.size, !=, 0);
-      memcpy (three_data_copy, three.data, three.size);
-    }
-  else
-    {
-      g_assert_cmpuint (three.size, ==, 0);
-    }
+  memcpy (three_data_copy, three.data, three.size);
   three_data_copy[three.size] = '\0';
 
   three_variant = g_variant_new_from_data (G_VARIANT_TYPE (g_variant_type_info_get_type_string (three.type_info)),
@@ -2377,174 +2363,6 @@ test_byteswaps (void)
 
   for (i = 0; i < 200; i++)
     test_byteswap ();
-
-  g_variant_type_info_assert_no_infos ();
-}
-
-static void
-test_byteswap_zero_sized (void)
-{
-  GVariant *variant;
-  GVariant *swapped;
-
-  variant = g_variant_new_from_data (G_VARIANT_TYPE_STRING, NULL, 0, TRUE, NULL, NULL);
-  swapped = g_variant_byteswap (variant);
-
-  g_variant_unref (variant);
-  g_variant_unref (swapped);
-}
-
-/* Serialise @value and all of its descendants and check each of them for
- * normal form. The results are deliberately unused: the point is to reach the
- * code which handles them, so that a sanitizer can have its say. */
-static void
-serialise_recursively (GVariant *value)
-{
-  gsize i, n;
-
-  g_variant_get_data (value);
-  g_variant_get_size (value);
-  g_variant_is_normal_form (value);
-
-  if (!g_variant_is_container (value))
-    return;
-
-  n = g_variant_n_children (value);
-  for (i = 0; i < n; i++)
-    {
-      GVariant *child = g_variant_get_child_value (value, i);
-
-      serialise_recursively (child);
-      g_variant_unref (child);
-    }
-}
-
-/* Test values whose serialised form is zero bytes long. Their data pointer is
- * NULL, so the serialiser must not form any pointer into it. */
-static void
-test_serialiser_zero_sized (void)
-{
-  const gchar *texts[] = {
-    /* Empty arrays, with fixed-sized, variable-sized and zero-sized
-     * elements. */
-    "@ai []",
-    "@as []",
-    "@a() []",
-    "@aay []",
-    "@a{ss} {}",
-    /* A maybe with no value. */
-    "@may nothing",
-    /* Tuples whose members all serialise to nothing. The last member of a
-     * tuple has no entry in the offset table, so these need no table at all. */
-    "(@ay [],)",
-    "(@as [],)",
-    "((@ay [],),)",
-    "@(ay) ([],)",
-    "@((ay)) (([],),)",
-  };
-  gsize i;
-
-  for (i = 0; i < G_N_ELEMENTS (texts); i++)
-    {
-      GVariant *value = NULL, *copy = NULL;
-      GBytes *bytes = NULL;
-      GError *local_error = NULL;
-
-      g_test_message ("Text: %s", texts[i]);
-
-      value = g_variant_parse (NULL, texts[i], NULL, NULL, &local_error);
-      g_assert_no_error (local_error);
-      g_assert_nonnull (value);
-
-      /* Serialising must give a zero-sized value with no data at all. */
-      g_assert_null (g_variant_get_data (value));
-      g_assert_cmpuint (g_variant_get_size (value), ==, 0);
-      g_assert_true (g_variant_is_normal_form (value));
-
-      /* Read the same data back and compare it to the original. */
-      bytes = g_variant_get_data_as_bytes (value);
-      copy = g_variant_new_from_bytes (g_variant_get_type (value), bytes, FALSE);
-      g_variant_ref_sink (copy);
-
-      serialise_recursively (copy);
-      g_assert_cmpvariant (value, copy);
-
-      g_variant_unref (copy);
-      g_bytes_unref (bytes);
-      g_variant_unref (value);
-    }
-
-  g_variant_type_info_assert_no_infos ();
-}
-
-/* Test tuples deserialised from zero bytes of data. Their offset table is
- * empty, so reading a member's bounds must not form a pointer into the (NULL)
- * data either. */
-static void
-test_serialiser_zero_sized_tuple_data (void)
-{
-  const struct
-  {
-    const gchar *type;
-    gboolean normal;
-  } tests[] = {
-    { "(ayay)", TRUE },
-    { "(asas)", TRUE },
-    { "(ayayay)", TRUE },
-    { "(mayay)", TRUE },
-    { "((ay)(ay))", TRUE },
-    { "(a(ay)a(ay))", TRUE },
-    /* Members which cannot be zero-sized make the value non-normal. Note that
-     * the others are considered normal because every one of their members can
-     * legitimately be zero-sized, so there is nothing missing from the data. */
-    { "(sss)", FALSE },
-    { "(ayi)", FALSE },
-    { "(iay)", FALSE },
-  };
-  gsize i;
-
-  for (i = 0; i < G_N_ELEMENTS (tests); i++)
-    {
-      GVariant *value = NULL;
-      GBytes *bytes = NULL;
-
-      g_test_message ("Type: %s", tests[i].type);
-
-      bytes = g_bytes_new (NULL, 0);
-      value = g_variant_new_from_bytes (G_VARIANT_TYPE (tests[i].type), bytes, FALSE);
-      g_variant_ref_sink (value);
-
-      g_assert_cmpuint (g_variant_get_size (value), ==, 0);
-      g_assert_cmpint (g_variant_is_normal_form (value), ==, tests[i].normal);
-
-      serialise_recursively (value);
-
-      g_variant_unref (value);
-      g_bytes_unref (bytes);
-    }
-
-  g_variant_type_info_assert_no_infos ();
-}
-
-/* Test the unit tuple, which is the only type with no member information at
- * all. */
-static void
-test_serialiser_unit_tuple (void)
-{
-  GVariant *value = NULL;
-
-  value = g_variant_new_tuple (NULL, 0);
-  g_variant_ref_sink (value);
-
-  g_assert_cmpstr (g_variant_get_type_string (value), ==, "()");
-  g_assert_cmpuint (g_variant_n_children (value), ==, 0);
-
-  /* The unit tuple is defined to take up one byte rather than none. */
-  g_assert_cmpuint (g_variant_get_size (value), ==, 1);
-  g_assert_nonnull (g_variant_get_data (value));
-  g_assert_true (g_variant_is_normal_form (value));
-
-  g_variant_unref (value);
 
   g_variant_type_info_assert_no_infos ();
 }
@@ -3069,15 +2887,6 @@ test_container (void)
 }
 
 static void
-do_failed_test (const char *test,
-                const gchar *pattern)
-{
-  g_test_trap_subprocess (test, 0, G_TEST_SUBPROCESS_DEFAULT);
-  g_test_trap_assert_failed ();
-  g_test_trap_assert_stderr (pattern);
-}
-
-static void
 test_string (void)
 {
   /* Test some different methods of creating strings */
@@ -3126,35 +2935,6 @@ test_utf8 (void)
    */
   g_assert_true (g_variant_get_string (value, NULL) == invalid);
   g_variant_unref (value);
-}
-
-static void
-test_utf8_bad_new_string (void)
-{
-  g_variant_new_string ("hello\xffworld");
-
-  g_assert_not_reached ();
-}
-
-static void
-test_utf8_bad_new_take_string (void)
-{
-  g_variant_new_take_string (g_strdup ("hello\xffworld"));
-
-  g_assert_not_reached ();
-}
-
-static void
-test_utf8_new_strings (void)
-{
-  if (g_test_undefined ())
-    {
-      do_failed_test ("/gvariant/utf8/subprocess/bad-new-string",
-                      "*g_variant_new_string(): requires valid UTF-8*");
-
-      do_failed_test ("/gvariant/utf8/subprocess/bad-new-take-string",
-                      "*g_variant_new_take_string(): requires valid UTF-8*");
-    }
 }
 
 static void
@@ -3216,6 +2996,15 @@ test_format_strings (void)
 
   type = g_variant_format_string_scan_type ("mm(@xy^a&*?@?)", NULL, NULL);
   g_assert_null (type);
+}
+
+static void
+do_failed_test (const char *test,
+                const gchar *pattern)
+{
+  g_test_trap_subprocess (test, 1000000, G_TEST_SUBPROCESS_DEFAULT);
+  g_test_trap_assert_failed ();
+  g_test_trap_assert_stderr (pattern);
 }
 
 static void
@@ -4225,7 +4014,7 @@ test_parses (void)
     g_free (printed);
   }
 
-  /* pattern coalesce of `MN` and `*` is `MN` */
+  /* pattern coalese of `MN` and `*` is `MN` */
   {
     GVariant *value = NULL;
     GError *error = NULL;
@@ -4233,29 +4022,6 @@ test_parses (void)
     value = g_variant_parse (NULL, "[[0], [], [nothing]]", NULL, NULL, &error);
     g_assert_no_error (error);
     g_assert_cmpstr (g_variant_get_type_string (value), ==, "aami");
-    g_variant_unref (value);
-  }
-
-  /* pattern coalesce of `u` and `u` is `u`; this operates close to the string
-   * length bounds in pattern_coalesce() */
-  {
-    GVariant *value = NULL;
-    GError *error = NULL;
-
-    value = g_variant_parse (NULL, "[@u 5, @u 15]", NULL, NULL, &error);
-    g_assert_no_error (error);
-    g_assert_cmpstr (g_variant_get_type_string (value), ==, "au");
-    g_variant_unref (value);
-  }
-
-  /* pattern coalesce of `(Ma*Ma(iii))` and `(Ma(iii)Ma*)` is `(Ma(iii)Ma(iii))` */
-  {
-    GVariant *value = NULL;
-    GError *error = NULL;
-
-    value = g_variant_parse (NULL, "[([], [(1,2,3)]), ([(1,2,3)], [])]", NULL, NULL, &error);
-    g_assert_no_error (error);
-    g_assert_cmpstr (g_variant_get_type_string (value), ==, "a(a(iii)a(iii))");
     g_variant_unref (value);
   }
 
@@ -4765,23 +4531,6 @@ test_bytestring (void)
 }
 
 static void
-test_bytestring_iteration (void)
-{
-  GVariantIter iter;
-  GVariant *child;
-  GVariant *value;
-
-  value = g_variant_new_bytestring ("Foo");
-
-  g_variant_iter_init (&iter, value);
-
-  while ((child = g_variant_iter_next_value (&iter)))
-    g_variant_unref (child);
-
-  g_variant_unref (value);
-}
-
-static void
 test_lookup_value (void)
 {
   struct {
@@ -5038,23 +4787,6 @@ test_fixed_array (void)
   for (i = 0; i < 5; i++)
     g_assert_cmpint (elts[i], ==, i + 1);
   g_variant_unref (a);
-
-  if (g_test_undefined ())
-    {
-      do_failed_test ("/gvariant/fixed-array/subprocess/overflow",
-                      "*n_elements <= G_MAXSIZE / element_size*");
-    }
-}
-
-static void
-test_fixed_array_overflow_subprocess (void)
-{
-  gint32 value = 0;
-
-  g_variant_new_fixed_array (G_VARIANT_TYPE_INT32, &value,
-                             G_MAXSIZE, sizeof (gint32));
-
-  g_assert_not_reached ();
 }
 
 static void
@@ -5298,49 +5030,6 @@ test_stack_builder_init (void)
   g_assert_cmpuint (g_variant_n_children (variant), ==, 5);
   g_assert_cmpstr (g_variant_get_bytestring (variant), ==, "glib");
   g_variant_unref (variant);
-}
-
-static void
-test_stack_builder_init_static (void)
-{
-  GVariantBuilder builder;
-  GVariant *variant;
-
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE_BYTESTRING);
-  g_variant_builder_add_value (&builder, g_variant_new_byte ('g'));
-  g_variant_builder_add_value (&builder, g_variant_new_byte ('l'));
-  g_variant_builder_add_value (&builder, g_variant_new_byte ('i'));
-  g_variant_builder_add_value (&builder, g_variant_new_byte ('b'));
-  g_variant_builder_add_value (&builder, g_variant_new_byte ('\0'));
-
-  variant = g_variant_ref_sink (g_variant_builder_end (&builder));
-  g_assert_nonnull (variant);
-  g_assert_true (g_variant_type_equal (g_variant_get_type (variant),
-                                       G_VARIANT_TYPE_BYTESTRING));
-  g_assert_cmpuint (g_variant_n_children (variant), ==, 5);
-  g_assert_cmpstr (g_variant_get_bytestring (variant), ==, "glib");
-  g_variant_unref (variant);
-}
-
-static void
-test_stack_builder_init_unset (void)
-{
-  GVariantBuilder builder1 = G_VARIANT_BUILDER_INIT_UNSET ();
-  GVariantBuilder builder2 = G_VARIANT_BUILDER_INIT_UNSET ();
-  GVariantBuilder builder3 = G_VARIANT_BUILDER_INIT_UNSET ();
-  GVariant *variant;
-
-  g_variant_builder_clear (&builder1);
-
-  g_variant_builder_init_static (&builder2, G_VARIANT_TYPE_BYTESTRING);
-  g_variant_builder_add_value (&builder2, g_variant_new_byte ('\0'));
-  variant = g_variant_ref_sink (g_variant_builder_end (&builder2));
-  g_assert_nonnull (variant);
-  g_variant_unref (variant);
-  g_variant_builder_clear (&builder2);
-
-  g_variant_builder_init (&builder3, G_VARIANT_TYPE_BYTESTRING);
-  g_variant_builder_clear (&builder3);
 }
 
 static GVariant *
@@ -5917,7 +5606,7 @@ test_normal_checking_tuple_offsets5 (void)
    *  - The offset of the first `s` in the tuple is always 0.
    *
    * See §2.5.4 (Structures) of the GVariant specification for details, noting
-   * that the table is only laid out this way because all three members of the
+   * that the table is only layed out this way because all three members of the
    * tuple have non-fixed sizes.
    *
    * It’s not clear whether the 0xaa data of this variant is part of the strings
@@ -5949,53 +5638,6 @@ test_normal_checking_tuple_offsets5 (void)
   g_assert_nonnull (normal_variant);
 
   expected = g_variant_new_parsed ("('', '', '')");
-  g_assert_cmpvariant (expected, variant);
-  g_assert_cmpvariant (expected, normal_variant);
-
-  g_variant_unref (expected);
-  g_variant_unref (normal_variant);
-  g_variant_unref (variant);
-}
-
-/* This is a regression test that looping over the padding bytes in a short
- * (non-normal) tuple doesn’t overflow the input data.
- *
- * See https://gitlab.gnome.org/GNOME/glib/-/issues/3915 */
-static void
-test_normal_checking_tuple_offsets6 (void)
-{
-  /*
-   * Type: (ynqiuxthdsog) — 12 members, first member 'y' (byte) has
-   * alignment 0, second 'n' (int16) has alignment 1.
-   * With 1 byte of data (0x28), after reading the first byte member,
-   * offset=1, alignment check for 'n' requires offset to be even,
-   * so the while loop checks value.data[1] — but size is only 1.
-   *
-   * Use heap allocation via GBytes so ASan reports heap-buffer-overflow.
-   */
-  uint8_t *heap_data = NULL;
-  GBytes *bytes = NULL;
-  const GVariantType *data_type = G_VARIANT_TYPE ("(ynqiuxthdsog)");
-  GVariant *variant = NULL;
-  GVariant *normal_variant = NULL;
-  GVariant *expected = NULL;
-
-  g_test_bug ("https://gitlab.gnome.org/GNOME/glib/-/issues/3915");
-
-  heap_data = g_malloc (1);
-  heap_data[0] = 0x28;
-  bytes = g_bytes_new_take (g_steal_pointer (&heap_data), 1);
-
-  variant = g_variant_new_from_bytes (data_type, bytes, FALSE);
-  g_assert_nonnull (variant);
-  g_clear_pointer (&bytes, g_bytes_unref);
-
-  g_assert_false (g_variant_is_normal_form (variant));
-
-  normal_variant = g_variant_get_normal_form (variant);
-  g_assert_nonnull (normal_variant);
-
-  expected = g_variant_new_parsed ("(byte 0x28, int16 0, uint16 0, 0, uint32 0, int64 0, uint64 0, handle 0, 0.0, '', objectpath '/', signature '')");
   g_assert_cmpvariant (expected, variant);
   g_assert_cmpvariant (expected, normal_variant);
 
@@ -6165,51 +5807,6 @@ test_unaligned_construction (void)
     }
 }
 
-static void
-test_invalid_get_data_as_bytes (void)
-{
-  static const guint8 data[] = { 0x41 };
-  GVariant *variant;
-  GBytes *bytes;
-
-  /* deliberately construct an invalid variant */
-  variant = g_variant_new_from_data (G_VARIANT_TYPE_UINT32,
-                                     data, sizeof (data),  
-                                     FALSE,
-                                     NULL, NULL);
-  g_assert_nonnull (variant);
-
-  /* ensure that the data is invalid */
-  g_assert_null (g_variant_get_data (variant));
-
-  /* query that variant's data as bytes */
-  bytes = g_variant_get_data_as_bytes (variant);
-  g_assert_nonnull (bytes);
-  /* assert that some data comes out and has the right size */
-  g_assert_cmpuint (g_variant_get_size (variant), ==, g_bytes_get_size (bytes));
-
-  g_bytes_unref (bytes);
-  g_variant_unref (variant);
-}
-
-static void
-test_g_variant_type_hash (void)
-{
-  char mas[4] = {'m', 'a', 's', 0};
-
-  g_assert_cmpint (g_variant_type_hash (G_VARIANT_TYPE ("a(ay)")),
-                   !=,
-                   g_variant_type_hash (G_VARIANT_TYPE ("aay")));
-
-  g_assert_cmpint (g_variant_type_hash (G_VARIANT_TYPE ("a{sv}")),
-                   !=,
-                   g_variant_type_hash (G_VARIANT_TYPE ("a(sv)")));
-
-  g_assert_cmpint (g_variant_type_hash (G_VARIANT_TYPE ("mas")),
-                   ==,
-                   g_variant_type_hash ((const GVariantType *)mas));
-}
-
 int
 main (int argc, char **argv)
 {
@@ -6229,12 +5826,7 @@ main (int argc, char **argv)
   g_test_add_func ("/gvariant/serialiser/variant", test_variants);
   g_test_add_func ("/gvariant/serialiser/strings", test_strings);
   g_test_add_func ("/gvariant/serialiser/byteswap", test_byteswaps);
-  g_test_add_func ("/gvariant/serialiser/byteswap/zero-sized", test_byteswap_zero_sized);
   g_test_add_func ("/gvariant/serialiser/children", test_serialiser_children);
-  g_test_add_func ("/gvariant/serialiser/zero-sized", test_serialiser_zero_sized);
-  g_test_add_func ("/gvariant/serialiser/zero-sized-tuple-data",
-                   test_serialiser_zero_sized_tuple_data);
-  g_test_add_func ("/gvariant/serialiser/unit-tuple", test_serialiser_unit_tuple);
 
   for (i = 1; i <= 20; i += 4)
     {
@@ -6248,9 +5840,6 @@ main (int argc, char **argv)
 
   g_test_add_func ("/gvariant/string", test_string);
   g_test_add_func ("/gvariant/utf8", test_utf8);
-  g_test_add_func ("/gvariant/utf8/subprocess/bad-new-string", test_utf8_bad_new_string);
-  g_test_add_func ("/gvariant/utf8/subprocess/bad-new-take-string", test_utf8_bad_new_take_string);
-  g_test_add_func ("/gvariant/utf8-new-strings", test_utf8_new_strings);
   g_test_add_func ("/gvariant/containers", test_containers);
   g_test_add_func ("/gvariant/format-strings", test_format_strings);
   g_test_add_func ("/gvariant/invalid-varargs", test_invalid_varargs);
@@ -6273,13 +5862,11 @@ main (int argc, char **argv)
   g_test_add_func ("/gvariant/parse/subprocess/bad-args", test_parse_bad_args);
   g_test_add_func ("/gvariant/floating", test_floating);
   g_test_add_func ("/gvariant/bytestring", test_bytestring);
-  g_test_add_func ("/gvariant/bytestring-iteration", test_bytestring_iteration);
   g_test_add_func ("/gvariant/lookup-value", test_lookup_value);
   g_test_add_func ("/gvariant/lookup", test_lookup);
   g_test_add_func ("/gvariant/compare", test_compare);
   g_test_add_func ("/gvariant/equal", test_equal);
   g_test_add_func ("/gvariant/fixed-array", test_fixed_array);
-  g_test_add_func ("/gvariant/fixed-array/subprocess/overflow", test_fixed_array_overflow_subprocess);
   g_test_add_func ("/gvariant/check-format-string", test_check_format_string);
 
   g_test_add_func ("/gvariant/checksum-basic", test_checksum_basic);
@@ -6290,8 +5877,6 @@ main (int argc, char **argv)
   g_test_add_func ("/gvariant/error-quark", test_error_quark);
 
   g_test_add_func ("/gvariant/stack-builder-init", test_stack_builder_init);
-  g_test_add_func ("/gvariant/stack-builder-init-static", test_stack_builder_init_static);
-  g_test_add_func ("/gvariant/stack-builder-init-unset", test_stack_builder_init_unset);
   g_test_add_func ("/gvariant/stack-dict-init", test_stack_dict_init);
 
   g_test_add_func ("/gvariant/normal-checking/tuples",
@@ -6314,8 +5899,6 @@ main (int argc, char **argv)
                    test_normal_checking_tuple_offsets4);
   g_test_add_func ("/gvariant/normal-checking/tuple-offsets5",
                    test_normal_checking_tuple_offsets5);
-  g_test_add_func ("/gvariant/normal-checking/tuple-offsets6",
-                   test_normal_checking_tuple_offsets6);
   g_test_add_func ("/gvariant/normal-checking/tuple-offsets/minimal-sized",
                    test_normal_checking_tuple_offsets_minimal_sized);
   g_test_add_func ("/gvariant/normal-checking/empty-object-path",
@@ -6328,12 +5911,6 @@ main (int argc, char **argv)
 
   g_test_add_func ("/gvariant/unaligned-construction",
                    test_unaligned_construction);
-
-  g_test_add_func ("/gvariant/invalid/get-data-as-bytes",
-                   test_invalid_get_data_as_bytes);
-
-  g_test_add_func ("/gvarianttype/hash",
-                   test_g_variant_type_hash);
 
   return g_test_run ();
 }

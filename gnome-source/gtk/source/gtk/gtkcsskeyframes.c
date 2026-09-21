@@ -21,8 +21,6 @@
 
 #include "gtkcssstyleprivate.h"
 #include "gtkcssarrayvalueprivate.h"
-#include "gtkcsscustompropertypoolprivate.h"
-#include "gtkcssreferencevalueprivate.h"
 #include "gtkcssshorthandpropertyprivate.h"
 #include "gtkcssstylepropertyprivate.h"
 #include "gtkstylepropertyprivate.h"
@@ -33,15 +31,12 @@
 #include <string.h>
 
 struct _GtkCssKeyframes {
-  int ref_count;                 /* ref count */
-  int n_keyframes;               /* number of keyframes (at least 2 for 0% and 100% */
-  double *keyframe_progress;     /* ordered array of n_keyframes of [0..1] */
-  int n_properties;              /* number of properties used by keyframes */
-  guint *property_ids;           /* ordered array of n_properties property ids */
-  GtkCssValue **values;          /* 2D array: n_keyframes * n_properties of (value or NULL) for all the keyframes */
-  GtkCssVariableSet **variables; /* array of variable sets for each keyframe */
-  int *variable_ids;             /* ordered array of variable ids */
-  int n_variables;               /* number of variable used by keyframes */
+  int ref_count;                /* ref count */
+  int n_keyframes;              /* number of keyframes (at least 2 for 0% and 100% */
+  double *keyframe_progress;    /* ordered array of n_keyframes of [0..1] */
+  int n_properties;             /* number of properties used by keyframes */
+  guint *property_ids;          /* ordered array of n_properties property ids */
+  GtkCssValue **values;         /* 2D array: n_keyframes * n_properties of (value or NULL) for all the keyframes */
 };
 
 #define KEYFRAMES_VALUE(keyframes, k, p) ((keyframes)->values[(k) * (keyframes)->n_properties + (p)])
@@ -74,16 +69,11 @@ _gtk_css_keyframes_unref (GtkCssKeyframes *keyframes)
     {
       for (p = 0; p < keyframes->n_properties; p++)
         {
-          gtk_css_value_unref (KEYFRAMES_VALUE (keyframes, k, p));
+          _gtk_css_value_unref (KEYFRAMES_VALUE (keyframes, k, p));
           KEYFRAMES_VALUE (keyframes, k, p) = NULL;
         }
-
-      if (keyframes->variables && keyframes->variables[k])
-        gtk_css_variable_set_unref (keyframes->variables[k]);
     }
   g_free (keyframes->values);
-  g_free (keyframes->variables);
-  g_free (keyframes->variable_ids);
 
   g_free (keyframes);
 }
@@ -103,7 +93,7 @@ gtk_css_keyframes_add_keyframe (GtkCssKeyframes *keyframes,
               if (KEYFRAMES_VALUE (keyframes, k, p) == NULL)
                 continue;
 
-              gtk_css_value_unref (KEYFRAMES_VALUE (keyframes, k, p));
+              _gtk_css_value_unref (KEYFRAMES_VALUE (keyframes, k, p));
               KEYFRAMES_VALUE (keyframes, k, p) = NULL;
 
               /* XXX: GC properties that are now unset
@@ -128,12 +118,6 @@ gtk_css_keyframes_add_keyframe (GtkCssKeyframes *keyframes,
       keyframes->values = g_realloc (keyframes->values, sizeof (GtkCssValue *) * keyframes->n_keyframes * keyframes->n_properties);
       memmove (&KEYFRAMES_VALUE (keyframes, k + 1, 0), &KEYFRAMES_VALUE (keyframes, k, 0), size * (keyframes->n_keyframes - k - 1));
       memset (&KEYFRAMES_VALUE (keyframes, k, 0), 0, size);
-    }
-
-  if (keyframes->variables)
-    {
-      keyframes->variables = g_realloc (keyframes->variables, sizeof (GtkCssVariableSet *) * keyframes->n_keyframes);
-      keyframes->variables[keyframes->n_keyframes - 1] = NULL;
     }
 
   return k;
@@ -189,26 +173,6 @@ gtk_css_keyframes_lookup_property (GtkCssKeyframes *keyframes,
   return p;
 }
 
-static void
-gtk_css_keyframes_register_variable (GtkCssKeyframes *keyframes,
-                                     int              variable_id)
-{
-  guint p;
-
-  for (p = 0; p < keyframes->n_variables; p++)
-    {
-      if (keyframes->variable_ids[p] == variable_id)
-        return;
-      else if (keyframes->variable_ids[p] > variable_id)
-        break;
-    }
-
-  keyframes->n_variables++;
-  keyframes->variable_ids = g_realloc (keyframes->variable_ids, sizeof (int) * keyframes->n_variables);
-  memmove (keyframes->variable_ids + p + 1, keyframes->variable_ids + p, sizeof (int) * (keyframes->n_variables - p - 1));
-  keyframes->variable_ids[p] = variable_id;
-}
-
 static GtkCssKeyframes *
 gtk_css_keyframes_alloc (void)
 {
@@ -247,9 +211,9 @@ keyframes_set_value (GtkCssKeyframes     *keyframes,
   p = gtk_css_keyframes_lookup_property (keyframes, _gtk_css_style_property_get_id (property));
   
   if (KEYFRAMES_VALUE (keyframes, k, p))
-    gtk_css_value_unref (KEYFRAMES_VALUE (keyframes, k, p));
+    _gtk_css_value_unref (KEYFRAMES_VALUE (keyframes, k, p));
 
-  KEYFRAMES_VALUE (keyframes, k, p) = gtk_css_value_ref (value);
+  KEYFRAMES_VALUE (keyframes, k, p) = _gtk_css_value_ref (value);
 
   return TRUE;
 }
@@ -271,47 +235,6 @@ gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
       return FALSE;
     }
 
-  /* This is a custom property */
-  if (name[0] == '-' && name[1] == '-')
-    {
-      GtkCssVariableValue *var_value;
-      GtkCssCustomPropertyPool *pool;
-      int id;
-
-      if (!gtk_css_parser_try_token (parser, GTK_CSS_TOKEN_COLON))
-        {
-          gtk_css_parser_error_syntax (parser, "Expected a ':'");
-          g_free (name);
-          return FALSE;
-        }
-
-      var_value = gtk_css_parser_parse_value_into_token_stream (parser);
-      if (var_value == NULL)
-        {
-          g_free (name);
-          return FALSE;
-        }
-
-      if (!keyframes->variables)
-        keyframes->variables = g_new0 (GtkCssVariableSet *, keyframes->n_keyframes);
-
-      if (!keyframes->variables[k])
-        keyframes->variables[k] = gtk_css_variable_set_new ();
-
-      pool = gtk_css_custom_property_pool_get ();
-      id = gtk_css_custom_property_pool_add (pool, name);
-      gtk_css_keyframes_register_variable (keyframes, id);
-
-      gtk_css_variable_value_taint (var_value);
-
-      gtk_css_variable_set_add (keyframes->variables[k], id, var_value);
-
-      gtk_css_custom_property_pool_unref (pool, id);
-
-      g_free (name);
-      return TRUE;
-    }
-
   property = _gtk_style_property_lookup (name);
   if (property == NULL)
     {
@@ -328,58 +251,14 @@ gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
       return FALSE;
     }
 
-  if (gtk_css_parser_has_references (parser))
-    {
-      GtkCssVariableValue *var_value;
-
-      var_value = gtk_css_parser_parse_value_into_token_stream (parser);
-      if (var_value == NULL)
-        return FALSE;
-
-      if (GTK_IS_CSS_SHORTHAND_PROPERTY (property))
-        {
-          GtkCssShorthandProperty *shorthand = GTK_CSS_SHORTHAND_PROPERTY (property);
-          guint i, n;
-          GtkCssValue **values;
-
-          n = _gtk_css_shorthand_property_get_n_subproperties (shorthand);
-
-          values = g_new (GtkCssValue *, n);
-
-          for (i = 0; i < n; i++)
-            {
-              GtkCssValue *child =
-                _gtk_css_reference_value_new (property,
-                                              var_value,
-                                              gtk_css_parser_get_file (parser));
-              _gtk_css_reference_value_set_subproperty (child, i);
-
-              values[i] = _gtk_css_array_value_get_nth (child, i);
-            }
-
-          value = _gtk_css_array_value_new_from_array (values, n);
-          g_free (values);
-        }
-      else
-        {
-          value = _gtk_css_reference_value_new (property,
-                                                var_value,
-                                                gtk_css_parser_get_file (parser));
-        }
-
-      gtk_css_variable_value_unref (var_value);
-    }
-  else
-    {
-      value = _gtk_style_property_parse_value (property, parser);
-      if (value == NULL)
-        return FALSE;
-    }
+  value = _gtk_style_property_parse_value (property, parser);
+  if (value == NULL)
+    return FALSE;
 
   if (!gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_EOF))
     {
       gtk_css_parser_error_syntax (parser, "Junk at end of value");
-      gtk_css_value_unref (value);
+      _gtk_css_value_unref (value);
       return FALSE;
     }
 
@@ -410,32 +289,9 @@ gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
       g_assert_not_reached ();
     }
       
-  gtk_css_value_unref (value);
+  _gtk_css_value_unref (value);
 
   return TRUE;
-}
-
-static guint
-gtk_css_keyframes_copy_keyframe (GtkCssKeyframes *keyframes,
-                                 guint            k,
-                                 double           progress)
-{
-  guint l = gtk_css_keyframes_add_keyframe (keyframes, progress);
-
-  if (l <= k)
-    k++;
-
-  if (keyframes->variables && keyframes->variables[k])
-    keyframes->variables[l] = gtk_css_variable_set_copy (keyframes->variables[k]);
-
-  for (guint p = 0; p < keyframes->n_properties; p++)
-    {
-      GtkCssValue *value = KEYFRAMES_VALUE (keyframes, k, p);
-      if (value)
-        KEYFRAMES_VALUE (keyframes, l, p) = gtk_css_value_ref (value);
-    }
-
-  return l;
 }
 
 static gboolean
@@ -458,9 +314,6 @@ gtk_css_keyframes_parse_block (GtkCssKeyframes *keyframes,
       gtk_css_parser_end_block (parser);
     }
 
-  if (keyframes->variables && keyframes->variables[k])
-    gtk_css_variable_set_resolve_cycles (keyframes->variables[k]);
-
   gtk_css_parser_end_block (parser);
 
   return TRUE;
@@ -472,64 +325,42 @@ _gtk_css_keyframes_parse (GtkCssParser *parser)
   GtkCssKeyframes *keyframes;
   double progress;
   guint k;
-  GArray *selectors;
 
   g_return_val_if_fail (parser != NULL, NULL);
 
   keyframes = gtk_css_keyframes_new ();
 
-  selectors = g_array_new (FALSE, FALSE, sizeof (double));
-
   while (!gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_EOF))
     {
-      g_array_set_size (selectors, 0);
-
-      while (TRUE)
+      if (gtk_css_parser_try_ident (parser, "from"))
+        progress = 0;
+      else if (gtk_css_parser_try_ident (parser, "to"))
+        progress = 1;
+      else if (gtk_css_parser_consume_percentage (parser, &progress))
         {
-          if (gtk_css_parser_try_ident (parser, "from"))
-            progress = 0;
-          else if (gtk_css_parser_try_ident (parser, "to"))
-            progress = 1;
-          else if (gtk_css_parser_consume_percentage (parser, &progress))
+          if (progress < 0 || progress > 100)
             {
-              if (progress < 0 || progress > 100)
-                {
-                  /* XXX: should we skip over the block here? */
-                  gtk_css_parser_error_value (parser, "percentages must be between 0%% and 100%%");
-                  g_clear_pointer (&keyframes, _gtk_css_keyframes_unref);
-                  goto done;
-                }
-              progress /= 100;
+              /* XXX: should we skip over the block here? */
+              gtk_css_parser_error_value (parser, "percentages must be between 0%% and 100%%");
+              _gtk_css_keyframes_unref (keyframes);
+              return NULL;
             }
-          else
-            {
-              gtk_css_parser_error_value (parser, "failed to parse keyframe selector");
-              g_clear_pointer (&keyframes, _gtk_css_keyframes_unref);
-              goto done;
-            }
-
-          g_array_append_val (selectors, progress);
-
-          if (!gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_COMMA))
-            break;
-
-          gtk_css_parser_consume_token (parser);
+          progress /= 100;
+        }
+      else
+        {
+          _gtk_css_keyframes_unref (keyframes);
+          return NULL;
         }
 
-      k = gtk_css_keyframes_add_keyframe (keyframes, g_array_index (selectors, double, 0));
+      k = gtk_css_keyframes_add_keyframe (keyframes, progress);
 
       if (!gtk_css_keyframes_parse_block (keyframes, k, parser))
         {
-          g_clear_pointer (&keyframes, _gtk_css_keyframes_unref);
-          goto done;
+          _gtk_css_keyframes_unref (keyframes);
+          return NULL;
         }
-
-      for (guint i = 1; i < selectors->len; i++)
-        k = gtk_css_keyframes_copy_keyframe (keyframes, k, g_array_index (selectors, double, i));
     }
-
-done:
-  g_array_unref (selectors);
 
   return keyframes;
 }
@@ -547,27 +378,12 @@ compare_property_by_name (gconstpointer a,
                     _gtk_css_style_property_lookup_by_id (keyframes->property_ids[*(const guint *) b]))));
 }
 
-static int
-compare_custom_property_ids (gconstpointer a, gconstpointer b, gpointer user_data)
-{
-  GtkCssCustomPropertyPool *pool = user_data;
-  int id1 = GPOINTER_TO_INT (*((const int *) a));
-  int id2 = GPOINTER_TO_INT (*((const int *) b));
-  const char *name1, *name2;
-
-  name1 = gtk_css_custom_property_pool_get_name (pool, id1);
-  name2 = gtk_css_custom_property_pool_get_name (pool, id2);
-
-  return strcmp (name1, name2);
-}
-
 void
 _gtk_css_keyframes_print (GtkCssKeyframes *keyframes,
                           GString         *string)
 {
-  GtkCssCustomPropertyPool *pool = gtk_css_custom_property_pool_get ();
   guint k, p;
-  guint *sorted, *sorted_variable_ids = NULL;
+  guint *sorted;
 
   g_return_if_fail (keyframes != NULL);
   g_return_if_fail (string != NULL);
@@ -575,15 +391,7 @@ _gtk_css_keyframes_print (GtkCssKeyframes *keyframes,
   sorted = g_new (guint, keyframes->n_properties);
   for (p = 0; p < keyframes->n_properties; p++)
     sorted[p] = p;
-  g_sort_array (sorted, keyframes->n_properties, sizeof (guint), compare_property_by_name, keyframes);
-
-  if (keyframes->variable_ids)
-    {
-      sorted_variable_ids = g_memdup2 (keyframes->variable_ids,
-                                       sizeof (int) * keyframes->n_variables);
-
-      g_sort_array (sorted_variable_ids, keyframes->n_variables, sizeof (int), compare_custom_property_ids, pool);
-    }
+  g_qsort_with_data (sorted, keyframes->n_properties, sizeof (guint), compare_property_by_name, keyframes);
 
   for (k = 0; k < keyframes->n_keyframes; k++)
     {
@@ -610,39 +418,8 @@ _gtk_css_keyframes_print (GtkCssKeyframes *keyframes,
                                                         GTK_STYLE_PROPERTY (
                                                           _gtk_css_style_property_lookup_by_id (
                                                             keyframes->property_ids[sorted[p]]))));
-          gtk_css_value_print (KEYFRAMES_VALUE (keyframes, k, sorted[p]), string);
+          _gtk_css_value_print (KEYFRAMES_VALUE (keyframes, k, sorted[p]), string);
           g_string_append (string, ";\n");
-        }
-
-      if (keyframes->variables && keyframes->variables[k])
-        {
-          for (p = 0; p < keyframes->n_variables; p++)
-            {
-              int variable_id = sorted_variable_ids[p];
-              GtkCssVariableValue *value =
-                gtk_css_variable_set_lookup (keyframes->variables[k], variable_id, NULL);
-              const char *name;
-
-              if (value == NULL)
-                continue;
-
-              if (!opened)
-                {
-                  if (keyframes->keyframe_progress[k] == 0.0)
-                    g_string_append (string, "  from {\n");
-                  else if (keyframes->keyframe_progress[k] == 1.0)
-                    g_string_append (string, "  to {\n");
-                  else
-                    g_string_append_printf (string, "  %g%% {\n", keyframes->keyframe_progress[k] * 100);
-                  opened = TRUE;
-                }
-
-              name = gtk_css_custom_property_pool_get_name (pool, variable_id);
-
-              g_string_append_printf (string, "    %s: ", name);
-              gtk_css_variable_value_print (value, string);
-              g_string_append (string, ";\n");
-            }
         }
 
       if (opened)
@@ -650,7 +427,6 @@ _gtk_css_keyframes_print (GtkCssKeyframes *keyframes,
     }
 
   g_free (sorted);
-  g_free (sorted_variable_ids);
 }
 
 GtkCssKeyframes *
@@ -659,7 +435,6 @@ _gtk_css_keyframes_compute (GtkCssKeyframes  *keyframes,
                             GtkCssStyle      *style,
                             GtkCssStyle      *parent_style)
 {
-  GtkCssComputeContext context = { NULL, };
   GtkCssKeyframes *resolved;
   guint k, p;
 
@@ -675,10 +450,6 @@ _gtk_css_keyframes_compute (GtkCssKeyframes  *keyframes,
   resolved->property_ids = g_memdup2 (keyframes->property_ids, keyframes->n_properties * sizeof (guint));
   resolved->values = g_new0 (GtkCssValue *, resolved->n_keyframes * resolved->n_properties);
 
-  context.provider = provider;
-  context.style = style;
-  context.parent_style = parent_style;
-
   for (p = 0; p < resolved->n_properties; p++)
     {
       for (k = 0; k < resolved->n_keyframes; k++)
@@ -686,29 +457,13 @@ _gtk_css_keyframes_compute (GtkCssKeyframes  *keyframes,
           if (KEYFRAMES_VALUE (keyframes, k, p) == NULL)
             continue;
 
-          context.variables = keyframes->variables ? keyframes->variables[k] : NULL;
-
-          KEYFRAMES_VALUE (resolved, k, p) =  gtk_css_value_compute (KEYFRAMES_VALUE (keyframes, k, p),
-                                                                     resolved->property_ids[p],
-                                                                     &context);
+          KEYFRAMES_VALUE (resolved, k, p) =  _gtk_css_value_compute (KEYFRAMES_VALUE (keyframes, k, p),
+                                                                      resolved->property_ids[p],
+                                                                      provider,
+                                                                      style,
+                                                                      parent_style);
         }
     }
-
-  if (keyframes->variables)
-    {
-      resolved->variables = g_new0 (GtkCssVariableSet *, resolved->n_keyframes);
-
-      for (k = 0; k < resolved->n_keyframes; k++)
-        {
-          if (keyframes->variables[k])
-            resolved->variables[k] = gtk_css_variable_set_ref (keyframes->variables[k]);
-        }
-    }
-  else
-    resolved->variables = NULL;
-
-  resolved->variable_ids = g_memdup2 (keyframes->variable_ids, keyframes->n_variables * sizeof (int));
-  resolved->n_variables = keyframes->n_variables;
 
   return resolved;
 }
@@ -756,7 +511,7 @@ _gtk_css_keyframes_get_value (GtkCssKeyframes *keyframes,
 
       if (keyframes->keyframe_progress[k] == progress)
         {
-          return gtk_css_value_ref (KEYFRAMES_VALUE (keyframes, k, id));
+          return _gtk_css_value_ref (KEYFRAMES_VALUE (keyframes, k, id));
         }
       else if (keyframes->keyframe_progress[k] < progress)
         {
@@ -773,95 +528,15 @@ _gtk_css_keyframes_get_value (GtkCssKeyframes *keyframes,
 
   progress = (progress - start_progress) / (end_progress - start_progress);
 
-  result = gtk_css_value_transition (start_value,
-                                     end_value,
-                                     keyframes->property_ids[id],
-                                     progress);
+  result = _gtk_css_value_transition (start_value,
+                                      end_value,
+                                      keyframes->property_ids[id],
+                                      progress);
 
   /* XXX: Dear spec, what's the correct thing to do here? */
   if (result == NULL)
-    return gtk_css_value_ref (start_value);
+    return _gtk_css_value_ref (start_value);
 
   return result;
 }
 
-guint
-_gtk_css_keyframes_get_n_variables (GtkCssKeyframes *keyframes)
-{
-  g_return_val_if_fail (keyframes != NULL, 0);
-
-  return keyframes->n_variables;
-}
-
-int
-_gtk_css_keyframes_get_variable_id (GtkCssKeyframes *keyframes,
-                                    guint            id)
-{
-  g_return_val_if_fail (keyframes != NULL, 0);
-  g_return_val_if_fail (id < keyframes->n_variables, 0);
-
-  return keyframes->variable_ids[id];
-}
-
-GtkCssVariableValue *
-_gtk_css_keyframes_get_variable (GtkCssKeyframes     *keyframes,
-                                 guint                id,
-                                 double               progress,
-                                 GtkCssVariableValue *default_value)
-{
-  GtkCssVariableValue *start_value, *end_value, *result;
-  double start_progress, end_progress;
-  int variable_id;
-  guint k;
-
-  g_return_val_if_fail (keyframes != NULL, 0);
-  g_return_val_if_fail (id < keyframes->n_variables, 0);
-
-  start_value = default_value;
-  start_progress = 0.0;
-  end_value = default_value;
-  end_progress = 1.0;
-
-  variable_id = keyframes->variable_ids[id];
-
-  for (k = 0; k < keyframes->n_keyframes; k++)
-    {
-      GtkCssVariableValue *value;
-
-      if (keyframes->variables[k] == NULL)
-        continue;
-
-      value = gtk_css_variable_set_lookup (keyframes->variables[k], variable_id, NULL);
-
-      if (value == NULL)
-        continue;
-
-      if (keyframes->keyframe_progress[k] == progress)
-        {
-          return gtk_css_variable_value_ref (value);
-        }
-      else if (keyframes->keyframe_progress[k] < progress)
-        {
-          start_value = value;
-          start_progress = keyframes->keyframe_progress[k];
-        }
-      else
-        {
-          end_value = value;
-          end_progress = keyframes->keyframe_progress[k];
-          break;
-        }
-    }
-
-  progress = (progress - start_progress) / (end_progress - start_progress);
-
-  result = gtk_css_variable_value_transition (start_value,
-                                              end_value,
-                                              progress);
-
-  /* XXX: Dear spec, what's the correct thing to do here? */
-  if (result == NULL)
-    return start_value ? gtk_css_variable_value_ref (start_value) : NULL;
-
-  return result;
-}

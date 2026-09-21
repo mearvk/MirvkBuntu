@@ -3,7 +3,6 @@
 
 custom_c_args = [
   '-DG_LOG_DOMAIN="GLib-GirCompiler"',  
-  warning_sign_conversion_args,
 ]
 
 if cc.get_id() != 'msvc'
@@ -20,7 +19,6 @@ gicompilerepository = executable('gi-compile-repository', 'compiler.c',
     libgirepository_dep,
     libgirepository_internals_dep,
     libgio_dep,
-    app_profile_dep,
   ],
   install: true,
   c_args: custom_c_args,

@@ -25,7 +25,7 @@
 /**
  * GdkDrag:
  *
- * Represents the source of an ongoing DND operation.
+ * The `GdkDrag` object represents the source of an ongoing DND operation.
  *
  * A `GdkDrag` is created when a drag is started, and stays alive for duration of
  * the DND operation. After a drag has been started with [func@Gdk.Drag.begin],
@@ -92,7 +92,7 @@ static GList *drags = NULL;
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GdkDrag, gdk_drag, G_TYPE_OBJECT)
 
 /**
- * gdk_drag_get_display:
+ * gdk_drag_get_display: (attributes org.gtk.Method.get_property=display)
  * @drag: a `GdkDrag`
  *
  * Gets the `GdkDisplay` that the drag object was created for.
@@ -110,7 +110,7 @@ gdk_drag_get_display (GdkDrag *drag)
 }
 
 /**
- * gdk_drag_get_formats:
+ * gdk_drag_get_formats: (attributes org.gtk.Method.get_property=formats)
  * @drag: a `GdkDrag`
  *
  * Retrieves the formats supported by this `GdkDrag` object.
@@ -128,7 +128,7 @@ gdk_drag_get_formats (GdkDrag *drag)
 }
 
 /**
- * gdk_drag_get_actions:
+ * gdk_drag_get_actions: (attributes org.gtk.Method.get_property=actions)
  * @drag: a `GdkDrag`
  *
  * Determines the bitmask of possible actions proposed by the source.
@@ -140,13 +140,13 @@ gdk_drag_get_actions (GdkDrag *drag)
 {
   GdkDragPrivate *priv = gdk_drag_get_instance_private (drag);
 
-  g_return_val_if_fail (GDK_IS_DRAG (drag), GDK_ACTION_NONE);
+  g_return_val_if_fail (GDK_IS_DRAG (drag), 0);
 
   return priv->actions;
 }
 
 /**
- * gdk_drag_get_selected_action:
+ * gdk_drag_get_selected_action: (attributes org.gtk.Method.get_property=selected-action)
  * @drag: a `GdkDrag`
  *
  * Determines the action chosen by the drag destination.
@@ -158,13 +158,13 @@ gdk_drag_get_selected_action (GdkDrag *drag)
 {
   GdkDragPrivate *priv = gdk_drag_get_instance_private (drag);
 
-  g_return_val_if_fail (GDK_IS_DRAG (drag), GDK_ACTION_NONE);
+  g_return_val_if_fail (GDK_IS_DRAG (drag), 0);
 
   return priv->selected_action;
 }
 
 /**
- * gdk_drag_get_device:
+ * gdk_drag_get_device: (attributes org.gtk.Method.get_property=device)
  * @drag: a `GdkDrag`
  *
  * Returns the `GdkDevice` associated to the `GdkDrag` object.
@@ -182,7 +182,7 @@ gdk_drag_get_device (GdkDrag *drag)
 }
 
 /**
- * gdk_drag_get_content:
+ * gdk_drag_get_content: (attributes org.gtk.Method.get_property=content)
  * @drag: a `GdkDrag`
  *
  * Returns the `GdkContentProvider` associated to the `GdkDrag` object.
@@ -200,7 +200,7 @@ gdk_drag_get_content (GdkDrag *drag)
 }
 
 /**
- * gdk_drag_get_surface:
+ * gdk_drag_get_surface: (attributes org.gtk.Method.get_property=surface)
  * @drag: a `GdkDrag`
  *
  * Returns the `GdkSurface` where the drag originates.
@@ -362,7 +362,7 @@ gdk_drag_class_init (GdkDragClass *klass)
   object_class->finalize = gdk_drag_finalize;
 
   /**
-   * GdkDrag:content:
+   * GdkDrag:content: (attributes org.gtk.Property.get=gdk_drag_get_content)
    *
    * The `GdkContentProvider`.
    */
@@ -371,11 +371,11 @@ gdk_drag_class_init (GdkDragClass *klass)
                          GDK_TYPE_CONTENT_PROVIDER,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrag:device:
+   * GdkDrag:device: (attributes org.gtk.Property.get=gdk_drag_get_device)
    *
    * The `GdkDevice` that is performing the drag.
    */
@@ -384,11 +384,11 @@ gdk_drag_class_init (GdkDragClass *klass)
                          GDK_TYPE_DEVICE,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrag:display:
+   * GdkDrag:display: (attributes org.gtk.Property.get=gdk_drag_get_display)
    *
    * The `GdkDisplay` that the drag belongs to.
    */
@@ -396,11 +396,11 @@ gdk_drag_class_init (GdkDragClass *klass)
     g_param_spec_object ("display", NULL, NULL,
                          GDK_TYPE_DISPLAY,
                          G_PARAM_READABLE |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrag:formats:
+   * GdkDrag:formats: (attributes org.gtk.Property.get=gdk_drag_get_formats)
    *
    * The possible formats that the drag can provide its data in.
    */
@@ -409,11 +409,11 @@ gdk_drag_class_init (GdkDragClass *klass)
                         GDK_TYPE_CONTENT_FORMATS,
                         G_PARAM_READWRITE |
                         G_PARAM_CONSTRUCT_ONLY |
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrag:selected-action:
+   * GdkDrag:selected-action: (attributes org.gtk.Property.get=gdk_drag_get_selected_action)
    *
    * The currently selected action of the drag.
    */
@@ -422,24 +422,24 @@ gdk_drag_class_init (GdkDragClass *klass)
                         GDK_TYPE_DRAG_ACTION,
                         0,
                         G_PARAM_READWRITE |
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrag:actions:
+   * GdkDrag:actions: (attributes org.gtk.Property.get=gdk_drag_get_actions)
    *
    * The possible actions of this drag.
    */
   properties[PROP_ACTIONS] =
     g_param_spec_flags ("actions", NULL, NULL,
                         GDK_TYPE_DRAG_ACTION,
-                        GDK_ACTION_NONE,
+                        0,
                         G_PARAM_READWRITE |
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrag:surface:
+   * GdkDrag:surface: (attributes org.gtk.Property.get=gdk_drag_get_surface)
    *
    * The surface where the drag originates.
    */
@@ -448,7 +448,7 @@ gdk_drag_class_init (GdkDragClass *klass)
                          GDK_TYPE_SURFACE,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -641,13 +641,15 @@ gdk_drag_set_selected_action (GdkDrag       *drag,
                               GdkDragAction  action)
 {
   GdkDragPrivate *priv = gdk_drag_get_instance_private (drag);
+  GdkCursor *cursor;
 
   if (priv->selected_action == action)
     return;
 
   priv->selected_action = action;
 
-  gdk_drag_update_cursor (drag);
+  cursor = gdk_drag_get_cursor (drag, action);
+  gdk_drag_set_cursor (drag, cursor);
 
   g_object_notify_by_pspec (G_OBJECT (drag), properties[PROP_SELECTED_ACTION]);
 }
@@ -734,12 +736,13 @@ gdk_drag_drop_done (GdkDrag  *drag,
 }
 
 void
-gdk_drag_update_cursor (GdkDrag *drag)
+gdk_drag_set_cursor (GdkDrag   *drag,
+                     GdkCursor *cursor)
 {
   g_return_if_fail (GDK_IS_DRAG (drag));
 
-  if (GDK_DRAG_GET_CLASS (drag)->update_cursor)
-    GDK_DRAG_GET_CLASS (drag)->update_cursor (drag);
+  if (GDK_DRAG_GET_CLASS (drag)->set_cursor)
+    GDK_DRAG_GET_CLASS (drag)->set_cursor (drag, cursor);
 }
 
 void
@@ -808,7 +811,7 @@ gdk_drag_get_cursor (GdkDrag       *drag,
  * Checks if @action represents a single action or includes
  * multiple actions.
  *
- * When @action is `GDK_ACTION_NONE` - ie no action was given, `TRUE`
+ * When @action is 0 - ie no action was given, %TRUE
  * is returned.
  *
  * Returns: %TRUE if exactly one action was given

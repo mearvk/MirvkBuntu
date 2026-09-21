@@ -1,20 +1,21 @@
-#include <cogl/cogl.h>
 #include <clutter/clutter.h>
 
 #include "tests/clutter-test-utils.h"
 
 /****************************************************************
  Old style shader effect
- This uses clutter_shader_effect_new_with_snippet
+ This uses clutter_shader_effect_set_source
  ****************************************************************/
 
 static const gchar
-old_shader_effect_declarations[] =
-  "uniform vec3 override_color;\n";
-
-static const gchar
-old_shader_effect_replace[] =
-  "  cogl_color_out = vec4 (override_color, 1.0);\n";
+old_shader_effect_source[] =
+  "uniform vec3 override_color;\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
+  "  cogl_color_out = vec4 (override_color, 1.0);\n"
+  "}";
 
 typedef struct _FooOldShaderEffectClass
 {
@@ -37,6 +38,8 @@ foo_old_shader_effect_paint_target (ClutterOffscreenEffect *effect,
                                     ClutterPaintNode       *node,
                                     ClutterPaintContext    *paint_context)
 {
+  clutter_shader_effect_set_shader_source (CLUTTER_SHADER_EFFECT (effect),
+                                           old_shader_effect_source);
   clutter_shader_effect_set_uniform (CLUTTER_SHADER_EFFECT (effect),
                                      "override_color",
                                      G_TYPE_FLOAT, 3,
@@ -46,31 +49,13 @@ foo_old_shader_effect_paint_target (ClutterOffscreenEffect *effect,
     paint_target (effect, node, paint_context);
 }
 
-static CoglSnippet *
-foo_old_shader_effect_get_static_snippet (ClutterShaderEffect *effect)
-{
-  CoglSnippet *snippet;
-
-  snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT,
-                              old_shader_effect_declarations,
-                              NULL);
-  cogl_snippet_set_replace (snippet, old_shader_effect_replace);
-
-  return snippet;
-}
-
 static void
 foo_old_shader_effect_class_init (FooOldShaderEffectClass *klass)
 {
   ClutterOffscreenEffectClass *offscreen_effect_class =
     CLUTTER_OFFSCREEN_EFFECT_CLASS (klass);
-  ClutterShaderEffectClass *shader_effect_class =
-    CLUTTER_SHADER_EFFECT_CLASS (klass);
 
   offscreen_effect_class->paint_target = foo_old_shader_effect_paint_target;
-
-  shader_effect_class->get_static_snippet =
-    foo_old_shader_effect_get_static_snippet;
 }
 
 static void
@@ -80,17 +65,19 @@ foo_old_shader_effect_init (FooOldShaderEffect *self)
 
 /****************************************************************
  New style shader effect
- This overrides get_static_snippet()
+ This overrides get_static_shader_source()
  ****************************************************************/
 
 static const gchar
-new_shader_effect_declarations[] =
-  "uniform vec3 override_color;\n";
-
-static const gchar
-new_shader_effect_replace[] =
+new_shader_effect_source[] =
+  "uniform vec3 override_color;\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
   "  cogl_color_out = (vec4 (override_color, 1.0) +\n"
-  "                    vec4 (0.0, 0.0, 1.0, 0.0));\n";
+  "                    vec4 (0.0, 0.0, 1.0, 0.0));\n"
+  "}";
 
 typedef struct _FooNewShaderEffectClass
 {
@@ -108,24 +95,18 @@ G_DEFINE_TYPE (FooNewShaderEffect,
                foo_new_shader_effect,
                CLUTTER_TYPE_SHADER_EFFECT);
 
-static CoglSnippet *
-foo_new_shader_effect_get_static_snippet (ClutterShaderEffect *effect)
+static gchar *
+foo_new_shader_effect_get_static_source (ClutterShaderEffect *effect)
 {
   static gboolean already_called = FALSE;
-  CoglSnippet *snippet;
 
   /* This should only be called once even though we have two actors
      using this effect */
-  g_assert_false (already_called);
+  g_assert (!already_called);
 
   already_called = TRUE;
 
-  snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT,
-                              new_shader_effect_declarations,
-                              NULL);
-  cogl_snippet_set_replace (snippet, new_shader_effect_replace);
-
-  return snippet;
+  return g_strdup (new_shader_effect_source);
 }
 
 static void
@@ -152,8 +133,8 @@ foo_new_shader_effect_class_init (FooNewShaderEffectClass *klass)
 
   offscreen_effect_class->paint_target = foo_new_shader_effect_paint_target;
 
-  shader_effect_class->get_static_snippet =
-    foo_new_shader_effect_get_static_snippet;
+  shader_effect_class->get_static_shader_source =
+    foo_new_shader_effect_get_static_source;
 }
 
 static void
@@ -169,8 +150,13 @@ foo_new_shader_effect_init (FooNewShaderEffect *self)
  ****************************************************************/
 
 static const gchar
-another_new_shader_effect_replace[] =
-  "  cogl_color_out = vec4 (1.0, 0.0, 1.0, 1.0);\n";
+another_new_shader_effect_source[] =
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
+  "  cogl_color_out = vec4 (1.0, 0.0, 1.0, 1.0);\n"
+  "}";
 
 typedef struct _FooAnotherNewShaderEffectClass
 {
@@ -188,15 +174,10 @@ G_DEFINE_TYPE (FooAnotherNewShaderEffect,
                foo_another_new_shader_effect,
                CLUTTER_TYPE_SHADER_EFFECT);
 
-static CoglSnippet *
-foo_another_new_shader_effect_get_static_snippet (ClutterShaderEffect *effect)
+static gchar *
+foo_another_new_shader_effect_get_static_source (ClutterShaderEffect *effect)
 {
-  CoglSnippet *snippet;
-
-  snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT, NULL, NULL);
-  cogl_snippet_set_replace (snippet, another_new_shader_effect_replace);
-
-  return snippet;
+  return g_strdup (another_new_shader_effect_source);
 }
 
 static void
@@ -205,8 +186,8 @@ foo_another_new_shader_effect_class_init (FooAnotherNewShaderEffectClass *klass)
   ClutterShaderEffectClass *shader_effect_class =
     CLUTTER_SHADER_EFFECT_CLASS (klass);
 
-  shader_effect_class->get_static_snippet =
-    foo_another_new_shader_effect_get_static_snippet;
+  shader_effect_class->get_static_shader_source =
+    foo_another_new_shader_effect_get_static_source;
 }
 
 static void
@@ -220,7 +201,7 @@ static ClutterActor *
 make_actor (GType shader_type)
 {
   ClutterActor *rect;
-  const CoglColor white = { 0xff, 0xff, 0xff, 0xff };
+  const ClutterColor white = { 0xff, 0xff, 0xff, 0xff };
 
   rect = clutter_actor_new ();
   clutter_actor_set_background_color (rect, &white);

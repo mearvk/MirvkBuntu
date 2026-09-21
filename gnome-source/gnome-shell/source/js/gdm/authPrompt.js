@@ -1,7 +1,7 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
-import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import Atk from 'gi://Atk';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
@@ -10,105 +10,17 @@ import St from 'gi://St';
 import * as Animation from '../ui/animation.js';
 import * as AuthList from './authList.js';
 import * as Batch from './batch.js';
-import {logErrorUnlessCancelled} from '../misc/errorUtils.js';
+import * as GdmUtil from './util.js';
 import * as Params from '../misc/params.js';
 import * as ShellEntry from '../ui/shellEntry.js';
-import * as UserVerifier from './userVerifier.js';
 import * as UserWidget from '../ui/userWidget.js';
-import * as WebLogin from './webLogin.js';
 import {wiggle} from '../misc/animationUtils.js';
 
-import {loadInterfaceXML} from '../misc/fileUtils.js';
+const DEFAULT_BUTTON_WELL_ICON_SIZE = 16;
+const DEFAULT_BUTTON_WELL_ANIMATION_DELAY = 1000;
+const DEFAULT_BUTTON_WELL_ANIMATION_TIME = 300;
 
-const TimerChildIface = loadInterfaceXML('org.freedesktop.MalcontentTimer1.Child');
-const TimerChildProxy = Gio.DBusProxy.makeProxyWrapper(TimerChildIface);
-
-export const DEFAULT_BUTTON_WELL_ICON_SIZE = 16;
-export const DEFAULT_BUTTON_WELL_ANIMATION_TIME = 300;
-export const MESSAGE_FADE_OUT_ANIMATION_TIME = 500;
-
-// A widget displayed instead of the unlock prompt
-// when parental controls session limits are reached
-const ParentalControlsShield = GObject.registerClass(
-class ParentalControlsShield extends St.BoxLayout {
-    _init() {
-        super._init({
-            style_class: 'parental-controls-shield',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_align: Clutter.ActorAlign.CENTER,
-        });
-
-        this._requestExtensionCookie = null;
-
-        this._timerChildProxy = new TimerChildProxy(Gio.DBus.system,
-            'org.freedesktop.MalcontentTimer1',
-            '/org/freedesktop/MalcontentTimer1',
-            (proxy, error) => {
-                if (error)
-                    console.error(`Failed to get TimerChild proxy: ${error}`);
-            },
-            null, /* cancellable */
-            Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION
-        );
-
-        this._timerChildProxy.connectSignal('ExtensionResponse', (proxy, sender, params) =>
-            this._onExtensionResponse(proxy, sender, params));
-
-        this.connect('destroy', this._onDestroy.bind(this));
-
-        this._titleLabel = new St.Label({
-            style_class: 'parental-controls-shield-title',
-            text: _('Screen Time Limit Reached'),
-        });
-        this.add_child(this._titleLabel);
-
-        this._descriptionLabel = new St.Label({
-            style_class: 'parental-controls-shield-description',
-            text: _('Daily limit for screen time on this device has been reached. Resume tomorrow.'),
-        });
-        this._descriptionLabel.clutter_text.line_wrap = true;
-        this.add_child(this._descriptionLabel);
-
-        this._ignoreButton = new St.Button({
-            style_class: 'parental-controls-shield-button',
-            // Translators: this is for ignoring a screen time limit for parental controls
-            label: _('Ignore'),
-            x_align: Clutter.ActorAlign.CENTER,
-        });
-        this._ignoreButton.connect('clicked',
-            () => this._onIgnoreButtonClicked().catch(logError));
-        this.add_child(this._ignoreButton);
-    }
-
-    _onDestroy() {
-        this._requestExtensionCookie = null;
-    }
-
-    async _onIgnoreButtonClicked() {
-        if (this._requestExtensionCookie)
-            return;
-
-        try {
-            [this._requestExtensionCookie] = await this._timerChildProxy.RequestExtensionAsync(
-                'login-session',
-                '',
-                0,
-                {},
-                Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION
-            );
-        } catch (e) {
-            console.warn(`Failed to obtain screen time extension: ${e.message}`);
-        }
-    }
-
-    _onExtensionResponse(proxy, sender, [_, cookie]) {
-        if (this._requestExtensionCookie === null ||
-            cookie !== this._requestExtensionCookie)
-            return;
-
-        this._requestExtensionCookie = null;
-    }
-});
+const MESSAGE_FADE_OUT_ANIMATION_TIME = 500;
 
 /** @enum {number} */
 export const AuthPromptMode = {
@@ -127,7 +39,7 @@ export const AuthPromptStatus = {
 };
 
 /** @enum {number} */
-export const ResetType = {
+export const BeginRequestType = {
     PROVIDE_USERNAME: 0,
     DONT_PROVIDE_USERNAME: 1,
     REUSE_USERNAME: 2,
@@ -139,26 +51,13 @@ export const AuthPrompt = GObject.registerClass({
         'failed': {},
         'next': {},
         'prompted': {},
-        'mechanisms-changed': {param_types: [GObject.TYPE_JSOBJECT]},
         'reset': {param_types: [GObject.TYPE_UINT]},
-        'verification-complete': {},
-        'loading': {param_types: [GObject.TYPE_BOOLEAN]},
-    },
-    Properties: {
-        'verification-status': GObject.ParamSpec.uint(
-            'verification-status', 'verification-status', 'verification-status',
-            GObject.ParamFlags.READWRITE,
-            AuthPromptStatus.NOT_VERIFYING, AuthPromptStatus.VERIFICATION_IN_PROGRESS, 0),
-        'prompt-step': GObject.ParamSpec.uint(
-            'prompt-step', 'prompt-step', 'prompt-step',
-            GObject.ParamFlags.READWRITE,
-            0, GLib.MAXUINT32, 0),
     },
 }, class AuthPrompt extends St.BoxLayout {
     _init(gdmClient, mode) {
         super._init({
             style_class: 'login-dialog-prompt-layout',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
             reactive: true,
@@ -171,27 +70,23 @@ export const AuthPrompt = GObject.registerClass({
         this._defaultButtonWellActor = null;
         this._cancelledRetries = 0;
 
-        this.connect('notify::prompt-step', () => this._updateCancelButton());
-
         let reauthenticationOnly;
         if (this._mode === AuthPromptMode.UNLOCK_ONLY)
             reauthenticationOnly = true;
         else if (this._mode === AuthPromptMode.UNLOCK_OR_LOG_IN)
             reauthenticationOnly = false;
 
-        this._userVerifier = this._createUserVerifier(this._gdmClient, {reauthenticationOnly});
+        this._userVerifier = new GdmUtil.ShellUserVerifier(this._gdmClient, {reauthenticationOnly});
 
-        this._userVerifier.connectObject(
-            'ask-question', (_, args) => this._onAskQuestion(args),
-            'show-message', (_, args) => this._onShowMessage(args),
-            'show-choice-list', (_, args) => this._onShowChoiceList(args),
-            'show-button', (_, args) => this._onShowButton(args),
-            'mechanisms-changed', (_, args) => this.emit('mechanisms-changed', args),
-            'web-login', (_, args) => this._onWebLogin(args),
-            'verification-failed', (_, args) => this._onVerificationFailed(args),
-            'verification-complete', () => this._onVerificationComplete(),
-            'reset', (_, args) => this._onReset(args),
-            this);
+        this._userVerifier.connect('ask-question', this._onAskQuestion.bind(this));
+        this._userVerifier.connect('show-message', this._onShowMessage.bind(this));
+        this._userVerifier.connect('show-choice-list', this._onShowChoiceList.bind(this));
+        this._userVerifier.connect('verification-failed', this._onVerificationFailed.bind(this));
+        this._userVerifier.connect('verification-complete', this._onVerificationComplete.bind(this));
+        this._userVerifier.connect('reset', this._onReset.bind(this));
+        this._userVerifier.connect('smartcard-status-changed', this._onSmartcardStatusChanged.bind(this));
+        this._userVerifier.connect('credential-manager-authenticated', this._onCredentialManagerAuthenticated.bind(this));
+        this.smartcardDetected = this._userVerifier.smartcardDetected;
 
         this.connect('destroy', this._onDestroy.bind(this));
 
@@ -201,23 +96,18 @@ export const AuthPrompt = GObject.registerClass({
         });
         this.add_child(this._userWell);
 
-        this._inputWell = new St.BoxLayout({
-            style_class: 'login-dialog-input-well',
-            orientation: Clutter.Orientation.VERTICAL,
-        });
-        this.add_child(this._inputWell);
-        this._mainContent = this._inputWell;
+        this._hasCancelButton = this._mode === AuthPromptMode.UNLOCK_OR_LOG_IN;
 
         this._initInputRow();
 
-        const capsLockPlaceholder = new St.Label();
-        this._inputWell.add_child(capsLockPlaceholder);
+        let capsLockPlaceholder = new St.Label();
+        this.add_child(capsLockPlaceholder);
 
         this._capsLockWarningLabel = new ShellEntry.CapsLockWarning({
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
         });
-        this._inputWell.add_child(this._capsLockWarningLabel);
+        this.add_child(this._capsLockWarningLabel);
 
         this._capsLockWarningLabel.bind_property('visible',
             capsLockPlaceholder, 'visible',
@@ -233,25 +123,19 @@ export const AuthPrompt = GObject.registerClass({
         });
         this._message.clutter_text.line_wrap = true;
         this._message.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this._inputWell.add_child(this._message);
-    }
-
-    _createUserVerifier(gdmClient, params) {
-        return new UserVerifier.ShellUserVerifier(gdmClient, params);
+        this.add_child(this._message);
     }
 
     _onDestroy() {
         this._inactiveEntry.destroy();
         this._inactiveEntry = null;
-        this._userVerifier.disconnectObject(this);
         this._userVerifier.destroy();
         this._userVerifier = null;
-        this._entry = null;
     }
 
     on_key_press_event(event) {
         if (event.get_key_symbol() === Clutter.KEY_Escape) {
-            this._handleCancel();
+            this.cancel();
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
@@ -260,67 +144,49 @@ export const AuthPrompt = GObject.registerClass({
     _initInputRow() {
         this._mainBox = new St.BoxLayout({
             style_class: 'login-dialog-button-box',
-            orientation: Clutter.Orientation.HORIZONTAL,
+            vertical: false,
         });
-        this._inputWell.add_child(this._mainBox);
+        this.add_child(this._mainBox);
 
         this.cancelButton = new St.Button({
             style_class: 'login-dialog-button cancel-button',
-            accessible_name: _('Back'),
-            button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.SECONDARY,
-            reactive: true,
-            can_focus: true,
+            accessible_name: _('Cancel'),
+            button_mask: St.ButtonMask.ONE | St.ButtonMask.THREE,
+            reactive: this._hasCancelButton,
+            can_focus: this._hasCancelButton,
             x_align: Clutter.ActorAlign.START,
             y_align: Clutter.ActorAlign.CENTER,
             icon_name: 'go-previous-symbolic',
         });
-        this.cancelButton.connect('clicked', () => this._handleCancel());
-        this._updateCancelButton();
+        if (this._hasCancelButton)
+            this.cancelButton.connect('clicked', () => this.cancel());
+        else
+            this.cancelButton.opacity = 0;
         this._mainBox.add_child(this.cancelButton);
 
         this._authList = new AuthList.AuthList();
-        this._authList.hide();
-        this._authListActivateId = 0;
-        this._inputWell.add_child(this._authList);
-
-        this._authListTitle = new St.Bin({
-            style_class: 'login-dialog-auth-list-title',
-            x_expand: true,
-            y_expand: true,
-            child: new St.Label({style_class: 'login-dialog-auth-list-title-label'}),
+        this._authList.set({
             visible: false,
         });
-        this._authList.bind_property('visible',
-            this._authListTitle, 'visible',
-            GObject.BindingFlags.DEFAULT);
-        this._authList.bind_property('opacity',
-            this._authListTitle, 'opacity',
-            GObject.BindingFlags.DEFAULT);
-        this._mainBox.add_child(this._authListTitle);
-
-        this._authList.add_constraint(new Clutter.BindConstraint({
-            coordinate: Clutter.BindCoordinate.WIDTH,
-            source: this._authListTitle,
-        }));
-        this._authList.add_constraint(new Clutter.BindConstraint({
-            coordinate: Clutter.BindCoordinate.X,
-            source: this._authListTitle,
-        }));
-
-        this._entryArea = new St.Widget({
-            style_class: 'login-dialog-prompt-entry-area',
-            layout_manager: new Clutter.BinLayout(),
-            x_expand: true,
-            y_expand: true,
-            visible: false,
+        this._authList.connect('activate', (list, key) => {
+            this._authList.reactive = false;
+            this._authList.ease({
+                opacity: 0,
+                duration: MESSAGE_FADE_OUT_ANIMATION_TIME,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => {
+                    this._authList.clear();
+                    this._authList.hide();
+                    this._userVerifier.selectChoice(this._queryingService, key);
+                },
+            });
         });
-        this._mainBox.add_child(this._entryArea);
+        this._mainBox.add_child(this._authList);
 
-        const entryParams = {
+        let entryParams = {
             style_class: 'login-dialog-prompt-entry',
             can_focus: true,
             x_expand: true,
-            y_expand: true,
         };
 
         this._entry = null;
@@ -332,7 +198,7 @@ export const AuthPrompt = GObject.registerClass({
         ShellEntry.addContextMenu(this._passwordEntry, {actionMode: Shell.ActionMode.NONE});
 
         this._entry = this._passwordEntry;
-        this._entryArea.add_child(this._entry);
+        this._mainBox.add_child(this._entry);
         this._entry.grab_key_focus();
         this._inactiveEntry = this._textEntry;
 
@@ -341,7 +207,7 @@ export const AuthPrompt = GObject.registerClass({
             scale_x: 0,
         });
 
-        this._inputWell.add_child(this._timedLoginIndicator);
+        this.add_child(this._timedLoginIndicator);
 
         [this._textEntry, this._passwordEntry].forEach(entry => {
             entry.clutter_text.connect('text-changed', () => {
@@ -349,72 +215,30 @@ export const AuthPrompt = GObject.registerClass({
                     this._fadeOutMessage();
             });
 
-            entry.clutter_text.connect('activate', () => this._activateNext());
+            entry.clutter_text.connect('activate', () => {
+                let shouldSpin = entry === this._passwordEntry;
+                if (entry.reactive)
+                    this._activateNext(shouldSpin);
+            });
         });
 
         this._defaultButtonWell = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
-            style_class: 'login-dialog-default-button-well',
-            x_expand: true,
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._entryArea.add_child(this._defaultButtonWell);
-
-        this._nextButton = new St.Button({
-            style_class: 'login-dialog-button next-button',
-            accessible_name: _('Submit'),
-            button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.SECONDARY,
-            reactive: true,
-            can_focus: false,
-            icon_name: 'go-next-symbolic',
-        });
-        this._nextButton.connect('clicked', () => this._activateNext());
-        this._nextButton.add_style_pseudo_class('default');
-        this._defaultButtonWell.add_child(this._nextButton);
+        this._defaultButtonWell.add_constraint(new Clutter.BindConstraint({
+            source: this.cancelButton,
+            coordinate: Clutter.BindCoordinate.WIDTH,
+        }));
+        this._mainBox.add_child(this._defaultButtonWell);
 
         this._spinner = new Animation.Spinner(DEFAULT_BUTTON_WELL_ICON_SIZE);
         this._defaultButtonWell.add_child(this._spinner);
-
-        this.setActorInDefaultButtonWell(this._nextButton);
-
-        this._authButton = new St.Button({
-            style_class: 'login-button',
-            button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.SECONDARY,
-            can_focus: true,
-            x_align: Clutter.ActorAlign.CENTER,
-            x_expand: true,
-            y_expand: true,
-        });
-        this._authButton.connect('clicked', () => this._completePendingCallback());
-        this._mainBox.add_child(this._authButton);
-
-        this._webLoginDialog = new WebLogin.WebLoginDialog();
-        this._webLoginDialog.connect('cancel', () => this._handleCancel());
-        this._webLoginDialog.connect('loading', () => this.emit('loading', this._webLoginDialog.isLoading));
-        this._inputWell.add_child(this._webLoginDialog);
-
-        // center elements inside _mainBox between the cancel
-        // button on the left and this spacer on the right
-        this._mainBox.add_child(new Clutter.Actor({
-            constraints: new Clutter.BindConstraint({
-                source: this.cancelButton,
-                coordinate: Clutter.BindCoordinate.WIDTH,
-            }),
-        }));
-    }
-
-    _updateCancelButton() {
-        if (this._mode === AuthPromptMode.UNLOCK_OR_LOG_IN)
-            return;
-
-        const cancelVisible = this.promptStep > 1;
-        this.cancelButton.opacity = cancelVisible ? 255 : 0;
-        this.cancelButton.reactive = cancelVisible;
     }
 
     showTimedLoginIndicator(time) {
-        const hold = new Batch.Hold();
+        let hold = new Batch.Hold();
 
         this.hideTimedLoginIndicator();
 
@@ -447,84 +271,46 @@ export const AuthPrompt = GObject.registerClass({
         this._timedLoginIndicator.scale_x = 0.;
     }
 
-    _activateNext() {
-        if (!this._entry.reactive)
-            return;
-
+    _activateNext(shouldSpin) {
         this.verificationStatus = AuthPromptStatus.VERIFICATION_IN_PROGRESS;
-        this.updateSensitivity({sensitive: false});
+        this.updateSensitivity(false);
 
-        if (this._entry === this._passwordEntry)
-            this.startSpinning({animate: true});
+        if (shouldSpin)
+            this.startSpinning();
 
         if (this._queryingService)
-            this._completePendingCallback(this._entry.text);
+            this._userVerifier.answerQuery(this._queryingService, this._entry.text);
         else
             this._preemptiveAnswer = this._entry.text;
-
-        this._preemptiveInput = false;
 
         this.emit('next');
     }
 
-    updateEntry(secret) {
-        let newEntry, inactiveEntry;
-
+    _updateEntry(secret) {
         if (secret && this._entry !== this._passwordEntry) {
-            newEntry = this._passwordEntry;
-            inactiveEntry = this._textEntry;
+            this._mainBox.replace_child(this._entry, this._passwordEntry);
+            this._entry = this._passwordEntry;
+            this._inactiveEntry = this._textEntry;
         } else if (!secret && this._entry !== this._textEntry) {
-            newEntry = this._textEntry;
-            inactiveEntry = this._passwordEntry;
+            this._mainBox.replace_child(this._entry, this._textEntry);
+            this._entry = this._textEntry;
+            this._inactiveEntry = this._passwordEntry;
         }
-
-        if (newEntry) {
-            this._entryArea.replace_child(this._entry, newEntry);
-            this._entry = newEntry;
-            this._inactiveEntry = inactiveEntry;
-
-            const {text, cursorPosition, selectionBound} = inactiveEntry.clutterText;
-            this._entry.clutterText.set({text, cursorPosition, selectionBound});
-        }
-
         this._capsLockWarningLabel.visible = secret;
     }
 
-    _setPendingCallback(callback) {
-        if (this._pendingCallback)
-            throw new Error('A pending request is already active');
-        this._pendingCallback = callback;
-    }
-
-    _completePendingCallback(...args) {
-        if (!this._pendingCallback)
-            throw new Error('No pending request to complete');
-
-        const callback = this._pendingCallback;
-        this._pendingCallback = null;
-
-        this._userVerifier.handlePendingMessages()
-            .then(() => callback(...args))
-            .catch(logErrorUnlessCancelled);
-    }
-
-    _onAskQuestion({serviceName, question, secret, answerHandler}) {
+    _onAskQuestion(verifier, serviceName, question, secret) {
         if (this._queryingService)
             this.clear();
 
         this._queryingService = serviceName;
-        this.promptStep++;
-
-        this._setPendingCallback(answerHandler);
-
-        const preemptiveAnswer = this._preemptiveAnswer;
-        this._clearPreemptiveState();
-        if (preemptiveAnswer) {
-            this._completePendingCallback(preemptiveAnswer);
+        if (this._preemptiveAnswer) {
+            this._userVerifier.answerQuery(this._queryingService, this._preemptiveAnswer);
+            this._preemptiveAnswer = null;
             return;
         }
 
-        this.updateEntry(secret);
+        this._updateEntry(secret);
 
         // Hack: The question string comes directly from PAM, if it's "Password:"
         // we replace it with our own to allow localization, if it's something
@@ -534,309 +320,211 @@ export const AuthPrompt = GObject.registerClass({
         else
             this.setQuestion(question.replace(/[:：] *$/, '').trim());
 
+        this.updateSensitivity(true);
         this.emit('prompted');
     }
 
-    _onShowChoiceList({serviceName, promptMessage, choiceList, choiceHandler}) {
+    _onShowChoiceList(userVerifier, serviceName, promptMessage, choiceList) {
         if (this._queryingService)
             this.clear();
 
         this._queryingService = serviceName;
-        this.promptStep++;
 
-        this._clearPreemptiveState();
-
-        this._connectAuthListActivate();
-        this._setPendingCallback(choiceHandler);
+        if (this._preemptiveAnswer)
+            this._preemptiveAnswer = null;
 
         this.setChoiceList(promptMessage, choiceList);
-        this.updateSensitivity({sensitive: true});
+        this.updateSensitivity(true);
         this.emit('prompted');
     }
 
-    _onShowMessage({message, type, shouldWiggle, showMessageResolver}) {
-        this.setMessage(message, type);
-        this.emit('prompted');
+    _onCredentialManagerAuthenticated() {
+        if (this.verificationStatus !== AuthPromptStatus.VERIFICATION_SUCCEEDED)
+            this.reset();
+    }
 
-        // If we're showing a message and no auth widget is currently visible,
-        // show the entry area to allow getting a preemptive answer
-        if (message &&
-            type < UserVerifier.MessageType.ERROR &&
-            !this._entryArea.visible &&
-            !this._authList.visible &&
-            !this._authButton.visible &&
-            !this._webLoginDialog.visible) {
-            this._fadeInElement(this._entryArea);
-            this.updateSensitivity({sensitive: true});
+    _onSmartcardStatusChanged() {
+        this.smartcardDetected = this._userVerifier.smartcardDetected;
+
+        // Most of the time we want to reset if the user inserts or removes
+        // a smartcard. Smartcard insertion "preempts" what the user was
+        // doing, and smartcard removal aborts the preemption.
+        // The exceptions are: 1) Don't reset on smartcard insertion if we're already verifying
+        //                        with a smartcard
+        //                     2) Don't reset if we've already succeeded at verification and
+        //                        the user is getting logged in.
+        if (this._userVerifier.serviceIsDefault(GdmUtil.SMARTCARD_SERVICE_NAME) &&
+            (this.verificationStatus === AuthPromptStatus.VERIFYING ||
+             this.verificationStatus === AuthPromptStatus.VERIFICATION_IN_PROGRESS) &&
+            this.smartcardDetected)
+            return;
+
+        if (this.verificationStatus !== AuthPromptStatus.VERIFICATION_SUCCEEDED)
+            this.reset();
+    }
+
+    _onShowMessage(_userVerifier, serviceName, message, type) {
+        let wiggleParameters = {duration: 0};
+
+        if (type === GdmUtil.MessageType.ERROR &&
+            this._userVerifier.serviceIsFingerprint(serviceName)) {
+            // TODO: Use Await for wiggle to be over before unfreezing the user verifier queue
+            wiggleParameters = {
+                duration: 65,
+                wiggleCount: 3,
+            };
+            this._userVerifier.increaseCurrentMessageTimeout(
+                wiggleParameters.duration * (wiggleParameters.wiggleCount + 2));
         }
 
-        const wigglePromise = shouldWiggle
-            ? wiggle(this._message, {duration: 65, wiggleCount: 3})
-            : Promise.resolve();
-
-        showMessageResolver?.(wigglePromise);
-    }
-
-    _onShowButton({serviceName, label, callback}) {
-        if (this._queryingService)
-            this.clear();
-
-        this._queryingService = serviceName;
-        this.promptStep++;
-
-        this._clearPreemptiveState();
-
-        this._setPendingCallback(callback);
-
-        this._authButton.set_label(label);
-
-        this._fadeInElement(this._authButton);
-        this.updateSensitivity({sensitive: true});
+        this.setMessage(message, type, wiggleParameters);
         this.emit('prompted');
     }
 
-    _onWebLogin({serviceName, message, url, code, buttons}) {
-        if (this._queryingService)
-            this.clear();
-
-        this._queryingService = serviceName;
-        this.promptStep++;
-
-        this._webLoginParams = {message, url, code, buttons};
-
-        this._entryArea.hide();
-
-        this._clearPreemptiveState();
-
-        this._openWebLoginDialog();
-
-        this.emit('prompted');
-    }
-
-    _closeWebLoginDialog() {
-        this._webLoginDialog.hide();
-
-        this._userWell.get_child()?.showAvatar();
-        this._mainBox.show();
-
-        this.webLoginActive = false;
-        this.remove_style_class_name('web-login-active');
-    }
-
-    _openWebLoginDialog() {
-        this._userWell.get_child()?.hideAvatar();
-        this._mainBox.hide();
-
-        this._webLoginDialog.update(this._webLoginParams);
-        this._fadeInElement(this._webLoginDialog);
-        this.updateSensitivity({sensitive: true});
-
-        this.webLoginActive = true;
-        this.add_style_class_name('web-login-active');
-    }
-
-    _onVerificationFailed({serviceName, canRetry}) {
+    _onVerificationFailed(userVerifier, serviceName, canRetry) {
         const wasQueryingService = this._queryingService === serviceName;
 
-        if (wasQueryingService)
+        if (wasQueryingService) {
             this._queryingService = null;
-
-        // Only allow instant retrying with password authentication.
-        // The rest of authentications will retry through the reset flow.
-        if (canRetry && this._userVerifier.selectedMechanism?.preemptiveInput) {
-            this.verificationStatus = AuthPromptStatus.VERIFYING;
-            this._entry.text = '';
-            this.startPreemptiveInput();
+            this.clear();
         }
-        this.stopSpinning();
+
+        this.updateSensitivity(canRetry);
+        this.setActorInDefaultButtonWell(null);
 
         if (!canRetry)
             this.verificationStatus = AuthPromptStatus.VERIFICATION_FAILED;
 
         if (wasQueryingService)
-            wiggle(this._entryArea);
+            wiggle(this._entry);
     }
 
     _onVerificationComplete() {
-        this.stopSpinning({animate: true});
+        this.setActorInDefaultButtonWell(null);
         this.verificationStatus = AuthPromptStatus.VERIFICATION_SUCCEEDED;
-
-        [this._mainBox, this._webLoginDialog].forEach(widget => {
-            widget.reactive = false;
-            widget.ease({
-                opacity: 0,
-                duration: MESSAGE_FADE_OUT_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
-        });
-
-        this.emit('verification-complete');
+        this.cancelButton.reactive = false;
+        this.cancelButton.can_focus = false;
     }
 
-    _onReset(resetParams) {
-        if (this.verificationStatus === AuthPromptStatus.VERIFICATION_SUCCEEDED)
-            return;
-
-        this.reset(resetParams);
+    _onReset() {
+        this.verificationStatus = AuthPromptStatus.NOT_VERIFYING;
+        this.reset();
     }
 
     setActorInDefaultButtonWell(actor, animate) {
-        if (!this._defaultButtonWellActor && !actor)
+        if (!this._defaultButtonWellActor &&
+            !actor)
             return;
 
-        const oldActor = this._defaultButtonWellActor;
-        const wasSpinner = oldActor === this._spinner;
+        let oldActor = this._defaultButtonWellActor;
 
         if (oldActor)
             oldActor.remove_all_transitions();
 
+        let wasSpinner;
+        if (oldActor === this._spinner)
+            wasSpinner = true;
+        else
+            wasSpinner = false;
+
+        let isSpinner;
         if (actor === this._spinner)
-            this._spinner.play();
+            isSpinner = true;
+        else
+            isSpinner = false;
 
-        if (!animate) {
-            if (oldActor) {
+        if (this._defaultButtonWellActor !== actor && oldActor) {
+            if (!animate) {
                 oldActor.opacity = 0;
-                if (wasSpinner)
-                    this._spinner.stop();
-            }
-            if (actor)
-                actor.opacity = 255;
 
-            this._defaultButtonWellActor = actor;
-            return;
-        }
-
-        if (oldActor) {
-            oldActor.opacity = 255;
-            oldActor.ease({
-                opacity: 0,
-                duration: DEFAULT_BUTTON_WELL_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.LINEAR,
-                onComplete: () => {
-                    if (wasSpinner)
+                if (wasSpinner) {
+                    if (this._spinner)
                         this._spinner.stop();
-                },
-            });
+                }
+            } else {
+                oldActor.ease({
+                    opacity: 0,
+                    duration: DEFAULT_BUTTON_WELL_ANIMATION_TIME,
+                    delay: DEFAULT_BUTTON_WELL_ANIMATION_DELAY,
+                    mode: Clutter.AnimationMode.LINEAR,
+                    onComplete: () => {
+                        if (wasSpinner) {
+                            if (this._spinner)
+                                this._spinner.stop();
+                        }
+                    },
+                });
+            }
         }
+
         if (actor) {
-            actor.opacity = 0;
-            actor.ease({
-                opacity: 255,
-                duration: DEFAULT_BUTTON_WELL_ANIMATION_TIME,
-                delay: oldActor ? DEFAULT_BUTTON_WELL_ANIMATION_TIME : 0,
-                mode: Clutter.AnimationMode.LINEAR,
-            });
+            if (isSpinner)
+                this._spinner.play();
+
+            if (!animate) {
+                actor.opacity = 255;
+            } else {
+                actor.ease({
+                    opacity: 255,
+                    duration: DEFAULT_BUTTON_WELL_ANIMATION_TIME,
+                    delay: DEFAULT_BUTTON_WELL_ANIMATION_DELAY,
+                    mode: Clutter.AnimationMode.LINEAR,
+                });
+            }
         }
 
         this._defaultButtonWellActor = actor;
     }
 
-    startSpinning({animate = false} = {}) {
-        this.emit('loading', true);
-        this.setActorInDefaultButtonWell(this._spinner, animate);
+    startSpinning() {
+        this.setActorInDefaultButtonWell(this._spinner, true);
     }
 
-    stopSpinning({animate = false} = {}) {
-        this.emit('loading', false);
-        this.setActorInDefaultButtonWell(this._nextButton, animate);
-
-        if (this._webLoginDialog.isLoading)
-            this._webLoginDialog.stopLoading();
+    stopSpinning() {
+        this.setActorInDefaultButtonWell(null, false);
     }
 
-    clear(params) {
-        const {reuseEntryText} = Params.parse(params, {
-            reuseEntryText: false,
-        });
-
-        if (!reuseEntryText) {
-            this._entry.hint_text = '';
-            this._inactiveEntry.hint_text = '';
-            this._entryArea.hide();
-            this._entry.text = '';
-            this._inactiveEntry.text = '';
-            this.stopSpinning();
-        }
-
-        this._authListTitle.child.text = '';
+    clear() {
+        this._entry.text = '';
+        this.stopSpinning();
         this._authList.clear();
         this._authList.hide();
-        this._disconnectAuthListActivate();
-        this._authButton.hide();
-        this._closeWebLoginDialog();
-        this._pendingCallback = null;
-
-        [this._mainBox, this._webLoginDialog].forEach(widget => {
-            widget.opacity = 255;
-            widget.reactive = true;
-        });
     }
 
     setQuestion(question) {
         this._entry.hint_text = question;
 
         this._authList.hide();
-        this._authButton.hide();
-        this._closeWebLoginDialog();
-
-        this._fadeInElement(this._entryArea);
-        this.updateSensitivity({sensitive: true});
+        this._entry.show();
+        this._entry.grab_key_focus();
     }
 
-    _connectAuthListActivate() {
-        if (this._authListActivateId)
-            return;
-
-        this._authListActivateId =
-            this._authList.connect('activate', (list, key) => {
-                this._authList.reactive = false;
-                this._authList.ease({
-                    opacity: 0,
-                    duration: MESSAGE_FADE_OUT_ANIMATION_TIME * 0.5,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                    onComplete: () => {
-                        this._authListTitle.child.text = '';
-                        this._authList.clear();
-                        this._authList.hide();
-                        this._completePendingCallback(key);
-                    },
-                });
-            });
-    }
-
-    _disconnectAuthListActivate() {
-        if (this._authListActivateId) {
-            this._authList.disconnect(this._authListActivateId);
-            this._authListActivateId = 0;
-        }
-    }
-
-    _fadeInElement(element) {
-        if (element.visible)
-            return;
-
-        element.set({
+    _fadeInChoiceList() {
+        this._authList.set({
             opacity: 0,
             visible: true,
+            reactive: false,
         });
-        element.ease({
+        this._authList.ease({
             opacity: 255,
             duration: MESSAGE_FADE_OUT_ANIMATION_TIME,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            transition: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => (this._authList.reactive = true),
         });
     }
 
     setChoiceList(promptMessage, choiceList) {
         this._authList.clear();
-        this._authListTitle.child.text = promptMessage;
-        for (const key in choiceList) {
-            const content = choiceList[key];
-            this._authList.addItem(key, content);
+        this._authList.label.text = promptMessage;
+        for (let key in choiceList) {
+            let text = choiceList[key];
+            this._authList.addItem(key, text);
         }
 
-        this._entryArea.hide();
-        this._fadeInElement(this._authList);
-        this.updateSensitivity({sensitive: true});
+        this._entry.hide();
+        if (this._message.text === '')
+            this._message.hide();
+        this._fadeInChoiceList();
     }
 
     getAnswer() {
@@ -863,173 +551,119 @@ export const AuthPrompt = GObject.registerClass({
         });
     }
 
-    setMessage(message, type) {
-        if (type === UserVerifier.MessageType.ERROR)
+    setMessage(message, type, wiggleParameters = {duration: 0}) {
+        if (type === GdmUtil.MessageType.ERROR)
             this._message.add_style_class_name('login-dialog-message-warning');
         else
             this._message.remove_style_class_name('login-dialog-message-warning');
 
-        if (type === UserVerifier.MessageType.HINT)
+        if (type === GdmUtil.MessageType.HINT)
             this._message.add_style_class_name('login-dialog-message-hint');
         else
             this._message.remove_style_class_name('login-dialog-message-hint');
 
+        this._message.show();
         if (message) {
             this._message.remove_all_transitions();
             this._message.text = message;
             this._message.opacity = 255;
-            this.get_accessible().emit('notification', message, Atk.Live.ASSERTIVE);
         } else {
             this._message.opacity = 0;
         }
+
+        wiggle(this._message, wiggleParameters);
     }
 
-    updateSensitivity({sensitive}) {
-        if (sensitive && this._preemptiveAnswer)
+    updateSensitivity(sensitive) {
+        if (this._entry.reactive === sensitive)
             return;
 
-        const authWidget = [
-            this._authList,
-            this._authButton,
-            this._webLoginDialog,
-        ].find(widget => widget.visible) ?? this._entry;
-
-        if (authWidget === this._entry)
-            this._nextButton.reactive = sensitive;
-
-        authWidget.reactive = sensitive;
+        this._entry.reactive = sensitive;
 
         if (sensitive) {
-            authWidget.grab_key_focus();
+            this._entry.grab_key_focus();
         } else {
             this.grab_key_focus();
 
-            if (authWidget === this._passwordEntry)
-                authWidget.password_visible = false;
+            if (this._entry === this._passwordEntry)
+                this._entry.password_visible = false;
         }
     }
 
     vfunc_hide() {
-        this.stopSpinning();
+        this.setActorInDefaultButtonWell(null, true);
         super.vfunc_hide();
         this._message.opacity = 0;
 
         this.setUser(null);
 
-        this.updateSensitivity({sensitive: true});
+        this.updateSensitivity(true);
         this._entry.set_text('');
     }
 
     setUser(user) {
-        const oldChild = this._userWell.get_child();
+        let oldChild = this._userWell.get_child();
         if (oldChild)
             oldChild.destroy();
 
-        const userWidget = new UserWidget.UserWidget(user, Clutter.Orientation.VERTICAL);
+        let userWidget = new UserWidget.UserWidget(user, Clutter.Orientation.VERTICAL);
         this._userWell.set_child(userWidget);
+
+        if (!user)
+            this._updateEntry(false);
     }
 
-    selectMechanism(mechanism) {
-        const invalidStatus = [
-            AuthPromptStatus.VERIFICATION_SUCCEEDED,
-            AuthPromptStatus.VERIFICATION_IN_PROGRESS,
-        ];
-        if (invalidStatus.includes(this.verificationStatus))
-            return false;
-
-        const oldPromptStep = this.promptStep;
-        this.promptStep = 0;
-        if (!this._userVerifier.selectMechanism(mechanism))
-            this.promptStep = oldPromptStep;
-
-        return true;
-    }
-
-    reset(params) {
-        let {reuseEntryText, softReset} = Params.parse(params, {
-            reuseEntryText: false,
-            softReset: false,
-        });
-
-        const oldStatus = this.verificationStatus;
+    reset() {
+        let oldStatus = this.verificationStatus;
         this.verificationStatus = AuthPromptStatus.NOT_VERIFYING;
-        if (oldStatus !== AuthPromptStatus.VERIFICATION_IN_PROGRESS)
-            this._preemptiveAnswer = null;
-        this.promptStep = 0;
+        this.cancelButton.reactive = this._hasCancelButton;
+        this.cancelButton.can_focus = this._hasCancelButton;
+        this._preemptiveAnswer = null;
 
-        if (softReset)
-            this._userVerifier?.cancel();
-        else
-            this._userVerifier?.reset();
-
-        reuseEntryText = reuseEntryText || !!this._preemptiveAnswer || this._preemptiveInput;
+        if (this._userVerifier)
+            this._userVerifier.cancel();
 
         this._queryingService = null;
-        this.clear({reuseEntryText});
+        this.clear();
         this._message.opacity = 0;
-        this.updateEntry(true);
+        this.setUser(null);
+        this._updateEntry(true);
+        this.stopSpinning();
 
         if (oldStatus === AuthPromptStatus.VERIFICATION_FAILED)
             this.emit('failed');
         else if (oldStatus === AuthPromptStatus.VERIFICATION_CANCELLED)
             this.emit('cancelled');
 
-        let resetType;
+        let beginRequestType;
 
         if (this._mode === AuthPromptMode.UNLOCK_ONLY) {
             // The user is constant at the unlock screen, so it will immediately
             // respond to the request with the username
             if (oldStatus === AuthPromptStatus.VERIFICATION_CANCELLED)
                 return;
-            resetType = ResetType.PROVIDE_USERNAME;
-        } else if (!this._userVerifier.needsUsername()) {
+            beginRequestType = BeginRequestType.PROVIDE_USERNAME;
+        } else if (this._userVerifier.foregroundServiceDeterminesUsername()) {
             // We don't need to know the username if the user preempted the login screen
             // with a smartcard or with preauthenticated oVirt credentials
-            resetType = ResetType.DONT_PROVIDE_USERNAME;
-        } else if (oldStatus === AuthPromptStatus.VERIFICATION_IN_PROGRESS ||
-            softReset) {
+            beginRequestType = BeginRequestType.DONT_PROVIDE_USERNAME;
+        } else if (oldStatus === AuthPromptStatus.VERIFICATION_IN_PROGRESS) {
             // We're going back to retry with current user
-            resetType = ResetType.REUSE_USERNAME;
+            beginRequestType = BeginRequestType.REUSE_USERNAME;
         } else {
             // In all other cases, we should get the username up front.
-            resetType = ResetType.PROVIDE_USERNAME;
+            beginRequestType = BeginRequestType.PROVIDE_USERNAME;
         }
 
-        this.emit('reset', resetType);
+        this.emit('reset', beginRequestType);
     }
 
-    startPreemptiveInput(unichar) {
-        this._preemptiveInput = true;
-        this.updateSensitivity({sensitive: true});
-        if (unichar)
-            this._entry.clutter_text.insert_unichar(unichar);
-    }
+    addCharacter(unichar) {
+        if (!this._entry.visible)
+            return;
 
-    _clearPreemptiveState() {
-        this._preemptiveInput = false;
-        this._preemptiveAnswer = null;
-    }
-
-    /*
-     * Set whether to block the authentication with the parental controls shield.
-     *
-     * @param {boolean} shouldBlock Whether to block the authentication
-     */
-    setAuthBlocked(shouldBlock) {
-        if (!this._parentalControlsShield)
-            this._parentalControlsShield = new ParentalControlsShield();
-
-        const newMainContent = shouldBlock
-            ? this._parentalControlsShield
-            : this._inputWell;
-
-        if (newMainContent !== this._mainContent) {
-            this.replace_child(this._mainContent, newMainContent);
-            this._mainContent = newMainContent;
-        }
-
-        if (this._mainContent === this._inputWell)
-            this._entry.grab_key_focus();
+        this._entry.grab_key_focus();
+        this._entry.clutter_text.insert_unichar(unichar);
     }
 
     begin(params) {
@@ -1038,11 +672,13 @@ export const AuthPrompt = GObject.registerClass({
             hold: null,
         });
 
-        if (!this._preemptiveInput)
-            this.updateSensitivity({sensitive: false});
+        this.updateSensitivity(false);
 
-        this._userVerifier.begin(params.userName, params.hold).catch(
-            logErrorUnlessCancelled);
+        let hold = params.hold;
+        if (!hold)
+            hold = new Batch.Hold();
+
+        this._userVerifier.begin(params.userName, hold);
         this.verificationStatus = AuthPromptStatus.VERIFYING;
     }
 
@@ -1053,36 +689,16 @@ export const AuthPrompt = GObject.registerClass({
             return;
         }
 
-        const signalId = this._userVerifier.connect('no-more-messages', () => {
+        let signalId = this._userVerifier.connect('no-more-messages', () => {
             this._userVerifier.disconnect(signalId);
             this._userVerifier.clear();
             onComplete();
         });
     }
 
-    _handleCancel() {
-        if (this._userVerifier.cancelRequested()) {
-            // We substract 2 because on cancel we'll receive a new prompt signal
-            // which increments promptStep, so that ends with a result of going
-            // back one step.
-            this.promptStep -= 2;
-            if (this.promptStep < 0)
-                this.promptStep = 0;
-            return;
-        }
-
-        this.cancel();
-    }
-
     cancel() {
         if (this.verificationStatus === AuthPromptStatus.VERIFICATION_SUCCEEDED)
             return;
-
-        // If we're in a multi-step flow (step > 1), go back to step 1 instead of full reset
-        if (this.promptStep > 1) {
-            this.reset({softReset: true});
-            return;
-        }
 
         if (this.verificationStatus === AuthPromptStatus.VERIFICATION_IN_PROGRESS) {
             this._cancelledRetries++;

@@ -100,16 +100,14 @@ development tools appropriate for your operating system, including:
  - Meson
  - Ninja
  - Gettext (19.7 or newer)
- - a [C99 compatible compiler][glib-toolchain-reqs]
+ - a [C99 compatible compiler](https://wiki.gnome.org/Projects/GLib/CompilerRequirements)
 
 Up-to-date instructions about developing GNOME applications and libraries
 can be found on [the GNOME Developer Center](https://developer.gnome.org).
 
 The GTK project uses GitLab for code hosting and for tracking issues. More
-information about using GitLab can be found on [the GNOME handbook][handbook].
-
-[glib-toolchain-reqs]: https://gitlab.gnome.org/GNOME/glib/-/blob/main/docs/toolchain-requirements.md
-[handbook]: https://handbook.gnome.org/infrastructure/gitlab.html
+information about using GitLab can be found [on the GNOME
+wiki](https://wiki.gnome.org/GitLab).
 
 ### Dependencies
 
@@ -133,7 +131,7 @@ GTK will attempt to download and build some of these dependencies if it
 cannot find them on your system.
 
 Additionally, you may want to look at projects that create a development
-environment for you, like [jhbuild](https://gitlab.gnome.org/GNOME/jhbuild)
+environment for you, like [jhbuild](https://wiki.gnome.org/HowDoI/Jhbuild)
 and [gvsbuild](https://github.com/wingtk/gvsbuild).
 
 ### Getting started
@@ -165,7 +163,7 @@ to the Git repository and open a new merge request, to let the GTK
 maintainers review your contribution.
 
 **Important**: Do **not** attach a diff or a patch file to a GitLab issue.
-Patches cannot be reviewed, and do not go through the CI pipeline. If
+Patches cannot be reviewed, and do not not go through the CI pipeline. If
 you wish to submit your changes to GTK, always use a merge request.
 
 ### Code reviews
@@ -225,11 +223,6 @@ Closes: https://gitlab.gnome.org/GNOME/gtk/issues/1234
  the commit message, e.g. `Bug: #1234`, and use the automatic issue
  closing syntax in the description of the merge request.
 
-- If some of your changes were generated mechanically (either by a script,
-  or by some elaborate commandline), it is a good idea to include this
-  information in the merge request description (if it is a script, attach it),
-  so the changes can be regenerated if necessary.
-
 ### Commit access to the GTK repository
 
 GTK is part of the GNOME infrastructure. At the current time, any
@@ -265,52 +258,3 @@ people committing to GTK to follow a few rules:
 If you have been contributing to GTK for a while and you don't have commit
 access to the repository, you may ask to obtain it following the [GNOME account
 process](https://handbook.gnome.org/infrastructure/developer-access.html).
-
-## AI Contribution Policy
-
-GTK is a project by humans for humans. We prefer contributions that
-are produced by human creativity, we expect a human to take full
-responsibility for each contribution, and we will take more joy in
-reviewing contributions when there's people at the other end of the
-line to stand by their changes.
-
-If you use LLM/GenAI tools for your contributions, here are the rules
-you must follow:
-
-### Requirements
-
-1. Use AI as a tool. Verify behavior, correctness, and compatibility
-   yourself prior to submitting your contribution. Do not ask the
-   maintainers to do this for you.
-1. Keep changes narrow and limited. Do **NOT** use LLM/GenAI tools to
-   generate broad rewrites, large refactorings, or style changes.
-1. Do **NOT** submit generated code, documentation, or tests that you
-   don’t understand.
-1. Do **NOT** fabricate benchmarks, bug reports, test results, code
-   samples, or reproducers.
-1. Do **NOT** include private code, credentials, tokens, or any other
-   confidential material.
-1. Respect the licensing and attribution requirements.
-
-### Disclosure
-
-Always disclose the use of LLM/GenAI tools when creating an issue or
-a merge request. Do not include trailers like “Co-authored-by:” or
-“Assisted-by:” in commit messages, since they serve as free advertising
-for AI companies.
-
-### Reviews
-
-1. Describe your changes, and the verification steps.
-1. Be prepared to explain all the changes yourself.
-1. Do **NOT** feed the review feedback to an LLM/GenAI tool.
-
-### Maintainers expectations
-
-1. Review LLM/GenAI-assisted contributions more strictly than any other contribution.
-1. Require reproducibility in fixes and tests.
-1. Reject changes that appear to be unverified LLM/GenAI output.
-1. Reject comments and feedback that appear to be LLM/GenAI output.
-
-> A COMPUTER CAN NEVER BE HELD ACCOUNTABLE.
-> THEREFORE A COMPUTER MUST NEVER MAKE A MAINTENANCE DECISION.

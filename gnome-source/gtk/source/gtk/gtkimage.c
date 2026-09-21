@@ -40,12 +40,9 @@
 /**
  * GtkImage:
  *
- * Displays an image.
+ * The `GtkImage` widget displays an image.
  *
- * <picture>
- *   <source srcset="image-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkImage" src="image.png">
- * </picture>
+ * ![An example GtkImage](image.png)
  *
  * Various kinds of object can be displayed as an image; most typically,
  * you would load a `GdkTexture` from a file, using the convenience function
@@ -58,9 +55,9 @@
  * If the file isn’t loaded successfully, the image will contain a
  * “broken image” icon similar to that used in many web browsers.
  *
- * If you want to handle errors in loading the file yourself, for example
- * by displaying an error message, then load the image with an image
- * loading framework such as libglycin, then create the `GtkImage` with
+ * If you want to handle errors in loading the file yourself,
+ * for example by displaying an error message, then load the image with
+ * [ctor@Gdk.Texture.new_from_file], then create the `GtkImage` with
  * [ctor@Gtk.Image.new_from_paintable].
  *
  * Sometimes an application will want to avoid depending on external data
@@ -81,7 +78,7 @@
  *
  * ## Accessibility
  *
- * `GtkImage` uses the [enum@Gtk.AccessibleRole.img] role.
+ * `GtkImage` uses the `GTK_ACCESSIBLE_ROLE_IMG` role.
  */
 
 typedef struct _GtkImageClass GtkImageClass;
@@ -172,14 +169,14 @@ gtk_image_class_init (GtkImageClass *class)
   widget_class->system_setting_changed = gtk_image_system_setting_changed;
 
   /**
-   * GtkImage:paintable: (getter get_paintable) (setter set_from_paintable)
+   * GtkImage:paintable: (attributes org.gtk.Property.get=gtk_image_get_paintable org.gtk.Property.set=gtk_image_set_from_paintable)
    *
    * The `GdkPaintable` to display.
    */
   image_props[PROP_PAINTABLE] =
       g_param_spec_object ("paintable", NULL, NULL,
                            GDK_TYPE_PAINTABLE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
    * GtkImage:file: (attributes org.gtk.Property.set=gtk_image_set_from_file)
@@ -189,10 +186,10 @@ gtk_image_class_init (GtkImageClass *class)
   image_props[PROP_FILE] =
       g_param_spec_string ("file", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
-   * GtkImage:icon-size:
+   * GtkImage:icon-size: (attributes org.gtk.Property.get=gtk_image_get_icon_size org.gtk.Property.set=gtk_image_set_icon_size org.gtk.Property.set=gtk_image_set_icon_size)
    *
    * The symbolic size to display icons at.
    */
@@ -200,10 +197,10 @@ gtk_image_class_init (GtkImageClass *class)
       g_param_spec_enum ("icon-size", NULL, NULL,
                          GTK_TYPE_ICON_SIZE,
                          GTK_ICON_SIZE_INHERIT,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkImage:pixel-size:
+   * GtkImage:pixel-size: (attributes org.gtk.Property.get=gtk_image_get_pixel_size org.gtk.Property.set=gtk_image_set_pixel_size)
    *
    * The size in pixels to display icons at.
    *
@@ -215,10 +212,10 @@ gtk_image_class_init (GtkImageClass *class)
       g_param_spec_int ("pixel-size", NULL, NULL,
                         -1, G_MAXINT,
                         -1,
-                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkImage:icon-name: (getter get_icon_name) (setter set_from_icon_name)
+   * GtkImage:icon-name: (attributes org.gtk.Property.get=gtk_image_get_icon_name org.gtk.Property.set=gtk_image_set_from_icon_name)
    *
    * The name of the icon in the icon theme.
    *
@@ -227,10 +224,10 @@ gtk_image_class_init (GtkImageClass *class)
   image_props[PROP_ICON_NAME] =
       g_param_spec_string ("icon-name", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
-   * GtkImage:gicon: (getter get_gicon) (setter set_from_gicon)
+   * GtkImage:gicon: (attributes org.gtk.Property.get=gtk_image_get_gicon org.gtk.Property.set=gtk_image_set_from_gicon)
    *
    * The `GIcon` displayed in the GtkImage.
    *
@@ -240,7 +237,7 @@ gtk_image_class_init (GtkImageClass *class)
   image_props[PROP_GICON] =
       g_param_spec_object ("gicon", NULL, NULL,
                            G_TYPE_ICON,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
    * GtkImage:resource: (attributes org.gtk.Property.set=gtk_image_set_from_resource)
@@ -250,10 +247,10 @@ gtk_image_class_init (GtkImageClass *class)
   image_props[PROP_RESOURCE] =
       g_param_spec_string ("resource", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
-   * GtkImage:storage-type:
+   * GtkImage:storage-type: (attributes org.gtk.Property.get=gtk_image_get_storage_type)
    *
    * The representation being used for image data.
    */
@@ -261,7 +258,7 @@ gtk_image_class_init (GtkImageClass *class)
       g_param_spec_enum ("storage-type", NULL, NULL,
                          GTK_TYPE_IMAGE_TYPE,
                          GTK_IMAGE_EMPTY,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         GTK_PARAM_READABLE);
 
   /**
    * GtkImage:use-fallback:
@@ -275,7 +272,7 @@ gtk_image_class_init (GtkImageClass *class)
   image_props[PROP_USE_FALLBACK] =
       g_param_spec_boolean ("use-fallback", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, image_props);
 
@@ -406,9 +403,9 @@ gtk_image_get_property (GObject     *object,
  * will display a “broken image” icon. This function never returns %NULL,
  * it always returns a valid `GtkImage` widget.
  *
- * If you need to detect failures to load the file, use an
- * image loading framework such as libglycin to load the file
- * yourself, then create the `GtkImage` from the texture.
+ * If you need to detect failures to load the file, use
+ * [ctor@Gdk.Texture.new_from_file] to load the file yourself,
+ * then create the `GtkImage` from the texture.
  *
  * The storage type (see [method@Gtk.Image.get_storage_type])
  * of the returned image is not defined, it will be whatever
@@ -438,9 +435,9 @@ gtk_image_new_from_file   (const char *filename)
  * display a “broken image” icon. This function never returns %NULL,
  * it always returns a valid `GtkImage` widget.
  *
- * If you need to detect failures to load the file, use an
- * image loading framework such as libglycin to load the file
- * yourself, then create the `GtkImage` from the texture.
+ * If you need to detect failures to load the file, use
+ * [ctor@GdkPixbuf.Pixbuf.new_from_file] to load the file yourself,
+ * then create the `GtkImage` from the pixbuf.
  *
  * The storage type (see [method@Gtk.Image.get_storage_type]) of
  * the returned image is not defined, it will be whatever is
@@ -509,13 +506,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
  * The `GtkImage` will track changes to the @paintable and update
  * its size and contents in response to it.
  *
- * Note that paintables are still subject to the icon size that is
- * set on the image. If you want to display a paintable at its intrinsic
- * size, use [class@Gtk.Picture] instead.
- *
- * If @paintable is a [iface@Gtk.SymbolicPaintable], then it will be
- * recolored with the symbolic palette from the theme.
- *
  * Returns: a new `GtkImage`
  */
 GtkWidget*
@@ -579,24 +569,19 @@ gtk_image_new_from_gicon (GIcon *icon)
 }
 
 /**
- * gtk_image_set_from_file: (set-property file)
+ * gtk_image_set_from_file: (attributes org.gtk.Method.set_property=file)
  * @image: a `GtkImage`
  * @filename: (type filename) (nullable): a filename
  *
  * Sets a `GtkImage` to show a file.
  *
  * See [ctor@Gtk.Image.new_from_file] for details.
- *
- * ::: warning
- *     Note that this function should not be used with untrusted data.
- *     Use a proper image loading framework such as libglycin, which can
- *     load many image formats into a `GdkTexture`, and then use
- *     [method@Gtk.Image.set_from_paintable].
  */
 void
 gtk_image_set_from_file (GtkImage    *image,
                          const char *filename)
 {
+  int scale_factor;
   GdkPaintable *paintable;
 
   g_return_if_fail (GTK_IS_IMAGE (image));
@@ -612,7 +597,8 @@ gtk_image_set_from_file (GtkImage    *image,
       return;
     }
 
-  paintable = gdk_paintable_new_from_filename (filename, NULL);
+  scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (image));
+  paintable = gdk_paintable_new_from_filename_scaled (filename, scale_factor);
 
   if (paintable == NULL)
     {
@@ -661,7 +647,7 @@ out:
 }
 
 /**
- * gtk_image_set_from_resource: (set-property resource)
+ * gtk_image_set_from_resource: (attributes org.gtk.Method.set_property=resource)
  * @image: a `GtkImage`
  * @resource_path: (nullable): a resource path
  *
@@ -673,6 +659,7 @@ void
 gtk_image_set_from_resource (GtkImage   *image,
                              const char *resource_path)
 {
+  int scale_factor;
   GdkPaintable *paintable;
 
   g_return_if_fail (GTK_IS_IMAGE (image));
@@ -694,7 +681,8 @@ gtk_image_set_from_resource (GtkImage   *image,
     }
   else
     {
-      paintable = gdk_paintable_new_from_resource (resource_path);
+      scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (image));
+      paintable = gdk_paintable_new_from_resource_scaled (resource_path, scale_factor);
     }
 
   if (paintable == NULL)
@@ -717,7 +705,7 @@ gtk_image_set_from_resource (GtkImage   *image,
 
 
 /**
- * gtk_image_set_from_pixbuf:
+ * gtk_image_set_from_pixbuf: (attributes org.gtk.Method.set_property=paintable)
  * @image: a `GtkImage`
  * @pixbuf: (nullable): a `GdkPixbuf` or `NULL`
  *
@@ -740,12 +728,10 @@ gtk_image_set_from_pixbuf (GtkImage  *image,
   g_return_if_fail (GTK_IS_IMAGE (image));
   g_return_if_fail (pixbuf == NULL || GDK_IS_PIXBUF (pixbuf));
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   if (pixbuf)
     texture = gdk_texture_new_for_pixbuf (pixbuf);
   else
     texture = NULL;
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   gtk_image_set_from_paintable (image, GDK_PAINTABLE (texture));
 
@@ -754,7 +740,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 }
 
 /**
- * gtk_image_set_from_icon_name: (set-property icon-name)
+ * gtk_image_set_from_icon_name: (attributes org.gtk.Method.set_property=icon-name)
  * @image: a `GtkImage`
  * @icon_name: (nullable): an icon name
  *
@@ -782,7 +768,7 @@ gtk_image_set_from_icon_name  (GtkImage    *image,
 }
 
 /**
- * gtk_image_set_from_gicon: (set-property gicon)
+ * gtk_image_set_from_gicon: (attributes org.gtk.Method.set_property=gicon)
  * @image: a `GtkImage`
  * @icon: an icon
  *
@@ -830,7 +816,7 @@ gtk_image_paintable_invalidate_size (GdkPaintable *paintable,
 }
 
 /**
- * gtk_image_set_from_paintable: (set-property paintable)
+ * gtk_image_set_from_paintable: (attributes org.gtk.Method.set_property=paintable)
  * @image: a `GtkImage`
  * @paintable: (nullable): a `GdkPaintable`
  *
@@ -879,7 +865,7 @@ gtk_image_set_from_paintable (GtkImage     *image,
 }
 
 /**
- * gtk_image_get_storage_type:
+ * gtk_image_get_storage_type: (attributes org.gtk.Method.get_property=storage-type)
  * @image: a `GtkImage`
  *
  * Gets the type of representation being used by the `GtkImage`
@@ -899,7 +885,7 @@ gtk_image_get_storage_type (GtkImage *image)
 }
 
 /**
- * gtk_image_get_paintable:
+ * gtk_image_get_paintable: (attributes org.gtk.Method.get_property=paintable)
  * @image: a `GtkImage`
  *
  * Gets the image `GdkPaintable` being displayed by the `GtkImage`.
@@ -920,7 +906,7 @@ gtk_image_get_paintable (GtkImage *image)
 }
 
 /**
- * gtk_image_get_icon_name:
+ * gtk_image_get_icon_name: (attributes org.gtk.Method.get_property=icon-name)
  * @image: a `GtkImage`
  *
  * Gets the icon name and size being displayed by the `GtkImage`.
@@ -941,7 +927,7 @@ gtk_image_get_icon_name (GtkImage *image)
 }
 
 /**
- * gtk_image_get_gicon:
+ * gtk_image_get_gicon: (attributes org.gtk.Method.get_property=gicon)
  * @image: a `GtkImage`
  *
  * Gets the `GIcon` being displayed by the `GtkImage`.
@@ -1017,8 +1003,6 @@ gtk_image_snapshot (GtkWidget   *widget,
   height = gtk_widget_get_height (widget);
   ratio = gdk_paintable_get_intrinsic_aspect_ratio (GDK_PAINTABLE (image->icon_helper));
 
-  gtk_snapshot_push_isolation (snapshot, GSK_ISOLATION_ALL);
-
   if (ratio == 0)
     {
       gdk_paintable_snapshot (GDK_PAINTABLE (image->icon_helper), snapshot, width, height);
@@ -1044,7 +1028,7 @@ gtk_image_snapshot (GtkWidget   *widget,
       if (baseline == -1)
         y = floor(height - ceil (h)) / 2;
       else
-        y = CLAMP (baseline - floor (ceil (h) * gtk_image_get_baseline_align (image)), 0, height - ceil (h));
+        y = CLAMP (baseline - h * gtk_image_get_baseline_align (image), 0, height - ceil (h));
 
       if (x != 0 || y != 0)
         {
@@ -1058,8 +1042,6 @@ gtk_image_snapshot (GtkWidget   *widget,
           gdk_paintable_snapshot (GDK_PAINTABLE (image->icon_helper), snapshot, w, h);
         }
     }
-
-  gtk_snapshot_pop (snapshot); /* isolation */
 }
 
 static void
@@ -1130,7 +1112,8 @@ gtk_image_clear_internal (GtkImage *self,
 
   if (self->filename)
     {
-      g_clear_pointer (&self->filename, g_free);
+      g_free (self->filename);
+      self->filename = NULL;
 
       if (notify)
         g_object_notify_by_pspec (gobject, image_props[PROP_FILE]);
@@ -1138,7 +1121,8 @@ gtk_image_clear_internal (GtkImage *self,
 
   if (self->resource_path)
     {
-      g_clear_pointer (&self->resource_path, g_free);
+      g_free (self->resource_path);
+      self->resource_path = NULL;
 
       if (notify)
         g_object_notify_by_pspec (gobject, image_props[PROP_RESOURCE]);
@@ -1227,14 +1211,14 @@ gtk_image_system_setting_changed (GtkWidget        *widget,
 }
 
 /**
- * gtk_image_set_pixel_size:
+ * gtk_image_set_pixel_size: (attributes org.gtk.Method.set_property=pixel-size)
  * @image: a `GtkImage`
  * @pixel_size: the new pixel size
  *
  * Sets the pixel size to use for named icons.
  *
  * If the pixel size is set to a value != -1, it is used instead
- * of the icon size set by [method@Gtk.Image.set_icon_size].
+ * of the icon size set by [method@Gtk.Image.set_from_icon_name].
  */
 void
 gtk_image_set_pixel_size (GtkImage *image,
@@ -1251,7 +1235,7 @@ gtk_image_set_pixel_size (GtkImage *image,
 }
 
 /**
- * gtk_image_get_pixel_size:
+ * gtk_image_get_pixel_size: (attributes org.gtk.Method.get_property=pixel-size)
  * @image: a `GtkImage`
  *
  * Gets the pixel size used for named icons.
@@ -1267,7 +1251,7 @@ gtk_image_get_pixel_size (GtkImage *image)
 }
 
 /**
- * gtk_image_set_icon_size:
+ * gtk_image_set_icon_size: (attributes org.gtk.Method.set_property=icon-size)
  * @image: a `GtkImage`
  * @icon_size: the new icon size
  *
@@ -1288,7 +1272,7 @@ gtk_image_set_icon_size (GtkImage    *image,
 }
 
 /**
- * gtk_image_get_icon_size:
+ * gtk_image_get_icon_size: (attributes org.gtk.Method.get_property=icon-size)
  * @image: a `GtkImage`
  *
  * Gets the icon size used by the @image when rendering icons.

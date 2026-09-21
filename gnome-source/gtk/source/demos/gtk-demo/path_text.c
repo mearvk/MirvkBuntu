@@ -175,24 +175,19 @@ gtk_path_transform (GskPath                *line_path,
                     GskPath                *path,
                     const graphene_point_t *offset)
 {
-  GtkPathTransform transform;
+  GskPathMeasure *measure = gsk_path_measure_new (line_path);
+  GtkPathTransform transform = { measure, gsk_path_builder_new (), *offset };
   graphene_rect_t bounds;
 
-  if (!gsk_path_get_bounds (path, &bounds))
-    return NULL;
-
-  transform.measure = gsk_path_measure_new (line_path);
-  transform.builder = gsk_path_builder_new ();
-  transform.offset = *offset;
-
+  gsk_path_get_bounds (path, &bounds);
   if (bounds.origin.x + bounds.size.width > 0)
-    transform.scale = gsk_path_measure_get_length (transform.measure) / (bounds.origin.x + bounds.size.width);
+    transform.scale = gsk_path_measure_get_length (measure) / (bounds.origin.x + bounds.size.width);
   else
     transform.scale = 1.0f;
 
   gsk_path_foreach (path, -1, gtk_path_transform_op, &transform);
 
-  gsk_path_measure_unref (transform.measure);
+  gsk_path_measure_unref (measure);
 
   return gsk_path_builder_free_to_path (transform.builder);
 }
@@ -434,15 +429,17 @@ gtk_path_widget_class_init (GtkPathWidgetClass *klass)
 
   properties[PROP_TEXT] =
     g_param_spec_string ("text",
-                         NULL, NULL,
+                         "text",
+                         "Text transformed along a path",
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_EDITABLE] =
     g_param_spec_boolean ("editable",
-                          NULL, NULL,
+                          "editable",
+                          "If the path can be edited by the user",
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
@@ -498,18 +495,6 @@ drag_update (GtkGestureDrag *drag,
 }
 
 static void
-drag_end (GtkGestureDrag *drag,
-          double          offset_x,
-          double          offset_y,
-          GtkPathWidget  *self)
-{
-  if (!gtk_gesture_is_active (GTK_GESTURE (drag)))
-    return;
-
-  drag_update (drag, offset_x, offset_y, self);
-}
-
-static void
 pointer_motion (GtkEventControllerMotion *controller,
                 double                    x,
                 double                    y,
@@ -542,7 +527,7 @@ gtk_path_widget_init (GtkPathWidget *self)
   controller = GTK_EVENT_CONTROLLER (gtk_gesture_drag_new ());
   g_signal_connect (controller, "drag-begin", G_CALLBACK (drag_begin), self);
   g_signal_connect (controller, "drag-update", G_CALLBACK (drag_update), self);
-  g_signal_connect (controller, "drag-end", G_CALLBACK (drag_end), self);
+  g_signal_connect (controller, "drag-end", G_CALLBACK (drag_update), self);
   gtk_widget_add_controller (GTK_WIDGET (self), controller);
 
   controller = GTK_EVENT_CONTROLLER (gtk_event_controller_motion_new ());

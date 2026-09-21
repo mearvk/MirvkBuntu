@@ -67,15 +67,13 @@ typedef         GdkRectangle       GtkAllocation;
 /**
  * GtkTickCallback:
  * @widget: the widget
- * @frame_clock: the frame clock for the widget
- * @user_data: user data passed to [method@Gtk.Widget.add_tick_callback].
+ * @frame_clock: the frame clock for the widget (same as calling gtk_widget_get_frame_clock())
+ * @user_data: user data passed to gtk_widget_add_tick_callback().
  *
- * Callback type for adding a function to update animations.
+ * Callback type for adding a function to update animations. See gtk_widget_add_tick_callback().
  *
- * See [method@Gtk.Widget.add_tick_callback].
- *
- * Returns: `G_SOURCE_CONTINUE` if the tick callback should continue
- *   to be called, `G_SOURCE_REMOVE` if it should be removed
+ * Returns: %G_SOURCE_CONTINUE if the tick callback should continue to be called,
+ *  %G_SOURCE_REMOVE if the tick callback should be removed.
  */
 typedef gboolean (*GtkTickCallback) (GtkWidget     *widget,
                                      GdkFrameClock *frame_clock,
@@ -86,10 +84,9 @@ typedef gboolean (*GtkTickCallback) (GtkWidget     *widget,
  * @width: the widget’s desired width
  * @height: the widget’s desired height
  *
- * Represents the desired size of a widget.
- *
- * See [GtkWidget’s geometry management section](class.Widget.html#height-for-width-geometry-management)
- * for more information.
+ * A `GtkRequisition` represents the desired size of a widget. See
+ * [GtkWidget’s geometry management section](class.Widget.html#height-for-width-geometry-management) for
+ * more information.
  */
 struct _GtkRequisition
 {
@@ -267,7 +264,7 @@ struct _GtkWidgetClass
 
 
 GDK_AVAILABLE_IN_ALL
-GType      gtk_widget_get_type            (void);
+GType      gtk_widget_get_type            (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 void       gtk_widget_unparent            (GtkWidget           *widget);
 GDK_DEPRECATED_IN_4_10_FOR(gtk_widget_set_visible or gtk_window_present)
@@ -639,10 +636,10 @@ GDK_AVAILABLE_IN_ALL
 PangoContext *gtk_widget_create_pango_context (GtkWidget   *widget);
 GDK_AVAILABLE_IN_ALL
 PangoContext *gtk_widget_get_pango_context    (GtkWidget   *widget);
-GDK_DEPRECATED_IN_4_16
+GDK_AVAILABLE_IN_ALL
 void gtk_widget_set_font_options (GtkWidget                  *widget,
                                   const cairo_font_options_t *options);
-GDK_DEPRECATED_IN_4_16
+GDK_AVAILABLE_IN_ALL
 const cairo_font_options_t *gtk_widget_get_font_options (GtkWidget *widget);
 GDK_AVAILABLE_IN_ALL
 PangoLayout  *gtk_widget_create_pango_layout  (GtkWidget   *widget,
@@ -698,7 +695,7 @@ GDK_AVAILABLE_IN_ALL
 gboolean        gtk_widget_get_has_tooltip              (GtkWidget   *widget);
 
 GDK_AVAILABLE_IN_ALL
-GType           gtk_requisition_get_type (void);
+GType           gtk_requisition_get_type (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkRequisition *gtk_requisition_new      (void) G_GNUC_MALLOC;
 GDK_AVAILABLE_IN_ALL
@@ -730,15 +727,15 @@ void gtk_widget_remove_tick_callback (GtkWidget       *widget,
 
 /**
  * gtk_widget_class_bind_template_callback:
- * @widget_class: a widget class
+ * @widget_class: a `GtkWidgetClass`
  * @callback: the callback symbol
  *
  * Binds a callback function defined in a template to the @widget_class.
  *
- * This macro is a convenience wrapper around
- * [method@Gtk.WidgetClass.bind_template_callback_full]. It is not
- * supported after [method@Gtk.WidgetClass.set_template_scope] has been
- * called on @widget_class.
+ * This macro is a convenience wrapper around the
+ * gtk_widget_class_bind_template_callback_full() function. It is not
+ * supported after gtk_widget_class_set_template_scope() has been used
+ * on @widget_class.
  */
 #define gtk_widget_class_bind_template_callback(widget_class, callback) \
   gtk_widget_class_bind_template_callback_full (GTK_WIDGET_CLASS (widget_class), \
@@ -747,14 +744,14 @@ void gtk_widget_remove_tick_callback (GtkWidget       *widget,
 
 /**
  * gtk_widget_class_bind_template_child:
- * @widget_class: a widget class
+ * @widget_class: a `GtkWidgetClass`
  * @TypeName: the type name of this widget
  * @member_name: name of the instance member in the instance struct for @data_type
  *
  * Binds a child widget defined in a template to the @widget_class.
  *
- * This macro is a convenience wrapper around
- * [method@Gtk.WidgetClass.bind_template_child_full].
+ * This macro is a convenience wrapper around the
+ * gtk_widget_class_bind_template_child_full() function.
  *
  * This macro will use the offset of the @member_name inside the @TypeName
  * instance structure.
@@ -767,17 +764,16 @@ void gtk_widget_remove_tick_callback (GtkWidget       *widget,
 
 /**
  * gtk_widget_class_bind_template_child_internal:
- * @widget_class: a widget class
+ * @widget_class: a `GtkWidgetClass`
  * @TypeName: the type name, in CamelCase
  * @member_name: name of the instance member in the instance struct for @data_type
  *
- * Binds a child widget defined in a template to the @widget_class.
+ * Binds a child widget defined in a template to the @widget_class, and
+ * also makes it available as an internal child in GtkBuilder, under the
+ * name @member_name.
  *
- * Additionally, the child widget is made available as an internal
- * child in `GtkBuilder`, under the name @member_name.
- *
- * This macro is a convenience wrapper around
- * [method@Gtk.WidgetClass.bind_template_child_full].
+ * This macro is a convenience wrapper around the
+ * gtk_widget_class_bind_template_child_full() function.
  *
  * This macro will use the offset of the @member_name inside the @TypeName
  * instance structure.
@@ -790,18 +786,18 @@ void gtk_widget_remove_tick_callback (GtkWidget       *widget,
 
 /**
  * gtk_widget_class_bind_template_child_private:
- * @widget_class: a widget class
+ * @widget_class: a `GtkWidgetClass`
  * @TypeName: the type name of this widget
  * @member_name: name of the instance private member in the private struct for @data_type
  *
  * Binds a child widget defined in a template to the @widget_class.
  *
- * This macro is a convenience wrapper around
- * [method@GtkWidgetClass.bind_template_child_full].
+ * This macro is a convenience wrapper around the
+ * gtk_widget_class_bind_template_child_full() function.
  *
  * This macro will use the offset of the @member_name inside the @TypeName
- * private data structure (it uses `G_PRIVATE_OFFSET()`, so the private struct
- * must be added with `G_ADD_PRIVATE())`.
+ * private data structure (it uses G_PRIVATE_OFFSET(), so the private struct
+ * must be added with G_ADD_PRIVATE()).
  */
 #define gtk_widget_class_bind_template_child_private(widget_class, TypeName, member_name) \
   gtk_widget_class_bind_template_child_full (widget_class, \
@@ -811,17 +807,16 @@ void gtk_widget_remove_tick_callback (GtkWidget       *widget,
 
 /**
  * gtk_widget_class_bind_template_child_internal_private:
- * @widget_class: a widget class
+ * @widget_class: a `GtkWidgetClass`
  * @TypeName: the type name, in CamelCase
  * @member_name: name of the instance private member on the private struct for @data_type
  *
- * Binds a child widget defined in a template to the @widget_class.
+ * Binds a child widget defined in a template to the @widget_class, and
+ * also makes it available as an internal child in GtkBuilder, under the
+ * name @member_name.
  *
- * Additionally, the child is made available as an internal child
- * in `GtkBuilder`, under the name @member_name.
- *
- * This macro is a convenience wrapper around
- * [method@Gtk.WidgetClass.bind_template_child_full].
+ * This macro is a convenience wrapper around the
+ * gtk_widget_class_bind_template_child_full() function.
  *
  * This macro will use the offset of the @member_name inside the @TypeName
  * private data structure.
@@ -945,7 +940,7 @@ void                    gtk_widget_get_color            (GtkWidget   *widget,
  * @parameter: (nullable): parameter for activation
  *
  * The type of the callback functions used for activating
- * actions installed with [method@Gtk.WidgetClass.install_action].
+ * actions installed with gtk_widget_class_install_action().
  *
  * The @parameter must match the @parameter_type of the action.
  */
@@ -983,14 +978,6 @@ void                    gtk_widget_class_set_accessible_role    (GtkWidgetClass 
                                                                  GtkAccessibleRole  accessible_role);
 GDK_AVAILABLE_IN_ALL
 GtkAccessibleRole       gtk_widget_class_get_accessible_role    (GtkWidgetClass    *widget_class);
-
-GDK_AVAILABLE_IN_4_18
-void                    gtk_widget_set_limit_events             (GtkWidget         *widget,
-                                                                 gboolean           limit_events);
-GDK_AVAILABLE_IN_4_18
-gboolean                gtk_widget_get_limit_events             (GtkWidget         *widget);
-
-
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkWidget, g_object_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkRequisition, gtk_requisition_free)

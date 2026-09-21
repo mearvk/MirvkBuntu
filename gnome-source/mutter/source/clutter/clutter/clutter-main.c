@@ -32,33 +32,322 @@
 #include "clutter/clutter-event-private.h"
 #include "clutter/clutter-input-device-private.h"
 #include "clutter/clutter-input-pointer-a11y-private.h"
+#include "clutter/clutter-graphene.h"
 #include "clutter/clutter-main.h"
 #include "clutter/clutter-mutter.h"
 #include "clutter/clutter-private.h"
 #include "clutter/clutter-settings-private.h"
 #include "clutter/clutter-stage.h"
+#include "clutter/clutter-stage-manager.h"
 #include "clutter/clutter-stage-private.h"
 #include "clutter/clutter-backend-private.h"
 
 #include "cogl/cogl.h"
+#include "cogl-pango/cogl-pango.h"
 
-G_DEFINE_QUARK (clutter_pipeline_capability, clutter_pipeline_capability)
+#include "cally/cally.h" /* For accessibility support */
+
+typedef struct
+{
+  GSourceFunc func;
+  gpointer data;
+  GDestroyNotify notify;
+} ClutterThreadsDispatch;
 
 /* main context */
 static ClutterContext *ClutterCntx       = NULL;
+
+/* command line options */
+static gboolean clutter_is_initialized       = FALSE;
+static gboolean clutter_enable_accessibility = TRUE;
 
 /* debug flags */
 guint clutter_debug_flags       = 0;
 guint clutter_paint_debug_flags = 0;
 guint clutter_pick_debug_flags  = 0;
 
-static GLogLevelFlags clutter_log_level = G_LOG_LEVEL_MESSAGE;
-
 /* A constant added to heuristic max render time to account for variations
  * in the estimates.
  */
 int clutter_max_render_time_constant_us = 1000;
 
+gboolean
+_clutter_context_get_show_fps (void)
+{
+  ClutterContext *context = _clutter_context_get_default ();
+
+  return context->show_fps;
+}
+
+/**
+ * clutter_get_accessibility_enabled:
+ *
+ * Returns whether Clutter has accessibility support enabled.  As
+ * least, a value of TRUE means that there are a proper AtkUtil
+ * implementation available
+ *
+ * Return value: %TRUE if Clutter has accessibility support enabled
+ */
+gboolean
+clutter_get_accessibility_enabled (void)
+{
+  return cally_get_cally_initialized ();
+}
+
+/**
+ * clutter_disable_accessibility:
+ *
+ * Disable loading the accessibility support. It has the same effect
+ * as setting the environment variable
+ * CLUTTER_DISABLE_ACCESSIBILITY. For the same reason, this method
+ * should be called before clutter_init().
+ */
+void
+clutter_disable_accessibility (void)
+{
+  if (clutter_is_initialized)
+    {
+      g_warning ("clutter_disable_accessibility() can only be called before "
+                 "initializing Clutter.");
+      return;
+    }
+
+  clutter_enable_accessibility = FALSE;
+}
+
+static gboolean
+_clutter_threads_dispatch (gpointer data)
+{
+  ClutterThreadsDispatch *dispatch = data;
+  gboolean ret = FALSE;
+
+  if (!g_source_is_destroyed (g_main_current_source ()))
+    ret = dispatch->func (dispatch->data);
+
+  return ret;
+}
+
+static void
+_clutter_threads_dispatch_free (gpointer data)
+{
+  ClutterThreadsDispatch *dispatch = data;
+
+  /* XXX - we cannot hold the thread lock here because the main loop
+   * might destroy a source while still in the dispatcher function; so
+   * knowing whether the lock is being held or not is not known a priori.
+   *
+   * see bug: http://bugzilla.gnome.org/show_bug.cgi?id=459555
+   */
+  if (dispatch->notify)
+    dispatch->notify (dispatch->data);
+
+  g_free (dispatch);
+}
+
+/**
+ * clutter_threads_add_idle_full: (rename-to clutter_threads_add_idle)
+ * @priority: the priority of the timeout source. Typically this will be in the
+ *    range between #G_PRIORITY_DEFAULT_IDLE and #G_PRIORITY_HIGH_IDLE
+ * @func: function to call
+ * @data: data to pass to the function
+ * @notify: function to call when the idle source is removed
+ *
+ * Adds a function to be called whenever there are no higher priority
+ * events pending. If the function returns %FALSE it is automatically
+ * removed from the list of event sources and will not be called again.
+ *
+ * This function can be considered a thread-safe variant of g_idle_add_full():
+ * it will call @function while holding the Clutter lock. It is logically
+ * equivalent to the following implementation:
+ *
+ * ```c
+ * static gboolean
+ * idle_safe_callback (gpointer data)
+ * {
+ *    SafeClosure *closure = data;
+ *    gboolean res = FALSE;
+ *
+ *    // the callback does not need to acquire the Clutter
+ *     / lock itself, as it is held by the this proxy handler
+ *     //
+ *    res = closure->callback (closure->data);
+ *
+ *    return res;
+ * }
+ * static gulong
+ * add_safe_idle (GSourceFunc callback,
+ *                gpointer    data)
+ * {
+ *   SafeClosure *closure = g_new0 (SafeClosure, 1);
+ *
+ *   closure->callback = callback;
+ *   closure->data = data;
+ *
+ *   return g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+ *                           idle_safe_callback,
+ *                           closure,
+ *                           g_free)
+ * }
+ * ```
+ *
+ * This function should be used by threaded applications to make sure
+ * that @func is emitted under the Clutter threads lock and invoked
+ * from the same thread that started the Clutter main loop. For instance,
+ * it can be used to update the UI using the results from a worker
+ * thread:
+ *
+ * ```c
+ * static gboolean
+ * update_ui (gpointer data)
+ * {
+ *   SomeClosure *closure = data;
+ *
+ *   // it is safe to call Clutter API from this function because
+ *    / it is invoked from the same thread that started the main
+ *    / loop and under the Clutter thread lock
+ *    //
+ *   clutter_label_set_text (CLUTTER_LABEL (closure->label),
+ *                           closure->text);
+ *
+ *   g_object_unref (closure->label);
+ *   g_free (closure);
+ *
+ *   return FALSE;
+ * }
+ *
+ *   // within another thread //
+ *   closure = g_new0 (SomeClosure, 1);
+ *   // always take a reference on GObject instances //
+ *   closure->label = g_object_ref (my_application->label);
+ *   closure->text = g_strdup (processed_text_to_update_the_label);
+ *
+ *   clutter_threads_add_idle_full (G_PRIORITY_HIGH_IDLE,
+ *                                  update_ui,
+ *                                  closure,
+ *                                  NULL);
+ * ```
+ *
+ * Return value: the ID (greater than 0) of the event source.
+ */
+guint
+clutter_threads_add_idle_full (gint           priority,
+                               GSourceFunc    func,
+                               gpointer       data,
+                               GDestroyNotify notify)
+{
+  ClutterThreadsDispatch *dispatch;
+
+  g_return_val_if_fail (func != NULL, 0);
+
+  dispatch = g_new0 (ClutterThreadsDispatch, 1);
+  dispatch->func = func;
+  dispatch->data = data;
+  dispatch->notify = notify;
+
+  return g_idle_add_full (priority,
+                          _clutter_threads_dispatch, dispatch,
+                          _clutter_threads_dispatch_free);
+}
+
+/**
+ * clutter_threads_add_idle: (skip)
+ * @func: function to call
+ * @data: data to pass to the function
+ *
+ * Simple wrapper around clutter_threads_add_idle_full() using the
+ * default priority.
+ *
+ * Return value: the ID (greater than 0) of the event source.
+ */
+guint
+clutter_threads_add_idle (GSourceFunc func,
+                          gpointer    data)
+{
+  g_return_val_if_fail (func != NULL, 0);
+
+  return clutter_threads_add_idle_full (G_PRIORITY_DEFAULT_IDLE,
+                                        func, data,
+                                        NULL);
+}
+
+/**
+ * clutter_threads_add_timeout_full: (rename-to clutter_threads_add_timeout)
+ * @priority: the priority of the timeout source. Typically this will be in the
+ *            range between #G_PRIORITY_DEFAULT and #G_PRIORITY_HIGH.
+ * @interval: the time between calls to the function, in milliseconds
+ * @func: function to call
+ * @data: data to pass to the function
+ * @notify: function to call when the timeout source is removed
+ *
+ * Sets a function to be called at regular intervals holding the Clutter
+ * threads lock, with the given priority. The function is called repeatedly
+ * until it returns %FALSE, at which point the timeout is automatically
+ * removed and the function will not be called again. The @notify function
+ * is called when the timeout is removed.
+ *
+ * The first call to the function will be at the end of the first @interval.
+ *
+ * It is important to note that, due to how the Clutter main loop is
+ * implemented, the timing will not be accurate and it will not try to
+ * "keep up" with the interval.
+ *
+ * See also clutter_threads_add_idle_full().
+ *
+ * Return value: the ID (greater than 0) of the event source.
+ */
+guint
+clutter_threads_add_timeout_full (gint           priority,
+                                  guint          interval,
+                                  GSourceFunc    func,
+                                  gpointer       data,
+                                  GDestroyNotify notify)
+{
+  ClutterThreadsDispatch *dispatch;
+
+  g_return_val_if_fail (func != NULL, 0);
+
+  dispatch = g_new0 (ClutterThreadsDispatch, 1);
+  dispatch->func = func;
+  dispatch->data = data;
+  dispatch->notify = notify;
+
+  return g_timeout_add_full (priority,
+                             interval,
+                             _clutter_threads_dispatch, dispatch,
+                             _clutter_threads_dispatch_free);
+}
+
+/**
+ * clutter_threads_add_timeout: (skip)
+ * @interval: the time between calls to the function, in milliseconds
+ * @func: function to call
+ * @data: data to pass to the function
+ *
+ * Simple wrapper around clutter_threads_add_timeout_full().
+ *
+ * Return value: the ID (greater than 0) of the event source.
+ */
+guint
+clutter_threads_add_timeout (guint       interval,
+                             GSourceFunc func,
+                             gpointer    data)
+{
+  g_return_val_if_fail (func != NULL, 0);
+
+  return clutter_threads_add_timeout_full (G_PRIORITY_DEFAULT,
+                                           interval,
+                                           func, data,
+                                           NULL);
+}
+
+gboolean
+_clutter_context_is_initialized (void)
+{
+  if (ClutterCntx == NULL)
+    return FALSE;
+
+  return ClutterCntx->is_initialized;
+}
 
 ClutterContext *
 _clutter_context_get_default (void)
@@ -68,7 +357,8 @@ _clutter_context_get_default (void)
 }
 
 ClutterContext *
-clutter_create_context (ClutterBackendConstructor   backend_constructor,
+clutter_create_context (ClutterContextFlags         flags,
+                        ClutterBackendConstructor   backend_constructor,
                         gpointer                    user_data,
                         GError                    **error)
 {
@@ -79,16 +369,14 @@ clutter_create_context (ClutterBackendConstructor   backend_constructor,
       return NULL;
     }
 
-  ClutterCntx = clutter_context_new (backend_constructor, user_data,
+  ClutterCntx = clutter_context_new (flags,
+                                     backend_constructor, user_data,
                                      error);
   if (!ClutterCntx)
     return NULL;
 
+  clutter_is_initialized = TRUE;
   g_object_add_weak_pointer (G_OBJECT (ClutterCntx), (gpointer *) &ClutterCntx);
-
-  if (g_test_initialized ())
-    clutter_log_level = G_LOG_LEVEL_DEBUG;
-
   return ClutterCntx;
 }
 
@@ -122,6 +410,64 @@ _clutter_boolean_continue_accumulator (GSignalInvocationHint *ihint,
   return continue_emission;
 }
 
+/*
+ * Emits a pointer event after having prepared the event for delivery (setting
+ * source, generating enter/leave etc.).
+ */
+
+static inline void
+emit_event (ClutterStage *stage,
+            ClutterEvent *event)
+{
+  ClutterEventType event_type;
+
+  event_type = clutter_event_type (event);
+
+  if (event_type == CLUTTER_KEY_PRESS ||
+      event_type == CLUTTER_KEY_RELEASE)
+    cally_snoop_key_event (stage, (ClutterKeyEvent *) event);
+
+  clutter_stage_emit_event (stage, event);
+}
+
+static void
+maybe_remove_device_for_event (ClutterStage *stage,
+                               ClutterEvent *event,
+                               gboolean      emit_crossing)
+{
+  ClutterInputDevice *device = clutter_event_get_device (event);
+  ClutterEventSequence *sequence = clutter_event_get_event_sequence (event);
+  graphene_point_t point;
+  uint32_t time;
+
+  if (clutter_event_type (event) == CLUTTER_DEVICE_REMOVED)
+    {
+      ClutterInputDeviceType device_type =
+        clutter_input_device_get_device_type (device);
+
+      if (device_type != CLUTTER_POINTER_DEVICE &&
+          device_type != CLUTTER_TABLET_DEVICE &&
+          device_type != CLUTTER_PEN_DEVICE &&
+          device_type != CLUTTER_ERASER_DEVICE &&
+          device_type != CLUTTER_CURSOR_DEVICE)
+        return;
+    }
+
+  clutter_event_get_coords (event, &point.x, &point.y);
+  time = clutter_event_get_time (event);
+
+  clutter_stage_update_device (stage,
+                               device, sequence,
+                               NULL,
+                               point,
+                               time,
+                               NULL,
+                               NULL,
+                               TRUE);
+
+  clutter_stage_remove_device_entry (stage, device, sequence);
+}
+
 /**
  * clutter_stage_handle_event:
  * @stage: a #ClutterStage.
@@ -139,7 +485,7 @@ void
 clutter_stage_handle_event (ClutterStage *stage,
                             ClutterEvent *event)
 {
-  ClutterContext *context;
+  ClutterContext *context = _clutter_context_get_default();
   ClutterActor *event_actor = NULL;
   ClutterEventType event_type;
   gboolean filtered;
@@ -151,7 +497,6 @@ clutter_stage_handle_event (ClutterStage *stage,
   if (CLUTTER_ACTOR_IN_DESTRUCTION (stage))
     return;
 
-  context = clutter_actor_get_context (CLUTTER_ACTOR (stage));
   event_type = clutter_event_type (event);
 
   switch (event_type)
@@ -195,11 +540,10 @@ clutter_stage_handle_event (ClutterStage *stage,
           event_type == CLUTTER_TOUCH_END ||
           event_type == CLUTTER_TOUCH_CANCEL)
         {
-          ClutterBackend *backend = clutter_context_get_backend (context);
-          ClutterSprite *sprite =
-            clutter_backend_get_sprite (backend, stage, event);
+          ClutterInputDevice *device = clutter_event_get_device (event);
+          ClutterEventSequence *sequence = clutter_event_get_event_sequence (event);
 
-          clutter_stage_maybe_lost_implicit_grab (stage, sprite);
+          clutter_stage_maybe_lost_implicit_grab (stage, device, sequence);
         }
     }
   else
@@ -209,11 +553,10 @@ clutter_stage_handle_event (ClutterStage *stage,
 
   if (event_type == CLUTTER_TOUCH_END ||
       event_type == CLUTTER_TOUCH_CANCEL ||
-      event_type == CLUTTER_PROXIMITY_OUT ||
       event_type == CLUTTER_DEVICE_REMOVED)
     {
       _clutter_stage_process_queued_events (stage);
-      clutter_stage_update_device_for_event (stage, event);
+      maybe_remove_device_for_event (stage, event, TRUE);
     }
 }
 
@@ -229,12 +572,10 @@ _clutter_process_event_details (ClutterActor    *stage,
 
       case CLUTTER_KEY_PRESS:
       case CLUTTER_KEY_RELEASE:
-      case CLUTTER_KEY_STATE:
       case CLUTTER_PAD_BUTTON_PRESS:
       case CLUTTER_PAD_BUTTON_RELEASE:
       case CLUTTER_PAD_STRIP:
       case CLUTTER_PAD_RING:
-      case CLUTTER_PAD_DIAL:
       case CLUTTER_IM_COMMIT:
       case CLUTTER_IM_DELETE:
       case CLUTTER_IM_PREEDIT:
@@ -253,7 +594,7 @@ _clutter_process_event_details (ClutterActor    *stage,
       case CLUTTER_TOUCH_END:
       case CLUTTER_PROXIMITY_IN:
       case CLUTTER_PROXIMITY_OUT:
-        clutter_stage_emit_event (CLUTTER_STAGE (stage), event);
+        emit_event (CLUTTER_STAGE (stage), event);
         break;
 
       case CLUTTER_DEVICE_REMOVED:
@@ -279,7 +620,7 @@ clutter_stage_process_event (ClutterStage *stage,
 
   COGL_TRACE_BEGIN_SCOPED (ProcessEvent, "Clutter::Stage::process_event()");
 
-  context = clutter_actor_get_context (CLUTTER_ACTOR (stage));
+  context = _clutter_context_get_default ();
   seat = clutter_backend_get_default_seat (context->backend);
 
   /* push events on a stack, so that we don't need to
@@ -292,6 +633,22 @@ clutter_stage_process_event (ClutterStage *stage,
   _clutter_process_event_details (CLUTTER_ACTOR (stage), context, event);
 
   context->current_event = g_slist_delete_link (context->current_event, context->current_event);
+}
+
+/**
+ * clutter_get_font_map:
+ *
+ * Retrieves the #PangoFontMap instance used by Clutter.
+ * You can use the global font map object with the COGL
+ * Pango API.
+ *
+ * Return value: (transfer none): the #PangoFontMap instance. The returned
+ *   value is owned by Clutter and it should never be unreferenced.
+ */
+PangoFontMap *
+clutter_get_font_map (void)
+{
+  return PANGO_FONT_MAP (clutter_context_get_pango_fontmap (ClutterCntx));
 }
 
 typedef struct _ClutterRepaintFunction
@@ -345,6 +702,52 @@ clutter_threads_remove_repaint_func (guint handle_id)
 
 /**
  * clutter_threads_add_repaint_func:
+ * @func: the function to be called within the paint cycle
+ * @data: data to be passed to the function, or %NULL
+ * @notify: function to be called when removing the repaint
+ *    function, or %NULL
+ *
+ * Adds a function to be called whenever Clutter is processing a new
+ * frame.
+ *
+ * If the function returns %FALSE it is automatically removed from the
+ * list of repaint functions and will not be called again.
+ *
+ * This function is guaranteed to be called from within the same thread
+ * that called clutter_main(), and while the Clutter lock is being held;
+ * the function will be called within the main loop, so it is imperative
+ * that it does not block, otherwise the frame time budget may be lost.
+ *
+ * A repaint function is useful to ensure that an update of the scenegraph
+ * is performed before the scenegraph is repainted. By default, a repaint
+ * function added using this function will be invoked prior to the frame
+ * being processed.
+ *
+ * Adding a repaint function does not automatically ensure that a new
+ * frame will be queued.
+ *
+ * When the repaint function is removed (either because it returned %FALSE
+ * or because clutter_threads_remove_repaint_func() has been called) the
+ * @notify function will be called, if any is set.
+ *
+ * See also: clutter_threads_add_repaint_func_full()
+ *
+ * Return value: the ID (greater than 0) of the repaint function. You
+ *   can use the returned integer to remove the repaint function by
+ *   calling clutter_threads_remove_repaint_func().
+ */
+guint
+clutter_threads_add_repaint_func (GSourceFunc    func,
+                                  gpointer       data,
+                                  GDestroyNotify notify)
+{
+  return clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_PRE_PAINT,
+                                                func,
+                                                data, notify);
+}
+
+/**
+ * clutter_threads_add_repaint_func_full:
  * @flags: flags for the repaint function
  * @func: the function to be called within the paint cycle
  * @data: data to be passed to the function, or %NULL
@@ -379,10 +782,10 @@ clutter_threads_remove_repaint_func (guint handle_id)
  *   calling clutter_threads_remove_repaint_func().
  */
 guint
-clutter_threads_add_repaint_func (ClutterRepaintFlags flags,
-                                  GSourceFunc         func,
-                                  gpointer            data,
-                                  GDestroyNotify      notify)
+clutter_threads_add_repaint_func_full (ClutterRepaintFlags flags,
+                                       GSourceFunc         func,
+                                       gpointer            data,
+                                       GDestroyNotify      notify)
 {
   ClutterContext *context;
   ClutterRepaintFunction *repaint_func;
@@ -426,7 +829,8 @@ _clutter_run_repaint_functions (ClutterRepaintFlags flags)
     return;
 
   /* steal the list */
-  invoke_list = g_steal_pointer (&context->repaint_funcs);
+  invoke_list = context->repaint_funcs;
+  context->repaint_funcs = NULL;
 
   reinvoke_list = NULL;
 
@@ -505,14 +909,15 @@ _clutter_clear_events_queue (void)
   while ((event = g_async_queue_try_pop_unlocked (context->events_queue)))
     clutter_event_free (event);
 
-  events_queue = g_steal_pointer (&context->events_queue);
+  events_queue = context->events_queue;
+  context->events_queue = NULL;
 
   g_async_queue_unlock (events_queue);
   g_async_queue_unref (events_queue);
 }
 
 /**
- * clutter_add_debug_flags:
+ * clutter_add_debug_flags: (skip)
  *
  * Adds the debug flags passed to the list of debug flags.
  */
@@ -527,7 +932,7 @@ clutter_add_debug_flags (ClutterDebugFlag     debug_flags,
 }
 
 /**
- * clutter_remove_debug_flags:
+ * clutter_remove_debug_flags: (skip)
  *
  * Removes the debug flags passed from the list of debug flags.
  */
@@ -547,12 +952,6 @@ clutter_debug_set_max_render_time_constant (int max_render_time_constant_us)
   clutter_max_render_time_constant_us = max_render_time_constant_us;
 }
 
-/**
- * clutter_get_debug_flags:
- * @debug_flags: (out) (optional): return location for debug flags
- * @draw_flags: (out) (optional): return location for draw debug flags
- * @pick_flags: (out) (optional): return location for pick debug flags
- */
 void
 clutter_get_debug_flags (ClutterDebugFlag     *debug_flags,
                          ClutterDrawDebugFlag *draw_flags,
@@ -597,7 +996,7 @@ _clutter_debug_messagev (const char *format,
   fmt = g_strconcat (stamp, ":", format, NULL);
   g_free (stamp);
 
-  g_logv (G_LOG_DOMAIN, clutter_log_level, fmt, var_args);
+  g_logv (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, fmt, var_args);
 
   g_free (fmt);
 }

@@ -31,8 +31,7 @@ typedef enum {
 
 typedef struct _GtkKineticScrolling GtkKineticScrolling;
 
-GtkKineticScrolling *    gtk_kinetic_scrolling_new  (gint64                frame_time,
-                                                     double                lower,
+GtkKineticScrolling *    gtk_kinetic_scrolling_new  (double                lower,
                                                      double                upper,
                                                      double                overshoot_width,
                                                      double                decel_friction,
@@ -46,7 +45,7 @@ GtkKineticScrollingChange gtk_kinetic_scrolling_update_size (GtkKineticScrolling
                                                              double               upper);
 
 gboolean                 gtk_kinetic_scrolling_tick (GtkKineticScrolling  *data,
-                                                     gint64                frame_time,
+                                                     double                time_delta,
                                                      double               *position,
                                                      double               *velocity);
 

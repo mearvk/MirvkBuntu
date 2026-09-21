@@ -1,1 +1,0 @@
-subdir('win32')

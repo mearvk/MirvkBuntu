@@ -163,7 +163,6 @@ class OrcaTestContext:
             debug_mock = essential_modules["orca.debug"]
             debug_mock.LEVEL_INFO = 800
             debug_mock.LEVEL_SEVERE = 1000
-            debug_mock.debugLevel = 800
             debug_mock.print_message = self.mocker.Mock()
             debug_mock.print_tokens = self.mocker.Mock()
             debug_mock.println = self.mocker.Mock()
@@ -224,7 +223,6 @@ class OrcaTestContext:
             ax_object_class_mock = self.mocker.Mock()
             ax_object_class_mock.is_valid = self.mocker.Mock(return_value=True)
             ax_object_class_mock.is_dead = self.mocker.Mock(return_value=False)
-            ax_object_class_mock.check_hung = self.mocker.Mock(return_value=False)
             ax_object_class_mock.get_name = self.mocker.Mock(return_value="")
             ax_object_class_mock.get_role = self.mocker.Mock(return_value=Atspi.Role.PANEL)
             ax_object_class_mock.get_parent = self.mocker.Mock(return_value=None)

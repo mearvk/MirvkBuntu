@@ -35,29 +35,7 @@
 
 #include "cogl/cogl-pipeline-private.h"
 
-void
-cogl_pipeline_fragend_glsl_pre_change_notify (CoglPipeline      *pipeline,
-                                              CoglPipelineState  change,
-                                              const CoglColor   *new_color);
-
-void
-cogl_pipeline_fragend_glsl_layer_pre_change_notify (CoglPipeline           *owner,
-                                                    CoglPipelineLayer      *layer,
-                                                    CoglPipelineLayerState  change);
-
-void
-cogl_pipeline_fragend_glsl_start (CoglPipeline  *pipeline,
-                                  int            n_layers,
-                                  unsigned long  pipelines_difference);
-
-gboolean
-cogl_pipeline_fragend_glsl_add_layer (CoglPipeline      *pipeline,
-                                      CoglPipelineLayer *layer,
-                                      unsigned long      layers_difference);
-
-gboolean
-cogl_pipeline_fragend_glsl_end (CoglPipeline  *pipeline,
-                                unsigned long  pipelines_difference);
+extern const CoglPipelineFragend _cogl_pipeline_glsl_fragend;
 
 GLuint
 _cogl_pipeline_fragend_glsl_get_shader (CoglPipeline *pipeline);

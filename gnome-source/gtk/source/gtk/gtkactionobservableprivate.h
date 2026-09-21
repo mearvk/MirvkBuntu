@@ -44,12 +44,6 @@ struct _GtkActionObservableInterface
   void (* unregister_observer) (GtkActionObservable *observable,
                                 const char          *action_name,
                                 GtkActionObserver   *observer);
-  gboolean (* subscribe)       (GtkActionObservable  *observable,
-                                const char           *action_name,
-                                GtkActionObserver    *observer,
-                                gboolean             *enabled,
-                                const GVariantType  **parameter_type,
-                                GVariant            **state);
 };
 
 GType                   gtk_action_observable_get_type                  (void);
@@ -59,11 +53,6 @@ void                    gtk_action_observable_register_observer         (GtkActi
 void                    gtk_action_observable_unregister_observer       (GtkActionObservable *observable,
                                                                          const char          *action_name,
                                                                          GtkActionObserver   *observer);
-gboolean                gtk_action_observable_subscribe                 (GtkActionObservable  *observable,
-                                                                         const char           *action_name,
-                                                                         GtkActionObserver    *observer,
-                                                                         gboolean             *enabled,
-                                                                         const GVariantType  **parameter_type,
-                                                                         GVariant            **state);
 
 G_END_DECLS
+

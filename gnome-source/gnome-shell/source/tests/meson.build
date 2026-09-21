@@ -1,3 +1,12 @@
+testconf = configuration_data()
+testconf.set('MUTTER_TYPELIB_DIR', mutter_typelibdir)
+testconf.set('srcdir', meson.current_source_dir())
+run_test = configure_file(
+  input: 'run-test.sh.in',
+  output: 'run-test.sh',
+  configuration: testconf
+)
+
 mutter_tests_datadir = mutter_test_dep.get_variable('tests_datadir')
 dbusrunnerconf = configuration_data()
 dbusrunnerconf.set('MUTTER_TEST_PKGDATADIR', mutter_tests_datadir)
@@ -9,85 +18,31 @@ dbus_runner = configure_file(
   configuration: dbusrunnerconf,
 )
 
-gvc_typelib_path = fs.parent(libgvc.get_variable('libgvc_gir')[1].full_path())
-shell_typelib_path = fs.parent(libshell_gir[1].full_path())
-st_typelib_path = fs.parent(libst_gir[1].full_path())
-
-# Shared tests dependencies.
-tests_dependencies = [
-  compiled_schemas,
-  data_resources_targets,
-  libst_gir[1],
-  libshell_gir[1],
-  libgvc_gir[1],
+unit_tests = [
+    'highlighter',
+    'injectionManager',
+    'insertSorted',
+    'jsParse',
+    'markup',
+    'params',
+    'signalTracker',
+    'url',
+    'versionCompare',
 ]
 
-unit_testenv = environment()
-unit_testenv.set('GNOME_SHELL_DATADIR', data_builddir)
-unit_testenv.append('GI_TYPELIB_PATH', gvc_typelib_path, separator: ':')
-unit_testenv.append('GI_TYPELIB_PATH', shell_typelib_path, separator: ':')
-unit_testenv.append('GI_TYPELIB_PATH', st_typelib_path, separator: ':')
-
-unit_tests = {
-  'asyncMutex': {},
-  'breakManager': {},
-  'errorUtils': {},
-  'extensionUtils': {},
-  'fileUtils': {
-    'env': {
-      'XDG_DATA_DIRS': join_paths(meson.current_source_dir(), 'unit/fixtures/datadirs/system'),
-      'XDG_DATA_HOME': join_paths(meson.current_source_dir(), 'unit/fixtures/datadirs/home'),
-    },
-  },
-  'highlighter': {},
-  'injectionManager': {},
-  'insertSorted': {},
-  'jsParse': {},
-  'markup': {},
-  'params': {},
-  'signalTracker': {},
-  'timeLimitsManager': {
-    # The time limits tests hard-code UTC to keep the code brief, so must be
-    # run in UTC
-    'env': { 'TZ': 'UTC' },
-  },
-  'url': {},
-  'versionCompare': {},
-}
-
-foreach test, extra_args : unit_tests
-  local_test_env = unit_testenv
-  foreach var, value : extra_args.get('env', {})
-    local_test_env.set(var, value)
-  endforeach
-
-  test(test, jasmine,
-    args: [
-      '--module',
-      '--tap',
-      '--no-config',
-      '--interpreter', run_test,
-      'unit/@0@.js'.format(test),
-    ],
+foreach test : unit_tests
+  test(test, run_test,
+    args: 'unit/@0@.js'.format(test),
     suite: 'unit',
-    depends: tests_dependencies,
-    env: local_test_env,
-    protocol: 'tap',
     workdir: meson.current_source_dir())
 endforeach
 
 shell_tests = [
   {
-    'name': 'minimal',
-  },
-  {
     'name': 'basic',
   },
   {
     'name': 'closeWithActiveWindows',
-  },
-  {
-    'name': 'multiMonitor',
   },
   {
     'name': 'headlessStart',
@@ -98,6 +53,7 @@ shell_tests = [
   },
 ]
 
+gvc_typelib_path = fs.parent(libgvc.get_variable('libgvc_gir')[1].full_path())
 libgvc_path = fs.parent(libgvc.get_variable('libgvc').full_path())
 
 background_file = join_paths(meson.current_source_dir(), 'data', 'background.png')
@@ -124,11 +80,7 @@ foreach shell_test : shell_tests
       options,
       '@0@/shell/@1@.js'.format(meson.current_source_dir(), test_name),
     ],
-    depends: [
-      gnome_shell_binary,
-      gnome_shell_perf_helper,
-      tests_dependencies,
-    ],
+    is_parallel: false,
     env: shell_testenv,
   )
 endforeach

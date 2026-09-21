@@ -30,20 +30,11 @@
 G_BEGIN_DECLS
 
 CLUTTER_EXPORT
-unsigned int clutter_keyval_to_upper (unsigned int keyval);
-CLUTTER_EXPORT
-unsigned int clutter_keyval_to_lower (unsigned int keyval);
-
-CLUTTER_EXPORT
 void clutter_keyval_convert_case (unsigned int  symbol,
                                   unsigned int *lower,
                                   unsigned int *upper);
 
 CLUTTER_EXPORT
 const char * clutter_keyval_name (unsigned int keyval);
-
-CLUTTER_EXPORT
-const unsigned int * clutter_keyval_get_aliases (unsigned int  keyval,
-                                                 unsigned int *n_aliases);
 
 G_END_DECLS

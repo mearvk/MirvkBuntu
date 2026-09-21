@@ -36,10 +36,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * A `GtkComboBoxText` is a simple variant of `GtkComboBox` for text-only
  * use cases.
  *
- * <picture>
- *   <source srcset="combo-box-text-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkComboBoxText" src="combo-box-text.png">
- * </picture>
+ * ![An example GtkComboBoxText](combo-box-text.png)
  *
  * `GtkComboBoxText` hides the model-view complexity of `GtkComboBox`.
  *

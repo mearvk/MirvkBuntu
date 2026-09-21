@@ -37,12 +37,8 @@
 /**
  * GtkToggleButton:
  *
- * Shows a button which remains “pressed-in” when clicked.
- *
- * <picture>
- *   <source srcset="toggle-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="Example GtkToggleButtons" src="toggle-button.png">
- * </picture>
+ * A `GtkToggleButton` is a button which remains “pressed-in” when
+ * clicked.
  *
  * Clicking again will cause the toggle button to return to its normal state.
  *
@@ -54,6 +50,9 @@
  * The state of a `GtkToggleButton` can be set specifically using
  * [method@Gtk.ToggleButton.set_active], and retrieved using
  * [method@Gtk.ToggleButton.get_active].
+ *
+ * To simply switch the state of a toggle button, use
+ * [method@Gtk.ToggleButton.toggled].
  *
  * ## Grouping
  *
@@ -70,7 +69,7 @@
  *
  * ## Accessibility
  *
- * `GtkToggleButton` uses the [enum@Gtk.AccessibleRole.toggle_button] role.
+ * `GtkToggleButton` uses the %GTK_ACCESSIBLE_ROLE_TOGGLE_BUTTON role.
  *
  * ## Creating two `GtkToggleButton` widgets.
  *
@@ -293,24 +292,24 @@ gtk_toggle_button_class_init (GtkToggleButtonClass *class)
   class->toggled = NULL;
 
   /**
-   * GtkToggleButton:active:
+   * GtkToggleButton:active: (attributes org.gtk.Property.get=gtk_toggle_button_get_active org.gtk.Property.set=gtk_toggle_button_set_active)
    *
    * If the toggle button should be pressed in.
    */
   toggle_button_props[PROP_ACTIVE] =
       g_param_spec_boolean ("active", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkToggleButton:group:
+   * GtkToggleButton:group: (attributes org.gtk.Property.set=gtk_toggle_button_set_group)
    *
    * The toggle button whose group this widget belongs to.
    */
   toggle_button_props[PROP_GROUP] =
       g_param_spec_object ("group", NULL, NULL,
                            GTK_TYPE_TOGGLE_BUTTON,
-                           G_PARAM_WRITABLE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_WRITABLE);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, toggle_button_props);
 
@@ -396,7 +395,7 @@ gtk_toggle_button_new_with_mnemonic (const char *label)
 }
 
 /**
- * gtk_toggle_button_set_active:
+ * gtk_toggle_button_set_active: (attributes org.gtk.Method.set_property=active)
  * @toggle_button: a `GtkToggleButton`.
  * @is_active: %TRUE or %FALSE.
  *
@@ -453,7 +452,7 @@ gtk_toggle_button_set_active (GtkToggleButton *toggle_button,
 }
 
 /**
- * gtk_toggle_button_get_active:
+ * gtk_toggle_button_get_active: (attributes org.gtk.Method.get_property=active)
  * @toggle_button: a `GtkToggleButton`.
  *
  * Queries a `GtkToggleButton` and returns its current state.
@@ -490,7 +489,7 @@ gtk_toggle_button_toggled (GtkToggleButton *toggle_button)
 }
 
 /**
- * gtk_toggle_button_set_group:
+ * gtk_toggle_button_set_group: (attributes org.gtk.Method.set_property=group)
  * @toggle_button: a `GtkToggleButton`
  * @group: (nullable) (transfer none): another `GtkToggleButton` to
  *   form a group with

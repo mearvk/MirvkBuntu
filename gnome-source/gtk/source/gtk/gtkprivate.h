@@ -30,7 +30,6 @@
 #include <gdk/gdkdebugprivate.h>
 
 #include "gtkcsstypesprivate.h"
-#include "gtkenumsprivate.h"
 #include "gtktexthandleprivate.h"
 #include "gtkplacessidebarprivate.h"
 #include "gtkeventcontrollerprivate.h"
@@ -38,6 +37,10 @@
 #include "gtkdebug.h"
 
 G_BEGIN_DECLS
+
+#define GTK_PARAM_READABLE G_PARAM_READABLE|G_PARAM_STATIC_NAME|G_PARAM_STATIC_NICK|G_PARAM_STATIC_BLURB
+#define GTK_PARAM_WRITABLE G_PARAM_WRITABLE|G_PARAM_STATIC_NAME|G_PARAM_STATIC_NICK|G_PARAM_STATIC_BLURB
+#define GTK_PARAM_READWRITE G_PARAM_READWRITE|G_PARAM_STATIC_NAME|G_PARAM_STATIC_NICK|G_PARAM_STATIC_BLURB
 
 #define OPPOSITE_ORIENTATION(_orientation) (1 - (_orientation))
 
@@ -51,11 +54,11 @@ G_BEGIN_DECLS
 #define gtk_internal_return_val_if_fail(__expr, __val) g_return_val_if_fail(__expr, __val)
 #endif
 
-const char * _gtk_get_datadir            (void);
-const char * _gtk_get_libdir             (void);
-const char * _gtk_get_sysconfdir         (void);
-const char * _gtk_get_localedir          (void);
-const char * _gtk_get_data_prefix        (void);
+const char * _gtk_get_datadir            (void) G_GNUC_CONST;
+const char * _gtk_get_libdir             (void) G_GNUC_CONST;
+const char * _gtk_get_sysconfdir         (void) G_GNUC_CONST;
+const char * _gtk_get_localedir          (void) G_GNUC_CONST;
+const char * _gtk_get_data_prefix        (void) G_GNUC_CONST;
 
 gboolean      _gtk_fnmatch                (const char *pattern,
                                            const char *string,
@@ -96,8 +99,6 @@ GtkWidget *gtk_get_event_widget         (GdkEvent  *event);
 
 guint32    gtk_get_current_event_time   (void);
 
-gboolean   gtk_event_treat_as_touch (GdkEvent *event);
-
 void check_crossing_invariants (GtkWidget       *widget,
                                 GtkCrossingData *crossing);
 
@@ -119,7 +120,10 @@ guint gtk_get_portal_interface_version (GDBusConnection *connection,
 #define PORTAL_PRINT_INTERFACE "org.freedesktop.portal.Print"
 #define PORTAL_SCREENSHOT_INTERFACE "org.freedesktop.portal.Screenshot"
 #define PORTAL_INHIBIT_INTERFACE "org.freedesktop.portal.Inhibit"
-#define PORTAL_OPENURI_INTERFACE "org.freedesktop.portal.OpenURI"
+
+#ifdef G_OS_WIN32
+void _gtk_load_dll_with_libgtk3_manifest (const char *dllname);
+#endif
 
 void            gtk_set_display_debug_flags        (GdkDisplay    *display,
                                                     GtkDebugFlags  flags);
@@ -156,12 +160,6 @@ void gtk_synthesize_crossing_events (GtkRoot         *toplevel,
                                      double           surface_y,
                                      GdkCrossingMode  mode,
                                      GdkDrop         *drop);
-
-#ifdef G_OS_WIN32
-
-void _gtk_load_dll_with_libgtk3_manifest (const wchar_t *dllname);
-
-#endif /* G_OS_WIN32 */
 
 G_END_DECLS
 

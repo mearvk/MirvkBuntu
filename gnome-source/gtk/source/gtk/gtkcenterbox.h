@@ -40,7 +40,7 @@ typedef struct _GtkCenterBox             GtkCenterBox;
 typedef struct _GtkCenterBoxClass        GtkCenterBoxClass;
 
 GDK_AVAILABLE_IN_ALL
-GType      gtk_center_box_get_type (void);
+GType      gtk_center_box_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkWidget *gtk_center_box_new (void);
@@ -72,8 +72,6 @@ void        gtk_center_box_set_shrink_center_last (GtkCenterBox *self,
                                                    gboolean      shrink_center_last);
 GDK_AVAILABLE_IN_4_12
 gboolean    gtk_center_box_get_shrink_center_last (GtkCenterBox *self);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkCenterBox, g_object_unref)
 
 G_END_DECLS
 

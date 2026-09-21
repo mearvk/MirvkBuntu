@@ -26,7 +26,7 @@
 typedef GVfsBackendClass GVfsBackendRecentClass;
 
 typedef struct {
-  char *id;
+  char *guid;
   char *uri;
   char *display_name;
   GFile *file;
@@ -43,7 +43,8 @@ struct OPAQUE_TYPE__GVfsBackendRecent
   GHashTable *uri_map;
   GHashTable *items;
 
-  GWeakRef dir_monitor;
+  GVfsMonitor *file_monitor;
+  GVfsMonitor *dir_monitor;
 };
 
 G_DEFINE_TYPE (GVfsBackendRecent, g_vfs_backend_recent, G_VFS_TYPE_BACKEND);
@@ -51,19 +52,38 @@ G_DEFINE_TYPE (GVfsBackendRecent, g_vfs_backend_recent, G_VFS_TYPE_BACKEND);
 #define RECENTLY_USED_FILE "recently-used.xbel"
 
 static GVfsMonitor *
+recent_backend_get_file_monitor (GVfsBackendRecent *backend,
+                                 gboolean           create)
+{
+  if (backend->file_monitor == NULL && create == FALSE)
+    return NULL;
+
+  else if (backend->file_monitor == NULL)
+    {
+      /* 'create' is only ever set in the main thread, so we will have
+       * no possibility here for creating more than one new monitor.
+       */
+      /* FIXME */
+
+      backend->file_monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
+    }
+
+  return g_object_ref (backend->file_monitor);
+}
+
+static GVfsMonitor *
 recent_backend_get_dir_monitor (GVfsBackendRecent *backend,
                                 gboolean           create)
 {
-  GVfsMonitor *monitor;
+  if (backend->dir_monitor == NULL && create == FALSE)
+    return NULL;
 
-  monitor = g_weak_ref_get (&backend->dir_monitor);
-  if (monitor != NULL || !create)
-    return monitor;
+  else if (backend->dir_monitor == NULL)
+    {
+      backend->dir_monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
+    }
 
-  monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
-  g_weak_ref_set (&backend->dir_monitor, monitor);
-
-  return monitor;
+  return g_object_ref (backend->dir_monitor);
 }
 
 static GFile *
@@ -285,7 +305,7 @@ recent_backend_add_info (RecentItem *item,
 {
   g_assert (item != NULL);
 
-  g_file_info_set_name (info, item->id);
+  g_file_info_set_name (info, item->guid);
   g_file_info_set_display_name (info, item->display_name);
   g_file_info_set_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_TARGET_URI, item->uri);
 
@@ -354,7 +374,7 @@ recent_item_free (RecentItem *item)
 {
   g_free (item->uri);
   g_free (item->display_name);
-  g_free (item->id);
+  g_free (item->guid);
   g_clear_object (&item->file);
   g_date_time_unref (item->modified);
   g_free (item);
@@ -402,7 +422,7 @@ recent_item_new (const gchar *uri,
 {
   RecentItem *item;
   item = g_new0 (RecentItem, 1);
-  item->id = g_compute_checksum_for_string (G_CHECKSUM_SHA256, uri, -1);
+  item->guid = g_dbus_generate_guid ();
   item->modified = g_date_time_ref (modified);
 
   recent_item_update (item, uri, display_name, modified);
@@ -490,7 +510,7 @@ reload_recent_items (GVfsBackendRecent *backend)
   for (i = 0; i < uris_len; i++)
     {
       const char *uri = uris[i];
-      const char *id;
+      const char *guid;
       char *display_name;
       GDateTime *modified;
 
@@ -498,31 +518,22 @@ reload_recent_items (GVfsBackendRecent *backend)
         {
           display_name = get_display_name (backend->bookmarks, uri);
           modified = g_bookmark_file_get_modified_date_time (backend->bookmarks, uri, NULL);
-          id = g_hash_table_lookup (backend->uri_map, uri);
-          if (id)
+          guid = g_hash_table_lookup (backend->uri_map, uri);
+          if (guid)
             {
               RecentItem *item;
-              item = g_hash_table_lookup (backend->items, id);
+              item = g_hash_table_lookup (backend->items, guid);
               if (recent_item_update (item, uri, display_name, modified))
-                changed = g_list_prepend (changed, item->id);
+                changed = g_list_prepend (changed, item->guid);
               not_seen_items = g_list_remove (not_seen_items, item);
             }
           else
             {
               RecentItem *item;
               item = recent_item_new (uri, display_name, modified);
-              if (g_hash_table_contains (backend->items, item->id))
-                {
-                  g_debug ("recent: hash collision for '%s', discarding", uri);
-
-                  recent_item_free (item);
-                }
-              else
-                {
-                  added = g_list_prepend (added, item->id);
-                  g_hash_table_insert (backend->items, item->id, item);
-                  g_hash_table_insert (backend->uri_map, item->uri, item->id);
-                }
+              added = g_list_prepend (added, item->guid);
+              g_hash_table_insert (backend->items, item->guid, item);
+              g_hash_table_insert (backend->uri_map, item->uri, item->guid);
             }
 
           g_free (display_name);
@@ -538,9 +549,9 @@ reload_recent_items (GVfsBackendRecent *backend)
     {
       RecentItem *item = l->data;
       g_hash_table_remove (backend->uri_map, item->uri);
-      g_hash_table_steal (backend->items, item->id);
+      g_hash_table_steal (backend->items, item->guid);
       if (monitor)
-        g_vfs_monitor_emit_event (monitor, G_FILE_MONITOR_EVENT_DELETED, item->id, NULL);
+        g_vfs_monitor_emit_event (monitor, G_FILE_MONITOR_EVENT_DELETED, item->guid, NULL);
       recent_item_free (item);
     }
   g_list_free (not_seen_items);
@@ -621,8 +632,6 @@ recent_backend_mount (GVfsBackend  *vfs_backend,
     g_signal_connect (backend->monitor, "changed", G_CALLBACK (bookmarks_changed), backend);
 
   reload_recent_items (backend);
-
-  g_vfs_backend_set_autounmount (vfs_backend, TRUE);
 
   g_vfs_job_succeeded (G_VFS_JOB (job));
 
@@ -737,14 +746,31 @@ recent_backend_create_dir_monitor (GVfsBackend          *vfs_backend,
   GVfsMonitor *monitor;
 
   if (filename[1])
-    {
-      g_vfs_job_failed (G_VFS_JOB (job),
-                        G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                        _("Operation not supported"));
-      return TRUE;
-    }
+    monitor = g_vfs_monitor_new (vfs_backend);
+  else
+    monitor = recent_backend_get_dir_monitor (backend, TRUE);
 
-  monitor = recent_backend_get_dir_monitor (backend, TRUE);
+  g_vfs_job_create_monitor_set_monitor (job, monitor);
+  g_vfs_job_succeeded (G_VFS_JOB (job));
+  g_object_unref (monitor);
+
+  return TRUE;
+}
+
+static gboolean
+recent_backend_create_file_monitor (GVfsBackend          *vfs_backend,
+                                    GVfsJobCreateMonitor *job,
+                                    const char           *filename,
+                                    GFileMonitorFlags     flags)
+{
+  GVfsBackendRecent *backend = G_VFS_BACKEND_RECENT (vfs_backend);
+  GVfsMonitor *monitor;
+
+  if (filename[1])
+    monitor = g_vfs_monitor_new (vfs_backend);
+  else
+    monitor = recent_backend_get_file_monitor (backend, TRUE);
+
   g_vfs_job_create_monitor_set_monitor (job, monitor);
   g_vfs_job_succeeded (G_VFS_JOB (job));
   g_object_unref (monitor);
@@ -757,7 +783,8 @@ recent_backend_finalize (GObject *object)
 {
   GVfsBackendRecent *backend = G_VFS_BACKEND_RECENT (object);
 
-  g_weak_ref_clear (&backend->dir_monitor);
+  g_clear_object (&backend->dir_monitor);
+  g_clear_object (&backend->file_monitor);
 
   g_hash_table_destroy (backend->items);
   g_hash_table_destroy (backend->uri_map);
@@ -779,8 +806,6 @@ g_vfs_backend_recent_init (GVfsBackendRecent *backend)
 {
   GVfsBackend *vfs_backend = G_VFS_BACKEND (backend);
   GMountSpec *mount_spec;
-
-  g_weak_ref_init (&backend->dir_monitor, NULL);
 
   backend->items = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, (GDestroyNotify)recent_item_free);
   backend->uri_map = g_hash_table_new (g_str_hash, g_str_equal);
@@ -815,4 +840,5 @@ g_vfs_backend_recent_class_init (GVfsBackendRecentClass *class)
   backend_class->try_enumerate = recent_backend_enumerate;
   backend_class->try_delete = recent_backend_delete;
   backend_class->try_create_dir_monitor = recent_backend_create_dir_monitor;
+  backend_class->try_create_file_monitor = recent_backend_create_file_monitor;
 }

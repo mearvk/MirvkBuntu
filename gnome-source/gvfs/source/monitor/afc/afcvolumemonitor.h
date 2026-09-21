@@ -26,7 +26,7 @@ struct _GVfsAfcVolumeMonitorClass {
   GVolumeMonitorClass parent_class;
 };
 
-GType g_vfs_afc_volume_monitor_get_type (void);
+GType g_vfs_afc_volume_monitor_get_type (void) G_GNUC_CONST;
 
 GVolumeMonitor *g_vfs_afc_volume_monitor_new (void);
 

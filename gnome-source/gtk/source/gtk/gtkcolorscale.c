@@ -51,11 +51,8 @@ typedef struct
 enum
 {
   PROP_ZERO,
-  PROP_SCALE_TYPE,
-  N_PROPS
+  PROP_SCALE_TYPE
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void hold_action (GtkGestureLongPress *gesture,
                          double               x,
@@ -130,12 +127,8 @@ gtk_color_scale_snapshot_trough (GtkColorScale  *scale,
       graphene_point_t start, end;
       const GdkRGBA *color;
 
-      if (gtk_orientable_get_orientation (GTK_ORIENTABLE (widget)) == GTK_ORIENTATION_VERTICAL)
-        {
-          graphene_point_init (&start, 0, 0);
-          graphene_point_init (&end, 0, height);
-        }
-      else if (gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL)
+      if (gtk_orientable_get_orientation (GTK_ORIENTABLE (widget)) == GTK_ORIENTATION_HORIZONTAL &&
+          gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL)
         {
           graphene_point_init (&start, width, 0);
           graphene_point_init (&end, 0, 0);
@@ -193,7 +186,8 @@ scale_constructed (GObject *object)
   GtkShortcut *shortcut;
 
   controller = gtk_shortcut_controller_new ();
-  trigger = gtk_shortcut_trigger_create_for_menu ();
+  trigger = gtk_alternative_trigger_new (gtk_keyval_trigger_new (GDK_KEY_F10, GDK_SHIFT_MASK),
+                                         gtk_keyval_trigger_new (GDK_KEY_Menu, 0));
   action = gtk_named_action_new ("color.edit");
   shortcut = gtk_shortcut_new_with_arguments (trigger,
                                               action,
@@ -202,8 +196,6 @@ scale_constructed (GObject *object)
                                                 ? "a" : "h");
   gtk_shortcut_controller_add_shortcut (GTK_SHORTCUT_CONTROLLER (controller), shortcut);
   gtk_widget_add_controller (GTK_WIDGET (scale), controller);
-
-  G_OBJECT_CLASS (gtk_color_scale_parent_class)->constructed (object);
 }
 
 static void
@@ -289,11 +281,10 @@ gtk_color_scale_class_init (GtkColorScaleClass *class)
   object_class->get_property = scale_get_property;
   object_class->set_property = scale_set_property;
 
-  props[PROP_SCALE_TYPE] = g_param_spec_int ("scale-type", NULL, NULL,
-                                             0, 1, 0,
-                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_SCALE_TYPE,
+      g_param_spec_int ("scale-type", NULL, NULL,
+                        0, 1, 0,
+                        GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 }
 
 void

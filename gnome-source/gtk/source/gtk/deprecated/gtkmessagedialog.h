@@ -62,7 +62,7 @@ struct _GtkMessageDialog
  *
  * > Please note that %GTK_BUTTONS_OK, %GTK_BUTTONS_YES_NO
  * > and %GTK_BUTTONS_OK_CANCEL are discouraged by the
- * > [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/).
+ * > [GNOME Human Interface Guidelines](http://library.gnome.org/devel/hig-book/stable/).
  */
 typedef enum
 {
@@ -75,7 +75,7 @@ typedef enum
 } GtkButtonsType;
 
 GDK_AVAILABLE_IN_ALL
-GType      gtk_message_dialog_get_type (void);
+GType      gtk_message_dialog_get_type (void) G_GNUC_CONST;
 
 GDK_DEPRECATED_IN_4_10
 GtkWidget* gtk_message_dialog_new      (GtkWindow      *parent,

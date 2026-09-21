@@ -102,15 +102,7 @@ lighten (vec4 Cs, vec4 Cb)
 float
 color_dodge (float source, float backdrop)
 {
-  source = clamp (source, 0.0, 1.0);
-  backdrop = clamp (backdrop, 0.0, 1.0);
-
-  if (backdrop == 0.0)
-    return 0.0;
-  else if (source == 1.0)
-    return 1.0;
-  else
-    return clamp (backdrop / (1.0 - source), 0.0, 1.0);
+  return (source == 1.0) ? source : min (backdrop / (1.0 - source), 1.0);
 }
 
 vec4
@@ -126,15 +118,7 @@ color_dodge (vec4 Cs, vec4 Cb)
 float
 color_burn (float source, float backdrop)
 {
-  source = clamp (source, 0.0, 1.0);
-  backdrop = clamp (backdrop, 0.0, 1.0);
-
-  if (backdrop == 1.0)
-    return 1.0;
-  else if (source == 0.0)
-    return 0.0;
-  else
-    return max (1.0 - ((1.0 - backdrop) / source), 0.0);
+  return (source == 0.0) ? source : max ((1.0 - ((1.0 - backdrop) / source)), 0.0);
 }
 
 vec4
@@ -162,7 +146,7 @@ lum (vec3 c)
 vec3
 clip_color (vec3 c)
 {
-  float l = clamp (lum (c), 0.0, 1.0);
+  float l = lum (c);
   float n = min (c.r, min (c.g, c.b));
   float x = max (c.r, max (c.g, c.b));
   if (n < 0.0) c = l + (((c - l) * l) / (l - n));

@@ -5,24 +5,20 @@
 #include "gskgpuglobalsopprivate.h"
 #include "gskgpuopprivate.h"
 #include "gskgpushaderopprivate.h"
-#include "gskgpuutilsprivate.h"
 #include "gskglbufferprivate.h"
+#include "gskgldescriptorsprivate.h"
 #include "gskgldeviceprivate.h"
 #include "gskglimageprivate.h"
-#include "gskglpipelineprivate.h"
 
 #include "gdkdmabuftextureprivate.h"
-#include "gdkdmabufeglprivate.h"
 #include "gdkglcontextprivate.h"
 #include "gdkgltextureprivate.h"
 
-#ifdef GDK_WINDOWING_WIN32
-#include "win32/gdkd3d12textureprivate.h"
-#endif
 struct _GskGLFrame
 {
   GskGpuFrame parent_instance;
 
+  GLuint globals_buffer_id;
   guint next_texture_slot;
   GLsync sync;
 
@@ -55,7 +51,15 @@ gsk_gl_frame_wait (GskGpuFrame *frame)
   if (!self->sync)
     return;
 
-  glClientWaitSync (self->sync, GL_SYNC_FLUSH_COMMANDS_BIT, G_MAXUINT64);
+  glClientWaitSync (self->sync, 0, G_MAXINT64);
+}
+
+static void
+gsk_gl_frame_setup (GskGpuFrame *frame)
+{
+  GskGLFrame *self = GSK_GL_FRAME (frame);
+
+  glGenBuffers (1, &self->globals_buffer_id);
 }
 
 static void
@@ -65,10 +69,9 @@ gsk_gl_frame_cleanup (GskGpuFrame *frame)
 
   if (self->sync)
     {
-      glClientWaitSync (self->sync, GL_SYNC_FLUSH_COMMANDS_BIT, G_MAXUINT64);
+      glClientWaitSync (self->sync, 0, -1);
 
       /* can't use g_clear_pointer() on glDeleteSync(), see MR !7294 */
-      /* gobject-linter-ignore-next-line: use_clear_functions */
       glDeleteSync (self->sync);
       self->sync = NULL;
     }
@@ -95,14 +98,10 @@ gsk_gl_frame_upload_texture (GskGpuFrame  *frame,
 
           image = gsk_gl_image_new_for_texture (GSK_GL_DEVICE (gsk_gpu_frame_get_device (frame)),
                                                 texture,
-                                                1,
-                                                (GLuint[1]) { gdk_gl_texture_get_id (gl_texture), },
-                                                NULL,
-                                                0,
+                                                gdk_gl_texture_get_id (gl_texture),
                                                 FALSE,
-                                                gdk_gl_texture_has_mipmap (gl_texture) ? (GSK_GPU_IMAGE_CAN_MIPMAP | GSK_GPU_IMAGE_MIPMAP) : 0,
-                                                GSK_GPU_CONVERSION_NONE);
-
+                                                gdk_gl_texture_has_mipmap (gl_texture) ? (GSK_GPU_IMAGE_CAN_MIPMAP | GSK_GPU_IMAGE_MIPMAP) : 0);
+         
           /* This is a hack, but it works */
           sync = gdk_gl_texture_get_sync (gl_texture);
           if (sync)
@@ -111,139 +110,33 @@ gsk_gl_frame_upload_texture (GskGpuFrame  *frame,
           return image;
         }
     }
-#if defined(HAVE_DMABUF) && defined (HAVE_EGL)
   else if (GDK_IS_DMABUF_TEXTURE (texture))
     {
-      const GdkDmabuf *dmabuf = gdk_dmabuf_texture_get_dmabuf (GDK_DMABUF_TEXTURE (texture));
-      GdkMemoryFormat format = gdk_texture_get_format (texture);
-      gboolean external, supported_conversion = TRUE;
-      GLuint tex_id[3];
-      GskGpuConversion conv;
-      EGLint color_space_hint, range_hint;
-      gsize n;
+      gboolean external;
+      GLuint tex_id;
 
-      /* First try single-image import */
-      if (gdk_memory_format_get_dmabuf_yuv_fourcc (format) == dmabuf->fourcc)
-        {
-          conv = gsk_gpu_color_state_get_conversion (gdk_texture_get_color_state (texture));
-
-          range_hint = EGL_YUV_NARROW_RANGE_EXT;
-          switch (conv)
-            {
-            case GSK_GPU_CONVERSION_NONE:
-            case GSK_GPU_CONVERSION_SRGB:
-              GDK_DEBUG (DMABUF, "EGL cannot import YUV dmabufs of colorstate %s",
-                         gdk_color_state_get_name (gdk_texture_get_color_state (texture)));
-              /* no hints for these */
-              supported_conversion = FALSE;
-              break;
-
-            case GSK_GPU_CONVERSION_BT601:
-              range_hint = EGL_YUV_FULL_RANGE_EXT;
-              G_GNUC_FALLTHROUGH;
-            case GSK_GPU_CONVERSION_BT601_NARROW:
-              color_space_hint = EGL_ITU_REC601_EXT;
-              break;
-
-            case GSK_GPU_CONVERSION_BT709:
-              range_hint = EGL_YUV_FULL_RANGE_EXT;
-              G_GNUC_FALLTHROUGH;
-            case GSK_GPU_CONVERSION_BT709_NARROW:
-              color_space_hint = EGL_ITU_REC709_EXT;
-              break;
-
-            case GSK_GPU_CONVERSION_BT2020:
-              range_hint = EGL_YUV_FULL_RANGE_EXT;
-              G_GNUC_FALLTHROUGH;
-            case GSK_GPU_CONVERSION_BT2020_NARROW:
-              color_space_hint = EGL_ITU_REC2020_EXT;
-              break;
-
-            default:
-              g_assert_not_reached ();
-              supported_conversion = FALSE;
-              break;
-            }
-        }
-      else if (gdk_memory_format_get_dmabuf_rgb_fourcc (format) == dmabuf->fourcc)
-        {
-          conv = GSK_GPU_CONVERSION_NONE;
-          color_space_hint = 0;
-          range_hint = 0;
-        }
-      else
-        {
-          supported_conversion = FALSE;
-        }
-
-      if (supported_conversion)
-        {
-          tex_id[0] = gdk_dmabuf_egl_import_dmabuf (GDK_GL_CONTEXT (gsk_gpu_frame_get_context (frame)),
-                                                    gdk_texture_get_width (texture),
-                                                    gdk_texture_get_height (texture),
-                                                    dmabuf,
-                                                    color_space_hint,
-                                                    range_hint,
-                                                    &external);
-          if (tex_id[0])
-            {
-              return gsk_gl_image_new_for_texture (GSK_GL_DEVICE (gsk_gpu_frame_get_device (frame)),
-                                                   texture,
-                                                   1,
-                                                   tex_id,
-                                                   NULL,
-                                                   0,
-                                                   TRUE,
-                                                   (external ? GSK_GPU_IMAGE_EXTERNAL : 0),
-                                                   conv);
-            }
-        }
-
-      /* Then try multi-image import */
-      n = gdk_dmabuf_egl_import_dmabuf_multiplane (GDK_GL_CONTEXT (gsk_gpu_frame_get_context (frame)),
-                                                   gdk_texture_get_width (texture),
-                                                   gdk_texture_get_height (texture),
-                                                   dmabuf,
-                                                   tex_id);
-      if (n > 0)
-        {
-          return gsk_gl_image_new_for_texture (GSK_GL_DEVICE (gsk_gpu_frame_get_device (frame)),
-                                               texture,
-                                               n,
-                                               tex_id,
-                                               NULL,
-                                               0,
-                                               TRUE,
-                                               0,
-                                               GSK_GPU_CONVERSION_NONE);
-        }
-    }
-#endif  /* HAVE_DMABUF && HAVE_EGL */
-#ifdef GDK_WINDOWING_WIN32
-  else if (GDK_IS_D3D12_TEXTURE (texture))
-    {
-      guint tex_id, mem_id, semaphore_id;
-
-      tex_id = gdk_d3d12_texture_import_gl (GDK_D3D12_TEXTURE (texture),
-                                            GDK_GL_CONTEXT (gsk_gpu_frame_get_context (frame)),
-                                            &mem_id,
-                                            &semaphore_id);
+      tex_id = gdk_gl_context_import_dmabuf (GDK_GL_CONTEXT (gsk_gpu_frame_get_context (frame)),
+                                             gdk_texture_get_width (texture),
+                                             gdk_texture_get_height (texture),
+                                             gdk_dmabuf_texture_get_dmabuf (GDK_DMABUF_TEXTURE (texture)),
+                                             &external);
       if (tex_id)
         {
           return gsk_gl_image_new_for_texture (GSK_GL_DEVICE (gsk_gpu_frame_get_device (frame)),
                                                texture,
-                                               1,
-                                               &tex_id,
-                                               &mem_id,
-                                               semaphore_id,
+                                               tex_id,
                                                TRUE,
-                                               0,
-                                               GSK_GPU_CONVERSION_NONE);
+                                               (external ? GSK_GPU_IMAGE_EXTERNAL | GSK_GPU_IMAGE_NO_BLIT : 0));
         }
     }
-#endif
 
   return GSK_GPU_FRAME_CLASS (gsk_gl_frame_parent_class)->upload_texture (frame, with_mipmap, texture);
+}
+
+static GskGpuDescriptors *
+gsk_gl_frame_create_descriptors (GskGpuFrame *frame)
+{
+  return GSK_GPU_DESCRIPTORS (gsk_gl_descriptors_new (GSK_GL_DEVICE (gsk_gpu_frame_get_device (frame))));
 }
 
 static GskGpuBuffer *
@@ -265,17 +158,6 @@ gsk_gl_frame_create_vertex_buffer (GskGpuFrame *frame,
 }
 
 static GskGpuBuffer *
-gsk_gl_frame_create_globals_buffer (GskGpuFrame *frame,
-                                    gsize        size)
-{
-  if (gdk_gl_context_has_feature (GDK_GL_CONTEXT (gsk_gpu_frame_get_context (frame)),
-                                  GDK_GL_FEATURE_BUFFER_STORAGE))
-    return gsk_gl_mapped_buffer_new (GL_UNIFORM_BUFFER, size);
-  else
-    return gsk_gl_copied_buffer_new (GL_UNIFORM_BUFFER, size);
-}
-
-static GskGpuBuffer *
 gsk_gl_frame_create_storage_buffer (GskGpuFrame *frame,
                                     gsize        size)
 {
@@ -287,27 +169,12 @@ gsk_gl_frame_create_storage_buffer (GskGpuFrame *frame,
 }
 
 static void
-gsk_gl_frame_write_texture_vertex_data (GskGpuFrame    *self,
-                                        guchar         *data,
-                                        GskGpuImage   **images,
-                                        GskGpuSampler  *samplers,
-                                        gsize           n_images)
-{
-}
-
-static void
-gsk_gl_frame_submit (GskGpuFrame       *frame,
-                     GskRenderPassType  pass_type,
-                     GskGpuBuffer      *vertex_buffer,
-                     GskGpuBuffer      *globals_buffer,
-                     GskGpuOp          *op)
+gsk_gl_frame_submit (GskGpuFrame  *frame,
+                     GskGpuBuffer *vertex_buffer,
+                     GskGpuOp     *op)
 {
   GskGLFrame *self = GSK_GL_FRAME (frame);
-  GskGLCommandState state = {
-    /* rest is 0 */
-    .current_samplers = { GSK_GPU_SAMPLER_N_SAMPLERS, GSK_GPU_SAMPLER_N_SAMPLERS },
-    .globals = globals_buffer,
-  };
+  GskGLCommandState state = { 0, };
 
   glEnable (GL_SCISSOR_TEST);
 
@@ -317,12 +184,20 @@ gsk_gl_frame_submit (GskGpuFrame       *frame,
   if (vertex_buffer)
     gsk_gl_buffer_bind (GSK_GL_BUFFER (vertex_buffer));
 
+  gsk_gl_frame_bind_globals (self);
+  glBufferData (GL_UNIFORM_BUFFER,
+                sizeof (GskGpuGlobalsInstance),
+                NULL,
+                GL_STREAM_DRAW);
+
   while (op)
     {
       op = gsk_gpu_op_gl_command (op, frame, &state);
     }
 
-  self->sync = glFenceSync (GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  if (gdk_gl_context_has_feature (GDK_GL_CONTEXT (gsk_gpu_frame_get_context (frame)),
+                                  GDK_GL_FEATURE_SYNC))
+    self->sync = glFenceSync (GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 }
 
 static void
@@ -331,6 +206,7 @@ gsk_gl_frame_finalize (GObject *object)
   GskGLFrame *self = GSK_GL_FRAME (object);
 
   g_hash_table_unref (self->vaos);
+  glDeleteBuffers (1, &self->globals_buffer_id);
 
   G_OBJECT_CLASS (gsk_gl_frame_parent_class)->finalize (object);
 }
@@ -343,12 +219,12 @@ gsk_gl_frame_class_init (GskGLFrameClass *klass)
 
   gpu_frame_class->is_busy = gsk_gl_frame_is_busy;
   gpu_frame_class->wait = gsk_gl_frame_wait;
+  gpu_frame_class->setup = gsk_gl_frame_setup;
   gpu_frame_class->cleanup = gsk_gl_frame_cleanup;
   gpu_frame_class->upload_texture = gsk_gl_frame_upload_texture;
+  gpu_frame_class->create_descriptors = gsk_gl_frame_create_descriptors;
   gpu_frame_class->create_vertex_buffer = gsk_gl_frame_create_vertex_buffer;
-  gpu_frame_class->create_globals_buffer = gsk_gl_frame_create_globals_buffer;
   gpu_frame_class->create_storage_buffer = gsk_gl_frame_create_storage_buffer;
-  gpu_frame_class->write_texture_vertex_data = gsk_gl_frame_write_texture_vertex_data;
   gpu_frame_class->submit = gsk_gl_frame_submit;
 
   object_class->finalize = gsk_gl_frame_finalize;
@@ -369,17 +245,17 @@ gsk_gl_frame_init (GskGLFrame *self)
 void
 gsk_gl_frame_use_program (GskGLFrame                *self,
                           const GskGpuShaderOpClass *op_class,
-                          GskGpuShaderFlags          flags,
-                          GskGpuColorStates          color_states,
-                          guint32                    variation)
+                          guint32                    variation,
+                          GskGpuShaderClip           clip,
+                          guint                      n_external_textures)
 {
   GLuint vao;
 
-  gsk_gl_pipeline_use (GSK_GL_DEVICE (gsk_gpu_frame_get_device (GSK_GPU_FRAME (self))),
-                       op_class,
-                       flags,
-                       color_states,
-                       variation);
+  gsk_gl_device_use_program (GSK_GL_DEVICE (gsk_gpu_frame_get_device (GSK_GPU_FRAME (self))),
+                             op_class,
+                             variation,
+                             clip,
+                             n_external_textures);
 
   vao = GPOINTER_TO_UINT (g_hash_table_lookup (self->vaos, op_class));
   if (vao)
@@ -392,5 +268,11 @@ gsk_gl_frame_use_program (GskGLFrame                *self,
   op_class->setup_vao (0);
 
   g_hash_table_insert (self->vaos, (gpointer) op_class, GUINT_TO_POINTER (vao));
+}
+
+void
+gsk_gl_frame_bind_globals (GskGLFrame *self)
+{
+  glBindBufferBase (GL_UNIFORM_BUFFER, 0, self->globals_buffer_id);
 }
 

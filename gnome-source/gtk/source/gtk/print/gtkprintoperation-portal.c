@@ -24,13 +24,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <cairo.h>
-#ifdef CAIRO_HAS_PDF_SURFACE
 #include <cairo-pdf.h>
-#endif
-#ifdef CAIRO_HAS_PS_SURFACE
 #include <cairo-ps.h>
-#endif
 
 #include <gio/gunixfdlist.h>
 
@@ -114,7 +109,6 @@ portal_data_free (gpointer data)
 typedef struct {
   GDBusProxy *proxy;
   GtkPrintJob *job;
-  GtkPrinter *printer;
   guint32 token;
   cairo_surface_t *surface;
   GMainLoop *loop;
@@ -124,13 +118,8 @@ typedef struct {
 static void
 op_portal_free (GtkPrintOperationPortal *op_portal)
 {
-  GtkPrintBackend *backend;
-
-  backend = gtk_printer_get_backend (op_portal->printer);
   g_clear_object (&op_portal->proxy);
   g_clear_object (&op_portal->job);
-  gtk_print_backend_destroy (backend);
-  g_clear_object (&op_portal->printer);
   if (op_portal->loop)
     g_main_loop_unref (op_portal->loop);
   g_free (op_portal);
@@ -158,7 +147,6 @@ portal_start_page (GtkPrintOperation *op,
     {
       if (type == CAIRO_SURFACE_TYPE_PS)
         {
-#ifdef CAIRO_HAS_PS_SURFACE
           cairo_ps_surface_set_size (op_portal->surface, w, h);
           cairo_ps_surface_dsc_begin_page_setup (op_portal->surface);
           switch (gtk_page_setup_get_orientation (page_setup))
@@ -176,18 +164,15 @@ portal_start_page (GtkPrintOperation *op,
               default:
                 break;
             }
-#endif
          }
       else if (type == CAIRO_SURFACE_TYPE_PDF)
         {
-#ifdef CAIRO_HAS_PDF_SURFACE
           if (!op->priv->manual_orientation)
             {
               w = gtk_page_setup_get_paper_width (page_setup, GTK_UNIT_POINTS);
               h = gtk_page_setup_get_paper_height (page_setup, GTK_UNIT_POINTS);
             }
           cairo_pdf_surface_set_size (op_portal->surface, w, h);
-#endif
         }
     }
 }
@@ -219,13 +204,6 @@ print_file_done (GObject *source,
   ret = g_dbus_proxy_call_finish (op_portal->proxy,
                                   result,
                                   &error);
-
-  // TODO: Delay GTK_PRINT_STATUS_FINISHED to org.freedesktop.portal.Request::Response ?
-  _gtk_print_operation_set_status (op,
-                                   ret == NULL ? GTK_PRINT_STATUS_FINISHED_ABORTED :
-                                                 GTK_PRINT_STATUS_FINISHED,
-                                   NULL);
-
   if (ret == NULL)
     {
       if (op->priv->error == NULL)
@@ -264,7 +242,6 @@ portal_job_complete (GtkPrintJob  *job,
     }
 
   op_portal->file_written = TRUE;
-  _gtk_print_operation_set_status (op, GTK_PRINT_STATUS_SENDING_DATA, NULL);
 
   settings = gtk_print_job_get_settings (job);
   uri = gtk_print_settings_get (settings, GTK_PRINT_SETTINGS_OUTPUT_URI);
@@ -331,8 +308,7 @@ static void
 finish_print (PortalData        *portal,
               GtkPrinter        *printer,
               GtkPageSetup      *page_setup,
-              GtkPrintSettings  *settings,
-              gboolean          is_file_printer)
+              GtkPrintSettings  *settings)
 {
   GtkPrintOperation *op = portal->op;
   GtkPrintOperationPrivate *priv = op->priv;
@@ -360,7 +336,6 @@ finish_print (PortalData        *portal,
 
       job = gtk_print_job_new (priv->job_name, printer, settings, page_setup);
       op_portal->job = job;
-      op_portal->printer = printer;
 
       op_portal->proxy = g_object_ref (portal->proxy);
       op_portal->token = portal->token;
@@ -379,29 +354,22 @@ finish_print (PortalData        *portal,
 
       priv->print_pages = gtk_print_job_get_pages (job);
       priv->page_ranges = gtk_print_job_get_page_ranges (job, &priv->num_page_ranges);
-      /* Printers used through portals always have the COPIES and NUMBER_UP capability, so
-      there is no need to make manual copies, except for print-to-file */
-      if (is_file_printer)
-        {
-          priv->manual_num_copies = gtk_print_job_get_num_copies(job);
-          priv->manual_number_up = gtk_print_job_get_n_up (job);
-        }
-      else
-        {
-          priv->manual_num_copies = 1;
-          priv->manual_number_up = 1;
-        }
-      priv->manual_number_up_layout = gtk_print_job_get_n_up_layout (job);
+      priv->manual_num_copies = gtk_print_job_get_num_copies (job);
       priv->manual_collation = gtk_print_job_get_collate (job);
       priv->manual_reverse = gtk_print_job_get_reverse (job);
       priv->manual_page_set = gtk_print_job_get_page_set (job);
       priv->manual_scale = gtk_print_job_get_scale (job);
       priv->manual_orientation = gtk_print_job_get_rotate (job);
+      priv->manual_number_up = gtk_print_job_get_n_up (job);
+      priv->manual_number_up_layout = gtk_print_job_get_n_up_layout (job);
     }
 
 out:
   if (portal->print_cb)
     portal->print_cb (op, portal->parent, portal->do_print, portal->result);
+
+  if (portal->destroy)
+    portal->destroy (portal);
 }
 
 static GtkPrinter *
@@ -418,17 +386,15 @@ find_file_printer (void)
       GtkPrintBackend *backend = l->data;
 
       /* FIXME: this needs changes for cpdb */
-      if (!printer && strcmp (G_OBJECT_TYPE_NAME (backend), "GtkPrintBackendFileBuiltin") == 0)
+      if (strcmp (G_OBJECT_TYPE_NAME (backend), "GtkPrintBackendFile") == 0)
         {
           printers = gtk_print_backend_get_printer_list (backend);
-          printer = g_object_ref (printers->data);
+          printer = printers->data;
           g_list_free (printers);
-          continue;
+          break;
         }
-
-      gtk_print_backend_destroy (backend);
     }
-  g_list_free_full (backends, g_object_unref);
+  g_list_free (backends);
 
   return printer;
 }
@@ -480,7 +446,6 @@ prepare_print_response (GDBusConnection *connection,
           char *filename;
           int fd;
           char *uri;
-          gboolean is_file_printer = !!gtk_print_settings_get(settings, GTK_PRINT_SETTINGS_OUTPUT_URI);
 
           fd = g_file_open_tmp ("gtkprintXXXXXX", &filename, NULL);
           uri = g_filename_to_uri (filename, NULL, NULL);
@@ -488,10 +453,10 @@ prepare_print_response (GDBusConnection *connection,
           g_free (uri);
           close (fd);
 
-          portal->result = GTK_PRINT_OPERATION_RESULT_APPLY;
-
-          finish_print (portal, printer, page_setup, settings, is_file_printer);
+          finish_print (portal, printer, page_setup, settings);
           g_free (filename);
+
+          portal->result = GTK_PRINT_OPERATION_RESULT_APPLY;
         }
       else
         {
@@ -505,6 +470,9 @@ prepare_print_response (GDBusConnection *connection,
 
       if (portal->print_cb)
         portal->print_cb (portal->op, portal->parent, portal->do_print, portal->result);
+
+      if (portal->destroy)
+        portal->destroy (portal);
     }
 
   if (options)
@@ -512,9 +480,6 @@ prepare_print_response (GDBusConnection *connection,
 
   if (portal->loop)
     g_main_loop_quit (portal->loop);
-
-  if (portal->destroy)
-    portal->destroy (portal);
 }
 
 static void
@@ -533,13 +498,8 @@ prepare_print_called (GObject      *source,
       if (portal->op->priv->error == NULL)
         portal->op->priv->error = g_error_copy (error);
       g_error_free (error);
-
       if (portal->loop)
         g_main_loop_quit (portal->loop);
-
-      if (portal->destroy)
-        portal->destroy (portal);
-
       return;
     }
   else

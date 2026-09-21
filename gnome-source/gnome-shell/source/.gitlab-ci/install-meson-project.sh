@@ -9,14 +9,13 @@ usage() {
 	Check out and install a meson project
 
 	Options:
-	  -Dkey=val          Option to pass on to meson
-	  --subdir=DIR       Build subdirectory instead of whole project
-	  --prepare=SCRIPT   Script to run before build
-	  --libdir=DIR       Setup the project with a different libdir
-	  --destdir=DIR      Install the project to DIR, can be used
-	                     several times to install to multiple destdirs
+	  -Dkey=val      Option to pass on to meson
+	  --subdir       Build subdirectory instead of whole project
+	  --prepare      Script to run before build
+	  --libdir       Setup the project with a different libdir
+	  --destdir      Install the project to an additional destdir
 
-	  -h, --help         Display this help
+	  -h, --help     Display this help
 
 	EOF
 }
@@ -37,7 +36,7 @@ unset TEMP
 MESON_OPTIONS=()
 SUBDIR=.
 PREPARE=:
-DESTDIRS=()
+DESTDIR=""
 
 while true; do
   case "$1" in
@@ -62,7 +61,7 @@ while true; do
     ;;
 
     --destdir)
-      DESTDIRS+=( $2 )
+      DESTDIR=$2
       shift 2
     ;;
 
@@ -86,8 +85,6 @@ fi
 REPO_URL="$1"
 COMMIT="$2"
 
-[[ ${#DESTDIRS[@]} == 0 ]] && DESTDIRS+=( / )
-
 CHECKOUT_DIR=$(mktemp --directory)
 trap "rm -rf $CHECKOUT_DIR" EXIT
 
@@ -97,16 +94,10 @@ pushd "$CHECKOUT_DIR/$SUBDIR"
 sh -c "$PREPARE"
 meson setup --prefix=/usr _build "${MESON_OPTIONS[@]}"
 
-# Install it to all specified dest dirs
-for destdir in "${DESTDIRS[@]}"; do
-    # don't use --destdir when installing to root,
-    # so post-install hooks are run
-    [[ $destdir == / ]] && destdir=
+# Install it to an additional directory e.g., system extension directory
+if [ -n "${DESTDIR}" ]; then
+    sudo meson install -C _build --destdir=$DESTDIR
+fi
 
-    # also install dependencies when installing to a separate distdir
-    install_deps=.gitlab-ci/install-common-dependencies.sh
-    [[ "$destdir" && -x $install_deps ]] && $install_deps --destdir $destdir
-
-    sudo meson install -C _build ${destdir:+--destdir=$destdir}
-done
+sudo meson install -C _build
 popd

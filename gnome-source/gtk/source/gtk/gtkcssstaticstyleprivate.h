@@ -40,7 +40,6 @@ struct _GtkCssStaticStyle
   GtkCssStyle parent;
 
   GPtrArray             *sections;             /* sections the values are defined in */
-  GPtrArray             *original_values;
 
   GtkCssChange           change;               /* change as returned by value lookup */
 };
@@ -50,7 +49,7 @@ struct _GtkCssStaticStyleClass
   GtkCssStyleClass parent_class;
 };
 
-GType                   gtk_css_static_style_get_type           (void);
+GType                   gtk_css_static_style_get_type           (void) G_GNUC_CONST;
 
 GtkCssStyle *           gtk_css_static_style_get_default        (void);
 GtkCssStyle *           gtk_css_static_style_new_compute        (GtkStyleProvider               *provider,

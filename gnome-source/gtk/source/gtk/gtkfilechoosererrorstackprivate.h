@@ -45,7 +45,7 @@ struct _GtkFileChooserErrorStackClass
   GtkWidgetClass parent_class;
 };
 
-GType  gtk_file_chooser_error_stack_get_type          (void);
+GType  gtk_file_chooser_error_stack_get_type          (void) G_GNUC_CONST;
 
 void   gtk_file_chooser_error_stack_set_error         (GtkFileChooserErrorStack *self,
                                                        gboolean                  is_folder,
@@ -53,7 +53,6 @@ void   gtk_file_chooser_error_stack_set_error         (GtkFileChooserErrorStack 
 
 void   gtk_file_chooser_error_stack_set_custom_error  (GtkFileChooserErrorStack *self,
                                                        const char               *label_text);
-GtkWidget *gtk_file_chooser_error_stack_get_error     (GtkFileChooserErrorStack *self);
 
 G_END_DECLS
 

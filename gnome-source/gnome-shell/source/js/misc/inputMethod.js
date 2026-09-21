@@ -1,10 +1,11 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import IBus from 'gi://IBus';
 
-import {logErrorUnlessCancelled} from './errorUtils.js';
 import * as Keyboard from '../ui/status/keyboard.js';
 import * as Main from '../ui/main.js';
 
@@ -32,9 +33,6 @@ export const InputMethod = GObject.registerClass({
         this._preeditAnchor = 0;
         this._preeditVisible = false;
         this._hidePanelId = 0;
-        this._surroundingText = null;
-        this._surroundingTextCursor = null;
-        this._surroundingTextAnchor = null;
         this._ibus = IBus.Bus.new_async();
         this._ibus.connect('connected', this._onConnected.bind(this));
         this._ibus.connect('disconnected', this._clear.bind(this));
@@ -54,10 +52,7 @@ export const InputMethod = GObject.registerClass({
     }
 
     _updateCapabilities() {
-        let caps = IBus.Capabilite.PREEDIT_TEXT | IBus.Capabilite.FOCUS;
-
-        if (this._surroundingText !== null)
-            caps |= IBus.Capabilite.SURROUNDING_TEXT;
+        let caps = IBus.Capabilite.PREEDIT_TEXT | IBus.Capabilite.FOCUS | IBus.Capabilite.SURROUNDING_TEXT;
 
         if (Main.keyboard.visible)
             caps |= IBus.Capabilite.OSK;
@@ -76,13 +71,14 @@ export const InputMethod = GObject.registerClass({
             this._context = await this._ibus.create_input_context_async(
                 'gnome-shell', -1, this._cancellable);
         } catch (e) {
-            if (logErrorUnlessCancelled(e))
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
+                logError(e);
                 this._clear();
+            }
             return;
         }
 
         this._context.set_client_commit_preedit(true);
-        this._context.set_preedit_format(IBus.PreeditFormat.HINT);
         this._context.connect('commit-text', this._onCommitText.bind(this));
         this._context.connect('delete-surrounding-text', this._onDeleteSurroundingText.bind(this));
         this._context.connect('update-preedit-text-with-mode', this._onUpdatePreeditText.bind(this));
@@ -94,9 +90,7 @@ export const InputMethod = GObject.registerClass({
         if (HAVE_REQUIRE_SURROUNDING_TEXT)
             this._context.connect('require-surrounding-text', this._onRequireSurroundingText.bind(this));
 
-        Main.keyboard.connectObject(
-            'visibility-changed', () => this._updateCapabilities(),
-            this);
+        Main.keyboard.connectObject('visibility-changed', () => this._updateCapabilities());
 
         this._updateCapabilities();
     }
@@ -118,57 +112,6 @@ export const InputMethod = GObject.registerClass({
         this._preeditVisible = false;
     }
 
-    _translatePreeditAttributes(ibusAttributes) {
-        const clutterAttrs = [];
-
-        for (let i = 0; ibusAttributes.get(i) != null; i++) {
-            const ibusAttr = ibusAttributes.get(i);
-
-            // Ignore all explicit style attributes
-            if (ibusAttr.get_attr_type() !== IBus.AttrType.HINT)
-                continue;
-
-            let preeditHint;
-
-            switch (ibusAttr.get_value()) {
-            case IBus.AttrPreedit.DEFAULT:
-                preeditHint = Clutter.PreeditStyleHint.NONE;
-                break;
-            case IBus.AttrPreedit.WHOLE:
-                preeditHint = Clutter.PreeditStyleHint.WHOLE;
-                break;
-            case IBus.AttrPreedit.SELECTION:
-                preeditHint = Clutter.PreeditStyleHint.SELECTION;
-                break;
-            case IBus.AttrPreedit.PREDICTION:
-                preeditHint = Clutter.PreeditStyleHint.PREDICTION;
-                break;
-            case IBus.AttrPreedit.PREFIX:
-                preeditHint = Clutter.PreeditStyleHint.PREFIX;
-                break;
-            case IBus.AttrPreedit.SUFFIX:
-                preeditHint = Clutter.PreeditStyleHint.SUFFIX;
-                break;
-            case IBus.AttrPreedit.ERROR_SPELLING:
-                preeditHint = Clutter.PreeditStyleHint.SPELLING_ERROR;
-                break;
-            case IBus.AttrPreedit.ERROR_COMPOSE:
-                preeditHint = Clutter.PreeditStyleHint.COMPOSE_ERROR;
-                break;
-            default:
-                continue;
-            }
-
-            clutterAttrs.push(new Clutter.PreeditAttribute({
-                hint: preeditHint,
-                start: ibusAttr.start_index,
-                end: ibusAttr.end_index,
-            }));
-        }
-
-        return clutterAttrs;
-    }
-
     _emitRequestSurrounding() {
         if (this._context.needs_surrounding_text())
             this.emit('request-surrounding');
@@ -183,15 +126,9 @@ export const InputMethod = GObject.registerClass({
     }
 
     _onDeleteSurroundingText(_context, offset, nchars) {
-        if (this._surroundingText === null) {
-            log('input-method engines should not call ' +
-                'the delete-surrounding-text API in case ' +
-                'the input context has no SURROUNDING_TEXT capability.');
-            return;
-        }
         try {
             this.delete_surrounding(offset, nchars);
-        } catch {
+        } catch (e) {
             // We may get out of bounds for negative offset on older mutter
             this.delete_surrounding(0, nchars + offset);
         }
@@ -205,41 +142,24 @@ export const InputMethod = GObject.registerClass({
         if (preedit === '')
             preedit = null;
 
-        const preeditHints =
-              this._translatePreeditAttributes(text.get_attributes());
         const anchor = pos;
-
-        if (visible) {
-            try {
-                this.set_preedit_text_with_attrs(
-                    preedit, pos, anchor, mode, preeditHints);
-            } catch {
-                this.set_preedit_text(null, pos, anchor, mode);
-            }
-        } else if (this._preeditVisible) {
+        if (visible)
+            this.set_preedit_text(preedit, pos, anchor, mode);
+        else if (this._preeditVisible)
             this.set_preedit_text(null, pos, anchor, mode);
-        }
 
         this._preeditStr = preedit;
         this._preeditPos = pos;
         this._preeditAnchor = anchor;
         this._preeditVisible = visible;
         this._preeditCommitMode = mode;
-        this._preeditHints = preeditHints;
     }
 
     _onShowPreeditText() {
         this._preeditVisible = true;
-
-        try {
-            this.set_preedit_text_with_attrs(
-                this._preeditStr, this._preeditPos, this._preeditAnchor,
-                this._preeditCommitMode, this._preeditHints);
-        } catch {
-            this.set_preedit_text(
-                this._preeditStr, this._preeditPos, this._preeditAnchor,
-                this._preeditCommitMode);
-        }
+        this.set_preedit_text(
+            this._preeditStr, this._preeditPos, this._preeditAnchor,
+            this._preeditCommitMode);
     }
 
     _onHidePreeditText() {
@@ -250,10 +170,10 @@ export const InputMethod = GObject.registerClass({
     }
 
     _onForwardKeyEvent(_context, keyval, keycode, state) {
-        const press = (state & IBus.ModifierType.RELEASE_MASK) === 0;
+        let press = (state & IBus.ModifierType.RELEASE_MASK) === 0;
         state &= ~IBus.ModifierType.RELEASE_MASK;
 
-        const curEvent = Clutter.get_current_event();
+        let curEvent = Clutter.get_current_event();
         let time;
         if (curEvent)
             time = curEvent.get_time();
@@ -290,9 +210,10 @@ export const InputMethod = GObject.registerClass({
             this._preeditStr = null;
         }
 
-        this._hidePanelId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, HIDE_PANEL_TIME, () => {
+        this._hidePanelId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, HIDE_PANEL_TIME, () => {
             this.set_input_panel_state(Clutter.InputPanelState.OFF);
             this._hidePanelId = 0;
+            return GLib.SOURCE_REMOVE;
         });
     }
 
@@ -322,13 +243,6 @@ export const InputMethod = GObject.registerClass({
     }
 
     vfunc_set_surrounding(text, cursor, anchor) {
-        // If the previous input context supports the surrounding-text feature.
-        const prevHasSurrounding = this._surroundingText !== null;
-        // If the current input context supports the surrounding-text feature.
-        const nowHasSurrounding = text !== null;
-        // If the SURROUNDING_TEXT capability is changed.
-        const updateCapabilities = prevHasSurrounding !== nowHasSurrounding;
-
         this._surroundingText = text;
         this._surroundingTextCursor = cursor;
         this._surroundingTextAnchor = anchor;
@@ -337,12 +251,7 @@ export const InputMethod = GObject.registerClass({
         if (!this._context || (!text && text !== ''))
             return;
 
-        const ibusText = IBus.Text.new_from_string(text);
-
-        if (updateCapabilities)
-            this._updateCapabilities();
-
-        // Call context.set_surrounding_text() after context.set_capabilities().
+        let ibusText = IBus.Text.new_from_string(text);
         this._context.set_surrounding_text(ibusText, cursor, anchor);
     }
 
@@ -362,10 +271,6 @@ export const InputMethod = GObject.registerClass({
             ibusHints |= IBus.InputHints.UPPERCASE_WORDS;
         if (hints & Clutter.InputContentHintFlags.SENSITIVE_DATA)
             ibusHints |= IBus.InputHints.PRIVATE;
-        if (hints & Clutter.InputContentHintFlags.HIDDEN_TEXT)
-            ibusHints |= IBus.InputHints.HIDDEN_TEXT;
-        if ((hints & Clutter.InputContentHintFlags.NO_EMOJI) !== 0)
-            ibusHints |= IBus.InputHints.NO_EMOJI;
 
         this._hints = ibusHints;
         if (this._context)
@@ -423,7 +328,7 @@ export const InputMethod = GObject.registerClass({
                     return;
 
                 try {
-                    const retval = context.process_key_event_async_finish(res);
+                    let retval = context.process_key_event_async_finish(res);
                     this.notify_key_event(event, retval);
                 } catch (e) {
                     if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
@@ -454,7 +359,7 @@ export const InputMethod = GObject.registerClass({
             await this._context.process_key_event_async(
                 keyval, 0, IBus.ModifierType.RELEASE_MASK, -1, null);
             return true;
-        } catch {
+        } catch (e) {
             return false;
         }
     }

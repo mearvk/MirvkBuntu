@@ -28,6 +28,7 @@
 
 #include "backends/meta-backend-private.h"
 #include "backends/meta-pointer-constraint.h"
+#include "core/frame.h"
 #include "core/window-private.h"
 #include "meta/meta-backend.h"
 #include "wayland/meta-pointer-confinement-wayland.h"
@@ -41,8 +42,6 @@
 
 #ifdef HAVE_XWAYLAND
 #include "wayland/meta-xwayland.h"
-#include "x11/meta-x11-frame.h"
-#include "x11/window-x11.h"
 #endif
 
 #include "pointer-constraints-unstable-v1-server-protocol.h"
@@ -64,8 +63,8 @@ struct _MetaWaylandPointerConstraint
   gulong pointer_focus_surface_handler_id;
 
   gboolean hint_set;
-  float x_hint;
-  float y_hint;
+  wl_fixed_t x_hint;
+  wl_fixed_t y_hint;
 
   MetaPointerConfinementWayland *confinement;
 };
@@ -297,6 +296,9 @@ meta_wayland_pointer_constraint_new (MetaWaylandSurface                       *s
   MetaWaylandPointerConstraint *constraint;
 
   constraint = g_object_new (META_TYPE_WAYLAND_POINTER_CONSTRAINT, NULL);
+  if (!constraint)
+    return NULL;
+
   constraint->surface = surface;
   constraint->seat = seat;
   constraint->lifetime = lifetime;
@@ -444,16 +446,16 @@ meta_wayland_pointer_constraint_destroy (MetaWaylandPointerConstraint *constrain
 
 static gboolean
 is_within_constraint_region (MetaWaylandPointerConstraint *constraint,
-                             float                         x,
-                             float                         y)
+                             wl_fixed_t                    sx,
+                             wl_fixed_t                    sy)
 {
   g_autoptr (MtkRegion) region = NULL;
   gboolean is_within;
 
   region = meta_wayland_pointer_constraint_calculate_effective_region (constraint);
   is_within = mtk_region_contains_point (region,
-                                         (int) floorf (x),
-                                         (int) floorf (y));
+                                         wl_fixed_to_int (sx),
+                                         wl_fixed_to_int (sy));
 
   return is_within;
 }
@@ -464,6 +466,7 @@ should_constraint_be_enabled (MetaWaylandPointerConstraint *constraint)
   MetaWindow *window;
 
   window = meta_wayland_surface_get_window (constraint->surface);
+#ifdef HAVE_XWAYLAND
   if (!window)
     {
       /*
@@ -471,13 +474,13 @@ should_constraint_be_enabled (MetaWaylandPointerConstraint *constraint)
        * associate the X11 Window with the wl_surface.
        * For subsurfaces the window of the ancestor might be gone already.
        */
-      g_warn_if_fail (
 #ifdef HAVE_XWAYLAND
-        meta_wayland_surface_is_xwayland (constraint->surface) ||
+      g_warn_if_fail (meta_wayland_surface_is_xwayland (constraint->surface) ||
+                      META_IS_WAYLAND_SUBSURFACE (constraint->surface->role));
 #endif
-        META_IS_WAYLAND_SUBSURFACE (constraint->surface->role));
       return FALSE;
     }
+#endif
 
   if (window->unmanaging)
     return FALSE;
@@ -516,21 +519,9 @@ should_constraint_be_enabled (MetaWaylandPointerConstraint *constraint)
 }
 
 static void
-maybe_scale_for_xwayland (MetaWaylandSurface *surface,
-                          float              *x,
-                          float              *y)
-{
-  if (meta_wayland_surface_is_xwayland (surface))
-    {
-      *x /= surface->applied_state.scale;
-      *y /= surface->applied_state.scale;
-    }
-}
-
-static void
 meta_wayland_pointer_constraint_maybe_enable (MetaWaylandPointerConstraint *constraint)
 {
-  float x, y;
+  wl_fixed_t sx, sy;
 
   if (constraint->is_enabled)
     return;
@@ -540,9 +531,8 @@ meta_wayland_pointer_constraint_maybe_enable (MetaWaylandPointerConstraint *cons
 
   meta_wayland_pointer_get_relative_coordinates (constraint->seat->pointer,
                                                  constraint->surface,
-                                                 &x, &y);
-  maybe_scale_for_xwayland (constraint->surface, &x, &y);
-  if (!is_within_constraint_region (constraint, x, y))
+                                                 &sx, &sy);
+  if (!is_within_constraint_region (constraint, sx, sy))
     return;
 
   meta_wayland_pointer_constraint_enable (constraint);
@@ -637,40 +627,32 @@ MtkRegion *
 meta_wayland_pointer_constraint_calculate_effective_region (MetaWaylandPointerConstraint *constraint)
 {
   MtkRegion *region;
-#ifdef HAVE_XWAYLAND
   MetaWindow *window;
-  MetaFrame *frame;
-#endif
 
   region = meta_wayland_surface_calculate_input_region (constraint->surface);
   if (constraint->region)
     mtk_region_intersect (region, constraint->region);
 
-#ifdef HAVE_XWAYLAND
   window = meta_wayland_surface_get_window (constraint->surface);
-  if (window && window->client_type == META_WINDOW_CLIENT_TYPE_X11)
+  if (window && window->frame)
     {
-      frame = meta_window_x11_get_frame (window);
-      if (frame)
+      MetaFrame *frame = window->frame;
+      int actual_width, actual_height;
+
+      g_assert (meta_wayland_surface_is_xwayland (constraint->surface));
+
+      actual_width = window->buffer_rect.width - (frame->child_x +
+                                                  frame->right_width);
+      actual_height = window->buffer_rect.height - (frame->child_y +
+                                                    frame->bottom_height);
+      if (actual_width > 0 && actual_height > 0)
         {
-          int actual_width, actual_height;
-
-          g_assert (meta_wayland_surface_is_xwayland (constraint->surface));
-
-          actual_width = window->buffer_rect.width - (frame->child_x +
-                                                      frame->right_width);
-          actual_height = window->buffer_rect.height - (frame->child_y +
-                                                        frame->bottom_height);
-          if (actual_width > 0 && actual_height > 0)
-            {
-              mtk_region_intersect_rectangle (region, &MTK_RECTANGLE_INIT (frame->child_x,
-                                                                           frame->child_y,
-                                                                           actual_width,
-                                                                           actual_height));
-            }
+          mtk_region_intersect_rectangle (region, &MTK_RECTANGLE_INIT (frame->child_x,
+                                                                       frame->child_y,
+                                                                       actual_width,
+                                                                       actual_height));
         }
     }
-#endif
 
   return region;
 }
@@ -793,7 +775,15 @@ pending_constraint_state_applied (MetaWaylandSurfaceState           *pending,
     return;
 
   g_clear_pointer (&constraint->region, mtk_region_unref);
-  constraint->region = g_steal_pointer (&constraint_pending->region);
+  if (constraint_pending->region)
+    {
+      constraint->region = constraint_pending->region;
+      constraint_pending->region = NULL;
+    }
+  else
+    {
+      constraint->region = NULL;
+    }
 
   g_clear_signal_handler (&constraint_pending->applied_handler_id, pending);
   remove_pending_constraint_state (constraint, pending);
@@ -919,6 +909,11 @@ init_pointer_constraint (struct wl_resource                       *resource,
                                                     region,
                                                     lifetime,
                                                     cr);
+  if (constraint == NULL)
+    {
+      wl_client_post_no_memory (client);
+      return;
+    }
 
   surface_add_pointer_constraint (surface, constraint);
 
@@ -934,7 +929,6 @@ locked_pointer_destroy (struct wl_client   *client,
 {
   MetaWaylandPointerConstraint *constraint =
     wl_resource_get_user_data (resource);
-  ClutterSeat *seat;
   gboolean warp_pointer = FALSE;
   int warp_x, warp_y;
 
@@ -943,21 +937,27 @@ locked_pointer_destroy (struct wl_client   *client,
                                    constraint->x_hint,
                                    constraint->y_hint))
     {
+      float sx, sy;
       float x, y;
 
+      sx = (float)wl_fixed_to_double (constraint->x_hint);
+      sy = (float)wl_fixed_to_double (constraint->y_hint);
       meta_wayland_surface_get_absolute_coordinates (constraint->surface,
-                                                     constraint->x_hint,
-                                                     constraint->y_hint,
+                                                     sx, sy,
                                                      &x, &y);
       warp_pointer = TRUE;
       warp_x = (int) x;
       warp_y = (int) y;
-      seat = constraint->seat->clutter_seat;
     }
   wl_resource_destroy (resource);
 
   if (warp_pointer)
-    clutter_seat_warp_pointer (seat, warp_x, warp_y);
+    {
+      ClutterSeat *seat;
+
+      seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
+      clutter_seat_warp_pointer (seat, warp_x, warp_y);
+    }
 }
 
 static void
@@ -968,20 +968,15 @@ locked_pointer_set_cursor_position_hint (struct wl_client   *client,
 {
   MetaWaylandPointerConstraint *constraint =
     wl_resource_get_user_data (resource);
-  float sx, sy;
 
   /* Ignore a set cursor hint that was already sent after the constraint
    * was cancelled. */
   if (!constraint || !constraint->resource || constraint->resource != resource)
     return;
 
-  sx = (float) wl_fixed_to_double (surface_x);
-  sy = (float) wl_fixed_to_double (surface_y);
-  maybe_scale_for_xwayland (constraint->surface, &sx, &sy);
-
   constraint->hint_set = TRUE;
-  constraint->x_hint = sx;
-  constraint->y_hint = sy;
+  constraint->x_hint = surface_x;
+  constraint->y_hint = surface_y;
 }
 
 static void
@@ -1008,34 +1003,31 @@ static const struct zwp_locked_pointer_v1_interface locked_pointer_interface = {
 
 static MetaWaylandSurface *
 pointer_constraints_get_focus_surface (MetaWaylandEventHandler *handler,
-                                       ClutterFocus            *focus,
+                                       ClutterInputDevice      *device,
+                                       ClutterEventSequence    *sequence,
                                        gpointer                 user_data)
 {
   return meta_wayland_event_handler_chain_up_get_focus_surface (handler,
-                                                                focus);
+                                                                device,
+                                                                sequence);
 }
 
 static void
 pointer_constraints_focus (MetaWaylandEventHandler *handler,
-                           ClutterFocus            *focus,
+                           ClutterInputDevice      *device,
+                           ClutterEventSequence    *sequence,
                            MetaWaylandSurface      *surface,
                            gpointer                 user_data)
 {
   MetaWaylandPointerConstraint *constraint = user_data;
 
-  if (CLUTTER_IS_SPRITE (focus))
-    {
-      ClutterSpriteRole role = clutter_sprite_get_role (CLUTTER_SPRITE (focus));
-
-      if (role == CLUTTER_SPRITE_ROLE_POINTER &&
-          surface != constraint->surface)
-        {
-          meta_wayland_pointer_constraint_deactivate (constraint);
-          return;
-        }
-    }
-
-  meta_wayland_event_handler_chain_up_focus (handler, focus, surface);
+  if (!sequence &&
+      (clutter_input_device_get_capabilities (device) &
+       CLUTTER_INPUT_CAPABILITY_POINTER) &&
+      surface != constraint->surface)
+    meta_wayland_pointer_constraint_deactivate (constraint);
+  else
+    meta_wayland_event_handler_chain_up_focus (handler, device, sequence, surface);
 }
 
 static const MetaWaylandEventInterface pointer_constraints_event_interface = {

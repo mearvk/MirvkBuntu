@@ -34,12 +34,9 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "backends/meta-renderer.h"
-#include "backends/meta-stage-private.h"
 #include "backends/meta-stage-view-private.h"
 #include "clutter/clutter-mutter.h"
 #include "cogl/cogl.h"
-#include "cogl/cogl-frame-info-private.h"
 #include "core/util-private.h"
 #include "meta/meta-backend.h"
 
@@ -51,7 +48,15 @@ typedef struct _MetaStageImplPrivate
   int64_t global_frame_counter;
 } MetaStageImplPrivate;
 
-G_DEFINE_TYPE_WITH_PRIVATE (MetaStageImpl, meta_stage_impl, CLUTTER_TYPE_STAGE_WINDOW)
+static void
+clutter_stage_window_iface_init (ClutterStageWindowInterface *iface);
+
+G_DEFINE_TYPE_WITH_CODE (MetaStageImpl,
+                         meta_stage_impl,
+                         G_TYPE_OBJECT,
+                         G_ADD_PRIVATE (MetaStageImpl)
+                         G_IMPLEMENT_INTERFACE (CLUTTER_TYPE_STAGE_WINDOW,
+                                                clutter_stage_window_iface_init));
 
 enum
 {
@@ -74,10 +79,20 @@ meta_stage_impl_unrealize (ClutterStageWindow *stage_window)
 static gboolean
 meta_stage_impl_realize (ClutterStageWindow *stage_window)
 {
+  ClutterBackend *backend;
+
   meta_topic (META_DEBUG_BACKEND,
               "Realizing stage '%s' [%p]",
               G_OBJECT_TYPE_NAME (stage_window),
               stage_window);
+
+  backend = clutter_get_default_backend ();
+
+  if (backend->cogl_context == NULL)
+    {
+      g_warning ("Failed to realize stage: missing Cogl context");
+      return FALSE;
+    }
 
   return TRUE;
 }
@@ -142,7 +157,7 @@ paint_damage_region (ClutterStageWindow *stage_window,
   if (G_UNLIKELY (overlay_blue == NULL))
     {
       overlay_blue = cogl_pipeline_new (ctx);
-      cogl_color_init_from_4f (&blue_color, 0.0f, 0.0f, 0.2f, 0.2f);
+      cogl_color_init_from_4f (&blue_color, 0.0, 0.0, 0.2, 0.2);
       cogl_pipeline_set_color (overlay_blue, &blue_color);
     }
 
@@ -169,7 +184,7 @@ paint_damage_region (ClutterStageWindow *stage_window,
       if (G_UNLIKELY (overlay_red == NULL))
         {
           overlay_red = cogl_pipeline_new (ctx);
-          cogl_color_init_from_4f (&red_color, 0.2f, 0.0f, 0.0f, 0.2f);
+          cogl_color_init_from_4f (&red_color, 0.2, 0.0, 0.0, 0.2);
           cogl_pipeline_set_color (overlay_red, &red_color);
         }
 
@@ -197,9 +212,12 @@ queue_damage_region (ClutterStageWindow *stage_window,
                      ClutterStageView   *stage_view,
                      MtkRegion          *damage_region)
 {
+  int *damage, n_rects, i;
+  g_autofree int *freeme = NULL;
   CoglFramebuffer *framebuffer;
   CoglOnscreen *onscreen;
-  MtkMonitorTransform view_transform;
+  int fb_width;
+  int fb_height;
 
   if (mtk_region_is_empty (damage_region))
     return;
@@ -209,47 +227,36 @@ queue_damage_region (ClutterStageWindow *stage_window,
     return;
 
   onscreen = COGL_ONSCREEN (framebuffer);
+  fb_width = cogl_framebuffer_get_width (framebuffer);
+  fb_height = cogl_framebuffer_get_height (framebuffer);
 
-  view_transform = clutter_stage_view_get_transform (stage_view);
-  if (view_transform != MTK_MONITOR_TRANSFORM_NORMAL)
-    {
-      g_autoptr (MtkRegion) region = NULL;
-      int fb_width;
-      int fb_height;
-      int n_rects, i;
-      g_autofree MtkRectangle *freeme = NULL;
-      MtkRectangle *damage;
+  n_rects = mtk_region_num_rectangles (damage_region);
 
-      fb_width = cogl_framebuffer_get_width (framebuffer);
-      fb_height = cogl_framebuffer_get_height (framebuffer);
-
-      n_rects = mtk_region_num_rectangles (damage_region);
-
-      if (n_rects < MAX_STACK_RECTS)
-        damage = g_newa (MtkRectangle, n_rects);
-      else
-        damage = freeme = g_new0 (MtkRectangle, n_rects);
-
-      for (i = 0; i < n_rects; i++)
-        {
-          MtkRectangle rect;
-
-          rect = mtk_region_get_rectangle (damage_region, i);
-
-          mtk_rectangle_transform (&rect,
-                                   clutter_stage_view_get_transform (stage_view),
-                                   fb_width,
-                                   fb_height,
-                                   &damage[i]);
-        }
-
-      region = mtk_region_create_rectangles (damage, n_rects);
-      cogl_onscreen_queue_damage_region (onscreen, region);
-    }
+  if (n_rects < MAX_STACK_RECTS)
+    damage = g_newa (int, n_rects * 4);
   else
+    damage = freeme = g_new (int, n_rects * 4);
+
+  for (i = 0; i < n_rects; i++)
     {
-      cogl_onscreen_queue_damage_region (onscreen, damage_region);
+      MtkRectangle rect;
+
+      rect = mtk_region_get_rectangle (damage_region, i);
+
+      clutter_stage_view_transform_rect_to_onscreen (stage_view,
+                                                     &rect,
+                                                     fb_width,
+                                                     fb_height,
+                                                     &rect);
+
+      damage[i * 4] = rect.x;
+      /* y coordinate needs to be flipped for OpenGL */
+      damage[i * 4 + 1] = fb_height - rect.y - rect.height;
+      damage[i * 4 + 2] = rect.width;
+      damage[i * 4 + 3] = rect.height;
     }
+
+  cogl_onscreen_queue_damage_region (onscreen, damage, n_rects);
 }
 
 static void
@@ -263,6 +270,7 @@ swap_framebuffer (ClutterStageWindow *stage_window,
   MetaStageImplPrivate *priv =
     meta_stage_impl_get_instance_private (stage_impl);
   CoglFramebuffer *framebuffer = clutter_stage_view_get_onscreen (stage_view);
+  CoglContext *cogl_context = cogl_framebuffer_get_context (framebuffer);
 
   COGL_TRACE_BEGIN_SCOPED (SwapFramebuffer, "Meta::StageImpl::swap_framebuffer()");
 
@@ -271,17 +279,35 @@ swap_framebuffer (ClutterStageWindow *stage_window,
   if (COGL_IS_ONSCREEN (framebuffer))
     {
       CoglOnscreen *onscreen = COGL_ONSCREEN (framebuffer);
-      int n_rects;
-      g_autoptr (CoglFrameInfo) frame_info = NULL;
-
-      frame_info =
-        cogl_frame_info_new (onscreen, priv->global_frame_counter,
-                             frame->frame_count);
-      priv->global_frame_counter++;
-
-      clutter_frame_take_cogl_frame_info (frame, g_object_ref (frame_info));
+      int64_t target_presentation_time_us;
+      int *damage, n_rects, i;
+      CoglFrameInfo *frame_info;
 
       n_rects = mtk_region_num_rectangles (swap_region);
+      damage = g_newa (int, n_rects * 4);
+      for (i = 0; i < n_rects; i++)
+        {
+          MtkRectangle rect;
+
+          rect = mtk_region_get_rectangle (swap_region, i);
+          damage[i * 4] = rect.x;
+          damage[i * 4 + 1] = rect.y;
+          damage[i * 4 + 2] = rect.width;
+          damage[i * 4 + 3] = rect.height;
+        }
+
+      frame_info =
+        cogl_frame_info_new (cogl_context, priv->global_frame_counter);
+      priv->global_frame_counter++;
+
+      if (clutter_frame_get_target_presentation_time (frame,
+                                                      &target_presentation_time_us))
+        {
+          cogl_frame_info_set_target_presentation_time (frame_info,
+                                                        target_presentation_time_us);
+        }
+
+      /* push on the screen */
       if (n_rects > 0 && !swap_with_damage)
         {
           meta_topic (META_DEBUG_BACKEND,
@@ -289,7 +315,7 @@ swap_framebuffer (ClutterStageWindow *stage_window,
                       onscreen);
 
           cogl_onscreen_swap_region (onscreen,
-                                     swap_region,
+                                     damage, n_rects,
                                      frame_info,
                                      frame);
         }
@@ -300,7 +326,7 @@ swap_framebuffer (ClutterStageWindow *stage_window,
                       onscreen);
 
           cogl_onscreen_swap_buffers_with_damage (onscreen,
-                                                  swap_region,
+                                                  damage, n_rects,
                                                   frame_info,
                                                   frame);
         }
@@ -312,10 +338,7 @@ swap_framebuffer (ClutterStageWindow *stage_window,
       meta_topic (META_DEBUG_BACKEND,
                   "fake offscreen swap (framebuffer: %p)",
                   framebuffer);
-
-      cogl_framebuffer_flush (framebuffer);
-      meta_stage_view_perform_fake_swap (view, priv->global_frame_counter,
-                                         frame->frame_count);
+      meta_stage_view_perform_fake_swap (view, priv->global_frame_counter);
       priv->global_frame_counter++;
     }
 }
@@ -324,12 +347,10 @@ static MtkRegion *
 offset_scale_and_clamp_region (const MtkRegion *region,
                                int              offset_x,
                                int              offset_y,
-                               float            scale,
-                               graphene_size_t *max_size)
+                               float            scale)
 {
   int n_rects, i;
   MtkRectangle *rects;
-  graphene_rect_t fb_rect;
   g_autofree MtkRectangle *freeme = NULL;
 
   n_rects = mtk_region_num_rectangles (region);
@@ -342,8 +363,6 @@ offset_scale_and_clamp_region (const MtkRegion *region,
   else
     rects = freeme = g_new (MtkRectangle, n_rects);
 
-  fb_rect = GRAPHENE_RECT_INIT (0, 0, max_size->width, max_size->height);
-
   for (i = 0; i < n_rects; i++)
     {
       MtkRectangle *rect = &rects[i];
@@ -354,7 +373,6 @@ offset_scale_and_clamp_region (const MtkRegion *region,
       tmp = mtk_rectangle_to_graphene_rect (rect);
       graphene_rect_offset (&tmp, offset_x, offset_y);
       graphene_rect_scale (&tmp, scale, scale, &tmp);
-      graphene_rect_intersection (&tmp, &fb_rect, &tmp);
       mtk_rectangle_from_graphene_rect (&tmp, MTK_ROUNDING_STRATEGY_GROW,
                                         rect);
     }
@@ -366,12 +384,10 @@ static MtkRegion *
 scale_offset_and_clamp_region (const MtkRegion *region,
                                float            scale,
                                int              offset_x,
-                               int              offset_y,
-                               graphene_size_t *max_size)
+                               int              offset_y)
 {
   int n_rects, i;
   MtkRectangle *rects;
-  graphene_rect_t fb_rect;
   g_autofree MtkRectangle *freeme = NULL;
 
   n_rects = mtk_region_num_rectangles (region);
@@ -384,10 +400,6 @@ scale_offset_and_clamp_region (const MtkRegion *region,
   else
     rects = freeme = g_new (MtkRectangle, n_rects);
 
-  fb_rect = GRAPHENE_RECT_INIT (0, 0, max_size->width, max_size->height);
-  graphene_rect_scale (&fb_rect, scale, scale, &fb_rect);
-  graphene_rect_offset (&fb_rect, offset_x, offset_y);
-
   for (i = 0; i < n_rects; i++)
     {
       MtkRectangle *rect = &rects[i];
@@ -398,7 +410,6 @@ scale_offset_and_clamp_region (const MtkRegion *region,
       tmp = mtk_rectangle_to_graphene_rect (rect);
       graphene_rect_scale (&tmp, scale, scale, &tmp);
       graphene_rect_offset (&tmp, offset_x, offset_y);
-      graphene_rect_intersection (&tmp, &fb_rect, &tmp);
       mtk_rectangle_from_graphene_rect (&tmp,
                                         MTK_ROUNDING_STRATEGY_GROW,
                                         rect);
@@ -439,11 +450,11 @@ transform_swap_region_to_onscreen (ClutterStageView *stage_view,
   for (i = 0; i < n_rects; i++)
     {
       rects[i] = mtk_region_get_rectangle (swap_region, i);
-      mtk_rectangle_transform (&rects[i],
-                               clutter_stage_view_get_transform (stage_view),
-                               width,
-                               height,
-                               &rects[i]);
+      clutter_stage_view_transform_rect_to_onscreen (stage_view,
+                                                     &rects[i],
+                                                     width,
+                                                     height,
+                                                     &rects[i]);
     }
   transformed_region = mtk_region_create_rectangles (rects, n_rects);
 
@@ -461,7 +472,6 @@ should_use_clipped_redraw (gboolean              is_full_redraw,
   gboolean can_blit_sub_buffer;
   gboolean can_use_clipped_redraw;
   gboolean is_warmed_up;
-  CoglContext *context = cogl_framebuffer_get_context (framebuffer);
 
   if (is_full_redraw)
     return FALSE;
@@ -480,7 +490,7 @@ should_use_clipped_redraw (gboolean              is_full_redraw,
     }
 
   can_blit_sub_buffer =
-    cogl_context_has_winsys_feature (context, COGL_WINSYS_FEATURE_SWAP_REGION);
+    cogl_clutter_winsys_has_feature (COGL_WINSYS_FEATURE_SWAP_REGION);
   can_use_clipped_redraw =
     _clutter_stage_window_can_clip_redraws (stage_window) &&
     (can_blit_sub_buffer || has_buffer_age);
@@ -499,7 +509,6 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
   ClutterStageWindow *stage_window = CLUTTER_STAGE_WINDOW (stage_impl);
   MetaStageView *view = META_STAGE_VIEW (stage_view);
   CoglFramebuffer *fb = clutter_stage_view_get_framebuffer (stage_view);
-  CoglContext *context = cogl_framebuffer_get_context (fb);
   CoglFramebuffer *onscreen = clutter_stage_view_get_onscreen (stage_view);
   MtkRectangle view_rect;
   gboolean is_full_redraw;
@@ -519,9 +528,6 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
 
   COGL_TRACE_BEGIN_SCOPED (RedrawViewPrimary,
                            "Meta::StageImpl::redraw_view_primary()");
-  COGL_TRACE_DEFINE_COUNTER_INT (RedrawViewPrimaryDamageArea,
-                                 "RedrawDamageArea",
-                                 "the damaged area of the redraw");
 
   clutter_stage_view_get_layout (stage_view, &view_rect);
   fb_scale = clutter_stage_view_get_scale (stage_view);
@@ -530,12 +536,9 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
 
   has_buffer_age =
     COGL_IS_ONSCREEN (onscreen) &&
-    cogl_context_has_winsys_feature (context, COGL_WINSYS_FEATURE_BUFFER_AGE);
+    cogl_clutter_winsys_has_feature (COGL_WINSYS_FEATURE_BUFFER_AGE);
 
   redraw_clip = clutter_stage_view_take_accumulated_redraw_clip (stage_view);
-  meta_stage_apply_redraw_clip_filters (META_STAGE (stage_impl->wrapper),
-                                        stage_view,
-                                        redraw_clip);
 
   /* NB: a NULL redraw clip == full stage redraw */
   if (!redraw_clip)
@@ -553,7 +556,7 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
                                              buffer_age);
     }
 
-  clutter_get_debug_flags (NULL, &paint_debug_flags, NULL);
+  meta_get_clutter_debug_flags (NULL, &paint_debug_flags, NULL);
 
   use_clipped_redraw =
     should_use_clipped_redraw (is_full_redraw,
@@ -568,23 +571,15 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
       fb_clip_region = offset_scale_and_clamp_region (redraw_clip,
                                                       -view_rect.x,
                                                       -view_rect.y,
-                                                      fb_scale,
-                                                      &(graphene_size_t) {
-                                                        .width = fb_width,
-                                                        .height = fb_height,
-                                                      });
+                                                      fb_scale);
 
       if (G_UNLIKELY (paint_debug_flags & CLUTTER_DEBUG_PAINT_DAMAGE_REGION))
         {
           queued_redraw_clip =
             scale_offset_and_clamp_region (fb_clip_region,
-                                           1.0f / fb_scale,
+                                           1.0 / fb_scale,
                                            view_rect.x,
-                                           view_rect.y,
-                                           &(graphene_size_t) {
-                                            .width = fb_width,
-                                            .height = fb_height,
-                                           });
+                                           view_rect.y);
         }
     }
   else
@@ -663,16 +658,12 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
        */
       g_clear_pointer (&redraw_clip, mtk_region_unref);
       redraw_clip = scale_offset_and_clamp_region (fb_clip_region,
-                                                   1.0f / fb_scale,
+                                                   1.0 / fb_scale,
                                                    view_rect.x,
-                                                   view_rect.y,
-                                                   &(graphene_size_t) {
-                                                    .width = fb_width,
-                                                    .height = fb_height,
-                                                   });
+                                                   view_rect.y);
     }
 
-  if (G_UNLIKELY (paint_debug_flags & CLUTTER_DEBUG_PAINT_DAMAGE_REGION))
+  if (paint_debug_flags & CLUTTER_DEBUG_PAINT_DAMAGE_REGION)
     {
       g_autoptr (MtkRegion) debug_redraw_clip = NULL;
 
@@ -696,36 +687,10 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
       paint_stage (stage_impl, stage_view, redraw_clip, frame);
     }
 
-#ifdef HAVE_PROFILER
-  if (G_UNLIKELY (cogl_is_tracing_enabled ()))
-    {
-      g_autoptr (GString) rects_str = NULL;
-      g_autofree char *area_str = NULL;
-      int n_rectangles, i;
-      int area = 0;
+  g_clear_pointer (&redraw_clip, mtk_region_unref);
+  g_clear_pointer (&fb_clip_region, mtk_region_unref);
 
-      rects_str = g_string_new ("");
-      n_rectangles = mtk_region_num_rectangles (redraw_clip);
-
-      for (i = 0; i < n_rectangles; i++)
-        {
-          MtkRectangle rect = mtk_region_get_rectangle (redraw_clip, i);
-
-          area += mtk_rectangle_area (&rect);
-
-          g_string_append_printf (rects_str, " %d,%d,%d,%d",
-                                  rect.x, rect.y, rect.width, rect.height);
-        }
-
-      area_str = g_strdup_printf ("%d", area);
-      g_string_prepend (rects_str, area_str);
-
-      COGL_TRACE_DESCRIBE (RedrawViewPrimary, rects_str->str);
-      COGL_TRACE_SET_COUNTER_INT (RedrawViewPrimaryDamageArea, area);
-    }
-#endif
-
-  if (G_UNLIKELY (queued_redraw_clip))
+  if (queued_redraw_clip)
     {
       g_autoptr (MtkRegion) swap_region_in_stage_space = NULL;
 
@@ -733,11 +698,7 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
         scale_offset_and_clamp_region (swap_region,
                                        1.0f / fb_scale,
                                        view_rect.x,
-                                       view_rect.y,
-                                       &(graphene_size_t) {
-                                        .width = fb_width,
-                                        .height = fb_height,
-                                       });
+                                       view_rect.y);
 
       mtk_region_subtract (swap_region_in_stage_space, queued_redraw_clip);
 
@@ -775,25 +736,28 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
     meta_stage_impl_get_instance_private (stage_impl);
   CoglFramebuffer *framebuffer =
     clutter_stage_view_get_onscreen (stage_view);
+  CoglContext *cogl_context = cogl_framebuffer_get_context (framebuffer);
   CoglOnscreen *onscreen;
-  g_autoptr (CoglFrameInfo) frame_info = NULL;
+  CoglFrameInfo *frame_info;
 
   g_assert (COGL_IS_ONSCREEN (framebuffer));
 
   onscreen = COGL_ONSCREEN (framebuffer);
 
-  frame_info = cogl_frame_info_new (onscreen, priv->global_frame_counter,
-                                    frame->frame_count);
-  clutter_frame_take_cogl_frame_info (frame, g_object_ref (frame_info));
+  frame_info = cogl_frame_info_new (cogl_context, priv->global_frame_counter);
 
   if (!cogl_onscreen_direct_scanout (onscreen,
                                      scanout,
                                      frame_info,
                                      frame,
                                      error))
-    return FALSE;
+    {
+      g_object_unref (frame_info);
+      return FALSE;
+    }
 
   priv->global_frame_counter++;
+
   return TRUE;
 }
 
@@ -830,21 +794,31 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
 }
 
 void
-meta_stage_impl_add_cogl_frame_info (MetaStageImpl    *stage_impl,
-                                     ClutterStageView *stage_view,
-                                     ClutterFrame     *frame)
+meta_stage_impl_add_onscreen_frame_info (MetaStageImpl    *stage_impl,
+                                         ClutterStageView *stage_view)
 {
   MetaStageImplPrivate *priv =
     meta_stage_impl_get_instance_private (stage_impl);
   CoglFramebuffer *framebuffer = clutter_stage_view_get_onscreen (stage_view);
-  CoglOnscreen *onscreen = COGL_ONSCREEN (framebuffer);
-  g_autoptr (CoglFrameInfo) frame_info = NULL;
+  CoglContext *cogl_context = cogl_framebuffer_get_context (framebuffer);
+  CoglFrameInfo *frame_info;
 
-  frame_info = cogl_frame_info_new (onscreen, priv->global_frame_counter,
-                                    frame->frame_count);
+  frame_info = cogl_frame_info_new (cogl_context, priv->global_frame_counter);
   priv->global_frame_counter++;
 
-  clutter_frame_take_cogl_frame_info (frame, g_steal_pointer (&frame_info));
+  cogl_onscreen_add_frame_info (COGL_ONSCREEN (framebuffer), frame_info);
+}
+
+static void
+clutter_stage_window_iface_init (ClutterStageWindowInterface *iface)
+{
+  iface->realize = meta_stage_impl_realize;
+  iface->unrealize = meta_stage_impl_unrealize;
+  iface->resize = meta_stage_impl_resize;
+  iface->show = meta_stage_impl_show;
+  iface->hide = meta_stage_impl_hide;
+  iface->get_frame_counter = meta_stage_impl_get_frame_counter;
+  iface->redraw_view = meta_stage_impl_redraw_view;
 }
 
 static void
@@ -876,17 +850,8 @@ static void
 meta_stage_impl_class_init (MetaStageImplClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  ClutterStageWindowClass *window_class = CLUTTER_STAGE_WINDOW_CLASS (klass);
 
   object_class->set_property = meta_stage_impl_set_property;
-
-  window_class->realize = meta_stage_impl_realize;
-  window_class->unrealize = meta_stage_impl_unrealize;
-  window_class->resize = meta_stage_impl_resize;
-  window_class->show = meta_stage_impl_show;
-  window_class->hide = meta_stage_impl_hide;
-  window_class->get_frame_counter = meta_stage_impl_get_frame_counter;
-  window_class->redraw_view = meta_stage_impl_redraw_view;
 
   obj_props[PROP_WRAPPER] =
     g_param_spec_object ("wrapper", NULL, NULL,
@@ -915,15 +880,4 @@ meta_stage_impl_get_backend (MetaStageImpl *stage_impl)
     meta_stage_impl_get_instance_private (stage_impl);
 
   return priv->backend;
-}
-
-void
-meta_stage_impl_rebuild_views (MetaStageImpl *stage_impl)
-{
-  MetaBackend *backend = meta_stage_impl_get_backend (stage_impl);
-  MetaRenderer *renderer = meta_backend_get_renderer (backend);
-  ClutterActor *stage = meta_backend_get_stage (backend);
-
-  meta_renderer_rebuild_views (renderer);
-  clutter_stage_clear_stage_views (CLUTTER_STAGE (stage));
 }

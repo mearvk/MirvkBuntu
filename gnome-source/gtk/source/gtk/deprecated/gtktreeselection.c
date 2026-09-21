@@ -136,7 +136,7 @@ gtk_tree_selection_class_init (GtkTreeSelectionClass *class)
   properties[PROP_MODE] = g_param_spec_enum ("mode", NULL, NULL,
                                              GTK_TYPE_SELECTION_MODE,
                                              GTK_SELECTION_SINGLE,
-                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                                             GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /* Install all properties */
   g_object_class_install_properties (object_class, N_PROPERTIES, properties);
@@ -550,10 +550,9 @@ gtk_tree_selection_get_selected (GtkTreeSelection  *selection,
  * To do this, you can use gtk_tree_row_reference_new().
  *
  * To free the return value, use:
- *
- * ```c
+ * |[<!-- language="C" -->
  * g_list_free_full (list, (GDestroyNotify) gtk_tree_path_free);
- * ```
+ * ]|
  *
  * Returns: (element-type GtkTreePath) (transfer full): A `GList` containing a `GtkTreePath` for each selected row.
  *
@@ -1179,7 +1178,7 @@ unselect_all_helper (GtkTreeRBTree *tree,
     }
 }
 
-static int
+static gboolean
 gtk_tree_selection_real_unselect_all (GtkTreeSelection *selection)
 {
   struct _TempTuple *tuple;

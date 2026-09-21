@@ -63,7 +63,7 @@ struct _GMemoryInputStreamClass
 
 
 GIO_AVAILABLE_IN_ALL
-GType          g_memory_input_stream_get_type      (void);
+GType          g_memory_input_stream_get_type      (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 GInputStream * g_memory_input_stream_new           (void);
 GIO_AVAILABLE_IN_ALL

@@ -19,7 +19,8 @@
  * 02111-1307, USA.
  */
 
-#pragma once
+#ifndef __SHELL_CAMERA_MONITOR_H__
+#define __SHELL_CAMERA_MONITOR_H__
 
 #include <glib-object.h>
 
@@ -29,6 +30,6 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (ShellCameraMonitor, shell_camera_monitor,
                       SHELL, CAMERA_MONITOR, GObject)
 
-gboolean shell_camera_monitor_get_cameras_in_use (ShellCameraMonitor *monitor);
-
 G_END_DECLS
+
+#endif /* __SHELL_CAMERA_MONITOR_H__ */

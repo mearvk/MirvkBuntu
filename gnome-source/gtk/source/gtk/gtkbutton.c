@@ -25,22 +25,14 @@
 /**
  * GtkButton:
  *
- * Calls a callback function when the button is clicked.
+ * The `GtkButton` widget is generally used to trigger a callback function that is
+ * called when the button is pressed.
  *
- * <picture>
- *   <source srcset="button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkButton" src="button.png">
- * </picture>
+ * ![An example GtkButton](button.png)
  *
  * The `GtkButton` widget can hold any valid child widget. That is, it can hold
  * almost any other standard `GtkWidget`. The most commonly used child is the
  * `GtkLabel`.
- *
- * # Shortcuts and Gestures
- *
- * The following signals have default keybindings:
- *
- * - [signal@Gtk.Button::activate]
  *
  * # CSS nodes
  *
@@ -62,7 +54,7 @@
  *
  * # Accessibility
  *
- * `GtkButton` uses the [enum@Gtk.AccessibleRole.button] role.
+ * `GtkButton` uses the %GTK_ACCESSIBLE_ROLE_BUTTON role.
  */
 
 #include "config.h"
@@ -81,7 +73,6 @@
 #include "gtktypebuiltins.h"
 #include "gtkwidgetprivate.h"
 #include "gtkshortcuttrigger.h"
-#include "gtkbuilderprivate.h"
 
 #include <string.h>
 
@@ -120,10 +111,11 @@ enum {
   PROP_ICON_NAME,
   PROP_CHILD,
   PROP_CAN_SHRINK,
-  /* GtkActionable */
+
+  /* actionable properties */
   PROP_ACTION_NAME,
   PROP_ACTION_TARGET,
-  LAST_PROP
+  LAST_PROP = PROP_ACTION_NAME
 };
 
 enum {
@@ -198,10 +190,11 @@ gtk_button_get_request_mode (GtkWidget *widget)
 static void
 gtk_button_class_init (GtkButtonClass *klass)
 {
+  const guint activate_keyvals[] = { GDK_KEY_space, GDK_KEY_KP_Space, GDK_KEY_Return,
+                                     GDK_KEY_ISO_Enter, GDK_KEY_KP_Enter };
   GObjectClass *gobject_class;
   GtkWidgetClass *widget_class;
-  GtkShortcutTrigger *trigger;
-  GtkShortcut *activate_shortcut;
+  GtkShortcutAction *activate_action;
 
   gobject_class = G_OBJECT_CLASS (klass);
   widget_class = (GtkWidgetClass*) klass;
@@ -219,17 +212,17 @@ gtk_button_class_init (GtkButtonClass *klass)
   klass->activate = gtk_real_button_activate;
 
   /**
-   * GtkButton:label:
+   * GtkButton:label: (attributes org.gtk.Property.get=gtk_button_get_label org.gtk.Property.set=gtk_button_set_label)
    *
    * Text of the label inside the button, if the button contains a label widget.
    */
   props[PROP_LABEL] =
     g_param_spec_string ("label", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkButton:use-underline:
+   * GtkButton:use-underline: (attributes org.gtk.Property.get=gtk_button_get_use_underline org.gtk.Property.set=gtk_button_set_use_underline)
    *
    * If set, an underline in the text indicates that the following character is
    * to be used as mnemonic.
@@ -237,37 +230,37 @@ gtk_button_class_init (GtkButtonClass *klass)
   props[PROP_USE_UNDERLINE] =
     g_param_spec_boolean ("use-underline", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkButton:has-frame:
+   * GtkButton:has-frame: (attributes org.gtk.Property.get=gtk_button_get_has_frame org.gtk.Property.set=gtk_button_set_has_frame)
    *
    * Whether the button has a frame.
    */
   props[PROP_HAS_FRAME] =
     g_param_spec_boolean ("has-frame", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkButton:icon-name:
+   * GtkButton:icon-name: (attributes org.gtk.Property.get=gtk_button_get_icon_name org.gtk.Property.set=gtk_button_set_icon_name)
    *
    * The name of the icon used to automatically populate the button.
    */
   props[PROP_ICON_NAME] =
     g_param_spec_string ("icon-name", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkButton:child:
+   * GtkButton:child: (attributes org.gtk.Property.get=gtk_button_get_child org.gtk.Property.set=gtk_button_set_child)
    *
    * The child widget.
    */
   props[PROP_CHILD] =
     g_param_spec_object ("child", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkButton:can-shrink:
@@ -285,14 +278,12 @@ gtk_button_class_init (GtkButtonClass *klass)
   props[PROP_CAN_SHRINK] =
     g_param_spec_boolean ("can-shrink", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  props[PROP_ACTION_NAME] = g_param_spec_override ("action-name",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-name"));
-  props[PROP_ACTION_TARGET] = g_param_spec_override ("action-target",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-target"));
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, LAST_PROP, props);
+
+  g_object_class_override_property (gobject_class, PROP_ACTION_NAME, "action-name");
+  g_object_class_override_property (gobject_class, PROP_ACTION_TARGET, "action-target");
 
   /**
    * GtkButton::clicked:
@@ -332,11 +323,16 @@ gtk_button_class_init (GtkButtonClass *klass)
 
   gtk_widget_class_set_activate_signal (widget_class, button_signals[ACTIVATE]);
 
-  trigger = gtk_alternative_trigger_new (gtk_shortcut_trigger_create_with_aliases (GDK_KEY_Return, 0),
-                                         gtk_shortcut_trigger_create_with_aliases (GDK_KEY_space, 0));
-  activate_shortcut = gtk_shortcut_new (trigger, gtk_signal_action_new ("activate"));
-  gtk_widget_class_add_shortcut (widget_class, activate_shortcut);
-  g_object_unref (activate_shortcut);
+  activate_action = gtk_signal_action_new ("activate");
+  for (guint i = 0; i < G_N_ELEMENTS (activate_keyvals); i++)
+    {
+      GtkShortcut *activate_shortcut = gtk_shortcut_new (gtk_keyval_trigger_new (activate_keyvals[i], 0),
+                                                         g_object_ref (activate_action));
+
+      gtk_widget_class_add_shortcut (widget_class, activate_shortcut);
+      g_object_unref (activate_shortcut);
+    }
+  g_object_unref (activate_action);
 
   gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_BUTTON);
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BIN_LAYOUT);
@@ -413,35 +409,23 @@ key_controller_key_released_cb (GtkEventControllerKey *controller,
     gtk_button_finish_activate (button, TRUE);
 }
 
-static inline void
-add_or_remove_class (GtkWidget  *widget,
-                     gboolean    add,
-                     const char *class)
-{
-  if (add)
-    gtk_widget_add_css_class (widget, class);
-  else
-    gtk_widget_remove_css_class (widget, class);
-}
-
 static void
-update_style_classes_from_child_type (GtkButton *button,
-                                      guint      child_type)
-{
-  add_or_remove_class (GTK_WIDGET (button), child_type == LABEL_CHILD, "text-button");
-  add_or_remove_class (GTK_WIDGET (button), child_type == ICON_CHILD, "image-button");
-}
-
-static void
-gtk_button_set_child_type (GtkButton *button,
-                           guint      child_type)
+gtk_button_set_child_type (GtkButton *button, guint child_type)
 {
   GtkButtonPrivate *priv = gtk_button_get_instance_private (button);
 
   if (priv->child_type == child_type)
     return;
 
-  update_style_classes_from_child_type (button, child_type);
+  if (child_type == LABEL_CHILD)
+    gtk_widget_add_css_class (GTK_WIDGET (button), "text-button");
+  else
+    gtk_widget_remove_css_class (GTK_WIDGET (button), "text-button");
+
+  if (child_type == ICON_CHILD)
+    gtk_widget_add_css_class (GTK_WIDGET (button), "image-button");
+  else
+    gtk_widget_remove_css_class (GTK_WIDGET (button), "image-button");
 
   if (child_type != LABEL_CHILD)
     g_object_notify_by_pspec (G_OBJECT (button), props[PROP_LABEL]);
@@ -638,14 +622,9 @@ gtk_button_buildable_add_child (GtkBuildable *buildable,
                                 const char   *type)
 {
   if (GTK_IS_WIDGET (child))
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-      gtk_button_set_child (GTK_BUTTON (buildable), GTK_WIDGET (child));
-    }
+    gtk_button_set_child (GTK_BUTTON (buildable), GTK_WIDGET (child));
   else
-    {
-      parent_buildable_iface->add_child (buildable, builder, child, type);
-    }
+    parent_buildable_iface->add_child (buildable, builder, child, type);
 }
 
 static void
@@ -731,7 +710,7 @@ gtk_button_new_with_mnemonic (const char *label)
 }
 
 /**
- * gtk_button_set_has_frame:
+ * gtk_button_set_has_frame: (attributes org.gtk.Method.set_property=has-frame)
  * @button: a `GtkButton`
  * @has_frame: whether the button should have a visible frame
  *
@@ -758,7 +737,7 @@ gtk_button_set_has_frame (GtkButton *button,
 }
 
 /**
- * gtk_button_get_has_frame:
+ * gtk_button_get_has_frame: (attributes org.gtk.Method.get_property=has-frame)
  * @button: a `GtkButton`
  *
  * Returns whether the button has a frame.
@@ -812,10 +791,12 @@ gtk_real_button_clicked (GtkButton *button)
     gtk_action_helper_activate (priv->action_helper);
 }
 
-static void
+static gboolean
 button_activate_timeout (gpointer data)
 {
   gtk_button_finish_activate (data, TRUE);
+
+  return FALSE;
 }
 
 static void
@@ -826,7 +807,7 @@ gtk_real_button_activate (GtkButton *button)
 
   if (gtk_widget_get_realized (widget) && !priv->activate_timeout)
     {
-      priv->activate_timeout = g_timeout_add_once (ACTIVATE_TIMEOUT, button_activate_timeout, button);
+      priv->activate_timeout = g_timeout_add (ACTIVATE_TIMEOUT, button_activate_timeout, button);
       gdk_source_set_static_name_by_id (priv->activate_timeout, "[gtk] button_activate_timeout");
 
       gtk_widget_add_css_class (GTK_WIDGET (button), "keyboard-activating");
@@ -842,7 +823,8 @@ gtk_button_finish_activate (GtkButton *button,
 
   gtk_widget_remove_css_class (GTK_WIDGET (button), "keyboard-activating");
 
-  g_clear_handle_id (&priv->activate_timeout, g_source_remove);
+  g_source_remove (priv->activate_timeout);
+  priv->activate_timeout = 0;
 
   priv->button_down = FALSE;
 
@@ -851,7 +833,7 @@ gtk_button_finish_activate (GtkButton *button,
 }
 
 /**
- * gtk_button_set_label:
+ * gtk_button_set_label: (attributes org.gtk.Method.set_property=label)
  * @button: a `GtkButton`
  * @label: a string
  *
@@ -896,7 +878,7 @@ gtk_button_set_label (GtkButton  *button,
 }
 
 /**
- * gtk_button_get_label:
+ * gtk_button_get_label: (attributes org.gtk.Method.get_property=label)
  * @button: a `GtkButton`
  *
  * Fetches the text from the label of the button.
@@ -922,7 +904,7 @@ gtk_button_get_label (GtkButton *button)
 }
 
 /**
- * gtk_button_set_use_underline:
+ * gtk_button_set_use_underline: (attributes org.gtk.Method.set_property=use-underline)
  * @button: a `GtkButton`
  * @use_underline: %TRUE if underlines in the text indicate mnemonics
  *
@@ -955,7 +937,7 @@ gtk_button_set_use_underline (GtkButton *button,
 }
 
 /**
- * gtk_button_get_use_underline:
+ * gtk_button_get_use_underline: (attributes org.gtk.Method.get_property=use-underline)
  * @button: a `GtkButton`
  *
  * gets whether underlines are interpreted as mnemonics.
@@ -986,7 +968,7 @@ gtk_button_state_flags_changed (GtkWidget     *widget,
 }
 
 /**
- * gtk_button_set_icon_name:
+ * gtk_button_set_icon_name: (attributes org.gtk.Method.set_property=icon-name)
  * @button: A `GtkButton`
  * @icon_name: An icon name
  *
@@ -1023,7 +1005,7 @@ gtk_button_set_icon_name (GtkButton  *button,
 }
 
 /**
- * gtk_button_get_icon_name:
+ * gtk_button_get_icon_name: (attributes org.gtk.Method.get_property=icon-name)
  * @button: A `GtkButton`
  *
  * Returns the icon name of the button.
@@ -1064,7 +1046,7 @@ gtk_button_get_action_helper (GtkButton *button)
 }
 
 /**
- * gtk_button_set_child:
+ * gtk_button_set_child: (attributes org.gtk.Method.set_property=child)
  * @button: a `GtkButton`
  * @child: (nullable): the child widget
  *
@@ -1096,17 +1078,11 @@ gtk_button_set_child (GtkButton *button,
     gtk_widget_set_parent (priv->child, GTK_WIDGET (button));
 
   gtk_button_set_child_type (button, WIDGET_CHILD);
-
-  if (GTK_IS_IMAGE (child))
-    update_style_classes_from_child_type (button, ICON_CHILD);
-  else if (GTK_IS_LABEL (child))
-    update_style_classes_from_child_type (button, LABEL_CHILD);
-
   g_object_notify_by_pspec (G_OBJECT (button), props[PROP_CHILD]);
 }
 
 /**
- * gtk_button_get_child:
+ * gtk_button_get_child: (attributes org.gtk.Method.get_property=child)
  * @button: a `GtkButton`
  *
  * Gets the child widget of @button.

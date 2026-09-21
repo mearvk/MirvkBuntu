@@ -19,11 +19,22 @@
 
 #pragma once
 
+#ifndef META_INPUT_THREAD_H_INSIDE
+#error "This header cannot be included directly. Use "backends/native/meta-input-thread.h""
+#endif /* META_INPUT_THREAD_H_INSIDE */
+
 #include "backends/native/meta-xkb-utils.h"
 #include "clutter/clutter.h"
 
 #define META_TYPE_KEYMAP_NATIVE (meta_keymap_native_get_type ())
-META_EXPORT_TEST
 G_DECLARE_FINAL_TYPE (MetaKeymapNative, meta_keymap_native,
                       META, KEYMAP_NATIVE,
                       ClutterKeymap)
+
+void meta_keymap_native_set_keyboard_map_in_impl (MetaKeymapNative  *keymap,
+                                                  struct xkb_keymap *xkb_keymap);
+struct xkb_keymap * meta_keymap_native_get_keyboard_map_in_impl (MetaKeymapNative *keymap);
+void meta_keymap_native_update_in_impl (MetaKeymapNative *keymap,
+                                        MetaSeatImpl     *seat_impl,
+                                        struct xkb_state *xkb_state);
+

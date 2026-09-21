@@ -1,3 +1,5 @@
+/* -*- mode: js2; js2-basic-offset: 4; indent-tabs-mode: nil -*- */
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -6,15 +8,15 @@ import St from 'gi://St';
 export const BarLevel = GObject.registerClass({
     Properties: {
         'value': GObject.ParamSpec.double(
-            'value', null, null,
+            'value', 'value', 'value',
             GObject.ParamFlags.READWRITE,
             0, 2, 0),
         'maximum-value': GObject.ParamSpec.double(
-            'maximum-value', null, null,
+            'maximum-value', 'maximum-value', 'maximum-value',
             GObject.ParamFlags.READWRITE,
             1, 2, 1),
         'overdrive-start': GObject.ParamSpec.double(
-            'overdrive-start', null, null,
+            'overdrive-start', 'overdrive-start', 'overdrive-start',
             GObject.ParamFlags.READWRITE,
             1, 2, 1),
     },
@@ -26,11 +28,15 @@ export const BarLevel = GObject.registerClass({
         this._barLevelWidth = 0;
         this._barLevelHeight = 0;
 
+        this._barLevelBorderWidth = 0;
         this._overdriveSeparatorWidth = 0;
 
         this._barLevelColor = null;
         this._barLevelActiveColor = null;
         this._barLevelOverdriveColor = null;
+        this._barLevelBorderColor = null;
+        this._barLevelActiveBorderColor = null;
+        this._barLevelOverdriveBorderColor = null;
 
         super._init({
             style_class: 'barlevel',
@@ -104,6 +110,8 @@ export const BarLevel = GObject.registerClass({
     vfunc_style_changed() {
         const themeNode = this.get_theme_node();
         this._barLevelHeight = themeNode.get_length('-barlevel-height');
+        this._barLevelBorderWidth =
+            Math.min(themeNode.get_length('-barlevel-border-width'), this._barLevelHeight);
         this._overdriveSeparatorWidth =
             themeNode.get_length('-barlevel-overdrive-separator-width');
 
@@ -111,17 +119,32 @@ export const BarLevel = GObject.registerClass({
         this._barLevelActiveColor = themeNode.get_color('-barlevel-active-background-color');
         this._barLevelOverdriveColor = themeNode.get_color('-barlevel-overdrive-color');
 
+        const [hasBorderColor, barLevelBorderColor] =
+            themeNode.lookup_color('-barlevel-border-color', false);
+        this._barLevelBorderColor = hasBorderColor
+            ? barLevelBorderColor : this._barLevelColor;
+
+        const [hasActiveBorderColor, barLevelActiveBorderColor] =
+            themeNode.lookup_color('-barlevel-active-border-color', false);
+        this._barLevelActiveBorderColor = hasActiveBorderColor
+            ? barLevelActiveBorderColor : this._barLevelActiveColor;
+
+        const [hasOverdriveBorderColor, barLevelOverdriveBorderColor] =
+            themeNode.lookup_color('-barlevel-overdrive-border-color', false);
+        this._barLevelOverdriveBorderColor = hasOverdriveBorderColor
+            ? barLevelOverdriveBorderColor : this._barLevelOverdriveColor;
+
         super.vfunc_style_changed();
     }
 
     vfunc_repaint() {
-        const cr = this.get_context();
-        const themeNode = this.get_theme_node();
-        const [width, height] = this.get_surface_size();
+        let cr = this.get_context();
+        let themeNode = this.get_theme_node();
+        let [width, height] = this.get_surface_size();
         const rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
 
         const barLevelBorderRadius = Math.min(width, this._barLevelHeight) / 2;
-        const fgColor = themeNode.get_foreground_color();
+        let fgColor = themeNode.get_foreground_color();
 
         const TAU = Math.PI * 2;
 
@@ -136,13 +159,13 @@ export const BarLevel = GObject.registerClass({
         let overdriveRatio = this._overdriveStart / this._maxValue;
         if (rtl)
             overdriveRatio = 1 - overdriveRatio;
-        const overdriveSeparatorX = barLevelBorderRadius + (width - 2 * barLevelBorderRadius) * overdriveRatio;
+        let overdriveSeparatorX = barLevelBorderRadius + (width - 2 * barLevelBorderRadius) * overdriveRatio;
 
-        const overdriveActive = this._overdriveStart !== this._maxValue;
+        let overdriveActive = this._overdriveStart !== this._maxValue;
         const overdriveSeparatorWidth = overdriveActive
             ? this._overdriveSeparatorWidth : 0;
 
-        let xcArcStart = barLevelBorderRadius;
+        let xcArcStart = barLevelBorderRadius + this._barLevelBorderWidth;
         let xcArcEnd = width - xcArcStart;
         if (rtl)
             [xcArcStart, xcArcEnd] = [xcArcEnd, xcArcStart];
@@ -156,7 +179,10 @@ export const BarLevel = GObject.registerClass({
         cr.lineTo(endX, (height - this._barLevelHeight) / 2);
         cr.lineTo(xcArcEnd, (height - this._barLevelHeight) / 2);
         cr.setSourceColor(this._barLevelColor);
-        cr.fill();
+        cr.fillPreserve();
+        cr.setSourceColor(this._barLevelBorderColor);
+        cr.setLineWidth(this._barLevelBorderWidth);
+        cr.stroke();
 
         /* normal progress bar */
         let x = 0;
@@ -172,7 +198,10 @@ export const BarLevel = GObject.registerClass({
         cr.lineTo(xcArcStart, (height + this._barLevelHeight) / 2);
         if (this._value > 0)
             cr.setSourceColor(this._barLevelActiveColor);
-        cr.fill();
+        cr.fillPreserve();
+        cr.setSourceColor(this._barLevelActiveBorderColor);
+        cr.setLineWidth(this._barLevelBorderWidth);
+        cr.stroke();
 
         /* overdrive progress barLevel */
         if (!rtl)
@@ -186,7 +215,10 @@ export const BarLevel = GObject.registerClass({
             cr.lineTo(x, (height + this._barLevelHeight) / 2);
             cr.lineTo(x, (height - this._barLevelHeight) / 2);
             cr.setSourceColor(this._barLevelOverdriveColor);
-            cr.fill();
+            cr.fillPreserve();
+            cr.setSourceColor(this._barLevelOverdriveBorderColor);
+            cr.setLineWidth(this._barLevelBorderWidth);
+            cr.stroke();
         }
 
         /* end progress bar arc */
@@ -205,7 +237,9 @@ export const BarLevel = GObject.registerClass({
                 cr.lineTo(Math.ceil(endX), (height - this._barLevelHeight) / 2);
             }
             cr.lineTo(endX, (height - this._barLevelHeight) / 2);
-            cr.fill();
+            cr.fillPreserve();
+            cr.setLineWidth(this._barLevelBorderWidth);
+            cr.stroke();
         }
 
         /* draw overdrive separator */
@@ -238,11 +272,11 @@ export const BarLevel = GObject.registerClass({
     }
 
     _getPreferredHeight() {
-        return this._barLevelHeight;
+        return this._barLevelHeight + this._barLevelBorderWidth;
     }
 
     _getPreferredWidth() {
-        return this._overdriveSeparatorWidth;
+        return this._overdriveSeparatorWidth + this._barLevelBorderWidth;
     }
 
     _getCurrentValue() {

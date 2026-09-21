@@ -20,7 +20,6 @@
 #include <glib.h>
 #include <wayland-client.h>
 
-#include "mtk/mtk.h"
 #include "wayland-test-client-utils.h"
 
 enum
@@ -29,8 +28,6 @@ enum
   XDG_TOPLEVEL_SUSPENDED_COMMAND_PREV_WORKSPACE = 1,
   XDG_TOPLEVEL_SUSPENDED_COMMAND_ACTIVATE_WINDOW = 2,
   XDG_TOPLEVEL_SUSPENDED_COMMAND_CLONE = 3,
-  XDG_TOPLEVEL_SUSPENDED_COMMAND_SHOW_SCREEN_SHIELD = 4,
-  XDG_TOPLEVEL_SUSPENDED_COMMAND_HIDE_SCREEN_SHIELD = 5,
 };
 
 static void
@@ -193,92 +190,6 @@ test_obstructed_clone (WaylandDisplay *display)
   wait_for_no_state (surface, XDG_TOPLEVEL_STATE_SUSPENDED);
 }
 
-static void
-timeout_cb (gpointer user_data)
-{
-  gboolean *done = user_data;
-
-  *done = TRUE;
-}
-
-static void
-wait_timeout_s (int timeout_s)
-{
-  gboolean done = FALSE;
-
-  g_timeout_add_once (s2ms (timeout_s),
-                      timeout_cb,
-                      &done);
-  while (!done)
-    g_main_context_iteration (NULL, TRUE);
-}
-
-static void
-test_delayed_map (WaylandDisplay *display)
-{
-  g_autoptr (WaylandSurface) surface = NULL;
-  g_autoptr (WaylandSurface) cover_surface = NULL;
-
-  g_debug ("Testing suspended state when delaying mapping");
-
-  surface = wayland_surface_new (display, __func__, 100, 100, 0xffffffff);
-  surface->manual_paint = TRUE;
-  wl_surface_commit (surface->wl_surface);
-
-  g_debug ("Waiting to become configured.");
-
-  wait_for_window_configured (display, surface);
-  g_assert_false (wayland_surface_has_state (surface,
-                                             XDG_TOPLEVEL_STATE_SUSPENDED));
-
-  g_debug ("Waiting for 6 seconds.");
-
-  /* Must be longer than the suspended timeout by a wide enough margin. */
-  wait_timeout_s (6);
-
-  g_assert_false (wayland_surface_has_state (surface,
-                                             XDG_TOPLEVEL_STATE_SUSPENDED));
-
-  int64_t commit_time_us = g_get_monotonic_time ();
-  draw_surface (surface->display,
-                surface->wl_surface,
-                surface->width, surface->height,
-                surface->color);
-  wayland_surface_commit (surface);
-  xdg_toplevel_set_minimized (surface->xdg_toplevel);
-
-  g_debug ("Waiting for becoming suspended.");
-  wait_for_state (surface, XDG_TOPLEVEL_STATE_SUSPENDED);
-  int64_t suspended_time_us = g_get_monotonic_time ();
-
-  /* Ensure we got suspended roughly 3 seconds after minimizing. */
-  g_assert_cmpint (suspended_time_us - commit_time_us, >, ms2us (3000 - 200));
-}
-
-static void
-test_screen_shield (WaylandDisplay *display)
-{
-  g_autoptr (WaylandSurface) surface = NULL;
-
-  g_debug ("Testing suspended state when showing screen shield");
-
-  surface = wayland_surface_new (display, __func__, 100, 100, 0xffffffff);
-  wl_surface_commit (surface->wl_surface);
-
-  wait_for_window_shown (display, surface->wl_surface);
-  g_assert_false (wayland_surface_has_state (surface,
-                                             XDG_TOPLEVEL_STATE_SUSPENDED));
-
-  test_driver_sync_point (display->test_driver,
-                          XDG_TOPLEVEL_SUSPENDED_COMMAND_SHOW_SCREEN_SHIELD,
-                          surface->wl_surface);
-  wait_for_state (surface, XDG_TOPLEVEL_STATE_SUSPENDED);
-  test_driver_sync_point (display->test_driver,
-                          XDG_TOPLEVEL_SUSPENDED_COMMAND_HIDE_SCREEN_SHIELD,
-                          surface->wl_surface);
-  wait_for_no_state (surface, XDG_TOPLEVEL_STATE_SUSPENDED);
-}
-
 int
 main (int    argc,
       char **argv)
@@ -295,8 +206,6 @@ main (int    argc,
   test_workspace_changes (display);
   test_obstructed (display);
   test_obstructed_clone (display);
-  test_delayed_map (display);
-  test_screen_shield (display);
 
   return EXIT_SUCCESS;
 }

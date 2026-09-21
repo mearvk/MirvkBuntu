@@ -32,20 +32,21 @@ from typing import TYPE_CHECKING
 from gi.repository import GLib
 
 from . import (
+    cmdnames,
+    command_manager,
+    dbus_service,
     debug,
     focus_manager,
     gsettings_registry,
     guilabels,
     input_event,
-    live_region_presenter_command_definitions,
+    keybindings,
     messages,
     presentation_manager,
     script_manager,
 )
 from .ax_object import AXObject
 from .ax_utilities import AXUtilities
-from .ax_utilities_text import CaretSetReason
-from .extension import Extension
 
 if TYPE_CHECKING:
     import gi
@@ -53,7 +54,6 @@ if TYPE_CHECKING:
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
 
-    from .command import Command
     from .scripts import default
 
 
@@ -176,7 +176,7 @@ class LiveRegionMessageQueue:
     "org.gnome.Orca.LiveRegions",
     name="live-regions",
 )
-class LiveRegionPresenter(Extension):
+class LiveRegionPresenter:
     """Presents live region announcements."""
 
     _SCHEMA = "live-regions"
@@ -196,8 +196,6 @@ class LiveRegionPresenter(Extension):
     # Maximum size for message queue and cache
     QUEUE_SIZE = 9
 
-    GROUP_LABEL = guilabels.KB_GROUP_LIVE_REGIONS
-
     def __init__(self) -> None:
         self.msg_queue = LiveRegionMessageQueue(max_size=self.QUEUE_SIZE)
 
@@ -205,21 +203,94 @@ class LiveRegionPresenter(Extension):
         self._politeness_overrides: dict[int, LivePoliteness] = {}
         self._restore_overrides: dict[int, LivePoliteness] = {}
 
-        self._deferred_containers: list[Atspi.Accessible] = []
         self._last_presented_message: LiveRegionMessage | None = None
         self._monitoring: bool = True
         # Use QUEUE_SIZE as sentinel to indicate "not yet navigating"
         self._current_index: int = self.QUEUE_SIZE
-        super().__init__()
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return live_region_presenter_command_definitions.get_commands(self)
+        msg = "LIVE REGION PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("LiveRegionPresenter", self)
+
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_LIVE_REGIONS
+
+        # Keybinding (same for desktop and laptop)
+        kb_backslash = keybindings.KeyBinding("backslash", keybindings.ORCA_MODIFIER_MASK)
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "toggle_live_region_support",
+                self.toggle_monitoring,
+                group_label,
+                cmdnames.LIVE_REGIONS_MONITOR,
+                desktop_keybinding=kb_backslash,
+                laptop_keybinding=kb_backslash,
+                is_group_toggle=True,
+            ),
+        )
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "present_previous_live_region_message",
+                self.present_previous_live_region_message,
+                group_label,
+                cmdnames.LIVE_REGIONS_PREVIOUS,
+                desktop_keybinding=None,
+                laptop_keybinding=None,
+            ),
+        )
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "advance_live_politeness",
+                self._advance_politeness_level,
+                group_label,
+                cmdnames.LIVE_REGIONS_ADVANCE_POLITENESS,
+                desktop_keybinding=None,
+                laptop_keybinding=None,
+            ),
+        )
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "toggle_live_region_presentation",
+                self.toggle_live_region_presentation,
+                group_label,
+                cmdnames.LIVE_REGIONS_ARE_ANNOUNCED,
+                desktop_keybinding=None,
+                laptop_keybinding=None,
+                is_group_toggle=True,
+            ),
+        )
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "present_next_live_region_message",
+                self.present_next_live_region_message,
+                group_label,
+                cmdnames.LIVE_REGIONS_NEXT,
+                desktop_keybinding=None,
+                laptop_keybinding=None,
+            ),
+        )
+
+        msg = "LIVE REGION PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def reset(self) -> None:
         """Reset the live region presenter."""
 
         self._politeness_overrides = {}
-        self._deferred_containers = []
 
     def handle_event(self, script: default.Script, event: Atspi.Event) -> None:
         """Handles a live region event."""
@@ -227,97 +298,22 @@ class LiveRegionPresenter(Extension):
         if not self.is_presentable_live_region_event(script, event):
             return
 
-        if self._defer_until_not_busy(event.source):
-            return
-
-        container = self._take_deferred_container(event.source)
-        if container is not None and self._present_container(script, container):
-            return
-
         politeness = self._get_live_event_type(event.source)
         if politeness == LivePoliteness.OFF:
             return
+        if politeness == LivePoliteness.ASSERTIVE:
+            self.msg_queue.purge_by_priority(LivePoliteness.POLITE)
 
         text = self._get_message(event)
         if not text:
             return
 
-        self._enqueue_message(text, politeness, event.source)
-
-    def handle_busy_changed(self, script: default.Script, event: Atspi.Event) -> None:
-        """Presents the live region update which was deferred while event.source was busy."""
-
-        if event.detail1:
-            return
-
-        if (container := self._take_deferred_container(event.source)) is not None:
-            self._present_container(script, container)
-
-    def _defer_until_not_busy(self, obj: Atspi.Accessible) -> bool:
-        """Returns True if obj's live region is busy, deferring its update until it is not."""
-
-        attrs = AXObject.get_attributes_dict(obj, False)
-        if attrs.get("container-busy") != "true":
-            return False
-
-        container = AXUtilities.find_ancestor_inclusive(obj, AXUtilities.is_busy)
-        if container is None:
-            tokens = ["LIVE REGION PRESENTER: Could not find busy container for", obj]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return False
-
-        if container not in self._deferred_containers:
-            self._deferred_containers.append(container)
-
-        tokens = ["LIVE REGION PRESENTER: Deferring update until", container, "is not busy"]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return True
-
-    def _take_deferred_container(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
-        """Returns and forgets the deferred container of obj, if there is one."""
-
-        for container in self._deferred_containers:
-            if AXUtilities.is_ancestor(obj, container, True):
-                self._deferred_containers.remove(container)
-                return container
-
-        return None
-
-    def _present_container(self, script: default.Script, container: Atspi.Accessible) -> bool:
-        """Returns True after presenting the update of a live region which is no longer busy."""
-
-        politeness = self._get_live_event_type(container)
-        if politeness == LivePoliteness.OFF:
-            return True
-
-        text = self._add_name_to_content(container, AXUtilities.expand_eocs(container))
-        if not text:
-            tokens = ["LIVE REGION PRESENTER: Could not get deferred update from", container]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return False
-
-        tokens = ["LIVE REGION PRESENTER: Presenting deferred update from", container]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        self._enqueue_message(text, politeness, container)
-        return True
-
-    def _enqueue_message(
-        self,
-        text: str,
-        politeness: LivePoliteness,
-        obj: Atspi.Accessible,
-    ) -> None:
-        """Queues text for presentation unless it duplicates the previous message."""
-
-        if politeness == LivePoliteness.ASSERTIVE:
-            self.msg_queue.purge_by_priority(LivePoliteness.POLITE)
-
-        message = LiveRegionMessage(text=text, politeness=politeness, obj=obj)
+        message = LiveRegionMessage(text=text, politeness=politeness, obj=event.source)
 
         # Check for duplicate and update tracking.
         if message.is_duplicate_of(self._last_presented_message):
-            tokens = ["LIVE REGION PRESENTER: Ignoring duplicate message:", text]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"LIVE REGION PRESENTER: Ignoring duplicate message: {text}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return
 
         self._last_presented_message = message
@@ -339,8 +335,8 @@ class LiveRegionPresenter(Extension):
         # do receive text changed events. Therefore we only pay attention to the latter here.
         # TODO - JD: Now that we have the "notification" event in AT-SPI, handle that here is well.
         if not event.type.startswith("object:text-changed:insert"):
-            tokens = ["LIVE REGION PRESENTER: Ignoring event of type", event.type]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"LIVE REGION PRESENTER: Ignoring event of type {event.type}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         if not self.get_is_enabled():
@@ -396,8 +392,8 @@ class LiveRegionPresenter(Extension):
         if not self._monitoring:
             self.msg_queue.purge_by_keep_alive()
 
-        tokens = ["LIVE REGIONS: messages in queue:", len(self.msg_queue)]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"LIVE REGIONS: messages in queue: {len(self.msg_queue)}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         debug.print_message(debug.LEVEL_INFO, "^^^^^ PRESENT LIVE REGION MESSAGE ^^^^^\n")
         return len(self.msg_queue) > 0
 
@@ -457,7 +453,7 @@ class LiveRegionPresenter(Extension):
             return False
 
         obj = self._last_presented_message.obj
-        script.utilities.set_caret_position(obj, 0, reason=CaretSetReason.LIVE_REGION_NAVIGATION)
+        script.utilities.set_caret_position(obj, 0)
         presentation_manager.get_manager().speak_contents(
             script.utilities.get_object_contents_at_offset(obj, 0),
         )
@@ -566,8 +562,8 @@ class LiveRegionPresenter(Extension):
         if self.get_is_enabled() == value:
             return True
 
-        tokens = ["LIVE REGION PRESENTER: Setting enabled to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"LIVE REGION PRESENTER: Setting enabled to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_ENABLED, value)
         return True
 
@@ -590,8 +586,8 @@ class LiveRegionPresenter(Extension):
         if self.get_present_live_region_from_inactive_tab() == value:
             return True
 
-        tokens = ["LIVE REGION PRESENTER: Setting presentLiveRegionFromInactiveTab to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"LIVE REGION PRESENTER: Setting presentLiveRegionFromInactiveTab to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_PRESENT_FROM_INACTIVE_TAB,
@@ -677,25 +673,20 @@ class LiveRegionPresenter(Extension):
             if "\ufffc" not in event.any_data:
                 content = event.any_data
             else:
-                content = AXUtilities.expand_eocs(
+                content = script.utilities.expand_eocs(
                     event.source,
                     event.detail1,
                     event.detail1 + event.detail2,
                 )
         else:
             container = self._find_container(event.source)
-            content = AXUtilities.expand_eocs(container)
-
-        return self._add_name_to_content(event.source, content)
-
-    def _add_name_to_content(self, obj: Atspi.Accessible, content: str) -> str | None:
-        """Returns content prefixed with obj's name, or obj's name if there is no content."""
+            content = script.utilities.expand_eocs(container)
 
         content = content.strip()
-        name = AXObject.get_name(obj).strip()
         if not content:
-            return name or None
+            return None
 
+        name = AXObject.get_name(event.source).strip()
         if name and name != content:
             content = f"{name}. {content}"
         return content

@@ -35,7 +35,6 @@
 #include <gio/gio.h>
 
 #include "gvfsbackendsmbbrowse.h"
-#include "gvfsutils.h"
 #include "gvfsjobmountmountable.h"
 #include "gvfsjobopenforread.h"
 #include "gvfsjobread.h"
@@ -176,13 +175,10 @@ g_vfs_backend_smb_browse_finalize (GObject *object)
 
   g_free (backend->user);
   g_free (backend->domain);
-  gvfs_free_password (backend->last_password);
-  g_free (backend->last_user);
-  g_free (backend->last_domain);
   g_free (backend->mounted_server);
   g_free (backend->server);
   g_free (backend->default_workgroup);
-
+  
   g_mutex_clear (&backend->entries_lock);
   g_mutex_clear (&backend->update_cache_lock);
 
@@ -290,22 +286,6 @@ auth_callback (SMBCCTX *context,
     {
       /* Try again if kerberos login + anonymous fallback fails */
       backend->mount_try_again = TRUE;
-      g_debug ("auth_callback - kerberos pass\n");
-    }
-  else if (backend->mount_try == 1 &&
-           backend->user == NULL &&
-           backend->domain == NULL)
-    {
-      /* Try again if ccache login fails */
-      backend->mount_try_again = TRUE;
-      g_debug ("auth_callback - ccache pass\n");
-    }
-  else if (backend->mount_try == 2 &&
-           backend->user == NULL &&
-           backend->domain == NULL)
-    {
-      /* Try again if anonymous login fails */
-      backend->mount_try_again = TRUE;
       g_debug ("auth_callback - anonymous pass\n");
     }
   else
@@ -395,14 +375,11 @@ auth_callback (SMBCCTX *context,
 	strncpy (domain_out, ask_domain, domainmaxlen);
 
     out:
-      gvfs_free_password (ask_password);
+      g_free (ask_password);
       g_free (ask_user);
       g_free (ask_domain);
     }
 
-  g_free (backend->last_user);
-  g_free (backend->last_domain);
-  gvfs_free_password (backend->last_password);
   backend->last_user = g_strdup (username_out);
   backend->last_domain = g_strdup (domain_out);
   backend->last_password = g_strdup (password_out);
@@ -480,8 +457,6 @@ update_cache (GVfsBackendSmbBrowse *backend, SMBCFILE *supplied_dir)
 	    }
 		  
 	  dirlen = dirp->dirlen;
-	  if (dirlen == 0 || dirlen > (unsigned int) res)
-	    break;
 	  dirp = (struct smbc_dirent *) (((char *)dirp) + dirlen);
 	  res -= dirlen;
 	}
@@ -516,7 +491,7 @@ find_entry_unlocked (GVfsBackendSmbBrowse *backend,
 {
   BrowseEntry *entry, *found;
   GList *l;
-  const char *end;
+  char *end;
   int len;
   char *normalized;
 
@@ -782,9 +757,9 @@ do_mount (GVfsBackend *backend,
              uri, op_backend->mount_try, dir, op_backend->mount_cancelled,
              errsv, g_strerror (errsv));
 
-      if (errsv == EINVAL && op_backend->mount_try <= 1 && op_backend->user == NULL)
+      if (errsv == EINVAL && op_backend->mount_try == 0 && op_backend->user == NULL)
         {
-          /* EINVAL is "expected" when kerberos/ccache is misconfigured, see:
+          /* EINVAL is "expected" when kerberos is misconfigured, see:
            * https://gitlab.gnome.org/GNOME/gvfs/-/issues/611
            */
         }
@@ -804,34 +779,15 @@ do_mount (GVfsBackend *backend,
           if (res)
             break;
         }
-      else
-        {
-          /* Purge the cache, we need to have clean playground for next auth try */
-          smbc_getFunctionPurgeCachedServers (smb_context)(smb_context);
-        }
 
       /* The first round is Kerberos-only.  Only if this fails do we enable
        * NTLMSSP fallback (turning off anonymous fallback, which we've
        * already tried and failed with).
        */
-      if (op_backend->mount_try == 0 &&
-          op_backend->user == NULL)
+      if (op_backend->mount_try == 0)
         {
           g_debug ("do_mount - after anon, enabling NTLMSSP fallback\n");
           smbc_setOptionFallbackAfterKerberos (op_backend->smb_context, 1);
-        }
-      else if (op_backend->mount_try == 1 &&
-               op_backend->user == NULL)
-        {
-          /* Samba 4.24 can return EINVAL with UseCCache enabled and missing
-           * kerberos ccache, which blocks NTLM/anonymous fallback, see:
-           * https://gitlab.gnome.org/GNOME/gvfs/-/work_items/857
-           */
-          smbc_setOptionUseCCache (op_backend->smb_context, 0);
-        }
-      else if (op_backend->mount_try == 2 &&
-               op_backend->user == NULL)
-        {
           smbc_setOptionNoAutoAnonymousLogin (op_backend->smb_context, 1);
         }
       op_backend->mount_try++;

@@ -9,7 +9,6 @@ cogl_pkg_deps = [
   gio_dep,
   gobject_dep,
   graphene_dep,
-  wayland_server_dep,
 ]
 
 cogl_pkg_private_deps = [
@@ -23,9 +22,28 @@ if have_profiler
   ]
 endif
 
+if have_wayland
+  cogl_pkg_deps += [
+    wayland_server_dep,
+  ]
+endif
+
 if have_egl
   cogl_pkg_deps += [
     egl_dep,
+  ]
+endif
+
+if have_x11_client
+  cogl_pkg_deps += [
+    x11_dep,
+  ]
+  cogl_pkg_private_deps += [
+    xext_dep,
+    xfixes_dep,
+    xdamage_dep,
+    xcomposite_dep,
+    xrandr_dep,
   ]
 endif
 
@@ -68,7 +86,13 @@ cogl_debug_c_args = []
 if buildtype != 'plain'
   if get_option('debug')
     cogl_debug_c_args += [
+      '-DCOGL_GL_DEBUG',
+      '-DCOGL_OBJECT_DEBUG',
       '-DCOGL_ENABLE_DEBUG',
+    ]
+  else
+    cogl_debug_c_args += [
+      '-DG_DISABLE_CAST_CHECKS',
     ]
   endif
 endif
@@ -76,3 +100,4 @@ cogl_debug_c_args = cc.get_supported_arguments(cogl_debug_c_args)
 cogl_c_args += cogl_debug_c_args
 
 subdir('cogl')
+subdir('cogl-pango')

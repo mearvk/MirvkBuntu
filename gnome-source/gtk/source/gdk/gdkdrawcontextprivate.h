@@ -22,14 +22,15 @@
 
 #include "gdkdrawcontext.h"
 
-#include "gdkcolorstateprivate.h"
 #include "gdkmemoryformatprivate.h"
 
-#include "gsk/gsktypes.h"
-
-#include <graphene.h>
-
 G_BEGIN_DECLS
+
+#define GDK_DRAW_CONTEXT_CLASS(klass) 	(G_TYPE_CHECK_CLASS_CAST ((klass), GDK_TYPE_DRAW_CONTEXT, GdkDrawContextClass))
+#define GDK_IS_DRAW_CONTEXT_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE ((klass), GDK_TYPE_DRAW_CONTEXT))
+#define GDK_DRAW_CONTEXT_GET_CLASS(obj)	(G_TYPE_INSTANCE_GET_CLASS ((obj), GDK_TYPE_DRAW_CONTEXT, GdkDrawContextClass))
+
+typedef struct _GdkDrawContextClass GdkDrawContextClass;
 
 struct _GdkDrawContext
 {
@@ -41,41 +42,21 @@ struct _GdkDrawContextClass
   GObjectClass parent_class;
 
   void                  (* begin_frame)                         (GdkDrawContext         *context,
-                                                                 gpointer                context_data,
-                                                                 cairo_region_t         *update_area,
-                                                                 GdkColorState         **out_color_state,
-                                                                 GdkMemoryDepth         *out_depth);
+                                                                 GdkMemoryDepth          depth,
+                                                                 cairo_region_t         *update_area);
   void                  (* end_frame)                           (GdkDrawContext         *context,
-                                                                 gpointer                context_data,
                                                                  cairo_region_t         *painted);
   void                  (* empty_frame)                         (GdkDrawContext         *context);
   void                  (* surface_resized)                     (GdkDrawContext         *context);
-  gboolean              (* surface_attach)                      (GdkDrawContext         *context,
-                                                                 GError                **error);
-  void                  (* surface_detach)                      (GdkDrawContext         *context);
 };
 
 void                    gdk_draw_context_surface_resized        (GdkDrawContext         *context);
 
 void                    gdk_draw_context_begin_frame_full       (GdkDrawContext         *context,
-                                                                 gpointer                context_data,
-                                                                 GskRenderNode          *node,
+                                                                 GdkMemoryDepth          depth,
                                                                  const cairo_region_t   *region);
-void                    gdk_draw_context_end_frame_full         (GdkDrawContext         *context,
-                                                                 gpointer                context_data);
 
 void                    gdk_draw_context_empty_frame            (GdkDrawContext         *context);
-
-gboolean                gdk_draw_context_attach                 (GdkDrawContext         *self,
-                                                                 GError                **error);
-void                    gdk_draw_context_detach                 (GdkDrawContext         *self);
-
-const cairo_region_t *  gdk_draw_context_get_render_region      (GdkDrawContext         *self);
-GdkColorState *         gdk_draw_context_get_color_state        (GdkDrawContext         *self);
-GdkMemoryDepth          gdk_draw_context_get_depth              (GdkDrawContext         *self);
-void                    gdk_draw_context_get_buffer_size        (GdkDrawContext         *self,
-                                                                 guint                  *out_width,
-                                                                 guint                  *out_height);
 
 
 G_END_DECLS

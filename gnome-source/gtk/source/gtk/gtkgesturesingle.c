@@ -21,7 +21,8 @@
 /**
  * GtkGestureSingle:
  *
- * A `GtkGesture` subclass optimized for singe-touch and mouse gestures.
+ * `GtkGestureSingle` is a `GtkGestures` subclass optimized for singe-touch
+ * and mouse gestures.
  *
  * Under interaction, these gestures stick to the first interacting sequence,
  * which is accessible through [method@Gtk.GestureSingle.get_current_sequence]
@@ -255,17 +256,17 @@ gtk_gesture_single_class_init (GtkGestureSingleClass *klass)
   gesture_class->cancel = gtk_gesture_single_cancel;
 
   /**
-   * GtkGestureSingle:touch-only:
+   * GtkGestureSingle:touch-only: (attributes org.gtk.Property.get=gtk_gesture_single_get_touch_only org.gtk.Property.set=gtk_gesture_single_set_touch_only)
    *
    * Whether the gesture handles only touch events.
    */
   properties[PROP_TOUCH_ONLY] =
       g_param_spec_boolean ("touch-only", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkGestureSingle:exclusive:
+   * GtkGestureSingle:exclusive: (attributes org.gtk.Property.get=gtk_gesture_single_get_exclusive org.gtk.Property.set=gtk_gesture_single_set_exclusive)
    *
    * Whether the gesture is exclusive.
    *
@@ -274,10 +275,10 @@ gtk_gesture_single_class_init (GtkGestureSingleClass *klass)
   properties[PROP_EXCLUSIVE] =
       g_param_spec_boolean ("exclusive", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkGestureSingle:button:
+   * GtkGestureSingle:button: (attributes org.gtk.Property.get=gtk_gesture_single_get_button org.gtk.Property.set=gtk_gesture_single_set_button)
    *
    * Mouse button number to listen to, or 0 to listen for any button.
    */
@@ -285,7 +286,7 @@ gtk_gesture_single_class_init (GtkGestureSingleClass *klass)
       g_param_spec_uint ("button", NULL, NULL,
                          0, G_MAXUINT,
                          GDK_BUTTON_PRIMARY,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, properties);
 }
@@ -301,7 +302,7 @@ gtk_gesture_single_init (GtkGestureSingle *gesture)
 }
 
 /**
- * gtk_gesture_single_get_touch_only:
+ * gtk_gesture_single_get_touch_only: (attributes org.gtk.Method.get_property=touch-only)
  * @gesture: a `GtkGestureSingle`
  *
  * Returns %TRUE if the gesture is only triggered by touch events.
@@ -321,7 +322,7 @@ gtk_gesture_single_get_touch_only (GtkGestureSingle *gesture)
 }
 
 /**
- * gtk_gesture_single_set_touch_only:
+ * gtk_gesture_single_set_touch_only: (attributes org.gtk.Method.set_property=touch-only)
  * @gesture: a `GtkGestureSingle`
  * @touch_only: whether @gesture handles only touch events
  *
@@ -350,7 +351,7 @@ gtk_gesture_single_set_touch_only (GtkGestureSingle *gesture,
 }
 
 /**
- * gtk_gesture_single_get_exclusive:
+ * gtk_gesture_single_get_exclusive: (attributes org.gtk.Method.get_property=exclusive)
  * @gesture: a `GtkGestureSingle`
  *
  * Gets whether a gesture is exclusive.
@@ -372,7 +373,7 @@ gtk_gesture_single_get_exclusive (GtkGestureSingle *gesture)
 }
 
 /**
- * gtk_gesture_single_set_exclusive:
+ * gtk_gesture_single_set_exclusive: (attributes org.gtk.Method.set_property=exclusive)
  * @gesture: a `GtkGestureSingle`
  * @exclusive: %TRUE to make @gesture exclusive
  *
@@ -401,7 +402,7 @@ gtk_gesture_single_set_exclusive (GtkGestureSingle *gesture,
 }
 
 /**
- * gtk_gesture_single_get_button:
+ * gtk_gesture_single_get_button: (attributes org.gtk.Method.get_property=button)
  * @gesture: a `GtkGestureSingle`
  *
  * Returns the button number @gesture listens for.
@@ -423,7 +424,7 @@ gtk_gesture_single_get_button (GtkGestureSingle *gesture)
 }
 
 /**
- * gtk_gesture_single_set_button:
+ * gtk_gesture_single_set_button: (attributes org.gtk.Method.set_property=button)
  * @gesture: a `GtkGestureSingle`
  * @button: button number to listen to, or 0 for any button
  *

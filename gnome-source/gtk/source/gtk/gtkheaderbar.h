@@ -34,7 +34,7 @@ G_BEGIN_DECLS
 typedef struct _GtkHeaderBar              GtkHeaderBar;
 
 GDK_AVAILABLE_IN_ALL
-GType        gtk_header_bar_get_type          (void);
+GType        gtk_header_bar_get_type          (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget   *gtk_header_bar_new               (void);
 
@@ -65,13 +65,6 @@ void         gtk_header_bar_set_decoration_layout (GtkHeaderBar *bar,
                                                    const char   *layout);
 GDK_AVAILABLE_IN_ALL
 const char *gtk_header_bar_get_decoration_layout (GtkHeaderBar *bar);
-
-GDK_AVAILABLE_IN_4_18
-gboolean     gtk_header_bar_get_use_native_controls (GtkHeaderBar *bar);
-
-GDK_AVAILABLE_IN_4_18
-void         gtk_header_bar_set_use_native_controls (GtkHeaderBar *bar,
-                                                     gboolean      setting);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkHeaderBar, g_object_unref)
 

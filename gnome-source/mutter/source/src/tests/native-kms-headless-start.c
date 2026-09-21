@@ -19,14 +19,13 @@
 
 #include "config.h"
 
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "backends/meta-monitor-manager-private.h"
-#include "backends/meta-udev.h"
 #include "backends/native/meta-backend-native.h"
+#include "backends/native/meta-udev.h"
 #include "core/display-private.h"
 #include "meta-test/meta-context-test.h"
 #include "tests/drm-mock/drm-mock.h"
-#include "tests/meta-kms-test-utils.h"
 #include "tests/meta-monitor-manager-test.h"
 
 static MetaContext *test_context;
@@ -73,19 +72,23 @@ static void
 meta_test_headless_monitor_connect (void)
 {
   MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaUdev *udev = meta_backend_get_udev (backend);
+  MetaUdev *udev = meta_backend_native_get_udev (META_BACKEND_NATIVE (backend));
   MetaMonitorManager *monitor_manager =
     meta_backend_get_monitor_manager (backend);
-  g_autoptr (GUdevDevice) udev_device = NULL;
+  g_autolist (GObject) udev_devices = NULL;
   GList *logical_monitors;
   MetaLogicalMonitor *logical_monitor;
   MtkRectangle monitor_layout;
   ClutterActor *stage;
+  g_autoptr (GError) error = NULL;
 
   drm_mock_unset_resource_filter (DRM_MOCK_CALL_FILTER_GET_CONNECTOR);
 
-  udev_device = meta_get_test_udev_device (udev);
-  g_signal_emit_by_name (udev, "hotplug", udev_device);
+  udev_devices = meta_udev_list_drm_devices (udev,
+                                             META_UDEV_DEVICE_TYPE_CARD,
+                                             &error);
+  g_assert_cmpuint (g_list_length (udev_devices), ==, 1);
+  g_signal_emit_by_name (udev, "hotplug", g_list_first (udev_devices)->data);
 
   logical_monitors =
     meta_monitor_manager_get_logical_monitors (monitor_manager);
@@ -97,8 +100,8 @@ meta_test_headless_monitor_connect (void)
   g_assert_cmpint (monitor_manager->screen_height, ==, monitor_layout.height);
 
   stage = meta_backend_get_stage (backend);
-  g_assert_cmpint ((int) clutter_actor_get_width (stage), ==, monitor_layout.width);
-  g_assert_cmpint ((int) clutter_actor_get_height (stage), ==, monitor_layout.height);
+  g_assert_cmpint (clutter_actor_get_width (stage), ==, monitor_layout.width);
+  g_assert_cmpint (clutter_actor_get_height (stage), ==, monitor_layout.height);
 }
 
 static MetaMonitorTestSetup *
@@ -135,7 +138,7 @@ main (int argc, char *argv[])
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_VKMS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   init_tests ();
 

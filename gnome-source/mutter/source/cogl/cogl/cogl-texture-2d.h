@@ -39,6 +39,10 @@
 #include "cogl/cogl-context.h"
 #include "cogl/cogl-bitmap.h"
 
+#ifdef HAVE_EGL
+#include "cogl/cogl-egl.h"
+#endif
+
 G_BEGIN_DECLS
 
 /**
@@ -62,11 +66,12 @@ G_BEGIN_DECLS
 #define COGL_TEXTURE_2D_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  COGL_TYPE_TEXTURE_2D, CoglTexture2DClass))
 
 typedef struct _CoglTexture2DClass CoglTexture2DClass;
+typedef struct _CoglTexture2D CoglTexture2D;
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglTexture2D, g_object_unref)
 
 COGL_EXPORT
-GType               cogl_texture_2d_get_type       (void);
+GType               cogl_texture_2d_get_type       (void) G_GNUC_CONST;
 
 typedef enum _CoglEglImageFlags
 {
@@ -96,6 +101,8 @@ typedef enum _CoglEglImageFlags
  * cogl_texture_set_premultiplied().
  *
  * Returns: (transfer full): A new #CoglTexture2D object with no storage yet allocated.
+ *
+ * Since: 2.0
  */
 COGL_EXPORT CoglTexture *
 cogl_texture_2d_new_with_format (CoglContext *ctx,
@@ -193,37 +200,45 @@ cogl_texture_2d_new_from_data (CoglContext *ctx,
 COGL_EXPORT CoglTexture *
 cogl_texture_2d_new_from_bitmap (CoglBitmap *bitmap);
 
+/**
+ * cogl_egl_texture_2d_new_from_image: (skip)
+ */
 #if defined (HAVE_EGL) && defined (EGL_KHR_image_base)
 /* NB: The reason we require the width, height and format to be passed
  * even though they may seem redundant is because GLES 1/2 don't
  * provide a way to query these properties. */
-/**
- * cogl_texture_2d_new_from_egl_image: (skip)
- */
 COGL_EXPORT CoglTexture *
-cogl_texture_2d_new_from_egl_image (CoglContext        *ctx,
-                                    int                 width,
-                                    int                 height,
-                                    CoglPixelFormat     format,
-                                    EGLImageKHR         image,
-                                    CoglEglImageFlags   flags,
-                                    GError            **error);
-#endif
+cogl_egl_texture_2d_new_from_image (CoglContext *ctx,
+                                    int width,
+                                    int height,
+                                    CoglPixelFormat format,
+                                    EGLImageKHR image,
+                                    CoglEglImageFlags flags,
+                                    GError **error);
+
+typedef gboolean (*CoglTexture2DEGLImageExternalAlloc) (CoglTexture2D *tex_2d,
+                                                        gpointer user_data,
+                                                        GError **error);
 
 /**
- * cogl_texture_2d_set_auto_mipmap:
- * @texture: A #CoglTexture2D
- * @value: The new value for whether to auto mipmap
- *
- * Sets whether the texture will automatically update the smaller
- * mipmap levels after any part of level 0 is updated. The update will
- * only occur whenever the texture is used for drawing with a texture
- * filter that requires the lower mipmap levels. An application should
- * disable this if it wants to upload its own data for the other
- * levels. By default auto mipmapping is enabled.
+ * cogl_texture_2d_new_from_egl_image_external: (skip)
  */
+COGL_EXPORT CoglTexture *
+cogl_texture_2d_new_from_egl_image_external (CoglContext *ctx,
+                                             int width,
+                                             int height,
+                                             CoglTexture2DEGLImageExternalAlloc alloc,
+                                             gpointer user_data,
+                                             GDestroyNotify destroy,
+                                             GError **error);
+
 COGL_EXPORT void
-cogl_texture_2d_set_auto_mipmap (CoglTexture2D *texture,
-                                 gboolean       value);
+cogl_texture_2d_egl_image_external_bind (CoglTexture2D *tex_2d);
+
+COGL_EXPORT void
+cogl_texture_2d_egl_image_external_alloc_finish (CoglTexture2D *tex_2d,
+						 void *user_data,
+						 GDestroyNotify destroy);
+#endif
 
 G_END_DECLS

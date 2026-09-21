@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -8,12 +10,10 @@ import Polkit from 'gi://Polkit';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
-import * as Config from '../../misc/config.js';
 import * as Main from '../main.js';
 import * as PopupMenu from '../popupMenu.js';
 import * as MessageTray from '../messageTray.js';
 import * as ModemManager from '../../misc/modemManager.js';
-import * as Signals from '../../misc/signals.js';
 import * as Util from '../../misc/util.js';
 
 import {Spinner} from '../animation.js';
@@ -25,7 +25,6 @@ import {registerDestroyableType} from '../../misc/signalTracker.js';
 Gio._promisify(Gio.DBusConnection.prototype, 'call');
 Gio._promisify(NM.Client, 'new_async');
 Gio._promisify(NM.Client.prototype, 'check_connectivity_async');
-Gio._promisify(NM.Client.prototype, 'dbus_set_property');
 Gio._promisify(NM.DeviceWifi.prototype, 'request_scan_async');
 
 const WIFI_SCAN_FREQUENCY = 15;
@@ -65,8 +64,8 @@ function ssidToLabel(ssid) {
 }
 
 function launchSettingsPanel(panel, ...args) {
-    const param = new GLib.Variant('av',
-        [new GLib.Variant('(sav)', [panel, args.map(s => new GLib.Variant('s', s))])]);
+    const param = new GLib.Variant('(sav)',
+        [panel, args.map(s => new GLib.Variant('s', s))]);
 
     const app = Shell.AppSystem.get_default()
         .lookup_app('org.gnome.Settings.desktop');
@@ -117,7 +116,7 @@ class ItemSorter {
     }
 
     _sortByName(one, two) {
-        return GLib.utf8_collate(one.name ?? '', two.name ?? '');
+        return GLib.utf8_collate(one.name, two.name);
     }
 
     _sortByMru(one, two) {
@@ -160,16 +159,16 @@ class ItemSorter {
 
 const NMMenuItem = GObject.registerClass({
     Properties: {
-        'radio-mode': GObject.ParamSpec.boolean('radio-mode', null, null,
+        'radio-mode': GObject.ParamSpec.boolean('radio-mode', '', '',
             GObject.ParamFlags.READWRITE,
             false),
-        'is-active': GObject.ParamSpec.boolean('is-active', null, null,
+        'is-active': GObject.ParamSpec.boolean('is-active', '', '',
             GObject.ParamFlags.READABLE,
             false),
-        'name': GObject.ParamSpec.string('name', null, null,
+        'name': GObject.ParamSpec.string('name', '', '',
             GObject.ParamFlags.READWRITE,
             ''),
-        'icon-name': GObject.ParamSpec.string('icon-name', null, null,
+        'icon-name': GObject.ParamSpec.string('icon-name', '', '',
             GObject.ParamFlags.READWRITE,
             ''),
     },
@@ -220,7 +219,7 @@ const NMMenuItem = GObject.registerClass({
  */
 const NMSectionItem = GObject.registerClass({
     Properties: {
-        'use-submenu': GObject.ParamSpec.boolean('use-submenu', null, null,
+        'use-submenu': GObject.ParamSpec.boolean('use-submenu', '', '',
             GObject.ParamFlags.READWRITE,
             false),
     },
@@ -399,7 +398,7 @@ class NMConnectionItem extends NMMenuItem {
 
 const NMDeviceConnectionItem = GObject.registerClass({
     Properties: {
-        'device-name': GObject.ParamSpec.string('device-name', null, null,
+        'device-name': GObject.ParamSpec.string('device-name', '', '',
             GObject.ParamFlags.READWRITE,
             ''),
     },
@@ -422,7 +421,7 @@ const NMDeviceConnectionItem = GObject.registerClass({
 
 const NMDeviceItem = GObject.registerClass({
     Properties: {
-        'single-device-mode': GObject.ParamSpec.boolean('single-device-mode', null, null,
+        'single-device-mode': GObject.ParamSpec.boolean('single-device-mode', '', '',
             GObject.ParamFlags.READWRITE,
             false),
     },
@@ -484,7 +483,7 @@ const NMDeviceItem = GObject.registerClass({
     }
 
     _autoConnect() {
-        const connection = new NM.SimpleConnection();
+        let connection = new NM.SimpleConnection();
         this._client.add_and_activate_connection_async(connection, this._device, null, null, null);
     }
 
@@ -501,8 +500,7 @@ const NMDeviceItem = GObject.registerClass({
     }
 
     _syncConnections() {
-        const available = this._device.get_available_connections().filter(
-            c => c.get_id() != null);
+        const available = this._device.get_available_connections();
         const removed = [...this._connectionItems.keys()]
             .filter(conn => !available.includes(conn));
 
@@ -648,7 +646,7 @@ class NMModemDeviceItem extends NMDeviceItem {
 
         this._mobileDevice = null;
 
-        const capabilities = device.current_capabilities;
+        let capabilities = device.current_capabilities;
         if (device.udi.indexOf('/org/freedesktop/ModemManager1/Modem') === 0)
             this._mobileDevice = new ModemManager.BroadbandModem(device.udi, capabilities);
         else if (capabilities & NM.DeviceModemCapabilities.GSM_UMTS)
@@ -737,23 +735,23 @@ class NMBluetoothDeviceItem extends NMDeviceItem {
 const WirelessNetwork = GObject.registerClass({
     Properties: {
         'name': GObject.ParamSpec.string(
-            'name', null, null,
+            'name', '', '',
             GObject.ParamFlags.READABLE,
             ''),
         'icon-name': GObject.ParamSpec.string(
-            'icon-name', null, null,
+            'icon-name', '', '',
             GObject.ParamFlags.READABLE,
             ''),
         'secure': GObject.ParamSpec.boolean(
-            'secure', null, null,
+            'secure', '', '',
             GObject.ParamFlags.READABLE,
             false),
         'is-active': GObject.ParamSpec.boolean(
-            'is-active', null, null,
+            'is-active', '', '',
             GObject.ParamFlags.READABLE,
             false),
         'signal-strength': GObject.ParamSpec.uint(
-            'signal-strength', null, null,
+            'signal-strength', '', '',
             GObject.ParamFlags.READABLE,
             0),
     },
@@ -951,15 +949,6 @@ const WirelessNetwork = GObject.registerClass({
                 this._getDeviceDBusPath(), ap.get_path());
         } else {
             conn = new NM.SimpleConnection();
-            const permission = Polkit.Permission.new_sync('org.freedesktop.NetworkManager.settings.modify.system', null, null);
-            let allowedToShare = false;
-            if (permission)
-                allowedToShare = permission.get_allowed();
-            if (!allowedToShare) {
-                const setting = new NM.SettingConnection();
-                setting.add_permission('user', GLib.get_user_name(), null);
-                conn.add_setting(setting);
-            }
             this._device.client.add_and_activate_connection_async(
                 conn, this._device, ap.get_path(), null, null);
         }
@@ -1059,7 +1048,7 @@ class NMWirelessNetworkItem extends PopupMenu.PopupBaseMenuItem {
 
     _updateAccessibleName() {
         const secureString = this._network.secure ? _('Secure') : _('Not secure');
-        const signalStrengthString = _('Signal strength %s%%').format(this._network.signal_strength);
+        let signalStrengthString = _('Signal strength %s%%').format(this._network.signal_strength);
         // translators: The first placeholder is the network name, the second and indication whether it is secure, and the last the signal strength indication
         this.accessible_name = _('%s, %s, %s').format(this._label.text, secureString, signalStrengthString);
     }
@@ -1067,10 +1056,10 @@ class NMWirelessNetworkItem extends PopupMenu.PopupBaseMenuItem {
 
 const NMWirelessDeviceItem = GObject.registerClass({
     Properties: {
-        'is-hotspot': GObject.ParamSpec.boolean('is-hotspot', null, null,
+        'is-hotspot': GObject.ParamSpec.boolean('is-hotspot', '', '',
             GObject.ParamFlags.READABLE,
             false),
-        'single-device-mode': GObject.ParamSpec.boolean('single-device-mode', null, null,
+        'single-device-mode': GObject.ParamSpec.boolean('single-device-mode', '', '',
             GObject.ParamFlags.READWRITE,
             false),
     },
@@ -1083,7 +1072,7 @@ const NMWirelessDeviceItem = GObject.registerClass({
 
         this._deviceName = '';
 
-        this._networks = [];
+        this._networkItems = new Map();
         this._itemSorter = new ItemSorter({
             sortFunc: (one, two) => one.network.compare(two.network),
         });
@@ -1124,8 +1113,10 @@ const NMWirelessDeviceItem = GObject.registerClass({
         this._availableConnectionsChanged();
         this._updateItemsVisibility();
 
-        this.connect('destroy',
-            () => this._networks.forEach(net => net.destroy()));
+        this.connect('destroy', () => {
+            for (const net of this._networkItems.keys())
+                net.destroy();
+        });
     }
 
     get icon_name() {
@@ -1134,7 +1125,6 @@ const NMWirelessDeviceItem = GObject.registerClass({
 
         switch (this.state) {
         case NM.ActiveConnectionState.ACTIVATING:
-        case NM.ActiveConnectionState.DEACTIVATING:
             return 'network-wireless-acquiring-symbolic';
 
         case NM.ActiveConnectionState.ACTIVATED: {
@@ -1148,7 +1138,7 @@ const NMWirelessDeviceItem = GObject.registerClass({
                 if (this._device.mode !== NM80211Mode.ADHOC)
                     console.info('An active wireless connection, in infrastructure mode, involves no access point?');
 
-                return 'network-wireless-offline-symbolic';
+                return 'network-wireless-connected-symbolic';
             }
 
             const {strength} = this._activeAccessPoint;
@@ -1184,7 +1174,7 @@ const NMWirelessDeviceItem = GObject.registerClass({
         if (!connection)
             return false;
 
-        const ip4config = connection.get_setting_ip4_config();
+        let ip4config = connection.get_setting_ip4_config();
         if (!ip4config)
             return false;
 
@@ -1217,7 +1207,8 @@ const NMWirelessDeviceItem = GObject.registerClass({
 
     _availableConnectionsChanged() {
         const connections = this._device.get_available_connections();
-        this._networks.forEach(net => net.checkConnections(connections));
+        for (const net of this._networkItems.keys())
+            net.checkConnections(connections);
     }
 
     _addAccessPoint(ap) {
@@ -1233,7 +1224,8 @@ const NMWirelessDeviceItem = GObject.registerClass({
             return;
         }
 
-        let network = this._networks.find(n => n.checkAccessPoint(ap));
+        let network = [...this._networkItems.keys()]
+            .find(n => n.checkAccessPoint(ap));
 
         if (!network) {
             network = new WirelessNetwork(this._device);
@@ -1244,32 +1236,28 @@ const NMWirelessDeviceItem = GObject.registerClass({
             network.connectObject(
                 'notify::icon-name', () => this._resortItem(item),
                 'notify::is-active', () => this._resortItem(item),
-                'destroy', () => {
-                    const idx = this._networks.indexOf(network);
-                    if (idx >= 0)
-                        this._networks.splice(idx, 1);
-
-                    this._itemSorter.delete(item);
-                    item.destroy();
-                },
                 this);
 
             const pos = this._itemSorter.upsert(item);
             this.section.addMenuItem(item, pos);
-            this._networks.push(network);
+            this._networkItems.set(network, item);
         }
 
         network.addAccessPoint(ap);
     }
 
     _removeAccessPoint(ap) {
-        ap.disconnectObject(this);
-
-        const network = this._networks.find(n => n.removeAccessPoint(ap));
+        const network = [...this._networkItems.keys()]
+            .find(n => n.removeAccessPoint(ap));
 
         if (!network || network.hasAccessPoints())
             return;
 
+        const item = this._networkItems.get(network);
+        this._itemSorter.delete(item);
+        this._networkItems.delete(network);
+
+        item?.destroy();
         network.destroy();
     }
 
@@ -1326,16 +1314,6 @@ const NMVpnConnectionItem = GObject.registerClass({
         this.bind_property('is-active',
             this._switch, 'state',
             GObject.BindingFlags.SYNC_CREATE);
-
-        // Switch handle is reactive, so events don't propagate to the item;
-        // activate it manually in that case
-        this._switch.connect('notify::state', () => {
-            if (this.is_active === this._switch.state)
-                return;
-
-            this.activate();
-        });
-
         this.bind_property('name',
             this._label, 'text',
             GObject.BindingFlags.SYNC_CREATE);
@@ -1544,7 +1522,6 @@ class NMVpnToggle extends NMToggle {
         super();
 
         this.menu.setHeader('network-vpn-symbolic', _('VPN'));
-        this.menuButtonAccessibleName = _('Open VPN menu');
         this.menu.addSettingsAction(_('VPN Settings'),
             'gnome-network-panel.desktop');
     }
@@ -1803,10 +1780,9 @@ class NMWirelessToggle extends NMDeviceToggle {
                 this._startScanning();
             else
                 this._stopScanning();
-        }, this);
+        });
 
         this.menu.setHeader('network-wireless-symbolic', _('Wi–Fi'));
-        this.menuButtonAccessibleName = _('Open Wi–Fi menu');
         this.menu.addHeaderSuffix(this._scanningSpinner);
         this.menu.addSettingsAction(_('All Networks'),
             'gnome-wifi-panel.desktop');
@@ -1828,20 +1804,7 @@ class NMWirelessToggle extends NMDeviceToggle {
         if (primaryItem?.is_hotspot)
             primaryItem.activate();
         else
-            this._toggleWirelessEnabled().catch(logError);
-    }
-
-    async _toggleWirelessEnabled() {
-        const enabled = !this._client.wireless_enabled;
-
-        await this._client.dbus_set_property(
-            NM.DBUS_PATH,
-            NM.DBUS_INTERFACE,
-            'WirelessEnabled',
-            new GLib.Variant('b', enabled),
-            2000,
-            null
-        );
+            this._client.wireless_enabled = !this._client.wireless_enabled;
     }
 
     async _scanDevice(device) {
@@ -1919,7 +1882,6 @@ class NMWiredToggle extends NMDeviceToggle {
         super(NM.DeviceType.ETHERNET);
 
         this.menu.setHeader('network-wired-symbolic', _('Wired Connections'));
-        this.menuButtonAccessibleName = _('Open wired connections menu');
         this.menu.addSettingsAction(_('Wired Settings'),
             'gnome-network-panel.desktop');
     }
@@ -1935,7 +1897,6 @@ class NMBluetoothToggle extends NMDeviceToggle {
         super(NM.DeviceType.BT);
 
         this.menu.setHeader('network-cellular-symbolic', _('Bluetooth Tethers'));
-        this.menuButtonAccessibleName = _('Open Bluetooth tethers menu');
         this.menu.addSettingsAction(_('Bluetooth Settings'),
             'gnome-network-panel.desktop');
     }
@@ -1956,7 +1917,6 @@ class NMModemToggle extends NMDeviceToggle {
         super(NM.DeviceType.MODEM);
 
         this.menu.setHeader('network-cellular-symbolic', _('Mobile Connections'));
-        this.menuButtonAccessibleName = _('Open mobile connections menu');
 
         const settingsLabel = _('Mobile Broadband Settings');
         this._wwanSettings = this.menu.addSettingsAction(settingsLabel,
@@ -1984,118 +1944,12 @@ class NMModemToggle extends NMDeviceToggle {
     }
 });
 
-class CaptivePortalHandler extends Signals.EventEmitter {
-    constructor(checkUri) {
-        super();
-
-        this._checkUri = checkUri;
-        this._connectivityQueue = new Set();
-        this._notifications = new Map();
-        this._portalHelperProxy = null;
-    }
-
-    addConnection(name, path) {
-        if (this._connectivityQueue.has(path) || this._notifications.has(path))
-            return;
-
-        const source = MessageTray.getSystemSource();
-
-        const notification = new MessageTray.Notification({
-            title: _('Sign in to Network'),
-            body: name,
-            source,
-        });
-        notification.connect('activated',
-            () => this._onNotificationActivated(path));
-        notification.connect('destroy',
-            () => this._notifications.delete(path));
-        this._notifications.set(path, notification);
-        source.addNotification(notification);
-    }
-
-
-    removeConnection(path) {
-        if (this._connectivityQueue.delete(path))
-            this._portalHelperProxy?.CloseAsync(path);
-        this._notifications.get(path)?.destroy(
-            MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
-        this._notifications.delete(path);
-    }
-
-    _onNotificationActivated(path) {
-        const context = global.create_app_launch_context(
-            global.get_current_time(), -1);
-
-        if (Config.HAVE_PORTAL_HELPER)
-            this._launchPortalHelper(path, context).catch(logError);
-        else
-            Gio.AppInfo.launch_default_for_uri(this._checkUri, context);
-
-        Main.overview.hide();
-        Main.panel.closeCalendar();
-    }
-
-    _portalHelperStatusChanged(parameters) {
-        const [path, result] = parameters;
-
-        if (result === PortalHelperResult.CANCELLED) {
-            // Keep the connection in the queue, so the user is not
-            // spammed with more logins until we next flush the queue,
-            // which will happen once they choose a better connection
-            // or we get to full connectivity through other means
-        } else if (result === PortalHelperResult.COMPLETED) {
-            this.removeConnection(path);
-        } else if (result === PortalHelperResult.RECHECK) {
-            this.emit('recheck', path);
-        } else {
-            log(`Invalid result from portal helper: ${result}`);
-        }
-    }
-
-    async _launchPortalHelper(path, context) {
-        if (!this._portalHelperProxy) {
-            this._portalHelperProxy = new Gio.DBusProxy({
-                g_connection: Gio.DBus.session,
-                g_name: 'org.gnome.Shell.PortalHelper',
-                g_object_path: '/org/gnome/Shell/PortalHelper',
-                g_interface_name: PortalHelperInfo.name,
-                g_interface_info: PortalHelperInfo,
-            });
-            this._portalHelperProxy.connectSignal('StatusChanged',
-                (proxy, emitter, params) => {
-                    this._portalHelperStatusChanged(params);
-                });
-
-            try {
-                await this._portalHelperProxy.init_async(
-                    GLib.PRIORITY_DEFAULT, null);
-            } catch (e) {
-                console.error(`Error launching the portal helper: ${e.message}`);
-            }
-        }
-
-        const {timestamp} = context;
-        this._portalHelperProxy?.AuthenticateAsync(path, this._checkUri, timestamp).catch(logError);
-        this._connectivityQueue.add(path);
-    }
-
-    clear() {
-        for (const item of this._connectivityQueue)
-            this._portalHelperProxy?.CloseAsync(item);
-        this._connectivityQueue.clear();
-
-        for (const n of this._notifications.values())
-            n.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
-        this._notifications.clear();
-    }
-}
-
 export const Indicator = GObject.registerClass(
 class Indicator extends SystemIndicator {
     _init() {
         super._init();
 
-        this._portalHandler = null;
+        this._connectivityQueue = new Set();
 
         this._mainConnection = null;
 
@@ -2150,16 +2004,6 @@ class Indicator extends SystemIndicator {
             this, 'visible',
             GObject.BindingFlags.SYNC_CREATE);
 
-        const {connectivityCheckUri} = this._client;
-        this._portalHandler = new CaptivePortalHandler(connectivityCheckUri);
-        this._portalHandler.connect('recheck', async (o, path) => {
-            try {
-                const state = await this._client.check_connectivity_async(null);
-                if (state >= NM.ConnectivityState.FULL)
-                    this._portalHandler.removeConnection(path);
-            } catch {}
-        });
-
         this._client.connectObject(
             'notify::primary-connection', () => this._syncMainConnection(),
             'notify::activating-connection', () => this._syncMainConnection(),
@@ -2213,6 +2057,7 @@ class Indicator extends SystemIndicator {
             this._mainConnectionStateChanged();
         }
 
+        this._updateIcon();
         this._syncConnectivity();
     }
 
@@ -2221,16 +2066,44 @@ class Indicator extends SystemIndicator {
             this._notification?.destroy();
     }
 
-    _syncConnectivity() {
-        this._updateIcon();
+    _flushConnectivityQueue() {
+        for (let item of this._connectivityQueue)
+            this._portalHelperProxy?.CloseAsync(item);
+        this._connectivityQueue.clear();
+    }
+
+    _closeConnectivityCheck(path) {
+        if (this._connectivityQueue.delete(path))
+            this._portalHelperProxy?.CloseAsync(path);
+    }
+
+    async _portalHelperDone(parameters) {
+        let [path, result] = parameters;
+
+        if (result === PortalHelperResult.CANCELLED) {
+            // Keep the connection in the queue, so the user is not
+            // spammed with more logins until we next flush the queue,
+            // which will happen once they choose a better connection
+            // or we get to full connectivity through other means
+        } else if (result === PortalHelperResult.COMPLETED) {
+            this._closeConnectivityCheck(path);
+        } else if (result === PortalHelperResult.RECHECK) {
+            try {
+                const state = await this._client.check_connectivity_async(null);
+                if (state >= NM.ConnectivityState.FULL)
+                    this._closeConnectivityCheck(path);
+            } catch (e) { }
+        } else {
+            log(`Invalid result from portal helper: ${result}`);
+        }
+    }
+
+    async _syncConnectivity() {
         if (this._mainConnection == null ||
             this._mainConnection.state !== NM.ActiveConnectionState.ACTIVATED) {
-            this._portalHandler.clear();
+            this._flushConnectivityQueue();
             return;
         }
-
-        if (Main.sessionMode.isGreeter)
-            return;
 
         let isPortal = this._client.connectivity === NM.ConnectivityState.PORTAL;
         // For testing, allow interpreting any value != FULL as PORTAL, because
@@ -2240,14 +2113,38 @@ class Indicator extends SystemIndicator {
         // (but in general we should only prompt a portal if we know there is a portal)
         if (GLib.getenv('GNOME_SHELL_CONNECTIVITY_TEST') != null)
             isPortal ||= this._client.connectivity < NM.ConnectivityState.FULL;
+        if (!isPortal || Main.sessionMode.isGreeter)
+            return;
 
-        if (isPortal) {
-            this._portalHandler.addConnection(
-                this._mainConnection.get_id(),
-                this._mainConnection.get_path());
-        } else {
-            this._portalHandler.clear();
+        let path = this._mainConnection.get_path();
+        if (this._connectivityQueue.has(path))
+            return;
+
+        let timestamp = global.get_current_time();
+        if (!this._portalHelperProxy) {
+            this._portalHelperProxy = new Gio.DBusProxy({
+                g_connection: Gio.DBus.session,
+                g_name: 'org.gnome.Shell.PortalHelper',
+                g_object_path: '/org/gnome/Shell/PortalHelper',
+                g_interface_name: PortalHelperInfo.name,
+                g_interface_info: PortalHelperInfo,
+            });
+            this._portalHelperProxy.connectSignal('Done',
+                (proxy, emitter, params) => {
+                    this._portalHelperDone(params).catch(logError);
+                });
+
+            try {
+                await this._portalHelperProxy.init_async(
+                    GLib.PRIORITY_DEFAULT, null);
+            } catch (e) {
+                console.error(`Error launching the portal helper: ${e.message}`);
+            }
         }
+
+        this._portalHelperProxy?.AuthenticateAsync(path, this._client.connectivity_check_uri, timestamp).catch(logError);
+
+        this._connectivityQueue.add(path);
     }
 
     _updateIcon() {

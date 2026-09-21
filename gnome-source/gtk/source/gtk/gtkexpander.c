@@ -22,12 +22,10 @@
 /**
  * GtkExpander:
  *
- * Allows the user to reveal or conceal a child widget.
+ * `GtkExpander` allows the user to reveal its child by clicking
+ * on an expander triangle.
  *
- * <picture>
- *   <source srcset="expander-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkExpander" src="expander.png">
- * </picture>
+ * ![An example GtkExpander](expander.png)
  *
  * This is similar to the triangles used in a `GtkTreeView`.
  *
@@ -79,16 +77,21 @@
  *
  * # GtkExpander as GtkBuildable
  *
+ * The `GtkExpander` implementation of the `GtkBuildable` interface supports
+ * placing a child in the label position by specifying “label” as the
+ * “type” attribute of a `<child>` element. A normal content child can be
+ * specified without specifying a `<child>` type attribute.
+ *
  * An example of a UI definition fragment with GtkExpander:
  *
  * ```xml
  * <object class="GtkExpander">
- *   <property name="label-widget">
+ *   <child type="label">
  *     <object class="GtkLabel" id="expander-label"/>
- *   </property>
- *   <property name="child">
+ *   </child>
+ *   <child>
  *     <object class="GtkEntry" id="expander-content"/>
- *   </property>
+ *   </child>
  * </object>
  * ```
  *
@@ -110,7 +113,7 @@
  *
  * # Accessibility
  *
- * `GtkExpander` uses the [enum@Gtk.AccessibleRole.button] role.
+ * `GtkExpander` uses the %GTK_ACCESSIBLE_ROLE_BUTTON role.
  */
 
 #include "config.h"
@@ -128,8 +131,6 @@
 #include "gtkmain.h"
 #include "gtkprivate.h"
 #include "gtkwidgetprivate.h"
-#include "gtkbuilderprivate.h"
-#include <gdk/gdkkeysyms.h>
 
 #include <string.h>
 
@@ -144,11 +145,8 @@ enum
   PROP_USE_MARKUP,
   PROP_LABEL_WIDGET,
   PROP_RESIZE_TOPLEVEL,
-  PROP_CHILD,
-  N_PROPS
+  PROP_CHILD
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 typedef struct _GtkExpanderClass   GtkExpanderClass;
 
@@ -226,13 +224,15 @@ G_DEFINE_TYPE_WITH_CODE (GtkExpander, gtk_expander, GTK_TYPE_WIDGET,
                          G_IMPLEMENT_INTERFACE (GTK_TYPE_BUILDABLE,
                                                 gtk_expander_buildable_init))
 
-static void
+static gboolean
 expand_timeout (gpointer data)
 {
   GtkExpander *expander = GTK_EXPANDER (data);
 
   expander->expand_timer = 0;
   gtk_expander_set_expanded (expander, TRUE);
+
+  return FALSE;
 }
 
 static void
@@ -243,7 +243,7 @@ gtk_expander_drag_enter (GtkDropControllerMotion *motion,
 {
   if (!expander->expanded && !expander->expand_timer)
     {
-      expander->expand_timer = g_timeout_add_once (TIMEOUT_EXPAND, (GSourceOnceFunc) expand_timeout, expander);
+      expander->expand_timer = g_timeout_add (TIMEOUT_EXPAND, (GSourceFunc) expand_timeout, expander);
       gdk_source_set_static_name_by_id (expander->expand_timer, "[gtk] expand_timeout");
     }
 }
@@ -252,7 +252,11 @@ static void
 gtk_expander_drag_leave (GtkDropControllerMotion *motion,
                          GtkExpander             *expander)
 {
-  g_clear_handle_id (&expander->expand_timer, g_source_remove);
+  if (expander->expand_timer)
+    {
+      g_source_remove (expander->expand_timer);
+      expander->expand_timer = 0;
+    }
 }
 
 static GtkSizeRequestMode
@@ -306,70 +310,82 @@ gtk_expander_class_init (GtkExpanderClass *klass)
   klass->activate = gtk_expander_activate;
 
   /**
-   * GtkExpander:expanded:
+   * GtkExpander:expanded: (attributes org.gtk.Property.get=gtk_expander_get_expanded org.gtk.Property.set=gtk_expander_set_expanded)
    *
    * Whether the expander has been opened to reveal the child.
    */
-  props[PROP_EXPANDED] = g_param_spec_boolean ("expanded", NULL, NULL,
-                                               FALSE,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_EXPANDED,
+                                   g_param_spec_boolean ("expanded", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkExpander:label:
+   * GtkExpander:label: (attributes org.gtk.Property.get=gtk_expander_get_label org.gtk.Property.set=gtk_expander_set_label)
    *
    * The text of the expanders label.
    */
-  props[PROP_LABEL] = g_param_spec_string ("label", NULL, NULL,
-                                           NULL,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT);
+  g_object_class_install_property (gobject_class,
+                                   PROP_LABEL,
+                                   g_param_spec_string ("label", NULL, NULL,
+                                                        NULL,
+                                                        GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT));
 
   /**
-   * GtkExpander:use-underline:
+   * GtkExpander:use-underline: (attributes org.gtk.Property.get=gtk_expander_get_use_underline org.gtk.Property.set=gtk_expander_set_use_underline)
    *
    * Whether an underline in the text indicates a mnemonic.
    */
-  props[PROP_USE_UNDERLINE] = g_param_spec_boolean ("use-underline", NULL, NULL,
-                                                    FALSE,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_USE_UNDERLINE,
+                                   g_param_spec_boolean ("use-underline", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkExpander:use-markup:
+   * GtkExpander:use-markup: (attributes org.gtk.Property.get=gtk_expander_get_use_markup org.gtk.Property.set=gtk_expander_set_use_markup)
    *
    * Whether the text in the label is Pango markup.
    */
-  props[PROP_USE_MARKUP] = g_param_spec_boolean ("use-markup", NULL, NULL,
-                                                 FALSE,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_USE_MARKUP,
+                                   g_param_spec_boolean ("use-markup", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkExpander:label-widget:
+   * GtkExpander:label-widget: (attributes org.gtk.Property.get=gtk_expander_get_label_widget org.gtk.Property.set=gtk_expander_set_label_widget)
    *
    * A widget to display instead of the usual expander label.
    */
-  props[PROP_LABEL_WIDGET] = g_param_spec_object ("label-widget", NULL, NULL,
-                                                  GTK_TYPE_WIDGET,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_LABEL_WIDGET,
+                                   g_param_spec_object ("label-widget", NULL, NULL,
+                                                        GTK_TYPE_WIDGET,
+                                                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkExpander:resize-toplevel:
+   * GtkExpander:resize-toplevel: (attributes org.gtk.Property.get=gtk_expander_get_resize_toplevel org.gtk.Property.set=gtk_expander_set_resize_toplevel)
    *
    * When this property is %TRUE, the expander will resize the toplevel
    * widget containing the expander upon expanding and collapsing.
    */
-  props[PROP_RESIZE_TOPLEVEL] = g_param_spec_boolean ("resize-toplevel", NULL, NULL,
-                                                      FALSE,
-                                                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_RESIZE_TOPLEVEL,
+                                   g_param_spec_boolean ("resize-toplevel", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkExpander:child:
+   * GtkExpander:child: (attributes org.gtk.Property.get=gtk_expander_get_child org.gtk.Property.set=gtk_expander_set_child)
    *
    * The child widget.
    */
-  props[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
-                                           GTK_TYPE_WIDGET,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+                                   PROP_CHILD,
+                                   g_param_spec_object ("child", NULL, NULL,
+                                                        GTK_TYPE_WIDGET,
+                                                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkExpander::activate:
@@ -450,19 +466,11 @@ gtk_expander_buildable_add_child (GtkBuildable  *buildable,
                                   const char    *type)
 {
   if (g_strcmp0 (type, "label") == 0)
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, "label", "label-widget");
-      gtk_expander_set_label_widget (GTK_EXPANDER (buildable), GTK_WIDGET (child));
-    }
+    gtk_expander_set_label_widget (GTK_EXPANDER (buildable), GTK_WIDGET (child));
   else if (GTK_IS_WIDGET (child))
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-      gtk_expander_set_child (GTK_EXPANDER (buildable), GTK_WIDGET (child));
-    }
+    gtk_expander_set_child (GTK_EXPANDER (buildable), GTK_WIDGET (child));
   else
-    {
-      parent_buildable_iface->add_child (buildable, builder, child, type);
-    }
+    parent_buildable_iface->add_child (buildable, builder, child, type);
 }
 
 static void
@@ -554,7 +562,11 @@ gtk_expander_dispose (GObject *object)
 {
   GtkExpander *expander = GTK_EXPANDER (object);
 
-  g_clear_handle_id (&expander->expand_timer, g_source_remove);
+  if (expander->expand_timer)
+    {
+      g_source_remove (expander->expand_timer);
+      expander->expand_timer = 0;
+    }
 
   /* If the expander is not expanded, we own the child */
   if (!expander->expanded)
@@ -562,7 +574,8 @@ gtk_expander_dispose (GObject *object)
 
   if (expander->box)
     {
-      g_clear_pointer (&expander->box, gtk_widget_unparent);
+      gtk_widget_unparent (expander->box);
+      expander->box = NULL;
       expander->child = NULL;
       expander->label_widget = NULL;
       expander->arrow_widget = NULL;
@@ -804,29 +817,6 @@ gtk_expander_measure (GtkWidget      *widget,
                        minimum_baseline, natural_baseline);
 }
 
-static void
-update_accessible_mnemonic (GtkExpander *expander)
-{
-  if (GTK_IS_LABEL (expander->label_widget) && expander->use_underline)
-    {
-      guint keyval = gtk_label_get_mnemonic_keyval (GTK_LABEL (expander->label_widget));
-      if (keyval != GDK_KEY_VoidSymbol)
-        {
-          const char *name = gdk_keyval_name (gdk_keyval_to_upper (keyval));
-          char *shortcut = g_strdup_printf ("Alt+%s", name);
-          gtk_accessible_update_property (GTK_ACCESSIBLE (expander),
-                                          GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS, shortcut,
-                                          -1);
-          g_free (shortcut);
-          return;
-        }
-    }
-
-  /* No mnemonic - clear the property */
-  gtk_accessible_reset_property (GTK_ACCESSIBLE (expander),
-                                 GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS);
-}
-
 /**
  * gtk_expander_new:
  * @label: (nullable): the text of the label
@@ -867,7 +857,7 @@ gtk_expander_new_with_mnemonic (const char *label)
 }
 
 /**
- * gtk_expander_set_expanded:
+ * gtk_expander_set_expanded: (attributes org.gtk.Method.set_property=expanded)
  * @expander: a `GtkExpander`
  * @expanded: whether the child widget is revealed
  *
@@ -925,11 +915,11 @@ gtk_expander_set_expanded (GtkExpander *expander,
                                GTK_ACCESSIBLE_STATE_EXPANDED, expanded,
                                -1);
 
-  g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_EXPANDED]);
+  g_object_notify (G_OBJECT (expander), "expanded");
 }
 
 /**
- * gtk_expander_get_expanded:
+ * gtk_expander_get_expanded: (attributes org.gtk.Method.get_property=expanded)
  * @expander:a `GtkExpander`
  *
  * Queries a `GtkExpander` and returns its current state.
@@ -947,7 +937,7 @@ gtk_expander_get_expanded (GtkExpander *expander)
 }
 
 /**
- * gtk_expander_set_label:
+ * gtk_expander_set_label: (attributes org.gtk.Method.set_property=label)
  * @expander: a `GtkExpander`
  * @label: (nullable): a string
  *
@@ -976,11 +966,11 @@ gtk_expander_set_label (GtkExpander *expander,
       gtk_expander_set_label_widget (expander, child);
     }
 
-  g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_LABEL]);
+  g_object_notify (G_OBJECT (expander), "label");
 }
 
 /**
- * gtk_expander_get_label:
+ * gtk_expander_get_label: (attributes org.gtk.Method.get_property=label)
  * @expander: a `GtkExpander`
  *
  * Fetches the text from a label widget.
@@ -1006,7 +996,7 @@ gtk_expander_get_label (GtkExpander *expander)
 }
 
 /**
- * gtk_expander_set_use_underline:
+ * gtk_expander_set_use_underline: (attributes org.gtk.Method.set_property=use-underline)
  * @expander: a `GtkExpander`
  * @use_underline: %TRUE if underlines in the text indicate mnemonics
  *
@@ -1027,14 +1017,12 @@ gtk_expander_set_use_underline (GtkExpander *expander,
       if (GTK_IS_LABEL (expander->label_widget))
         gtk_label_set_use_underline (GTK_LABEL (expander->label_widget), use_underline);
 
-      update_accessible_mnemonic (expander);
-
-      g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_USE_UNDERLINE]);
+      g_object_notify (G_OBJECT (expander), "use-underline");
     }
 }
 
 /**
- * gtk_expander_get_use_underline:
+ * gtk_expander_get_use_underline: (attributes org.gtk.Method.get_property=use-underline)
  * @expander: a `GtkExpander`
  *
  * Returns whether an underline in the text indicates a mnemonic.
@@ -1051,7 +1039,7 @@ gtk_expander_get_use_underline (GtkExpander *expander)
 }
 
 /**
- * gtk_expander_set_use_markup:
+ * gtk_expander_set_use_markup: (attributes org.gtk.Method.set_property=use-markup)
  * @expander: a `GtkExpander`
  * @use_markup: %TRUE if the label’s text should be parsed for markup
  *
@@ -1072,12 +1060,12 @@ gtk_expander_set_use_markup (GtkExpander *expander,
       if (GTK_IS_LABEL (expander->label_widget))
         gtk_label_set_use_markup (GTK_LABEL (expander->label_widget), use_markup);
 
-      g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_USE_MARKUP]);
+      g_object_notify (G_OBJECT (expander), "use-markup");
     }
 }
 
 /**
- * gtk_expander_get_use_markup:
+ * gtk_expander_get_use_markup: (attributes org.gtk.Method.get_property=use-markup)
  * @expander: a `GtkExpander`
  *
  * Returns whether the label’s text is interpreted as Pango markup.
@@ -1093,7 +1081,7 @@ gtk_expander_get_use_markup (GtkExpander *expander)
 }
 
 /**
- * gtk_expander_set_label_widget:
+ * gtk_expander_set_label_widget: (attributes org.gtk.Method.set_property=label-widget)
  * @expander: a `GtkExpander`
  * @label_widget: (nullable): the new label widget
  *
@@ -1130,16 +1118,14 @@ gtk_expander_set_label_widget (GtkExpander *expander,
   if (gtk_widget_get_visible (widget))
     gtk_widget_queue_resize (widget);
 
-  update_accessible_mnemonic (expander);
-
   g_object_freeze_notify (G_OBJECT (expander));
-  g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_LABEL_WIDGET]);
-  g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_LABEL]);
+  g_object_notify (G_OBJECT (expander), "label-widget");
+  g_object_notify (G_OBJECT (expander), "label");
   g_object_thaw_notify (G_OBJECT (expander));
 }
 
 /**
- * gtk_expander_get_label_widget:
+ * gtk_expander_get_label_widget: (attributes org.gtk.Method.get_property=label-widget)
  * @expander: a `GtkExpander`
  *
  * Retrieves the label widget for the frame.
@@ -1155,7 +1141,7 @@ gtk_expander_get_label_widget (GtkExpander *expander)
 }
 
 /**
- * gtk_expander_set_resize_toplevel:
+ * gtk_expander_set_resize_toplevel: (attributes org.gtk.Method.set_property=resize-toplevel)
  * @expander: a `GtkExpander`
  * @resize_toplevel: whether to resize the toplevel
  *
@@ -1171,12 +1157,12 @@ gtk_expander_set_resize_toplevel (GtkExpander *expander,
   if (expander->resize_toplevel != resize_toplevel)
     {
       expander->resize_toplevel = resize_toplevel ? TRUE : FALSE;
-      g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_RESIZE_TOPLEVEL]);
+      g_object_notify (G_OBJECT (expander), "resize-toplevel");
     }
 }
 
 /**
- * gtk_expander_get_resize_toplevel:
+ * gtk_expander_get_resize_toplevel: (attributes org.gtk.Method.get_property=resize-toplevel)
  * @expander: a `GtkExpander`
  *
  * Returns whether the expander will resize the toplevel widget
@@ -1193,7 +1179,7 @@ gtk_expander_get_resize_toplevel (GtkExpander *expander)
 }
 
 /**
- * gtk_expander_set_child:
+ * gtk_expander_set_child: (attributes org.gtk.Method.set_property=child)
  * @expander: a `GtkExpander`
  * @child: (nullable): the child widget
  *
@@ -1247,11 +1233,11 @@ gtk_expander_set_child (GtkExpander *expander,
                                      GTK_ACCESSIBLE_RELATION_CONTROLS);
     }
 
-  g_object_notify_by_pspec (G_OBJECT (expander), props[PROP_CHILD]);
+  g_object_notify (G_OBJECT (expander), "child");
 }
 
 /**
- * gtk_expander_get_child:
+ * gtk_expander_get_child: (attributes org.gtk.Method.get_property=child)
  * @expander: a `GtkExpander`
  *
  * Gets the child widget of @expander.

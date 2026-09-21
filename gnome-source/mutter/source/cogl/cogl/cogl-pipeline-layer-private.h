@@ -35,6 +35,7 @@
 
 #include "cogl/cogl-private.h"
 #include "cogl/cogl-pipeline.h"
+#include "cogl/cogl-node-private.h"
 #include "cogl/cogl-texture.h"
 #include "cogl/cogl-pipeline-layer-state.h"
 #include "cogl/cogl-pipeline-snippet-private.h"
@@ -42,12 +43,20 @@
 
 #include <glib.h>
 
-#define COGL_TYPE_PIPELINE_LAYER (cogl_pipeline_layer_get_type ())
+#define COGL_TYPE_PIPELINE_LAYER            (cogl_pipeline_layer_get_type ())
+#define COGL_PIPELINE_LAYER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), COGL_TYPE_PIPELINE_LAYER, CoglPipelineLayer))
+#define COGL_PIPELINE_LAYER_CONST(obj)      (G_TYPE_CHECK_INSTANCE_CAST ((obj), COGL_TYPE_PIPELINE_LAYER, CoglPipelineLayer const))
+#define COGL_PIPELINE_LAYER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass),  COGL_TYPE_PIPELINE_LAYER, CoglPipelineLayerClass))
+#define COGL_IS_PIPELINE_LAYER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), COGL_TYPE_PIPELINE_LAYER))
+#define COGL_IS_PIPELINE_LAYER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass),  COGL_TYPE_PIPELINE_LAYER))
+#define COGL_PIPELINE_LAYER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  COGL_TYPE_PIPELINE_LAYER, CoglPipelineLayerClass))
 
-G_DECLARE_FINAL_TYPE (CoglPipelineLayer,
-                      cogl_pipeline_layer,
-                      COGL, PIPELINE_LAYER,
-                      GObject)
+typedef struct _CoglPipelineLayerClass CoglPipelineLayerClass;
+typedef struct _CoglPipelineLayer CoglPipelineLayer;
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglPipelineLayer, g_object_unref)
+
+GType               cogl_pipeline_layer_get_type       (void) G_GNUC_CONST;
 
 /* XXX: should I rename these as
  * COGL_PIPELINE_LAYER_STATE_INDEX_XYZ... ?
@@ -209,13 +218,7 @@ struct _CoglPipelineLayer
    * the state relating to a given pipeline or layer may actually be
    * owned by one if is ancestors in the tree. We have a common data
    * type to track the tree hierarchy so we can share code... */
-  GObject parent_instance;
-
-  CoglPipelineLayer *parent;
-  CoglPipelineLayer *prev_sibling;
-  CoglPipelineLayer *next_sibling;
-  CoglPipelineLayer *first_child;
-  CoglPipelineLayer *last_child;
+  CoglNode parent_instance;
 
   /* Some layers have a pipeline owner, which is to say that the layer
    * is referenced in that pipelines->layer_differences list.  A layer
@@ -259,6 +262,11 @@ struct _CoglPipelineLayer
 
 };
 
+struct _CoglPipelineLayerClass
+{
+   CoglNodeClass parent_class;
+};
+
 
 typedef gboolean
 (*CoglPipelineLayerStateComparator) (CoglPipelineLayer *authority0,
@@ -272,7 +280,8 @@ _cogl_pipeline_init_default_layers (CoglContext *ctx);
 static inline CoglPipelineLayer *
 _cogl_pipeline_layer_get_parent (CoglPipelineLayer *layer)
 {
-  return layer->parent;
+  CoglNode *parent_node = COGL_NODE (layer)->parent;
+  return COGL_PIPELINE_LAYER (parent_node);
 }
 
 CoglPipelineLayer *
@@ -323,6 +332,14 @@ _cogl_pipeline_layer_get_filters (CoglPipelineLayer *layer,
 
 const CoglSamplerCacheEntry *
 _cogl_pipeline_layer_get_sampler_state (CoglPipelineLayer *layer);
+
+typedef enum
+{
+  COGL_PIPELINE_LAYER_TYPE_TEXTURE
+} CoglPipelineLayerType;
+
+CoglPipelineLayerType
+_cogl_pipeline_layer_get_type (CoglPipelineLayer *layer);
 
 CoglTexture *
 _cogl_pipeline_layer_get_texture (CoglPipelineLayer *layer);

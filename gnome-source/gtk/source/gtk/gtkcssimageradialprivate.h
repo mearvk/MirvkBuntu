@@ -36,9 +36,8 @@ typedef struct _GtkCssImageRadialClass      GtkCssImageRadialClass;
 typedef struct _GtkCssImageRadialColorStop  GtkCssImageRadialColorStop;
 
 struct _GtkCssImageRadialColorStop {
-  GtkCssValue        *transition_hint;
-  GtkCssValue        *color;
   GtkCssValue        *offset;
+  GtkCssValue        *color;
 };
 
 typedef enum {
@@ -55,13 +54,8 @@ struct _GtkCssImageRadial
 
   GtkCssValue *position;
   GtkCssValue *sizes[2];
-
-  GtkCssColorSpace color_space;
-  GtkCssHueInterpolation hue_interp;
-
   guint n_stops;
   GtkCssImageRadialColorStop *color_stops;
-
   GtkCssRadialSize size;
   guint circle : 1;
   guint repeating :1;
@@ -72,7 +66,7 @@ struct _GtkCssImageRadialClass
   GtkCssImageClass parent_class;
 };
 
-GType          _gtk_css_image_radial_get_type             (void);
+GType          _gtk_css_image_radial_get_type             (void) G_GNUC_CONST;
 
 G_END_DECLS
 

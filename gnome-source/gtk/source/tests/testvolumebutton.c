@@ -35,7 +35,7 @@ response_cb (GtkDialog *dialog,
   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
-static void
+static gboolean
 show_error (gpointer data)
 {
   GtkWindow *window = (GtkWindow *) data;
@@ -50,8 +50,10 @@ show_error (gpointer data)
                                    "This should have unbroken the grab");
   g_signal_connect_object (G_OBJECT (dialog),
                            "response",
-                           G_CALLBACK (response_cb), NULL, G_CONNECT_DEFAULT);
+                           G_CALLBACK (response_cb), NULL, 0);
   gtk_window_present (GTK_WINDOW (dialog));
+
+  return G_SOURCE_REMOVE;
 }
 
 int
@@ -83,7 +85,7 @@ main (int    argc,
   gtk_box_append (GTK_BOX (box), button2);
 
   gtk_window_present (GTK_WINDOW (window));
-  g_timeout_add_once (4000, (GSourceOnceFunc) show_error, window);
+  g_timeout_add (4000, (GSourceFunc) show_error, window);
 
   while (TRUE)
     g_main_context_iteration (NULL, TRUE);

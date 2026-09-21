@@ -25,19 +25,15 @@
 #include <string.h>
 #include <X11/Xlib-xcb.h>
 
-#include "backends/meta-cursor-tracker-private.h"
 #include "backends/meta-monitor-config-store.h"
 #include "backends/meta-virtual-monitor.h"
 #include "backends/native/meta-backend-native.h"
 #include "backends/native/meta-input-thread.h"
 #include "backends/native/meta-seat-native.h"
-#include "compositor/meta-window-actor-private.h"
 #include "core/display-private.h"
 #include "core/window-private.h"
 #include "meta-test/meta-context-test.h"
-#include "wayland/meta-wayland-pointer.h"
-#include "wayland/meta-wayland-private.h"
-#include "wayland/meta-window-wayland.h"
+#include "wayland/meta-wayland.h"
 #include "wayland/meta-xwayland.h"
 #include "x11/meta-x11-display-private.h"
 
@@ -57,6 +53,7 @@ struct _MetaTestClient
   GError **error;
 
   MetaAsyncWaiter *waiter;
+  MetaX11AlarmFilter *alarm_filter;
 };
 
 struct _MetaAsyncWaiter
@@ -69,8 +66,6 @@ struct _MetaAsyncWaiter
 
   GMainLoop *loop;
   int counter_wait_value;
-
-  MetaX11AlarmFilter *alarm_filter;
 };
 
 typedef struct
@@ -78,31 +73,20 @@ typedef struct
   GList *subprocesses;
 } ClientProcessHandler;
 
-typedef struct _MetaTestComandWatcher
-{
-  MetaTestCommandFunc func;
-  gpointer user_data;
-
-  GDataInputStream *client_stdout;
-  GOutputStream *client_stdin;
-  GCancellable *cancellable;
-} MetaTestCommandWatcher;
-
 G_DEFINE_QUARK (meta-test-client-error-quark, meta_test_client_error)
 
-static char *test_runner_client_path;
-
-static void read_line_async (GDataInputStream       *client_stdout,
-                             MetaTestCommandWatcher *watcher);
+static char *test_client_path;
 
 void
 meta_ensure_test_client_path (int    argc,
                               char **argv)
 {
-  test_runner_client_path = g_test_build_filename (G_TEST_BUILT,
-                                                   "mutter-test-client",
-                                                   NULL);
-  if (!g_file_test (test_runner_client_path,
+  test_client_path = g_test_build_filename (G_TEST_BUILT,
+                                            "src",
+                                            "tests",
+                                            "mutter-test-client",
+                                            NULL);
+  if (!g_file_test (test_client_path,
                     G_FILE_TEST_EXISTS | G_FILE_TEST_IS_EXECUTABLE))
     {
       g_autofree char *basename = NULL;
@@ -111,23 +95,13 @@ meta_ensure_test_client_path (int    argc,
       basename = g_path_get_basename (argv[0]);
 
       dirname = g_path_get_dirname (argv[0]);
-      test_runner_client_path = g_build_filename (dirname,
-                                                  "mutter-test-client", NULL);
+      test_client_path = g_build_filename (dirname,
+                                           "mutter-test-client", NULL);
     }
 
-  if (!g_file_test (test_runner_client_path,
+  if (!g_file_test (test_client_path,
                     G_FILE_TEST_EXISTS | G_FILE_TEST_IS_EXECUTABLE))
     g_error ("mutter-test-client executable not found");
-}
-
-static gboolean
-async_waiter_alarm_filter (MetaX11Display        *x11_display,
-                           XSyncAlarmNotifyEvent *event,
-                           gpointer               user_data)
-{
-  MetaAsyncWaiter *waiter = user_data;
-
-  return meta_async_waiter_process_x11_event (waiter, x11_display, event);
 }
 
 MetaAsyncWaiter *
@@ -173,11 +147,6 @@ meta_async_waiter_new (MetaX11Display *x11_display)
 
   waiter->loop = g_main_loop_new (NULL, FALSE);
 
-  waiter->alarm_filter =
-    meta_x11_display_add_alarm_filter (x11_display,
-                                       async_waiter_alarm_filter,
-                                       waiter);
-
   return waiter;
 }
 
@@ -194,18 +163,10 @@ meta_async_waiter_destroy (MetaAsyncWaiter *waiter)
       XSyncDestroyAlarm (xdisplay, waiter->alarm);
       XSyncDestroyCounter (xdisplay, waiter->counter);
 
-      if (waiter->alarm_filter)
-        {
-          meta_x11_display_remove_alarm_filter (x11_display,
-                                                waiter->alarm_filter);
-        }
-
       g_object_remove_weak_pointer (G_OBJECT (x11_display),
                                     (gpointer *) &waiter->x11_display);
     }
   g_main_loop_unref (waiter->loop);
-
-  g_free (waiter);
 }
 
 static int
@@ -249,7 +210,7 @@ meta_async_waiter_process_x11_event (MetaAsyncWaiter       *waiter,
                                      MetaX11Display        *x11_display,
                                      XSyncAlarmNotifyEvent *event)
 {
-  g_assert_true (x11_display == waiter->x11_display);
+  g_assert (x11_display == waiter->x11_display);
 
   if (event->alarm != waiter->alarm)
     return FALSE;
@@ -267,12 +228,6 @@ char *
 meta_test_client_get_id (MetaTestClient *client)
 {
   return client->id;
-}
-
-MetaWindowClientType
-meta_test_client_get_client_type (MetaTestClient *client)
-{
-  return client->type;
 }
 
 static void
@@ -309,7 +264,8 @@ meta_test_client_do_line (MetaTestClient  *client,
 
   client->error = &local_error;
   g_main_loop_run (client->loop);
-  line = g_steal_pointer (&client->line);
+  line = client->line;
+  client->line = NULL;
   client->error = NULL;
 
   if (local_error)
@@ -340,51 +296,46 @@ meta_test_client_do_line (MetaTestClient  *client,
 }
 
 gboolean
-meta_test_client_do_strv (MetaTestClient  *client,
-                          const char     **args,
-                          GError         **error)
-{
-  g_autoptr (GString) command = NULL;
-  const char **arg;
-
-  command = g_string_new (NULL);
-  for (arg = &args[0]; *arg; arg++)
-    {
-      g_autofree char *quoted = NULL;
-
-      if (command->len > 0)
-        g_string_append_c (command, ' ');
-
-      quoted = g_shell_quote (*arg);
-      g_string_append (command, quoted);
-    }
-
-  g_string_append_c (command, '\n');
-
-  return meta_test_client_do_line (client, command->str, error);
-}
-
-gboolean
 meta_test_client_dov (MetaTestClient  *client,
                       GError         **error,
                       va_list          vap)
 {
-  g_autoptr (GStrvBuilder) args_builder = NULL;
-  g_auto (GStrv) args = NULL;
+  GString *command = g_string_new (NULL);
+  GError *local_error = NULL;
 
-  args_builder = g_strv_builder_new ();
   while (TRUE)
     {
       char *word = va_arg (vap, char *);
+      char *quoted;
 
-      if (!word)
+      if (word == NULL)
         break;
 
-      g_strv_builder_add (args_builder, word);
+      if (command->len > 0)
+        g_string_append_c (command, ' ');
+
+      quoted = g_shell_quote (word);
+      g_string_append (command, quoted);
+      g_free (quoted);
     }
 
-  args = g_strv_builder_end (args_builder);
-  return meta_test_client_do_strv (client, (const char **) args, error);
+  g_string_append_c (command, '\n');
+
+  if (!meta_test_client_do_line (client, command->str, &local_error))
+    goto out;
+
+ out:
+  g_string_free (command, TRUE);
+
+  if (local_error)
+    {
+      g_propagate_error (error, local_error);
+      return FALSE;
+    }
+  else
+    {
+      return TRUE;
+    }
 }
 
 gboolean
@@ -505,19 +456,9 @@ typedef struct _WaitForShownData
 } WaitForShownData;
 
 static void
-window_weak_notify_cb (gpointer  user_data,
-                       GObject  *where_the_object_was)
-{
-  g_error ("Window was destroyed when waiting to be shown");
-}
-
-static void
 on_window_shown (MetaWindow       *window,
                  WaitForShownData *data)
 {
-  g_object_weak_unref (G_OBJECT (window),
-                       window_weak_notify_cb,
-                       NULL);
   g_main_loop_quit (data->loop);
 }
 
@@ -534,25 +475,19 @@ wait_for_showing_before_redraw (gpointer user_data)
     }
   else
     {
-      g_object_weak_unref (G_OBJECT (data->window),
-                           window_weak_notify_cb,
-                           NULL);
       g_main_loop_quit (data->loop);
     }
 
-  return G_SOURCE_REMOVE;
+  return FALSE;
 }
 
 void
-meta_wait_for_window_shown (MetaWindow *window)
+meta_test_client_wait_for_window_shown (MetaTestClient *client,
+                                        MetaWindow     *window)
 {
   MetaDisplay *display = meta_window_get_display (window);
   MetaCompositor *compositor = meta_display_get_compositor (display);
   MetaLaters *laters = meta_compositor_get_laters (compositor);
-
-  g_object_weak_ref (G_OBJECT (window),
-                     window_weak_notify_cb,
-                     NULL);
 
   WaitForShownData data = {
     .loop = g_main_loop_new (NULL, FALSE),
@@ -567,30 +502,21 @@ meta_wait_for_window_shown (MetaWindow *window)
   g_main_loop_unref (data.loop);
 }
 
-static void
-on_after_paint (ClutterStage     *stage,
-                ClutterStageView *view,
-                ClutterFrame     *frame,
-                gboolean         *was_painted)
+static gboolean
+meta_test_client_process_x11_event (MetaTestClient        *client,
+                                    MetaX11Display        *x11_display,
+                                    XSyncAlarmNotifyEvent *event)
 {
-  *was_painted = TRUE;
-}
-
-void
-meta_wait_for_paint (ClutterStage *stage)
-{
-  gboolean was_painted = FALSE;
-  gulong was_painted_id;
-
-  was_painted_id = g_signal_connect (stage,
-                                     "after-paint",
-                                     G_CALLBACK (on_after_paint),
-                                     &was_painted);
-
-  while (!was_painted)
-    g_main_context_iteration (NULL, TRUE);
-
-  g_signal_handler_disconnect (stage, was_painted_id);
+  if (client->waiter)
+    {
+      return meta_async_waiter_process_x11_event (client->waiter,
+                                                  x11_display,
+                                                  event);
+    }
+  else
+    {
+      return FALSE;
+    }
 }
 
 static gpointer
@@ -665,6 +591,16 @@ ensure_process_handler (MetaContext *context)
   return process_handler;
 }
 
+static gboolean
+alarm_filter (MetaX11Display        *x11_display,
+              XSyncAlarmNotifyEvent *event,
+              gpointer               user_data)
+{
+  MetaTestClient *client = user_data;
+
+  return meta_test_client_process_x11_event (client, x11_display, event);
+}
+
 MetaTestClient *
 meta_test_client_new (MetaContext           *context,
                       const char            *id,
@@ -680,13 +616,11 @@ meta_test_client_new (MetaContext           *context,
 #ifdef HAVE_XWAYLAND
   const char *x11_display_name;
 #endif
-#ifdef HAVE_ASAN_TESTS
-  g_autofree char *asan_options = NULL;
-#endif
 
   launcher =  g_subprocess_launcher_new ((G_SUBPROCESS_FLAGS_STDIN_PIPE |
                                           G_SUBPROCESS_FLAGS_STDOUT_PIPE));
 
+  g_assert (meta_is_wayland_compositor ());
   compositor = meta_context_get_wayland_compositor (context);
   wayland_display_name = meta_wayland_get_wayland_display_name (compositor);
 #ifdef HAVE_XWAYLAND
@@ -708,14 +642,9 @@ meta_test_client_new (MetaContext           *context,
     }
 #endif
 
-#ifdef HAVE_ASAN_TESTS
-  asan_options = g_strdup_printf ("detect_leaks=0:%s", getenv ("ASAN_OPTIONS"));
-  g_subprocess_launcher_setenv (launcher, "ASAN_OPTIONS", asan_options, TRUE);
-#endif
-
   subprocess = g_subprocess_launcher_spawn (launcher,
                                             error,
-                                            test_runner_client_path,
+                                            test_client_path,
                                             "--client-id",
                                             id,
                                             (type == META_WINDOW_CLIENT_TYPE_WAYLAND ?
@@ -764,6 +693,10 @@ meta_test_client_new (MetaContext           *context,
       x11_display = meta_display_get_x11_display (display);
       g_assert_nonnull (x11_display);
 
+      client->alarm_filter = meta_x11_display_add_alarm_filter (x11_display,
+                                                                alarm_filter,
+                                                                client);
+
       client->waiter = meta_async_waiter_new (x11_display);
     }
 
@@ -786,7 +719,16 @@ meta_test_client_quit (MetaTestClient  *client,
 void
 meta_test_client_destroy (MetaTestClient *client)
 {
+  MetaDisplay *display = meta_context_get_display (client->context);
+  MetaX11Display *x11_display;
   GError *error = NULL;
+
+  x11_display = meta_display_get_x11_display (display);
+  if (client->alarm_filter && x11_display)
+    {
+      meta_x11_display_remove_alarm_filter (x11_display,
+                                            client->alarm_filter);
+    }
 
   if (client->waiter)
     meta_async_waiter_destroy (client->waiter);
@@ -823,14 +765,14 @@ meta_set_custom_monitor_config_full (MetaBackend            *backend,
     meta_backend_get_monitor_manager (backend);
   MetaMonitorConfigManager *config_manager = monitor_manager->config_manager;
   MetaMonitorConfigStore *config_store;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   g_autofree char *path = NULL;
 
   g_assert_nonnull (config_manager);
 
   config_store = meta_monitor_config_manager_get_store (config_manager);
 
-  path = g_test_build_filename (G_TEST_DIST, "monitor-configs",
+  path = g_test_build_filename (G_TEST_DIST, "tests", "monitor-configs",
                                 filename, NULL);
   if (!meta_monitor_config_store_set_custom (config_store, path, NULL,
                                              configs_flags,
@@ -879,7 +821,7 @@ raise_error (const char *message)
 }
 
 void
-meta_wait_for_presented (MetaContext *context)
+meta_wait_for_paint (MetaContext *context)
 {
   MetaBackend *backend = meta_context_get_backend (context);
   ClutterActor *stage = meta_backend_get_stage (backend);
@@ -905,33 +847,6 @@ meta_wait_for_presented (MetaContext *context)
   g_signal_handler_disconnect (monitor_manager, monitors_changed_handler_id);
 }
 
-static void
-on_after_update (ClutterStage     *stage,
-                 ClutterStageView *view,
-                 ClutterFrame     *frame,
-                 gboolean         *done)
-{
-  *done = TRUE;
-}
-
-void
-meta_wait_for_update (MetaContext *context)
-{
-  MetaBackend *backend = meta_context_get_backend (context);
-  ClutterActor *stage = meta_backend_get_stage (backend);
-  gulong after_update_handler_id;
-  gboolean done = FALSE;
-
-  clutter_stage_schedule_update (CLUTTER_STAGE (stage));
-
-  after_update_handler_id = g_signal_connect (stage, "after-update",
-                                              G_CALLBACK (on_after_update),
-                                              &done);
-  while (!done)
-    g_main_context_iteration (NULL, TRUE);
-  g_signal_handler_disconnect (stage, after_update_handler_id);
-}
-
 MetaVirtualMonitor *
 meta_create_test_monitor (MetaContext *context,
                           int          width,
@@ -947,11 +862,10 @@ meta_create_test_monitor (MetaContext *context,
   MetaVirtualMonitor *virtual_monitor;
 
   serial = g_strdup_printf ("0x%x", serial_count++);
-  monitor_info = meta_virtual_monitor_info_new_simple (width, height,
-                                                       refresh_rate,
-                                                       "MetaTestVendor",
-                                                       "MetaVirtualMonitor",
-                                                       serial);
+  monitor_info = meta_virtual_monitor_info_new (width, height, refresh_rate,
+                                                "MetaTestVendor",
+                                                "MetaVirtualMonitor",
+                                                serial);
   virtual_monitor = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                  monitor_info,
                                                                  &error);
@@ -962,28 +876,33 @@ meta_create_test_monitor (MetaContext *context,
   return virtual_monitor;
 }
 
-static GMutex mutex;
-static GCond cond;
+#ifdef HAVE_NATIVE_BACKEND
+static gboolean
+callback_idle (gpointer user_data)
+{
+  GMainLoop *loop = user_data;
+
+  g_main_loop_quit (loop);
+  return G_SOURCE_REMOVE;
+}
 
 static gboolean
 queue_callback (GTask *task)
 {
-  g_mutex_lock (&mutex);
-  g_cond_signal (&cond);
-  g_mutex_unlock (&mutex);
-
-  g_task_return_boolean (task, TRUE);
-
+  g_idle_add (callback_idle, g_task_get_task_data (task));
   return G_SOURCE_REMOVE;
 }
+#endif
 
 void
 meta_flush_input (MetaContext *context)
 {
+#ifdef HAVE_NATIVE_BACKEND
   MetaBackend *backend = meta_context_get_backend (context);
   ClutterSeat *seat;
   MetaSeatNative *seat_native;
   g_autoptr (GTask) task = NULL;
+  g_autoptr (GMainLoop) loop = NULL;
 
   g_assert_true (META_IS_BACKEND_NATIVE (backend));
 
@@ -991,310 +910,12 @@ meta_flush_input (MetaContext *context)
   seat_native = META_SEAT_NATIVE (seat);
 
   task = g_task_new (backend, NULL, NULL, NULL);
-
-  g_mutex_lock (&mutex);
+  loop = g_main_loop_new (NULL, FALSE);
+  g_task_set_task_data (task, loop, NULL);
 
   meta_seat_impl_run_input_task (seat_native->impl, task,
                                  (GSourceFunc) queue_callback);
 
-  g_cond_wait (&cond, &mutex);
-  g_mutex_unlock (&mutex);
-}
-
-GSubprocess *
-meta_launch_test_executable (GSubprocessFlags  subprocess_flags,
-                             const char       *name,
-                             const char       *argv0,
-                             ...)
-{
-  g_autoptr (GPtrArray) args = NULL;
-  const char *arg;
-  va_list ap;
-  g_autofree char *test_client_path = NULL;
-  g_autoptr (GSubprocessLauncher) launcher = NULL;
-  GSubprocess *subprocess;
-  GError *error = NULL;
-
-  args = g_ptr_array_new ();
-
-  test_client_path = g_test_build_filename (G_TEST_BUILT, name, NULL);
-  g_ptr_array_add (args, test_client_path);
-
-  va_start (ap, argv0);
-  g_ptr_array_add (args, (char *) argv0);
-  while ((arg = va_arg (ap, const char *)))
-    g_ptr_array_add (args, (char *) arg);
-
-  g_ptr_array_add (args, NULL);
-  va_end (ap);
-
-  launcher = g_subprocess_launcher_new (subprocess_flags);
-  g_subprocess_launcher_setenv (launcher,
-                                "XDG_RUNTIME_DIR", getenv ("XDG_RUNTIME_DIR"),
-                                TRUE);
-  g_subprocess_launcher_setenv (launcher,
-                                "G_TEST_SRCDIR", g_test_get_dir (G_TEST_DIST),
-                                TRUE);
-  g_subprocess_launcher_setenv (launcher,
-                                "G_TEST_BUILDDIR", g_test_get_dir (G_TEST_BUILT),
-                                TRUE);
-  g_subprocess_launcher_setenv (launcher,
-                                "G_MESSAGES_DEBUG", "all",
-                                TRUE);
-  subprocess = g_subprocess_launcher_spawnv (launcher,
-                                             (const char * const *) args->pdata,
-                                             &error);
-  if (!subprocess)
-    g_error ("Failed to launch screen cast test client: %s", error->message);
-
-  return subprocess;
-}
-
-static void
-process_line (const char             *line,
-              MetaTestCommandWatcher *watcher)
-{
-  g_autoptr (GError) error = NULL;
-  g_auto (GStrv) argv = NULL;
-  int argc;
-
-  if (!g_shell_parse_argv (line, &argc, &argv, &error))
-    g_assert_no_error (error);
-
-  if (!watcher->func (argc, argv, watcher->user_data))
-    g_error ("Unknown command '%s'", line);
-
-  if (watcher->client_stdin)
-    {
-      g_output_stream_printf (watcher->client_stdin, NULL, NULL, &error,
-                              "OK\n");
-      g_assert_no_error (error);
-      g_output_stream_flush (watcher->client_stdin, NULL, &error);
-      g_assert_no_error (error);
-    }
-}
-
-static void
-line_read_cb (GObject      *source_object,
-              GAsyncResult *res,
-              gpointer      user_data)
-{
-  GDataInputStream *client_stdout = G_DATA_INPUT_STREAM (source_object);
-  MetaTestCommandWatcher *watcher = user_data;
-  g_autoptr (GError) error = NULL;
-  g_autofree char *line = NULL;
-
-  line = g_data_input_stream_read_line_finish_utf8 (client_stdout,
-                                                    res,
-                                                    NULL,
-                                                    &error);
-  if (error)
-    {
-      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_error ("Failed to read line: %s", error->message);
-      return;
-    }
-
-  if (line)
-    process_line (line, watcher);
-
-  read_line_async (client_stdout, watcher);
-}
-
-static void
-read_line_async (GDataInputStream       *client_stdout,
-                 MetaTestCommandWatcher *watcher)
-{
-  g_data_input_stream_read_line_async (client_stdout,
-                                       G_PRIORITY_DEFAULT,
-                                       watcher->cancellable,
-                                       line_read_cb,
-                                       watcher);
-}
-
-static void
-watcher_test_client_exited (GObject      *source_object,
-                            GAsyncResult *result,
-                            gpointer      user_data)
-{
-  MetaTestCommandWatcher *watcher = user_data;
-  GError *error = NULL;
-
-  if (!g_subprocess_wait_finish (G_SUBPROCESS (source_object),
-                                 result,
-                                 &error))
-    g_error ("Screen cast test client exited with an error: %s", error->message);
-
-  g_cancellable_cancel (watcher->cancellable);
-  g_clear_object (&watcher->client_stdout);
-  g_clear_object (&watcher->client_stdin);
-  g_free (watcher);
-}
-
-void
-meta_test_process_watch_commands (GSubprocess         *subprocess,
-                                  MetaTestCommandFunc  func,
-                                  gpointer             user_data)
-{
-  MetaTestCommandWatcher *watcher;
-  GInputStream *stdout_stream;
-  GOutputStream *stdin_stream;
-
-  watcher = g_new0 (MetaTestCommandWatcher, 1);
-
-  watcher->func = func;
-  watcher->user_data = user_data;
-
-  stdout_stream = g_subprocess_get_stdout_pipe (subprocess);
-  if (stdout_stream)
-    watcher->client_stdout = g_data_input_stream_new (stdout_stream);
-
-  stdin_stream = g_subprocess_get_stdin_pipe (subprocess);
-  if (stdin_stream)
-    watcher->client_stdin = g_object_ref (stdin_stream);
-
-  watcher->cancellable = g_cancellable_new ();
-
-  read_line_async (watcher->client_stdout, watcher);
-
-  g_subprocess_wait_check_async (subprocess,
-                                 NULL,
-                                 watcher_test_client_exited,
-                                 watcher);
-}
-
-static void
-test_client_exited (GObject      *source_object,
-                    GAsyncResult *result,
-                    gpointer      user_data)
-{
-  GError *error = NULL;
-
-  if (!g_subprocess_wait_finish (G_SUBPROCESS (source_object),
-                                 result,
-                                 &error))
-    g_error ("Screen cast test client exited with an error: %s", error->message);
-
-  g_main_loop_quit (user_data);
-}
-
-void
-meta_wait_test_process (GSubprocess *subprocess)
-{
-  g_autoptr (GMainLoop) loop = NULL;
-
-  loop = g_main_loop_new (NULL, FALSE);
-  g_subprocess_wait_check_async (subprocess,
-                                 NULL,
-                                 test_client_exited,
-                                 loop);
   g_main_loop_run (loop);
-  g_assert_true (g_subprocess_get_successful (subprocess));
-}
-
-ClutterCursor *
-meta_get_current_cursor (MetaContext *context)
-{
-  MetaBackend *backend = meta_context_get_backend (context);
-  ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
-  ClutterStage *stage = CLUTTER_STAGE (meta_backend_get_stage (backend));
-  ClutterSprite *sprite =
-    clutter_backend_get_pointer_sprite (clutter_backend, stage);
-
-  return clutter_sprite_get_cursor (sprite);
-}
-
-void
-meta_wait_for_cursor_change (MetaContext   *context,
-                             ClutterCursor *current_cursor)
-{
-  while (current_cursor == meta_get_current_cursor (context))
-    g_main_context_iteration (NULL, FALSE);
-}
-
-static gboolean
-check_current_window_cursor (MetaContext *context)
-{
-  MetaWaylandCompositor *wayland_compositor =
-    meta_context_get_wayland_compositor (context);
-  MetaWaylandSeat *wayland_seat = wayland_compositor->seat;
-  MetaWaylandPointer *wayland_pointer = wayland_seat->pointer;
-  g_autoptr (ClutterCursor) pointer_cursor = NULL;
-
-  pointer_cursor = meta_wayland_pointer_get_cursor (wayland_pointer);
-
-  return pointer_cursor == meta_get_current_cursor (context);
-}
-
-void
-meta_wait_for_window_cursor (MetaContext *context)
-{
-  while (!check_current_window_cursor (context))
-    g_main_context_iteration (NULL, FALSE);
-}
-
-void
-meta_wait_for_effects (MetaWindow *window)
-{
-  MetaWindowActor *window_actor;
-
-  window_actor = meta_window_actor_from_window (window);
-  g_object_add_weak_pointer (G_OBJECT (window_actor),
-                             (gpointer *) &window_actor);
-
-  while (window_actor && meta_window_actor_effect_in_progress (window_actor))
-    g_main_context_iteration (NULL, TRUE);
-
-  if (window_actor)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (window_actor),
-                                    (gpointer *) &window_actor);
-    }
-}
-
-void
-meta_wait_wayland_window_reconfigure (MetaWindow *window)
-{
-  MetaWindowWayland *wl_window = META_WINDOW_WAYLAND (window);
-  uint32_t serial;
-
-  g_assert_true (meta_window_wayland_get_pending_serial (wl_window, &serial));
-  while (meta_window_wayland_peek_configuration (wl_window, serial))
-    g_main_context_iteration (NULL, TRUE);
-}
-
-MetaWindow *
-meta_find_client_window (MetaContext *context,
-                         const char  *title)
-{
-  MetaDisplay *display = meta_context_get_display (context);
-  g_autoptr (GSList) windows = NULL;
-  GSList *l;
-
-  windows = meta_display_list_windows (display, META_LIST_DEFAULT);
-  for (l = windows; l; l = l->next)
-    {
-      MetaWindow *window = l->data;
-
-      if (g_strcmp0 (meta_window_get_title (window), title) == 0)
-        return window;
-    }
-
-  return NULL;
-}
-
-MetaWindow *
-meta_wait_for_client_window (MetaContext *context,
-                             const char  *title)
-{
-  while (TRUE)
-    {
-      MetaWindow *window;
-
-      window = meta_find_client_window (context, title);
-      if (window)
-        return window;
-
-      g_main_context_iteration (NULL, TRUE);
-    }
+#endif
 }

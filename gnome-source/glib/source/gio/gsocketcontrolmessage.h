@@ -49,8 +49,6 @@ G_BEGIN_DECLS
 typedef struct _GSocketControlMessagePrivate                GSocketControlMessagePrivate;
 typedef struct _GSocketControlMessageClass                  GSocketControlMessageClass;
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GSocketControlMessage, g_object_unref)
-
 /**
  * GSocketControlMessageClass:
  * @get_size: gets the size of the message.
@@ -93,7 +91,7 @@ struct _GSocketControlMessage
 };
 
 GIO_AVAILABLE_IN_ALL
-GType                  g_socket_control_message_get_type     (void);
+GType                  g_socket_control_message_get_type     (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 gsize                  g_socket_control_message_get_size     (GSocketControlMessage *message);
 GIO_AVAILABLE_IN_ALL

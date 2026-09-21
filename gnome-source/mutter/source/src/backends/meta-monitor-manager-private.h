@@ -32,13 +32,13 @@
 
 #include "backends/meta-backend-private.h"
 #include "backends/meta-crtc.h"
+#include "backends/meta-cursor.h"
 #include "backends/meta-display-config-shared.h"
-#include "backends/meta-output.h"
+#include "backends/meta-monitor-transform.h"
 #include "backends/meta-viewport-info.h"
 #include "core/util-private.h"
 #include "meta/display.h"
 #include "meta/meta-monitor-manager.h"
-#include "mtk/mtk.h"
 
 #define META_MONITOR_MANAGER_MIN_SCREEN_WIDTH 640
 #define META_MONITOR_MANAGER_MIN_SCREEN_HEIGHT 480
@@ -85,7 +85,7 @@ struct _MetaCrtcAssignment
   MetaCrtc *crtc;
   MetaCrtcMode *mode;
   graphene_rect_t layout;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   GPtrArray *outputs;
 
   gpointer backend_private;
@@ -107,8 +107,18 @@ struct _MetaOutputAssignment
   gboolean has_max_bpc;
   unsigned int max_bpc;
   unsigned int rgb_range;
-  MetaColorMode color_mode;
 };
+
+/*
+ * MetaOutputCtm:
+ *
+ * A 3x3 color transform matrix in the fixed-point S31.32 sign-magnitude format
+ * used by DRM.
+ */
+typedef struct _MetaOutputCtm
+{
+  uint64_t matrix[9];
+} MetaOutputCtm;
 
 #define META_TYPE_MONITOR_MANAGER            (meta_monitor_manager_get_type ())
 #define META_MONITOR_MANAGER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), META_TYPE_MONITOR_MANAGER, MetaMonitorManager))
@@ -173,6 +183,9 @@ struct _MetaMonitorManager
  *
  * @set_power_save_mode: Sets the #MetaPowerSave mode (for all displays).
  *
+ * @change_backlight: Changes the backlight intensity to the given value (in
+ *   percent).
+ *
  * @tiled_monitor_added: Should be called by a #MetaMonitor when it is created.
  *
  * @tiled_monitor_removed: Should be called by a #MetaMonitor when it is
@@ -210,11 +223,19 @@ struct _MetaMonitorManagerClass
   void (* set_power_save_mode) (MetaMonitorManager *manager,
                                 MetaPowerSave       power_save);
 
+  void (* change_backlight) (MetaMonitorManager *manager,
+                             MetaOutput         *output,
+                             int                 backlight);
+
   void (* tiled_monitor_added) (MetaMonitorManager *manager,
                                 MetaMonitor        *monitor);
 
   void (* tiled_monitor_removed) (MetaMonitorManager *manager,
                                   MetaMonitor        *monitor);
+
+  gboolean (* is_transform_handled) (MetaMonitorManager   *manager,
+                                     MetaCrtc             *crtc,
+                                     MetaMonitorTransform  transform);
 
   float (* calculate_monitor_mode_scale) (MetaMonitorManager           *manager,
                                           MetaLogicalMonitorLayoutMode  layout_mode,
@@ -235,13 +256,16 @@ struct _MetaMonitorManagerClass
 
   MetaLogicalMonitorLayoutMode (* get_default_layout_mode) (MetaMonitorManager *manager);
 
-  void (* set_output_ctm) (MetaOutput    *output,
-                           const MetaCtm *ctm);
+  void (* set_output_ctm) (MetaOutput          *output,
+                           const MetaOutputCtm *ctm);
 
   MetaVirtualMonitor * (* create_virtual_monitor) (MetaMonitorManager            *manager,
                                                    const MetaVirtualMonitorInfo  *info,
                                                    GError                       **error);
 };
+
+META_EXPORT_TEST
+MetaBackend *       meta_monitor_manager_get_backend (MetaMonitorManager *manager);
 
 void                meta_monitor_manager_setup (MetaMonitorManager *manager);
 
@@ -250,7 +274,14 @@ void                meta_monitor_manager_rebuild (MetaMonitorManager *manager,
                                                   MetaMonitorsConfig *config);
 
 META_EXPORT_TEST
+void                meta_monitor_manager_rebuild_derived (MetaMonitorManager *manager,
+                                                          MetaMonitorsConfig *config);
+
+META_EXPORT_TEST
 int                 meta_monitor_manager_get_num_logical_monitors (MetaMonitorManager *manager);
+
+META_EXPORT_TEST
+GList *             meta_monitor_manager_get_logical_monitors (MetaMonitorManager *manager);
 
 MetaLogicalMonitor *meta_monitor_manager_get_logical_monitor_from_number (MetaMonitorManager *manager,
                                                                           int                 number);
@@ -275,7 +306,7 @@ MetaLogicalMonitor *meta_monitor_manager_get_logical_monitor_neighbor (MetaMonit
 MetaMonitor *       meta_monitor_manager_get_primary_monitor (MetaMonitorManager *manager);
 
 META_EXPORT_TEST
-MetaMonitor *       meta_monitor_manager_get_builtin_monitor (MetaMonitorManager *manager);
+MetaMonitor *       meta_monitor_manager_get_laptop_panel (MetaMonitorManager *manager);
 
 MetaMonitor *       meta_monitor_manager_get_monitor_from_spec (MetaMonitorManager *manager,
                                                                 MetaMonitorSpec    *monitor_spec);
@@ -283,16 +314,14 @@ MetaMonitor *       meta_monitor_manager_get_monitor_from_spec (MetaMonitorManag
 MetaMonitor *       meta_monitor_manager_get_monitor_from_connector (MetaMonitorManager *manager,
                                                                      const char         *connector);
 
+META_EXPORT_TEST
+GList *             meta_monitor_manager_get_monitors      (MetaMonitorManager *manager);
+
 void                meta_monitor_manager_get_screen_size   (MetaMonitorManager *manager,
                                                             int                *width,
                                                             int                *height);
 
-META_EXPORT_TEST
 MetaPowerSave       meta_monitor_manager_get_power_save_mode (MetaMonitorManager *manager);
-
-META_EXPORT_TEST
-void                meta_monitor_manager_set_power_save_mode (MetaMonitorManager *monitor_manager,
-                                                              MetaPowerSave       mode);
 
 void                meta_monitor_manager_power_save_mode_changed (MetaMonitorManager        *manager,
                                                                   MetaPowerSave              mode,
@@ -325,16 +354,15 @@ MetaMonitorsConfig * meta_monitor_manager_ensure_configured (MetaMonitorManager 
 
 META_EXPORT_TEST
 void               meta_monitor_manager_update_logical_state (MetaMonitorManager *manager,
-                                                              MetaMonitorsConfig *config,
-                                                              MtkDisposeBin      *bin);
+                                                              MetaMonitorsConfig *config);
 
-void               meta_monitor_manager_update_for_lease_state (MetaMonitorManager *manager,
-                                                                MetaMonitorsConfig *config);
+META_EXPORT_TEST
+void               meta_monitor_manager_update_logical_state_derived (MetaMonitorManager *manager,
+                                                                      MetaMonitorsConfig *config);
 
 META_EXPORT_TEST
 void               meta_monitor_manager_lid_is_closed_changed (MetaMonitorManager *manager);
 
-META_EXPORT_TEST
 gboolean           meta_monitor_manager_is_headless (MetaMonitorManager *manager);
 
 float              meta_monitor_manager_calculate_monitor_mode_scale (MetaMonitorManager           *manager,
@@ -408,11 +436,3 @@ gboolean meta_monitor_manager_apply_monitors_config (MetaMonitorManager        *
                                                      MetaMonitorsConfig        *config,
                                                      MetaMonitorsConfigMethod   method,
                                                      GError                   **error);
-
-MetaLogicalMonitorLayoutMode meta_monitor_manager_get_layout_mode (MetaMonitorManager *manager);
-
-MetaOutput * meta_monitor_manager_find_output (MetaMonitorManager *monitor_manager,
-                                               MetaOutput         *old_output);
-
-MetaMonitor * meta_monitor_manager_find_monitor (MetaMonitorManager *monitor_manager,
-                                                 MetaMonitor        *old_monitor);

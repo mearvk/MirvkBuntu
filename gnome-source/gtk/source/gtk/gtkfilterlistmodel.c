@@ -22,16 +22,16 @@
 #include "gtkfilterlistmodel.h"
 
 #include "gtkbitset.h"
-#include "gtkfilterprivate.h"
 #include "gtkprivate.h"
 #include "gtksectionmodelprivate.h"
 
 /**
  * GtkFilterListModel:
  *
- * A list model that filters the elements of another model.
+ * `GtkFilterListModel` is a list model that filters the elements of
+ * the underlying model according to a `GtkFilter`.
  *
- * It hides some elements from the underlying model according to
+ * It hides some elements from the other model according to
  * criteria given by a `GtkFilter`.
  *
  * The model can be set up to do incremental filtering, so that
@@ -49,15 +49,8 @@ enum {
   PROP_MODEL,
   PROP_N_ITEMS,
   PROP_PENDING,
-  PROP_WATCH_ITEMS,
   NUM_PROPERTIES
 };
-
-typedef struct _WatchData
-{
-  GtkFilter *filter;
-  gpointer watch;
-} WatchData;
 
 struct _GtkFilterListModel
 {
@@ -67,10 +60,6 @@ struct _GtkFilterListModel
   GtkFilter *filter;
   GtkFilterMatch strictness;
   gboolean incremental;
-  gboolean watch_items;
-
-  GSequence *watches; /* NULL if watch_items == FALSE */
-  GtkBitset *watched_items; /* NULL if watch_items == FALSE */
 
   GtkBitset *matches; /* NULL if strictness != GTK_FILTER_MATCH_SOME */
   GtkBitset *pending; /* not yet filtered items or NULL if all filtered */
@@ -83,27 +72,6 @@ struct _GtkFilterListModelClass
 };
 
 static GParamSpec *properties[NUM_PROPERTIES] = { NULL, };
-
-static void
-watch_data_free (gpointer data)
-{
-  WatchData *self = (WatchData *) data;
-
-  if (self->watch)
-    gtk_filter_unwatch (self->filter, g_steal_pointer (&self->watch));
-
-  g_free (self);
-}
-
-static WatchData *
-watch_data_new (GtkFilter *filter,
-                gpointer   watch)
-{
-  WatchData *self = g_new0 (WatchData, 1);
-  self->filter = filter;
-  self->watch = watch;
-  return g_steal_pointer (&self);
-}
 
 static GType
 gtk_filter_list_model_get_item_type (GListModel *list)
@@ -267,12 +235,58 @@ G_DEFINE_TYPE_WITH_CODE (GtkFilterListModel, gtk_filter_list_model, G_TYPE_OBJEC
 
 static gboolean
 gtk_filter_list_model_run_filter_on_item (GtkFilterListModel *self,
-                                          gpointer            item)
+                                          guint               position)
 {
+  gpointer item;
+  gboolean visible;
+
   /* all other cases should have been optimized away */
   g_assert (self->strictness == GTK_FILTER_MATCH_SOME);
 
-  return gtk_filter_match (self->filter, item);
+  item = g_list_model_get_item (self->model, position);
+  visible = gtk_filter_match (self->filter, item);
+  g_object_unref (item);
+
+  return visible;
+}
+
+static void
+gtk_filter_list_model_run_filter (GtkFilterListModel *self,
+                                  guint               n_steps)
+{
+  GtkBitsetIter iter;
+  guint i, pos;
+  gboolean more;
+
+  g_return_if_fail (GTK_IS_FILTER_LIST_MODEL (self));
+
+  if (self->pending == NULL)
+    return;
+
+  for (i = 0, more = gtk_bitset_iter_init_first (&iter, self->pending, &pos);
+       i < n_steps && more;
+       i++, more = gtk_bitset_iter_next (&iter, &pos))
+    {
+      if (gtk_filter_list_model_run_filter_on_item (self, pos))
+        gtk_bitset_add (self->matches, pos);
+    }
+
+  if (more)
+    gtk_bitset_remove_range_closed (self->pending, 0, pos - 1);
+  else
+    g_clear_pointer (&self->pending, gtk_bitset_unref);
+}
+
+static void
+gtk_filter_list_model_stop_filtering (GtkFilterListModel *self)
+{
+  gboolean notify_pending = self->pending != NULL;
+
+  g_clear_pointer (&self->pending, gtk_bitset_unref);
+  g_clear_handle_id (&self->pending_cb, g_source_remove);
+
+  if (notify_pending)
+    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PENDING]);
 }
 
 static void
@@ -300,139 +314,6 @@ gtk_filter_list_model_emit_items_changed_for_changes (GtkFilterListModel *self,
     }
   gtk_bitset_unref (changes);
   gtk_bitset_unref (old);
-}
-
-static void gtk_filter_list_model_start_filtering (GtkFilterListModel *self,
-                                                   GtkBitset          *items);
-
-static void
-item_changed_cb (gpointer item,
-                 gpointer user_data)
-{
-  GtkFilterListModel *self = (GtkFilterListModel *) user_data;
-  GtkBitset *item_to_refilter = NULL;
-  unsigned int position = GTK_INVALID_LIST_POSITION;
-  unsigned int n_items;
-  gboolean was_filtered;
-  gboolean is_filtered;
-
-  g_assert (GTK_IS_FILTER_LIST_MODEL (self));
-  g_assert (G_IS_LIST_MODEL (self->model));
-  g_assert (GTK_IS_FILTER (self->filter));
-
-  item_to_refilter = gtk_bitset_new_empty ();
-  n_items = g_list_model_get_n_items (self->model);
-
-  for (position = 0; position < n_items; position++)
-    {
-      gpointer aux = g_list_model_get_item (self->model, position);
-
-      if (aux == item)
-        {
-          gtk_bitset_add (item_to_refilter, position);
-          g_clear_object (&aux);
-          break;
-        }
-
-      g_clear_object (&aux);
-    }
-
-  g_assert (!gtk_bitset_is_empty (item_to_refilter));
-  g_assert (position != GTK_INVALID_LIST_POSITION);
-
-  was_filtered = gtk_bitset_contains (self->matches, position);
-
-  gtk_filter_list_model_start_filtering (self, g_steal_pointer (&item_to_refilter));
-
-  is_filtered = gtk_bitset_contains (self->matches, position);
-  if (was_filtered != is_filtered)
-    {
-      g_list_model_items_changed (G_LIST_MODEL (self),
-                                  position > 0 ? gtk_bitset_get_size_in_range (self->matches, 0, position - 1) : 0,
-                                  is_filtered ? 0 : 1,
-                                  is_filtered ? 1 : 0);
-
-      g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_N_ITEMS]);
-    }
-}
-
-static void
-gtk_filter_list_model_run_filter (GtkFilterListModel *self,
-                                  guint               n_steps)
-{
-  GtkBitsetIter iter;
-  guint i, pos;
-  gboolean more;
-
-  g_return_if_fail (GTK_IS_FILTER_LIST_MODEL (self));
-
-  if (self->pending == NULL)
-    return;
-
-  for (i = 0, more = gtk_bitset_iter_init_first (&iter, self->pending, &pos);
-       i < n_steps && more;
-       i++, more = gtk_bitset_iter_next (&iter, &pos))
-    {
-      gpointer item = g_list_model_get_item (self->model, pos);
-
-      if (gtk_filter_list_model_run_filter_on_item (self, item))
-        gtk_bitset_add (self->matches, pos);
-      else
-        gtk_bitset_remove (self->matches, pos);
-
-      if (self->watch_items && !gtk_bitset_contains (self->watched_items, pos))
-        {
-          gpointer watch;
-
-          watch = gtk_filter_watch (self->filter, item, item_changed_cb, self, NULL);
-          g_sequence_insert_before (g_sequence_get_iter_at_pos (self->watches, pos),
-                                    watch_data_new (self->filter, watch));
-
-          gtk_bitset_add (self->watched_items, pos);
-        }
-
-      g_clear_object (&item);
-    }
-
-  if (more)
-    gtk_bitset_remove_range_closed (self->pending, 0, pos - 1);
-  else
-    g_clear_pointer (&self->pending, gtk_bitset_unref);
-}
-
-static void
-gtk_filter_list_model_stop_filtering (GtkFilterListModel *self)
-{
-  gboolean notify_pending = self->pending != NULL;
-
-  g_clear_pointer (&self->pending, gtk_bitset_unref);
-  g_clear_handle_id (&self->pending_cb, g_source_remove);
-
-  if (notify_pending)
-    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PENDING]);
-}
-
-static void
-setup_all_watches (GtkFilterListModel *self)
-{
-  unsigned int n_items;
-
-  if (self->filter == NULL || self->model == NULL)
-    return;
-
-  n_items = g_list_model_get_n_items (self->model);
-
-  for (size_t i = 0; i < n_items; i++)
-    {
-      gpointer item = g_list_model_get_item (self->model, i);
-      gpointer watch = gtk_filter_watch (self->filter, item, item_changed_cb, self, NULL);
-
-      g_sequence_append (self->watches, watch_data_new (self->filter, watch));
-
-      g_clear_object (&item);
-    }
-
-  gtk_bitset_add_range (self->watched_items, 0, n_items);
 }
 
 static gboolean
@@ -523,13 +404,6 @@ gtk_filter_list_model_items_changed_cb (GListModel         *model,
   if (self->pending)
     gtk_bitset_splice (self->pending, position, removed, added);
 
-  if (self->watch_items)
-    {
-      GSequenceIter *start = g_sequence_get_iter_at_pos (self->watches, position);
-      g_sequence_remove_range (start, g_sequence_iter_move (start, removed));
-      gtk_bitset_splice (self->watched_items, position, removed, added);
-    }
-
   if (added > 0)
     {
       gtk_filter_list_model_start_filtering (self, gtk_bitset_new_range (position, added));
@@ -566,10 +440,6 @@ gtk_filter_list_model_set_property (GObject      *object,
 
     case PROP_MODEL:
       gtk_filter_list_model_set_model (self, g_value_get_object (value));
-      break;
-
-    case PROP_WATCH_ITEMS:
-      gtk_filter_list_model_set_watch_items (self, g_value_get_boolean (value));
       break;
 
     default:
@@ -612,24 +482,10 @@ gtk_filter_list_model_get_property (GObject     *object,
       g_value_set_uint (value, gtk_filter_list_model_get_pending (self));
       break;
 
-    case PROP_WATCH_ITEMS:
-      g_value_set_boolean (value, gtk_filter_list_model_get_watch_items (self));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
     }
-}
-
-static inline void
-remove_all_watches (GtkFilterListModel *self)
-{
-  if (self->watches && !g_sequence_is_empty (self->watches))
-    g_sequence_remove_range (g_sequence_get_begin_iter (self->watches),
-                             g_sequence_get_end_iter (self->watches));
-  if (self->watched_items)
-    gtk_bitset_remove_all (self->watched_items);
 }
 
 static void
@@ -637,8 +493,6 @@ gtk_filter_list_model_clear_model (GtkFilterListModel *self)
 {
   if (self->model == NULL)
     return;
-
-  remove_all_watches (self);
 
   gtk_filter_list_model_stop_filtering (self);
   g_signal_handlers_disconnect_by_func (self->model, gtk_filter_list_model_items_changed_cb, self);
@@ -660,12 +514,6 @@ gtk_filter_list_model_refilter (GtkFilterListModel *self,
     new_strictness = GTK_FILTER_MATCH_ALL;
   else
     new_strictness = gtk_filter_get_strictness (self->filter);
-
-  /* Item watches only make sense with GTK_FILTER_MATCH_SOME; drop
-   * them for every other situation.
-   */
-  if (new_strictness != self->strictness && new_strictness != GTK_FILTER_MATCH_SOME)
-    remove_all_watches (self);
 
   /* don't set self->strictness yet so get_n_items() and friends return old values */
 
@@ -767,26 +615,15 @@ gtk_filter_list_model_refilter (GtkFilterListModel *self,
           default:
             g_assert_not_reached ();
             /* fall thru */
-          case GTK_FILTER_CHANGE_DIFFERENT_REWATCH:
-            remove_all_watches (self);
-            G_GNUC_FALLTHROUGH;
           case GTK_FILTER_CHANGE_DIFFERENT:
             self->matches = gtk_bitset_new_empty ();
             pending = gtk_bitset_new_range (0, g_list_model_get_n_items (self->model));
             break;
-
-          case GTK_FILTER_CHANGE_LESS_STRICT_REWATCH:
-            remove_all_watches (self);
-            G_GNUC_FALLTHROUGH;
           case GTK_FILTER_CHANGE_LESS_STRICT:
             self->matches = gtk_bitset_copy (old);
             pending = gtk_bitset_new_range (0, g_list_model_get_n_items (self->model));
             gtk_bitset_subtract (pending, self->matches);
             break;
-
-          case GTK_FILTER_CHANGE_MORE_STRICT_REWATCH:
-            remove_all_watches (self);
-            G_GNUC_FALLTHROUGH;
           case GTK_FILTER_CHANGE_MORE_STRICT:
             self->matches = gtk_bitset_new_empty ();
             pending = gtk_bitset_copy (old);
@@ -813,8 +650,6 @@ gtk_filter_list_model_clear_filter (GtkFilterListModel *self)
   if (self->filter == NULL)
     return;
 
-  remove_all_watches (self);
-
   g_signal_handlers_disconnect_by_func (self->filter, gtk_filter_list_model_filter_changed_cb, self);
   g_clear_object (&self->filter);
 }
@@ -827,8 +662,6 @@ gtk_filter_list_model_dispose (GObject *object)
   gtk_filter_list_model_clear_model (self);
   gtk_filter_list_model_clear_filter (self);
   g_clear_pointer (&self->matches, gtk_bitset_unref);
-  g_clear_pointer (&self->watched_items, gtk_bitset_unref);
-  g_clear_pointer (&self->watches, g_sequence_free);
 
   G_OBJECT_CLASS (gtk_filter_list_model_parent_class)->dispose (object);
 }
@@ -843,24 +676,24 @@ gtk_filter_list_model_class_init (GtkFilterListModelClass *class)
   gobject_class->dispose = gtk_filter_list_model_dispose;
 
   /**
-   * GtkFilterListModel:filter:
+   * GtkFilterListModel:filter: (attributes org.gtk.Property.get=gtk_filter_list_model_get_filter org.gtk.Property.set=gtk_filter_list_model_set_filter)
    *
    * The filter for this model.
    */
   properties[PROP_FILTER] =
       g_param_spec_object ("filter", NULL, NULL,
                            GTK_TYPE_FILTER,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFilterListModel:incremental:
+   * GtkFilterListModel:incremental: (attributes org.gtk.Property.get=gtk_filter_list_model_get_incremental org.gtk.Property.set=gtk_filter_list_model_set_incremental)
    *
    * If the model should filter items incrementally.
    */
   properties[PROP_INCREMENTAL] =
       g_param_spec_boolean ("incremental", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkFilterListModel:item-type:
@@ -872,17 +705,17 @@ gtk_filter_list_model_class_init (GtkFilterListModelClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkFilterListModel:model:
+   * GtkFilterListModel:model: (attributes org.gtk.Property.get=gtk_filter_list_model_get_model org.gtk.Property.set=gtk_filter_list_model_set_model)
    *
    * The model being filtered.
    */
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkFilterListModel:n-items:
@@ -894,30 +727,17 @@ gtk_filter_list_model_class_init (GtkFilterListModelClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkFilterListModel:pending:
+   * GtkFilterListModel:pending: (attributes org.gtk.Property.get=gtk_filter_list_model_get_pending)
    *
    * Number of items not yet filtered.
    */
   properties[PROP_PENDING] =
       g_param_spec_uint ("pending", NULL, NULL,
                          0, G_MAXUINT, 0,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-
-  /**
-   * GtkFilterListModel:watch-items:
-   *
-   * Monitor the list items for changes. It may impact performance.
-   *
-   * Since: 4.20
-   */
-  properties[PROP_WATCH_ITEMS] =
-      g_param_spec_boolean ("watch-items", NULL, NULL,
-                            FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -960,7 +780,7 @@ gtk_filter_list_model_new (GListModel *model,
 }
 
 /**
- * gtk_filter_list_model_set_filter:
+ * gtk_filter_list_model_set_filter: (attributes org.gtk.Method.set_property=filter)
  * @self: a `GtkFilterListModel`
  * @filter: (nullable) (transfer none): filter to use
  *
@@ -993,7 +813,7 @@ gtk_filter_list_model_set_filter (GtkFilterListModel *self,
 }
 
 /**
- * gtk_filter_list_model_get_filter:
+ * gtk_filter_list_model_get_filter: (attributes org.gtk.Method.get_property=filter)
  * @self: a `GtkFilterListModel`
  *
  * Gets the `GtkFilter` currently set on @self.
@@ -1009,7 +829,7 @@ gtk_filter_list_model_get_filter (GtkFilterListModel *self)
 }
 
 /**
- * gtk_filter_list_model_set_model:
+ * gtk_filter_list_model_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkFilterListModel`
  * @model: (nullable): The model to be filtered
  *
@@ -1074,7 +894,7 @@ gtk_filter_list_model_set_model (GtkFilterListModel *self,
 }
 
 /**
- * gtk_filter_list_model_get_model:
+ * gtk_filter_list_model_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkFilterListModel`
  *
  * Gets the model currently filtered or %NULL if none.
@@ -1090,7 +910,7 @@ gtk_filter_list_model_get_model (GtkFilterListModel *self)
 }
 
 /**
- * gtk_filter_list_model_set_incremental:
+ * gtk_filter_list_model_set_incremental: (attributes org.gtk.Method.set_property=incremental)
  * @self: a `GtkFilterListModel`
  * @incremental: %TRUE to enable incremental filtering
  *
@@ -1140,7 +960,7 @@ gtk_filter_list_model_set_incremental (GtkFilterListModel *self,
 }
 
 /**
- * gtk_filter_list_model_get_incremental:
+ * gtk_filter_list_model_get_incremental: (attributes org.gtk.Method.get_property=incremental)
  * @self: a `GtkFilterListModel`
  *
  * Returns whether incremental filtering is enabled.
@@ -1158,7 +978,7 @@ gtk_filter_list_model_get_incremental (GtkFilterListModel *self)
 }
 
 /**
- * gtk_filter_list_model_get_pending:
+ * gtk_filter_list_model_get_pending: (attributes org.gtk.Method.get_property=pending)
  * @self: a `GtkFilterListModel`
  *
  * Returns the number of items that have not been filtered yet.
@@ -1189,69 +1009,4 @@ gtk_filter_list_model_get_pending (GtkFilterListModel *self)
     return 0;
 
   return gtk_bitset_get_size (self->pending);
-}
-
-/**
- * gtk_filter_list_model_get_watch_items:
- * @self: a `GtkFilterListModel`
- *
- * Returns whether watching items is enabled.
- *
- * See [method@Gtk.FilterListModel.set_watch_items].
- *
- * Returns: %TRUE if watching items is enabled
- *
- * Since: 4.20
- */
-gboolean
-gtk_filter_list_model_get_watch_items (GtkFilterListModel *self)
-{
-  g_return_val_if_fail (GTK_IS_FILTER_LIST_MODEL (self), FALSE);
-
-  return self->watch_items;
-}
-
-/**
- * gtk_filter_list_model_set_watch_items:
- * @self: a `GtkFilterListModel`
- * @watch_items: %TRUE to watch items for property changes
- *
- * Sets the filter model to monitor properties of its items.
- *
- * This allows implementations of [class@Gtk.Filter] that support expression
- * watching to react to property changes. This property has no effect if the
- * current filter doesn't support watching items.
- *
- * By default, watching items is disabled.
- *
- * Since: 4.20
- **/
-void
-gtk_filter_list_model_set_watch_items (GtkFilterListModel *self,
-                                       gboolean            watch_items)
-{
-  g_return_if_fail (GTK_IS_FILTER_LIST_MODEL (self));
-
-  if (self->watch_items == watch_items)
-    return;
-
-  self->watch_items = watch_items;
-
-  if (watch_items)
-    {
-      g_assert (self->watches == NULL);
-      g_assert (self->watched_items == NULL);
-      self->watched_items = gtk_bitset_new_empty ();
-      self->watches = g_sequence_new (watch_data_free);
-      setup_all_watches (self);
-    }
-  else
-    {
-      g_assert (self->watches != NULL);
-      g_assert (self->watched_items != NULL);
-      g_clear_pointer (&self->watches, g_sequence_free);
-      g_clear_pointer (&self->watched_items, gtk_bitset_unref);
-    }
-
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_WATCH_ITEMS]);
 }

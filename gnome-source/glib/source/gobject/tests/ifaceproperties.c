@@ -396,9 +396,9 @@ static DEFINE_TYPE (DerivedObject, derived_object,
 static void
 assert_in_properties (GParamSpec  *param_spec,
                       GParamSpec **properties,
-                      size_t       n_properties)
+                      gint         n_properties)
 {
-  size_t i;
+  gint i;
   gboolean found = FALSE;
 
   for (i = 0; i < n_properties; i++)

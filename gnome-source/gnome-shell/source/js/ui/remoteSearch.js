@@ -1,6 +1,7 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
-import GioUnix from 'gi://GioUnix';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -69,16 +70,16 @@ const SearchProvider2ProxyInfo = Gio.DBusInterfaceInfo.new_for_xml(SearchProvide
  * @returns {RemoteSearchProvider[]} - the list of remote providers
  */
 export function loadRemoteSearchProviders(searchSettings) {
-    const objectPaths = {};
+    let objectPaths = {};
     let loadedProviders = [];
 
     function loadRemoteSearchProvider(file) {
-        const keyfile = new GLib.KeyFile();
-        const path = file.get_path();
+        let keyfile = new GLib.KeyFile();
+        let path = file.get_path();
 
         try {
             keyfile.load_from_file(path, 0);
-        } catch {
+        } catch (e) {
             return;
         }
 
@@ -87,20 +88,20 @@ export function loadRemoteSearchProviders(searchSettings) {
 
         let remoteProvider;
         try {
-            const group = KEY_FILE_GROUP;
-            const busName = keyfile.get_string(group, 'BusName');
-            const objectPath = keyfile.get_string(group, 'ObjectPath');
+            let group = KEY_FILE_GROUP;
+            let busName = keyfile.get_string(group, 'BusName');
+            let objectPath = keyfile.get_string(group, 'ObjectPath');
 
             if (objectPaths[objectPath])
                 return;
 
             let appInfo = null;
             try {
-                const desktopId = keyfile.get_string(group, 'DesktopId');
-                appInfo = GioUnix.DesktopAppInfo.new(desktopId);
+                let desktopId = keyfile.get_string(group, 'DesktopId');
+                appInfo = Gio.DesktopAppInfo.new(desktopId);
                 if (!appInfo.should_show())
                     return;
-            } catch {
+            } catch (e) {
                 log(`Ignoring search provider ${path}: missing DesktopId`);
                 return;
             }
@@ -108,14 +109,14 @@ export function loadRemoteSearchProviders(searchSettings) {
             let autoStart = true;
             try {
                 autoStart = keyfile.get_boolean(group, 'AutoStart');
-            } catch {
+            } catch (e) {
                 // ignore error
             }
 
             let version = '1';
             try {
                 version = keyfile.get_string(group, 'Version');
-            } catch {
+            } catch (e) {
                 // ignore error
             }
 
@@ -127,7 +128,7 @@ export function loadRemoteSearchProviders(searchSettings) {
             remoteProvider.defaultEnabled = true;
             try {
                 remoteProvider.defaultEnabled = !keyfile.get_boolean(group, 'DefaultDisabled');
-            } catch {
+            } catch (e) {
                 // ignore error
             }
 
@@ -141,16 +142,16 @@ export function loadRemoteSearchProviders(searchSettings) {
     if (searchSettings.get_boolean('disable-external'))
         return [];
 
-    for (const {file} of FileUtils.collectFromDatadirs('search-providers', false))
-        loadRemoteSearchProvider(file);
+    for (const {dir} of FileUtils.collectFromDatadirs('search-providers', false))
+        loadRemoteSearchProvider(dir);
 
-    const sortOrder = searchSettings.get_strv('sort-order');
+    let sortOrder = searchSettings.get_strv('sort-order');
 
     const disabled = searchSettings.get_strv('disabled');
     const enabled = searchSettings.get_strv('enabled');
 
     loadedProviders = loadedProviders.filter(provider => {
-        const appId = provider.appInfo.get_id();
+        let appId = provider.appInfo.get_id();
 
         if (provider.defaultEnabled)
             return !disabled.includes(appId);
@@ -159,16 +160,19 @@ export function loadRemoteSearchProviders(searchSettings) {
     });
 
     loadedProviders.sort((providerA, providerB) => {
-        const appIdA = providerA.appInfo.get_id();
-        const appIdB = providerB.appInfo.get_id();
+        let idxA, idxB;
+        let appIdA, appIdB;
 
-        const idxA = sortOrder.indexOf(appIdA);
-        const idxB = sortOrder.indexOf(appIdB);
+        appIdA = providerA.appInfo.get_id();
+        appIdB = providerB.appInfo.get_id();
+
+        idxA = sortOrder.indexOf(appIdA);
+        idxB = sortOrder.indexOf(appIdB);
 
         // if no provider is found in the order, use alphabetical order
         if ((idxA === -1) && (idxB === -1)) {
-            const nameA = providerA.appInfo.get_name();
-            const nameB = providerB.appInfo.get_name();
+            let nameA = providerA.appInfo.get_name();
+            let nameB = providerB.appInfo.get_name();
 
             return GLib.utf8_collate(nameA, nameB);
         }
@@ -246,8 +250,8 @@ class RemoteSearchProvider {
         if (results.length <= maxNumber)
             return results;
 
-        const regularResults = results.filter(r => !r.startsWith('special:'));
-        const specialResults = results.filter(r => r.startsWith('special:'));
+        let regularResults = results.filter(r => !r.startsWith('special:'));
+        let specialResults = results.filter(r => r.startsWith('special:'));
 
         return regularResults.slice(0, maxNumber).concat(specialResults.slice(0, maxNumber));
     }
@@ -284,9 +288,9 @@ class RemoteSearchProvider {
             return [];
         }
 
-        const resultMetas = [];
+        let resultMetas = [];
         for (let i = 0; i < metas.length; i++) {
-            for (const prop in metas[i]) {
+            for (let prop in metas[i]) {
                 // we can use the serialized icon variant directly
                 if (prop !== 'icon')
                     metas[i][prop] = metas[i][prop].deepUnpack();

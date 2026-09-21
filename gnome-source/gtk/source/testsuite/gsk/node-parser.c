@@ -22,8 +22,6 @@
 
 #include <gtk/gtk.h>
 
-#include "../testutils.h"
-
 static char *
 test_get_reference_file (const char *node_file)
 {
@@ -64,6 +62,47 @@ test_get_errors_file (const char *node_file)
     }
 
   return g_string_free (file, FALSE);
+}
+
+static GBytes *
+diff_with_file (const char  *file1,
+                GBytes      *input,
+                GError     **error)
+{
+  GSubprocess *process;
+  GBytes *output;
+
+  process = g_subprocess_new (G_SUBPROCESS_FLAGS_STDIN_PIPE
+                              | G_SUBPROCESS_FLAGS_STDOUT_PIPE,
+                              error,
+                              "diff", "-u", file1, "-", NULL);
+  if (process == NULL)
+    return NULL;
+
+  if (!g_subprocess_communicate (process,
+                                 input,
+                                 NULL,
+                                 &output,
+                                 NULL,
+                                 error))
+    {
+      g_object_unref (process);
+      return NULL;
+    }
+
+  if (!g_subprocess_get_successful (process) &&
+      /* this is the condition when the files differ */
+      !(g_subprocess_get_if_exited (process) && g_subprocess_get_exit_status (process) == 1))
+    {
+      g_clear_pointer (&output, g_bytes_unref);
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "The `diff' process exited with error status %d",
+                   g_subprocess_get_exit_status (process));
+    }
+
+  g_object_unref (process);
+
+  return output;
 }
 
 static void
@@ -123,9 +162,8 @@ parse_node_file (GFile *file, gboolean generate)
   char *node_file, *reference_file, *errors_file;
   GskRenderNode *node;
   GString *errors;
-  GBytes *bytes;
+  GBytes *diff, *bytes;
   GError *error = NULL;
-  char *diff;
   gboolean result = TRUE;
 
   bytes = g_file_load_bytes (file, NULL, NULL, &error);
@@ -155,33 +193,33 @@ parse_node_file (GFile *file, gboolean generate)
   node_file = g_file_get_path (file);
   reference_file = test_get_reference_file (node_file);
 
-  diff = diff_bytes_with_file (reference_file, bytes, &error);
+  diff = diff_with_file (reference_file, bytes, &error);
   g_assert_no_error (error);
 
-  if (diff)
+  if (diff && g_bytes_get_size (diff) > 0)
     {
       g_print ("Resulting file doesn't match reference:\n%s\n",
-               (const char *) diff);
+               (const char *) g_bytes_get_data (diff, NULL));
       result = FALSE;
     }
   g_free (reference_file);
-  g_clear_pointer (&diff, g_free);
+  g_clear_pointer (&diff, g_bytes_unref);
 
   errors_file = test_get_errors_file (node_file);
 
   if (errors_file)
     {
       GBytes *error_bytes = g_string_free_to_bytes (errors);
-      diff = diff_bytes_with_file (errors_file, error_bytes, &error);
+      diff = diff_with_file (errors_file, error_bytes, &error);
       g_assert_no_error (error);
 
-      if (diff)
+      if (diff && g_bytes_get_size (diff) > 0)
         {
           g_print ("Errors don't match expected errors:\n%s\n",
-                   (const char *) diff);
+                   (const char *) g_bytes_get_data (diff, NULL));
           result = FALSE;
         }
-      g_clear_pointer (&diff, g_free);
+      g_clear_pointer (&diff, g_bytes_unref);
       g_clear_pointer (&error_bytes, g_bytes_unref);
     }
   else if (errors->str[0])

@@ -48,25 +48,25 @@ typedef struct _GdkX11ScreenClass GdkX11ScreenClass;
 GDK_AVAILABLE_IN_ALL
 GType    gdk_x11_screen_get_type          (void);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 Screen * gdk_x11_screen_get_xscreen       (GdkX11Screen   *screen);
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 int      gdk_x11_screen_get_screen_number (GdkX11Screen   *screen);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 const char* gdk_x11_screen_get_window_manager_name (GdkX11Screen *screen);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 gboolean gdk_x11_screen_supports_net_wm_hint (GdkX11Screen *screen,
                                               const char   *property_name);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 XID      gdk_x11_screen_get_monitor_output   (GdkX11Screen *screen,
                                               int           monitor_num);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 guint32  gdk_x11_screen_get_number_of_desktops (GdkX11Screen *screen);
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 guint32  gdk_x11_screen_get_current_desktop    (GdkX11Screen *screen);
 
 G_END_DECLS

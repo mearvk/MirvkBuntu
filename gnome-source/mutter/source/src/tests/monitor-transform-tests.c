@@ -19,105 +19,105 @@
 
 #include "tests/monitor-transform-tests.h"
 
-#include "mtk/mtk.h"
+#include "backends/meta-monitor-transform.h"
 
 static void
 test_transform (void)
 {
   const struct
   {
-    MtkMonitorTransform transform;
-    MtkMonitorTransform other;
-    MtkMonitorTransform expect;
+    MetaMonitorTransform transform;
+    MetaMonitorTransform other;
+    MetaMonitorTransform expect;
   } tests[] = {
     {
-      .transform = MTK_MONITOR_TRANSFORM_NORMAL,
-      .other = MTK_MONITOR_TRANSFORM_90,
-      .expect = MTK_MONITOR_TRANSFORM_90,
+      .transform = META_MONITOR_TRANSFORM_NORMAL,
+      .other = META_MONITOR_TRANSFORM_90,
+      .expect = META_MONITOR_TRANSFORM_90,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_NORMAL,
-      .other = MTK_MONITOR_TRANSFORM_FLIPPED_90,
-      .expect = MTK_MONITOR_TRANSFORM_FLIPPED_90,
+      .transform = META_MONITOR_TRANSFORM_NORMAL,
+      .other = META_MONITOR_TRANSFORM_FLIPPED_90,
+      .expect = META_MONITOR_TRANSFORM_FLIPPED_90,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_90,
-      .other = MTK_MONITOR_TRANSFORM_90,
-      .expect = MTK_MONITOR_TRANSFORM_180,
+      .transform = META_MONITOR_TRANSFORM_90,
+      .other = META_MONITOR_TRANSFORM_90,
+      .expect = META_MONITOR_TRANSFORM_180,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_FLIPPED_90,
-      .other = MTK_MONITOR_TRANSFORM_90,
-      .expect = MTK_MONITOR_TRANSFORM_FLIPPED_180,
+      .transform = META_MONITOR_TRANSFORM_FLIPPED_90,
+      .other = META_MONITOR_TRANSFORM_90,
+      .expect = META_MONITOR_TRANSFORM_FLIPPED_180,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_FLIPPED_90,
-      .other = MTK_MONITOR_TRANSFORM_180,
-      .expect = MTK_MONITOR_TRANSFORM_FLIPPED_270,
+      .transform = META_MONITOR_TRANSFORM_FLIPPED_90,
+      .other = META_MONITOR_TRANSFORM_180,
+      .expect = META_MONITOR_TRANSFORM_FLIPPED_270,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_FLIPPED_180,
-      .other = MTK_MONITOR_TRANSFORM_FLIPPED_180,
-      .expect = MTK_MONITOR_TRANSFORM_NORMAL,
+      .transform = META_MONITOR_TRANSFORM_FLIPPED_180,
+      .other = META_MONITOR_TRANSFORM_FLIPPED_180,
+      .expect = META_MONITOR_TRANSFORM_NORMAL,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_NORMAL,
-      .other = mtk_monitor_transform_invert (MTK_MONITOR_TRANSFORM_90),
-      .expect = MTK_MONITOR_TRANSFORM_270,
+      .transform = META_MONITOR_TRANSFORM_NORMAL,
+      .other = meta_monitor_transform_invert (META_MONITOR_TRANSFORM_90),
+      .expect = META_MONITOR_TRANSFORM_270,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_FLIPPED,
-      .other = mtk_monitor_transform_invert (MTK_MONITOR_TRANSFORM_90),
-      .expect = MTK_MONITOR_TRANSFORM_FLIPPED_270,
+      .transform = META_MONITOR_TRANSFORM_FLIPPED,
+      .other = meta_monitor_transform_invert (META_MONITOR_TRANSFORM_90),
+      .expect = META_MONITOR_TRANSFORM_FLIPPED_270,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_FLIPPED_180,
-      .other = mtk_monitor_transform_invert (MTK_MONITOR_TRANSFORM_270),
-      .expect = MTK_MONITOR_TRANSFORM_FLIPPED_270,
+      .transform = META_MONITOR_TRANSFORM_FLIPPED_180,
+      .other = meta_monitor_transform_invert (META_MONITOR_TRANSFORM_270),
+      .expect = META_MONITOR_TRANSFORM_FLIPPED_270,
     },
     {
-      .transform = MTK_MONITOR_TRANSFORM_FLIPPED_180,
+      .transform = META_MONITOR_TRANSFORM_FLIPPED_180,
       .other =
-        mtk_monitor_transform_invert (MTK_MONITOR_TRANSFORM_FLIPPED_180),
-      .expect = MTK_MONITOR_TRANSFORM_NORMAL,
+        meta_monitor_transform_invert (META_MONITOR_TRANSFORM_FLIPPED_180),
+      .expect = META_MONITOR_TRANSFORM_NORMAL,
     },
   };
   int i;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
 
   for (i = 0; i < G_N_ELEMENTS (tests); i++)
     {
-      MtkMonitorTransform result;
+      MetaMonitorTransform result;
 
-      result = mtk_monitor_transform_transform (tests[i].transform,
-                                                tests[i].other);
+      result = meta_monitor_transform_transform (tests[i].transform,
+                                                 tests[i].other);
       g_assert_cmpint (result, ==, tests[i].expect);
     }
 
-  for (transform = 0; transform <= MTK_MONITOR_TRANSFORM_FLIPPED_270; transform++)
+  for (transform = 0; transform <= META_MONITOR_TRANSFORM_FLIPPED_270; transform++)
     {
-      MtkMonitorTransform other;
-      MtkMonitorTransform result1;
+      MetaMonitorTransform other;
+      MetaMonitorTransform result1;
 
       result1 =
-        mtk_monitor_transform_transform (transform,
-                                         mtk_monitor_transform_invert (transform));
-      g_assert_cmpint (result1, ==, MTK_MONITOR_TRANSFORM_NORMAL);
+        meta_monitor_transform_transform (transform,
+                                          meta_monitor_transform_invert (transform));
+      g_assert_cmpint (result1, ==, META_MONITOR_TRANSFORM_NORMAL);
 
-      for (other = 0; other <= MTK_MONITOR_TRANSFORM_FLIPPED_270; other++)
+      for (other = 0; other <= META_MONITOR_TRANSFORM_FLIPPED_270; other++)
         {
-          MtkMonitorTransform result2;
+          MetaMonitorTransform result2;
 
-          result1 = mtk_monitor_transform_transform (transform, other);
+          result1 = meta_monitor_transform_transform (transform, other);
           result2 =
-            mtk_monitor_transform_transform (result1,
-                                             mtk_monitor_transform_invert (other));
+            meta_monitor_transform_transform (result1,
+                                              meta_monitor_transform_invert (other));
           g_assert_cmpint (result2, ==, transform);
 
           result1 =
-            mtk_monitor_transform_transform (mtk_monitor_transform_invert (transform),
-                                             other);
-          result2 = mtk_monitor_transform_transform (transform, result1);
+            meta_monitor_transform_transform (meta_monitor_transform_invert (transform),
+                                              other);
+          result2 = meta_monitor_transform_transform (transform, result1);
           g_assert_cmpint (result2, ==, other);
         }
     }

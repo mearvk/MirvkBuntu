@@ -34,7 +34,7 @@ import gi
 import pytest
 
 gi.require_version("Atspi", "2.0")
-from gi.repository import Atspi
+from gi.repository import Atspi, GLib
 
 if TYPE_CHECKING:
     from unittest.mock import MagicMock
@@ -54,7 +54,6 @@ class TestAXEventSynthesizer:
             "orca.ax_device_manager",
             "orca.ax_object",
             "orca.ax_text",
-            "orca.ax_utilities",
             "orca.ax_utilities_action",
             "orca.ax_utilities_component",
             "orca.ax_utilities_debugging",
@@ -169,8 +168,8 @@ class TestAXEventSynthesizer:
         from orca.ax_event_synthesizer import AXEventSynthesizer
 
         mock_accessible = test_context.Mock(spec=Atspi.Accessible)
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = None
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = None
         result = AXEventSynthesizer._is_scrolled_off_screen(mock_accessible)
         assert result is False
 
@@ -185,8 +184,8 @@ class TestAXEventSynthesizer:
 
         mock_accessible = test_context.Mock(spec=Atspi.Accessible)
         mock_ancestor = test_context.Mock(spec=Atspi.Accessible)
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = mock_ancestor
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = mock_ancestor
         ax_component_mock = essential_modules["orca.ax_component"].AXComponent
         obj_rect = test_context.Mock()
         obj_rect.x = 200
@@ -206,22 +205,40 @@ class TestAXEventSynthesizer:
         assert result is True
 
     def test_generate_mouse_event_success(self, test_context: OrcaTestContext) -> None:
-        """Test _generate_mouse_event delegates to ax_device_manager."""
+        """Test _generate_mouse_event returns True on successful event generation."""
 
         essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_event_synthesizer import AXEventSynthesizer
 
         mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_device = test_context.Mock()
         ax_device_mgr = essential_modules["orca.ax_device_manager"]
-        ax_device_mgr.get_manager.return_value.generate_mouse_event.return_value = True
+        ax_device_mgr.get_manager.return_value.get_device.return_value = mock_device
+        mock_generate = test_context.Mock()
+        test_context.patch("gi.repository.Atspi.Device.generate_mouse_event", new=mock_generate)
         result = AXEventSynthesizer._generate_mouse_event(mock_accessible, 50, 25, "b1c")
         assert result is True
-        ax_device_mgr.get_manager.return_value.generate_mouse_event.assert_called_once_with(
-            mock_accessible,
-            50,
-            25,
-            "b1c",
-        )
+        ax_device_mgr.get_manager.return_value.get_device.assert_called_once()
+        mock_generate.assert_called_once_with(mock_device, mock_accessible, 50, 25, "b1c")
+
+    def test_generate_mouse_event_exception_returns_false(
+        self,
+        test_context: OrcaTestContext,
+    ) -> None:
+        """Test _generate_mouse_event returns False on GLib.GError exception."""
+
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
+        from orca.ax_event_synthesizer import AXEventSynthesizer
+
+        mock_accessible = test_context.Mock(spec=Atspi.Accessible)
+        mock_device = test_context.Mock()
+        ax_device_mgr = essential_modules["orca.ax_device_manager"]
+        ax_device_mgr.get_manager.return_value.get_device.return_value = mock_device
+        mock_generate = test_context.Mock()
+        test_context.patch("gi.repository.Atspi.Device.generate_mouse_event", new=mock_generate)
+        mock_generate.side_effect = GLib.GError("Test error")
+        result = AXEventSynthesizer._generate_mouse_event(mock_accessible, 50, 25, "b1c")
+        assert result is False
 
     def test_mouse_event_on_character_uses_caret_offset_when_none(
         self,
@@ -324,7 +341,7 @@ class TestAXEventSynthesizer:
         mock_scroll = test_context.Mock()
         test_context.patch_object(AXEventSynthesizer, "_scroll_to_location", new=mock_scroll)
         AXEventSynthesizer.scroll_into_view(mock_accessible, 5, 15)
-        mock_scroll.assert_called_once_with(mock_accessible, Atspi.ScrollType.ANYWHERE, 5, 15, None)
+        mock_scroll.assert_called_once_with(mock_accessible, Atspi.ScrollType.ANYWHERE, 5, 15)
 
     def test_scroll_to_center_calculates_center_coordinates(
         self,
@@ -337,15 +354,15 @@ class TestAXEventSynthesizer:
 
         mock_accessible = test_context.Mock(spec=Atspi.Accessible)
         mock_ancestor = test_context.Mock(spec=Atspi.Accessible)
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = mock_ancestor
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = mock_ancestor
         ax_uc_mock = essential_modules["orca.ax_utilities_component"].AXUtilitiesComponent
         ax_uc_mock.get_center_point.return_value = (300.0, 350.0)
         mock_scroll = test_context.Mock()
         test_context.patch_object(AXEventSynthesizer, "_scroll_to_point", new=mock_scroll)
         AXEventSynthesizer.scroll_to_center(mock_accessible, 5, 15)
 
-        mock_scroll.assert_called_once_with(mock_accessible, 300, 350, 5, 15, None)
+        mock_scroll.assert_called_once_with(mock_accessible, 300, 350, 5, 15)
 
     @pytest.mark.parametrize(
         "method_name,scroll_type",
@@ -374,7 +391,7 @@ class TestAXEventSynthesizer:
         test_context.patch_object(AXEventSynthesizer, "_scroll_to_location", new=mock_scroll)
         method = getattr(AXEventSynthesizer, method_name)
         method(mock_accessible, 10, 20)
-        mock_scroll.assert_called_once_with(mock_accessible, scroll_type_value, 10, 20, None)
+        mock_scroll.assert_called_once_with(mock_accessible, scroll_type_value, 10, 20)
 
     def test_try_all_clickable_actions_success_on_first_action(
         self,
@@ -482,6 +499,7 @@ class TestAXEventSynthesizer:
 
         result = AXEventSynthesizer._mouse_event_on_character(mock_obj, 10, "abs")
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "method_name,args,position_changes,expected_text_method,expected_object_method",
@@ -595,11 +613,12 @@ class TestAXEventSynthesizer:
         rect.x, rect.y, rect.width, rect.height = 50, 50, 100, 100
         ax_component_mock.get_rect.return_value = rect
 
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = None
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = None
 
         result = AXEventSynthesizer._is_scrolled_off_screen(mock_obj, 5)
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_scrolled_off_screen_returns_true_when_object_outside_ancestor(
         self,
@@ -631,11 +650,12 @@ class TestAXEventSynthesizer:
         ax_uc_mock.get_rect_intersection.return_value = empty_intersection
         ax_uc_mock.is_empty_rect.return_value = True
 
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = mock_ancestor
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = mock_ancestor
 
         result = AXEventSynthesizer._is_scrolled_off_screen(mock_obj, 10)
         assert result is True
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_scrolled_off_screen_returns_false_when_no_offset(
         self,
@@ -660,11 +680,12 @@ class TestAXEventSynthesizer:
         ax_uc_mock.get_rect_intersection.return_value = intersection
         ax_uc_mock.is_empty_rect.return_value = False
 
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = mock_ancestor
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = mock_ancestor
 
         result = AXEventSynthesizer._is_scrolled_off_screen(mock_obj, None)
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_is_scrolled_off_screen_returns_false_when_empty_character_rect(
         self,
@@ -694,11 +715,12 @@ class TestAXEventSynthesizer:
         ax_text_mock = essential_modules["orca.ax_text"].AXText
         ax_text_mock.get_character_rect.return_value = empty_char_rect
 
-        ax_utilities_mock = essential_modules["orca.ax_utilities"].AXUtilities
-        ax_utilities_mock.find_ancestor.return_value = mock_ancestor
+        ax_object_mock = essential_modules["orca.ax_object"].AXObject
+        ax_object_mock.find_ancestor.return_value = mock_ancestor
 
         result = AXEventSynthesizer._is_scrolled_off_screen(mock_obj, 8)
         assert result is False
+        essential_modules["orca.debug"].print_tokens.assert_called()
 
     def test_mouse_event_on_object_grabs_focus_when_still_offscreen(
         self,
@@ -740,3 +762,4 @@ class TestAXEventSynthesizer:
         assert result is True
         assert scroll_call_count == 1
         ax_object_mock.grab_focus.assert_called_once_with(mock_obj)
+        essential_modules["orca.debug"].print_tokens.assert_called()

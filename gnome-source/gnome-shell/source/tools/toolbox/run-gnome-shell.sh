@@ -49,26 +49,12 @@ should_run_nested() {
   [[ "$XDG_SESSION_TYPE" != "tty" ]] && [[ ! "$HEADLESS" ]]
 }
 
-has_devkit() {
-  toolbox --container $TOOLBOX run gnome-shell --help | grep -q -- --devkit
-}
-
 # load defaults
-if [[ -e "$CONFIG_FILE" ]]; then
-  . $CONFIG_FILE
-fi
+. $CONFIG_FILE
 TOOLBOX=$DEFAULT_TOOLBOX
 
 SHELL_ENV=(XDG_CURRENT_DESKTOP=GNOME)
 SHELL_ARGS=()
-DEVKIT_ARGS=()
-
-# Some host OSes (like NixOS) have a weird $XDG_DATA_DIRS environment variable
-# that breaks GSettings schemas. Make sure it is set to something sensible.
-if [[ ! :$XDG_DATA_DIRS: =~ :/usr/share/?: ]]
-then
-  SHELL_ENV+=(XDG_DATA_DIRS=$XDG_DATA_DIRS:/usr/share/)
-fi
 
 TEMP=$(getopt \
  --name $(basename $0) \
@@ -111,7 +97,7 @@ while true; do
     ;;
 
     -2|--multi-monitor)
-      DEVKIT_ARGS+=(--add-monitor)
+      SHELL_ENV+=(MUTTER_DEBUG_NUM_DUMMY_MONITORS=2)
       shift
     ;;
 
@@ -162,14 +148,14 @@ while true; do
 done
 
 if should_run_nested; then
-  if has_devkit; then
-    SHELL_ARGS+=( --devkit ${DEVKIT_ARGS+--devkit-args="${DEVKIT_ARGS[*]}"})
-  else
-    die Mutter has to be built with devkit or x11 support
-  fi
+  SHELL_ARGS+=( --nested )
 else
   SHELL_ARGS+=( --wayland )
 fi
+
+display=toolbox-wayland-$RANDOM
+SHELL_ENV+=(WAYLAND_DISPLAY=$display)
+SHELL_ARGS+=(--wayland-display=$display)
 
 toolbox --container $TOOLBOX run \
   env "${SHELL_ENV[@]}" dbus-run-session $GDB gnome-shell "${SHELL_ARGS[@]}"

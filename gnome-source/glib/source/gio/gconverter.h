@@ -69,7 +69,7 @@ struct _GConverterIface
 };
 
 GIO_AVAILABLE_IN_ALL
-GType            g_converter_get_type     (void);
+GType            g_converter_get_type     (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GConverterResult g_converter_convert (GConverter       *converter,
@@ -83,11 +83,6 @@ GConverterResult g_converter_convert (GConverter       *converter,
 				      GError          **error);
 GIO_AVAILABLE_IN_ALL
 void             g_converter_reset   (GConverter       *converter);
-
-GIO_AVAILABLE_IN_2_82
-GBytes *         g_converter_convert_bytes (GConverter  *converter,
-                                            GBytes      *bytes,
-                                            GError     **error);
 
 
 G_END_DECLS

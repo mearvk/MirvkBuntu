@@ -20,7 +20,7 @@
 /**
  * GtkConstraintLayout:
  *
- * Uses constraints to describe relations between widgets.
+ * A layout manager using constraints to describe relations between widgets.
  *
  * `GtkConstraintLayout` is a layout manager that uses relations between
  * widget attributes, expressed via [class@Gtk.Constraint] instances, to
@@ -1924,13 +1924,6 @@ attribute_from_name (const char *name)
   return GTK_CONSTRAINT_ATTRIBUTE_NONE;
 }
 
-/**
- * gtk_constraint_vfl_parser_error_quark:
- *
- * Registers an error quark for VFL error parsing.
- *
- * Returns: the error quark
- **/
 GQuark
 gtk_constraint_vfl_parser_error_quark (void)
 {

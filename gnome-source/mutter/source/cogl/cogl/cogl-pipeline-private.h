@@ -34,6 +34,7 @@
 #pragma once
 
 #include "cogl/cogl-debug.h"
+#include "cogl/cogl-node-private.h"
 #include "cogl/cogl-pipeline-layer-private.h"
 #include "cogl/cogl-pipeline.h"
 #include "cogl/cogl-profile.h"
@@ -57,6 +58,7 @@ typedef enum
   COGL_PIPELINE_STATE_ALPHA_FUNC_INDEX,
   COGL_PIPELINE_STATE_ALPHA_FUNC_REFERENCE_INDEX,
   COGL_PIPELINE_STATE_BLEND_INDEX,
+  COGL_PIPELINE_STATE_USER_SHADER_INDEX,
   COGL_PIPELINE_STATE_DEPTH_INDEX,
   COGL_PIPELINE_STATE_NON_ZERO_POINT_SIZE_INDEX,
   COGL_PIPELINE_STATE_POINT_SIZE_INDEX,
@@ -97,6 +99,8 @@ typedef enum _CoglPipelineState
     1L<<COGL_PIPELINE_STATE_ALPHA_FUNC_REFERENCE_INDEX,
   COGL_PIPELINE_STATE_BLEND =
     1L<<COGL_PIPELINE_STATE_BLEND_INDEX,
+  COGL_PIPELINE_STATE_USER_SHADER =
+    1L<<COGL_PIPELINE_STATE_USER_SHADER_INDEX,
   COGL_PIPELINE_STATE_DEPTH =
     1L<<COGL_PIPELINE_STATE_DEPTH_INDEX,
   COGL_PIPELINE_STATE_NON_ZERO_POINT_SIZE =
@@ -134,6 +138,7 @@ typedef enum _CoglPipelineState
   (COGL_PIPELINE_STATE_COLOR | \
    COGL_PIPELINE_STATE_LAYERS | \
    COGL_PIPELINE_STATE_BLEND | \
+   COGL_PIPELINE_STATE_USER_SHADER | \
    COGL_PIPELINE_STATE_VERTEX_SNIPPETS | \
    COGL_PIPELINE_STATE_FRAGMENT_SNIPPETS)
 
@@ -141,6 +146,7 @@ typedef enum _CoglPipelineState
   (COGL_PIPELINE_STATE_ALPHA_FUNC | \
    COGL_PIPELINE_STATE_ALPHA_FUNC_REFERENCE | \
    COGL_PIPELINE_STATE_BLEND | \
+   COGL_PIPELINE_STATE_USER_SHADER | \
    COGL_PIPELINE_STATE_DEPTH | \
    COGL_PIPELINE_STATE_NON_ZERO_POINT_SIZE | \
    COGL_PIPELINE_STATE_POINT_SIZE | \
@@ -202,6 +208,7 @@ typedef struct
 {
   CoglPipelineAlphaFuncState alpha_state;
   CoglPipelineBlendState blend_state;
+  CoglProgram *user_program;
   CoglDepthState depth_state;
   float point_size;
   unsigned int non_zero_point_size : 1;
@@ -211,6 +218,12 @@ typedef struct
   CoglPipelineSnippetList vertex_snippets;
   CoglPipelineSnippetList fragment_snippets;
 } CoglPipelineBigState;
+
+typedef struct
+{
+  CoglPipeline *owner;
+  CoglPipelineLayer *layer;
+} CoglPipelineLayerCacheEntry;
 
 typedef struct _CoglPipelineHashState
 {
@@ -245,21 +258,11 @@ struct _CoglPipeline
    * pipelines or if instead it can go under ->big_state.
    */
 
-  GObject parent_instance;
-
   /* Layers represent their state in a tree structure where some of
    * the state relating to a given pipeline or layer may actually be
    * owned by one if is ancestors in the tree. We have a common data
    * type to track the tree hierarchy so we can share code... */
-  CoglPipeline *parent;
-  CoglPipeline *prev_sibling;
-  CoglPipeline *next_sibling;
-  CoglPipeline *first_child;
-  CoglPipeline *last_child;
-
-  /* TRUE if the node took a strong reference on its parent. Weak
-   * pipelines for instance don't take a reference on their parent. */
-  gboolean has_parent_reference;
+  CoglNode parent_instance;
 
   CoglContext *context;
 
@@ -320,10 +323,6 @@ struct _CoglPipeline
    * and corresponding authorities_cache_dirty:1 bitfield
    */
 
-  /* Array of opaque capabilities tagged by owners of pipelines.
-   */
-  GArray *capabilities;
-
   /* bitfields */
 
   /* Weak pipelines don't count as dependants on their parents which
@@ -365,10 +364,72 @@ struct _CoglPipeline
    * string with a pipeline which can be an aid when trying to trace
    * where the pipeline originates from */
   const char      *static_breadcrumb;
-
-  /* Pointer to a static string with a descriptive name, or NULL. */
-  const char *name;
 };
+
+struct _CoglPipelineClass
+{
+   CoglNodeClass parent_class;
+};
+
+typedef struct _CoglPipelineFragend
+{
+  void (*start) (CoglPipeline *pipeline,
+                 int n_layers,
+                 unsigned long pipelines_difference);
+  gboolean (*add_layer) (CoglPipeline *pipeline,
+                         CoglPipelineLayer *layer,
+                         unsigned long layers_difference);
+  gboolean (*end) (CoglPipeline *pipeline,
+                   unsigned long pipelines_difference);
+
+  void (*pipeline_pre_change_notify) (CoglPipeline *pipeline,
+                                      CoglPipelineState change,
+                                      const CoglColor *new_color);
+  void (*layer_pre_change_notify) (CoglPipeline *owner,
+                                   CoglPipelineLayer *layer,
+                                   CoglPipelineLayerState change);
+} CoglPipelineFragend;
+
+typedef struct _CoglPipelineVertend
+{
+  void (*start) (CoglPipeline *pipeline,
+                 int n_layers,
+                 unsigned long pipelines_difference);
+  gboolean (*add_layer) (CoglPipeline *pipeline,
+                         CoglPipelineLayer *layer,
+                         unsigned long layers_difference,
+                         CoglFramebuffer *framebuffer);
+  gboolean (*end) (CoglPipeline *pipeline,
+                   unsigned long pipelines_difference);
+
+  void (*pipeline_pre_change_notify) (CoglPipeline *pipeline,
+                                      CoglPipelineState change,
+                                      const CoglColor *new_color);
+  void (*layer_pre_change_notify) (CoglPipeline *owner,
+                                   CoglPipelineLayer *layer,
+                                   CoglPipelineLayerState change);
+} CoglPipelineVertend;
+
+typedef struct
+{
+  gboolean (*start) (CoglPipeline *pipeline);
+  void (*end) (CoglPipeline *pipeline,
+               unsigned long pipelines_difference);
+  void (*pipeline_pre_change_notify) (CoglPipeline *pipeline,
+                                      CoglPipelineState change,
+                                      const CoglColor *new_color);
+  void (*layer_pre_change_notify) (CoglPipeline *owner,
+                                   CoglPipelineLayer *layer,
+                                   CoglPipelineLayerState change);
+  /* This is called after all of the other functions whenever the
+     pipeline is flushed, even if the pipeline hasn't changed since
+     the last flush */
+  void (* pre_paint) (CoglPipeline *pipeline, CoglFramebuffer *framebuffer);
+} CoglPipelineProgend;
+
+extern const CoglPipelineFragend *_cogl_pipeline_fragend;
+extern const CoglPipelineVertend *_cogl_pipeline_vertend;
+extern const CoglPipelineProgend *_cogl_pipeline_progend;
 
 void
 _cogl_pipeline_init_default_pipeline (CoglContext *ctx);
@@ -376,7 +437,8 @@ _cogl_pipeline_init_default_pipeline (CoglContext *ctx);
 static inline CoglPipeline *
 _cogl_pipeline_get_parent (CoglPipeline *pipeline)
 {
-  return pipeline->parent;
+  CoglNode *parent_node = COGL_NODE (pipeline)->parent;
+  return COGL_PIPELINE (parent_node);
 }
 
 static inline CoglPipeline *
@@ -455,12 +517,15 @@ _cogl_pipeline_pre_paint_for_layer (CoglPipeline *pipeline,
  *      textures where you will need to point to each of the texture slices in
  *      turn when drawing your geometry.  Passing a value of 0 is the same as
  *      not passing the option at all.
+ * @COGL_PIPELINE_FLUSH_SKIP_GL_COLOR: When flushing the GL state for the
+ *      pipeline don't call glColor.
  */
 typedef enum _CoglPipelineFlushFlag
 {
   COGL_PIPELINE_FLUSH_FALLBACK_MASK       = 1L<<0,
   COGL_PIPELINE_FLUSH_DISABLE_MASK        = 1L<<1,
   COGL_PIPELINE_FLUSH_LAYER0_OVERRIDE     = 1L<<2,
+  COGL_PIPELINE_FLUSH_SKIP_GL_COLOR       = 1L<<3
 } CoglPipelineFlushFlag;
 
 /*
@@ -546,7 +611,7 @@ _cogl_get_n_args_for_combine_func (CoglPipelineCombineFunc func);
  *
  * typedef struct {
  *   CoglPipeline *validated_source;
- * } MyValidatedPipelineCache;
+ * } MyValidatedMaterialCache;
  *
  * static void
  * destroy_cache_cb (CoglObject *object, void *user_data)
@@ -557,7 +622,7 @@ _cogl_get_n_args_for_combine_func (CoglPipelineCombineFunc func);
  * static void
  * invalidate_cache_cb (CoglPipeline *destroyed, void *user_data)
  * {
- *   MyValidatedPipelineCache *cache = user_data;
+ *   MyValidatedMaterialCache *cache = user_data;
  *   g_object_unref (cache->validated_source);
  *   cache->validated_source = NULL;
  * }
@@ -566,13 +631,13 @@ _cogl_get_n_args_for_combine_func (CoglPipelineCombineFunc func);
  * get_validated_pipeline (CoglPipeline *source)
  * {
  *   _cogl_my_cache_key = g_quark_from_static_string ("my-cache-key");
- *   MyValidatedPipelineCache *cache =
+ *   MyValidatedMaterialCache *cache =
  *     g_object_get_qdata (G_OBJECT (source),
  *                         _cogl_my_cache_key);
  *   if (G_UNLIKELY (cache == NULL))
  *     {
- *       cache = g_new0 (MyValidatedPipelineCache, 1);
- *
+ *       cache = g_new0 (MyValidatedMaterialCache, 1);
+ * 
  *       g_object_set_qdata_full (G_OBJECT (source),
  *                                _cogl_my_cache_key,
  *                                cache, destroy_cache_cb);
@@ -603,6 +668,13 @@ CoglPipeline *
 _cogl_pipeline_weak_copy (CoglPipeline *pipeline,
                           CoglPipelineDestroyCallback callback,
                           void *user_data);
+
+void
+_cogl_pipeline_set_progend (CoglPipeline *pipeline, int progend);
+
+void
+_cogl_pipeline_get_colorubv (CoglPipeline *pipeline,
+                             uint8_t       *color);
 
 /* XXX: At some point it could be good for this to accept a mask of
  * the state groups we are interested in comparing since we can
@@ -648,6 +720,9 @@ void
 _cogl_pipeline_texture_storage_change_notify (CoglTexture *texture);
 
 void
+_cogl_pipeline_apply_legacy_state (CoglPipeline *pipeline);
+
+void
 _cogl_pipeline_apply_overrides (CoglPipeline *pipeline,
                                 CoglPipelineFlushOptions *options);
 
@@ -656,6 +731,9 @@ void
 _cogl_pipeline_set_static_breadcrumb (CoglPipeline *pipeline,
                                       const char *breadcrumb);
 #endif
+
+unsigned long
+_cogl_pipeline_get_age (CoglPipeline *pipeline);
 
 void
 _cogl_pipeline_add_layer_difference (CoglPipeline *pipeline,
@@ -697,6 +775,14 @@ gboolean
 _cogl_pipeline_layer_numbers_equal (CoglPipeline *pipeline0,
                                     CoglPipeline *pipeline1);
 
+gboolean
+_cogl_pipeline_layer_and_unit_numbers_equal (CoglPipeline *pipeline0,
+                                             CoglPipeline *pipeline1);
+
+gboolean
+_cogl_pipeline_need_texture_combine_separate
+                                    (CoglPipelineLayer *combine_authority);
+
 void
 _cogl_pipeline_init_state_hash_functions (void);
 
@@ -711,7 +797,3 @@ _cogl_pipeline_get_layer_state_for_fragment_codegen (CoglContext *context);
 
 CoglPipelineState
 _cogl_pipeline_get_state_for_fragment_codegen (CoglContext *context);
-
-void
-cogl_pipeline_add_capability_from_snippet (CoglPipeline *pipeline,
-                                           CoglSnippet  *snippet);

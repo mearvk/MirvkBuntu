@@ -29,8 +29,6 @@
 #include "gdkx11property.h"
 #include "gdkx11surface.h"
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 typedef struct GdkX11SelectionInputStreamPrivate  GdkX11SelectionInputStreamPrivate;
 
 struct GdkX11SelectionInputStreamPrivate {
@@ -542,7 +540,7 @@ gdk_x11_selection_input_stream_new_async (GdkDisplay          *display,
   g_signal_connect_data (display, "xevent",
                          G_CALLBACK (gdk_x11_selection_input_stream_xevent),
                          g_steal_pointer (&stream),
-                         (GClosureNotify) g_object_unref, G_CONNECT_DEFAULT);
+                         (GClosureNotify) g_object_unref, 0);
 
   XConvertSelection (GDK_DISPLAY_XDISPLAY (display),
                      priv->xselection,

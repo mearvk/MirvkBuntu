@@ -30,15 +30,13 @@
 
 /* clutter-actor.h */
 
-#include <atk/atk.h>
 #include <gio/gio.h>
+#include <pango/pango.h>
+#include <atk/atk.h>
 
 #include "cogl/cogl.h"
 
 #include "clutter/clutter-types.h"
-#include "clutter/clutter-binding-pool.h"
-#include "clutter/clutter-cursor.h"
-#include "clutter/clutter-enums.h"
 #include "clutter/clutter-event.h"
 #include "clutter/clutter-paint-context.h"
 #include "clutter/clutter-pick-context.h"
@@ -66,7 +64,6 @@ struct _ClutterActor
 
   /*< public >*/
   guint32 flags;
-  AtkRole accessible_role;
 
   /*< private >*/
   guint32 private_flags;
@@ -139,8 +136,6 @@ struct _ClutterActor
  * @key_focus_out: signal class closure for [signal@Clutter.Actor::key-focus-out]
  * @queue_relayout: class handler for [signal@Clutter.Actor::queue-relayout]
  * @get_accessible: virtual function, returns the accessible object that
- *   describes the actor to an assistive technology.
- * @get_accessible_type: returns the type of the accessible object that
  *   describes the actor to an assistive technology.
  * @get_paint_volume: virtual function, for sub-classes to define their
  *   #ClutterPaintVolume
@@ -218,12 +213,8 @@ struct _ClutterActorClass
 
   void     (* queue_relayout)       (ClutterActor         *self);
 
-  ClutterCursor * (* get_cursor_for_sprite) (ClutterActor  *self,
-                                             ClutterSprite *sprite);
-
   /* accessibility support */
   AtkObject * (* get_accessible)    (ClutterActor         *self);
-  GType    (* get_accessible_type) (void);
 
   gboolean (* get_paint_volume)     (ClutterActor         *actor,
                                      ClutterPaintVolume   *volume);
@@ -231,11 +222,11 @@ struct _ClutterActorClass
   gboolean (* has_overlaps)         (ClutterActor         *self);
 
   void     (* paint_node)           (ClutterActor         *self,
-                                     ClutterPaintNode     *root,
-                                     ClutterPaintContext  *paint_context);
+                                     ClutterPaintNode     *root);
 
   gboolean (* touch_event)          (ClutterActor         *self,
                                      ClutterEvent         *event);
+  gboolean (* has_accessible)       (ClutterActor         *self);
   void     (* resource_scale_changed) (ClutterActor *self);
   float    (* calculate_resource_scale) (ClutterActor *self,
                                          int           phase);
@@ -267,11 +258,19 @@ struct _ClutterActorIter
 };
 
 CLUTTER_EXPORT
-GType clutter_actor_get_type (void);
+GType clutter_actor_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 ClutterActor *                  clutter_actor_new                               (void);
 
+CLUTTER_EXPORT
+void                            clutter_actor_set_flags                         (ClutterActor                *self,
+                                                                                 ClutterActorFlags            flags);
+CLUTTER_EXPORT
+void                            clutter_actor_unset_flags                       (ClutterActor                *self,
+                                                                                 ClutterActorFlags            flags);
+CLUTTER_EXPORT
+ClutterActorFlags               clutter_actor_get_flags                         (ClutterActor                *self);
 CLUTTER_EXPORT
 void                            clutter_actor_show                              (ClutterActor                *self);
 CLUTTER_EXPORT
@@ -314,26 +313,10 @@ void                            clutter_actor_set_name                          
 CLUTTER_EXPORT
 const gchar *                   clutter_actor_get_name                          (ClutterActor                *self);
 CLUTTER_EXPORT
-void                            clutter_actor_set_accessible_role               (ClutterActor                *self,
-                                                                                 AtkRole                      role);
-CLUTTER_EXPORT
-AtkRole                         clutter_actor_get_accessible_role               (ClutterActor                *self);
-CLUTTER_EXPORT
-void                            clutter_actor_set_accessible_name               (ClutterActor                *self,
-                                                                                 const gchar                 *name);
-CLUTTER_EXPORT
-const gchar *                   clutter_actor_get_accessible_name               (ClutterActor                *self);
-CLUTTER_EXPORT
 AtkObject *                     clutter_actor_get_accessible                    (ClutterActor                *self);
 CLUTTER_EXPORT
-void                            clutter_actor_set_accessible                    (ClutterActor                *self,
-                                                                                 AtkObject                   *accessible);
-CLUTTER_EXPORT
-void                            clutter_actor_add_accessible_state              (ClutterActor                *actor,
-                                                                                 AtkStateType                 state);
-CLUTTER_EXPORT
-void                            clutter_actor_remove_accessible_state           (ClutterActor                *actor,
-                                                                                 AtkStateType                 state);
+gboolean                        clutter_actor_has_accessible                    (ClutterActor                *self);
+
 CLUTTER_EXPORT
 gboolean                        clutter_actor_is_visible                        (ClutterActor                *self);
 CLUTTER_EXPORT
@@ -342,11 +325,6 @@ CLUTTER_EXPORT
 gboolean                        clutter_actor_is_realized                       (ClutterActor                *self);
 
 /* Size negotiation */
-CLUTTER_EXPORT
-void                            clutter_actor_set_no_layout                     (ClutterActor               *actor,
-                                                                                 gboolean                    no_layout);
-CLUTTER_EXPORT
-gboolean                        clutter_actor_is_no_layout                      (ClutterActor               *actor);
 CLUTTER_EXPORT
 void                            clutter_actor_set_request_mode                  (ClutterActor                *self,
                                                                                  ClutterRequestMode           mode);
@@ -584,24 +562,20 @@ CLUTTER_EXPORT
 ClutterContentRepeat            clutter_actor_get_content_repeat                (ClutterActor               *self);
 
 CLUTTER_EXPORT
-void                            clutter_actor_set_color_state                   (ClutterActor               *self,
-                                                                                 ClutterColorState          *color_state);
-
+void clutter_actor_set_color_state (ClutterActor      *self,
+                                    ClutterColorState *color_state);
 CLUTTER_EXPORT
-void                            clutter_actor_unset_color_state                 (ClutterActor               *self);
-
-CLUTTER_EXPORT
-ClutterColorState *             clutter_actor_get_color_state                   (ClutterActor               *self);
+ClutterColorState *clutter_actor_get_color_state (ClutterActor *self);
 
 CLUTTER_EXPORT
 void                            clutter_actor_get_content_box                   (ClutterActor               *self,
                                                                                  ClutterActorBox            *box);
 CLUTTER_EXPORT
 void                            clutter_actor_set_background_color              (ClutterActor               *self,
-                                                                                 const CoglColor            *color);
+                                                                                 const ClutterColor         *color);
 CLUTTER_EXPORT
 void                            clutter_actor_get_background_color              (ClutterActor               *self,
-                                                                                 CoglColor                  *color);
+                                                                                 ClutterColor               *color);
 CLUTTER_EXPORT
 const ClutterPaintVolume *      clutter_actor_get_paint_volume                  (ClutterActor               *self);
 CLUTTER_EXPORT
@@ -625,6 +599,14 @@ gboolean                        clutter_actor_event                             
 CLUTTER_EXPORT
 gboolean                        clutter_actor_has_pointer                       (ClutterActor               *self);
 
+/* Text */
+CLUTTER_EXPORT
+PangoContext *                  clutter_actor_get_pango_context                 (ClutterActor               *self);
+CLUTTER_EXPORT
+PangoContext *                  clutter_actor_create_pango_context              (ClutterActor               *self);
+CLUTTER_EXPORT
+PangoLayout *                   clutter_actor_create_pango_layout               (ClutterActor               *self,
+                                                                                 const gchar                *text);
 CLUTTER_EXPORT
 void                            clutter_actor_set_text_direction                (ClutterActor               *self,
                                                                                  ClutterTextDirection        text_dir);
@@ -680,10 +662,6 @@ gboolean                        clutter_actor_contains                          
                                                                                  ClutterActor               *descendant);
 CLUTTER_EXPORT
 ClutterActor*                   clutter_actor_get_stage                         (ClutterActor               *actor);
-
-CLUTTER_EXPORT
-ClutterContext *                clutter_actor_get_context                       (ClutterActor *actor);
-
 CLUTTER_EXPORT
 void                            clutter_actor_set_child_below_sibling           (ClutterActor               *self,
                                                                                  ClutterActor               *child,
@@ -896,19 +874,9 @@ CLUTTER_EXPORT
 void clutter_actor_invalidate_paint_volume (ClutterActor *self);
 
 CLUTTER_EXPORT
-ClutterBindingPool * clutter_actor_class_get_binding_pool (ClutterActorClass *actor_class);
-
-CLUTTER_EXPORT
 void clutter_actor_class_set_layout_manager_type (ClutterActorClass *actor_class,
                                                   GType              type);
 CLUTTER_EXPORT
 GType clutter_actor_class_get_layout_manager_type (ClutterActorClass *actor_class);
-
-CLUTTER_EXPORT
-void clutter_actor_set_cursor_type (ClutterActor      *actor,
-                                    ClutterCursorType  cursor_type);
-
-CLUTTER_EXPORT
-ClutterCursorType clutter_actor_get_cursor_type (ClutterActor *actor);
 
 G_END_DECLS

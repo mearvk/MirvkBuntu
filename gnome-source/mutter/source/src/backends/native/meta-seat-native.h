@@ -50,14 +50,16 @@ struct _MetaSeatNative
   GList *devices;
   struct xkb_keymap *xkb_keymap;
   xkb_layout_index_t xkb_layout_index;
-  MetaKeymapDescription *keymap_description;
+
+  ClutterInputDevice *core_pointer;
+  ClutterInputDevice *core_keyboard;
 
   guint virtual_touch_slot_base;
   GHashTable *reserved_virtual_slots;
 
   MetaKeymapNative *keymap;
   MetaCursorRenderer *cursor_renderer;
-  GHashTable *secondary_cursor_renderers;
+  GHashTable *tablet_cursors;
 
   gboolean released;
   gboolean touch_mode;
@@ -70,26 +72,51 @@ G_DECLARE_FINAL_TYPE (MetaSeatNative, meta_seat_native,
 
 void meta_seat_native_start (MetaSeatNative *seat_native);
 
+void meta_seat_native_set_libinput_seat (MetaSeatNative       *seat,
+                                         struct libinput_seat *libinput_seat);
+
+void meta_seat_native_sync_leds (MetaSeatNative *seat);
+
+/**
+ * MetaOpenDeviceCallback:
+ * @path: the device path
+ * @flags: flags to be passed to open
+ *
+ * This callback will be called when Clutter needs to access an input
+ * device. It should return an open file descriptor for the file at @path,
+ * or -1 if opening failed.
+ */
+typedef int (* MetaOpenDeviceCallback) (const char  *path,
+                                        int          flags,
+                                        gpointer     user_data,
+                                        GError     **error);
+typedef void (* MetaCloseDeviceCallback) (int          fd,
+                                          gpointer     user_data);
+
+void  meta_seat_native_set_device_callbacks (MetaOpenDeviceCallback  open_callback,
+                                             MetaCloseDeviceCallback close_callback,
+                                             gpointer                user_data);
+
 void  meta_seat_native_release_devices (MetaSeatNative *seat);
 void  meta_seat_native_reclaim_devices (MetaSeatNative *seat);
 
-void meta_seat_native_set_keymap_async (MetaSeatNative        *seat,
-                                        MetaKeymapDescription *description,
-                                        xkb_layout_index_t     layout_index,
-                                        GCancellable          *cancellable,
-                                        GAsyncReadyCallback    callback,
-                                        gpointer               user_data);
+void meta_seat_native_set_keyboard_map (MetaSeatNative *seat,
+                                        const char     *layouts,
+                                        const char     *variants,
+                                        const char     *options,
+                                        const char     *model);
 
-gboolean meta_seat_native_set_keymap_finish (MetaSeatNative  *seat_native,
-                                             GAsyncResult    *result,
-                                             GError         **error);
+struct xkb_keymap * meta_seat_native_get_keyboard_map (MetaSeatNative *seat);
 
-META_EXPORT_TEST
-struct xkb_keymap * meta_seat_native_get_xkb_keymap (MetaSeatNative *seat);
-
-MetaKeymapDescription * meta_seat_native_get_keymap_description (MetaSeatNative *seat_native);
+void meta_seat_native_set_keyboard_layout_index (MetaSeatNative     *seat,
+                                                 xkb_layout_index_t  idx);
 
 xkb_layout_index_t meta_seat_native_get_keyboard_layout_index (MetaSeatNative *seat);
+
+void meta_seat_native_set_keyboard_repeat (MetaSeatNative *seat,
+                                           gboolean        repeat,
+                                           uint32_t        delay,
+                                           uint32_t        interval);
 
 void meta_seat_native_release_touch_slots (MetaSeatNative *seat,
                                            guint           base_slot);
@@ -100,8 +127,8 @@ MetaBackend * meta_seat_native_get_backend (MetaSeatNative *seat);
 
 void meta_seat_native_set_pointer_constraint (MetaSeatNative            *seat,
                                               MetaPointerConstraintImpl *constraint_impl);
-MetaCursorRenderer * meta_seat_native_maybe_ensure_cursor_renderer (MetaSeatNative *seat,
-                                                                    ClutterSprite  *sprite);
+MetaCursorRenderer * meta_seat_native_maybe_ensure_cursor_renderer (MetaSeatNative     *seat,
+                                                                    ClutterInputDevice *device);
 
 void meta_seat_native_set_viewports (MetaSeatNative   *seat,
                                      MetaViewportInfo *viewports);
@@ -110,10 +137,3 @@ void meta_seat_native_run_impl_task (MetaSeatNative *seat,
                                      GSourceFunc     dispatch_func,
                                      gpointer        user_data,
                                      GDestroyNotify  destroy_notify);
-
-void meta_seat_native_set_a11y_modifiers (MetaSeatNative *seat,
-                                          const uint32_t *modifiers,
-                                          int             n_modifiers);
-
-void meta_seat_native_remove_cursor_renderer (MetaSeatNative *seat_native,
-                                              ClutterSprite  *sprite);

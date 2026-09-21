@@ -38,8 +38,6 @@ struct _GtkCssAnimatedStyle
   GtkCssStyle parent;
 
   GtkCssStyle           *style;                /* the style if we weren't animating */
-  GtkCssStyle           *parent_style;
-  GtkStyleProvider      *provider;
 
   gint64                 current_time;         /* the current time in our world */
   gpointer              *animations;           /* GtkStyleAnimation**, least important one first */
@@ -51,7 +49,7 @@ struct _GtkCssAnimatedStyleClass
   GtkCssStyleClass parent_class;
 };
 
-GType                   gtk_css_animated_style_get_type         (void);
+GType                   gtk_css_animated_style_get_type         (void) G_GNUC_CONST;
 
 GtkCssStyle *           gtk_css_animated_style_new              (GtkCssStyle            *base_style,
                                                                  GtkCssStyle            *parent_style,
@@ -59,28 +57,15 @@ GtkCssStyle *           gtk_css_animated_style_new              (GtkCssStyle    
                                                                  GtkStyleProvider       *provider,
                                                                  GtkCssStyle            *previous_style);
 GtkCssStyle *           gtk_css_animated_style_new_advance      (GtkCssAnimatedStyle    *source,
-                                                                 GtkCssStyle            *base_style,
-                                                                 GtkCssStyle            *parent_style,
-                                                                 gint64                  timestamp,
-                                                                 GtkStyleProvider       *provider);
+                                                                 GtkCssStyle            *base,
+                                                                 gint64                  timestamp);
 
 void                    gtk_css_animated_style_set_animated_value(GtkCssAnimatedStyle   *style,
                                                                  guint                   id,
                                                                  GtkCssValue            *value);
+
 GtkCssValue *           gtk_css_animated_style_get_intrinsic_value (GtkCssAnimatedStyle *style,
                                                                  guint                   id);
-
-gboolean                gtk_css_animated_style_set_animated_custom_value (GtkCssAnimatedStyle *animated,
-                                                                 int                     id,
-                                                                 GtkCssVariableValue    *value);
-
-void                    gtk_css_animated_style_recompute        (GtkCssAnimatedStyle    *style);
-GtkCssVariableValue *   gtk_css_animated_style_get_intrinsic_custom_value (GtkCssAnimatedStyle *style,
-                                                                 int                     id);
-
-GtkCssStyle *           gtk_css_animated_style_get_base_style   (GtkCssAnimatedStyle    *style);
-GtkCssStyle *           gtk_css_animated_style_get_parent_style (GtkCssAnimatedStyle    *style);
-GtkStyleProvider *      gtk_css_animated_style_get_provider     (GtkCssAnimatedStyle    *style);
 
 G_END_DECLS
 

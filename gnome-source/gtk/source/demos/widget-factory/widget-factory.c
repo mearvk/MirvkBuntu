@@ -23,7 +23,6 @@
 #include <stdlib.h>
 
 #include <glib/gi18n.h>
-#include <gmodule.h>
 #include <gtk/gtk.h>
 
 #include "profile_conf.h"
@@ -34,15 +33,10 @@ change_dark_state (GSimpleAction *action,
                     gpointer       user_data)
 {
   GtkSettings *settings = gtk_settings_get_default ();
-  GtkInterfaceColorScheme color_scheme;
-
-  if (g_variant_get_boolean (state))
-    color_scheme = GTK_INTERFACE_COLOR_SCHEME_DARK;
-  else
-    color_scheme = GTK_INTERFACE_COLOR_SCHEME_LIGHT;
 
   g_object_set (G_OBJECT (settings),
-                "gtk-interface-color-scheme", color_scheme,
+                "gtk-application-prefer-dark-theme",
+                g_variant_get_boolean (state),
                 NULL);
 
   g_simple_action_set_state (action, state);
@@ -54,40 +48,33 @@ change_theme_state (GSimpleAction *action,
                     gpointer       user_data)
 {
   GtkSettings *settings = gtk_settings_get_default ();
-  GtkInterfaceColorScheme color_scheme;
-  GtkInterfaceContrast contrast;
   const char *s;
-
-  s = g_variant_get_string (state, NULL);
+  const char *theme;
 
   g_simple_action_set_state (action, state);
 
+  s = g_variant_get_string (state, NULL);
+
   if (strcmp (s, "default") == 0)
-    {
-      color_scheme = GTK_INTERFACE_COLOR_SCHEME_LIGHT;
-      contrast = GTK_INTERFACE_CONTRAST_NO_PREFERENCE;
-    }
+    theme = "Default";
   else if (strcmp (s, "dark") == 0)
-    {
-      color_scheme = GTK_INTERFACE_COLOR_SCHEME_DARK;
-      contrast = GTK_INTERFACE_CONTRAST_NO_PREFERENCE;
-    }
+    theme = "Default-dark";
   else if (strcmp (s, "hc") == 0)
-    {
-      color_scheme = GTK_INTERFACE_COLOR_SCHEME_LIGHT;
-      contrast = GTK_INTERFACE_CONTRAST_MORE;
-    }
+    theme = "Default-hc";
   else if (strcmp (s, "hc-dark") == 0)
+    theme = "Default-hc-dark";
+  else if (strcmp (s, "current") == 0)
     {
-      color_scheme = GTK_INTERFACE_COLOR_SCHEME_DARK;
-      contrast = GTK_INTERFACE_CONTRAST_MORE;
+      gtk_settings_reset_property (settings, "gtk-theme-name");
+      gtk_settings_reset_property (settings, "gtk-application-prefer-dark-theme");
+      return;
     }
   else
     return;
 
-  g_object_set (settings,
-                "gtk-interface-color-scheme", color_scheme,
-                "gtk-interface-contrast", contrast,
+  g_object_set (G_OBJECT (settings),
+                "gtk-theme-name", theme,
+                "gtk-application-prefer-dark-theme", FALSE,
                 NULL);
 }
 
@@ -135,7 +122,7 @@ change_transition_state (GSimpleAction *action,
   g_simple_action_set_state (action, state);
 }
 
-static void
+static gboolean
 get_idle (gpointer data)
 {
   GtkWidget *window = data;
@@ -144,6 +131,8 @@ get_idle (gpointer data)
   gtk_widget_set_sensitive (window, TRUE);
   gdk_surface_set_cursor (gtk_native_get_surface (GTK_NATIVE (window)), NULL);
   g_application_unmark_busy (G_APPLICATION (app));
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -159,7 +148,7 @@ get_busy (GSimpleAction *action,
   cursor = gdk_cursor_new_from_name ("wait", NULL);
   gdk_surface_set_cursor (gtk_native_get_surface (GTK_NATIVE (window)), cursor);
   g_object_unref (cursor);
-  g_timeout_add_once (5000, get_idle, window);
+  g_timeout_add (5000, get_idle, window);
 
   gtk_widget_set_sensitive (window, FALSE);
 }
@@ -305,13 +294,20 @@ activate_about (GSimpleAction *action,
   GtkApplication *app = user_data;
   GtkWindow *window;
   GtkWidget *button;
+  const char *authors[] = {
+    "Andrea Cimitan",
+    "Cosimo Cecchi",
+    NULL
+  };
+  const char *maintainers[] = {
+    "The GTK Team",
+    NULL
+  };
   char *version;
   char *os_name;
   char *os_version;
   GString *s;
   GtkWidget *dialog;
-  GFile *logo_file;
-  GtkIconPaintable *logo;
 
   s = g_string_new ("");
 
@@ -344,8 +340,6 @@ activate_about (GSimpleAction *action,
                              gtk_get_minor_version (),
                              gtk_get_micro_version ());
 
-  logo_file = g_file_new_for_uri ("resource:///org/gtk/WidgetFactory4/icons/scalable/apps/org.gtk.WidgetFactory4.svg");
-  logo = gtk_icon_paintable_new_for_file (logo_file, 64, 1);
   dialog = g_object_new (GTK_TYPE_ABOUT_DIALOG,
                          "transient-for", gtk_application_get_active_window (app),
                          "modal", TRUE,
@@ -353,20 +347,18 @@ activate_about (GSimpleAction *action,
                                          ? "GTK Widget Factory (Development)"
                                          : "GTK Widget Factory",
                          "version", version,
-                         "copyright", "© 1997—2024 The GTK Team",
+                         "copyright", "© 1997—2021 The GTK Team",
                          "license-type", GTK_LICENSE_LGPL_2_1,
                          "website", "http://www.gtk.org",
                          "comments", "Program to demonstrate GTK themes and widgets",
-                         "authors", (const char *[]) { "Andrea Cimitan", "Cosimo Cecchi", NULL },
-                         "logo", logo,
+                         "authors", authors,
+                         "logo-icon-name", "org.gtk.WidgetFactory4",
                          "title", "About GTK Widget Factory",
                          "system-information", s->str,
                          NULL);
-  g_object_unref (logo);
-  g_object_unref (logo_file);
 
   gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG (dialog),
-                                       _("Maintained by"), (const char *[]) { "The GTK Team", NULL });
+                                       _("Maintained by"), maintainers);
 
   gtk_window_present (GTK_WINDOW (dialog));
 
@@ -558,10 +550,9 @@ remove_pulse (gpointer pulse_id)
   g_source_remove (GPOINTER_TO_UINT (pulse_id));
 }
 
-static void
-pulse_it (gpointer data)
+static gboolean
+pulse_it (GtkWidget *widget)
 {
-  GtkWidget *widget = data;
   guint pulse_id;
 
   if (GTK_IS_ENTRY (widget))
@@ -569,8 +560,10 @@ pulse_it (gpointer data)
   else
     gtk_progress_bar_pulse (GTK_PROGRESS_BAR (widget));
 
-  pulse_id = g_timeout_add_once (pulse_time, pulse_it, widget);
+  pulse_id = g_timeout_add (pulse_time, (GSourceFunc)pulse_it, widget);
   g_object_set_data_full (G_OBJECT (widget), "pulse_id", GUINT_TO_POINTER (pulse_id), remove_pulse);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -594,7 +587,7 @@ update_pulse_time (GtkAdjustment *adjustment, GtkWidget *widget)
     {
       if (pulse_id == 0 && (GTK_IS_PROGRESS_BAR (widget) || pulse_entry_mode % 3 == 2))
         {
-          pulse_id = g_timeout_add_once (pulse_time, pulse_it, widget);
+          pulse_id = g_timeout_add (pulse_time, (GSourceFunc)pulse_it, widget);
           g_object_set_data_full (G_OBJECT (widget), "pulse_id", GUINT_TO_POINTER (pulse_id), remove_pulse);
         }
     }
@@ -605,8 +598,6 @@ on_entry_icon_release (GtkEntry            *entry,
                        GtkEntryIconPosition icon_pos,
                        gpointer             user_data)
 {
-  GtkSvg *paintable;
-
   if (icon_pos != GTK_ENTRY_ICON_SECONDARY)
     return;
 
@@ -618,9 +609,7 @@ on_entry_icon_release (GtkEntry            *entry,
       gtk_entry_set_progress_fraction (entry, 0);
     }
   else if (pulse_entry_mode % 3 == 1)
-    {
-      gtk_entry_set_progress_fraction (entry, 0.25);
-    }
+    gtk_entry_set_progress_fraction (entry, 0.25);
   else if (pulse_entry_mode % 3 == 2)
     {
       if (pulse_time - 50 < 400)
@@ -629,10 +618,6 @@ on_entry_icon_release (GtkEntry            *entry,
           pulse_it (GTK_WIDGET (entry));
         }
     }
-
-  g_object_get (entry, "secondary-icon-paintable", &paintable, NULL);
-  gtk_svg_set_state (paintable, pulse_entry_mode % 3);
-  g_object_unref (paintable);
 }
 
 #define EPSILON (1e-10)
@@ -817,19 +802,21 @@ set_needs_attention (GtkWidget *page, gboolean needs_attention)
                            NULL);
 }
 
-static void
+static gboolean
 demand_attention (gpointer stack)
 {
   GtkWidget *page;
 
   page = gtk_stack_get_child_by_name (GTK_STACK (stack), "page3");
   set_needs_attention (page, TRUE);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
 action_dialog_button_clicked (GtkButton *button, GtkWidget *page)
 {
-  g_timeout_add_once (1000, demand_attention, page);
+  g_timeout_add (1000, demand_attention, page);
 }
 
 static void
@@ -845,11 +832,9 @@ page_changed_cb (GtkWidget *stack, GParamSpec *pspec, gpointer data)
   name = gtk_stack_get_visible_child_name (GTK_STACK (stack));
 
   window = gtk_widget_get_ancestor (stack, GTK_TYPE_APPLICATION_WINDOW);
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   g_object_set (gtk_application_window_get_help_overlay (GTK_APPLICATION_WINDOW (window)),
                 "view-name", name,
                 NULL);
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   if (g_str_equal (name, "page1"))
     current_page = 1;
@@ -1257,9 +1242,7 @@ background_loaded_cb (GObject      *source,
       return;
     }
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
   add_background (bd->flowbox, bd->filename, texture, FALSE);
 
   g_object_unref (texture);
@@ -1309,9 +1292,7 @@ populate_flowbox (GtkWidget *flowbox)
     {
       filename = g_strconcat ("/org/gtk/WidgetFactory4/", resources[i], NULL);
       pixbuf = gdk_pixbuf_new_from_resource_at_scale (filename, 110, 110, TRUE, NULL);
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       texture = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
       add_background (flowbox, filename, texture, TRUE);
       g_object_unref (texture);
       g_object_unref (pixbuf);
@@ -1360,21 +1341,18 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 static void
 row_activated (GtkListBox *box, GtkListBoxRow *row)
 {
-  GtkImage *image;
+  GtkWidget *image;
   GtkWidget *dialog;
 
-  image = (GtkImage *) g_object_get_data (G_OBJECT (row), "image");
-  dialog = (GtkWidget *) g_object_get_data (G_OBJECT (row), "dialog");
+  image = (GtkWidget *)g_object_get_data (G_OBJECT (row), "image");
+  dialog = (GtkWidget *)g_object_get_data (G_OBJECT (row), "dialog");
 
   if (image)
     {
-      GtkSvg *paintable;
-
-      paintable = GTK_SVG (gtk_image_get_paintable (image));
-      if (gtk_svg_get_state (paintable) == 0)
-        gtk_svg_set_state (paintable, 1);
+      if (gtk_widget_get_opacity (image) > 0)
+        gtk_widget_set_opacity (image, 0);
       else
-        gtk_svg_set_state (paintable, 0);
+        gtk_widget_set_opacity (image, 1);
     }
   else if (dialog)
     {
@@ -1764,17 +1742,18 @@ open_popover_text_changed (GtkEntry *entry, GParamSpec *pspec, GtkWidget *button
   gtk_widget_set_sensitive (button, strlen (text) > 0);
 }
 
-static void
+static gboolean
 show_page_again (gpointer data)
 {
   gtk_widget_set_visible (GTK_WIDGET (data), TRUE);
+  return G_SOURCE_REMOVE;
 }
 
 static void
 tab_close_cb (GtkWidget *page)
 {
   gtk_widget_set_visible (page, FALSE);
-  g_timeout_add_once (2500, show_page_again, page);
+  g_timeout_add (2500, show_page_again, page);
 }
 
 typedef struct _GTestPermission GTestPermission;
@@ -1825,7 +1804,6 @@ acquire_async (GPermission         *permission,
   GTask *task;
 
   task = g_task_new ((GObject*)permission, NULL, callback, user_data);
-  g_task_set_source_tag (task, acquire_async);
   g_task_return_boolean (task, update_allowed (permission, TRUE));
   g_object_unref (task);
 }
@@ -1855,7 +1833,6 @@ release_async (GPermission         *permission,
   GTask *task;
 
   task = g_task_new ((GObject*)permission, NULL, callback, user_data);
-  g_task_set_source_tag (task, release_async);
   g_task_return_boolean (task, update_allowed (permission, FALSE));
   g_object_unref (task);
 }
@@ -2038,16 +2015,11 @@ validate_more_details (GtkEntry   *entry,
     {
       gtk_widget_set_tooltip_text (GTK_WIDGET (entry), "Must have details first");
       gtk_widget_add_css_class (GTK_WIDGET (entry), "error");
-      gtk_accessible_update_state (GTK_ACCESSIBLE (entry),
-                                   GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE,
-                                   -1);
     }
   else
     {
       gtk_widget_set_tooltip_text (GTK_WIDGET (entry), "");
       gtk_widget_remove_css_class (GTK_WIDGET (entry), "error");
-      gtk_accessible_reset_state (GTK_ACCESSIBLE (entry),
-                                  GTK_ACCESSIBLE_STATE_INVALID);
     }
 }
 
@@ -2063,20 +2035,10 @@ mode_switch_state_set (GtkSwitch *sw, gboolean state)
     {
       gtk_widget_set_visible (label, FALSE);
       gtk_switch_set_state (sw, state);
-      gtk_accessible_reset_state (GTK_ACCESSIBLE (sw),
-                                  GTK_ACCESSIBLE_STATE_INVALID);
-      gtk_accessible_reset_relation (GTK_ACCESSIBLE (sw),
-                                     GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE);
     }
   else
     {
       gtk_widget_set_visible (label, TRUE);
-      gtk_accessible_update_state (GTK_ACCESSIBLE (sw),
-                                   GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE,
-                                   -1);
-      gtk_accessible_update_relation (GTK_ACCESSIBLE (sw),
-                                      GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE, label, NULL,
-                                      -1);
     }
 
   return TRUE;
@@ -2095,10 +2057,6 @@ level_scale_value_changed (GtkRange *range)
     {
       gtk_widget_set_visible (label, FALSE);
       gtk_switch_set_state (GTK_SWITCH (sw), TRUE);
-      gtk_accessible_reset_state (GTK_ACCESSIBLE (sw),
-                                  GTK_ACCESSIBLE_STATE_INVALID);
-      gtk_accessible_reset_relation (GTK_ACCESSIBLE (sw),
-                                     GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE);
     }
   else if (gtk_switch_get_state (GTK_SWITCH (sw)) &&
           (gtk_range_get_value (range) <= 50))
@@ -2169,53 +2127,14 @@ load_texture_in_thread (GtkWidget  *picture,
                         const char *resource_path)
 {
   GTask *task = g_task_new (picture, NULL, load_texture_done, NULL);
-  g_task_set_source_tag (task, load_texture_in_thread);
   g_task_set_task_data (task, (gpointer)resource_path, NULL);
   g_task_run_in_thread (task, load_texture_thread);
   g_object_unref (task);
 }
 
-static GFile *
-resource_file_new (const char *resource_path)
-{
-  char *uri;
-  GFile *file;
-
-  uri = g_strconcat ("resource://", resource_path, NULL);
-  file = g_file_new_for_uri (uri);
-  g_free (uri);
-
-  return file;
-}
-
-static void
-builder_add_symbolic (GtkBuilder *builder,
-                      const char *icon_name,
-                      const char *resource_path)
-{
-  GFile *file;
-  GtkIconPaintable *paintable;
-
-  file = resource_file_new (resource_path);
-  paintable = gtk_icon_paintable_new_for_file (file, 16, 1);
-
-  gtk_builder_expose_object (builder, icon_name, G_OBJECT (paintable));
-
-  g_object_unref (paintable);
-  g_object_unref (file);
-}
-
-static void
-set_paintable_clock (GtkWidget *window,
-                     GtkSvg    *svg)
-{
-  gtk_svg_set_frame_clock (svg, gtk_widget_get_frame_clock (window));
-}
-
 static void
 activate (GApplication *app)
 {
-  GList *list;
   GtkBuilder *builder;
   GtkBuilderScope *scope;
   GtkWindow *window;
@@ -2272,15 +2191,8 @@ activate (GApplication *app)
   GAction *action;
   GError *error = NULL;
   GtkEventController *controller;
-  guint pulse_id;
 
   g_type_ensure (my_text_view_get_type ());
-
-  if ((list = gtk_application_get_windows (GTK_APPLICATION (app))) != NULL)
-    {
-      gtk_window_present (GTK_WINDOW (list->data));
-      return;
-    }
 
   provider = gtk_css_provider_new ();
   gtk_css_provider_load_from_resource (provider, "/org/gtk/WidgetFactory4/widget-factory.css");
@@ -2310,36 +2222,6 @@ activate (GApplication *app)
   gtk_builder_cscope_add_callback (scope, transition_speed_changed);
   gtk_builder_cscope_add_callback (scope, reset_icon_size);
   gtk_builder_set_scope (builder, scope);
-
-  builder_add_symbolic (builder, "open-menu-symbolic", "/org/gtk/libgtk/icons/open-menu-symbolic.svg");
-  builder_add_symbolic (builder, "view-refresh-symbolic", "/org/gtk/libgtk/icons/view-refresh-symbolic.svg");
-  builder_add_symbolic (builder, "window-close-symbolic", "/org/gtk/libgtk/icons/window-close-symbolic.svg");
-  builder_add_symbolic (builder, "emblem-system-symbolic", "/org/gtk/libgtk/icons/emblem-system-symbolic.svg");
-  builder_add_symbolic (builder, "object-select-symbolic", "/org/gtk/libgtk/icons/object-select-symbolic.svg");
-  builder_add_symbolic (builder, "appointment-soon-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/status/appointment-soon-symbolic.svg");
-  builder_add_symbolic (builder, "document-new-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/document-new-symbolic.svg");
-  builder_add_symbolic (builder, "document-save-symbolic", "/org/gtk/libgtk/icons/document-save-symbolic.svg");
-  builder_add_symbolic (builder, "edit-find-symbolic", "/org/gtk/libgtk/icons/edit-find-symbolic.svg");
-  builder_add_symbolic (builder, "insert-image-symbolic", "/org/gtk/libgtk/icons/insert-image-symbolic.svg");
-  builder_add_symbolic (builder, "zoom-out-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/zoom-out-symbolic.svg");
-  builder_add_symbolic (builder, "zoom-in-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/zoom-in-symbolic.svg");
-  builder_add_symbolic (builder, "zoom-original-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/zoom-original-symbolic.svg");
-  builder_add_symbolic (builder, "media-record-symbolic", "/org/gtk/libgtk/icons/media-record-symbolic.svg");
-  builder_add_symbolic (builder, "view-grid-symbolic", "/org/gtk/libgtk/icons/view-grid-symbolic.svg");
-  builder_add_symbolic (builder, "view-list-symbolic", "/org/gtk/libgtk/icons/view-list-symbolic.svg");
-  builder_add_symbolic (builder, "view-more-symbolic", "/org/gtk/libgtk/icons/view-more-symbolic.svg");
-  builder_add_symbolic (builder, "document-open-symbolic", "/org/gtk/libgtk/icons/document-open-symbolic.svg");
-  builder_add_symbolic (builder, "send-to-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/send-to-symbolic.svg");
-  builder_add_symbolic (builder, "view-fullscreen-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/view-fullscreen-symbolic.svg");
-  builder_add_symbolic (builder, "start-new-symbolic", "/org/gtk/WidgetFactory4/icons/scalable/actions/star-new-symbolic.svg");
-  builder_add_symbolic (builder, "edit-cut-symbolic", "/org/gtk/libgtk/icons/edit-cut-symbolic.svg");
-  builder_add_symbolic (builder, "edit-copy-symbolic", "/org/gtk/libgtk/icons/edit-copy-symbolic.svg");
-  builder_add_symbolic (builder, "edit-paste-symbolic", "/org/gtk/libgtk/icons/edit-paste-symbolic.svg");
-  builder_add_symbolic (builder, "edit-delete-symbolic", "/org/gtk/libgtk/icons/edit-delete-symbolic.svg");
-  builder_add_symbolic (builder, "go-previous-symbolic", "/org/gtk/libgtk/icons/go-previous-symbolic.svg");
-  builder_add_symbolic (builder, "go-next-symbolic", "/org/gtk/libgtk/icons/go-next-symbolic.svg");
-  builder_add_symbolic (builder, "emblem-important-symbolic", "/org/gtk/libgtk/icons/emblem-important-symbolic.svg");
-
   g_object_unref (scope);
   if (!gtk_builder_add_from_resource (builder, "/org/gtk/WidgetFactory4/widget-factory.ui", &error))
     {
@@ -2365,7 +2247,6 @@ activate (GApplication *app)
                                    window);
 
   controller = gtk_shortcut_controller_new ();
-  gtk_event_controller_set_static_name (controller, "widget-factory-late-accels");
   gtk_event_controller_set_propagation_phase (controller, GTK_PHASE_BUBBLE);
 
   for (i = 0; i < G_N_ELEMENTS (late_accels); i++)
@@ -2546,7 +2427,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   widget = (GtkWidget *)gtk_builder_get_object (builder, "pastebutton");
   g_signal_connect (widget, "clicked", G_CALLBACK (handle_cutcopypaste), widget2);
   g_signal_connect_object (gtk_widget_get_clipboard (widget2), "notify::formats",
-                           G_CALLBACK (clipboard_formats_notify), widget, G_CONNECT_DEFAULT);
+                           G_CALLBACK (clipboard_formats_notify), widget, 0);
 
   widget = (GtkWidget *)gtk_builder_get_object (builder, "osd_frame");
   widget2 = (GtkWidget *)gtk_builder_get_object (builder, "totem_like_osd");
@@ -2602,8 +2483,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   g_signal_connect (adj, "value-changed", G_CALLBACK (adjustment3_value_changed), widget2);
 
   widget = (GtkWidget *)gtk_builder_get_object (builder, "extra_info_entry");
-  pulse_id = g_timeout_add_once (100, pulse_it, widget);
-  g_object_set_data_full (G_OBJECT (widget), "pulse_id", GUINT_TO_POINTER (pulse_id), remove_pulse);
+  g_timeout_add (100, (GSourceFunc)pulse_it, widget);
 
   widget = (GtkWidget *)gtk_builder_get_object (builder, "scale3");
   gtk_scale_set_format_value_func (GTK_SCALE (widget), scale_format_value, NULL, NULL);
@@ -2615,28 +2495,36 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   model = (GMenuModel *)gtk_builder_get_object (builder, "new_style_context_menu_model");
   set_up_context_popover (widget, model);
 
-  widget = (GtkWidget *)gtk_builder_get_object (builder, "video");
-
-  GFile *file;
-  GInputStream *input_stream;
-  GtkMediaStream *media_stream;
-
-  file = g_file_new_for_uri ("resource:///org/gtk/WidgetFactory4/gtk-logo.webm");
-  input_stream = G_INPUT_STREAM (g_file_read (file, NULL, NULL));
-  media_stream = gtk_media_file_new_for_input_stream (input_stream);
-  gtk_video_set_media_stream (GTK_VIDEO (widget), media_stream);
-  g_object_unref (media_stream);
-  g_object_unref (input_stream);
-  g_object_unref (file);
-
-  g_signal_connect (window, "map", G_CALLBACK (set_paintable_clock),
-                    gtk_builder_get_object (builder, "view_refresh_paintable"));
-  g_signal_connect (window, "map", G_CALLBACK (set_paintable_clock),
-                    gtk_builder_get_object (builder, "checked_paintable"));
-
   gtk_window_present (window);
 
   g_object_unref (builder);
+}
+
+static void
+print_version (void)
+{
+  g_print ("gtk4-widget-factory %s%s%s\n",
+           PACKAGE_VERSION,
+           g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
+           g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
+}
+
+static int
+local_options (GApplication *app,
+               GVariantDict *options,
+               gpointer      data)
+{
+  gboolean version = FALSE;
+
+  g_variant_dict_lookup (options, "version", "b", &version);
+
+  if (version)
+    {
+      print_version ();
+      return 0;
+    }
+
+  return -1;
 }
 
 static void
@@ -2674,13 +2562,13 @@ toggle_action (GSimpleAction *action,
                              g_variant_new_boolean (!g_variant_get_boolean (state)));
 }
 
-static void
+static gboolean
 quit_timeout (gpointer data)
 {
-  g_application_quit (G_APPLICATION (data));
+  exit (0);
+  return G_SOURCE_REMOVE;
 }
 
-G_MODULE_EXPORT
 int
 main (int argc, char *argv[])
 {
@@ -2727,15 +2615,8 @@ main (int argc, char *argv[])
     { "radio-x-disabled", NULL, "s", "'x'", NULL },
   };
   int status;
-  char version[80];
 
   app = gtk_application_new ("org.gtk.WidgetFactory4", G_APPLICATION_NON_UNIQUE);
-
-  g_snprintf (version, sizeof (version), "%s%s%s\n",
-              PACKAGE_VERSION,
-              g_strcmp0 (PROFILE, "devel") == 0 ? "-" : "",
-              g_strcmp0 (PROFILE, "devel") == 0 ? VCS_TAG : "");
-  g_application_set_version (G_APPLICATION (app), version);
 
   g_action_map_add_action_entries (G_ACTION_MAP (app),
                                    app_entries, G_N_ELEMENTS (app_entries),
@@ -2751,9 +2632,12 @@ main (int argc, char *argv[])
 
   g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
 
-  if (g_getenv ("GTK_DEBUG_AUTO_QUIT"))
-    g_timeout_add_seconds_once (1, quit_timeout, app);
+  g_application_add_main_option (G_APPLICATION (app), "version", 0, 0, G_OPTION_ARG_NONE, "Show program version", NULL);
 
+  if (g_getenv ("GTK_DEBUG_AUTO_QUIT"))
+    g_timeout_add (500, quit_timeout, NULL);
+
+  g_signal_connect (app, "handle-local-options", G_CALLBACK (local_options), NULL);
   status = g_application_run (G_APPLICATION (app), argc, argv);
   g_object_unref (app);
 

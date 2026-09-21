@@ -64,10 +64,9 @@ void meta_wayland_touch_create_new_resource (MetaWaylandTouch   *touch,
 void meta_wayland_touch_cancel (MetaWaylandTouch *touch);
 
 
-ClutterEventSequence * meta_wayland_touch_find_grab_sequence (MetaWaylandTouch    *touch,
-                                                              MetaWaylandSurface  *surface,
-                                                              uint32_t             serial,
-                                                              ClutterSprite      **sprite_out);
+ClutterEventSequence * meta_wayland_touch_find_grab_sequence (MetaWaylandTouch   *touch,
+                                                              MetaWaylandSurface *surface,
+                                                              uint32_t            serial);
 
 gboolean meta_wayland_touch_get_press_coords (MetaWaylandTouch     *touch,
                                               ClutterEventSequence *sequence,
@@ -77,8 +76,5 @@ gboolean meta_wayland_touch_get_press_coords (MetaWaylandTouch     *touch,
 gboolean meta_wayland_touch_can_popup        (MetaWaylandTouch *touch,
                                               uint32_t          serial);
 
-MetaWaylandSurface * meta_wayland_touch_get_focus_surface (MetaWaylandTouch     *touch,
-                                                           ClutterEventSequence *sequence);
-
-MetaWaylandSurface * meta_wayland_touch_get_current_surface (MetaWaylandTouch     *touch,
-                                                             ClutterEventSequence *sequence);
+MetaWaylandSurface * meta_wayland_touch_get_surface (MetaWaylandTouch     *touch,
+                                                     ClutterEventSequence *sequence);

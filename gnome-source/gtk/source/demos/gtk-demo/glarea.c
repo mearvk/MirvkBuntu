@@ -25,10 +25,9 @@ static float rotation_angles[N_AXIS] = { 0.0 };
 
 /* The object we are drawing */
 static const GLfloat vertex_data[] = {
-  /* coord */               /* color */
-  0.f,   0.5f,   0.f, 1.f,  1.f, 0.f, 0.f, 1.f,
-  0.5f, -0.366f, 0.f, 1.f,  0.f, 1.f, 0.f, 1.f,
- -0.5f, -0.366f, 0.f, 1.f,  0.f, 0.f, 1.f, 1.f
+  0.f,   0.5f,   0.f, 1.f,
+  0.5f, -0.366f, 0.f, 1.f,
+ -0.5f, -0.366f, 0.f, 1.f,
 };
 
 /* Initialize the GL buffers */
@@ -129,9 +128,6 @@ init_shaders (const char *vertex_path,
   program = glCreateProgram ();
   glAttachShader (program, vertex);
   glAttachShader (program, fragment);
-
-  glBindAttribLocation (program, 0, "in_position");
-  glBindAttribLocation (program, 1, "in_color");
 
   glLinkProgram (program);
 
@@ -281,9 +277,7 @@ draw_triangle (void)
   /* Use the vertices in our buffer */
   glBindBuffer (GL_ARRAY_BUFFER, position_buffer);
   glEnableVertexAttribArray (0);
-  glVertexAttribPointer (0, 4, GL_FLOAT, GL_FALSE, 32, 0);
-  glEnableVertexAttribArray (1);
-  glVertexAttribPointer (1, 4, GL_FLOAT, GL_FALSE, 32, (void *) 16);
+  glVertexAttribPointer (0, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
   /* Draw the three vertices as a triangle */
   glDrawArrays (GL_TRIANGLES, 0, 3);

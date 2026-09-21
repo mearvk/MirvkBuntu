@@ -18,7 +18,7 @@
 
 #include "config.h"
 
-#include "core/meta-debug-control-private.h"
+#include "core/meta-debug-control.h"
 
 #include "core/util-private.h"
 #include "meta/meta-backend.h"
@@ -29,7 +29,6 @@ enum
   PROP_0,
 
   PROP_CONTEXT,
-  PROP_EXPORTED,
 
   N_PROPS
 };
@@ -44,7 +43,6 @@ struct _MetaDebugControl
   MetaDBusDebugControlSkeleton parent;
 
   MetaContext *context;
-  gboolean exported;
 
   guint dbus_name_id;
 };
@@ -87,6 +85,72 @@ on_bus_acquired (GDBusConnection *connection,
 }
 
 static void
+on_enable_hdr_changed (MetaDebugControl *debug_control,
+                       GParamSpec       *pspec)
+{
+  MetaDBusDebugControl *dbus_debug_control =
+    META_DBUS_DEBUG_CONTROL (debug_control);
+  MetaBackend *backend = meta_context_get_backend (debug_control->context);
+  MetaMonitorManager *monitor_manager = meta_backend_get_monitor_manager (backend);
+  gboolean enable;
+
+  enable = meta_dbus_debug_control_get_enable_hdr (dbus_debug_control);
+  g_object_set (G_OBJECT (monitor_manager),
+                "experimental-hdr", enable ? "on" : "off",
+                NULL);
+}
+
+static void
+on_experimental_hdr_changed (MetaMonitorManager *monitor_manager,
+                             GParamSpec         *pspec,
+                             MetaDebugControl   *debug_control)
+{
+  MetaDBusDebugControl *dbus_debug_control =
+    META_DBUS_DEBUG_CONTROL (debug_control);
+  g_autofree char *experimental_hdr = NULL;
+  gboolean enable;
+
+  g_object_get (G_OBJECT (monitor_manager),
+                "experimental-hdr", &experimental_hdr,
+                NULL);
+  
+  enable = g_strcmp0 (experimental_hdr, "on") == 0;
+  if (enable == meta_dbus_debug_control_get_enable_hdr (dbus_debug_control))
+    return;
+
+  meta_dbus_debug_control_set_enable_hdr (META_DBUS_DEBUG_CONTROL (debug_control),
+                                          g_strcmp0 (experimental_hdr, "on") == 0);
+}
+
+static void
+on_context_started (MetaContext      *context,
+                    MetaDebugControl *debug_control)
+{
+  MetaBackend *backend = meta_context_get_backend (context);
+  MetaMonitorManager *monitor_manager = meta_backend_get_monitor_manager (backend);
+
+  g_signal_connect (monitor_manager, "notify::experimental-hdr",
+                    G_CALLBACK (on_experimental_hdr_changed),
+                    debug_control);
+}
+
+static void
+meta_debug_control_constructed (GObject *object)
+{
+  MetaDebugControl *debug_control = META_DEBUG_CONTROL (object);
+
+  g_signal_connect_object (debug_control->context, "started",
+                           G_CALLBACK (on_context_started), debug_control,
+                           G_CONNECT_DEFAULT);
+
+  g_signal_connect_object (debug_control, "notify::enable-hdr",
+                           G_CALLBACK (on_enable_hdr_changed), debug_control,
+                           G_CONNECT_DEFAULT);
+
+  G_OBJECT_CLASS (meta_debug_control_parent_class)->constructed (object);
+}
+
+static void
 meta_debug_control_dispose (GObject *object)
 {
   MetaDebugControl *debug_control = META_DEBUG_CONTROL (object);
@@ -109,10 +173,6 @@ meta_debug_control_set_property (GObject      *object,
     case PROP_CONTEXT:
       debug_control->context = g_value_get_object (value);
       break;
-    case PROP_EXPORTED:
-      meta_debug_control_set_exported (debug_control,
-                                       g_value_get_boolean (value));
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -132,9 +192,6 @@ meta_debug_control_get_property (GObject    *object,
     case PROP_CONTEXT:
       g_value_set_object (value, debug_control->context);
       break;
-    case PROP_EXPORTED:
-      g_value_set_boolean (value, debug_control->exported);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -146,6 +203,7 @@ meta_debug_control_class_init (MetaDebugControlClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = meta_debug_control_constructed;
   object_class->dispose = meta_debug_control_dispose;
   object_class->set_property = meta_debug_control_set_property;
   object_class->get_property = meta_debug_control_get_property;
@@ -155,102 +213,24 @@ meta_debug_control_class_init (MetaDebugControlClass *klass)
                                                  G_PARAM_CONSTRUCT_ONLY |
                                                  G_PARAM_READWRITE |
                                                  G_PARAM_STATIC_STRINGS);
-  obj_props[PROP_EXPORTED] = g_param_spec_boolean ("exported", NULL, NULL,
-                                                   FALSE,
-                                                   G_PARAM_READWRITE |
-                                                   G_PARAM_EXPLICIT_NOTIFY |
-                                                   G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (object_class, N_PROPS, obj_props);
 }
 
 static void
 meta_debug_control_init (MetaDebugControl *debug_control)
 {
-  MetaDBusDebugControl *dbus_debug_control =
-    META_DBUS_DEBUG_CONTROL (debug_control);
-  gboolean force_hdr, force_linear_blending;
-  gboolean inhibit_hw_cursor;
-  gboolean a11y_manager_without_access_control;
-
-  force_hdr = g_strcmp0 (getenv ("MUTTER_DEBUG_FORCE_HDR"), "1") == 0;
-  meta_dbus_debug_control_set_force_hdr (dbus_debug_control, force_hdr);
-
-  force_linear_blending =
-    g_strcmp0 (getenv ("MUTTER_DEBUG_FORCE_LINEAR_BLENDING"), "1") == 0;
-  meta_dbus_debug_control_set_force_linear_blending (dbus_debug_control,
-                                                     force_linear_blending);
-
-  inhibit_hw_cursor =
-    g_strcmp0 (getenv ("MUTTER_DEBUG_INHIBIT_HW_CURSOR"), "1") == 0;
-  meta_dbus_debug_control_set_inhibit_hw_cursor (dbus_debug_control,
-                                                 inhibit_hw_cursor);
-
-  a11y_manager_without_access_control =
-    g_strcmp0 (getenv ("MUTTER_DEBUG_A11Y_MANAGER_WITHOUT_ACCESS_CONTROL"), "1") == 0;
-  meta_dbus_debug_control_set_a11y_manager_without_access_control (dbus_debug_control,
-                                                                   a11y_manager_without_access_control);
-}
-
-gboolean
-meta_debug_control_is_linear_blending_forced (MetaDebugControl *debug_control)
-{
-  MetaDBusDebugControl *dbus_debug_control =
-    META_DBUS_DEBUG_CONTROL (debug_control);
-
-  return meta_dbus_debug_control_get_force_linear_blending (dbus_debug_control);
-}
-
-gboolean
-meta_debug_control_is_hdr_forced (MetaDebugControl *debug_control)
-{
-  MetaDBusDebugControl *dbus_debug_control =
-    META_DBUS_DEBUG_CONTROL (debug_control);
-
-  return meta_dbus_debug_control_get_force_hdr (dbus_debug_control);
 }
 
 void
-meta_debug_control_set_exported (MetaDebugControl *debug_control,
-                                 gboolean          exported)
+meta_debug_control_export (MetaDebugControl *debug_control)
 {
-  if (debug_control->exported == exported)
-    return;
-
-  if (exported)
-    {
-      debug_control->dbus_name_id =
-        g_bus_own_name (G_BUS_TYPE_SESSION,
-                        META_DEBUG_CONTROL_DBUS_SERVICE,
-                        G_BUS_NAME_OWNER_FLAGS_NONE,
-                        on_bus_acquired,
-                        NULL,
-                        NULL,
-                        debug_control,
-                        NULL);
-    }
-  else
-    {
-      g_clear_handle_id (&debug_control->dbus_name_id, g_bus_unown_name);
-    }
-
-  debug_control->exported = exported;
-  g_object_notify_by_pspec (G_OBJECT (debug_control), obj_props[PROP_EXPORTED]);
-}
-
-gboolean
-meta_debug_control_is_hw_cursor_inhibited (MetaDebugControl *debug_control)
-{
-  MetaDBusDebugControl *dbus_debug_control =
-    META_DBUS_DEBUG_CONTROL (debug_control);
-
-  return meta_dbus_debug_control_get_inhibit_hw_cursor (dbus_debug_control);
-}
-
-gboolean
-meta_debug_control_is_a11y_manager_without_access_control (MetaDebugControl *debug_control)
-{
-  MetaDBusDebugControl *dbus_debug_control =
-    META_DBUS_DEBUG_CONTROL (debug_control);
-
-  return meta_dbus_debug_control_get_a11y_manager_without_access_control (dbus_debug_control);
+  debug_control->dbus_name_id =
+    g_bus_own_name (G_BUS_TYPE_SESSION,
+                    META_DEBUG_CONTROL_DBUS_SERVICE,
+                    G_BUS_NAME_OWNER_FLAGS_NONE,
+                    on_bus_acquired,
+                    NULL,
+                    NULL,
+                    debug_control,
+                    NULL);
 }

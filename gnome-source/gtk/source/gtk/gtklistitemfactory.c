@@ -26,7 +26,7 @@
 /**
  * GtkListItemFactory:
  *
- * Creates widgets for the items taken from a `GListModel`.
+ * A `GtkListItemFactory` creates widgets for the items taken from a `GListModel`.
  *
  * This is one of the core concepts of handling list widgets such
  * as [class@Gtk.ListView] or [class@Gtk.GridView].
@@ -70,9 +70,10 @@
  * If you intend to do changes to the behavior, it is recommended that you create
  * a new `GtkListItemFactory` which will allow the views to recreate its widgets.
  *
- * Once you have chosen your factory and created it, you need to set it on the view
- * widget you want to use it with, such as via [method@Gtk.ListView.set_factory].
- * Reusing factories across different views is allowed, but very uncommon.
+ * Once you have chosen your factory and created it, you need to set it
+ * on the view widget you want to use it with, such as via
+ * [method@Gtk.ListView.set_factory]. Reusing factories across different
+ * views is allowed, but very uncommon.
  */
 
 G_DEFINE_TYPE (GtkListItemFactory, gtk_list_item_factory, G_TYPE_OBJECT)
@@ -99,7 +100,7 @@ gtk_list_item_factory_default_teardown (GtkListItemFactory *self,
     func (item, data);
 }
 
-static void
+static void                  
 gtk_list_item_factory_default_update (GtkListItemFactory *self,
                                       GObject            *item,
                                       gboolean            unbind,

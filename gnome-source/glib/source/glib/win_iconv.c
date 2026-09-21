@@ -24,10 +24,7 @@
 # define WINVER 0x0500
 #endif
 
-#ifndef STRICT
-# define STRICT
-#endif
-
+#define STRICT
 #include <windows.h>
 #include <errno.h>
 #include <string.h>
@@ -1131,7 +1128,7 @@ must_use_null_useddefaultchar(int codepage)
 static char *
 strrstr(const char *str, const char *token)
 {
-    size_t len = strlen(token);
+    int len = strlen(token);
     const char *p = str + strlen(str);
 
     while (str <= --p)

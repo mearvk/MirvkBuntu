@@ -31,17 +31,14 @@
 #include "gtkbuildable.h"
 #include "gtkwidgetprivate.h"
 #include "gtklabel.h"
-#include "gtkbuilderprivate.h"
 
 /**
  * GtkFrame:
  *
- * Surrounds its child with a decorative frame and an optional label.
+ * `GtkFrame` is a widget that surrounds its child with a decorative
+ * frame and an optional label.
  *
- * <picture>
- *   <source srcset="frame-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkFrame" src="frame.png">
- * </picture>
+ * ![An example GtkFrame](frame.png)
  *
  * If present, the label is drawn inside the top edge of the frame.
  * The horizontal position of the label can be controlled with
@@ -52,16 +49,20 @@
  *
  * # GtkFrame as GtkBuildable
  *
- * An example of a UI definition fragment with GtkFrame:
+ * The `GtkFrame` implementation of the `GtkBuildable` interface supports
+ * placing a child in the label position by specifying “label” as the
+ * “type” attribute of a `<child>` element. A normal content child can
+ * be specified without specifying a `<child>` type attribute.
  *
+ * An example of a UI definition fragment with GtkFrame:
  * ```xml
  * <object class="GtkFrame">
- *   <property name="label-widget">
+ *   <child type="label">
  *     <object class="GtkLabel" id="frame_label"/>
- *   </property>
- *   <property name="child">
+ *   </child>
+ *   <child>
  *     <object class="GtkEntry" id="frame_content"/>
- *   </property>
+ *   </child>
  * </object>
  * ```
  *
@@ -79,7 +80,7 @@
  *
  * # Accessibility
  *
- * `GtkFrame` uses the [enum@Gtk.AccessibleRole.group] role.
+ * `GtkFrame` uses the `GTK_ACCESSIBLE_ROLE_GROUP` role.
  */
 
 typedef struct
@@ -163,17 +164,17 @@ gtk_frame_class_init (GtkFrameClass *class)
   class->compute_child_allocation = gtk_frame_real_compute_child_allocation;
 
   /**
-   * GtkFrame:label:
+   * GtkFrame:label: (attributes org.gtk.Property.get=gtk_frame_get_label org.gtk.Property.set=gtk_frame_set_label)
    *
    * Text of the frame's label.
    */
   frame_props[PROP_LABEL] =
       g_param_spec_string ("label", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFrame:label-xalign: (getter get_label_align) (setter set_label_align)
+   * GtkFrame:label-xalign: (attributes org.gtk.Property.get=gtk_frame_get_label_align org.gtk.Property.set=gtk_frame_set_label_align)
    *
    * The horizontal alignment of the label.
    */
@@ -181,27 +182,27 @@ gtk_frame_class_init (GtkFrameClass *class)
       g_param_spec_float ("label-xalign", NULL, NULL,
                           0.0, 1.0,
                           0.0,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFrame:label-widget:
+   * GtkFrame:label-widget: (attributes org.gtk.Property.get=gtk_frame_get_label_widget org.gtk.Property.set=gtk_frame_set_label_widget)
    *
    * Widget to display in place of the usual frame label.
    */
   frame_props[PROP_LABEL_WIDGET] =
       g_param_spec_object ("label-widget", NULL, NULL,
                            GTK_TYPE_WIDGET,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFrame:child:
+   * GtkFrame:child: (attributes org.gtk.Property.get=gtk_frame_get_child org.gtk.Property.set=gtk_frame_set_child)
    *
    * The child widget.
    */
   frame_props[PROP_CHILD] =
       g_param_spec_object ("child", NULL, NULL,
                            GTK_TYPE_WIDGET,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, LAST_PROP, frame_props);
 
@@ -226,19 +227,11 @@ gtk_frame_buildable_add_child (GtkBuildable *buildable,
                                const char   *type)
 {
   if (type && strcmp (type, "label") == 0)
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, "label", "label-widget");
-      gtk_frame_set_label_widget (GTK_FRAME (buildable), GTK_WIDGET (child));
-    }
+    gtk_frame_set_label_widget (GTK_FRAME (buildable), GTK_WIDGET (child));
   else if (GTK_IS_WIDGET (child))
-    {
-      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-      gtk_frame_set_child (GTK_FRAME (buildable), GTK_WIDGET (child));
-    }
+    gtk_frame_set_child (GTK_FRAME (buildable), GTK_WIDGET (child));
   else
-    {
-      parent_buildable_iface->add_child (buildable, builder, child, type);
-    }
+    parent_buildable_iface->add_child (buildable, builder, child, type);
 }
 
 static void
@@ -341,7 +334,7 @@ gtk_frame_new (const char *label)
 }
 
 /**
- * gtk_frame_set_label:
+ * gtk_frame_set_label: (attributes org.gtk.Method.set_property=label)
  * @frame: a `GtkFrame`
  * @label: (nullable): the text to use as the label of the frame
  *
@@ -361,7 +354,7 @@ gtk_frame_set_label (GtkFrame *frame,
 }
 
 /**
- * gtk_frame_get_label:
+ * gtk_frame_get_label: (attributes org.gtk.Method.get_property=label)
  * @frame: a `GtkFrame`
  *
  * Returns the frame labels text.
@@ -404,7 +397,7 @@ update_accessible_relation (GtkFrame *frame)
 }
 
 /**
- * gtk_frame_set_label_widget:
+ * gtk_frame_set_label_widget: (attributes org.gtk.Method.get_property=label-widget)
  * @frame: a `GtkFrame`
  * @label_widget: (nullable): the new label widget
  *
@@ -445,7 +438,7 @@ gtk_frame_set_label_widget (GtkFrame  *frame,
 }
 
 /**
- * gtk_frame_get_label_widget:
+ * gtk_frame_get_label_widget: (attributes org.gtk.Method.get_property=label-widget)
  * @frame: a `GtkFrame`
  *
  * Retrieves the label widget for the frame.
@@ -463,7 +456,7 @@ gtk_frame_get_label_widget (GtkFrame *frame)
 }
 
 /**
- * gtk_frame_set_label_align: (set-property label-xalign)
+ * gtk_frame_set_label_align: (attributes org.gtk.Method.set_property=label-xalign)
  * @frame: a `GtkFrame`
  * @xalign: The position of the label along the top edge
  *   of the widget. A value of 0.0 represents left alignment;
@@ -491,7 +484,7 @@ gtk_frame_set_label_align (GtkFrame *frame,
 }
 
 /**
- * gtk_frame_get_label_align: (get-property label-xalign)
+ * gtk_frame_get_label_align: (attributes org.gtk.Method.get_property=label-xalign)
  * @frame: a `GtkFrame`
  *
  * Retrieves the X alignment of the frame’s label.
@@ -667,7 +660,7 @@ gtk_frame_get_request_mode (GtkWidget *widget)
 }
 
 /**
- * gtk_frame_set_child:
+ * gtk_frame_set_child: (attributes org.gtk.Method.set_property=child)
  * @frame: a `GtkFrame`
  * @child: (nullable): the child widget
  *
@@ -699,7 +692,7 @@ gtk_frame_set_child (GtkFrame  *frame,
 }
 
 /**
- * gtk_frame_get_child:
+ * gtk_frame_get_child: (attributes org.gtk.Method.get_property=child)
  * @frame: a `GtkFrame`
  *
  * Gets the child widget of @frame.

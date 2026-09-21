@@ -152,30 +152,18 @@ struct _GtkAccessibleInterface
                            int           *y,
                            int           *width,
                            int           *height);
-
-  /**
-   * GtkAccessibleIface::get_accessible_id:
-   * @self: an accessible object
-   *
-   * Retrieves the accessible identifier for the accessible object.
-   *
-   * Returns: (transfer full) (nullable): the accessible identifier
-   *
-   * Since: 4.22
-   */
-  char * (* get_accessible_id) (GtkAccessible *self);
 };
 
 /**
  * GtkAccessibleList:
  *
- * Wraps a list of references to [iface@Gtk.Accessible] objects.
+ * A boxed type which wraps a list of references to GtkAccessible objects.
  *
  * Since: 4.14
  */
 typedef struct _GtkAccessibleList GtkAccessibleList;
 
-GDK_AVAILABLE_IN_4_10
+GDK_AVAILABLE_IN_ALL
 GtkATContext *  gtk_accessible_get_at_context   (GtkAccessible *self);
 
 GDK_AVAILABLE_IN_4_10
@@ -206,9 +194,6 @@ gboolean gtk_accessible_get_bounds (GtkAccessible *self,
                                     int           *y,
                                     int           *width,
                                     int           *height);
-
-GDK_AVAILABLE_IN_4_22
-char * gtk_accessible_get_accessible_id (GtkAccessible *self);
 
 GDK_AVAILABLE_IN_ALL
 GtkAccessibleRole gtk_accessible_get_accessible_role (GtkAccessible *self);
@@ -279,9 +264,5 @@ GDK_AVAILABLE_IN_4_14
 void gtk_accessible_announce (GtkAccessible                     *self,
                               const char                        *message,
                               GtkAccessibleAnnouncementPriority  priority);
-
-GDK_AVAILABLE_IN_4_18
-void gtk_accessible_update_platform_state (GtkAccessible              *self,
-                                           GtkAccessiblePlatformState  state);
 
 G_END_DECLS

@@ -35,87 +35,35 @@
 
 #include "cogl/cogl-private.h"
 
+#include "cogl/cogl-display-private.h"
 #include "cogl/cogl-renderer-private.h"
-#include "cogl/winsys/cogl-winsys.h"
+#include "cogl/winsys/cogl-winsys-private.h"
 
-typedef struct _CoglDisplayPrivate
+
+G_DEFINE_TYPE (CoglDisplay, cogl_display, G_TYPE_OBJECT);
+
+static const CoglWinsysVtable *
+_cogl_display_get_winsys (CoglDisplay *display)
 {
-  CoglContext *context;
-
-  gboolean setup;
-  CoglRenderer *renderer;
-
-} CoglDisplayPrivate;
-
-enum
-{
-  PROP_0,
-  PROP_RENDERER,
-  N_PROPS
-};
-
-static GParamSpec *obj_props[N_PROPS];
-
-G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (CoglDisplay, cogl_display, G_TYPE_OBJECT);
-
-
-static void
-cogl_display_get_property (GObject    *object,
-                           guint       prop_id,
-                           GValue     *value,
-                           GParamSpec *pspec)
-{
-  CoglDisplay *display = COGL_DISPLAY (object);
-  CoglDisplayPrivate *priv =
-    cogl_display_get_instance_private (display);
-
-  switch (prop_id)
-    {
-    case PROP_RENDERER:
-      g_value_set_object (value, priv->renderer);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-    }
-}
-
-static void
-cogl_display_set_property (GObject      *object,
-                           guint         prop_id,
-                           const GValue *value,
-                           GParamSpec   *pspec)
-{
-  CoglDisplay *display = COGL_DISPLAY (object);
-  CoglDisplayPrivate *priv =
-    cogl_display_get_instance_private (display);
-
-  switch (prop_id)
-    {
-    case PROP_RENDERER:
-      priv->renderer = g_value_get_object (value);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-    }
+  return display->renderer->winsys_vtable;
 }
 
 static void
 cogl_display_dispose (GObject *object)
 {
   CoglDisplay *display = COGL_DISPLAY (object);
-  CoglDisplayPrivate *priv = cogl_display_get_instance_private (display);
 
-  if (priv->setup)
+  const CoglWinsysVtable *winsys;
+
+  if (display->setup)
     {
-      CoglDisplayClass *class = COGL_DISPLAY_GET_CLASS (display);
-
-      class->destroy (display);
-      priv->setup = FALSE;
+      winsys = _cogl_display_get_winsys (display);
+      winsys->display_destroy (display);
+      display->setup = FALSE;
     }
 
-  priv->renderer = NULL;
+  g_clear_object (&display->renderer);
+  g_clear_object (&display->onscreen_template);
 
   G_OBJECT_CLASS (cogl_display_parent_class)->dispose (object);
 }
@@ -123,9 +71,6 @@ cogl_display_dispose (GObject *object)
 static void
 cogl_display_init (CoglDisplay *display)
 {
-  CoglDisplayPrivate *priv = cogl_display_get_instance_private (display);
-
-  priv->setup = FALSE;
 }
 
 static void
@@ -133,42 +78,74 @@ cogl_display_class_init (CoglDisplayClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
 
-  object_class->get_property = cogl_display_get_property;
-  object_class->set_property = cogl_display_set_property;
   object_class->dispose = cogl_display_dispose;
+}
 
-  obj_props[PROP_RENDERER] =
-    g_param_spec_object ("renderer", NULL, NULL,
-                         COGL_TYPE_RENDERER,
-                         G_PARAM_READWRITE |
-                         G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_STRINGS);
+CoglDisplay *
+cogl_display_new (CoglRenderer         *renderer,
+                  CoglOnscreenTemplate *onscreen_template)
+{
+  CoglDisplay *display = g_object_new (COGL_TYPE_DISPLAY, NULL);
+  GError *error = NULL;
 
-  g_object_class_install_properties (object_class, N_PROPS, obj_props);
+  _cogl_init ();
+
+  display->renderer = renderer;
+  if (renderer)
+    g_object_ref (renderer);
+  else
+    display->renderer = cogl_renderer_new ();
+
+  if (!cogl_renderer_connect (display->renderer, &error))
+    g_error ("Failed to connect to renderer: %s\n", error->message);
+
+  display->setup = FALSE;
+
+  cogl_display_set_onscreen_template (display, onscreen_template);
+
+  return display;
 }
 
 CoglRenderer *
 cogl_display_get_renderer (CoglDisplay *display)
 {
-  CoglDisplayPrivate *priv = cogl_display_get_instance_private (display);
+  return display->renderer;
+}
 
-  return priv->renderer;
+void
+cogl_display_set_onscreen_template (CoglDisplay *display,
+                                    CoglOnscreenTemplate *onscreen_template)
+{
+  g_return_if_fail (display->setup == FALSE);
+
+  if (onscreen_template)
+    g_object_ref (onscreen_template);
+
+  if (display->onscreen_template)
+    g_object_unref (display->onscreen_template);
+
+  display->onscreen_template = onscreen_template;
+
+  /* NB: we want to maintain the invariable that there is always an
+   * onscreen template associated with a CoglDisplay... */
+  if (!onscreen_template)
+    display->onscreen_template = cogl_onscreen_template_new (NULL);
 }
 
 gboolean
 cogl_display_setup (CoglDisplay *display,
                     GError **error)
 {
-  CoglDisplayPrivate *priv = cogl_display_get_instance_private (display);
-  CoglDisplayClass *class = COGL_DISPLAY_GET_CLASS (display);
+  const CoglWinsysVtable *winsys;
 
-  if (priv->setup)
+  if (display->setup)
     return TRUE;
 
-  if (!class->setup (display, error))
+  winsys = _cogl_display_get_winsys (display);
+  if (!winsys->display_setup (display, error))
     return FALSE;
 
-  priv->setup = TRUE;
+  display->setup = TRUE;
 
   return TRUE;
 }

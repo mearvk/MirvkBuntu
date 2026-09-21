@@ -31,8 +31,6 @@
 #include "gdkx11property.h"
 #include "gdkx11surface.h"
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 typedef struct _GdkX11PendingSelectionNotify GdkX11PendingSelectionNotify;
 typedef struct _GdkX11SelectionOutputStreamPrivate  GdkX11SelectionOutputStreamPrivate;
 
@@ -307,11 +305,8 @@ gdk_x11_selection_output_stream_perform_flush (GdkX11SelectionOutputStream *stre
       priv->notify = NULL;
     }
 
-  if (priv->incr)
-    {
-      g_object_ref (stream);
-      priv->delete_pending = TRUE;
-    }
+  g_object_ref (stream);
+  priv->delete_pending = TRUE;
   g_cond_broadcast (&priv->cond);
   g_mutex_unlock (&priv->mutex);
 
@@ -327,7 +322,8 @@ gdk_x11_selection_output_stream_perform_flush (GdkX11SelectionOutputStream *stre
   if (priv->pending_task)
     {
       g_task_return_int (priv->pending_task, GPOINTER_TO_SIZE (g_task_get_task_data (priv->pending_task)));
-      g_clear_object (&priv->pending_task);
+      g_object_unref (priv->pending_task);
+      priv->pending_task = NULL;
     }
 }
 

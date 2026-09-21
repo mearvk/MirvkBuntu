@@ -25,10 +25,6 @@ G_BEGIN_DECLS
 
 typedef struct _ClutterBlur ClutterBlur;
 
-float clutter_blur_calculate_downscale_factor (float width,
-                                               float height,
-                                               float radius);
-
 ClutterBlur * clutter_blur_new (CoglTexture *texture,
                                 float        radius);
 

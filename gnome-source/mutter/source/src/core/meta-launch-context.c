@@ -24,7 +24,7 @@
 #include "core/display-private.h"
 #include "meta/meta-launch-context.h"
 
-#ifdef HAVE_XWAYLAND
+#ifdef HAVE_X11_CLIENT
 #include "x11/meta-startup-notification-x11.h"
 #endif
 
@@ -138,7 +138,7 @@ meta_launch_context_get_startup_notify_id (GAppLaunchContext *launch_context,
   if (context->workspace)
     workspace_idx = meta_workspace_index (context->workspace);
 
-#ifdef HAVE_XWAYLAND
+#ifdef HAVE_X11_CLIENT
   if (display->x11_display)
     {
       /* If there is a X11 display, we prefer going entirely through
@@ -176,7 +176,7 @@ meta_launch_context_get_startup_notify_id (GAppLaunchContext *launch_context,
                           "display", context->display,
                           "id", startup_id,
                           "application-id", application_id,
-                          "name", info ? g_app_info_get_name (info) : NULL,
+                          "name", g_app_info_get_name (info),
                           "workspace", workspace_idx,
                           "timestamp", (uint64_t) context->timestamp,
                           NULL);
@@ -222,15 +222,15 @@ meta_launch_context_class_init (MetaLaunchContextClass *klass)
   props[PROP_DISPLAY] =
     g_param_spec_object ("display", NULL, NULL,
                          META_TYPE_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   props[PROP_WORKSPACE] =
     g_param_spec_object ("workspace", NULL, NULL,
                          META_TYPE_WORKSPACE,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE);
   props[PROP_TIMESTAMP] =
     g_param_spec_uint ("timestamp", NULL, NULL,
                        0, G_MAXUINT32, 0,
-                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE);
 
   g_object_class_install_properties (object_class, N_PROPS, props);
 }

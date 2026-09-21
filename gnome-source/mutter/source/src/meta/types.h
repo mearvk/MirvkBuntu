@@ -23,10 +23,13 @@ typedef struct _MetaBackend     MetaBackend;
 typedef struct _MetaContext     MetaContext;
 typedef struct _MetaCompositor  MetaCompositor;
 typedef struct _MetaDisplay     MetaDisplay;
+typedef struct _MetaX11Display  MetaX11Display;
+typedef struct _MetaFrame       MetaFrame;
 typedef struct _MetaWindow      MetaWindow;
 typedef struct _MetaWorkspace   MetaWorkspace;
 typedef struct _MetaLaters      MetaLaters;
 
+typedef struct _MetaGroup       MetaGroup;
 typedef struct _MetaKeyBinding  MetaKeyBinding;
 typedef struct _MetaCursorTracker MetaCursorTracker;
 
@@ -34,8 +37,4 @@ typedef struct _MetaDnd         MetaDnd;
 typedef struct _MetaSettings    MetaSettings;
 
 typedef struct _MetaWorkspaceManager MetaWorkspaceManager;
-typedef struct _MetaSelection MetaSelection;
-typedef struct _MetaDebugControl MetaDebugControl;
-typedef struct _MetaWindowConfig MetaWindowConfig;
-typedef struct _MetaExternalConstraint MetaExternalConstraint;
-typedef struct _MetaBacklight MetaBacklight;
+typedef struct _MetaSelection   MetaSelection;

@@ -45,11 +45,11 @@ G_BEGIN_DECLS
 typedef struct _GtkCalendar	       GtkCalendar;
 
 GDK_AVAILABLE_IN_ALL
-GType	   gtk_calendar_get_type	(void);
+GType	   gtk_calendar_get_type	(void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget* gtk_calendar_new		(void);
 
-GDK_DEPRECATED_IN_4_20_FOR (gtk_calendar_set_date)
+GDK_AVAILABLE_IN_ALL
 void          gtk_calendar_select_day                  (GtkCalendar *self,
                                                         GDateTime   *date);
 
@@ -99,9 +99,6 @@ void          gtk_calendar_set_year                    (GtkCalendar *self,
 GDK_AVAILABLE_IN_4_14
 int           gtk_calendar_get_year                    (GtkCalendar *self);
 
-GDK_AVAILABLE_IN_4_20
-void          gtk_calendar_set_date                    (GtkCalendar *self,
-                                                        GDateTime   *date);
 GDK_AVAILABLE_IN_ALL
 GDateTime *   gtk_calendar_get_date                    (GtkCalendar *self);
 

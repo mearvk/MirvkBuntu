@@ -29,7 +29,7 @@
 /**
  * GtkEntryBuffer:
  *
- * Holds the text that is displayed in a single-line text entry widget.
+ * A `GtkEntryBuffer` hold the text displayed in a `GtkText` widget.
  *
  * A single `GtkEntryBuffer` object can be shared by multiple widgets
  * which will then share the same text content, but not the cursor
@@ -267,7 +267,8 @@ gtk_entry_buffer_finalize (GObject *obj)
   if (pv->normal_text)
     {
       trash_area (pv->normal_text, pv->normal_text_size);
-      g_clear_pointer (&pv->normal_text, g_free);
+      g_free (pv->normal_text);
+      pv->normal_text = NULL;
       pv->normal_text_bytes = pv->normal_text_size = 0;
       pv->normal_text_chars = 0;
     }
@@ -340,34 +341,34 @@ gtk_entry_buffer_class_init (GtkEntryBufferClass *klass)
   klass->deleted_text = gtk_entry_buffer_real_deleted_text;
 
   /**
-   * GtkEntryBuffer:text:
+   * GtkEntryBuffer:text: (attributes org.gtk.Property.get=gtk_entry_buffer_get_text org.gtk.Property.set=gtk_entry_buffer_set_text)
    *
    * The contents of the buffer.
    */
   entry_buffer_props[PROP_TEXT] =
       g_param_spec_string ("text", NULL, NULL,
                            "",
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
-   * GtkEntryBuffer:length:
+   * GtkEntryBuffer:length: (attributes org.gtk.Property.get=gtk_entry_buffer_get_length)
    *
    * The length (in characters) of the text in buffer.
    */
    entry_buffer_props[PROP_LENGTH] =
        g_param_spec_uint ("length", NULL, NULL,
                           0, GTK_ENTRY_BUFFER_MAX_SIZE, 0,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          GTK_PARAM_READABLE);
 
   /**
-   * GtkEntryBuffer:max-length:
+   * GtkEntryBuffer:max-length: (attributes org.gtk.Property.get=gtk_entry_buffer_get_max_length org.gtk.Property.set=gtk_entry_buffer_set_max_length)
    *
    * The maximum length (in characters) of the text in the buffer.
    */
   entry_buffer_props[PROP_MAX_LENGTH] =
       g_param_spec_int ("max-length", NULL, NULL,
                         0, GTK_ENTRY_BUFFER_MAX_SIZE, 0,
-                        G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, entry_buffer_props);
 
@@ -445,7 +446,7 @@ gtk_entry_buffer_new (const char *initial_chars,
 }
 
 /**
- * gtk_entry_buffer_get_length:
+ * gtk_entry_buffer_get_length: (attributes org.gtk.Method.get_property=length)
  * @buffer: a `GtkEntryBuffer`
  *
  * Retrieves the length in characters of the buffer.
@@ -491,7 +492,7 @@ gtk_entry_buffer_get_bytes (GtkEntryBuffer *buffer)
 }
 
 /**
- * gtk_entry_buffer_get_text:
+ * gtk_entry_buffer_get_text: (attributes org.gtk.Method.get_property=text)
  * @buffer: a `GtkEntryBuffer`
  *
  * Retrieves the contents of the buffer.
@@ -517,7 +518,7 @@ gtk_entry_buffer_get_text (GtkEntryBuffer *buffer)
 }
 
 /**
- * gtk_entry_buffer_set_text:
+ * gtk_entry_buffer_set_text: (attributes org.gtk.Method.set_property=text)
  * @buffer: a `GtkEntryBuffer`
  * @chars: the new text
  * @n_chars: the number of characters in @text, or -1
@@ -545,7 +546,7 @@ gtk_entry_buffer_set_text (GtkEntryBuffer *buffer,
 }
 
 /**
- * gtk_entry_buffer_set_max_length:
+ * gtk_entry_buffer_set_max_length: (attributes org.gtk.Method.set_property=max-length)
  * @buffer: a `GtkEntryBuffer`
  * @max_length: the maximum length of the entry buffer, or 0 for no maximum.
  *   (other than the maximum length of entries.) The value passed in will
@@ -577,7 +578,7 @@ gtk_entry_buffer_set_max_length (GtkEntryBuffer *buffer,
 }
 
 /**
- * gtk_entry_buffer_get_max_length:
+ * gtk_entry_buffer_get_max_length: (attributes org.gtk.Method.get_property=max-length)
  * @buffer: a `GtkEntryBuffer`
  *
  * Retrieves the maximum allowed length of the text in @buffer.

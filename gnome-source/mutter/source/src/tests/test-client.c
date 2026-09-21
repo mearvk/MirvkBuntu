@@ -26,22 +26,17 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <X11/extensions/Xrandr.h>
 #include <X11/extensions/sync.h>
 
 #include "core/events.h"
 
 const char *client_id = "0";
-const char *script_path = NULL;
 static gboolean wayland;
-static gboolean dont_exit_on_eof;
-static gboolean verbose;
 GHashTable *windows;
 GQuark event_source_quark;
 GQuark event_handlers_quark;
 GQuark can_take_focus_quark;
 gboolean sync_after_lines = -1;
-gboolean is_sleeping;
 
 typedef void (*XEventHandler) (GtkWidget *window, XEvent *event);
 
@@ -71,7 +66,7 @@ lookup_window (const char *window_id)
 }
 
 typedef struct {
-  GSource parent;
+  GSource base;
   GSource **self_ref;
   GPollFD event_poll_fd;
   Display *xdisplay;
@@ -207,8 +202,7 @@ window_add_x11_event_handler (GtkWidget     *window,
                            (GDestroyNotify) unref_and_maybe_destroy_gsource);
 
   handlers = g_list_append (handlers, handler);
-  g_object_set_qdata_full (G_OBJECT (window), event_handlers_quark,
-                           handlers, (GDestroyNotify) g_list_free);
+  g_object_set_qdata (G_OBJECT (window), event_handlers_quark, handlers);
 }
 
 static void
@@ -223,8 +217,7 @@ window_remove_x11_event_handler (GtkWidget     *window,
   g_object_set_qdata (G_OBJECT (window), event_source_quark, NULL);
 
   handlers = g_list_remove (handlers, handler);
-  g_object_set_qdata_full (G_OBJECT (window), event_handlers_quark,
-                           handlers, (GDestroyNotify) g_list_free);
+  g_object_set_qdata (G_OBJECT (window), event_handlers_quark, handlers);
 }
 
 static void
@@ -233,12 +226,10 @@ handle_take_focus (GtkWidget *window,
 {
   GdkWindow *gdkwindow = gtk_widget_get_window (window);
   GdkDisplay *display = gtk_widget_get_display (window);
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   Atom wm_protocols =
     gdk_x11_get_xatom_by_name_for_display (display, "WM_PROTOCOLS");
   Atom wm_take_focus =
     gdk_x11_get_xatom_by_name_for_display (display, "WM_TAKE_FOCUS");
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   if (xevent->xany.type != ClientMessage ||
       xevent->xany.window != GDK_WINDOW_XID (gdkwindow))
@@ -288,171 +279,16 @@ text_clear_func (GtkClipboard *clipboard,
 }
 
 static void
-calculate_anchors (const char *position,
-                   GdkGravity *rect_anchor,
-                   GdkGravity *window_anchor)
+process_line (const char *line)
 {
-  if (g_strcmp0 (position, "center") == 0)
-    {
-      *rect_anchor = GDK_GRAVITY_CENTER;
-      *window_anchor = GDK_GRAVITY_CENTER;
-    }
-  else if (g_strcmp0 (position, "top") == 0)
-    {
-      *rect_anchor = GDK_GRAVITY_NORTH;
-      *window_anchor = GDK_GRAVITY_SOUTH;
-    }
-  else if (g_strcmp0 (position, "bottom") == 0)
-    {
-      *rect_anchor = GDK_GRAVITY_SOUTH;
-      *window_anchor = GDK_GRAVITY_NORTH;
-    }
-  else if (g_strcmp0 (position, "left") == 0)
-    {
-      *rect_anchor = GDK_GRAVITY_WEST;
-      *window_anchor = GDK_GRAVITY_EAST;
-    }
-  else if (g_strcmp0 (position, "right") == 0)
-    {
-      *rect_anchor = GDK_GRAVITY_EAST;
-      *window_anchor = GDK_GRAVITY_WEST;
-    }
-  else
-    {
-      g_assert_not_reached ();
-    }
-}
-
-static void
-prepare_popup_window (GdkSeat   *seat,
-                      GdkWindow *window,
-                      gpointer   user_data)
-{
-  GtkWidget *popup = user_data;
-
-  gtk_widget_show (popup);
-}
-
-typedef enum _PopupAtFlags
-{
-  POPUP_AT_FLAG_NONE = 0,
-  POPUP_AT_FLAG_GRAB = 1 << 0,
-  POPUP_AT_FLAG_RESIZE = 1 << 1,
-  POPUP_AT_FLAG_FLIP = 1 << 2,
-} PopupAtFlags;
-
-static void
-popup_at (GtkWidget    *parent,
-          const char   *popup_id,
-          const char   *position,
-          int           width,
-          int           height,
-          PopupAtFlags  flags)
-{
-  GtkWidget *popup;
-  g_autofree char *title;
-  GdkWindow *gdk_window;
-  GdkRectangle window_rect;
-  GdkGravity rect_anchor, window_anchor;
-  GdkAnchorHints anchor_hints = 0;
-
-  popup = g_object_new (GTK_TYPE_WINDOW,
-                        "type", GTK_WINDOW_POPUP,
-                        "type-hint", GDK_WINDOW_TYPE_HINT_POPUP_MENU,
-                        NULL);
-
-  title = g_strdup_printf ("test/%s/%s", client_id, popup_id);
-  gtk_window_set_transient_for (GTK_WINDOW (popup), GTK_WINDOW (parent));
-  gtk_window_set_title (GTK_WINDOW (popup), title);
-  g_hash_table_insert (windows, g_strdup (popup_id), popup);
-
-  gtk_window_resize (GTK_WINDOW (popup), width, height);
-
-  gtk_widget_realize (popup);
-  gdk_window = gtk_widget_get_window (popup);
-
-  gtk_widget_get_allocation (popup, &window_rect);
-
-  calculate_anchors (position, &rect_anchor, &window_anchor);
-
-  if (flags & POPUP_AT_FLAG_RESIZE)
-    anchor_hints |= GDK_ANCHOR_RESIZE;
-  if (flags & POPUP_AT_FLAG_FLIP)
-    anchor_hints |= GDK_ANCHOR_FLIP;
-
-  gdk_window_move_to_rect (gdk_window,
-                           &window_rect,
-                           rect_anchor,
-                           window_anchor,
-                           anchor_hints,
-                           0, 0);
-
-  if (flags & POPUP_AT_FLAG_GRAB)
-    {
-      GdkSeat *seat =
-        gdk_display_get_default_seat (gtk_widget_get_display (popup));
-      GdkGrabStatus grab_status;
-
-      grab_status = gdk_seat_grab (seat, gdk_window,
-                                   (GDK_SEAT_CAPABILITY_POINTER |
-                                    GDK_SEAT_CAPABILITY_TABLET_STYLUS |
-                                    GDK_SEAT_CAPABILITY_KEYBOARD),
-                                   TRUE,
-                                   NULL, NULL,
-                                   prepare_popup_window, popup);
-      g_assert_cmpint (grab_status, ==, GDK_GRAB_SUCCESS);
-    }
-  else
-    {
-      gtk_widget_show (popup);
-    }
-}
-
-static int
-find_monitor_from_connector (const char *connector)
-{
-  GdkDisplay *display = gdk_display_get_default ();
-  GdkScreen *screen = gdk_screen_get_default ();
-  int i;
-
-  for (i = 0; i < gdk_display_get_n_monitors (display); i++)
-    {
-      g_autofree char *monitor_connector = NULL;
-
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      monitor_connector = gdk_screen_get_monitor_plug_name (screen, i);
-      G_GNUC_END_IGNORE_DEPRECATIONS
-      if (g_strcmp0 (connector, monitor_connector) == 0)
-        return i;
-    }
-
-  return -1;
-}
-
-static void
-sleep_timeout_cb (gpointer user_data)
-{
-  GDataInputStream *in = G_DATA_INPUT_STREAM (user_data);
-
-  is_sleeping = FALSE;
-  read_next_line (in);
-}
-
-static void
-process_line (const char       *line,
-              GDataInputStream *in)
-{
-  GdkDisplay *display = gdk_display_get_default ();
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   int argc;
   char **argv;
-  static int line_count = 0;
-
-  line_count++;
 
   if (!g_shell_parse_argv (line, &argc, &argv, &error))
     {
       g_print ("error parsing command: %s\n", error->message);
+      g_error_free (error);
       return;
     }
 
@@ -461,9 +297,6 @@ process_line (const char       *line,
       g_print ("Empty command\n");
       goto out;
     }
-
-  if (verbose)
-    g_printerr ("%d %s\n", line_count, line);
 
   if (strcmp (argv[0], "create") == 0)
     {
@@ -641,12 +474,11 @@ process_line (const char       *line,
           goto out;
         }
 
+      GdkDisplay *display = gdk_display_get_default ();
       GdkWindow *gdkwindow = gtk_widget_get_window (window);
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       Display *xdisplay = gdk_x11_display_get_xdisplay (display);
       Window xwindow = GDK_WINDOW_XID (gdkwindow);
       Atom wm_take_focus = gdk_x11_get_xatom_by_name_for_display (display, "WM_TAKE_FOCUS");
-      G_GNUC_END_IGNORE_DEPRECATIONS
       gboolean add = g_ascii_strcasecmp(argv[2], "true") == 0;
       Atom *protocols = NULL;
       Atom *new_protocols;
@@ -755,14 +587,11 @@ process_line (const char       *line,
 
       gtk_window_present (GTK_WINDOW (window));
     }
-  else if (strcmp (argv[0], "resize") == 0 ||
-           strcmp (argv[0], "resize_ignore_titlebar") == 0)
+  else if (strcmp (argv[0], "resize") == 0)
     {
-      int titlebar_height;
-
       if (argc != 4)
         {
-          g_print ("usage: %s <id> <width> <height>\n", argv[0]);
+          g_print ("usage: resize <id> <width> <height>\n");
           goto out;
         }
 
@@ -772,27 +601,10 @@ process_line (const char       *line,
 
       int width = atoi (argv[2]);
       int height = atoi (argv[3]);
-
-      if (strcmp (argv[0], "resize_ignore_titlebar") == 0)
-        titlebar_height = 0;
-      else
-        titlebar_height = calculate_titlebar_height (GTK_WINDOW (window));
-
+      int titlebar_height = calculate_titlebar_height (GTK_WINDOW (window));
       gtk_window_resize (GTK_WINDOW (window),
                          width,
                          height - titlebar_height);
-    }
-  else if (strcmp (argv[0], "x11_geometry") == 0)
-    {
-      GtkWidget *window;
-
-      window = lookup_window (argv[1]);
-      if (!window)
-        goto out;
-
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      gtk_window_parse_geometry (GTK_WINDOW (window), argv[2]);
-      G_GNUC_END_IGNORE_DEPRECATIONS
     }
   else if (strcmp (argv[0], "raise") == 0)
     {
@@ -886,10 +698,8 @@ process_line (const char       *line,
       XSyncValue sync_value;
       XSyncIntToValue (&sync_value, value);
 
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       XSyncSetCounter (gdk_x11_display_get_xdisplay (gdk_display_get_default ()),
                        counter, sync_value);
-      G_GNUC_END_IGNORE_DEPRECATIONS
     }
   else if (strcmp (argv[0], "minimize") == 0)
     {
@@ -947,43 +757,11 @@ process_line (const char       *line,
 
       gtk_window_unmaximize (GTK_WINDOW (window));
     }
-  else if (strcmp (argv[0], "set_modal") == 0)
-    {
-      GtkWidget *window;
-
-      if (argc != 2)
-        {
-          g_print ("usage: set_modal <id>\n");
-          goto out;
-        }
-
-      window = lookup_window (argv[1]);
-      if (!window)
-        goto out;
-
-      gtk_window_set_modal (GTK_WINDOW (window), TRUE);
-    }
-  else if (strcmp (argv[0], "unset_modal") == 0)
-    {
-      GtkWidget *window;
-
-      if (argc != 2)
-        {
-          g_print ("usage: unset_modal <id>\n");
-          goto out;
-        }
-
-      window = lookup_window (argv[1]);
-      if (!window)
-        goto out;
-
-      gtk_window_set_modal (GTK_WINDOW (window), FALSE);
-    }
   else if (strcmp (argv[0], "fullscreen") == 0)
     {
-      if (argc != 2 && argc != 3)
+      if (argc != 2)
         {
-          g_print ("usage: fullscreen <id> [<connector>]\n");
+          g_print ("usage: fullscreen <id>\n");
           goto out;
         }
 
@@ -991,26 +769,7 @@ process_line (const char       *line,
       if (!window)
         goto out;
 
-      if (argc == 3)
-        {
-          GdkScreen *screen = gdk_screen_get_default ();
-          int monitor;
-
-          monitor = find_monitor_from_connector (argv[2]);
-          if (monitor == -1)
-            {
-              g_printerr ("Unknown monitor %s\n", argv[2]);
-              goto out;
-            }
-
-          gtk_window_fullscreen_on_monitor (GTK_WINDOW (window),
-                                            screen,
-                                            monitor);
-        }
-      else
-        {
-          gtk_window_fullscreen (GTK_WINDOW (window));
-        }
+      gtk_window_fullscreen (GTK_WINDOW (window));
     }
   else if (strcmp (argv[0], "unfullscreen") == 0)
     {
@@ -1084,102 +843,6 @@ process_line (const char       *line,
           goto out;
         }
     }
-  else if (strcmp (argv[0], "assert_client_size") == 0)
-    {
-      GtkWidget *window;
-      int expected_width;
-      int expected_height;
-      int width;
-      int height;
-
-      if (argc != 4)
-        {
-          g_print ("usage: assert_size <id> <width> <height>\n");
-          goto out;
-        }
-
-      window = lookup_window (argv[1]);
-      if (!window)
-        goto out;
-
-      gtk_window_get_size (GTK_WINDOW (window), &width, &height);
-
-      expected_width = atoi (argv[2]);
-      expected_height = atoi (argv[3]);
-      if (expected_width != width || expected_height != height)
-        {
-          g_print ("Expected size %dx%d didn't match actual size %dx%d\n",
-                   expected_width, expected_height,
-                   width, height);
-          goto out;
-        }
-    }
-  else if (strcmp (argv[0], "assert_primary_monitor") == 0)
-    {
-      GdkWindow *root_window = gdk_screen_get_root_window ((gdk_screen_get_default ()));
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      Display *xdisplay = gdk_x11_display_get_xdisplay (display);
-      Window root_xwindow = gdk_x11_window_get_xid (root_window);
-      G_GNUC_END_IGNORE_DEPRECATIONS
-      XRRScreenResources *resources;
-      RROutput primary_output;
-      XRROutputInfo *output_info;
-      char *expected_name;
-
-      if (wayland)
-        {
-          g_print ("Can only assert primary monitor on X11\n");
-          goto out;
-        }
-
-      if (argc != 2)
-        {
-          g_print ("usage: %s <monitor-name>\n", argv[0]);
-          goto out;
-        }
-
-      expected_name = argv[1];
-
-      gdk_display_sync (gdk_display_get_default ());
-
-      resources = XRRGetScreenResourcesCurrent (xdisplay, root_xwindow);
-      if (!resources)
-        {
-          g_print ("Failed to retrieve XRANDR resources\n");
-          goto out;
-        }
-
-      primary_output = XRRGetOutputPrimary (xdisplay, root_xwindow);
-      if (!primary_output)
-        {
-          if (g_strcmp0 (expected_name, "(none)") != 0)
-            {
-              g_print ("Failed to retrieve primary XRANDR output (expected %s)\n", expected_name);
-              goto out;
-            }
-        }
-      else
-        {
-          output_info = XRRGetOutputInfo (xdisplay, resources, primary_output);
-          if (!output_info)
-            {
-              XRRFreeScreenResources (resources);
-              g_print ("Failed to retrieve primary XRANDR output info\n");
-              goto out;
-            }
-
-          if (g_strcmp0 (expected_name, output_info->name) != 0)
-            {
-              XRRFreeOutputInfo (output_info);
-              XRRFreeScreenResources (resources);
-              g_print ("XRANDR output %s primary, expected %s\n",
-                       output_info->name, expected_name);
-              goto out;
-            }
-          XRRFreeOutputInfo (output_info);
-        }
-      XRRFreeScreenResources (resources);
-    }
   else if (strcmp (argv[0], "stop_after_next") == 0)
     {
       if (sync_after_lines != -1)
@@ -1202,6 +865,7 @@ process_line (const char       *line,
     }
   else if (strcmp (argv[0], "clipboard-set") == 0)
     {
+      GdkDisplay *display = gdk_display_get_default ();
       GtkClipboard *clipboard;
       GdkAtom atom;
       GtkTargetList *target_list;
@@ -1230,104 +894,6 @@ process_line (const char       *line,
                                    g_strdup (argv[2]));
       gtk_target_table_free (targets, n_targets);
     }
-  else if (strcmp (argv[0], "popup_at") == 0)
-    {
-      GtkWidget *parent;
-      int width, height;
-      PopupAtFlags flags = POPUP_AT_FLAG_NONE;
-      int i;
-
-      if (argc < 6)
-        {
-          g_print ("usage: popup_at <popup-id> <parent-id> "
-                   "<top|bottom|left|right|center> "
-                   "<width> <height> [<grab>,<resize>,<flip>]\n");
-          goto out;
-        }
-
-      parent = lookup_window (argv[2]);
-      if (!parent)
-        {
-          g_print ("Parent not found\n");
-          goto out;
-        }
-
-      width = atoi (argv[4]);
-      height = atoi (argv[5]);
-
-      for (i = 6; i < argc; i++)
-        {
-          if (g_strcmp0 (argv[i], "grab") == 0)
-            {
-              flags |= POPUP_AT_FLAG_GRAB;
-            }
-          else if (g_strcmp0 (argv[i], "resize") == 0)
-            {
-              flags |= POPUP_AT_FLAG_RESIZE;
-            }
-          else if (g_strcmp0 (argv[i], "flip") == 0)
-            {
-              flags |= POPUP_AT_FLAG_FLIP;
-            }
-          else
-            {
-              g_print ("Unknown argument '%s'", argv[6]);
-              goto out;
-            }
-        }
-
-      popup_at (parent, argv[1], argv[3], width, height, flags);
-    }
-  else if (strcmp (argv[0], "popup") == 0)
-    {
-      GtkWidget *parent;
-
-      if (argc != 3)
-        {
-          g_print ("usage: popup <popup-id> <parent-id>\n");
-          goto out;
-        }
-
-      parent = lookup_window (argv[2]);
-      if (!parent)
-        {
-          g_print ("Parent not found\n");
-          goto out;
-        }
-
-      popup_at (parent, argv[1], "center", 100, 100, POPUP_AT_FLAG_NONE);
-    }
-  else if (strcmp (argv[0], "dismiss") == 0)
-    {
-      GtkWidget *popup;
-
-      if (argc != 2)
-        {
-          g_print ("usage: popup <popup-id>\n");
-          goto out;
-        }
-
-      popup = lookup_window (argv[1]);
-      if (!popup)
-        goto out;
-
-      g_hash_table_remove (windows, argv[1]);
-      gtk_widget_destroy (popup);
-    }
-  else if (strcmp (argv[0], "sleep") == 0)
-    {
-      int64_t sleep_ms;
-
-      if (argc != 2)
-        {
-          g_print ("usage: sleep <milliseconds>\n");
-          goto out;
-        }
-
-      sleep_ms = atoi (argv[1]);
-      is_sleeping = TRUE;
-      g_timeout_add_once (sleep_ms, sleep_timeout_cb, in);
-    }
   else
     {
       g_print ("Unknown command %s\n", argv[0]);
@@ -1341,19 +907,12 @@ process_line (const char       *line,
 }
 
 static void
-maybe_read_next_line (GDataInputStream *in)
-{
-  if (!is_sleeping)
-    read_next_line (in);
-}
-
-static void
 on_line_received (GObject      *source,
                   GAsyncResult *result,
                   gpointer      user_data)
 {
   GDataInputStream *in = G_DATA_INPUT_STREAM (source);
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   gsize length;
   char *line = g_data_input_stream_read_line_finish_utf8 (in, result, &length, &error);
 
@@ -1361,14 +920,13 @@ on_line_received (GObject      *source,
     {
       if (error != NULL)
         g_printerr ("Error reading from stdin: %s\n", error->message);
-      if (!dont_exit_on_eof)
-        gtk_main_quit ();
+      gtk_main_quit ();
       return;
     }
 
-  process_line (line, in);
+  process_line (line);
   g_free (line);
-  maybe_read_next_line (in);
+  read_next_line (in);
 }
 
 static void
@@ -1388,14 +946,11 @@ read_next_line (GDataInputStream *in)
         {
           if (error)
             g_printerr ("Error reading from stdin: %s\n", error->message);
-          if (!dont_exit_on_eof)
-            gtk_main_quit ();
+          gtk_main_quit ();
           return;
         }
 
-      process_line (line, in);
-      if (is_sleeping)
-        return;
+      process_line (line);
     }
 
   if (sync_after_lines >= 0)
@@ -1413,28 +968,10 @@ const GOptionEntry options[] = {
     NULL
   },
   {
-    "dont-exit-on-eof", 0, 0, G_OPTION_ARG_NONE,
-    &dont_exit_on_eof,
-    "Don't terminate client when reaching end of file",
-    NULL
-  },
-  {
     "client-id", 0, 0, G_OPTION_ARG_STRING,
     &client_id,
     "Identifier used in Window titles for this client",
     "CLIENT_ID",
-  },
-  {
-    "script", 0, 0, G_OPTION_ARG_STRING,
-    &script_path,
-    "Test script to run",
-    "SCRIPT",
-  },
-  {
-    "verbose", 'v', 0, G_OPTION_ARG_NONE,
-    &verbose,
-    "Verbose",
-    NULL,
   },
   { NULL }
 };
@@ -1443,19 +980,13 @@ int
 main(int    argc,
      char **argv)
 {
-  g_autoptr (GOptionContext) context = NULL;
+  GOptionContext *context = g_option_context_new (NULL);
   GdkScreen *screen;
   GtkCssProvider *provider;
-  g_autoptr (GError) error = NULL;
-  g_autoptr (GInputStream) raw_in = NULL;
-  g_autoptr (GDataInputStream) in = NULL;
-  GHashTableIter iter;
-  gpointer key, value;
-  GdkDisplay *display;
+  GError *error = NULL;
 
   g_log_writer_default_set_use_stderr (TRUE);
 
-  context = g_option_context_new (NULL);
   g_option_context_add_main_entries (context, options, NULL);
 
   if (!g_option_context_parse (context,
@@ -1501,37 +1032,12 @@ main(int    argc,
   event_handlers_quark = g_quark_from_static_string ("event-handlers");
   can_take_focus_quark = g_quark_from_static_string ("can-take-focus");
 
-  if (script_path)
-    {
-      g_autoptr (GFile) file = NULL;
-
-      file = g_file_new_for_path (script_path);
-      raw_in = G_INPUT_STREAM (g_file_read (file, NULL, &error));
-      if (!raw_in)
-        {
-          g_printerr ("Failed to read file '%s': %s\n",
-                      script_path, error->message);
-          return 1;
-        }
-    }
-  else
-    {
-      raw_in = g_unix_input_stream_new (0, FALSE);
-    }
-
-  in = g_data_input_stream_new (raw_in);
+  GInputStream *raw_in = g_unix_input_stream_new (0, FALSE);
+  GDataInputStream *in = g_data_input_stream_new (raw_in);
 
   read_next_line (in);
 
   gtk_main ();
-
-  g_hash_table_iter_init (&iter, windows);
-  while (g_hash_table_iter_next (&iter, &key, &value))
-    gtk_widget_destroy (value);
-
-  display = gdk_display_get_default ();
-  gdk_display_sync (display);
-  gdk_display_close (display);
 
   return 0;
 }

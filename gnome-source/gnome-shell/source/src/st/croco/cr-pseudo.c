@@ -107,7 +107,7 @@ cr_pseudo_to_string (CRPseudo const * a_this)
         }
 
         if (str_buf) {
-                result = (guchar *) g_string_free_and_steal (str_buf);
+                result = (guchar *) g_string_free (str_buf, FALSE);
                 str_buf = NULL;
         }
 

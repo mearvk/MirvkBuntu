@@ -1,3 +1,5 @@
+/* -*- mode: js2; js2-basic-offset: 4; indent-tabs-mode: nil -*- */
+
 const AsyncFunction = async function () {}.constructor;
 
 /**
@@ -19,7 +21,7 @@ export async function getCompletions(text, commandHeader, globalCompletionList) 
     if (globalCompletionList == null)
         globalCompletionList = [];
 
-    const offset = getExpressionOffset(text, text.length - 1);
+    let offset = getExpressionOffset(text, text.length - 1);
     if (offset >= 0) {
         text = text.slice(offset);
 
@@ -68,7 +70,7 @@ function isStopChar(c) {
  * @param {number} offset
  */
 export function findMatchingQuote(expr, offset) {
-    const quoteChar = expr.charAt(offset);
+    let quoteChar = expr.charAt(offset);
     for (let i = offset - 1; i >= 0; --i) {
         if (expr.charAt(i) === quoteChar && expr.charAt(i - 1) !== '\\')
             return i;
@@ -100,8 +102,8 @@ export function findMatchingSlash(expr, offset) {
  * @param {number} offset
  */
 export function findMatchingBrace(expr, offset) {
-    const closeBrace = expr.charAt(offset);
-    const openBrace = {')': '(', ']': '['}[closeBrace];
+    let closeBrace = expr.charAt(offset);
+    let openBrace = {')': '(', ']': '['}[closeBrace];
 
     return findTheBrace(expr, offset - 1, openBrace, closeBrace);
 }
@@ -113,7 +115,7 @@ export function findMatchingBrace(expr, offset) {
  * @returns {number}
  */
 export function findTheBrace(expr, offset, ...braces) {
-    const [openBrace, closeBrace] = braces;
+    let [openBrace, closeBrace] = braces;
 
     if (offset < 0)
         return -1;
@@ -145,7 +147,7 @@ export function findTheBrace(expr, offset, ...braces) {
  */
 export function getExpressionOffset(expr, offset) {
     while (offset >= 0) {
-        const currChar = expr.charAt(offset);
+        let currChar = expr.charAt(offset);
 
         if (isStopChar(currChar))
             return offset + 1;
@@ -199,14 +201,14 @@ export async function getPropertyNamesFromExpression(expr, commandHeader = '') {
             const lines = expr.split('\n');
             lines.push(`return ${lines.pop()}`);
             obj = await AsyncFunction(commandHeader + lines.join(';'))();
-        } catch {
+        } catch (e) {
             return [];
         }
     } else {
         return [];
     }
 
-    const propsUnique = {};
+    let propsUnique = {};
     if (typeof obj === 'object') {
         let allProps = getAllProps(obj);
         // Get only things we are allowed to complete following a '.'
@@ -225,7 +227,7 @@ export async function getPropertyNamesFromExpression(expr, commandHeader = '') {
  * @param {readonly string[]} words
  */
 export function getCommonPrefix(words) {
-    const word = words[0];
+    let word = words[0];
     for (let i = 0; i < word.length; i++) {
         for (let w = 1; w < words.length; w++) {
             if (words[w].charAt(i) !== word.charAt(i))
@@ -244,7 +246,7 @@ export function removeLiterals(str) {
     if (str.length === 0)
         return '';
 
-    const currChar = str.charAt(str.length - 1);
+    let currChar = str.charAt(str.length - 1);
     if (currChar === '"' || currChar === '\'') {
         return removeLiterals(
             str.slice(0, findMatchingQuote(str, str.length - 1)));
@@ -288,10 +290,10 @@ export function isUnsafeExpression(str) {
  * @param {string} str
  */
 export function getDeclaredConstants(str) {
-    const ret = [];
+    let ret = [];
     str.split(';').forEach(s => {
         let base_, keyword;
-        const match = s.match(/const\s+(\w+)\s*=/);
+        let match = s.match(/const\s+(\w+)\s*=/);
         if (match) {
             [base_, keyword] = match;
             ret.push(keyword);

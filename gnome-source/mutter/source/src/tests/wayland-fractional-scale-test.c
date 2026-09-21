@@ -67,16 +67,6 @@ fractional_scale (void)
   MetaLogicalMonitor *logical_monitor;
   MtkRectangle layout;
 
-  wayland_test_client = meta_wayland_test_client_new (test_context,
-                                                      "fractional-scale");
-
-  while (!test_window)
-    {
-      g_main_context_iteration (NULL, TRUE);
-      test_window =
-        meta_find_window_from_title (test_context, "fractional-scale");
-    }
-
   wait_for_sync_point (0);
   assert_wayland_surface_size (test_window, 1920, 1080);
   assert_wayland_buffer_size (test_window, 1920, 1080);
@@ -112,30 +102,6 @@ fractional_scale (void)
   wait_for_sync_point (2);
   assert_wayland_surface_size (test_window, 1280, 720);
   assert_wayland_buffer_size (test_window, 1920, 1080);
-
-  meta_window_delete (test_window, g_get_monotonic_time ());
-  test_window = NULL;
-  meta_wayland_test_client_finish (wayland_test_client);
-}
-
-static void
-repeated_preferred_scale (void)
-{
-  wayland_test_client = meta_wayland_test_client_new (test_context,
-                                                      "repeated-preferred-scale");
-
-  while (!test_window)
-    {
-      g_main_context_iteration (NULL, TRUE);
-      test_window =
-        meta_find_window_from_title (test_context, "repeated-preferred-scale");
-    }
-
-  wait_for_sync_point (0);
-
-  meta_window_delete (test_window, g_get_monotonic_time ());
-  test_window = NULL;
-  meta_wayland_test_client_finish (wayland_test_client);
 }
 
 static void
@@ -148,11 +114,25 @@ on_before_tests (void)
 
   virtual_monitor = meta_create_test_monitor (test_context,
                                               1920, 1080, 60.0);
+
+  wayland_test_client = meta_wayland_test_client_new (test_context,
+                                                      "fractional-scale");
+
+  while (!test_window)
+    {
+      g_main_context_iteration (NULL, TRUE);
+      test_window =
+        meta_find_window_from_title (test_context, "fractional-scale");
+    }
 }
 
 static void
 on_after_tests (void)
 {
+  meta_window_delete (test_window, g_get_monotonic_time ());
+
+  meta_wayland_test_client_finish (wayland_test_client);
+
   g_clear_object (&virtual_monitor);
 
   g_clear_object (&test_driver);
@@ -163,8 +143,6 @@ init_tests (void)
 {
   g_test_add_func ("/wayland/fractional-scale",
                    fractional_scale);
-  g_test_add_func ("/wayland/repeated-preferred-scale",
-                   repeated_preferred_scale);
 }
 
 int
@@ -175,7 +153,7 @@ main (int   argc,
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   test_context = context;
 

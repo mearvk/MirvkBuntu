@@ -39,7 +39,7 @@ class AccessDialog extends ModalDialog.ModalDialog {
         this._requestExported = false;
         this._request = Gio.DBusExportedObject.wrapJSObject(RequestIface, this);
 
-        for (const option in options)
+        for (let option in options)
             options[option] = options[option].deepUnpack();
 
         this._buildLayout(title, description, body, options);
@@ -48,21 +48,21 @@ class AccessDialog extends ModalDialog.ModalDialog {
     _buildLayout(title, description, body, options) {
         // No support for non-modal system dialogs, so ignore the option
         // let modal = options['modal'] || true;
-        const denyLabel = options['deny_label'] || _('Deny');
-        const grantLabel = options['grant_label'] || _('Allow');
-        const choices = options['choices'] || [];
+        let denyLabel = options['deny_label'] || _('Deny');
+        let grantLabel = options['grant_label'] || _('Allow');
+        let choices = options['choices'] || [];
 
-        const content = new Dialog.MessageDialogContent({title, description});
+        let content = new Dialog.MessageDialogContent({title, description});
         this.contentLayout.add_child(content);
 
         this._choices = new Map();
 
         for (let i = 0; i < choices.length; i++) {
-            const [id, name, opts, selected] = choices[i];
+            let [id, name, opts, selected] = choices[i];
             if (opts.length > 0)
                 continue; // radio buttons, not implemented
 
-            const check = new CheckBox.CheckBox();
+            let check = new CheckBox.CheckBox();
             check.getLabelActor().text = name;
             check.checked = selected === 'true';
             content.add_child(check);
@@ -71,7 +71,7 @@ class AccessDialog extends ModalDialog.ModalDialog {
         }
 
         if (body) {
-            const bodyLabel = new St.Label({
+            let bodyLabel = new St.Label({
                 text: body,
                 x_align: Clutter.ActorAlign.CENTER,
             });
@@ -95,7 +95,7 @@ class AccessDialog extends ModalDialog.ModalDialog {
         if (!super.open())
             return false;
 
-        const connection = this._invocation.get_connection();
+        let connection = this._invocation.get_connection();
         this._requestExported = this._request.export(connection, this._handle);
         return true;
     }
@@ -117,10 +117,10 @@ class AccessDialog extends ModalDialog.ModalDialog {
             this._request.unexport();
         this._requestExported = false;
 
-        const results = {};
+        let results = {};
         if (response === DialogResponse.OK) {
-            for (const [id, check] of this._choices) {
-                const checked = check.checked ? 'true' : 'false';
+            for (let [id, check] of this._choices) {
+                let checked = check.checked ? 'true' : 'false';
                 results[id] = new GLib.Variant('s', checked);
             }
         }
@@ -161,7 +161,7 @@ export class AccessDialogDBus {
             return;
         }
 
-        const [handle, appId, parentWindow_, title, description, body, options] = params;
+        let [handle, appId, parentWindow_, title, description, body, options] = params;
         // We probably want to use parentWindow and global.display.focus_window
         // for this check in the future
         if (appId && `${appId}.desktop` !== this._windowTracker.focus_app.id) {
@@ -172,7 +172,7 @@ export class AccessDialogDBus {
             return;
         }
 
-        const dialog = new AccessDialog(
+        let dialog = new AccessDialog(
             invocation, handle, title, description, body, options);
         dialog.open();
 

@@ -21,7 +21,8 @@
  * See COPYRIGHTS file for copyright information.
  */
 
-#pragma once
+#ifndef __CR_ATTR_SEL_H__
+#define __CR_ATTR_SEL_H__
 
 #include <stdio.h>
 #include <glib.h>
@@ -69,3 +70,5 @@ void cr_attr_sel_dump (CRAttrSel const *a_this, FILE *a_fp) ;
 void cr_attr_sel_destroy (CRAttrSel *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_ATTR_SEL_H__*/

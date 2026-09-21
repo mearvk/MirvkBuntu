@@ -34,6 +34,13 @@ G_BEGIN_DECLS
 PangoAttrList *_gtk_pango_attr_list_merge (PangoAttrList *into,
                                            PangoAttrList *from) G_GNUC_WARN_UNUSED_RESULT;
 
+gboolean gtk_buildable_attribute_tag_start (GtkBuildable       *buildable,
+                                            GtkBuilder         *builder,
+                                            GObject            *child,
+                                            const char         *tagname,
+                                            GtkBuildableParser *parser,
+                                            gpointer           *data);
+
 typedef struct {
   GtkBuilder    *builder;
   GObject       *object;
@@ -50,7 +57,7 @@ gtk_pango_attribute_start_element (GtkBuildableParseContext  *context,
 
 const char *pango_wrap_mode_to_string (PangoWrapMode mode);
 const char *pango_underline_to_string (PangoUnderline underline);
-const char *pango_overline_to_string (PangoOverline overline);
+const char *pango_overline_to_string (PangoOverline underline);
 const char *pango_stretch_to_string (PangoStretch stretch);
 const char *pango_style_to_string (PangoStyle style);
 const char *pango_variant_to_string (PangoVariant variant);
@@ -74,8 +81,5 @@ char *gtk_pango_get_string_at   (PangoLayout                  *layout,
                                  GtkAccessibleTextGranularity  granularity,
                                  unsigned int                 *start_offset,
                                  unsigned int                 *end_offset);
-
-gboolean gtk_pango_glyph_item_has_color_glyphs (PangoGlyphItem *item);
-gboolean gtk_pango_layout_has_color_glyphs     (PangoLayout    *layout);
 
 G_END_DECLS

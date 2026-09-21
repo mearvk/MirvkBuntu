@@ -71,39 +71,3 @@ MetaLaters * meta_compositor_get_laters (MetaCompositor *compositor);
 
 META_EXPORT
 ClutterActor * meta_compositor_get_feedback_group (MetaCompositor *compositor);
-
-META_EXPORT
-MetaBackend * meta_compositor_get_backend (MetaCompositor *compositor);
-
-META_EXPORT
-ClutterStage * meta_compositor_get_stage (MetaCompositor *compositor);
-
-META_EXPORT
-ClutterActor * meta_compositor_get_window_group (MetaCompositor *compositor);
-
-META_EXPORT
-GList * meta_compositor_get_window_actors (MetaCompositor *compositor);
-
-META_EXPORT
-ClutterActor * meta_compositor_get_top_window_group (MetaCompositor *compositor);
-
-META_EXPORT
-ClutterActor * meta_compositor_get_input_panel_group (MetaCompositor *compositor);
-
-META_EXPORT
-void meta_compositor_disable_unredirect (MetaCompositor *compositor);
-
-META_EXPORT
-void meta_compositor_enable_unredirect (MetaCompositor *compositor);
-
-META_EXPORT
-void meta_compositor_set_background_blur_params (MetaCompositor *compositor,
-                                                 float           blur_radius,
-                                                 float           saturation,
-                                                 float           noise);
-
-META_EXPORT
-void meta_compositor_get_background_blur_params (MetaCompositor *compositor,
-                                                 float          *blur_radius,
-                                                 float          *saturation,
-                                                 float          *noise);

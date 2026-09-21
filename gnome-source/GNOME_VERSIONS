@@ -1,0 +1,22 @@
+# MirvkBuntu GNOME module version pins.
+#
+# Read by gnome-source/pull-all-source.sh. Each line sets a module's ref
+# environment variable to a git tag on the GNOME GitHub mirror (verified to
+# exist). Values already set in the environment override these.
+#
+# To move the whole stack to a newer GNOME release, bump these together and
+# re-run:  FORCE=1 bash gnome-source/pull-all-source.sh
+#
+# Modules acquired by git clone into source/ (ref = git tag):
+GLIB_REF=2.80.4
+GDK_PIXBUF_REF=2.42.12
+GTK_REF=4.14.5
+MUTTER_REF=46.4
+GNOME_SHELL_REF=46.4
+GVFS_REF=1.56.1
+ORCA_REF=50.2
+PANGO_REF=1.54.0
+
+# cairo, glib-networking, gnome-control-center, gnome-software, and
+# gnome-terminal ship their own pinned pull-source.sh (release tarballs) and are
+# not pinned here.

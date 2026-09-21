@@ -39,7 +39,7 @@ typedef struct _GtkEventControllerMotion GtkEventControllerMotion;
 typedef struct _GtkEventControllerMotionClass GtkEventControllerMotionClass;
 
 GDK_AVAILABLE_IN_ALL
-GType               gtk_event_controller_motion_get_type (void);
+GType               gtk_event_controller_motion_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkEventController *gtk_event_controller_motion_new      (void);
@@ -48,8 +48,6 @@ GDK_AVAILABLE_IN_ALL
 gboolean            gtk_event_controller_motion_contains_pointer   (GtkEventControllerMotion *self);
 GDK_AVAILABLE_IN_ALL
 gboolean            gtk_event_controller_motion_is_pointer         (GtkEventControllerMotion *self);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkEventControllerMotion, g_object_unref)
 
 G_END_DECLS
 

@@ -1,11 +1,11 @@
-# Orca v51.1
+# Orca v50.2
 
 [TOC]
 
 ## Attention Application Developers
 
 If you are an application developer trying to make your application work with Orca, please see the
-[README for application developers](docs/application-developers.md).
+[README for application developers](README-APPLICATION-DEVELOPERS.md).
 
 ## Introduction
 
@@ -27,33 +27,22 @@ community, and where to log bugs and feature requests.
 
 Orca has the following dependencies:
 
-* meson: The build system used by Orca
-* Python 3: Python platform
-* pygobject-3.0: Python bindings for the GObject library
-* gtk+-3.0: GTK+ toolkit
-* at-spi2-core 2.58.6 or newer, built with Python support
-* gpaste: Clipboard manager for non-KDE Wayland sessions (optional).
-  This is needed for Orca's commands which copy or append items to the clipboard.
-  In KDE sessions, Orca attempts to use Klipper.
-* python3-babel: Babel support for localized language display names (strongly encouraged).
-  Without Babel, languages in Orca's UI will be displayed as codes rather than names.
-* python3-brlapi: BrlAPI (<https://mielke.cc/brltty/>) support for braille (optional)
-* python3-dasbus: Dasbus (<https://dasbus.readthedocs.io/>) support for remote control of Orca
-* python3-louis: Liblouis (<https://liblouis.io/>) support for contracted braille (optional)
-* python3-psutil: Process and system utilities (optional)
-* python3-setproctitle: Python library to set the process title (strongly encouraged).
-  This causes `pidof orca` to work. It also updates `/proc/<Orca's pid>/cmdline` to
-  contain "orca". The latter is checked by Chromium-based browsers to automatically enable
-  full accessibility support without the need for `--force-rendereer-accessibility`.
-* python3-speechd: Python bindings for Speech Dispatcher (optional)
-* gstreamer-1.0: GStreamer - Streaming media framework (optional)
-* cargo: Used to build MathCAT (<https://daisy.github.io/MathCAT/>) for MathML support.
-  MathCAT is built by default, so cargo is required unless you opt out by
-  passing `-Dmathcat=false` to `meson setup`.
-* libwnck3: Used for mouse review in X11 (optional, deprecated)
+* meson            - The build system used by Orca
+* Python 3         - Python platform
+* pygobject-3.0    - Python bindings for the GObject library
+* gtk+-3.0         - GTK+ toolkit
+* python3-dasbus   - Dasbus (<https://dasbus.readthedocs.io/>) support for remote control of Orca
+* python-speechd   - Python bindings for Speech Dispatcher (optional)
+* BrlTTY           - BrlTTY (<https://mielke.cc/brltty/>) support for braille (optional)
+* BrlAPI           - BrlAPI support for braille (optional)
+* liblouis         - Liblouis (<https://liblouis.io/>) support for contracted braille (optional)
+* py-setproctitle  - Python library to set the process title (optional)
+* gstreamer-1.0    - GStreamer - Streaming media framework (optional)
+* python3-psutil   - Process and system utilities (optional)
+* libwnck3         - Used for mouse review in X11 (optional)
 
 You are strongly encouraged to also have the latest stable versions
-of AT-SPI2 and ATK for the GNOME 51.x release.
+of AT-SPI2 and ATK for the GNOME 50.x release.
 
 ## Note for Braille Users
 
@@ -103,29 +92,32 @@ a "Key Bindings" tab that lists the keyboard binding for Orca.
 For more information, see the Orca documentation which is available
 within Orca as well as at <https://gnome.pages.gitlab.gnome.org/orca/help>.
 
-## Orca's Scripts, Features, and User Extensions
+## Orca's Scripts and Features
 
 Orca's scripts provide access to applications and toolkits by responding to
 accessible events. For instance, when focus changes in an application, that
 application will emit an accessible event, `object:state-changed:focused`,
 which is then handled by the script associated with the application or toolkit.
-To see examples of scripts, look in `src/orca/scripts` of the source tree.
 
-Scripts can import features, but the features themselves do not live inside
-the script; they live in navigators, presenters, and other such "extension"
-modules. Starting with version 51, Orca also supports user extensions.
-For more information, see [user-extensions.md](docs/user-extensions.md).
+If you have an application or toolkit that is accessible, but poorly supported
+by Orca, writing a custom script for that application might be the correct
+solution. (The correct solution might instead be to fix a bug in Orca and/or the
+application.) To see examples of scripts, look in `src/orca/scripts` of the
+source tree.
+
+Scripts can also import features, but the features themselves do not live inside the script;
+they live in navigators, presenters, and other such modules.
 
 ## Remote Controller (D-Bus Interface)
 
 Orca provides a D-Bus interface that allows external applications to remotely control Orca's
 functionality and present messages to users. For detailed usage instructions, examples, and
-API documentation, see [remote-controller.md](docs/remote-controller.md).
+API documentation, see [README-REMOTE-CONTROLLER.md](README-REMOTE-CONTROLLER.md).
 
 ## GSettings Support
 
 Starting with Orca v50, Orca uses GSettings for its configuration. A list of Orca's
-schemas, keys, defaults, and enums is available in [gsettings-schemas.md](docs/gsettings-schemas.md).
+schemas, keys, defaults, and enums is available in [GSETTINGS-SCHEMAS.md](GSETTINGS-SCHEMAS.md).
 
 ## Spiel Text-to-Speech Support
 

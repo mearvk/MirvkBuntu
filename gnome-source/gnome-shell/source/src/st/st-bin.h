@@ -21,7 +21,8 @@
 #error "Only <st/st.h> can be included directly.h"
 #endif
 
-#pragma once
+#ifndef __ST_BIN_H__
+#define __ST_BIN_H__
 
 #include <st/st-types.h>
 #include <st/st-widget.h>
@@ -48,3 +49,5 @@ void          st_bin_set_child     (StBin        *bin,
 ClutterActor *st_bin_get_child     (StBin        *bin);
 
 G_END_DECLS
+
+#endif /* __ST_BIN_H__ */

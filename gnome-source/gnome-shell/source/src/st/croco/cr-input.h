@@ -21,7 +21,8 @@
  * See the COPYRIGHTS file for copyrights information.
  */
 
-#pragma once
+#ifndef __CR_INPUT_SRC_H__
+#define __CR_INPUT_SRC_H__
 
 
 #include <glib.h>
@@ -61,7 +62,10 @@ struct _CRInputPos
 
 CRInput *
 cr_input_new_from_buf (guchar *a_buf, gulong a_len,
-                       gboolean a_free_buf) ;
+                       enum CREncoding a_enc, gboolean a_free_buf) ;
+CRInput *
+cr_input_new_from_uri (const gchar *a_file_uri, 
+                       enum CREncoding a_enc) ;
 
 void
 cr_input_destroy (CRInput *a_this) ;
@@ -161,4 +165,10 @@ cr_input_increment_col_num (CRInput *a_this,
 glong
 cr_input_get_nb_bytes_left (CRInput const *a_this) ;
 
+enum CRStatus
+cr_input_end_of_input (CRInput const *a_this, gboolean *a_end_of_input) ;
+
 G_END_DECLS
+
+#endif /*__CR_INPUT_SRC_H__*/
+

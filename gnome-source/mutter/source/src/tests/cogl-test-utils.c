@@ -78,14 +78,14 @@ test_utils_compare_pixel (const uint8_t *screen_pixel,
 }
 
 void
-test_utils_check_pixel (CoglFramebuffer *framebuffer,
+test_utils_check_pixel (CoglFramebuffer *test_fb,
                         int              x,
                         int              y,
                         uint32_t         expected_pixel)
 {
   uint8_t pixel[4];
 
-  cogl_framebuffer_read_pixels (framebuffer,
+  cogl_framebuffer_read_pixels (test_fb,
                                 x, y, 1, 1,
                                 COGL_PIXEL_FORMAT_RGBA_8888_PRE,
                                 pixel);
@@ -94,14 +94,14 @@ test_utils_check_pixel (CoglFramebuffer *framebuffer,
 }
 
 void
-test_utils_check_pixel_and_alpha (CoglFramebuffer *framebuffer,
+test_utils_check_pixel_and_alpha (CoglFramebuffer *test_fb,
                                   int              x,
                                   int              y,
                                   uint32_t         expected_pixel)
 {
   uint8_t pixel[4];
 
-  cogl_framebuffer_read_pixels (framebuffer,
+  cogl_framebuffer_read_pixels (test_fb,
                                 x, y, 1, 1,
                                 COGL_PIXEL_FORMAT_RGBA_8888_PRE,
                                 pixel);
@@ -110,7 +110,7 @@ test_utils_check_pixel_and_alpha (CoglFramebuffer *framebuffer,
 }
 
 void
-test_utils_check_pixel_rgb (CoglFramebuffer *framebuffer,
+test_utils_check_pixel_rgb (CoglFramebuffer *test_fb,
                             int              x,
                             int              y,
                             int              r,
@@ -124,14 +124,14 @@ test_utils_check_pixel_rgb (CoglFramebuffer *framebuffer,
   g_return_if_fail (g <= 0xFF);
   g_return_if_fail (b <= 0xFF);
 
-  test_utils_check_pixel (framebuffer, x, y,
+  test_utils_check_pixel (test_fb, x, y,
                           (((guint32) r) << 24) |
                           (((guint32) g) << 16) |
                           (((guint32) b) << 8));
 }
 
 void
-test_utils_check_region (CoglFramebuffer *framebuffer,
+test_utils_check_region (CoglFramebuffer *test_fb,
                          int              x,
                          int              y,
                          int              width,
@@ -141,7 +141,7 @@ test_utils_check_region (CoglFramebuffer *framebuffer,
   uint8_t *pixels, *p;
 
   pixels = p = g_malloc (width * height * 4);
-  cogl_framebuffer_read_pixels (framebuffer,
+  cogl_framebuffer_read_pixels (test_fb,
                                 x,
                                 y,
                                 width,
@@ -192,7 +192,7 @@ set_auto_mipmap_cb (CoglTexture *sub_texture,
                     const float *meta_coords,
                     void        *user_data)
 {
-  cogl_texture_2d_set_auto_mipmap (COGL_TEXTURE_2D (sub_texture), FALSE);
+  cogl_primitive_texture_set_auto_mipmap (sub_texture, FALSE);
 }
 
 CoglTexture *
@@ -203,7 +203,7 @@ test_utils_texture_new_with_size (CoglContext           *ctx,
                                   CoglTextureComponents  components)
 {
   CoglTexture *tex;
-  g_autoptr (GError) skip_error = NULL;
+  GError *skip_error = NULL;
 
   /* First try creating a fast-path non-sliced texture */
   tex = cogl_texture_2d_new_with_size (ctx, width, height);
@@ -211,7 +211,11 @@ test_utils_texture_new_with_size (CoglContext           *ctx,
   cogl_texture_set_components (tex, components);
 
   if (!cogl_texture_allocate (tex, &skip_error))
-    g_clear_object (&tex);
+    {
+      g_error_free (skip_error);
+      g_object_unref (tex);
+      tex = NULL;
+    }
 
   if (!tex)
     {
@@ -232,12 +236,12 @@ test_utils_texture_new_with_size (CoglContext           *ctx,
        * need to ensure the texture is allocated... */
       cogl_texture_allocate (tex, NULL); /* don't catch exceptions */
 
-      cogl_texture_foreach_in_region (tex,
-                                      0, 0, 1, 1,
-                                      COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
-                                      COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
-                                      set_auto_mipmap_cb,
-                                      NULL); /* don't catch exceptions */
+      cogl_meta_texture_foreach_in_region (tex,
+                                           0, 0, 1, 1,
+                                           COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
+                                           COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
+                                           set_auto_mipmap_cb,
+                                           NULL); /* don't catch exceptions */
     }
 
   cogl_texture_allocate (tex, NULL);
@@ -297,12 +301,12 @@ test_utils_texture_new_from_bitmap (CoglBitmap            *bitmap,
 
   if (flags & TEST_UTILS_TEXTURE_NO_AUTO_MIPMAP)
     {
-      cogl_texture_foreach_in_region (tex,
-                                      0, 0, 1, 1,
-                                      COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
-                                      COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
-                                      set_auto_mipmap_cb,
-                                      NULL); /* don't catch exceptions */
+      cogl_meta_texture_foreach_in_region (tex,
+                                           0, 0, 1, 1,
+                                           COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
+                                           COGL_PIPELINE_WRAP_MODE_CLAMP_TO_EDGE,
+                                           set_auto_mipmap_cb,
+                                           NULL); /* don't catch exceptions */
     }
 
   cogl_texture_allocate (tex, NULL);
@@ -323,7 +327,7 @@ test_utils_texture_new_from_data (CoglContext           *ctx,
   CoglTexture *tex;
 
   g_assert_cmpint (format, !=, COGL_PIXEL_FORMAT_ANY);
-  g_assert_nonnull (data);
+  g_assert (data != NULL);
 
   /* Wrap the data into a bitmap */
   bmp = cogl_bitmap_new_for_data (ctx,
@@ -344,8 +348,8 @@ on_before_tests (MetaContext *context)
 {
   MetaBackend *backend = meta_context_get_backend (context);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
-  g_autoptr (CoglOffscreen) offscreen = NULL;
-  g_autoptr (CoglTexture) tex = NULL;
+  CoglOffscreen *offscreen;
+  CoglTexture *tex;
   GError *error = NULL;
 
   test_ctx = clutter_backend_get_cogl_context (clutter_backend);
@@ -354,7 +358,7 @@ on_before_tests (MetaContext *context)
   g_assert_nonnull (tex);
   offscreen = cogl_offscreen_new_with_texture (tex);
   g_assert_nonnull (offscreen);
-  test_fb = COGL_FRAMEBUFFER (g_steal_pointer (&offscreen));
+  test_fb = COGL_FRAMEBUFFER (offscreen);
 
   if (!cogl_framebuffer_allocate (test_fb, &error))
     g_error ("Failed to allocate framebuffer: %s", error->message);
@@ -364,14 +368,6 @@ on_before_tests (MetaContext *context)
                             COGL_BUFFER_BIT_DEPTH |
                             COGL_BUFFER_BIT_STENCIL,
                             0, 0, 0, 1);
-}
-
-const char *
-test_utils_get_cogl_driver_vendor (CoglContext *context)
-{
-  CoglDriver *driver = cogl_context_get_driver (context);
-
-  return cogl_driver_get_vendor (driver);
 }
 
 static void
@@ -388,7 +384,7 @@ meta_create_cogl_test_context (int    argc,
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   if (g_strcmp0 ("COGL_TEST_VERBOSE", "1") == 0)
     cogl_test_is_verbose = TRUE;

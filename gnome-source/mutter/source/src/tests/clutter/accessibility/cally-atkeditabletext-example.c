@@ -20,7 +20,6 @@
 
 #include <atk/atk.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 
 #include "cally-examples-util.h"
 
@@ -150,12 +149,12 @@ _create_button (const gchar *text)
 
   button = clutter_actor_new ();
   rectangle = clutter_actor_new ();
-  clutter_actor_set_background_color (rectangle, &COGL_COLOR_INIT (255, 0, 255, 255));
+  clutter_actor_set_background_color (rectangle, &CLUTTER_COLOR_INIT (255, 0, 255, 255));
   clutter_actor_set_size (rectangle, 375, 35);
 
   label = clutter_text_new_full ("Sans Bold 32px",
                                  text,
-                                 &COGL_COLOR_INIT (0, 0, 0, 255));
+                                 &CLUTTER_COLOR_INIT (0, 0, 0, 255));
   clutter_actor_add_child (button, rectangle);
   clutter_actor_add_child (button, label);
   clutter_actor_set_reactive (button, TRUE);
@@ -168,25 +167,26 @@ make_ui (ClutterActor *stage)
 {
   ClutterActor *button      = NULL;
 
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Cally - AtkEditable Test");
   clutter_actor_set_background_color (CLUTTER_ACTOR (stage),
-                                      &COGL_COLOR_INIT (255, 255, 255, 255));
+                                      &CLUTTER_COLOR_INIT (255, 255, 255, 255));
   clutter_actor_set_size (stage, WIDTH, HEIGHT);
 
   /* text */
   text_actor = clutter_text_new_full ("Sans Bold 32px",
                                       "Lorem ipsum dolor sit amet",
-                                      &COGL_COLOR_INIT (255, 0, 0, 255));
+                                      &CLUTTER_COLOR_INIT (255, 0, 0, 255));
   clutter_actor_add_child (stage, text_actor);
 
   /* text_editable */
   text_editable_actor = clutter_text_new_full ("Sans Bold 32px",
                                                "consectetur adipisicing elit",
-                                               &COGL_COLOR_INIT (255, 0, 0, 255));
+                                               &CLUTTER_COLOR_INIT (255, 0, 0, 255));
   clutter_actor_set_position (text_editable_actor, 0, 100);
   clutter_text_set_editable (CLUTTER_TEXT (text_editable_actor), TRUE);
   clutter_text_set_selectable (CLUTTER_TEXT (text_editable_actor), TRUE);
   clutter_text_set_selection_color (CLUTTER_TEXT (text_editable_actor),
-                                    &COGL_COLOR_INIT (0, 255, 0, 255));
+                                    &CLUTTER_COLOR_INIT (0, 255, 0, 255));
   clutter_text_set_activatable (CLUTTER_TEXT (text_editable_actor),
                                 TRUE);
   clutter_text_set_line_wrap (CLUTTER_TEXT (text_editable_actor), TRUE);

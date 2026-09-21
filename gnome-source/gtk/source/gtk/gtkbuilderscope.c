@@ -27,7 +27,8 @@
 /**
  * GtkBuilderScope:
  *
- * Provides language binding support to `GtkBuilder`.
+ * `GtkBuilderScope` is an interface to provide language binding support
+ * to `GtkBuilder`.
  *
  * The goal of `GtkBuilderScope` is to look up programming-language-specific
  * values for strings that are given in a `GtkBuilder` UI file.
@@ -433,10 +434,11 @@ gtk_builder_cscope_new (void)
 
 /**
  * gtk_builder_cscope_add_callback:
- * @scope: a `GtkBuilderCScope`
- * @callback: (scope async): The callback pointer
+ * @self: a `GtkBuilderCScope`
+ * @callback_symbols: (scope async): The callback pointer
  *
- * Adds the @callback to the scope of @builder under its own name.
+ * Adds the @callback_symbol to the scope of @builder under its
+ * own name.
  *
  * This is a convenience wrapper of [method@Gtk.BuilderCScope.add_callback_symbol].
  *

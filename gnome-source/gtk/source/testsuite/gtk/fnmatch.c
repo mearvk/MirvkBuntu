@@ -1,7 +1,9 @@
 #include <gtk/gtk.h>
 #include "gtk/gtkprivate.h"
 
-#if !defined(G_OS_WIN32) && !defined(G_WITH_CYGWIN)
+#if defined(G_OS_WIN32) || defined(G_WITH_CYGWIN)
+#define DO_ESCAPE 0
+#else  
 #define DO_ESCAPE 1
 #endif
 
@@ -23,17 +25,17 @@ static TestCase tests[] = {
   { "?", "a", TRUE, FALSE, TRUE },
   { "?", ".", TRUE, FALSE, FALSE },
   { "a?", "a.", TRUE, FALSE, TRUE },
-  { "a" G_DIR_SEPARATOR_S "?", "a" G_DIR_SEPARATOR_S "b", TRUE, FALSE, TRUE },
-  { "a" G_DIR_SEPARATOR_S "?", "a" G_DIR_SEPARATOR_S ".", TRUE, FALSE, FALSE },
-  { "?", "" G_DIR_SEPARATOR_S "", TRUE, FALSE, FALSE },
+  { "a/?", "a/b", TRUE, FALSE, TRUE },
+  { "a/?", "a/.", TRUE, FALSE, FALSE },
+  { "?", "/", TRUE, FALSE, FALSE },
 
   /* Test what * matches */
   { "*", "a", TRUE, FALSE, TRUE },
   { "*", ".", TRUE, FALSE, FALSE },
   { "a*", "a.", TRUE, FALSE, TRUE },
-  { "a" G_DIR_SEPARATOR_S "*", "a" G_DIR_SEPARATOR_S "b", TRUE, FALSE, TRUE },
-  { "a" G_DIR_SEPARATOR_S "*", "a" G_DIR_SEPARATOR_S ".", TRUE, FALSE, FALSE },
-  { "*", "" G_DIR_SEPARATOR_S "", TRUE, FALSE, FALSE },
+  { "a/*", "a/b", TRUE, FALSE, TRUE },
+  { "a/*", "a/.", TRUE, FALSE, FALSE },
+  { "*", "/", TRUE, FALSE, FALSE },
 
   /* Range tests */
   { "[ab]", "a", TRUE, FALSE, TRUE },
@@ -59,9 +61,9 @@ static TestCase tests[] = {
   /* Ranges and special no-wildcard matches */
   { "[.]", ".", TRUE, FALSE, FALSE },
   { "a[.]", "a.", TRUE, FALSE, TRUE },
-  { "a" G_DIR_SEPARATOR_S "[.]", "a" G_DIR_SEPARATOR_S ".", TRUE, FALSE, FALSE },
-  { "[" G_DIR_SEPARATOR_S "]", "" G_DIR_SEPARATOR_S "", TRUE, FALSE, FALSE },
-  { "[^" G_DIR_SEPARATOR_S "]", "a", TRUE, FALSE, TRUE },
+  { "a/[.]", "a/.", TRUE, FALSE, FALSE },
+  { "[/]", "/", TRUE, FALSE, FALSE },
+  { "[^/]", "a", TRUE, FALSE, TRUE },
   
   /* Basic tests of * (and combinations of * and ?) */
   { "a*b", "ab", TRUE, FALSE, TRUE },
@@ -79,8 +81,8 @@ static TestCase tests[] = {
   { "a*[cd]", "axc", TRUE, FALSE, TRUE },
   { "a*[cd]", "axx", TRUE, FALSE, FALSE },
 
-  { "a" G_DIR_SEPARATOR_S "[.]", "a" G_DIR_SEPARATOR_S ".", TRUE, FALSE, FALSE },
-  { "a*[.]", "a" G_DIR_SEPARATOR_S ".", TRUE, FALSE, FALSE },
+  { "a/[.]", "a/.", TRUE, FALSE, FALSE },
+  { "a*[.]", "a/.", TRUE, FALSE, FALSE },
 
 
   /* Test of UTF-8 */

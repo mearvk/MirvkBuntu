@@ -33,9 +33,7 @@
  * For a given key symbol and modifier mask combination there can be only one
  * action; for each action there can be only one callback. There can be
  * multiple actions with the same name, and the same callback can be used
- * to handle multiple key bindings. Key symbols are case-insensitive; for any
- * standard ASCII letter, both the lowercase and uppercase letter can activate
- * the action.
+ * to handle multiple key bindings.
  *
  * Actors requiring key bindings should create a new #ClutterBindingPool
  * inside their class initialization function and then install actions
@@ -100,7 +98,6 @@
 #include "clutter/clutter-binding-pool.h"
 #include "clutter/clutter-debug.h"
 #include "clutter/clutter-enum-types.h"
-#include "clutter/clutter-keyval.h"
 #include "clutter/clutter-marshal.h"
 #include "clutter/clutter-private.h"
 
@@ -157,7 +154,7 @@ binding_entry_hash (gconstpointer v)
   const ClutterBindingEntry *e = v;
   guint h;
 
-  h = clutter_keyval_to_lower (e->key_val);
+  h = e->key_val;
   h ^= e->modifiers;
 
   return h;
@@ -170,8 +167,7 @@ binding_entry_compare (gconstpointer v1,
   const ClutterBindingEntry *e1 = v1;
   const ClutterBindingEntry *e2 = v2;
 
-  return (clutter_keyval_to_lower (e1->key_val) == clutter_keyval_to_lower (e2->key_val)) &&
-         (e1->modifiers == e2->modifiers);
+  return (e1->key_val == e2->key_val && e1->modifiers == e2->modifiers);
 }
 
 static ClutterBindingEntry *
@@ -450,8 +446,6 @@ clutter_binding_pool_find (const gchar *name)
  *
  * Actions can be blocked with [method@Clutter.BindingPool.block_action]
  * and then unblocked using [method@Clutter.BindingPool.unblock_action].
- *
- * This function considers key aliases.
  */
 void
 clutter_binding_pool_install_action (ClutterBindingPool  *pool,
@@ -464,53 +458,39 @@ clutter_binding_pool_install_action (ClutterBindingPool  *pool,
 {
   ClutterBindingEntry *entry;
   GClosure *closure;
-  const unsigned int *keys;
-  unsigned int n_keys;
 
   g_return_if_fail (pool != NULL);
   g_return_if_fail (action_name != NULL);
   g_return_if_fail (key_val != 0);
   g_return_if_fail (callback != NULL);
 
-  keys = clutter_keyval_get_aliases (key_val, &n_keys);
-  if (!keys)
+  entry = binding_pool_lookup_entry (pool, key_val, modifiers);
+  if (G_UNLIKELY (entry))
     {
-      keys = &key_val;
-      n_keys = 1;
+      g_warning ("There already is an action '%s' for the given "
+                 "key symbol of %d (modifiers: %d) installed inside "
+                 "the binding pool.",
+                 entry->name,
+                 entry->key_val, entry->modifiers);
+      return;
+    }
+  else
+    entry = binding_entry_new (action_name, key_val, modifiers);
+
+  closure = g_cclosure_new (callback, data, (GClosureNotify) notify);
+  entry->closure = g_closure_ref (closure);
+  g_closure_sink (closure);
+
+  if (G_CLOSURE_NEEDS_MARSHAL (closure))
+    {
+      GClosureMarshal marshal;
+
+      marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
+      g_closure_set_marshal (closure, marshal);
     }
 
-  for (unsigned int i = 0; i < n_keys; i++)
-    {
-      unsigned int key = keys[i];
-
-      entry = binding_pool_lookup_entry (pool, key, modifiers);
-      if (G_UNLIKELY (entry))
-        {
-          g_warning ("There already is an action '%s' for the given "
-                     "key symbol of %d (modifiers: %d) installed inside "
-                     "the binding pool.",
-                     entry->name,
-                     entry->key_val, entry->modifiers);
-          continue;
-        }
-      else
-        entry = binding_entry_new (action_name, key, modifiers);
-
-      closure = g_cclosure_new (callback, data, (GClosureNotify) notify);
-      entry->closure = g_closure_ref (closure);
-      g_closure_sink (closure);
-
-      if (G_CLOSURE_NEEDS_MARSHAL (closure))
-        {
-          GClosureMarshal marshal;
-
-          marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
-          g_closure_set_marshal (closure, marshal);
-        }
-
-      pool->entries = g_slist_prepend (pool->entries, entry);
-      g_hash_table_insert (pool->entries_hash, entry, entry);
-    }
+  pool->entries = g_slist_prepend (pool->entries, entry);
+  g_hash_table_insert (pool->entries_hash, entry, entry);
 }
 
 /**
@@ -534,8 +514,6 @@ clutter_binding_pool_install_action (ClutterBindingPool  *pool,
  *
  * Actions can be blocked with [method@Clutter.BindingPool.block_action]
  * and then unblocked using [method@Clutter.BindingPool.unblock_action].
- *
- * This function considers key aliases.
  */
 void
 clutter_binding_pool_install_closure (ClutterBindingPool  *pool,
@@ -545,52 +523,38 @@ clutter_binding_pool_install_closure (ClutterBindingPool  *pool,
                                       GClosure            *closure)
 {
   ClutterBindingEntry *entry;
-  const unsigned int *keys;
-  unsigned int n_keys;
 
   g_return_if_fail (pool != NULL);
   g_return_if_fail (action_name != NULL);
   g_return_if_fail (key_val != 0);
   g_return_if_fail (closure != NULL);
 
-  keys = clutter_keyval_get_aliases (key_val, &n_keys);
-  if (!keys)
+  entry = binding_pool_lookup_entry (pool, key_val, modifiers);
+  if (G_UNLIKELY (entry))
     {
-      keys = &key_val;
-      n_keys = 1;
+      g_warning ("There already is an action '%s' for the given "
+                 "key symbol of %d (modifiers: %d) installed inside "
+                 "the binding pool.",
+                 entry->name,
+                 entry->key_val, entry->modifiers);
+      return;
+    }
+  else
+    entry = binding_entry_new (action_name, key_val, modifiers);
+
+  entry->closure = g_closure_ref (closure);
+  g_closure_sink (closure);
+
+  if (G_CLOSURE_NEEDS_MARSHAL (closure))
+    {
+      GClosureMarshal marshal;
+
+      marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
+      g_closure_set_marshal (closure, marshal);
     }
 
-  for (unsigned int i = 0; i < n_keys; i++)
-    {
-      unsigned int key = keys[i];
-
-      entry = binding_pool_lookup_entry (pool, key, modifiers);
-      if (G_UNLIKELY (entry))
-        {
-          g_warning ("There already is an action '%s' for the given "
-                     "key symbol of %d (modifiers: %d) installed inside "
-                     "the binding pool.",
-                     entry->name,
-                     entry->key_val, entry->modifiers);
-          continue;
-        }
-      else
-        entry = binding_entry_new (action_name, key, modifiers);
-
-      entry->closure = g_closure_ref (closure);
-      g_closure_sink (closure);
-
-      if (G_CLOSURE_NEEDS_MARSHAL (closure))
-        {
-          GClosureMarshal marshal;
-
-          marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
-          g_closure_set_marshal (closure, marshal);
-        }
-
-      pool->entries = g_slist_prepend (pool->entries, entry);
-      g_hash_table_insert (pool->entries_hash, entry, entry);
-    }
+  pool->entries = g_slist_prepend (pool->entries, entry);
+  g_hash_table_insert (pool->entries_hash, entry, entry);
 }
 
 /**
@@ -611,8 +575,6 @@ clutter_binding_pool_install_closure (ClutterBindingPool  *pool,
  *
  * Actions can be blocked with [method@Clutter.BindingPool.block_action]
  * and then unblocked using [method@Clutter.BindingPool.unblock_action].
- *
- * This function considers key aliases.
  */
 void
 clutter_binding_pool_override_action (ClutterBindingPool  *pool,
@@ -624,50 +586,37 @@ clutter_binding_pool_override_action (ClutterBindingPool  *pool,
 {
   ClutterBindingEntry *entry;
   GClosure *closure;
-  const unsigned int *keys;
-  unsigned int n_keys;
 
   g_return_if_fail (pool != NULL);
   g_return_if_fail (key_val != 0);
   g_return_if_fail (callback != NULL);
 
-  keys = clutter_keyval_get_aliases (key_val, &n_keys);
-  if (!keys)
+  entry = binding_pool_lookup_entry (pool, key_val, modifiers);
+  if (G_UNLIKELY (entry == NULL))
     {
-      keys = &key_val;
-      n_keys = 1;
+      g_warning ("There is no action for the given key symbol "
+                 "of %d (modifiers: %d) installed inside the "
+                 "binding pool.",
+                 key_val, modifiers);
+      return;
     }
 
-  for (unsigned int i = 0; i < n_keys; i++)
+  if (entry->closure)
     {
-      unsigned int key = keys[i];
-      entry = binding_pool_lookup_entry (pool, key, modifiers);
-      if (G_UNLIKELY (entry == NULL))
-        {
-          g_warning ("There is no action for the given key symbol "
-                     "of %d (modifiers: %d) installed inside the "
-                     "binding pool.",
-                     key, modifiers);
-          continue;
-        }
+      g_closure_unref (entry->closure);
+      entry->closure = NULL;
+    }
 
-      if (entry->closure)
-        {
-          g_closure_unref (entry->closure);
-          entry->closure = NULL;
-        }
+  closure = g_cclosure_new (callback, data, (GClosureNotify) notify);
+  entry->closure = g_closure_ref (closure);
+  g_closure_sink (closure);
 
-      closure = g_cclosure_new (callback, data, (GClosureNotify) notify);
-      entry->closure = g_closure_ref (closure);
-      g_closure_sink (closure);
+  if (G_CLOSURE_NEEDS_MARSHAL (closure))
+    {
+      GClosureMarshal marshal;
 
-      if (G_CLOSURE_NEEDS_MARSHAL (closure))
-        {
-          GClosureMarshal marshal;
-
-          marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
-          g_closure_set_marshal (closure, marshal);
-        }
+      marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
+      g_closure_set_marshal (closure, marshal);
     }
 }
 
@@ -688,8 +637,6 @@ clutter_binding_pool_override_action (ClutterBindingPool  *pool,
  *
  * Actions can be blocked with [method@Clutter.BindingPool.block_action]
  * and then unblocked using [method@Clutter.BindingPool.unblock_action].
- *
- * This function considers key aliases.
  */
 void
 clutter_binding_pool_override_closure (ClutterBindingPool  *pool,
@@ -698,50 +645,36 @@ clutter_binding_pool_override_closure (ClutterBindingPool  *pool,
                                        GClosure            *closure)
 {
   ClutterBindingEntry *entry;
-  const unsigned int *keys;
-  unsigned int n_keys;
 
   g_return_if_fail (pool != NULL);
   g_return_if_fail (key_val != 0);
   g_return_if_fail (closure != NULL);
 
-  keys = clutter_keyval_get_aliases (key_val, &n_keys);
-  if (!keys)
+  entry = binding_pool_lookup_entry (pool, key_val, modifiers);
+  if (G_UNLIKELY (entry == NULL))
     {
-      keys = &key_val;
-      n_keys = 1;
+      g_warning ("There is no action for the given key symbol "
+                 "of %d (modifiers: %d) installed inside the "
+                 "binding pool.",
+                 key_val, modifiers);
+      return;
     }
 
-  for (unsigned int i = 0; i < n_keys; i++)
+  if (entry->closure)
     {
-      unsigned int key = keys[i];
+      g_closure_unref (entry->closure);
+      entry->closure = NULL;
+    }
 
-      entry = binding_pool_lookup_entry (pool, key, modifiers);
-      if (G_UNLIKELY (entry == NULL))
-        {
-          g_warning ("There is no action for the given key symbol "
-                     "of %d (modifiers: %d) installed inside the "
-                     "binding pool.",
-                     key, modifiers);
-          continue;
-        }
+  entry->closure = g_closure_ref (closure);
+  g_closure_sink (closure);
 
-      if (entry->closure)
-        {
-          g_closure_unref (entry->closure);
-          entry->closure = NULL;
-        }
+  if (G_CLOSURE_NEEDS_MARSHAL (closure))
+    {
+      GClosureMarshal marshal;
 
-      entry->closure = g_closure_ref (closure);
-      g_closure_sink (closure);
-
-      if (G_CLOSURE_NEEDS_MARSHAL (closure))
-        {
-          GClosureMarshal marshal;
-
-          marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
-          g_closure_set_marshal (closure, marshal);
-        }
+      marshal = _clutter_marshal_BOOLEAN__STRING_UINT_FLAGS;
+      g_closure_set_marshal (closure, marshal);
     }
 }
 
@@ -783,8 +716,6 @@ clutter_binding_pool_find_action (ClutterBindingPool  *pool,
  *
  * Removes the action matching the given @key_val, @modifiers pair,
  * if any exists.
- *
- * This function considers key aliases.
  */
 void
 clutter_binding_pool_remove_action (ClutterBindingPool  *pool,
@@ -793,42 +724,28 @@ clutter_binding_pool_remove_action (ClutterBindingPool  *pool,
 {
   ClutterBindingEntry remove_entry = { 0, };
   GSList *l;
-  const unsigned int *keys;
-  unsigned int n_keys;
 
   g_return_if_fail (pool != NULL);
   g_return_if_fail (key_val != 0);
 
   modifiers = modifiers & BINDING_MOD_MASK;
 
-  keys = clutter_keyval_get_aliases (key_val, &n_keys);
-  if (!keys)
+  remove_entry.key_val = key_val;
+  remove_entry.modifiers = modifiers;
+
+  for (l = pool->entries; l != NULL; l = l->data)
     {
-      keys = &key_val;
-      n_keys = 1;
-    }
+      ClutterBindingEntry *e = l->data;
 
-  for (unsigned int i = 0; i < n_keys; i++)
-    {
-      unsigned int key = keys[i];
-
-      remove_entry.key_val = key;
-      remove_entry.modifiers = modifiers;
-
-      for (l = pool->entries; l != NULL; l = l->data)
+      if (e->key_val == remove_entry.key_val &&
+          e->modifiers == remove_entry.modifiers)
         {
-          ClutterBindingEntry *e = l->data;
-
-          if (clutter_keyval_to_lower (e->key_val) == clutter_keyval_to_lower (remove_entry.key_val) &&
-              e->modifiers == remove_entry.modifiers)
-            {
-              pool->entries = g_slist_remove_link (pool->entries, l);
-              break;
-            }
+          pool->entries = g_slist_remove_link (pool->entries, l);
+          break;
         }
-
-      g_hash_table_remove (pool->entries_hash, &remove_entry);
     }
+
+  g_hash_table_remove (pool->entries_hash, &remove_entry);
 }
 
 static gboolean

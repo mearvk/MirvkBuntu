@@ -30,16 +30,16 @@ G_BEGIN_DECLS
 /**
  * GtkFilterMatch:
  * @GTK_FILTER_MATCH_SOME: The filter matches some items,
- *   [method@Gtk.Filter.match] may return true or false
+ *   gtk_filter_match() may return %TRUE or %FALSE
  * @GTK_FILTER_MATCH_NONE: The filter does not match any item,
- *   [method@Gtk.Filter.match] will always return false
+ *   gtk_filter_match() will always return %FALSE.
  * @GTK_FILTER_MATCH_ALL: The filter matches all items,
- *   [method@Gtk.Filter.match] will alays return true
+ *   gtk_filter_match() will alays return %TRUE.
  *
  * Describes the known strictness of a filter.
  *
  * Note that for filters where the strictness is not known,
- * `GTK_FILTER_MATCH_SOME` is always an acceptable value,
+ * %GTK_FILTER_MATCH_SOME is always an acceptable value,
  * even if a filter does match all or no items.
  */
 typedef enum {
@@ -51,62 +51,25 @@ typedef enum {
 /**
  * GtkFilterChange:
  * @GTK_FILTER_CHANGE_DIFFERENT: The filter change cannot be
- *   described with any of the other enumeration values
+ *   described with any of the other enumeration values.
  * @GTK_FILTER_CHANGE_LESS_STRICT: The filter is less strict than
- *   it was before: All items that it used to return true
- *   still return true, others now may, too.
+ *   it was before: All items that it used to return %TRUE for
+ *   still return %TRUE, others now may, too.
  * @GTK_FILTER_CHANGE_MORE_STRICT: The filter is more strict than
- *   it was before: All items that it used to return false
- *   still return false, others now may, too.
+ *   it was before: All items that it used to return %FALSE for
+ *   still return %FALSE, others now may, too.
  *
  * Describes changes in a filter in more detail and allows objects
  * using the filter to optimize refiltering items.
  *
  * If you are writing an implementation and are not sure which
- * value to pass, `GTK_FILTER_CHANGE_DIFFERENT` is always a correct
+ * value to pass, %GTK_FILTER_CHANGE_DIFFERENT is always a correct
  * choice.
- *
- * New values may be added in the future.
- */
-
-/**
- * GTK_FILTER_CHANGE_DIFFERENT_REWATCH:
- *
- * Similar to [enum@Gtk.FilterChange.DIFFERENT],
- * but signs that item watches should be recreated. This is used by
- * [class@Gtk.FilterListModel] to keep the list up-to-date when items
- * change.
- *
- * Since: 4.20
- */
-
-/**
- * GTK_FILTER_CHANGE_LESS_STRICT_REWATCH:
- *
- * Similar to [enum@Gtk.FilterChange.LESS_STRICT],
- * but signs that item watches should be recreated. This is used by
- * [class@Gtk.FilterListModel] to keep the list up-to-date when items
- * change.
- *
- * Since: 4.20
- */
-
-/**
- * GTK_FILTER_CHANGE_MORE_STRICT_REWATCH:
- * Similar to [enum@Gtk.FilterChange.MORE_STRICT],
- * but signs that item watches should be recreated. This is used by
- * [class@Gtk.FilterListModel] to keep the list up-to-date when items
- * change.
- *
- * Since: 4.20
  */
 typedef enum {
   GTK_FILTER_CHANGE_DIFFERENT = 0,
   GTK_FILTER_CHANGE_LESS_STRICT,
   GTK_FILTER_CHANGE_MORE_STRICT,
-  GTK_FILTER_CHANGE_DIFFERENT_REWATCH,
-  GTK_FILTER_CHANGE_LESS_STRICT_REWATCH,
-  GTK_FILTER_CHANGE_MORE_STRICT_REWATCH,
 } GtkFilterChange;
 
 #define GTK_TYPE_FILTER             (gtk_filter_get_type ())

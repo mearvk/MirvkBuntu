@@ -19,8 +19,6 @@
  */
 
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
-
 #include "st-theme.h"
 #include "st-theme-context.h"
 #include "st-label.h"
@@ -78,7 +76,8 @@ assert_font_features (StThemeNode *node,
       fail = TRUE;
     }
 
-  g_free (value);
+  if (value)
+    g_free (value);
 }
 
 static char *
@@ -100,7 +99,7 @@ text_decoration_to_string (StTextDecoration decoration)
   else
     g_string_append(result, "none");
 
-  return g_string_free_and_steal (result);
+  return g_string_free (result, FALSE);
 }
 
 static void
@@ -125,18 +124,18 @@ assert_text_decoration (StThemeNode     *node,
 
 static void
 assert_foreground_color (StThemeNode *node,
-                         const char  *node_description,
-                         const char  *expected)
+			 const char  *node_description,
+			 guint32      expected)
 {
-  CoglColor color;
-  g_autofree char* value;
+  ClutterColor color;
+  guint32 value;
 
   st_theme_node_get_foreground_color (node, &color);
-  value = cogl_color_to_string (&color);
+  value = clutter_color_to_pixel (&color);
 
-  if (g_strcmp0 (expected, value) != 0)
+  if (expected != value)
     {
-      g_print ("%s: %s.color: expected: %s, got: %s\n",
+      g_print ("%s: %s.color: expected: #%08x, got: #%08x\n",
 	       test, node_description, expected, value);
       fail = TRUE;
     }
@@ -144,18 +143,18 @@ assert_foreground_color (StThemeNode *node,
 
 static void
 assert_background_color (StThemeNode *node,
-                         const char  *node_description,
-                         const char  *expected)
+			 const char  *node_description,
+			 guint32      expected)
 {
-  CoglColor color;
-  g_autofree char* value;
+  ClutterColor color;
+  guint32 value;
 
   st_theme_node_get_background_color (node, &color);
-  value = cogl_color_to_string (&color);
+  value = clutter_color_to_pixel (&color);
 
-  if (g_strcmp0 (expected, value) != 0)
+  if (expected != value)
     {
-      g_print ("%s: %s.background-color: expected: %s, got: %s\n",
+      g_print ("%s: %s.background-color: expected: #%08x, got: #%08x\n",
 	       test, node_description, expected, value);
       fail = TRUE;
     }
@@ -183,17 +182,17 @@ static void
 assert_border_color (StThemeNode *node,
                      const char  *node_description,
                      StSide       side,
-                     const char  *expected)
+                     guint32      expected)
 {
-  CoglColor color;
-  g_autofree char* value;
+  ClutterColor color;
+  guint32 value;
 
   st_theme_node_get_border_color (node, side, &color);
-  value = cogl_color_to_string (&color);
+  value = clutter_color_to_pixel (&color);
 
-  if (g_strcmp0 (expected, value) != 0)
+  if (expected != value)
     {
-      g_print ("%s: %s.border-%s-color: expected: %s, got: %s\n",
+      g_print ("%s: %s.border-%s-color: expected: #%08x, got: #%08x\n",
 	       test, node_description, side_to_string (side), expected, value);
       fail = TRUE;
     }
@@ -245,7 +244,7 @@ test_defaults (void)
   /* font comes from context */
   assert_font (root, "stage", "sans-serif 12");
   /* black is the default foreground color */
-  assert_foreground_color (root, "stage", "#000000ff");
+  assert_foreground_color (root, "stage", 0x00000ff);
 }
 
 static void
@@ -305,9 +304,9 @@ test_adjacent_selector (void)
 {
   test = "adjacent_selector";
   /* #group1 > #text1 matches text1 */
-  assert_foreground_color (text1, "text1", "#00ff00ff");
+  assert_foreground_color (text1, "text1", 0x00ff00ff);
   /* stage > #text2 doesn't match text2 */
-  assert_foreground_color (text2, "text2", "#000000ff");
+  assert_foreground_color (text2, "text2", 0x000000ff);
 }
 
 static void
@@ -393,10 +392,10 @@ test_border (void)
   assert_length ("group2", "border-left-width", 2.,
 		 st_theme_node_get_border_width (group2, ST_SIDE_LEFT));
 
-  assert_border_color (group2, "group2", ST_SIDE_TOP,    "#000000ff");
-  assert_border_color (group2, "group2", ST_SIDE_RIGHT,  "#000000ff");
-  assert_border_color (group2, "group2", ST_SIDE_BOTTOM, "#0000ffff");
-  assert_border_color (group2, "group2", ST_SIDE_LEFT,   "#000000ff");
+  assert_border_color (group2, "group2", ST_SIDE_TOP,    0x000000ff);
+  assert_border_color (group2, "group2", ST_SIDE_RIGHT,  0x000000ff);
+  assert_border_color (group2, "group2", ST_SIDE_BOTTOM, 0x0000ffff);
+  assert_border_color (group2, "group2", ST_SIDE_LEFT,   0x000000ff);
 
   assert_length ("group2", "border-radius-topleft", 10.,
 		 st_theme_node_get_border_radius (group2, ST_CORNER_TOPLEFT));
@@ -413,13 +412,13 @@ test_background (void)
 {
   test = "background";
   /* group1 has a background: shortcut property setting color and image */
-  assert_background_color (group1, "group1", "#ff0000ff");
+  assert_background_color (group1, "group1", 0xff0000ff);
   assert_background_image (group1, "group1", "some-background.png");
   /* text1 inherits the background image but not the color */
-  assert_background_color (text1,  "text1",  "#00000000");
+  assert_background_color (text1,  "text1",  0x00000000);
   assert_background_image (text1,  "text1",  "some-background.png");
   /* text2 inherits both, but then background: none overrides both */
-  assert_background_color (text2,  "text2",  "#00000000");
+  assert_background_color (text2,  "text2",  0x00000000);
   assert_background_image (text2,  "text2",  NULL);
   /* background-image property */
   assert_background_image (group2, "group2", "other-background.png");
@@ -459,7 +458,7 @@ test_pseudo_class (void)
 
   test = "pseudo_class";
   /* text4 has :visited and :hover pseudo-classes, so should pick up both of these */
-  assert_foreground_color (text4,   "text4",  "#888888ff");
+  assert_foreground_color (text4,   "text4",  0x888888ff);
   assert_text_decoration  (text4,   "text4",  ST_TEXT_DECORATION_UNDERLINE);
   /* :hover pseudo-class matches, but class doesn't match */
   assert_text_decoration  (group3,  "group3", 0);
@@ -469,7 +468,7 @@ test_pseudo_class (void)
   clutter_actor_add_child (stage, CLUTTER_ACTOR (label));
 
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#000000ff");
+  assert_foreground_color (labelNode, "label", 0x000000ff);
   assert_text_decoration  (labelNode, "label", 0);
   assert_length ("label", "border-width", 0.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
@@ -477,7 +476,7 @@ test_pseudo_class (void)
   st_widget_add_style_pseudo_class (label, "visited");
   g_assert (st_widget_has_style_pseudo_class (label, "visited"));
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#888888ff");
+  assert_foreground_color (labelNode, "label", 0x888888ff);
   assert_text_decoration  (labelNode, "label", 0);
   assert_length ("label", "border-width", 0.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
@@ -485,7 +484,7 @@ test_pseudo_class (void)
   st_widget_add_style_pseudo_class (label, "hover");
   g_assert (st_widget_has_style_pseudo_class (label, "hover"));
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#888888ff");
+  assert_foreground_color (labelNode, "label", 0x888888ff);
   assert_text_decoration  (labelNode, "label", ST_TEXT_DECORATION_UNDERLINE);
   assert_length ("label", "border-width", 0.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
@@ -494,21 +493,21 @@ test_pseudo_class (void)
   g_assert (!st_widget_has_style_pseudo_class (label, "visited"));
   g_assert (st_widget_has_style_pseudo_class (label, "hover"));
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#000000ff");
+  assert_foreground_color (labelNode, "label", 0x000000ff);
   assert_text_decoration  (labelNode, "label", ST_TEXT_DECORATION_UNDERLINE);
   assert_length ("label", "border-width", 0.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
 
   st_widget_add_style_pseudo_class (label, "boxed");
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#000000ff");
+  assert_foreground_color (labelNode, "label", 0x000000ff);
   assert_text_decoration  (labelNode, "label", ST_TEXT_DECORATION_UNDERLINE);
   assert_length ("label", "border-width", 1.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
 
   st_widget_remove_style_pseudo_class (label, "hover");
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#000000ff");
+  assert_foreground_color (labelNode, "label", 0x000000ff);
   assert_text_decoration  (labelNode, "label", 0);
   assert_length ("label", "border-width", 1.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
@@ -517,7 +516,7 @@ test_pseudo_class (void)
   g_assert (!st_widget_has_style_pseudo_class (label, "boxed"));
   g_assert (st_widget_has_style_pseudo_class (label, "insensitive"));
   labelNode = st_widget_get_theme_node (label);
-  assert_foreground_color (labelNode, "label", "#000000ff");
+  assert_foreground_color (labelNode, "label", 0x000000ff);
   assert_text_decoration  (labelNode, "label", 0);
   assert_length ("label", "border-width", 0.,
                  st_theme_node_get_border_width (labelNode, ST_SIDE_TOP));
@@ -531,7 +530,7 @@ test_inline_style (void)
 {
   test = "inline_style";
   /* These properties come from the inline-style specified when creating the node */
-  assert_foreground_color (text3,   "text3",  "#0000ffff");
+  assert_foreground_color (text3,   "text3",  0x00000ffff);
   assert_length ("text3", "padding-bottom", 12.,
                  st_theme_node_get_padding (text3, ST_SIDE_BOTTOM));
 }
@@ -544,7 +543,6 @@ main (int argc, char **argv)
   MetaBackend *backend;
   StTheme *theme;
   StThemeContext *theme_context;
-  ClutterContext *clutter_context;
   PangoFontDescription *font_desc;
   GFile *file;
   g_autofree char *cwd = NULL;
@@ -552,7 +550,7 @@ main (int argc, char **argv)
   /* meta_init() cds to $HOME */
   cwd = g_get_current_dir ();
 
-  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_TEST,
+  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_NESTED,
                                       META_CONTEXT_TEST_FLAG_NONE);
   if (!meta_context_configure (context, &argc, &argv, &error))
     g_error ("Failed to configure: %s", error->message);
@@ -564,16 +562,14 @@ main (int argc, char **argv)
     g_error ("chdir('%s') failed: %s", cwd, g_strerror (errno));
 
   /* Make sure our assumptions about resolution are correct */
-  backend = meta_context_get_backend (context);
-  stage = meta_backend_get_stage (backend);
-  clutter_context = clutter_actor_get_context (stage);
-  g_object_set (clutter_context_get_settings (clutter_context),
-                "font-dpi", -1, NULL);
+  g_object_set (clutter_settings_get_default (), "font-dpi", -1, NULL);
 
   file = g_file_new_for_path ("test-theme.css");
   theme = st_theme_new (file, NULL, NULL);
   g_object_unref (file);
 
+  backend = meta_context_get_backend (context);
+  stage = meta_backend_get_stage (backend);
   theme_context = st_theme_context_get_for_stage (CLUTTER_STAGE (stage));
   st_theme_context_set_theme (theme_context, theme);
 

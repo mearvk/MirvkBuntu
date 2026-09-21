@@ -1,54 +1,34 @@
 data_builddir = meson.current_build_dir()
 
 desktop_files = [
+  'org.gnome.Shell.desktop',
   'org.gnome.Shell.Extensions.desktop',
 ]
 service_files = []
 
-if have_portal_helper
+if have_networkmanager
   desktop_files += 'org.gnome.Shell.PortalHelper.desktop'
   service_files += 'org.gnome.Shell.PortalHelper.service'
 endif
 
+desktopconf = configuration_data()
+# We substitute in bindir so it works as an autostart
+# file when built in a non-system prefix
+desktopconf.set('bindir', bindir)
+desktopconf.set('systemd_hidden', have_systemd ? 'true' : 'false')
+
 foreach desktop_file : desktop_files
   i18n.merge_file(
-    input: desktop_file + '.in',
+    input: configure_file(
+      input: desktop_file + '.in.in',
+      output: desktop_file + '.in',
+      configuration: desktopconf
+    ),
     output: desktop_file,
     po_dir: po_dir,
     install: true,
     install_dir: desktopdir,
     type: 'desktop'
-  )
-endforeach
-
-desktopconf = configuration_data()
-desktopconf.set('libexecdir', libexecdir)
-
-i18n.merge_file(
-  input: configure_file(
-    input: 'org.gnome.Shell.CalendarServer.desktop.in.in',
-    output: 'org.gnome.Shell.CalendarServer.desktop.in',
-    configuration: desktopconf
-  ),
-  output: 'org.gnome.Shell.CalendarServer.desktop',
-  po_dir: po_dir,
-  install: true,
-  install_dir: desktopdir,
-  type: 'desktop'
-)
-
-desktop_directories = [
-  'X-GNOME-Shell-Utilities.directory',
-  'X-GNOME-Shell-System.directory',
-]
-foreach desktop_directory : desktop_directories
-  i18n.merge_file(
-    input: f'@desktop_directory@.desktop.in',
-    output: desktop_directory,
-    po_dir: po_dir,
-    install: true,
-    install_dir: join_paths(datadir, 'desktop-directories'),
-    type: 'desktop',
   )
 endforeach
 
@@ -75,14 +55,11 @@ data_resources = [
   {'name': 'osk-layouts'},
   {'name': 'theme', 'deps': theme_deps}
 ]
-
-install_subdir('sounds', install_dir: pkgdatadir)
-data_resources_targets = []
 foreach resource : data_resources
   name = resource.get('name')
   deps = resource.get('deps', [])
 
-  data_resources_targets += gnome.compile_resources(
+  gnome.compile_resources(
     'gnome-shell-' + name,
     'gnome-shell-@0@.gresource.xml'.format(name),
     source_dir: name,
@@ -92,11 +69,6 @@ foreach resource : data_resources
     install_dir: pkgdatadir
   )
 endforeach
-
-cursor_theme_resource = gnome.compile_resources(
-  'gnome-shell-cursor-theme',
-  'gnome-shell-cursor-theme.gresource.xml',
-  source_dir: 'cursor-theme')
 
 perfconf = configuration_data()
 perfconf.set('datadir', datadir)
@@ -118,14 +90,6 @@ install_data(keybinding_files, install_dir: keysdir)
 
 schemaconf = configuration_data()
 schemaconf.set('GETTEXT_PACKAGE', meson.project_name())
-schemaconf.set('DASH_APPS', run_command(
-  generate_app_list, 'default-apps/dash.txt',
-  check: true,
-).stdout())
-schemaconf.set('APP_GRID_APPS', run_command(
-  generate_app_list, '--pages', 'default-apps/app-grid.txt',
-  check: true,
-).stdout())
 schema = configure_file(
   input: 'org.gnome.shell.gschema.xml.in',
   output: 'org.gnome.shell.gschema.xml',
@@ -137,22 +101,30 @@ install_data('00_org.gnome.shell.gschema.override', install_dir: schemadir)
 if have_systemd
   unitconf = configuration_data()
   unitconf.set('bindir', bindir)
+
   configure_file(
-    input: 'org.gnome.Shell@.service.in',
-    output: 'org.gnome.Shell@.service',
+    input: 'org.gnome.Shell@x11.service.in',
+    output: 'org.gnome.Shell@x11.service',
     configuration: unitconf,
     install_dir: systemduserunitdir
   )
 
-  install_data (
-    'org.gnome.Shell-disable-extensions.service',
-    install_dir: systemduserunitdir,
+  configure_file(
+    input: 'org.gnome.Shell@wayland.service.in',
+    output: 'org.gnome.Shell@wayland.service',
+    configuration: unitconf,
+    install_dir: systemduserunitdir
   )
+
+  units = files('org.gnome.Shell.target',
+                'org.gnome.Shell-disable-extensions.service')
+
+  install_data(units, install_dir: systemduserunitdir)
 endif
 
 # for unit tests - gnome.compile_schemas() only looks in srcdir
-compiled_schemas = custom_target('compile-schemas',
+custom_target('compile-schemas',
   input: schema,
   output: 'gschemas.compiled',
   command: [find_program('glib-compile-schemas'), '--strict', data_builddir],
-)
+  build_by_default: true)

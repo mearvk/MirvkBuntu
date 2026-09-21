@@ -32,13 +32,10 @@
 #include <strings.h>
 
 #include "cogl/cogl-context-private.h"
-#include "cogl/cogl-texture-private.h"
-#include "cogl/cogl-texture-2d-private.h"
 #include "cogl/cogl-util.h"
-#include "cogl/driver/gl/cogl-driver-gl-private.h"
-#include "cogl/driver/gl/cogl-texture-2d-gl-private.h"
+#include "cogl/driver/gl/cogl-util-gl-private.h"
 #include "cogl/driver/gl/cogl-texture-gl-private.h"
-#include "cogl/driver/gl/cogl-pipeline-gl-private.h"
+#include "cogl/driver/gl/cogl-pipeline-opengl-private.h"
 
 static inline int
 calculate_alignment (int rowstride)
@@ -52,17 +49,15 @@ void
 _cogl_texture_gl_prep_alignment_for_pixels_upload (CoglContext *ctx,
                                                    int pixels_rowstride)
 {
-  CoglDriver *driver = cogl_context_get_driver (ctx);
-
-  GE (driver, glPixelStorei (GL_UNPACK_ALIGNMENT,
-                             calculate_alignment (pixels_rowstride)));
+  GE( ctx, glPixelStorei (GL_UNPACK_ALIGNMENT,
+                          calculate_alignment (pixels_rowstride)) );
 }
 
 void
-_cogl_texture_gl_prep_alignment_for_pixels_download (CoglDriver *driver,
-                                                     int         bpp,
-                                                     int         width,
-                                                     int         rowstride)
+_cogl_texture_gl_prep_alignment_for_pixels_download (CoglContext *ctx,
+                                                     int bpp,
+                                                     int width,
+                                                     int rowstride)
 {
   int alignment;
 
@@ -80,43 +75,81 @@ _cogl_texture_gl_prep_alignment_for_pixels_download (CoglDriver *driver,
   else
     alignment = calculate_alignment (rowstride);
 
-  GE (driver, glPixelStorei (GL_PACK_ALIGNMENT, alignment));
+  GE( ctx, glPixelStorei (GL_PACK_ALIGNMENT, alignment) );
+}
+
+void
+_cogl_texture_gl_flush_legacy_texobj_wrap_modes (CoglTexture *texture,
+                                                 unsigned int wrap_mode_s,
+                                                 unsigned int wrap_mode_t)
+{
+  COGL_TEXTURE_GET_CLASS (texture)->gl_flush_legacy_texobj_wrap_modes (texture,
+                                                                       wrap_mode_s,
+                                                                       wrap_mode_t);
+}
+
+void
+_cogl_texture_gl_flush_legacy_texobj_filters (CoglTexture *texture,
+                                              unsigned int min_filter,
+                                              unsigned int mag_filter)
+{
+  COGL_TEXTURE_GET_CLASS (texture)->gl_flush_legacy_texobj_filters (texture,
+                                                                    min_filter,
+                                                                    mag_filter);
+}
+
+/* GL and GLES3 have this by default, but GLES2 does not except via extension.
+ * So really it's probably always available. Even if we used it and it wasn't
+ * available in some driver then there are no adverse consequences to the
+ * command simply being ignored...
+ */
+#ifndef GL_TEXTURE_MAX_LEVEL
+#define GL_TEXTURE_MAX_LEVEL 0x813D
+#endif
+
+void
+cogl_texture_gl_set_max_level (CoglTexture *texture,
+                               int max_level)
+{
+  CoglContext *ctx = cogl_texture_get_context (texture);
+
+  if (_cogl_has_private_feature (ctx, COGL_PRIVATE_FEATURE_TEXTURE_MAX_LEVEL))
+    {
+      GLuint gl_handle;
+      GLenum gl_target;
+
+      cogl_texture_get_gl_texture (texture, &gl_handle, &gl_target);
+
+      cogl_texture_set_max_level_set (texture, max_level);
+
+      _cogl_bind_gl_texture_transient (gl_target,
+                                       gl_handle);
+
+      GE( ctx, glTexParameteri (gl_target,
+                                GL_TEXTURE_MAX_LEVEL, cogl_texture_get_max_level_set (texture)));
+    }
+}
+
+void
+_cogl_texture_gl_generate_mipmaps (CoglTexture *texture)
+{
+  CoglContext *ctx = cogl_texture_get_context (texture);
+  int n_levels = _cogl_texture_get_n_levels (texture);
+  GLuint gl_handle;
+  GLenum gl_target;
+
+  if (cogl_texture_get_max_level_set (texture) != n_levels - 1)
+    cogl_texture_gl_set_max_level (texture, n_levels - 1);
+
+  cogl_texture_get_gl_texture (texture, &gl_handle, &gl_target);
+
+  _cogl_bind_gl_texture_transient (gl_target,
+                                   gl_handle);
+  GE( ctx, glGenerateMipmap (gl_target) );
 }
 
 GLenum
 _cogl_texture_gl_get_format (CoglTexture *texture)
 {
-  CoglTexture2D *leaf = cogl_texture_get_first_leaf (texture);
-
-  g_return_val_if_fail (leaf != NULL, GL_RGBA);
-
-  return COGL_TEXTURE_2D_GL (leaf)->gl_internal_format;
-}
-
-gboolean
-cogl_texture_get_gl_texture (CoglTexture *texture,
-                             GLuint      *out_gl_handle,
-                             GLenum      *out_gl_target)
-{
-  CoglTexture2D *leaf;
-  CoglTexture2DGL *leaf_gl;
-
-  g_return_val_if_fail (COGL_IS_TEXTURE (texture), FALSE);
-
-  if (!cogl_texture_is_allocated (texture))
-    cogl_texture_allocate (texture, NULL);
-
-  leaf = cogl_texture_get_first_leaf (texture);
-  if (!leaf)
-    return FALSE;
-
-  leaf_gl = COGL_TEXTURE_2D_GL (leaf);
-
-  if (out_gl_handle)
-    *out_gl_handle = leaf_gl->gl_texture;
-
-  if (out_gl_target)
-    *out_gl_target = leaf_gl->gl_target;
-
-  return leaf_gl->gl_texture ? TRUE : FALSE;
+  return COGL_TEXTURE_GET_CLASS (texture)->get_gl_format (texture);
 }

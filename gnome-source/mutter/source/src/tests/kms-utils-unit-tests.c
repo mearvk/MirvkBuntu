@@ -44,7 +44,7 @@ static const RefreshRateTestCase refresh_rate_test_cases[] = {
       .vscan = 0,
       .flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC,
     },
-    .expected_refresh_rate = 59.9375f,
+    .expected_refresh_rate = 59.9375,
   },
 
   /* "cvt 640 480" with htotal 0 */
@@ -62,7 +62,7 @@ static const RefreshRateTestCase refresh_rate_test_cases[] = {
        .vscan = 0,
        .flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC,
     },
-    .expected_refresh_rate = 0.0f,
+    .expected_refresh_rate = 0.0,
   },
 
   /* "cvt 640 480" with vtotal 0 */
@@ -80,7 +80,7 @@ static const RefreshRateTestCase refresh_rate_test_cases[] = {
       .vscan = 0,
       .flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC,
     },
-    .expected_refresh_rate = 0.0f,
+    .expected_refresh_rate = 0.0,
   },
 
   /* "cvt 320 240" with doubled clock and vscan 2 */
@@ -98,7 +98,7 @@ static const RefreshRateTestCase refresh_rate_test_cases[] = {
       .vscan = 2,
       .flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC,
     },
-    .expected_refresh_rate = 59.8313f,
+    .expected_refresh_rate = 59.8313,
   },
 
   /* "cvt 15360 8640 180" */
@@ -116,7 +116,7 @@ static const RefreshRateTestCase refresh_rate_test_cases[] = {
       .vscan = 0,
       .flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC,
     },
-    .expected_refresh_rate = 179.9939f,
+    .expected_refresh_rate = 179.9939,
   },
 };
 

@@ -410,8 +410,6 @@ set_button_image_get_info_cb (GObject      *source,
         break;
     };
 
-  g_object_unref (info);
-
 out:
   g_free (data);
 }
@@ -537,10 +535,6 @@ gtk_path_bar_update_button_appearance (GtkPathBar *path_bar,
 
   gtk_widget_remove_css_class (button_data->button, "text-button");
   gtk_widget_remove_css_class (button_data->button, "image-button");
-
-  gtk_accessible_update_property (GTK_ACCESSIBLE (button_data->button),
-                                  GTK_ACCESSIBLE_PROPERTY_LABEL, dir_name,
-                                  -1);
 
   if (button_data->label != NULL)
     {
@@ -753,7 +747,6 @@ gtk_path_bar_set_file_finish (struct SetFileInfo *info,
       GList *l;
 
       gtk_path_bar_clear_buttons (info->path_bar);
-      g_list_free (info->path_bar->button_list);
       info->path_bar->button_list = g_list_reverse (info->new_buttons);
       info->path_bar->fake_root = info->fake_root;
 
@@ -833,7 +826,6 @@ gtk_path_bar_get_info_callback (GObject      *source,
                                        file_info->root_file,
                                        file_info->first_directory, is_hidden);
   g_clear_object (&file_info->file);
-  g_object_unref (info);
 
   file_info->new_buttons = g_list_prepend (file_info->new_buttons, button_data);
 

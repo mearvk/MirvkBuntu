@@ -62,7 +62,7 @@ struct _GUnixInputStreamClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType          g_unix_input_stream_get_type     (void);
+GType          g_unix_input_stream_get_type     (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GInputStream * g_unix_input_stream_new          (gint              fd,

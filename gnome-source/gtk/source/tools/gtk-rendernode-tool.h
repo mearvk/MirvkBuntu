@@ -1,23 +1,11 @@
-#pragma once
 
-#include <gsk/gsk.h>
+#pragma once
 
 void do_benchmark   (int *argc, const char ***argv);
 void do_compare     (int *argc, const char ***argv);
-void do_convert     (int *argc, const char ***argv);
-void do_extract     (int *argc, const char ***argv);
-void do_filter      (int *argc, const char ***argv);
 void do_info        (int *argc, const char ***argv);
-void do_match       (int *argc, const char ***argv);
 void do_show        (int *argc, const char ***argv);
 void do_render      (int *argc, const char ***argv);
 
-GskRenderNode *filter_background_blur   (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_copypaste         (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_cut               (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_diff              (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_opaque            (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_show              (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_simplify          (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_strip             (GskRenderNode *node, int argc, const char **argv);
-GskRenderNode *filter_texture           (GskRenderNode *node, int argc, const char **argv);
+GskRenderNode *load_node_file (const char *filename);
+GskRenderer   *create_renderer (const char *name, GError **error);

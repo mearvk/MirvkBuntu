@@ -10,9 +10,9 @@ the question you have, this list is a good place to start.
 *  How do I get started with GTK?
 
     The GTK [website](https://www.gtk.org) offers some
-    [tutorials](https://developer.gnome.org/documentation/tutorials.html) and other documentation
+    [tutorials](https://www.gtk.org/documentation.php) and other documentation
     This reference manual also contains a introductory
-    [Getting Started](https://docs.gtk.org/gtk4/getting_started.html) part.
+    [Getting Started](#gtk-getting-started) part.
 
     More documentation ranging from whitepapers to online books can be found at
     the [GNOME developer's site](https://developer.gnome.org). After studying these
@@ -20,11 +20,11 @@ the question you have, this list is a good place to start.
 
 *  Where can I get help with GTK, submit a bug report, or make a feature request?
 
-    See the [documentation](https://docs.gtk.org/gtk4/resources.html) on this topic.
+    See the [documentation](#gtk-resources) on this topic.
 
 *  How do I port from one GTK version to another?
 
-    Every major version of GTK comes with a [migration guide](https://docs.gtk.org/gtk4/migrating-3to4.html). You may also
+    Every major version of GTK comes with a [migration guide](#migrating). You may also
     find useful information in the documentation for specific widgets and functions. If
     you have a question not covered in the manual, feel free to ask, and please
     [file a bug report](https://gitlab.gnome.org/GNOME/gtk/issues/) against the
@@ -257,7 +257,7 @@ the question you have, this list is a good place to start.
 
 *  How do I use GTK with other non-C languages?
 
-    See the list of [language bindings](https://www.gtk.org/docs/language-bindings/)
+    See the list of [language bindings](https://www.gtk.org/language-bindings.php)
     on the GTK [website](https://www.gtk.org).
 
 *  How do I load an image or animation from a file?
@@ -306,6 +306,17 @@ the question you have, this list is a good place to start.
 
     See also the [Layout Objects](https://docs.gtk.org/Pango/class.Layout.html)
     section of the [Pango documentation](https://docs.gtk.org/Pango/).
+
+*  Why are types not registered if I use their `GTK_TYPE_BLAH` macro?
+
+    The %GTK_TYPE_BLAH macros are defined as calls to gtk_blah_get_type(), and
+    the `_get_type()` functions are declared as %G_GNUC_CONST which allows the
+    compiler to optimize the call away if it appears that the value is not
+    being used.
+
+    GLib provides the `g_type_ensure()` function to work around this problem.
+
+        g_type_ensure (GTK_TYPE_BLAH);
 
 *  How do I create a transparent toplevel window?
 

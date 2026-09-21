@@ -74,6 +74,10 @@ struct _GVfsUDisks2Mount
   gchar *mount_entry_name;
   gchar *mount_entry_fs_type;
 
+#ifdef HAVE_BURN
+  gboolean is_burn_mount;
+#endif
+
   GIcon *autorun_icon;
   gboolean searched_for_autorun;
 
@@ -117,10 +121,6 @@ gvfs_udisks2_mount_finalize (GObject *object)
   g_free (mount->mount_path);
 
   g_free (mount->mount_entry_name);
-  g_free (mount->mount_entry_fs_type);
-
-  if (mount->mount_entry != NULL)
-    g_unix_mount_entry_free (mount->mount_entry);
 
   if (mount->autorun_icon != NULL)
     g_object_unref (mount->autorun_icon);
@@ -257,7 +257,7 @@ update_mount (GVfsUDisks2Mount *mount)
         mount->icon = g_object_ref (mount->autorun_icon);
       else
         {
-          mount->icon = gvfs_udisks2_utils_icon_from_fs_type (mount->mount_entry_fs_type);
+          mount->icon = gvfs_udisks2_utils_icon_from_fs_type (g_unix_mount_get_fs_type (mount->mount_entry));
         }
 
       g_free (mount->name);
@@ -270,7 +270,7 @@ update_mount (GVfsUDisks2Mount *mount)
       else
         mount->name = g_strdup (mount->mount_entry_name);
 
-      mount->symbolic_icon = gvfs_udisks2_utils_symbolic_icon_from_fs_type (mount->mount_entry_fs_type);
+      mount->symbolic_icon = gvfs_udisks2_utils_symbolic_icon_from_fs_type (g_unix_mount_get_fs_type (mount->mount_entry));
     }
 
   /* compute whether something changed */
@@ -342,17 +342,27 @@ gvfs_udisks2_mount_new (GVfsUDisks2VolumeMonitor *monitor,
   if (mount_entry != NULL)
     {
       mount->mount_entry = mount_entry; /* takes ownership */
-      mount->mount_entry_name = g_unix_mount_entry_guess_name (mount_entry);
-      mount->mount_entry_fs_type = g_strdup (g_unix_mount_entry_get_fs_type (mount_entry));
-      mount->device_file = g_strdup (g_unix_mount_entry_get_device_path (mount_entry));
-      mount->mount_path = g_strdup (g_unix_mount_entry_get_mount_path (mount_entry));
+      mount->mount_entry_name = g_unix_mount_guess_name (mount_entry);
+      mount->device_file = g_strdup (g_unix_mount_get_device_path (mount_entry));
+      mount->mount_path = g_strdup (g_unix_mount_get_mount_path (mount_entry));
       mount->root = g_file_new_for_path (mount->mount_path);
     }
+#ifdef HAVE_BURN
+  else
+    {
+      /* burn:/// mount (the only mounts we support with mount_entry == NULL) */
+      mount->device_file = NULL;
+      mount->mount_path = NULL;
+      mount->root = g_file_new_for_uri ("burn:///");
+      mount->is_burn_mount = TRUE;
+    }
+#endif
 
   /* need to set the volume only when the mount is fully constructed */
   mount->volume = volume;
   if (mount->volume != NULL)
     {
+      gvfs_udisks2_volume_set_mount (volume, mount);
       /* this is for piggy backing on the name and icon of the associated volume */
       g_signal_connect (mount->volume, "changed", G_CALLBACK (on_volume_changed), mount);
     }
@@ -367,8 +377,10 @@ gvfs_udisks2_mount_unmounted (GVfsUDisks2Mount *mount)
 {
   if (mount->volume != NULL)
     {
+      gvfs_udisks2_volume_unset_mount (mount->volume, mount);
       g_signal_handlers_disconnect_by_func (mount->volume, on_volume_changed, mount);
       mount->volume = NULL;
+      emit_changed (mount);
     }
 }
 
@@ -380,6 +392,7 @@ gvfs_udisks2_mount_unset_volume (GVfsUDisks2Mount   *mount,
     {
       g_signal_handlers_disconnect_by_func (mount->volume, on_volume_changed, mount);
       mount->volume = NULL;
+      emit_changed (mount);
     }
 }
 
@@ -394,10 +407,12 @@ gvfs_udisks2_mount_set_volume (GVfsUDisks2Mount   *mount,
       mount->volume = volume;
       if (mount->volume != NULL)
         {
+          gvfs_udisks2_volume_set_mount (volume, mount);
           /* this is for piggy backing on the name and icon of the associated volume */
           g_signal_connect (mount->volume, "changed", G_CALLBACK (on_volume_changed), mount);
         }
       update_mount (mount);
+      emit_changed (mount);
     }
 }
 
@@ -542,7 +557,6 @@ unmount_data_free (UnmountData *data)
   g_clear_object (&data->mount_operation);
   g_clear_object (&data->encrypted);
   g_clear_object (&data->filesystem);
-  g_free (data);
 }
 
 static gboolean
@@ -648,9 +662,9 @@ on_mount_op_reply (GMountOperation       *mount_operation,
 }
 
 static void
-busy_processes_command_cb (GObject       *source_object,
-                           GAsyncResult  *res,
-                           gpointer       user_data)
+lsof_command_cb (GObject       *source_object,
+                 GAsyncResult  *res,
+                 gpointer       user_data)
 {
   GTask *task = G_TASK (user_data);
   UnmountData *data = g_task_get_task_data (task);
@@ -671,24 +685,15 @@ busy_processes_command_cb (GObject       *source_object,
                                         NULL, /* gchar **out_standard_error */
                                         &error))
     {
-      g_warning ("Error launching %s(1): %s (%s, %d)\n",
-                 BUSY_PROCESS_COMMAND,
-                 error->message,
-                 g_quark_to_string (error->domain),
-                 error->code);
+      g_printerr ("Error launching lsof(1): %s (%s, %d)\n",
+                  error->message, g_quark_to_string (error->domain), error->code);
       g_error_free (error);
       goto out;
     }
 
-  if (!WIFEXITED (exit_status))
+  if (!(WIFEXITED (exit_status) && WEXITSTATUS (exit_status) == 0))
     {
-      g_warning ("%s(1) killed by signal %d\n", BUSY_PROCESS_COMMAND, WTERMSIG (exit_status));
-      goto out;
-    }
-  if (WEXITSTATUS (exit_status) != 0)
-    {
-      /* A non-zero exit is expected when no processes are using the mount */
-      g_debug ("%s(1) exited with status %d\n", BUSY_PROCESS_COMMAND, WEXITSTATUS (exit_status));
+      g_printerr ("lsof(1) did not exit normally\n");
       goto out;
     }
 
@@ -702,16 +707,10 @@ busy_processes_command_cb (GObject       *source_object,
         break;
 
       pid = strtol (p, &endp, 10);
-      if (p == endp)
-        {
-          /* strtol made no progress: skip one non-numeric character so the
-           * loop doesn't stall and subsequent PIDs are not lost. */
-          p++;
-          continue;
-        }
+      if (pid == 0 && p == endp)
+        break;
 
-      if (pid != 0)
-        g_array_append_val (processes, pid);
+      g_array_append_val (processes, pid);
 
       p = endp;
     }
@@ -726,9 +725,9 @@ busy_processes_command_cb (GObject       *source_object,
       is_stop = unmount_operation_is_stop (data->mount_operation);
 
       /* We want to emit the 'show-processes' signal even if launching
-       * lsof(1) or fuser(1) failed or if it didn't return any PIDs. This
-       * is because it won't show e.g. root-owned processes operating on
-       * files on the mount point.
+       * lsof(1) failed or if it didn't return any PIDs. This is because
+       * it won't show e.g. root-owned processes operating on files
+       * on the mount point.
        *
        * (unfortunately there's no way to convey that it failed)
        */
@@ -794,9 +793,9 @@ unmount_show_busy (GTask        *task,
   escaped_mount_point = g_strescape (mount_point, NULL);
   gvfs_udisks2_utils_spawn (10, /* timeout in seconds */
                             g_task_get_cancellable (task),
-                            busy_processes_command_cb,
+                            lsof_command_cb,
                             g_object_ref (task),
-                            BUSY_PROCESS_SPAWN,
+                            "lsof -t \"%s\"",
                             escaped_mount_point);
   g_free (escaped_mount_point);
 }
@@ -1021,6 +1020,16 @@ gvfs_udisks2_mount_unmount_with_operation (GMount              *_mount,
 
   g_task_set_task_data (task, data, (GDestroyNotify)unmount_data_free);
 
+#ifdef HAVE_BURN
+  if (mount->is_burn_mount)
+    {
+      /* burn mounts are really never mounted so complete successfully immediately */
+      g_task_return_boolean (task, TRUE);
+      g_object_unref (task);
+      return;
+    }
+#endif
+
   block = NULL;
   if (mount->volume != NULL)
     block = gvfs_udisks2_volume_get_block (mount->volume);
@@ -1192,13 +1201,41 @@ gvfs_udisks2_mount_guess_content_type_sync (GMount        *_mount,
 
   p = g_ptr_array_new ();
 
-  /* sniff content type */
-  x_content_types = g_content_type_guess_for_tree (mount->root);
-  if (x_content_types != NULL)
+#ifdef HAVE_BURN
+  /* doesn't make sense to probe blank discs - look at the disc type instead */
+  if (mount->is_burn_mount)
     {
-      for (n = 0; x_content_types[n] != NULL; n++)
-        g_ptr_array_add (p, g_strdup (x_content_types[n]));
-      g_strfreev (x_content_types);
+      GDrive *drive;
+      drive = gvfs_udisks2_mount_get_drive (_mount);
+      if (drive != NULL)
+        {
+          UDisksDrive *udisks_drive = gvfs_udisks2_drive_get_udisks_drive (GVFS_UDISKS2_DRIVE (drive));;
+          const gchar *media = udisks_drive_get_media (udisks_drive);
+          if (media != NULL)
+            {
+              if (g_str_has_prefix (media, "optical_dvd"))
+                g_ptr_array_add (p, g_strdup ("x-content/blank-dvd"));
+              else if (g_str_has_prefix (media, "optical_hddvd"))
+                g_ptr_array_add (p, g_strdup ("x-content/blank-hddvd"));
+              else if (g_str_has_prefix (media, "optical_bd"))
+                g_ptr_array_add (p, g_strdup ("x-content/blank-bd"));
+              else
+                g_ptr_array_add (p, g_strdup ("x-content/blank-cd")); /* assume CD */
+            }
+          g_object_unref (drive);
+        }
+    }
+  else
+#endif
+    {
+      /* sniff content type */
+      x_content_types = g_content_type_guess_for_tree (mount->root);
+      if (x_content_types != NULL)
+        {
+          for (n = 0; x_content_types[n] != NULL; n++)
+            g_ptr_array_add (p, g_strdup (x_content_types[n]));
+          g_strfreev (x_content_types);
+        }
     }
 
   if (mount->device_file != NULL)

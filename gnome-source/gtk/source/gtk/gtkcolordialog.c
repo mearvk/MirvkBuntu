@@ -30,14 +30,15 @@
 /**
  * GtkColorDialog:
  *
- * Asynchronous API to present a color chooser dialog.
- *
- * `GtkColorDialog` collects the arguments that are needed to present
- * the dialog to the user, such as a title for the dialog and whether
- * it should be modal.
+ * A `GtkColorDialog` object collects the arguments that
+ * are needed to present a color chooser dialog to the
+ * user, such as a title for the dialog and whether it
+ * should be modal.
  *
  * The dialog is shown with the [method@Gtk.ColorDialog.choose_rgba]
- * function.
+ * function. This API follows the GIO async pattern, and the
+ * result can be obtained by calling
+ * [method@Gtk.ColorDialog.choose_rgba_finish].
  *
  * See [class@Gtk.ColorDialogButton] for a convenient control
  * that uses `GtkColorDialog` and presents the results.
@@ -152,19 +153,20 @@ gtk_color_dialog_class_init (GtkColorDialogClass *class)
   object_class->set_property = gtk_color_dialog_set_property;
 
   /**
-   * GtkColorDialog:title:
+   * GtkColorDialog:title: (attributes org.gtk.Property.get=gtk_color_dialog_get_title org.gtk.Property.set=gtk_color_dialog_set_title)
    *
-   * A title that may be shown on the color chooser dialog.
+   * A title that may be shown on the color chooser
+   * dialog that is presented by [method@Gtk.ColorDialog.choose_rgba].
    *
    * Since: 4.10
    */
   properties[PROP_TITLE] =
       g_param_spec_string ("title", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkColorDialog:modal:
+   * GtkColorDialog:modal: (attributes org.gtk.Property.get=gtk_color_dialog_get_modal org.gtk.Property.set=gtk_color_dialog_set_modal)
    *
    * Whether the color chooser dialog is modal.
    *
@@ -173,14 +175,14 @@ gtk_color_dialog_class_init (GtkColorDialogClass *class)
   properties[PROP_MODAL] =
       g_param_spec_boolean ("modal", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkColorDialog:with-alpha:
+   * GtkColorDialog:with-alpha: (attributes org.gtk.Property.get=gtk_color_dialog_get_with_alpha org.gtk.Property.set=gtk_color_dialog_set_with_alpha)
    *
    * Whether colors may have alpha (translucency).
    *
-   * When with-alpha is false, the color that is selected
+   * When with-alpha is %FALSE, the color that is selected
    * will be forced to have alpha == 1.
    *
    * Since: 4.10
@@ -188,7 +190,7 @@ gtk_color_dialog_class_init (GtkColorDialogClass *class)
   properties[PROP_WITH_ALPHA] =
       g_param_spec_boolean ("with-alpha", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }
@@ -216,7 +218,7 @@ gtk_color_dialog_new (void)
 
 /**
  * gtk_color_dialog_get_title:
- * @self: a color dialog
+ * @self: a `GtkColorDialog`
  *
  * Returns the title that will be shown on the
  * color chooser dialog.
@@ -235,7 +237,7 @@ gtk_color_dialog_get_title (GtkColorDialog *self)
 
 /**
  * gtk_color_dialog_set_title:
- * @self: a color dialog
+ * @self: a `GtkColorDialog`
  * @title: the new title
  *
  * Sets the title that will be shown on the
@@ -264,13 +266,13 @@ gtk_color_dialog_set_title (GtkColorDialog *self,
 
 /**
  * gtk_color_dialog_get_modal:
- * @self: a color dialog
+ * @self: a `GtkColorDialog`
  *
  * Returns whether the color chooser dialog
  * blocks interaction with the parent window
  * while it is presented.
  *
- * Returns: true if the color chooser dialog is modal
+ * Returns: `TRUE` if the color chooser dialog is modal
  *
  * Since: 4.10
  */
@@ -284,7 +286,7 @@ gtk_color_dialog_get_modal (GtkColorDialog *self)
 
 /**
  * gtk_color_dialog_set_modal:
- * @self: a color dialog
+ * @self: a `GtkColorDialog`
  * @modal: the new value
  *
  * Sets whether the color chooser dialog
@@ -309,11 +311,11 @@ gtk_color_dialog_set_modal (GtkColorDialog *self,
 
 /**
  * gtk_color_dialog_get_with_alpha:
- * @self: a color dailog
+ * @self: a `GtkColorDialog`
  *
  * Returns whether colors may have alpha.
  *
- * Returns: true if colors may have alpha
+ * Returns: `TRUE` if colors may have alpha
  *
  * Since: 4.10
  */
@@ -327,7 +329,7 @@ gtk_color_dialog_get_with_alpha (GtkColorDialog *self)
 
 /**
  * gtk_color_dialog_set_with_alpha:
- * @self: a color dialog
+ * @self: a `GtkColorDialog`
  * @with_alpha: the new value
  *
  * Sets whether colors may have alpha.
@@ -424,15 +426,19 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
 /**
  * gtk_color_dialog_choose_rgba:
- * @self: a color dialog
- * @parent: (nullable): the parent window
+ * @self: a `GtkColorDialog`
+ * @parent: (nullable): the parent `GtkWindow`
  * @initial_color: (nullable): the color to select initially
- * @cancellable: (nullable): a cancellable to cancel the operation
- * @callback: (scope async) (closure user_data): a callback to call
- *   when the operation is complete
- * @user_data: data to pass to @callback
+ * @cancellable: (nullable): a `GCancellable` to cancel the operation
+ * @callback: (scope async): a callback to call when the operation is complete
+ * @user_data: (closure callback): data to pass to @callback
  *
- * Presents a color chooser dialog to the user.
+ * This function initiates a color choice operation by
+ * presenting a color chooser dialog to the user.
+ *
+ * The @callback will be called when the dialog is dismissed.
+ * It should call [method@Gtk.ColorDialog.choose_rgba_finish]
+ * to obtain the result.
  *
  * Since: 4.10
  */
@@ -465,16 +471,15 @@ gtk_color_dialog_choose_rgba (GtkColorDialog       *self,
 
 /**
  * gtk_color_dialog_choose_rgba_finish:
- * @self: a color dialog
- * @result: the result
+ * @self: a `GtkColorDialog`
+ * @result: a `GAsyncResult`
  * @error: return location for a [enum@Gtk.DialogError] error
  *
- * Finishes the [method@Gtk.ColorDialog.choose_rgba] call
+ * Finishes the [method@Gtk.ColorDialog.choose_rgba] call and
+ * returns the resulting color.
  *
- * Note that this function returns a [error@Gtk.DialogError.DISMISSED]
- * error if the user cancels the dialog.
- *
- * Returns: (transfer full): the selected color
+ * Returns: (nullable) (transfer full): the selected color, or
+ *   `NULL` and @error is set
  *
  * Since: 4.10
  */
@@ -495,4 +500,4 @@ gtk_color_dialog_choose_rgba_finish (GtkColorDialog  *self,
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

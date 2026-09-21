@@ -25,10 +25,11 @@
 
 import argparse
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from generate_gsettings_schemas import _discover_schemas, build_schema_tree
+from generate_gsettings_schemas import _discover_schemas, generate_schema_xml
 
 
 def _normalize_summary(summary: str | None) -> str:
@@ -82,15 +83,13 @@ def generate_documentation(
 ) -> str:
     """Generate markdown documentation from generated schema XML."""
 
-    root = build_schema_tree(src_dir)
+    with tempfile.TemporaryDirectory(prefix="orca-gsettings-") as tmpdir:
+        xml_path = Path(tmpdir) / "org.gnome.Orca.gschema.xml"
+        generate_schema_xml(src_dir, str(xml_path))
+        root = ET.parse(xml_path).getroot()
 
-    schemas, settings, _enums = _discover_schemas(src_dir)
+    schemas, _settings, _enums = _discover_schemas(src_dir)
     schema_names_by_id = {schema_id: schema_name for schema_name, schema_id in schemas.items()}
-    hidden_settings = {
-        (setting.get("schema"), setting.get("key"))
-        for setting in settings
-        if setting.get("user_visible") is False
-    }
 
     enum_values: dict[str, list[tuple[str, str]]] = {}
     for enum_el in sorted(root.findall("enum"), key=lambda el: el.get("id", "")):
@@ -113,16 +112,9 @@ def generate_documentation(
     lines.append("Orca stores settings under `/org/gnome/orca/`.")
     lines.append("- Profile-level settings: `/org/gnome/orca/<profile>/<schema-name>/`")
     lines.append("- App-specific overrides: `/org/gnome/orca/<profile>/apps/<app>/<schema-name>/`")
-    lines.append(
-        "- Voice settings: `/org/gnome/orca/<profile>/voice-sets/<voice-set>/<voice-type>/`"
-    )
+    lines.append("- Voice settings: `/org/gnome/orca/<profile>/voices/<voice-type>/`")
     lines.append(
         "- App-specific voice overrides: "
-        "`/org/gnome/orca/<profile>/apps/<app>/voice-sets/<voice-set>/<voice-type>/`"
-    )
-    lines.append("- Voice settings (deprecated): `/org/gnome/orca/<profile>/voices/<voice-type>/`")
-    lines.append(
-        "- App-specific voice overrides (deprecated): "
         "`/org/gnome/orca/<profile>/apps/<app>/voices/<voice-type>/`"
     )
     lines.append("")
@@ -133,10 +125,6 @@ def generate_documentation(
     )
     lines.append("- `<schema-name>`: Orca schema name, e.g. `typing-echo`, `speech`, `braille`.")
     lines.append("- `<app>`: app ID used for app-specific overrides.")
-    lines.append(
-        "- `<voice-set>`: voice set name. `primary` is the main set; "
-        "language-specific sets use language codes."
-    )
     lines.append("- `<voice-type>`: voice type (`default`, `uppercase`, `hyperlink`, `system`).")
     lines.append("")
     lines.append(
@@ -184,20 +172,40 @@ def generate_documentation(
     lines.append("- `dconf watch /org/gnome/orca/default/speech/`: one schema path")
     lines.append("- `gsettings monitor org.gnome.Orca.Speech:/org/gnome/orca/default/speech/`")
     lines.append("")
-    lines.append("## Migrating from JSON Settings")
+    lines.append("## Migrating to GSettings")
     lines.append("")
     lines.append(
-        "Orca v50 automatically migrated JSON settings from `~/.local/share/orca/` "
-        "into dconf on first launch. Users upgrading from Orca v49 or earlier directly "
-        "to v51 or later can use the standalone import tool:"
+        "On launch, Orca automatically migrates JSON settings from `~/.local/share/orca/` "
+        "into dconf if there are no dconf settings found."
     )
     lines.append("")
-    lines.append("```sh")
-    lines.append("python tools/gsettings_import_json.py import ~/.local/share/orca")
-    lines.append("```")
+    lines.append(
+        "`orca -i DIR` / `orca --import-dir DIR` can also import JSON settings manually. "
+        "This replaces the current `/org/gnome/orca/` settings in dconf, so back up first "
+        "if needed (see Transferring, Backing Up, and Restoring Settings)."
+    )
     lines.append("")
     lines.append(
-        "Use `import --dry-run` to preview writes without changing anything. "
+        "There is also a stand-alone tool mainly for testing and debugging the migration: "
+        "`python tools/gsettings_import_export.py <subcommand> ...`"
+    )
+    lines.append("")
+    lines.append(
+        "- `import DIR`: load JSON settings from `DIR` into dconf. "
+        "Use `import --dry-run` to preview writes without changing anything."
+    )
+    lines.append("- `export DIR`: save current dconf settings to JSON files in `DIR`.")
+    lines.append(
+        "- `diff SRC_DIR OUT_DIR`: export current dconf to JSON in `OUT_DIR` and compare "
+        "against `SRC_DIR`. Nothing is imported; useful for verifying migration results."
+    )
+    lines.append(
+        "- `roundtrip SRC_DIR OUT_DIR`: reset `/org/gnome/orca/`, import from `SRC_DIR`, "
+        "export to `OUT_DIR`, then diff. Tests the full import/export cycle from a clean state."
+    )
+    lines.append("")
+    lines.append(
+        "`diff` and `roundtrip` accept `-v` / `--verbose` for fuller output. "
         "Use `--prefix <orca-prefix>` if schemas are installed in a non-default prefix."
     )
     lines.append("")
@@ -239,12 +247,7 @@ def generate_documentation(
             schema_el.findall("key"),
             key=lambda el: (el.get("name", "") != "version", el.get("name", "")),
         )
-        keys = [
-            key
-            for key in keys_all
-            if key.get("name", "") != "version"
-            and (schema_name, key.get("name", "")) not in hidden_settings
-        ]
+        keys = [key for key in keys_all if key.get("name", "") != "version"]
 
         lines.append(f"### `{schema_id}` (schema-name: `{schema_name}`)")
         lines.append("")
@@ -273,8 +276,8 @@ def main() -> int:
     parser.add_argument(
         "output",
         nargs="?",
-        default=str(Path(__file__).resolve().parent.parent / "docs" / "gsettings-schemas.md"),
-        help="Output markdown path (default: ../docs/gsettings-schemas.md)",
+        default=str(Path(__file__).resolve().parent.parent / "GSETTINGS-SCHEMAS.md"),
+        help="Output markdown path (default: ../GSETTINGS-SCHEMAS.md)",
     )
     parser.add_argument(
         "--enum-allowed",

@@ -91,7 +91,6 @@ WHERE_AM_I_PRESENTER_HANDLERS = frozenset(
         "whereAmILinkHandler",
         "whereAmISelectionHandler",
         "readCharAttributesHandler",
-        "show_character_attributes",
         "presentSizeAndPositionHandler",
         "present_default_button",
         "present_cell_formula",
@@ -133,7 +132,6 @@ SYSTEM_INFORMATION_PRESENTER_HANDLERS = frozenset(
         "presentDateHandler",
         "present_battery_status",
         "present_cpu_and_memory_usage",
-        "present_modifier_keys_state",
     },
 )
 
@@ -149,11 +147,8 @@ ACTION_PRESENTER_HANDLERS = frozenset(
     },
 )
 
-MOUSE_PRESENTER_HANDLERS = frozenset(
+MOUSE_REVIEW_HANDLERS = frozenset(
     {
-        "leftClickReviewItemHandler",
-        "rightClickReviewItemHandler",
-        "routePointerToItemHandler",
         "toggleMouseReviewHandler",
     },
 )
@@ -186,14 +181,6 @@ CLIPBOARD_HANDLERS = frozenset(
 TYPING_ECHO_PRESENTER_HANDLERS = frozenset(
     {
         "cycleKeyEchoHandler",
-    },
-)
-
-SCREEN_READER_MANAGER_HANDLERS = frozenset(
-    {
-        "appPreferencesSettingsHandler",
-        "preferencesSettingsHandler",
-        "shutdownHandler",
     },
 )
 
@@ -240,7 +227,6 @@ STRUCTURAL_NAVIGATOR_HANDLERS = frozenset(
         "list_links",
         "list_list_items",
         "list_lists",
-        "list_math",
         "list_paragraphs",
         "list_radio_buttons",
         "list_tables",
@@ -268,7 +254,6 @@ STRUCTURAL_NAVIGATOR_HANDLERS = frozenset(
         "next_list",
         "next_list_item",
         "next_live_region",
-        "next_math",
         "next_paragraph",
         "next_radio_button",
         "next_separator",
@@ -297,7 +282,6 @@ STRUCTURAL_NAVIGATOR_HANDLERS = frozenset(
         "previous_list",
         "previous_list_item",
         "previous_live_region",
-        "previous_math",
         "previous_paragraph",
         "previous_radio_button",
         "previous_separator",
@@ -363,29 +347,29 @@ SPEECH_MANAGER_HANDLERS = frozenset(
 SPEECH_PRESENTER_HANDLERS = frozenset(
     {
         "changeNumberStyleHandler",
-        "toggleSpeakingIndentationHandler",
+        "toggleSpeakingIndentationJustificationHandler",
         "toggleSpeechVerbosityHandler",
         "toggleTableCellReadModeHandler",
-    },
-)
-
-BRAILLE_PRESENTER_HANDLERS = frozenset(
-    {
-        "contractedBrailleHandler",
-        "goBrailleHomeHandler",
-        "panBrailleLeftHandler",
-        "panBrailleRightHandler",
-        "processBrailleCutBeginHandler",
-        "processBrailleCutLineHandler",
-        "processRoutingKeyHandler",
-        "toggle_braille_monitor",
     },
 )
 
 # Script handlers - these will eventually move to presenter/manager modules
 DEFAULT_SCRIPT_HANDLERS = frozenset(
     {
+        "appPreferencesSettingsHandler",
+        "contractedBrailleHandler",
         "cycleSettingsProfileHandler",
+        "goBrailleHomeHandler",
+        "leftClickReviewItemHandler",
+        "panBrailleLeftHandler",
+        "panBrailleRightHandler",
+        "preferencesSettingsHandler",
+        "processBrailleCutBeginHandler",
+        "processBrailleCutLineHandler",
+        "processRoutingKeyHandler",
+        "rightClickReviewItemHandler",
+        "routePointerToItemHandler",
+        "shutdownHandler",
     },
 )
 
@@ -408,13 +392,12 @@ EXPECTED_TOTAL_COMMANDS = (
     + len(SYSTEM_INFORMATION_PRESENTER_HANDLERS)
     + len(LEARN_MODE_PRESENTER_HANDLERS)
     + len(ACTION_PRESENTER_HANDLERS)
-    + len(MOUSE_PRESENTER_HANDLERS)
+    + len(MOUSE_REVIEW_HANDLERS)
     + len(SLEEP_MODE_MANAGER_HANDLERS)
     + len(BYPASS_MODE_MANAGER_HANDLERS)
     + len(DEBUGGING_TOOLS_MANAGER_HANDLERS)
     + len(CLIPBOARD_HANDLERS)
     + len(TYPING_ECHO_PRESENTER_HANDLERS)
-    + len(SCREEN_READER_MANAGER_HANDLERS)
     + len(CARET_NAVIGATOR_HANDLERS)
     + len(STRUCTURAL_NAVIGATOR_HANDLERS)
     + len(TABLE_NAVIGATOR_HANDLERS)
@@ -422,10 +405,13 @@ EXPECTED_TOTAL_COMMANDS = (
     + len(SAY_ALL_PRESENTER_HANDLERS)
     + len(SPEECH_MANAGER_HANDLERS)
     + len(SPEECH_PRESENTER_HANDLERS)
-    + len(BRAILLE_PRESENTER_HANDLERS)
     + len(DEFAULT_SCRIPT_HANDLERS)
     + len(DOCUMENT_PRESENTER_HANDLERS)
 )
+
+
+class Fake:
+    """A simple class to use as a mock for Atspi constants and classes."""
 
 
 @pytest.mark.unit
@@ -469,6 +455,10 @@ class TestCommandRegistry:
 
         gi_repository_mock = essential_modules["gi.repository"]
         atspi_mock = essential_modules["gi.repository.Atspi"]
+        atspi_mock.Role = Fake
+        atspi_mock.Accessible = Fake
+        atspi_mock.MatchRule = Fake
+        atspi_mock.Relation = Fake
         atspi_mock.get_version = test_context.Mock(return_value=(2, 52, 0))
         gi_repository_mock.Atspi = atspi_mock
 
@@ -513,6 +503,9 @@ class TestCommandRegistry:
 
         debug_mock = essential_modules["orca.debug"]
         debug_mock.debugFile = None
+
+        flat_review_mock = essential_modules["orca.flat_review"]
+        flat_review_mock.Context = Fake
 
         return essential_modules
 
@@ -655,9 +648,6 @@ class TestCommandRegistry:
         ]
         essential_modules = test_context.setup_shared_dependencies(additional_modules)
 
-        essential_modules["orca.cmdnames"].SWITCH_VOICE_SET = "Switch voice to: %s"
-        essential_modules["orca.guilabels"].VOICE_SET_GLOBAL = "Global"
-
         essential_modules["orca.orca_i18n"]._ = lambda x: x
         essential_modules["orca.orca_i18n"].C_ = lambda c, x: x
         essential_modules["orca.orca_i18n"].ngettext = lambda s, p, n: s if n == 1 else p
@@ -679,30 +669,6 @@ class TestCommandRegistry:
         acss_mock.ACSS.RATE = "rate"
         acss_mock.ACSS.AVERAGE_PITCH = "average-pitch"
         acss_mock.ACSS.GAIN = "gain"
-
-        return essential_modules
-
-    def _setup_braille_dependencies(self, test_context: OrcaTestContext) -> dict[str, MagicMock]:
-        """Sets up dependencies for braille presenter testing."""
-
-        additional_modules = ["orca.braille", "orca.braille_monitor", "orca.orca_platform"]
-        essential_modules = test_context.setup_shared_dependencies(additional_modules)
-
-        platform_mock = essential_modules["orca.orca_platform"]
-        platform_mock.tablesdir = "/usr/share/liblouis/tables"
-
-        from orca import gsettings_registry
-
-        gsettings_registry.get_registry().clear_runtime_values()
-
-        test_context.patch(
-            "orca.braille_presenter.BraillePresenter._get_table_files",
-            return_value=[
-                "en-us-g1.ctb",
-                "en-us-g2.ctb",
-                "en-us-comp8.ctb",
-            ],
-        )
 
         return essential_modules
 
@@ -930,23 +896,21 @@ class TestCommandRegistry:
 
         assert not missing, f"Missing commands in bypass_mode_manager: {missing}"
 
-    def test_mouse_presenter_handlers_exist(self, test_context: OrcaTestContext) -> None:
-        """Test that all mouse presenter handlers are registered."""
+    def test_mouse_review_handlers_exist(self, test_context: OrcaTestContext) -> None:
+        """Test that all mouse review handlers are registered."""
 
         self._setup_dependencies(test_context)
         from orca import command_manager
-        from orca.mouse_presenter import get_presenter
+        from orca.mouse_review import get_reviewer
 
-        presenter = get_presenter()
-        presenter.set_up_commands()
+        reviewer = get_reviewer()
+        reviewer.set_up_commands()
         cmd_manager = command_manager.get_manager()
 
         missing = frozenset(
-            name
-            for name in MOUSE_PRESENTER_HANDLERS
-            if cmd_manager.get_keyboard_command(name) is None
+            name for name in MOUSE_REVIEW_HANDLERS if cmd_manager.get_keyboard_command(name) is None
         )
-        assert not missing, f"Missing commands in mouse_presenter: {missing}"
+        assert not missing, f"Missing commands in mouse_review: {missing}"
 
     def test_typing_echo_presenter_handlers_exist(self, test_context: OrcaTestContext) -> None:
         """Test that all typing echo presenter handlers are registered."""
@@ -981,24 +945,6 @@ class TestCommandRegistry:
             name for name in CLIPBOARD_HANDLERS if cmd_manager.get_keyboard_command(name) is None
         )
         assert not missing, f"Missing commands in clipboard: {missing}"
-
-    def test_screen_reader_manager_handlers_exist(self, test_context: OrcaTestContext) -> None:
-        """Test that all screen reader manager handlers are registered."""
-
-        self._setup_dependencies(test_context)
-        from orca import command_manager
-        from orca.screen_reader_manager import get_manager
-
-        manager = get_manager()
-        manager.set_up_commands()
-        cmd_manager = command_manager.get_manager()
-
-        missing = frozenset(
-            name
-            for name in SCREEN_READER_MANAGER_HANDLERS
-            if cmd_manager.get_keyboard_command(name) is None
-        )
-        assert not missing, f"Missing commands in screen_reader_manager: {missing}"
 
     def test_caret_navigator_handlers_exist(self, test_context: OrcaTestContext) -> None:
         """Test that all caret navigator commands are registered with CommandManager.
@@ -1130,39 +1076,6 @@ class TestCommandRegistry:
         )
         assert not missing, f"Missing commands in speech_presenter: {missing}"
 
-    def test_braille_presenter_handlers_exist(self, test_context: OrcaTestContext) -> None:
-        """Test that all braille presenter handlers are registered."""
-
-        self._setup_braille_dependencies(test_context)
-        from orca import command_manager
-        from orca.braille_presenter import get_presenter
-
-        presenter = get_presenter()
-        presenter.set_up_commands()
-
-        manager = command_manager.get_manager()
-        keyboard_handlers = {
-            "contractedBrailleHandler",
-            "panBrailleLeftHandler",
-            "panBrailleRightHandler",
-            "toggle_braille_monitor",
-        }
-        missing_keyboard = frozenset(
-            name for name in keyboard_handlers if manager.get_keyboard_command(name) is None
-        )
-        assert not missing_keyboard, (
-            f"Missing keyboard commands in braille_presenter: {missing_keyboard}"
-        )
-
-        braille_handlers = BRAILLE_PRESENTER_HANDLERS - {"toggle_braille_monitor"}
-        registered_braille_handlers = {
-            command.get_name() for command in manager.get_all_braille_commands()
-        }
-        missing_braille = braille_handlers - registered_braille_handlers
-        assert not missing_braille, (
-            f"Missing braille commands in braille_presenter: {missing_braille}"
-        )
-
     def test_document_presenter_handlers_exist(self, test_context: OrcaTestContext) -> None:
         """Test that all document presenter handlers are registered."""
 
@@ -1200,13 +1113,12 @@ class TestCommandRegistry:
             + len(SYSTEM_INFORMATION_PRESENTER_HANDLERS)
             + len(LEARN_MODE_PRESENTER_HANDLERS)
             + len(ACTION_PRESENTER_HANDLERS)
-            + len(MOUSE_PRESENTER_HANDLERS)
+            + len(MOUSE_REVIEW_HANDLERS)
             + len(SLEEP_MODE_MANAGER_HANDLERS)
             + len(BYPASS_MODE_MANAGER_HANDLERS)
             + len(DEBUGGING_TOOLS_MANAGER_HANDLERS)
             + len(CLIPBOARD_HANDLERS)
             + len(TYPING_ECHO_PRESENTER_HANDLERS)
-            + len(SCREEN_READER_MANAGER_HANDLERS)
             + len(CARET_NAVIGATOR_HANDLERS)
             + len(STRUCTURAL_NAVIGATOR_HANDLERS)
             + len(TABLE_NAVIGATOR_HANDLERS)
@@ -1214,7 +1126,6 @@ class TestCommandRegistry:
             + len(SAY_ALL_PRESENTER_HANDLERS)
             + len(SPEECH_MANAGER_HANDLERS)
             + len(SPEECH_PRESENTER_HANDLERS)
-            + len(BRAILLE_PRESENTER_HANDLERS)
             + len(DEFAULT_SCRIPT_HANDLERS)
             + len(DOCUMENT_PRESENTER_HANDLERS)
         )

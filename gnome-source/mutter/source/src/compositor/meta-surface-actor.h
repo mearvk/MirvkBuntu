@@ -19,15 +19,18 @@ struct _MetaSurfaceActorClass
   /*< private >*/
   ClutterActorClass parent_class;
 
-  void (* process_damage) (MetaSurfaceActor   *actor,
-                           const MtkRectangle *area);
-  gboolean (* is_opaque) (MetaSurfaceActor *actor);
+  void     (* process_damage)    (MetaSurfaceActor *actor,
+                                  int x, int y, int width, int height);
+  gboolean (* is_opaque)         (MetaSurfaceActor *actor);
 };
 
 MetaShapedTexture *meta_surface_actor_get_texture (MetaSurfaceActor *self);
 
-void meta_surface_actor_update_area (MetaSurfaceActor   *self,
-                                     const MtkRectangle *area);
+void meta_surface_actor_update_area (MetaSurfaceActor *self,
+                                     int               x,
+                                     int               y,
+                                     int               width,
+                                     int               height);
 
 gboolean meta_surface_actor_is_obscured (MetaSurfaceActor *self);
 
@@ -37,27 +40,19 @@ gboolean meta_surface_actor_is_obscured_on_stage_view (MetaSurfaceActor *self,
                                                        ClutterStageView *stage_view,
                                                        float            *unobscurred_fraction);
 
+gboolean meta_surface_actor_contains_rect (MetaSurfaceActor *surface_actor,
+                                           MtkRectangle     *rect);
+
 void meta_surface_actor_set_input_region (MetaSurfaceActor *self,
                                           MtkRegion        *region);
 void meta_surface_actor_set_opaque_region (MetaSurfaceActor *self,
                                            MtkRegion        *region);
-
-void meta_surface_actor_set_background_blur_region (MetaSurfaceActor *surface_actor,
-                                                    MtkRegion        *region);
-void meta_surface_actor_invalidate_background_blur (MetaSurfaceActor *surface_actor);
-void meta_surface_actor_paint_background_effects (MetaSurfaceActor    *surface_actor,
-                                                  ClutterPaintNode    *root_node,
-                                                  ClutterPaintContext *paint_context,
-                                                  ClutterActorBox     *content_box,
-                                                  int                  content_width,
-                                                  int                  content_height,
-                                                  MtkRegion           *clip_region,
-                                                  uint8_t              opacity);
+MtkRegion * meta_surface_actor_get_opaque_region (MetaSurfaceActor *self);
 
 void meta_surface_actor_schedule_update (MetaSurfaceActor *self);
 
-void meta_surface_actor_process_damage (MetaSurfaceActor   *actor,
-                                        const MtkRectangle *area);
+void meta_surface_actor_process_damage (MetaSurfaceActor *actor,
+                                        int x, int y, int width, int height);
 
 gboolean meta_surface_actor_is_opaque (MetaSurfaceActor *actor);
 

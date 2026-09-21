@@ -102,8 +102,7 @@ typedef enum {
  * GtkPrintOperationAction:
  * @GTK_PRINT_OPERATION_ACTION_PRINT_DIALOG: Show the print dialog.
  * @GTK_PRINT_OPERATION_ACTION_PRINT: Start to print without showing
- *   the print dialog, based on the current print settings, if possible.
- *   Depending on the platform, a print dialog might appear anyway.
+ *   the print dialog, based on the current print settings.
  * @GTK_PRINT_OPERATION_ACTION_PREVIEW: Show the print preview.
  * @GTK_PRINT_OPERATION_ACTION_EXPORT: Export to a file. This requires
  *   the export-filename property to be set.
@@ -222,7 +221,7 @@ GDK_AVAILABLE_IN_ALL
 GQuark gtk_print_error_quark (void);
 
 GDK_AVAILABLE_IN_ALL
-GType                   gtk_print_operation_get_type               (void);
+GType                   gtk_print_operation_get_type               (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkPrintOperation *     gtk_print_operation_new                    (void);
 GDK_AVAILABLE_IN_ALL

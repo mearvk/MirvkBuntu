@@ -23,8 +23,8 @@ G_DEFINE_ABSTRACT_TYPE (MetaCrtcNative, meta_crtc_native,
                         META_TYPE_CRTC)
 
 gboolean
-meta_crtc_native_is_transform_handled (MetaCrtcNative      *crtc_native,
-                                       MtkMonitorTransform  transform)
+meta_crtc_native_is_transform_handled (MetaCrtcNative       *crtc_native,
+                                       MetaMonitorTransform  transform)
 {
   MetaCrtcNativeClass *klass = META_CRTC_NATIVE_GET_CLASS (crtc_native);
 
@@ -37,14 +37,6 @@ meta_crtc_native_is_hw_cursor_supported (MetaCrtcNative *crtc_native)
   MetaCrtcNativeClass *klass = META_CRTC_NATIVE_GET_CLASS (crtc_native);
 
   return klass->is_hw_cursor_supported (crtc_native);
-}
-
-int64_t
-meta_crtc_native_get_deadline_evasion (MetaCrtcNative *crtc_native)
-{
-  MetaCrtcNativeClass *klass = META_CRTC_NATIVE_GET_CLASS (crtc_native);
-
-  return klass->get_deadline_evasion (crtc_native);
 }
 
 static void

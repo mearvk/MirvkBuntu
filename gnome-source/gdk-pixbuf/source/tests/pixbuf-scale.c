@@ -33,30 +33,20 @@ test_scale (gconstpointer data)
   GdkPixbuf *pixbuf;
   gint width, height;
 
-  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
-  ref = gdk_pixbuf_new_from_file (path, &error);
-
-  if (g_error_matches (error, GDK_PIXBUF_ERROR, GDK_PIXBUF_ERROR_UNKNOWN_TYPE))
+  if (!format_supported (filename))
     {
-      g_clear_error (&error);
       g_test_skip ("format not supported");
       return;
     }
 
+  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
+  ref = gdk_pixbuf_new_from_file (path, &error);
   g_assert_no_error (error);
 
   width = gdk_pixbuf_get_width (ref);
   height = gdk_pixbuf_get_height (ref);
 
   pixbuf = gdk_pixbuf_new_from_file_at_scale (path, 2 * width, 3 * height, FALSE, &error);
-  if (g_error_matches (error, GDK_PIXBUF_ERROR, GDK_PIXBUF_ERROR_UNKNOWN_TYPE))
-    {
-      g_clear_error (&error);
-      g_test_skip ("format not supported");
-      g_object_unref (ref);
-      return;
-    }
-
   g_assert_no_error (error);
 
   g_assert_cmpint (gdk_pixbuf_get_width (pixbuf), ==, 2 * width);
@@ -85,15 +75,14 @@ test_scale_down (gconstpointer data)
   GdkPixbuf *pixbuf;
   gint width, height;
 
-  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
-  ref = gdk_pixbuf_new_from_file (path, &error);
-
-  if (g_error_matches (error, GDK_PIXBUF_ERROR, GDK_PIXBUF_ERROR_UNKNOWN_TYPE))
+  if (!format_supported (filename))
     {
-      g_clear_error (&error);
       g_test_skip ("format not supported");
       return;
     }
+
+  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
+  ref = gdk_pixbuf_new_from_file (path, &error);
 
   if (skip_if_insufficient_memory (&error))
     return;
@@ -117,15 +106,14 @@ test_add_alpha (gconstpointer data)
   GdkPixbuf *ref;
   GdkPixbuf *pixbuf;
 
-  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
-  ref = gdk_pixbuf_new_from_file (path, &error);
-
-  if (g_error_matches (error, GDK_PIXBUF_ERROR, GDK_PIXBUF_ERROR_UNKNOWN_TYPE))
+  if (!format_supported (filename))
     {
-      g_clear_error (&error);
       g_test_skip ("format not supported");
       return;
     }
+
+  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
+  ref = gdk_pixbuf_new_from_file (path, &error);
 
   if (skip_if_insufficient_memory (&error))
     return;
@@ -158,15 +146,14 @@ test_rotate (gconstpointer data)
   GdkPixbuf *ref;
   GdkPixbuf *pixbuf;
 
-  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
-  ref = gdk_pixbuf_new_from_file (path, &error);
-
-  if (g_error_matches (error, GDK_PIXBUF_ERROR, GDK_PIXBUF_ERROR_UNKNOWN_TYPE))
+  if (!format_supported (filename))
     {
-      g_clear_error (&error);
       g_test_skip ("format not supported");
       return;
     }
+
+  path = g_test_get_filename (G_TEST_DIST, filename, NULL);
+  ref = gdk_pixbuf_new_from_file (path, &error);
 
   if (skip_if_insufficient_memory (&error))
     return;

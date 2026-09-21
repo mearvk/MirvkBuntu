@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import * as Params from '../../misc/params.js';
@@ -29,8 +31,6 @@ class AutomountManager {
     }
 
     enable() {
-        this._cancellable = new Gio.Cancellable();
-
         this._volumeMonitor.connectObject(
             'volume-added', this._onVolumeAdded.bind(this),
             'volume-removed', this._onVolumeRemoved.bind(this),
@@ -38,14 +38,11 @@ class AutomountManager {
             'drive-disconnected', this._onDriveDisconnected.bind(this),
             'drive-eject-button', this._onDriveEjectButton.bind(this), this);
 
-        this._mountAllId = GLib.idle_add_once(GLib.PRIORITY_DEFAULT, this._startupMountAll.bind(this));
+        this._mountAllId = GLib.idle_add(GLib.PRIORITY_DEFAULT, this._startupMountAll.bind(this));
         GLib.Source.set_name_by_id(this._mountAllId, '[gnome-shell] this._startupMountAll');
     }
 
     disable() {
-        this._cancellable?.cancel();
-        this._cancellable = null;
-
         this._volumeMonitor.disconnectObject(this);
 
         if (this._mountAllId > 0) {
@@ -59,11 +56,11 @@ class AutomountManager {
             const [inhibited] =
                 await this._session.IsInhibitedAsync(GNOME_SESSION_AUTOMOUNT_INHIBIT);
             this._inhibited = inhibited;
-        } catch {}
+        } catch (e) {}
     }
 
     _startupMountAll() {
-        const volumes = this._volumeMonitor.get_volumes();
+        let volumes = this._volumeMonitor.get_volumes();
         volumes.forEach(volume => {
             this._checkAndMountVolume(volume, {
                 checkSession: false,
@@ -73,6 +70,7 @@ class AutomountManager {
         });
 
         this._mountAllId = 0;
+        return GLib.SOURCE_REMOVE;
     }
 
     _onDriveConnected() {
@@ -81,9 +79,8 @@ class AutomountManager {
         if (!this._session.SessionIsActive)
             return;
 
-        const player = global.display.get_sound_player();
-        player.play_from_file(
-            Gio.File.new_for_path(`${global.datadir}/sounds/device-added.oga`),
+        let player = global.display.get_sound_player();
+        player.play_from_theme('device-added-media',
             _('External drive connected'),
             null);
     }
@@ -94,9 +91,8 @@ class AutomountManager {
         if (!this._session.SessionIsActive)
             return;
 
-        const player = global.display.get_sound_player();
-        player.play_from_file(
-            Gio.File.new_for_path(`${global.datadir}/sounds/device-removed.oga`),
+        let player = global.display.get_sound_player();
+        player.play_from_theme('device-removed-media',
             _('External drive disconnected'),
             null);
     }
@@ -169,7 +165,7 @@ class AutomountManager {
         }
 
         if (params.useMountOp) {
-            const operation = new ShellMountOperation.ShellMountOperation(volume);
+            let operation = new ShellMountOperation.ShellMountOperation(volume);
             this._mountVolume(volume, operation, params.allowAutorun);
         } else {
             this._mountVolume(volume, null, params.allowAutorun);
@@ -183,7 +179,7 @@ class AutomountManager {
         const mountOp = operation?.mountOp ?? null;
         this._activeOperations.set(volume, operation);
 
-        volume.mount(0, mountOp, this._cancellable,
+        volume.mount(0, mountOp, null,
             this._onVolumeMounted.bind(this));
     }
 
@@ -230,15 +226,15 @@ class AutomountManager {
     }
 
     _reaskPassword(volume) {
-        const prevOperation = this._activeOperations.get(volume);
+        let prevOperation = this._activeOperations.get(volume);
         const existingDialog = prevOperation?.borrowDialog();
-        const operation =
+        let operation =
             new ShellMountOperation.ShellMountOperation(volume, {existingDialog});
         this._mountVolume(volume, operation);
     }
 
     _closeOperation(volume) {
-        const operation = this._activeOperations.get(volume);
+        let operation = this._activeOperations.get(volume);
         if (!operation)
             return;
         operation.close();
@@ -250,9 +246,10 @@ class AutomountManager {
     }
 
     _allowAutorunExpire(volume) {
-        const id = GLib.timeout_add_seconds_once(GLib.PRIORITY_DEFAULT, AUTORUN_EXPIRE_TIMEOUT_SECS, () => {
+        let id = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, AUTORUN_EXPIRE_TIMEOUT_SECS, () => {
             volume.allowAutorun = false;
             delete volume._allowAutorunExpireId;
+            return GLib.SOURCE_REMOVE;
         });
         volume._allowAutorunExpireId = id;
         GLib.Source.set_name_by_id(id, '[gnome-shell] volume.allowAutorun');

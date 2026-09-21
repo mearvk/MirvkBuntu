@@ -40,12 +40,10 @@ static void     update_button_sensitivity
 /**
  * GtkFontDialogButton:
  *
- * Opens a font chooser dialog to select a font.
+ * The `GtkFontDialogButton` is wrapped around a [class@Gtk.FontDialog]
+ * and allows to open a font chooser dialog to change the font.
  *
- * <picture>
- *   <source srcset="font-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkFontDialogButton" src="font-button.png">
- * </picture>
+ * ![An example GtkFontDialogButton](font-button.png)
  *
  * It is suitable widget for selecting a font in a preference dialog.
  *
@@ -150,10 +148,6 @@ gtk_font_dialog_button_init (GtkFontDialogButton *self)
   pango_font_description_free (font_desc);
 
   gtk_widget_add_css_class (self->button, "font");
-
-  gtk_accessible_update_property (GTK_ACCESSIBLE (self->button),
-                                  GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
-                                  -1);
 }
 
 static void
@@ -300,7 +294,7 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
   widget_class->unroot = gtk_font_dialog_button_unroot;
 
   /**
-   * GtkFontDialogButton:dialog:
+   * GtkFontDialogButton:dialog: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_dialog org.gtk.Property.set=gtk_font_dialog_button_set_dialog)
    *
    * The `GtkFontDialog` that contains parameters for
    * the font chooser dialog.
@@ -310,10 +304,10 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
   properties[PROP_DIALOG] =
       g_param_spec_object ("dialog", NULL, NULL,
                            GTK_TYPE_FONT_DIALOG,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFontDialogButton:level:
+   * GtkFontDialogButton:level: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_level org.gtk.Property.set=gtk_font_dialog_button_set_level)
    *
    * The level of detail for the font chooser dialog.
    */
@@ -321,10 +315,10 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
       g_param_spec_enum ("level", NULL, NULL,
                          GTK_TYPE_FONT_LEVEL,
                          GTK_FONT_LEVEL_FONT,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFontDialogButton:font-desc:
+   * GtkFontDialogButton:font-desc: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_font_desc org.gtk.Property.set=gtk_font_dialog_button_set_font_desc)
    *
    * The selected font.
    *
@@ -340,10 +334,10 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
   properties[PROP_FONT_DESC] =
       g_param_spec_boxed ("font-desc", NULL, NULL,
                           PANGO_TYPE_FONT_DESCRIPTION,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFontDialogButton:font-features:
+   * GtkFontDialogButton:font-features: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_font_features org.gtk.Property.set=gtk_font_dialog_button_set_font_features)
    *
    * The selected font features.
    *
@@ -358,10 +352,10 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
   properties[PROP_FONT_FEATURES] =
       g_param_spec_string ("font-features", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFontDialogButton:language:
+   * GtkFontDialogButton:language: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_language org.gtk.Property.set=gtk_font_dialog_button_set_language)
    *
    * The selected language for font features.
    *
@@ -376,27 +370,27 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
   properties[PROP_LANGUAGE] =
       g_param_spec_boxed ("language", NULL, NULL,
                           PANGO_TYPE_LANGUAGE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFontDialogButton:use-font:
+   * GtkFontDialogButton:use-font: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_use_font org.gtk.Property.set=gtk_font_dialog_button_set_use_font)
    *
    * Whether the buttons label will be drawn in the selected font.
    */
   properties[PROP_USE_FONT] =
       g_param_spec_boolean ("use-font", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkFontDialogButton:use-size:
+   * GtkFontDialogButton:use-size: (attributes org.gtk.Property.get=gtk_font_dialog_button_get_use_size org.gtk.Property.set=gtk_font_dialog_button_set_use_size)
    *
    * Whether the buttons label will use the selected font size.
    */
   properties[PROP_USE_SIZE] =
       g_param_spec_boolean ("use-size", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
@@ -626,9 +620,6 @@ update_font_data (GtkFontDialogButton *self)
           break;
         }
     }
-
-  if (self->font_family == NULL)
-    return;
 
   for (unsigned i = 0; i < g_list_model_get_n_items (G_LIST_MODEL (self->font_family)); i++)
     {
@@ -1098,4 +1089,4 @@ gtk_font_dialog_button_get_use_size (GtkFontDialogButton *self)
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

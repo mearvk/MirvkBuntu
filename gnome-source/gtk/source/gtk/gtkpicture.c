@@ -29,18 +29,13 @@
 #include "gtktypebuiltins.h"
 #include "gtkwidgetprivate.h"
 #include "gdktextureutilsprivate.h"
-#include "gtksymbolicpaintable.h"
-#include "gtkrendericonprivate.h"
 
 /**
  * GtkPicture:
  *
- * Displays a `GdkPaintable`.
+ * The `GtkPicture` widget displays a `GdkPaintable`.
  *
- * <picture>
- *   <source srcset="picture-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkPicture" src="picture.png">
- * </picture>
+ * ![An example GtkPicture](picture.png)
  *
  * Many convenience functions are provided to make pictures simple to use.
  * For example, if you want to load an image from a file, and then display
@@ -54,8 +49,8 @@
  * “broken image” icon similar to that used in many web browsers.
  * If you want to handle errors in loading the file yourself,
  * for example by displaying an error message, then load the image with
- * and image loading framework such as libglycin, then create the `GtkPicture`
- * with [ctor@Gtk.Picture.new_for_paintable].
+ * [ctor@Gdk.Texture.new_from_file], then create the `GtkPicture` with
+ * [ctor@Gtk.Picture.new_for_paintable].
  *
  * Sometimes an application will want to avoid depending on external data
  * files, such as image files. See the documentation of `GResource` for details.
@@ -83,7 +78,7 @@
  *
  * ## Accessibility
  *
- * `GtkPicture` uses the [enum@Gtk.AccessibleRole.img] role.
+ * `GtkPicture` uses the `GTK_ACCESSIBLE_ROLE_IMG` role.
  */
 
 enum
@@ -95,7 +90,6 @@ enum
   PROP_KEEP_ASPECT_RATIO,
   PROP_CAN_SHRINK,
   PROP_CONTENT_FIT,
-  PROP_ISOLATE_CONTENTS,
   NUM_PROPERTIES
 };
 
@@ -107,9 +101,8 @@ struct _GtkPicture
   GFile *file;
 
   char *alternative_text;
-  GtkContentFit content_fit;
   guint can_shrink : 1;
-  guint isolate_contents : 1;
+  GtkContentFit content_fit;
 };
 
 struct _GtkPictureClass
@@ -126,7 +119,6 @@ gtk_picture_snapshot (GtkWidget   *widget,
                       GtkSnapshot *snapshot)
 {
   GtkPicture *self = GTK_PICTURE (widget);
-  GtkCssStyle *style;
   double ratio;
   int x, y, width, height;
   double w, h;
@@ -134,24 +126,13 @@ gtk_picture_snapshot (GtkWidget   *widget,
   if (self->paintable == NULL)
     return;
 
-  style = gtk_css_node_get_style (gtk_widget_get_css_node (widget));
-
   width = gtk_widget_get_width (widget);
   height = gtk_widget_get_height (widget);
   ratio = gdk_paintable_get_intrinsic_aspect_ratio (self->paintable);
 
-  if (self->isolate_contents)
-    gtk_snapshot_push_isolation (snapshot, GSK_ISOLATION_ALL);
-
   if (self->content_fit == GTK_CONTENT_FIT_FILL || ratio == 0)
     {
-      if (GTK_IS_SYMBOLIC_PAINTABLE (self->paintable))
-        gtk_css_style_snapshot_icon_paintable (style,
-                                               snapshot,
-                                               self->paintable,
-                                               width, height);
-      else
-        gdk_paintable_snapshot (self->paintable, snapshot, width, height);
+      gdk_paintable_snapshot (self->paintable, snapshot, width, height);
     }
   else
     {
@@ -200,18 +181,9 @@ gtk_picture_snapshot (GtkWidget   *widget,
 
       gtk_snapshot_save (snapshot);
       gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (x, y));
-      if (GTK_IS_SYMBOLIC_PAINTABLE (self->paintable))
-        gtk_css_style_snapshot_icon_paintable (style,
-                                               snapshot,
-                                               self->paintable,
-                                               w, h);
-      else
-        gdk_paintable_snapshot (self->paintable, snapshot, w, h);
+      gdk_paintable_snapshot (self->paintable, snapshot, w, h);
       gtk_snapshot_restore (snapshot);
     }
-
-  if (self->isolate_contents)
-    gtk_snapshot_pop (snapshot); /* isolation */
 }
 
 static GtkSizeRequestMode
@@ -243,7 +215,7 @@ gtk_picture_measure (GtkWidget      *widget,
     }
 
   style = gtk_css_node_get_style (gtk_widget_get_css_node (widget));
-  default_size = gtk_css_number_value_get (style->icon->icon_size, 100);
+  default_size = _gtk_css_number_value_get (style->icon->icon_size, 100);
 
   if (self->can_shrink)
     {
@@ -255,19 +227,6 @@ gtk_picture_measure (GtkWidget      *widget,
                                            0, 0,
                                            default_size, default_size,
                                            &min_width, &min_height);
-    }
-
-  if (for_size > 0 && self->content_fit == GTK_CONTENT_FIT_SCALE_DOWN)
-    {
-      double opposite_intrinsic_size;
-
-      if (orientation == GTK_ORIENTATION_HORIZONTAL)
-        opposite_intrinsic_size = gdk_paintable_get_intrinsic_height (self->paintable);
-      else
-        opposite_intrinsic_size = gdk_paintable_get_intrinsic_width (self->paintable);
-
-      if (opposite_intrinsic_size != 0 && opposite_intrinsic_size < for_size)
-        for_size = opposite_intrinsic_size;
     }
 
   if (orientation == GTK_ORIENTATION_HORIZONTAL)
@@ -328,10 +287,6 @@ gtk_picture_set_property (GObject      *object,
       gtk_picture_set_content_fit (self, g_value_get_enum (value));
       break;
 
-    case PROP_ISOLATE_CONTENTS:
-      gtk_picture_set_isolate_contents (self, g_value_get_boolean (value));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -374,10 +329,6 @@ gtk_picture_get_property (GObject     *object,
       g_value_set_enum (value, self->content_fit);
       break;
 
-    case PROP_ISOLATE_CONTENTS:
-      g_value_set_boolean (value, self->isolate_contents);
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -396,21 +347,6 @@ gtk_picture_paintable_invalidate_size (GdkPaintable *paintable,
                                        GtkPicture   *self)
 {
   gtk_widget_queue_resize (GTK_WIDGET (self));
-}
-
-static void
-gtk_picture_css_changed (GtkWidget         *widget,
-                         GtkCssStyleChange *change)
-{
-  GtkPicture *self = GTK_PICTURE (widget);
-
-  GTK_WIDGET_CLASS (gtk_picture_parent_class)->css_changed (widget, change);
-
-  if (gtk_css_style_change_affects (change, GTK_CSS_AFFECTS_ICON_REDRAW_SYMBOLIC) &&
-      self->paintable && GTK_IS_SYMBOLIC_PAINTABLE (self->paintable))
-    {
-      gtk_widget_queue_draw (widget);
-    }
 }
 
 static void
@@ -433,7 +369,7 @@ gtk_picture_clear_paintable (GtkPicture *self)
                                           gtk_picture_paintable_invalidate_size,
                                           self);
 
-  g_clear_object (&self->paintable);
+  g_object_unref (self->paintable);
 }
 
 static void
@@ -462,40 +398,39 @@ gtk_picture_class_init (GtkPictureClass *class)
   widget_class->snapshot = gtk_picture_snapshot;
   widget_class->get_request_mode = gtk_picture_get_request_mode;
   widget_class->measure = gtk_picture_measure;
-  widget_class->css_changed = gtk_picture_css_changed;
 
   /**
-   * GtkPicture:paintable:
+   * GtkPicture:paintable: (attributes org.gtk.Property.get=gtk_picture_get_paintable org.gtk.Property.set=gtk_picture_set_paintable)
    *
    * The `GdkPaintable` to be displayed by this `GtkPicture`.
    */
   properties[PROP_PAINTABLE] =
       g_param_spec_object ("paintable", NULL, NULL,
                            GDK_TYPE_PAINTABLE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPicture:file:
+   * GtkPicture:file: (attributes org.gtk.Property.get=gtk_picture_get_file org.gtk.Property.set=gtk_picture_set_file)
    *
    * The `GFile` that is displayed or %NULL if none.
    */
   properties[PROP_FILE] =
       g_param_spec_object ("file", NULL, NULL,
                            G_TYPE_FILE,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPicture:alternative-text:
+   * GtkPicture:alternative-text: (attributes org.gtk.Property.get=gtk_picture_get_alternative_text org.gtk.Property.set=gtk_picture_set_alternative_text)
    *
    * The alternative textual description for the picture.
    */
   properties[PROP_ALTERNATIVE_TEXT] =
       g_param_spec_string ("alternative-text", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPicture:keep-aspect-ratio:
+   * GtkPicture:keep-aspect-ratio: (attributes org.gtk.Property.get=gtk_picture_get_keep_aspect_ratio org.gtk.Property.set=gtk_picture_set_keep_aspect_ratio)
    *
    * Whether the GtkPicture will render its contents trying to preserve the aspect
    * ratio.
@@ -505,20 +440,22 @@ gtk_picture_class_init (GtkPictureClass *class)
   properties[PROP_KEEP_ASPECT_RATIO] =
       g_param_spec_boolean ("keep-aspect-ratio", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_DEPRECATED);
+                            GTK_PARAM_READWRITE |
+                            G_PARAM_EXPLICIT_NOTIFY |
+                            G_PARAM_DEPRECATED);
 
   /**
-   * GtkPicture:can-shrink:
+   * GtkPicture:can-shrink: (attributes org.gtk.Property.get=gtk_picture_get_can_shrink org.gtk.Property.set=gtk_picture_set_can_shrink)
    *
    * If the `GtkPicture` can be made smaller than the natural size of its contents.
    */
   properties[PROP_CAN_SHRINK] =
       g_param_spec_boolean ("can-shrink", NULL, NULL,
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPicture:content-fit:
+   * GtkPicture:content-fit: (attributes org.gtk.Property.get=gtk_picture_get_content_fit org.gtk.Property.set=gtk_picture_set_content_fit)
    *
    * How the content should be resized to fit inside the `GtkPicture`.
    *
@@ -528,19 +465,7 @@ gtk_picture_class_init (GtkPictureClass *class)
       g_param_spec_enum ("content-fit", NULL, NULL,
                          GTK_TYPE_CONTENT_FIT,
                          GTK_CONTENT_FIT_CONTAIN,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  /**
-   * GtkPicture:isolate-contents:
-   *
-   * If the rendering of the contents is isolated from the rest of the widget tree.
-   *
-   * Since: 4.22
-   */
-  properties[PROP_ISOLATE_CONTENTS] =
-      g_param_spec_boolean ("isolate-contents", NULL, NULL,
-                            TRUE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 
@@ -553,7 +478,6 @@ gtk_picture_init (GtkPicture *self)
 {
   self->can_shrink = TRUE;
   self->content_fit = GTK_CONTENT_FIT_CONTAIN;
-  self->isolate_contents = TRUE;
 
   gtk_widget_set_overflow (GTK_WIDGET (self), GTK_OVERFLOW_HIDDEN);
 }
@@ -616,12 +540,10 @@ gtk_picture_new_for_pixbuf (GdkPixbuf *pixbuf)
 
   g_return_val_if_fail (pixbuf == NULL || GDK_IS_PIXBUF (pixbuf), NULL);
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   if (pixbuf)
     paintable = GDK_PAINTABLE (gdk_texture_new_for_pixbuf (pixbuf));
   else
     paintable = NULL;
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   result = gtk_picture_new_for_paintable (paintable);
 
@@ -640,9 +562,9 @@ G_GNUC_END_IGNORE_DEPRECATIONS
  * If the file isn’t found or can’t be loaded, the resulting
  * `GtkPicture` is empty.
  *
- * If you need to detect failures to load the file, use an
- * image loading framework such as libglycin to load the file
- * yourself, then create the `GtkPicture` from the texture.
+ * If you need to detect failures to load the file, use
+ * [ctor@Gdk.Texture.new_from_file] to load the file yourself,
+ * then create the `GtkPicture` from the texture.
  *
  * Returns: a new `GtkPicture`
  */
@@ -729,19 +651,13 @@ gtk_picture_new_for_resource (const char *resource_path)
 }
 
 /**
- * gtk_picture_set_file:
+ * gtk_picture_set_file: (attributes org.gtk.Method.set_property=file)
  * @self: a `GtkPicture`
  * @file: (nullable): a `GFile`
  *
  * Makes @self load and display @file.
  *
  * See [ctor@Gtk.Picture.new_for_file] for details.
- *
- * ::: warning
- *     Note that this function should not be used with untrusted data.
- *     Use a proper image loading framework such as libglycin, which can
- *     load many image formats into a `GdkTexture`, and then use
- *     [method@Gtk.Image.set_from_paintable].
  */
 void
 gtk_picture_set_file (GtkPicture *self,
@@ -761,7 +677,7 @@ gtk_picture_set_file (GtkPicture *self,
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_FILE]);
 
   if (file)
-    paintable = gdk_paintable_new_from_file (file, NULL);
+    paintable = gdk_paintable_new_from_file_scaled (file, gtk_widget_get_scale_factor (GTK_WIDGET (self)));
   else
     paintable = NULL;
 
@@ -772,7 +688,7 @@ gtk_picture_set_file (GtkPicture *self,
 }
 
 /**
- * gtk_picture_get_file:
+ * gtk_picture_get_file: (attributes org.gtk.Method.get_property=file)
  * @self: a `GtkPicture`
  *
  * Gets the `GFile` currently displayed if @self is displaying a file.
@@ -798,12 +714,6 @@ gtk_picture_get_file (GtkPicture *self)
  * Makes @self load and display the given @filename.
  *
  * This is a utility function that calls [method@Gtk.Picture.set_file].
- *
- * ::: warning
- *     Note that this function should not be used with untrusted data.
- *     Use a proper image loading framework such as libglycin, which can
- *     load many image formats into a `GdkTexture`, and then use
- *     [method@Gtk.Image.set_from_paintable].
  */
 void
 gtk_picture_set_filename (GtkPicture *self,
@@ -887,12 +797,10 @@ gtk_picture_set_pixbuf (GtkPicture *self,
   g_return_if_fail (GTK_IS_PICTURE (self));
   g_return_if_fail (pixbuf == NULL || GDK_IS_PIXBUF (pixbuf));
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   if (pixbuf)
     texture = gdk_texture_new_for_pixbuf (pixbuf);
   else
     texture = NULL;
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   gtk_picture_set_paintable (self, GDK_PAINTABLE (texture));
 
@@ -900,28 +808,14 @@ G_GNUC_END_IGNORE_DEPRECATIONS
     g_object_unref (texture);
 }
 
-static gboolean
-paintable_size_equal (GdkPaintable *one,
-                      GdkPaintable *two)
-{
-  if (one == NULL)
-    return two == NULL;
-  else if (two == NULL)
-    return FALSE;
-
-  return gdk_paintable_get_intrinsic_width (one) == gdk_paintable_get_intrinsic_width (two) &&
-         gdk_paintable_get_intrinsic_height (one) == gdk_paintable_get_intrinsic_height (two) &&
-         gdk_paintable_get_intrinsic_aspect_ratio (one) == gdk_paintable_get_intrinsic_aspect_ratio (two);
-}
-
 /**
- * gtk_picture_set_paintable:
+ * gtk_picture_set_paintable: (attributes org.gtk.Method.set_property=paintable)
  * @self: a `GtkPicture`
  * @paintable: (nullable): a `GdkPaintable`
  *
  * Makes @self display the given @paintable.
  *
- * If @paintable is `NULL`, nothing will be displayed.
+ * If @paintable is %NULL, nothing will be displayed.
  *
  * See [ctor@Gtk.Picture.new_for_paintable] for details.
  */
@@ -929,8 +823,6 @@ void
 gtk_picture_set_paintable (GtkPicture   *self,
                            GdkPaintable *paintable)
 {
-  gboolean size_changed;
-
   g_return_if_fail (GTK_IS_PICTURE (self));
   g_return_if_fail (paintable == NULL || GDK_IS_PAINTABLE (paintable));
 
@@ -942,8 +834,6 @@ gtk_picture_set_paintable (GtkPicture   *self,
   if (paintable)
     g_object_ref (paintable);
 
-  size_changed = !paintable_size_equal (self->paintable, paintable);
- 
   gtk_picture_clear_paintable (self);
 
   self->paintable = paintable;
@@ -965,10 +855,7 @@ gtk_picture_set_paintable (GtkPicture   *self,
                           self);
     }
 
-  if (size_changed)
-    gtk_widget_queue_resize (GTK_WIDGET (self));
-  else
-    gtk_widget_queue_draw (GTK_WIDGET (self));
+  gtk_widget_queue_resize (GTK_WIDGET (self));
 
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PAINTABLE]);
 
@@ -976,7 +863,7 @@ gtk_picture_set_paintable (GtkPicture   *self,
 }
 
 /**
- * gtk_picture_get_paintable:
+ * gtk_picture_get_paintable: (attributes org.gtk.Method.get_property=paintable)
  * @self: a `GtkPicture`
  *
  * Gets the `GdkPaintable` being displayed by the `GtkPicture`.
@@ -992,7 +879,7 @@ gtk_picture_get_paintable (GtkPicture *self)
 }
 
 /**
- * gtk_picture_set_keep_aspect_ratio:
+ * gtk_picture_set_keep_aspect_ratio: (attributes org.gtk.Method.set_property=keep-aspect-ratio)
  * @self: a `GtkPicture`
  * @keep_aspect_ratio: whether to keep aspect ratio
  *
@@ -1021,7 +908,7 @@ gtk_picture_set_keep_aspect_ratio (GtkPicture *self,
 }
 
 /**
- * gtk_picture_get_keep_aspect_ratio:
+ * gtk_picture_get_keep_aspect_ratio: (attributes org.gtk.Method.get_property=keep-aspect-ratio)
  * @self: a `GtkPicture`
  *
  * Returns whether the `GtkPicture` preserves its contents aspect ratio.
@@ -1041,11 +928,11 @@ gtk_picture_get_keep_aspect_ratio (GtkPicture *self)
 }
 
 /**
- * gtk_picture_set_can_shrink:
+ * gtk_picture_set_can_shrink: (attributes org.gtk.Method.set_property=can-shrink)
  * @self: a `GtkPicture`
  * @can_shrink: if @self can be made smaller than its contents
  *
- * If set to %TRUE, then @self can be made smaller than its contents.
+ * If set to %TRUE, the @self can be made smaller than its contents.
  *
  * The contents will then be scaled down when rendering.
  *
@@ -1073,7 +960,7 @@ gtk_picture_set_can_shrink (GtkPicture *self,
 }
 
 /**
- * gtk_picture_get_can_shrink:
+ * gtk_picture_get_can_shrink: (attributes org.gtk.Method.get_property=can-shrink)
  * @self: a `GtkPicture`
  *
  * Returns whether the `GtkPicture` respects its contents size.
@@ -1089,7 +976,7 @@ gtk_picture_get_can_shrink (GtkPicture *self)
 }
 
 /**
- * gtk_picture_set_content_fit:
+ * gtk_picture_set_content_fit: (attributes org.gtk.Method.set_property=content-fit)
  * @self: a `GtkPicture`
  * @content_fit: the content fit mode
  *
@@ -1104,7 +991,6 @@ gtk_picture_set_content_fit (GtkPicture    *self,
                              GtkContentFit  content_fit)
 {
   gboolean notify_keep_aspect_ratio;
-  gboolean queue_resize;
 
   g_return_if_fail (GTK_IS_PICTURE (self));
 
@@ -1113,15 +999,10 @@ gtk_picture_set_content_fit (GtkPicture    *self,
 
   notify_keep_aspect_ratio = (content_fit == GTK_CONTENT_FIT_FILL ||
                               self->content_fit == GTK_CONTENT_FIT_FILL);
-  queue_resize = (content_fit == GTK_CONTENT_FIT_SCALE_DOWN ||
-                  self->content_fit == GTK_CONTENT_FIT_SCALE_DOWN);
 
   self->content_fit = content_fit;
 
-  if (queue_resize)
-    gtk_widget_queue_resize (GTK_WIDGET (self));
-  else
-    gtk_widget_queue_draw (GTK_WIDGET (self));
+  gtk_widget_queue_draw (GTK_WIDGET (self));
 
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_CONTENT_FIT]);
 
@@ -1130,7 +1011,7 @@ gtk_picture_set_content_fit (GtkPicture    *self,
 }
 
 /**
- * gtk_picture_get_content_fit:
+ * gtk_picture_get_content_fit: (attributes org.gtk.Method.get_property=content-fit)
  * @self: a `GtkPicture`
  *
  * Returns the fit mode for the content of the `GtkPicture`.
@@ -1150,59 +1031,7 @@ gtk_picture_get_content_fit (GtkPicture *self)
 }
 
 /**
- * gtk_picture_set_isolate_contents:
- * @self: a `GtkPicture`
- * @isolate_contents: if contents are rendered separately
- *
- * If set to true, then the contents will be rendered individually.
- *
- * If set to false they will be able to erase or otherwise mix with
- * the background.
- *
- * GTK supports finer grained isolation, in rare cases where you need
- * this, you can use [method@Gtk.Snapshot.push_isolation] yourself to
- * achieve this.
- *
- * By default contents are isolated.
- *
- * Since: 4.22
- */
-void
-gtk_picture_set_isolate_contents (GtkPicture *self,
-                                  gboolean    isolate_contents)
-{
-  g_return_if_fail (GTK_IS_PICTURE (self));
-
-  if (self->isolate_contents == isolate_contents)
-    return;
-
-  self->isolate_contents = isolate_contents;
-
-  gtk_widget_queue_resize (GTK_WIDGET (self));
-
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ISOLATE_CONTENTS]);
-}
-
-/**
- * gtk_picture_get_isolate_contents:
- * @self: a `GtkPicture`
- *
- * Returns whether the contents are isolated.
- *
- * Returns: True if contents are isolated
- *
- * Since: 4.22
- */
-gboolean
-gtk_picture_get_isolate_contents (GtkPicture *self)
-{
-  g_return_val_if_fail (GTK_IS_PICTURE (self), TRUE);
-
-  return self->isolate_contents;
-}
-
-/**
- * gtk_picture_set_alternative_text:
+ * gtk_picture_set_alternative_text: (attributes org.gtk.Method.set_property=alternative-text)
  * @self: a `GtkPicture`
  * @alternative_text: (nullable): a textual description of the contents
  *
@@ -1234,7 +1063,7 @@ gtk_picture_set_alternative_text (GtkPicture *self,
 }
 
 /**
- * gtk_picture_get_alternative_text:
+ * gtk_picture_get_alternative_text: (attributes org.gtk.Method.get_property=alternative-text)
  * @self: a `GtkPicture`
  *
  * Gets the alternative textual description of the picture.

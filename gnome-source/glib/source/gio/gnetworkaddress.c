@@ -66,7 +66,7 @@ struct _GNetworkAddressPrivate {
   GList *cached_sockaddrs;
   gchar *scheme;
 
-  guint64 resolver_serial;
+  gint64 resolver_serial;
 };
 
 enum {
@@ -634,7 +634,7 @@ typedef enum {
   RESOLVE_STATE_NONE = 0,
   RESOLVE_STATE_WAITING_ON_IPV4 = 1 << 0,
   RESOLVE_STATE_WAITING_ON_IPV6 = 1 << 1,
-} G_GNUC_FLAG_ENUM ResolveState;
+} ResolveState;
 
 typedef struct {
   GSocketAddressEnumerator parent_instance;
@@ -880,7 +880,7 @@ g_network_address_address_enumerator_next (GSocketAddressEnumerator  *enumerator
     {
       GNetworkAddress *addr = addr_enum->addr;
       GResolver *resolver = g_resolver_get_default ();
-      guint64 serial = g_resolver_get_serial (resolver);
+      gint64 serial = g_resolver_get_serial (resolver);
 
       if (addr->priv->resolver_serial != 0 &&
           addr->priv->resolver_serial != serial)
@@ -1078,7 +1078,7 @@ g_network_address_address_enumerator_next_async (GSocketAddressEnumerator  *enum
     {
       GNetworkAddress *addr = addr_enum->addr;
       GResolver *resolver = g_resolver_get_default ();
-      guint64 serial = g_resolver_get_serial (resolver);
+      gint64 serial = g_resolver_get_serial (resolver);
 
       if (addr->priv->resolver_serial != 0 &&
           addr->priv->resolver_serial != serial)

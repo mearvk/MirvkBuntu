@@ -8,7 +8,8 @@
 /**
  * GtkLayoutChild:
  *
- * The base class for objects that are meant to hold layout properties.
+ * `GtkLayoutChild` is the base class for objects that are meant to hold
+ * layout properties.
  *
  * If a `GtkLayoutManager` has per-child properties, like their packing type,
  * or the horizontal and vertical span, or the icon name, then the layout
@@ -117,24 +118,26 @@ gtk_layout_child_class_init (GtkLayoutChildClass *klass)
   gobject_class->constructed = gtk_layout_child_constructed;
 
   /**
-   * GtkLayoutChild:layout-manager:
+   * GtkLayoutChild:layout-manager: (attributes org.gtk.Property.get=gtk_layout_child_get_layout_manager)
    *
    * The layout manager that created the `GtkLayoutChild` instance.
    */
   layout_child_properties[PROP_LAYOUT_MANAGER] =
     g_param_spec_object ("layout-manager", NULL, NULL,
                          GTK_TYPE_LAYOUT_MANAGER,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+                         GTK_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   /**
-   * GtkLayoutChild:child-widget:
+   * GtkLayoutChild:child-widget: (attributes org.gtk.Property.get=gtk_layout_child_get_child_widget)
    *
    * The widget that is associated to the `GtkLayoutChild` instance.
    */
   layout_child_properties[PROP_CHILD_WIDGET] =
     g_param_spec_object ("child-widget", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+                         GTK_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, layout_child_properties);
 }
@@ -145,7 +148,7 @@ gtk_layout_child_init (GtkLayoutChild *self)
 }
 
 /**
- * gtk_layout_child_get_layout_manager:
+ * gtk_layout_child_get_layout_manager: (attributes org.gtk.Method.get_property=layout-manager)
  * @layout_child: a `GtkLayoutChild`
  *
  * Retrieves the `GtkLayoutManager` instance that created the
@@ -164,7 +167,7 @@ gtk_layout_child_get_layout_manager (GtkLayoutChild *layout_child)
 }
 
 /**
- * gtk_layout_child_get_child_widget:
+ * gtk_layout_child_get_child_widget: (attributes org.gtk.Method.get_property=child-widget)
  * @layout_child: a `GtkLayoutChild`
  *
  * Retrieves the `GtkWidget` associated to the given @layout_child.

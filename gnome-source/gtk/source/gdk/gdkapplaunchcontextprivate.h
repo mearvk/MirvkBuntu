@@ -22,6 +22,13 @@
 
 G_BEGIN_DECLS
 
+#define GDK_APP_LAUNCH_CONTEXT_CLASS(k)     (G_TYPE_CHECK_CLASS_CAST((k), GDK_TYPE_APP_LAUNCH_CONTEXT, GdkAppLaunchContextClass))
+#define GDK_IS_APP_LAUNCH_CONTEXT_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), GDK_TYPE_APP_LAUNCH_CONTEXT))
+#define GDK_APP_LAUNCH_CONTEXT_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), GDK_TYPE_APP_LAUNCH_CONTEXT, GdkAppLaunchContextClass))
+
+
+typedef GAppLaunchContextClass GdkAppLaunchContextClass;
+
 struct _GdkAppLaunchContext
 {
   GAppLaunchContext parent_instance;
@@ -31,11 +38,6 @@ struct _GdkAppLaunchContext
   guint32 timestamp;
   GIcon *icon;
   char *icon_name;
-};
-
-struct _GdkAppLaunchContextClass
-{
-  GAppLaunchContextClass parent_class;
 };
 
 G_END_DECLS

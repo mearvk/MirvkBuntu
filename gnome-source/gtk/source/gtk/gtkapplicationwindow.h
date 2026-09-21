@@ -24,7 +24,7 @@
 #endif
 
 #include <gtk/gtkwindow.h>
-#include <gtk/deprecated/gtkshortcutswindow.h>
+#include <gtk/gtkshortcutswindow.h>
 
 G_BEGIN_DECLS
 
@@ -61,7 +61,7 @@ struct _GtkApplicationWindowClass
 };
 
 GDK_AVAILABLE_IN_ALL
-GType       gtk_application_window_get_type          (void);
+GType       gtk_application_window_get_type          (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget * gtk_application_window_new               (GtkApplication      *application);
 
@@ -74,13 +74,12 @@ gboolean    gtk_application_window_get_show_menubar (GtkApplicationWindow *windo
 GDK_AVAILABLE_IN_ALL
 guint       gtk_application_window_get_id           (GtkApplicationWindow *window);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 void        gtk_application_window_set_help_overlay (GtkApplicationWindow *window,
                                                      GtkShortcutsWindow   *help_overlay);
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 GtkShortcutsWindow *
             gtk_application_window_get_help_overlay (GtkApplicationWindow *window);
-
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkApplicationWindow, g_object_unref)
 

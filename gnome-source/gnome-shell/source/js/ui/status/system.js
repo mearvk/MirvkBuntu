@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -11,6 +13,7 @@ import UPower from 'gi://UPowerGlib';
 import * as SystemActions from '../../misc/systemActions.js';
 import * as Main from '../main.js';
 import * as PopupMenu from '../popupMenu.js';
+import {PopupAnimation} from '../boxpointer.js';
 
 import {QuickSettingsItem, QuickToggle, SystemIndicator} from '../quickSettings.js';
 import {loadInterfaceXML} from '../../misc/fileUtils.js';
@@ -25,7 +28,7 @@ const SHOW_BATTERY_PERCENTAGE = 'show-battery-percentage';
 
 const PowerToggle = GObject.registerClass({
     Properties: {
-        'fallback-icon-name': GObject.ParamSpec.string('fallback-icon-name', null, null,
+        'fallback-icon-name': GObject.ParamSpec.string('fallback-icon-name', '', '',
             GObject.ParamFlags.READWRITE,
             ''),
     },
@@ -73,16 +76,9 @@ const PowerToggle = GObject.registerClass({
             return;
 
         // The icons
-        let chargingState;
-        if (this._proxy.State === UPower.DeviceState.CHARGING)
-            chargingState = '-charging';
-        else if (this._proxy.State === UPower.DeviceState.PENDING_CHARGE &&
-                 this._proxy.ChargeThresholdEnabled)
-            chargingState = '-plugged-in';
-        else
-            chargingState = '';
-
-        const fillLevel = 10 * Math.floor(this._proxy.Percentage / 10);
+        let chargingState = this._proxy.State === UPower.DeviceState.CHARGING
+            ? '-charging' : '';
+        let fillLevel = 10 * Math.floor(this._proxy.Percentage / 10);
         const charged =
             this._proxy.State === UPower.DeviceState.FULLY_CHARGED ||
             (this._proxy.State === UPower.DeviceState.CHARGING && fillLevel === 100);
@@ -124,7 +120,7 @@ class ScreenshotItem extends QuickSettingsItem {
                 Main.screenshotUI.open().catch(logError);
                 return GLib.SOURCE_REMOVE;
             });
-            topMenu.close({animate: false});
+            topMenu.close(PopupAnimation.NONE);
         });
     }
 });

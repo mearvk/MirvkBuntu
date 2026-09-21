@@ -31,7 +31,7 @@ typedef struct {
   double angle1;
   double angle2;
   gboolean negative;
-} ArcPath;
+} Arc;
 
 static inline guint
 mem_hash (gconstpointer v, int len)
@@ -49,14 +49,14 @@ mem_hash (gconstpointer v, int len)
 }
 
 static guint
-arc_path_hash (ArcPath *arc)
+arc_path_hash (Arc *arc)
 {
-  return mem_hash ((gconstpointer)arc, sizeof (ArcPath));
+  return mem_hash ((gconstpointer)arc, sizeof (Arc));
 }
 
 static gboolean
-arc_path_equal (ArcPath *arc1,
-                ArcPath *arc2)
+arc_path_equal (Arc *arc1,
+                Arc *arc2)
 {
   return arc1->angle1 == arc2->angle1 &&
          arc1->angle2 == arc2->angle2 &&
@@ -80,10 +80,10 @@ static void
 append_arc (cairo_t *cr, double angle1, double angle2, gboolean negative)
 {
   static GHashTable *arc_path_cache;
-  ArcPath key;
+  Arc key;
   cairo_path_t *arc;
 
-  memset (&key, 0, sizeof (ArcPath));
+  memset (&key, 0, sizeof (Arc));
   key.angle1 = angle1;
   key.angle2 = angle2;
   key.negative = negative;

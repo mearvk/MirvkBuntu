@@ -35,7 +35,7 @@
 #include "glib.h"
 #include "test-common.h"
 
-#if defined(G_OS_UNIX) && !defined(__APPLE__)
+#if defined(G_OS_UNIX)
 #include "gio/gdesktopappinfo.h"
 #elif defined(G_OS_WIN32)
 #include "gio/gwin32inputstream.h"
@@ -48,13 +48,7 @@ test_repository_basic (RepositoryFixture *fx,
   const char * const * search_paths;
   char **namespaces = NULL;
   size_t n_namespaces;
-#if defined(G_OS_UNIX)
-  const char *expected_namespaces[] = { "GLib", "GLibUnix", NULL };
-#elif defined(G_OS_WIN32)
-  const char *expected_namespaces[] = { "GLib", "GLibWin32", NULL };
-#else
   const char *expected_namespaces[] = { "GLib", NULL };
-#endif
   char **versions;
   size_t n_versions;
   const char *prefix = NULL;
@@ -116,9 +110,6 @@ test_repository_info (RepositoryFixture *fx,
 
   object_info_by_gtype = GI_OBJECT_INFO (gi_repository_find_by_gtype (fx->repository, G_TYPE_OBJECT));
   g_assert_nonnull (object_info);
-
-  signal_info = gi_object_info_find_signal (object_info, "does-not-exist");
-  g_assert_null (signal_info);
 
   signal_info = gi_object_info_find_signal (object_info, "notify");
   g_assert_nonnull (signal_info);
@@ -846,7 +837,7 @@ test_repository_find_by_gtype (RepositoryFixture *fx,
     GType platform_specific_type;
     const char *expected_name, *expected_namespace;
 
-#if defined(G_OS_UNIX) && !(__APPLE__)
+#if defined(G_OS_UNIX)
     platform_specific_type = G_TYPE_DESKTOP_APP_INFO;
     expected_name = "DesktopAppInfo";
     expected_namespace = "GioUnix";
@@ -901,20 +892,6 @@ test_repository_loaded_namespaces (RepositoryFixture *fx,
   g_strfreev (namespaces);
 }
 
-static void
-test_repository_dup_default (void)
-{
-  GIRepository *repository1 = gi_repository_dup_default ();
-  GIRepository *repository2 = gi_repository_dup_default ();
-
-  g_assert_nonnull (repository1);
-  g_assert_nonnull (repository2);
-  g_assert_true (repository1 == repository2);
-
-  g_clear_object (&repository1);
-  g_clear_object (&repository2);
-}
-
 int
 main (int   argc,
       char *argv[])
@@ -932,7 +909,7 @@ main (int   argc,
   ADD_REPOSITORY_TEST ("/repository/constructor-return-type", test_repository_constructor_return_type, &typelib_load_spec_gobject);
   ADD_REPOSITORY_TEST ("/repository/enum-info-c-identifier", test_repository_enum_info_c_identifier, &typelib_load_spec_glib);
   ADD_REPOSITORY_TEST ("/repository/enum-info-static-methods", test_repository_enum_info_static_methods, &typelib_load_spec_glib);
-  ADD_REPOSITORY_TEST ("/repository/error-quark", test_repository_error_quark, &typelib_load_spec_gio);
+  ADD_REPOSITORY_TEST ("/repository/error-quark", test_repository_error_quark, &typelib_load_spec_gio_platform);
   ADD_REPOSITORY_TEST ("/repository/flags-info-c-identifier", test_repository_flags_info_c_identifier, &typelib_load_spec_gobject);
   ADD_REPOSITORY_TEST ("/repository/fundamental-ref-func", test_repository_fundamental_ref_func, &typelib_load_spec_gobject);
   ADD_REPOSITORY_TEST ("/repository/instance-method-ownership-transfer", test_repository_instance_method_ownership_transfer, &typelib_load_spec_gio);
@@ -942,9 +919,8 @@ main (int   argc,
   ADD_REPOSITORY_TEST ("/repository/vfunc-info-with-no-invoker", test_repository_vfunc_info_with_no_invoker, &typelib_load_spec_gobject);
   ADD_REPOSITORY_TEST ("/repository/vfunc-info-with-invoker-on-interface", test_repository_vfunc_info_with_invoker_on_interface, &typelib_load_spec_gio);
   ADD_REPOSITORY_TEST ("/repository/vfunc-info-with-invoker-on-object", test_repository_vfunc_info_with_invoker_on_object, &typelib_load_spec_gio);
-  ADD_REPOSITORY_TEST ("/repository/find-by-gtype", test_repository_find_by_gtype, &typelib_load_spec_gio);
-  ADD_REPOSITORY_TEST ("/repository/loaded-namespaces", test_repository_loaded_namespaces, &typelib_load_spec_gio);
-  g_test_add_func ("/repository/dup_default", test_repository_dup_default);
+  ADD_REPOSITORY_TEST ("/repository/find-by-gtype", test_repository_find_by_gtype, &typelib_load_spec_gio_platform);
+  ADD_REPOSITORY_TEST ("/repository/loaded-namespaces", test_repository_loaded_namespaces, &typelib_load_spec_gio_platform);
 
   return g_test_run ();
 }

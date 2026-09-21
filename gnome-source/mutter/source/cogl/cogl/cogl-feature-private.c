@@ -37,7 +37,6 @@
 #include "cogl/cogl-feature-private.h"
 #include "cogl/cogl-renderer-private.h"
 #include "cogl/cogl-private.h"
-#include "cogl/driver/gl/cogl-driver-gl-private.h"
 
 gboolean
 _cogl_feature_check (CoglRenderer *renderer,
@@ -45,7 +44,7 @@ _cogl_feature_check (CoglRenderer *renderer,
                      const CoglFeatureData *data,
                      int gl_major,
                      int gl_minor,
-                     CoglDriverId driver,
+                     CoglDriver driver,
                      char * const *extensions,
                      void *function_table)
 
@@ -56,22 +55,22 @@ _cogl_feature_check (CoglRenderer *renderer,
 
   switch (driver)
     {
-    case COGL_DRIVER_ID_GLES2:
+    case COGL_DRIVER_GLES2:
       gles_availability = COGL_EXT_IN_GLES2;
 
       if (COGL_CHECK_GL_VERSION (gl_major, gl_minor, 3, 0))
         gles_availability |= COGL_EXT_IN_GLES3;
       break;
-    case COGL_DRIVER_ID_ANY:
+    case COGL_DRIVER_ANY:
       g_assert_not_reached ();
-    case COGL_DRIVER_ID_NOP:
-    case COGL_DRIVER_ID_GL3:
+    case COGL_DRIVER_NOP:
+    case COGL_DRIVER_GL3:
       break;
     }
 
   /* First check whether the functions should be directly provided by
      GL */
-  if ((driver == COGL_DRIVER_ID_GL3 &&
+  if ((driver == COGL_DRIVER_GL3 &&
        COGL_CHECK_GL_VERSION (gl_major, gl_minor,
                               data->min_gl_major, data->min_gl_minor)) ||
       (data->gles_availability & gles_availability))
@@ -114,8 +113,8 @@ _cogl_feature_check (CoglRenderer *renderer,
                                    namespace, namespace_len);
               g_string_append_c (full_extension_name, '_');
               g_string_append (full_extension_name, extension);
-              if (cogl_check_extension (full_extension_name->str,
-                                        extensions))
+              if (_cogl_check_extension (full_extension_name->str,
+                                         extensions))
                 break;
             }
 
@@ -144,8 +143,8 @@ _cogl_feature_check (CoglRenderer *renderer,
 
       full_function_name = g_strconcat (data->functions[func_num].name,
                                         suffix, NULL);
-      func = cogl_renderer_get_proc_address (renderer,
-                                             full_function_name);
+      func = _cogl_renderer_get_proc_address (renderer,
+                                              full_function_name);
       g_free (full_function_name);
 
       if (func == NULL)
@@ -177,7 +176,7 @@ error:
                        namespaces, extension_names)                     \
   static const CoglFeatureFunction cogl_ext_ ## name ## _funcs[] = {
 #define COGL_EXT_FUNCTION(ret, name, args)                          \
-  { G_STRINGIFY (name), G_STRUCT_OFFSET (CoglDriverGLPrivate, name) },
+  { G_STRINGIFY (name), G_STRUCT_OFFSET (CoglContext, name) },
 #define COGL_EXT_END()                      \
   { NULL, 0 },                                  \
   };
@@ -204,21 +203,17 @@ cogl_feature_ext_functions_data[] =
   };
 
 void
-_cogl_feature_check_ext_functions (CoglDriver   *driver,
-                                   CoglRenderer *renderer,
-                                   int           gl_major,
-                                   int           gl_minor,
+_cogl_feature_check_ext_functions (CoglContext *context,
+                                   int gl_major,
+                                   int gl_minor,
                                    char * const *gl_extensions)
 {
-  CoglDriverGL *driver_gl = COGL_DRIVER_GL (driver);
-  CoglDriverGLPrivate *priv_gl = cogl_driver_gl_get_private (driver_gl);
   int i;
 
   for (i = 0; i < G_N_ELEMENTS (cogl_feature_ext_functions_data); i++)
-    _cogl_feature_check (renderer,
+    _cogl_feature_check (context->display->renderer,
                          "GL", cogl_feature_ext_functions_data + i,
-                         gl_major, gl_minor,
-                         cogl_renderer_get_driver_id (renderer),
+                         gl_major, gl_minor, context->driver,
                          gl_extensions,
-                         priv_gl);
+                         context);
 }

@@ -1,7 +1,7 @@
 # Orca
 #
 # Copyright 2005-2009 Sun Microsystems Inc.
-# Copyright 2011-2026 Igalia, S.L.
+# Copyright 2011-2025 Igalia, S.L.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,6 @@
 # pylint: disable=too-many-positional-arguments
 # pylint: disable=too-many-public-methods
 # pylint: disable=too-many-instance-attributes
-# pylint: disable=too-many-lines
 
 """Module for commands related to the current accessible object."""
 
@@ -31,11 +30,12 @@ from __future__ import annotations
 
 import unicodedata
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from . import (
     ax_event_synthesizer,
-    caret_navigator,
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     focus_manager,
@@ -43,19 +43,18 @@ from . import (
     guilabels,
     input_event,
     input_event_manager,
+    keybindings,
     messages,
+    preferences_grid_base,
     presentation_manager,
-    say_all_presenter_command_definitions,
     speech_presenter,
     speechserver,
     structural_navigator,
-    text_attribute_manager,
 )
 from .acss import ACSS
 from .ax_object import AXObject
+from .ax_text import AXText
 from .ax_utilities import AXUtilities
-from .ax_utilities_text import CaretSetReason
-from .extension import Extension
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -65,8 +64,6 @@ if TYPE_CHECKING:
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
 
-    from .command import Command
-    from .say_all_presenter_preferences_grid import SayAllPreferencesGrid
     from .scripts import default
 
 
@@ -87,24 +84,121 @@ class SayAllStyle(Enum):
         return self.name.lower()
 
 
+class SayAllPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Say All preferences page."""
+
+    _gsettings_schema = "say-all"
+
+    def __init__(self, presenter: SayAllPresenter) -> None:
+        self._only_speak_displayed_control = preferences_grid_base.BooleanPreferenceControl(
+            label=guilabels.SPEECH_ONLY_SPEAK_DISPLAYED_TEXT,
+            getter=presenter.get_only_speak_displayed_text,
+            setter=presenter.set_only_speak_displayed_text,
+            prefs_key=SayAllPresenter.KEY_ONLY_SPEAK_DISPLAYED_TEXT,
+        )
+
+        controls: list[preferences_grid_base.ControlType] = [
+            preferences_grid_base.EnumPreferenceControl(
+                label=guilabels.SAY_ALL_BY,
+                options=[guilabels.SAY_ALL_STYLE_SENTENCE, guilabels.SAY_ALL_STYLE_LINE],
+                values=[SayAllStyle.SENTENCE.value, SayAllStyle.LINE.value],
+                getter=presenter.get_style_as_int,
+                setter=presenter.set_style_from_int,
+                prefs_key=SayAllPresenter.KEY_STYLE,
+            ),
+            self._only_speak_displayed_control,
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.SAY_ALL_UP_AND_DOWN_ARROW,
+                getter=presenter.get_rewind_and_fast_forward_enabled,
+                setter=presenter.set_rewind_and_fast_forward_enabled,
+                prefs_key=SayAllPresenter.KEY_REWIND_AND_FAST_FORWARD,
+                member_of=guilabels.SAY_ALL_REWIND_AND_FAST_FORWARD_BY,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.SAY_ALL_STRUCTURAL_NAVIGATION,
+                getter=presenter.get_structural_navigation_enabled,
+                setter=presenter.set_structural_navigation_enabled,
+                prefs_key=SayAllPresenter.KEY_STRUCTURAL_NAVIGATION,
+                member_of=guilabels.SAY_ALL_REWIND_AND_FAST_FORWARD_BY,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.ANNOUNCE_BLOCKQUOTES,
+                getter=presenter.get_announce_blockquote,
+                setter=presenter.set_announce_blockquote,
+                prefs_key=SayAllPresenter.KEY_ANNOUNCE_BLOCKQUOTE,
+                member_of=guilabels.ANNOUNCEMENTS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.ANNOUNCE_FORMS,
+                getter=presenter.get_announce_form,
+                setter=presenter.set_announce_form,
+                prefs_key=SayAllPresenter.KEY_ANNOUNCE_FORM,
+                member_of=guilabels.ANNOUNCEMENTS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.ANNOUNCE_LANDMARKS,
+                getter=presenter.get_announce_landmark,
+                setter=presenter.set_announce_landmark,
+                prefs_key=SayAllPresenter.KEY_ANNOUNCE_LANDMARK,
+                member_of=guilabels.ANNOUNCEMENTS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.ANNOUNCE_LISTS,
+                getter=presenter.get_announce_list,
+                setter=presenter.set_announce_list,
+                prefs_key=SayAllPresenter.KEY_ANNOUNCE_LIST,
+                member_of=guilabels.ANNOUNCEMENTS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.ANNOUNCE_PANELS,
+                getter=presenter.get_announce_grouping,
+                setter=presenter.set_announce_grouping,
+                prefs_key=SayAllPresenter.KEY_ANNOUNCE_GROUPING,
+                member_of=guilabels.ANNOUNCEMENTS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.ANNOUNCE_TABLES,
+                getter=presenter.get_announce_table,
+                setter=presenter.set_announce_table,
+                prefs_key=SayAllPresenter.KEY_ANNOUNCE_TABLE,
+                member_of=guilabels.ANNOUNCEMENTS,
+                determine_sensitivity=self._only_speak_displayed_text_is_off,
+            ),
+        ]
+
+        info = (
+            f"{guilabels.SAY_ALL_INFO}\n\n{guilabels.SAY_ALL_NAVIGATION_INFO}"
+            f"\n\n{guilabels.SAY_ALL_CONTAINER_INFO}"
+        )
+        super().__init__(guilabels.GENERAL_SAY_ALL, controls, info_message=info)
+
+    def _only_speak_displayed_text_is_off(self) -> bool:
+        """Returns True if only-speak-displayed-text is off in the UI."""
+
+        widget = self.get_widget_for_control(self._only_speak_displayed_control)
+        if widget:
+            return not widget.get_active()
+        return True
+
+
 @gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.SayAll", name="say-all")
-class SayAllPresenter(Extension):
+class SayAllPresenter:
     """Module for commands related to the current accessible object."""
 
     _SCHEMA = "say-all"
-    KEY_ANNOUNCE_ARTICLE = "announce-article"
     KEY_ANNOUNCE_BLOCKQUOTE = "announce-blockquote"
-    KEY_ANNOUNCE_CODE_BLOCK = "announce-code-block"
-    KEY_ANNOUNCE_DOCUMENT = "announce-document"
     KEY_ANNOUNCE_FORM = "announce-form"
     KEY_ANNOUNCE_GROUPING = "announce-grouping"
     KEY_ANNOUNCE_LANDMARK = "announce-landmark"
     KEY_ANNOUNCE_LIST = "announce-list"
     KEY_ANNOUNCE_TABLE = "announce-table"
-    KEY_ANNOUNCE_TRACKED_CHANGES = "announce-tracked-changes"
     KEY_ONLY_SPEAK_DISPLAYED_TEXT = "only-speak-displayed-text"
     KEY_REWIND_AND_FAST_FORWARD = "rewind-and-fast-forward"
-    KEY_TEXT_ATTRIBUTE_CHANGE_MODE = "text-attribute-change-mode"
     KEY_STRUCTURAL_NAVIGATION = "structural-navigation"
     KEY_STYLE = "style"
 
@@ -118,8 +212,6 @@ class SayAllPresenter(Extension):
             default=default,
         )
 
-    GROUP_LABEL = guilabels.GENERAL_SAY_ALL
-
     def __init__(self) -> None:
         self._script: default.Script | None = None
         self._contents: list[tuple[Atspi.Accessible, int, int, str]] = []
@@ -127,16 +219,43 @@ class SayAllPresenter(Extension):
         self._current_context: speechserver.SayAllContext | None = None
         self._prior_obj: Atspi.Accessible | None = None
         self._say_all_is_running: bool = False
-        super().__init__()
+        self._initialized: bool = False
 
-    def _get_commands(self) -> list[Command]:
-        return say_all_presenter_command_definitions.get_commands(self)
+        msg = "SAY ALL PRESENTER: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("SayAllPresenter", self)
+
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_DEFAULT
+
+        # Layout-specific keybindings
+        kb_desktop = keybindings.KeyBinding("KP_Add", keybindings.NO_MODIFIER_MASK)
+        kb_laptop = keybindings.KeyBinding("semicolon", keybindings.ORCA_MODIFIER_MASK)
+
+        manager.add_command(
+            command_manager.KeyboardCommand(
+                "sayAllHandler",
+                self.say_all,
+                group_label,
+                cmdnames.SAY_ALL,
+                desktop_keybinding=kb_desktop,
+                laptop_keybinding=kb_laptop,
+            ),
+        )
+
+        msg = "SAY ALL PRESENTER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def create_preferences_grid(self) -> SayAllPreferencesGrid:
         """Returns the GtkGrid containing the Say All preferences UI."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .say_all_presenter_preferences_grid import SayAllPreferencesGrid
 
         return SayAllPreferencesGrid(self)
 
@@ -149,8 +268,8 @@ class SayAllPresenter(Extension):
     def set_style_from_int(self, value: int) -> bool:
         """Sets the Say All style from an integer value."""
 
-        tokens = ["SAY ALL PRESENTER: Setting style to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting style to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         style_name = SayAllStyle(value).string_name
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_STYLE, style_name
@@ -165,9 +284,8 @@ class SayAllPresenter(Extension):
         notify_user: bool = True,
         obj: Atspi.Accessible | None = None,
         offset: int | None = None,
-        interrupt: bool = True,
     ) -> bool:
-        """Speaks the entire document or text, optionally interrupting current presentation."""
+        """Speaks the entire document or text, starting from the current position."""
 
         self._contexts = []
         self._contents = []
@@ -182,20 +300,16 @@ class SayAllPresenter(Extension):
             event,
             "notify_user:",
             notify_user,
-            "interrupt:",
-            interrupt,
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         self._script = script
-        if interrupt:
-            presentation_manager.get_manager().interrupt_presentation()
+        presentation_manager.get_manager().interrupt_presentation()
         obj = obj or focus_manager.get_manager().get_locus_of_focus()
         if not obj or AXObject.is_dead(obj):
             presentation_manager.get_manager().present_message(messages.LOCATION_NOT_FOUND_FULL)
             return True
 
-        focus_manager.get_manager().emit_region_changed(obj, mode=focus_manager.SAY_ALL)
         speech_presenter.get_presenter().say_all(
             self._say_all_iter(obj, offset),
             self._progress_callback,
@@ -282,61 +396,41 @@ class SayAllPresenter(Extension):
         obj, start_offset, end_offset, _text = content
         if start_offset == end_offset:
             return True, "start_offset equals end_offset"
-        if (
-            AXUtilities.get_is_label_for(obj)
-            and not AXUtilities.is_focusable(obj)
-            and not AXUtilities.is_heading(obj)
-            and not AXUtilities.is_caption(obj)
-        ):
+        if AXUtilities.get_is_label_for(obj) and not AXUtilities.is_focusable(obj):
             return True, "is non-focusable label for other object"
         stripped = _text.strip()
         if stripped and all(unicodedata.category(c).startswith("P") for c in stripped):
             return True, "is punctuation only"
         return False, ""
 
-    def _get_next_context(
-        self,
-        obj: Atspi.Accessible,
-        contents: list,
-        restrict_to: Atspi.Accessible | None,
-    ) -> tuple[Atspi.Accessible | None, int]:
-        """Returns the content position which follows the current contents."""
-
-        assert self._script is not None
-        if not contents:
-            return self._script.utilities.find_next_object(obj, restrict_to), 0
-
-        last_obj, last_offset = contents[-1][0], contents[-1][2]
-        # last_offset is the start of the next text unit (per AT-SPI2 semantics).
-        # next_context() looks for the position after the provided offset. In the case of
-        # text, we will wind up with the same text unit for last_offset and last_offset - 1.
-        # However, if the character at last_offset is an embedded object, we'll skip over
-        # its contents if we pass last_offset directly. Only decrement in that case so that
-        # next_context() can still cross object boundaries at end of text.
-        if AXUtilities.character_at_offset_is_eoc(last_obj, last_offset):
-            last_offset = max(0, last_offset - 1)
-        return self._script.utilities.next_context(
-            last_obj,
-            last_offset,
-            skip_space=True,
-            restrict_to=restrict_to,
-        )
-
     def _advance_to_next(
         self,
-        next_obj: Atspi.Accessible | None,
-        next_offset: int,
+        obj: Atspi.Accessible,
+        _offset: int,
+        contents: list,
         restrict_to: Atspi.Accessible | None,
     ) -> tuple[Atspi.Accessible | None, int]:
         """Advances to the next content position during say-all iteration."""
 
-        # The web context walkers ignore restrict_to, so stop Say All at the embedded document.
-        if (
-            next_obj is not None
-            and AXUtilities.is_embedded_document_frame(restrict_to)
-            and not AXUtilities.is_ancestor(next_obj, restrict_to, True)
-        ):
-            return None, 0
+        assert self._script is not None
+        if contents:
+            last_obj, last_offset = contents[-1][0], contents[-1][2]
+            # last_offset is the start of the next text unit (per AT-SPI2 semantics).
+            # next_context() looks for the position after the provided offset. In the case of
+            # text, we will wind up with the same text unit for last_offset and last_offset - 1.
+            # However, if the character at last_offset is an embedded object, we'll skip over
+            # its contents if we pass last_offset directly. Only decrement in that case so that
+            # next_context() can still cross object boundaries at end of text.
+            if AXUtilities.character_at_offset_is_eoc(last_obj, last_offset):
+                last_offset = max(0, last_offset - 1)
+            next_obj, next_offset = self._script.utilities.next_context(
+                last_obj,
+                last_offset,
+                restrict_to=restrict_to,
+            )
+        else:
+            next_obj = self._script.utilities.find_next_object(obj, restrict_to)
+            next_offset = 0
 
         if next_obj is not None:
             tokens = ["SAY ALL PRESENTER: Updating focus to", next_obj]
@@ -360,7 +454,7 @@ class SayAllPresenter(Extension):
             skip, _reason = self._say_all_should_skip_content(content, contents)
             if skip:
                 continue
-            expanded = AXUtilities.expand_eocs(content_obj, start, end)
+            expanded = self._script.utilities.expand_eocs(content_obj, start, end)
             if not expanded.strip():
                 continue
             if first_obj is None:
@@ -377,18 +471,10 @@ class SayAllPresenter(Extension):
         tokens = [
             "SAY ALL PRESENTER: Speaking (displayed-text):",
             first_obj,
-            "'",
-            combined,
-            "' (",
-            first_start,
-            "-",
-            last_end,
-            ")",
+            f"'{combined}' ({first_start}-{last_end})",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        self._script.utilities.set_caret_offset(
-            first_obj, first_start, reason=CaretSetReason.SAY_ALL_COMMAND
-        )
+        self._script.utilities.set_caret_offset(first_obj, first_start)
         ax_event_synthesizer.get_synthesizer().scroll_into_view(
             context.obj,
             context.start_offset,
@@ -399,7 +485,6 @@ class SayAllPresenter(Extension):
     def _generate_speech_contexts(
         self,
         contents: list[tuple[Atspi.Accessible, int, int, str]],
-        next_obj: Atspi.Accessible | None = None,
     ) -> Generator[list[speechserver.SayAllContext | ACSS], None, None]:
         """Yields [SayAllContext, ACSS] pairs for each content item."""
 
@@ -408,79 +493,50 @@ class SayAllPresenter(Extension):
         for i, content in enumerate(contents):
             content_obj, start, end, text = content
             tokens = [
-                "SAY ALL PRESENTER: CONTENT:",
-                i,
-                ".",
+                f"SAY ALL PRESENTER: CONTENT: {i}.",
                 content_obj,
-                "'",
-                text,
-                "' (",
-                start,
-                "-",
-                end,
-                ")",
+                f"'{text}' ({start}-{end})",
             ]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
             skip, reason = self._say_all_should_skip_content(content, contents)
             if skip:
-                tokens = ["SAY ALL PRESENTER: Skipping content -", reason, "."]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                msg = f"SAY ALL PRESENTER: Skipping content - {reason}."
+                debug.print_message(debug.LEVEL_INFO, msg, True)
                 continue
 
             utterances = speech_presenter.get_presenter().generate_speech_contents(
                 self._script,
                 [content],
-                eliminate_pauses=True,
-                prior_obj=self._prior_obj,
+                eliminatePauses=True,
+                priorObj=self._prior_obj,
                 index=i,
                 total=len(contents),
-                next_obj=contents[i + 1][0] if i + 1 < len(contents) else next_obj,
             )
+            self._prior_obj = content_obj
             elements, voices = self._parse_utterances(utterances)
             if len(elements) != len(voices):
                 tokens = [
                     "SAY ALL PRESENTER: Skipping content - elements/voices mismatch:",
                     content_obj,
-                    "'",
-                    text,
-                    "', elements:",
-                    len(elements),
-                    ", voices:",
-                    len(voices),
+                    f"'{text}', elements: {len(elements)}, voices: {len(voices)}",
                 ]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 continue
 
-            presentations = [
-                (element, voice)
-                for element, voice in zip(elements, voices, strict=True)
-                if element and (not isinstance(element, str) or element.strip())
-            ]
-            if not presentations:
-                if self._prior_obj and AXUtilities.is_ancestor(self._prior_obj, content_obj):
-                    self._prior_obj = content_obj
-                continue
+            for element, voice in zip(elements, voices, strict=True):
+                if not element or (isinstance(element, str) and not element.strip()):
+                    continue
 
-            self._prior_obj = content_obj
-            for element, voice in presentations:
                 context = speechserver.SayAllContext(content_obj, element, start, end)
                 self._contexts.append(context)
                 tokens = [
                     "SAY ALL PRESENTER: Speaking (contents):",
                     content_obj,
-                    "'",
-                    element,
-                    "' (",
-                    start,
-                    "-",
-                    end,
-                    ")",
+                    f"'{element}' ({start}-{end})",
                 ]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                self._script.utilities.set_caret_offset(
-                    content_obj, start, reason=CaretSetReason.SAY_ALL_COMMAND
-                )
+                self._script.utilities.set_caret_offset(content_obj, start)
                 ax_event_synthesizer.get_synthesizer().scroll_into_view(
                     context.obj,
                     context.start_offset,
@@ -503,8 +559,8 @@ class SayAllPresenter(Extension):
         if offset is None:
             offset = self._script.utilities.get_caret_context()[-1] or 0
 
-        restrict_to = AXUtilities.get_embedded_document_frame_for_object(obj)
-        if restrict_to is None and (AXUtilities.is_text(obj) or AXUtilities.is_terminal(obj)):
+        restrict_to = None
+        if AXUtilities.is_text(obj) or AXUtilities.is_terminal(obj):
             restrict_to = obj
 
         prev_obj, prev_offset = None, None
@@ -514,14 +570,10 @@ class SayAllPresenter(Extension):
                 tokens = [
                     "SAY ALL PRESENTER: Stuck at",
                     prev_obj,
-                    "offset",
-                    prev_offset,
-                    ".",
+                    f"offset {prev_offset}.",
                     "Moving to",
                     obj,
-                    "offset",
-                    offset,
-                    ".",
+                    f"offset {offset}.",
                 ]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
                 continue
@@ -537,22 +589,16 @@ class SayAllPresenter(Extension):
                     use_cache=False,
                 )
 
-            # A layout line at the edge of an embedded document can spill into the page below it.
-            if AXUtilities.is_embedded_document_frame(restrict_to):
-                contents = [c for c in contents if AXUtilities.is_ancestor(c[0], restrict_to, True)]
-
             filtered = self._script.utilities.filter_contents_for_presentation(contents)
             self._contents.extend(filtered)
-
-            next_obj, next_offset = self._get_next_context(obj, contents, restrict_to)
 
             if self.get_only_speak_displayed_text():
                 if (result := self._build_displayed_text_context(filtered)) is not None:
                     yield list(result)
             else:
-                yield from self._generate_speech_contexts(filtered, next_obj)
+                yield from self._generate_speech_contexts(filtered)
 
-            obj, offset = self._advance_to_next(next_obj, next_offset, restrict_to)
+            obj, offset = self._advance_to_next(obj, offset, contents, restrict_to)
 
         self.stop()
 
@@ -614,9 +660,7 @@ class SayAllPresenter(Extension):
         self.say_all(self._script, obj=next_obj, offset=next_offset)
         return True
 
-    def _progress_callback(  # pylint: disable=too-many-return-statements
-        self, context: speechserver.SayAllContext, progress_type: int
-    ) -> None:
+    def _progress_callback(self, context: speechserver.SayAllContext, progress_type: int) -> None:
         self._current_context = context
         self._say_all_is_running = True
 
@@ -642,24 +686,15 @@ class SayAllPresenter(Extension):
                     return
                 if manager.last_event_was_up() and self._rewind(context):
                     return
-                caret_nav = caret_navigator.get_navigator()
-                if caret_nav.last_input_event_was_navigation_command():
-                    self.stop()
-                    return
-                structural_nav = structural_navigator.get_navigator()
-                if structural_nav.last_input_event_was_navigation_command():
-                    if self.get_structural_navigation_enabled():
-                        return
-                    self.stop()
+                navigator = structural_navigator.get_navigator()
+                if (
+                    self.get_structural_navigation_enabled()
+                    and navigator.last_input_event_was_navigation_command()
+                ):
                     return
                 presentation_manager.get_manager().interrupt_presentation()
-                AXUtilities.set_caret_offset_with_reason(
-                    context.obj, context.current_offset, CaretSetReason.SAY_ALL_COMMAND
-                )
+                AXText.set_caret_offset(context.obj, context.current_offset)
                 self._say_all_is_running = False
-            else:
-                self.stop()
-                return
         else:
             tokens = ["SAY ALL PROGRESS CALLBACK: Completed", context]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -673,32 +708,6 @@ class SayAllPresenter(Extension):
             mode,
         )
         self._script.utilities.set_caret_context(context.obj, context.current_offset)
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_ARTICLE,
-        schema="say-all",
-        gtype="b",
-        default=True,
-        summary="Announce articles",
-    )
-    @dbus_service.getter
-    def get_announce_article(self) -> bool:
-        """Returns whether articles are announced when entered."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_ARTICLE, True)
-
-    @dbus_service.setter
-    def set_announce_article(self, value: bool) -> bool:
-        """Sets whether articles are announced when entered."""
-
-        tokens = ["SAY ALL PRESENTER: Setting announce articles to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_ARTICLE,
-            value,
-        )
-        return True
 
     @gsettings_registry.get_registry().gsetting(
         key=KEY_ANNOUNCE_BLOCKQUOTE,
@@ -718,63 +727,11 @@ class SayAllPresenter(Extension):
     def set_announce_blockquote(self, value: bool) -> bool:
         """Sets whether blockquotes are announced when entered."""
 
-        tokens = ["SAY ALL PRESENTER: Setting announce blockquotes to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting announce blockquotes to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_BLOCKQUOTE,
-            value,
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_CODE_BLOCK,
-        schema="say-all",
-        gtype="b",
-        default=True,
-        summary="Announce code blocks",
-    )
-    @dbus_service.getter
-    def get_announce_code_block(self) -> bool:
-        """Returns whether code blocks are announced when entered."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_CODE_BLOCK, True)
-
-    @dbus_service.setter
-    def set_announce_code_block(self, value: bool) -> bool:
-        """Sets whether code blocks are announced when entered."""
-
-        tokens = ["SAY ALL PRESENTER: Setting announce code blocks to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_CODE_BLOCK,
-            value,
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_DOCUMENT,
-        schema="say-all",
-        gtype="b",
-        default=True,
-        summary="Announce embedded documents",
-    )
-    @dbus_service.getter
-    def get_announce_document(self) -> bool:
-        """Returns whether embedded documents are announced when entered and left."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_DOCUMENT, True)
-
-    @dbus_service.setter
-    def set_announce_document(self, value: bool) -> bool:
-        """Sets whether embedded documents are announced when entered and left."""
-
-        tokens = ["SAY ALL PRESENTER: Setting announce documents to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_DOCUMENT,
             value,
         )
         return True
@@ -797,8 +754,8 @@ class SayAllPresenter(Extension):
     def set_announce_form(self, value: bool) -> bool:
         """Sets whether non-landmark forms are announced when entered."""
 
-        tokens = ["SAY ALL PRESENTER: Setting announce forms to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting announce forms to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ANNOUNCE_FORM, value
         )
@@ -822,8 +779,8 @@ class SayAllPresenter(Extension):
     def set_announce_grouping(self, value: bool) -> bool:
         """Sets whether groupings are announced when entered."""
 
-        tokens = ["SAY ALL PRESENTER: Setting announce groupings to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting announce groupings to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_GROUPING,
@@ -849,8 +806,8 @@ class SayAllPresenter(Extension):
     def set_announce_landmark(self, value: bool) -> bool:
         """Sets whether landmarks are announced when entered."""
 
-        tokens = ["SAY ALL PRESENTER: Setting announce landmarks to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting announce landmarks to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ANNOUNCE_LANDMARK,
@@ -876,8 +833,8 @@ class SayAllPresenter(Extension):
     def set_announce_list(self, value: bool) -> bool:
         """Sets whether lists are announced when entered."""
 
-        tokens = ["SAY ALL PRESENTER: Setting announce lists to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting announce lists to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ANNOUNCE_LIST, value
         )
@@ -901,36 +858,10 @@ class SayAllPresenter(Extension):
     def set_announce_table(self, value: bool) -> bool:
         """Sets whether tables are announced when entered."""
 
-        tokens = ["SAY ALL PRESENTER: Setting announce tables to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting announce tables to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA, self.KEY_ANNOUNCE_TABLE, value
-        )
-        return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_ANNOUNCE_TRACKED_CHANGES,
-        schema="say-all",
-        gtype="b",
-        default=True,
-        summary="Announce tracked changes",
-    )
-    @dbus_service.getter
-    def get_announce_tracked_changes(self) -> bool:
-        """Returns whether tracked changes are announced when entered."""
-
-        return self._get_setting(self.KEY_ANNOUNCE_TRACKED_CHANGES, True)
-
-    @dbus_service.setter
-    def set_announce_tracked_changes(self, value: bool) -> bool:
-        """Sets whether tracked changes are announced when entered."""
-
-        tokens = ["SAY ALL PRESENTER: Setting announce tracked changes to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_ANNOUNCE_TRACKED_CHANGES,
-            value,
         )
         return True
 
@@ -951,8 +882,8 @@ class SayAllPresenter(Extension):
     def set_only_speak_displayed_text(self, value: bool) -> bool:
         """Sets whether Say All only speaks displayed text."""
 
-        tokens = ["SAY ALL PRESENTER: Setting only speak displayed text to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting only speak displayed text to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_ONLY_SPEAK_DISPLAYED_TEXT,
@@ -987,12 +918,12 @@ class SayAllPresenter(Extension):
         try:
             style = SayAllStyle[value.upper()]
         except KeyError:
-            tokens: list[Any] = ["SAY ALL PRESENTER: Invalid style:", value]
-            debug.print_tokens(debug.LEVEL_WARNING, tokens, True)
+            msg = f"SAY ALL PRESENTER: Invalid style: {value}"
+            debug.print_message(debug.LEVEL_WARNING, msg, True)
             return False
 
-        tokens = ["SAY ALL PRESENTER: Setting style to", value, "(", style.value, ")."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting style to {value} ({style.value})."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_STYLE,
@@ -1018,8 +949,8 @@ class SayAllPresenter(Extension):
     def set_structural_navigation_enabled(self, value: bool) -> bool:
         """Sets whether structural navigation keys can be used in Say All."""
 
-        tokens = ["SAY ALL PRESENTER: Setting enable structural navigation to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting enable structural navigation to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_STRUCTURAL_NAVIGATION,
@@ -1045,63 +976,14 @@ class SayAllPresenter(Extension):
     def set_rewind_and_fast_forward_enabled(self, value: bool) -> bool:
         """Returns whether Up and Down can be used in Say All."""
 
-        tokens = ["SAY ALL PRESENTER: Setting enable rewind and fast forward to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SAY ALL PRESENTER: Setting enable rewind and fast forward to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_REWIND_AND_FAST_FORWARD,
             value,
         )
         return True
-
-    @gsettings_registry.get_registry().gsetting(
-        key=KEY_TEXT_ATTRIBUTE_CHANGE_MODE,
-        schema="say-all",
-        genum="org.gnome.Orca.TextAttributeChangeMode",
-        default="off",
-        summary="When to speak text attribute changes during Say All",
-    )
-    @dbus_service.getter
-    def get_text_attribute_change_mode_as_string(self) -> str:
-        """Returns when text attribute changes are spoken during Say All."""
-
-        return gsettings_registry.get_registry().layered_lookup(
-            self._SCHEMA,
-            self.KEY_TEXT_ATTRIBUTE_CHANGE_MODE,
-            "",
-            genum="org.gnome.Orca.TextAttributeChangeMode",
-            default="off",
-        )
-
-    @dbus_service.setter
-    def set_text_attribute_change_mode_as_string(self, value: str) -> bool:
-        """Sets when text attribute changes are spoken during Say All."""
-
-        tokens = ["SAY ALL PRESENTER: Setting text attribute change mode to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        gsettings_registry.get_registry().set_runtime_value(
-            self._SCHEMA,
-            self.KEY_TEXT_ATTRIBUTE_CHANGE_MODE,
-            value,
-        )
-        return True
-
-    def get_text_attribute_change_mode(self) -> text_attribute_manager.TextAttributeChangeMode:
-        """Returns the text attribute change mode enum."""
-
-        name = self.get_text_attribute_change_mode_as_string()
-        return text_attribute_manager.TextAttributeChangeMode[name.upper().replace("-", "_")]
-
-    def get_text_attribute_change_mode_as_int(self) -> int:
-        """Returns the text attribute change mode as an int for the UI."""
-
-        return self.get_text_attribute_change_mode().value
-
-    def set_text_attribute_change_mode_from_int(self, value: int) -> bool:
-        """Sets the text attribute change mode from an int for the UI."""
-
-        name = text_attribute_manager.TextAttributeChangeMode(value).name.lower().replace("_", "-")
-        return self.set_text_attribute_change_mode_as_string(name)
 
 
 _presenter: SayAllPresenter = SayAllPresenter()

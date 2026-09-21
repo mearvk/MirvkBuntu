@@ -33,7 +33,14 @@ META_EXPORT
 gboolean meta_is_verbose  (void);
 
 META_EXPORT
+gboolean meta_is_wayland_compositor (void);
+
+META_EXPORT
 void meta_bug        (const char *format,
+                      ...) G_GNUC_PRINTF (1, 2);
+
+META_EXPORT
+void meta_warning    (const char *format,
                       ...) G_GNUC_PRINTF (1, 2);
 
 META_EXPORT
@@ -44,17 +51,11 @@ void meta_fatal      (const char *format,
  * MetaDebugPaintFlag:
  * @META_DEBUG_PAINT_NONE: default
  * @META_DEBUG_PAINT_OPAQUE_REGION: paint opaque regions
- * @META_DEBUG_PAINT_SYNC_CURSOR_PRIMARY: make cursor updates await compositing
- *   frames
- * @META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT: always composite frames
  */
 typedef enum
 {
   META_DEBUG_PAINT_NONE          = 0,
   META_DEBUG_PAINT_OPAQUE_REGION = 1 << 0,
-  META_DEBUG_PAINT_SYNC_CURSOR_PRIMARY = 1 << 1,
-  META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT = 1 << 2,
-  META_DEBUG_PAINT_IGNORE_COLOR_STATE_FOR_DIRECT_SCANOUT = 1 << 3,
 } MetaDebugPaintFlag;
 
 META_EXPORT
@@ -62,6 +63,12 @@ void meta_add_verbose_topic    (MetaDebugTopic topic);
 
 META_EXPORT
 void meta_remove_verbose_topic (MetaDebugTopic topic);
+
+META_EXPORT
+void meta_push_no_msg_prefix (void);
+
+META_EXPORT
+void meta_pop_no_msg_prefix  (void);
 
 META_EXPORT
 gint  meta_unsigned_long_equal (gconstpointer v1,
@@ -81,18 +88,29 @@ char* meta_external_binding_name_for_action (guint keybinding_action);
 META_EXPORT
 char* meta_g_utf8_strndup (const gchar *src, gsize n);
 
-META_EXPORT
-void meta_read_bytes (int                 fd,
-                      uint32_t            offset,
-                      uint32_t            length,
-                      GAsyncReadyCallback callback,
-                      gpointer            user_data);
+typedef enum
+{
+  META_LOCALE_DIRECTION_LTR,
+  META_LOCALE_DIRECTION_RTL,
+} MetaLocaleDirection;
 
 META_EXPORT
-gboolean meta_read_bytes_finish (GAsyncResult  *result,
-                                 uint8_t      **bytes,
-                                 uint32_t      *length,
-                                 GError       **error);
+MetaLocaleDirection meta_get_locale_direction (void);
+
+META_EXPORT
+void meta_add_clutter_debug_flags (ClutterDebugFlag     debug_flags,
+                                   ClutterDrawDebugFlag draw_flags,
+                                   ClutterPickDebugFlag pick_flags);
+
+META_EXPORT
+void meta_remove_clutter_debug_flags (ClutterDebugFlag     debug_flags,
+                                      ClutterDrawDebugFlag draw_flags,
+                                      ClutterPickDebugFlag pick_flags);
+
+META_EXPORT
+void meta_get_clutter_debug_flags (ClutterDebugFlag     *debug_flags,
+                                   ClutterDrawDebugFlag *draw_flags,
+                                   ClutterPickDebugFlag *pick_flags);
 
 META_EXPORT
 void meta_add_debug_paint_flag (MetaDebugPaintFlag flag);

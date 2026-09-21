@@ -41,7 +41,7 @@ struct _GtkCssTransientNodeClass
   GtkCssNodeClass node_class;
 };
 
-GType                   gtk_css_transient_node_get_type         (void);
+GType                   gtk_css_transient_node_get_type         (void) G_GNUC_CONST;
 
 GtkCssNode *            gtk_css_transient_node_new              (GtkCssNode     *parent);
 

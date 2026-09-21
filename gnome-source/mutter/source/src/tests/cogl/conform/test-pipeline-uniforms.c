@@ -1,3 +1,5 @@
+#define COGL_DISABLE_DEPRECATION_WARNINGS
+
 #include <cogl/cogl.h>
 
 #include <string.h>
@@ -21,74 +23,87 @@ typedef struct _TestState
 } TestState;
 
 static const char
-color_declarations[] =
-  "uniform float red, green, blue;\n";
+color_source[] =
+  "uniform float red, green, blue;\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
+  "  cogl_color_out = vec4 (red, green, blue, 1.0);\n"
+  "}\n";
 
 static const char
-color_replace[] =
-  "  cogl_color_out = vec4 (red, green, blue, 1.0);\n";
-
-static const char
-matrix_declarations[] =
-  "uniform mat4 matrix_array[4];\n";
-
-static const char
-matrix_replace[] =
+matrix_source[] =
+  "uniform mat4 matrix_array[4];\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
   "  vec4 color = vec4 (0.0, 0.0, 0.0, 1.0);\n"
   "  int i;\n"
   "\n"
   "  for (i = 0; i < 4; i++)\n"
   "    color = matrix_array[i] * color;\n"
   "\n"
-  "  cogl_color_out = color;\n";
+  "  cogl_color_out = color;\n"
+  "}\n";
 
 static const char
-vector_declarations[] =
+vector_source[] =
   "uniform vec4 vector_array[2];\n"
-  "uniform vec3 short_vector;\n";
-
-static const char
-vector_replace[] =
+  "uniform vec3 short_vector;\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
   "  cogl_color_out = (vector_array[0] +\n"
   "                    vector_array[1] +\n"
-  "                    vec4 (short_vector, 1.0));\n";
+  "                    vec4 (short_vector, 1.0));\n"
+  "}\n";
 
 static const char
-int_declarations[] =
+int_source[] =
   "uniform ivec4 vector_array[2];\n"
-  "uniform int single_value;\n";
-
-static const char
-int_replace[] =
+  "uniform int single_value;\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
   "  cogl_color_out = (vec4 (vector_array[0]) +\n"
   "                    vec4 (vector_array[1]) +\n"
-  "                    vec4 (float (single_value), 0.0, 0.0, 255.0)) / 255.0;\n";
+  "                    vec4 (float (single_value), 0.0, 0.0, 255.0)) / 255.0;\n"
+  "}\n";
 
 static const char
-long_declarations[] =
+long_source[] =
   "uniform int long_array[" G_STRINGIFY (LONG_ARRAY_SIZE) "];\n"
-  "const int last_index = " G_STRINGIFY (LONG_ARRAY_SIZE) " - 1;\n";
-
-static const char
-long_replace[] =
-  "  cogl_color_out = vec4 (float (long_array[last_index]), 0.0, 0.0, 1.0);\n";
+  "const int last_index = " G_STRINGIFY (LONG_ARRAY_SIZE) " - 1;\n"
+  "\n"
+  "void\n"
+  "main ()\n"
+  "{\n"
+  "  cogl_color_out = vec4 (float (long_array[last_index]), 0.0, 0.0, 1.0);\n"
+  "}\n";
 
 static CoglPipeline *
-create_pipeline_for_shader (TestState  *state,
-                            const char *declarations,
-                            const char *replace)
+create_pipeline_for_shader (TestState *state, const char *shader_source)
 {
   CoglPipeline *pipeline;
-  CoglSnippet *snippet;
+  CoglShader *shader;
+  CoglProgram *program;
 
   pipeline = cogl_pipeline_new (test_ctx);
 
-  snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT,
-                              declarations,
-                              NULL);
-  cogl_snippet_set_replace (snippet, replace);
-  cogl_pipeline_add_snippet (pipeline, snippet);
-  g_object_unref (snippet);
+  shader = cogl_create_shader (COGL_SHADER_TYPE_FRAGMENT);
+  cogl_shader_source (shader, shader_source);
+
+  program = cogl_create_program ();
+  cogl_program_attach_shader (program, shader);
+
+  cogl_pipeline_set_user_program (pipeline, program);
+
+  g_object_unref (shader);
+  g_object_unref (program);
 
   return pipeline;
 }
@@ -98,9 +113,7 @@ init_state (TestState *state)
 {
   int uniform_location;
 
-  state->pipeline_red = create_pipeline_for_shader (state,
-                                                    color_declarations,
-                                                    color_replace);
+  state->pipeline_red = create_pipeline_for_shader (state, color_source);
 
   uniform_location =
     cogl_pipeline_get_uniform_location (state->pipeline_red, "red");
@@ -122,15 +135,9 @@ init_state (TestState *state)
     cogl_pipeline_get_uniform_location (state->pipeline_blue, "blue");
   cogl_pipeline_set_uniform_1f (state->pipeline_blue, uniform_location, 1.0f);
 
-  state->matrix_pipeline = create_pipeline_for_shader (state,
-                                                       matrix_declarations,
-                                                       matrix_replace);
-  state->vector_pipeline = create_pipeline_for_shader (state,
-                                                       vector_declarations,
-                                                       vector_replace);
-  state->int_pipeline = create_pipeline_for_shader (state,
-                                                    int_declarations,
-                                                    int_replace);
+  state->matrix_pipeline = create_pipeline_for_shader (state, matrix_source);
+  state->vector_pipeline = create_pipeline_for_shader (state, vector_source);
+  state->int_pipeline = create_pipeline_for_shader (state, int_source);
 
   state->long_pipeline = NULL;
 }
@@ -140,9 +147,7 @@ init_long_pipeline_state (TestState *state)
 {
   int i;
 
-  state->long_pipeline = create_pipeline_for_shader (state,
-                                                     long_declarations,
-                                                     long_replace);
+  state->long_pipeline = create_pipeline_for_shader (state, long_source);
 
   /* This tries to lookup a large number of uniform names to make sure
      that the bitmask of overridden uniforms flows over the size of a
@@ -362,7 +367,7 @@ validate_result (void)
 
   for (i = 0; i <= 8; i++)
     {
-      int green_value = (int) (i / 8.0f * 255.0f + 0.5f);
+      int green_value = i / 8.0f * 255.0f + 0.5f;
       check_pos (i + 3, 0xff0000ff + (green_value << 16));
     }
 

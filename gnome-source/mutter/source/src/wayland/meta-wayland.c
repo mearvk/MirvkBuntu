@@ -34,41 +34,30 @@
 #endif
 
 #include "clutter/clutter.h"
-#include "cogl/cogl.h"
+#include "cogl/cogl-egl.h"
 #include "compositor/meta-surface-actor-wayland.h"
 #include "core/events.h"
 #include "core/meta-context-private.h"
 #include "wayland/meta-wayland-activation.h"
-#include "wayland/meta-wayland-background-effect.h"
 #include "wayland/meta-wayland-buffer.h"
-#include "wayland/meta-wayland-client-private.h"
-#include "wayland/meta-wayland-color-management.h"
-#include "wayland/meta-wayland-color-representation.h"
-#include "wayland/meta-wayland-commit-timing.h"
-#include "wayland/meta-wayland-cursor-shape.h"
-#include "wayland/meta-wayland-fifo.h"
 #include "wayland/meta-wayland-data-device.h"
 #include "wayland/meta-wayland-dma-buf.h"
+#include "wayland/meta-wayland-egl-stream.h"
 #include "wayland/meta-wayland-filter-manager.h"
-#include "wayland/meta-wayland-fixes.h"
 #include "wayland/meta-wayland-idle-inhibit.h"
 #include "wayland/meta-wayland-inhibit-shortcuts-dialog.h"
 #include "wayland/meta-wayland-inhibit-shortcuts.h"
 #include "wayland/meta-wayland-legacy-xdg-foreign.h"
-#include "wayland/meta-wayland-linux-drm-syncobj.h"
 #include "wayland/meta-wayland-outputs.h"
 #include "wayland/meta-wayland-presentation-time-private.h"
 #include "wayland/meta-wayland-private.h"
 #include "wayland/meta-wayland-region.h"
 #include "wayland/meta-wayland-seat.h"
 #include "wayland/meta-wayland-subsurface.h"
-#include "wayland/meta-wayland-system-bell.h"
 #include "wayland/meta-wayland-tablet-manager.h"
 #include "wayland/meta-wayland-transaction.h"
-#include "wayland/meta-wayland-xdg-dialog.h"
 #include "wayland/meta-wayland-xdg-foreign.h"
-#include "wayland/meta-wayland-xdg-session-manager.h"
-#include "wayland/meta-wayland-xdg-toplevel-tag.h"
+#include "wayland/meta-wayland-linux-drm-syncobj.h"
 
 #ifdef HAVE_XWAYLAND
 #include "wayland/meta-wayland-x11-interop.h"
@@ -77,9 +66,10 @@
 #include "wayland/meta-xwayland.h"
 #endif
 
+#ifdef HAVE_NATIVE_BACKEND
 #include "backends/native/meta-frame-native.h"
 #include "backends/native/meta-renderer-native.h"
-#include "wayland/meta-wayland-drm-lease.h"
+#endif
 
 enum
 {
@@ -194,7 +184,6 @@ emit_frame_callbacks_for_stage_view (MetaWaylandCompositor *compositor,
       MetaWaylandSurface *surface = l->data;
       MetaSurfaceActor *actor;
       MetaWaylandActorSurface *actor_surface;
-      gboolean should_flush_frame_callbacks;
 
       l = l->next;
 
@@ -202,11 +191,7 @@ emit_frame_callbacks_for_stage_view (MetaWaylandCompositor *compositor,
       if (!actor)
         continue;
 
-      should_flush_frame_callbacks =
-        meta_wayland_surface_flush_frame_callbacks (surface);
-
-      if (!should_flush_frame_callbacks &&
-          !meta_surface_actor_wayland_is_view_primary (actor,
+      if (!meta_surface_actor_wayland_is_view_primary (actor,
                                                        stage_view))
         continue;
 
@@ -218,6 +203,8 @@ emit_frame_callbacks_for_stage_view (MetaWaylandCompositor *compositor,
         g_list_delete_link (compositor->frame_callback_surfaces, l_cur);
     }
 }
+
+#ifdef HAVE_NATIVE_BACKEND
 
 static gboolean
 frame_callback_source_prepare (GSource *base,
@@ -356,86 +343,15 @@ ensure_source_for_stage_view (MetaWaylandCompositor *compositor,
   source = g_hash_table_lookup (priv->frame_callback_sources, stage_view);
   if (!source)
     {
-      g_autoptr (GMainContext) main_context = NULL;
-
-      main_context = g_main_context_ref_thread_default ();
-
       source = frame_callback_source_new (compositor, stage_view);
       g_hash_table_insert (priv->frame_callback_sources, stage_view, source);
-      g_source_attach (source, main_context);
+      g_source_attach (source, NULL);
       g_source_unref (source);
     }
 
   return source;
 }
-
-static gboolean
-clear_time_constraints_for_stage_view_transactions (MetaWaylandCompositor *compositor,
-                                                    ClutterStageView      *stage_view,
-                                                    int64_t                target_time_us)
-{
-  MetaWaylandTransaction *transaction;
-  gboolean cleared = FALSE;
-
-  while ((transaction = g_queue_peek_head (compositor->timed_transactions)))
-    {
-      if (!meta_wayland_transaction_unblock_timed (transaction, target_time_us))
-        break;
-
-      g_queue_pop_head (compositor->timed_transactions);
-      cleared = TRUE;
-    }
-
-  return cleared;
-}
-
-static void
-clear_barrier_for_stage_view_surfaces (MetaWaylandCompositor *compositor,
-                                       ClutterStageView      *stage_view)
-{
-  GList *l;
-
-  l = compositor->barrier_surfaces;
-  while (l)
-    {
-      GList *l_cur = l;
-      MetaWaylandSurface *surface = l->data;
-      MetaSurfaceActor *actor;
-
-      l = l->next;
-
-      /* If the surface is not visible, the fifo condition should be
-       * unblocked, even if it wasn't on this stage view */
-      actor = meta_wayland_surface_get_actor (surface);
-      if (actor && !meta_surface_actor_is_effectively_obscured (actor) &&
-          clutter_actor_is_mapped (CLUTTER_ACTOR (actor)) &&
-          !meta_surface_actor_wayland_is_view_primary (actor, stage_view))
-        continue;
-
-      compositor->barrier_surfaces =
-        g_list_delete_link (compositor->barrier_surfaces, l_cur);
-
-      meta_wayland_transaction_unblock_surface (surface);
-    }
-}
-
-static void
-on_before_update (ClutterStage          *stage,
-                  ClutterStageView      *stage_view,
-                  ClutterFrame          *frame,
-                  MetaWaylandCompositor *compositor)
-{
-  int64_t expected_presentation_time_us;
-
-  if (!clutter_frame_get_expected_presentation_time (frame,
-                                                     &expected_presentation_time_us))
-    expected_presentation_time_us = g_get_monotonic_time ();
-
-  if (clear_time_constraints_for_stage_view_transactions (compositor,
-                                                          stage_view,
-                                                          expected_presentation_time_us))
-    frame->is_target_presentation_time = TRUE;
-}
+#endif /* HAVE_NATIVE_BACKEND */
 
 static void
 on_after_update (ClutterStage          *stage,
@@ -443,12 +359,11 @@ on_after_update (ClutterStage          *stage,
                  ClutterFrame          *frame,
                  MetaWaylandCompositor *compositor)
 {
+#if defined(HAVE_NATIVE_BACKEND)
   MetaContext *context = meta_wayland_compositor_get_context (compositor);
   MetaBackend *backend = meta_context_get_backend (context);
   GSource *source;
   int64_t frame_deadline_us;
-
-  clear_barrier_for_stage_view_surfaces (compositor, stage_view);
 
   if (!META_IS_BACKEND_NATIVE (backend))
     {
@@ -479,6 +394,9 @@ on_after_update (ClutterStage          *stage,
     return;
 
   g_source_set_ready_time (source, frame_deadline_us);
+#else
+  emit_frame_callbacks_for_stage_view (compositor, stage_view);
+#endif
 }
 
 void
@@ -550,15 +468,49 @@ meta_wayland_compositor_update (MetaWaylandCompositor *compositor,
   meta_wayland_seat_update (compositor->seat, event);
 }
 
+static MetaWaylandOutput *
+get_output_for_stage_view (MetaWaylandCompositor *compositor,
+                           ClutterStageView      *stage_view)
+{
+  MetaCrtc *crtc;
+  MetaOutput *output;
+  MetaMonitor *monitor;
+
+  crtc = meta_renderer_view_get_crtc (META_RENDERER_VIEW (stage_view));
+
+  /*
+   * All outputs occupy the same region of the screen, as their contents are
+   * the same, so pick the first one.
+   */
+  output = meta_crtc_get_outputs (crtc)->data;
+
+  monitor = meta_output_get_monitor (output);
+  return g_hash_table_lookup (compositor->outputs,
+                              meta_monitor_get_spec (monitor));
+}
+
 static void
 on_presented (ClutterStage          *stage,
               ClutterStageView      *stage_view,
               ClutterFrameInfo      *frame_info,
               MetaWaylandCompositor *compositor)
 {
-  meta_wayland_presentation_time_present_feedbacks (compositor,
-                                                    stage_view,
-                                                    frame_info);
+  MetaWaylandPresentationFeedback *feedback, *next;
+  struct wl_list *feedbacks;
+  MetaWaylandOutput *output;
+
+  feedbacks =
+    meta_wayland_presentation_time_ensure_feedbacks (&compositor->presentation_time,
+                                                     stage_view);
+
+  output = get_output_for_stage_view (compositor, stage_view);
+
+  wl_list_for_each_safe (feedback, next, feedbacks, link)
+    {
+      meta_wayland_presentation_feedback_present (feedback,
+                                                  frame_info,
+                                                  output);
+    }
 }
 
 static void
@@ -587,6 +539,28 @@ meta_wayland_compositor_handle_event (MetaWaylandCompositor *compositor,
                                       const ClutterEvent    *event)
 {
   return meta_wayland_seat_handle_event (compositor->seat, event);
+}
+
+/* meta_wayland_compositor_update_key_state:
+ * @compositor: the #MetaWaylandCompositor
+ * @key_vector: bit vector of key states
+ * @key_vector_len: length of @key_vector
+ * @offset: the key for the first evdev keycode is found at this offset in @key_vector
+ *
+ * This function is used to resynchronize the key state that Mutter
+ * is tracking with the actual keyboard state. This is useful, for example,
+ * to handle changes in key state when a nested compositor doesn't
+ * have focus. We need to fix up the XKB modifier tracking and deliver
+ * any modifier changes to clients.
+ */
+void
+meta_wayland_compositor_update_key_state (MetaWaylandCompositor *compositor,
+                                          char                  *key_vector,
+                                          int                    key_vector_len,
+                                          int                    offset)
+{
+  meta_wayland_keyboard_update_key_state (compositor->seat->keyboard,
+                                          key_vector, key_vector_len, offset);
 }
 
 void
@@ -627,53 +601,6 @@ meta_wayland_compositor_remove_presentation_feedback_surface (MetaWaylandComposi
     g_list_remove (compositor->presentation_time.feedback_surfaces, surface);
 }
 
-static int
-compare_transaction_times (const MetaWaylandTransaction *a,
-                           const MetaWaylandTransaction *b,
-                           void                         *data)
-{
-  int64_t target_time_us_a = meta_wayland_transaction_get_target_presentation_time_us (a);
-  int64_t target_time_us_b = meta_wayland_transaction_get_target_presentation_time_us (b);
-
-  if (target_time_us_a > target_time_us_b)
-    return 1;
-
-  if (target_time_us_a < target_time_us_b)
-    return -1;
-
-  return 0;
-}
-
-void
-meta_wayland_compositor_add_timed_transaction (MetaWaylandCompositor  *compositor,
-                                               MetaWaylandTransaction *transaction)
-{
-  if (g_queue_find (compositor->timed_transactions, transaction))
-    return;
-
-  g_queue_insert_sorted (compositor->timed_transactions, transaction,
-                         (GCompareDataFunc)compare_transaction_times, NULL);
-}
-
-void
-meta_wayland_compositor_add_barrier_surface (MetaWaylandCompositor *compositor,
-                                             MetaWaylandSurface    *surface)
-{
-  if (g_list_find (compositor->barrier_surfaces, surface))
-    return;
-
-  compositor->barrier_surfaces =
-    g_list_prepend (compositor->barrier_surfaces, surface);
-}
-
-void
-meta_wayland_compositor_remove_barrier_surface (MetaWaylandCompositor *compositor,
-                                                MetaWaylandSurface    *surface)
-{
-  compositor->barrier_surfaces =
-    g_list_remove (compositor->barrier_surfaces, surface);
-}
-
 GQueue *
 meta_wayland_compositor_get_committed_transactions (MetaWaylandCompositor *compositor)
 {
@@ -681,44 +608,11 @@ meta_wayland_compositor_get_committed_transactions (MetaWaylandCompositor *compo
 }
 
 static gboolean
-update_activation_environment (GDBusConnection *session_bus,
-                               const char      *name,
-                               const char      *value)
-{
-  g_autoptr (GError) error = NULL;
-  g_autoptr (GVariant) result = NULL;
-  GVariantBuilder builder;
-
-  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a{ss}"));
-  g_variant_builder_add (&builder, "{ss}", name, value);
-
-  result = g_dbus_connection_call_sync (session_bus,
-                                        "org.freedesktop.DBus",
-                                        "/org/freedesktop/DBus",
-                                        "org.freedesktop.DBus",
-                                        "UpdateActivationEnvironment",
-                                        g_variant_new ("(@a{ss})",
-                                                       g_variant_builder_end (&builder)),
-                                        NULL,
-                                        G_DBUS_CALL_FLAGS_NO_AUTO_START,
-                                        -1, NULL, &error);
-
-  if (error)
-    {
-      g_warning ("Failed to update activation environment with variable %s: %s",
-                 name, error->message);
-
-      return FALSE;
-    }
-  return TRUE;
-}
-
-static gboolean
 set_gnome_env (const char *name,
 	       const char *value)
 {
   GDBusConnection *session_bus;
-  g_autoptr (GError) error = NULL;
+  GError *error = NULL;
   g_autoptr (GVariant) result = NULL;
 
   setenv (name, value, TRUE);
@@ -737,18 +631,17 @@ set_gnome_env (const char *name,
 			       -1, NULL, &error);
   if (error)
     {
-      g_autofree char *remote_error = NULL;
+      char *remote_error;
 
       remote_error = g_dbus_error_get_remote_error (error);
-      if (g_strcmp0 (remote_error, "org.freedesktop.DBus.Error.NameHasNoOwner") == 0)
+      if (g_strcmp0 (remote_error, "org.gnome.SessionManager.NotInInitialization") != 0)
         {
-          return update_activation_environment (session_bus, name, value);
+          meta_warning ("Failed to set environment variable %s for gnome-session: %s",
+                        name, error->message);
         }
-      else if (g_strcmp0 (remote_error, "org.gnome.SessionManager.NotInInitialization") != 0)
-        {
-          g_warning ("Failed to set environment variable %s for gnome-session: %s",
-                     name, error->message);
-        }
+
+      g_free (remote_error);
+      g_error_free (error);
 
       return FALSE;
     }
@@ -766,25 +659,9 @@ meta_wayland_log_func (const char *fmt,
   g_free (str);
 }
 
-static void
-on_client_created (struct wl_listener *listener,
-                   void               *user_data)
+void
+meta_wayland_compositor_prepare_shutdown (MetaWaylandCompositor *compositor)
 {
-  struct wl_client *client = user_data;
-  MetaWaylandCompositor *compositor =
-    wl_container_of (listener, compositor, client_created_listener);
-  MetaContext *context = meta_wayland_compositor_get_context (compositor);
-  g_autoptr (MetaWaylandClient) wayland_client = NULL;
-
-  wayland_client = meta_wayland_client_new_from_wl (context, client);
-}
-
-static void
-on_prepare_compositor_shutdown (MetaContext *context,
-                                gpointer     user_data)
-{
-  MetaWaylandCompositor *compositor = user_data;
-
   g_signal_emit (compositor, signals[PREPARE_SHUTDOWN], 0, NULL);
 
   if (compositor->wayland_display)
@@ -800,8 +677,6 @@ meta_wayland_compositor_finalize (GObject *object)
   MetaBackend *backend = meta_context_get_backend (compositor->context);
   ClutterActor *stage = meta_backend_get_stage (backend);
 
-  meta_wayland_xdg_foreign_finalize (compositor);
-  meta_wayland_xdg_session_management_finalize (compositor);
   meta_wayland_activation_finalize (compositor);
   meta_wayland_outputs_finalize (compositor);
   meta_wayland_presentation_time_finalize (compositor);
@@ -825,8 +700,6 @@ meta_wayland_compositor_finalize (GObject *object)
   g_clear_pointer (&compositor->wayland_display, wl_display_destroy);
   g_clear_pointer (&compositor->source, g_source_destroy);
 
-  g_queue_free (compositor->timed_transactions);
-
   G_OBJECT_CLASS (meta_wayland_compositor_parent_class)->finalize (object);
 }
 
@@ -844,15 +717,10 @@ meta_wayland_compositor_init (MetaWaylandCompositor *compositor)
   if (compositor->wayland_display == NULL)
     g_error ("Failed to create the global wl_display");
 
-  compositor->client_created_listener.notify = on_client_created;
-  wl_display_add_client_created_listener (compositor->wayland_display,
-                                          &compositor->client_created_listener);
-
   priv->filter_manager = meta_wayland_filter_manager_new (compositor);
   priv->frame_callback_sources =
     g_hash_table_new_full (NULL, NULL, NULL,
                            (GDestroyNotify) g_source_destroy);
-  compositor->timed_transactions = g_queue_new ();
 }
 
 static void
@@ -874,7 +742,8 @@ meta_wayland_compositor_class_init (MetaWaylandCompositorClass *klass)
 void
 meta_wayland_override_display_name (const char *display_name)
 {
-  g_set_str (&_display_name_override, display_name);
+  g_clear_pointer (&_display_name_override, g_free);
+  _display_name_override = g_strdup (display_name);
 }
 
 static void
@@ -884,16 +753,16 @@ meta_wayland_init_egl (MetaWaylandCompositor *compositor)
     meta_wayland_compositor_get_instance_private (compositor);
   MetaContext *context = meta_wayland_compositor_get_context (compositor);
   MetaBackend *backend = meta_context_get_backend (context);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   ClutterBackend *clutter_backend = meta_backend_get_clutter_backend (backend);
   CoglContext *cogl_context =
     clutter_backend_get_cogl_context (clutter_backend);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (cogl_context_get_renderer (cogl_context));
+  EGLDisplay egl_display = cogl_egl_context_get_egl_display (cogl_context);
   g_autoptr (GError) error = NULL;
 
-  if (!cogl_renderer_egl_has_extensions (renderer_egl, NULL,
-                                         "EGL_WL_bind_wayland_display",
-                                         NULL))
+  if (!meta_egl_has_extensions (egl, egl_display, NULL,
+                                "EGL_WL_bind_wayland_display",
+                                NULL))
     {
       meta_topic (META_DEBUG_WAYLAND,
                   "Not binding Wayland display, missing extension");
@@ -903,9 +772,10 @@ meta_wayland_init_egl (MetaWaylandCompositor *compositor)
   meta_topic (META_DEBUG_WAYLAND,
               "Binding Wayland EGL display");
 
-  if (cogl_renderer_egl_bind_wayland_display (renderer_egl,
-                                              compositor->wayland_display,
-                                              &error))
+  if (meta_egl_bind_wayland_display (egl,
+                                     egl_display,
+                                     compositor->wayland_display,
+                                     &error))
     priv->is_wayland_egl_display_bound = TRUE;
   else
     g_warning ("Failed to bind Wayland display: %s", error->message);
@@ -939,24 +809,14 @@ meta_wayland_compositor_new (MetaContext *context)
 {
   MetaBackend *backend = meta_context_get_backend (context);
   ClutterActor *stage = meta_backend_get_stage (backend);
-  g_autoptr (GMainContext) main_context = NULL;
   MetaWaylandCompositor *compositor;
   GSource *wayland_event_source;
 #ifdef HAVE_XWAYLAND
   MetaX11DisplayPolicy x11_display_policy;
 #endif
 
-  main_context = g_main_context_ref_thread_default ();
-
   compositor = g_object_new (META_TYPE_WAYLAND_COMPOSITOR, NULL);
   compositor->context = context;
-
-  g_signal_connect_after (context, "prepare-compositor-shutdown",
-                          G_CALLBACK (on_prepare_compositor_shutdown),
-                          compositor);
-
-  wl_display_set_default_max_buffer_size (compositor->wayland_display,
-                                          1024 * 1024);
 
   wayland_event_source = wayland_event_source_new (compositor->wayland_display);
 
@@ -967,12 +827,10 @@ meta_wayland_compositor_new (MetaContext *context)
    * according to the X protocol.
    */
   g_source_set_priority (wayland_event_source, META_PRIORITY_EVENTS + 1);
-  g_source_attach (wayland_event_source, main_context);
+  g_source_attach (wayland_event_source, NULL);
   compositor->source = wayland_event_source;
   g_source_unref (wayland_event_source);
 
-  g_signal_connect (stage, "before-update",
-                    G_CALLBACK (on_before_update), compositor);
   g_signal_connect (stage, "after-update",
                     G_CALLBACK (on_after_update), compositor);
   g_signal_connect (stage, "presented",
@@ -989,6 +847,7 @@ meta_wayland_compositor_new (MetaContext *context)
 
   meta_wayland_init_egl (compositor);
   meta_wayland_init_shm (compositor);
+
   meta_wayland_outputs_init (compositor);
   meta_wayland_data_device_manager_init (compositor);
   meta_wayland_data_device_primary_manager_init (compositor);
@@ -1011,18 +870,27 @@ meta_wayland_compositor_new (MetaContext *context)
   meta_wayland_transaction_init (compositor);
   meta_wayland_idle_inhibit_init (compositor);
   meta_wayland_drm_syncobj_init (compositor);
-  meta_wayland_init_xdg_wm_dialog (compositor);
-  meta_wayland_init_color_management (compositor);
-  meta_wayland_xdg_session_management_init (compositor);
-  meta_wayland_init_system_bell (compositor);
-  meta_wayland_xdg_toplevel_tag_init (compositor);
-  meta_wayland_drm_lease_manager_init (compositor);
-  meta_wayland_commit_timing_init (compositor);
-  meta_wayland_fifo_init (compositor);
-  meta_wayland_init_cursor_shape (compositor);
-  meta_wayland_init_color_representation (compositor);
-  meta_wayland_init_background_effect (compositor);
-  meta_wayland_init_fixes (compositor);
+
+#ifdef HAVE_WAYLAND_EGLSTREAM
+  {
+    gboolean should_enable_eglstream_controller = TRUE;
+#if defined(HAVE_EGL_DEVICE) && defined(HAVE_NATIVE_BACKEND)
+    MetaRenderer *renderer = meta_backend_get_renderer (backend);
+
+    if (META_IS_RENDERER_NATIVE (renderer))
+      {
+        MetaRendererNative *renderer_native = META_RENDERER_NATIVE (renderer);
+
+        if (meta_renderer_native_get_mode (renderer_native) ==
+            META_RENDERER_NATIVE_MODE_GBM)
+          should_enable_eglstream_controller = FALSE;
+      }
+#endif /* defined(HAVE_EGL_DEVICE) && defined(HAVE_NATIVE_BACKEND) */
+
+    if (should_enable_eglstream_controller)
+      meta_wayland_eglstream_controller_init (compositor);
+  }
+#endif /* HAVE_WAYLAND_EGLSTREAM */
 
 #ifdef HAVE_XWAYLAND
   meta_wayland_x11_interop_init (compositor);
@@ -1132,6 +1000,12 @@ meta_wayland_compositor_is_shortcuts_inhibited (MetaWaylandCompositor *composito
     return FALSE;
 
   return meta_wayland_surface_is_shortcuts_inhibited (focus, compositor->seat);
+}
+
+void
+meta_wayland_compositor_flush_clients (MetaWaylandCompositor *compositor)
+{
+  wl_display_flush_clients (compositor->wayland_display);
 }
 
 static void on_scheduled_association_unmanaged (MetaWindow *window,
@@ -1276,37 +1150,4 @@ meta_wayland_compositor_sync_focus (MetaWaylandCompositor *compositor)
 
   meta_wayland_compositor_update_focus (compositor,
                                         display ? display->focus_window : NULL);
-}
-
-ClutterCursor *
-meta_wayland_compositor_get_cursor (MetaWaylandCompositor *compositor,
-                                    ClutterSprite         *sprite)
-{
-  return meta_wayland_seat_get_cursor (compositor->seat, sprite);
-}
-
-MetaWindow *
-meta_wayland_compositor_get_current_window (MetaWaylandCompositor *compositor,
-                                            ClutterSprite         *sprite,
-                                            graphene_point_t      *rel_coords)
-{
-  MetaWaylandSurface *surface;
-
-  surface = meta_wayland_seat_get_current_surface (compositor->seat,
-                                                   CLUTTER_FOCUS (sprite));
-  if (!surface)
-    return NULL;
-
-  if (rel_coords)
-    {
-      graphene_point_t pos;
-      float x, y;
-
-      clutter_sprite_get_coords (sprite, &pos);
-      meta_wayland_surface_get_relative_coordinates (surface, pos.x, pos.y,
-                                                     &x, &y);
-      *rel_coords = GRAPHENE_POINT_INIT (x, y);
-    }
-
-  return meta_wayland_surface_get_toplevel_window (surface);
 }

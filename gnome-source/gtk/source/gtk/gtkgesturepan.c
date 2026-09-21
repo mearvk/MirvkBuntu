@@ -20,7 +20,7 @@
 /**
  * GtkGesturePan:
  *
- * Recognizes pan gestures.
+ * `GtkGesturePan` is a `GtkGesture` for pan gestures.
  *
  * These are drags that are locked to happen along one axis. The axis
  * that a `GtkGesturePan` handles is defined at construct time, and
@@ -52,11 +52,8 @@ struct _GtkGesturePanPrivate
 };
 
 enum {
-  PROP_ORIENTATION = 1,
-  N_PROPS
+  PROP_ORIENTATION = 1
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum {
   PAN,
@@ -226,16 +223,16 @@ gtk_gesture_pan_class_init (GtkGesturePanClass *klass)
   drag_gesture_class->drag_end = gtk_gesture_pan_drag_end;
 
   /**
-   * GtkGesturePan:orientation:
+   * GtkGesturePan:orientation: (attributes org.gtk.Property.get=gtk_gesture_pan_get_orientation org.gtk.Property.set=gtk_gesture_pan_set_orientation)
    *
    * The expected orientation of pan gestures.
    */
-  props[PROP_ORIENTATION] = g_param_spec_enum ("orientation", NULL, NULL,
-                                               GTK_TYPE_ORIENTATION,
-                                               GTK_ORIENTATION_HORIZONTAL,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_ORIENTATION,
+                                   g_param_spec_enum ("orientation", NULL, NULL,
+                                                      GTK_TYPE_ORIENTATION,
+                                                      GTK_ORIENTATION_HORIZONTAL,
+                                                      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkGesturePan::pan:
@@ -285,7 +282,7 @@ gtk_gesture_pan_new (GtkOrientation orientation)
 }
 
 /**
- * gtk_gesture_pan_get_orientation:
+ * gtk_gesture_pan_get_orientation: (attributes org.gtk.Method.get_property=orientation)
  * @gesture: A `GtkGesturePan`
  *
  * Returns the orientation of the pan gestures that this @gesture expects.
@@ -305,7 +302,7 @@ gtk_gesture_pan_get_orientation (GtkGesturePan *gesture)
 }
 
 /**
- * gtk_gesture_pan_set_orientation:
+ * gtk_gesture_pan_set_orientation: (attributes org.gtk.Method.set_property=orientation)
  * @gesture: A `GtkGesturePan`
  * @orientation: expected orientation
  *
@@ -327,5 +324,5 @@ gtk_gesture_pan_set_orientation (GtkGesturePan  *gesture,
     return;
 
   priv->orientation = orientation;
-  g_object_notify_by_pspec (G_OBJECT (gesture), props[PROP_ORIENTATION]);
+  g_object_notify (G_OBJECT (gesture), "orientation");
 }

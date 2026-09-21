@@ -131,15 +131,12 @@
  *   See [class@Gtk.LayoutManager] for layout manager delegate objects
  */
 
-#include "gtkcelllayoutprivate.h"
-
-#include "gtkbuilderprivate.h"
-#include "gtkcellareaprivate.h"
-
 #include "config.h"
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include "gtkcelllayout.h"
+#include "gtkbuilderprivate.h"
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
@@ -513,8 +510,8 @@ gtk_cell_layout_add_attribute (GtkCellLayout   *cell_layout,
  * gtk_cell_layout_set_cell_data_func:
  * @cell_layout: a `GtkCellLayout`
  * @cell: a `GtkCellRenderer`
- * @func: (nullable) (scope notified) (closure func_data) (destroy destroy): the `GtkCellLayout`DataFunc to use
- * @func_data: user data for @func
+ * @func: (nullable): the `GtkCellLayout`DataFunc to use
+ * @func_data: (closure): user data for @func
  * @destroy: destroy notify for @func_data
  *
  * Sets the `GtkCellLayout`DataFunc to use for @cell_layout.
@@ -722,7 +719,8 @@ attributes_end_element (GtkBuildableParseContext  *context,
 				 data->attr_name,
                                  g_value_get_int (&val));
 
-  g_clear_pointer (&data->attr_name, g_free);
+  g_free (data->attr_name);
+  data->attr_name = NULL;
 
   g_string_set_size (data->string, 0);
 }

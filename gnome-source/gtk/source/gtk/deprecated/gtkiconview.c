@@ -22,7 +22,7 @@
 #include "gtkadjustmentprivate.h"
 #include "gtkcellareabox.h"
 #include "gtkcellareacontext.h"
-#include "gtkcelllayoutprivate.h"
+#include "gtkcelllayout.h"
 #include "gtkcellrenderer.h"
 #include "gtkcellrendererpixbuf.h"
 #include "gtkcellrenderertext.h"
@@ -55,11 +55,6 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * GtkIconView:
  *
  * `GtkIconView` is a widget which displays data in a grid of icons.
- *
- * <picture>
- *   <source srcset="icon-view-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkIconView" src="icon-view.png">
- * </picture>
  *
  * `GtkIconView` provides an alternative view on a `GtkTreeModel`.
  * It displays the model as a grid of icons with labels. Like
@@ -129,16 +124,12 @@ enum
   PROP_TOOLTIP_COLUMN,
   PROP_ITEM_PADDING,
   PROP_CELL_AREA,
-  PROP_ACTIVATE_ON_SINGLE_CLICK,
-  /* GtkScrollable */
   PROP_HADJUSTMENT,
   PROP_VADJUSTMENT,
   PROP_HSCROLL_POLICY,
   PROP_VSCROLL_POLICY,
-  N_PROPS
+  PROP_ACTIVATE_ON_SINGLE_CLICK
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 /* GObject vfuncs */
 static void             gtk_icon_view_cell_layout_init          (GtkCellLayoutIface *iface);
@@ -368,10 +359,12 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * icon view. If the mode is %GTK_SELECTION_MULTIPLE, rubberband selection
    * is enabled, for the other modes, only keyboard selection is possible.
    */
-  props[PROP_SELECTION_MODE] = g_param_spec_enum ("selection-mode", NULL, NULL,
-                                                  GTK_TYPE_SELECTION_MODE,
-                                                  GTK_SELECTION_SINGLE,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_SELECTION_MODE,
+				   g_param_spec_enum ("selection-mode", NULL, NULL,
+						      GTK_TYPE_SELECTION_MODE,
+						      GTK_SELECTION_SINGLE,
+						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:pixbuf-column:
@@ -381,9 +374,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * of type `GDK_TYPE_PIXBUF`. Setting this property to -1 turns off the
    * display of pixbufs.
    */
-  props[PROP_PIXBUF_COLUMN] = g_param_spec_int ("pixbuf-column", NULL, NULL,
-                                                -1, G_MAXINT, -1,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_PIXBUF_COLUMN,
+				   g_param_spec_int ("pixbuf-column", NULL, NULL,
+						     -1, G_MAXINT, -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:text-column:
@@ -393,9 +388,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * of type `G_TYPE_STRING`. If this property and the :markup-column
    * property are both set to -1, no texts are displayed.
    */
-  props[PROP_TEXT_COLUMN] = g_param_spec_int ("text-column", NULL, NULL,
-                                              -1, G_MAXINT, -1,
-                                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_TEXT_COLUMN,
+				   g_param_spec_int ("text-column", NULL, NULL,
+						     -1, G_MAXINT, -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 
   /**
@@ -407,18 +404,17 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * are both set to column numbers, it overrides the text column.
    * If both are set to -1, no texts are displayed.
    */
-  props[PROP_MARKUP_COLUMN] = g_param_spec_int ("markup-column", NULL, NULL,
-                                                -1, G_MAXINT, -1,
-                                                G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_MARKUP_COLUMN,
+				   g_param_spec_int ("markup-column", NULL, NULL,
+						     -1, G_MAXINT, -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-  /**
-   * GtkIconView:model:
-   *
-   * The model of the icon view.
-   */
-  props[PROP_MODEL] = g_param_spec_object ("model", NULL, NULL,
-                                           GTK_TYPE_TREE_MODEL,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+                                   PROP_MODEL,
+                                   g_param_spec_object ("model", NULL, NULL,
+							GTK_TYPE_TREE_MODEL,
+							GTK_PARAM_READWRITE));
 
   /**
    * GtkIconView:columns:
@@ -427,9 +423,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * items should be displayed. If it is -1, the number of columns will
    * be chosen automatically to fill the available area.
    */
-  props[PROP_COLUMNS] = g_param_spec_int ("columns", NULL, NULL,
-                                          -1, G_MAXINT, -1,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_COLUMNS,
+				   g_param_spec_int ("columns", NULL, NULL,
+						     -1, G_MAXINT, -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 
   /**
@@ -439,9 +437,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * If it is set to -1, the icon view will automatically determine a
    * suitable item size.
    */
-  props[PROP_ITEM_WIDTH] = g_param_spec_int ("item-width", NULL, NULL,
-                                             -1, G_MAXINT, -1,
-                                             G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_ITEM_WIDTH,
+				   g_param_spec_int ("item-width", NULL, NULL,
+						     -1, G_MAXINT, -1,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:spacing:
@@ -449,9 +449,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The spacing property specifies the space which is inserted between
    * the cells (i.e. the icon and the text) of an item.
    */
-  props[PROP_SPACING] = g_param_spec_int ("spacing", NULL, NULL,
-                                          0, G_MAXINT, 0,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_SPACING,
+                                   g_param_spec_int ("spacing", NULL, NULL,
+						     0, G_MAXINT, 0,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:row-spacing:
@@ -459,9 +461,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The row-spacing property specifies the space which is inserted between
    * the rows of the icon view.
    */
-  props[PROP_ROW_SPACING] = g_param_spec_int ("row-spacing", NULL, NULL,
-                                              0, G_MAXINT, 6,
-                                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_ROW_SPACING,
+                                   g_param_spec_int ("row-spacing", NULL, NULL,
+						     0, G_MAXINT, 6,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:column-spacing:
@@ -469,9 +473,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The column-spacing property specifies the space which is inserted between
    * the columns of the icon view.
    */
-  props[PROP_COLUMN_SPACING] = g_param_spec_int ("column-spacing", NULL, NULL,
-                                                 0, G_MAXINT, 6,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_COLUMN_SPACING,
+                                   g_param_spec_int ("column-spacing", NULL, NULL,
+						     0, G_MAXINT, 6,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:margin:
@@ -479,9 +485,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The margin property specifies the space which is inserted
    * at the edges of the icon view.
    */
-  props[PROP_MARGIN] = g_param_spec_int ("margin", NULL, NULL,
-                                         0, G_MAXINT, 6,
-                                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_MARGIN,
+                                   g_param_spec_int ("margin", NULL, NULL,
+						     0, G_MAXINT, 6,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:item-orientation:
@@ -489,10 +497,12 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The item-orientation property specifies how the cells (i.e. the icon and
    * the text) of the item are positioned relative to each other.
    */
-  props[PROP_ITEM_ORIENTATION] = g_param_spec_enum ("item-orientation", NULL, NULL,
-                                                    GTK_TYPE_ORIENTATION,
-                                                    GTK_ORIENTATION_VERTICAL,
-                                                    G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+				   PROP_ITEM_ORIENTATION,
+				   g_param_spec_enum ("item-orientation", NULL, NULL,
+						      GTK_TYPE_ORIENTATION,
+						      GTK_ORIENTATION_VERTICAL,
+						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:reorderable:
@@ -500,21 +510,19 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The reorderable property specifies if the items can be reordered
    * by DND.
    */
-  props[PROP_REORDERABLE] = g_param_spec_boolean ("reorderable", NULL, NULL,
-                                                  FALSE,
-                                                  G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+                                   PROP_REORDERABLE,
+                                   g_param_spec_boolean ("reorderable", NULL, NULL,
+							 FALSE,
+							 G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
-    /**
-     * GtkIconView:tooltip-column:
-     *
-     * The column of the icon view model which is being used for displaying
-     * tooltips on it's rows.
-     */
-    props[PROP_TOOLTIP_COLUMN] = g_param_spec_int ("tooltip-column", NULL, NULL,
-                                                 -1,
-                                                 G_MAXINT,
-                                                 -1,
-                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+    g_object_class_install_property (gobject_class,
+                                     PROP_TOOLTIP_COLUMN,
+                                     g_param_spec_int ("tooltip-column", NULL, NULL,
+                                                       -1,
+                                                       G_MAXINT,
+                                                       -1,
+                                                       GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:item-padding:
@@ -522,9 +530,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The item-padding property specifies the padding around each
    * of the icon view's item.
    */
-  props[PROP_ITEM_PADDING] = g_param_spec_int ("item-padding", NULL, NULL,
-                                               0, G_MAXINT, 6,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_ITEM_PADDING,
+                                   g_param_spec_int ("item-padding", NULL, NULL,
+						     0, G_MAXINT, 6,
+						     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkIconView:cell-area:
@@ -534,9 +544,11 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * If no area is specified when creating the icon view with gtk_icon_view_new_with_area()
    * a `GtkCellAreaBox` will be used.
    */
-  props[PROP_CELL_AREA] = g_param_spec_object ("cell-area", NULL, NULL,
-                                               GTK_TYPE_CELL_AREA,
-                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_CELL_AREA,
+				   g_param_spec_object ("cell-area", NULL, NULL,
+							GTK_TYPE_CELL_AREA,
+							GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   /**
    * GtkIconView:activate-on-single-click:
@@ -544,21 +556,17 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * The activate-on-single-click property specifies whether the "item-activated" signal
    * will be emitted after a single click.
    */
-  props[PROP_ACTIVATE_ON_SINGLE_CLICK] = g_param_spec_boolean ("activate-on-single-click", NULL, NULL,
-                                                               FALSE,
-                                                               G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_ACTIVATE_ON_SINGLE_CLICK,
+                                   g_param_spec_boolean ("activate-on-single-click", NULL, NULL,
+							 FALSE,
+							 GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /* Scrollable interface properties */
-  props[PROP_HADJUSTMENT] = g_param_spec_override ("hadjustment",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_SCROLLABLE), "hadjustment"));
-  props[PROP_VADJUSTMENT] = g_param_spec_override ("vadjustment",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_SCROLLABLE), "vadjustment"));
-  props[PROP_HSCROLL_POLICY] = g_param_spec_override ("hscroll-policy",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_SCROLLABLE), "hscroll-policy"));
-  props[PROP_VSCROLL_POLICY] = g_param_spec_override ("vscroll-policy",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_SCROLLABLE), "vscroll-policy"));
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_override_property (gobject_class, PROP_HADJUSTMENT,    "hadjustment");
+  g_object_class_override_property (gobject_class, PROP_VADJUSTMENT,    "vadjustment");
+  g_object_class_override_property (gobject_class, PROP_HSCROLL_POLICY, "hscroll-policy");
+  g_object_class_override_property (gobject_class, PROP_VSCROLL_POLICY, "vscroll-policy");
 
   /* Signals */
   /**
@@ -704,8 +712,6 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * programmatically.
    *
    * The default bindings for this signal are Space, Return and Enter.
-   *
-   * Returns: whether the item was activated
    */
   icon_view_signals[ACTIVATE_CURSOR_ITEM] =
     g_signal_new (I_("activate-cursor-item"),
@@ -741,8 +747,6 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
    * - PageUp/PageDown which move by "pages"
    * All of these will extend the selection when combined with
    * the Shift modifier.
-   *
-   * Returns: whether the cursor was moved
    */
   icon_view_signals[MOVE_CURSOR] =
     g_signal_new (I_("move-cursor"),
@@ -761,17 +765,6 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
                               _gtk_marshal_BOOLEAN__ENUM_INT_BOOLEAN_BOOLEANv);
 
   /* Key bindings */
-
-#ifdef __APPLE__
-  gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_a, GDK_META_MASK,
-				       "select-all",
-                                       NULL);
-  gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_a, GDK_META_MASK | GDK_SHIFT_MASK,
-				       "unselect-all",
-                                       NULL);
-#else
   gtk_widget_class_add_binding_signal (widget_class,
                                        GDK_KEY_a, GDK_CONTROL_MASK,
 				       "select-all",
@@ -780,8 +773,6 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
                                        GDK_KEY_a, GDK_CONTROL_MASK | GDK_SHIFT_MASK,
 				       "unselect-all",
                                        NULL);
-#endif
-
   gtk_widget_class_add_binding_signal (widget_class,
                                        GDK_KEY_space, GDK_CONTROL_MASK,
 				       "toggle-cursor-item",
@@ -792,23 +783,23 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
                                        NULL);
 
   gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_space, GDK_NO_MODIFIER_MASK,
+                                       GDK_KEY_space, 0,
 				       "activate-cursor-item",
                                        NULL);
   gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_KP_Space, GDK_NO_MODIFIER_MASK,
+                                       GDK_KEY_KP_Space, 0,
 				       "activate-cursor-item",
                                        NULL);
   gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_Return, GDK_NO_MODIFIER_MASK,
+                                       GDK_KEY_Return, 0,
 				       "activate-cursor-item",
                                        NULL);
   gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_ISO_Enter, GDK_NO_MODIFIER_MASK,
+                                       GDK_KEY_ISO_Enter, 0,
 				       "activate-cursor-item",
                                        NULL);
   gtk_widget_class_add_binding_signal (widget_class,
-                                       GDK_KEY_KP_Enter, GDK_NO_MODIFIER_MASK,
+                                       GDK_KEY_KP_Enter, 0,
 				       "activate-cursor-item",
                                        NULL);
 
@@ -973,15 +964,31 @@ gtk_icon_view_dispose (GObject *object)
 
   gtk_icon_view_set_model (icon_view, NULL);
 
-  g_clear_pointer (&icon_view->priv->scroll_to_path, gtk_tree_row_reference_free);
+  if (icon_view->priv->scroll_to_path != NULL)
+    {
+      gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+      icon_view->priv->scroll_to_path = NULL;
+    }
 
   remove_scroll_timeout (icon_view);
 
-  g_clear_object (&icon_view->priv->hadjustment);
+  if (icon_view->priv->hadjustment != NULL)
+    {
+      g_object_unref (icon_view->priv->hadjustment);
+      icon_view->priv->hadjustment = NULL;
+    }
 
-  g_clear_object (&icon_view->priv->vadjustment);
+  if (icon_view->priv->vadjustment != NULL)
+    {
+      g_object_unref (icon_view->priv->vadjustment);
+      icon_view->priv->vadjustment = NULL;
+    }
 
-  g_clear_object (&priv->cell_area_context);
+  if (priv->cell_area_context)
+    {
+      g_object_unref (priv->cell_area_context);
+      priv->cell_area_context = NULL;
+    }
 
   if (priv->row_contexts)
     {
@@ -998,7 +1005,8 @@ gtk_icon_view_dispose (GObject *object)
       priv->add_editable_id = 0;
       priv->remove_editable_id = 0;
 
-      g_clear_object (&priv->cell_area);
+      g_object_unref (priv->cell_area);
+      priv->cell_area = NULL;
     }
 
   g_clear_object (&priv->key_controller);
@@ -1592,7 +1600,8 @@ gtk_icon_view_size_allocate (GtkWidget *widget,
     {
       GtkTreePath *path;
       path = gtk_tree_row_reference_get_path (icon_view->priv->scroll_to_path);
-      g_clear_pointer (&icon_view->priv->scroll_to_path, gtk_tree_row_reference_free);
+      gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+      icon_view->priv->scroll_to_path = NULL;
 
       gtk_icon_view_scroll_to_path (icon_view, path,
 				    icon_view->priv->scroll_to_use_align,
@@ -1735,7 +1744,7 @@ rubberband_scroll_timeout (gpointer data)
 
   gtk_icon_view_update_rubberband (icon_view);
 
-  return G_SOURCE_CONTINUE;
+  return TRUE;
 }
 
 static GtkIconViewItem *
@@ -2038,11 +2047,7 @@ gtk_icon_view_button_press (GtkGestureClick *gesture,
   if (button == GDK_BUTTON_PRIMARY)
     {
       GdkModifierType extend_mod_mask = GDK_SHIFT_MASK;
-#ifdef __APPLE__
-      GdkModifierType modify_mod_mask = GDK_META_MASK;
-#else
       GdkModifierType modify_mod_mask = GDK_CONTROL_MASK;
-#endif
 
       state = gdk_event_get_modifier_state (event);
 
@@ -2589,7 +2594,7 @@ gtk_icon_view_set_hadjustment (GtkIconView   *icon_view,
   priv->hadjustment = g_object_ref_sink (adjustment);
   gtk_icon_view_set_hadjustment_values (icon_view);
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_HADJUSTMENT]);
+  g_object_notify (G_OBJECT (icon_view), "hadjustment");
 }
 
 static void
@@ -2618,7 +2623,7 @@ gtk_icon_view_set_vadjustment (GtkIconView   *icon_view,
   priv->vadjustment = g_object_ref_sink (adjustment);
   gtk_icon_view_set_vadjustment_values (icon_view);
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_VADJUSTMENT]);
+  g_object_notify (G_OBJECT (icon_view), "vadjustment");
 }
 
 static void
@@ -2733,7 +2738,7 @@ gtk_icon_view_layout (GtkIconView *icon_view)
                                      sizes);
 
   /* Actually allocate the rows */
-  g_sort_array (sizes, n_rows, sizeof (GtkRequestedSize), compare_sizes, NULL);
+  g_qsort_with_data (sizes, n_rows, sizeof (GtkRequestedSize), compare_sizes, NULL);
 
   items = priv->items;
   priv->height = priv->margin;
@@ -4390,7 +4395,7 @@ gtk_icon_view_set_tooltip_column (GtkIconView *icon_view,
     }
 
   icon_view->priv->tooltip_column = column;
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_TOOLTIP_COLUMN]);
+  g_object_notify (G_OBJECT (icon_view), "tooltip-column");
 }
 
 /**
@@ -4528,7 +4533,7 @@ gtk_icon_view_set_selection_mode (GtkIconView      *icon_view,
 
   icon_view->priv->selection_mode = mode;
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_SELECTION_MODE]);
+  g_object_notify (G_OBJECT (icon_view), "selection-mode");
 }
 
 /**
@@ -4573,7 +4578,11 @@ gtk_icon_view_set_model (GtkIconView *icon_view,
   if (icon_view->priv->model == model)
     return;
 
-  g_clear_pointer (&icon_view->priv->scroll_to_path, gtk_tree_row_reference_free);
+  if (icon_view->priv->scroll_to_path)
+    {
+      gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+      icon_view->priv->scroll_to_path = NULL;
+    }
 
   /* The area can be NULL while disposing */
   if (icon_view->priv->cell_area)
@@ -4617,7 +4626,8 @@ gtk_icon_view_set_model (GtkIconView *icon_view,
 
       g_object_unref (icon_view->priv->model);
 
-      g_clear_list (&icon_view->priv->items, (GDestroyNotify) gtk_icon_view_item_free);
+      g_list_free_full (icon_view->priv->items, (GDestroyNotify) gtk_icon_view_item_free);
+      icon_view->priv->items = NULL;
       icon_view->priv->anchor_item = NULL;
       icon_view->priv->cursor_item = NULL;
       icon_view->priv->last_single_clicked = NULL;
@@ -4651,7 +4661,7 @@ gtk_icon_view_set_model (GtkIconView *icon_view,
       gtk_icon_view_build_items (icon_view);
     }
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_MODEL]);
+  g_object_notify (G_OBJECT (icon_view), "model");
 
   if (dirty)
     g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
@@ -4810,7 +4820,7 @@ gtk_icon_view_set_text_column (GtkIconView *icon_view,
 
   gtk_icon_view_invalidate_sizes (icon_view);
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_TEXT_COLUMN]);
+  g_object_notify (G_OBJECT (icon_view), "text-column");
 }
 
 /**
@@ -4869,7 +4879,7 @@ gtk_icon_view_set_markup_column (GtkIconView *icon_view,
 
   gtk_icon_view_invalidate_sizes (icon_view);
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_MARKUP_COLUMN]);
+  g_object_notify (G_OBJECT (icon_view), "markup-column");
 }
 
 /**
@@ -4926,7 +4936,7 @@ gtk_icon_view_set_pixbuf_column (GtkIconView *icon_view,
 
   gtk_icon_view_invalidate_sizes (icon_view);
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_PIXBUF_COLUMN]);
+  g_object_notify (G_OBJECT (icon_view), "pixbuf-column");
 
 }
 
@@ -5013,8 +5023,7 @@ gtk_icon_view_unselect_path (GtkIconView *icon_view,
  * To do this, you can use gtk_tree_row_reference_new().
  *
  * To free the return value, use `g_list_free_full`:
- *
- * ```c
+ * |[<!-- language="C" -->
  * GtkWidget *icon_view = gtk_icon_view_new ();
  * // Use icon_view
  *
@@ -5023,7 +5032,7 @@ gtk_icon_view_unselect_path (GtkIconView *icon_view,
  * // use list
  *
  * g_list_free_full (list, (GDestroyNotify) gtk_tree_path_free);
- * ```
+ * ]|
  *
  * Returns: (element-type GtkTreePath) (transfer full): A `GList` containing a `GtkTreePath` for each selected row.
  *
@@ -5258,7 +5267,7 @@ gtk_icon_view_set_item_orientation (GtkIconView    *icon_view,
       update_text_cell (icon_view);
       update_pixbuf_cell (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_ITEM_ORIENTATION]);
+      g_object_notify (G_OBJECT (icon_view), "item-orientation");
     }
 }
 
@@ -5309,7 +5318,7 @@ gtk_icon_view_set_columns (GtkIconView *icon_view,
 
       gtk_widget_queue_resize (GTK_WIDGET (icon_view));
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_COLUMNS]);
+      g_object_notify (G_OBJECT (icon_view), "columns");
     }
 }
 
@@ -5359,7 +5368,7 @@ gtk_icon_view_set_item_width (GtkIconView *icon_view,
 
       update_text_cell (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_ITEM_WIDTH]);
+      g_object_notify (G_OBJECT (icon_view), "item-width");
     }
 }
 
@@ -5408,7 +5417,7 @@ gtk_icon_view_set_spacing (GtkIconView *icon_view,
 
       gtk_icon_view_invalidate_sizes (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_SPACING]);
+      g_object_notify (G_OBJECT (icon_view), "spacing");
     }
 }
 
@@ -5455,7 +5464,7 @@ gtk_icon_view_set_row_spacing (GtkIconView *icon_view,
 
       gtk_icon_view_invalidate_sizes (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_ROW_SPACING]);
+      g_object_notify (G_OBJECT (icon_view), "row-spacing");
     }
 }
 
@@ -5502,7 +5511,7 @@ gtk_icon_view_set_column_spacing (GtkIconView *icon_view,
 
       gtk_icon_view_invalidate_sizes (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_COLUMN_SPACING]);
+      g_object_notify (G_OBJECT (icon_view), "column-spacing");
     }
 }
 
@@ -5550,7 +5559,7 @@ gtk_icon_view_set_margin (GtkIconView *icon_view,
 
       gtk_icon_view_invalidate_sizes (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_MARGIN]);
+      g_object_notify (G_OBJECT (icon_view), "margin");
     }
 }
 
@@ -5597,7 +5606,7 @@ gtk_icon_view_set_item_padding (GtkIconView *icon_view,
 
       gtk_icon_view_invalidate_sizes (icon_view);
 
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_ITEM_PADDING]);
+      g_object_notify (G_OBJECT (icon_view), "item-padding");
     }
 }
 
@@ -5645,7 +5654,7 @@ unset_reorderable (GtkIconView *icon_view)
   if (icon_view->priv->reorderable)
     {
       icon_view->priv->reorderable = FALSE;
-      g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_REORDERABLE]);
+      g_object_notify (G_OBJECT (icon_view), "reorderable");
     }
 }
 
@@ -5746,7 +5755,12 @@ check_model_dnd (GtkTreeModel *model,
 static void
 remove_scroll_timeout (GtkIconView *icon_view)
 {
-  g_clear_handle_id (&icon_view->priv->scroll_timeout_id, g_source_remove);
+  if (icon_view->priv->scroll_timeout_id != 0)
+    {
+      g_source_remove (icon_view->priv->scroll_timeout_id);
+
+      icon_view->priv->scroll_timeout_id = 0;
+    }
 }
 
 static void
@@ -5784,7 +5798,7 @@ drag_scroll_timeout (gpointer data)
 {
   gtk_icon_view_autoscroll (data);
 
-  return G_SOURCE_CONTINUE;
+  return TRUE;
 }
 
 static GdkDragAction
@@ -6467,7 +6481,8 @@ gtk_icon_view_set_drag_dest_item (GtkIconView              *icon_view,
     {
       GtkTreePath *current_path;
       current_path = gtk_tree_row_reference_get_path (icon_view->priv->dest_item);
-      g_clear_pointer (&icon_view->priv->dest_item, gtk_tree_row_reference_free);
+      gtk_tree_row_reference_free (icon_view->priv->dest_item);
+      icon_view->priv->dest_item = NULL;
 
       gtk_icon_view_queue_draw_path (icon_view, current_path);
       gtk_tree_path_free (current_path);
@@ -6715,7 +6730,7 @@ gtk_icon_view_set_reorderable (GtkIconView *icon_view,
 
   icon_view->priv->reorderable = reorderable;
 
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_REORDERABLE]);
+  g_object_notify (G_OBJECT (icon_view), "reorderable");
 }
 
 /**
@@ -6740,7 +6755,7 @@ gtk_icon_view_set_activate_on_single_click (GtkIconView *icon_view,
     return;
 
   icon_view->priv->activate_on_single_click = single;
-  g_object_notify_by_pspec (G_OBJECT (icon_view), props[PROP_ACTIVATE_ON_SINGLE_CLICK]);
+  g_object_notify (G_OBJECT (icon_view), "activate-on-single-click");
 }
 
 /**

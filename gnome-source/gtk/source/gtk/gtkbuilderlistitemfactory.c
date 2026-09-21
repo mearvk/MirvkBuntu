@@ -29,14 +29,11 @@
 /**
  * GtkBuilderListItemFactory:
  *
- * Creates widgets by instantiating `GtkBuilder` UI templates.
+ * `GtkBuilderListItemFactory` is a `GtkListItemFactory` that creates
+ * widgets by instantiating `GtkBuilder` UI templates.
  *
- * The templates must extend the class that the parent widget expects.
- * For example, a factory provided to [property@Gtk.ListView:factory] must have
- * a template that extends [class@Gtk.ListItem].
- *
- * Templates typically use [class@Gtk.Expression] to obtain data from the items
- * in the model.
+ * The templates must be extending `GtkListItem`, and typically use
+ * `GtkExpression`s to obtain data from the items in the model.
  *
  * Example:
  * ```xml
@@ -55,11 +52,6 @@
  *     </template>
  *   </interface>
  * ```
- *
- * A common approach is to embed such templates as CDATA marked sections into
- * a surrounding UI file. Note that if you use this approach, extracting
- * translatable strings with xgettext will not work for strings inside the
- * marked section.
  */
 
 struct _GtkBuilderListItemFactory
@@ -211,7 +203,7 @@ gtk_builder_list_item_factory_set_property (GObject      *object,
     case PROP_RESOURCE:
       {
         GError *error = NULL;
-        GBytes *bytes;
+        GBytes *bytes;  
         const char *resource;
 
         resource = g_value_get_string (value);
@@ -269,34 +261,34 @@ gtk_builder_list_item_factory_class_init (GtkBuilderListItemFactoryClass *klass)
   factory_class->setup = gtk_builder_list_item_factory_setup;
 
   /**
-   * GtkBuilderListItemFactory:bytes:
+   * GtkBuilderListItemFactory:bytes: (attributes org.gtk.Property.get=gtk_builder_list_item_factory_get_bytes)
    *
    * `GBytes` containing the UI definition.
    */
   properties[PROP_BYTES] =
     g_param_spec_boxed ("bytes", NULL, NULL,
                         G_TYPE_BYTES,
-                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkBuilderListItemFactory:resource:
+   * GtkBuilderListItemFactory:resource: (attributes org.gtk.Property.get=gtk_builder_list_item_factory_get_resource)
    *
    * Path of the resource containing the UI definition.
    */
   properties[PROP_RESOURCE] =
     g_param_spec_string ("resource", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkBuilderListItemFactory:scope:
+   * GtkBuilderListItemFactory:scope: (attributes org.gtk.Property.get=gtk_builder_list_item_factory_get_scope)
    *
    * `GtkBuilderScope` to use when instantiating listitems
    */
   properties[PROP_SCOPE] =
     g_param_spec_object ("scope", NULL, NULL,
                          GTK_TYPE_BUILDER_SCOPE,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -309,7 +301,7 @@ gtk_builder_list_item_factory_init (GtkBuilderListItemFactory *self)
 /**
  * gtk_builder_list_item_factory_new_from_bytes:
  * @scope: (nullable) (transfer none): A scope to use when instantiating
- * @bytes: the `GBytes` containing the UI definition to instantiate
+ * @bytes: the `GBytes` containing the ui file to instantiate
  *
  * Creates a new `GtkBuilderListItemFactory` that instantiates widgets
  * using @bytes as the data to pass to `GtkBuilder`.
@@ -331,7 +323,7 @@ gtk_builder_list_item_factory_new_from_bytes (GtkBuilderScope *scope,
 /**
  * gtk_builder_list_item_factory_new_from_resource:
  * @scope: (nullable) (transfer none): A scope to use when instantiating
- * @resource_path: valid path to a resource that contains the UI definition
+ * @resource_path: valid path to a resource that contains the data
  *
  * Creates a new `GtkBuilderListItemFactory` that instantiates widgets
  * using data read from the given @resource_path to pass to `GtkBuilder`.
@@ -352,7 +344,7 @@ gtk_builder_list_item_factory_new_from_resource (GtkBuilderScope *scope,
 }
 
 /**
- * gtk_builder_list_item_factory_get_bytes:
+ * gtk_builder_list_item_factory_get_bytes: (attributes org.gtk.Method.get_property=bytes)
  * @self: a `GtkBuilderListItemFactory`
  *
  * Gets the data used as the `GtkBuilder` UI template for constructing
@@ -369,7 +361,7 @@ gtk_builder_list_item_factory_get_bytes (GtkBuilderListItemFactory *self)
 }
 
 /**
- * gtk_builder_list_item_factory_get_resource:
+ * gtk_builder_list_item_factory_get_resource: (attributes org.gtk.Method.get_property=resource)
  * @self: a `GtkBuilderListItemFactory`
  *
  * If the data references a resource, gets the path of that resource.
@@ -385,7 +377,7 @@ gtk_builder_list_item_factory_get_resource (GtkBuilderListItemFactory *self)
 }
 
 /**
- * gtk_builder_list_item_factory_get_scope:
+ * gtk_builder_list_item_factory_get_scope: (attributes org.gtk.Method.get_property=scope)
  * @self: a `GtkBuilderListItemFactory`
  *
  * Gets the scope used when constructing listitems.

@@ -62,7 +62,7 @@ typedef enum
  * Indicates which monitor a surface should span over when in fullscreen mode.
  */
 typedef enum
-{ /*< prefix=GDK_FULLSCREEN >*/
+{
   GDK_FULLSCREEN_ON_CURRENT_MONITOR,
   GDK_FULLSCREEN_ON_ALL_MONITORS
 } GdkFullscreenMode;
@@ -85,6 +85,7 @@ typedef enum
  * @GDK_TOPLEVEL_STATE_BOTTOM_RESIZABLE: whether the bottom edge is resizable
  * @GDK_TOPLEVEL_STATE_LEFT_TILED: whether the left edge is tiled
  * @GDK_TOPLEVEL_STATE_LEFT_RESIZABLE: whether the left edge is resizable
+ * @GDK_TOPLEVEL_STATE_SUSPENDED: the surface is not visible to the user
  *
  * Specifies the state of a toplevel surface.
  *
@@ -93,14 +94,6 @@ typedef enum
  * tiled states is set. On platforms that lack that support, the tiled state
  * will give an indication of tiledness without any of the per-edge states
  * being set.
- */
-
-/**
- * GDK_TOPLEVEL_STATE_SUSPENDED:
- *
- * The surface is not visible to the user.
- *
- * Since: 4.12
  */
 typedef enum
 {
@@ -125,12 +118,9 @@ typedef enum
 
 /**
  * GdkTitlebarGesture:
- * @GDK_TITLEBAR_GESTURE_DOUBLE_CLICK: double click gesture
- * @GDK_TITLEBAR_GESTURE_RIGHT_CLICK: right click gesture
- * @GDK_TITLEBAR_GESTURE_MIDDLE_CLICK: middle click gesture
- *
- * The kind of title bar gesture to emit with
- * [method@Gdk.Toplevel.titlebar_gesture].
+ * @GDK_TITLEBAR_GESTURE_DOUBLE_CLICK:
+ * @GDK_TITLEBAR_GESTURE_RIGHT_CLICK:
+ * @GDK_TITLEBAR_GESTURE_MIDDLE_CLICK:
  *
  * Since: 4.4
  */
@@ -226,102 +216,5 @@ GDK_AVAILABLE_IN_4_4
 gboolean      gdk_toplevel_titlebar_gesture          (GdkToplevel        *toplevel,
                                                       GdkTitlebarGesture  gesture);
 
-/**
- * GdkToplevelCapabilities:
- *
- * Reflects what features a `GdkToplevel` supports.
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_EDGE_CONSTRAINTS:
- *
- * Whether tiled window states are supported.
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_INHIBIT_SHORTCUTS:
- *
- * Whether inhibiting system shortcuts is supported.
- * See [method@Gdk.Toplevel.inhibit_system_shortcuts].
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_TITLEBAR_GESTURES:
- *
- * Whether titlebar gestures are supported.
- * See [method@Gdk.Toplevel.titlebar_gesture].
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_WINDOW_MENU:
- *
- * Whether showing the window menu is supported.
- * See [method@Gdk.Toplevel.show_window_menu].
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_MAXIMIZE:
- *
- * Whether the toplevel can be maximized.
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_FULLSCREEN:
- *
- * Whether the toplevel can be made fullscreen.
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_MINIMIZE:
- *
- * Whether the toplevel can be minimized.
- * See [method@Gdk.Toplevel.minimize].
- *
- * Since: 4.20
- */
-
-/**
- * GDK_TOPLEVEL_CAPABILITIES_LOWER:
- *
- * Whether the toplevel can be lowered.
- * See [method@Gdk.Toplevel.lower].
- *
- * Since: 4.20
- */
-typedef enum
-{
-  GDK_TOPLEVEL_CAPABILITIES_EDGE_CONSTRAINTS  = 1 << 0,
-  GDK_TOPLEVEL_CAPABILITIES_INHIBIT_SHORTCUTS = 1 << 1,
-  GDK_TOPLEVEL_CAPABILITIES_TITLEBAR_GESTURES = 1 << 2,
-  GDK_TOPLEVEL_CAPABILITIES_WINDOW_MENU       = 1 << 3,
-  GDK_TOPLEVEL_CAPABILITIES_MAXIMIZE          = 1 << 4,
-  GDK_TOPLEVEL_CAPABILITIES_FULLSCREEN        = 1 << 5,
-  GDK_TOPLEVEL_CAPABILITIES_MINIMIZE          = 1 << 6,
-  GDK_TOPLEVEL_CAPABILITIES_LOWER             = 1 << 7,
-} GdkToplevelCapabilities;
-
-GDK_AVAILABLE_IN_4_20
-GdkToplevelCapabilities gdk_toplevel_get_capabilities (GdkToplevel *toplevel);
-
-GDK_AVAILABLE_IN_4_20
-GdkGravity      gdk_toplevel_get_gravity (GdkToplevel *toplevel);
-
-GDK_AVAILABLE_IN_4_20
-void            gdk_toplevel_set_gravity (GdkToplevel *toplevel,
-                                          GdkGravity   gravity);
-
 G_END_DECLS
+

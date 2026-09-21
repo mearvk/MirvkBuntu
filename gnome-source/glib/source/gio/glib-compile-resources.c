@@ -606,7 +606,7 @@ parse_resource_file (const gchar *filename,
 
 	  g_free (mykey);
 
-	  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("(uuay)"));
+	  g_variant_builder_init (&builder, G_VARIANT_TYPE ("(uuay)"));
 
 	  g_variant_builder_add (&builder, "u", data->size); /* Size */
 	  g_variant_builder_add (&builder, "u", data->flags); /* Flags */
@@ -754,16 +754,7 @@ get_compiler_id (const char *compiler)
 #endif
 
 #ifdef G_OS_WIN32
-      /* For Visual Studio builds: if a developer shell is detected,
-         immediately assume MSVC so we don't DoS the user with octal
-         strings.
-         See https://developercommunity.visualstudio.com/t/Long-octal-formatted-strings-DoS-the-use/11021201
-       */
-      if (g_getenv ("VCINSTALLDIR") != NULL)
-        {
-          compiler = "msvc"; 
-        }
-      else if (g_getenv ("MSYSTEM") != NULL)
+      if (g_getenv ("MSYSTEM") != NULL)
         {
           const char *compiler_env = g_getenv ("CC");
 
@@ -1079,11 +1070,10 @@ main (int argc, char **argv)
     {
       if (generate_source)
 	{
-	  int fd = g_file_open_tmp (NULL, &binary_target, &error);
+	  int fd = g_file_open_tmp (NULL, &binary_target, NULL);
 	  if (fd == -1)
 	    {
-	      g_printerr ("Can't open temp file: %s\n", error->message);
-              g_error_free (error);
+	      g_printerr ("Can't open temp file\n");
 	      g_free (c_name);
               g_hash_table_unref (files);
 	      return 1;
@@ -1141,7 +1131,7 @@ main (int argc, char **argv)
     {
       FILE *file;
 
-      file = g_fopen (target, "we");
+      file = fopen (target, "w");
       if (file == NULL)
 	{
 	  g_printerr ("can't write to file %s", target);
@@ -1190,7 +1180,7 @@ main (int argc, char **argv)
 	}
       g_unlink (binary_target);
 
-      file = g_fopen (target, "we");
+      file = fopen (target, "w");
       if (file == NULL)
 	{
 	  g_printerr ("can't write to file %s", target);

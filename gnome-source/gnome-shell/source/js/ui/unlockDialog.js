@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import AccountsService from 'gi://AccountsService';
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
@@ -15,14 +17,7 @@ import * as Main from './main.js';
 import * as MessageTray from './messageTray.js';
 import * as SwipeTracker from './swipeTracker.js';
 import {formatDateWithCFormatString} from '../misc/dateUtils.js';
-import {fixMarkup} from '../misc/util.js';
-import * as AuthMenuButton from '../gdm/authMenuButton.js';
 import * as AuthPrompt from '../gdm/authPrompt.js';
-import {AuthPromptStatus} from '../gdm/authPrompt.js';
-import {MprisSource} from './mpris.js';
-import {MediaMessage} from './messageList.js';
-
-const PRIMARY_UNLOCK_METHOD_SECTION_NAME = _('Unlock Options');
 
 // The timeout before going back automatically to the lock screen (in seconds)
 const IDLE_TIMEOUT = 2 * 60;
@@ -37,19 +32,17 @@ const FADE_OUT_SCALE = 0.3;
 const BLUR_BRIGHTNESS = 0.65;
 const BLUR_RADIUS = 90;
 
-const FIXED_PROMPT_HEIGHT = 550;
-
 const NotificationsBox = GObject.registerClass({
     Signals: {'wake-up-screen': {}},
 }, class NotificationsBox extends St.BoxLayout {
     _init() {
         super._init({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             name: 'unlockDialogNotifications',
         });
 
         this._notificationBox = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
             style_class: 'unlock-dialog-notifications-container',
         });
 
@@ -57,16 +50,6 @@ const NotificationsBox = GObject.registerClass({
             child: this._notificationBox,
         });
         this.add_child(this._scrollView);
-
-        this._players = new Map();
-        this._mediaSource = new MprisSource();
-        this._mediaSource.connectObject(
-            'player-added', (o, player) => this._addPlayer(player),
-            'player-removed', (o, player) => this._removePlayer(player),
-            this);
-        this._mediaSource.players.forEach(player => {
-            this._addPlayer(player);
-        });
 
         this._settings = new Gio.Settings({
             schema_id: 'org.gnome.desktop.notifications',
@@ -85,12 +68,9 @@ const NotificationsBox = GObject.registerClass({
     }
 
     _onDestroy() {
-        const items = this._sources.entries();
-        for (const [source, obj] of items)
+        let items = this._sources.entries();
+        for (let [source, obj] of items)
             this._removeSource(source, obj);
-
-        for (const player of this._players.keys())
-            this._removePlayer(player);
     }
 
     _updateVisibility() {
@@ -101,21 +81,21 @@ const NotificationsBox = GObject.registerClass({
     }
 
     _makeNotificationSource(source, box) {
-        const iconActor = new St.Icon({
+        let iconActor = new St.Icon({
             style_class: 'unlock-dialog-notification-icon',
             fallback_icon_name: 'application-x-executable',
         });
         source.bind_property('icon', iconActor, 'gicon', GObject.BindingFlags.SYNC_CREATE);
         box.add_child(iconActor);
 
-        const textBox = new St.BoxLayout({
+        let textBox = new St.BoxLayout({
             x_expand: true,
             y_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
         box.add_child(textBox);
 
-        const title = new St.Label({
+        let title = new St.Label({
             style_class: 'unlock-dialog-notification-label',
             x_expand: true,
             x_align: Clutter.ActorAlign.START,
@@ -125,8 +105,8 @@ const NotificationsBox = GObject.registerClass({
             GObject.BindingFlags.SYNC_CREATE);
         textBox.add_child(title);
 
-        const count = source.unseenCount;
-        const countLabel = new St.Label({
+        let count = source.unseenCount;
+        let countLabel = new St.Label({
             text: `${count}`,
             visible: count > 1,
             style_class: 'unlock-dialog-notification-count-text',
@@ -138,19 +118,17 @@ const NotificationsBox = GObject.registerClass({
     }
 
     _makeNotificationDetailedSource(source, box) {
-        const iconActor = new St.Icon({
+        let iconActor = new St.Icon({
             style_class: 'unlock-dialog-notification-icon',
             fallback_icon_name: 'application-x-executable',
         });
         source.bind_property('icon', iconActor, 'gicon', GObject.BindingFlags.SYNC_CREATE);
         box.add_child(iconActor);
 
-        const textBox = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-        });
+        let textBox = new St.BoxLayout({vertical: true});
         box.add_child(textBox);
 
-        const title = new St.Label({
+        let title = new St.Label({
             style_class: 'unlock-dialog-notification-label',
         });
         source.bind_property_full('title',
@@ -162,7 +140,7 @@ const NotificationsBox = GObject.registerClass({
 
         let visible = false;
         for (let i = 0; i < source.notifications.length; i++) {
-            const n = source.notifications[i];
+            let n = source.notifications[i];
 
             if (n.acknowledged)
                 continue;
@@ -170,13 +148,13 @@ const NotificationsBox = GObject.registerClass({
             let body = '';
             if (n.body) {
                 const bodyText = n.body.replace(/\n/g, ' ');
-                body = fixMarkup(bodyText, n.useBodyMarkup);
+                body = n.useBodyMarkup
+                    ? bodyText
+                    : GLib.markup_escape_text(bodyText, -1);
             }
 
-            const escapedTitle = fixMarkup(n.title, false);
-
-            const label = new St.Label({style_class: 'unlock-dialog-notification-count-text'});
-            label.clutter_text.set_markup(`<b>${escapedTitle}</b> ${body}`);
+            let label = new St.Label({style_class: 'unlock-dialog-notification-count-text'});
+            label.clutter_text.set_markup(`<b>${n.title}</b> ${body}`);
             textBox.add_child(label);
 
             visible = true;
@@ -192,7 +170,7 @@ const NotificationsBox = GObject.registerClass({
     }
 
     _updateSourceBoxStyle(source, obj, box) {
-        const hasCriticalNotification =
+        let hasCriticalNotification =
             source.notifications.some(n => n.urgency === MessageTray.Urgency.CRITICAL);
 
         if (hasCriticalNotification !== obj.hasCriticalNotification) {
@@ -224,22 +202,8 @@ const NotificationsBox = GObject.registerClass({
             this.emit('wake-up-screen');
     }
 
-    _addPlayer(player) {
-        const message = new MediaMessage(player);
-        this._players.set(player, message);
-        this._notificationBox.insert_child_at_index(message, 0);
-        this._updateVisibility();
-    }
-
-    _removePlayer(player) {
-        const message = this._players.get(player);
-        this._players.delete(player);
-        message.destroy();
-        this._updateVisibility();
-    }
-
     _sourceAdded(tray, source, initial) {
-        const obj = {
+        let obj = {
             visible: source.policy.showInLockScreen,
             detailed: this._shouldShowDetails(source),
             sourceBox: null,
@@ -253,7 +217,7 @@ const NotificationsBox = GObject.registerClass({
             x_expand: true,
         });
         this._showSource(source, obj, obj.sourceBox);
-        this._notificationBox.insert_child_at_index(obj.sourceBox, this._players.size);
+        this._notificationBox.add_child(obj.sourceBox);
 
         source.connectObject(
             'notify::count', () => this._countChanged(source, obj),
@@ -273,12 +237,12 @@ const NotificationsBox = GObject.registerClass({
 
         if (!initial) {
             // block scrollbars while animating, if they're not needed now
-            const boxHeight = this._notificationBox.height;
+            let boxHeight = this._notificationBox.height;
             if (this._scrollView.height >= boxHeight)
                 this._scrollView.vscrollbar_policy = St.PolicyType.NEVER;
 
-            const widget = obj.sourceBox;
-            const [, natHeight] = widget.get_preferred_height(-1);
+            let widget = obj.sourceBox;
+            let [, natHeight] = widget.get_preferred_height(-1);
             widget.height = 0;
             widget.ease({
                 height: natHeight,
@@ -302,8 +266,8 @@ const NotificationsBox = GObject.registerClass({
     _countChanged(source, obj) {
         // A change in the number of notifications may change whether we show
         // details.
-        const newDetailed = this._shouldShowDetails(source);
-        const oldDetailed = obj.detailed;
+        let newDetailed = this._shouldShowDetails(source);
+        let oldDetailed = obj.detailed;
 
         obj.detailed = newDetailed;
 
@@ -315,7 +279,7 @@ const NotificationsBox = GObject.registerClass({
             obj.titleLabel = obj.countLabel = null;
             this._showSource(source, obj, obj.sourceBox);
         } else {
-            const count = source.unseenCount;
+            let count = source.unseenCount;
             obj.countLabel.text = `${count}`;
             obj.countLabel.visible = count > 1;
         }
@@ -338,7 +302,7 @@ const NotificationsBox = GObject.registerClass({
     }
 
     _detailedChanged(source, obj) {
-        const newDetailed = this._shouldShowDetails(source);
+        let newDetailed = this._shouldShowDetails(source);
         if (obj.detailed === newDetailed)
             return;
 
@@ -362,10 +326,7 @@ const NotificationsBox = GObject.registerClass({
 const Clock = GObject.registerClass(
 class UnlockDialogClock extends St.BoxLayout {
     _init() {
-        super._init({
-            style_class: 'unlock-dialog-clock',
-            orientation: Clutter.Orientation.VERTICAL,
-        });
+        super._init({style_class: 'unlock-dialog-clock', vertical: true});
 
         this._time = new St.Label({
             style_class: 'unlock-dialog-clock-time',
@@ -388,8 +349,7 @@ class UnlockDialogClock extends St.BoxLayout {
         this._wallClock = new GnomeDesktop.WallClock({time_only: true});
         this._wallClock.connect('notify::clock', this._updateClock.bind(this));
 
-        const backend = this.get_context().get_backend();
-        this._seat = backend.get_default_seat();
+        this._seat = Clutter.get_default_backend().get_default_seat();
         this._seat.connectObject('notify::touch-mode',
             this._updateHint.bind(this), this);
 
@@ -414,29 +374,17 @@ class UnlockDialogClock extends St.BoxLayout {
     _updateClock() {
         this._time.text = this._wallClock.clock.trim();
 
-        const date = new Date();
+        let date = new Date();
         /* Translators: This is a time format for a date in
            long format */
-        const dateFormat = Shell.util_translate_time_string(N_('%A %B %-d'));
+        let dateFormat = Shell.util_translate_time_string(N_('%A %B %-d'));
         this._date.text = formatDateWithCFormatString(date, dateFormat);
     }
 
-    selectAuthHint(hint) {
-        this._authHint = hint;
-        this._updateHint();
-    }
-
     _updateHint() {
-        let text;
-
-        if (this._authHint)
-            text = this._authHint;
-        else if (this._seat.touch_mode)
-            text = _('Swipe up');
-        else
-            text = _('Click or press a key');
-
-        this._hint.text = text;
+        this._hint.text = this._seat.touch_mode
+            ? _('Swipe up to unlock')
+            : _('Click or press a key to unlock');
     }
 
     _onDestroy() {
@@ -448,13 +396,12 @@ class UnlockDialogClock extends St.BoxLayout {
 
 const UnlockDialogLayout = GObject.registerClass(
 class UnlockDialogLayout extends Clutter.LayoutManager {
-    _init(stack, notifications, authIndicatorButton, bottomButtonGroup) {
+    _init(stack, notifications, switchUserButton) {
         super._init();
 
         this._stack = stack;
         this._notifications = notifications;
-        this._authIndicatorButton = authIndicatorButton;
-        this._bottomButtonGroup = bottomButtonGroup;
+        this._switchUserButton = switchUserButton;
     }
 
     vfunc_get_preferred_width(container, forHeight) {
@@ -466,24 +413,24 @@ class UnlockDialogLayout extends Clutter.LayoutManager {
     }
 
     vfunc_allocate(container, box) {
-        const [width, height] = box.get_size();
+        let [width, height] = box.get_size();
 
-        const tenthOfHeight = height / 10.0;
-        const centerY = height / 2.0;
+        let tenthOfHeight = height / 10.0;
+        let thirdOfHeight = height / 3.0;
 
-        const [, , stackWidth, stackHeight] =
+        let [, , stackWidth, stackHeight] =
             this._stack.get_preferred_size();
 
-        const [, , notificationsWidth, notificationsHeight] =
+        let [, , notificationsWidth, notificationsHeight] =
             this._notifications.get_preferred_size();
 
-        const columnWidth = Math.max(stackWidth, notificationsWidth);
+        let columnWidth = Math.max(stackWidth, notificationsWidth);
 
-        const columnX1 = Math.floor((width - columnWidth) / 2.0);
-        const actorBox = new Clutter.ActorBox();
+        let columnX1 = Math.floor((width - columnWidth) / 2.0);
+        let actorBox = new Clutter.ActorBox();
 
         // Notifications
-        const maxNotificationsHeight = Math.min(
+        let maxNotificationsHeight = Math.min(
             notificationsHeight,
             height - tenthOfHeight - stackHeight);
 
@@ -495,8 +442,8 @@ class UnlockDialogLayout extends Clutter.LayoutManager {
         this._notifications.allocate(actorBox);
 
         // Authentication Box
-        const stackY = Math.min(
-            Math.floor(centerY - FIXED_PROMPT_HEIGHT / 2.0),
+        let stackY = Math.min(
+            thirdOfHeight,
             height - stackHeight - maxNotificationsHeight);
 
         actorBox.x1 = columnX1;
@@ -506,40 +453,22 @@ class UnlockDialogLayout extends Clutter.LayoutManager {
 
         this._stack.allocate(actorBox);
 
-        // Auth Indicator button (bottom start)
-        if (this._authIndicatorButton.visible) {
-            const [, , natWidth, natHeight] =
-                this._authIndicatorButton.get_preferred_size();
+        // Switch User button
+        if (this._switchUserButton.visible) {
+            let [, , natWidth, natHeight] =
+                this._switchUserButton.get_preferred_size();
 
-            const textDirection = this._authIndicatorButton.get_text_direction();
+            const textDirection = this._switchUserButton.get_text_direction();
             if (textDirection === Clutter.TextDirection.RTL)
-                actorBox.x1 = box.x2 - natWidth;
+                actorBox.x1 = box.x1 + natWidth;
             else
-                actorBox.x1 = box.x1;
+                actorBox.x1 = box.x2 - (natWidth * 2);
 
-            actorBox.y1 = box.y2 - natHeight;
+            actorBox.y1 = box.y2 - (natHeight * 2);
             actorBox.x2 = actorBox.x1 + natWidth;
             actorBox.y2 = actorBox.y1 + natHeight;
 
-            this._authIndicatorButton.allocate(actorBox);
-        }
-
-        // bottom button group, (has login options and switch user buttons) (bottom end)
-        if (this._bottomButtonGroup.visible) {
-            const [, , natWidth, natHeight] =
-                this._bottomButtonGroup.get_preferred_size();
-
-            const textDirection = this._bottomButtonGroup.get_text_direction();
-            if (textDirection === Clutter.TextDirection.RTL)
-                actorBox.x1 = box.x1;
-            else
-                actorBox.x1 = box.x2 - natWidth;
-
-            actorBox.y1 = box.y2 - natHeight;
-            actorBox.x2 = actorBox.x1 + natWidth;
-            actorBox.y2 = actorBox.y1 + natHeight;
-
-            this._bottomButtonGroup.allocate(actorBox);
+            this._switchUserButton.allocate(actorBox);
         }
     }
 });
@@ -565,9 +494,8 @@ export const UnlockDialog = GObject.registerClass({
         try {
             this._gdmClient.set_enabled_extensions([
                 Gdm.UserVerifierChoiceList.interface_info().name,
-                Gdm.UserVerifierCustomJSON.interface_info().name,
             ]);
-        } catch {
+        } catch (e) {
         }
 
         this._adjustment = new St.Adjustment({
@@ -583,37 +511,28 @@ export const UnlockDialog = GObject.registerClass({
 
         this._swipeTracker = new SwipeTracker.SwipeTracker(this,
             Clutter.Orientation.VERTICAL,
-            Shell.ActionMode.UNLOCK_SCREEN,
-            {
-                name: 'UnlockDialog swipe tracker',
-            });
+            Shell.ActionMode.UNLOCK_SCREEN);
         this._swipeTracker.connect('begin', this._swipeBegin.bind(this));
         this._swipeTracker.connect('update', this._swipeUpdate.bind(this));
         this._swipeTracker.connect('end', this._swipeEnd.bind(this));
 
-        const discreteScroll = new Clutter.ScrollController({
-            flags: Clutter.ScrollControllerFlags.DISCRETE |
-                Clutter.ScrollControllerFlags.SCROLL_VERTICAL,
-        });
-        discreteScroll.connect(
-            'scroll',
-            (_controller, _sprite, _source, _dx, dy) => {
-                if (dy < 0)
-                    this._showClock();
-                else if (dy > 0)
-                    this._showPrompt();
-            });
-        this.add_action(discreteScroll);
+        this.connect('scroll-event', (o, event) => {
+            if (this._swipeTracker.canHandleScrollEvent(event))
+                return Clutter.EVENT_PROPAGATE;
 
-        this._keyController = new Clutter.KeyController();
-        this._keyController.connect('key-press', () => this._onKeyPress());
-        this.add_action(this._keyController);
+            let direction = event.get_scroll_direction();
+            if (direction === Clutter.ScrollDirection.UP)
+                this._showClock();
+            else if (direction === Clutter.ScrollDirection.DOWN)
+                this._showPrompt();
+            return Clutter.EVENT_STOP;
+        });
 
         this._activePage = null;
 
-        const clickGesture = new Clutter.ClickGesture();
-        clickGesture.connect('recognize', () => this._showPrompt());
-        this.add_action(clickGesture);
+        let tapAction = new Clutter.TapAction();
+        tapAction.connect('tap', this._showPrompt.bind(this));
+        this.add_action(tapAction);
 
         // Background
         this._backgroundGroup = new Clutter.Actor();
@@ -636,9 +555,7 @@ export const UnlockDialog = GObject.registerClass({
         // Authentication & Clock stack
         this._stack = new Shell.Stack();
 
-        this._promptBox = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-        });
+        this._promptBox = new St.BoxLayout({vertical: true});
         this._promptBox.set_pivot_point(0.5, 0.5);
         this._promptBox.hide();
         this._stack.add_child(this._promptBox);
@@ -656,47 +573,19 @@ export const UnlockDialog = GObject.registerClass({
         this._notificationsBox = new NotificationsBox();
         this._notificationsBox.connect('wake-up-screen', () => this.emit('wake-up-screen'));
 
-        this._bottomButtonGroup = new St.BoxLayout({
-            style_class: 'login-dialog-bottom-button-group',
-        });
-        this._bottomButtonGroup.set_pivot_point(0.5, 0.5);
-
         // Switch User button
         this._otherUserButton = new St.Button({
             style_class: 'login-dialog-button switch-user-button',
             accessible_name: _('Log in as another user'),
-            button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.SECONDARY,
+            button_mask: St.ButtonMask.ONE | St.ButtonMask.THREE,
             reactive: false,
+            opacity: 0,
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.END,
-            label: _('Switch User…'),
+            icon_name: 'system-users-symbolic',
         });
+        this._otherUserButton.set_pivot_point(0.5, 0.5);
         this._otherUserButton.connect('clicked', this._otherUserClicked.bind(this));
-        this._bottomButtonGroup.add_child(this._otherUserButton);
-
-        // Login Options button
-        this._authMenuButton = new AuthMenuButton.AuthMenuButton({
-            accessible_name: _('Login Options'),
-            visible: false,
-            y_align: Clutter.ActorAlign.END,
-        });
-        this._authMenuButton.connect('active-item-changed', () => {
-            const authMechanism = this._authMenuButton.getActiveItem();
-            if (!authMechanism)
-                return;
-
-            this._selectAuthMechanism(authMechanism);
-            this._authMenuButton.closeMenu();
-        });
-        this._bottomButtonGroup.add_child(this._authMenuButton);
-
-        // Auth Indicators
-        this._authIndicatorButton = new AuthMenuButton.AuthMenuButtonIndicator({
-            accessible_name: _('Background Authentication Methods'),
-            animateVisibility: true,
-            visible: false,
-        });
-        this._authIndicatorButton.set_pivot_point(0.5, 0.5);
 
         this._screenSaverSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.screensaver'});
 
@@ -714,26 +603,16 @@ export const UnlockDialog = GObject.registerClass({
 
         this._updateUserSwitchVisibility();
 
-        // When parental controls session limits are enabled, the screen will be
-        // locked upon reaching the time limit. In those cases, tweak the lock screen,
-        // so that the children cannot unlock without parental supervision.
-        Main.timeLimitsManager.connectObject(
-            'notify::should-lock-session', () => this._updateAuthBlocked(),
-            this);
-        this._updateAuthBlocked();
-
         // Main Box
-        const mainBox = new St.Widget();
+        let mainBox = new St.Widget();
         mainBox.add_constraint(new Layout.MonitorConstraint({primary: true}));
         mainBox.add_child(this._stack);
         mainBox.add_child(this._notificationsBox);
-        mainBox.add_child(this._authIndicatorButton);
-        mainBox.add_child(this._bottomButtonGroup);
+        mainBox.add_child(this._otherUserButton);
         mainBox.layout_manager = new UnlockDialogLayout(
             this._stack,
             this._notificationsBox,
-            this._authIndicatorButton,
-            this._bottomButtonGroup);
+            this._otherUserButton);
         this.add_child(mainBox);
 
         this._idleMonitor = global.backend.get_core_idle_monitor();
@@ -742,45 +621,38 @@ export const UnlockDialog = GObject.registerClass({
         this.connect('destroy', this._onDestroy.bind(this));
     }
 
-    _onKeyPress() {
+    vfunc_key_press_event(event) {
         if (this._activePage === this._promptBox ||
             (this._promptBox && this._promptBox.visible))
             return Clutter.EVENT_PROPAGATE;
 
-        const [, keyval, _, unichar] = this._keyController.get_key();
+        const keyval = event.get_key_symbol();
         if (keyval === Clutter.KEY_Shift_L ||
             keyval === Clutter.KEY_Shift_R ||
             keyval === Clutter.KEY_Shift_Lock ||
             keyval === Clutter.KEY_Caps_Lock)
             return Clutter.EVENT_PROPAGATE;
 
+        let unichar = event.get_key_unicode();
+
         this._showPrompt();
 
-        if (GLib.unichar_isprint(unichar))
-            this._authPrompt.startPreemptiveInput(unichar);
+        if (GLib.unichar_isgraph(unichar))
+            this._authPrompt.addCharacter(unichar);
 
         return Clutter.EVENT_PROPAGATE;
     }
 
-    _selectAuthMechanism(authMechanism) {
-        const oldMechanism = this._selectedAuthMechanism;
+    vfunc_captured_event(event) {
+        if (Main.keyboard.maybeHandleEvent(event))
+            return Clutter.EVENT_STOP;
 
-        if (authMechanism === oldMechanism)
-            return;
-
-        if (!this._authPrompt.selectMechanism(authMechanism)) {
-            this._authMenuButton.setActiveItem(oldMechanism);
-            return;
-        }
-
-        this._selectedAuthMechanism = authMechanism;
-
-        this._clock.selectAuthHint(authMechanism?.hint);
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _createBackground(monitorIndex) {
-        const monitor = Main.layoutManager.monitors[monitorIndex];
-        const widget = new St.Widget({
+        let monitor = Main.layoutManager.monitors[monitorIndex];
+        let widget = new St.Widget({
             style_class: 'screen-shield-background',
             x: monitor.x,
             y: monitor.y,
@@ -789,7 +661,7 @@ export const UnlockDialog = GObject.registerClass({
             effect: new Shell.BlurEffect({name: 'blur'}),
         });
 
-        const bgManager = new Background.BackgroundManager({
+        let bgManager = new Background.BackgroundManager({
             container: widget,
             monitorIndex,
             controlPosition: false,
@@ -834,26 +706,15 @@ export const UnlockDialog = GObject.registerClass({
             this._authPrompt.connect('failed', this._fail.bind(this));
             this._authPrompt.connect('cancelled', this._fail.bind(this));
             this._authPrompt.connect('reset', this._onReset.bind(this));
-            this._authPrompt.connect('loading', this._onLoading.bind(this));
-            this._authPrompt.connect('mechanisms-changed', this._onMechanismsChanged.bind(this));
             this._promptBox.add_child(this._authPrompt);
         }
 
-        const {verificationStatus} = this._authPrompt;
-        switch (verificationStatus) {
-        case AuthPromptStatus.NOT_VERIFYING:
-        case AuthPromptStatus.VERIFICATION_CANCELLED:
-        case AuthPromptStatus.VERIFICATION_FAILED:
-            this._authPrompt.reset();
-            this._authPrompt.updateSensitivity(
-                {sensitive: verificationStatus === AuthPromptStatus.NOT_VERIFYING});
-        }
-
-        this._updateAuthBlocked();
+        this._authPrompt.reset();
+        this._authPrompt.updateSensitivity(true);
     }
 
     _maybeDestroyAuthPrompt() {
-        const focus = global.stage.key_focus;
+        let focus = global.stage.key_focus;
         if (focus === null ||
             (this._authPrompt && this._authPrompt.contains(focus)) ||
             (this._otherUserButton && focus === this._otherUserButton))
@@ -862,7 +723,6 @@ export const UnlockDialog = GObject.registerClass({
         if (this._authPrompt) {
             this._authPrompt.destroy();
             this._authPrompt = null;
-            this._authIndicatorButton.clearItems();
         }
     }
 
@@ -901,50 +761,27 @@ export const UnlockDialog = GObject.registerClass({
             reactive: progress > 0,
             can_focus: progress > 0,
         });
-        this._authIndicatorButton.set({
-            opacity: 255 * progress,
-            scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
-            scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
-        });
-        this._updateUserSwitchVisibility();
 
         const {scaleFactor} = St.ThemeContext.get_for_stage(global.stage);
-        const {reducedMotion} = St.Settings.get();
-        const useMotion = reducedMotion !== St.ReducedMotion.REDUCE;
-
-        const promptMotionParams = useMotion
-            ? {
-                scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
-                scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
-                translation_y: FADE_OUT_TRANSLATION * (1 - progress) * scaleFactor,
-            } : {};
 
         this._promptBox.set({
             opacity: 255 * progress,
-            ...promptMotionParams,
+            scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
+            scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
+            translation_y: FADE_OUT_TRANSLATION * (1 - progress) * scaleFactor,
         });
-
-        const clockMotionParams = useMotion
-            ? {
-                scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * (1 - progress),
-                scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * (1 - progress),
-                translation_y: -FADE_OUT_TRANSLATION * progress * scaleFactor,
-            } : {};
 
         this._clock.set({
             opacity: 255 * (1 - progress),
-            ...clockMotionParams,
+            scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * (1 - progress),
+            scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * (1 - progress),
+            translation_y: -FADE_OUT_TRANSLATION * progress * scaleFactor,
         });
 
-        const bottomButtonGroupMotionParams = useMotion
-            ? {
-                scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
-                scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
-            } : {};
-
-        this._bottomButtonGroup.set({
+        this._otherUserButton.set({
             opacity: 255 * progress,
-            ...bottomButtonGroupMotionParams,
+            scale_x: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
+            scale_y: FADE_OUT_SCALE + (1 - FADE_OUT_SCALE) * progress,
         });
     }
 
@@ -953,9 +790,9 @@ export const UnlockDialog = GObject.registerClass({
         this.emit('failed');
     }
 
-    _onReset(authPrompt, resetType) {
+    _onReset(authPrompt, beginRequest) {
         let userName;
-        if (resetType !== AuthPrompt.ResetType.DONT_PROVIDE_USERNAME) {
+        if (beginRequest === AuthPrompt.BeginRequestType.PROVIDE_USERNAME) {
             this._authPrompt.setUser(this._user);
             userName = this._userName;
         } else {
@@ -963,37 +800,6 @@ export const UnlockDialog = GObject.registerClass({
         }
 
         this._authPrompt.begin({userName});
-    }
-
-    _onLoading(_authPrompt, isLoading) {
-        this._authMenuButton.reactive = !isLoading;
-    }
-
-    _onMechanismsChanged(_authPrompt, {mechanisms, selectedMechanism}) {
-        this._authMenuButton.clearItems({
-            sectionName: PRIMARY_UNLOCK_METHOD_SECTION_NAME,
-        });
-
-        this._authIndicatorButton.clearItems();
-
-        if (mechanisms.length === 0)
-            return;
-
-        for (const m of mechanisms) {
-            if (m.selectable) {
-                this._authMenuButton.addItem({
-                    sectionName: PRIMARY_UNLOCK_METHOD_SECTION_NAME,
-                    ...m,
-                });
-            } else {
-                this._authIndicatorButton.addItem(m);
-            }
-        }
-
-        if (Object.keys(selectedMechanism).length > 0)
-            this._authMenuButton.setActiveItem(selectedMechanism);
-
-        this._authIndicatorButton.updateDescriptionLabel();
     }
 
     _escape() {
@@ -1009,7 +815,7 @@ export const UnlockDialog = GObject.registerClass({
 
         this._ensureAuthPrompt();
 
-        const progress = this._adjustment.value;
+        let progress = this._adjustment.value;
         tracker.confirmSwipe(this._stack.height,
             [0, 1],
             progress,
@@ -1036,7 +842,8 @@ export const UnlockDialog = GObject.registerClass({
     }
 
     _otherUserClicked() {
-        this._authPrompt.connect('destroy', () => Gdm.goto_login_session_sync(null));
+        Gdm.goto_login_session_sync(null);
+
         this._authPrompt.cancel();
     }
 
@@ -1058,13 +865,7 @@ export const UnlockDialog = GObject.registerClass({
         this._otherUserButton.visible = this._userManager.can_switch() &&
             this._userManager.has_multiple_users &&
             this._screenSaverSettings.get_boolean('user-switch-enabled') &&
-            !this._lockdownSettings.get_boolean('disable-user-switching') &&
-            this._promptBox.visible;
-    }
-
-    _updateAuthBlocked() {
-        this._authPrompt?.setAuthBlocked(
-            Main.timeLimitsManager.shouldLockSession);
+            !this._lockdownSettings.get_boolean('disable-user-switching');
     }
 
     cancel() {
@@ -1089,6 +890,11 @@ export const UnlockDialog = GObject.registerClass({
 
         const grab = Main.pushModal(Main.uiGroup,
             {actionMode: Shell.ActionMode.UNLOCK_SCREEN});
+        if (grab.get_seat_state() !== Clutter.GrabState.ALL) {
+            Main.popModal(grab);
+            return false;
+        }
+
         this._grab = grab;
         this._isModal = true;
 

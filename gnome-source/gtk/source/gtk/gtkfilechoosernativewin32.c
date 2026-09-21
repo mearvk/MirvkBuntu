@@ -19,6 +19,12 @@
 
 #include "config.h"
 
+/* Vista or newer */
+#define _WIN32_WINNT 0x0600
+#include <sdkddkver.h>
+
+#define COBJMACROS
+
 #include "gtkfilechoosernativeprivate.h"
 #include "gtknativedialogprivate.h"
 
@@ -244,7 +250,6 @@ ifiledialogevents_OnTypeChange (IFileDialogEvents * self,
   events->data->self->current_filter = filter;
   g_object_unref (filter);
   g_object_unref (filters);
-  /* gobject-linter-ignore-next-line: use_g_object_notify_by_pspec */
   g_object_notify (G_OBJECT (events->data->self), "filter");
   return S_OK;
 }
@@ -332,9 +337,10 @@ filechooser_win32_thread_data_free (FilechooserWin32ThreadData *data)
       g_array_free (data->choices_selections, TRUE);
       data->choices_selections = NULL;
     }
-  g_clear_object (&data->shortcut_files);
+  g_object_unref (data->shortcut_files);
   g_slist_free_full (data->files, g_object_unref);
-  g_clear_object (&data->self);
+  if (data->self)
+    g_object_unref (data->self);
   g_free (data->accept_label);
   g_free (data->cancel_label);
   g_free (data->title);

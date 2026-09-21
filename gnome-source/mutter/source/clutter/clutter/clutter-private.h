@@ -27,6 +27,9 @@
 
 #include <string.h>
 #include <glib.h>
+#include <pango/pango.h>
+
+#include "cogl-pango/cogl-pango.h"
 
 #include "clutter/clutter-backend.h"
 #include "clutter/clutter-context.h"
@@ -34,11 +37,20 @@
 #include "clutter/clutter-event.h"
 #include "clutter/clutter-layout-manager.h"
 #include "clutter/clutter-settings.h"
+#include "clutter/clutter-stage-manager.h"
 #include "clutter/clutter-stage.h"
 
 G_BEGIN_DECLS
 
 typedef struct _ClutterContext      ClutterContext;
+
+#define CLUTTER_REGISTER_VALUE_TRANSFORM_TO(TYPE_TO,func)             { \
+  g_value_register_transform_func (g_define_type_id, TYPE_TO, func);    \
+}
+
+#define CLUTTER_REGISTER_VALUE_TRANSFORM_FROM(TYPE_FROM,func)         { \
+  g_value_register_transform_func (TYPE_FROM, g_define_type_id, func);  \
+}
 
 #define CLUTTER_REGISTER_INTERVAL_PROGRESS(func)                      { \
   clutter_interval_register_progress_func (g_define_type_id, func);     \
@@ -67,8 +79,6 @@ typedef struct _ClutterContext      ClutterContext;
  * because it will break for negative numbers. */
 #define CLUTTER_NEARBYINT(x) ((int) ((x) < 0.0f ? (x) - 0.5f : (x) + 0.5f))
 
-typedef struct _ClutterColorTransformKey ClutterColorTransformKey;
-
 typedef enum
 {
   CLUTTER_ACTOR_UNUSED_FLAG = 0,
@@ -89,6 +99,10 @@ typedef enum
 } ClutterPrivateFlags;
 
 ClutterContext *        _clutter_context_get_default                    (void);
+
+CLUTTER_EXPORT
+gboolean                _clutter_context_is_initialized                 (void);
+gboolean                _clutter_context_get_show_fps                   (void);
 
 /* Diagnostic mode */
 gboolean        _clutter_diagnostic_enabled     (void);
@@ -120,8 +134,18 @@ void  _clutter_util_fully_transform_vertices (const graphene_matrix_t  *modelvie
                                               graphene_point3d_t       *vertices_out,
                                               int                       n_vertices);
 
+CLUTTER_EXPORT
+ClutterTextDirection clutter_unichar_direction (gunichar ch);
+
+ClutterTextDirection _clutter_find_base_dir (const gchar *text,
+                                             gint         length);
+
+PangoDirection
+clutter_text_direction_to_pango_direction (ClutterTextDirection dir);
+
 typedef enum _ClutterCullResult
 {
+  CLUTTER_CULL_RESULT_UNKNOWN,
   CLUTTER_CULL_RESULT_IN,
   CLUTTER_CULL_RESULT_OUT,
 } ClutterCullResult;
@@ -135,12 +159,76 @@ gboolean        _clutter_run_progress_function  (GType gtype,
 
 void            clutter_timeline_cancel_delay (ClutterTimeline *timeline);
 
-void clutter_interval_register_progress_funcs (void);
-
 static inline void
 clutter_round_to_256ths (float *f)
 {
   *f = roundf ((*f) * 256) / 256;
+}
+
+static inline uint64_t
+ns (uint64_t ns)
+{
+  return ns;
+}
+
+static inline int64_t
+us (int64_t us)
+{
+  return us;
+}
+
+static inline int64_t
+ms (int64_t ms)
+{
+  return ms;
+}
+
+static inline int64_t
+ms2us (int64_t ms)
+{
+  return us (ms * 1000);
+}
+
+static inline int64_t
+us2ns (int64_t us)
+{
+  return ns (us * 1000);
+}
+
+static inline int64_t
+us2ms (int64_t us)
+{
+  return (int64_t) (us / 1000);
+}
+
+static inline int64_t
+ns2us (int64_t ns)
+{
+  return us (ns / 1000);
+}
+
+static inline int64_t
+s2us (int64_t s)
+{
+  return s * G_USEC_PER_SEC;
+}
+
+static inline int64_t
+us2s (int64_t us)
+{
+  return us / G_USEC_PER_SEC;
+}
+
+static inline int64_t
+s2ns (int64_t s)
+{
+  return us2ns (s2us (s));
+}
+
+static inline int64_t
+s2ms (int64_t s)
+{
+  return (int64_t) ms (s * 1000);
 }
 
 G_END_DECLS

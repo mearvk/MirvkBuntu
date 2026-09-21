@@ -4,40 +4,12 @@
 
 #include "broadway/gdkprivate-broadway.h"
 
-#include "gskarithmeticnodeprivate.h"
-#include "gskblendnode.h"
-#include "gskblurnode.h"
-#include "gskbordernode.h"
-#include "gskcaironode.h"
-#include "gskclipnode.h"
-#include "gskcolormatrixnode.h"
-#include "gskcolornode.h"
-#include "gskcontainernode.h"
-#include "gskdebugnode.h"
 #include "gskdebugprivate.h"
-#include "gskinsetshadownode.h"
-#include "gsklineargradientnode.h"
-#include "gskmasknode.h"
-#include "gskopacitynode.h"
-#include "gskoutsetshadownode.h"
-#include "gskroundedclipnode.h"
 #include "gsktransformprivate.h"
 #include "gskrendererprivate.h"
 #include "gskrendernodeprivate.h"
-#include "gskshadownode.h"
-#include "gsksubsurfacenode.h"
-#include "gsktransformnode.h"
-#include "gsktexturenode.h"
-#include "gdk/gdkcolorstateprivate.h"
 #include "gdk/gdktextureprivate.h"
 
-/**
- * GskBroadwayRenderer:
- *
- * A Broadway based renderer.
- *
- * See [class@Gsk.Renderer].
- */
 struct _GskBroadwayRenderer
 {
   GskRenderer parent_instance;
@@ -65,7 +37,6 @@ static gboolean
 gsk_broadway_renderer_realize (GskRenderer  *renderer,
                                GdkDisplay   *display,
                                GdkSurface   *surface,
-                               gboolean      attach,
                                GError      **error)
 {
   GskBroadwayRenderer *self = GSK_BROADWAY_RENDERER (renderer);
@@ -78,11 +49,6 @@ gsk_broadway_renderer_realize (GskRenderer  *renderer,
     }
 
   self->draw_context = gdk_broadway_draw_context_context (surface);
-  if (attach && !gdk_draw_context_attach (GDK_DRAW_CONTEXT (self->draw_context), error))
-    {
-      g_clear_object (&self->draw_context);
-      return FALSE;
-    }
 
   return TRUE;
 }
@@ -91,9 +57,6 @@ static void
 gsk_broadway_renderer_unrealize (GskRenderer *renderer)
 {
   GskBroadwayRenderer *self = GSK_BROADWAY_RENDERER (renderer);
-
-  gdk_draw_context_detach (GDK_DRAW_CONTEXT (self->draw_context));
-
   g_clear_object (&self->draw_context);
 }
 
@@ -312,14 +275,6 @@ collect_reused_child_nodes (GskRenderer *renderer,
     case GSK_FILL_NODE:
     case GSK_STROKE_NODE:
     case GSK_SUBSURFACE_NODE:
-    case GSK_COMPONENT_TRANSFER_NODE:
-    case GSK_COPY_NODE:
-    case GSK_PASTE_NODE:
-    case GSK_COMPOSITE_NODE:
-    case GSK_ISOLATION_NODE:
-    case GSK_DISPLACEMENT_NODE:
-    case GSK_ARITHMETIC_NODE:
-    case GSK_TURBULENCE_NODE:
 
     default:
 
@@ -522,7 +477,7 @@ get_colorized_texture (GdkTexture *texture,
         return g_object_ref (colorized->texture);
     }
 
-  surface = gdk_texture_download_surface (texture, GDK_COLOR_STATE_SRGB);
+  surface = gdk_texture_download_surface (texture);
   image_surface = cairo_surface_map_to_image (surface, NULL);
   data = cairo_image_surface_get_data (image_surface);
   width = cairo_image_surface_get_width (image_surface);
@@ -918,14 +873,6 @@ gsk_broadway_renderer_add_node (GskRenderer *renderer,
     case GSK_GL_SHADER_NODE:
     case GSK_FILL_NODE:
     case GSK_STROKE_NODE:
-    case GSK_COMPONENT_TRANSFER_NODE:
-    case GSK_COPY_NODE:
-    case GSK_PASTE_NODE:
-    case GSK_COMPOSITE_NODE:
-    case GSK_ISOLATION_NODE:
-    case GSK_DISPLACEMENT_NODE:
-    case GSK_ARITHMETIC_NODE:
-    case GSK_TURBULENCE_NODE:
     default:
       break; /* Fallback */
     }
@@ -979,7 +926,7 @@ gsk_broadway_renderer_render (GskRenderer          *renderer,
 
   self->node_lookup = g_hash_table_new (g_direct_hash, g_direct_equal);
 
-  gdk_draw_context_begin_frame_full (GDK_DRAW_CONTEXT (self->draw_context), NULL, root, update_area);
+  gdk_draw_context_begin_frame (GDK_DRAW_CONTEXT (self->draw_context), update_area);
 
   /* These are owned by the draw context between begin and end, but
      cache them here for easier access during the render */
@@ -991,7 +938,7 @@ gsk_broadway_renderer_render (GskRenderer          *renderer,
   self->nodes = NULL;
   self->node_textures = NULL;
 
-  gdk_draw_context_end_frame_full (GDK_DRAW_CONTEXT (self->draw_context), NULL);
+  gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (self->draw_context));
 
   if (self->last_node_lookup)
     g_hash_table_unref (self->last_node_lookup);
@@ -1042,8 +989,6 @@ gsk_broadway_renderer_init (GskBroadwayRenderer *self)
  * support.
  *
  * Returns: a new Broadway renderer.
- *
- * Deprecated: 4.20: Broadway will be retired in GTK 5
  **/
 GskRenderer *
 gsk_broadway_renderer_new (void)

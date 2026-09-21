@@ -17,6 +17,11 @@ if buildtype != 'plain'
     clutter_debug_c_args += [
       '-DCLUTTER_ENABLE_DEBUG',
     ]
+  else
+    clutter_debug_c_args += [
+      '-DG_DISABLE_ASSERT',
+      '-DG_DISABLE_CAST_CHECKS',
+    ]
   endif
 endif
 clutter_debug_c_args = cc.get_supported_arguments(clutter_debug_c_args)
@@ -24,25 +29,50 @@ clutter_c_args += clutter_debug_c_args
 
 clutter_pkg_deps = [
   atk_dep,
+  cairo_dep,
   glib_dep,
   gobject_dep,
   gio_dep,
-  xkbcommon_dep,
-  lcms2_dep,
+  pango_dep,
+  harfbuzz_dep,
 ]
 
 clutter_pkg_private_deps = [
+  fribidi_dep,
   gthread_dep,
   gmodule_no_export_dep,
+  pangocairo_dep,
 ]
 
-if have_fonts
+if have_pango_ft2
   clutter_pkg_private_deps += [
-    cairo_dep,
-    fribidi_dep,
-    pangocairo_dep,
-    pango_dep,
-    harfbuzz_dep,
+    pangoft2_dep,
+  ]
+endif
+
+if have_wayland
+  clutter_pkg_private_deps += [
+    wayland_egl_dep,
+    wayland_server_dep,
+  ]
+endif
+
+if have_x11_client
+  clutter_pkg_deps += [
+    x11_dep,
+  ]
+  clutter_pkg_private_deps += [
+    xext_dep,
+    xdamage_dep,
+    xcomposite_dep,
+    xtst_dep,
+    xi_dep,
+  ]
+endif
+
+if have_libwacom
+  clutter_pkg_private_deps += [
+    libwacom_dep,
   ]
 endif
 

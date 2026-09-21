@@ -28,7 +28,8 @@
 /**
  * GtkSingleSelection:
  *
- * A selection model that allows selecting a single item.
+ * `GtkSingleSelection` is a `GtkSelectionModel` that allows selecting a single
+ * item.
  *
  * Note that the selection is *persistent* -- if the selected item is removed
  * and re-added in the same [signal@Gio.ListModel::items-changed] emission, it
@@ -163,7 +164,7 @@ gtk_single_selection_unselect_item (GtkSelectionModel *model,
 {
   GtkSingleSelection *self = GTK_SINGLE_SELECTION (model);
 
-  if (!self->can_unselect || self->autoselect)
+  if (!self->can_unselect)
     return FALSE;
 
   if (self->selected == position)
@@ -172,21 +173,12 @@ gtk_single_selection_unselect_item (GtkSelectionModel *model,
   return TRUE;
 }
 
-static gboolean
-gtk_single_selection_unselect_all (GtkSelectionModel *model)
-{
-  GtkSingleSelection *self = GTK_SINGLE_SELECTION (model);
-
-  return gtk_single_selection_unselect_item (model, self->selected);
-}
-
 static void
 gtk_single_selection_selection_model_init (GtkSelectionModelInterface *iface)
 {
   iface->is_selected = gtk_single_selection_is_selected; 
   iface->get_selection_in_range = gtk_single_selection_get_selection_in_range; 
   iface->select_item = gtk_single_selection_select_item; 
-  iface->unselect_all = gtk_single_selection_unselect_all;
   iface->unselect_item = gtk_single_selection_unselect_item; 
 }
 
@@ -434,24 +426,24 @@ gtk_single_selection_class_init (GtkSingleSelectionClass *klass)
   gobject_class->dispose = gtk_single_selection_dispose;
 
   /**
-   * GtkSingleSelection:autoselect:
+   * GtkSingleSelection:autoselect: (attributes org.gtk.Property.get=gtk_single_selection_get_autoselect org.gtk.Property.set=gtk_single_selection_set_autoselect)
    *
    * If the selection will always select an item.
    */
   properties[PROP_AUTOSELECT] =
     g_param_spec_boolean ("autoselect", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSingleSelection:can-unselect:
+   * GtkSingleSelection:can-unselect: (attributes org.gtk.Property.get=gtk_single_selection_get_can_unselect org.gtk.Property.set=gtk_single_selection_set_can_unselect)
    *
    * If unselecting the selected item is allowed.
    */
   properties[PROP_CAN_UNSELECT] =
     g_param_spec_boolean ("can-unselect", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkSingleSelection:item-type:
@@ -463,17 +455,17 @@ gtk_single_selection_class_init (GtkSingleSelectionClass *klass)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSingleSelection:model:
+   * GtkSingleSelection:model: (attributes org.gtk.Property.get=gtk_single_selection_get_model org.gtk.Property.set=gtk_single_selection_set_model)
    *
    * The model being managed.
    */
   properties[PROP_MODEL] =
     g_param_spec_object ("model", NULL, NULL,
                          G_TYPE_LIST_MODEL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkSingleSelection:n-items:
@@ -485,27 +477,27 @@ gtk_single_selection_class_init (GtkSingleSelectionClass *klass)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSingleSelection:selected:
+   * GtkSingleSelection:selected: (attributes org.gtk.Property.get=gtk_single_selection_get_selected org.gtk.Property.set=gtk_single_selection_set_selected)
    *
    * Position of the selected item.
    */
   properties[PROP_SELECTED] =
     g_param_spec_uint ("selected", NULL, NULL,
                        0, G_MAXUINT, GTK_INVALID_LIST_POSITION,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSingleSelection:selected-item:
+   * GtkSingleSelection:selected-item: (attributes org.gtk.Property.get=gtk_single_selection_get_selected_item)
    *
    * The selected item.
    */
   properties[PROP_SELECTED_ITEM] =
     g_param_spec_object ("selected-item", NULL, NULL,
                          G_TYPE_OBJECT,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -543,7 +535,7 @@ gtk_single_selection_new (GListModel *model)
 }
 
 /**
- * gtk_single_selection_get_model:
+ * gtk_single_selection_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkSingleSelection`
  *
  * Gets the model that @self is wrapping.
@@ -559,7 +551,7 @@ gtk_single_selection_get_model (GtkSingleSelection *self)
 }
 
 /**
- * gtk_single_selection_set_model:
+ * gtk_single_selection_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkSingleSelection`
  * @model: (nullable): A `GListModel` to wrap
  *
@@ -621,7 +613,7 @@ gtk_single_selection_set_model (GtkSingleSelection *self,
 }
 
 /**
- * gtk_single_selection_get_selected:
+ * gtk_single_selection_get_selected: (attributes org.gtk.Method.get_property=selected)
  * @self: a `GtkSingleSelection`
  *
  * Gets the position of the selected item.
@@ -639,7 +631,7 @@ gtk_single_selection_get_selected (GtkSingleSelection *self)
 }
 
 /**
- * gtk_single_selection_set_selected:
+ * gtk_single_selection_set_selected: (attributes org.gtk.Method.set_property=selected)
  * @self: a `GtkSingleSelection`
  * @position: the item to select or %GTK_INVALID_LIST_POSITION
  *
@@ -650,8 +642,7 @@ gtk_single_selection_get_selected (GtkSingleSelection *self)
  * value of the [property@Gtk.SingleSelection:autoselect] property:
  * If it is set, no change will occur and the old item will stay
  * selected. If it is unset, the selection will be unset and no item
- * will be selected. This also applies if [property@Gtk.SingleSelection:can-unselect]
- * is set to %FALSE.
+ * will be selected.
  */
 void
 gtk_single_selection_set_selected (GtkSingleSelection *self,
@@ -669,12 +660,7 @@ gtk_single_selection_set_selected (GtkSingleSelection *self,
     new_selected = g_list_model_get_item (self->model, position);
 
   if (new_selected == NULL)
-    {
-      if (!self->can_unselect || self->autoselect)
-        return;
-
-      position = GTK_INVALID_LIST_POSITION;
-    }
+    position = GTK_INVALID_LIST_POSITION;
 
   if (self->selected == position)
     return;
@@ -698,7 +684,7 @@ gtk_single_selection_set_selected (GtkSingleSelection *self,
 }
 
 /**
- * gtk_single_selection_get_selected_item:
+ * gtk_single_selection_get_selected_item: (attributes org.gtk.Method.get_property=selected-item)
  * @self: a `GtkSingleSelection`
  *
  * Gets the selected item.
@@ -716,7 +702,7 @@ gtk_single_selection_get_selected_item (GtkSingleSelection *self)
 }
 
 /**
- * gtk_single_selection_get_autoselect:
+ * gtk_single_selection_get_autoselect: (attributes org.gtk.Method.get_property=autoselect)
  * @self: a `GtkSingleSelection`
  *
  * Checks if autoselect has been enabled or disabled via
@@ -733,7 +719,7 @@ gtk_single_selection_get_autoselect (GtkSingleSelection *self)
 }
 
 /**
- * gtk_single_selection_set_autoselect:
+ * gtk_single_selection_set_autoselect: (attributes org.gtk.Method.set_property=autoselect)
  * @self: a `GtkSingleSelection`
  * @autoselect: %TRUE to always select an item
  *
@@ -765,7 +751,7 @@ gtk_single_selection_set_autoselect (GtkSingleSelection *self,
 }
 
 /**
- * gtk_single_selection_get_can_unselect:
+ * gtk_single_selection_get_can_unselect: (attributes org.gtk.Method.get_property=can-unselect)
  * @self: a `GtkSingleSelection`
  *
  * If %TRUE, gtk_selection_model_unselect_item() is supported and allows
@@ -782,7 +768,7 @@ gtk_single_selection_get_can_unselect (GtkSingleSelection *self)
 }
 
 /**
- * gtk_single_selection_set_can_unselect:
+ * gtk_single_selection_set_can_unselect: (attributes org.gtk.Method.set_property=can-unselect)
  * @self: a `GtkSingleSelection`
  * @can_unselect: %TRUE to allow unselecting
  *
@@ -791,7 +777,7 @@ gtk_single_selection_get_can_unselect (GtkSingleSelection *self)
  *
  * Note that setting [property@Gtk.SingleSelection:autoselect] will
  * cause unselecting to not work, so it practically makes no sense
- * to set both at the same time.
+ * to set both at the same time the same time.
  */
 void
 gtk_single_selection_set_can_unselect (GtkSingleSelection *self,

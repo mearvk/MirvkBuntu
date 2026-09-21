@@ -41,7 +41,7 @@ typedef struct _ClutterPaintNodePrivate ClutterPaintNodePrivate;
 typedef struct _ClutterPaintNodeClass   ClutterPaintNodeClass;
 
 CLUTTER_EXPORT
-GType clutter_paint_node_get_type (void);
+GType clutter_paint_node_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 ClutterPaintNode *      clutter_paint_node_ref                          (ClutterPaintNode      *node);

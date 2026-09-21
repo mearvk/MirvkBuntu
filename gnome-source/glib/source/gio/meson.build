@@ -345,7 +345,6 @@ contenttype_sources = []
 portal_sources = []
 unix_sources = []
 win32_sources = []
-have_gio_launch_desktop = false
 
 # This is also used by tests/gdbus-daemon, so use files() to include the path
 gdbus_daemon_sources = [
@@ -368,12 +367,6 @@ if host_system != 'windows'
     'ggtknotificationbackend.c',
   )
 
-  document_portal_sources = [files(
-      'gdocumentportal.c',
-    ),
-    xdp_dbus_generated,
-  ]
-
   portal_sources = [files(
       'gdocumentportal.c',
       'gopenuriportal.c',
@@ -386,7 +379,7 @@ if host_system != 'windows'
       'gportalnotificationbackend.c',
       'gsandbox.c',
     ),
-    document_portal_sources,
+    xdp_dbus_generated
   ]
 
   gio_unix_include_headers = files(
@@ -397,49 +390,34 @@ if host_system != 'windows'
     'gunixoutputstream.h',
   )
 
-  if glib_conf.has('HAVE_SYSINFO')
-    unix_sources += files(
-      'gmemorymonitorpoll.c',
-    )
-  endif
-  
-  if host_system != 'sunos'
-    unix_sources += files('gmemorymonitorpsi.c')
-  endif
-
   if glib_have_cocoa
     settings_sources += files('gnextstepsettingsbackend.m')
-    contenttype_sources += files('gcontenttype-osx.m')
-    unix_sources += files('glocalfile-osx.m')
+    contenttype_sources += files('gosxcontenttype.m')
     unix_sources += files('gosxappinfo.m')
     framework_dep = dependency('appleframeworks', modules : ['Foundation', 'CoreFoundation', 'AppKit'])
     platform_deps += [framework_dep]
-    unix_sources += files('gcocoanotificationbackend.m')
-    unix_sources += files('gosxnetworkmonitor.c')
+    if glib_have_os_x_9_or_later
+      unix_sources += files('gcocoanotificationbackend.m')
+    endif
     application_headers += files('gosxappinfo.h')
   else
-    contenttype_sources += files('gcontenttype-fdo.c')
+    contenttype_sources += files('gcontenttype.c')
     unix_sources += files('gdesktopappinfo.c')
     gio_unix_include_headers += files('gdesktopappinfo.h')
+    launch_desktop_sources = files('gio-launch-desktop.c')
 
-    if process_spawn_allowed
-      launch_desktop_sources = files('gio-launch-desktop.c')
-
-      if host_system == 'linux'
-        launch_desktop_sources += files('../glib/gjournal-private.c')
-      endif
-
-      have_gio_launch_desktop = true
-      gio_launch_desktop = executable('gio-launch-desktop', launch_desktop_sources,
-        dependencies: [app_profile_dep],
-        include_directories : glibinc,
-        install : true,
-        install_dir : multiarch_libexecdir,
-        install_tag : 'bin',
-        c_args : gio_c_args,
-        # intl.lib is not compatible with SAFESEH
-        link_args : noseh_link_args)
+    if host_system == 'linux'
+      launch_desktop_sources += files('../glib/gjournal-private.c')
     endif
+
+    gio_launch_desktop = executable('gio-launch-desktop', launch_desktop_sources,
+      include_directories : glibinc,
+      install : true,
+      install_dir : multiarch_libexecdir,
+      install_tag : 'bin',
+      c_args : gio_c_args,
+      # intl.lib is not compatible with SAFESEH
+      link_args : noseh_link_args)
   endif
 
   subdir('xdgmime')
@@ -451,7 +429,6 @@ if host_system != 'windows'
     unix_sources += files(
       'gnetworkmonitornetlink.c',
       'gnetworkmonitornm.c',
-      'gnetworkmonitorsystemd.c',
     )
   endif
 else
@@ -481,21 +458,13 @@ else
   )
 
   if glib_build_shared
-    gio_rc_conf = configuration_data({
-      'NAME': 'GIO',
-      'FILENAME': (cc.get_argument_syntax() == 'msvc' ? '' : 'lib') + 'gio-' + glib_api_version + '-' + soversion.to_string() + '.dll',
-      'DESCRIPTION': 'Gio is a library providing general purpose I/O, networking, IPC, settings, and other high level application functionality',
-    })
-    gio_rc_conf.merge_from(rc_conf_base)
-    lib_rc = configure_file(
-      input: lib_rc_in,
+    gio_win_rc = configure_file(
+      input: 'gio.rc.in',
       output: 'gio.rc',
-      configuration: gio_rc_conf,
+      configuration: glibconfig_conf,
     )
-    win32_sources += [windows.compile_resources(lib_rc,
-      # Workaround for https://github.com/llvm/llvm-project/issues/63426
-      args: ['-c', '65001'],
-    )]
+    gio_win_res = windows.compile_resources(gio_win_rc)
+    win32_sources += [gio_win_res]
   endif
 
   gio_win32_include_headers = files(
@@ -516,7 +485,6 @@ gio_base_sources = files(
   'gbytesicon.c',
   'gcancellable.c',
   'gcharsetconverter.c',
-  'gcontenttype.c',
   'gcontextspecificgroup.c',
   'gconverter.c',
   'gconverterinputstream.c',
@@ -556,13 +524,10 @@ gio_base_sources = files(
   'giomodule-priv.c',
   'gioscheduler.c',
   'giostream.c',
-  'giptosmessage.c',
-  'gipv6tclassmessage.c',
   'gloadableicon.c',
   'gmarshal-internal.c',
   'gmount.c',
   'gmemorymonitor.c',
-  'gmemorymonitorbase.c',
   'gmemorymonitordbus.c',
   'gmemoryinputstream.c',
   'gmemoryoutputstream.c',
@@ -716,8 +681,6 @@ gio_headers = files(
   'gioscheduler.h',
   'giostream.h',
   'giotypes.h',
-  'giptosmessage.h',
-  'gipv6tclassmessage.h',
   'gloadableicon.h',
   'gmount.h',
   'gmemoryinputstream.h',
@@ -793,6 +756,8 @@ gio_visibility_h = custom_target(
   command: [gen_visibility_macros, meson.project_version(), 'visibility-macros', 'GIO', '@OUTPUT@'],
   install: true,
   install_dir: gio_includedir,
+  # FIXME: Not needed with Meson >= 0.64.0
+  install_tag: 'devel',
 )
 gio_sources += gio_visibility_h
 
@@ -809,6 +774,8 @@ gioenumtypes_h = custom_target('gioenumtypes_h',
   input : gio_headers,
   install : true,
   install_dir : gio_includedir,
+  # FIXME: Not needed with Meson >= 0.64.0
+  install_tag: 'devel',
   command : [python, glib_mkenums,
              '--template', files('gioenumtypes.h.template'),
              '@INPUT@', gnetworking_h])
@@ -824,41 +791,19 @@ gioenumtypes_c = custom_target('gioenumtypes_c',
 
 gioenumtypes_dep = declare_dependency(sources : [gioenumtypes_h, glib_enumtypes_h, gio_visibility_h])
 
-file_monitor_backend = get_option('file_monitor_backend')
-if file_monitor_backend == 'auto'
-  if glib_conf.has('HAVE_SYS_INOTIFY_H') and have_func_inotify_init1
-    file_monitor_backend = 'inotify'
-  elif have_func_kqueue and have_func_kevent
-    file_monitor_backend = 'kqueue'
-  elif host_system == 'windows'
-    file_monitor_backend = 'win32'
-  endif
-endif
-
 # inotify
-if file_monitor_backend == 'inotify'
-  glib_conf.set('FILE_MONITOR_BACKEND_INOTIFY', 1)
-  subdir('inotify')
-  internal_deps += [ inotify_lib ]
-endif
-
-# libinotify-kqueue
-# uses the same code as inotify, but changes some functions behavior via #ifdef's
-if file_monitor_backend == 'libinotify-kqueue'
-  glib_conf.set('FILE_MONITOR_BACKEND_LIBINOTIFY_KQUEUE', 1)
+if glib_conf.has('HAVE_SYS_INOTIFY_H') and have_func_inotify_init1
   subdir('inotify')
   internal_deps += [ inotify_lib ]
 endif
 
 # kevent
-if file_monitor_backend == 'kqueue'
-  glib_conf.set('FILE_MONITOR_BACKEND_KQUEUE', 1)
+if have_func_kqueue and have_func_kevent
   subdir('kqueue')
   internal_deps += [ kqueue_lib ]
 endif
 
-if file_monitor_backend == 'win32'
-  glib_conf.set('FILE_MONITOR_BACKEND_WIN32', 1)
+if host_system == 'windows'
   subdir('win32')
   internal_deps += [ giowin32_lib ]
 endif
@@ -950,16 +895,6 @@ pkg.generate(libgio,
     'gresource=' + '${bindir}' / 'gresource',
     'gsettings=' + '${bindir}' / 'gsettings',
   ],
-  uninstalled_variables : [
-    'gio=${prefix}/gio/gio',
-    'gio_querymodules=${prefix}/gio/gio-querymodules',
-    'glib_compile_schemas=${prefix}/gio/glib-compile-schemas',
-    'glib_compile_resources=${prefix}/gio/glib-compile-resources',
-    'gdbus=${prefix}/gio/gdbus',
-    'gdbus_codegen=${prefix}/gio/gdbus-2.0/codegen/gdbus-codegen',
-    'gresource=${prefix}/gio/gresource',
-    'gsettings=${prefix}/gio/gsettings',
-  ],
   version : glib_version,
   install_dir : glib_pkgconfigreldir,
   filebase : 'gio-2.0',
@@ -1014,9 +949,6 @@ else
   have_libelf = have_libelf and cc.has_function('elf_getshdrstrndx', dependencies : libelf)
   have_libelf = have_libelf and cc.has_function('elf_getshdrnum', dependencies : libelf)
   have_libelf = have_libelf and cc.has_header('libelf.h')
-  # This check is necessary for Solaris & illumos, where 32-bit libelf
-  # is incompatible with large-file mode, which meson forces to be enabled
-  have_libelf = have_libelf and cc.compiles('#include <libelf.h>', name: 'libelf.h')
 endif
 
 if have_libelf
@@ -1059,14 +991,14 @@ gio_tool = executable('gio', gio_tool_sources,
   c_args : gio_c_args,
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, app_profile_dep])
+  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep])
 
 executable('gresource', 'gresource-tool.c',
   install : true,
   install_tag : 'bin',
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libelf, libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, app_profile_dep])
+  dependencies : [libelf, libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep])
 
 gio_querymodules = executable('gio-querymodules', 'gio-querymodules.c', 'giomodule-priv.c',
   install : true,
@@ -1075,7 +1007,7 @@ gio_querymodules = executable('gio-querymodules', 'gio-querymodules.c', 'giomodu
   c_args : gio_c_args,
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, app_profile_dep])
+  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep])
 
 glib_compile_schemas = executable('glib-compile-schemas',
   ['glib-compile-schemas.c'],
@@ -1084,7 +1016,7 @@ glib_compile_schemas = executable('glib-compile-schemas',
   install_tag : 'bin',
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, gvdb_dep, app_profile_dep])
+  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, gvdb_dep])
 
 glib_compile_resources = executable('glib-compile-resources',
   [gconstructor_as_data_h, 'glib-compile-resources.c'],
@@ -1093,7 +1025,7 @@ glib_compile_resources = executable('glib-compile-resources',
   c_args : gio_c_args,
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, gvdb_dep, app_profile_dep])
+  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, gvdb_dep])
 install_data('gresource.dtd',
   install_dir: get_option('datadir') / dtds_subdir,
   install_tag: 'devel',
@@ -1114,7 +1046,7 @@ executable('gsettings', 'gsettings-tool.c',
   c_args : gio_c_args,
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, app_profile_dep])
+  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep])
 install_data('gschema.dtd',
   install_dir : get_option('datadir') / schemas_subdir,
   install_tag : 'devel',
@@ -1125,13 +1057,13 @@ install_data(['gschema.loc', 'gschema.its'],
   install_tag : 'devel',
 )
 
-gdbus_tool = executable('gdbus', 'gdbus-tool.c',
+executable('gdbus', 'gdbus-tool.c',
   install : true,
   install_tag : 'bin',
   c_args : gio_c_args,
   # intl.lib is not compatible with SAFESEH
   link_args : noseh_link_args,
-  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, app_profile_dep])
+  dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep])
 
 if host_system != 'windows' and not glib_have_cocoa
   executable('gapplication', 'gapplication-tool.c',
@@ -1140,7 +1072,7 @@ if host_system != 'windows' and not glib_have_cocoa
     c_args : gio_c_args,
     # intl.lib is not compatible with SAFESEH
     link_args : noseh_link_args,
-    dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep, app_profile_dep])
+    dependencies : [libgio_dep, libgobject_dep, libgmodule_dep, libglib_dep])
 endif
 
 if enable_systemtap

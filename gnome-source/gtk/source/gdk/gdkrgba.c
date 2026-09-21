@@ -43,7 +43,8 @@ G_DEFINE_BOXED_TYPE (GdkRGBA, gdk_rgba,
  * @alpha: The opacity of the color from 0.0 for completely translucent to
  *   1.0 for opaque
  *
- * Represents a color, in a way that is compatible with cairo’s notion of color.
+ * A `GdkRGBA` is used to represent a color, in a way that is compatible
+ * with cairo’s notion of color.
  *
  * `GdkRGBA` is a convenient way to pass colors around. It’s based on
  * cairo’s way to deal with colors and mirrors its behavior. All values
@@ -97,9 +98,9 @@ gdk_rgba_free (GdkRGBA *rgba)
  * Returns: %TRUE if the @rgba is clear
  */
 gboolean
-(gdk_rgba_is_clear) (const GdkRGBA *rgba)
+gdk_rgba_is_clear (const GdkRGBA *rgba)
 {
-  return _gdk_rgba_is_clear (rgba);
+  return rgba->alpha < ((float) 0x00ff / (float) 0xffff);
 }
 
 /**
@@ -114,9 +115,9 @@ gboolean
  * Returns: %TRUE if the @rgba is opaque
  */
 gboolean
-(gdk_rgba_is_opaque) (const GdkRGBA *rgba)
+gdk_rgba_is_opaque (const GdkRGBA *rgba)
 {
-  return _gdk_rgba_is_opaque (rgba);
+  return rgba->alpha > ((float)0xff00 / (float)0xffff);
 }
 
 #define SKIP_WHITESPACES(s) while (*(s) == ' ') (s)++;
@@ -134,8 +135,7 @@ gboolean
 static gboolean
 parse_rgb_value (const char   *str,
                  char        **endp,
-                 double       *number,
-                 int           coord)
+                 double       *number)
 {
   const char *p;
 
@@ -151,21 +151,11 @@ parse_rgb_value (const char   *str,
   if (*p == '%')
     {
       *endp = (char *)(p + 1);
-      *number = CLAMP (*number / 100., 0., 1.);
+      *number = CLAMP(*number / 100., 0., 1.);
     }
   else
     {
-      if (coord == 'h')
-        {
-          *number = fmod (*number, 360);
-          if (*number < 0)
-            *number += 360;
-          *number = CLAMP (*number / 360.0, 0., 1.);
-        }
-      else if (coord == 's' || coord == 'l')
-        *number = CLAMP (*number / 100.0, 0., 1.);
-      else
-        *number = CLAMP (*number / 255., 0., 1.);
+      *number = CLAMP(*number / 255., 0., 1.);
     }
 
   return TRUE;
@@ -188,16 +178,14 @@ parse_rgb_value (const char   *str,
  * - A RGB color in the form “rgb(r,g,b)” (In this case the color
  *   will have full opacity)
  * - A RGBA color in the form “rgba(r,g,b,a)”
- * - A HSL color in the form “hsl(h,s,l)”
- * - A HSLA color in the form “hsla(h,s,l,a)”
+ * - A HSL color in the form "hsl(hue, saturation, lightness)"
+ * - A HSLA color in the form "hsla(hue, saturation, lightness, alpha)"
  *
  * Where “r”, “g”, “b” and “a” are respectively the red, green,
  * blue and alpha color values. In the last two cases, “r”, “g”,
  * and “b” are either integers in the range 0 to 255 or percentage
  * values in the range 0% to 100%, and a is a floating point value
- * in the range 0 to 1. The range for “h” is 0 to 360, and
- * “s”, “l” can be either numbers in the range 0 to 100 or
- * percentages.
+ * in the range 0 to 1.
  *
  * Returns: %TRUE if the parsing succeeded
  */
@@ -224,6 +212,7 @@ gdk_rgba_parse (GdkRGBA    *rgba,
     {
       has_alpha = FALSE;
       is_hsl = FALSE;
+      a = 1;
       str += 3;
     }
   else if (strncmp (str, "hsla", 4) == 0)
@@ -236,6 +225,7 @@ gdk_rgba_parse (GdkRGBA    *rgba,
     {
       has_alpha = FALSE;
       is_hsl = TRUE;
+      a = 1;
       str += 3;
     }
   else
@@ -271,7 +261,7 @@ gdk_rgba_parse (GdkRGBA    *rgba,
 
   /* Parse red */
   SKIP_WHITESPACES (str);
-  if (!parse_rgb_value (str, &str, &r, is_hsl ? 'h' : 'r'))
+  if (!parse_rgb_value (str, &str, &r))
     return FALSE;
   SKIP_WHITESPACES (str);
 
@@ -282,7 +272,7 @@ gdk_rgba_parse (GdkRGBA    *rgba,
 
   /* Parse green */
   SKIP_WHITESPACES (str);
-  if (!parse_rgb_value (str, &str, &g, is_hsl ? 's' : 'g'))
+  if (!parse_rgb_value (str, &str, &g))
     return FALSE;
   SKIP_WHITESPACES (str);
 
@@ -293,7 +283,7 @@ gdk_rgba_parse (GdkRGBA    *rgba,
 
   /* Parse blue */
   SKIP_WHITESPACES (str);
-  if (!parse_rgb_value (str, &str, &b, is_hsl ? 'l' : 'b'))
+  if (!parse_rgb_value (str, &str, &b))
     return FALSE;
   SKIP_WHITESPACES (str);
 
@@ -312,10 +302,6 @@ gdk_rgba_parse (GdkRGBA    *rgba,
       str = p;
       SKIP_WHITESPACES (str);
     }
-  else
-    {
-      a = 1;
-    }
 
   if (*str != ')')
     return FALSE;
@@ -332,7 +318,7 @@ gdk_rgba_parse (GdkRGBA    *rgba,
       if (is_hsl)
         {
           GdkHSLA hsla;
-          hsla.hue = r * 360;
+          hsla.hue = r * 255;
           hsla.saturation = CLAMP (g, 0, 1);
           hsla.lightness = CLAMP (b, 0, 1);
           hsla.alpha = CLAMP (a, 0, 1);
@@ -382,10 +368,21 @@ gdk_rgba_hash (gconstpointer p)
  * Returns: %TRUE if the two colors compare equal
  */
 gboolean
-(gdk_rgba_equal) (gconstpointer p1,
-                  gconstpointer p2)
+gdk_rgba_equal (gconstpointer p1,
+                gconstpointer p2)
 {
-  return _gdk_rgba_equal (p1, p2);
+  const GdkRGBA *rgba1, *rgba2;
+
+  rgba1 = p1;
+  rgba2 = p2;
+
+  if (rgba1->red == rgba2->red &&
+      rgba1->green == rgba2->green &&
+      rgba1->blue == rgba2->blue &&
+      rgba1->alpha == rgba2->alpha)
+    return TRUE;
+
+  return FALSE;
 }
 
 /**
@@ -411,28 +408,9 @@ gboolean
 char *
 gdk_rgba_to_string (const GdkRGBA *rgba)
 {
-  return g_string_free (gdk_rgba_print (rgba, g_string_new ("")), FALSE);
-}
-
-/**
- * gdk_rgba_print:
- * @rgba: a `GdkRGBA`
- * @string: the string to print to
- *
- * Appends a representation of @rgba to @string.
- *
- * Returns: A newly allocated text string
- *
- * Since: 4.22
- */
-GString *
-gdk_rgba_print (const GdkRGBA *rgba,
-                GString       *string)
-{
   if (rgba->alpha > 0.999)
     {
-      g_string_append_printf (string,
-                              "rgb(%d,%d,%d)",
+      return g_strdup_printf ("rgb(%d,%d,%d)",
                               (int)(0.5 + CLAMP (rgba->red, 0., 1.) * 255.),
                               (int)(0.5 + CLAMP (rgba->green, 0., 1.) * 255.),
                               (int)(0.5 + CLAMP (rgba->blue, 0., 1.) * 255.));
@@ -443,15 +421,12 @@ gdk_rgba_print (const GdkRGBA *rgba,
 
       g_ascii_formatd (alpha, G_ASCII_DTOSTR_BUF_SIZE, "%g", CLAMP (rgba->alpha, 0, 1));
 
-      g_string_append_printf (string,
-                              "rgba(%d,%d,%d,%s)",
+      return g_strdup_printf ("rgba(%d,%d,%d,%s)",
                               (int)(0.5 + CLAMP (rgba->red, 0., 1.) * 255.),
                               (int)(0.5 + CLAMP (rgba->green, 0., 1.) * 255.),
                               (int)(0.5 + CLAMP (rgba->blue, 0., 1.) * 255.),
                               alpha);
     }
-
-  return string;
 }
 
 static gboolean

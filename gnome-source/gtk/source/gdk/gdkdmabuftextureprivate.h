@@ -7,6 +7,8 @@
 
 G_BEGIN_DECLS
 
+const GdkDmabuf *       gdk_dmabuf_texture_builder_get_dmabuf   (GdkDmabufTextureBuilder *builder);
+
 GdkTexture *            gdk_dmabuf_texture_new_from_builder (GdkDmabufTextureBuilder *builder,
                                                              GDestroyNotify           destroy,
                                                              gpointer                 data,
@@ -16,3 +18,4 @@ GdkDisplay *            gdk_dmabuf_texture_get_display      (GdkDmabufTexture   
 const GdkDmabuf *       gdk_dmabuf_texture_get_dmabuf       (GdkDmabufTexture        *self);
 
 G_END_DECLS
+

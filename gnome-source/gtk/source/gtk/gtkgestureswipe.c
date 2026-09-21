@@ -21,7 +21,7 @@
 /**
  * GtkGestureSwipe:
  *
- * Recognizes swipe gestures.
+ * `GtkGestureSwipe` is a `GtkGesture` for swipe gestures.
  *
  * After a press/move/.../move/release sequence happens, the
  * [signal@Gtk.GestureSwipe::swipe] signal will be emitted,

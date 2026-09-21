@@ -25,7 +25,8 @@
  *Declaration file of the #CRString class.
  */
 
-#pragma once
+#ifndef __CR_STRING_H__
+#define __CR_STRING_H__
 
 #include <glib.h>
 #include "cr-utils.h"
@@ -71,3 +72,5 @@ gint cr_string_peek_raw_str_len (CRString const *a_this) ;
 void cr_string_destroy (CRString *a_this) ;
 
 G_END_DECLS
+
+#endif 

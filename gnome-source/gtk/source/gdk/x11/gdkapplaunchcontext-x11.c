@@ -33,8 +33,6 @@
 #include <string.h>
 #include <unistd.h>
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 static char *
 get_display_name (GFile     *file,
                   GFileInfo *info)
@@ -167,12 +165,16 @@ free_startup_timeout (void *data)
 
   g_slist_free_full (std->contexts, free_startup_notification_data);
 
-  g_clear_handle_id (&std->timeout_id, g_source_remove);
+  if (std->timeout_id != 0)
+    {
+      g_source_remove (std->timeout_id);
+      std->timeout_id = 0;
+    }
 
   g_free (std);
 }
 
-static void
+static gboolean
 startup_timeout (void *data)
 {
   StartupTimeoutData *std;
@@ -215,11 +217,12 @@ startup_timeout (void *data)
   if (std->contexts == NULL)
     std->timeout_id = 0;
   else {
-    std->timeout_id = g_timeout_add_seconds_once ((min_timeout + 500)/1000, startup_timeout, std);
+    std->timeout_id = g_timeout_add_seconds ((min_timeout + 500)/1000, startup_timeout, std);
     gdk_source_set_static_name_by_id (std->timeout_id, "[gtk] startup_timeout");
   }
 
   /* always remove this one, but we may have reinstalled another one. */
+  return G_SOURCE_REMOVE;
 }
 
 
@@ -250,7 +253,8 @@ add_startup_timeout (GdkX11Screen *screen,
   data->contexts = g_slist_prepend (data->contexts, sn_data);
 
   if (data->timeout_id == 0) {
-    data->timeout_id = g_timeout_add_seconds_once (STARTUP_TIMEOUT_LENGTH_SECONDS, startup_timeout, data);
+    data->timeout_id = g_timeout_add_seconds (STARTUP_TIMEOUT_LENGTH_SECONDS,
+                                              startup_timeout, data);
     gdk_source_set_static_name_by_id (data->timeout_id, "[gtk] startup_timeout");
   }
 }
@@ -300,8 +304,7 @@ gdk_x11_app_launch_context_get_startup_notify_id (GAppLaunchContext *context,
         fileinfo = g_file_query_info (files->data,
                                       G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                       G_FILE_ATTRIBUTE_STANDARD_ICON,
-                                      G_FILE_QUERY_INFO_NONE,
-                                      NULL, NULL);
+                                      0, NULL, NULL);
 
       display_name = get_display_name (files->data, fileinfo);
       description = g_strdup_printf (_("Opening “%s”"), display_name);
@@ -421,7 +424,10 @@ gdk_x11_app_launch_context_launch_failed (GAppLaunchContext *context,
         }
 
       if (data->contexts == NULL)
-        g_clear_handle_id (&data->timeout_id, g_source_remove);
+        {
+          g_source_remove (data->timeout_id);
+          data->timeout_id = 0;
+        }
     }
 }
 

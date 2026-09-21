@@ -34,8 +34,6 @@ struct _ShellWorkspaceBackground
 
 G_DEFINE_TYPE (ShellWorkspaceBackground, shell_workspace_background, ST_TYPE_WIDGET);
 
-#define EPSILON (1e-10)
-
 static void
 on_workareas_changed (ShellWorkspaceBackground *self)
 {
@@ -155,11 +153,25 @@ shell_workspace_background_set_property (GObject      *gobject,
   switch (property_id)
     {
     case PROP_MONITOR_INDEX:
-      self->monitor_index = g_value_get_int (value);
+      {
+        int new_value = g_value_get_int (value);
+        if (self->monitor_index != new_value)
+        {
+          self->monitor_index = new_value;
+          g_object_notify_by_pspec (gobject, obj_props[PROP_MONITOR_INDEX]);
+        }
+      }
       break;
 
     case PROP_STATE_ADJUSTMENT_VALUE:
-      shell_workspace_background_set_state_adjustment_value (self, g_value_get_double (value));
+      {
+        double new_value = g_value_get_double (value);
+        if (self->state_adjustment_value != new_value)
+        {
+          self->state_adjustment_value = new_value;
+          g_object_notify_by_pspec (gobject, obj_props[PROP_STATE_ADJUSTMENT_VALUE]);
+        }
+      }
       break;
 
     default:
@@ -183,17 +195,18 @@ shell_workspace_background_class_init (ShellWorkspaceBackgroundClass *klass)
    * ShellWorkspaceBackground:monitor-index:
    */
   obj_props[PROP_MONITOR_INDEX] =
-    g_param_spec_int ("monitor-index", NULL, NULL,
+    g_param_spec_int ("monitor-index", "", "",
                       0, G_MAXINT, 0,
                       G_PARAM_READWRITE |
                       G_PARAM_CONSTRUCT_ONLY |
-                      G_PARAM_STATIC_STRINGS);
+                      G_PARAM_STATIC_STRINGS |
+                      G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * ShellWorkspaceBackground:state-adjustment-value:
    */
   obj_props[PROP_STATE_ADJUSTMENT_VALUE] =
-    g_param_spec_double ("state-adjustment-value", NULL, NULL,
+    g_param_spec_double ("state-adjustment-value", "", "",
                          -G_MAXDOUBLE, G_MAXDOUBLE, 0.0,
                          G_PARAM_READWRITE |
                          G_PARAM_STATIC_STRINGS |
@@ -211,33 +224,4 @@ shell_workspace_background_init (ShellWorkspaceBackground *self)
   g_signal_connect_object (display, "workareas-changed",
                            G_CALLBACK (on_workareas_changed),
                            self, G_CONNECT_SWAPPED);
-}
-
-int
-shell_workspace_background_get_monitor_index (ShellWorkspaceBackground *self)
-{
-  g_return_val_if_fail (SHELL_IS_WORKSPACE_BACKGROUND (self), -1);
-
-  return self->monitor_index;
-}
-
-double
-shell_workspace_background_get_state_adjustment_value (ShellWorkspaceBackground *self)
-{
-  g_return_val_if_fail (SHELL_IS_WORKSPACE_BACKGROUND (self), -1);
-
-  return self->state_adjustment_value;
-}
-
-void
-shell_workspace_background_set_state_adjustment_value (ShellWorkspaceBackground *self,
-                                                       double                    value)
-{
-  g_return_if_fail (SHELL_IS_WORKSPACE_BACKGROUND (self));
-
-  if (fabs (self->state_adjustment_value - value) < EPSILON)
-    return;
-
-  self->state_adjustment_value = value;
-  g_object_notify_by_pspec (G_OBJECT (self), obj_props[PROP_STATE_ADJUSTMENT_VALUE]);
 }

@@ -1,9 +1,10 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {ServiceImplementation} from './dbusService.js';
 
-import {emitSignalToDestination, loadInterfaceXML} from './misc/dbusUtils.js';
+import {loadInterfaceXML} from './misc/dbusUtils.js';
 
 const NotificationsIface = loadInterfaceXML('org.freedesktop.Notifications');
 const NotificationsProxy = Gio.DBusProxy.makeProxyWrapper(NotificationsIface);
@@ -23,7 +24,7 @@ export const NotificationDaemon = class extends ServiceImplementation {
             '/org/freedesktop/Notifications',
             (proxy, error) => {
                 if (error)
-                    console.error(error.message);
+                    log(error.message);
             });
 
         this._proxy.connectSignal('ActivationToken',
@@ -56,7 +57,12 @@ export const NotificationDaemon = class extends ServiceImplementation {
     _emitSignal(sender, signalName, params) {
         if (!sender)
             return;
-        emitSignalToDestination(this._dbusImpl, sender, signalName, params);
+        this._dbusImpl.get_connection()?.emit_signal(
+            sender,
+            this._dbusImpl.get_object_path(),
+            'org.freedesktop.Notifications',
+            signalName,
+            params);
     }
 
     _untrackSender(sender) {

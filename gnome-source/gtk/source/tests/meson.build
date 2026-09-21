@@ -1,11 +1,5 @@
 gtk_tests = [
   # testname, optional extra sources
-  ['movingtext'],
-  ['bigfont'],
-  ['svg-view'],
-  ['imagednd'],
-  ['testcursor'],
-  ['callbackcursor'],
   ['devicepixels'],
   ['testsections'],
   ['testfilelauncher'],
@@ -22,7 +16,8 @@ gtk_tests = [
   ['animated-revealing', ['frame-stats.c', 'variable.c']],
   ['motion-compression'],
   ['scrolling-performance', ['frame-stats.c', 'variable.c']],
-  ['simple', [],[ libgtk_dep ]],
+  ['blur-performance', ['../gsk/gskcairoblur.c']],
+  ['simple'],
   ['video-timer', ['variable.c']],
   ['testaccel'],
   ['testadjustsize'],
@@ -43,12 +38,12 @@ gtk_tests = [
   ['testentrycompletion'],
   ['testentryicons'],
   ['testfilechooser'],
-  ['testfiledrop'],
   ['testflowbox'],
   ['testfontoptions'],
   ['testframe'],
   ['testfullscreen'],
   ['testglarea'],
+  ['testglblending', ['gtkgears.c']],
   ['testgrid'],
   ['testgtk'],
   ['testheaderbar'],
@@ -69,7 +64,6 @@ gtk_tests = [
   ['testlockbutton'],
   ['testmenubutton'],
   ['testmountoperation'],
-  ['testnativecontrols'],
   ['testnotebookdnd'],
   ['testnouiprint'],
   ['testoverlay'],
@@ -134,18 +128,13 @@ gtk_tests = [
 if os_unix
   gtk_tests += [
     ['testfontchooserdialog'],
-    ['parallel', [], [ libgtk_private_dep, libm ] ],
   ]
 endif
 
 if os_linux
-  rsvg_dep = dependency('librsvg-2.0', required: false)
-
-  if rsvg_dep.found()
-    gtk_tests += [
-      ['svg-compare', ['svgpaintable.c' ],[ libgtk_dep, rsvg_dep ]],
-    ]
-  endif
+  gtk_tests += [
+    ['testdmabuf', ['testdmabuf.c', 'gtkclipper.c']],
+  ]
 endif
 
 if x11_enabled
@@ -159,14 +148,10 @@ test_args = ['-DGTK_SRCDIR="@0@"'.format(meson.current_source_dir())]
 foreach t: gtk_tests
   test_name = t.get(0)
   test_srcs = ['@0@.c'.format(test_name), t.get(1, [])]
-  test_libs = t.get(2,[])
-  if test_libs == []
-    test_libs = [ libgtk_dep, libm ]
-  endif
   executable(test_name,
     sources: test_srcs,
     include_directories: [confinc, gdkinc],
     c_args: test_args + common_cflags,
-    dependencies: test_libs,
+    dependencies: [libgtk_dep, libm],
   )
 endforeach

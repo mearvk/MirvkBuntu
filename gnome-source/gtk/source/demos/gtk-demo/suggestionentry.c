@@ -140,35 +140,35 @@ match_object_class_init (MatchObjectClass *class)
   object_class->set_property = match_object_set_property;
 
   match_properties[PROP_ITEM]
-      = g_param_spec_object ("item", NULL, NULL,
+      = g_param_spec_object ("item", "Item", "Item",
                              G_TYPE_OBJECT,
                              G_PARAM_READWRITE |
                              G_PARAM_CONSTRUCT_ONLY |
-                             G_PARAM_STATIC_NAME);
+                             G_PARAM_STATIC_STRINGS);
   match_properties[PROP_STRING]
-      = g_param_spec_string ("string", NULL, NULL,
+      = g_param_spec_string ("string", "String", "String",
                              NULL,
                              G_PARAM_READWRITE |
                              G_PARAM_CONSTRUCT_ONLY |
-                             G_PARAM_STATIC_NAME);
+                             G_PARAM_STATIC_STRINGS);
   match_properties[PROP_MATCH_START]
-      = g_param_spec_uint ("match-start", NULL, NULL,
+      = g_param_spec_uint ("match-start", "Match Start", "Match Start",
                            0, G_MAXUINT, 0,
                            G_PARAM_READWRITE |
                            G_PARAM_EXPLICIT_NOTIFY |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
   match_properties[PROP_MATCH_END]
-      = g_param_spec_uint ("match-end", NULL, NULL,
+      = g_param_spec_uint ("match-end", "Match End", "Match End",
                            0, G_MAXUINT, 0,
                            G_PARAM_READWRITE |
                            G_PARAM_EXPLICIT_NOTIFY |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
   match_properties[PROP_SCORE]
-      = g_param_spec_uint ("score", NULL, NULL,
+      = g_param_spec_uint ("score", "Score", "Score",
                            0, G_MAXUINT, 0,
                            G_PARAM_READWRITE |
                            G_PARAM_EXPLICIT_NOTIFY |
-                           G_PARAM_STATIC_NAME);
+                           G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_MATCH_PROPERTIES, match_properties);
 }
@@ -308,7 +308,11 @@ suggestion_entry_dispose (GObject *object)
 {
   SuggestionEntry *self = SUGGESTION_ENTRY (object);
 
-  g_clear_signal_handler (&self->changed_id, self->entry);
+  if (self->changed_id)
+    {
+      g_signal_handler_disconnect (self->entry, self->changed_id);
+      self->changed_id = 0;
+    }
   g_clear_pointer (&self->entry, gtk_widget_unparent);
   g_clear_pointer (&self->arrow, gtk_widget_unparent);
   g_clear_pointer (&self->popup, gtk_widget_unparent);
@@ -497,44 +501,51 @@ suggestion_entry_class_init (SuggestionEntryClass *klass)
 
   properties[PROP_MODEL] =
     g_param_spec_object ("model",
-                         NULL, NULL,
+                         "Model",
+                         "Model for the displayed items",
                          G_TYPE_LIST_MODEL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_FACTORY] =
     g_param_spec_object ("factory",
-                         NULL, NULL,
+                         "Factory",
+                         "Factory for populating list items",
                          GTK_TYPE_LIST_ITEM_FACTORY,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_EXPRESSION] =
     gtk_param_spec_expression ("expression",
-                               NULL, NULL,
-                               G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                               "Expression",
+                               "Expression to determine strings to search for",
+                               G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_PLACEHOLDER_TEXT] =
       g_param_spec_string ("placeholder-text",
-                           NULL, NULL,
+                           "Placeholder text",
+                           "Show text in the entry when it’s empty and unfocused",
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           G_PARAM_READWRITE);
 
   properties[PROP_POPUP_VISIBLE] =
       g_param_spec_boolean ("popup-visible",
-                            NULL, NULL,
+                            "Popup visible",
+                            "Whether the popup with suggestions is currently visible",
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_USE_FILTER] =
       g_param_spec_boolean ("use-filter",
-                            NULL, NULL,
+                            "Use filter",
+                            "Whether to filter the list for matches",
                             TRUE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   properties[PROP_SHOW_ARROW] =
       g_param_spec_boolean ("show-arrow",
-                            NULL, NULL,
+                            "Show arrow",
+                            "Whether to show a clickable arrow for presenting the popup",
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPERTIES, properties);
   gtk_editable_install_properties (object_class, N_PROPERTIES);
@@ -604,7 +615,7 @@ suggestion_entry_set_popup_visible (SuggestionEntry *self,
 
 static void update_map (SuggestionEntry *self);
 
-static void
+static gboolean
 text_changed_idle (gpointer data)
 {
   SuggestionEntry *self = data;
@@ -612,7 +623,7 @@ text_changed_idle (gpointer data)
   guint matches;
 
   if (!self->map_model)
-    return;
+    return G_SOURCE_REMOVE;
 
   text = gtk_editable_get_text (GTK_EDITABLE (self->entry));
 
@@ -624,6 +635,8 @@ text_changed_idle (gpointer data)
   matches = g_list_model_get_n_items (G_LIST_MODEL (self->selection));
 
   suggestion_entry_set_popup_visible (self, matches > 0);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -634,7 +647,7 @@ text_changed (GtkEditable        *editable,
   /* We need to defer to an idle since GtkText sets selection bounds
    * after notify::text
    */
-  g_idle_add_once (text_changed_idle, self);
+  g_idle_add (text_changed_idle, self);
 }
 
 static void
@@ -974,7 +987,7 @@ map_func (gpointer item, gpointer user_data)
     {
       g_critical ("Either SuggestionEntry:expression must be set "
                   "or SuggestionEntry:model must be a GtkStringList");
-      g_value_set_static_string (&value, "No value");
+      g_value_set_string (&value, "No value");
     }
 
   obj = match_object_new (item, g_value_get_string (&value));

@@ -70,7 +70,7 @@ typedef enum {
 } GtkStackTransitionType;
 
 GDK_AVAILABLE_IN_ALL
-GType                  gtk_stack_page_get_type            (void);
+GType                  gtk_stack_page_get_type            (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget *            gtk_stack_page_get_child           (GtkStackPage           *self);
 GDK_AVAILABLE_IN_ALL
@@ -107,7 +107,7 @@ void                   gtk_stack_page_set_icon_name       (GtkStackPage         
 
 
 GDK_AVAILABLE_IN_ALL
-GType                  gtk_stack_get_type                (void);
+GType                  gtk_stack_get_type                (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkWidget *            gtk_stack_new                     (void);

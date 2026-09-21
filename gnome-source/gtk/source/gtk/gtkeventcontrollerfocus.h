@@ -40,7 +40,7 @@ typedef struct _GtkEventControllerFocus GtkEventControllerFocus;
 typedef struct _GtkEventControllerFocusClass GtkEventControllerFocusClass;
 
 GDK_AVAILABLE_IN_ALL
-GType               gtk_event_controller_focus_get_type  (void);
+GType               gtk_event_controller_focus_get_type  (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkEventController *gtk_event_controller_focus_new (void);
@@ -50,7 +50,6 @@ gboolean            gtk_event_controller_focus_contains_focus     (GtkEventContr
 GDK_AVAILABLE_IN_ALL
 gboolean            gtk_event_controller_focus_is_focus           (GtkEventControllerFocus  *self);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkEventControllerFocus, g_object_unref)
 
 G_END_DECLS
 

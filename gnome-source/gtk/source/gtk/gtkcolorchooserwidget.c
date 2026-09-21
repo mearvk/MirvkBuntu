@@ -61,14 +61,6 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * The `GtkColorChooserWidget` is used in the [class@Gtk.ColorChooserDialog]
  * to provide a dialog for selecting colors.
  *
- * # Actions
- *
- * `GtkColorChooserWidget` defines a set of built-in actions:
- *
- * - `color.customize` activates the color editor for the given color.
- * - `color.select` emits the [signal@Gtk.ColorChooser::color-activated] signal
- *   for the given color.
- *
  * # CSS names
  *
  * `GtkColorChooserWidget` has a single CSS node with name colorchooser.
@@ -108,14 +100,10 @@ struct _GtkColorChooserWidgetClass
 enum
 {
   PROP_ZERO,
-  PROP_SHOW_EDITOR,
-  /* GtkColorChooser */
   PROP_RGBA,
   PROP_USE_ALPHA,
-  N_PROPS
+  PROP_SHOW_EDITOR
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void gtk_color_chooser_widget_iface_init (GtkColorChooserInterface *iface);
 
@@ -151,7 +139,7 @@ select_swatch (GtkColorChooserWidget *cc,
   if (gtk_widget_get_visible (GTK_WIDGET (cc->editor)))
     gtk_color_chooser_set_rgba (GTK_COLOR_CHOOSER (cc->editor), &color);
   else
-    g_object_notify_by_pspec (G_OBJECT (cc), props[PROP_RGBA]);
+    g_object_notify (G_OBJECT (cc), "rgba");
 }
 
 static void
@@ -251,7 +239,7 @@ gtk_color_chooser_widget_set_use_alpha (GtkColorChooserWidget *cc,
     }
 
   gtk_widget_queue_draw (GTK_WIDGET (cc));
-  g_object_notify_by_pspec (G_OBJECT (cc), props[PROP_USE_ALPHA]);
+  g_object_notify (G_OBJECT (cc), "use-alpha");
 }
 
 static void
@@ -269,8 +257,6 @@ gtk_color_chooser_widget_set_show_editor (GtkColorChooserWidget *cc,
 
   gtk_widget_set_visible (cc->editor, show_editor);
   gtk_widget_set_visible (cc->palette, !show_editor);
-  if (show_editor)
-    gtk_widget_grab_focus (cc->editor);
 }
 
 static void
@@ -279,7 +265,7 @@ update_from_editor (GtkColorEditor        *editor,
                     GtkColorChooserWidget *widget)
 {
   if (gtk_widget_get_visible (GTK_WIDGET (editor)))
-    g_object_notify_by_pspec (G_OBJECT (widget), props[PROP_RGBA]);
+    g_object_notify (G_OBJECT (widget), "rgba");
 }
 
 /* UI construction {{{1 */
@@ -523,8 +509,7 @@ gtk_color_chooser_widget_activate_color_customize (GtkWidget  *widget,
 
   gtk_widget_set_visible (cc->palette, FALSE);
   gtk_widget_set_visible (cc->editor, TRUE);
-  gtk_widget_grab_focus (cc->editor);
-  g_object_notify_by_pspec (G_OBJECT (cc), props[PROP_SHOW_EDITOR]);
+  g_object_notify (G_OBJECT (cc), "show-editor");
 }
 
 static void
@@ -730,10 +715,8 @@ gtk_color_chooser_widget_class_init (GtkColorChooserWidgetClass *class)
   widget_class->grab_focus = gtk_widget_grab_focus_child;
   widget_class->focus = gtk_widget_focus_child;
 
-  props[PROP_RGBA] = g_param_spec_override ("rgba",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "rgba"));
-  props[PROP_USE_ALPHA] = g_param_spec_override ("use-alpha",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "use-alpha"));
+  g_object_class_override_property (object_class, PROP_RGBA, "rgba");
+  g_object_class_override_property (object_class, PROP_USE_ALPHA, "use-alpha");
 
   /**
    * GtkColorChooserWidget:show-editor:
@@ -742,10 +725,9 @@ gtk_color_chooser_widget_class_init (GtkColorChooserWidgetClass *class)
    *
    * It can be set to switch the color chooser into single-color editing mode.
    */
-  props[PROP_SHOW_EDITOR] = g_param_spec_boolean ("show-editor", NULL, NULL,
-                                                  FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class, PROP_SHOW_EDITOR,
+      g_param_spec_boolean ("show-editor", NULL, NULL,
+                            FALSE, GTK_PARAM_READWRITE));
 
   gtk_widget_class_set_css_name (widget_class, I_("colorchooser"));
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BOX_LAYOUT);
@@ -903,8 +885,6 @@ gtk_color_chooser_widget_iface_init (GtkColorChooserInterface *iface)
  * Creates a new `GtkColorChooserWidget`.
  *
  * Returns: a new `GtkColorChooserWidget`
- *
- * Deprecated: 4.10
  */
 GtkWidget *
 gtk_color_chooser_widget_new (void)

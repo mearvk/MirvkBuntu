@@ -471,7 +471,6 @@ g_win32_registry_key_dispose (GObject *object)
  *
  * Creates an object that represents a registry key specified by @path.
  * @path must start with one of the following pre-defined names:
- *
  * - HKEY_CLASSES_ROOT
  * - HKEY_CURRENT_CONFIG
  * - HKEY_CURRENT_USER
@@ -481,7 +480,6 @@ g_win32_registry_key_dispose (GObject *object)
  * - HKEY_PERFORMANCE_NLSTEXT
  * - HKEY_PERFORMANCE_TEXT
  * - HKEY_USERS
- *
  * @path must not end with '\\'.
  *
  * Returns: (nullable) (transfer full): a #GWin32RegistryKey or %NULL if can't
@@ -508,7 +506,6 @@ g_win32_registry_key_new (const gchar  *path,
  *
  * Creates an object that represents a registry key specified by @path.
  * @path must start with one of the following pre-defined names:
- *
  * - HKEY_CLASSES_ROOT
  * - HKEY_CURRENT_CONFIG
  * - HKEY_CURRENT_USER
@@ -518,7 +515,6 @@ g_win32_registry_key_new (const gchar  *path,
  * - HKEY_PERFORMANCE_NLSTEXT
  * - HKEY_PERFORMANCE_TEXT
  * - HKEY_USERS
- *
  * @path must not end with L'\\'.
  *
  * Returns: (nullable) (transfer full): a #GWin32RegistryKey or %NULL if can't
@@ -1982,7 +1978,7 @@ g_win32_registry_get_os_dirs (void)
  * @value_type: (out) (optional): type of the value retrieved.
  * @value_data: (out callee-allocates) (optional): contents of the value.
  * @value_data_size: (out) (optional): size of the buffer pointed
- *   by @value_data, in bytes.
+ *   by @value_data.
  * @error: (nullable): a pointer to %NULL #GError, or %NULL
  *
  * Get data from a value of a key. String data is guaranteed to be
@@ -2249,7 +2245,7 @@ MuiRegQueryValueExW (HKEY                     hKey,
  * @value_type: (out) (optional): type of the value retrieved.
  * @value_data: (out callee-allocates) (optional): contents of the value.
  * @value_data_size: (out) (optional): size of the buffer pointed
- *   by @value_data, in bytes.
+ *   by @value_data.
  * @error: (nullable): a pointer to %NULL #GError, or %NULL
  *
  * Get data from a value of a key. String data is guaranteed to be

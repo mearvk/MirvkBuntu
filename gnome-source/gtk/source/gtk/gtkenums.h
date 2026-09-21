@@ -55,7 +55,7 @@ G_BEGIN_DECLS
  * are interpreted relative to text direction.
  *
  * Baseline support is optional for containers and widgets, and is only available
- * for vertical alignment. `GTK_ALIGN_BASELINE_CENTER` and `GTK_ALIGN_BASELINE_FILL`
+ * for vertical alignment. `GTK_ALIGN_BASELINE_CENTER and `GTK_ALIGN_BASELINE_FILL`
  * are treated similar to `GTK_ALIGN_CENTER` and `GTK_ALIGN_FILL`, except that it
  * positions the widget to line up the baselines, where that is supported.
  */
@@ -69,14 +69,14 @@ G_BEGIN_DECLS
 /**
  * GTK_ALIGN_BASELINE_FILL:
  *
- * stretch to fill all space, but align the baseline.
+ * a different name for `GTK_ALIGN_BASELINE`.
  *
  * Since: 4.12
  */
 /**
  * GTK_ALIGN_BASELINE_CENTER:
  *
- * align the baseline.
+ * stretch to fill all space, but align the baseline.
  *
  * Since: 4.12
  */
@@ -99,7 +99,7 @@ typedef enum
  * @GTK_ARROW_RIGHT: Represents a right pointing arrow.
  * @GTK_ARROW_NONE: No arrow.
  *
- * Indicates the direction in which an arrow should point.
+ * Used to indicate the direction in which an arrow should point.
  */
 typedef enum
 {
@@ -678,7 +678,6 @@ typedef enum {
  * that only exists when parsing the source for introspection.
  */
 #ifdef __GI_SCANNER__
-GDK_AVAILABLE_IN_ALL
 GtkOrdering     gtk_ordering_from_cmpfunc       (int cmpfunc_result);
 #else
 /**
@@ -774,8 +773,6 @@ typedef enum
  * @GTK_TREE_VIEW_GRID_LINES_BOTH: Horizontal and vertical grid lines.
  *
  * Used to indicate which grid lines to draw in a tree view.
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef enum
 {
@@ -1046,10 +1043,9 @@ typedef enum
  * GtkPropagationLimit:
  * @GTK_LIMIT_NONE: Events are handled regardless of what their
  *   target is.
- * @GTK_LIMIT_SAME_NATIVE: Events are only handled if their target is in
- *   the same [iface@Native] (or widget with [property@Gtk.Widget:limit-events]
- *   set) as the event controllers widget.
- *   Note that some event types have two targets (origin and destination).
+ * @GTK_LIMIT_SAME_NATIVE: Events are only handled if their target
+ *   is in the same [iface@Native] as the event controllers widget. Note
+ *   that some event types have two targets (origin and destination).
  *
  * Describes limits of a [class@EventController] for handling events
  * targeting other widgets.
@@ -1210,7 +1206,7 @@ typedef enum {
  *
  * Domain for VFL parsing errors.
  */
-typedef enum { /*< prefix=GTK_CONSTRAINT_VFL_PARSER_ERROR >*/
+typedef enum {
   GTK_CONSTRAINT_VFL_PARSER_ERROR_INVALID_SYMBOL,
   GTK_CONSTRAINT_VFL_PARSER_ERROR_INVALID_ATTRIBUTE,
   GTK_CONSTRAINT_VFL_PARSER_ERROR_INVALID_VIEW,
@@ -1266,19 +1262,11 @@ typedef enum {
  *
  * Since: 4.6
  */
-/**
- * GTK_SYMBOLIC_COLOR_ACCENT:
- *
- * The system accent color.
- *
- * Since: 4.22
- */
 typedef enum {
-  GTK_SYMBOLIC_COLOR_FOREGROUND,
-  GTK_SYMBOLIC_COLOR_ERROR,
-  GTK_SYMBOLIC_COLOR_WARNING,
-  GTK_SYMBOLIC_COLOR_SUCCESS,
-  GTK_SYMBOLIC_COLOR_ACCENT,
+  GTK_SYMBOLIC_COLOR_FOREGROUND = 0,
+  GTK_SYMBOLIC_COLOR_ERROR = 1,
+  GTK_SYMBOLIC_COLOR_WARNING = 2,
+  GTK_SYMBOLIC_COLOR_SUCCESS = 3
 } GtkSymbolicColor;
 
 /**
@@ -1601,23 +1589,12 @@ typedef enum {
  *    would be presented if they were made. Value type: [enum@AccessibleAutocomplete]
  * @GTK_ACCESSIBLE_PROPERTY_DESCRIPTION: Defines a string value that describes
  *    or annotates the current element. Value type: string
- * @GTK_ACCESSIBLE_PROPERTY_HAS_POPUP: Indicates the availability of interactive
- *    popup element, such as menu or popover, that can be triggered by an
- *    element. Contrary to “aria-haspopup”, it doesn't indicate the type of the
- *    element, as such it cannot be used to indicate the availability of more
- *    complex elements such as dialog. Value type: boolean
+ * @GTK_ACCESSIBLE_PROPERTY_HAS_POPUP: Indicates the availability and type of
+ *    interactive popup element, such as menu or dialog, that can be triggered
+ *    by an element.
  * @GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS: Indicates keyboard shortcuts that an
  *    author has implemented to activate or give focus to an element. Value type:
- *    string. The format of the value is a space-separated list of shortcuts, with
- *    each shortcut consisting of one or more modifiers (`Control`, `Alt` or `Shift`),
- *    followed by a non-modifier key, all separated by `+`. The
- *    [WAI-ARIA](https://www.w3.org/TR/wai-aria/#aria-keyshortcuts) reference
- *    specifies how to build keyboard shortcuts strings, with specific values
- *    for each key which are the same regardless of the language, so these
- *    strings can't be built from localized key names. You can convert an
- *    accelerator into the matching key shortcuts label with
- *    [func@Gtk.accelerator_get_accessible_label].
- *    Examples: `F2`, `Alt+F`, `Control+Shift+N`
+ *    string
  * @GTK_ACCESSIBLE_PROPERTY_LABEL: Defines a string value that labels the current
  *    element. Value type: string
  * @GTK_ACCESSIBLE_PROPERTY_LEVEL: Defines the hierarchical level of an element
@@ -1651,18 +1628,9 @@ typedef enum {
  * @GTK_ACCESSIBLE_PROPERTY_VALUE_NOW: Defines the current value for a range widget.
  *    Value type: double
  * @GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT: Defines the human readable text alternative
- *    of [enum@Gtk.AccessibleProperty.VALUE_NOW] for a range widget. Value type: string
+ *    of aria-valuenow for a range widget. Value type: string
  *
  * The possible accessible properties of a [iface@Accessible].
- */
-
-/**
- * GTK_ACCESSIBLE_PROPERTY_HELP_TEXT:
- *
- * Defines a string value that provides a description of non-standard keyboard
- * interactions of the current element. Value type: string
- *
- * Since: 4.16
  */
 typedef enum {
   GTK_ACCESSIBLE_PROPERTY_AUTOCOMPLETE,
@@ -1683,8 +1651,7 @@ typedef enum {
   GTK_ACCESSIBLE_PROPERTY_VALUE_MAX,
   GTK_ACCESSIBLE_PROPERTY_VALUE_MIN,
   GTK_ACCESSIBLE_PROPERTY_VALUE_NOW,
-  GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT,
-  GTK_ACCESSIBLE_PROPERTY_HELP_TEXT
+  GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT
 } GtkAccessibleProperty;
 
 /**
@@ -1707,8 +1674,8 @@ typedef enum {
  *    that describes the object. Value type: reference
  * @GTK_ACCESSIBLE_RELATION_DETAILS: Identifies the element (or elements) that
  *    provide additional information related to the object. Value type: reference
- * @GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE: Identifies the element (or elements) that
- *    provide an error message for an object. Value type: reference
+ * @GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE: Identifies the element that provides
+ *    an error message for an object. Value type: reference
  * @GTK_ACCESSIBLE_RELATION_FLOW_TO: Identifies the next element (or elements)
  *    in an alternate reading order of content which, at the user's discretion,
  *    allows assistive technology to override the general default of reading in
@@ -1727,7 +1694,7 @@ typedef enum {
  *    with respect to the total number of rows within a table, grid, or treegrid.
  *    Value type: integer
  * @GTK_ACCESSIBLE_RELATION_ROW_INDEX_TEXT: Defines a human readable text
- *    alternative of [enum@Gtk.AccessibleRelation.ROW_INDEX]. Value type: string
+ *    alternative of aria-rowindex. Value type: string
  * @GTK_ACCESSIBLE_RELATION_ROW_SPAN: Defines the number of rows spanned by a
  *    cell or gridcell within a table, grid, or treegrid. Value type: integer
  * @GTK_ACCESSIBLE_RELATION_SET_SIZE: Defines the number of items in the current
@@ -1737,69 +1704,6 @@ typedef enum {
  *
  * Accessible relations can be references to other widgets,
  * integers or strings.
- */
-
-/**
- * GTK_ACCESSIBLE_RELATION_LABEL_FOR:
- *
- * Identifies the element (or elements) that are labeled by the
- * current element. Value type: reference
- *
- * This relation is managed by GTK and should not be set from application code.
- *
- * Since: 4.18
- */
-/**
- * GTK_ACCESSIBLE_RELATION_DESCRIPTION_FOR:
- *
- * Identifies the element (or elements) that are described by
- * the current element. Value type: reference
- *
- * This relation is managed by GTK and should not be set from application code.
- *
- * Since: 4.18
- */
-/**
- * GTK_ACCESSIBLE_RELATION_CONTROLLED_BY:
- *
- * Identifies the element (or elements) that the current
- * element is controlled by. Value type: reference
- *
- * This relation is managed by GTK and should not be set from application code.
- *
- * Since: 4.18
- */
-/**
- * GTK_ACCESSIBLE_RELATION_DETAILS_FOR:
- *
- * Identifies the element (or elements) for which the current
- * element provides additional information. Value type: reference
- *
- * This relation is managed by GTK and should not be set from application code.
- *
- * Since: 4.18
- */
-/**
- * GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE_FOR:
- *
- * Identifies the element (or elements) for which the current
- * element provides an error message. Value type: reference
- *
- * This relation is managed by GTK and should not be set from application code.
- *
- * Since: 4.18
- */
-/**
- * GTK_ACCESSIBLE_RELATION_FLOW_FROM:
- *
- * Identifies the previous element (or elements) in an alternate
- * reading order of content which, at the user's discretion, allows
- * assistive technology to override the general default of reading in
- * document source order. Value type: reference
- *
- * This relation is managed by GTK and should not be set from application code.
- *
- * Since: 4.18
  */
 typedef enum {
   GTK_ACCESSIBLE_RELATION_ACTIVE_DESCENDANT,
@@ -1819,13 +1723,7 @@ typedef enum {
   GTK_ACCESSIBLE_RELATION_ROW_INDEX,
   GTK_ACCESSIBLE_RELATION_ROW_INDEX_TEXT,
   GTK_ACCESSIBLE_RELATION_ROW_SPAN,
-  GTK_ACCESSIBLE_RELATION_SET_SIZE,
-  GTK_ACCESSIBLE_RELATION_LABEL_FOR,
-  GTK_ACCESSIBLE_RELATION_DESCRIPTION_FOR,
-  GTK_ACCESSIBLE_RELATION_CONTROLLED_BY,
-  GTK_ACCESSIBLE_RELATION_DETAILS_FOR,
-  GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE_FOR,
-  GTK_ACCESSIBLE_RELATION_FLOW_FROM
+  GTK_ACCESSIBLE_RELATION_SET_SIZE
 } GtkAccessibleRelation;
 
 /**
@@ -1913,17 +1811,16 @@ typedef enum { /*< prefix=GTK_ACCESSIBLE_SORT >*/
 
 /**
  * GtkAccessibleAnnouncementPriority:
- * @GTK_ACCESSIBLE_ANNOUNCEMENT_PRIORITY_LOW: The announcement is low priority,
- *   and might be read only on the user's request.
- * @GTK_ACCESSIBLE_ANNOUNCEMENT_PRIORITY_MEDIUM: The announcement is of medium
- *   priority, and is usually spoken at the next opportunity, such as at the
- *   end of speaking the current sentence or when the user pauses typing.
- * @GTK_ACCESSIBLE_ANNOUNCEMENT_PRIORITY_HIGH: The announcement is of high
- *   priority, and is usually spoken immediately. Because an interruption
- *   might disorient users or cause them to not complete their current task,
- *   authors SHOULD NOT use high priority announcements unless the
- *   interruption is imperative. An example would be a notification about a
- *   critical battery power level.
+ * @GTK_ANNOUNCEMENT_PRIORITY_LOW: The announcement is low priority, and might be read only
+ *     on the user's request.
+ * @GTK_ANNOUNCEMENT_PRIORITY_MEDIUM: The announcement is of medium priority, and is usually
+ *     spoken at the next opportunity, such as at the end of speaking the current sentence
+ *     or when the user pauses typing.
+ * @GTK_ANNOUNCEMENT_PRIORITY_HIGH: The announcement is of high priority, and is usually
+ *     spoken immediately. Because an interruption might disorient users or cause them to
+ *     not complete their current task, authors SHOULD NOT use high priority announcements
+ *     unless the interruption is imperative. An example would be a notification about a
+ *     critical battery power level.
  *
  * The priority of an accessibility announcement.
  *
@@ -1954,116 +1851,5 @@ typedef enum { /*< prefix=GTK_POPOVER_MENU >*/
   GTK_POPOVER_MENU_SLIDING = 0,
   GTK_POPOVER_MENU_NESTED = 1 << 0
 } GtkPopoverMenuFlags;
-
-/**
- * GtkFontRendering:
- * @GTK_FONT_RENDERING_AUTOMATIC: Set up font rendering automatically,
- *   taking factors like screen resolution and scale into account
- * @GTK_FONT_RENDERING_MANUAL: Follow low-level font-related settings
- *   when configuring font rendering
- *
- * Values for the [property@Gtk.Settings:gtk-font-rendering] setting
- * that influence how GTK renders fonts.
- *
- * Since: 4.16
- */
-typedef enum {
-  GTK_FONT_RENDERING_AUTOMATIC,
-  GTK_FONT_RENDERING_MANUAL,
-} GtkFontRendering;
-
-/**
- * GtkTextBufferNotifyFlags:
- * @GTK_TEXT_BUFFER_NOTIFY_BEFORE_INSERT: Be notified before text
- *   is inserted into the underlying buffer.
- * @GTK_TEXT_BUFFER_NOTIFY_AFTER_INSERT: Be notified after text
- *   has been inserted into the underlying buffer.
- * @GTK_TEXT_BUFFER_NOTIFY_BEFORE_DELETE: Be notified before text
- *   is deleted from the underlying buffer.
- * @GTK_TEXT_BUFFER_NOTIFY_AFTER_DELETE: Be notified after text
- *   has been deleted from the underlying buffer.
- *
- * Values for [callback@Gtk.TextBufferCommitNotify] to denote the
- * point of the notification.
- *
- * Since: 4.16
- */
-typedef enum {
-  GTK_TEXT_BUFFER_NOTIFY_BEFORE_INSERT = 1 << 0,
-  GTK_TEXT_BUFFER_NOTIFY_AFTER_INSERT  = 1 << 1,
-  GTK_TEXT_BUFFER_NOTIFY_BEFORE_DELETE = 1 << 2,
-  GTK_TEXT_BUFFER_NOTIFY_AFTER_DELETE  = 1 << 3,
-} GtkTextBufferNotifyFlags;
-
-/**
- * GtkInterfaceColorScheme:
- * @GTK_INTERFACE_COLOR_SCHEME_UNSUPPORTED: The system doesn't support color schemes
- * @GTK_INTERFACE_COLOR_SCHEME_DEFAULT: The default color scheme is used
- * @GTK_INTERFACE_COLOR_SCHEME_DARK: A dark color scheme is used
- * @GTK_INTERFACE_COLOR_SCHEME_LIGHT: A light color scheme is used
- *
- * Values for the [property@Gtk.Settings:gtk-interface-color-scheme]
- * and [property@Gtk.CssProvider:prefers-color-scheme] properties
- * that indicates what color scheme is used.
- *
- * This information can be used inside CSS via media queries.
- *
- * More values may be added to this enumeration. Unknown values
- * should be treated the same as `GTK_INTERFACE_COLOR_SCHEME_DEFAULT`.
- *
- * Since: 4.20
- */
-typedef enum {
-  GTK_INTERFACE_COLOR_SCHEME_UNSUPPORTED,
-  GTK_INTERFACE_COLOR_SCHEME_DEFAULT,
-  GTK_INTERFACE_COLOR_SCHEME_DARK,
-  GTK_INTERFACE_COLOR_SCHEME_LIGHT,
-} GtkInterfaceColorScheme;
-
-/**
- * GtkInterfaceContrast
- * @GTK_INTERFACE_CONTRAST_UNSUPPORTED: The system doesn't support contrast levels
- * @GTK_INTERFACE_CONTRAST_NO_PREFERENCE: No particular preference for contrast
- * @GTK_INTERFACE_CONTRAST_MORE: More contrast is preferred
- * @GTK_INTERFACE_CONTRAST_LESS: Less contrast is preferred
- *
- * Values for the [property@Gtk.Settings:gtk-interface-contrast]
- * and [property@Gtk.CssProvider:prefers-contrast] properties
- * that indicates the preferred level of contrast.
- *
- * This information can be used inside CSS via media queries.
- *
- * More values may be added to this enumeration. Unknown values
- * should be treated the same as `GTK_INTERFACE_CONTRAST_NO_PREFERENCE`.
- *
- * Since: 4.20
- */
-typedef enum {
-  GTK_INTERFACE_CONTRAST_UNSUPPORTED,
-  GTK_INTERFACE_CONTRAST_NO_PREFERENCE,
-  GTK_INTERFACE_CONTRAST_MORE,
-  GTK_INTERFACE_CONTRAST_LESS,
-} GtkInterfaceContrast;
-
-/**
- * GtkReducedMotion:
- * @GTK_REDUCED_MOTION_NO_PREFERENCE: The user has made no preference known to the system
- * @GTK_REDUCED_MOTION_REDUCE: The user has notified the system that they
- *   prefer an interface that removes or replaces the types of motion-based
- *   animation that either trigger discomfort for those with vestibular
- *   motion sensitivity, or distraction for those with attention deficits
- *
- * Values for the [property@Gtk.Settings:gtk-interface-reduced-motion]
- * and [property@Gtk.CssProvider:prefers-reduced-motion] properties
- * that indicates the preferred level of motion animations.
- *
- * This information can be used inside CSS via media queries.
- *
- * Since: 4.22
- */
-typedef enum {
-  GTK_REDUCED_MOTION_NO_PREFERENCE,
-  GTK_REDUCED_MOTION_REDUCE,
-} GtkReducedMotion;
 
 G_END_DECLS

@@ -549,20 +549,11 @@ test_type (gconstpointer data)
                                NULL);
       gdk_content_formats_unref (formats);
     }
-  else if (g_type_is_a (type, GDK_TYPE_TEXTURE))
-    {
-      static const guint8 pixels[4] = { 0xff, 0x00, 0x00, 0xff };
-      GBytes *bytes = g_bytes_new_static (pixels, sizeof (pixels));
-      instance = (GObject *) gdk_memory_texture_new (1, 1, GDK_MEMORY_DEFAULT, bytes, 4);
-      g_bytes_unref (bytes);
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    }
   else if (g_type_is_a (type, GSK_TYPE_GL_SHADER))
     {
       GBytes *bytes = g_bytes_new_static ("", 0);
       instance = g_object_new (type, "source", bytes, NULL);
       g_bytes_unref (bytes);
-G_GNUC_END_IGNORE_DEPRECATIONS
     }
   else if (g_type_is_a (type, GTK_TYPE_FILTER_LIST_MODEL) ||
            g_type_is_a (type, GTK_TYPE_NO_SELECTION) ||
@@ -578,10 +569,11 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   else if (g_type_is_a (type, GTK_TYPE_CALENDAR))
     {
       /* avoid day 30 and 31, since they don't exist in February */
-      GDateTime *date;
-      date = g_date_time_new_from_iso8601 ("1984-05-10T00:00:00Z", NULL);
-      instance = g_object_new (type, "date", date, NULL);
-      g_date_time_unref (date);
+      instance = g_object_new (type,
+                               "year", 1984,
+                               "day", 05,
+                               "month", 10,
+                               NULL);
     }
   /* special casing for singletons */
   else if (g_type_is_a (type, GTK_TYPE_NEVER_TRIGGER))

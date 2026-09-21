@@ -27,11 +27,6 @@ G_BEGIN_DECLS
 
 typedef struct _GtkCssLocation GtkCssLocation;
 
-/**
- * GtkCssLocation:
- *
- * Points at a location inside a CSS stream.
- */
 struct _GtkCssLocation
 {
   gsize                  bytes;

@@ -40,12 +40,9 @@
 /**
  * GtkPasswordEntry:
  *
- * A single-line text entry widget for entering passwords and other secrets.
+ * `GtkPasswordEntry` is an entry that has been tailored for entering secrets.
  *
- * <picture>
- *   <source srcset="password-entry-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkPasswordEntry" src="password-entry.png">
- * </picture>
+ * ![An example GtkPasswordEntry](password-entry.png)
  *
  * It does not show its contents in clear text, does not allow to copy it
  * to the clipboard, and it shows a warning when Caps Lock is engaged. If
@@ -74,7 +71,7 @@
  *
  * # Accessibility
  *
- * `GtkPasswordEntry` uses the [enum@Gtk.AccessibleRole.text_box] role.
+ * `GtkPasswordEntry` uses the %GTK_ACCESSIBLE_ROLE_TEXT_BOX role.
  */
 
 struct _GtkPasswordEntry
@@ -232,6 +229,10 @@ gtk_password_entry_init (GtkPasswordEntry *entry)
 
   /* Transfer ownership to the GtkText widget */
   g_object_unref (buffer);
+
+  gtk_accessible_update_property (GTK_ACCESSIBLE (entry),
+                                  GTK_ACCESSIBLE_PROPERTY_HAS_POPUP, TRUE,
+                                  -1);
 }
 
 static void
@@ -479,7 +480,7 @@ gtk_password_entry_class_init (GtkPasswordEntryClass *klass)
   props[PROP_PLACEHOLDER_TEXT] =
       g_param_spec_string ("placeholder-text", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                           GTK_PARAM_READWRITE);
 
   /**
    * GtkPasswordEntry:activates-default:
@@ -489,20 +490,20 @@ gtk_password_entry_class_init (GtkPasswordEntryClass *klass)
   props[PROP_ACTIVATES_DEFAULT] =
       g_param_spec_boolean ("activates-default", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPasswordEntry:show-peek-icon:
+   * GtkPasswordEntry:show-peek-icon: (attributes org.gtk.Property.get=gtk_password_entry_get_show_peek_icon org.gtk.Property.set=gtk_password_entry_set_show_peek_icon)
    *
    * Whether to show an icon for revealing the content.
    */
   props[PROP_SHOW_PEEK_ICON] =
       g_param_spec_boolean ("show-peek-icon", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkPasswordEntry:extra-menu:
+   * GtkPasswordEntry:extra-menu: (attributes org.gtk.Property.get=gtk_password_entry_get_extra_menu org.gtk.Property.set=gtk_password_entry_set_extra_menu)
    *
    * A menu model whose contents will be appended to
    * the context menu.
@@ -510,7 +511,7 @@ gtk_password_entry_class_init (GtkPasswordEntryClass *klass)
   props[PROP_EXTRA_MENU] =
       g_param_spec_object ("extra-menu", NULL, NULL,
                            G_TYPE_MENU_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, props);
   gtk_editable_install_properties (object_class, NUM_PROPERTIES);
@@ -595,7 +596,7 @@ gtk_password_entry_new (void)
 }
 
 /**
- * gtk_password_entry_set_show_peek_icon:
+ * gtk_password_entry_set_show_peek_icon: (attributes org.gtk.Method.set_property=show-peek-icon)
  * @entry: a `GtkPasswordEntry`
  * @show_peek_icon: whether to show the peek icon
  *
@@ -650,7 +651,7 @@ gtk_password_entry_set_show_peek_icon (GtkPasswordEntry *entry,
 }
 
 /**
- * gtk_password_entry_get_show_peek_icon:
+ * gtk_password_entry_get_show_peek_icon: (attributes org.gtk.Method.get_property=show-peek-icon)
  * @entry: a `GtkPasswordEntry`
  *
  * Returns whether the entry is showing an icon to
@@ -667,7 +668,7 @@ gtk_password_entry_get_show_peek_icon (GtkPasswordEntry *entry)
 }
 
 /**
- * gtk_password_entry_set_extra_menu:
+ * gtk_password_entry_set_extra_menu: (attributes org.gtk.Method.set_property=extra-menu)
  * @entry: a `GtkPasswordEntry`
  * @model: (nullable): a `GMenuModel`
  *
@@ -718,7 +719,7 @@ gtk_password_entry_set_extra_menu (GtkPasswordEntry *entry,
 }
 
 /**
- * gtk_password_entry_get_extra_menu:
+ * gtk_password_entry_get_extra_menu: (attributes org.gtk.Method.get_property=extra-menu)
  * @entry: a `GtkPasswordEntry`
  *
  * Gets the menu model set with gtk_password_entry_set_extra_menu().

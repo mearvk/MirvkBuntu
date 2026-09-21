@@ -1,4 +1,4 @@
-/* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
+/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
 /* Copyright (C) 2022 Red Hat Inc.
  *
  * This library is free software; you can redistribute it and/or
@@ -24,7 +24,6 @@
 #include "na-xembed.h"
 
 #include <mtk/mtk-x11.h>
-#include <X11/extensions/shape.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -36,7 +35,6 @@ struct _NaXembedPrivate
   MetaX11Display *x11_display;
   Window socket_window;
   Window plug_window;
-  Window old_parent;
 
   int root_x;
   int root_y;
@@ -44,8 +42,6 @@ struct _NaXembedPrivate
   int request_height;
   int current_width;
   int current_height;
-  int available_width;
-  int available_height;
   int resize_count;
   int xembed_version;
 
@@ -92,7 +88,6 @@ G_DEFINE_TYPE_WITH_PRIVATE (NaXembed, na_xembed, G_TYPE_OBJECT)
 enum {
   PLUG_ADDED,
   PLUG_REMOVED,
-  RECONFIGURED,
   LAST_SIGNAL
 };
 
@@ -116,8 +111,9 @@ xembed_send_message (NaXembed          *xembed,
 {
   NaXembedPrivate *priv = na_xembed_get_instance_private (xembed);
   Display *xdisplay = meta_x11_display_get_xdisplay (priv->x11_display);
-  XClientMessageEvent xclient = {0};
+  XClientMessageEvent xclient;
 
+  memset (&xclient, 0, sizeof (xclient));
   xclient.window = recipient;
   xclient.type = ClientMessage;
   xclient.message_type = priv->atom__XEMBED;
@@ -140,31 +136,10 @@ na_xembed_end_embedding (NaXembed *xembed)
 {
   NaXembedPrivate *priv = na_xembed_get_instance_private (xembed);
 
-  if (priv->socket_window)
-    {
-      Display *xdisplay = meta_x11_display_get_xdisplay (priv->x11_display);
-
-      mtk_x11_error_trap_push (xdisplay);
-
-      if (priv->plug_window && priv->old_parent)
-        XReparentWindow (xdisplay,
-                         priv->plug_window,
-                         priv->old_parent,
-                         0, 0);
-
-      XDestroyWindow (xdisplay, priv->socket_window);
-      priv->socket_window = None;
-
-      mtk_x11_error_trap_pop (xdisplay);
-    }
-
   priv->plug_window = None;
-  priv->old_parent = None;
   priv->current_width = 0;
   priv->current_height = 0;
   priv->resize_count = 0;
-  priv->available_width = -1;
-  priv->available_height = -1;
   g_clear_handle_id (&priv->resize_id, g_source_remove);
 }
 
@@ -172,9 +147,10 @@ static void
 na_xembed_send_configure_event (NaXembed *xembed)
 {
   NaXembedPrivate *priv = na_xembed_get_instance_private (xembed);
-  XConfigureEvent xconfigure = {0};
+  XConfigureEvent xconfigure;
   Display *xdisplay = meta_x11_display_get_xdisplay (priv->x11_display);
 
+  memset (&xconfigure, 0, sizeof (xconfigure));
   xconfigure.type = ConfigureNotify;
 
   xconfigure.event = priv->plug_window;
@@ -208,11 +184,6 @@ na_xembed_synchronize_size (NaXembed *xembed)
   y = priv->root_y;
   width = priv->request_width;
   height = priv->request_height;
-
-  if (priv->available_width >= 0)
-    width = priv->available_width;
-  if (priv->available_height >= 0)
-    height = priv->available_height;
 
   XMoveResizeWindow (xdisplay,
                      priv->socket_window,
@@ -253,7 +224,7 @@ na_xembed_synchronize_size (NaXembed *xembed)
     }
 }
 
-static void
+static gboolean
 synchronize_size_cb (gpointer user_data)
 {
   NaXembed *xembed = user_data;
@@ -261,6 +232,8 @@ synchronize_size_cb (gpointer user_data)
 
   na_xembed_synchronize_size (xembed);
   priv->resize_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -297,7 +270,7 @@ na_xembed_resize (NaXembed *xembed)
   priv->have_size = TRUE;
   mtk_x11_error_trap_pop (xdisplay);
 
-  priv->resize_id = g_idle_add_once (synchronize_size_cb, xembed);
+  priv->resize_id = g_idle_add (synchronize_size_cb, xembed);
 }
 
 static gboolean
@@ -389,7 +362,6 @@ na_xembed_add_window (NaXembed  *xembed,
     {
       XSetWindowAttributes socket_attrs;
       XWindowAttributes plug_attrs;
-      int shape_major, shape_minor;
       int result;
 
       result = XGetWindowAttributes (xdisplay, priv->plug_window, &plug_attrs);
@@ -431,35 +403,10 @@ na_xembed_add_window (NaXembed  *xembed,
                        &socket_attrs);
 
       XUnmapWindow (xdisplay, priv->plug_window); /* Shouldn't actually be necessary for XEMBED, but just in case */
-
-      if (!priv->old_parent)
-        {
-          g_autofree Window *children = NULL;
-          unsigned int n_children;
-          Window root;
-
-          if (!XQueryTree (xdisplay, priv->plug_window, &root, &priv->old_parent,
-                           &children, &n_children))
-            priv->old_parent = meta_x11_display_get_xroot (priv->x11_display);
-        }
-
       XReparentWindow (xdisplay,
                        priv->plug_window,
                        priv->socket_window,
                        0, 0);
-
-      /* Set an empty input shape on the window so that the socket does not
-       * get any input. Without this the tray may still get events and - for
-       * instance - show tooltips on hover which we don't want.
-       * This is the quickest way to achieve this, without having to deal these
-       * windows with specific code in mutter.
-       */
-      if (XShapeQueryExtension (xdisplay, &shape_major, &shape_minor))
-        {
-          XShapeSelectInput (xdisplay, priv->socket_window, NoEventMask);
-          XShapeCombineRectangles (xdisplay, priv->socket_window, ShapeInput,
-                                   0, 0, NULL, 0, ShapeSet, 0);
-        }
     }
 
   priv->have_size = FALSE;
@@ -577,15 +524,6 @@ xembed_filter_func (MetaX11Display *x11_display,
           }
         break;
       }
-    case ConfigureNotify:
-      {
-        XConfigureEvent *xce = &xevent->xconfigure;
-
-        if (xce->window == priv->socket_window)
-          g_signal_emit (xembed, signals[RECONFIGURED], 0);
-
-        break;
-      }
     case DestroyNotify:
       {
         XDestroyWindowEvent *xdwe = &xevent->xdestroywindow;
@@ -593,14 +531,10 @@ xembed_filter_func (MetaX11Display *x11_display,
         /* Note that we get destroy notifies both from SubstructureNotify on
          * our window and StructureNotify on socket->plug_window
          */
-        if (priv->socket_window && xdwe->window == priv->socket_window)
-          priv->socket_window = None;
-
         if (priv->plug_window && (xdwe->window == priv->plug_window))
           {
             g_object_ref (xembed);
             g_signal_emit (xembed, signals[PLUG_REMOVED], 0);
-            priv->plug_window = None;
             na_xembed_end_embedding (xembed);
             g_object_unref (xembed);
           }
@@ -665,7 +599,6 @@ xembed_filter_func (MetaX11Display *x11_display,
           {
             g_object_ref (xembed);
             g_signal_emit (xembed, signals[PLUG_REMOVED], 0);
-            priv->old_parent = None;
             na_xembed_end_embedding (xembed);
             g_object_unref (xembed);
           }
@@ -731,7 +664,7 @@ na_xembed_finalize (GObject *object)
   if (priv->x11_display && priv->event_func_id)
     meta_x11_display_remove_event_func (priv->x11_display, priv->event_func_id);
 
-  if (priv->plug_window || priv->socket_window)
+  if (priv->plug_window)
     na_xembed_end_embedding (xembed);
 
   G_OBJECT_CLASS (na_xembed_parent_class)->finalize (object);
@@ -785,18 +718,13 @@ na_xembed_class_init (NaXembedClass *klass)
                   NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
-  signals[RECONFIGURED] =
-    g_signal_new ("reconfigured",
-                  G_OBJECT_CLASS_TYPE (klass),
-                  G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (NaXembedClass, reconfigured),
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
-
   props[PROP_X11_DISPLAY] =
-    g_param_spec_object ("x11-display", NULL, NULL,
+    g_param_spec_object ("x11-display",
+                         "x11-display",
+                         "x11-display",
                          META_TYPE_X11_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (object_class, N_PROPS, props);
 }
@@ -804,10 +732,6 @@ na_xembed_class_init (NaXembedClass *klass)
 static void
 na_xembed_init (NaXembed *xembed)
 {
-  NaXembedPrivate *priv = na_xembed_get_instance_private (xembed);
-
-  priv->available_width = -1;
-  priv->available_height = -1;
 }
 
 void
@@ -848,7 +772,7 @@ na_xembed_set_root_position (NaXembed *xembed,
   priv->root_y = y;
 
   if (priv->resize_id == 0)
-    priv->resize_id = g_idle_add_once (synchronize_size_cb, xembed);
+    priv->resize_id = g_idle_add (synchronize_size_cb, xembed);
 }
 
 MetaX11Display *
@@ -870,22 +794,6 @@ na_xembed_get_size (NaXembed *xembed,
     *width = priv->request_width;
   if (height)
     *height = priv->request_height;
-}
-
-void
-na_xembed_set_available_size (NaXembed *xembed,
-                              int       width,
-                              int       height)
-{
-  NaXembedPrivate *priv = na_xembed_get_instance_private (xembed);
-
-  if (priv->available_width == width && priv->available_height == height)
-    return;
-
-  priv->available_width = width;
-  priv->available_height = height;
-
-  na_xembed_resize (xembed);
 }
 
 void
@@ -933,8 +841,8 @@ get_pixel_details (unsigned long  pixel_mask,
 }
 
 void
-na_xembed_set_background_color (NaXembed        *xembed,
-                                const CoglColor *color)
+na_xembed_set_background_color (NaXembed           *xembed,
+                                const ClutterColor *color)
 {
   NaXembedPrivate *priv = na_xembed_get_instance_private (xembed);
   XVisualInfo *xvisual_info;

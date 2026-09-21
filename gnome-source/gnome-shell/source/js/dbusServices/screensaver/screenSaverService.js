@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -19,7 +20,7 @@ export const ScreenSaverService = class extends ServiceImplementation {
             '/org/gnome/ScreenSaver',
             (proxy, error) => {
                 if (error)
-                    console.error(error.message);
+                    log(error.message);
             });
 
         this._proxy.connectSignal('ActiveChanged',

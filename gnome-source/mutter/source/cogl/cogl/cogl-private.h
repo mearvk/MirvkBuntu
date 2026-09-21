@@ -38,5 +38,54 @@ G_BEGIN_DECLS
 
 #define I_(str)  (g_intern_static_string ((str)))
 
+typedef enum
+{
+  COGL_PRIVATE_FEATURE_TEXTURE_2D_FROM_EGL_IMAGE,
+  COGL_PRIVATE_FEATURE_MESA_PACK_INVERT,
+  COGL_PRIVATE_FEATURE_PBOS,
+  COGL_PRIVATE_FEATURE_EXT_PACKED_DEPTH_STENCIL,
+  COGL_PRIVATE_FEATURE_OES_PACKED_DEPTH_STENCIL,
+  COGL_PRIVATE_FEATURE_TEXTURE_FORMAT_BGRA8888,
+  COGL_PRIVATE_FEATURE_UNPACK_SUBIMAGE,
+  COGL_PRIVATE_FEATURE_SAMPLER_OBJECTS,
+  COGL_PRIVATE_FEATURE_READ_PIXELS_ANY_STRIDE,
+  COGL_PRIVATE_FEATURE_FORMAT_CONVERSION,
+  COGL_PRIVATE_FEATURE_QUERY_FRAMEBUFFER_BITS,
+  COGL_PRIVATE_FEATURE_QUERY_TEXTURE_PARAMETERS,
+  COGL_PRIVATE_FEATURE_ALPHA_TEXTURES,
+  COGL_PRIVATE_FEATURE_TEXTURE_SWIZZLE,
+  COGL_PRIVATE_FEATURE_TEXTURE_MAX_LEVEL,
+  COGL_PRIVATE_FEATURE_TEXTURE_LOD_BIAS,
+  COGL_PRIVATE_FEATURE_OES_EGL_SYNC,
+  /* If this is set then the winsys is responsible for queueing dirty
+   * events. Otherwise a dirty event will be queued when the onscreen
+   * is first allocated or when it is shown or resized */
+  COGL_PRIVATE_FEATURE_DIRTY_EVENTS,
+  /* This feature allows for explicitly selecting a GL-based backend,
+   * as opposed to nop or (in the future) Vulkan.
+   */
+  COGL_PRIVATE_FEATURE_ANY_GL,
+
+  /* This is a Mali bug/quirk: */
+  COGL_PRIVATE_QUIRK_GENERATE_MIPMAP_NEEDS_FLUSH,
+
+  COGL_N_PRIVATE_FEATURES
+} CoglPrivateFeature;
+
+void
+_cogl_transform_point (const graphene_matrix_t *matrix_mv,
+                       const graphene_matrix_t *matrix_p,
+                       const float             *viewport,
+                       float                   *x,
+                       float                   *y);
+
+gboolean
+_cogl_check_extension (const char *name, char * const *ext);
+
+void
+_cogl_init (void);
+
+#define _cogl_has_private_feature(ctx, feature) \
+  COGL_FLAGS_GET ((ctx)->private_features, (feature))
 
 G_END_DECLS

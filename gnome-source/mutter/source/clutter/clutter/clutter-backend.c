@@ -26,7 +26,7 @@
 
 /**
  * ClutterBackend:
- *
+ * 
  * Backend abstraction
  *
  * Clutter can be compiled against different backends. Each backend
@@ -38,11 +38,6 @@
  */
 
 #include "config.h"
-
-#ifdef HAVE_FONTS
-#include <cairo.h>
-#include <pango/pangocairo.h>
-#endif
 
 #include "clutter/clutter-backend-private.h"
 #include "clutter/clutter-context-private.h"
@@ -57,6 +52,8 @@
 
 #include "cogl/cogl.h"
 
+#define DEFAULT_FONT_NAME       "Sans 10"
+
 enum
 {
   RESOLUTION_CHANGED,
@@ -65,15 +62,6 @@ enum
 
   LAST_SIGNAL
 };
-
-enum
-{
-  PROP_0,
-  PROP_CONTEXT,
-  N_PROPS
-};
-
-static GParamSpec *pspecs[N_PROPS] = { 0 };
 
 G_DEFINE_ABSTRACT_TYPE (ClutterBackend, clutter_backend, G_TYPE_OBJECT)
 
@@ -87,66 +75,31 @@ clutter_backend_dispose (GObject *gobject)
   /* clear the events still in the queue of the main context */
   _clutter_clear_events_queue ();
 
-  g_clear_object (&backend->cogl_display);
-  g_clear_object (&backend->cogl_context);
   g_clear_object (&backend->dummy_onscreen);
-  g_clear_weak_pointer (&backend->stage_window);
+  if (backend->stage_window)
+    {
+      g_object_remove_weak_pointer (G_OBJECT (backend->stage_window),
+                                    (gpointer *) &backend->stage_window);
+      backend->stage_window = NULL;
+    }
 
-#ifdef HAVE_FONTS
+  g_clear_pointer (&backend->cogl_source, g_source_destroy);
+  g_clear_pointer (&backend->font_name, g_free);
   g_clear_pointer (&backend->font_options, cairo_font_options_destroy);
-#endif
   g_clear_object (&backend->input_method);
 
   G_OBJECT_CLASS (clutter_backend_parent_class)->dispose (gobject);
 }
 
 static void
-clutter_backend_get_property (GObject      *object,
-                              guint         prop_id,
-                              GValue       *value,
-                              GParamSpec   *pspec)
-{
-  ClutterBackend *backend = CLUTTER_BACKEND (object);
-
-  switch (prop_id)
-    {
-    case PROP_CONTEXT:
-      g_value_set_object (value, backend->context);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-    }
-}
-
-static void
-clutter_backend_set_property (GObject      *object,
-                              guint         prop_id,
-                              const GValue *value,
-                              GParamSpec   *pspec)
-{
-  ClutterBackend *backend = CLUTTER_BACKEND (object);
-
-  switch (prop_id)
-    {
-    case PROP_CONTEXT:
-      backend->context = g_value_get_object (value);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-    }
-}
-
-#ifdef HAVE_FONTS
-static void
 clutter_backend_real_resolution_changed (ClutterBackend *backend)
 {
-  ClutterContext *context = backend->context;
-  ClutterSettings *settings = clutter_context_get_settings (context);
+  ClutterContext *context;
+  ClutterSettings *settings;
   gdouble resolution;
   gint dpi;
 
+  settings = clutter_settings_get_default ();
   g_object_get (settings, "font-dpi", &dpi, NULL);
 
   if (dpi < 0)
@@ -154,24 +107,23 @@ clutter_backend_real_resolution_changed (ClutterBackend *backend)
   else
     resolution = dpi / 1024.0;
 
+  context = _clutter_context_get_default ();
   if (context->font_map != NULL)
-    pango_cairo_font_map_set_resolution (PANGO_CAIRO_FONT_MAP (context->font_map),
-                                         resolution);
+    cogl_pango_font_map_set_resolution (context->font_map, resolution);
 }
-#endif
 
 static gboolean
-clutter_backend_real_create_context (ClutterBackend  *backend,
-                                     GError         **error)
+clutter_backend_do_real_create_context (ClutterBackend  *backend,
+                                        CoglDriver       driver_id,
+                                        GError         **error)
 {
   ClutterBackendClass *klass;
-
-  if (backend->cogl_context != NULL)
-    return TRUE;
-
-  cogl_init ();
+  CoglSwapChain *swap_chain;
 
   klass = CLUTTER_BACKEND_GET_CLASS (backend);
+
+  swap_chain = NULL;
+
   CLUTTER_NOTE (BACKEND, "Creating Cogl renderer");
   backend->cogl_renderer = klass->get_renderer (backend, error);
 
@@ -179,11 +131,45 @@ clutter_backend_real_create_context (ClutterBackend  *backend,
     goto error;
 
   CLUTTER_NOTE (BACKEND, "Connecting the renderer");
+  cogl_renderer_set_driver (backend->cogl_renderer, driver_id);
   if (!cogl_renderer_connect (backend->cogl_renderer, error))
     goto error;
 
+  CLUTTER_NOTE (BACKEND, "Creating Cogl swap chain");
+  swap_chain = cogl_swap_chain_new ();
+
   CLUTTER_NOTE (BACKEND, "Creating Cogl display");
-  backend->cogl_display = klass->get_display (backend, backend->cogl_renderer, error);
+  if (klass->get_display != NULL)
+    {
+      backend->cogl_display = klass->get_display (backend,
+                                                  backend->cogl_renderer,
+                                                  swap_chain,
+                                                  error);
+    }
+  else
+    {
+      CoglOnscreenTemplate *tmpl;
+      gboolean res;
+
+      tmpl = cogl_onscreen_template_new (swap_chain);
+
+      /* XXX: I have some doubts that this is a good design.
+       *
+       * Conceptually should we be able to check an onscreen_template
+       * without more details about the CoglDisplay configuration?
+       */
+      res = cogl_renderer_check_onscreen_template (backend->cogl_renderer,
+                                                   tmpl,
+                                                   error);
+
+      if (!res)
+        goto error;
+
+      backend->cogl_display = cogl_display_new (backend->cogl_renderer, tmpl);
+
+      /* the display owns the template */
+      g_object_unref (tmpl);
+    }
 
   if (backend->cogl_display == NULL)
     goto error;
@@ -193,9 +179,13 @@ clutter_backend_real_create_context (ClutterBackend  *backend,
     goto error;
 
   CLUTTER_NOTE (BACKEND, "Creating the Cogl context");
-  backend->cogl_context = klass->get_context (backend, backend->cogl_display, error);
+  backend->cogl_context = cogl_context_new (backend->cogl_display, error);
   if (backend->cogl_context == NULL)
     goto error;
+
+  /* the display owns the renderer and the swap chain */
+  g_object_unref (backend->cogl_renderer);
+  g_object_unref (swap_chain);
 
   return TRUE;
 
@@ -203,7 +193,84 @@ error:
   g_clear_object (&backend->cogl_display);
   g_clear_object (&backend->cogl_renderer);
 
+  if (swap_chain != NULL)
+    g_object_unref (swap_chain);
+
   return FALSE;
+}
+
+static const struct {
+  const char *driver_name;
+  const char *driver_desc;
+  CoglDriver driver_id;
+} all_known_drivers[] = {
+  { "gl3", "OpenGL 3.1 core profile", COGL_DRIVER_GL3 },
+  { "gles2", "OpenGL ES 2.0", COGL_DRIVER_GLES2 },
+  { "any", "Default Cogl driver", COGL_DRIVER_ANY },
+};
+
+static gboolean
+clutter_backend_real_create_context (ClutterBackend  *backend,
+                                     GError         **error)
+{
+  GError *internal_error = NULL;
+  const char *drivers_list;
+  char **known_drivers;
+  int i;
+
+  if (backend->cogl_context != NULL)
+    return TRUE;
+
+  drivers_list = g_getenv ("CLUTTER_DRIVER");
+  if (drivers_list == NULL)
+    drivers_list = "*";
+
+  known_drivers = g_strsplit (drivers_list, ",", 0);
+
+  for (i = 0; backend->cogl_context == NULL && known_drivers[i] != NULL; i++)
+    {
+      const char *driver_name = known_drivers[i];
+      gboolean is_any = g_str_equal (driver_name, "*");
+      int j;
+
+      for (j = 0; j < G_N_ELEMENTS (all_known_drivers); j++)
+        {
+          if (is_any ||
+              g_str_equal (all_known_drivers[j].driver_name, driver_name))
+            {
+              CLUTTER_NOTE (BACKEND, "Checking for the %s driver", all_known_drivers[j].driver_desc);
+
+              if (clutter_backend_do_real_create_context (backend, all_known_drivers[j].driver_id, &internal_error))
+                break;
+
+              if (internal_error)
+                {
+                  CLUTTER_NOTE (BACKEND, "Unable to use the %s driver: %s",
+                                all_known_drivers[j].driver_desc,
+                                internal_error->message);
+                  g_clear_error (&internal_error);
+                }
+            }
+        }
+    }
+
+  g_strfreev (known_drivers);
+
+  if (backend->cogl_context == NULL)
+    {
+      if (internal_error != NULL)
+        g_propagate_error (error, internal_error);
+      else
+        g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                             "Unable to initialize the Clutter backend: no available drivers found.");
+
+      return FALSE;
+    }
+
+  backend->cogl_source = cogl_glib_source_new (backend->cogl_context, G_PRIORITY_DEFAULT);
+  g_source_attach (backend->cogl_source, NULL);
+
+  return TRUE;
 }
 
 static void
@@ -212,8 +279,6 @@ clutter_backend_class_init (ClutterBackendClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
   gobject_class->dispose = clutter_backend_dispose;
-  gobject_class->get_property = clutter_backend_get_property;
-  gobject_class->set_property = clutter_backend_set_property;
 
   /**
    * ClutterBackend::resolution-changed:
@@ -241,7 +306,7 @@ clutter_backend_class_init (ClutterBackendClass *klass)
     g_signal_new (I_("font-changed"),
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  0,
+                  G_STRUCT_OFFSET (ClutterBackendClass, font_changed),
                   NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
@@ -256,22 +321,11 @@ clutter_backend_class_init (ClutterBackendClass *klass)
     g_signal_new (I_("settings-changed"),
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  0,
+                  G_STRUCT_OFFSET (ClutterBackendClass, settings_changed),
                   NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
-  pspecs[PROP_CONTEXT] =
-    g_param_spec_object ("context", NULL, NULL,
-                         CLUTTER_TYPE_CONTEXT,
-                         G_PARAM_READWRITE |
-                         G_PARAM_STATIC_STRINGS |
-                         G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, pspecs);
-
-#ifdef HAVE_FONTS
   klass->resolution_changed = clutter_backend_real_resolution_changed;
-#endif
 
   klass->create_context = clutter_backend_real_create_context;
 }
@@ -282,19 +336,6 @@ clutter_backend_init (ClutterBackend *self)
   self->dummy_onscreen = NULL;
 
   self->fallback_resource_scale = 1.f;
-
-  /* Default font options */
-#ifdef HAVE_FONTS
-  self->font_options = cairo_font_options_create ();
-  cairo_font_options_set_hint_metrics (self->font_options,
-                                       CAIRO_HINT_METRICS_ON);
-  cairo_font_options_set_hint_style (self->font_options,
-                                     CAIRO_HINT_STYLE_NONE);
-  cairo_font_options_set_subpixel_order (self->font_options,
-                                         CAIRO_SUBPIXEL_ORDER_DEFAULT);
-  cairo_font_options_set_antialias (self->font_options,
-                                    CAIRO_ANTIALIAS_DEFAULT);
-#endif
 }
 
 ClutterStageWindow *
@@ -338,6 +379,26 @@ _clutter_backend_create_context (ClutterBackend  *backend,
 }
 
 /**
+ * clutter_get_default_backend:
+ *
+ * Retrieves the default #ClutterBackend used by Clutter. The
+ * #ClutterBackend holds backend-specific configuration options.
+ *
+ * Return value: (transfer none): the default backend. You should
+ *   not ref or unref the returned object. Applications should rarely
+ *   need to use this.
+ */
+ClutterBackend *
+clutter_get_default_backend (void)
+{
+  ClutterContext *clutter_context;
+
+  clutter_context = _clutter_context_get_default ();
+
+  return clutter_context->backend;
+}
+
+/**
  * clutter_backend_get_resolution:
  * @backend: a #ClutterBackend
  *
@@ -363,13 +424,77 @@ clutter_backend_get_resolution (ClutterBackend *backend)
 
   g_return_val_if_fail (CLUTTER_IS_BACKEND (backend), -1.0);
 
-  settings = clutter_context_get_settings (backend->context);
+  settings = clutter_settings_get_default ();
   g_object_get (settings, "font-dpi", &resolution, NULL);
 
   if (resolution < 0)
     return 96.0;
 
   return resolution / 1024.0;
+}
+
+/**
+ * clutter_backend_set_font_options:
+ * @backend: a #ClutterBackend
+ * @options: Cairo font options for the backend, or %NULL
+ *
+ * Sets the new font options for @backend. The #ClutterBackend will
+ * copy the #cairo_font_options_t.
+ *
+ * If @options is %NULL, the first following call to
+ * [method@Clutter.Backend.get_font_options] will return the default font
+ * options for @backend.
+ *
+ * This function is intended for actors creating a Pango layout
+ * using the PangoCairo API.
+ */
+void
+clutter_backend_set_font_options (ClutterBackend             *backend,
+                                  const cairo_font_options_t *options)
+{
+  g_return_if_fail (CLUTTER_IS_BACKEND (backend));
+
+  if (backend->font_options != options)
+    {
+      if (backend->font_options)
+        cairo_font_options_destroy (backend->font_options);
+
+      if (options)
+        backend->font_options = cairo_font_options_copy (options);
+      else
+        backend->font_options = NULL;
+
+      g_signal_emit (backend, backend_signals[FONT_CHANGED], 0);
+    }
+}
+
+/**
+ * clutter_backend_get_font_options:
+ * @backend: a #ClutterBackend
+ *
+ * Retrieves the font options for @backend.
+ *
+ * Return value: (transfer none): the font options of the #ClutterBackend.
+ *   The returned #cairo_font_options_t is owned by the backend and should
+ *   not be modified or freed
+ */
+const cairo_font_options_t *
+clutter_backend_get_font_options (ClutterBackend *backend)
+{
+  g_return_val_if_fail (CLUTTER_IS_BACKEND (backend), NULL);
+
+  if (G_LIKELY (backend->font_options))
+    return backend->font_options;
+
+  backend->font_options = cairo_font_options_create ();
+
+  cairo_font_options_set_hint_style (backend->font_options, CAIRO_HINT_STYLE_NONE);
+  cairo_font_options_set_subpixel_order (backend->font_options, CAIRO_SUBPIXEL_ORDER_DEFAULT);
+  cairo_font_options_set_antialias (backend->font_options, CAIRO_ANTIALIAS_DEFAULT);
+
+  g_signal_emit (backend, backend_signals[FONT_CHANGED], 0);
+
+  return backend->font_options;
 }
 
 /**
@@ -470,105 +595,9 @@ clutter_backend_is_display_server (ClutterBackend *backend)
   return CLUTTER_BACKEND_GET_CLASS (backend)->is_display_server (backend);
 }
 
-/**
- * clutter_backend_get_sprite:
- * @backend: A #ClutterBackend
- * @stage: A #ClutterStage
- * @for_event: Event to get sprite for
- *
- * Retrieves the #ClutterSprite affected by @for_event
- *
- * Returns: (transfer none)(nullable): a #ClutterSprite, or %NULL if event does not drive one
- **/
-ClutterSprite *
-clutter_backend_get_sprite (ClutterBackend     *backend,
-                            ClutterStage       *stage,
-                            const ClutterEvent *for_event)
-{
-  return CLUTTER_BACKEND_GET_CLASS (backend)->get_sprite (backend,
-                                                          stage,
-                                                          for_event);
-}
-
-/**
- * clutter_backend_get_pointer_sprite:
- * @backend: a #ClutterBackend
- * @stage: a #ClutterStage
- *
- * Gets the on-screen sprite typically considered "the pointer"
- *
- * Returns: (transfer none): The "pointer" sprite
- */
-ClutterSprite *
-clutter_backend_get_pointer_sprite (ClutterBackend *backend,
-                                    ClutterStage   *stage)
-{
-  return CLUTTER_BACKEND_GET_CLASS (backend)->get_pointer_sprite (backend, stage);
-}
-
-/**
- * clutter_backend_destroy_sprite: (skip)
- */
-void
-clutter_backend_destroy_sprite (ClutterBackend *backend,
-                                ClutterSprite  *sprite)
-{
-  CLUTTER_BACKEND_GET_CLASS (backend)->destroy_sprite (backend, sprite);
-}
-
-/**
- * clutter_backend_foreach_sprite: (skip)
- */
-gboolean
-clutter_backend_foreach_sprite (ClutterBackend               *backend,
-                                ClutterStage                 *stage,
-                                ClutterStageInputForeachFunc  func,
-                                gpointer                      user_data)
-{
-  return CLUTTER_BACKEND_GET_CLASS (backend)->foreach_sprite (backend,
-                                                              stage,
-                                                              func,
-                                                              user_data);
-}
-
-/**
- * clutter_backend_get_key_focus:
- * @backend: a #ClutterBackend
- * @stage: a #ClutterStage
- *
- * Returns the key focus for stage
- *
- * Returns: (transfer none): the #ClutterKeyFocus representing key focus
- **/
-ClutterKeyFocus *
-clutter_backend_get_key_focus (ClutterBackend *backend,
-                               ClutterStage   *stage)
-{
-  return CLUTTER_BACKEND_GET_CLASS (backend)->get_key_focus (backend, stage);
-}
-
 void
 clutter_backend_destroy (ClutterBackend *backend)
 {
   g_object_run_dispose (G_OBJECT (backend));
   g_object_unref (backend);
-}
-
-/**
- * clutter_backend_get_cursor:
- * @backend: a `ClutterBackend`
- * @cursor_type: a [enum@Clutter.CursorType]
- *
- * Gets a [class@Clutter.Cursor] that represents the given @cursor_type
- *
- * Returns: (transfer full): The cursor object holding @cursor_type iconography
- **/
-ClutterCursor *
-clutter_backend_get_cursor (ClutterBackend    *backend,
-                            ClutterCursorType  cursor_type)
-{
-  if (!CLUTTER_BACKEND_GET_CLASS (backend)->get_cursor)
-    return NULL;
-
-  return CLUTTER_BACKEND_GET_CLASS (backend)->get_cursor (backend, cursor_type);
 }

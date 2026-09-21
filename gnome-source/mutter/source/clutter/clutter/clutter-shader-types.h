@@ -64,11 +64,11 @@ typedef struct _ClutterShaderMatrix   ClutterShaderMatrix;
 #define CLUTTER_VALUE_HOLDS_SHADER_MATRIX(x) (G_VALUE_HOLDS ((x), CLUTTER_TYPE_SHADER_MATRIX))
 
 CLUTTER_EXPORT
-GType clutter_shader_float_get_type  (void);
+GType clutter_shader_float_get_type  (void) G_GNUC_CONST;
 CLUTTER_EXPORT
-GType clutter_shader_int_get_type    (void);
+GType clutter_shader_int_get_type    (void) G_GNUC_CONST;
 CLUTTER_EXPORT
-GType clutter_shader_matrix_get_type (void);
+GType clutter_shader_matrix_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 void            clutter_value_set_shader_float  (GValue       *value,

@@ -108,6 +108,7 @@ cr_declaration_new (CRStatement * a_statement,
  *this declaration. Must be non NULL and of type
  *RULESET_STMT (must be a ruleset).
  *@a_str: the string that contains the statement.
+ *@a_enc: the encoding of a_str.
  *
  *Parses a text buffer that contains
  *a css declaration.
@@ -115,7 +116,7 @@ cr_declaration_new (CRStatement * a_statement,
  */
 CRDeclaration *
 cr_declaration_parse_from_buf (CRStatement * a_statement,
-                               const guchar * a_str)
+                               const guchar * a_str, enum CREncoding a_enc)
 {
         enum CRStatus status = CR_OK;
         CRTerm *value = NULL;
@@ -129,7 +130,7 @@ cr_declaration_parse_from_buf (CRStatement * a_statement,
                 g_return_val_if_fail (a_statement->type == RULESET_STMT,
                                       NULL);
 
-        parser = cr_parser_new_from_buf ((guchar*)a_str, strlen ((const char *) a_str), FALSE);
+        parser = cr_parser_new_from_buf ((guchar*)a_str, strlen ((const char *) a_str), a_enc, FALSE);
         g_return_val_if_fail (parser, NULL);
 
         status = cr_parser_try_to_skip_spaces_and_comments (parser);
@@ -172,12 +173,14 @@ cr_declaration_parse_from_buf (CRStatement * a_statement,
  * cr_declaration_parse_list_from_buf:
  *@a_str: the input buffer that contains the list of declaration to
  *parse.
+ *@a_enc: the encoding of a_str
  *
  *Parses a ';' separated list of properties declaration.
  *Returns the parsed list of declaration, NULL if parsing failed.
  */
 CRDeclaration *
-cr_declaration_parse_list_from_buf (const guchar * a_str)
+cr_declaration_parse_list_from_buf (const guchar * a_str,
+                                    enum CREncoding a_enc)
 {
 
         enum CRStatus status = CR_OK;
@@ -191,7 +194,7 @@ cr_declaration_parse_list_from_buf (const guchar * a_str)
 
         g_return_val_if_fail (a_str, NULL);
 
-        parser = cr_parser_new_from_buf ((guchar*)a_str, strlen ((const char *) a_str), FALSE);
+        parser = cr_parser_new_from_buf ((guchar*)a_str, strlen ((const char *) a_str), a_enc, FALSE);
         g_return_val_if_fail (parser, NULL);
         status = cr_parser_get_tknzr (parser, &tokenizer);
         if (status != CR_OK || !tokenizer) {
@@ -536,7 +539,7 @@ cr_declaration_to_string (CRDeclaration const * a_this, gulong a_indent)
                 }
         }
         if (stringue && stringue->str) {
-                result = g_string_free_and_steal (stringue);
+                result = g_string_free (stringue, FALSE);
         }
         return result;
 
@@ -545,7 +548,10 @@ cr_declaration_to_string (CRDeclaration const * a_this, gulong a_indent)
                 g_string_free (stringue, TRUE);
                 stringue = NULL;
         }
-        g_clear_pointer (&str, g_free);
+        if (str) {
+                g_free (str);
+                str = NULL;
+        }
 
         return result;
 }
@@ -579,7 +585,7 @@ cr_declaration_list_to_string (CRDeclaration const * a_this, gulong a_indent)
                         break;
         }
         if (stringue && stringue->str) {
-                result = (guchar *) g_string_free_and_steal (stringue);
+                result = (guchar *) g_string_free (stringue, FALSE);
         }
 
         return result;
@@ -631,7 +637,7 @@ cr_declaration_list_to_string2 (CRDeclaration const * a_this,
                         break;
         }
         if (stringue && stringue->str) {
-                result = (guchar *) g_string_free_and_steal (stringue);
+                result = (guchar *) g_string_free (stringue, FALSE);
         }
 
         return result;

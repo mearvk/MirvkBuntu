@@ -135,11 +135,9 @@ int ParseFTPList(const char *line, struct list_state *state,
               {
                 guint64 seconds;
 		time_t t;
-                struct tm tm;
                 sscanf(p+1, "%"G_GUINT64_FORMAT, &seconds);
 		t = seconds;
-                if (localtime_r (&t, &tm) != NULL)
-                  result->fe_time = tm;
+		result->fe_time = *localtime (&t);
               }
             }
           }
@@ -1158,8 +1156,7 @@ int ParseFTPList(const char *line, struct list_state *state,
           if (!state->now_time)
           {
             state->now_time = time (NULL);
-            if (localtime_r (&state->now_time, &state->now_tm) == NULL)
-              memset (&state->now_tm, 0, sizeof (state->now_tm));
+	    state->now_tm = *localtime (&state->now_time);
           }
 
           result->fe_time.tm_year = state->now_tm.tm_year;
@@ -1194,8 +1191,7 @@ int ParseFTPList(const char *line, struct list_state *state,
              This can give proper result for cases like "aaa -> bbb -> ccc". */
           guint32 fe_size = atoi(result->fe_size);
 
-          if (fe_size <= result->fe_fnlen - 4 &&
-              result->fe_fnlen > (fe_size + 4) &&
+          if (result->fe_fnlen > (fe_size + 4) &&
               strncmp(result->fe_fname + result->fe_fnlen - fe_size - 4 , " -> ", 4) == 0)
           {
             result->fe_lname = result->fe_fname + (result->fe_fnlen - fe_size);
@@ -1635,9 +1631,8 @@ int ParseFTPList(const char *line, struct list_state *state,
                 result->fe_time.tm_min = atoi(p+3);
                 if (!state->now_time)
                 {
-                  state->now_time = time (NULL);
-                  if (localtime_r (&state->now_time, &state->now_tm) == NULL)
-                    memset (&state->now_tm, 0, sizeof (state->now_tm));
+		  state->now_time = time (NULL);
+		  state->now_tm = *localtime (&state->now_time);
                 }
                 result->fe_time.tm_year = state->now_tm.tm_year;
                 if ( (( state->now_tm.tm_mon  << 4) + state->now_tm.tm_mday) <

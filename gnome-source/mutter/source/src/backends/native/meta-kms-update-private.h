@@ -34,16 +34,6 @@ typedef struct _MetaKmsCrtcColorUpdate
   struct {
     gboolean has_update;
     MetaGammaLut *state;
-  } degamma;
-
-  struct {
-    gboolean has_update;
-    MetaCtm *state;
-  } ctm;
-
-  struct {
-    gboolean has_update;
-    MetaGammaLut *state;
   } gamma;
 } MetaKmsCrtcColorUpdate;
 
@@ -52,7 +42,6 @@ typedef struct _MetaKmsFeedback
   gatomicrefcount ref_count;
 
   MetaKmsFeedbackResult result;
-  int64_t ready_time_us;
 
   GList *failed_planes;
   GError *error;
@@ -82,16 +71,6 @@ typedef struct _MetaKmsPlaneAssignment
     int x;
     int y;
   } cursor_hotspot;
-
-  struct {
-    gboolean has_update;
-    MetaKmsPlaneYCbCrColorEncoding value;
-  } color_encoding;
-
-  struct {
-    gboolean has_update;
-    MetaKmsPlaneYCbCrColorRange value;
-  } color_range;
 } MetaKmsPlaneAssignment;
 
 typedef struct _MetaKmsModeSet
@@ -169,6 +148,12 @@ struct _MetaKmsResultListener
   MetaKmsFeedback *feedback;
 };
 
+typedef struct _MetaKmsCustomPageFlip
+{
+  MetaKmsCustomPageFlipFunc func;
+  gpointer user_data;
+} MetaKmsCustomPageFlip;
+
 void meta_kms_plane_feedback_free (MetaKmsPlaneFeedback *plane_feedback);
 
 MetaKmsPlaneFeedback * meta_kms_plane_feedback_new_take_error (MetaKmsPlane *plane,
@@ -186,12 +171,6 @@ MetaKmsFeedback * meta_kms_feedback_new_failed (GList  *failed_planes,
 
 void meta_kms_plane_assignment_set_rotation (MetaKmsPlaneAssignment *plane_assignment,
                                              MetaKmsPlaneRotation    rotation);
-
-void meta_kms_plane_assignment_set_color_encoding (MetaKmsPlaneAssignment         *plane_assignment,
-                                                   MetaKmsPlaneYCbCrColorEncoding  color_encoding);
-
-void meta_kms_plane_assignment_set_color_range (MetaKmsPlaneAssignment      *plane_assignment,
-                                                MetaKmsPlaneYCbCrColorRange  range);
 
 META_EXPORT_TEST
 MetaKmsPlaneAssignment * meta_kms_update_get_primary_plane_assignment (MetaKmsUpdate *update,
@@ -219,6 +198,8 @@ GList * meta_kms_update_get_crtc_updates (MetaKmsUpdate *update);
 META_EXPORT_TEST
 GList * meta_kms_update_get_crtc_color_updates (MetaKmsUpdate *update);
 
+MetaKmsCustomPageFlip * meta_kms_update_take_custom_page_flip_func (MetaKmsUpdate *update);
+
 META_EXPORT_TEST
 GList * meta_kms_update_take_result_listeners (MetaKmsUpdate *update);
 
@@ -230,6 +211,8 @@ void meta_kms_result_listener_set_feedback (MetaKmsResultListener *listener,
 void meta_kms_result_listener_notify (MetaKmsResultListener *listener);
 
 void meta_kms_result_listener_free (MetaKmsResultListener *listener);
+
+void meta_kms_custom_page_flip_free (MetaKmsCustomPageFlip *custom_page_flip);
 
 void meta_kms_update_realize (MetaKmsUpdate     *update,
                               MetaKmsImplDevice *impl_device);
@@ -244,3 +227,6 @@ gboolean meta_kms_update_is_empty (MetaKmsUpdate *update);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaKmsPlaneFeedback,
                                meta_kms_plane_feedback_free)
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaKmsCustomPageFlip,
+                               meta_kms_custom_page_flip_free)

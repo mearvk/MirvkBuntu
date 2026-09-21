@@ -69,7 +69,8 @@ dispose (GObject *object)
    {
       g_signal_handlers_disconnect_by_func (self->editor, variant_editor_changed_cb, self->data);
 
-      g_clear_pointer (&self->editor, gtk_widget_unparent);
+      gtk_widget_unparent (self->editor);
+      self->editor = NULL;
     }
 
   G_OBJECT_CLASS (gtk_inspector_variant_editor_parent_class)->dispose (object);

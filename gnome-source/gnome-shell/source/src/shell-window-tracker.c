@@ -6,14 +6,13 @@
 #include <stdlib.h>
 
 #include <meta/display.h>
+#include <meta/group.h>
 #include <meta/util.h>
 #include <meta/window.h>
 #include <meta/meta-workspace-manager.h>
 #include <meta/meta-startup-notification.h>
-#ifdef HAVE_XWAYLAND
-#include <meta/meta-x11-group.h>
-#endif
 
+#include "shell-window-tracker-private.h"
 #include "shell-app-private.h"
 #include "shell-global.h"
 #include "st.h"
@@ -26,9 +25,8 @@
  */
 
 /**
- * ShellWindowTracker:
- *
- * Associate windows with applications
+ * SECTION:shell-window-tracker
+ * @short_description: Associate windows with applications
  *
  * Maintains a mapping from windows to applications (.desktop file ids).
  * It currently implements this with some heuristics on the WM_CLASS X11
@@ -68,6 +66,8 @@ enum {
 static guint signals[LAST_SIGNAL] = { 0 };
 
 static void shell_window_tracker_finalize (GObject *object);
+static void set_focus_app (ShellWindowTracker  *tracker,
+                           ShellApp            *new_focus_app);
 static void on_focus_window_changed (MetaDisplay *display, GParamSpec *spec, ShellWindowTracker *tracker);
 
 static void track_window (ShellWindowTracker *tracker, MetaWindow *window);
@@ -103,7 +103,9 @@ shell_window_tracker_class_init (ShellWindowTrackerClass *klass)
   gobject_class->finalize = shell_window_tracker_finalize;
 
   props[PROP_FOCUS_APP] =
-    g_param_spec_object ("focus-app", NULL, NULL,
+    g_param_spec_object ("focus-app",
+                         "Focus App",
+                         "Focused application",
                          SHELL_TYPE_APP,
                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
@@ -162,26 +164,31 @@ get_app_from_window_wmclass (MetaWindow  *window)
      much of the complexity here comes from the desire to support
      Chrome apps.
 
-     Currently Chrome sets WM_CLASS to "Google-chrome" and Chromium sets
-     it to "Chromium-browser". That happens for the normal browser window, as
-     well as for its shortcut windows (which can be created through Save and
-     share -> Create shortcut...)
+     From https://bugzilla.gnome.org/show_bug.cgi?id=673657#c13
 
-     The .desktop file names are formatted like so:
-     ${APPLICATION_ID}.flextop.chrome-${WEBSITE_ID}-${PROFILE}.desktop
-     This file has a matching StartupWMClass, which is formatted like so:
-     crx_${WEBSITE_ID}
+     Currently chrome sets WM_CLASS as follows (the first string is the 'instance',
+     the second one is the 'class':
 
-     e.g. the .desktop file for a Chromium shortcut to https://handbook.gnome.org
-     would be located at:
+     For the normal browser:
+     WM_CLASS(STRING) = "chromium", "Chromium"
 
-     .local/share/applications/org.chromium.Chromium.flextop.chrome-bmfccmnckbnljdcnoglodbceoplecbkl-Default.desktop
+     For a bookmarked page (through 'Tools -> Create application shortcuts')
+     WM_CLASS(STRING) = "wiki.gnome.org__GnomeShell_ApplicationBased", "Chromium"
+
+     For an application from the chrome store (with a .desktop file created through
+     right click, "Create shortcuts" from Chrome's apps overview)
+     WM_CLASS(STRING) = "crx_blpcfgokakmgnkcojhhkbfbldkacnbeo", "Chromium"
+
+     The .desktop file has a matching StartupWMClass, but the name differs, e.g. for
+     the store app (youtube) there is
+
+     .local/share/applications/chrome-blpcfgokakmgnkcojhhkbfbldkacnbeo-Default.desktop
 
      with
 
-     StartupWMClass=crx_bmfccmnckbnljdcnoglodbceoplecbkl
+     StartupWMClass=crx_blpcfgokakmgnkcojhhkbfbldkacnbeo
 
-     Note that Chromium (but not Chrome!) includes a StartupWMClass=chromium-browser
+     Note that chromium (but not google-chrome!) includes a StartupWMClass=chromium
      in their .desktop file, so we must match the instance first.
 
      Also note that in the good case (regular gtk+ app without hacks), instance and
@@ -301,14 +308,10 @@ static ShellApp*
 get_app_from_window_group (ShellWindowTracker  *tracker,
                            MetaWindow          *window)
 {
-#ifdef HAVE_XWAYLAND
   ShellApp *result;
   GSList *group_windows;
   MetaGroup *group;
   GSList *iter;
-
-  if (meta_window_get_client_type (window) != META_WINDOW_CLIENT_TYPE_X11)
-    return NULL;
 
   group = meta_window_x11_get_group (window);
   if (group == NULL)
@@ -337,9 +340,6 @@ get_app_from_window_group (ShellWindowTracker  *tracker,
     g_object_ref (result);
 
   return result;
-#else
-  return NULL;
-#endif
 }
 
 /*
@@ -463,7 +463,7 @@ get_app_for_window (ShellWindowTracker    *tracker,
   /* If we didn't get a startup-notification match, see if we matched
    * any other windows in the group.
    */
-  if (result == NULL)
+  if (result == NULL && meta_window_get_client_type (window) == META_WINDOW_CLIENT_TYPE_X11)
     result = get_app_from_window_group (tracker, window);
 
   /* Our last resort - we create a fake app from the window */
@@ -498,8 +498,7 @@ update_focus_app (ShellWindowTracker *self)
       shell_app_update_app_actions (new_focus_app, new_focus_win);
     }
 
-  if (g_set_object (&self->focus_app, new_focus_app))
-    g_object_notify_by_pspec (G_OBJECT (self), props[PROP_FOCUS_APP]);
+  set_focus_app (self, new_focus_app);
 
   g_clear_object (&new_focus_app);
 }
@@ -712,18 +711,6 @@ shell_window_tracker_get_window_app (ShellWindowTracker *tracker,
   return app;
 }
 
-/**
- * shell_window_tracker_get_focus_app:
- *
- * Returns: (transfer none) (nullable):
- */
-ShellApp *
-shell_window_tracker_get_focus_app (ShellWindowTracker *tracker)
-{
-  g_return_val_if_fail (SHELL_IS_WINDOW_TRACKER (tracker), NULL);
-  return tracker->focus_app;
-}
-
 
 /**
  * shell_window_tracker_get_app_from_pid:
@@ -766,6 +753,24 @@ shell_window_tracker_get_app_from_pid (ShellWindowTracker *tracker,
   g_slist_free (running);
 
   return result;
+}
+
+static void
+set_focus_app (ShellWindowTracker  *tracker,
+               ShellApp            *new_focus_app)
+{
+  if (new_focus_app == tracker->focus_app)
+    return;
+
+  if (tracker->focus_app != NULL)
+    g_object_unref (tracker->focus_app);
+
+  tracker->focus_app = new_focus_app;
+
+  if (tracker->focus_app != NULL)
+    g_object_ref (tracker->focus_app);
+
+  g_object_notify_by_pspec (G_OBJECT (tracker), props[PROP_FOCUS_APP]);
 }
 
 static void

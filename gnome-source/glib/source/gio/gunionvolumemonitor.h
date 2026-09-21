@@ -42,7 +42,7 @@ struct _GUnionVolumeMonitorClass
   GVolumeMonitorClass parent_class;
 };
 
-GType _g_union_volume_monitor_get_type (void);
+GType _g_union_volume_monitor_get_type (void) G_GNUC_CONST;
 
 G_END_DECLS
 

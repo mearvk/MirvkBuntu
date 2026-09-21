@@ -19,8 +19,6 @@
 
 #include "config.h"
 
-#define VK_USE_PLATFORM_METAL_EXT
-
 #include <AppKit/AppKit.h>
 
 #import "GdkMacosWindow.h"
@@ -43,7 +41,6 @@
 #include "gdkmacossurface-private.h"
 #include "gdkmacostoplevelsurface-private.h"
 #include "gdkmacosutils-private.h"
-#include "gdkmacosvulkancontext-private.h"
 
 G_DEFINE_TYPE (GdkMacosDisplay, gdk_macos_display, GDK_TYPE_DISPLAY)
 
@@ -273,6 +270,13 @@ gdk_macos_display_get_next_serial (GdkDisplay *display)
   return ++serial;
 }
 
+static gboolean
+gdk_macos_display_has_pending (GdkDisplay *display)
+{
+  return _gdk_event_queue_find_first (display) ||
+         _gdk_macos_event_source_check_pending ();
+}
+
 static void
 gdk_macos_display_notify_startup_complete (GdkDisplay  *display,
                                            const char *startup_notification_id)
@@ -413,7 +417,7 @@ _gdk_macos_display_surface_became_key (GdkMacosDisplay *self,
   gdk_surface_request_motion (GDK_SURFACE (surface));
 }
 
-static void
+static gboolean
 select_key_in_idle_cb (gpointer data)
 {
   GdkMacosDisplay *self = data;
@@ -424,7 +428,7 @@ select_key_in_idle_cb (gpointer data)
 
   /* Don't steal focus from NSPanel, etc */
   if (self->key_window_is_foreign)
-    return;
+    return G_SOURCE_REMOVE;
 
   if (self->keyboard_surface == NULL)
     {
@@ -442,6 +446,8 @@ select_key_in_idle_cb (gpointer data)
             }
         }
     }
+
+  return G_SOURCE_REMOVE;
 }
 
 void
@@ -490,7 +496,7 @@ _gdk_macos_display_surface_resigned_key (GdkMacosDisplay *self,
   _gdk_macos_display_clear_sorting (self);
 
   if (self->select_key_in_idle == 0)
-    self->select_key_in_idle = g_idle_add_once (select_key_in_idle_cb, self);
+    self->select_key_in_idle = g_idle_add (select_key_in_idle_cb, self);
 }
 
 /* Raises a transient window.
@@ -597,11 +603,6 @@ gdk_macos_display_class_init (GdkMacosDisplayClass *klass)
   display_class->popup_type = GDK_TYPE_MACOS_POPUP_SURFACE;
   display_class->cairo_context_type = GDK_TYPE_MACOS_CAIRO_CONTEXT;
 
-#ifdef GDK_RENDERING_VULKAN
-  display_class->vk_context_type = GDK_TYPE_MACOS_VULKAN_CONTEXT;
-  display_class->vk_extension_name = VK_EXT_METAL_SURFACE_EXTENSION_NAME;
-#endif
-
   display_class->beep = gdk_macos_display_beep;
   display_class->flush = gdk_macos_display_flush;
   display_class->get_keymap = gdk_macos_display_get_keymap;
@@ -610,6 +611,7 @@ gdk_macos_display_class_init (GdkMacosDisplayClass *klass)
   display_class->get_next_serial = gdk_macos_display_get_next_serial;
   display_class->get_name = gdk_macos_display_get_name;
   display_class->get_setting = gdk_macos_display_get_setting;
+  display_class->has_pending = gdk_macos_display_has_pending;
   display_class->init_gl = gdk_macos_display_init_gl;
   display_class->notify_startup_complete = gdk_macos_display_notify_startup_complete;
   display_class->queue_events = gdk_macos_display_queue_events;
@@ -648,10 +650,8 @@ _gdk_macos_display_open (const char *display_name)
 
   /* Make the current process a foreground application, i.e. an app
    * with a user interface, in case we're not running from a .app bundle
-   * unless running as unit-test
    */
-  if (!g_test_initialized ())
-    TransformProcessType (&psn, kProcessTransformToForegroundApplication);
+  TransformProcessType (&psn, kProcessTransformToForegroundApplication);
 
   [NSApplication sharedApplication];
 
@@ -796,15 +796,36 @@ void
 _gdk_macos_display_break_all_grabs (GdkMacosDisplay *self,
                                     guint32          time)
 {
-  GdkSurface *surface;
+  GdkDevice *devices[2];
   GdkSeat *seat;
 
   g_return_if_fail (GDK_IS_MACOS_DISPLAY (self));
 
   seat = gdk_display_get_default_seat (GDK_DISPLAY (self));
+  devices[0] = gdk_seat_get_keyboard (seat);
+  devices[1] = gdk_seat_get_pointer (seat);
 
-  if ((surface = gdk_seat_get_topmost_grab_surface (seat)) != NULL)
-    gdk_seat_break_grab (seat, surface);
+  for (guint i = 0; i < G_N_ELEMENTS (devices); i++)
+    {
+      GdkDevice *device = devices[i];
+      GdkDeviceGrabInfo *grab;
+
+      grab = _gdk_display_get_last_device_grab (GDK_DISPLAY (self), device);
+
+      if (grab != NULL)
+        {
+          GdkEvent *event;
+          GList *node;
+
+          event = gdk_grab_broken_event_new (grab->surface,
+                                             device,
+                                             grab->surface,
+                                             TRUE);
+          node = _gdk_event_queue_append (GDK_DISPLAY (self), event);
+          _gdk_windowing_got_event (GDK_DISPLAY (self), node, event,
+                                    _gdk_display_get_next_serial (GDK_DISPLAY (self)));
+        }
+    }
 }
 
 void
@@ -882,6 +903,25 @@ _gdk_macos_display_get_surface_at_display_coords (GdkMacosDisplay *self,
   _gdk_macos_display_from_display_coords (self, x, y, &x_gdk, &y_gdk);
 
   return _gdk_macos_display_get_surface_at_coords (self, x_gdk, y_gdk, surface_x, surface_y);
+}
+
+NSWindow *
+_gdk_macos_display_find_native_under_pointer (GdkMacosDisplay *self,
+                                              int             *x,
+                                              int             *y)
+{
+  GdkMacosSurface *surface;
+  NSPoint point;
+
+  g_assert (GDK_IS_MACOS_DISPLAY (self));
+
+  point = [NSEvent mouseLocation];
+
+  surface = _gdk_macos_display_get_surface_at_display_coords (self, point.x, point.y, x, y);
+  if (surface != NULL)
+    return _gdk_macos_surface_get_native (surface);
+
+  return NULL;
 }
 
 void

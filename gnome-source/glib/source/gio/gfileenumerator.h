@@ -92,7 +92,7 @@ struct _GFileEnumeratorClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType      g_file_enumerator_get_type          (void);
+GType      g_file_enumerator_get_type          (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GFileInfo *g_file_enumerator_next_file         (GFileEnumerator      *enumerator,

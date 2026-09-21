@@ -21,7 +21,8 @@
 #error "Only <st/st.h> can be included directly.h"
 #endif
 
-#pragma once
+#ifndef __ST_PASSWORD_ENTRY_H__
+#define __ST_PASSWORD_ENTRY_H__
 
 G_BEGIN_DECLS
 
@@ -40,3 +41,6 @@ void                st_password_entry_set_show_peek_icon         (StPasswordEntr
                                                                   gboolean         value);
 
 G_END_DECLS
+
+#endif /* __ST_PASSWORD_ENTRY_H__ */
+

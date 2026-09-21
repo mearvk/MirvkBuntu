@@ -1,10 +1,13 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import IBus from 'gi://IBus';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Signals from './signals.js';
-import {logErrorUnlessCancelled} from './errorUtils.js';
+import * as BoxPointer from '../ui/boxpointer.js';
 
 import * as IBusCandidatePopup from '../ui/ibusCandidatePopup.js';
 
@@ -25,8 +28,6 @@ let _ibusManager = null;
 const IBUS_SYSTEMD_SERVICE = 'org.freedesktop.IBus.session.GNOME.service';
 
 const TYPING_BOOSTER_ENGINE = 'typing-booster';
-
-const FALLBACK_ENGINE_ID = 'xkb:us::eng';
 
 function _checkIBusVersion(requiredMajor, requiredMinor, requiredMicro) {
     if ((IBus.MAJOR_VERSION > requiredMajor) ||
@@ -88,7 +89,7 @@ class IBusManager extends Signals.EventEmitter {
             this._ibusIsSystemdService =
                 await Shell.util_systemd_unit_exists(
                     IBUS_SYSTEMD_SERVICE, null);
-        } catch {
+        } catch (e) {
             this._ibusIsSystemdService = false;
         }
 
@@ -98,7 +99,7 @@ class IBusManager extends Signals.EventEmitter {
     async _queueSpawn() {
         const isSystemdService = await this._ibusSystemdServiceExists();
         if (!isSystemdService)
-            this._spawn([]);
+            this._spawn(Meta.is_wayland_compositor() ? [] : ['--xim']);
     }
 
     _tryAppendEnv(env, varname) {
@@ -159,32 +160,37 @@ class IBusManager extends Signals.EventEmitter {
 
     _onConnected() {
         this._cancellable = new Gio.Cancellable();
-        this._initEngines(this._cancellable);
-        this._initPanelService(this._cancellable);
+        this._initEngines();
+        this._initPanelService();
     }
 
-    async _initEngines(cancellable) {
+    async _initEngines() {
         try {
             const enginesList =
-                await this._ibus.list_engines_async(-1, cancellable);
+                await this._ibus.list_engines_async(-1, this._cancellable);
             for (let i = 0; i < enginesList.length; ++i) {
-                const name = enginesList[i].get_name();
+                let name = enginesList[i].get_name();
                 this._engines.set(name, enginesList[i]);
             }
             this._updateReadiness();
         } catch (e) {
-            if (logErrorUnlessCancelled(e))
-                this._clear();
+            if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                return;
+
+            logError(e);
+            this._clear();
         }
     }
 
-    async _initPanelService(cancellable) {
+    async _initPanelService() {
         try {
             await this._ibus.request_name_async(IBus.SERVICE_PANEL,
-                IBus.BusNameFlag.REPLACE_EXISTING, -1, cancellable);
+                IBus.BusNameFlag.REPLACE_EXISTING, -1, this._cancellable);
         } catch (e) {
-            if (logErrorUnlessCancelled(e))
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
+                logError(e);
                 this._clear();
+            }
             return;
         }
 
@@ -195,7 +201,7 @@ class IBusManager extends Signals.EventEmitter {
         this._candidatePopup.setPanelService(this._panelService);
         this._panelService.connect('update-property', this._updateProperty.bind(this));
         this._panelService.connect('set-cursor-location', (ps, x, y, w, h) => {
-            const cursorLocation = {x, y, width: w, height: h};
+            let cursorLocation = {x, y, width: w, height: h};
             this.emit('set-cursor-location', cursorLocation);
         });
         this._panelService.connect('focus-in', (panel, path) => {
@@ -212,16 +218,16 @@ class IBusManager extends Signals.EventEmitter {
             // confusing users. We thus don't use it in that case.
             _checkIBusVersion(1, 5, 10);
             this._panelService.connect('set-content-type', this._setContentType.bind(this));
-        } catch {
+        } catch (e) {
         }
         this._updateReadiness();
 
         try {
             // If an engine is already active we need to get its properties
             const engine =
-                await this._ibus.get_global_engine_async(-1, cancellable);
+                await this._ibus.get_global_engine_async(-1, this._cancellable);
             this._engineChanged(this._ibus, engine.get_name());
-        } catch {
+        } catch (e) {
         }
     }
 
@@ -235,7 +241,7 @@ class IBusManager extends Signals.EventEmitter {
             return;
 
         this._currentEngineName = engineName;
-        this._candidatePopup.close({animate: false});
+        this._candidatePopup.close(BoxPointer.PopupAnimation.NONE);
 
         if (this._registerPropertiesId !== 0)
             return;
@@ -271,49 +277,41 @@ class IBusManager extends Signals.EventEmitter {
         return this._engines.get(id);
     }
 
-    async _setEngine(id) {
+    async _setEngine(id, callback) {
         // Send id even if id == this._currentEngineName
         // because 'properties-registered' signal can be emitted
         // while this._ibusSources == null on a lock screen.
-        if (!this._ready)
+        if (!this._ready) {
+            if (callback)
+                callback();
             return;
+        }
 
-        const cancellable = this._cancellable;
         try {
             await this._ibus.set_global_engine_async(id,
                 this._MAX_INPUT_SOURCE_ACTIVATION_TIME,
-                cancellable);
+                this._cancellable);
         } catch (e) {
-            if (!logErrorUnlessCancelled(e))
-                return;
-
-            try {
-                await this._ibus.set_global_engine_async(FALLBACK_ENGINE_ID,
-                    this._MAX_INPUT_SOURCE_ACTIVATION_TIME,
-                    cancellable);
-            } catch (e2) {
-                logErrorUnlessCancelled(e2);
-            }
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                logError(e);
         }
+
+        if (callback)
+            callback();
     }
 
-    async setEngine(id) {
+    async setEngine(id, callback) {
         if (this._oskCompletion)
-            await this._maybeUpdateCompletion(id);
-        else
-            await this._setEngine(id);
-    }
+            this._preOskEngine = id;
 
-    async _maybeUpdateCompletion(id) {
-        if (!this._oskCompletion)
+        const isXkb = id.startsWith('xkb:');
+        if (this._oskCompletion && isXkb)
             return;
 
-        this._preOskEngine = id;
-        const isXkb = id.startsWith('xkb:');
-
-        /* Non xkb engines conflict with completion */
-        if (!isXkb)
-            await this.setCompletionEnabled(false);
+        if (this._oskCompletion)
+            this.setCompletionEnabled(false, callback);
+        else
+            await this._setEngine(id, callback);
     }
 
     preloadEngines(ids) {
@@ -329,7 +327,7 @@ class IBusManager extends Signals.EventEmitter {
         }
 
         this._preloadEnginesId =
-            GLib.timeout_add_seconds_once(
+            GLib.timeout_add_seconds(
                 GLib.PRIORITY_DEFAULT,
                 this._PRELOAD_ENGINES_DELAY_TIME,
                 () => {
@@ -339,15 +337,11 @@ class IBusManager extends Signals.EventEmitter {
                         this._cancellable,
                         null);
                     this._preloadEnginesId = 0;
+                    return GLib.SOURCE_REMOVE;
                 });
     }
 
-    /**
-     * @param {boolean} enabled - whether completion should be enabled
-     *
-     * @returns {boolean} - whether completion are enabled
-     */
-    async setCompletionEnabled(enabled) {
+    setCompletionEnabled(enabled, callback) {
         /* Needs typing-booster available */
         if (enabled && !this._engines.has(TYPING_BOOSTER_ENGINE))
             return false;
@@ -356,17 +350,17 @@ class IBusManager extends Signals.EventEmitter {
             return false;
 
         if (this._oskCompletion === enabled)
-            return enabled;
+            return true;
 
         this._oskCompletion = enabled;
 
         if (enabled) {
             this._preOskEngine = this._currentEngineName;
-            await this._setEngine(TYPING_BOOSTER_ENGINE);
+            this._setEngine(TYPING_BOOSTER_ENGINE, callback);
         } else if (this._preOskEngine) {
-            await this._setEngine(this._preOskEngine);
+            this._setEngine(this._preOskEngine, callback);
             delete this._preOskEngine;
         }
-        return this._oskCompletion;
+        return true;
     }
 }

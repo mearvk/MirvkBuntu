@@ -20,7 +20,8 @@
  * See COPYRIGHTS file for copyright information
  */
 
-#pragma once
+#ifndef __CR_PSEUDO_H__
+#define __CR_PSEUDO_H__
 
 #include <stdio.h>
 #include <glib.h>
@@ -59,3 +60,5 @@ void cr_pseudo_dump (CRPseudo const *a_this, FILE *a_fp) ;
 void cr_pseudo_destroy (CRPseudo *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_PSEUDO_H__*/

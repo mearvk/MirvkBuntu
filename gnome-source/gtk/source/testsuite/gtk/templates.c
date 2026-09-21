@@ -24,7 +24,7 @@
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
-static void
+static gboolean
 main_loop_quit_cb (gpointer data)
 {
   gboolean *done = data;
@@ -32,6 +32,8 @@ main_loop_quit_cb (gpointer data)
   *done = TRUE;
 
   g_main_context_wakeup (NULL);
+
+  return FALSE;
 }
 
 static void
@@ -39,7 +41,7 @@ show_and_wait (GtkWidget *widget)
 {
   gboolean done = FALSE;
 
-  g_timeout_add_once (500, main_loop_quit_cb, &done);
+  g_timeout_add (500, main_loop_quit_cb, &done);
   gtk_widget_set_visible (widget, TRUE);
   while (!done)
     g_main_context_iteration (NULL, FALSE);
@@ -223,7 +225,7 @@ test_app_chooser_dialog_basic (void)
    * the main context then app_chooser_online_get_default_ready_cb()
    * will be eventually called and segfault.
    */
-  g_timeout_add_once (500, main_loop_quit_cb, &done);
+  g_timeout_add (500, main_loop_quit_cb, &done);
   while (!done)
     g_main_context_iteration (NULL,  TRUE);
   gtk_window_destroy (GTK_WINDOW (widget));
@@ -288,7 +290,7 @@ test_file_chooser_widget_basic (void)
    * Since we assert all automated children are finalized we
    * can catch this
    */
-  g_timeout_add_once (100, main_loop_quit_cb, &done);
+  g_timeout_add (100, main_loop_quit_cb, &done);
   while (!done)
     g_main_context_iteration (NULL,  TRUE);
 
@@ -310,7 +312,7 @@ test_file_chooser_dialog_basic (void)
 
   g_assert_true (GTK_IS_FILE_CHOOSER_DIALOG (widget));
   done = FALSE;
-  g_timeout_add_once (100, main_loop_quit_cb, &done);
+  g_timeout_add (100, main_loop_quit_cb, &done);
   while (!done)
     g_main_context_iteration (NULL,  TRUE);
 

@@ -21,7 +21,6 @@
 
 #include "gtkmultifilter.h"
 
-#include "gtkfilterprivate.h"
 #include "gtkbuildable.h"
 #include "gtktypebuiltins.h"
 
@@ -37,13 +36,13 @@
 /**
  * GtkMultiFilter:
  *
- * Base class for filters that combine multiple filters.
+ * `GtkMultiFilter` is the base class for filters that combine multiple filters.
  */
 
 /**
  * GtkAnyFilter:
  *
- * Matches an item when at least one of its filters matches.
+ * `GtkAnyFilter` matches an item when at least one of its filters matches.
  *
  * To add filters to a `GtkAnyFilter`, use [method@Gtk.MultiFilter.append].
  */
@@ -51,7 +50,7 @@
 /**
  * GtkEveryFilter:
  *
- * Matches an item when each of its filters matches.
+ * `GtkEveryFilter` matches an item when each of its filters matches.
  *
  * To add filters to a `GtkEveryFilter`, use [method@Gtk.MultiFilter.append].
  */
@@ -190,113 +189,37 @@ gtk_multi_filter_dispose (GObject *object)
   G_OBJECT_CLASS (gtk_multi_filter_parent_class)->dispose (object);
 }
 
-typedef struct _MultiFilterWatchData {
-  GHashTable *filter_to_watch;
-  GtkFilterWatchCallback callback;
-
-  gpointer user_data;
-  GDestroyNotify destroy;
-} MultiFilterWatchData;
-
-static void
-multi_filter_watch_cb (gpointer item,
-                       gpointer user_data)
-{
-  MultiFilterWatchData *data = (MultiFilterWatchData *) user_data;
-  data->callback (item, data->user_data);
-}
-
-static gpointer
-gtk_multi_filter_watch (GtkFilter              *filter,
-                        gpointer                item,
-                        GtkFilterWatchCallback  callback,
-                        gpointer                user_data,
-                        GDestroyNotify          destroy)
-{
-  MultiFilterWatchData *data;
-  GtkMultiFilter *self;
-
-  self = GTK_MULTI_FILTER (filter);
-
-  data = g_new0 (MultiFilterWatchData, 1);
-  data->callback = callback;
-  data->user_data = user_data;
-  data->destroy = destroy;
-
-  data->filter_to_watch = g_hash_table_new (g_direct_hash, g_direct_equal);
-  for (size_t i = 0; i < gtk_filters_get_size (&self->filters); i++)
-    {
-      GtkFilter *child = gtk_filters_get (&self->filters, i);
-
-      g_hash_table_insert (data->filter_to_watch,
-                           child,
-                           gtk_filter_watch (child, item,
-                                             multi_filter_watch_cb,
-                                             data,
-                                             NULL));
-    }
-
-  return g_steal_pointer (&data);
-}
-
-static void
-gtk_multi_filter_unwatch (GtkFilter *filter,
-                          gpointer   watch)
-{
-  MultiFilterWatchData *data = (MultiFilterWatchData *) watch;
-  GHashTableIter iter;
-  gpointer child_filter;
-  gpointer child_watch;
-
-  g_assert (data->filter_to_watch != NULL);
-
-  g_hash_table_iter_init (&iter, data->filter_to_watch);
-  while (g_hash_table_iter_next (&iter, &child_filter, &child_watch) && child_watch)
-    gtk_filter_unwatch (child_filter, child_watch);
-
-  g_clear_pointer (&data->filter_to_watch, g_hash_table_destroy);
-  g_free (data);
-}
-
 static void
 gtk_multi_filter_class_init (GtkMultiFilterClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
-  GtkFilterClassPrivate *filter_class_priv = G_TYPE_CLASS_GET_PRIVATE (class, GTK_TYPE_FILTER, GtkFilterClassPrivate);
 
   object_class->get_property = gtk_multi_filter_get_property;
   object_class->dispose = gtk_multi_filter_dispose;
 
-  filter_class_priv->watch = gtk_multi_filter_watch;
-  filter_class_priv->unwatch = gtk_multi_filter_unwatch;
-
   /**
    * GtkMultiFilter:item-type:
    *
-   * The type of items.
-   *
-   * See [method@Gio.ListModel.get_item_type].
+   * The type of items. See [method@Gio.ListModel.get_item_type].
    *
    * Since: 4.8
-   */
+   **/
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         GTK_TYPE_FILTER,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkMultiFilter:n-items:
    *
-   * The number of items.
-   *
-   * See [method@Gio.ListModel.get_n_items].
+   * The number of items. See [method@Gio.ListModel.get_n_items].
    *
    * Since: 4.8
-   */
+   **/
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
@@ -309,10 +232,10 @@ gtk_multi_filter_init (GtkMultiFilter *self)
 
 /**
  * gtk_multi_filter_append:
- * @self: a multi filter
- * @filter: (transfer full): a filter to add
+ * @self: a `GtkMultiFilter`
+ * @filter: (transfer full): A new filter to use
  *
- * Adds a filter.
+ * Adds a @filter to @self to use for matching.
  */
 void
 gtk_multi_filter_append (GtkMultiFilter *self,
@@ -332,13 +255,14 @@ gtk_multi_filter_append (GtkMultiFilter *self,
 
 /**
  * gtk_multi_filter_remove:
- * @self: a multi filter
+ * @self: a `GtkMultiFilter`
  * @position: position of filter to remove
  *
- * Removes a filter.
+ * Removes the filter at the given @position from the list of filters used
+ * by @self.
  *
- * If @position is larger than the number of filters,
- * nothing happens.
+ * If @position is larger than the number of filters, nothing happens and
+ * the function returns.
  **/
 void
 gtk_multi_filter_remove (GtkMultiFilter *self,
@@ -428,8 +352,8 @@ gtk_any_filter_class_init (GtkAnyFilterClass *class)
   GtkMultiFilterClass *multi_filter_class = GTK_MULTI_FILTER_CLASS (class);
   GtkFilterClass *filter_class = GTK_FILTER_CLASS (class);
 
-  multi_filter_class->addition_change = GTK_FILTER_CHANGE_LESS_STRICT_REWATCH;
-  multi_filter_class->removal_change = GTK_FILTER_CHANGE_MORE_STRICT_REWATCH;
+  multi_filter_class->addition_change = GTK_FILTER_CHANGE_LESS_STRICT;
+  multi_filter_class->removal_change = GTK_FILTER_CHANGE_MORE_STRICT;
 
   filter_class->match = gtk_any_filter_match;
   filter_class->get_strictness = gtk_any_filter_get_strictness;
@@ -526,8 +450,8 @@ gtk_every_filter_class_init (GtkEveryFilterClass *class)
   GtkMultiFilterClass *multi_filter_class = GTK_MULTI_FILTER_CLASS (class);
   GtkFilterClass *filter_class = GTK_FILTER_CLASS (class);
 
-  multi_filter_class->addition_change = GTK_FILTER_CHANGE_MORE_STRICT_REWATCH;
-  multi_filter_class->removal_change = GTK_FILTER_CHANGE_LESS_STRICT_REWATCH;
+  multi_filter_class->addition_change = GTK_FILTER_CHANGE_MORE_STRICT;
+  multi_filter_class->removal_change = GTK_FILTER_CHANGE_LESS_STRICT;
 
   filter_class->match = gtk_every_filter_match;
   filter_class->get_strictness = gtk_every_filter_get_strictness;

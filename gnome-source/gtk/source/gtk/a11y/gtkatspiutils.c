@@ -23,6 +23,7 @@
 #include "gtkatspiutilsprivate.h"
 
 #include "gtkenums.h"
+#include "gtkpasswordentry.h"
 #include "gtkscrolledwindow.h"
 
 /*< private >
@@ -243,7 +244,7 @@ gtk_accessible_role_to_atspi_role (GtkAccessibleRole role)
       return ATSPI_ROLE_FILLER;
 
     case GTK_ACCESSIBLE_ROLE_SWITCH:
-      return ATSPI_ROLE_SWITCH;
+      return ATSPI_ROLE_CHECK_BOX;
 
     case GTK_ACCESSIBLE_ROLE_TAB:
       return ATSPI_ROLE_PAGE_TAB;
@@ -316,12 +317,10 @@ gtk_atspi_role_for_context (GtkATContext *context)
   GtkAccessible *accessible = gtk_at_context_get_accessible (context);
   GtkAccessibleRole role = gtk_at_context_get_accessible_role (context);
 
-  /* ARIA does not have a password entry role, so use the input purpose to distinguish them */
-  if (role == GTK_ACCESSIBLE_ROLE_TEXT_BOX)
-    {
-      if (gtk_accessible_is_password_text (accessible))
-        return ATSPI_ROLE_PASSWORD_TEXT;
-    }
+  /* ARIA does not have a "password entry" role, so we need to fudge it here */
+  if (GTK_IS_PASSWORD_ENTRY (accessible))
+    return ATSPI_ROLE_PASSWORD_TEXT;
+
   /* ARIA does not have a "scroll area" role */
   if (GTK_IS_SCROLLED_WINDOW (accessible))
     return ATSPI_ROLE_SCROLL_PANE;
@@ -340,7 +339,8 @@ gtk_at_spi_emit_children_changed (GDBusConnection         *connection,
                                   const char              *path,
                                   GtkAccessibleChildState  state,
                                   int                      idx,
-                                  GVariant                *child_ref)
+                                  GVariant                *child_ref,
+                                  GVariant                *sender_ref)
 {
   const char *change;
 
@@ -364,115 +364,6 @@ gtk_at_spi_emit_children_changed (GDBusConnection         *connection,
                                  path,
                                  "org.a11y.atspi.Event.Object",
                                  "ChildrenChanged",
-                                 g_variant_new ("(siiva{sv})", change, idx, 0, child_ref, NULL),
+                                 g_variant_new ("(siiv@(so))", change, idx, 0, child_ref, sender_ref),
                                  NULL);
-}
-
-
-void
-gtk_at_spi_translate_coordinates_to_accessible (GtkAccessible  *accessible,
-                                                AtspiCoordType  coordtype,
-                                                int             xi,
-                                                int             yi,
-                                                int            *xo,
-                                                int            *yo)
-{
-  GtkAccessible *parent;
-  int x, y, width, height;
-
-  if (coordtype == ATSPI_COORD_TYPE_SCREEN)
-    {
-      *xo = 0;
-      *yo = 0;
-      return;
-    }
-
-  if (!gtk_accessible_get_bounds (accessible, &x, &y, &width, &height))
-    {
-      *xo = xi;
-      *yo = yi;
-      return;
-    }
-
-  /* Transform coords to our parent, we will need that in any case */
-  *xo = xi - x;
-  *yo = yi - y;
-
-  /* If that's what the caller requested, we're done */
-  if (coordtype == ATSPI_COORD_TYPE_PARENT)
-    return;
-
-  if (coordtype == ATSPI_COORD_TYPE_WINDOW)
-    {
-      parent = gtk_accessible_get_accessible_parent (accessible);
-      while (parent != NULL)
-        {
-          g_object_unref (parent);
-
-          if (gtk_accessible_get_bounds (parent, &x, &y, &width, &height))
-            {
-              *xo = *xo - x;
-              *yo = *yo - y;
-              parent = gtk_accessible_get_accessible_parent (parent);
-            }
-          else
-            break;
-        }
-    }
-  else
-    g_assert_not_reached ();
-}
-
-void
-gtk_at_spi_translate_coordinates_from_accessible (GtkAccessible *accessible,
-                                                  AtspiCoordType     coordtype,
-                                                  int                xi,
-                                                  int                yi,
-                                                  int               *xo,
-                                                  int               *yo)
-{
-  GtkAccessible *parent;
-  int x, y, width, height;
-
-  if (coordtype == ATSPI_COORD_TYPE_SCREEN)
-    {
-      *xo = 0;
-      *yo = 0;
-      return;
-    }
-
-  if (!gtk_accessible_get_bounds (accessible, &x, &y, &width, &height))
-    {
-      *xo = xi;
-      *yo = yi;
-      return;
-    }
-
-  /* Transform coords to our parent, we will need that in any case */
-  *xo = xi + x;
-  *yo = yi + y;
-
-  /* If that's what the caller requested, we're done */
-  if (coordtype == ATSPI_COORD_TYPE_PARENT)
-    return;
-
-  if (coordtype == ATSPI_COORD_TYPE_WINDOW)
-    {
-      parent = gtk_accessible_get_accessible_parent (accessible);
-      while (parent != NULL)
-        {
-          g_object_unref (parent);
-
-          if (gtk_accessible_get_bounds (parent, &x, &y, &width, &height))
-            {
-              *xo = *xo + x;
-              *yo = *yo + y;
-              parent = gtk_accessible_get_accessible_parent (parent);
-            }
-          else
-            break;
-        }
-    }
-  else
-    g_assert_not_reached ();
 }

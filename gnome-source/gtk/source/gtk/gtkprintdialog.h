@@ -34,7 +34,7 @@ typedef struct _GtkPrintSetup GtkPrintSetup;
 #define GTK_TYPE_PRINT_SETUP (gtk_print_setup_get_type ())
 
 GDK_AVAILABLE_IN_4_14
-GType           gtk_print_setup_get_type                (void);
+GType           gtk_print_setup_get_type                (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_4_14
 GtkPrintSetup  *gtk_print_setup_ref                     (GtkPrintSetup        *setup);
@@ -48,8 +48,6 @@ GtkPrintSettings *
 
 GDK_AVAILABLE_IN_4_14
 GtkPageSetup *  gtk_print_setup_get_page_setup          (GtkPrintSetup        *setup);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkPrintSetup, gtk_print_setup_unref)
 
 
 #define GTK_TYPE_PRINT_DIALOG (gtk_print_dialog_get_type ())

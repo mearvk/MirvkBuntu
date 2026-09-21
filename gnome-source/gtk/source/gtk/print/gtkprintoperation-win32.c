@@ -16,8 +16,18 @@
  * License along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
+#ifndef _MSC_VER
+#ifndef _WIN32_WINNT
+/* Vista or newer */
+#define _WIN32_WINNT 0x0600
+#endif
+#ifndef WINVER
+#define WINVER _WIN32_WINNT
+#endif
+#endif
 
+#define COBJMACROS
+#include "config.h"
 #include <math.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -516,7 +526,7 @@ win32_end_page (GtkPrintOperation *op,
   EndPage (op_win32->hdc);
 }
 
-static void
+static gboolean
 win32_poll_status_timeout (GtkPrintOperation *op)
 {
   GtkPrintOperationWin32 *op_win32 = op->priv->platform_data;
@@ -528,10 +538,13 @@ win32_poll_status_timeout (GtkPrintOperation *op)
   win32_poll_status (op);
 
   if (!gtk_print_operation_is_finished (op)) {
-    op_win32->timeout_id = g_timeout_add_once (STATUS_POLLING_TIME, (GSourceOnceFunc) win32_poll_status_timeout, op);
+    op_win32->timeout_id = g_timeout_add (STATUS_POLLING_TIME,
+					  (GSourceFunc)win32_poll_status_timeout,
+					  op);
     gdk_source_set_static_name_by_id (op_win32->timeout_id, "[gtk] win32_poll_status_timeout");
   }
   g_object_unref (op);
+  return FALSE;
 }
 
 
@@ -560,7 +573,8 @@ win32_end_run (GtkPrintOperation *op,
   GlobalFree (op_win32->devmode);
   GlobalFree (op_win32->devnames);
 
-  g_clear_pointer (&op_win32->surface, cairo_surface_destroy);
+  cairo_surface_destroy (op_win32->surface);
+  op_win32->surface = NULL;
 
   DeleteDC (op_win32->hdc);
   
@@ -568,7 +582,9 @@ win32_end_run (GtkPrintOperation *op,
     {
       op_win32->printerHandle = printerHandle;
       win32_poll_status (op);
-      op_win32->timeout_id = g_timeout_add_once (STATUS_POLLING_TIME, (GSourceOnceFunc) win32_poll_status_timeout, op);
+      op_win32->timeout_id = g_timeout_add (STATUS_POLLING_TIME,
+					    (GSourceFunc)win32_poll_status_timeout,
+					    op);
       gdk_source_set_static_name_by_id (op_win32->timeout_id, "[gtk] win32_poll_status_timeout");
     }
   else
@@ -956,8 +972,6 @@ devmode_from_settings (GtkPrintSettings *settings,
   const char *extras_base64;
   gsize extras_len;
   const char *val;
-  gunichar2 *device_name;
-  glong device_name_len;
 
   /* If we already provided a valid hDevMode, don't initialize a new one; just lock the one we have */
   if (hDevMode)
@@ -982,9 +996,8 @@ devmode_from_settings (GtkPrintSettings *settings,
       devmode->dmSpecVersion = DM_SPECVERSION;
       devmode->dmSize = sizeof (DEVMODEW);
   
-      device_name = g_utf8_to_utf16 (gtk_print_settings_get (settings, "win32-devmode-name"), -1, NULL, &device_name_len, NULL);
-      if (device_name && device_name_len)
-        memcpy (devmode->dmDeviceName, device_name, MIN (device_name_len, CCHDEVICENAME) * sizeof (gunichar2));
+      gunichar2 *device_name = g_utf8_to_utf16 (gtk_print_settings_get (settings, "win32-devmode-name"), -1, NULL, NULL, NULL);
+      memcpy (devmode->dmDeviceName, device_name, CCHDEVICENAME);
       g_free (device_name);
 
 
@@ -1402,7 +1415,7 @@ pageDlgProc (HWND wnd, UINT message, WPARAM wparam, LPARAM lparam)
       SetWindowLongPtrW (wnd, GWLP_USERDATA, (LONG_PTR)op);
 
       gtk_window_set_modal (GTK_WINDOW (plug), TRUE);
-      op_win32->embed_widget = g_object_ref_sink (plug);
+      op_win32->embed_widget = plug;
       gtk_box_append (GTK_BOX (plug), op->priv->custom_widget);
       gtk_widget_set_visible (op->priv->custom_widget, TRUE);
       gtk_widget_set_visible (plug, TRUE);
@@ -1417,7 +1430,8 @@ pageDlgProc (HWND wnd, UINT message, WPARAM wparam, LPARAM lparam)
       op_win32 = op->priv->platform_data;
       
       g_signal_emit_by_name (op, "custom-widget-apply", op->priv->custom_widget);
-      g_clear_object (&op_win32->embed_widget);
+      g_object_unref (g_object_ref_sink (op_win32->embed_widget));
+      op_win32->embed_widget = NULL;
       op->priv->custom_widget = NULL;
     }
   else 
@@ -1433,7 +1447,7 @@ pageDlgProc (HWND wnd, UINT message, WPARAM wparam, LPARAM lparam)
       if (message == WM_SIZE)
         {
           gtk_widget_queue_resize (op_win32->embed_widget);
-        }
+    }
 
       return FALSE;
     }
@@ -1645,7 +1659,8 @@ gtk_print_operation_run_without_dialog (GtkPrintOperation *op,
 			   GTK_PRINT_ERROR_GENERAL,
 			   _("Error from StartDoc"));
       *do_print = FALSE;
-      g_clear_pointer (&op_win32->surface, cairo_surface_destroy);
+      cairo_surface_destroy (op_win32->surface);
+      op_win32->surface = NULL;
       goto out; 
     }
 
@@ -1715,7 +1730,7 @@ gtk_print_operation_run_with_dialog (GtkPrintOperation *op,
       if (!initialized)
         g_warning ("Failed to InitCommonControlsEx: %lu", GetLastError ());
 
-      _gtk_load_dll_with_libgtk3_manifest (L"comdlg32.dll");
+      _gtk_load_dll_with_libgtk3_manifest ("comdlg32.dll");
 
       g_once_init_leave (&common_controls_initialized, initialized ? 1 : 0);
     }
@@ -1801,7 +1816,7 @@ gtk_print_operation_run_with_dialog (GtkPrintOperation *op,
 
   callback = print_callback_new ();
   printdlgex->lpCallback = (IUnknown *)callback;
-  got_gdk_events_message = RegisterWindowMessage (L"GDK_WIN32_GOT_EVENTS");
+  got_gdk_events_message = RegisterWindowMessage ("GDK_WIN32_GOT_EVENTS");
 
   hResult = PrintDlgExW (printdlgex);
   IUnknown_Release ((IUnknown *)callback);
@@ -1890,7 +1905,8 @@ gtk_print_operation_run_with_dialog (GtkPrintOperation *op,
                                GTK_PRINT_ERROR_GENERAL,
                                _("Error from StartDoc"));
 	  *do_print = FALSE;
-	  g_clear_pointer (&op_win32->surface, cairo_surface_destroy);
+	  cairo_surface_destroy (op_win32->surface);
+	  op_win32->surface = NULL;
 	  goto out; 
 	} 
       
@@ -2143,7 +2159,7 @@ gtk_print_run_page_setup_dialog (GtkWindow        *parent,
 
   pagesetupdlg->Flags |= PSD_ENABLEPAGESETUPHOOK;
   pagesetupdlg->lpfnPageSetupHook = run_mainloop_hook;
-  got_gdk_events_message = RegisterWindowMessage (L"GDK_WIN32_GOT_EVENTS");
+  got_gdk_events_message = RegisterWindowMessage ("GDK_WIN32_GOT_EVENTS");
   
   res = PageSetupDlgW (pagesetupdlg);
   gdk_win32_set_modal_dialog_libgtk_only (NULL);

@@ -97,7 +97,7 @@ struct _ClutterPaintOperation
   } op;
 };
 
-GType _clutter_dummy_node_get_type (void);
+GType _clutter_dummy_node_get_type (void) G_GNUC_CONST;
 
 void                    clutter_paint_node_init_types                   (ClutterBackend *clutter_backend);
 gpointer                _clutter_paint_node_create                      (GType gtype);
@@ -106,17 +106,6 @@ ClutterPaintNode *      _clutter_dummy_node_new                         (Clutter
                                                                          CoglFramebuffer             *framebuffer);
 G_GNUC_INTERNAL
 guint                   clutter_paint_node_get_n_children               (ClutterPaintNode      *node);
-
-CLUTTER_EXPORT
-ClutterPaintNode * clutter_blur_node_new_from_framebuffer          (CoglFramebuffer       *framebuffer,
-                                                                    int                    src_x,
-                                                                    int                    src_y,
-                                                                    unsigned int           width,
-                                                                    unsigned int           height,
-                                                                    float                  radius,
-                                                                    float                  saturation,
-                                                                    float                  noise,
-                                                                    uint8_t                opacity);
 
 #define CLUTTER_TYPE_EFFECT_NODE                (clutter_effect_node_get_type ())
 #define CLUTTER_EFFECT_NODE(obj)                (G_TYPE_CHECK_INSTANCE_CAST ((obj), CLUTTER_TYPE_EFFECT_NODE, ClutterEffectNode))
@@ -132,7 +121,7 @@ typedef struct _ClutterEffectNode ClutterEffectNode;
 typedef struct _ClutterEffectNode ClutterEffectNodeClass;
 
 CLUTTER_EXPORT
-GType clutter_effect_node_get_type (void);
+GType clutter_effect_node_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 ClutterPaintNode * clutter_effect_node_new (ClutterEffect *effect);

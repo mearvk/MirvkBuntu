@@ -23,100 +23,94 @@
 
 from __future__ import annotations
 
+import threading
+import time
+import urllib.parse
+from typing import TYPE_CHECKING
+
 import gi
 
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, GLib
 
-from . import debug
+from . import debug, messages
+from .ax_collection import AXCollection
 from .ax_object import AXObject
+from .ax_utilities_role import AXUtilitiesRole
+from .ax_utilities_state import AXUtilitiesState
+from .ax_utilities_table import AXUtilitiesTable
+
+if TYPE_CHECKING:
+    from typing import ClassVar
 
 
 class AXDocument:
     """Wrapper for the Atspi.Document interface."""
 
-    @staticmethod
-    def get_text_selections(
-        document: Atspi.Accessible,
-    ) -> tuple[bool, list[Atspi.TextSelection]]:
-        """Returns whether the getter succeeded and the document's text selections."""
-
-        if not AXObject.supports_document(document):
-            return False, []
-
-        atspi_version = Atspi.get_version()  # pylint: disable=no-value-for-parameter
-        getter_is_safe = (
-            atspi_version >= (2, 61, 2)
-            or (atspi_version[:2] == (2, 60) and atspi_version[2] >= 7)
-            or (atspi_version[:2] == (2, 58) and atspi_version[2] >= 9)
-        )
-        if getter_is_safe:
-            try:
-                result = Atspi.Document.get_text_selections(document)
-            except GLib.GError as error:
-                tokens = ["AXDocument: Exception in get_text_selections:", error]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                return False, []
-
-            selections = list(result or [])
-            tokens = ["AXDocument:", document, "reports", len(selections), "text selection(s)."]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return True, selections
-
-        # Older versions can return dangling accessible pointers:
-        # https://gitlab.gnome.org/GNOME/at-spi2-core/-/work_items/243
-        version_string = ".".join(str(part) for part in atspi_version)
-        tokens = [
-            "AXDocument: Not getting text selections due to at-spi2-core issue 243. Version:",
-            version_string,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return False, []
+    LAST_KNOWN_PAGE: ClassVar[dict[int, int]] = {}
+    _lock = threading.Lock()
 
     @staticmethod
-    def set_text_selection(
-        document: Atspi.Accessible,
-        start_object: Atspi.Accessible,
-        start_offset: int,
-        end_object: Atspi.Accessible,
-        end_offset: int,
-        start_is_active: bool,
-    ) -> bool:
-        """Sets a single document text selection."""
+    def _clear_stored_data() -> None:
+        """Clears any data we have cached for objects"""
+
+        while True:
+            time.sleep(60)
+            msg = "AXDocument: Clearing local cache."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            AXDocument.LAST_KNOWN_PAGE.clear()
+
+    @staticmethod
+    def start_cache_clearing_thread() -> None:
+        """Starts thread to periodically clear cached details."""
+
+        thread = threading.Thread(target=AXDocument._clear_stored_data)
+        thread.daemon = True
+        thread.start()
+
+    @staticmethod
+    def did_page_change(document: Atspi.Accessible) -> bool:
+        """Returns True if the current page changed."""
 
         if not AXObject.supports_document(document):
             return False
 
-        selection = Atspi.TextSelection()
-        selection.start_object = start_object
-        selection.start_offset = start_offset
-        selection.end_object = end_object
-        selection.end_offset = end_offset
-        selection.start_is_active = start_is_active
+        old_page = AXDocument.LAST_KNOWN_PAGE.get(hash(document))
+        result = old_page != AXDocument._get_current_page(document)
+        if result:
+            tokens = ["AXDocument: Previous page of", document, f"was {old_page}"]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return result
+
+    @staticmethod
+    def _get_current_page(document: Atspi.Accessible) -> int:
+        """Returns the current page of document."""
+
+        if not AXObject.supports_document(document):
+            return 0
 
         try:
-            result = Atspi.Document.set_text_selections(document, [selection])
+            page = Atspi.Document.get_current_page_number(document)
         except GLib.GError as error:
-            tokens = ["AXDocument: Exception in set_text_selection:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return False
+            msg = f"AXDocument: Exception in _get_current_page: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return 0
 
-        tokens = [
-            "AXDocument: Set text selection in",
-            document,
-            "from",
-            start_object,
-            start_offset,
-            "to",
-            end_object,
-            end_offset,
-            "with start active:",
-            start_is_active,
-            ". Result:",
-            result,
-        ]
+        tokens = ["AXDocument: Current page of", document, f"is {page}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return result
+        return page
+
+    @staticmethod
+    def get_current_page(document: Atspi.Accessible) -> int:
+        """Returns the current page of document."""
+
+        if not AXObject.supports_document(document):
+            return 0
+
+        page = AXDocument._get_current_page(document)
+        AXDocument.LAST_KNOWN_PAGE[hash(document)] = page
+        return page
 
     @staticmethod
     def get_page_count(document: Atspi.Accessible) -> int:
@@ -128,11 +122,11 @@ class AXDocument:
         try:
             count = Atspi.Document.get_page_count(document)
         except GLib.GError as error:
-            tokens = ["AXDocument: Exception in get_page_count:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXDocument: Exception in get_page_count: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return 0
 
-        tokens = ["AXDocument: Page count of", document, "is", count]
+        tokens = ["AXDocument: Page count of", document, f"is {count}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return count
 
@@ -146,8 +140,8 @@ class AXDocument:
         try:
             result = Atspi.Document.get_locale(document)
         except GLib.GError as error:
-            tokens = ["AXDocument: Exception in get_locale:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXDocument: Exception in get_locale: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return ""
 
         if result is None:
@@ -155,12 +149,12 @@ class AXDocument:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return ""
 
-        tokens = ["AXDocument: Locale of", document, "is '", result, "'"]
+        tokens = ["AXDocument: Locale of", document, f"is '{result}'"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
 
     @staticmethod
-    def get_attributes_dict(document: Atspi.Accessible) -> dict[str, str]:
+    def _get_attributes_dict(document: Atspi.Accessible) -> dict[str, str]:
         """Returns a dict with the document-attributes of document."""
 
         if not AXObject.supports_document(document):
@@ -169,10 +163,118 @@ class AXDocument:
         try:
             result = Atspi.Document.get_document_attributes(document)
         except GLib.GError as error:
-            tokens = ["AXDocument: Exception in get_attributes_dict:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXDocument: Exception in _get_attributes_dict: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return {}
 
         tokens = ["AXDocument: Attributes of", document, "are:", result]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result or {}
+
+    @staticmethod
+    def get_uri(document: Atspi.Accessible) -> str:
+        """Returns the uri of document."""
+
+        if not AXObject.supports_document(document):
+            return ""
+
+        attributes = AXDocument._get_attributes_dict(document)
+        return attributes.get("DocURL", attributes.get("URI", ""))
+
+    @staticmethod
+    def get_mime_type(document: Atspi.Accessible) -> str:
+        """Returns the uri of document."""
+
+        if not AXObject.supports_document(document):
+            return ""
+
+        attributes = AXDocument._get_attributes_dict(document)
+        return attributes.get("MimeType", "")
+
+    @staticmethod
+    def is_plain_text(document: Atspi.Accessible) -> bool:
+        """Returns True if document is a plain-text document."""
+
+        return AXDocument.get_mime_type(document) == "text/plain"
+
+    @staticmethod
+    def is_pdf(document: Atspi.Accessible) -> bool:
+        """Returns True if document is a PDF document."""
+
+        mime_type = AXDocument.get_mime_type(document)
+        if mime_type == "application/pdf":
+            return True
+        if mime_type == "text/html":
+            return AXDocument.get_uri(document).endswith(".pdf")
+        return False
+
+    @staticmethod
+    def get_document_uri_fragment(document: Atspi.Accessible) -> str:
+        """Returns the fragment portion of document's uri."""
+
+        result = urllib.parse.urlparse(AXDocument.get_uri(document))
+        return result.fragment
+
+    @staticmethod
+    def _get_object_counts(document: Atspi.Accessible) -> dict[str, int]:
+        """Returns a dictionary of object counts used in a document summary."""
+
+        result = {
+            "forms": 0,
+            "landmarks": 0,
+            "headings": 0,
+            "tables": 0,
+            "unvisited_links": 0,
+            "visited_links": 0,
+        }
+
+        roles = [
+            Atspi.Role.HEADING,
+            Atspi.Role.LINK,
+            Atspi.Role.TABLE,
+            Atspi.Role.FORM,
+            Atspi.Role.LANDMARK,
+        ]
+
+        rule = AXCollection.create_match_rule(
+            roles=roles,
+            role_match_type=Atspi.CollectionMatchType.ANY,
+        )
+        matches = AXCollection.get_all_matches(document, rule)
+
+        for obj in matches:
+            if AXUtilitiesRole.is_heading(obj):
+                result["headings"] += 1
+            elif AXUtilitiesRole.is_form(obj):
+                result["forms"] += 1
+            elif AXUtilitiesRole.is_table(obj) and not AXUtilitiesTable.is_layout_table(obj):
+                result["tables"] += 1
+            elif AXUtilitiesRole.is_link(obj):
+                if AXUtilitiesState.is_visited(obj):
+                    result["visited_links"] += 1
+                else:
+                    result["unvisited_links"] += 1
+            elif AXUtilitiesRole.is_landmark(obj):
+                result["landmarks"] += 1
+
+        return result
+
+    @staticmethod
+    def get_document_summary(document: Atspi.Accessible, only_if_found: bool = True) -> str:
+        """Returns a string summarizing the document's structure and objects of interest."""
+
+        result = []
+        counts = AXDocument._get_object_counts(document)
+        result.append(messages.landmark_count(counts.get("landmarks", 0), only_if_found))
+        result.append(messages.heading_count(counts.get("headings", 0), only_if_found))
+        result.append(messages.form_count(counts.get("forms", 0), only_if_found))
+        result.append(messages.table_count(counts.get("tables", 0), only_if_found))
+        result.append(messages.visited_link_count(counts.get("visited_links", 0), only_if_found))
+        result.append(
+            messages.unvisited_link_count(counts.get("unvisited_links", 0), only_if_found),
+        )
+        result = list(filter(lambda x: x, result))
+        if not result:
+            return ""
+
+        return messages.PAGE_SUMMARY_PREFIX % ", ".join(result)

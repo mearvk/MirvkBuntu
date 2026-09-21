@@ -18,13 +18,12 @@
 
 #pragma once
 
+#include "core/meta-debug-control.h"
 #include "core/meta-private-enums.h"
 #include "core/meta-service-channel.h"
-#include "core/meta-session-manager.h"
 #include "core/util-private.h"
 #include "meta/meta-backend.h"
 #include "meta/meta-context.h"
-#include "meta/meta-debug-control.h"
 #include "wayland/meta-wayland-types.h"
 
 #ifdef HAVE_PROFILER
@@ -40,7 +39,11 @@ struct _MetaContextClass
                           char        ***argv,
                           GError       **error);
 
+  MetaCompositorType (* get_compositor_type) (MetaContext *context);
+
   MetaX11DisplayPolicy (* get_x11_display_policy) (MetaContext *context);
+
+  gboolean (* is_replacing) (MetaContext *context);
 
   gboolean (* setup) (MetaContext  *context,
                       GError      **error);
@@ -50,25 +53,29 @@ struct _MetaContextClass
 
   void (* notify_ready) (MetaContext *context);
 
-
-  MetaSessionManager * (* get_session_manager) (MetaContext *context);
+#ifdef HAVE_X11
+  gboolean (* is_x11_sync) (MetaContext *context);
+#endif
 };
 
 const char * meta_context_get_name (MetaContext *context);
-
-const char * meta_context_get_nick (MetaContext *context);
 
 const char * meta_context_get_gnome_wm_keybindings (MetaContext *context);
 
 void meta_context_set_unsafe_mode (MetaContext *context,
                                    gboolean     enable);
 
-gboolean meta_context_get_unsafe_mode (MetaContext *context);
-
+#ifdef HAVE_WAYLAND
 META_EXPORT_TEST
 MetaServiceChannel * meta_context_get_service_channel (MetaContext *context);
+#endif
 
 MetaX11DisplayPolicy meta_context_get_x11_display_policy (MetaContext *context);
+
+#ifdef HAVE_X11
+META_EXPORT_TEST
+gboolean meta_context_is_x11_sync (MetaContext *context);
+#endif
 
 #ifdef HAVE_PROFILER
 MetaProfiler *
@@ -78,9 +85,4 @@ void meta_context_set_trace_file (MetaContext *context,
                                   const char  *trace_file);
 #endif
 
-META_EXPORT_TEST
-MetaSessionManager * meta_context_get_session_manager (MetaContext *context);
-
-META_EXPORT_TEST
-void meta_context_set_plugin_options (MetaContext *context,
-                                      GVariant    *plugin_options);
+MetaDebugControl * meta_context_get_debug_control (MetaContext *context);

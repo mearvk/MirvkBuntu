@@ -113,7 +113,7 @@ meta_dnd_actor_class_init (MetaDnDActorClass *klass)
 
   pspec = g_param_spec_object ("drag-origin", NULL, NULL,
                                CLUTTER_TYPE_ACTOR,
-                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_property (object_class,
                                    PROP_DRAG_ORIGIN,
@@ -121,7 +121,7 @@ meta_dnd_actor_class_init (MetaDnDActorClass *klass)
 
   pspec = g_param_spec_int ("drag-start-x", NULL, NULL,
                             0, G_MAXINT, 0,
-                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_property (object_class,
                                    PROP_DRAG_START_X,
@@ -129,7 +129,7 @@ meta_dnd_actor_class_init (MetaDnDActorClass *klass)
 
   pspec = g_param_spec_int ("drag-start-y", NULL, NULL,
                             0, G_MAXINT, 0,
-                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME);
+                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_property (object_class,
                                    PROP_DRAG_START_Y,
@@ -161,7 +161,6 @@ meta_dnd_actor_new (MetaCompositor *compositor,
                        "drag-origin", drag_origin,
                        "drag-start-x", drag_start_x,
                        "drag-start-y", drag_start_y,
-                       "accessible-name", "Drag and drop actor",
                        NULL);
 
   return CLUTTER_ACTOR (self);
@@ -182,15 +181,11 @@ void
 meta_dnd_actor_drag_finish (MetaDnDActor *self,
                             gboolean      success)
 {
-  ClutterActor *actor, *child;
+  ClutterActor *actor;
 
   g_return_if_fail (META_IS_DND_ACTOR (self));
-  g_return_if_fail (META_IS_SURFACE_ACTOR (clutter_actor_get_first_child (CLUTTER_ACTOR (self))));
 
   actor = CLUTTER_ACTOR (self);
-
-  child = clutter_actor_get_first_child (actor);
-  meta_surface_actor_set_frozen (META_SURFACE_ACTOR (child), TRUE);
 
   if (success)
     {

@@ -46,18 +46,18 @@ class SpeechGenerator(speech_generator.SpeechGenerator):
 
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
-            tokens = ["PIDGIN SPEECH GENERATOR:", func.__name__, ":", result]
+            tokens = [f"PIDGIN SPEECH GENERATOR: {func.__name__}:", result]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return result
 
         return wrapper
 
     @log_generator_output
-    def _generate_state_expanded(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_state_expanded(self, obj: Atspi.Accessible, **args) -> list[Any]:
         cell = self._script.utilities.get_expander_cell_for(obj) or obj
-        return super()._generate_state_expanded(cell)
+        return super()._generate_state_expanded(cell, **args)
 
     @log_generator_output
-    def _generate_number_of_children(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_number_of_children(self, obj: Atspi.Accessible, **args) -> list[Any]:
         cell = self._script.utilities.get_expander_cell_for(obj) or obj
-        return super()._generate_number_of_children(cell)
+        return super()._generate_number_of_children(cell, **args)

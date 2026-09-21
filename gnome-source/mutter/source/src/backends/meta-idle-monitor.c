@@ -30,6 +30,7 @@
 
 #include <string.h>
 
+#include "backends/gsm-inhibitor-flag.h"
 #include "backends/meta-backend-private.h"
 #include "backends/meta-idle-monitor-private.h"
 #include "clutter/clutter.h"
@@ -39,6 +40,15 @@
 
 G_STATIC_ASSERT(sizeof(unsigned long) == sizeof(gpointer));
 
+enum
+{
+  PROP_0,
+  PROP_DEVICE,
+  PROP_LAST,
+};
+
+static GParamSpec *obj_props[PROP_LAST];
+
 struct _MetaIdleMonitor
 {
   GObject parent;
@@ -47,12 +57,11 @@ struct _MetaIdleMonitor
   GDBusProxy *session_proxy;
   gboolean inhibited;
   GHashTable *watches;
+  ClutterInputDevice *device;
   int64_t last_event_time;
 };
 
 G_DEFINE_TYPE (MetaIdleMonitor, meta_idle_monitor, G_TYPE_OBJECT)
-
-#define GSM_INHIBITOR_FLAG_IDLE 1 << 3
 
 static void
 meta_idle_monitor_watch_fire (MetaIdleMonitorWatch *watch)
@@ -63,6 +72,8 @@ meta_idle_monitor_watch_fire (MetaIdleMonitorWatch *watch)
 
   monitor = watch->monitor;
   g_object_ref (monitor);
+
+  g_clear_handle_id (&watch->idle_source_id, g_source_remove);
 
   id = watch->id;
   is_user_active_watch = (watch->timeout_msec == 0);
@@ -88,11 +99,62 @@ meta_idle_monitor_dispose (GObject *object)
 }
 
 static void
+meta_idle_monitor_get_property (GObject    *object,
+                                guint       prop_id,
+                                GValue     *value,
+                                GParamSpec *pspec)
+{
+  MetaIdleMonitor *monitor = META_IDLE_MONITOR (object);
+
+  switch (prop_id)
+    {
+    case PROP_DEVICE:
+      g_value_set_object (value, monitor->device);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
+}
+
+static void
+meta_idle_monitor_set_property (GObject      *object,
+                                guint         prop_id,
+                                const GValue *value,
+                                GParamSpec   *pspec)
+{
+  MetaIdleMonitor *monitor = META_IDLE_MONITOR (object);
+  switch (prop_id)
+    {
+    case PROP_DEVICE:
+      monitor->device = g_value_get_object (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
+}
+
+static void
 meta_idle_monitor_class_init (MetaIdleMonitorClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->dispose = meta_idle_monitor_dispose;
+  object_class->get_property = meta_idle_monitor_get_property;
+  object_class->set_property = meta_idle_monitor_set_property;
+
+  /**
+   * MetaIdleMonitor:device:
+   *
+   * The device to listen to idletime on.
+   */
+  obj_props[PROP_DEVICE] =
+    g_param_spec_object ("device", NULL, NULL,
+                         CLUTTER_TYPE_INPUT_DEVICE,
+                         G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+
+  g_object_class_install_property (object_class, PROP_DEVICE, obj_props[PROP_DEVICE]);
 }
 
 static void
@@ -102,6 +164,8 @@ free_watch (gpointer data)
   MetaIdleMonitor *monitor = watch->monitor;
 
   g_object_ref (monitor);
+
+  g_clear_handle_id (&watch->idle_source_id, g_source_remove);
 
   if (watch->notify != NULL)
     watch->notify (watch->user_data);
@@ -122,9 +186,6 @@ update_inhibited_watch (gpointer key,
   MetaIdleMonitorWatch *watch = value;
 
   if (!watch->timeout_source)
-    return;
-
-  if (!watch->inhibitable)
     return;
 
   if (monitor->inhibited)
@@ -255,11 +316,9 @@ make_watch (MetaIdleMonitor           *monitor,
             guint64                    timeout_msec,
             MetaIdleMonitorWatchFunc   callback,
             gpointer                   user_data,
-            GDestroyNotify             notify,
-            MetaIdleMonitorWatchFlags  flags)
+            GDestroyNotify             notify)
 {
   MetaIdleMonitorWatch *watch;
-  gboolean start_now = !!(flags & META_IDLE_MONITOR_WATCH_FLAGS_START_NOW);
 
   watch = g_new0 (MetaIdleMonitorWatch, 1);
 
@@ -269,27 +328,21 @@ make_watch (MetaIdleMonitor           *monitor,
   watch->user_data = user_data;
   watch->notify = notify;
   watch->timeout_msec = timeout_msec;
-  watch->inhibitable = !(flags & META_IDLE_MONITOR_WATCH_FLAGS_UNINHIBITABLE);
 
   if (timeout_msec != 0)
     {
-      g_autoptr (GMainContext) main_context = NULL;
-      GSource *source;
-
-      main_context = g_main_context_ref_thread_default ();
-      source = g_source_new (&idle_monitor_source_funcs,
-                             sizeof (GSource));
+      GSource *source = g_source_new (&idle_monitor_source_funcs,
+                                      sizeof (GSource));
       g_source_set_name (source, "[mutter] Idle monitor");
 
       g_source_set_callback (source, NULL, watch, NULL);
-      if (!watch->inhibitable || !monitor->inhibited)
+      if (!monitor->inhibited)
         {
-          int64_t start_time =
-            start_now ? g_get_monotonic_time () : monitor->last_event_time;
-
-          g_source_set_ready_time (source, start_time + timeout_msec * 1000);
+          g_source_set_ready_time (source,
+                                   monitor->last_event_time +
+                                   timeout_msec * 1000);
         }
-      g_source_attach (source, main_context);
+      g_source_attach (source, NULL);
       g_source_unref (source);
 
       watch->timeout_source = source;
@@ -318,11 +371,6 @@ make_watch (MetaIdleMonitor           *monitor,
  * meta_idle_monitor_remove_watch(), or can be used to tell idle time
  * watches apart if you have more than one.
  *
- * The idle watch is affected by idle inhibitors and takes into account
- * the idle time from before the watch was added.
- * meta_idle_monitor_add_idle_watch_full() allows creating idle watches
- * with different behavior.
- *
  * Also note that this function will only care about positive transitions
  * (user's idle time exceeding a certain time). If you want to know about
  * when the user has become active, use
@@ -335,38 +383,6 @@ meta_idle_monitor_add_idle_watch (MetaIdleMonitor	       *monitor,
                                   gpointer			user_data,
                                   GDestroyNotify		notify)
 {
-  return meta_idle_monitor_add_idle_watch_full (monitor,
-                                                interval_msec,
-                                                callback,
-                                                user_data,
-                                                notify,
-                                                META_IDLE_MONITOR_WATCH_FLAGS_NONE);
-}
-
-/**
- * meta_idle_monitor_add_idle_watch_full:
- * @monitor: A #MetaIdleMonitor
- * @interval_msec: The idletime interval, in milliseconds
- * @callback: (nullable): The callback to call when the user has
- *     accumulated @interval_msec milliseconds of idle time.
- * @user_data: (nullable): The user data to pass to the callback
- * @notify: A #GDestroyNotify
- * @flags: Flags for the idle watch
- *
- * Returns: a watch id
- *
- * This function is identical to meta_idle_monitor_add_idle_watch(),
- * with the addition of a flags parameter to modify the behavior
- * of the idle watch.
- */
-guint
-meta_idle_monitor_add_idle_watch_full (MetaIdleMonitor           *monitor,
-                                       guint64                    interval_msec,
-                                       MetaIdleMonitorWatchFunc   callback,
-                                       gpointer                   user_data,
-                                       GDestroyNotify             notify,
-                                       MetaIdleMonitorWatchFlags  flags)
-{
   MetaIdleMonitorWatch *watch;
 
   g_return_val_if_fail (META_IS_IDLE_MONITOR (monitor), 0);
@@ -376,8 +392,7 @@ meta_idle_monitor_add_idle_watch_full (MetaIdleMonitor           *monitor,
                       interval_msec,
                       callback,
                       user_data,
-                      notify,
-                      flags);
+                      notify);
 
   return watch->id;
 }
@@ -412,8 +427,7 @@ meta_idle_monitor_add_user_active_watch (MetaIdleMonitor          *monitor,
                       0,
                       callback,
                       user_data,
-                      notify,
-                      META_IDLE_MONITOR_WATCH_FLAGS_NONE);
+                      notify);
 
   return watch->id;
 }
@@ -476,7 +490,7 @@ meta_idle_monitor_reset_idletime (MetaIdleMonitor *monitor)
         }
       else
         {
-          if (watch->inhibitable && monitor->inhibited)
+          if (monitor->inhibited)
             {
               g_source_set_ready_time (watch->timeout_source, -1);
             }
@@ -499,11 +513,14 @@ meta_idle_monitor_get_manager (MetaIdleMonitor *monitor)
 }
 
 MetaIdleMonitor *
-meta_idle_monitor_new (MetaIdleManager *idle_manager)
+meta_idle_monitor_new (MetaIdleManager    *idle_manager,
+                       ClutterInputDevice *device)
 {
   MetaIdleMonitor *monitor;
 
-  monitor = g_object_new (META_TYPE_IDLE_MONITOR, NULL);
+  monitor = g_object_new (META_TYPE_IDLE_MONITOR,
+                          "device", device,
+                          NULL);
   monitor->idle_manager = idle_manager;
 
   return monitor;

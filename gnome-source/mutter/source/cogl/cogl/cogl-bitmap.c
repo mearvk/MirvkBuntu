@@ -42,7 +42,7 @@
 
 static GQuark bitmap_free_key = 0;
 
-G_DEFINE_FINAL_TYPE (CoglBitmap, cogl_bitmap, G_TYPE_OBJECT);
+G_DEFINE_TYPE (CoglBitmap, cogl_bitmap, G_TYPE_OBJECT);
 
 static void
 cogl_bitmap_dispose (GObject *object)
@@ -82,12 +82,12 @@ _cogl_bitmap_convert_premult_status (CoglBitmap *bmp,
   /* Do we need to unpremultiply? */
   if ((bmp->format & COGL_PREMULT_BIT) > 0 &&
       (dst_format & COGL_PREMULT_BIT) == 0 &&
-      _cogl_pixel_format_can_have_premult (dst_format))
+      COGL_PIXEL_FORMAT_CAN_HAVE_PREMULT (dst_format))
     return _cogl_bitmap_unpremult (bmp, error);
 
   /* Do we need to premultiply? */
   if ((bmp->format & COGL_PREMULT_BIT) == 0 &&
-      _cogl_pixel_format_can_have_premult (bmp->format) &&
+      COGL_PIXEL_FORMAT_CAN_HAVE_PREMULT (bmp->format) &&
       (dst_format & COGL_PREMULT_BIT) > 0)
     /* Try premultiplying using imaging library */
     return _cogl_bitmap_premult (bmp, error);
@@ -105,10 +105,10 @@ _cogl_bitmap_copy (CoglBitmap *src_bmp,
   int height = cogl_bitmap_get_height (src_bmp);
 
   dst_bmp =
-    cogl_bitmap_new_with_malloc_buffer (src_bmp->context,
-                                        width, height,
-                                        src_format,
-                                        error);
+    _cogl_bitmap_new_with_malloc_buffer (src_bmp->context,
+                                         width, height,
+                                         src_format,
+                                         error);
   if (!dst_bmp)
     return NULL;
 
@@ -152,10 +152,10 @@ _cogl_bitmap_copy_subregion (CoglBitmap *src,
 
   bpp = cogl_pixel_format_get_bytes_per_pixel (src->format, 0);
 
-  if ((srcdata = cogl_bitmap_map (src, COGL_BUFFER_ACCESS_READ, 0, error)))
+  if ((srcdata = _cogl_bitmap_map (src, COGL_BUFFER_ACCESS_READ, 0, error)))
     {
       if ((dstdata =
-           cogl_bitmap_map (dst, COGL_BUFFER_ACCESS_WRITE, 0, error)))
+           _cogl_bitmap_map (dst, COGL_BUFFER_ACCESS_WRITE, 0, error)))
         {
           srcdata += src_y * src->rowstride + src_x * bpp;
           dstdata += dst_y * dst->rowstride + dst_x * bpp;
@@ -169,10 +169,10 @@ _cogl_bitmap_copy_subregion (CoglBitmap *src,
 
           succeeded = TRUE;
 
-          cogl_bitmap_unmap (dst);
+          _cogl_bitmap_unmap (dst);
         }
 
-      cogl_bitmap_unmap (src);
+      _cogl_bitmap_unmap (src);
     }
 
   return succeeded;
@@ -211,11 +211,11 @@ cogl_bitmap_new_for_data (CoglContext    *context,
 }
 
 CoglBitmap *
-cogl_bitmap_new_with_malloc_buffer (CoglContext      *context,
-                                    unsigned int      width,
-                                    unsigned int      height,
-                                    CoglPixelFormat   format,
-                                    GError          **error)
+_cogl_bitmap_new_with_malloc_buffer (CoglContext *context,
+                                     unsigned int width,
+                                     unsigned int height,
+                                     CoglPixelFormat format,
+                                     GError **error)
 {
   bitmap_free_key = g_quark_from_static_string ("-cogl-bitmap-malloc-buffer-key");
   int bpp;
@@ -372,15 +372,21 @@ cogl_bitmap_get_buffer (CoglBitmap *bitmap)
   return COGL_PIXEL_BUFFER (bitmap->buffer);
 }
 
+uint32_t
+cogl_bitmap_error_quark (void)
+{
+  return g_quark_from_static_string ("cogl-bitmap-error-quark");
+}
+
 uint8_t *
-cogl_bitmap_map (CoglBitmap         *bitmap,
-                 CoglBufferAccess    access,
-                 CoglBufferMapHint   hints,
-                 GError            **error)
+_cogl_bitmap_map (CoglBitmap *bitmap,
+                  CoglBufferAccess access,
+                  CoglBufferMapHint hints,
+                  GError **error)
 {
   /* Divert to another bitmap if this data is shared */
   if (bitmap->shared_bmp)
-    return cogl_bitmap_map (bitmap->shared_bmp, access, hints, error);
+    return _cogl_bitmap_map (bitmap->shared_bmp, access, hints, error);
 
   g_assert (!bitmap->mapped);
 
@@ -413,12 +419,12 @@ cogl_bitmap_map (CoglBitmap         *bitmap,
 }
 
 void
-cogl_bitmap_unmap (CoglBitmap *bitmap)
+_cogl_bitmap_unmap (CoglBitmap *bitmap)
 {
   /* Divert to another bitmap if this data is shared */
   if (bitmap->shared_bmp)
     {
-      cogl_bitmap_unmap (bitmap->shared_bmp);
+      _cogl_bitmap_unmap (bitmap->shared_bmp);
       return;
     }
 

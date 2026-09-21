@@ -28,7 +28,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -36,20 +35,10 @@ import pytest
 from dasbus.error import DBusError
 from gi.repository import GLib
 
-from .dbus_fixtures import (
-    command_signature,
-    get_property,
-    list_module_names,
-    module_interface_xml,
-    parameterized_command_names,
-    property_names,
-    property_signature,
-    set_property,
-    simple_command_names,
-)
-
 if TYPE_CHECKING:
-    from dasbus.connection import SessionMessageBus
+    from collections.abc import Callable
+
+    from dasbus.client.proxy import ObjectProxy as DBusProxy
 
 # Get configurable timeout values from environment variables
 DEFAULT_MODULE_TIMEOUT = 15
@@ -68,7 +57,7 @@ MODULE_TIMEOUTS = {
 }
 
 # Modules that may not be present in all environments (e.g., X11 vs Wayland)
-OPTIONAL_MODULES = {"MousePresenter"}
+OPTIONAL_MODULES = {"MouseReviewer"}
 
 MODULE_CONFIG = {
     "ActionPresenter": {
@@ -130,24 +119,20 @@ MODULE_CONFIG = {
         "toggle_commands": ["TogglePresentationMode"],
         "skip": [],
     },
-    "MousePresenter": {
-        "commands": [
-            "LeftClickItem",
-            "RightClickItem",
-            "RoutePointerToItem",
-            "ToggleMouseReview",
-        ],
+    "MouseReviewer": {
+        "commands": ["Toggle"],
         "parameterized_commands": [],
         "getters": ["IsEnabled", "PresentTooltips"],
         "setters": ["IsEnabled", "PresentTooltips"],
         "ui_commands": [],
-        "toggle_commands": ["ToggleMouseReview"],
+        "toggle_commands": ["Toggle"],
         "skip": [],
     },
     "FlatReviewPresenter": {
         "commands": [
             "AppendToClipboard",
             "CopyToClipboard",
+            "GetCurrentObject",
             "GoAbove",
             "GoBelow",
             "GoBottomLeft",
@@ -162,8 +147,6 @@ MODULE_CONFIG = {
             "GoPreviousLine",
             "GoStartOfLine",
             "LeftClickOnObject",
-            "MoveFocusToReview",
-            "MoveReviewToFocus",
             "PhoneticItem",
             "PhoneticLine",
             "PresentCharacter",
@@ -182,8 +165,8 @@ MODULE_CONFIG = {
             "UnicodeCurrentCharacter",
         ],
         "parameterized_commands": [],
-        "getters": ["DisplaysUpdates", "FocusTracking", "IsRestricted", "SpeaksUpdates"],
-        "setters": ["DisplaysUpdates", "FocusTracking", "IsRestricted", "SpeaksUpdates"],
+        "getters": ["IsRestricted"],
+        "setters": ["IsRestricted"],
         "ui_commands": [
             "ShowContents",
             "LeftClickOnObject",
@@ -228,33 +211,6 @@ MODULE_CONFIG = {
         "toggle_commands": [],
         "skip": [],
     },
-    "MathPresenter": {
-        "commands": [],
-        "parameterized_commands": [],
-        "getters": [
-            "AutoZoomOut",
-            "BrailleCode",
-            "BrailleNavHighlight",
-            "CopyFormat",
-            "Language",
-            "NavMode",
-            "SpeechStyle",
-            "Verbosity",
-        ],
-        "setters": [
-            "AutoZoomOut",
-            "BrailleCode",
-            "BrailleNavHighlight",
-            "CopyFormat",
-            "Language",
-            "NavMode",
-            "SpeechStyle",
-            "Verbosity",
-        ],
-        "ui_commands": [],
-        "toggle_commands": [],
-        "skip": [],
-    },
     "NotificationPresenter": {
         "commands": [
             "PresentLastNotification",
@@ -272,8 +228,8 @@ MODULE_CONFIG = {
     "SleepModeManager": {
         "commands": ["ToggleSleepMode"],
         "parameterized_commands": [],
-        "getters": ["SleepModeApps"],
-        "setters": ["SleepModeApps"],
+        "getters": [],
+        "setters": [],
         "ui_commands": [],
         "toggle_commands": ["ToggleSleepMode"],
         "skip": [],
@@ -304,13 +260,10 @@ MODULE_CONFIG = {
             "CycleCapitalizationStyle",
             "CyclePunctuationLevel",
             "CycleSynthesizer",
-            "CycleVoiceSet",
             "DecreasePitch",
-            "DecreasePitchRange",
             "DecreaseRate",
             "DecreaseVolume",
             "IncreasePitch",
-            "IncreasePitchRange",
             "IncreaseRate",
             "IncreaseVolume",
             "InterruptSpeech",
@@ -319,15 +272,11 @@ MODULE_CONFIG = {
             "StartSpeech",
             "ToggleSpeech",
         ],
-        "parameterized_commands": ["ActivateVoiceSet", "GetVoicesForLanguage"],
+        "parameterized_commands": ["GetVoicesForLanguage"],
         "getters": [
-            "ActiveVoiceSet",
             "AutoLanguageSwitching",
-            "AutoLanguageSwitchingUi",
-            "OnlySwitchConfiguredLanguages",
             "AvailableServers",
             "AvailableSynthesizers",
-            "AvailableVoiceSets",
             "AvailableVoices",
             "CapitalizationStyle",
             "CurrentServer",
@@ -335,7 +284,6 @@ MODULE_CONFIG = {
             "CurrentVoice",
             "InsertPausesBetweenUtterances",
             "Pitch",
-            "PitchRange",
             "PunctuationLevel",
             "Rate",
             "SpeakNumbersAsDigits",
@@ -346,17 +294,13 @@ MODULE_CONFIG = {
             "Volume",
         ],
         "setters": [
-            "ActiveVoiceSet",
             "AutoLanguageSwitching",
-            "AutoLanguageSwitchingUi",
-            "OnlySwitchConfiguredLanguages",
             "CapitalizationStyle",
             "CurrentServer",
             "CurrentSynthesizer",
             "CurrentVoice",
             "InsertPausesBetweenUtterances",
             "Pitch",
-            "PitchRange",
             "PunctuationLevel",
             "Rate",
             "SpeakNumbersAsDigits",
@@ -373,8 +317,7 @@ MODULE_CONFIG = {
     "SpeechPresenter": {
         "commands": [
             "ChangeNumberStyle",
-            "CycleTextAttributeChangeMode",
-            "ToggleIndentation",
+            "ToggleIndentationAndJustification",
             "ToggleMonitor",
             "ToggleTableCellReadingMode",
             "ToggleVerbosity",
@@ -382,20 +325,16 @@ MODULE_CONFIG = {
         "parameterized_commands": [],
         "getters": [
             "AlwaysAnnounceSelectedRangeInSpreadsheet",
-            "AnnounceArticle",
             "AnnounceBlockquote",
             "AnnounceCellCoordinates",
             "AnnounceCellHeaders",
             "AnnounceCellSpan",
-            "AnnounceCodeBlock",
-            "AnnounceDocument",
             "AnnounceForm",
             "AnnounceGrouping",
             "AnnounceLandmark",
             "AnnounceList",
             "AnnounceSpreadsheetCellCoordinates",
             "AnnounceTable",
-            "AnnounceTrackedChanges",
             "MessagesAreDetailed",
             "OnlySpeakDisplayedText",
             "ProgressBarSpeechInterval",
@@ -403,7 +342,7 @@ MODULE_CONFIG = {
             "RepeatedCharacterLimit",
             "SpeakBlankLines",
             "SpeakDescription",
-            "SpeakIndentation",
+            "SpeakIndentationAndJustification",
             "SpeakIndentationOnlyIfChanged",
             "SpeakMisspelledIndicator",
             "SpeakPositionInSet",
@@ -411,7 +350,6 @@ MODULE_CONFIG = {
             "SpeakRowInDocumentTable",
             "SpeakRowInGuiTable",
             "SpeakRowInSpreadsheet",
-            "SpeakTextAttributeChanges",
             "SpeakTutorialMessages",
             "SpeakWidgetMnemonic",
             "MonitorIsEnabled",
@@ -422,20 +360,16 @@ MODULE_CONFIG = {
         ],
         "setters": [
             "AlwaysAnnounceSelectedRangeInSpreadsheet",
-            "AnnounceArticle",
             "AnnounceBlockquote",
             "AnnounceCellCoordinates",
             "AnnounceCellHeaders",
             "AnnounceCellSpan",
-            "AnnounceCodeBlock",
-            "AnnounceDocument",
             "AnnounceForm",
             "AnnounceGrouping",
             "AnnounceLandmark",
             "AnnounceList",
             "AnnounceSpreadsheetCellCoordinates",
             "AnnounceTable",
-            "AnnounceTrackedChanges",
             "MessagesAreDetailed",
             "OnlySpeakDisplayedText",
             "ProgressBarSpeechInterval",
@@ -443,7 +377,7 @@ MODULE_CONFIG = {
             "RepeatedCharacterLimit",
             "SpeakBlankLines",
             "SpeakDescription",
-            "SpeakIndentation",
+            "SpeakIndentationAndJustification",
             "SpeakIndentationOnlyIfChanged",
             "SpeakMisspelledIndicator",
             "SpeakPositionInSet",
@@ -451,7 +385,6 @@ MODULE_CONFIG = {
             "SpeakRowInDocumentTable",
             "SpeakRowInGuiTable",
             "SpeakRowInSpreadsheet",
-            "SpeakTextAttributeChanges",
             "SpeakTutorialMessages",
             "SpeakWidgetMnemonic",
             "MonitorIsEnabled",
@@ -462,7 +395,7 @@ MODULE_CONFIG = {
         ],
         "ui_commands": [],
         "toggle_commands": [
-            "ToggleIndentation",
+            "ToggleIndentationAndJustification",
             "ToggleTableCellReadingMode",
             "ToggleVerbosity",
         ],
@@ -482,7 +415,6 @@ MODULE_CONFIG = {
             "ContainerEnd",
             "ContainerStart",
             "CycleMode",
-            "ListAnnotations",
             "ListBlockquotes",
             "ListButtons",
             "ListCheckboxes",
@@ -504,13 +436,11 @@ MODULE_CONFIG = {
             "ListLinks",
             "ListListItems",
             "ListLists",
-            "ListMath",
             "ListParagraphs",
             "ListRadioButtons",
             "ListTables",
             "ListUnvisitedLinks",
             "ListVisitedLinks",
-            "NextAnnotation",
             "NextBlockquote",
             "NextButton",
             "NextCheckbox",
@@ -533,14 +463,12 @@ MODULE_CONFIG = {
             "NextList",
             "NextListItem",
             "NextLiveRegion",
-            "NextMath",
             "NextParagraph",
             "NextRadioButton",
             "NextSeparator",
             "NextTable",
             "NextUnvisitedLink",
             "NextVisitedLink",
-            "PreviousAnnotation",
             "PreviousBlockquote",
             "PreviousButton",
             "PreviousCheckbox",
@@ -563,7 +491,6 @@ MODULE_CONFIG = {
             "PreviousList",
             "PreviousListItem",
             "PreviousLiveRegion",
-            "PreviousMath",
             "PreviousParagraph",
             "PreviousRadioButton",
             "PreviousSeparator",
@@ -576,18 +503,15 @@ MODULE_CONFIG = {
             "IsEnabled",
             "LargeObjectTextLength",
             "NavigationWraps",
-            "SkipUnlabeledImages",
             "TriggersFocusMode",
         ],
         "setters": [
             "IsEnabled",
             "LargeObjectTextLength",
             "NavigationWraps",
-            "SkipUnlabeledImages",
             "TriggersFocusMode",
         ],
         "ui_commands": [
-            "ListAnnotations",
             "ListBlockquotes",
             "ListButtons",
             "ListCheckboxes",
@@ -609,7 +533,6 @@ MODULE_CONFIG = {
             "ListLinks",
             "ListListItems",
             "ListLists",
-            "ListMath",
             "ListParagraphs",
             "ListRadioButtons",
             "ListTables",
@@ -624,7 +547,6 @@ MODULE_CONFIG = {
             "PresentBatteryStatus",
             "PresentCpuAndMemoryUsage",
             "PresentDate",
-            "PresentModifierKeysState",
             "PresentTime",
         ],
         "parameterized_commands": [],
@@ -715,15 +637,6 @@ MODULE_CONFIG = {
         "toggle_commands": [],
         "skip": [],
     },
-    "MathNavigator": {
-        "commands": ["CopyToClipboard", "EnterMathModeCommand", "ExitMathMode"],
-        "parameterized_commands": ["ExecuteMathcatCommand"],
-        "getters": ["IsActive", "SupportedCommands"],
-        "setters": [],
-        "ui_commands": [],
-        "toggle_commands": [],
-        "skip": [],
-    },
     "CaretNavigator": {
         "commands": [
             "ToggleEnabled",
@@ -777,38 +690,28 @@ MODULE_CONFIG = {
         "commands": ["SayAll", "Rewind", "FastForward"],
         "parameterized_commands": [],
         "getters": [
-            "AnnounceArticle",
             "AnnounceBlockquote",
-            "AnnounceCodeBlock",
-            "AnnounceDocument",
             "AnnounceForm",
             "AnnounceGrouping",
             "AnnounceLandmark",
             "AnnounceList",
             "AnnounceTable",
-            "AnnounceTrackedChanges",
             "OnlySpeakDisplayedText",
             "Style",
             "StructuralNavigationEnabled",
             "RewindAndFastForwardEnabled",
-            "TextAttributeChangeModeAsString",
         ],
         "setters": [
-            "AnnounceArticle",
             "AnnounceBlockquote",
-            "AnnounceCodeBlock",
-            "AnnounceDocument",
             "AnnounceForm",
             "AnnounceGrouping",
             "AnnounceLandmark",
             "AnnounceList",
             "AnnounceTable",
-            "AnnounceTrackedChanges",
             "OnlySpeakDisplayedText",
             "Style",
             "StructuralNavigationEnabled",
             "RewindAndFastForwardEnabled",
-            "TextAttributeChangeModeAsString",
         ],
         "ui_commands": [],
         "toggle_commands": [],
@@ -818,7 +721,6 @@ MODULE_CONFIG = {
         "commands": [
             "PresentCellFormula",
             "PresentCharacterAttributes",
-            "ShowCharacterAttributes",
             "PresentDefaultButton",
             "PresentLink",
             "PresentSelectedText",
@@ -901,10 +803,23 @@ MODULE_CONFIG = {
 }
 
 PARAMETERIZED_TEST_PARAMS = {
-    "ActivateVoiceSet": {"set_id": "primary"},
-    "GetVoicesForLanguage": {"language": "en", "variant": ""},
-    "ExecuteMathcatCommand": {"mathcat_command": "ReadCurrent"},
+    "GetVoicesForLanguage": {"language": "en", "variant": "", "notify_user": False},
 }
+
+
+def safe_call(func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any | None:
+    """Safely call a function, returning result or None on error."""
+
+    try:
+        return func(*args, **kwargs)
+    except (DBusError, AttributeError, TypeError, ValueError):
+        return None
+
+
+def extract_names(items: list[Any] | None) -> list[str]:
+    """Extract first element from list of tuples/lists, return empty list if None."""
+
+    return [item[0] for item in items] if items else []
 
 
 def is_context_error(error_str: str) -> bool:
@@ -942,8 +857,14 @@ def is_timeout_error(error_str: str) -> bool:
     return any(pattern for pattern in timeout_patterns)
 
 
+def unpack_variant(value: Any) -> Any:
+    """Unpack a GLib.Variant if needed."""
+
+    return value.unpack() if hasattr(value, "unpack") else value
+
+
 def get_alternative_value(
-    bus: SessionMessageBus,
+    proxy: DBusProxy,
     prop_name: str,
     current_value: str | float | bool,
 ) -> str | float | bool:
@@ -951,21 +872,24 @@ def get_alternative_value(
 
     try:
         if prop_name == "CurrentServer":
-            servers = get_property(bus, "SpeechManager", "AvailableServers")
+            servers = proxy.ExecuteRuntimeGetter("AvailableServers")
+            servers = unpack_variant(servers)
             assert isinstance(current_value, str)
             non_default = [s for s in servers if s != current_value and "default" not in s.lower()]
             if non_default:
                 return non_default[0]
             return next((s for s in servers if s != current_value), current_value)
         if prop_name == "CurrentSynthesizer":
-            synths = get_property(bus, "SpeechManager", "AvailableSynthesizers")
+            synths = proxy.ExecuteRuntimeGetter("AvailableSynthesizers")
+            synths = unpack_variant(synths)
             assert isinstance(current_value, str)
             non_default = [s for s in synths if s != current_value and "default" not in s.lower()]
             if non_default:
                 return non_default[0]
             return next((s for s in synths if s != current_value), current_value)
         if prop_name == "CurrentVoice":
-            voices = get_property(bus, "SpeechManager", "AvailableVoices")
+            voices = proxy.ExecuteRuntimeGetter("AvailableVoices")
+            voices = unpack_variant(voices)
             if voices and len(voices) > 1:
                 assert isinstance(current_value, str)
                 current_voice_name = current_value.split()[0] if current_value else ""
@@ -984,7 +908,7 @@ def get_alternative_value(
 
 
 def get_test_value(
-    bus: SessionMessageBus,
+    proxy: DBusProxy,
     prop_name: str,
     current_value: str | float | bool,
 ) -> str | float | bool:
@@ -995,17 +919,15 @@ def get_test_value(
     if isinstance(current_value, (int, float)):
         return current_value + 1 if current_value < 100 else current_value - 1
     if isinstance(current_value, str):
-        return get_alternative_value(bus, prop_name, current_value)
+        return get_alternative_value(proxy, prop_name, current_value)
     if isinstance(current_value, list):
         return list(reversed(current_value)) if len(current_value) > 1 else current_value
     return current_value
 
 
-def to_variant(value: str | bool | float | list, signature: str | None = None) -> Any:
-    """Convert a Python value to GLib.Variant. Uses signature if given, else infers from type."""
+def to_variant(value: str | bool | float | list) -> Any:
+    """Convert a Python value to GLib.Variant."""
 
-    if signature is not None:
-        return GLib.Variant(signature, value)
     if isinstance(value, bool):
         return GLib.Variant("b", value)
     if isinstance(value, str):
@@ -1017,20 +939,6 @@ def to_variant(value: str | bool | float | list, signature: str | None = None) -
     if isinstance(value, list):
         return GLib.Variant("as", value)
     return GLib.Variant("s", str(value))
-
-
-def _module_is_testing_only(bus, module_name: str) -> bool:
-    """Returns True if module_name exposes only gated *ForTesting members."""
-
-    iface = module_interface_xml(bus, module_name)
-    if iface is None:
-        return False
-    methods = [name for m in iface.findall("method") if (name := m.get("name"))]
-    return (
-        bool(methods)
-        and not iface.findall("property")
-        and all(name.endswith("ForTesting") for name in methods)
-    )
 
 
 @pytest.mark.dbus
@@ -1046,19 +954,10 @@ class TestOrcaDBusIntegration:
         assert len(str(version)) > 0
 
     @pytest.mark.dbus
-    def test_get_atspi_version(self, dbus_service_proxy):
-        """Test the GetAtspiVersion service command."""
+    def test_list_modules(self, dbus_service_proxy):
+        """Test listing available modules."""
 
-        version = str(dbus_service_proxy.GetAtspiVersion())
-        parts = version.split(".")
-        assert len(parts) == 3, f"Expected a major.minor.micro version, got: {version}"
-        assert all(part.isdigit() for part in parts), f"Non-numeric version part in: {version}"
-
-    @pytest.mark.dbus
-    def test_list_modules(self, bus):
-        """Test listing available modules via introspection of the service root."""
-
-        modules = list_module_names(bus)
+        modules = list(dbus_service_proxy.ListModules())
         assert isinstance(modules, list)
 
         expected_modules = set(MODULE_CONFIG.keys()) - OPTIONAL_MODULES
@@ -1092,8 +991,17 @@ class TestOrcaDBusIntegration:
         ids=list(MODULE_CONFIG.keys()),
     )
     @pytest.mark.dbus
-    def test_module_capabilities(self, bus, run_with_timeout, module_name, config):
-        """Test that each module's introspection XML matches the expected capabilities."""
+    def test_module_capabilities(self, module_proxy_factory, run_with_timeout, module_name, config):
+        """Test that each module reports correct capabilities."""
+        # Skip optional modules that aren't available
+        if module_name in OPTIONAL_MODULES:
+            try:
+                proxy = module_proxy_factory(module_name)
+                # Check if module has the required dbus interface
+                if not hasattr(proxy, "ExecuteRuntimeGetter"):
+                    pytest.skip(f"{module_name} is optional and not available")
+            except (DBusError, AttributeError):
+                pytest.skip(f"{module_name} is optional and not available")
 
         print(f"\n  Testing {module_name} capabilities:")
         for cap_type in ["commands", "parameterized_commands", "getters", "setters"]:
@@ -1106,12 +1014,12 @@ class TestOrcaDBusIntegration:
                     print(f"      - ... and {len(items) - 5} more")
 
         def get_capabilities():
-            iface = module_interface_xml(bus, module_name)
+            proxy = module_proxy_factory(module_name)
             return {
-                "commands": simple_command_names(iface),
-                "parameterized_commands": parameterized_command_names(iface),
-                "getters": property_names(iface, "read", "readwrite"),
-                "setters": property_names(iface, "write", "readwrite"),
+                "commands": extract_names(safe_call(proxy.ListCommands)),
+                "parameterized_commands": extract_names(safe_call(proxy.ListParameterizedCommands)),
+                "getters": extract_names(safe_call(proxy.ListRuntimeGetters)),
+                "setters": extract_names(safe_call(proxy.ListRuntimeSetters)),
             }
 
         timeout = MODULE_TIMEOUTS.get(module_name)
@@ -1121,8 +1029,6 @@ class TestOrcaDBusIntegration:
         for cap_type in ["commands", "parameterized_commands", "getters", "setters"]:
             expected = set(config.get(cap_type, []))
             actual = set(result["result"].get(cap_type, []))
-            # Test-only commands (gated by ORCA_TEST_RPC_SECRET) are not part of the API surface.
-            actual = {name for name in actual if not name.endswith("ForTesting")}
             missing = expected - actual
             unexpected = actual - expected
 
@@ -1137,6 +1043,15 @@ class TestOrcaDBusIntegration:
     @pytest.mark.dbus
     def test_module_commands(self, module_proxy_factory, run_with_timeout, module_name, config):
         """Test that module commands execute without errors."""
+        # Skip optional modules that aren't available
+        if module_name in OPTIONAL_MODULES:
+            try:
+                proxy = module_proxy_factory(module_name)
+                # Check if module has the required dbus interface
+                if not hasattr(proxy, "ExecuteRuntimeGetter"):
+                    pytest.skip(f"{module_name} is optional and not available")
+            except (DBusError, AttributeError):
+                pytest.skip(f"{module_name} is optional and not available")
 
         commands = config["commands"]
         ui_commands = config.get("ui_commands", [])
@@ -1158,10 +1073,10 @@ class TestOrcaDBusIntegration:
             if cmd_name in ui_commands or cmd_name in skip_commands:
                 return {"success": True, "skipped": True}
             try:
-                getattr(proxy, cmd_name)(False)
+                proxy.ExecuteCommand(cmd_name, False)
                 if cmd_name in toggle_commands:
                     print(f"      → Restoring {cmd_name} to original state")
-                    getattr(proxy, cmd_name)(False)
+                    proxy.ExecuteCommand(cmd_name, False)
                 return {"success": True}
             except (DBusError, AttributeError, TypeError, ValueError) as error:
                 error_str = str(error)
@@ -1204,7 +1119,6 @@ class TestOrcaDBusIntegration:
     @pytest.mark.dbus
     def test_module_parameterized_commands(
         self,
-        bus,
         module_proxy_factory,
         run_with_timeout,
         module_name,
@@ -1218,21 +1132,15 @@ class TestOrcaDBusIntegration:
             param_str = ", ".join(f"{k}={v}" for k, v in params.items())
             print(f"    • {cmd}({param_str})")
 
-        iface = module_interface_xml(bus, module_name)
-
         def test_single_param_command(proxy, cmd_name):
             params = PARAMETERIZED_TEST_PARAMS.get(cmd_name, {})
             if not params:
                 return {"success": False, "error": "No test parameters"}
 
             try:
-                # Order positional args by the introspected parameter order so we call
-                # the native method with the right argument positions.
-                ordered_args = [
-                    params.get(arg_name, False if arg_name == "notify_user" else None)
-                    for arg_name, _ in command_signature(iface, cmd_name)
-                ]
-                result = getattr(proxy, cmd_name)(*ordered_args)
+                variant_params = {k: to_variant(v) for k, v in params.items() if k != "notify_user"}
+                notify_user = params.get("notify_user", False)
+                result = proxy.ExecuteParameterizedCommand(cmd_name, variant_params, notify_user)
                 return {"success": True, "result": result}
             except (DBusError, AttributeError, TypeError, ValueError) as error:
                 if is_context_error(str(error)):
@@ -1276,12 +1184,21 @@ class TestOrcaDBusIntegration:
     @pytest.mark.dbus
     def test_module_getters_setters(
         self,
-        bus,
+        module_proxy_factory,
         run_with_timeout,
         module_name,
         config,
     ):
         """Test that module getter/setter pairs work correctly."""
+        # Skip optional modules that aren't available
+        if module_name in OPTIONAL_MODULES:
+            try:
+                proxy = module_proxy_factory(module_name)
+                # Check if module has the required dbus interface
+                if not hasattr(proxy, "ExecuteRuntimeGetter"):
+                    pytest.skip(f"{module_name} is optional and not available")
+            except (DBusError, AttributeError):
+                pytest.skip(f"{module_name} is optional and not available")
 
         all_props = sorted(set(config.get("getters", []) + config.get("setters", [])))
         print(f"\n  Testing {module_name} properties ({len(all_props)} total):")
@@ -1296,53 +1213,33 @@ class TestOrcaDBusIntegration:
             status = f"({'/'.join(status_parts)})" if status_parts else ""
             print(f"    • {prop} {status}")
 
-        iface_xml = module_interface_xml(bus, module_name)
-
-        def test_single_property(prop_name, is_setter=False):
+        def test_single_property(proxy, prop_name, is_setter=False):
             try:
-                current_value = get_property(bus, module_name, prop_name)
-                if not is_setter:
-                    return {"success": True, "value": current_value}
-                test_value = get_test_value(bus, prop_name, current_value)
-                sig = property_signature(iface_xml, prop_name)
-                try:
-                    set_property(bus, module_name, prop_name, to_variant(test_value, sig))
-                except DBusError as error:
-                    # A setter that rejects a value (validation) is acceptable, not a failure.
+                current_value = unpack_variant(proxy.ExecuteRuntimeGetter(prop_name))
+                if is_setter:
+                    test_value = get_test_value(proxy, prop_name, current_value)
+                    proxy.ExecuteRuntimeSetter(prop_name, to_variant(test_value))
+                    new_value = unpack_variant(proxy.ExecuteRuntimeGetter(prop_name))
+                    proxy.ExecuteRuntimeSetter(prop_name, to_variant(current_value))
                     return {
                         "success": True,
-                        "rejected": True,
+                        "original_value": current_value,
                         "test_value": test_value,
-                        "error": str(error),
+                        "actual_new_value": new_value,
                     }
-                new_value = get_property(bus, module_name, prop_name)
-                # Restoring the original is best-effort: a value that was readable isn't guaranteed
-                # to be settable (e.g. a synthesizer the active server doesn't offer).
-                with contextlib.suppress(DBusError):
-                    set_property(bus, module_name, prop_name, to_variant(current_value, sig))
-                return {
-                    "success": True,
-                    "original_value": current_value,
-                    "test_value": test_value,
-                    "actual_new_value": new_value,
-                }
+                return {"success": True, "value": current_value}
             except (DBusError, AttributeError, TypeError, ValueError) as error:
                 return {"success": False, "error": str(error)}
 
         def test_getters_setters():
+            proxy = module_proxy_factory(module_name)
             results = {}
-            getter_props = config.get("getters", [])
-            setter_props = config.get("setters", [])
 
-            for prop in getter_props:
-                results[f"get_{prop}"] = test_single_property(prop, is_setter=False)
+            for prop in config.get("getters", []):
+                results[f"get_{prop}"] = test_single_property(proxy, prop, is_setter=False)
 
-            # Setter round-trips need a getter for read-back. Write-only properties
-            # (in setters but not getters) can't be round-tripped via D-Bus Properties.
-            for prop in setter_props:
-                if prop not in getter_props:
-                    continue
-                results[f"set_{prop}"] = test_single_property(prop, is_setter=True)
+            for prop in config.get("setters", []):
+                results[f"set_{prop}"] = test_single_property(proxy, prop, is_setter=True)
 
             return results
 
@@ -1367,11 +1264,7 @@ class TestOrcaDBusIntegration:
                 print("    Setter tests:")
                 for prop_key, res in setter_results.items():
                     prop = prop_key[4:]
-                    if res.get("rejected"):
-                        print(
-                            f"      - {prop}: rejected test value {res['test_value']!r} (validated)"
-                        )
-                    elif res["success"]:
+                    if res["success"]:
                         original = res["original_value"]
                         test_val = res["test_value"]
                         actual = res["actual_new_value"]
@@ -1387,14 +1280,13 @@ class TestOrcaDBusIntegration:
         assert not failed, f"{module_name} getter/setter failures: {failed}"
 
     @pytest.mark.dbus
-    def test_parameterized_command_signatures(self, bus, run_with_timeout):
+    def test_parameterized_command_signatures(self, module_proxy_factory, run_with_timeout):
         """Test that parameterized commands have correct parameter signatures."""
 
         def get_signatures():
-            iface = module_interface_xml(bus, "SpeechManager")
-            return {
-                name: command_signature(iface, name) for name in parameterized_command_names(iface)
-            }
+            proxy = module_proxy_factory("SpeechManager")
+            commands = proxy.ListParameterizedCommands()
+            return {cmd[0]: [list(p[:2]) for p in cmd[2]] for cmd in commands}
 
         result = run_with_timeout(get_signatures)
         error_msg = f"Could not get parameterized command signatures: {result['error']}"
@@ -1402,8 +1294,7 @@ class TestOrcaDBusIntegration:
 
         signatures = result["result"]
         if "GetVoicesForLanguage" in signatures:
-            # Native D-Bus interface lists each input arg with its D-Bus type signature.
-            expected = [("language", "s"), ("variant", "s")]
+            expected = [["language", "str"], ["variant", "str"], ["notify_user", "bool"]]
             actual = signatures["GetVoicesForLanguage"]
             error_msg = (
                 f"GetVoicesForLanguage signature mismatch: expected {expected}, got {actual}"
@@ -1411,13 +1302,12 @@ class TestOrcaDBusIntegration:
             assert actual == expected, error_msg
 
     @pytest.mark.dbus
-    def test_no_unexpected_modules(self, bus):
+    def test_no_unexpected_modules(self, dbus_service_proxy):
         """Test that no unexpected modules exist - ensures test coverage for all modules."""
 
-        actual_modules = set(list_module_names(bus))
+        actual_modules = set(dbus_service_proxy.ListModules())
         expected_modules = set(MODULE_CONFIG.keys())
-        candidates = actual_modules - expected_modules - OPTIONAL_MODULES
-        unexpected_modules = {m for m in candidates if not _module_is_testing_only(bus, m)}
+        unexpected_modules = actual_modules - expected_modules - OPTIONAL_MODULES
 
         if unexpected_modules:
             module_list = sorted(unexpected_modules)

@@ -31,14 +31,19 @@
 
 G_DEFINE_TYPE (GdkX11VulkanContext, gdk_x11_vulkan_context, GDK_TYPE_VULKAN_CONTEXT)
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 static VkResult
 gdk_x11_vulkan_context_create_surface (GdkVulkanContext *context,
                                        VkSurfaceKHR     *surface)
 {
   GdkSurface *window = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (context));
   GdkDisplay *display = gdk_draw_context_get_display (GDK_DRAW_CONTEXT (context));
+
+  /* This is necessary so that Vulkan sees the Window.
+   * Usually, vkCreateXlibSurfaceKHR() will not cause a problem to happen as
+   * it just creates resources, but further calls with the resulting surface
+   * do cause issues.
+   */
+  gdk_display_sync (display);
 
   return GDK_VK_CHECK (vkCreateXlibSurfaceKHR, gdk_vulkan_context_get_instance (context),
                                                &(VkXlibSurfaceCreateInfoKHR) {
@@ -54,14 +59,18 @@ gdk_x11_vulkan_context_create_surface (GdkVulkanContext *context,
 
 static void
 gdk_x11_vulkan_context_end_frame (GdkDrawContext *context,
-                                  gpointer        context_data,
                                   cairo_region_t *painted)
 {
   GdkSurface *surface = gdk_draw_context_get_surface (context);
 
   gdk_x11_surface_pre_damage (surface);
 
-  GDK_DRAW_CONTEXT_CLASS (gdk_x11_vulkan_context_parent_class)->end_frame (context, context_data, painted);
+  GDK_DRAW_CONTEXT_CLASS (gdk_x11_vulkan_context_parent_class)->end_frame (context, painted);
+}
+
+static void
+gdk_x11_vulkan_context_empty_frame (GdkDrawContext *draw_context)
+{
 }
 
 static void
@@ -71,6 +80,7 @@ gdk_x11_vulkan_context_class_init (GdkX11VulkanContextClass *klass)
   GdkDrawContextClass *draw_context_class = GDK_DRAW_CONTEXT_CLASS (klass);
 
   draw_context_class->end_frame = gdk_x11_vulkan_context_end_frame;
+  draw_context_class->empty_frame = gdk_x11_vulkan_context_empty_frame;
 
   context_class->create_surface = gdk_x11_vulkan_context_create_surface;
 }

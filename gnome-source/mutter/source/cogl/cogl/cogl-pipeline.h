@@ -34,6 +34,11 @@
 #error "Only <cogl/cogl.h> can be included directly."
 #endif
 
+/* We forward declare the CoglPipeline type here to avoid some circular
+ * dependency issues with the following headers.
+ */
+typedef struct _CoglPipeline CoglPipeline;
+
 #include "cogl/cogl-types.h"
 #include "cogl/cogl-context.h"
 #include "cogl/cogl-snippet.h"
@@ -55,11 +60,21 @@ G_BEGIN_DECLS
  * performs fragment processing including depth testing and texture
  * mapping. Finally it blends the result with the framebuffer.
  */
+#define COGL_TYPE_PIPELINE            (cogl_pipeline_get_type ())
+#define COGL_PIPELINE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), COGL_TYPE_PIPELINE, CoglPipeline))
+#define COGL_PIPELINE_CONST(obj)      (G_TYPE_CHECK_INSTANCE_CAST ((obj), COGL_TYPE_PIPELINE, CoglPipeline const))
+#define COGL_PIPELINE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass),  COGL_TYPE_PIPELINE, CoglPipelineClass))
+#define COGL_IS_PIPELINE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), COGL_TYPE_PIPELINE))
+#define COGL_IS_PIPELINE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass),  COGL_TYPE_PIPELINE))
+#define COGL_PIPELINE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  COGL_TYPE_PIPELINE, CoglPipelineClass))
 
-#define COGL_TYPE_PIPELINE (cogl_pipeline_get_type ())
+typedef struct _CoglPipelineClass CoglPipelineClass;
+typedef struct _CoglPipeline CoglPipeline;
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglPipeline, g_object_unref)
 
 COGL_EXPORT
-G_DECLARE_FINAL_TYPE (CoglPipeline, cogl_pipeline, COGL, PIPELINE, GObject)
+GType               cogl_pipeline_get_type       (void) G_GNUC_CONST;
 
 /**
  * cogl_pipeline_new: (constructor)
@@ -107,9 +122,10 @@ typedef gboolean (*CoglPipelineLayerCallback) (CoglPipeline *pipeline,
 /**
  * cogl_pipeline_foreach_layer:
  * @pipeline: A #CoglPipeline object
- * @callback: (scope call) (closure user_data): A #CoglPipelineLayerCallback
- *            to be called for each layer index
- * @user_data: Private data that will be passed to the callback
+ * @callback: (scope call): A #CoglPipelineLayerCallback to be
+ *            called for each layer index
+ * @user_data: (closure): Private data that will be passed to the
+ *             callback
  *
  * Iterates all the layer indices of the given @pipeline.
  */
@@ -138,45 +154,5 @@ cogl_pipeline_foreach_layer (CoglPipeline *pipeline,
 COGL_EXPORT int
 cogl_pipeline_get_uniform_location (CoglPipeline *pipeline,
                                     const char *uniform_name);
-
-COGL_EXPORT void
-cogl_pipeline_add_capability (CoglPipeline *pipeline,
-                              GQuark        domain,
-                              unsigned int  capability);
-
-COGL_EXPORT gboolean
-cogl_pipeline_has_capability (CoglPipeline *pipeline,
-                              GQuark        domain,
-                              unsigned int  capability);
-
-/**
- * cogl_pipeline_set_static_name:
- * @pipeline: A #CoglPipeline object
- * @name: A descriptive name
- *
- * Set a pipeline name. It may be used for debugging or logging purposes. The
- * string must be a static string, and string. It will not be copied.
- */
-COGL_EXPORT void
-cogl_pipeline_set_static_name  (CoglPipeline *pipeline,
-                                const char   *name);
-
-/**
- * cogl_pipeline_get_name:
- * @pipeline: A #CoglPipeline object
- *
- * Returns: (transfer none): The pipeline name, or %NULL
- */
-COGL_EXPORT const char *
-cogl_pipeline_get_name (CoglPipeline *pipeline);
-
-/**
- * cogl_pipeline_get_context:
- * @pipeline: a #CoglPipeline
- *
- * Returns: (transfer none): the Cogl context
- */
-COGL_EXPORT CoglContext *
-cogl_pipeline_get_context (CoglPipeline *pipeline);
 
 G_END_DECLS

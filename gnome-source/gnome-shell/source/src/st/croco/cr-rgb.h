@@ -20,7 +20,8 @@
  * see COPYRIGHTS file for copyright information.
  */
 
-#pragma once
+#ifndef __CR_RGB_H__
+#define __CR_RGB_H__
 
 #include <stdio.h>
 #include <glib.h>
@@ -51,7 +52,8 @@ CRRgb * cr_rgb_new (void) ;
 CRRgb * cr_rgb_new_with_vals (gulong a_red, gulong a_green, 
                               gulong a_blue, gboolean a_is_percentage) ;
 
-CRRgb *cr_rgb_parse_from_buf(const guchar *a_str) ;
+CRRgb *cr_rgb_parse_from_buf(const guchar *a_str,
+                             enum CREncoding a_enc);
 
 enum CRStatus cr_rgb_compute_from_percentage (CRRgb *a_this) ;
 
@@ -78,3 +80,5 @@ void cr_rgb_dump (CRRgb const *a_this, FILE *a_fp) ;
 void cr_rgb_destroy (CRRgb *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_RGB_H__*/

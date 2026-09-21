@@ -196,12 +196,6 @@ insert_tags_for_attributes (GtkTextBuffer     *buffer,
           INT_ATTR (stretch);
           break;
 
-#if PANGO_VERSION_CHECK (1, 58, 0)
-        case PANGO_ATTR_WIDTH:
-          INT_ATTR (width);
-          break;
-#endif
-
         case PANGO_ATTR_SIZE:
           INT_ATTR (size);
           break;
@@ -369,9 +363,7 @@ insert_markup_idle (gpointer data)
 
       if (g_get_monotonic_time () - begin > G_TIME_SPAN_MILLISECOND)
         {
-          guint id;
-          id = g_idle_add (insert_markup_idle, data);
-          g_source_set_name_by_id (id, "[gtk-demo] insert_markup_idle");
+          g_idle_add (insert_markup_idle, data);
           return G_SOURCE_REMOVE;
         }
 
@@ -406,9 +398,7 @@ parse_markup_idle (gpointer data)
   do {
     if (g_get_monotonic_time () - begin > G_TIME_SPAN_MILLISECOND)
       {
-        guint id;
-        id = g_idle_add (parse_markup_idle, data);
-        g_source_set_name_by_id (id, "[gtk-demo] parse_markup_idle");
+        g_idle_add (parse_markup_idle, data);
         return G_SOURCE_REMOVE;
       }
 
@@ -548,7 +538,8 @@ fontify (const char    *format,
   GSubprocess *subprocess;
   char *format_arg;
   GtkSettings *settings;
-  GtkInterfaceColorScheme color_scheme;
+  char *theme;
+  gboolean prefer_dark;
   const char *style_arg;
   char *text;
   GtkTextIter start, end;
@@ -557,13 +548,16 @@ fontify (const char    *format,
 
   settings = gtk_settings_get_default ();
   g_object_get (settings,
-                "gtk-interface-color-scheme", &color_scheme,
+                "gtk-theme-name", &theme,
+                "gtk-application-prefer-dark-theme", &prefer_dark,
                 NULL);
 
-  if (color_scheme == GTK_INTERFACE_COLOR_SCHEME_DARK)
+  if (prefer_dark || strcmp (theme, "HighContrastInverse") == 0)
     style_arg = "--style=edit-vim-dark";
   else
     style_arg = "--style=edit-kwrite";
+
+  g_free (theme);
 
   format_arg = g_strconcat ("--syntax=", format, NULL);
   subprocess = g_subprocess_new (G_SUBPROCESS_FLAGS_STDIN_PIPE |
@@ -579,21 +573,18 @@ fontify (const char    *format,
 
   if (!subprocess)
     {
-      static gboolean warned = FALSE;
-
-      if (!warned)
+      if (g_error_matches (error, G_SPAWN_ERROR, G_SPAWN_ERROR_NOENT))
         {
-          if (g_error_matches (error, G_SPAWN_ERROR, G_SPAWN_ERROR_NOENT))
+          static gboolean warned = FALSE;
+
+          if (!warned)
             {
+              warned = TRUE;
               g_message ("For syntax highlighting, install the “highlight” program");
             }
-          else
-            {
-              g_message ("%s", error->message);
-            }
-
-          warned = TRUE;
         }
+      else
+        g_warning ("%s", error->message);
 
       g_clear_error (&error);
 

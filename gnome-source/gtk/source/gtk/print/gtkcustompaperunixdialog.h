@@ -28,14 +28,13 @@ G_BEGIN_DECLS
 typedef struct _GtkCustomPaperUnixDialog         GtkCustomPaperUnixDialog;
 
 GDK_AVAILABLE_IN_ALL
-GType             gtk_custom_paper_unix_dialog_get_type           (void);
+GType             gtk_custom_paper_unix_dialog_get_type           (void) G_GNUC_CONST;
 GtkWidget *       _gtk_custom_paper_unix_dialog_new                (GtkWindow   *parent,
                                                                     const char *title);
 GtkUnit           _gtk_print_get_default_user_units                (void);
 void               gtk_print_load_custom_papers                    (GListStore *store);
 GList *           _gtk_load_custom_papers                          (void);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (GtkCustomPaperUnixDialog, g_object_unref)
 
 G_END_DECLS
 

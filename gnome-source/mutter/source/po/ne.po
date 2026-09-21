@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Gnome Nepali Translation Project\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/mutter/issues/\n"
-"POT-Creation-Date: 2025-03-11 00:58+0000\n"
-"PO-Revision-Date: 2025-03-12 16:27+0545\n"
+"POT-Creation-Date: 2024-05-15 08:44+0000\n"
+"PO-Revision-Date: 2024-06-19 13:09+0545\n"
 "Last-Translator: Pawan Chitrakar <chautari@gmail.com>\n"
 "Language-Team: Nepali Translation Team <chautari@gmail.com>\n"
 "Language: ne\n"
@@ -17,7 +17,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n !=1;\n"
-"X-Generator: Poedit 3.5\n"
+"X-Generator: Poedit 3.4.4\n"
 
 #: data/50-mutter-navigation.xml:6
 msgid "Navigation"
@@ -247,19 +247,19 @@ msgstr "ठाडो रूपमा सञ्झ्याल बढाउनु
 msgid "Maximize window horizontally"
 msgstr "तेर्सो रूपमा सञ्झ्याल बढाउनुहोस्"
 
-#: data/50-mutter-windows.xml:41 data/org.gnome.mutter.gschema.xml.in:187
+#: data/50-mutter-windows.xml:41 data/org.gnome.mutter.gschema.xml.in:167
 msgid "View split on left"
 msgstr "बायाँपट्टी दृश्य विभाजन"
 
-#: data/50-mutter-windows.xml:45 data/org.gnome.mutter.gschema.xml.in:192
+#: data/50-mutter-windows.xml:45 data/org.gnome.mutter.gschema.xml.in:172
 msgid "View split on right"
 msgstr "दायाँतिर दृश्य विभाजन"
 
-#: data/org.gnome.mutter.gschema.xml.in:16
+#: data/org.gnome.mutter.gschema.xml.in:15
 msgid "Modifier to use for extended window management operations"
 msgstr "विस्तारित सञ्झ्याल व्यवस्थापन सञ्चालनका लागि प्रयोग गरिने परिमार्जक"
 
-#: data/org.gnome.mutter.gschema.xml.in:17
+#: data/org.gnome.mutter.gschema.xml.in:16
 msgid ""
 "This key will initiate the “overlay”, which is a combination window overview and application "
 "launching system. The default is intended to be the “Windows key” on PC hardware. It’s "
@@ -269,11 +269,11 @@ msgstr ""
 "पूर्वनिर्धारित पीसी हार्डवेयरमा \"विन्डोज कुञ्जी\" हुनुको उद्देश्य हो। यो अपेक्षा गरिएको छ कि यो बाध्यकारी वा "
 "पूर्वनिर्धारित वा खाली स्ट्रिङमा सेट गर्नुहोस्।."
 
-#: data/org.gnome.mutter.gschema.xml.in:29
+#: data/org.gnome.mutter.gschema.xml.in:28
 msgid "Attach modal dialogs"
 msgstr "मोडल संवाद संलग्न गर्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:30
+#: data/org.gnome.mutter.gschema.xml.in:29
 msgid ""
 "When true, instead of having independent titlebars, modal dialogs appear attached to the "
 "titlebar of the parent window and are moved together with the parent window."
@@ -281,11 +281,11 @@ msgstr ""
 "जब सँधै, स्वतन्त्र शीर्षकपट्टीको सट्टामा, मोडल संवादहरू अभिभावक सञ्झ्यालको शीर्षकपट्टीमा संलग्न हुन्छन् र "
 "अभिभावकको सञ्झ्यालमा सँगै सारिन्छन्।."
 
-#: data/org.gnome.mutter.gschema.xml.in:39
+#: data/org.gnome.mutter.gschema.xml.in:38
 msgid "Enable edge tiling when dropping windows on screen edges"
 msgstr "स्क्रिन किनाराहरूमा सञ्झ्याल छोड्दा किनारा टायल सक्षम गर्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:40
+#: data/org.gnome.mutter.gschema.xml.in:39
 msgid ""
 "If enabled, dropping windows on vertical screen edges maximizes them vertically and resizes "
 "them horizontally to cover half of the available area. Dropping windows on the top screen "
@@ -295,11 +295,11 @@ msgstr ""
 "उपलब्ध क्षेत्रको आधा कवर गर्न रिसाइज गर्दछ। शीर्ष स्क्रिन किनारामा विन्डो छोडेर उनीहरूलाई पूर्ण रूपमा अधिकतम "
 "गर्दछ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:49
+#: data/org.gnome.mutter.gschema.xml.in:48
 msgid "Workspaces are managed dynamically"
 msgstr "कार्यस्थान गतिशील रूपमा व्यवस्थापन गरिन्छ"
 
-#: data/org.gnome.mutter.gschema.xml.in:50
+#: data/org.gnome.mutter.gschema.xml.in:49
 msgid ""
 "Determines whether workspaces are managed dynamically or whether there’s a static number of "
 "workspaces (determined by the num-workspaces key in org.gnome.desktop.wm.preferences)."
@@ -307,11 +307,11 @@ msgstr ""
 "निर्धारण गर्दछ कि कार्यस्थानहरू गतिशील रूपमा व्यवस्थित छन् वा चाहेको स्थिर कार्य सङ्ख्या (यदि सङ्ख्या-"
 "कार्यक्षेत्र कुञ्जीद्वारा org.gnome.desktop.wm.preferences मा निर्धारण गरिएको हो)।."
 
-#: data/org.gnome.mutter.gschema.xml.in:59
+#: data/org.gnome.mutter.gschema.xml.in:58
 msgid "Workspaces only on primary"
 msgstr "प्राथमिक कार्यस्थान मात्र"
 
-#: data/org.gnome.mutter.gschema.xml.in:60
+#: data/org.gnome.mutter.gschema.xml.in:59
 msgid ""
 "Determines whether workspace switching should happen for windows on all monitors or only for "
 "windows on the primary monitor."
@@ -319,11 +319,11 @@ msgstr ""
 "सबै मनिटरहरूमा सञ्झ्यालका लागि कार्यस्थान स्विच गर्नु पर्दछ वा केवल प्राथमिक मनिटरमा सञ्झ्याल को लागि "
 "हुनुपर्छ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:68
+#: data/org.gnome.mutter.gschema.xml.in:67
 msgid "Delay focus changes until the pointer stops moving"
 msgstr "सूचक ले चाल नरोकेसम्म फोकस परिवर्तन विलम्ब गर्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:69
+#: data/org.gnome.mutter.gschema.xml.in:68
 msgid ""
 "If set to true, and the focus mode is either “sloppy” or “mouse” then the focus will not be "
 "changed immediately when entering a window, but only after the pointer stops moving."
@@ -331,11 +331,11 @@ msgstr ""
 "यदि सत्यमा सेट गरिएको छ, र फोकस मोड या त \"स्लोपी\" वा \"माउस\" हो भने सञ्झ्याल प्रविष्ट गर्दा फोकस "
 "तुरुन्तै परिवर्तन गरिने छैन, तर सूचकले सार्न रोकेपछि मात्र।."
 
-#: data/org.gnome.mutter.gschema.xml.in:79
+#: data/org.gnome.mutter.gschema.xml.in:78
 msgid "Draggable border width"
 msgstr "तान्ने योग्य सिमाना चौडाइ"
 
-#: data/org.gnome.mutter.gschema.xml.in:80
+#: data/org.gnome.mutter.gschema.xml.in:79
 msgid ""
 "The amount of total draggable borders. If the theme’s visible borders are not enough, "
 "invisible borders will be added to meet this value."
@@ -343,31 +343,31 @@ msgstr ""
 "कूल तान्न सकिने किनाराको मात्रा । यदि विषयवस्तुको दृश्यात्मक किनारा हरू पर्याप्त छैनन् भने, यो मानलाई पूरा "
 "गर्न अदृश्य किनाराथपिनेछ ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:89
+#: data/org.gnome.mutter.gschema.xml.in:88
 msgid "Auto maximize nearly monitor sized windows"
 msgstr "लगभग मोनिटर आकारको सञ्झ्याललाई स्वत: ठूलो पार्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:90
+#: data/org.gnome.mutter.gschema.xml.in:89
 msgid ""
 "If enabled, new windows that are initially the size of the monitor automatically get "
 "maximized."
 msgstr "यदि सक्षम पारिएमा, नयाँ सञ्झ्याल जुन सुरुमा मोनिटरको साइजको हुन्छ स्वचालित रूपमा ठूलो पारिन्छ ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:98
+#: data/org.gnome.mutter.gschema.xml.in:97
 msgid "Place new windows in the center"
 msgstr "नयाँ सञ्झ्यालहरू केन्द्रमा राख्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:99
+#: data/org.gnome.mutter.gschema.xml.in:98
 msgid ""
 "When true, the new windows will always be put in the center of the active screen of the "
 "monitor."
 msgstr "ठीक भएमा, नयाँ सञ्झ्यालहरू सधैँ मोनिटरको सक्रिय पर्दाको बीचमा राखिनेछ ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:108
+#: data/org.gnome.mutter.gschema.xml.in:107
 msgid "Enable experimental features"
 msgstr "प्रयोगात्मक विशेषताहरू सक्षम पार्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:109
+#: data/org.gnome.mutter.gschema.xml.in:108
 msgid ""
 "To enable experimental features, add the feature keyword to the list. Whether the feature "
 "requires restarting the compositor depends on the given feature. Any experimental feature is "
@@ -380,37 +380,32 @@ msgid ""
 "automatically terminates Xwayland if all relevant X11 clients are gone. Requires a restart. • "
 "“variable-refresh-rate” — makes mutter dynamically adjust the refresh rate of the monitor "
 "when applicable if supported by the monitor, GPU and DRM driver. Configurable in Settings. "
-"Requires a restart. • “xwayland-native-scaling” — lets Xwayland clients use their native "
-"scaling support. If scaling is not supported by client, the client will be unscaled. Setting "
-"only takes effect when “scale-monitor-framebuffer” is enabled as well."
+"Requires a restart."
 msgstr ""
-"प्रयोगात्मक सुविधाहरू सक्षम गर्न, सूचीमा सुविधा किवर्ड थप्नुहोस्। सुविधाले कम्पोजिटर पुन: सुरु गर्न आवश्यक छ कि "
-"छैन भन्ने कुरा दिइएको सुविधामा निर्भर गर्दछ। कुनै पनि प्रयोगात्मक सुविधा अझै पनि उपलब्ध हुन वा कन्फिगर गर्न "
-"आवश्यक छैन। भविष्यको प्रमाणको रूपमा यस सेटिङमा केहि पनि थप्ने आशा नगर्नुहोस्। हाल सम्भावित किवर्डहरू: • "
-"“scale-monitor-framebuffer” — HiDPI मनिटरहरू व्यवस्थापन गर्न विन्डो सामग्रीको सट्टा मनिटर फ्रेमबफरहरू "
-"स्केल गर्दा, तार्किक पिक्सेल निर्देशांक स्थानमा तार्किक मनिटरहरू लेआउट गर्न mutter लाई पूर्वनिर्धारित बनाउँछ। "
-"पुन: सुरु गर्न आवश्यक छैन। • “kms-modifiers” — ड्राइभरद्वारा समर्थित भएमा, स्पष्ट परिमार्जकहरू सहित "
-"स्क्यानआउट बफरहरू सधैं आवंटित गर्न mutter बनाउँछ। पुन: सुरु गर्न आवश्यक छ। • “autoclose-xwayland” — सबै "
-"सान्दर्भिक X11 क्लाइन्टहरू गएमा Xwayland स्वचालित रूपमा समाप्त हुन्छ। पुन: सुरु गर्न आवश्यक छ। • “variable-"
-"refresh-rate” — यदि मनिटर, GPU र DRM ड्राइभरद्वारा समर्थित भएमा लागू हुँदा मनिटरको रिफ्रेस दरलाई "
-"गतिशील रूपमा समायोजन गर्न mutter लाई बनाउँछ। सेटिङहरूमा कन्फिगर गर्न योग्य। पुन: सुरु गर्न आवश्यक छ। • "
-"“xwayland-native-scaling” — Xwayland क्लाइन्टहरूलाई उनीहरूको नेटिभ स्केलिंग समर्थन प्रयोग गर्न दिन्छ। यदि "
-"स्केलिंग क्लाइन्टद्वारा समर्थित छैन भने, क्लाइन्ट अनस्केल हुनेछ। “scale-monitor-framebuffer” सक्षम पारिएको "
-"बेला मात्र सेटिङ प्रभावकारी हुन्छ।."
+"प्रयोगात्मक सुविधाहरू सक्षम गर्न, सूचीमा सुविधा कुञ्जीशब्द थप्नुहोस्। सुविधालाई कम्पोजिटर पुन: सुरु गर्न आवश्यक छ "
+"कि छैन भन्ने कुरा दिइएको सुविधामा निर्भर गर्दछ । कुनै पनि प्रयोगात्मक सुविधा अझै पनि उपलब्ध, वा कन्फिगर गर्न "
+"आवश्यक छैन। यो सेटिङमा केहि पनि थप्न भविष्यको प्रमाण हुन आशा नगर्नुहोस्। हाल सम्भव कुञ्जीशब्दहरू: • \"स्केल-"
+"मोनिटर-फ्रेमबफर\" - लेजिकल पिक्सेल समन्वय स्पेसमा तार्किक मोनिटरहरू लेआउट गर्न मटर पूर्वनिर्धारित बनाउँदछ, "
+"जबकि सञ्झ्याल सामग्रीको सट्टा मोनिटर फ्रेमबफरहरू स्केल गर्दा, एचआईडीपीआई मोनिटरहरू व्यवस्थापन गर्न। पुनरारंभ "
+"आवश्यक पर्दैन । • \"केएमएस-मोडिफायरहरू\" - यदि ड्राइभरद्वारा समर्थित छ भने, मटरले सधैं स्पष्ट परिमार्जकहरूको "
+"साथ स्क्यानआउट बफरहरू आवंटित गर्दछ। पुनरारंभ आवश्यक छ । • \"अटोक्लोज-एक्सवेल्याण्ड\" - यदि सबै प्रासंगिक एक्स "
+"11 क्लाइन्टहरू गएमा स्वचालित रूपमा एक्सवेल्याण्ड समाप्त हुन्छ। पुनरारंभ आवश्यक छ । • \"भेरिएबल-रिफ्रेश-रेट\" - "
+"मोनिटर, जीपीयू र डीआरएम ड्राइभरद्वारा समर्थित भएमा लागू हुँदा मटरलाई गतिशील रूपमा मोनिटरको रिफ्रेस दर "
+"समायोजित गर्दछ। सेटिङमा कन्फिगर गर्न सकिन्छ । पुनरारंभ आवश्यक छ ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:151
+#: data/org.gnome.mutter.gschema.xml.in:144
 msgid "Modifier to use to locate the pointer"
 msgstr "सूचक तोक्नका लागि प्रयोग गरिने परिमार्जक"
 
-#: data/org.gnome.mutter.gschema.xml.in:152
+#: data/org.gnome.mutter.gschema.xml.in:145
 msgid "This key will initiate the “locate pointer” action."
 msgstr "यस कुञ्जीले \"सूचक तोक्नुहोस्\" कार्य सुरु गर्नेछ ।."
 
-#: data/org.gnome.mutter.gschema.xml.in:159
+#: data/org.gnome.mutter.gschema.xml.in:152
 msgid "Timeout for check-alive ping"
 msgstr "परीक्षण-जिवित पिङका लागि समय समाप्ति"
 
-#: data/org.gnome.mutter.gschema.xml.in:160
+#: data/org.gnome.mutter.gschema.xml.in:153
 msgid ""
 "Number of milliseconds a client has to respond to a ping request in order to not be detected "
 "as frozen. Using 0 will disable the alive check completely."
@@ -418,31 +413,15 @@ msgstr ""
 "नचलेको रूपमा पत्ता नलगाउनका लागि एउटा ग्राहकले पिङ अनुरोधको जवाफ दिनुपर्ने मिलिसेकेन्डको सङ्ख्या । ० को "
 "प्रयोगले जिउँदो जाँच पूर्ण रूपमा अक्षम पार्दछ ।."
 
-#. TRANSLATORS: Luminance is different from brightness.
-#. See https://en.wikipedia.org/wiki/Luminance
-#: data/org.gnome.mutter.gschema.xml.in:171
-msgid "Per output luminance settings"
-msgstr "प्रति आउटपुट ल्युमिनेन्स सेटिङहरू"
-
-#: data/org.gnome.mutter.gschema.xml.in:172
-msgid ""
-"Per output and color mode luminance setting. Each entry consists of a tuple with connector, "
-"vendor, product, serial, and a color mode, as well as an associated floating point value "
-"representing the output luminance in percent (%). The default when not specified is 100%."
-msgstr ""
-"प्रति आउटपुट र रङ मोड ल्युमिनेन्स सेटिङ। प्रत्येक प्रविष्टिमा कनेक्टर, विक्रेता, उत्पादन, सिरियल, र रङ मोड "
-"सहितको टपल, साथै प्रतिशत (%) मा आउटपुट ल्युमिनेन्स प्रतिनिधित्व गर्ने सम्बन्धित फ्लोटिंग पोइन्ट मान समावेश "
-"हुन्छ। निर्दिष्ट नगरिएको बेला पूर्वनिर्धारित १००% हुन्छ।."
-
-#: data/org.gnome.mutter.gschema.xml.in:197
+#: data/org.gnome.mutter.gschema.xml.in:177
 msgid "Switch monitor configurations"
 msgstr "मोनिटर सेटिङ स्विच गर्नुहोस्"
 
-#: data/org.gnome.mutter.gschema.xml.in:202
+#: data/org.gnome.mutter.gschema.xml.in:182
 msgid "Rotates the built-in monitor configuration"
 msgstr "निर्मित मोनिटर सेटिङ घुमाउँदछ"
 
-#: data/org.gnome.mutter.gschema.xml.in:207
+#: data/org.gnome.mutter.gschema.xml.in:187
 msgid "Cancel any active input capture session"
 msgstr "कुनै पनि सक्रिय आगत क्याप्चर सत्र रद्द गर्नुहोस्"
 
@@ -579,25 +558,25 @@ msgstr ""
 "गर्दैन भने यो विकल्पको कुनै प्रभाव पर्दैन । यो सेटिङ प्रभावकारी हुनका लागि एक्सवेल्याण्ड लाई पुन: सुरु गर्नु पर्दछ "
 "।."
 
-#: src/backends/meta-monitor.c:266
+#: src/backends/meta-monitor.c:251
 msgid "Built-in display"
 msgstr "सम्मिलित प्रर्दशन"
 
-#: src/backends/meta-monitor.c:293
+#: src/backends/meta-monitor.c:278
 msgid "Unknown"
 msgstr "अज्ञात"
 
-#: src/backends/meta-monitor.c:295
+#: src/backends/meta-monitor.c:280
 msgid "Unknown Display"
 msgstr "अज्ञात प्रदर्शन"
 
-#: src/backends/meta-monitor.c:303
+#: src/backends/meta-monitor.c:288
 #, c-format
 msgctxt "This is a monitor vendor name, followed by a size in inches, like 'Dell 15\"'"
 msgid "%s %s"
 msgstr "%s %s"
 
-#: src/backends/meta-monitor.c:311
+#: src/backends/meta-monitor.c:296
 #, c-format
 msgctxt ""
 "This is a monitor vendor name followed by product/model name where size in inches could not "
@@ -609,102 +588,94 @@ msgstr "%s %s"
 msgid "Bell event"
 msgstr "घटना घण्टी"
 
-#: src/core/display.c:741
+#: src/core/display.c:734
 msgid "Privacy Screen Enabled"
 msgstr "गोपनियता पर्दा सक्षम पारियो"
 
-#: src/core/display.c:742
+#: src/core/display.c:735
 msgid "Privacy Screen Disabled"
 msgstr "गोपनियता पर्दा असक्षम पारियो"
 
-#: src/core/meta-context-main.c:621
+#: src/core/meta-context-main.c:601
 msgid "Replace the running window manager"
 msgstr "चलिरहेको सञ्झ्याल प्रबन्धक प्रतिस्थापन गर्नुहोस्"
 
-#: src/core/meta-context-main.c:627
+#: src/core/meta-context-main.c:607
 msgid "X Display to use"
 msgstr "प्रयोग गरिने X प्रदर्शन"
 
-#: src/core/meta-context-main.c:633
+#: src/core/meta-context-main.c:613
 msgid "Disable connection to session manager"
 msgstr "सत्र प्रबन्धकमा जडान गर्न अक्षम"
 
-#: src/core/meta-context-main.c:639
+#: src/core/meta-context-main.c:619
 msgid "Specify session management ID"
 msgstr "सत्र प्रबन्धक आईडी (ID) निर्दिष्ट गर्नुहोस्"
 
-#: src/core/meta-context-main.c:645
+#: src/core/meta-context-main.c:625
 msgid "Initialize session from savefile"
 msgstr "बचत फाइलबाट सत्र सुरुआत गर्नुहोस्"
 
-#: src/core/meta-context-main.c:651
+#: src/core/meta-context-main.c:631
 msgid "Make X calls synchronous"
 msgstr "X कल समकालीन बनाउनुहोस्"
 
-#: src/core/meta-context-main.c:659
+#: src/core/meta-context-main.c:639
 msgid "Run as a wayland compositor"
 msgstr "व्यल्यान्ड संमिश्रणको रूपमा चलाउनुहोस्"
 
-#: src/core/meta-context-main.c:666
+#: src/core/meta-context-main.c:645
 msgid "Run as a nested compositor"
 msgstr "नेस्ट गरिएको कम्पोजिटरको रूपमा चलाउनुहोस्"
 
-#: src/core/meta-context-main.c:672
+#: src/core/meta-context-main.c:651
 msgid "Run wayland compositor without starting Xwayland"
 msgstr "एक्सवेल्यान्ड सुरु नगरीकनै वेल्यान्ड कम्पोजिटर चलाउनुहोस्"
 
-#: src/core/meta-context-main.c:679
+#: src/core/meta-context-main.c:657
 msgid "Specify Wayland display name to use"
 msgstr "प्रयोग गरिने वेल्यान्ड प्रदर्शन नाम निर्दिष्ट गर्नुहोस्"
 
-#: src/core/meta-context-main.c:687
+#: src/core/meta-context-main.c:665
 msgid "Run as a full display server, rather than nested"
 msgstr "नेस्ट गरिएको सट्टा पूर्ण प्रदर्शन सर्भरको रूपमा चलाउनुहोस्"
 
-#: src/core/meta-context-main.c:692
+#: src/core/meta-context-main.c:670
 msgid "Run as a headless display server"
 msgstr "हेडलेस प्रदर्शन सर्भरको रूपमा चलाउनुहोस्"
 
-#: src/core/meta-context-main.c:697
+#: src/core/meta-context-main.c:675
 msgid "Add persistent virtual monitor (WxH or WxH@R)"
 msgstr "अवास्तविक मोनिटर थप्नुहोस् (WxH वा WxH@R)"
 
-#: src/core/meta-context-main.c:709
+#: src/core/meta-context-main.c:687
 msgid "Run with X11 backend"
 msgstr "X11 ब्याकइन्डसँग चलाउनुहोस्"
 
-#: src/core/meta-context-main.c:715
+#: src/core/meta-context-main.c:693
 msgid "Profile performance using trace instrumentation"
 msgstr "ट्रेस इन्स्ट्रुमेन्टेसन प्रयोग गरेर प्रोफाइल प्रदर्शन"
 
-#: src/core/meta-context-main.c:721
+#: src/core/meta-context-main.c:699
 msgid "Enable debug control D-Bus interface"
 msgstr "डिबग नियन्त्रण डी-बस इन्टरफेस सक्षम पार्नुहोस्"
 
 #. TRANSLATORS: This string refers to a button that switches between
-#. * different modes in that button group.
+#. * different modes.
 #.
-#: src/core/meta-pad-action-mapper.c:552
+#: src/core/meta-pad-action-mapper.c:826
 #, c-format
 msgid "Mode Switch (Group %d)"
 msgstr "मोड स्विच (समूह %d)"
 
-#. TRANSLATORS: This string refers to a button that switches between
-#. * different modes.
-#.
-#: src/core/meta-pad-action-mapper.c:559
-#, c-format
-msgid "Mode Switch"
-msgstr "मोड स्विच"
-
 #. TRANSLATORS: This string refers to an action, cycles drawing tablets'
 #. * mapping through the available outputs.
 #.
-#: src/core/meta-pad-action-mapper.c:582
+#: src/core/meta-pad-action-mapper.c:848
 msgid "Switch monitor"
 msgstr "निगरानि  बदल्नुहोस्"
 
-#: src/core/meta-pad-action-mapper.c:584
+#: src/core/meta-pad-action-mapper.c:850
 msgid "Show on-screen help"
 msgstr "अन-स्क्रिन सहयोग हेर्नुहोस्"
 
@@ -721,16 +692,16 @@ msgstr "मुद्रण संस्करण"
 msgid "Mutter plugin to use"
 msgstr "प्रयोग गर्नका लागि मुटर प्लगइन"
 
-#: src/core/prefs.c:1869
+#: src/core/prefs.c:1842
 #, c-format
 msgid "Workspace %d"
 msgstr "कार्यक्षेत्र %d"
 
-#: src/core/util.c:140
+#: src/core/util.c:139
 msgid "Mutter was compiled without support for verbose mode"
 msgstr "भर्बोज शैली समर्थन बिनानै मटर कम्पाइल गरियो"
 
-#: src/core/workspace.c:508
+#: src/core/workspace.c:510
 msgid "Workspace switched"
 msgstr "कार्यस्थान स्विचर"
 
@@ -739,7 +710,7 @@ msgstr "कार्यस्थान स्विचर"
 msgid "Mode Switch: Mode %d"
 msgstr "मोड स्विच: मोड %d"
 
-#: src/x11/meta-x11-display.c:858
+#: src/x11/meta-x11-display.c:723
 #, c-format
 msgid ""
 "Display “%s” already has a window manager; try using the --replace option to replace the "
@@ -748,19 +719,19 @@ msgstr ""
 "\"%s\" प्रदर्शनसँग पहिले नै सञ्झ्याल प्रबन्धक छ; हालको सञ्झ्याल प्रबन्धकलाई बदल्न --replace विकल्प प्रयोग गरेर "
 "प्रयास गर्नुहोस् ।."
 
-#: src/x11/meta-x11-display.c:1243
+#: src/x11/meta-x11-display.c:1088
 #, c-format
 msgid "Failed to open X Window System display “%s”"
 msgstr "X सञ्झ्याल प्रणाली प्रर्दशन \"%s\" खोल्न असफल"
 
-#: src/x11/meta-x11-display.c:1476
+#: src/x11/meta-x11-display.c:1268
 #, c-format
 msgid "Screen %d on display “%s” is invalid"
 msgstr "पर्दा %d को प्रदर्शन \"%s\" अवैध छ"
 
 #. This probably means that a non-WM compositor like xcompmgr is running;
 #. * we have no way to get it to exit
-#: src/x11/meta-x11-display.c:2799
+#: src/x11/meta-x11-display.c:2547
 #, c-format
 msgid "Another compositing manager is already running on screen %i on display “%s”."
 msgstr "पर्दा %i मा \"%s\" प्रदर्शन कम्पोजिट प्रबन्धक पहिले नै चलिरहेको छ ।."
@@ -770,7 +741,7 @@ msgstr "पर्दा %i मा \"%s\" प्रदर्शन कम्प�
 msgid "Format %s not supported"
 msgstr "ढाँचा %s समर्थित छैन"
 
-#: src/x11/window-props.c:555
+#: src/x11/window-props.c:528
 #, c-format
 msgid "%s (on %s)"
 msgstr "%s (मा %s)"

@@ -51,7 +51,7 @@ struct _GDtlsClientConnectionInterface
 };
 
 GIO_AVAILABLE_IN_2_48
-GType                g_dtls_client_connection_get_type             (void);
+GType                g_dtls_client_connection_get_type             (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_2_48
 GDatagramBased      *g_dtls_client_connection_new                  (GDatagramBased         *base_socket,

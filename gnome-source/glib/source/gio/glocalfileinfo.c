@@ -103,6 +103,12 @@
 #include "glibintl.h"
 
 
+struct ThumbMD5Context {
+	guint32 buf[4];
+	guint32 bits[2];
+	unsigned char in[64];
+};
+
 #ifndef G_OS_WIN32
 
 typedef struct {
@@ -218,12 +224,12 @@ get_selinux_context (const char            *path,
     {
       if (follow_symlinks)
 	{
-	  if (getfilecon_raw (path, &context) < 0)
+	  if (lgetfilecon_raw (path, &context) < 0)
 	    return;
 	}
       else
 	{
-	  if (lgetfilecon_raw (path, &context) < 0)
+	  if (getfilecon_raw (path, &context) < 0)
 	    return;
 	}
 
@@ -900,7 +906,7 @@ get_access_rights (GFileAttributeMatcher *attribute_matcher,
 		   GLocalFileStat        *statbuf,
 		   GLocalParentFileInfo  *parent_info)
 {
-  /* FIXME: Windows: The underlying _waccess() is mostly pointless */
+  /* FIXME: Windows: The underlyin _waccess() is mostly pointless */
   if (_g_file_attribute_matcher_matches_id (attribute_matcher,
 					    G_FILE_ATTRIBUTE_ID_ACCESS_CAN_READ))
     _g_file_info_set_attribute_boolean_by_id (info, G_FILE_ATTRIBUTE_ID_ACCESS_CAN_READ,
@@ -1840,10 +1846,6 @@ get_icon_name (const char *path,
     {
       name = use_symbolic ? "folder-pictures-symbolic" : "folder-pictures";
     }
-  else if (g_strcmp0 (path, g_get_user_special_dir (G_USER_DIRECTORY_PROJECTS)) == 0)
-    {
-      name = use_symbolic ? "folder-projects-symbolic" : "folder-projects";
-    }
   else if (g_strcmp0 (path, g_get_user_special_dir (G_USER_DIRECTORY_PUBLIC_SHARE)) == 0)
     {
       name = use_symbolic ? "folder-publicshare-symbolic" : "folder-publicshare";
@@ -1913,8 +1915,6 @@ _g_local_file_info_get (const char             *basename,
   GVfs *vfs;
   GVfsClass *class;
   guint64 device;
-  gboolean query_full_content_type, query_fast_content_type, query_icons;
-  char *icon_content_type;
 
   info = g_file_info_new ();
 
@@ -2027,14 +2027,13 @@ _g_local_file_info_get (const char             *basename,
   _g_file_info_set_attribute_boolean_by_id (info, G_FILE_ATTRIBUTE_ID_DOS_IS_SYSTEM,
                                             (statbuf.attributes & FILE_ATTRIBUTE_SYSTEM));
 
-  if (stat_ok)
-    {
-      _g_file_info_set_attribute_boolean_by_id (info, G_FILE_ATTRIBUTE_ID_DOS_IS_MOUNTPOINT,
-                                                (statbuf.reparse_tag == IO_REPARSE_TAG_MOUNT_POINT));
+  _g_file_info_set_attribute_boolean_by_id (info, G_FILE_ATTRIBUTE_ID_DOS_IS_MOUNTPOINT,
+                                            (statbuf.reparse_tag == IO_REPARSE_TAG_MOUNT_POINT));
 
-      if (statbuf.reparse_tag != 0)
-        _g_file_info_set_attribute_uint32_by_id (info, G_FILE_ATTRIBUTE_ID_DOS_REPARSE_POINT_TAG, statbuf.reparse_tag);
-    }
+  if (statbuf.reparse_tag != 0)
+    _g_file_info_set_attribute_uint32_by_id (info, G_FILE_ATTRIBUTE_ID_DOS_REPARSE_POINT_TAG, statbuf.reparse_tag);
+
+  _g_file_info_set_attribute_boolean_by_id (info, G_FILE_ATTRIBUTE_ID_STANDARD_IS_BACKUP, FALSE);
 #endif
 
   symlink_target = NULL;
@@ -2049,18 +2048,12 @@ _g_local_file_info_get (const char             *basename,
         g_file_info_set_symlink_target (info, symlink_target);
     }
 
-  query_full_content_type = _g_file_attribute_matcher_matches_id (attribute_matcher,
-                                                                  G_FILE_ATTRIBUTE_ID_STANDARD_CONTENT_TYPE);
-  query_fast_content_type = _g_file_attribute_matcher_matches_id (attribute_matcher,
-                                                                  G_FILE_ATTRIBUTE_ID_STANDARD_FAST_CONTENT_TYPE);
-  query_icons = _g_file_attribute_matcher_matches_id (attribute_matcher,
-                                                      G_FILE_ATTRIBUTE_ID_STANDARD_ICON) ||
-                _g_file_attribute_matcher_matches_id (attribute_matcher,
-                                                      G_FILE_ATTRIBUTE_ID_STANDARD_SYMBOLIC_ICON);
-  icon_content_type = NULL;
-
-  if (query_full_content_type ||
-      (query_icons && !query_fast_content_type))
+  if (_g_file_attribute_matcher_matches_id (attribute_matcher,
+					    G_FILE_ATTRIBUTE_ID_STANDARD_CONTENT_TYPE) ||
+      _g_file_attribute_matcher_matches_id (attribute_matcher,
+					    G_FILE_ATTRIBUTE_ID_STANDARD_ICON) ||
+      _g_file_attribute_matcher_matches_id (attribute_matcher,
+					    G_FILE_ATTRIBUTE_ID_STANDARD_SYMBOLIC_ICON))
     {
       char *content_type = get_content_type (basename, path, stat_ok ? &statbuf : NULL, is_symlink, symlink_broken, flags, FALSE);
 
@@ -2068,49 +2061,45 @@ _g_local_file_info_get (const char             *basename,
 	{
 	  g_file_info_set_content_type (info, content_type);
 
-          if (query_icons && (query_full_content_type || !query_fast_content_type))
-            icon_content_type = g_steal_pointer (&content_type);
+	  if (_g_file_attribute_matcher_matches_id (attribute_matcher,
+                                                     G_FILE_ATTRIBUTE_ID_STANDARD_ICON)
+               || _g_file_attribute_matcher_matches_id (attribute_matcher,
+                                                        G_FILE_ATTRIBUTE_ID_STANDARD_SYMBOLIC_ICON))
+	    {
+	      GIcon *icon;
 
-          g_free (content_type);
-        }
+              /* non symbolic icon */
+              icon = get_icon (path, content_type, FALSE);
+              if (icon != NULL)
+                {
+                  g_file_info_set_icon (info, icon);
+                  g_object_unref (icon);
+                }
+
+              /* symbolic icon */
+              icon = get_icon (path, content_type, TRUE);
+              if (icon != NULL)
+                {
+                  g_file_info_set_symbolic_icon (info, icon);
+                  g_object_unref (icon);
+                }
+
+	    }
+	  
+	  g_free (content_type);
+	}
     }
 
-  if (query_fast_content_type)
+  if (_g_file_attribute_matcher_matches_id (attribute_matcher,
+					    G_FILE_ATTRIBUTE_ID_STANDARD_FAST_CONTENT_TYPE))
     {
       char *content_type = get_content_type (basename, path, stat_ok ? &statbuf : NULL, is_symlink, symlink_broken, flags, TRUE);
       
       if (content_type)
 	{
 	  _g_file_info_set_attribute_string_by_id (info, G_FILE_ATTRIBUTE_ID_STANDARD_FAST_CONTENT_TYPE, content_type);
-
-          if (query_icons && icon_content_type == NULL)
-            icon_content_type = g_steal_pointer (&content_type);
-
-          g_free (content_type);
-        }
-    }
-
-  if (icon_content_type != NULL)
-    {
-      GIcon *icon;
-
-      /* non symbolic icon */
-      icon = get_icon (path, icon_content_type, FALSE);
-      if (icon != NULL)
-        {
-          g_file_info_set_icon (info, icon);
-          g_object_unref (icon);
-        }
-
-      /* symbolic icon */
-      icon = get_icon (path, icon_content_type, TRUE);
-      if (icon != NULL)
-        {
-          g_file_info_set_symbolic_icon (info, icon);
-          g_object_unref (icon);
-        }
-
-      g_free (icon_content_type);
+	  g_free (content_type);
+	}
     }
 
   if (_g_file_attribute_matcher_matches_id (attribute_matcher,
@@ -2534,7 +2523,7 @@ set_symlink (char                       *filename,
       return FALSE;
     }
   
-  if (symlink (val, filename) != 0)
+  if (symlink (filename, val) != 0)
     {
       int errsv = errno;
 

@@ -20,7 +20,6 @@
 
 #include <atk/atk.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 
 #include "cally-examples-util.h"
 
@@ -35,11 +34,11 @@ make_ui (ClutterActor *stage)
   ClutterActor    *editable      = NULL;
   ClutterActor    *rectangle     = NULL;
   ClutterActor    *label         = NULL;
-  CoglColor color_stage = { 0x00, 0x00, 0x00, 0xff };
-  CoglColor color_text = { 0xff, 0x00, 0x00, 0xff };
-  CoglColor color_sel = { 0x00, 0xff, 0x00, 0x55 };
-  CoglColor color_label = { 0x00, 0xff, 0x55, 0xff };
-  CoglColor color_rect = { 0x00, 0xff, 0xff, 0x55 };
+  ClutterColor     color_stage   = { 0x00, 0x00, 0x00, 0xff };
+  ClutterColor     color_text    = { 0xff, 0x00, 0x00, 0xff };
+  ClutterColor     color_sel     = { 0x00, 0xff, 0x00, 0x55 };
+  ClutterColor     color_label   = { 0x00, 0xff, 0x55, 0xff };
+  ClutterColor     color_rect    = { 0x00, 0xff, 0xff, 0x55 };
   ClutterActor    *full_entry    = NULL;
   ClutterActor    *cloned_entry  = NULL;
 
@@ -98,6 +97,7 @@ main (int argc, char *argv[])
   cally_util_a11y_init (&argc, &argv);
 
   stage = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Cally - Clone Test");
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_test_quit), NULL);
 
   make_ui (stage);

@@ -29,10 +29,8 @@ static CoglTexture *
 create_source (TestState *state)
 {
   int dx, dy;
-  g_autofree uint8_t *data = NULL;
+  uint8_t *data = g_malloc (SOURCE_SIZE * SOURCE_SIZE * 4);
   CoglTexture *tex;
-
-  data = g_malloc (SOURCE_SIZE * SOURCE_SIZE * 4);
 
   /* Create a texture with a different coloured rectangle at each
      corner */
@@ -213,7 +211,7 @@ validate_result (TestState *state)
 
   /* Sub sub texture */
   p = texture_data = g_malloc (10 * 10 * 4);
-  cogl_context_flush (cogl_framebuffer_get_context (test_fb));
+  cogl_flush ();
   cogl_framebuffer_read_pixels (test_fb,
                                 0, SOURCE_SIZE * 2, 10, 10,
                                 COGL_PIXEL_FORMAT_RGBA_8888,
@@ -221,8 +219,8 @@ validate_result (TestState *state)
   for (y = 0; y < 10; y++)
     for (x = 0; x < 10; x++)
       {
-        g_assert_true (*(p++) == x + 40);
-        g_assert_true (*(p++) == y + 20);
+        g_assert (*(p++) == x + 40);
+        g_assert (*(p++) == y + 20);
         p += 2;
       }
   g_free (texture_data);
@@ -250,7 +248,7 @@ validate_result (TestState *state)
                      DIVISION_HEIGHT);
         uint32_t reference = corner_colors[div_x + div_y * SOURCE_DIVISIONS_X] >> 8;
         uint32_t color = GUINT32_FROM_BE (*((uint32_t *)p)) >> 8;
-        g_assert_true (color == reference);
+        g_assert (color == reference);
         p += 4;
       }
   g_free (texture_data);
@@ -283,17 +281,17 @@ validate_result (TestState *state)
         /* If we're in the center quarter */
         if (x >= 96 && x < 160 && y >= 96 && y < 160)
           {
-            g_assert_cmpint ((*p++), ==, 0);
-            g_assert_cmpint ((*p++), ==, 0);
-            g_assert_true ((*p++) == x - 96);
-            g_assert_true ((*p++) == y - 96);
+            g_assert ((*p++) == 0);
+            g_assert ((*p++) == 0);
+            g_assert ((*p++) == x - 96);
+            g_assert ((*p++) == y - 96);
           }
         else
           {
-            g_assert_true ((*p++) == x);
-            g_assert_true ((*p++) == y);
-            g_assert_true ((*p++) == 255);
-            g_assert_true ((*p++) == 255);
+            g_assert ((*p++) == x);
+            g_assert ((*p++) == y);
+            g_assert ((*p++) == 255);
+            g_assert ((*p++) == 255);
           }
       }
   g_free (texture_data);

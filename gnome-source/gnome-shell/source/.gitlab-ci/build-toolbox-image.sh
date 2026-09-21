@@ -32,22 +32,19 @@ build_container() {
     gnome-console # can't do without *some* terminal
     flatpak-spawn # run host commands
     flatpak # for host apps
-    nautilus # FileChooser portal
-    adwaita-fonts-all # system fonts
+    abattis-cantarell-fonts # system font
     gnome-backgrounds # no blank background!
   )
-  local debug_packages=(
-    glib2 # makes gdb much more useful
-  )
-  buildah run $build_cntr dnf config-manager setopt '*-openh264.enabled=0'
+  buildah run $build_cntr dnf config-manager --set-disabled '*-openh264'
   buildah run $build_cntr dnf install -y "${extra_packages[@]}"
-  buildah run $build_cntr dnf debuginfo-install -y "${debug_packages[@]}"
   buildah run $build_cntr dnf clean all
   buildah run $build_cntr rm -rf /var/lib/cache/dnf
 
-  # somehow the sysusers trigger from the flatpak package messes up the
-  # permissions of /etc/passwd to be only readable by root
-  buildah run $build_cntr chmod 644 /etc/passwd
+  # disable gnome-keyring activation:
+  # it either asks for unlocking the login keyring on startup, or it detects
+  # the running host daemon and doesn't export the object on the bus, which
+  # blocks the activating service until it hits the timeout
+  buildah run $build_cntr rm /usr/share/dbus-1/services/org.freedesktop.secrets.service
 
   local srcdir=$(realpath $(dirname $0))
   buildah copy --chmod 755 $build_cntr $srcdir/install-meson-project.sh /usr/libexec
@@ -56,10 +53,7 @@ build_container() {
   local update_mutter=$(mktemp)
   cat > $update_mutter <<-EOF
 	#!/bin/sh
-	TOOLBOX=\$(. /run/.containerenv; echo \$name)
-	/usr/libexec/install-meson-project.sh \\
-	  --destdir=/ --destdir=/var/lib/extensions/\$TOOLBOX \\
-	  https://gitlab.gnome.org/GNOME/mutter.git $MUTTER_BRANCH
+	/usr/libexec/install-meson-project.sh https://gitlab.gnome.org/GNOME/mutter.git $MUTTER_BRANCH
 	EOF
   buildah copy --chmod 755 $build_cntr $update_mutter /usr/bin/update-mutter
 
@@ -94,6 +88,4 @@ podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 
 build_container
 
-if [[ -z "$DRY_RUN" ]]; then
-  podman push $TOOLBOX_IMAGE
-fi
+podman push $TOOLBOX_IMAGE

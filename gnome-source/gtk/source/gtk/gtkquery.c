@@ -22,7 +22,7 @@
 #include "config.h"
 #include <string.h>
 
-#include "gtkqueryprivate.h"
+#include "gtkquery.h"
 
 struct _GtkQueryPrivate
 {
@@ -84,7 +84,9 @@ gtk_query_set_text (GtkQuery    *query,
 
   g_free (priv->text);
   priv->text = g_strdup (text);
-  g_clear_pointer (&priv->words, g_strfreev);
+
+  g_strfreev (priv->words);
+  priv->words = NULL;
 }
 
 GFile *

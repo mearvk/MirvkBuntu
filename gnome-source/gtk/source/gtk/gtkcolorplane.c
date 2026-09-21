@@ -51,11 +51,8 @@ enum {
   PROP_0,
   PROP_H_ADJUSTMENT,
   PROP_S_ADJUSTMENT,
-  PROP_V_ADJUSTMENT,
-  N_PROPS
+  PROP_V_ADJUSTMENT
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE (GtkColorPlane, gtk_color_plane, GTK_TYPE_WIDGET)
 
@@ -409,7 +406,8 @@ gtk_color_plane_init (GtkColorPlane *plane)
   gtk_widget_add_controller (GTK_WIDGET (plane), controller);
 
   controller = gtk_shortcut_controller_new ();
-  trigger = gtk_shortcut_trigger_create_for_menu ();
+  trigger = gtk_alternative_trigger_new (gtk_keyval_trigger_new (GDK_KEY_F10, GDK_SHIFT_MASK),
+                                         gtk_keyval_trigger_new (GDK_KEY_Menu, 0));
   action = gtk_named_action_new ("color.edit");
   shortcut = gtk_shortcut_new_with_arguments (trigger, action, "s", "sv");
   gtk_shortcut_controller_add_shortcut (GTK_SHORTCUT_CONTROLLER (controller), shortcut);
@@ -486,22 +484,28 @@ gtk_color_plane_class_init (GtkColorPlaneClass *class)
   widget_class->snapshot = plane_snapshot;
   widget_class->size_allocate = plane_size_allocate;
 
-  props[PROP_H_ADJUSTMENT] = g_param_spec_object ("h-adjustment", NULL, NULL,
-                                                  GTK_TYPE_ADJUSTMENT,
-                                                  G_PARAM_WRITABLE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class,
+                                   PROP_H_ADJUSTMENT,
+                                   g_param_spec_object ("h-adjustment", NULL, NULL,
+                                                        GTK_TYPE_ADJUSTMENT,
+                                                        GTK_PARAM_WRITABLE |
+                                                        G_PARAM_CONSTRUCT_ONLY));
 
-  props[PROP_S_ADJUSTMENT] = g_param_spec_object ("s-adjustment", NULL, NULL,
-                                                  GTK_TYPE_ADJUSTMENT,
-                                                  G_PARAM_WRITABLE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class,
+                                   PROP_S_ADJUSTMENT,
+                                   g_param_spec_object ("s-adjustment", NULL, NULL,
+                                                        GTK_TYPE_ADJUSTMENT,
+                                                        GTK_PARAM_WRITABLE |
+                                                        G_PARAM_CONSTRUCT_ONLY));
 
-  props[PROP_V_ADJUSTMENT] = g_param_spec_object ("v-adjustment", NULL, NULL,
-                                                  GTK_TYPE_ADJUSTMENT,
-                                                  G_PARAM_WRITABLE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_V_ADJUSTMENT,
+                                   g_param_spec_object ("v-adjustment", NULL, NULL,
+                                                        GTK_TYPE_ADJUSTMENT,
+                                                        GTK_PARAM_WRITABLE |
+                                                        G_PARAM_CONSTRUCT_ONLY));
 
   gtk_widget_class_set_css_name (widget_class, "plane");
-  gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_SLIDER);
 }
 
 GtkWidget *

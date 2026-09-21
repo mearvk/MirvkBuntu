@@ -582,7 +582,7 @@ clutter_align_constraint_set_factor (ClutterAlignConstraint *align,
 {
   g_return_if_fail (CLUTTER_IS_ALIGN_CONSTRAINT (align));
 
-  align->factor = CLAMP (factor, 0.0f, 1.0f);
+  align->factor = CLAMP (factor, 0.0, 1.0);
 
   if (align->actor != NULL)
     clutter_actor_queue_relayout (align->actor);

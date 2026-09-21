@@ -53,6 +53,7 @@ typedef struct _CoglBoxedValue
     float matrix[16];
     float *float_array;
     int *int_array;
+    void *array;
   } v;
 } CoglBoxedValue;
 
@@ -61,12 +62,7 @@ typedef struct _CoglBoxedValue
     CoglBoxedValue *_bv = (bv);                 \
     _bv->type = COGL_BOXED_NONE;                \
     _bv->count = 1;                             \
-    _bv->size = 0;                              \
   } G_STMT_END
-
-char *
-_cogl_boxed_value_to_string (const CoglBoxedValue *bv,
-                             const char *name);
 
 gboolean
 _cogl_boxed_value_equal (const CoglBoxedValue *bva,

@@ -26,18 +26,15 @@
 #include "window.h"
 #include "css-editor.h"
 
-#include "gtkalertdialog.h"
 #include "gtkcssprovider.h"
-#include "gtkfiledialog.h"
-#include "gtklabel.h"
-#include "gtkstyleproviderprivate.h"
-#include "gtktextiter.h"
+#include "gtkstyleprovider.h"
 #include "gtktextview.h"
+#include "gtkalertdialog.h"
+#include "gtkfiledialog.h"
 #include "gtktogglebutton.h"
-#include "gtkswitch.h"
+#include "gtklabel.h"
 #include "gtktooltip.h"
-#include "gtksettings.h"
-#include "gtkdropdown.h"
+#include "gtktextiter.h"
 
 #include "gtk/css/gtkcss.h"
 
@@ -47,13 +44,9 @@ struct _GtkInspectorCssEditorPrivate
   GtkTextBuffer *text;
   GdkDisplay *display;
   GtkCssProvider *provider;
-  GtkSwitch *enable_switch;
-  GtkDropDown *color_scheme;
-  GtkDropDown *contrast;
-  GtkDropDown *reduced_motion;
+  GtkToggleButton *disable_button;
   guint timeout;
   GList *errors;
-  gboolean show_deprecations;
 };
 
 typedef struct {
@@ -101,12 +94,6 @@ query_tooltip_cb (GtkWidget             *widget,
     {
       CssError *css_error = l->data;
 
-      if (g_error_matches (css_error->error,
-                           GTK_CSS_PARSER_WARNING,
-                           GTK_CSS_PARSER_WARNING_DEPRECATED) &&
-          !ce->priv->show_deprecations)
-        continue;
-
       if (gtk_text_iter_in_range (&iter, &css_error->start, &css_error->end))
         {
           gtk_tooltip_set_text (tooltip, css_error->error->message);
@@ -135,11 +122,11 @@ set_initial_text (GtkInspectorCssEditor *ce)
   autosave_file = get_autosave_path ();
 
   if (g_file_get_contents (autosave_file, &initial_text, &len, NULL))
-    gtk_switch_set_active (GTK_SWITCH (ce->priv->enable_switch), FALSE);
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (ce->priv->disable_button), TRUE);
   else
     initial_text = g_strconcat ("/*\n",
                                 _("You can type here any CSS rule recognized by GTK."), "\n",
-                                _("You can temporarily disable this custom CSS by toggling the switch above."), "\n\n",
+                                _("You can temporarily disable this custom CSS by clicking on the “Pause” button above."), "\n\n",
                                 _("Changes are applied instantly and globally, for the whole application."), "\n",
                                 "*/\n\n", NULL);
   gtk_text_buffer_set_text (GTK_TEXT_BUFFER (ce->priv->text), initial_text, -1);
@@ -168,43 +155,19 @@ autosave_contents (GtkInspectorCssEditor *ce)
 }
 
 static void
-enable_switch_changed (GtkSwitch             *sw,
-                       GParamSpec            *pspec,
-                       GtkInspectorCssEditor *ce)
+disable_toggled (GtkToggleButton       *button,
+                 GtkInspectorCssEditor *ce)
 {
   if (!ce->priv->display)
     return;
 
-  if (gtk_switch_get_active (sw))
-    gtk_style_context_add_provider_for_display (ce->priv->display,
-                                                GTK_STYLE_PROVIDER (ce->priv->provider),
-                                                GTK_STYLE_PROVIDER_PRIORITY_INSPECTOR);
-  else
+  if (gtk_toggle_button_get_active (button))
     gtk_style_context_remove_provider_for_display (ce->priv->display,
                                                    GTK_STYLE_PROVIDER (ce->priv->provider));
-}
-
-static void
-toggle_deprecations (GtkToggleButton       *button,
-                     GtkInspectorCssEditor *ce)
-{
-  GtkTextTagTable *tags;
-  GtkTextTag *tag;
-  PangoUnderline underline;
-
-  if (!ce->priv->display)
-    return;
-
-  ce->priv->show_deprecations = gtk_toggle_button_get_active (button);
-
-  tags = gtk_text_buffer_get_tag_table (GTK_TEXT_BUFFER (ce->priv->text));
-  tag = gtk_text_tag_table_lookup (tags, "deprecation");
-  if (ce->priv->show_deprecations)
-    underline = PANGO_UNDERLINE_SINGLE;
   else
-    underline = PANGO_UNDERLINE_NONE;
-
-  g_object_set (tag, "underline", underline, NULL);
+    gtk_style_context_add_provider_for_display (ce->priv->display,
+                                                GTK_STYLE_PROVIDER (ce->priv->provider),
+                                                GTK_STYLE_PROVIDER_PRIORITY_USER);
 }
 
 static char *
@@ -289,60 +252,19 @@ save_clicked (GtkButton             *button,
 }
 
 static void
-settings_changed (GtkDropDown           *dropdown,
-                  GParamSpec            *pspec,
-                  GtkInspectorCssEditor *ce)
-{
-  GtkInterfaceColorScheme color_scheme = gtk_drop_down_get_selected (ce->priv->color_scheme) + 1;
-  GtkInterfaceColorScheme system_color_scheme;
-  GtkInterfaceContrast contrast = gtk_drop_down_get_selected (ce->priv->contrast) + 1;
-  GtkInterfaceContrast system_contrast;
-  GtkReducedMotion reduced_motion = gtk_drop_down_get_selected (ce->priv->reduced_motion);
-  GtkReducedMotion system_reduced_motion;
-
-  g_object_get (gtk_settings_get_for_display (ce->priv->display),
-                "gtk-interface-color-scheme", &system_color_scheme,
-                "gtk-interface-contrast", &system_contrast,
-                "gtk-interface-reduced-motion", &system_reduced_motion,
-                NULL);
-
-  if (color_scheme == GTK_INTERFACE_COLOR_SCHEME_DEFAULT)
-    color_scheme = system_color_scheme;
-
-  if (contrast == GTK_INTERFACE_CONTRAST_NO_PREFERENCE)
-    contrast = system_contrast;
-
-  if (reduced_motion == GTK_REDUCED_MOTION_NO_PREFERENCE)
-    reduced_motion = system_reduced_motion;
-
-  g_object_set (ce->priv->provider,
-                "prefers-color-scheme", color_scheme,
-                "prefers-contrast", contrast,
-                "prefers-reduced-motion", reduced_motion,
-                NULL);
-}
-
-static void
-system_settings_changed (GtkSettings           *settings,
-                         GParamSpec            *pspec,
-                         GtkInspectorCssEditor *ce)
-{
-  settings_changed (NULL, NULL, ce);
-}
-
-static void
 update_style (GtkInspectorCssEditor *ce)
 {
   char *text;
 
-  g_clear_list (&ce->priv->errors, css_error_free);
+  g_list_free_full (ce->priv->errors, css_error_free);
+  ce->priv->errors = NULL;
 
   text = get_current_text (ce->priv->text);
   gtk_css_provider_load_from_string (ce->priv->provider, text);
   g_free (text);
 }
 
-static void
+static gboolean
 update_timeout (gpointer data)
 {
   GtkInspectorCssEditor *ce = data;
@@ -351,6 +273,8 @@ update_timeout (gpointer data)
 
   autosave_contents (ce);
   update_style (ce);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -360,9 +284,10 @@ text_changed (GtkTextBuffer         *buffer,
   if (ce->priv->timeout != 0)
     g_source_remove (ce->priv->timeout);
 
-  ce->priv->timeout = g_timeout_add_once (100, update_timeout, ce);
+  ce->priv->timeout = g_timeout_add (100, update_timeout, ce); 
 
-  g_clear_list (&ce->priv->errors, css_error_free);
+  g_list_free_full (ce->priv->errors, css_error_free);
+  ce->priv->errors = NULL;
 }
 
 static void
@@ -382,21 +307,16 @@ show_parsing_error (GtkCssProvider        *provider,
   start = gtk_css_section_get_start_location (section);
   gtk_text_buffer_get_iter_at_line_index (buffer,
                                           &css_error->start,
-                                          CLAMP (start->lines - 1, 0, INT_MAX),
-                                          CLAMP (start->line_bytes, 0, INT_MAX));
+                                          start->lines,
+                                          start->line_bytes);
   end = gtk_css_section_get_end_location (section);
   gtk_text_buffer_get_iter_at_line_index (buffer,
                                           &css_error->end,
-                                          CLAMP (end->lines - 1, 0, INT_MAX),
-                                          CLAMP (end->line_bytes, 0, INT_MAX));
+                                          end->lines,
+                                          end->line_bytes);
 
   if (error->domain == GTK_CSS_PARSER_WARNING)
-    {
-      if (error->code == GTK_CSS_PARSER_WARNING_DEPRECATED)
-        tag_name = "deprecation";
-      else
-        tag_name = "warning";
-    }
+    tag_name = "warning";
   else
     tag_name = "error";
 
@@ -412,9 +332,9 @@ static void
 create_provider (GtkInspectorCssEditor *ce)
 {
   ce->priv->provider = gtk_css_provider_new ();
-
   g_signal_connect (ce->priv->provider, "parsing-error",
                     G_CALLBACK (show_parsing_error), ce);
+
 }
 
 static void
@@ -428,17 +348,6 @@ static void
 add_provider (GtkInspectorCssEditor *ce,
               GdkDisplay *display)
 {
-  GtkSettings *settings = gtk_settings_get_for_display (display);
-
-  g_signal_connect_object (settings, "notify::gtk-interface-color-scheme",
-                           G_CALLBACK (system_settings_changed), ce, G_CONNECT_DEFAULT);
-  g_signal_connect_object (settings, "notify::gtk-interface-contrast",
-                           G_CALLBACK (system_settings_changed), ce, G_CONNECT_DEFAULT);
-  g_signal_connect_object (settings, "notify::gtk-interface-reduced-motion",
-                           G_CALLBACK (system_settings_changed), ce, G_CONNECT_DEFAULT);
-
-  system_settings_changed (settings, NULL, ce);
-
   gtk_style_context_add_provider_for_display (display,
                                               GTK_STYLE_PROVIDER (ce->priv->provider),
                                               GTK_STYLE_PROVIDER_PRIORITY_USER);
@@ -463,8 +372,6 @@ static void
 constructed (GObject *object)
 {
   GtkInspectorCssEditor *ce = GTK_INSPECTOR_CSS_EDITOR (object);
-
-  G_OBJECT_CLASS (gtk_inspector_css_editor_parent_class)->constructed (object);
 
   create_provider (ce);
 }
@@ -498,16 +405,11 @@ gtk_inspector_css_editor_class_init (GtkInspectorCssEditorClass *klass)
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gtk/libgtk/inspector/css-editor.ui");
   gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, text);
   gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, view);
-  gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, enable_switch);
-  gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, color_scheme);
-  gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, contrast);
-  gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, reduced_motion);
-  gtk_widget_class_bind_template_callback (widget_class, enable_switch_changed);
-  gtk_widget_class_bind_template_callback (widget_class, toggle_deprecations);
+  gtk_widget_class_bind_template_child_private (widget_class, GtkInspectorCssEditor, disable_button);
+  gtk_widget_class_bind_template_callback (widget_class, disable_toggled);
   gtk_widget_class_bind_template_callback (widget_class, save_clicked);
   gtk_widget_class_bind_template_callback (widget_class, text_changed);
   gtk_widget_class_bind_template_callback (widget_class, query_tooltip_cb);
-  gtk_widget_class_bind_template_callback (widget_class, settings_changed);
 }
 
 void

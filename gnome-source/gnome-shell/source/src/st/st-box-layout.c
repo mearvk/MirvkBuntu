@@ -35,9 +35,8 @@
  */
 
 /**
- * StBoxLayout:
- *
- * Layout container arranging children in a single line.
+ * SECTION:st-box-layout
+ * @short_description: a layout container arranging children in a single line
  *
  * The #StBoxLayout arranges its children along a single line, where each
  * child can be allocated either its preferred size or larger if the expand
@@ -45,6 +44,7 @@
  * than its requested size. If the fill option is not set, but the expand option
  * is enabled, then the position of the actor within the available space can
  * be determined by the alignment child property.
+ *
  */
 
 #include <stdlib.h>
@@ -58,7 +58,8 @@
 enum {
   PROP_0,
 
-  PROP_ORIENTATION,
+  PROP_VERTICAL,
+  PROP_PACK_START,
 
   N_PROPS
 };
@@ -85,10 +86,14 @@ st_box_layout_get_property (GObject    *object,
 
   switch (property_id)
     {
-    case PROP_ORIENTATION:
+    case PROP_VERTICAL:
       layout = clutter_actor_get_layout_manager (CLUTTER_ACTOR (object));
       orientation = clutter_box_layout_get_orientation (CLUTTER_BOX_LAYOUT (layout));
-      g_value_set_enum (value, orientation);
+      g_value_set_boolean (value, orientation == CLUTTER_ORIENTATION_VERTICAL);
+      break;
+
+    case PROP_PACK_START:
+      g_value_set_boolean (value, FALSE);
       break;
 
     default:
@@ -106,8 +111,11 @@ st_box_layout_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_ORIENTATION:
-      st_box_layout_set_orientation (box, g_value_get_enum (value));
+    case PROP_VERTICAL:
+      st_box_layout_set_vertical (box, g_value_get_boolean (value));
+      break;
+
+    case PROP_PACK_START:
       break;
 
     default:
@@ -131,12 +139,15 @@ st_box_layout_style_changed (StWidget *self)
 }
 
 static void
-on_layout_orientation_changed (GObject    *object,
-                               GParamSpec *pspec,
-                               gpointer    user_data)
+layout_notify (GObject    *object,
+               GParamSpec *pspec,
+               gpointer    user_data)
 {
-  GObject *box = user_data;
-  g_object_notify_by_pspec (box, props[PROP_ORIENTATION]);
+  GObject *self = user_data;
+  const char *prop_name = g_param_spec_get_name (pspec);
+
+  if (g_object_class_find_property (G_OBJECT_GET_CLASS (self), prop_name))
+    g_object_notify (self, prop_name);
 }
 
 static void
@@ -150,8 +161,7 @@ on_layout_manager_notify (GObject    *object,
   if (layout == NULL)
     return;
 
-  g_signal_connect (layout, "notify::orientation",
-                    G_CALLBACK (on_layout_orientation_changed), object);
+  g_signal_connect (layout, "notify", G_CALLBACK (layout_notify), object);
 }
 
 static void
@@ -167,16 +177,31 @@ st_box_layout_class_init (StBoxLayoutClass *klass)
   widget_class->style_changed = st_box_layout_style_changed;
 
   /**
-   * StBoxLayout:orientation:
+   * StBoxLayout:vertical:
    *
-   * The orientation of the #StBoxLayout, either horizontal or
-   * vertical
+   * A convenience property for the #ClutterBoxLayout:vertical property of the
+   * internal layout for #StBoxLayout.
    */
-  props[PROP_ORIENTATION] =
-    g_param_spec_enum ("orientation", NULL, NULL,
-                       CLUTTER_TYPE_ORIENTATION,
-                       CLUTTER_ORIENTATION_HORIZONTAL,
-                       ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
+  props[PROP_VERTICAL] =
+    g_param_spec_boolean ("vertical",
+                          "Vertical",
+                          "Whether the layout should be vertical, rather"
+                          "than horizontal",
+                          FALSE,
+                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
+
+  /**
+   * StBoxLayout:pack-start:
+   *
+   * A convenience property for the #ClutterBoxLayout:pack-start property of the
+   * internal layout for #StBoxLayout.
+   */
+  props[PROP_PACK_START] =
+    g_param_spec_boolean ("pack-start",
+                          "Pack Start",
+                          "Whether to pack items at the start of the box",
+                          FALSE,
+                          ST_PARAM_READWRITE | G_PARAM_DEPRECATED);
 
   g_object_class_install_properties (object_class, N_PROPS, props);
 
@@ -206,42 +231,75 @@ st_box_layout_new (void)
 }
 
 /**
- * st_box_layout_set_orientation:
+ * st_box_layout_set_vertical:
  * @box: A #StBoxLayout
- * @orientation: the orientation of the #StBoxLayout
+ * @vertical: %TRUE if the layout should be vertical
  *
- * Set the value of the #StBoxLayout:orientation property
+ * Set the value of the #StBoxLayout:vertical property
  */
 void
-st_box_layout_set_orientation (StBoxLayout        *box,
-                               ClutterOrientation  orientation)
+st_box_layout_set_vertical (StBoxLayout *box,
+                            gboolean     vertical)
 {
   ClutterLayoutManager *layout;
+  ClutterOrientation orientation;
 
   g_return_if_fail (ST_IS_BOX_LAYOUT (box));
 
   layout = clutter_actor_get_layout_manager (CLUTTER_ACTOR (box));
+  orientation = vertical ? CLUTTER_ORIENTATION_VERTICAL
+                         : CLUTTER_ORIENTATION_HORIZONTAL;
 
   if (clutter_box_layout_get_orientation (CLUTTER_BOX_LAYOUT (layout)) != orientation)
-    clutter_box_layout_set_orientation (CLUTTER_BOX_LAYOUT (layout), orientation);
+    {
+      clutter_box_layout_set_orientation (CLUTTER_BOX_LAYOUT (layout), orientation);
+      g_object_notify_by_pspec (G_OBJECT (box), props[PROP_VERTICAL]);
+    }
 }
 
 /**
- * st_box_layout_get_orientation:
+ * st_box_layout_get_vertical:
  * @box: A #StBoxLayout
  *
- * Get the value of the #StBoxLayout:orientation property.
+ * Get the value of the #StBoxLayout:vertical property.
  *
- * Returns: the orientation
+ * Returns: %TRUE if the layout is vertical
  */
-ClutterOrientation
-st_box_layout_get_orientation (StBoxLayout *box)
+gboolean
+st_box_layout_get_vertical (StBoxLayout *box)
 {
   ClutterLayoutManager *layout;
+  ClutterOrientation orientation;
 
-  g_return_val_if_fail (ST_IS_BOX_LAYOUT (box),
-                        CLUTTER_ORIENTATION_HORIZONTAL);
+  g_return_val_if_fail (ST_IS_BOX_LAYOUT (box), FALSE);
 
   layout = clutter_actor_get_layout_manager (CLUTTER_ACTOR (box));
-  return clutter_box_layout_get_orientation (CLUTTER_BOX_LAYOUT (layout));
+  orientation = clutter_box_layout_get_orientation (CLUTTER_BOX_LAYOUT (layout));
+  return orientation == CLUTTER_ORIENTATION_VERTICAL;
+}
+
+/**
+ * st_box_layout_set_pack_start:
+ * @box: A #StBoxLayout
+ * @pack_start: %TRUE if the layout should use pack-start
+ *
+ * Deprecated: No longer has any effect
+ */
+void
+st_box_layout_set_pack_start (StBoxLayout *box,
+                              gboolean     pack_start)
+{
+}
+
+/**
+ * st_box_layout_get_pack_start:
+ * @box: A #StBoxLayout
+ *
+ * Returns: the value of the #StBoxLayout:pack-start property,
+ *   always %FALSE
+ */
+gboolean
+st_box_layout_get_pack_start (StBoxLayout *box)
+{
+  return FALSE;
 }

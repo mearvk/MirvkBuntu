@@ -21,14 +21,17 @@
 
 """ Integration tests for g_message functions on low-memory. """
 
+import collections
 import os
+import subprocess
 import unittest
 
 import taptestrunner
-import testprogramrunner
+
+Result = collections.namedtuple("Result", ("info", "out", "err"))
 
 
-class TestMessagesLowMemory(testprogramrunner.TestProgramRunner):
+class TestMessagesLowMemory(unittest.TestCase):
     """Integration test for checking g_message()’s behavior on low memory.
 
     This can be run when installed or uninstalled. When uninstalled,
@@ -39,12 +42,51 @@ class TestMessagesLowMemory(testprogramrunner.TestProgramRunner):
     error message.
     """
 
-    PROGRAM_NAME = "messages-low-memory"
-    PROGRAM_TYPE = testprogramrunner.ProgramType.NATIVE
+    test_binary = "messages-low-memory"
+
+    def setUp(self):
+        ext = ""
+        if os.name == "nt":
+            ext = ".exe"
+        if "G_TEST_BUILDDIR" in os.environ:
+            self._test_binary = os.path.join(
+                os.environ["G_TEST_BUILDDIR"], self.test_binary + ext
+            )
+        else:
+            self._test_binary = os.path.join(
+                os.path.dirname(__file__), self.test_binary + ext
+            )
+        print("messages-low-memory:", self._test_binary)
+
+    def runTestBinary(self, *args):
+        print("Running:", *args)
+
+        env = os.environ.copy()
+        env["LC_ALL"] = "C.UTF-8"
+        env["G_DEBUG"] = "fatal-warnings"
+        print("Environment:", env)
+
+        # We want to ensure consistent line endings...
+        info = subprocess.run(
+            *args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            universal_newlines=True,
+        )
+        out = info.stdout.strip()
+        err = info.stderr.strip()
+
+        result = Result(info, out, err)
+
+        print("Return code:", result.info.returncode)
+        print("Output:", result.out)
+        print("Error:", result.err)
+        return result
 
     def test_message_memory_allocation_failure(self):
         """Test running g_message() when memory is exhausted."""
-        result = self.runTestProgram([], should_fail=True)
+        result = self.runTestBinary(self._test_binary)
 
         if result.info.returncode == 77:
             self.skipTest("Not supported")

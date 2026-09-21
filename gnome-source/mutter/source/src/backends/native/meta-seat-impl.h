@@ -35,14 +35,23 @@
 #include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-barrier-native.h"
 #include "backends/native/meta-cursor-renderer-native.h"
-#include "backends/native/meta-keyboard-a11y.h"
 #include "backends/native/meta-keymap-native.h"
 #include "backends/native/meta-pointer-constraint-native.h"
 #include "backends/native/meta-xkb-utils.h"
 #include "clutter/clutter.h"
 
+typedef struct _MetaTouchState MetaTouchState;
 typedef struct _MetaSeatImpl MetaSeatImpl;
 typedef struct _MetaEventSource  MetaEventSource;
+
+struct _MetaTouchState
+{
+  MetaSeatImpl *seat_impl;
+
+  int device_slot;
+  int seat_slot;
+  graphene_point_t coords;
+};
 
 struct _MetaSeatImpl
 {
@@ -65,7 +74,16 @@ struct _MetaSeatImpl
   GSList *devices;
   GHashTable *tools;
 
+  ClutterInputDevice *core_pointer;
+  ClutterInputDevice *core_keyboard;
+
+  GHashTable *touch_states;
+  GHashTable *cursor_renderers;
+
   struct xkb_state *xkb;
+  xkb_led_index_t caps_lock_led;
+  xkb_led_index_t num_lock_led;
+  xkb_led_index_t scroll_lock_led;
   xkb_layout_index_t layout_idx;
   uint32_t button_state;
   int button_count[KEY_CNT];
@@ -73,10 +91,8 @@ struct _MetaSeatImpl
   MetaBarrierManagerNative *barrier_manager;
   MetaPointerConstraintImpl *pointer_constraint;
 
-  MetaKeyboardA11y *keyboard_a11y;
   MetaKeymapNative *keymap;
   MetaInputSettings *input_settings;
-  ClutterInputDevice *virtual_source_pointer;
 
   MetaViewportInfo *viewports;
 
@@ -96,6 +112,9 @@ struct _MetaSeatImpl
   ClutterInputDevice *repeat_device;
   GSource *repeat_source;
 
+  float pointer_x;
+  float pointer_y;
+
   /* Emulation of discrete scroll events out of smooth ones */
   float accum_scroll_dx;
   float accum_scroll_dy;
@@ -111,11 +130,9 @@ MetaSeatImpl * meta_seat_impl_new (MetaSeatNative     *seat_native,
                                    const char         *seat_id,
                                    MetaSeatNativeFlag  flags);
 
-void meta_seat_impl_setup (MetaSeatImpl *seat_impl);
-
 void meta_seat_impl_start (MetaSeatImpl *seat_impl);
 
-void meta_seat_impl_prepare_shutdown (MetaSeatImpl *seat_impl);
+void meta_seat_impl_destroy (MetaSeatImpl *seat_impl);
 
 META_EXPORT_TEST
 void meta_seat_impl_run_input_task (MetaSeatImpl *seat_impl,
@@ -171,10 +188,17 @@ void meta_seat_impl_notify_touch_event_in_impl (MetaSeatImpl       *seat_impl,
                                                 ClutterEventType    evtype,
                                                 uint64_t            time_us,
                                                 int                 slot,
-                                                float               x,
-                                                float               y);
+                                                double              x,
+                                                double              y);
 
 void meta_seat_impl_sync_leds_in_impl (MetaSeatImpl *seat_impl);
+
+MetaTouchState * meta_seat_impl_acquire_touch_state_in_impl (MetaSeatImpl *seat_impl,
+                                                             int           seat_slot);
+MetaTouchState * meta_seat_impl_lookup_touch_state_in_impl (MetaSeatImpl *seat_impl,
+                                                            int           seat_slot);
+void meta_seat_impl_release_touch_state_in_impl (MetaSeatImpl   *seat_impl,
+                                                 int             seat_slot);
 
 void meta_seat_impl_update_xkb_state_in_impl (MetaSeatImpl *seat_impl);
 
@@ -183,16 +207,11 @@ void  meta_seat_impl_reclaim_devices (MetaSeatImpl *seat_impl);
 
 struct xkb_state * meta_seat_impl_get_xkb_state_in_impl (MetaSeatImpl *seat_impl);
 
-gboolean meta_seat_impl_set_keymap_finish (MetaSeatImpl  *seat_impl,
-                                           GAsyncResult  *result,
-                                           GError       **error);
+void meta_seat_impl_set_keyboard_map (MetaSeatImpl      *seat_impl,
+                                      struct xkb_keymap *keymap);
 
-void meta_seat_impl_set_keymap_async (MetaSeatImpl          *seat_impl,
-                                      MetaKeymapDescription *keymap_description,
-                                      xkb_layout_index_t     layout_index,
-                                      GCancellable          *cancellable,
-                                      GAsyncReadyCallback    callback,
-                                      gpointer               user_data);
+void meta_seat_impl_set_keyboard_layout_index (MetaSeatImpl       *seat_impl,
+                                               xkb_layout_index_t  idx);
 
 void meta_seat_impl_set_keyboard_repeat_in_impl (MetaSeatImpl *seat_impl,
                                                  gboolean      repeat,
@@ -217,6 +236,8 @@ gboolean meta_seat_impl_query_state (MetaSeatImpl         *seat_impl,
                                      ClutterEventSequence *sequence,
                                      graphene_point_t     *coords,
                                      ClutterModifierType  *modifiers);
+ClutterInputDevice * meta_seat_impl_get_pointer (MetaSeatImpl *seat_impl);
+ClutterInputDevice * meta_seat_impl_get_keyboard (MetaSeatImpl *seat_impl);
 
 MetaKeymapNative * meta_seat_impl_get_keymap (MetaSeatImpl *seat_impl);
 
@@ -236,15 +257,3 @@ void meta_seat_impl_queue_main_thread_idle (MetaSeatImpl   *seat_impl,
                                             GDestroyNotify  destroy_notify);
 
 MetaBackend * meta_seat_impl_get_backend (MetaSeatImpl *seat_impl);
-
-void meta_seat_impl_add_virtual_input_device (MetaSeatImpl       *seat_impl,
-                                              ClutterInputDevice *device);
-
-void meta_seat_impl_remove_virtual_input_device (MetaSeatImpl       *seat_impl,
-                                                 ClutterInputDevice *device);
-
-void meta_seat_impl_set_a11y_modifiers (MetaSeatImpl   *seat_impl,
-                                        const uint32_t *modifiers,
-                                        int             n_modifiers);
-
-ClutterInputDevice * meta_seat_impl_get_virtual_source_pointer (MetaSeatImpl *seat_impl);

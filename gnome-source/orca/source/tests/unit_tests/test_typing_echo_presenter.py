@@ -233,11 +233,7 @@ class TestTypingEchoPresenter:
         test_context.patch_object(
             Atspi,
             "RelationType",
-            new=type(
-                "RelationType",
-                (),
-                {"ERROR_FOR": 1, "ERROR_MESSAGE": 2, "LABELLED_BY": 0},
-            ),
+            new=type("RelationType", (), {"LABELLED_BY": 0}),
         )
         test_context.patch_object(Atspi, "Relation", new=type("Relation", (), {}))
 

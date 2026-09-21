@@ -60,12 +60,9 @@ static guint signals[LAST_SIGNAL] = { 0, };
 /**
  * GtkDrawingArea:
  *
- * Allows drawing with cairo.
+ * `GtkDrawingArea` is a widget that allows drawing with cairo.
  *
- * <picture>
- *   <source srcset="drawingarea-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkDrawingArea" src="drawingarea.png">
- * </picture>
+ * ![An example GtkDrawingArea](drawingarea.png)
  *
  * It’s essentially a blank widget; you can draw on it. After
  * creating a drawing area, the application may want to connect to:
@@ -282,24 +279,24 @@ gtk_drawing_area_class_init (GtkDrawingAreaClass *class)
   widget_class->snapshot = gtk_drawing_area_snapshot;
 
   /**
-   * GtkDrawingArea:content-width:
+   * GtkDrawingArea:content-width: (attributes org.gtk.Property.get=gtk_drawing_area_get_content_width org.gtk.Property.set=gtk_drawing_area_set_content_width)
    *
    * The content width.
    */
   props[PROP_CONTENT_WIDTH] =
     g_param_spec_int ("content-width", NULL, NULL,
                       0, G_MAXINT, 0,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkDrawingArea:content-height:
+   * GtkDrawingArea:content-height: (attributes org.gtk.Property.get=gtk_drawing_area_get_content_height org.gtk.Property.set=gtk_drawing_area_set_content_height)
    *
    * The content height.
    */
   props[PROP_CONTENT_HEIGHT] =
     g_param_spec_int ("content-height", NULL, NULL,
                       0, G_MAXINT, 0,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, LAST_PROP, props);
 
@@ -348,7 +345,7 @@ gtk_drawing_area_new (void)
 }
 
 /**
- * gtk_drawing_area_set_content_width:
+ * gtk_drawing_area_set_content_width: (attributes org.gtk.Method.set_property=content-width)
  * @self: a `GtkDrawingArea`
  * @width: the width of contents
  *
@@ -380,7 +377,7 @@ gtk_drawing_area_set_content_width (GtkDrawingArea *self,
 }
 
 /**
- * gtk_drawing_area_get_content_width:
+ * gtk_drawing_area_get_content_width: (attributes org.gtk.Method.get_property=content-width)
  * @self: a `GtkDrawingArea`
  *
  * Retrieves the content width of the `GtkDrawingArea`.
@@ -398,7 +395,7 @@ gtk_drawing_area_get_content_width (GtkDrawingArea *self)
 }
 
 /**
- * gtk_drawing_area_set_content_height:
+ * gtk_drawing_area_set_content_height: (attributes org.gtk.Method.set_property=content-height)
  * @self: a `GtkDrawingArea`
  * @height: the height of contents
  *
@@ -430,7 +427,7 @@ gtk_drawing_area_set_content_height (GtkDrawingArea *self,
 }
 
 /**
- * gtk_drawing_area_get_content_height:
+ * gtk_drawing_area_get_content_height: (attributes org.gtk.Method.get_property=content-height)
  * @self: a `GtkDrawingArea`
  *
  * Retrieves the content height of the `GtkDrawingArea`.
@@ -450,9 +447,9 @@ gtk_drawing_area_get_content_height (GtkDrawingArea *self)
 /**
  * gtk_drawing_area_set_draw_func:
  * @self: a `GtkDrawingArea`
- * @draw_func: (nullable) (scope notified) (closure user_data) (destroy destroy): callback
- *   that lets you draw the drawing area's contents
- * @user_data: user data passed to @draw_func
+ * @draw_func: (nullable): callback that lets you draw
+ *   the drawing area's contents
+ * @user_data: (closure): user data passed to @draw_func
  * @destroy: destroy notifier for @user_data
  *
  * Setting a draw function is the main thing you want to do when using

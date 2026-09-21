@@ -23,8 +23,6 @@
 
 """Utilities for accessible roles."""
 
-from __future__ import annotations
-
 import gi
 
 gi.require_version("Atspi", "2.0")
@@ -40,53 +38,6 @@ from .ax_utilities_state import AXUtilitiesState
 
 class AXUtilitiesRole:
     """Utilities for accessible roles."""
-
-    _TEXT_BLOCK_ROLES: frozenset[Atspi.Role] | None = None
-
-    _MATH_TAGS = frozenset(
-        (
-            "math",
-            "maction",
-            "maligngroup",
-            "malignmark",
-            "menclose",
-            "merror",
-            "mfenced",
-            "mfrac",
-            "mglyph",
-            "mi",
-            "mlabeledtr",
-            "mlongdiv",
-            "mmultiscripts",
-            "mn",
-            "mo",
-            "mover",
-            "mpadded",
-            "mphantom",
-            "mprescripts",
-            "mroot",
-            "mrow",
-            "ms",
-            "mscarries",
-            "mscarry",
-            "msgroup",
-            "msline",
-            "mspace",
-            "msqrt",
-            "msrow",
-            "mstack",
-            "mstyle",
-            "msub",
-            "msup",
-            "msubsup",
-            "mtable",
-            "mtd",
-            "mtext",
-            "mtr",
-            "munder",
-            "munderover",
-        )
-    )
 
     @staticmethod
     def _get_display_style(obj: Atspi.Accessible) -> str:
@@ -136,20 +87,6 @@ class AXUtilitiesRole:
             return True
 
         return False
-
-    @staticmethod
-    def get_annotation_roles() -> list[Atspi.Role]:
-        """Returns the list of roles we consider annotations."""
-
-        # TODO - JD: Enable suggestion once we bump to a version of AT-SPI2 that contains the
-        # fix for https://gitlab.gnome.org/GNOME/at-spi2-core/-/issues/222.
-        roles = [
-            Atspi.Role.CONTENT_DELETION,
-            Atspi.Role.CONTENT_INSERTION,
-            Atspi.Role.MARK,
-            # Atspi.Role.SUGGESTION,
-        ]
-        return roles
 
     @staticmethod
     def get_dialog_roles(include_alert_as_dialog: bool = True) -> list[Atspi.Role]:
@@ -346,60 +283,10 @@ class AXUtilitiesRole:
         return roles
 
     @staticmethod
-    def get_text_block_roles() -> frozenset[Atspi.Role]:
-        """Returns the set of roles we consider text blocks."""
-
-        if AXUtilitiesRole._TEXT_BLOCK_ROLES is None:
-            AXUtilitiesRole._TEXT_BLOCK_ROLES = frozenset(
-                {
-                    Atspi.Role.ARTICLE,
-                    Atspi.Role.BLOCK_QUOTE,
-                    Atspi.Role.CAPTION,
-                    Atspi.Role.COLUMN_HEADER,
-                    Atspi.Role.COMMENT,
-                    Atspi.Role.CONTENT_DELETION,
-                    Atspi.Role.CONTENT_INSERTION,
-                    Atspi.Role.DEFINITION,
-                    Atspi.Role.DESCRIPTION_LIST,
-                    Atspi.Role.DESCRIPTION_TERM,
-                    Atspi.Role.DESCRIPTION_VALUE,
-                    Atspi.Role.DOCUMENT_FRAME,
-                    Atspi.Role.DOCUMENT_WEB,
-                    Atspi.Role.FOOTER,
-                    Atspi.Role.FORM,
-                    Atspi.Role.HEADING,
-                    Atspi.Role.LIST,
-                    Atspi.Role.LIST_ITEM,
-                    Atspi.Role.MARK,
-                    Atspi.Role.PARAGRAPH,
-                    Atspi.Role.ROW_HEADER,
-                    Atspi.Role.SECTION,
-                    Atspi.Role.STATIC,
-                    Atspi.Role.SUGGESTION,
-                    Atspi.Role.TABLE_CELL,
-                    Atspi.Role.TEXT,
-                }
-            )
-        return AXUtilitiesRole._TEXT_BLOCK_ROLES
-
-    @staticmethod
     def get_text_ui_roles() -> list[Atspi.Role]:
         """Returns the list of roles we consider UI that displays static text"""
 
         roles = [Atspi.Role.INFO_BAR, Atspi.Role.LABEL, Atspi.Role.PAGE_TAB, Atspi.Role.STATUS_BAR]
-        return roles
-
-    @staticmethod
-    def get_top_level_roles() -> list[Atspi.Role]:
-        """Returns the list of roles we consider top-level objects"""
-
-        roles = [
-            Atspi.Role.DIALOG,
-            Atspi.Role.FILE_CHOOSER,
-            Atspi.Role.FRAME,
-            Atspi.Role.WINDOW,
-            Atspi.Role.ALERT,
-        ]
         return roles
 
     @staticmethod
@@ -557,9 +444,7 @@ class AXUtilitiesRole:
         """Returns the localized role name for misc role overrides, or empty string."""
 
         name = ""
-        if AXUtilitiesRole.is_code_block(obj):
-            name = object_properties.ROLE_CODE_BLOCK
-        elif AXUtilitiesRole.is_suggestion(obj, role):
+        if AXUtilitiesRole.is_suggestion(obj, role):
             name = object_properties.ROLE_CONTENT_SUGGESTION
         elif AXUtilitiesRole.is_feed(obj, role):
             name = object_properties.ROLE_FEED
@@ -603,32 +488,6 @@ class AXUtilitiesRole:
             return AXObject.get_role_name(obj, True)
 
         return Atspi.role_get_localized_name(role)
-
-    @staticmethod
-    def has_live_region_role(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
-        """Returns True if obj has a role that is used for a live region."""
-
-        # Technically, any role can be a live region. But the work required to determine if an
-        # object is a presentable live region is not cheap: We need to obtain the object attributes
-        # and we cannot use a cached version because the aria-live value can change. And the reason
-        # we need to do this check is to prevent the event manager's spam filtering from treating
-        # these events as spam, i.e. during an event flood. Therefore, the list below can be
-        # updated on a case-by-case basis but should remain small.
-
-        if role is None:
-            role = AXObject.get_role(obj)
-
-        # Gecko maps the ARIA alert role to the alert role (a type of dialog) rather than to
-        # the notification role specified by the Core-AAM.
-        roles = [
-            Atspi.Role.ALERT,
-            Atspi.Role.LOG,
-            Atspi.Role.NOTIFICATION,
-            Atspi.Role.PARAGRAPH,
-            Atspi.Role.SECTION,
-            Atspi.Role.STATUS_BAR,
-        ]
-        return role in roles
 
     @staticmethod
     def has_role_from_aria(obj: Atspi.Accessible) -> bool:
@@ -809,28 +668,10 @@ class AXUtilitiesRole:
     def is_code(obj: Atspi.Accessible, _role: Atspi.Role | None = None) -> bool:
         """Returns True if obj has the code or code-like role"""
 
-        if "code" in AXUtilitiesRole._get_xml_roles(obj):
-            return True
-        tag = AXUtilitiesRole._get_tag(obj)
-        if tag == "code":
-            return True
-        # Thunderbird uses <pre class="moz-quote-pre"> for quoted email replies.
-        if tag == "pre":
-            return "quote" not in AXObject.get_attributes_dict(obj).get("class", "")
-        return False
-
-    @staticmethod
-    def is_code_block(obj: Atspi.Accessible, _role: Atspi.Role | None = None) -> bool:
-        """Returns True if obj is a block-level code element."""
-
-        if not AXUtilitiesRole.is_code(obj):
-            return False
-        if AXUtilitiesRole._get_tag(obj) == "pre":
-            if AXObject.supports_collection(obj):
-                rule = AXCollection.create_match_rule(roles=[Atspi.Role.PARAGRAPH])
-                return AXCollection.get_first_match(obj, rule) is None
-            return AXUtilitiesObject.find_descendant(obj, AXUtilitiesRole.is_paragraph) is None
-        return "inline" not in AXUtilitiesRole._get_display_style(obj)
+        return "code" in AXUtilitiesRole._get_xml_roles(obj) or AXUtilitiesRole._get_tag(obj) in [
+            "code",
+            "pre",
+        ]
 
     @staticmethod
     def is_color_chooser(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
@@ -1647,6 +1488,15 @@ class AXUtilitiesRole:
         return "inline" in AXUtilitiesRole._get_display_style(obj)
 
     @staticmethod
+    def is_inline_list_item(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
+        """Returns True if obj has the list item role and is inline."""
+
+        if not AXUtilitiesRole.is_list_item(obj, role):
+            return False
+
+        return "inline" in AXUtilitiesRole._get_display_style(obj)
+
+    @staticmethod
     def is_inline_suggestion(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
         """Returns True if obj has the suggestion role and is inline."""
 
@@ -1654,30 +1504,6 @@ class AXUtilitiesRole:
             return False
 
         return "inline" in AXUtilitiesRole._get_display_style(obj)
-
-    @staticmethod
-    def is_inline_element(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
-        """Returns True if obj is an inline element rather than block-level."""
-
-        # Chromium exposes inline MathML as display=math; the block form is "block math".
-        display = AXUtilitiesRole._get_display_style(obj)
-        if "inline" in display or display == "math":
-            return True
-
-        # A link is inline-level content; a flex box whose children are presentational is an
-        # atomic widget (button, tab, slider) flexing its own icon/label. Both are inline-level
-        # regardless of CSS display.
-        if AXUtilitiesRole.is_link(obj, role):
-            return True
-
-        if "flex" in display and AXUtilitiesRole.children_are_presentational(obj):
-            return True
-
-        # A flex item is positioned by its container, not in normal block flow, so it is
-        # inline-level for line grouping. (Grid items are excluded: their 2D layout keeps them
-        # on separate lines.)
-        parent = AXObject.get_parent(obj)
-        return parent is not None and "flex" in AXUtilitiesRole._get_display_style(parent)
 
     @staticmethod
     def is_input_method_window(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
@@ -1947,23 +1773,54 @@ class AXUtilitiesRole:
 
     @staticmethod
     def is_math_related(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
-        """Returns True if obj has a math-related role or is a text leaf inside math."""
-
-        if obj is None:
-            return False
+        """Returns True if obj has a math-related role"""
 
         if role is None:
             role = AXObject.get_role(obj)
         if role in [Atspi.Role.MATH, Atspi.Role.MATH_FRACTION, Atspi.Role.MATH_ROOT]:
             return True
-
-        if AXUtilitiesRole.is_terminal(obj, role):
-            return False
-
-        if tag := AXUtilitiesRole._get_tag(obj):
-            return tag in AXUtilitiesRole._MATH_TAGS
-
-        return AXUtilitiesRole.is_math_related(AXObject.get_parent(obj))
+        return AXUtilitiesRole._get_tag(obj) in [
+            "math",
+            "maction",
+            "maligngroup",
+            "malignmark",
+            "menclose",
+            "merror",
+            "mfenced",
+            "mfrac",
+            "mglyph",
+            "mi",
+            "mlabeledtr",
+            "mlongdiv",
+            "mmultiscripts",
+            "mn",
+            "mo",
+            "mover",
+            "mpadded",
+            "mphantom",
+            "mprescripts",
+            "mroot",
+            "mrow",
+            "ms",
+            "mscarries",
+            "mscarry",
+            "msgroup",
+            "msline",
+            "mspace",
+            "msqrt",
+            "msrow",
+            "mstack",
+            "mstyle",
+            "msub",
+            "msup",
+            "msubsup",
+            "mtable",
+            "mtd",
+            "mtext",
+            "mtr",
+            "munder",
+            "munderover",
+        ]
 
     @staticmethod
     def is_math_root(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
@@ -2343,6 +2200,17 @@ class AXUtilitiesRole:
         return role in [Atspi.Role.SUBSCRIPT, Atspi.Role.SUPERSCRIPT]
 
     @staticmethod
+    def is_subscript_or_superscript_text(
+        obj: Atspi.Accessible,
+        role: Atspi.Role | None = None,
+    ) -> bool:
+        """Returns True if obj has the subscript or superscript role and is not math-related"""
+
+        if AXUtilitiesRole.is_math_related(obj, role):
+            return False
+        return AXUtilitiesRole.is_subscript_or_superscript(obj, role)
+
+    @staticmethod
     def is_suggestion(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
         """Returns True if obj has the suggestion role"""
 
@@ -2394,7 +2262,7 @@ class AXUtilitiesRole:
 
     @staticmethod
     def is_table_cell_or_header(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
-        """Returns True if obj has a table cell or header related role"""
+        """Returns True if obj has the table cell or a header-related role"""
 
         roles = AXUtilitiesRole.get_table_cell_roles()
         if role is None:
@@ -2432,18 +2300,12 @@ class AXUtilitiesRole:
         return role in roles
 
     @staticmethod
-    def is_table_row(
-        obj: Atspi.Accessible,
-        role: Atspi.Role | None = None,
-        include_display: bool = False,
-    ) -> bool:
-        """Returns True if obj is a table row by role, or CSS display if include_display."""
+    def is_table_row(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
+        """Returns True if obj has the table row role"""
 
         if role is None:
             role = AXObject.get_role(obj)
-        if role == Atspi.Role.TABLE_ROW:
-            return True
-        return include_display and AXUtilitiesRole._get_display_style(obj) == "table-row"
+        return role == Atspi.Role.TABLE_ROW
 
     @staticmethod
     def is_table_row_header(obj: Atspi.Accessible, role: Atspi.Role | None = None) -> bool:
@@ -2486,10 +2348,7 @@ class AXUtilitiesRole:
         if role in roles:
             return True
         if role == Atspi.Role.TEXT:
-            states = AXObject.get_state_set(obj)
-            return AXUtilitiesState.is_editable(obj, states) and AXUtilitiesState.is_single_line(
-                obj, states
-            )
+            return AXUtilitiesState.is_editable(obj) and AXUtilitiesState.is_single_line(obj)
         return bool(AXUtilitiesRole.is_editable_combo_box(obj))
 
     @staticmethod
@@ -2771,8 +2630,7 @@ class AXUtilitiesRole:
     ) -> bool:
         """Returns True if obj is a widget controlled by line navigation"""
 
-        state_set = AXObject.get_state_set(obj)
-        if AXUtilitiesState.is_multi_line(obj, state_set):
+        if AXUtilitiesState.is_multi_line(obj):
             return False
 
         if role is None:
@@ -2789,15 +2647,13 @@ class AXUtilitiesRole:
         if role in roles:
             return True
 
-        if AXUtilitiesState.is_editable(obj, state_set) or AXUtilitiesState.is_selectable(
-            obj, state_set
-        ):
+        if AXUtilitiesState.is_editable(obj) or AXUtilitiesState.is_selectable(obj):
             return (
                 AXUtilitiesObject.find_ancestor(obj, lambda x: AXObject.get_role(x) in roles)
                 is not None
             )
 
-        if not AXUtilitiesState.is_vertical(obj, state_set):
+        if not AXUtilitiesState.is_vertical(obj):
             return False
 
         return role in [

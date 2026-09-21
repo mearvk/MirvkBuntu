@@ -1,7 +1,6 @@
 # Esperanto translation for orca.
 # Copyright (C) 2026 orca's COPYRIGHT HOLDER
 # This file is distributed under the same license as the orca package.
-# Kristjan ESPERANTO <kristjan.schmidt@googlemail.com>,  2026.
 # Kristjan SCHMIDT <kristjan.schmidt@googlemail.com>, 2026.
 #
 msgid ""

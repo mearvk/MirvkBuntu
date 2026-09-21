@@ -54,10 +54,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * The `GtkColorButton` allows to open a color chooser dialog to change
  * the color.
  *
- * <picture>
- *   <source srcset="color-button-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkColorButton" src="color-button.png">
- * </picture>
+ * ![An example GtkColorButton](color-button.png)
  *
  * It is suitable widget for selecting a color in a preference dialog.
  *
@@ -105,16 +102,12 @@ struct _GtkColorButtonClass {
 enum
 {
   PROP_0,
-  PROP_TITLE,
-  PROP_SHOW_EDITOR,
-  PROP_MODAL,
-  /* GtkColorChooser */
   PROP_USE_ALPHA,
+  PROP_TITLE,
   PROP_RGBA,
-  N_PROPS
+  PROP_SHOW_EDITOR,
+  PROP_MODAL
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 /* Signals */
 enum
@@ -176,19 +169,19 @@ gtk_color_button_class_init (GtkColorButtonClass *klass)
   klass->color_set = NULL;
   klass->activate = gtk_color_button_activate;
 
-  props[PROP_RGBA] = g_param_spec_override ("rgba",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "rgba"));
-  props[PROP_USE_ALPHA] = g_param_spec_override ("use-alpha",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_COLOR_CHOOSER), "use-alpha"));
+  g_object_class_override_property (gobject_class, PROP_RGBA, "rgba");
+  g_object_class_override_property (gobject_class, PROP_USE_ALPHA, "use-alpha");
 
   /**
-   * GtkColorButton:title:
+   * GtkColorButton:title: (attributes org.gtk.Property.get=gtk_color_button_get_title org.gtk.Property.set=gtk_color_button_set_title)
    *
    * The title of the color chooser dialog
    */
-  props[PROP_TITLE] = g_param_spec_string ("title", NULL, NULL,
-                                           _("Pick a Color"),
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+  g_object_class_install_property (gobject_class,
+                                   PROP_TITLE,
+                                   g_param_spec_string ("title", NULL, NULL,
+                                                        _("Pick a Color"),
+                                                        GTK_PARAM_READWRITE));
 
 
   /**
@@ -243,20 +236,22 @@ gtk_color_button_class_init (GtkColorButtonClass *klass)
    * in the editor would be redundant, such as when the color
    * button is already part of a palette.
    */
-  props[PROP_SHOW_EDITOR] = g_param_spec_boolean ("show-editor", NULL, NULL,
-                                                  FALSE,
-                                                  G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  g_object_class_install_property (gobject_class,
+                                   PROP_SHOW_EDITOR,
+                                   g_param_spec_boolean ("show-editor", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
-   * GtkColorButton:modal:
+   * GtkColorButton:modal: (attributes org.gtk.Property.get=gtk_color_button_get_modal org.gtk.Property.set=gtk_color_button_set_modal)
    *
    * Whether the color chooser dialog should be modal.
    */
-  props[PROP_MODAL] = g_param_spec_boolean ("modal", NULL, NULL,
-                                            TRUE,
-                                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (gobject_class, N_PROPS, props);
+  g_object_class_install_property (gobject_class,
+                                   PROP_MODAL,
+                                   g_param_spec_boolean ("modal", NULL, NULL,
+                                                         TRUE,
+                                                         GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
 
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BIN_LAYOUT);
@@ -381,8 +376,6 @@ gtk_color_button_new (void)
  * Creates a new color button showing the given color.
  *
  * Returns: a new color button
- *
- * Deprecated: 4.10
  */
 GtkWidget *
 gtk_color_button_new_with_rgba (const GdkRGBA *rgba)
@@ -420,7 +413,7 @@ dialog_response (GtkDialog *dialog,
       g_signal_emit (button, color_button_signals[COLOR_SET], 0);
 
       g_object_freeze_notify (G_OBJECT (button));
-      g_object_notify_by_pspec (G_OBJECT (button), props[PROP_RGBA]);
+      g_object_notify (G_OBJECT (button), "rgba");
       g_object_thaw_notify (G_OBJECT (button));
       g_object_unref (button);
     }
@@ -540,7 +533,7 @@ gtk_color_button_set_rgba (GtkColorChooser *chooser,
                                   -1);
   g_free (text);
 
-  g_object_notify_by_pspec (G_OBJECT (chooser), props[PROP_RGBA]);
+  g_object_notify (G_OBJECT (chooser), "rgba");
 }
 
 static void
@@ -567,12 +560,12 @@ set_use_alpha (GtkColorButton *button,
 
       gtk_color_swatch_set_use_alpha (GTK_COLOR_SWATCH (button->swatch), use_alpha);
 
-      g_object_notify_by_pspec (G_OBJECT (button), props[PROP_USE_ALPHA]);
+      g_object_notify (G_OBJECT (button), "use-alpha");
     }
 }
 
 /**
- * gtk_color_button_set_title:
+ * gtk_color_button_set_title: (attributes org.gtk.Method.set_property=title)
  * @button: a `GtkColorButton`
  * @title: String containing new window title
  *
@@ -595,11 +588,11 @@ gtk_color_button_set_title (GtkColorButton *button,
   if (button->cs_dialog)
     gtk_window_set_title (GTK_WINDOW (button->cs_dialog), button->title);
 
-  g_object_notify_by_pspec (G_OBJECT (button), props[PROP_TITLE]);
+  g_object_notify (G_OBJECT (button), "title");
 }
 
 /**
- * gtk_color_button_get_title:
+ * gtk_color_button_get_title: (attributes org.gtk.Method.get_property=title)
  * @button: a `GtkColorButton`
  *
  * Gets the title of the color chooser dialog.
@@ -617,7 +610,7 @@ gtk_color_button_get_title (GtkColorButton *button)
 }
 
 /**
- * gtk_color_button_set_modal:
+ * gtk_color_button_set_modal: (attributes org.gtk.Method.set_property=modal)
  * @button: a `GtkColorButton`
  * @modal: %TRUE to make the dialog modal
  *
@@ -639,11 +632,11 @@ gtk_color_button_set_modal (GtkColorButton *button,
   if (button->cs_dialog)
     gtk_window_set_modal (GTK_WINDOW (button->cs_dialog), button->modal);
 
-  g_object_notify_by_pspec (G_OBJECT (button), props[PROP_MODAL]);
+  g_object_notify (G_OBJECT (button), "modal");
 }
 
 /**
- * gtk_color_button_get_modal:
+ * gtk_color_button_get_modal: (attributes org.gtk.Method.get_property=modal)
  * @button: a `GtkColorButton`
  *
  * Gets whether the dialog is modal.
@@ -685,7 +678,7 @@ gtk_color_button_set_property (GObject      *object,
         if (button->show_editor != show_editor)
           {
             button->show_editor = show_editor;
-            g_object_notify_by_pspec (object, props[PROP_SHOW_EDITOR]);
+            g_object_notify (object, "show-editor");
           }
       }
       break;

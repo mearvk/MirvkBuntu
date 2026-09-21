@@ -305,11 +305,8 @@ g_charset_converter_convert (GConverter       *converter,
                    &inbufp, &in_left,
                    &outbufp, &out_left);
 
-  g_assert (inbufp >= (char *) inbuf);
-  g_assert (outbufp >= (char *) outbuf);
-
-  *bytes_read = (size_t) (inbufp - (char *) inbuf);
-  *bytes_written = (size_t) (outbufp - (char *) outbuf);
+  *bytes_read = inbufp - (char *)inbuf;
+  *bytes_written = outbufp - (char *)outbuf;
 
   /* Don't report error if we converted anything */
   if (res == (gsize) -1 && *bytes_read == 0)
@@ -343,8 +340,8 @@ g_charset_converter_convert (GConverter       *converter,
 		  guint8 v = *(guint8 *)inbuf;
 		  guint8 *out = (guint8 *)outbuf;
 		  out[0] = '\\';
-		  out[1] = (guint8) hex[(v & 0xf0) >> 4];
-		  out[2] = (guint8) hex[(v & 0x0f) >> 0];
+		  out[1] = hex[(v & 0xf0) >> 4];
+		  out[2] = hex[(v & 0x0f) >> 0];
 		  *bytes_read = 1;
 		  *bytes_written = 3;
 		  in_left--;

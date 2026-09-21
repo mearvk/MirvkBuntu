@@ -46,7 +46,7 @@ struct _CoglAtlasTexture
 
   /* The rectangle that was used to add this texture to the
      atlas. This includes the 1-pixel border */
-  MtkRectangle rectangle;
+  CoglRectangleMapEntry rectangle;
 
   /* The atlas that this texture is in. If the texture is no longer in
      an atlas then this will be NULL. A reference is taken on the
@@ -63,3 +63,13 @@ struct _CoglAtlasTextureClass
 {
    CoglTextureClass parent_class;
 };
+
+COGL_EXPORT void
+_cogl_atlas_texture_add_reorganize_callback (CoglContext *ctx,
+                                             GHookFunc callback,
+                                             void *user_data);
+
+COGL_EXPORT void
+_cogl_atlas_texture_remove_reorganize_callback (CoglContext *ctx,
+                                                GHookFunc callback,
+                                                void *user_data);

@@ -42,7 +42,7 @@ struct _GOsxAppInfoClass
 };
 
 GIO_AVAILABLE_IN_2_52
-GType   g_osx_app_info_get_type           (void);
+GType   g_osx_app_info_get_type           (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_2_52
 const char *g_osx_app_info_get_filename   (GOsxAppInfo *info);

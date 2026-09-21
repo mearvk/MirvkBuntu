@@ -37,6 +37,7 @@ erDiagram
 ```mermaid
 classDiagram
     MetaBackend <-- MetaBackendNative
+    MetaBackend <-- MetaBackendX11
     class MetaBackend{
       MetaMonitorManager monitor_manager
       List~MetaGpu~ gpus

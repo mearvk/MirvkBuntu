@@ -7,7 +7,7 @@
     <accessibility>
       <relation name="described-by">label</relation>
     </accessibility>
-    <property name="child">
+    <child>
       <object class="GtkBox">
         <property name="orientation">vertical</property>
         <property name="margin-start">12</property>
@@ -33,11 +33,13 @@
                 <property name="valign">center</property>
                 <property name="model">
                   <object class="GtkStringList">
-                    <property name="strings">Text
-Color
-Image
-File
-Folder</property>
+                    <items>
+                      <item>Text</item>
+                      <item>Color</item>
+                      <item>Image</item>
+                      <item>File</item>
+                      <item>Folder</item>
+                    </items>
                   </object>
                 </property>
               </object>
@@ -101,7 +103,9 @@ Folder</property>
                               <property name="label">Photo Drag Source</property>
                             </accessibility>
                             <property name="active">1</property>
-                            <property name="child">
+                            <child>
+                            </child>
+                            <child>
                               <object class="GtkImage">
                                 <accessibility>
                                   <property name="label">Portland Rose Photo</property>
@@ -111,7 +115,7 @@ Folder</property>
                                 </style>
                                 <property name="paintable">resource:///transparent/portland-rose.jpg</property>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                         <child>
@@ -125,7 +129,7 @@ Folder</property>
                                 <signal name="prepare" handler="drag_prepare"/>
                               </object>
                             </child>
-                            <property name="child">
+                            <child>
                               <object class="GtkImage">
                                 <accessibility>
                                   <property name="label">Floppy Buddy Icon</property>
@@ -135,7 +139,7 @@ Folder</property>
                                 </style>
                                 <property name="paintable">resource:///images/floppybuddy.gif</property>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                         <child>
@@ -149,7 +153,7 @@ Folder</property>
                                 <signal name="prepare" handler="drag_prepare"/>
                               </object>
                             </child>
-                            <property name="child">
+                            <child>
                               <object class="GtkImage">
                                 <accessibility>
                                   <property name="label">gtk-demo logo</property>
@@ -157,13 +161,9 @@ Folder</property>
                                 <style>
                                   <class name="large-icons"/>
                                 </style>
-                                <property name="paintable">
-                                  <object class="GtkIconPaintable">
-                                    <property name="file">resource:///images/org.gtk.Demo4-symbolic.svg</property>
-                                  </object>
-                                </property>
+                                <property name="paintable">resource:///images/org.gtk.Demo4.svg</property>
                               </object>
-                            </property>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -357,6 +357,6 @@ Folder</property>
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </object>
 </interface>

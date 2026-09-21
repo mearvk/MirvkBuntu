@@ -77,7 +77,7 @@ struct _GDBusObjectManagerClientClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType                         g_dbus_object_manager_client_get_type           (void);
+GType                         g_dbus_object_manager_client_get_type           (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 void                          g_dbus_object_manager_client_new                (GDBusConnection               *connection,
                                                                                GDBusObjectManagerClientFlags  flags,

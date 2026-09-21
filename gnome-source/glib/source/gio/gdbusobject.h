@@ -66,7 +66,7 @@ struct _GDBusObjectIface
 };
 
 GIO_AVAILABLE_IN_ALL
-GType            g_dbus_object_get_type        (void);
+GType            g_dbus_object_get_type        (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 const gchar     *g_dbus_object_get_object_path (GDBusObject  *object);
 GIO_AVAILABLE_IN_ALL

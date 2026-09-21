@@ -43,8 +43,6 @@ G_BEGIN_DECLS
  * A function which decides whether the row indicated by @iter is visible.
  *
  * Returns: Whether the row indicated by @iter is visible.
- *
- * Deprecated: 4.20: There is no replacement
  */
 typedef gboolean (* GtkTreeModelFilterVisibleFunc) (GtkTreeModel *model,
                                                     GtkTreeIter  *iter,
@@ -65,8 +63,6 @@ typedef gboolean (* GtkTreeModelFilterVisibleFunc) (GtkTreeModel *model,
  *
  * Since this function is called for each data access, it’s not a
  * particularly efficient operation.
- *
- * Deprecated: 4.20: There is no replacement
  */
 
 typedef void (* GtkTreeModelFilterModifyFunc) (GtkTreeModel *model,
@@ -107,7 +103,7 @@ struct _GtkTreeModelFilterClass
 
 /* base */
 GDK_AVAILABLE_IN_ALL
-GType         gtk_tree_model_filter_get_type                   (void);
+GType         gtk_tree_model_filter_get_type                   (void) G_GNUC_CONST;
 GDK_DEPRECATED_IN_4_10_FOR(GtkFilterListModel)
 GtkTreeModel *gtk_tree_model_filter_new                        (GtkTreeModel                 *child_model,
                                                                 GtkTreePath                  *root);

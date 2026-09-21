@@ -84,19 +84,45 @@ meta_test_stage_views_exist (void)
   GList *stage_views;
 
   stage = meta_backend_get_stage (backend);
-  g_assert_cmpint ((int) clutter_actor_get_width (stage), ==, 1024 * 2);
-  g_assert_cmpint ((int) clutter_actor_get_height (stage), ==, 768);
+  g_assert_cmpint (clutter_actor_get_width (stage), ==, 1024 * 2);
+  g_assert_cmpint (clutter_actor_get_height (stage), ==, 768);
 
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
   g_assert_cmpint (g_list_length (stage_views), ==, 2);
 }
 
 static void
-wait_for_window_map (ClutterStage *stage,
+on_after_paint (ClutterStage     *stage,
+                ClutterStageView *view,
+                ClutterFrame     *frame,
+                gboolean         *was_painted)
+{
+  *was_painted = TRUE;
+}
+
+static void
+wait_for_paint (ClutterActor *stage)
+{
+  gboolean was_painted = FALSE;
+  gulong was_painted_id;
+
+  was_painted_id = g_signal_connect (CLUTTER_STAGE (stage),
+                                     "after-paint",
+                                     G_CALLBACK (on_after_paint),
+                                     &was_painted);
+
+  while (!was_painted)
+    g_main_context_iteration (NULL, TRUE);
+
+  g_signal_handler_disconnect (stage, was_painted_id);
+}
+
+static void
+wait_for_window_map (ClutterActor *stage,
                      ClutterActor *window_actor)
 {
   while (!clutter_actor_is_mapped (window_actor))
-    meta_wait_for_paint (stage);
+    wait_for_paint (stage);
 }
 
 static void
@@ -123,7 +149,7 @@ is_on_stage_views (ClutterActor *actor,
     }
 
   va_end (valist);
-  g_assert_true (g_list_length (stage_views) == n_views);
+  g_assert (g_list_length (stage_views) == n_views);
 }
 
 static void
@@ -159,28 +185,28 @@ meta_test_actor_stage_views (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (container, 1, stage_views->data);
   is_on_stage_views (test_actor, 1, stage_views->data);
 
   /* The signal was emitted for the initial change */
-  g_assert_true (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_container = FALSE;
   stage_views_changed_test_actor = FALSE;
 
   /* Move the container to the second stage view */
   clutter_actor_set_x (container, 1040);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (container, 1, stage_views->next->data);
   is_on_stage_views (test_actor, 1, stage_views->next->data);
 
   /* The signal was emitted again */
-  g_assert_true (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_container = FALSE;
   stage_views_changed_test_actor = FALSE;
 
@@ -189,14 +215,14 @@ meta_test_actor_stage_views (void)
    */
   clutter_actor_set_x (container, 940);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (container, 2, stage_views->data, stage_views->next->data);
   is_on_stage_views (test_actor, 1, stage_views->data);
 
   /* The signal was emitted again */
-  g_assert_true (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
 
   g_signal_handlers_disconnect_by_func (container, on_stage_views_changed,
                                         stage_views_changed_container_ptr);
@@ -233,7 +259,7 @@ meta_test_actor_stage_views_relayout (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
   clutter_actor_set_position (actor, 1000.0, 0.0);
   transition = clutter_actor_get_transition (actor, "position");
   g_signal_connect_after (transition, "new-frame",
@@ -285,14 +311,14 @@ meta_test_actor_stage_views_reparent (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (container, 2, stage_views->data, stage_views->next->data);
   is_on_stage_views (test_actor, 2, stage_views->data, stage_views->next->data);
 
   /* The signal was emitted for both actors */
-  g_assert_true (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_container = FALSE;
   stage_views_changed_test_actor = FALSE;
 
@@ -304,15 +330,15 @@ meta_test_actor_stage_views_reparent (void)
   is_on_stage_views (test_actor, 0);
 
   /* When the test_actor left the stage, the signal was emitted */
-  g_assert_false (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (!stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_test_actor = FALSE;
 
   /* Add the test_actor again as a child of the stage */
   clutter_actor_add_child (stage, test_actor);
   g_object_unref (test_actor);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   /* The container is still on both stage views... */
   is_on_stage_views (container, 2, stage_views->data, stage_views->next->data);
@@ -321,8 +347,8 @@ meta_test_actor_stage_views_reparent (void)
   is_on_stage_views (test_actor, 1, stage_views->data);
 
   /* The signal was emitted for the test_actor again */
-  g_assert_false (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (!stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_test_actor = FALSE;
 
   /* Move the container out of the stage... */
@@ -331,15 +357,15 @@ meta_test_actor_stage_views_reparent (void)
   clutter_actor_remove_child (stage, test_actor);
 
   /* When the test_actor left the stage, the signal was emitted */
-  g_assert_false (stage_views_changed_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (!stage_views_changed_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_test_actor = FALSE;
 
   /* ...and reparent the test_actor to the container again */
   clutter_actor_add_child (container, test_actor);
   g_object_unref (test_actor);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   /* Now both actors are on no stage views */
   is_on_stage_views (container, 0);
@@ -348,8 +374,8 @@ meta_test_actor_stage_views_reparent (void)
   /* The signal was emitted only for the container, the test_actor already
    * has no stage-views.
    */
-  g_assert_true (stage_views_changed_container);
-  g_assert_false (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_container);
+  g_assert (!stage_views_changed_test_actor);
 
   g_signal_handlers_disconnect_by_func (container, on_stage_views_changed,
                                         stage_views_changed_container_ptr);
@@ -400,7 +426,7 @@ meta_test_actor_stage_views_hide_parent (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   /* The containers and the test_actor are on all on the first view */
   is_on_stage_views (outer_container, 1, stage_views->data);
@@ -408,9 +434,9 @@ meta_test_actor_stage_views_hide_parent (void)
   is_on_stage_views (test_actor, 1, stage_views->data);
 
   /* The signal was emitted for all three */
-  g_assert_true (stage_views_changed_outer_container);
-  g_assert_true (stage_views_changed_inner_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_outer_container);
+  g_assert (stage_views_changed_inner_container);
+  g_assert (stage_views_changed_test_actor);
   stage_views_changed_outer_container = FALSE;
   stage_views_changed_inner_container = FALSE;
   stage_views_changed_test_actor = FALSE;
@@ -421,7 +447,7 @@ meta_test_actor_stage_views_hide_parent (void)
   /* Move the outer_container so it's still on the first view */
   clutter_actor_set_x (outer_container, 1023);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   /* The outer_container is still expanded so it should be on both views */
   is_on_stage_views (outer_container, 2,
@@ -432,15 +458,15 @@ meta_test_actor_stage_views_hide_parent (void)
   is_on_stage_views (test_actor, 1, stage_views->data);
 
   /* The signal was emitted for the outer_container */
-  g_assert_true (stage_views_changed_outer_container);
-  g_assert_false (stage_views_changed_inner_container);
-  g_assert_false (stage_views_changed_test_actor);
+  g_assert (stage_views_changed_outer_container);
+  g_assert (!stage_views_changed_inner_container);
+  g_assert (!stage_views_changed_test_actor);
   stage_views_changed_outer_container = FALSE;
 
   /* Show the inner_container again */
   clutter_actor_show (inner_container);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   /* All actors are on both views now */
   is_on_stage_views (outer_container, 2,
@@ -451,9 +477,9 @@ meta_test_actor_stage_views_hide_parent (void)
                      stage_views->data, stage_views->next->data);
 
   /* The signal was emitted for the inner_container and test_actor */
-  g_assert_false (stage_views_changed_outer_container);
-  g_assert_true (stage_views_changed_inner_container);
-  g_assert_true (stage_views_changed_test_actor);
+  g_assert (!stage_views_changed_outer_container);
+  g_assert (stage_views_changed_inner_container);
+  g_assert (stage_views_changed_test_actor);
 
   g_signal_handlers_disconnect_by_func (outer_container, on_stage_views_changed,
                                         stage_views_changed_outer_container_ptr);
@@ -524,7 +550,7 @@ meta_test_actor_stage_views_hot_plug (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (actor_1, 1, stage_views->data);
   is_on_stage_views (actor_2, 1, stage_views->next->data);
@@ -539,10 +565,10 @@ meta_test_actor_stage_views_hot_plug (void)
 
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
 
-  g_assert_true (stage_views != prev_stage_views);
+  g_assert (stage_views != prev_stage_views);
   g_assert_cmpint (g_list_length (stage_views), ==, 2);
-  g_assert_true (prev_stage_views->data != stage_views->data);
-  g_assert_true (prev_stage_views->next->data != stage_views->next->data);
+  g_assert (prev_stage_views->data != stage_views->data);
+  g_assert (prev_stage_views->next->data != stage_views->next->data);
   assert_is_stage_view (stage_views->data, 0, 0, 1024, 768);
   assert_is_stage_view (stage_views->next->data, 1024, 0, 1024, 768);
 
@@ -551,7 +577,7 @@ meta_test_actor_stage_views_hot_plug (void)
   is_on_stage_views (actor_1, 0);
   is_on_stage_views (actor_2, 0);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (actor_1, 1, stage_views->data);
   is_on_stage_views (actor_2, 1, stage_views->next->data);
@@ -614,7 +640,7 @@ meta_test_actor_stage_views_frame_clock (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (actor_1, 1, stage_views->data);
   is_on_stage_views (actor_2, 1, stage_views->next->data);
@@ -673,13 +699,13 @@ on_transition_new_frame (ClutterTransition *transition,
 
   if (test->phase == 1)
     {
-      g_assert_true (clutter_timeline_get_frame_clock (timeline) ==
+      g_assert (clutter_timeline_get_frame_clock (timeline) ==
                 test->frame_clock_1);
       test->frame_counter[0]++;
     }
   else if (test->phase == 2)
     {
-      g_assert_true (clutter_timeline_get_frame_clock (timeline) ==
+      g_assert (clutter_timeline_get_frame_clock (timeline) ==
                 test->frame_clock_2);
       test->frame_counter[1]++;
     }
@@ -697,7 +723,7 @@ on_transition_frame_clock_changed (ClutterTimeline    *timeline,
   ClutterFrameClock *frame_clock;
 
   frame_clock = clutter_timeline_get_frame_clock (timeline);
-  g_assert_true (frame_clock == test->frame_clock_2);
+  g_assert (frame_clock == test->frame_clock_2);
   g_assert_cmpint (test->phase, ==, 1);
 
   test->phase = 2;
@@ -750,7 +776,7 @@ meta_test_actor_stage_views_timeline (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (actor, 1, stage_views->data);
 
@@ -759,7 +785,7 @@ meta_test_actor_stage_views_timeline (void)
 
   transition = clutter_actor_get_transition (actor, "position");
   g_assert_nonnull (transition);
-  g_assert_true (clutter_timeline_get_frame_clock (CLUTTER_TIMELINE (transition)) ==
+  g_assert (clutter_timeline_get_frame_clock (CLUTTER_TIMELINE (transition)) ==
             test.frame_clock_1);
 
   test.main_loop = g_main_loop_new (NULL, FALSE);
@@ -826,7 +852,7 @@ meta_test_actor_stage_views_parent_views_rebuilt (void)
   clutter_actor_add_child (container, test_actor);
 
   clutter_actor_show (stage);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (test_actor, 0);
   is_on_stage_views (container, 1, stage_views->data);
@@ -839,7 +865,7 @@ meta_test_actor_stage_views_parent_views_rebuilt (void)
   view_frame_clock = clutter_stage_view_get_frame_clock (stage_views->data);
   g_assert_nonnull (timeline_frame_clock);
   g_assert_nonnull (view_frame_clock);
-  g_assert_true (timeline_frame_clock == view_frame_clock);
+  g_assert (timeline_frame_clock == view_frame_clock);
 
   /* Keep the stage view alive so it can be used to compare with later. */
   old_stage_view = g_object_ref (stage_views->data);
@@ -850,27 +876,25 @@ meta_test_actor_stage_views_parent_views_rebuilt (void)
                                                &frame_clock_test_setup,
                                                MONITOR_TEST_FLAG_NO_STORED);
   meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
   g_assert_cmpint (g_list_length (stage_views), ==, 1);
 
-  g_assert_true (stage_views->data != old_stage_view);
+  g_assert (stage_views->data != old_stage_view);
   view_frame_clock = clutter_stage_view_get_frame_clock (stage_views->data);
   g_assert_nonnull (view_frame_clock);
-  g_assert_true (view_frame_clock != old_frame_clock);
+  g_assert (view_frame_clock != old_frame_clock);
 
   timeline_frame_clock = clutter_timeline_get_frame_clock (timeline);
   g_assert_nonnull (timeline_frame_clock);
-  g_assert_true (timeline_frame_clock == view_frame_clock);
+  g_assert (timeline_frame_clock == view_frame_clock);
 
   g_object_unref (old_stage_view);
   g_object_unref (old_frame_clock);
 
   clutter_actor_destroy (test_actor);
   clutter_actor_destroy (container);
-
-  g_object_unref (timeline);
 }
 
 static void
@@ -913,7 +937,7 @@ meta_test_actor_stage_views_parent_views_changed (void)
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
   g_assert_cmpint (g_list_length (stage_views), ==, 2);
   clutter_actor_show (stage);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
   g_assert_cmpint (g_list_length (stage_views), ==, 2);
 
@@ -936,14 +960,14 @@ meta_test_actor_stage_views_parent_views_changed (void)
   timeline_frame_clock = clutter_timeline_get_frame_clock (timeline);
 
   g_assert_nonnull (timeline_frame_clock);
-  g_assert_true (timeline_frame_clock == first_view_frame_clock);
+  g_assert (timeline_frame_clock == first_view_frame_clock);
 
   clutter_actor_set_x (container, 1200);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   timeline_frame_clock = clutter_timeline_get_frame_clock (timeline);
   g_assert_nonnull (timeline_frame_clock);
-  g_assert_true (timeline_frame_clock == second_view_frame_clock);
+  g_assert (timeline_frame_clock == second_view_frame_clock);
 
   g_object_unref (timeline);
   clutter_actor_destroy (test_actor);
@@ -993,7 +1017,7 @@ meta_test_actor_stage_views_and_frame_clocks_freed (void)
 
   clutter_actor_show (stage);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   is_on_stage_views (actor_1, 1, first_view);
   is_on_stage_views (actor_2, 1, second_view);
@@ -1019,7 +1043,7 @@ meta_test_actor_stage_views_and_frame_clocks_freed (void)
   timeline_frame_clock = clutter_timeline_get_frame_clock (timeline);
 
   g_assert_nonnull (timeline_frame_clock);
-  g_assert_true (timeline_frame_clock == first_view_frame_clock);
+  g_assert (timeline_frame_clock == first_view_frame_clock);
 
   /* Now set the timeline actor to actor_2 and make sure the timeline is
    * using the second frame clock.
@@ -1029,7 +1053,7 @@ meta_test_actor_stage_views_and_frame_clocks_freed (void)
   timeline_frame_clock = clutter_timeline_get_frame_clock (timeline);
 
   g_assert_nonnull (timeline_frame_clock);
-  g_assert_true (timeline_frame_clock == second_view_frame_clock);
+  g_assert (timeline_frame_clock == second_view_frame_clock);
 
   /* Trigger a hotplug and remove both monitors, after that the timeline
    * should have no frame clock set and both stage views and their
@@ -1133,7 +1157,7 @@ meta_test_actor_stage_views_queue_frame_drawn (void)
                                                &hotplug_test_case_setup,
                                                MONITOR_TEST_FLAG_NO_STORED);
   meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
   g_assert_cmpint (g_list_length (clutter_actor_peek_stage_views (stage)),
                    ==,
                    1);
@@ -1145,7 +1169,7 @@ meta_test_actor_stage_views_queue_frame_drawn (void)
   if (!test_window)
     g_error ("Failed to find the window: %s", error->message);
   window_actor = CLUTTER_ACTOR (meta_window_actor_from_window (test_window));
-  wait_for_window_map (CLUTTER_STAGE (stage), window_actor);
+  wait_for_window_map (stage, window_actor);
   g_assert_nonnull (clutter_actor_peek_stage_views (window_actor));
 
   /* Queue an X11 _NET_WM_FRAME_DRAWN event; this will find the frame clock via
@@ -1176,7 +1200,7 @@ meta_test_actor_stage_views_queue_frame_drawn (void)
    * _NET_WM_FRAME_DRAWN event. */
   meta_window_actor_queue_frame_drawn (META_WINDOW_ACTOR (window_actor), TRUE);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   if (!meta_test_client_quit (x11_test_client, &error))
     g_error ("Failed to quit X11 test client: %s", error->message);
@@ -1233,7 +1257,7 @@ meta_test_timeline_actor_destroyed (void)
   g_assert_true (did_stage_views_changed);
   clutter_actor_queue_redraw (persistent_actor);
   clutter_stage_schedule_update (CLUTTER_STAGE (stage));
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
   g_assert_true (did_stage_views_changed);
 
   g_signal_handlers_disconnect_by_func (stage, on_stage_views_changed,
@@ -1260,7 +1284,7 @@ meta_test_timeline_actor_tree_clear (void)
   clutter_actor_set_size (container1, 100, 100);
   clutter_actor_add_child (stage, container1);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   container2 = clutter_actor_new ();
   clutter_actor_set_size (container2, 100, 100);
@@ -1281,7 +1305,7 @@ meta_test_timeline_actor_tree_clear (void)
   is_on_stage_views (container2, 0);
   is_on_stage_views (floating, 0);
 
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
+  wait_for_paint (stage);
 
   stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
   is_on_stage_views (container1, 1, stage_views->data);
@@ -1291,355 +1315,6 @@ meta_test_timeline_actor_tree_clear (void)
   clutter_actor_destroy (floating);
   clutter_actor_destroy (container1);
   clutter_actor_destroy (container2);
-}
-
-static void
-assert_view_pixel (CoglFramebuffer *framebuffer,
-                   int              x,
-                   int              y,
-                   uint32_t         expected_rgba)
-{
-  uint8_t pixel[4];
-  uint32_t rgba;
-
-  cogl_framebuffer_read_pixels (framebuffer, x, y, 1, 1,
-                                COGL_PIXEL_FORMAT_RGBA_8888, pixel);
-  rgba = (pixel[0] << 24) | (pixel[1] << 16) | (pixel[2] << 8) | pixel[3];
-  g_assert_cmphex (rgba, ==, expected_rgba);
-}
-
-static void
-meta_test_stage_views_fractional_position (void)
-{
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (test_backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  ClutterActor *stage = meta_backend_get_stage (test_backend);
-  MonitorTestCaseSetup frac_test_case_setup = {
-    .modes = {
-      {
-        .width = 1024,
-        .height = 767,
-        .refresh_rate = 60.000495910644531
-      },
-      {
-        .width = 1200,
-        .height = 900,
-        .refresh_rate = 60.000495910644531
-      }
-    },
-    .n_modes = 2,
-    .outputs = {
-       {
-        .crtc = 0,
-        .modes = { 0 },
-        .n_modes = 1,
-        .preferred_mode = 0,
-        .possible_crtcs = { 0 },
-        .n_possible_crtcs = 1,
-        .width_mm = 222,
-        .height_mm = 125,
-        .serial = "0x123456a",
-      },
-      {
-        .crtc = 1,
-        .modes = { 1 },
-        .n_modes = 1,
-        .preferred_mode = 1,
-        .possible_crtcs = { 1 },
-        .n_possible_crtcs = 1,
-        .width_mm = 220,
-        .height_mm = 124,
-        .serial = "0x123456b",
-      }
-    },
-    .n_outputs = 2,
-    .crtcs = {
-      {
-        .current_mode = 0
-      },
-      {
-        .current_mode = 1
-      }
-    },
-    .n_crtcs = 2
-  };
-  MetaMonitorTestSetup *test_setup;
-  ClutterContext *clutter_context = clutter_actor_get_context (stage);
-  ClutterBackend *clutter_backend = clutter_context_get_backend (clutter_context);
-  CoglContext *cogl_context =
-    clutter_backend_get_cogl_context (clutter_backend);
-  GList *stage_views;
-  ClutterStageView *view;
-  CoglFramebuffer *framebuffer;
-  ClutterActor *base_actor;
-  ClutterActor *top_actor;
-  ClutterActor *pattern_actor;
-  ClutterContent *pattern_content;
-  CoglTexture *pattern_texture;
-  g_autofree uint8_t *pattern_data = NULL;
-  g_autoptr (GError) error = NULL;
-  int i;
-
-  test_setup = meta_create_monitor_test_setup (test_backend,
-                                               &frac_test_case_setup,
-                                               MONITOR_TEST_FLAG_NONE);
-  meta_set_custom_monitor_config (test_context,
-                                  "stage-views-fractional-position.xml");
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-
-  /* The scaled view's device pixel offset is fractional: 767 * 1.5 = 1150.5 */
-  stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
-  g_assert_cmpint (g_list_length (stage_views), ==, 2);
-  view = stage_views->next->data;
-  assert_is_stage_view (view, 0, 767, 800, 600);
-  g_assert_cmpfloat (clutter_stage_view_get_scale (view), ==, 1.5f);
-
-  base_actor = clutter_actor_new ();
-  clutter_actor_set_background_color (base_actor,
-                                      &COGL_COLOR_INIT (0, 255, 0, 255));
-  clutter_actor_set_position (base_actor, 0, 767);
-  clutter_actor_set_size (base_actor, 800, 600);
-  clutter_actor_add_child (stage, base_actor);
-
-  top_actor = clutter_actor_new ();
-  clutter_actor_set_background_color (top_actor,
-                                      &COGL_COLOR_INIT (255, 255, 255, 255));
-  clutter_actor_set_position (top_actor, 0, 767);
-  clutter_actor_set_size (top_actor, 800, 300);
-  clutter_actor_add_child (stage, top_actor);
-
-  /* 6x300 texture of alternating black/white rows, shown 1:1; under linear
-   * sampling the rows stay pure only if the transform is pixel-exact. */
-  pattern_data = g_malloc (6 * 300 * 4);
-  for (i = 0; i < 6 * 300; i++)
-    {
-      uint8_t value = (i / 6) % 2 == 0 ? 0xff : 0x00;
-
-      pattern_data[i * 4 + 0] = value;
-      pattern_data[i * 4 + 1] = value;
-      pattern_data[i * 4 + 2] = value;
-      pattern_data[i * 4 + 3] = 0xff;
-    }
-  pattern_texture =
-    COGL_TEXTURE (cogl_texture_2d_new_from_data (cogl_context, 6, 300,
-                                                 COGL_PIXEL_FORMAT_RGBA_8888,
-                                                 6 * 4, pattern_data,
-                                                 &error));
-  g_assert_no_error (error);
-  pattern_content =
-    clutter_texture_content_new_from_texture (pattern_texture, NULL);
-  g_object_unref (pattern_texture);
-
-  pattern_actor = clutter_actor_new ();
-  clutter_actor_set_content (pattern_actor, pattern_content);
-  clutter_actor_set_content_scaling_filters (pattern_actor,
-                                             CLUTTER_SCALING_FILTER_LINEAR,
-                                             CLUTTER_SCALING_FILTER_LINEAR);
-  g_object_unref (pattern_content);
-  clutter_actor_set_position (pattern_actor, 0, 767);
-  clutter_actor_set_size (pattern_actor, 4, 200);
-  clutter_actor_add_child (stage, pattern_actor);
-
-  clutter_actor_queue_redraw (stage);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
-
-  framebuffer = clutter_stage_view_get_framebuffer (view);
-
-  /* Solid actors must land on exact device rows: white/green boundary at
-   * row 450, green covering the view's first and last rows. */
-  assert_view_pixel (framebuffer, 600, 0, 0xffffffff);
-  assert_view_pixel (framebuffer, 600, 449, 0xffffffff);
-  assert_view_pixel (framebuffer, 600, 450, 0x00ff00ff);
-  assert_view_pixel (framebuffer, 600, 899, 0x00ff00ff);
-
-  /* Pattern samples 1:1: alternating rows stay pure black and white. */
-  assert_view_pixel (framebuffer, 3, 100, 0xffffffff);
-  assert_view_pixel (framebuffer, 3, 101, 0x000000ff);
-  assert_view_pixel (framebuffer, 3, 102, 0xffffffff);
-  assert_view_pixel (framebuffer, 3, 103, 0x000000ff);
-
-  /* Same content via paint_to_framebuffer_clipped into a y-flipped offscreen
-   * must land on the same device rows. */
-  {
-    g_autoptr (CoglTexture) capture_texture = NULL;
-    g_autoptr (CoglOffscreen) capture = NULL;
-    CoglFramebuffer *capture_fb;
-
-    capture_texture = cogl_texture_2d_new_with_size (cogl_context, 1200, 900);
-    g_assert_nonnull (capture_texture);
-    capture = cogl_offscreen_new_with_texture (capture_texture);
-    capture_fb = COGL_FRAMEBUFFER (capture);
-    g_assert_true (cogl_framebuffer_allocate (capture_fb, &error));
-    g_assert_no_error (error);
-
-    clutter_stage_paint_to_framebuffer_clipped (CLUTTER_STAGE (stage),
-                                                capture_fb,
-                                                &(MtkRectangle) { 0, 767, 800, 600 },
-                                                1.5,
-                                                NULL,
-                                                NULL,
-                                                CLUTTER_PAINT_FLAG_CLEAR);
-
-    assert_view_pixel (capture_fb, 600, 0, 0xffffffff);
-    assert_view_pixel (capture_fb, 600, 449, 0xffffffff);
-    assert_view_pixel (capture_fb, 600, 450, 0x00ff00ff);
-    assert_view_pixel (capture_fb, 600, 899, 0x00ff00ff);
-    assert_view_pixel (capture_fb, 3, 100, 0xffffffff);
-    assert_view_pixel (capture_fb, 3, 101, 0x000000ff);
-    assert_view_pixel (capture_fb, 3, 102, 0xffffffff);
-    assert_view_pixel (capture_fb, 3, 103, 0x000000ff);
-  }
-
-  clutter_actor_destroy (pattern_actor);
-  clutter_actor_destroy (top_actor);
-  clutter_actor_destroy (base_actor);
-
-  test_setup = meta_create_monitor_test_setup (test_backend,
-                                               &initial_test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-}
-
-static void
-meta_test_stage_views_offscreen_effect_resource_scale (void)
-{
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (test_backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  ClutterActor *stage = meta_backend_get_stage (test_backend);
-  MonitorTestCaseSetup scale_test_case_setup = {
-    .modes = {
-      {
-        .width = 1024,
-        .height = 767,
-        .refresh_rate = 60.000495910644531
-      },
-      {
-        .width = 1200,
-        .height = 900,
-        .refresh_rate = 60.000495910644531
-      }
-    },
-    .n_modes = 2,
-    .outputs = {
-      {
-        .crtc = 0,
-        .modes = { 0 },
-        .n_modes = 1,
-        .preferred_mode = 0,
-        .possible_crtcs = { 0 },
-        .n_possible_crtcs = 1,
-        .width_mm = 222,
-        .height_mm = 125,
-        .serial = "0x123456a",
-      },
-      {
-        .crtc = 1,
-        .modes = { 1 },
-        .n_modes = 1,
-        .preferred_mode = 1,
-        .possible_crtcs = { 1 },
-        .n_possible_crtcs = 1,
-        .width_mm = 220,
-        .height_mm = 124,
-        .serial = "0x123456b",
-      }
-    },
-    .n_outputs = 2,
-    .crtcs = {
-      {
-        .current_mode = 0
-      },
-      {
-        .current_mode = 1
-      }
-    },
-    .n_crtcs = 2
-  };
-  MetaMonitorTestSetup *test_setup;
-  GList *stage_views;
-  ClutterStageView *unscaled_view;
-  ClutterStageView *scaled_view;
-  CoglFramebuffer *framebuffer;
-  ClutterActor *base_actor;
-  ClutterActor *container;
-  ClutterActor *redirected_actor;
-
-  test_setup = meta_create_monitor_test_setup (test_backend,
-                                               &scale_test_case_setup,
-                                               MONITOR_TEST_FLAG_NONE);
-  meta_set_custom_monitor_config (test_context,
-                                  "stage-views-fractional-position.xml");
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-
-  stage_views = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
-  g_assert_cmpint (g_list_length (stage_views), ==, 2);
-  unscaled_view = stage_views->data;
-  scaled_view = stage_views->next->data;
-  g_assert_cmpfloat (clutter_stage_view_get_scale (unscaled_view), ==, 1.0f);
-  g_assert_cmpfloat (clutter_stage_view_get_scale (scaled_view), ==, 1.5f);
-
-  /* Green backdrop covering the unscaled monitor. */
-  base_actor = clutter_actor_new ();
-  clutter_actor_set_background_color (base_actor,
-                                      &COGL_COLOR_INIT (0, 255, 0, 255));
-  clutter_actor_set_position (base_actor, 0, 0);
-  clutter_actor_set_size (base_actor, 1024, 767);
-  clutter_actor_add_child (stage, base_actor);
-
-  /* A white actor cached into an offscreen, starting out on the 1.5 scaled
-   * view, so its fbo gets rendered at the ceiled resource scale 2. It is moved
-   * around by its container rather than directly: that way its own allocation
-   * never changes and it never becomes dirty, which is what lets the effect
-   * take its cached texture path across the resource scale change.
-   */
-  container = clutter_actor_new ();
-  clutter_actor_set_position (container, 0, 867);
-  clutter_actor_set_size (container, 100, 100);
-  clutter_actor_add_child (stage, container);
-
-  redirected_actor = clutter_actor_new ();
-  clutter_actor_set_background_color (redirected_actor,
-                                      &COGL_COLOR_INIT (255, 255, 255, 255));
-  clutter_actor_set_offscreen_redirect (redirected_actor,
-                                        CLUTTER_OFFSCREEN_REDIRECT_ALWAYS);
-  clutter_actor_set_position (redirected_actor, 0, 0);
-  clutter_actor_set_size (redirected_actor, 100, 100);
-  clutter_actor_add_child (container, redirected_actor);
-
-  clutter_actor_queue_redraw (stage);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
-  g_assert_cmpfloat (clutter_actor_get_resource_scale (redirected_actor), ==, 2.0f);
-
-  /* Move the container over to the unscaled view. */
-  clutter_actor_set_position (container, 0, 100);
-  clutter_actor_queue_redraw (stage);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
-
-  clutter_actor_queue_redraw (stage);
-  meta_wait_for_paint (CLUTTER_STAGE (stage));
-  g_assert_cmpfloat (clutter_actor_get_resource_scale (redirected_actor), ==, 1.0f);
-
-  framebuffer = clutter_stage_view_get_framebuffer (unscaled_view);
-
-  /* The actor is 100x100 logical pixels on a 1:1 view, so it has to cover
-   * exactly 100x100 device pixels. Reusing the texture rendered at the ceiled
-   * scale 2 without rescaling paints it at twice that size instead.
-   */
-  assert_view_pixel (framebuffer, 50, 150, 0xffffffff);
-  assert_view_pixel (framebuffer, 150, 150, 0x00ff00ff);
-  assert_view_pixel (framebuffer, 50, 250, 0x00ff00ff);
-
-  clutter_actor_destroy (container);
-  clutter_actor_destroy (base_actor);
-
-  test_setup = meta_create_monitor_test_setup (test_backend,
-                                               &initial_test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
 }
 
 static void
@@ -1681,10 +1356,6 @@ init_tests (void)
                    meta_test_timeline_actor_destroyed);
   g_test_add_func ("/stage-views/timeline/tree-clear",
                    meta_test_timeline_actor_tree_clear);
-  g_test_add_func ("/stage-views/offscreen-effect-resource-scale",
-                   meta_test_stage_views_offscreen_effect_resource_scale);
-  g_test_add_func ("/stage-views/fractional-position",
-                   meta_test_stage_views_fractional_position);
 }
 
 int
@@ -1692,10 +1363,11 @@ main (int argc, char *argv[])
 {
   g_autoptr (MetaContext) context = NULL;
 
-  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_TEST,
-                                      (META_CONTEXT_TEST_FLAG_TEST_CLIENT |
-                                       META_CONTEXT_TEST_FLAG_NO_ANIMATIONS));
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_setenv ("MUTTER_DEBUG_DISABLE_ANIMATIONS", "1", TRUE);
+
+  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_NESTED,
+                                      META_CONTEXT_TEST_FLAG_TEST_CLIENT);
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
 
   test_context = context;
 

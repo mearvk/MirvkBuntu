@@ -158,7 +158,6 @@ get_g_file_info_from_local (const char *filename, GFile *file,
 		if (info == NULL) {
 		    g_print (" (EE) get_g_file_info_from_local (filename = '%s'): g_file_query_info failed: %s \n", filename, error->message);
 		    g_vfs_job_failed_from_error (G_VFS_JOB (job), error);
-		    g_error_free (error);
 		    return NULL;
 		}
 	}
@@ -306,7 +305,6 @@ do_enumerate (GVfsBackend *backend,
 	  while ((info = g_file_enumerator_next_file (enumerator, G_VFS_JOB (job)->cancellable, &error)) != NULL) {
     	  g_print ("  (II) try_enumerate (filename = %s): file '%s' \n", filename, g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME));
     	  g_vfs_job_enumerate_add_info (job, info);
-    	  g_object_unref (info);
       }
 	  if (error) {
 		  g_print ("  (EE) try_enumerate: error: %s \n", error->message);
@@ -369,14 +367,11 @@ do_query_info (GVfsBackend *backend,
   if (info2) {
       g_file_info_copy_into (info2, info);
       g_object_unref (info2);
+      g_object_unref (file);
       inject_error (backend, G_VFS_JOB (job), GVFS_JOB_QUERY_INFO);
       g_print ("(II) try_query_info success. \n");
   } else
 	  g_print ("(EE) try_query_info failed. \n");
-
-  if (file) {
-      g_object_unref (file);
-  }
 }
 
 

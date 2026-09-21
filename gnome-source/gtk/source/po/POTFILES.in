@@ -1,11 +1,9 @@
 # Files from the Gtk distribution which have already been
 # marked to allow runtime translation of messages
-gdk/android/gdkandroidclipboard.c
 gdk/broadway/gdkbroadway-server.c
 gdk/gdkapplaunchcontext.c
 gdk/gdk.c
 gdk/gdkclipboard.c
-gdk/gdkcolorstate.c
 gdk/gdkcontentprovider.c
 gdk/gdkcontentproviderimpl.c
 gdk/gdkcursor.c
@@ -59,9 +57,9 @@ gdk/x11/gdkglcontext-x11.c
 gdk/x11/gdkmain-x11.c
 gdk/x11/gdkselectioninputstream-x11.c
 gdk/x11/gdktextlistconverter-x11.c
+gsk/gl/gskglrenderer.c
 gsk/gpu/gskgldevice.c
-gsk/gpu/gskglrenderer.c
-gsk/gpu/gskvulkanrenderer.c
+gsk/gpu/gsknglrenderer.c
 gsk/gskrendernodeimpl.c
 gtk/a11y/gtkatspiaction.c
 gtk/a11y/gtkatspiroot.c
@@ -183,7 +181,6 @@ gtk/gtkfilechooserdialog.c
 gtk/gtkfilechooserentry.c
 gtk/gtkfilechoosererrorstack.c
 gtk/gtkfilechoosernative.c
-gtk/gtkfilechoosernativeportal.c
 gtk/gtkfilechoosernativequartz.c
 gtk/gtkfilechooserutils.c
 gtk/gtkfilechooserwidget.c
@@ -237,7 +234,6 @@ gtk/gtklistitemwidget.c
 gtk/gtklistview.c
 gtk/gtkmagnifier.c
 gtk/gtkmaplistmodel.c
-gtk/media/gtkgstsink.c
 gtk/gtkmediacontrols.c
 gtk/gtkmediafile.c
 gtk/gtkmediastream.c
@@ -274,10 +270,6 @@ gtk/gtkpopover.c
 gtk/gtkpopovercontent.c
 gtk/gtkpopovermenubar.c
 gtk/gtkpopovermenu.c
-gtk/print/backends/gtkprintbackendcpdb.c
-gtk/print/backends/gtkprintbackendcups.c
-gtk/print/backends/gtkprintbackendfile.c
-gtk/print/backends/gtkprintercups.c
 gtk/print/gtkprintbackend.c
 gtk/print/gtkprinter.c
 gtk/print/gtkprinteroption.c
@@ -290,7 +282,6 @@ gtk/print/gtkprintoperationpreview.c
 gtk/print/gtkprintoperation-unix.c
 gtk/print/gtkprintoperation-win32.c
 gtk/print/gtkprintunixdialog.c
-gtk/gtkprintdialog.c
 gtk/gtkprogressbar.c
 gtk/gtkpropertylookuplistmodel.c
 gtk/gtkrange.c
@@ -311,11 +302,11 @@ gtk/gtksettings.c
 gtk/gtkshortcutaction.c
 gtk/gtkshortcut.c
 gtk/gtkshortcutcontroller.c
-gtk/deprecated/gtkshortcutlabel.c
-gtk/deprecated/gtkshortcutsgroup.c
-gtk/deprecated/gtkshortcutssection.c
-gtk/deprecated/gtkshortcutsshortcut.c
-gtk/deprecated/gtkshortcutswindow.c
+gtk/gtkshortcutlabel.c
+gtk/gtkshortcutsgroup.c
+gtk/gtkshortcutssection.c
+gtk/gtkshortcutsshortcut.c
+gtk/gtkshortcutswindow.c
 gtk/gtkshortcuttrigger.c
 gtk/gtksidebarrow.c
 gtk/gtksignallistitemfactory.c
@@ -338,7 +329,6 @@ gtk/gtkswitch.c
 gtk/gtktextbuffer.c
 gtk/gtktext.c
 gtk/gtktextchild.c
-gtk/gtktextencoding.c
 gtk/gtktexthandle.c
 gtk/gtktextiter.c
 gtk/gtktextlayout.c
@@ -358,7 +348,6 @@ gtk/gtkvideo.c
 gtk/gtkviewport.c
 gtk/gtkwidget.c
 gtk/gtkwidgetpaintable.c
-gtk/gtkwindowbuttonsquartz.c
 gtk/gtkwindow.c
 gtk/gtkwindowcontrols.c
 gtk/gtkwindowhandle.c
@@ -424,21 +413,19 @@ gtk/print/ui/gtkprintunixdialog.ui
 gtk/ui/gtkscalebutton.ui
 gtk/ui/gtksidebarrow.ui
 gtk/ui/gtkstatusbar.ui
-gtk/ui/gtkvideo.ui
 gtk/ui/gtkvolumebutton.ui
+modules/media/gtkgstsink.c
+modules/printbackends/gtkprintbackendcpdb.c
+modules/printbackends/gtkprintbackendcups.c
+modules/printbackends/gtkprintbackendfile.c
+modules/printbackends/gtkprintercups.c
+tools/encodesymbolic.c
 tools/gtk-builder-tool.c
 tools/gtk-builder-tool-enumerate.c
 tools/gtk-builder-tool-preview.c
 tools/gtk-builder-tool-screenshot.c
 tools/gtk-builder-tool-simplify.c
 tools/gtk-builder-tool-validate.c
-tools/gtk-image-tool.c
-tools/gtk-image-tool-compare.c
-tools/gtk-image-tool-convert.c
-tools/gtk-image-tool-info.c
-tools/gtk-image-tool-play.c
-tools/gtk-image-tool-relabel.c
-tools/gtk-image-tool-show.c
 tools/gtk-launch.c
 tools/gtk-path-tool.c
 tools/gtk-path-tool-decompose.c
@@ -451,10 +438,8 @@ tools/gtk-path-tool-utils.c
 tools/gtk-rendernode-tool.c
 tools/gtk-rendernode-tool-benchmark.c
 tools/gtk-rendernode-tool-compare.c
-tools/gtk-rendernode-tool-convert.c
-tools/gtk-rendernode-tool-extract.c
 tools/gtk-rendernode-tool-info.c
 tools/gtk-rendernode-tool-render.c
 tools/gtk-rendernode-tool-show.c
-tools/gtk-tool-utils.c
+tools/gtk-rendernode-tool-utils.c
 tools/updateiconcache.c

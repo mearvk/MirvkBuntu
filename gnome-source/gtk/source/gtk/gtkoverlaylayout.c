@@ -33,7 +33,7 @@
 /**
  * GtkOverlayLayout:
  *
- * The layout manager used by [class@Gtk.Overlay].
+ * `GtkOverlayLayout` is the layout manager used by [class@Gtk.Overlay].
  *
  * It places widgets as overlays on top of the main child.
  *
@@ -130,7 +130,7 @@ gtk_overlay_layout_child_class_init (GtkOverlayLayoutChildClass *klass)
   gobject_class->get_property = gtk_overlay_layout_child_get_property;
 
   /**
-   * GtkOverlayLayoutChild:measure:
+   * GtkOverlayLayoutChild:measure: (attributes org.gtk.Property.get=gtk_overlay_layout_child_get_measure org.gtk.Property.set=gtk_overlay_layout_child_set_measure)
    *
    * Whether the child size should contribute to the `GtkOverlayLayout`'s
    * measurement.
@@ -138,17 +138,17 @@ gtk_overlay_layout_child_class_init (GtkOverlayLayoutChildClass *klass)
   child_props[PROP_MEASURE] =
     g_param_spec_boolean ("measure", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkOverlayLayoutChild:clip-overlay:
+   * GtkOverlayLayoutChild:clip-overlay: (attributes org.gtk.Property.get=gtk_overlay_layout_child_get_clip_overlay org.gtk.Property.set=gtk_overlay_layout_child_set_clip_overlay)
    *
    * Whether the child should be clipped to fit the parent's size.
    */
   child_props[PROP_CLIP_OVERLAY] =
     g_param_spec_boolean ("clip-overlay", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, N_CHILD_PROPERTIES, child_props);
 }
@@ -159,7 +159,7 @@ gtk_overlay_layout_child_init (GtkOverlayLayoutChild *self)
 }
 
 /**
- * gtk_overlay_layout_child_set_measure:
+ * gtk_overlay_layout_child_set_measure: (attributes org.gtk.Method.set_property=measure)
  * @child: a `GtkOverlayLayoutChild`
  * @measure: whether to measure this child
  *
@@ -185,7 +185,7 @@ gtk_overlay_layout_child_set_measure (GtkOverlayLayoutChild *child,
 }
 
 /**
- * gtk_overlay_layout_child_get_measure:
+ * gtk_overlay_layout_child_get_measure: (attributes org.gtk.Method.get_property=measure)
  * @child: a `GtkOverlayLayoutChild`
  *
  * Retrieves whether the child is measured.
@@ -201,7 +201,7 @@ gtk_overlay_layout_child_get_measure (GtkOverlayLayoutChild *child)
 }
 
 /**
- * gtk_overlay_layout_child_set_clip_overlay:
+ * gtk_overlay_layout_child_set_clip_overlay: (attributes org.gtk.Method.set_property=clip-overlay)
  * @child: a `GtkOverlayLayoutChild`
  * @clip_overlay: whether to clip this child
  *
@@ -227,7 +227,7 @@ gtk_overlay_layout_child_set_clip_overlay (GtkOverlayLayoutChild *child,
 }
 
 /**
- * gtk_overlay_layout_child_get_clip_overlay:
+ * gtk_overlay_layout_child_get_clip_overlay: (attributes org.gtk.Method.get_property=clip-overlay)
  * @child: a `GtkOverlayLayoutChild`
  *
  * Retrieves whether the child is clipped.

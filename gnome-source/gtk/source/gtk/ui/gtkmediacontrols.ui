@@ -33,7 +33,9 @@
           <object class="GtkBox" id="time_box">
             <child>
               <object class="GtkLabel" id="time_label">
-                <property name="attributes">0 -1 font-features "tnum=1"</property>
+                <attributes>
+                  <attribute name="font-features" value="tnum=1"></attribute>
+                </attributes>
               </object>
             </child>
             <child>
@@ -48,7 +50,9 @@
             </child>
             <child>
               <object class="GtkLabel" id="duration_label">
-                <property name="attributes">0 -1 font-features "tnum=1"</property>
+                <attributes>
+                  <attribute name="font-features" value="tnum=1"></attribute>
+                </attributes>
               </object>
             </child>
           </object>

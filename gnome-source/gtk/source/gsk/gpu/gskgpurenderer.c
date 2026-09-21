@@ -13,28 +13,23 @@
 #include "gdk/gdkdebugprivate.h"
 #include "gdk/gdkdisplayprivate.h"
 #include "gdk/gdkdmabuftextureprivate.h"
-#include "gdk/gdkmemorytextureprivate.h"
 #include "gdk/gdkdrawcontextprivate.h"
 #include "gdk/gdkprofilerprivate.h"
 #include "gdk/gdktextureprivate.h"
+#include "gdk/gdktexturedownloaderprivate.h"
 #include "gdk/gdkdrawcontextprivate.h"
-#include "gdk/gdkcolorstateprivate.h"
 
 #include <graphene.h>
 
 #define GSK_GPU_MAX_FRAMES 4
 
 static const GdkDebugKey gsk_gpu_optimization_keys[] = {
-  { "clear",     GSK_GPU_OPTIMIZE_CLEAR,             "Use shaders instead of vkCmdClearAttachment()/glClear()" },
-  { "merge",     GSK_GPU_OPTIMIZE_MERGE,             "Use one vkCmdDraw()/glDrawArrays() per operation" },
-  { "blit",      GSK_GPU_OPTIMIZE_BLIT,              "Use shaders instead of vkCmdBlit()/glBlitFramebuffer()" },
-  { "gradients", GSK_GPU_OPTIMIZE_GRADIENTS,         "Don't supersample gradients" },
-  { "mipmap",    GSK_GPU_OPTIMIZE_MIPMAP,            "Avoid creating mipmaps" },
-  { "to-image",  GSK_GPU_OPTIMIZE_TO_IMAGE,          "Don't fast-path creation of images for nodes" },
-  { "occlusion", GSK_GPU_OPTIMIZE_OCCLUSION_CULLING, "Disable occlusion culling via opaque node tracking" },
-  { "repeat",    GSK_GPU_OPTIMIZE_REPEAT,            "Repeat drawing operations instead of using offscreen and GL_REPEAT" },
-  { "damage",    GSK_GPU_OPTIMIZE_DAMAGE,            "Redraw the whole bounding box instead of doing fine grained damage tracking" },
-  { "profile",   GSK_GPU_OPTIMIZE_PROFILE,           "Disable profiling support" },
+  { "uber", GSK_GPU_OPTIMIZE_UBER, "Don't use the uber shader" },
+  { "clear", GSK_GPU_OPTIMIZE_CLEAR, "Use shaders instead of vkCmdClearAttachment()/glClear()" },
+  { "merge", GSK_GPU_OPTIMIZE_MERGE, "Use one vkCmdDraw()/glDrawArrays() per operation" },
+  { "blit", GSK_GPU_OPTIMIZE_BLIT, "Use shaders instead of vkCmdBlit()/glBlitFramebuffer()" },
+  { "gradients", GSK_GPU_OPTIMIZE_GRADIENTS, "Don't supersample gradients" },
+  { "mipmap", GSK_GPU_OPTIMIZE_MIPMAP, "Avoid creating mipmaps" },
 };
 
 typedef struct _GskGpuRendererPrivate GskGpuRendererPrivate;
@@ -61,19 +56,6 @@ gsk_gpu_renderer_make_current (GskGpuRenderer *self)
   GSK_GPU_RENDERER_GET_CLASS (self)->make_current (self);
 }
 
-static gpointer
-gsk_gpu_renderer_save_current (GskGpuRenderer *self)
-{
-  return GSK_GPU_RENDERER_GET_CLASS (self)->save_current (self);
-}
-
-static void
-gsk_gpu_renderer_restore_current (GskGpuRenderer *self,
-                                  gpointer        current)
-{
-  GSK_GPU_RENDERER_GET_CLASS (self)->restore_current (self, current);
-}
-
 static GskGpuFrame *
 gsk_gpu_renderer_create_frame (GskGpuRenderer *self)
 {
@@ -81,15 +63,101 @@ gsk_gpu_renderer_create_frame (GskGpuRenderer *self)
   GskGpuRendererClass *klass = GSK_GPU_RENDERER_GET_CLASS (self);
   GskGpuFrame *result;
 
-  if (GSK_RENDERER_DEBUG_CHECK (GSK_RENDERER (self), PROFILE) &&
-      priv->optimizations & GSK_GPU_OPTIMIZE_PROFILE)
-    result = g_object_new (klass->profile_frame_type, NULL);
-  else
-    result = g_object_new (klass->frame_type, NULL);
+  result = g_object_new (klass->frame_type, NULL);
 
   gsk_gpu_frame_setup (result, self, priv->device, priv->optimizations);
 
   return result;
+}
+
+static void
+gsk_gpu_renderer_dmabuf_downloader_close (GdkDmabufDownloader *downloader)
+{
+  gsk_renderer_unrealize (GSK_RENDERER (downloader));
+}
+
+static gboolean
+gsk_gpu_renderer_dmabuf_downloader_supports (GdkDmabufDownloader  *downloader,
+                                             GdkDmabufTexture     *texture,
+                                             GError              **error)
+{
+  GskGpuRenderer *self = GSK_GPU_RENDERER (downloader);
+  const GdkDmabuf *dmabuf;
+  GdkDmabufFormats *formats;
+
+  dmabuf = gdk_dmabuf_texture_get_dmabuf (texture);
+
+  formats = GSK_GPU_RENDERER_GET_CLASS (self)->get_dmabuf_formats (self);
+
+  if (!gdk_dmabuf_formats_contains (formats, dmabuf->fourcc, dmabuf->modifier))
+    {
+      g_set_error (error,
+                   GDK_DMABUF_ERROR, GDK_DMABUF_ERROR_UNSUPPORTED_FORMAT,
+                   "Unsupported dmabuf format: %.4s:%#" G_GINT64_MODIFIER "x",
+                   (char *) &dmabuf->fourcc, dmabuf->modifier);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static void
+gsk_gpu_renderer_dmabuf_downloader_download (GdkDmabufDownloader *downloader,
+                                             GdkDmabufTexture    *texture,
+                                             GdkMemoryFormat      format,
+                                             guchar              *data,
+                                             gsize                stride)
+{
+  GskGpuRenderer *self = GSK_GPU_RENDERER (downloader);
+  GskGpuFrame *frame;
+
+  gsk_gpu_renderer_make_current (self);
+
+  frame = gsk_gpu_renderer_create_frame (self);
+
+  gsk_gpu_frame_download_texture (frame,
+                                  g_get_monotonic_time (),
+                                  GDK_TEXTURE (texture),
+                                  format,
+                                  data,
+                                  stride);
+
+  g_object_unref (frame);
+}
+
+static void
+gsk_gpu_renderer_dmabuf_downloader_init (GdkDmabufDownloaderInterface *iface)
+{
+  iface->close = gsk_gpu_renderer_dmabuf_downloader_close;
+  iface->supports = gsk_gpu_renderer_dmabuf_downloader_supports;
+  iface->download = gsk_gpu_renderer_dmabuf_downloader_download;
+}
+
+static cairo_region_t *
+get_render_region (GskGpuRenderer *self)
+{
+  GskGpuRendererPrivate *priv = gsk_gpu_renderer_get_instance_private (self);
+  const cairo_region_t *damage;
+  cairo_region_t *scaled_damage;
+  double scale;
+
+  scale = gsk_gpu_renderer_get_scale (self);
+
+  damage = gdk_draw_context_get_frame_region (priv->context);
+  scaled_damage = cairo_region_create ();
+  for (int i = 0; i < cairo_region_num_rectangles (damage); i++)
+    {
+      cairo_rectangle_int_t rect;
+      cairo_region_get_rectangle (damage, i, &rect);
+      cairo_region_union_rectangle (scaled_damage, &(cairo_rectangle_int_t) {
+                                      .x = (int) floor (rect.x * scale),
+                                      .y = (int) floor (rect.y * scale),
+                                      .width = (int) ceil ((rect.x + rect.width) * scale) - floor (rect.x * scale),
+                                      .height = (int) ceil ((rect.y + rect.height) * scale) - floor (rect.y * scale),
+                                    });
+    }
+
+  return scaled_damage;
 }
 
 static GskGpuFrame *
@@ -128,80 +196,15 @@ gsk_gpu_renderer_get_frame (GskGpuRenderer *self)
   return earliest_frame;
 }
 
-static void
-gsk_gpu_renderer_dmabuf_downloader_close (GdkDmabufDownloader *downloader)
-{
-  gsk_renderer_unrealize (GSK_RENDERER (downloader));
-}
-
-static gboolean
-gsk_gpu_renderer_dmabuf_downloader_download (GdkDmabufDownloader   *downloader,
-                                             GdkDmabufTexture      *texture,
-                                             guchar                *data,
-                                             const GdkMemoryLayout *layout,
-                                             GdkColorState         *color_state)
-{
-  GskGpuRenderer *self = GSK_GPU_RENDERER (downloader);
-  GskGpuRendererPrivate *priv = gsk_gpu_renderer_get_instance_private (self);
-  GskGpuFrame *frame;
-  gpointer previous;
-  gboolean retval = FALSE;
-  gint64 timestamp;
-
-  previous = gsk_gpu_renderer_save_current (self);
-
-  timestamp = g_get_monotonic_time ();
-  gsk_gpu_device_maybe_gc (priv->device, timestamp);
-
-  gsk_gpu_renderer_make_current (self);
-
-  frame = gsk_gpu_renderer_get_frame (self);
-
-  if (gsk_gpu_frame_download_texture (frame,
-                                      timestamp,
-                                      GDK_TEXTURE (texture),
-                                      data,
-                                      layout,
-                                      color_state))
-    {
-      retval = TRUE;
-
-      GDK_DISPLAY_DEBUG (gdk_dmabuf_texture_get_display (texture), DMABUF,
-                         "Used %s for downloading %dx%d dmabuf (format %.4s:%#" G_GINT64_MODIFIER "x)",
-                         G_OBJECT_TYPE_NAME (downloader),
-                         gdk_texture_get_width (GDK_TEXTURE (texture)),
-                         gdk_texture_get_height (GDK_TEXTURE (texture)),
-                         (char *)&(gdk_dmabuf_texture_get_dmabuf (texture)->fourcc),
-                         gdk_dmabuf_texture_get_dmabuf (texture)->modifier);
-
-      gsk_gpu_frame_wait (frame);
-    }
-
-  gsk_gpu_renderer_restore_current (self, previous);
-
-  gsk_gpu_device_queue_gc (priv->device);
-
-  return retval;
-}
-
-static void
-gsk_gpu_renderer_dmabuf_downloader_init (GdkDmabufDownloaderInterface *iface)
-{
-  iface->close = gsk_gpu_renderer_dmabuf_downloader_close;
-  iface->download = gsk_gpu_renderer_dmabuf_downloader_download;
-}
-
 static gboolean
 gsk_gpu_renderer_realize (GskRenderer  *renderer,
                           GdkDisplay   *display,
                           GdkSurface   *surface,
-                          gboolean      attach,
                           GError      **error)
 {
   GskGpuRenderer *self = GSK_GPU_RENDERER (renderer);
   GskGpuRendererPrivate *priv = gsk_gpu_renderer_get_instance_private (self);
   GskGpuOptimizations context_optimizations;
-  G_GNUC_UNUSED gint64 start_time = GDK_PROFILER_CURRENT_TIME;
 
   priv->device = GSK_GPU_RENDERER_GET_CLASS (self)->get_device (display, error);
   if (priv->device == NULL)
@@ -213,16 +216,8 @@ gsk_gpu_renderer_realize (GskRenderer  *renderer,
       g_clear_object (&priv->device);
       return FALSE;
     }
-  if (attach && !gdk_draw_context_attach (priv->context, error))
-    {
-      g_clear_object (&priv->context);
-      g_clear_object (&priv->device);
-      return FALSE;
-    }
 
   priv->optimizations &= context_optimizations;
-
-  gdk_profiler_end_mark (start_time, "Realize GskGpuRenderer", NULL);
 
   return TRUE;
 }
@@ -245,30 +240,26 @@ gsk_gpu_renderer_unrealize (GskRenderer *renderer)
       g_clear_object (&priv->frames[i]);
     }
 
-  gdk_draw_context_detach (priv->context);
-
   g_clear_object (&priv->context);
   g_clear_object (&priv->device);
 }
 
 static GdkTexture *
 gsk_gpu_renderer_fallback_render_texture (GskGpuRenderer        *self,
-                                          gint64                 timestamp,
                                           GskRenderNode         *root,
                                           const graphene_rect_t *rounded_viewport)
 {
   GskGpuRendererPrivate *priv = gsk_gpu_renderer_get_instance_private (self);
   GskGpuImage *image;
   gsize width, height, max_size, image_width, image_height;
-  gsize x, y;
+  gsize x, y, size, bpp, stride;
+  GdkMemoryFormat format;
   GdkMemoryDepth depth;
-  GdkColorState *color_state;
   GBytes *bytes;
   guchar *data;
   GdkTexture *texture;
-  cairo_region_t *clip_region;
+  GdkTextureDownloader downloader;
   GskGpuFrame *frame;
-  GdkMemoryLayout layout;
 
   max_size = gsk_gpu_device_get_max_image_size (priv->device);
   depth = gsk_render_node_get_preferred_depth (root);
@@ -282,92 +273,55 @@ gsk_gpu_renderer_fallback_render_texture (GskGpuRenderer        *self,
     }
   while (image == NULL);
 
-  width = rounded_viewport->size.width;
-  height = rounded_viewport->size.height;
-
-  if (!gdk_memory_layout_try_init (&layout, 
-                                   gsk_gpu_image_get_format (image),
-                                   width,
-                                   height,
-                                   1) ||
-      !(data = g_malloc (layout.size)))
-    {
-      g_critical ("Image size %zux%zu too large", width, height);
-      return NULL;
-    }
-
+  format = gsk_gpu_image_get_format (image);
+  bpp = gdk_memory_format_bytes_per_pixel (format);
   image_width = gsk_gpu_image_get_width (image);
   image_height = gsk_gpu_image_get_height (image);
-
-  if (gsk_gpu_image_get_conversion (image) & GSK_GPU_CONVERSION_SRGB)
-    color_state = GDK_COLOR_STATE_SRGB_LINEAR;
-  else
-    color_state = GDK_COLOR_STATE_SRGB;
+  width = rounded_viewport->size.width;
+  height = rounded_viewport->size.height;
+  stride = width * bpp;
+  size = stride * height;
+  data = g_malloc_n (stride, height);
 
   for (y = 0; y < height; y += image_height)
     {
       for (x = 0; x < width; x += image_width)
         {
-          gsize tile_width, tile_height;
-          GdkMemoryLayout sub;
-
-          tile_width = MIN (image_width, width - x);
-          tile_height = MIN (image_height, height - y);
           texture = NULL;
-
           if (image == NULL)
-            {
-              image = gsk_gpu_device_create_download_image (priv->device,
-                                                            depth,
-                                                            tile_width, tile_height);
+            image = gsk_gpu_device_create_download_image (priv->device,
+                                                          depth,
+                                                          MIN (image_width, width - x),
+                                                          MIN (image_height, height - y));
 
-              if (gsk_gpu_image_get_conversion (image) & GSK_GPU_CONVERSION_SRGB)
-                color_state = GDK_COLOR_STATE_SRGB_LINEAR;
-              else
-                color_state = GDK_COLOR_STATE_SRGB;
-            }
-
-          clip_region = cairo_region_create_rectangle (&(cairo_rectangle_int_t) {
-                                                           0, 0,
-                                                           tile_width, tile_height
-                                                       });
-          frame = gsk_gpu_renderer_get_frame (self);
+          frame = gsk_gpu_renderer_create_frame (self);
           gsk_gpu_frame_render (frame,
-                                timestamp,
+                                g_get_monotonic_time (),
                                 image,
-                                color_state,
-                                clip_region,
+                                NULL,
                                 root,
                                 &GRAPHENE_RECT_INIT (rounded_viewport->origin.x + x,
                                                      rounded_viewport->origin.y + y,
-                                                     tile_width,
-                                                     tile_height),
+                                                     image_width,
+                                                     image_height),
                                 &texture);
-          gsk_gpu_frame_sync (frame);
-          gsk_gpu_frame_wait (frame);
+          g_object_unref (frame);
 
           g_assert (texture);
-          gdk_memory_layout_init_sublayout (&sub,
-                                            &layout,
-                                            &(cairo_rectangle_int_t) {
-                                                x,
-                                                y,
-                                                tile_width,
-                                                tile_height
-                                            });
-          gdk_texture_do_download (texture, data, &sub, color_state);
+          gdk_texture_downloader_init (&downloader, texture);
+          gdk_texture_downloader_set_format (&downloader, format);
+          gdk_texture_downloader_download_into (&downloader,
+                                                data + stride * y + x * bpp,
+                                                stride);
 
+          gdk_texture_downloader_finish (&downloader);
           g_object_unref (texture);
           g_clear_object (&image);
-
-          /* Let's GC like a madman, we draw oversized stuff and don't want to OOM */
-          gsk_gpu_device_maybe_gc (priv->device, timestamp);
-          gsk_gpu_renderer_make_current (self);
         }
     }
 
-  bytes = g_bytes_new_take (data, layout.size);
-  texture = gdk_memory_texture_new_from_layout (bytes, &layout, color_state, NULL, NULL);
+  bytes = g_bytes_new_take (data, size);
+  texture = gdk_memory_texture_new (width, height, GDK_MEMORY_DEFAULT, bytes, stride);
   g_bytes_unref (bytes);
   return texture;
 }
@@ -383,13 +337,8 @@ gsk_gpu_renderer_render_texture (GskRenderer           *renderer,
   GskGpuImage *image;
   GdkTexture *texture;
   graphene_rect_t rounded_viewport;
-  GdkColorState *color_state;
-  cairo_region_t *clip_region;
-  gint64 timestamp;
 
-  timestamp = g_get_monotonic_time ();
-
-  gsk_gpu_device_maybe_gc (priv->device, timestamp);
+  gsk_gpu_device_maybe_gc (priv->device);
 
   gsk_gpu_renderer_make_current (self);
 
@@ -403,33 +352,20 @@ gsk_gpu_renderer_render_texture (GskRenderer           *renderer,
                                                 rounded_viewport.size.height);
 
   if (image == NULL)
-    return gsk_gpu_renderer_fallback_render_texture (self, timestamp, root, &rounded_viewport);
+    return gsk_gpu_renderer_fallback_render_texture (self, root, &rounded_viewport);
 
-  if (gsk_gpu_image_get_conversion (image) == GSK_GPU_CONVERSION_SRGB)
-    color_state = GDK_COLOR_STATE_SRGB_LINEAR;
-  else
-    color_state = GDK_COLOR_STATE_SRGB;
-
-  frame = gsk_gpu_renderer_get_frame (self);
-
-  clip_region = cairo_region_create_rectangle (&(cairo_rectangle_int_t) {
-                                                   0, 0,
-                                                   gsk_gpu_image_get_width (image),
-                                                   gsk_gpu_image_get_height (image)
-                                               });
+  frame = gsk_gpu_renderer_create_frame (self);
 
   texture = NULL;
   gsk_gpu_frame_render (frame,
                         g_get_monotonic_time (),
                         image,
-                        color_state,
-                        clip_region,
+                        NULL,
                         root,
                         &rounded_viewport,
                         &texture);
-  gsk_gpu_frame_sync (frame);
 
-  gsk_gpu_frame_wait (frame);
+  g_object_unref (frame);
   g_object_unref (image);
 
   gsk_gpu_device_queue_gc (priv->device);
@@ -451,7 +387,6 @@ gsk_gpu_renderer_render (GskRenderer          *renderer,
   GskGpuImage *backbuffer;
   cairo_region_t *render_region;
   double scale;
-  gint64 timestamp;
 
   if (cairo_region_is_empty (region))
     {
@@ -459,33 +394,23 @@ gsk_gpu_renderer_render (GskRenderer          *renderer,
       return;
     }
 
-  timestamp = g_get_monotonic_time ();
-  gsk_gpu_device_maybe_gc (priv->device, timestamp);
+  gdk_draw_context_begin_frame_full (priv->context,
+                                     gsk_render_node_get_preferred_depth (root),
+                                     region);
+
+  gsk_gpu_device_maybe_gc (priv->device);
 
   gsk_gpu_renderer_make_current (self);
 
-  frame = gsk_gpu_renderer_get_frame (self);
-  scale = gdk_surface_get_scale (gdk_draw_context_get_surface (priv->context));
-
-  gsk_gpu_frame_begin (frame, priv->context, root, region);
-
   backbuffer = GSK_GPU_RENDERER_GET_CLASS (self)->get_backbuffer (self);
 
-  render_region = cairo_region_copy (gdk_draw_context_get_render_region (priv->context));
-
-  if (!(priv->optimizations & GSK_GPU_OPTIMIZE_DAMAGE))
-    {
-      cairo_rectangle_int_t extents;
-
-      cairo_region_get_extents (render_region, &extents);
-      cairo_region_destroy (render_region);
-      render_region = cairo_region_create_rectangle (&extents);
-    }
+  frame = gsk_gpu_renderer_get_frame (self);
+  render_region = get_render_region (self);
+  scale = gsk_gpu_renderer_get_scale (self);
 
   gsk_gpu_frame_render (frame,
-                        timestamp,
+                        g_get_monotonic_time (),
                         backbuffer,
-                        gdk_draw_context_get_color_state (priv->context),
                         render_region,
                         root,
                         &GRAPHENE_RECT_INIT (
@@ -495,11 +420,22 @@ gsk_gpu_renderer_render (GskRenderer          *renderer,
                         ),
                         NULL);
 
-  gsk_gpu_frame_end (frame, priv->context);
-
-  g_object_unref (backbuffer);
-
   gsk_gpu_device_queue_gc (priv->device);
+
+  gdk_draw_context_end_frame (priv->context);
+
+  g_clear_pointer (&render_region, cairo_region_destroy);
+}
+
+static double
+gsk_gpu_renderer_real_get_scale (GskGpuRenderer *self)
+{
+  GskGpuRendererPrivate *priv = gsk_gpu_renderer_get_instance_private (self);
+  GdkSurface *surface;
+
+  surface = gdk_draw_context_get_surface (priv->context);
+
+  return gdk_surface_get_scale (surface);
 }
 
 static void
@@ -518,10 +454,9 @@ gsk_gpu_renderer_class_init (GskGpuRendererClass *klass)
 
   klass->optimizations = -1;
   klass->optimizations &= ~gdk_parse_debug_var ("GSK_GPU_DISABLE",
-      "GSK_GPU_DISABLE can be set to of values which cause GSK to disable\n"
-      "certain optimizations in the \'ngl\' and \'vulkan\' renderers.\n",
-      gsk_gpu_optimization_keys,
-      G_N_ELEMENTS (gsk_gpu_optimization_keys));
+                                                gsk_gpu_optimization_keys,
+                                                G_N_ELEMENTS (gsk_gpu_optimization_keys));
+  klass->get_scale = gsk_gpu_renderer_real_get_scale;
 }
 
 static void
@@ -546,4 +481,10 @@ gsk_gpu_renderer_get_device (GskGpuRenderer *self)
   GskGpuRendererPrivate *priv = gsk_gpu_renderer_get_instance_private (self);
 
   return priv->device;
+}
+
+double
+gsk_gpu_renderer_get_scale (GskGpuRenderer *self)
+{
+  return GSK_GPU_RENDERER_GET_CLASS (self)->get_scale (self);
 }

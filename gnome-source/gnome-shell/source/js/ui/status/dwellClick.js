@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -47,8 +48,7 @@ class DwellClickIndicator extends PanelMenu.Button {
         this._a11ySettings.connect(`changed::${KEY_DWELL_CLICK_ENABLED}`, this._syncMenuVisibility.bind(this));
         this._a11ySettings.connect(`changed::${KEY_DWELL_MODE}`, this._syncMenuVisibility.bind(this));
 
-        const backend = this.get_context().get_backend();
-        this._seat = backend.get_default_seat();
+        this._seat = Clutter.get_default_backend().get_default_seat();
         this._seat.connect('ptr-a11y-dwell-click-type-changed', this._updateClickType.bind(this));
 
         this._addDwellAction(DWELL_CLICK_MODES.primary);
@@ -64,6 +64,8 @@ class DwellClickIndicator extends PanelMenu.Button {
         this.visible =
           this._a11ySettings.get_boolean(KEY_DWELL_CLICK_ENABLED) &&
            this._a11ySettings.get_string(KEY_DWELL_MODE) === DWELL_MODE_WINDOW;
+
+        return GLib.SOURCE_REMOVE;
     }
 
     _addDwellAction(mode) {
@@ -71,7 +73,7 @@ class DwellClickIndicator extends PanelMenu.Button {
     }
 
     _updateClickType(manager, clickType) {
-        for (const mode in DWELL_CLICK_MODES) {
+        for (let mode in DWELL_CLICK_MODES) {
             if (DWELL_CLICK_MODES[mode].type === clickType)
                 this._icon.icon_name = DWELL_CLICK_MODES[mode].icon;
         }

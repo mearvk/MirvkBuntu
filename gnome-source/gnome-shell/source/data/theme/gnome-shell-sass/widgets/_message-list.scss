@@ -1,10 +1,9 @@
 /* Message List */
 // a.k.a. notifications in the menu
-$_message_list_width: 29em;
 
 // main list
 .message-list {
-  width: $_message_list_width;
+  width: 29em;
   border: solid $borders_color;
 
   // padding and margins to account for scrollbar
@@ -12,10 +11,10 @@ $_message_list_width: 29em;
   &:rtl {margin-right: 0; margin-left: $base_margin; padding-left: $base_padding; border-left-width: 1px; }
 
   .message-list-placeholder {
-    @extend %title_3;
-    color: transparentize($fg_color, .55);
+    @extend %title_2;
+    color: transparentize($fg_color, .75);
     @if $contrast == 'high' {
-      color: $fg_color;
+      color: transparentize($fg_color, .5);
     }
     // icon size and color
     > StIcon {
@@ -26,86 +25,60 @@ $_message_list_width: 29em;
   }
 }
 
-.message-view {
+.message-list-sections {
   // to account for scrollbar
   &:ltr {margin-right: $base_margin * 3; }
   &:rtl {margin-left: $base_margin * 3;}
 
-  -st-vfade-offset: 68px;
+  spacing: $base_padding * 2;
+}
 
-  .message {
-    margin-bottom: $base_padding * 2 !important;
-    // manually adjust radius to account for popover corners
-    border-radius: $modal_radius + 2px;
-  }
+.message-list-section,
+.message-list-section-list {
+  spacing: $base_padding * 2;
 }
 
 // do-not-disturb + clear button
 .message-list-controls {
   // NOTE: remove the padding if notification_bubble could remove margin for drop shadow
   padding: $base_padding * 2;
-  padding-bottom: $base_padding * 1.5;
+  padding-bottom: $base_padding;
   spacing: $base_padding;
   @extend %heading;
 
-  .message-list-clear-button {
-    border-radius: $forced_circular_radius;
-  }
-}
+  .dnd-button {
+    // We need this because the focus outline isn't inset like for the buttons
+    // so the dnd button would grow when it gets focus if we didn't change only
+    // its color when focusing.
+    border-width: 2px;
+    border-color: transparent;
+    border-radius: 32px;
+    border-style: solid;
 
-// message notification group
-.message-notification-group {
-  spacing: $base_padding * 2;
-
-  .message-group-header {
-    padding: $base_padding;
-    .message-group-title {
-      @extend %title_2;
-      margin: 0 $base_margin;
+    &:focus {
+      border-color: transparentize($selected_bg_color, 0.4);
     }
-  }
-
-  // close button
-  .message-collapse-button {
-    @extend .icon-button;
-    color: $fg_color;
-    background-color: transparentize($fg_color, 0.8);
-    padding: 4px !important;
-    border: 4px transparent solid;
-    &:hover {background-color: transparentize($fg_color, 0.7);}
-    &:active {background-color: transparentize($fg_color, 0.8);}
   }
 }
 
 // message bubbles
 .message {
   @extend %card;
-  padding: $base_padding;
+  padding: 0;
   margin: 0;
   border-radius: $modal_radius;
 
-  background-color: if($variant == 'light', $card_bg_color, lighten($card_bg_color, 5%));
-
-  &:second-in-stack {
-    background-color: if($variant == 'light', darken($card_bg_color, 4%), darken($card_bg_color, 1%));
-    box-shadow: 0 1px 1px 0 $card_shadow_color;
-  }
-
-  &:lower-in-stack {
-    background-color: if($variant == 'light', darken($card_bg_color, 7%), darken($card_bg_color, 4%));
-    box-shadow: none;
-    border-color: if($variant == 'light', darken($card_bg_color, 10%), transparent); // a not ideal workaround for light theme
-  }
+  // subtract side padding to accommodate the close button's border
+  &:ltr { padding-right:-2px; };
+  &:rtl { padding-left:-2px; };
 
   // message header
   .message-header {
+    padding: 0 $scaled_padding;
+    margin: $base_padding;
+    margin-bottom: 0;
     spacing: $base_padding;
-    color: $card_insensitive_fg_color;
-    padding:0 $base_padding;
-
-    // remove side padding to accommodate the close button
-    &:ltr { padding-right: 0; }
-    &:rtl { padding-left: 0; }
+    color: $insensitive_fg_color;
 
     // header source icon
     .message-source-icon {
@@ -127,11 +100,12 @@ $_message_list_width: 29em;
       // Time label
       .event-time {
         @extend %caption;
-        color: $card_insensitive_fg_color;
+        color: $insensitive_fg_color;
         // Add bottom padding to align the app name with the time horizontally
         padding-bottom: to_em(1px);
 
-        text-align: end;
+        &:ltr { text-align: right };
+        &:rtl { text-align: left };
       }
     }
 
@@ -139,26 +113,26 @@ $_message_list_width: 29em;
     .message-expand-button,
     .message-close-button {
       @extend .icon-button;
-      @extend %notification_button;
-      border-radius: $forced_circular_radius; // make circular
       color: $fg_color;
+      background-color: transparentize($fg_color, .9);
+      padding: 4px;
+      &:hover { background-color: transparentize($fg_color, .81);}
+      &:active,
+      &:active:hover { background-color: transparentize($fg_color, .76);}
+      &:insensitive { background-color: transparentize($fg_color, .93);}
     }
 
-    // increase padding to expand button to make it larger
     .message-expand-button {
-      padding: $base_padding;
-    }
-
-    // add margin to close button to balance it with the expand button
-    .message-close-button {
-      margin: $base_padding * 0.5;
-      padding: $base_padding;
+      padding: 6px;
+      &:ltr { margin-right: $base_padding; }
+      &:rtl { margin-left: $base_padding; }
     }
   }
 
   // container for message contents
   .message-box {
     padding: $base_padding;
+    margin: $base_padding;
     margin-top: 0;
     spacing: $base_padding;
 
@@ -192,26 +166,6 @@ $_message_list_width: 29em;
       // message title
       .message-title {
         font-weight: bold;
-      }
-    }
-  }
-
-  // container for message buttons
-  .message-action-bin {
-    padding: $base_margin;
-    spacing: $base_padding;
-
-    // set margin on children
-    * {
-      margin: 0 $base_margin;
-      // remove margins
-      &:first-child {
-        &:ltr { margin-left:0;}
-        &:rtl { margin-right:0;}
-      }
-      &:last-child {
-        &:ltr { margin-right:0;}
-        &:rtl { margin-left:0;}
       }
     }
   }

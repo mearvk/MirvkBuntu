@@ -19,7 +19,7 @@ After=speech-dispatcher.socket
 Type=notify-reload
 ExecStart=orca --replace
 Restart=always
-WatchdogSec=10
+WatchdogSec=6
 Slice=session.slice
 
 [Install]

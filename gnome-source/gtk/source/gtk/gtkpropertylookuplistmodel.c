@@ -21,13 +21,12 @@
 /*
  * GtkPropertyLookupListModel:
  *
- * A list model that recursively looks up a property.
+ * `GtkPropertyLookupListModel` is a `GListModel` implementation that takes an
+ * object and a property and then recursively looks up the next element using
+ * the property on the previous object.
  *
- * `GtkPropertyLookupListModel` takes an object and a property and looks
- * up the next element using the property on the previous object.
- *
- * For example, one could use this list model with the [property@Gtk.Widget:parent]
- * property to get a list of a widget and all its ancestors.
+ * For example, one could use this list model with the GtkWidget:parent property
+ * to get a list of a widgets and all its ancestors.
  **/
 
 #include "config.h"
@@ -378,7 +377,7 @@ gtk_property_lookup_list_model_class_init (GtkPropertyLookupListModelClass *klas
   properties[PROP_ITEM_TYPE] =
       g_param_spec_gtype ("item-type", NULL, NULL,
                           G_TYPE_OBJECT,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkPropertyLookupListModel:n-items:
@@ -390,7 +389,7 @@ gtk_property_lookup_list_model_class_init (GtkPropertyLookupListModelClass *klas
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkPropertyLookupListModel:property:
@@ -400,7 +399,7 @@ gtk_property_lookup_list_model_class_init (GtkPropertyLookupListModelClass *klas
   properties[PROP_PROPERTY] =
       g_param_spec_string ("property", NULL, NULL,
                            NULL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkPropertyLookupListModel:object:
@@ -410,7 +409,7 @@ gtk_property_lookup_list_model_class_init (GtkPropertyLookupListModelClass *klas
   properties[PROP_OBJECT] =
       g_param_spec_object ("object", NULL, NULL,
                            G_TYPE_OBJECT,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }

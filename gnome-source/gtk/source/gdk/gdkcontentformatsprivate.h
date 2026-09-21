@@ -23,8 +23,7 @@
 
 G_BEGIN_DECLS
 
-void gdk_content_init_serializers (void);
-void gdk_content_init_deserializers (void);
+
 
 
 G_END_DECLS

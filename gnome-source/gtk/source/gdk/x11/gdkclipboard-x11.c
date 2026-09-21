@@ -35,8 +35,6 @@
 #include <X11/extensions/Xfixes.h>
 #endif
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 #define IDLE_ABORT_TIME 30 /* seconds */
 
 typedef struct _GdkX11ClipboardClass GdkX11ClipboardClass;
@@ -755,11 +753,10 @@ gdk_x11_clipboard_read_got_stream (GObject      *source,
 
       for (i = 0; i < G_N_ELEMENTS (special_targets); i++)
         {
-          if (special_targets[i].mime_type == NULL)
-            continue;
-
           if (g_str_equal (mime_type, special_targets[i].x_target))
             {
+              g_assert (special_targets[i].mime_type != NULL);
+
               GDK_DISPLAY_DEBUG (gdk_clipboard_get_display (GDK_CLIPBOARD (cb)), CLIPBOARD,
                                  "%s: reading with converter from %s to %s",
                                     cb->selection, mime_type, special_targets[i].mime_type);

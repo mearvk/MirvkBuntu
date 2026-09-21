@@ -112,19 +112,20 @@ test_label_markup (void)
 
   g_assert_cmpstr (str->str, ==,
     "range 0 3\n"
-    "[0,4]underline=5\n"
+    "[0,4]underline=1\n"
     "[0,8]foreground=#1b1b6a6acbcb\n"
     "[0,3]style=2\n"
     "range 3 4\n"
-    "[0,4]underline=5\n"
+    "[0,4]underline=1\n"
     "[0,8]foreground=#1b1b6a6acbcb\n"
     "range 4 5\n"
     "[0,8]foreground=#1b1b6a6acbcb\n"
     "[4,5]underline=3\n"
     "range 5 8\n"
     "[0,8]foreground=#1b1b6a6acbcb\n"
-    "[5,8]underline=5\n"
+    "[5,8]underline=1\n"
     "range 8 2147483647\n");
+
 
   gtk_window_set_mnemonics_visible (GTK_WINDOW (window), FALSE);
 
@@ -137,11 +138,11 @@ test_label_markup (void)
 
   g_assert_cmpstr (str->str, ==,
     "range 0 3\n"
-    "[0,7]underline=5\n"
+    "[0,7]underline=1\n"
     "[0,7]foreground=#1b1b6a6acbcb\n"
     "[0,3]style=2\n"
     "range 3 7\n"
-    "[0,7]underline=5\n"
+    "[0,7]underline=1\n"
     "[0,7]foreground=#1b1b6a6acbcb\n"
     "range 7 2147483647\n");
 
@@ -157,11 +158,11 @@ test_label_markup (void)
 
   g_assert_cmpstr (str->str, ==,
     "range 0 3\n"
-    "[0,8]underline=5\n"
+    "[0,8]underline=1\n"
     "[0,8]foreground=#1b1b6a6acbcb\n"
     "[0,3]style=2\n"
     "range 3 8\n"
-    "[0,8]underline=5\n"
+    "[0,8]underline=1\n"
     "[0,8]foreground=#1b1b6a6acbcb\n"
     "range 8 2147483647\n");
 
@@ -205,10 +206,8 @@ test_label_parse_more (void)
     { "tes_t m__e mo_re", TRUE, FALSE, "test m_e more", GDK_KEY_t },
     { "test m__e mo_re", TRUE, FALSE, "test m_e more", GDK_KEY_r },
     { "tes_t m__e mo_re", FALSE, FALSE, "tes_t m__e mo_re", GDK_KEY_VoidSymbol },
-    { "test m__e more", TRUE, FALSE, "test m_e more", GDK_KEY_VoidSymbol },
     { "<span font='test_font'>test <a href='bla'>w_ith</a> bla</span>", TRUE, TRUE, "test with bla", GDK_KEY_i },
     { "<span font='test_font'>test <a href='bla'>w_ith</a> bla</span>", FALSE, TRUE, "test w_ith bla", GDK_KEY_VoidSymbol },
-    { "<span font='test_font'>test <a href='bla'>with</a> bla</span>", TRUE, TRUE, "test with bla", GDK_KEY_VoidSymbol },
   };
   GtkWidget *label;
 

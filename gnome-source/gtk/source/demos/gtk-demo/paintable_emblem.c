@@ -105,7 +105,7 @@ demo_icon_new_with_paintable (const char   *icon_name,
   icon = gtk_icon_theme_lookup_icon (theme,
                                      icon_name, NULL,
                                      128, 1,
-                                     GTK_TEXT_DIR_LTR, GTK_ICON_LOOKUP_NONE);
+                                     GTK_TEXT_DIR_LTR, 0);
 
   self = g_object_new (DEMO_TYPE_ICON, NULL);
 
@@ -135,7 +135,7 @@ demo_icon_new (const char *icon_name,
   emblem = gtk_icon_theme_lookup_icon (theme,
                                        emblem_name, NULL,
                                        128, 1,
-                                       GTK_TEXT_DIR_LTR, GTK_ICON_LOOKUP_NONE);
+                                       GTK_TEXT_DIR_LTR, 0);
 
   return GDK_PAINTABLE (demo_icon_new_with_paintable (icon_name,
                                                       GDK_PAINTABLE (emblem)));
@@ -161,7 +161,6 @@ do_paintable_emblem (GtkWidget *do_widget)
 
       icon = demo_icon_new ("folder", "starred");
       image = gtk_image_new_from_paintable (icon);
-      gtk_image_set_pixel_size (GTK_IMAGE (image), 256);
       gtk_widget_set_hexpand (image, TRUE);
       gtk_widget_set_vexpand (image, TRUE);
       gtk_grid_attach (GTK_GRID (grid), image, 0, 0, 1, 1);
@@ -169,7 +168,6 @@ do_paintable_emblem (GtkWidget *do_widget)
       icon = demo_icon_new_with_paintable ("drive-multidisk",
                                            gtk_nuclear_animation_new (FALSE));
       image = gtk_image_new_from_paintable (icon);
-      gtk_image_set_pixel_size (GTK_IMAGE (image), 256);
       gtk_widget_set_hexpand (image, TRUE);
       gtk_widget_set_vexpand (image, TRUE);
       gtk_grid_attach (GTK_GRID (grid), image, 1, 0, 1, 1);

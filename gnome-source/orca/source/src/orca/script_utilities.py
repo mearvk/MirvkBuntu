@@ -25,13 +25,11 @@
 
 """Utilities for providing app/toolkit-specific information about objects and events."""
 
-from __future__ import annotations
+from collections.abc import Callable
 
 import gi
 
 gi.require_version("Atspi", "2.0")
-from typing import TYPE_CHECKING
-
 from gi.repository import Atspi
 
 from . import (
@@ -46,14 +44,12 @@ from . import (
     spellcheck_presenter,
     table_navigator,
 )
+from .ax_hypertext import AXHypertext
 from .ax_object import AXObject
 from .ax_table import AXTable
 from .ax_text import AXText
 from .ax_utilities import AXUtilities
 from .ax_utilities_text import TextUnit
-
-if TYPE_CHECKING:
-    from .ax_utilities_text import CaretSetReason
 
 
 class Utilities:
@@ -72,7 +68,7 @@ class Utilities:
     def node_level(self, obj: Atspi.Accessible) -> int:
         """Returns the node level of the specified tree item."""
 
-        if not AXUtilities.is_tree_or_tree_table_descendant(obj):
+        if not AXUtilities.find_ancestor(obj, AXUtilities.is_tree_or_tree_table):
             return -1
 
         attrs = AXObject.get_attributes_dict(obj)
@@ -185,14 +181,14 @@ class Utilities:
         if not AXUtilities.is_entry(obj):
             return False
 
-        return AXUtilities.is_tool_bar_descendant(obj)
+        return AXUtilities.find_ancestor(obj, AXUtilities.is_tool_bar) is not None
 
     def get_find_results_count(self, _root: Atspi.Accessible | None = None) -> str:
         """Returns a string description of the number of find-in-page results in root."""
 
         return ""
 
-    def is_document(self, obj: Atspi.Accessible) -> bool:
+    def is_document(self, obj: Atspi.Accessible, _exclude_document_frame=False) -> bool:
         """Returns True if obj is a document."""
 
         # TODO - JD: See if the web script logic can be included here and then it all moved
@@ -209,11 +205,8 @@ class Utilities:
         """Returns the active document."""
 
         window = focus_manager.get_manager().get_active_window()
-        documents = [
-            obj
-            for obj in AXUtilities.get_embeds(window)
-            if self.is_document(obj) and AXUtilities.is_showing(obj)
-        ]
+        documents = list(filter(self.is_document, AXUtilities.get_embeds(window)))
+        documents = list(filter(AXUtilities.is_showing, documents))
         if len(documents) == 1:
             tokens = ["SCRIPT UTILITIES: Active document (via embeds):", documents[0]]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -233,7 +226,7 @@ class Utilities:
     def get_top_level_document_for_object(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
         """Returns the top-level document containing obj."""
 
-        return AXUtilities.find_outermost_ancestor_inclusive(obj, self.is_document)
+        return AXUtilities.find_ancestor_inclusive(obj, self.is_top_level_document)
 
     def get_document_for_object(self, obj: Atspi.Accessible) -> Atspi.Accessible | None:
         """Returns the nearest document ancestor of obj, or obj if it is a document."""
@@ -277,7 +270,7 @@ class Utilities:
         name = AXObject.get_name(obj)
         if name:
             tokens.append(name)
-        text = AXUtilities.expand_eocs(obj)
+        text = self.expand_eocs(obj)
         if text and text not in tokens:
             tokens.append(text)
         else:
@@ -299,9 +292,60 @@ class Utilities:
 
         return AXUtilities.is_link(obj)
 
+    def _get_object_from_path(self, path):
+        # TODO - JD: This broad exception is swallowing a pyatspism meaning the one caller
+        # (recovery code for web brokenness) is not recovering. Which suggests that code can
+        # be removed.
+        start = self._script.app
+        rv = None
+        for p in path:
+            if p == -1:
+                continue
+            try:
+                start = start[p]
+            except (IndexError, TypeError, AttributeError):
+                break
+        else:
+            rv = start
+
+        return rv
+
+    def _top_level_roles(self) -> list[Atspi.Role]:
+        # TODO - JD: Move this into AXUtilities.
+        roles = [
+            Atspi.Role.DIALOG,
+            Atspi.Role.FILE_CHOOSER,
+            Atspi.Role.FRAME,
+            Atspi.Role.WINDOW,
+            Atspi.Role.ALERT,
+        ]
+        return roles
+
+    def _find_window_with_descendant(self, child: Atspi.Accessible) -> Atspi.Accessible | None:
+        """A terrible, non-performant workaround for broken ancestry."""
+
+        if not AXObject.is_valid(child):
+            return None
+
+        app = AXUtilities.get_application(child)
+        if app is None:
+            return None
+
+        for i in range(AXObject.get_child_count(app)):
+            window = AXObject.get_child(app, i)
+            if AXUtilities.find_descendant(window, lambda x: x == child) is not None:
+                tokens = ["SCRIPT UTILITIES:", window, "contains", child]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                return window
+
+            tokens = ["SCRIPT UTILITIES:", window, "does not contain", child]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        return None
+
     def _is_top_level_object(self, obj: Atspi.Accessible) -> bool:
         return (
-            AXObject.get_role(obj) in AXUtilities.get_top_level_roles()
+            AXObject.get_role(obj) in self._top_level_roles()
             and AXObject.get_role(AXObject.get_parent(obj)) == Atspi.Role.APPLICATION
         )
 
@@ -319,7 +363,7 @@ class Utilities:
         if rv is None and use_fallback_search:
             msg = "SCRIPT UTILITIES: Attempting to find top-level object via fallback search"
             debug.print_message(debug.LEVEL_INFO, msg, True)
-            rv = AXUtilities.find_window_with_descendant(obj)
+            rv = self._find_window_with_descendant(obj)
 
         return rv
 
@@ -337,6 +381,46 @@ class Utilities:
             return False
 
         return top_level == focus_manager.get_manager().get_active_window()
+
+    @staticmethod
+    def path_comparison(path1: list[int], path2: list[int]) -> int:
+        """Returns -1, 0, or 1 to indicate if path1 is before, the same, or after path2."""
+
+        # TODO - JD: Move into AXUtilities.
+
+        if path1 == path2:
+            return 0
+
+        size = max(len(path1), len(path2))
+        path1 = (path1 + [-1] * size)[:size]
+        path2 = (path2 + [-1] * size)[:size]
+
+        for x in range(min(len(path1), len(path2))):
+            if path1[x] < path2[x]:
+                return -1
+            if path1[x] > path2[x]:
+                return 1
+
+        return 0
+
+    def _find_all_descendants(
+        self,
+        root: Atspi.Accessible | None,
+        include_if: Callable[[Atspi.Accessible], bool] | None = None,
+        exclude_if: Callable[[Atspi.Accessible], bool] | None = None,
+    ) -> list[Atspi.Accessible]:
+        # TODO - JD: Move this into AXUtilities.
+        if root is None:
+            return []
+
+        # Don't bother if the root is a 'pre' or 'code' element. Those often have
+        # nothing but a TON of static text leaf nodes, which we want to ignore.
+        if AXUtilities.is_code(root):
+            tokens = ["SCRIPT UTILITIES: Returning 0 descendants for pre/code", root]
+            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            return []
+
+        return AXUtilities.find_all_descendants(root, include_if, exclude_if)
 
     def unrelated_labels(
         self,
@@ -393,7 +477,7 @@ class Utilities:
                 return True
             return only_showing and not AXUtilities.is_showing(x)
 
-        labels = AXUtilities.find_all_descendants(root, _include, _exclude)
+        labels = self._find_all_descendants(root, _include, _exclude)
 
         root_name = AXObject.get_name(root)
 
@@ -432,6 +516,73 @@ class Utilities:
         if restrict_to is None:
             restrict_to = self.get_top_level_document_for_object(obj)
         return AXUtilities.find_next_object(obj, restrict_to)
+
+    def expand_eocs(
+        self,
+        obj: Atspi.Accessible,
+        start_offset: int = 0,
+        end_offset: int = -1,
+    ) -> str:
+        """Expands the current object replacing embedded object characters with their text."""
+
+        text = AXText.get_substring(obj, start_offset, end_offset)
+        if "\ufffc" not in text:
+            return text
+
+        block_roles = [
+            Atspi.Role.HEADING,
+            Atspi.Role.LIST,
+            Atspi.Role.LIST_ITEM,
+            Atspi.Role.PARAGRAPH,
+            Atspi.Role.SECTION,
+            Atspi.Role.TABLE,
+            Atspi.Role.TABLE_CELL,
+            Atspi.Role.TABLE_ROW,
+        ]
+
+        to_build = list(text)
+        for i, char in enumerate(to_build):
+            if char == "\ufffc":
+                child = AXHypertext.find_child_at_offset(obj, i + start_offset)
+                result = self.expand_eocs(child)
+                if child and AXObject.get_role(child) in block_roles:
+                    result += " "
+                to_build[i] = result
+
+        result = "".join(to_build)
+        tokens = [
+            "SCRIPT UTILITIES: Expanded EOCs for",
+            obj,
+            f"range: {start_offset}:{end_offset}: '{result}'",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+
+        if "\ufffc" in result:
+            msg = "SCRIPT UTILITIES: Unable to expand EOCs"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return ""
+
+        return result
+
+    def is_error_for_contents(
+        self,
+        obj: Atspi.Accessible,
+        contents: list[tuple[Atspi.Accessible, int, int, str]] | None = None,
+    ) -> bool:
+        """Returns True of obj is an error message for the contents."""
+
+        if not contents:
+            return False
+
+        if not AXUtilities.get_is_error_for(obj):
+            return False
+
+        for acc, _start, _end, _string in contents:
+            targets = AXUtilities.get_error_message(acc)
+            if targets is not None and obj in targets:
+                return True
+
+        return False
 
     def deleted_text(self, event: Atspi.Event) -> str:
         """Tries to determine the real deleted text for the given event. Because app bugs."""
@@ -481,6 +632,7 @@ class Utilities:
     def get_caret_context(
         self,
         document: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
+        get_replicant: bool = False,  # pylint: disable=unused-argument
         search_if_needed: bool = True,  # pylint: disable=unused-argument
     ) -> tuple[Atspi.Accessible, int]:
         """Returns an (obj, offset) tuple representing the current location."""
@@ -502,8 +654,6 @@ class Utilities:
         obj: Atspi.Accessible,
         offset: int,
         document: Atspi.Accessible | None = None,  # pylint: disable=unused-argument
-        *,
-        reason: CaretSetReason,
     ) -> None:
         """Sets the locus of focus to obj and sets the caret position to offset."""
 
@@ -512,12 +662,11 @@ class Utilities:
         if self.grab_focus_when_setting_caret(obj):
             AXObject.grab_focus(obj)
 
-        if not reason.is_text_selection():
-            # We cannot count on implementations clearing the selection for us when we set the
-            # caret offset. Also, we should clear the selected text first.
-            # https://bugs.documentfoundation.org/show_bug.cgi?id=167930
-            AXUtilities.clear_all_selected_text(obj)
-        self.set_caret_offset(obj, offset, reason=reason)
+        # We cannot count on implementations clearing the selection for us when we set the caret
+        # offset. Also, we should clear the selected text first.
+        # https://bugs.documentfoundation.org/show_bug.cgi?id=167930
+        AXUtilities.clear_all_selected_text(obj)
+        self.set_caret_offset(obj, offset)
 
         # TODO - JD: The web script's set_caret_position() also sets the caret context.
         # Ensuring global structural navigation, caret navigation, browse mode, etc.
@@ -530,13 +679,11 @@ class Utilities:
         scroll_to = max(0, min(offset, AXText.get_character_count(obj) - 1))
         ax_event_synthesizer.get_synthesizer().scroll_into_view(obj, scroll_to)
 
-    def set_caret_offset(
-        self, obj: Atspi.Accessible, offset: int, *, reason: CaretSetReason
-    ) -> None:
+    def set_caret_offset(self, obj: Atspi.Accessible, offset: int) -> None:
         """Sets the caret offset via AtspiText."""
 
         # TODO - JD. Remove this function if the web override can be adjusted
-        AXUtilities.set_caret_offset_with_reason(obj, offset, reason)
+        AXText.set_caret_offset(obj, offset)
 
     def split_substring_by_language(
         self,
@@ -636,10 +783,6 @@ class Utilities:
             prev_obj, prev_offset = self.previous_context(obj, 0)
             return self.get_line_contents_at_offset(prev_obj, prev_offset)
 
-        prev_obj, prev_offset = self.previous_context(obj, this_start)
-        if prev_obj is not None:
-            return self.get_line_contents_at_offset(prev_obj, prev_offset)
-
         return [(obj, 0, 0, "")]
 
     def get_line_contents_at_offset(
@@ -675,16 +818,7 @@ class Utilities:
 
         _this_line, _this_start, this_end = AXText.get_line_at_offset(obj, offset)
         if this_end == AXText.get_character_count(obj):
-            if offset < this_end:
-                last_char = AXText.get_character_at_offset(obj, this_end - 1)[0]
-                if not last_char or last_char in "\r\n":
-                    return self.get_line_contents_at_offset(obj, this_end)
-
             next_obj, next_offset = self.next_context(obj, this_end)
-            return self.get_line_contents_at_offset(next_obj, next_offset)
-
-        next_obj, next_offset = self.next_context(obj, max(this_end, offset))
-        if next_obj is not None:
             return self.get_line_contents_at_offset(next_obj, next_offset)
 
         return [(obj, 0, 0, "")]
@@ -725,11 +859,10 @@ class Utilities:
 
         prev_offset = offset - 1
         if skip_space:
-            while prev_offset >= 0:
-                char = AXText.get_character_at_offset(obj, prev_offset)[0]
-                if char and not char.isspace():
-                    break
+            char = AXText.get_character_at_offset(obj, prev_offset)[0]
+            while char and char.isspace():
                 prev_offset -= 1
+                char = AXText.get_character_at_offset(obj, prev_offset)[0]
 
         if prev_offset >= 0:
             return obj, prev_offset
@@ -756,12 +889,10 @@ class Utilities:
 
         next_offset = offset + 1
         if skip_space:
-            character_count = AXText.get_character_count(obj)
-            while next_offset <= character_count:
-                char = AXText.get_character_at_offset(obj, next_offset)[0]
-                if char and not char.isspace():
-                    break
+            char = AXText.get_character_at_offset(obj, next_offset)[0]
+            while char and char.isspace():
                 next_offset += 1
+                char = AXText.get_character_at_offset(obj, next_offset)[0]
 
         if next_offset <= AXText.get_character_count(obj):
             return obj, next_offset
@@ -879,18 +1010,11 @@ class Utilities:
 
             word = AXText.get_substring(obj, start, end)
             debug_string = word.replace("\n", "\\n")
-            tokens = [
-                "SCRIPT UTILITIES: Adjusted word at offset",
-                offset,
-                "for ongoing word nav is '",
-                debug_string,
-                "' (",
-                start,
-                "-",
-                end,
-                ")",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = (
+                f"SCRIPT UTILITIES: Adjusted word at offset {offset} for ongoing word nav is "
+                f"'{debug_string}' ({start}-{end})"
+            )
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return word, start, end
 
         # Otherwise, attempt some smarts so that the user winds up with the same presentation
@@ -927,18 +1051,11 @@ class Utilities:
         start, end = self._strip_newline_from_repeated_word(word, prev_word, start, end)
         word = AXText.get_substring(obj, start, end)
         debug_string = word.replace("\n", "\\n")
-        tokens = [
-            "SCRIPT UTILITIES: Adjusted word at offset",
-            offset,
-            "for new word nav is '",
-            debug_string,
-            "' (",
-            start,
-            "-",
-            end,
-            ")",
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = (
+            f"SCRIPT UTILITIES: Adjusted word at offset {offset} for new word nav is "
+            f"'{debug_string}' ({start}-{end})"
+        )
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return word, start, end
 
     def handle_container_selection_change(self, obj: Atspi.Accessible) -> bool:
@@ -956,14 +1073,211 @@ class Utilities:
 
         return False
 
+    def _compute_selection_changes(
+        self,
+        obj: Atspi.Accessible,
+        old_string: str,
+        old_start: int,
+        old_end: int,
+        new_string: str,
+        new_start: int,
+        new_end: int,
+    ) -> list[list]:
+        """Returns a list of [start, end, message] describing what changed in the selection."""
+
+        old_chars = set(range(old_start, old_end))
+        new_chars = set(range(new_start, new_end))
+        if not old_chars.union(new_chars):
+            return []
+
+        if old_chars and new_chars and not old_chars.intersection(new_chars):
+            return [
+                [old_start, old_end, messages.TEXT_UNSELECTED],
+                [new_start, new_end, messages.TEXT_SELECTED],
+            ]
+
+        change = sorted(old_chars.symmetric_difference(new_chars))
+        if not change:
+            return []
+
+        changes = []
+        change_start, change_end = change[0], change[-1] + 1
+        if old_chars < new_chars:
+            changes.append([change_start, change_end, messages.TEXT_SELECTED])
+            if old_string.endswith("\ufffc") and old_end == change_start:
+                child = AXHypertext.find_child_at_offset(obj, old_end - 1)
+                self.handle_text_selection_change(child, False)
+        else:
+            changes.append([change_start, change_end, messages.TEXT_UNSELECTED])
+            if new_string.endswith("\ufffc"):
+                child = AXHypertext.find_child_at_offset(obj, new_end - 1)
+                self.handle_text_selection_change(child, False)
+        return changes
+
+    def _present_selection_changes(
+        self,
+        obj: Atspi.Accessible,
+        changes: list[list],
+        speak_message: bool,
+    ) -> None:
+        """Presents the selection changes to the user."""
+
+        speak_message = (
+            speak_message and not speech_presenter.get_presenter().get_only_speak_displayed_text()
+        )
+        for start, end, message in changes:
+            string = AXText.get_substring(obj, start, end)
+            ends_with_child = string.endswith("\ufffc")
+            effective_end = end - 1 if ends_with_child else end
+
+            if len(string) > 5000 and speak_message:
+                if message == messages.TEXT_SELECTED:
+                    presentation_manager.get_manager().speak_message(
+                        messages.selected_character_count(len(string)),
+                    )
+                else:
+                    presentation_manager.get_manager().speak_message(
+                        messages.unselected_character_count(len(string)),
+                    )
+            else:
+                self._script.say_phrase(obj, start, effective_end)
+                if speak_message and not ends_with_child:
+                    presentation_manager.get_manager().speak_message(message)
+
+            if ends_with_child:
+                child = AXHypertext.find_child_at_offset(obj, effective_end)
+                self.handle_text_selection_change(child, speak_message)
+
+    def handle_text_selection_change(
+        self,
+        obj: Atspi.Accessible,
+        speak_message: bool = True,
+    ) -> bool:
+        """Handles a change in the selected text."""
+
+        # Note: This guesswork to figure out what actually changed with respect
+        # to text selection will get eliminated once the new text-selection API
+        # is added to ATK and implemented by the toolkits. (BGO 638378)
+
+        if (
+            not AXObject.supports_text(obj)
+            or input_event_manager.get_manager().last_event_was_cut()
+        ):
+            return False
+
+        old_string, old_start, old_end = AXUtilities.get_cached_selected_text(obj)
+        AXUtilities.update_cached_selected_text(obj)
+        new_string, new_start, new_end = AXUtilities.get_cached_selected_text(obj)
+
+        if input_event_manager.get_manager().last_event_was_select_all() and new_string:
+            if new_string != old_string:
+                presentation_manager.get_manager().speak_message(messages.DOCUMENT_SELECTED_ALL)
+            return True
+
+        # Even though we present a message, treat it as unhandled so the new location is
+        # still presented.
+        if (
+            not input_event_manager.get_manager().last_event_was_caret_selection()
+            and old_string
+            and not new_string
+        ):
+            presentation_manager.get_manager().speak_message(messages.SELECTION_REMOVED)
+            return False
+
+        changes = self._compute_selection_changes(
+            obj,
+            old_string,
+            old_start,
+            old_end,
+            new_string,
+            new_start,
+            new_end,
+        )
+        if not changes:
+            return False
+
+        self._present_selection_changes(obj, changes, speak_message)
+        return True
+
+    def _should_interrupt_for_ancestor_focus_change(
+        self,
+        old_focus: Atspi.Accessible,
+        new_focus: Atspi.Accessible,
+    ) -> bool:
+        """Returns True if speech should be interrupted when old_focus is an ancestor."""
+
+        msg = "SCRIPT UTILITIES: Not interrupting for locusOfFocus change: "
+        if old_name := AXObject.get_name(old_focus):
+            if old_name == AXObject.get_name(new_focus):
+                return True
+            msg += "old locusOfFocus is ancestor of new locusOfFocus, and has a name"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+        if AXUtilities.is_dialog_or_window(old_focus):
+            if AXUtilities.is_menu(new_focus):
+                return True
+            msg += "old locusOfFocus is ancestor dialog or window of the new locusOfFocus"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+        return True
+
+    def should_interrupt_for_locus_of_focus_change(
+        self,
+        old_focus: Atspi.Accessible,
+        new_focus: Atspi.Accessible,
+        event: Atspi.Event | None = None,
+    ) -> bool:
+        """Returns True if speech should be interrupted to present the new focus."""
+
+        msg = "SCRIPT UTILITIES: Not interrupting for locusOfFocus change: "
+        if (
+            event is None
+            or old_focus == new_focus
+            or event.type.startswith("object:active-descendant-changed")
+        ):
+            if event is None:
+                msg += "event is None"
+            elif old_focus == new_focus:
+                msg += "old locusOfFocus is same as new locusOfFocus"
+            else:
+                msg += "event is active-descendant-changed"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if (
+            AXUtilities.is_table_cell(old_focus)
+            and AXUtilities.is_text(new_focus)
+            and AXUtilities.is_editable(new_focus)
+        ):
+            msg += "suspected editable cell"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if not AXUtilities.is_menu_related(new_focus) and (
+            AXUtilities.is_check_menu_item(old_focus) or AXUtilities.is_radio_menu_item(old_focus)
+        ):
+            msg += "suspected menuitem state change"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        if AXUtilities.is_ancestor(new_focus, old_focus):
+            return self._should_interrupt_for_ancestor_focus_change(old_focus, new_focus)
+
+        if AXUtilities.object_is_controlled_by(
+            old_focus,
+            new_focus,
+        ) or AXUtilities.object_is_controlled_by(new_focus, old_focus):
+            msg += "new locusOfFocus and old locusOfFocus have controls relation"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+            return False
+
+        return True
+
     # pylint: disable=unused-argument
     def is_text_block_element(self, obj: Atspi.Accessible) -> bool:
         """Returns True if obj is a text block element like a paragraph or heading."""
 
-        if not AXUtilities.is_text_block(obj, exclude_editable=True, exclude_focusable=True):
-            return False
-
-        return not self.has_name_and_action_and_no_useful_children(obj)
+        return False
 
     def has_name_and_action_and_no_useful_children(self, obj: Atspi.Accessible) -> bool:
         """Returns True if obj has a name, supports action, and has no useful children."""

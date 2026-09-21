@@ -17,6 +17,8 @@
 
 #pragma once
 
+#ifdef HAVE_WAYLAND
+
 #include "meta/meta-context.h"
 
 #include "core/util-private.h"
@@ -28,8 +30,6 @@ typedef enum _MetaServiceClientType
 {
   META_SERVICE_CLIENT_TYPE_NONE,
   META_SERVICE_CLIENT_TYPE_PORTAL_BACKEND,
-  META_SERVICE_CLIENT_TYPE_FILECHOOSER_PORTAL_BACKEND,
-  META_SERVICE_CLIENT_TYPE_GLOBAL_SHORTCUTS_PORTAL_BACKEND,
 } MetaServiceClientType;
 
 #define META_TYPE_SERVICE_CHANNEL (meta_service_channel_get_type ())
@@ -42,3 +42,5 @@ MetaServiceChannel * meta_service_channel_new (MetaContext *context);
 META_EXPORT_TEST
 MetaWaylandClient * meta_service_channel_get_service_client (MetaServiceChannel    *service_channel,
                                                              MetaServiceClientType  service_client_type);
+
+#endif /* HAVE_WAYLAND */

@@ -18,6 +18,12 @@
 
 #pragma once
 
+typedef enum _MetaCompositorType
+{
+  META_COMPOSITOR_TYPE_WAYLAND,
+  META_COMPOSITOR_TYPE_X11,
+} MetaCompositorType;
+
 /**
  * MetaGrabOp:
  * @META_GRAB_OP_NONE: None
@@ -107,6 +113,53 @@ typedef enum
   META_GRAB_OP_KEYBOARD_RESIZING_SE       = META_GRAB_OP_WINDOW_BASE | _WGO_S | _WGO_E | _WGO_K,
   META_GRAB_OP_KEYBOARD_RESIZING_W        = META_GRAB_OP_WINDOW_BASE |          _WGO_W | _WGO_K,
 } MetaGrabOp;
+
+/**
+ * MetaCursor:
+ * @META_CURSOR_DEFAULT: Default cursor
+ * @META_CURSOR_NORTH_RESIZE: Resize northern edge cursor
+ * @META_CURSOR_SOUTH_RESIZE: Resize southern edge cursor
+ * @META_CURSOR_WEST_RESIZE: Resize western edge cursor
+ * @META_CURSOR_EAST_RESIZE: Resize eastern edge cursor
+ * @META_CURSOR_SE_RESIZE: Resize south-eastern corner cursor
+ * @META_CURSOR_SW_RESIZE: Resize south-western corner cursor
+ * @META_CURSOR_NE_RESIZE: Resize north-eastern corner cursor
+ * @META_CURSOR_NW_RESIZE: Resize north-western corner cursor
+ * @META_CURSOR_MOVE_OR_RESIZE_WINDOW: Move or resize cursor
+ * @META_CURSOR_BUSY: Busy cursor
+ * @META_CURSOR_DND_IN_DRAG: DND in drag cursor
+ * @META_CURSOR_DND_MOVE: DND move cursor
+ * @META_CURSOR_DND_COPY: DND copy cursor
+ * @META_CURSOR_DND_UNSUPPORTED_TARGET: DND unsupported target
+ * @META_CURSOR_POINTING_HAND: pointing hand
+ * @META_CURSOR_CROSSHAIR: crosshair (action forbidden)
+ * @META_CURSOR_IBEAM: I-beam (text input)
+ * @META_CURSOR_BLANK: Invisible cursor
+ */
+typedef enum
+{
+  META_CURSOR_NONE = 0,
+  META_CURSOR_DEFAULT,
+  META_CURSOR_NORTH_RESIZE,
+  META_CURSOR_SOUTH_RESIZE,
+  META_CURSOR_WEST_RESIZE,
+  META_CURSOR_EAST_RESIZE,
+  META_CURSOR_SE_RESIZE,
+  META_CURSOR_SW_RESIZE,
+  META_CURSOR_NE_RESIZE,
+  META_CURSOR_NW_RESIZE,
+  META_CURSOR_MOVE_OR_RESIZE_WINDOW,
+  META_CURSOR_BUSY,
+  META_CURSOR_DND_IN_DRAG,
+  META_CURSOR_DND_MOVE,
+  META_CURSOR_DND_COPY,
+  META_CURSOR_DND_UNSUPPORTED_TARGET,
+  META_CURSOR_POINTING_HAND,
+  META_CURSOR_CROSSHAIR,
+  META_CURSOR_IBEAM,
+  META_CURSOR_BLANK,
+  META_CURSOR_LAST
+} MetaCursor;
 
 /**
  * MetaFrameType:
@@ -329,33 +382,3 @@ typedef enum
   META_A11Y_STICKY_KEYS_BEEP = 1 << 12,
   META_A11Y_FEATURE_STATE_CHANGE_BEEP = 1 << 13,
 } MetaKeyboardA11yFlags;
-
-/**
- * MetaMoveResizeFlags:
- * @META_EXTERNAL_CONSTRAINT_FLAGS_NONE: No operation
- * @META_EXTERNAL_CONSTRAINT_FLAGS_MOVE: Move operation
- * @META_EXTERNAL_CONSTRAINT_FLAGS_RESIZE: Resize operation
- *
- * Flags for external constraint operations.
- */
-typedef enum _MetaExternalConstraintFlags
-{
-  META_EXTERNAL_CONSTRAINT_FLAGS_NONE = 0,
-  META_EXTERNAL_CONSTRAINT_FLAGS_MOVE = 1 << 0,
-  META_EXTERNAL_CONSTRAINT_FLAGS_RESIZE = 1 << 1,
-} MetaExternalConstraintFlags;
-
-/**
- * MetaMaximizeFlags:
- * @META_MAXIMIZE_NONE: Not maximized
- * @META_MAXIMIZE_HORIZONTAL: Horizontal
- * @META_MAXIMIZE_VERTICAL: Vertical
- * @META_MAXIMIZE_BOTH: Both
- */
-typedef enum _MetaMaximizeFlags
-{
-  META_MAXIMIZE_NONE       = 0,
-  META_MAXIMIZE_HORIZONTAL = 1 << 0,
-  META_MAXIMIZE_VERTICAL   = 1 << 1,
-  META_MAXIMIZE_BOTH       = (1 << 0 | 1 << 1),
-} MetaMaximizeFlags;

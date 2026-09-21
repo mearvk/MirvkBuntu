@@ -37,7 +37,7 @@ typedef struct _GtkGestureStylus GtkGestureStylus;
 typedef struct _GtkGestureStylusClass GtkGestureStylusClass;
 
 GDK_AVAILABLE_IN_ALL
-GType             gtk_gesture_stylus_get_type (void);
+GType             gtk_gesture_stylus_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkGesture *      gtk_gesture_stylus_new      (void);
@@ -62,8 +62,6 @@ gboolean          gtk_gesture_stylus_get_backlog (GtkGestureStylus  *gesture,
 						  guint             *n_elems);
 GDK_AVAILABLE_IN_ALL
 GdkDeviceTool *   gtk_gesture_stylus_get_device_tool (GtkGestureStylus *gesture);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkGestureStylus, g_object_unref)
 
 G_END_DECLS
 

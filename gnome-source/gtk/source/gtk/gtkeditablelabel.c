@@ -29,21 +29,16 @@
 #include "gtkprivate.h"
 #include "gtkshortcut.h"
 #include "gtkshortcuttrigger.h"
-#include "gtkpopovermenu.h"
 #include "gtkwidgetprivate.h"
 #include "gtkeventcontrollerfocus.h"
-
-#include <glib/gi18n-lib.h>
 
 /**
  * GtkEditableLabel:
  *
- * Allows users to edit the displayed text by switching to an “edit mode”.
+ * A `GtkEditableLabel` is a label that allows users to
+ * edit the text by switching to an “edit mode”.
  *
- * <picture>
- *   <source srcset="editable-label-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkEditableLabel" src="editable-label.png">
- * </picture>
+ * ![An example GtkEditableLabel](editable-label.png)
  *
  * `GtkEditableLabel` does not have API of its own, but it
  * implements the [iface@Gtk.Editable] interface.
@@ -52,20 +47,6 @@
  * to click or press the Enter key. The default bindings
  * for leaving the edit mode are the Enter key (to save
  * the results) or the Escape key (to cancel the editing).
- *
- * # Shortcuts and Gestures
- *
- * `GtkEditableLabel` supports the following keyboard shortcuts:
- *
- * - <kbd>Enter</kbd> starts editing.
- * - <kbd>Escape</kbd> stops editing.
- *
- * # Actions
- *
- * `GtkEditableLabel` defines a set of built-in actions:
- *
- * - `editing.starts` switches the widget into editing mode.
- * - `editing.stop` switches the widget out of editing mode.
  *
  * # CSS nodes
  *
@@ -91,7 +72,6 @@ struct _GtkEditableLabel
   GtkWidget *stack;
   GtkWidget *label;
   GtkWidget *entry;
-  GtkWidget *popup_menu;
 
   guint stop_editing_soon_id;
 };
@@ -146,86 +126,9 @@ stop_editing (GtkWidget  *widget,
 }
 
 static void
-clipboard_copy (GtkWidget  *widget,
-                const char *name,
-                GVariant   *parameter)
+clicked_cb (GtkWidget *self)
 {
-  GtkEditableLabel *self = GTK_EDITABLE_LABEL (widget);
-  GdkClipboard *clipboard;
-  const char *text;
-
-  clipboard = gtk_widget_get_clipboard (widget);
-  text = gtk_label_get_label (GTK_LABEL (self->label));
-
-  gdk_clipboard_set_text (clipboard, text);
-}
-
-static GMenuModel *
-create_menu (void)
-{
-  GMenu *menu;
-
-  menu = g_menu_new ();
-
-  g_menu_append (menu, _("_Edit"), "editing.start");
-  g_menu_append (menu, _("_Copy"), "clipboard.copy");
-
-  return G_MENU_MODEL (menu);
-}
-
-static void
-do_popup (GtkEditableLabel *self,
-          double            x,
-          double            y)
-{
-  if (x != -1 && y != -1)
-    {
-      GdkRectangle rect = { x, y, 1, 1 };
-      gtk_popover_set_pointing_to (GTK_POPOVER (self->popup_menu), &rect);
-    }
-  else
-    {
-      gtk_popover_set_pointing_to (GTK_POPOVER (self->popup_menu), NULL);
-    }
-
-  gtk_popover_popup (GTK_POPOVER (self->popup_menu));
-}
-
-static void
-clicked_cb (GtkGestureClick  *gesture,
-            int               n_press,
-            double            x,
-            double            y,
-            GtkEditableLabel *self)
-{
-  guint button;
-  GdkEventSequence *sequence;
-  GdkEvent *event;
-
-  button = gtk_gesture_single_get_current_button (GTK_GESTURE_SINGLE (gesture));
-  sequence = gtk_gesture_single_get_current_sequence (GTK_GESTURE_SINGLE (gesture));
-  event = gtk_gesture_get_last_event (GTK_GESTURE (gesture), sequence);
-
-  if (button == GDK_BUTTON_PRIMARY)
-    {
-      gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
-      gtk_widget_activate_action (GTK_WIDGET (self), "editing.start", NULL);
-    }
-  else if (gdk_event_triggers_context_menu (event))
-    {
-      gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
-      do_popup (self, x, y);
-    }
-}
-
-static void
-popup_menu (GtkWidget  *widget,
-            const char *action_name,
-            GVariant   *parameters)
-{
-  GtkEditableLabel *self = GTK_EDITABLE_LABEL (widget);
-
-  do_popup (self, -1, -1);
+  gtk_widget_activate_action (self, "editing.start", NULL);
 }
 
 static void
@@ -257,7 +160,7 @@ gtk_editable_label_drag_accept (GtkDropTarget    *dest,
   if (!gtk_editable_get_editable (GTK_EDITABLE (self)))
     return FALSE;
 
-  if ((gdk_drop_get_actions (drop) & gtk_drop_target_get_actions (dest)) == GDK_ACTION_NONE)
+  if ((gdk_drop_get_actions (drop) & gtk_drop_target_get_actions (dest)) == 0)
     return FALSE;
 
   return gdk_content_formats_match (gtk_drop_target_get_formats (dest), gdk_drop_get_formats (drop));
@@ -291,7 +194,7 @@ gtk_editable_label_prepare_drag (GtkDragSource    *source,
                                          gtk_label_get_label (GTK_LABEL (self->label)));
 }
 
-static void
+static gboolean
 stop_editing_soon (gpointer data)
 {
   GtkEventController *controller = data;
@@ -301,17 +204,16 @@ stop_editing_soon (gpointer data)
     gtk_editable_label_stop_editing (self, TRUE);
 
   self->stop_editing_soon_id = 0;
+
+  return FALSE;
 }
 
 static void
 gtk_editable_label_focus_out (GtkEventController *controller,
                               GtkEditableLabel   *self)
 {
-  if (!gtk_editable_label_get_editing (self))
-    return;
-
   if (self->stop_editing_soon_id == 0)
-    self->stop_editing_soon_id = g_timeout_add_once (100, stop_editing_soon, controller);
+    self->stop_editing_soon_id = g_timeout_add (100, stop_editing_soon, controller);
 }
 
 static void
@@ -321,7 +223,6 @@ gtk_editable_label_init (GtkEditableLabel *self)
   GtkDropTarget *target;
   GtkDragSource *source;
   GtkEventController *controller;
-  GMenuModel *model;
 
   gtk_widget_set_focusable (GTK_WIDGET (self), TRUE);
 
@@ -330,28 +231,13 @@ gtk_editable_label_init (GtkEditableLabel *self)
   gtk_label_set_xalign (GTK_LABEL (self->label), 0.0);
   self->entry = gtk_text_new ();
 
-  model = create_menu ();
-  self->popup_menu = gtk_popover_menu_new_from_model (model);
-  gtk_widget_set_parent (self->popup_menu, GTK_WIDGET (self));
-  gtk_popover_set_position (GTK_POPOVER (self->popup_menu), GTK_POS_BOTTOM);
-
-  gtk_popover_set_has_arrow (GTK_POPOVER (self->popup_menu), FALSE);
-  gtk_widget_set_halign (self->popup_menu, GTK_ALIGN_START);
-
-  gtk_accessible_update_property (GTK_ACCESSIBLE (self->popup_menu),
-                                  GTK_ACCESSIBLE_PROPERTY_LABEL, _("Context menu"),
-                                  -1);
-
-  g_object_unref (model);
-
   gtk_stack_add_named (GTK_STACK (self->stack), self->label, "label");
   gtk_stack_add_named (GTK_STACK (self->stack), self->entry, "entry");
 
   gtk_widget_set_parent (self->stack, GTK_WIDGET (self));
 
   gesture = gtk_gesture_click_new ();
-  gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), 0);
-  g_signal_connect (gesture, "pressed", G_CALLBACK (clicked_cb), self);
+  g_signal_connect_swapped (gesture, "released", G_CALLBACK (clicked_cb), self);
   gtk_widget_add_controller (self->label, GTK_EVENT_CONTROLLER (gesture));
 
   g_signal_connect_swapped (self->entry, "activate", G_CALLBACK (activate_cb), self);
@@ -475,7 +361,6 @@ gtk_editable_label_dispose (GObject *object)
 
   gtk_editable_finish_delegate (GTK_EDITABLE (self));
 
-  g_clear_pointer (&self->popup_menu, gtk_widget_unparent);
   g_clear_pointer (&self->stack, gtk_widget_unparent);
 
   self->entry = NULL;
@@ -492,6 +377,8 @@ gtk_editable_label_class_init (GtkEditableLabelClass *class)
   GObjectClass *object_class = G_OBJECT_CLASS (class);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
   GtkShortcut *shortcut;
+  GtkShortcutTrigger *trigger;
+  GtkShortcutAction *action;
 
   object_class->set_property = gtk_editable_label_set_property;
   object_class->get_property = gtk_editable_label_get_property;
@@ -500,14 +387,14 @@ gtk_editable_label_class_init (GtkEditableLabelClass *class)
   widget_class->grab_focus = gtk_editable_label_grab_focus;
 
   /**
-   * GtkEditableLabel:editing:
+   * GtkEditableLabel:editing: (attributes org.gtk.Property.get=gtk_editable_label_get_editing)
    *
    * This property is %TRUE while the widget is in edit mode.
    */
   properties[PROP_EDITING] =
     g_param_spec_boolean ("editing", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 
@@ -520,10 +407,10 @@ gtk_editable_label_class_init (GtkEditableLabelClass *class)
    * user can make changes to the text.
    *
    * The default bindings for this action are clicking
-   * on the widget and the <kbd>Enter</kbd> key.
+   * on the widget and the Enter key.
    *
    * This action is disabled when `GtkEditableLabel:editing`
-   * is %TRUE.
+   * is %FALSE.
    */
   gtk_widget_class_install_action (widget_class, "editing.start", NULL, start_editing);
 
@@ -543,23 +430,20 @@ gtk_editable_label_class_init (GtkEditableLabelClass *class)
    */
   gtk_widget_class_install_action (widget_class, "editing.stop", "b", stop_editing);
 
-  gtk_widget_class_add_binding_action (widget_class,
-                                       GDK_KEY_Return, GDK_NO_MODIFIER_MASK,
-                                       "editing.start",
-                                       NULL);
-
-  gtk_widget_class_add_binding_action (widget_class,
-                                       GDK_KEY_Escape, GDK_NO_MODIFIER_MASK,
-                                       "editing.stop",
-                                       "b", FALSE);
-
-  gtk_widget_class_install_action (widget_class, "clipboard.copy", NULL, clipboard_copy);
-  gtk_widget_class_install_action (widget_class, "menu.popup", NULL, popup_menu);
-
-  shortcut = gtk_shortcut_new (gtk_shortcut_trigger_create_for_menu (),
-                               gtk_named_action_new ("menu.popup"));
+  trigger = gtk_alternative_trigger_new (
+                gtk_alternative_trigger_new (
+                    gtk_keyval_trigger_new (GDK_KEY_Return, 0),
+                    gtk_keyval_trigger_new (GDK_KEY_ISO_Enter, 0)),
+                    gtk_keyval_trigger_new (GDK_KEY_KP_Enter, 0));
+  action = gtk_named_action_new ("editing.start");
+  shortcut = gtk_shortcut_new (trigger, action);
   gtk_widget_class_add_shortcut (widget_class, shortcut);
   g_object_unref (shortcut);
+
+  gtk_widget_class_add_binding_action (widget_class,
+                                       GDK_KEY_Escape, 0,
+                                       "editing.stop",
+                                       "b", FALSE);
 
   gtk_widget_class_set_layout_manager_type (widget_class, GTK_TYPE_BIN_LAYOUT);
   gtk_widget_class_set_css_name (widget_class, "editablelabel");
@@ -582,7 +466,7 @@ gtk_editable_label_new (const char *str)
 }
 
 /**
- * gtk_editable_label_get_editing:
+ * gtk_editable_label_get_editing: (attributes org.gtk.Method.get_property=editing)
  * @self: a `GtkEditableLabel`
  *
  * Returns whether the label is currently in “editing mode”.

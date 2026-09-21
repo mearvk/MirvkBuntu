@@ -21,7 +21,6 @@
 
 #include "compositor/compositor-private.h"
 #include "core/window-private.h"
-#include "mtk/mtk.h"
 #include "mtk/mtk-x11.h"
 #include "x11/meta-sync-counter.h"
 #include "x11/meta-x11-display-private.h"
@@ -57,7 +56,7 @@ meta_sync_counter_init (MetaSyncCounter *sync_counter,
 void
 meta_sync_counter_clear (MetaSyncCounter *sync_counter)
 {
-  g_clear_handle_id (&sync_counter->sync_request_timeout_id, mtk_source_remove);
+  g_clear_handle_id (&sync_counter->sync_request_timeout_id, g_source_remove);
   meta_sync_counter_destroy_sync_alarm (sync_counter);
   g_clear_list (&sync_counter->frames, g_free);
   sync_counter->window = NULL;
@@ -77,10 +76,9 @@ meta_sync_counter_set_counter (MetaSyncCounter *sync_counter,
 
   if (sync_counter->sync_request_counter != None)
     {
-      meta_topic (META_DEBUG_X11,
-                  "Window has _NET_WM_SYNC_REQUEST_COUNTER 0x%lx (extended=%s)",
-                  sync_counter->sync_request_counter,
-                  sync_counter->extended_sync_request_counter ? "true" : "false");
+      meta_verbose ("Window has _NET_WM_SYNC_REQUEST_COUNTER 0x%lx (extended=%s)",
+                    sync_counter->sync_request_counter,
+                    sync_counter->extended_sync_request_counter ? "true" : "false");
     }
 
   if (sync_counter->extended_sync_request_counter)
@@ -111,7 +109,7 @@ meta_sync_counter_create_sync_alarm (MetaSyncCounter *sync_counter)
                               sync_counter->sync_request_counter,
                               &init))
         {
-          mtk_x11_error_trap_pop (x11_display->xdisplay);
+          mtk_x11_error_trap_pop_with_return (x11_display->xdisplay);
           sync_counter->sync_request_counter = None;
           return;
         }
@@ -180,7 +178,14 @@ meta_sync_counter_destroy_sync_alarm (MetaSyncCounter *sync_counter)
   sync_counter->sync_request_alarm = None;
 }
 
-static void
+gboolean
+meta_sync_counter_has_sync_alarm (MetaSyncCounter *sync_counter)
+{
+  return (!sync_counter->disabled &&
+          sync_counter->sync_request_alarm != None);
+}
+
+static gboolean
 sync_request_timeout (gpointer data)
 {
   MetaSyncCounter *sync_counter = data;
@@ -207,6 +212,8 @@ sync_request_timeout (gpointer data)
       window == meta_window_drag_get_window (window_drag) &&
       meta_grab_op_is_resizing (meta_window_drag_get_grab_op (window_drag)))
     meta_window_x11_check_update_resize (window);
+
+  return G_SOURCE_REMOVE;
 }
 
 void
@@ -259,11 +266,11 @@ meta_sync_counter_send_request (MetaSyncCounter *sync_counter)
    * if this time expires, we consider the window unresponsive
    * and resize it unsynchonized.
    */
-  sync_counter->sync_request_timeout_id = mtk_timeout_add_once (1000,
-                                                                sync_request_timeout,
-                                                                sync_counter);
-  mtk_source_set_name_by_id (sync_counter->sync_request_timeout_id,
-                             "[mutter] sync_request_timeout");
+  sync_counter->sync_request_timeout_id = g_timeout_add (1000,
+                                                         sync_request_timeout,
+                                                         sync_counter);
+  g_source_set_name_by_id (sync_counter->sync_request_timeout_id,
+                           "[mutter] sync_request_timeout");
 
   meta_compositor_sync_updates_frozen (window->display->compositor, window);
 }
@@ -293,7 +300,7 @@ meta_sync_counter_update (MetaSyncCounter *sync_counter,
        new_counter_value % 2 == 0))
     {
       g_clear_handle_id (&sync_counter->sync_request_timeout_id,
-                         mtk_source_remove);
+                         g_source_remove);
     }
 
   /* If sync was previously disabled, turn it back on and hope
@@ -513,7 +520,7 @@ meta_sync_counter_complete_frame (MetaSyncCounter  *sync_counter,
     {
       GList *l_next = l->next;
       FrameData *frame = l->data;
-      int64_t frame_counter = frame_info->global_frame_counter;
+      int64_t frame_counter = frame_info->frame_counter;
 
       if (frame->frame_counter != -1 && frame->frame_counter <= frame_counter)
         {

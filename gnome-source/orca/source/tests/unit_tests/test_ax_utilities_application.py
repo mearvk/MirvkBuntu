@@ -24,14 +24,12 @@
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-positional-arguments
 # pylint: disable=import-outside-toplevel
-# pylint: disable=protected-access
 
 """Unit tests for ax_utilities_application.py methods."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import mock_open
 
 import gi
 import pytest
@@ -50,67 +48,26 @@ class TestAXUtilitiesApplication:
     def _setup_dependencies(self, test_context: OrcaTestContext):
         """Set up mocks for ax_utilities_application dependencies."""
 
-        essential_modules = test_context.setup_shared_dependencies()
+        additional_modules = ["subprocess"]
+        essential_modules = test_context.setup_shared_dependencies(additional_modules)
 
         debug_mock = essential_modules["orca.debug"]
         debug_mock.print_message = test_context.Mock()
         debug_mock.print_tokens = test_context.Mock()
         debug_mock.LEVEL_INFO = 800
-        debug_mock.LEVEL_SEVERE = 1000
-        debug_mock.debugLevel = debug_mock.LEVEL_SEVERE
 
         ax_object_class_mock = test_context.Mock()
-        ax_object_class_mock.is_valid = test_context.Mock(side_effect=lambda obj: obj is not None)
+        ax_object_class_mock.is_valid = test_context.Mock(return_value=True)
         ax_object_class_mock.get_name = test_context.Mock(return_value="")
         ax_object_class_mock.get_child_count = test_context.Mock(return_value=0)
         ax_object_class_mock.get_parent = test_context.Mock(return_value=None)
         ax_object_class_mock.iter_children = test_context.Mock(return_value=[])
         essential_modules["orca.ax_object"].AXObject = ax_object_class_mock
 
+        subprocess_mock = essential_modules["subprocess"]
+        subprocess_mock.getoutput = test_context.Mock(return_value="")
+
         return essential_modules
-
-    def test_import_registers_application_cache_namespace(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test importing application utilities registers its cache namespace."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-
-        manager = ax_cache_manager.get_manager()
-        register = test_context.patch_object(
-            manager,
-            "register_cache",
-            wraps=manager.register_cache,
-        )
-
-        from orca.ax_utilities_application import AXUtilitiesApplication
-
-        register.assert_called_once_with(
-            AXUtilitiesApplication._CACHE,
-            AXUtilitiesApplication._CACHE.APP_FOR_OBJECT,
-            lifetime=ax_cache_manager.Lifetime.PROCESS,
-            clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-            clear_interval_seconds=AXUtilitiesApplication._CACHE._CACHE_CLEAR_INTERVAL_SECONDS,
-        )
-        assert AXUtilitiesApplication._CACHE._CACHE_CLEAR_INTERVAL_SECONDS == 120
-
-    def test_manager_clear_cache_now_preserves_application_cache(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test routine manager clearing preserves cached application lookups."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-        from orca.ax_utilities_application import AXUtilitiesApplication
-
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        mock_app = test_context.Mock(spec=Atspi.Accessible)
-        AXUtilitiesApplication._CACHE.set_application(mock_obj, mock_app)
-
-        ax_cache_manager.get_manager().clear_cache_now("test reason")
-
-        assert AXUtilitiesApplication._CACHE.get_application(mock_obj) == mock_app
 
     @pytest.mark.parametrize(
         "method_name, atspi_method_name, success_value",
@@ -429,13 +386,9 @@ class TestAXUtilitiesApplication:
 
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         mock_app = test_context.Mock(spec=Atspi.Accessible)
-        getter = test_context.patch_object(
-            Atspi.Accessible, "get_application", return_value=mock_app
-        )
+        test_context.patch_object(Atspi.Accessible, "get_application", return_value=mock_app)
         result = AXUtilitiesApplication.get_application(mock_obj)
         assert result == mock_app
-        assert AXUtilitiesApplication.get_application(mock_obj) == mock_app
-        getter.assert_called_once_with(mock_obj)
 
     def test_get_application_with_glib_error(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilitiesApplication.get_application handles GLib.GError."""
@@ -489,47 +442,49 @@ class TestAXUtilitiesApplication:
             assert result is None
 
     @pytest.mark.parametrize(
-        "parent_is_desktop,expected_found",
+        "search_app_index,expected_found",
         [
-            (True, True),
-            (False, False),
+            (0, True),
+            (2, False),
         ],
     )
     def test_is_application_in_desktop(
         self,
         test_context: OrcaTestContext,
-        parent_is_desktop: bool,
+        search_app_index: int,
         expected_found: bool,
     ) -> None:
         """Test AXUtilitiesApplication.is_application_in_desktop with different scenarios."""
 
-        essential_modules = self._setup_dependencies(test_context)
+        self._setup_dependencies(test_context)
         from orca.ax_utilities_application import AXUtilitiesApplication
 
-        mock_desktop = test_context.Mock(spec=Atspi.Accessible)
-        mock_app = test_context.Mock(spec=Atspi.Accessible)
-        mock_other_parent = test_context.Mock(spec=Atspi.Accessible)
-        test_context.patch_object(AXUtilitiesApplication, "get_desktop", return_value=mock_desktop)
-        parent = mock_desktop if parent_is_desktop else mock_other_parent
-        essential_modules["orca.ax_object"].AXObject.get_parent = test_context.Mock(
-            return_value=parent
+        mock_app1 = test_context.Mock(spec=Atspi.Accessible)
+        mock_app2 = test_context.Mock(spec=Atspi.Accessible)
+        mock_app3 = test_context.Mock(spec=Atspi.Accessible)
+        test_apps = [mock_app1, mock_app2, mock_app3]
+        test_context.patch_object(
+            AXUtilitiesApplication,
+            "get_all_applications",
+            return_value=[mock_app1, mock_app2],
         )
-        result = AXUtilitiesApplication.is_application_in_desktop(mock_app)
+        search_app = test_apps[search_app_index]
+        result = AXUtilitiesApplication.is_application_in_desktop(search_app)
         assert result is expected_found
 
     @pytest.mark.parametrize(
-        "file_content,expected_unresponsive",
+        "process_state,expected_unresponsive",
         [
-            ("Name:\tbash\nState:\tZ (zombie)\n", True),
-            ("Name:\tbash\nState:\tT (stopped)\n", True),
-            ("Name:\tbash\nState:\tR (running)\n", False),
+            ("State: Z (zombie)", True),
+            ("State: T (stopped)", True),
+            ("State: R (running)", False),
             ("", False),
         ],
     )
     def test_is_application_unresponsive(
         self,
         test_context: OrcaTestContext,
-        file_content: str,
+        process_state: str,
         expected_unresponsive: bool,
     ) -> None:
         """Test AXUtilitiesApplication.is_application_unresponsive with different process states."""
@@ -539,6 +494,6 @@ class TestAXUtilitiesApplication:
 
         mock_app = test_context.Mock(spec=Atspi.Accessible)
         test_context.patch_object(AXUtilitiesApplication, "get_process_id", return_value=1234)
-        test_context.patch("builtins.open", new=mock_open(read_data=file_content))
+        test_context.patch("subprocess.getoutput", return_value=process_state)
         result = AXUtilitiesApplication.is_application_unresponsive(mock_app)
         assert result is expected_unresponsive

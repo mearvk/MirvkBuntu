@@ -61,10 +61,7 @@ names in the file system.
 
 ## Conversion between file name encodings
 
-<picture>
-  <source srcset="file-name-encodings-dark.svg" media="(prefers-color-scheme: dark)">
-  <img src="file-name-encodings-light.svg" alt="Converting file name encodings between filesystem and application">
-</picture>
+![](file-name-encodings.png)
 
 ## Checklist for Application Writers
 

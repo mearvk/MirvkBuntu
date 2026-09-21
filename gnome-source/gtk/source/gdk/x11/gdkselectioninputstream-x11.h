@@ -47,7 +47,7 @@ struct GdkX11SelectionInputStreamClass
 };
 
 
-GType          gdk_x11_selection_input_stream_get_type      (void);
+GType          gdk_x11_selection_input_stream_get_type      (void) G_GNUC_CONST;
 
 void           gdk_x11_selection_input_stream_new_async     (GdkDisplay                 *display,
                                                              const char                 *selection,

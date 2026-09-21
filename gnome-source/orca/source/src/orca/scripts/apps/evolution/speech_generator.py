@@ -51,14 +51,14 @@ class SpeechGenerator(web.SpeechGenerator, speech_generator.SpeechGenerator):
 
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
-            tokens = ["EVOLUTION SPEECH GENERATOR:", func.__name__, ":", result]
+            tokens = [f"EVOLUTION SPEECH GENERATOR: {func.__name__}:", result]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return result
 
         return wrapper
 
     @log_generator_output
-    def _generate_state_checked_for_cell(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_state_checked_for_cell(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if self._script.utilities.is_message_list_status_cell(obj):
             return []
 
@@ -66,28 +66,29 @@ class SpeechGenerator(web.SpeechGenerator, speech_generator.SpeechGenerator):
             if AXUtilities.cell_row_changed(obj) or not AXUtilities.is_focused(obj):
                 return []
 
-        return super()._generate_state_checked_for_cell(obj)
+        return super()._generate_state_checked_for_cell(obj, **args)
 
     @log_generator_output
-    def _generate_accessible_label(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_accessible_label(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if self._script.utilities.is_message_list_toggle_cell(obj):
             return []
 
-        return super()._generate_accessible_label(obj)
+        return super()._generate_accessible_label(obj, **args)
 
     @log_generator_output
-    def _generate_accessible_name(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_accessible_name(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if self._script.utilities.is_message_list_toggle_cell(
             obj,
         ) and not self._script.utilities.is_message_list_status_cell(obj):
             return []
 
-        return super()._generate_accessible_name(obj)
+        return super()._generate_accessible_name(obj, **args)
 
     @log_generator_output
     def _generate_real_active_descendant_displayed_text(
         self,
         obj: Atspi.Accessible,
+        **args,
     ) -> list[Any]:
         if self._script.utilities.is_message_list_toggle_cell(
             obj,
@@ -97,22 +98,22 @@ class SpeechGenerator(web.SpeechGenerator, speech_generator.SpeechGenerator):
             if AXUtilities.is_focused(obj) and not AXUtilities.cell_row_changed(obj):
                 return []
 
-        return super()._generate_real_active_descendant_displayed_text(obj)
+        return super()._generate_real_active_descendant_displayed_text(obj, **args)
 
     @log_generator_output
-    def _generate_accessible_role(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_accessible_role(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if self._script.utilities.is_message_list_toggle_cell(obj) and not AXUtilities.is_focused(
             obj,
         ):
             return []
 
-        return super()._generate_accessible_role(obj)
+        return super()._generate_accessible_role(obj, **args)
 
     @log_generator_output
-    def _generate_state_unselected(self, obj: Atspi.Accessible) -> list[Any]:
+    def _generate_state_unselected(self, obj: Atspi.Accessible, **args) -> list[Any]:
         if self._script.utilities.is_message_list_toggle_cell(obj) or AXUtilities.is_tree_table(
             AXObject.get_parent(obj),
         ):
             return []
 
-        return super()._generate_state_unselected(obj)
+        return super()._generate_state_unselected(obj, **args)

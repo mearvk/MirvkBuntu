@@ -4,7 +4,7 @@
     <property name="title" translatable="yes">Settings</property>
     <property name="default-width">640</property>
     <property name="default-height">480</property>
-    <property name="titlebar">
+    <child type="titlebar">
       <object class="GtkHeaderBar">
         <child type="end">
           <object class="GtkToggleButton" id="search_button">
@@ -12,13 +12,13 @@
           </object>
         </child>
       </object>
-    </property>
-    <property name="child">
+    </child>
+    <child>
       <object class="GtkPaned">
         <property name="position">300</property>
-        <property name="start-child">
+        <child>
           <object class="GtkScrolledWindow">
-            <property name="child">
+            <child>
               <object class="GtkListView" id="listview">
                 <property name="tab-behavior">item</property>
                 <style>
@@ -53,29 +53,29 @@
                   </object>
                 </property>
               </object>
-            </property>
+            </child>
           </object>
-        </property>
-        <property name="end-child">
+        </child>
+        <child>
           <object class="GtkBox">
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkSearchBar">
                 <property name="search-mode-enabled" bind-source="search_button" bind-property="active" bind-flags="bidirectional"/>
                 <signal name="notify::search-mode-enabled" handler="search_enabled" object="entry"/>
-                <property name="child">
+                <child>
                   <object class="GtkSearchEntry" id="entry">
                     <signal name="search-changed" handler="search_changed"/>
                     <signal name="stop-search" handler="stop_search"/>
                   </object>
-                </property>
+                </child>
               </object>
             </child>
             <child>
               <object class="GtkScrolledWindow">
                 <property name="hexpand">1</property>
                 <property name="vexpand">1</property>
-                <property name="child">
+                <child>
                   <object class="GtkColumnView" id="columnview">
                     <property name="tab-behavior">cell</property>
                     <style>
@@ -126,7 +126,7 @@
             <lookup name="item">GtkColumnViewCell</lookup>
           </lookup>
         </binding>
-        <signal name="notify::editing" handler="item_value_changed"/>
+        <signal name="notify::label" handler="item_value_changed"/>
       </object>
     </property>
   </template>
@@ -256,13 +256,13 @@
                       </object>
                     </child>
                   </object>
-                </property>
+                </child>
               </object>
             </child>
           </object>
-        </property>
+        </child>
       </object>
-    </property>
+    </child>
   </object>
   <menu id="header_menu">
     <section>

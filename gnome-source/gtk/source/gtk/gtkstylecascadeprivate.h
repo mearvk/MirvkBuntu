@@ -46,7 +46,7 @@ struct _GtkStyleCascadeClass
   GObjectClass  parent_class;
 };
 
-GType                 _gtk_style_cascade_get_type               (void);
+GType                 _gtk_style_cascade_get_type               (void) G_GNUC_CONST;
 
 GtkStyleCascade *     _gtk_style_cascade_new                    (void);
 

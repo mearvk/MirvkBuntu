@@ -22,7 +22,6 @@
 #include "meta-window-tracker.h"
 
 #include "meta-frame.h"
-#include "meta-frames-client.h"
 
 #include <gdesktop-enums.h>
 #include <gdk/x11/gdkx.h>
@@ -95,8 +94,6 @@ update_color_scheme (MetaWindowTracker *window_tracker)
   GDesktopColorScheme color_scheme;
   gboolean is_dark;
 
-  g_assert (window_tracker->interface_settings != NULL);
-
   color_scheme = g_settings_get_enum (window_tracker->interface_settings,
                                       "color-scheme");
   is_dark = color_scheme == G_DESKTOP_COLOR_SCHEME_PREFER_DARK;
@@ -119,30 +116,22 @@ set_up_frame (MetaWindowTracker *window_tracker,
               Window             xwindow)
 {
   GdkDisplay *display = window_tracker->display;
-  Display *xdisplay;
+  Display *xdisplay = gdk_x11_display_get_xdisplay (display);
   GdkSurface *surface;
   Window xframe;
   unsigned long data[1];
   GtkWidget *frame;
-
-  frame = g_hash_table_lookup (window_tracker->client_windows,
-                               GUINT_TO_POINTER (xwindow));
-  if (frame)
-    return;
 
   /* Double check it's not a request for a frame of our own. */
   if (g_hash_table_contains (window_tracker->frames,
                              GUINT_TO_POINTER (xwindow)))
     return;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
   /* Create a frame window */
   frame = meta_frame_new (xwindow);
   surface = gtk_native_get_surface (GTK_NATIVE (frame));
   xframe = gdk_x11_surface_get_xid (surface);
 
-  xdisplay = gdk_x11_display_get_xdisplay (display);
   gdk_x11_display_error_trap_push (display);
 
   XAddToSaveSet (xdisplay, xwindow);
@@ -162,8 +151,6 @@ set_up_frame (MetaWindowTracker *window_tracker,
       return;
     }
 
-  G_GNUC_END_IGNORE_DEPRECATIONS
-
   g_hash_table_insert (window_tracker->frames,
                        GUINT_TO_POINTER (xframe), frame);
   g_hash_table_insert (window_tracker->client_windows,
@@ -176,15 +163,12 @@ listen_set_up_frame (MetaWindowTracker *window_tracker,
                      Window             xwindow)
 {
   GdkDisplay *display = window_tracker->display;
-  Display *xdisplay;
+  Display *xdisplay = gdk_x11_display_get_xdisplay (display);
   int format;
   Atom type;
   unsigned long nitems, bytes_after;
   unsigned char *data;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
-  xdisplay = gdk_x11_display_get_xdisplay (display);
   gdk_x11_display_error_trap_push (display);
 
   XSelectInput (xdisplay, xwindow,
@@ -203,8 +187,6 @@ listen_set_up_frame (MetaWindowTracker *window_tracker,
   if (gdk_x11_display_error_trap_pop (display))
     return;
 
-  G_GNUC_END_IGNORE_DEPRECATIONS
-
   if (nitems > 0 && data[0])
     set_up_frame (window_tracker, xwindow);
 
@@ -216,7 +198,7 @@ remove_frame (MetaWindowTracker *window_tracker,
               Window             xwindow)
 {
   GdkDisplay *display = window_tracker->display;
-  Display *xdisplay;
+  Display *xdisplay = gdk_x11_display_get_xdisplay (display);
   GtkWidget *frame;
   GdkSurface *surface;
   Window xframe;
@@ -226,18 +208,12 @@ remove_frame (MetaWindowTracker *window_tracker,
   if (!frame)
     return;
 
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
-  xdisplay = gdk_x11_display_get_xdisplay (display);
-
   surface = gtk_native_get_surface (GTK_NATIVE (frame));
   xframe = gdk_x11_surface_get_xid (surface);
 
   gdk_x11_display_error_trap_push (display);
   XRemoveFromSaveSet (xdisplay, xwindow);
   gdk_x11_display_error_trap_pop_ignored (display);
-
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   g_hash_table_remove (window_tracker->client_windows,
                        GUINT_TO_POINTER (xwindow));
@@ -250,14 +226,10 @@ on_xevent (GdkDisplay *display,
            XEvent     *xevent,
            gpointer    user_data)
 {
-  Window xroot;
+  Window xroot = gdk_x11_display_get_xrootwindow (display);
   Window xwindow = xevent->xany.window;
   MetaWindowTracker *window_tracker = user_data;
   GtkWidget *frame;
-
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
-  xroot = gdk_x11_display_get_xrootwindow (display);
 
   if (xevent->type == CreateNotify &&
       xevent->xcreatewindow.parent == xroot &&
@@ -268,24 +240,6 @@ on_xevent (GdkDisplay *display,
       xwindow = xevent->xcreatewindow.window;
       listen_set_up_frame (window_tracker, xwindow);
     }
-  else if (xevent->type == ConfigureNotify &&
-           xevent->xconfigure.event == xroot &&
-           xevent->xconfigure.window != xroot &&
-           !g_hash_table_contains (window_tracker->frames,
-                                   GUINT_TO_POINTER (xevent->xconfigure.window)))
-    {
-      gboolean has_frame;
-
-      xwindow = xevent->xconfigure.window;
-      has_frame =
-        g_hash_table_contains (window_tracker->client_windows,
-                               GUINT_TO_POINTER (xwindow));
-
-      if (!xevent->xconfigure.override_redirect && !has_frame)
-        listen_set_up_frame (window_tracker, xwindow);
-      else if (xevent->xconfigure.override_redirect && has_frame)
-        remove_frame (window_tracker, xwindow);
-    }
   else if (xevent->type == DestroyNotify)
     {
       xwindow = xevent->xdestroywindow.window;
@@ -295,9 +249,13 @@ on_xevent (GdkDisplay *display,
            xevent->xproperty.atom ==
            gdk_x11_get_xatom_by_name_for_display (display, "_MUTTER_NEEDS_FRAME"))
     {
-      if (xevent->xproperty.state == PropertyNewValue)
+      if (xevent->xproperty.state == PropertyNewValue &&
+          !g_hash_table_contains (window_tracker->client_windows,
+                                  GUINT_TO_POINTER (xwindow)))
         set_up_frame (window_tracker, xwindow);
-      else if (xevent->xproperty.state == PropertyDelete)
+      else if (xevent->xproperty.state == PropertyDelete &&
+               g_hash_table_contains (window_tracker->client_windows,
+                                      GUINT_TO_POINTER (xwindow)))
         remove_frame (window_tracker, xwindow);
     }
   else if (xevent->type == PropertyNotify)
@@ -342,7 +300,6 @@ on_xevent (GdkDisplay *display,
             }
         }
     }
-  G_GNUC_END_IGNORE_DEPRECATIONS
 
   return GDK_EVENT_PROPAGATE;
 }
@@ -372,17 +329,12 @@ meta_window_tracker_constructed (GObject *object)
 {
   MetaWindowTracker *window_tracker = META_WINDOW_TRACKER (object);
   GdkDisplay *display = window_tracker->display;
-  Display *xdisplay;
-  Window xroot;
+  Display *xdisplay = gdk_x11_display_get_xdisplay (display);
+  Window xroot = gdk_x11_display_get_xrootwindow (display);
   Window *windows, ignored1, ignored2;
   unsigned int i, n_windows;
 
   G_OBJECT_CLASS (meta_window_tracker_parent_class)->constructed (object);
-
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
-  xdisplay = gdk_x11_display_get_xdisplay (display);
-  xroot = gdk_x11_display_get_xrootwindow (display);
 
   query_xi_extension (window_tracker, xdisplay);
 
@@ -427,8 +379,6 @@ meta_window_tracker_constructed (GObject *object)
       listen_set_up_frame (window_tracker, windows[i]);
     }
 
-  G_GNUC_END_IGNORE_DEPRECATIONS
-
   XFree (windows);
 }
 
@@ -472,15 +422,12 @@ meta_window_tracker_class_init (MetaWindowTrackerClass *klass)
 static void
 meta_window_tracker_init (MetaWindowTracker *window_tracker)
 {
-  if (meta_frames_client_should_monitor_color_scheme ())
-    {
-      window_tracker->interface_settings = g_settings_new ("org.gnome.desktop.interface");
-      g_signal_connect (window_tracker->interface_settings,
-                        "changed::color-scheme",
-                        G_CALLBACK (on_color_scheme_changed_cb),
-                        window_tracker);
-      update_color_scheme (window_tracker);
-    }
+  window_tracker->interface_settings = g_settings_new ("org.gnome.desktop.interface");
+  g_signal_connect (window_tracker->interface_settings,
+                    "changed::color-scheme",
+                    G_CALLBACK (on_color_scheme_changed_cb),
+                    window_tracker);
+  update_color_scheme (window_tracker);
 
   window_tracker->frames =
     g_hash_table_new_full (NULL, NULL, NULL,

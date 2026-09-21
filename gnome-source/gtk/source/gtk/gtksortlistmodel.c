@@ -56,14 +56,12 @@
 /**
  * GtkSortListModel:
  *
- * A list model that sorts the elements of another model.
- *
- * The elements are sorted according to a `GtkSorter`.
+ * A `GListModel` that sorts the elements of an underlying model
+ * according to a `GtkSorter`.
  *
  * The model is a stable sort. If two items compare equal according
  * to the sorter, the one that appears first in the original model will
  * also appear first after sorting.
- *
  * Note that if you change the sorter, the previous order will have no
  * influence on the new order. If you want that, consider using a
  * `GtkMultiSorter` and appending the previous sorter to it.
@@ -1028,14 +1026,14 @@ gtk_sort_list_model_class_init (GtkSortListModelClass *class)
   gobject_class->dispose = gtk_sort_list_model_dispose;
 
   /**
-   * GtkSortListModel:incremental:
+   * GtkSortListModel:incremental: (attributes org.gtk.Property.get=gtk_sort_list_model_get_incremental org.gtk.Property.set=gtk_sort_list_model_set_incremental)
    *
    * If the model should sort items incrementally.
    */
   properties[PROP_INCREMENTAL] =
       g_param_spec_boolean ("incremental", NULL, NULL,
                             FALSE,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkSortListModel:item-type:
@@ -1047,17 +1045,17 @@ gtk_sort_list_model_class_init (GtkSortListModelClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSortListModel:model:
+   * GtkSortListModel:model: (attributes org.gtk.Property.get=gtk_sort_list_model_get_model org.gtk.Property.set=gtk_sort_list_model_set_model)
    *
    * The model being sorted.
    */
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkSortListModel:n-items:
@@ -1069,20 +1067,20 @@ gtk_sort_list_model_class_init (GtkSortListModelClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSortListModel:pending:
+   * GtkSortListModel:pending: (attributes org.gtk.Property.get=gtk_sort_list_model_get_pending)
    *
    * Estimate of unsorted items remaining.
    */
   properties[PROP_PENDING] =
       g_param_spec_uint ("pending", NULL, NULL,
                          0, G_MAXUINT, 0,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkSortListModel:section-sorter:
+   * GtkSortListModel:section-sorter: (attributes org.gtk.Property.get=gtk_sort_list_model_get_section_sorter org.gtk.Property.set=gtk_sort_list_model_set_section_sorter)
    *
    * The section sorter for this model, if one is set.
    *
@@ -1091,17 +1089,17 @@ gtk_sort_list_model_class_init (GtkSortListModelClass *class)
   properties[PROP_SECTION_SORTER] =
       g_param_spec_object ("section-sorter", NULL, NULL,
                            GTK_TYPE_SORTER,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkSortListModel:sorter:
+   * GtkSortListModel:sorter: (attributes org.gtk.Property.get=gtk_sort_list_model_get_sorter org.gtk.Property.set=gtk_sort_list_model_set_sorter)
    *
    * The sorter for this model.
    */
   properties[PROP_SORTER] =
       g_param_spec_object ("sorter", NULL, NULL,
                             GTK_TYPE_SORTER,
-                            G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -1142,7 +1140,7 @@ gtk_sort_list_model_new (GListModel *model,
 }
 
 /**
- * gtk_sort_list_model_set_model:
+ * gtk_sort_list_model_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkSortListModel`
  * @model: (nullable): The model to be sorted
  *
@@ -1190,7 +1188,7 @@ gtk_sort_list_model_set_model (GtkSortListModel *self,
 }
 
 /**
- * gtk_sort_list_model_get_model:
+ * gtk_sort_list_model_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkSortListModel`
  *
  * Gets the model currently sorted or %NULL if none.
@@ -1206,7 +1204,7 @@ gtk_sort_list_model_get_model (GtkSortListModel *self)
 }
 
 /**
- * gtk_sort_list_model_set_sorter:
+ * gtk_sort_list_model_set_sorter: (attributes org.gtk.Method.set_property=sorter)
  * @self: a `GtkSortListModel`
  * @sorter: (nullable): the `GtkSorter` to sort @model with
  *
@@ -1230,7 +1228,7 @@ gtk_sort_list_model_set_sorter (GtkSortListModel *self,
 }
 
 /**
- * gtk_sort_list_model_get_sorter:
+ * gtk_sort_list_model_get_sorter: (attributes org.gtk.Method.get_property=sorter)
  * @self: a `GtkSortListModel`
  *
  * Gets the sorter that is used to sort @self.
@@ -1246,7 +1244,7 @@ gtk_sort_list_model_get_sorter (GtkSortListModel *self)
 }
 
 /**
- * gtk_sort_list_model_set_section_sorter:
+ * gtk_sort_list_model_set_section_sorter: (attributes org.gtk.Method.set_property=section-sorter)
  * @self: a `GtkSortListModel`
  * @sorter: (nullable): the `GtkSorter` to sort @model with
  *
@@ -1272,7 +1270,7 @@ gtk_sort_list_model_set_section_sorter (GtkSortListModel *self,
 }
 
 /**
- * gtk_sort_list_model_get_section_sorter:
+ * gtk_sort_list_model_get_section_sorter: (attributes org.gtk.Method.get_property=section-sorter)
  * @self: a `GtkSortListModel`
  *
  * Gets the section sorter that is used to sort items of @self into
@@ -1291,7 +1289,7 @@ gtk_sort_list_model_get_section_sorter (GtkSortListModel *self)
 }
 
 /**
- * gtk_sort_list_model_set_incremental:
+ * gtk_sort_list_model_set_incremental: (attributes org.gtk.Method.set_property=incremental)
  * @self: a `GtkSortListModel`
  * @incremental: %TRUE to sort incrementally
  *
@@ -1336,7 +1334,7 @@ gtk_sort_list_model_set_incremental (GtkSortListModel *self,
 }
 
 /**
- * gtk_sort_list_model_get_incremental:
+ * gtk_sort_list_model_get_incremental: (attributes org.gtk.Method.get_property=incremental)
  * @self: a `GtkSortListModel`
  *
  * Returns whether incremental sorting is enabled.
@@ -1354,7 +1352,7 @@ gtk_sort_list_model_get_incremental (GtkSortListModel *self)
 }
 
 /**
- * gtk_sort_list_model_get_pending:
+ * gtk_sort_list_model_get_pending: (attributes org.gtk.Method.get_property=pending)
  * @self: a `GtkSortListModel`
  *
  * Estimates progress of an ongoing sorting operation.

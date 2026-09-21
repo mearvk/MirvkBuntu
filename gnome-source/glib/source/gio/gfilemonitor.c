@@ -23,13 +23,12 @@
 #include "config.h"
 #include <string.h>
 
-#include "gfile.h"
 #include "gfilemonitor.h"
 #include "gioenumtypes.h"
-#include "glib.h"
-#include "glibintl.h"
 #include "gmarshal-internal.h"
+#include "gfile.h"
 #include "gvfs.h"
+#include "glibintl.h"
 
 /**
  * GFileMonitor:
@@ -51,26 +50,20 @@
 
 #define DEFAULT_RATE_LIMIT_MSECS 800
 
-typedef enum {
-  CANCEL_STATE_NONE,
-  CANCEL_STATE_CANCELLING,
-  CANCEL_STATE_CANCELLED,
-} GFileMonitorCancelState;
-
 struct _GFileMonitorPrivate
 {
-  int cancelled; /* atomic */
+  gboolean cancelled;
 };
 
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GFileMonitor, g_file_monitor, G_TYPE_OBJECT)
 
-typedef enum
+enum
 {
-  PROP_RATE_LIMIT = 1,
+  PROP_0,
+  PROP_RATE_LIMIT,
   PROP_CANCELLED
-} GFileMonitorProperty;
+};
 
-static GParamSpec *props[PROP_CANCELLED + 1];
 static guint g_file_monitor_changed_signal;
 
 static void
@@ -79,15 +72,14 @@ g_file_monitor_set_property (GObject      *object,
                              const GValue *value,
                              GParamSpec   *pspec)
 {
-  switch ((GFileMonitorProperty) prop_id)
+  //GFileMonitor *monitor;
+
+  //monitor = G_FILE_MONITOR (object);
+
+  switch (prop_id)
     {
     case PROP_RATE_LIMIT:
       /* not supported by default */
-      break;
-
-    case PROP_CANCELLED:
-      /* Read only */
-      g_assert_not_reached ();
       break;
 
     default:
@@ -102,9 +94,7 @@ g_file_monitor_get_property (GObject    *object,
                              GValue     *value,
                              GParamSpec *pspec)
 {
-  GFileMonitor *self = G_FILE_MONITOR (object);
-
-  switch ((GFileMonitorProperty) prop_id)
+  switch (prop_id)
     {
     case PROP_RATE_LIMIT:
       /* we expect this to be overridden... */
@@ -112,7 +102,9 @@ g_file_monitor_get_property (GObject    *object,
       break;
 
     case PROP_CANCELLED:
-      g_value_set_boolean (value, g_file_monitor_is_cancelled (self));
+      //g_mutex_lock (&fms->lock);
+      g_value_set_boolean (value, FALSE);//fms->cancelled);
+      //g_mutex_unlock (&fms->lock);
       break;
 
     default:
@@ -201,21 +193,19 @@ g_file_monitor_class_init (GFileMonitorClass *klass)
    *
    * The limit of the monitor to watch for changes, in milliseconds.
    */
-  props[PROP_RATE_LIMIT] =
-      g_param_spec_int ("rate-limit", NULL, NULL,
-                        0, G_MAXINT, DEFAULT_RATE_LIMIT_MSECS, G_PARAM_READWRITE |
-                        G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+  g_object_class_install_property (object_class, PROP_RATE_LIMIT,
+                                   g_param_spec_int ("rate-limit", NULL, NULL,
+                                                     0, G_MAXINT, DEFAULT_RATE_LIMIT_MSECS, G_PARAM_READWRITE |
+                                                     G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
 
   /**
    * GFileMonitor:cancelled:
    *
    * Whether the monitor has been cancelled.
    */
-  props[PROP_CANCELLED] =
-      g_param_spec_boolean ("cancelled", NULL, NULL,
-                            FALSE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
-
-  g_object_class_install_properties (object_class, G_N_ELEMENTS (props), props);
+  g_object_class_install_property (object_class, PROP_CANCELLED,
+                                   g_param_spec_boolean ("cancelled", NULL, NULL,
+                                                         FALSE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 }
 
 /**
@@ -229,9 +219,13 @@ g_file_monitor_class_init (GFileMonitorClass *klass)
 gboolean
 g_file_monitor_is_cancelled (GFileMonitor *monitor)
 {
+  gboolean res;
+
   g_return_val_if_fail (G_IS_FILE_MONITOR (monitor), FALSE);
 
-  return g_atomic_int_get (&monitor->priv->cancelled) == CANCEL_STATE_CANCELLED;
+  res = monitor->priv->cancelled;
+
+  return res;
 }
 
 /**
@@ -247,14 +241,12 @@ g_file_monitor_cancel (GFileMonitor *monitor)
 {
   g_return_val_if_fail (G_IS_FILE_MONITOR (monitor), FALSE);
 
-  if (g_atomic_int_compare_and_exchange (&monitor->priv->cancelled,
-                                         CANCEL_STATE_NONE,
-                                         CANCEL_STATE_CANCELLING))
+  if (!monitor->priv->cancelled)
     {
       G_FILE_MONITOR_GET_CLASS (monitor)->cancel (monitor);
 
-      g_atomic_int_set (&monitor->priv->cancelled, CANCEL_STATE_CANCELLED);
-      g_object_notify_by_pspec (G_OBJECT (monitor), props[PROP_CANCELLED]);
+      monitor->priv->cancelled = TRUE;
+      g_object_notify (G_OBJECT (monitor), "cancelled");
     }
 
   return TRUE;
@@ -280,7 +272,7 @@ g_file_monitor_set_rate_limit (GFileMonitor *monitor,
  * g_file_monitor_emit_event:
  * @monitor: a #GFileMonitor.
  * @child: a #GFile.
- * @other_file: (nullable): a #GFile, or %NULL.
+ * @other_file: a #GFile.
  * @event_type: a set of #GFileMonitorEvent flags.
  *
  * Emits the #GFileMonitor::changed signal if a change
@@ -288,8 +280,8 @@ g_file_monitor_set_rate_limit (GFileMonitor *monitor,
  * implementations only.
  *
  * Implementations are responsible to call this method from the
- * thread-default main context (see [method@GLib.MainContext.push_thread_default])
- * of the thread that the monitor was created in.
+ * [thread-default main context][g-main-context-push-thread-default] of the
+ * thread that the monitor was created in.
  **/
 void
 g_file_monitor_emit_event (GFileMonitor      *monitor,
@@ -301,7 +293,7 @@ g_file_monitor_emit_event (GFileMonitor      *monitor,
   g_return_if_fail (G_IS_FILE (child));
   g_return_if_fail (!other_file || G_IS_FILE (other_file));
 
-  if (g_atomic_int_get (&monitor->priv->cancelled) != CANCEL_STATE_NONE)
+  if (monitor->priv->cancelled)
     return;
 
   g_signal_emit (monitor, g_file_monitor_changed_signal, 0, child, other_file, event_type);

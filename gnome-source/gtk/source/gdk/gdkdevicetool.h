@@ -26,9 +26,10 @@
 G_BEGIN_DECLS
 
 #define GDK_TYPE_DEVICE_TOOL    (gdk_device_tool_get_type ())
+#define GDK_DEVICE_TOOL(o)      (G_TYPE_CHECK_INSTANCE_CAST ((o), GDK_TYPE_DEVICE_TOOL, GdkDeviceTool))
+#define GDK_IS_DEVICE_TOOL(o)   (G_TYPE_CHECK_INSTANCE_TYPE ((o), GDK_TYPE_DEVICE_TOOL))
 
-GDK_AVAILABLE_IN_ALL
-GDK_DECLARE_INTERNAL_TYPE (GdkDeviceTool, gdk_device_tool, GDK, DEVICE_TOOL, GObject)
+typedef struct _GdkDeviceTool GdkDeviceTool;
 
 /**
  * GdkDeviceToolType:
@@ -56,6 +57,9 @@ typedef enum {
 } GdkDeviceToolType;
 
 GDK_AVAILABLE_IN_ALL
+GType               gdk_device_tool_get_type        (void) G_GNUC_CONST;
+
+GDK_AVAILABLE_IN_ALL
 guint64             gdk_device_tool_get_serial      (GdkDeviceTool *tool);
 
 GDK_AVAILABLE_IN_ALL
@@ -68,3 +72,4 @@ GDK_AVAILABLE_IN_ALL
 GdkAxisFlags        gdk_device_tool_get_axes        (GdkDeviceTool *tool);
 
 G_END_DECLS
+

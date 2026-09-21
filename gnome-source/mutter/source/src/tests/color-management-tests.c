@@ -19,16 +19,11 @@
 #include "config.h"
 
 #include <fcntl.h>
-#include <math.h>
 
 #include "backends/meta-color-device.h"
 #include "backends/meta-color-manager-private.h"
 #include "backends/meta-color-profile.h"
-#include "backends/meta-crtc.h"
-#include "backends/meta-monitor-manager-private.h"
-#include "backends/meta-monitor-private.h"
 #include "meta-test/meta-context-test.h"
-#include "tests/meta-crtc-test.h"
 #include "tests/meta-monitor-test-utils.h"
 
 static MetaContext *test_context;
@@ -85,53 +80,29 @@ static MonitorTestCaseSetup base_monitor_setup = {
 /* Extracted from a 'California Institute of Technology, 0x1403' monitor. */
 #define CALTECH_MONITOR_EDID (\
   (MetaEdidInfo) { \
-    .default_gamma = 2.200000f, \
-    .default_color_primaries = { \
-      .primary = { \
-          { \
-            .x = 0.683594f, \
-            .y = 0.312500f, \
-          }, \
-          { \
-            .x = 0.255859f, \
-            .y = 0.685547f, \
-          }, \
-          { \
-            .x = 0.139648f, \
-            .y = 0.056641f, \
-          }, \
-      }, \
-      .default_white = { \
-        .x = 0.313477f, \
-        .y = 0.326172f, \
-      }, \
-    } \
+    .gamma = 2.200000, \
+    .red_x = 0.683594, \
+    .red_y = 0.312500, \
+    .green_x = 0.255859, \
+    .green_y = 0.685547, \
+    .blue_x = 0.139648, \
+    .blue_y = 0.056641, \
+    .white_x = 0.313477, \
+    .white_y = 0.326172, \
   })
 
 /* Extracted from a 'Ancor Communications Inc, VX239, ECLMRS004144' monitor. */
 #define ANCOR_VX239_EDID (\
   (MetaEdidInfo) { \
-    .default_gamma = 2.200000f, \
-    .default_color_primaries = { \
-      .primary = { \
-          { \
-            .x = 0.651367f, \
-            .y = 0.335938f, \
-          }, \
-          { \
-            .x = 0.321289f, \
-            .y = 0.614258f, \
-          }, \
-          { \
-            .x = 0.154297f, \
-            .y = 0.063477f, \
-          }, \
-      }, \
-      .default_white = { \
-        .x = 0.313477f, \
-        .y = 0.329102f, \
-      }, \
-    } \
+    .gamma = 2.200000, \
+    .red_x = 0.651367, \
+    .red_y = 0.335938, \
+    .green_x = 0.321289, \
+    .green_y = 0.614258, \
+    .blue_x = 0.154297, \
+    .blue_y = 0.063477, \
+    .white_x = 0.313477, \
+    .white_y = 0.329102, \
   })
 
 #define assert_color_xyz_equal(color, expected_color) \
@@ -155,6 +126,7 @@ get_colord_mock_proxy (void)
 {
   GDBusProxy *proxy;
   g_autoptr (GError) error = NULL;
+  g_autoptr (GVariant) ret = NULL;
 
   proxy =
     g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
@@ -193,20 +165,20 @@ wait_for_profile_assigned (MetaColorDevice *color_device,
 }
 
 static void
-on_device_calibration_changed (MetaColorDevice *color_device,
-                               gboolean        *run)
+on_device_updated (MetaColorDevice *color_device,
+                   gboolean        *run)
 {
   *run = FALSE;
 }
 
 static void
-wait_for_device_calibration_changed (MetaColorDevice *color_device)
+wait_for_device_updated (MetaColorDevice *color_device)
 {
   gulong handler_id;
   gboolean run = TRUE;
 
-  handler_id = g_signal_connect (color_device, "calibration-changed",
-                                 G_CALLBACK (on_device_calibration_changed),
+  handler_id = g_signal_connect (color_device, "updated",
+                                 G_CALLBACK (on_device_updated),
                                  &run);
   while (run)
     g_main_context_iteration (NULL, TRUE);
@@ -240,7 +212,6 @@ set_colord_device_profiles (const char  *cd_device_id,
   g_autoptr (GError) error = NULL;
   GVariantBuilder params_builder;
   GVariantBuilder profiles_builder;
-  g_autoptr (GVariant) result = NULL;
   int i;
 
   proxy = get_colord_mock_proxy ();
@@ -253,12 +224,11 @@ set_colord_device_profiles (const char  *cd_device_id,
     g_variant_builder_add (&profiles_builder, "s", cd_profile_ids[i]);
   g_variant_builder_add (&params_builder, "as", &profiles_builder);
 
-  result = g_dbus_proxy_call_sync (proxy,
-                                   "SetDeviceProfiles",
-                                   g_variant_builder_end (&params_builder),
-                                   G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
-                                   &error);
-  if (!result)
+  if (!g_dbus_proxy_call_sync (proxy,
+                               "SetDeviceProfiles",
+                               g_variant_builder_end (&params_builder),
+                               G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
+                               &error))
     g_error ("Failed to set device profile: %s", error->message);
 }
 
@@ -269,7 +239,6 @@ add_colord_system_profile (const char *cd_profile_id,
   GDBusProxy *proxy;
   g_autoptr (GError) error = NULL;
   GVariantBuilder params_builder;
-  g_autoptr (GVariant) result = NULL;
 
   proxy = get_colord_mock_proxy ();
 
@@ -277,12 +246,11 @@ add_colord_system_profile (const char *cd_profile_id,
   g_variant_builder_add (&params_builder, "s", cd_profile_id);
   g_variant_builder_add (&params_builder, "s", file_path);
 
-  result = g_dbus_proxy_call_sync (proxy,
-                                   "AddSystemProfile",
-                                   g_variant_builder_end (&params_builder),
-                                   G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
-                                   &error);
-  if (!result)
+  if (!g_dbus_proxy_call_sync (proxy,
+                               "AddSystemProfile",
+                               g_variant_builder_end (&params_builder),
+                               G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
+                               &error))
     g_error ("Failed to add system profile: %s", error->message);
 }
 
@@ -291,6 +259,7 @@ get_gsd_color_mock_proxy (void)
 {
   GDBusProxy *proxy;
   g_autoptr (GError) error = NULL;
+  g_autoptr (GVariant) ret = NULL;
 
   proxy =
     g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
@@ -316,19 +285,17 @@ set_night_light_temperature (unsigned int temperature)
   GDBusProxy *proxy;
   g_autoptr (GError) error = NULL;
   GVariantBuilder params_builder;
-  g_autoptr (GVariant) result = NULL;
 
   proxy = get_gsd_color_mock_proxy ();
 
   g_variant_builder_init (&params_builder, G_VARIANT_TYPE ("(u)"));
   g_variant_builder_add (&params_builder, "u", temperature);
 
-  result = g_dbus_proxy_call_sync (proxy,
-                                   "SetTemperature",
-                                   g_variant_builder_end (&params_builder),
-                                   G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
-                                   &error);
-  if (!result)
+  if (!g_dbus_proxy_call_sync (proxy,
+                               "SetTemperature",
+                               g_variant_builder_end (&params_builder),
+                               G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
+                               &error))
     g_error ("Failed to set gsd-color temperature devices: %s", error->message);
 }
 
@@ -338,19 +305,17 @@ set_night_light_active (gboolean active)
   GDBusProxy *proxy;
   g_autoptr (GError) error = NULL;
   GVariantBuilder params_builder;
-  g_autoptr (GVariant) result = NULL;
 
   proxy = get_gsd_color_mock_proxy ();
 
   g_variant_builder_init (&params_builder, G_VARIANT_TYPE ("(b)"));
   g_variant_builder_add (&params_builder, "b", active);
 
-  result = g_dbus_proxy_call_sync (proxy,
-                                   "SetNightLightActive",
-                                   g_variant_builder_end (&params_builder),
-                                   G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
-                                   &error);
-  if (!result)
+  if (!g_dbus_proxy_call_sync (proxy,
+                               "SetNightLightActive",
+                               g_variant_builder_end (&params_builder),
+                               G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
+                               &error))
     g_error ("Failed to set enable or disable night light: %s", error->message);
 }
 
@@ -364,16 +329,14 @@ prepare_color_test (void)
     meta_backend_get_color_manager (backend);
   GDBusProxy *proxy;
   g_autoptr (GError) error = NULL;
-  g_autoptr (GVariant) result = NULL;
 
   proxy = get_colord_mock_proxy ();
 
-  result = g_dbus_proxy_call_sync (proxy,
-                                   "Reset",
-                                   NULL,
-                                   G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
-                                   &error);
-  if (!result)
+  if (!g_dbus_proxy_call_sync (proxy,
+                               "Reset",
+                               NULL,
+                               G_DBUS_CALL_FLAGS_NO_AUTO_START, -1, NULL,
+                               &error))
     g_error ("Failed to reset mocked colord state: %s", error->message);
 
   g_assert_null (meta_monitor_manager_get_monitors (monitor_manager));
@@ -471,47 +434,39 @@ meta_test_color_management_device_basic (void)
       g_assert_nonnull (meta_monitor_get_edid_checksum_md5 (monitor));
       monitor_edid_info = meta_monitor_get_edid_info (monitor);
 
-      g_assert_cmpfloat_with_epsilon (expected_edid_info->default_gamma,
-                                      monitor_edid_info->default_gamma,
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->gamma,
+                                      monitor_edid_info->gamma,
                                       FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.primary[0].x,
-        monitor_edid_info->default_color_primaries.primary[0].x,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.primary[0].y,
-        monitor_edid_info->default_color_primaries.primary[0].y,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.primary[1].x,
-        monitor_edid_info->default_color_primaries.primary[1].x,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.primary[1].y,
-        monitor_edid_info->default_color_primaries.primary[1].y,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.primary[2].x,
-        monitor_edid_info->default_color_primaries.primary[2].x,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.primary[2].y,
-        monitor_edid_info->default_color_primaries.primary[2].y,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.default_white.x,
-        monitor_edid_info->default_color_primaries.default_white.x,
-        FLT_EPSILON);
-      g_assert_cmpfloat_with_epsilon (
-        expected_edid_info->default_color_primaries.default_white.y,
-        monitor_edid_info->default_color_primaries.default_white.y,
-        FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->red_x,
+                                      monitor_edid_info->red_x,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->red_y,
+                                      monitor_edid_info->red_y,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->green_x,
+                                      monitor_edid_info->green_x,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->green_y,
+                                      monitor_edid_info->green_y,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->blue_x,
+                                      monitor_edid_info->blue_x,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->blue_y,
+                                      monitor_edid_info->blue_y,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->white_x,
+                                      monitor_edid_info->white_x,
+                                      FLT_EPSILON);
+      g_assert_cmpfloat_with_epsilon (expected_edid_info->white_y,
+                                      monitor_edid_info->white_y,
+                                      FLT_EPSILON);
 
       color_device = meta_color_manager_get_color_device (color_manager,
                                                           monitor);
       g_assert_nonnull (color_device);
 
-      g_assert_true (meta_color_device_get_monitor (color_device) == monitor);
+      g_assert (meta_color_device_get_monitor (color_device) == monitor);
     }
 }
 
@@ -555,7 +510,7 @@ meta_test_color_management_device_no_gamma (void)
 
   color_device = meta_color_manager_get_color_device (color_manager, monitor);
   g_assert_nonnull (color_device);
-  g_assert_true (meta_color_device_get_monitor (color_device) == monitor);
+  g_assert (meta_color_device_get_monitor (color_device) == monitor);
 
   while (!meta_color_device_is_ready (color_device))
     g_main_context_iteration (NULL, TRUE);
@@ -569,107 +524,6 @@ meta_test_color_management_device_no_gamma (void)
                               color_profiles, G_N_ELEMENTS (color_profiles));
 
   wait_for_profile_assigned (color_device, profile_id);
-}
-
-static void
-meta_test_color_management_device_no_edid (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  MetaColorManager *color_manager =
-    meta_backend_get_color_manager (backend);
-  MonitorTestCaseSetup test_case_setup = base_monitor_setup;
-  MetaMonitorTestSetup *test_setup;
-  MetaMonitor *monitor;
-  MetaColorDevice *color_device;
-  MetaColorProfile *color_profile;
-  CdIcc *cd_icc;
-  const char *device_id;
-  g_autofree char *device_id_checksum = NULL;
-  g_autofree char *expected_file_name = NULL;
-  g_autofree char *file_name = NULL;
-
-  test_case_setup.outputs[0].serial = "device_no_edid/serial";
-
-  test_case_setup.n_outputs = 1;
-  test_case_setup.n_crtcs = 1;
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-
-  monitor =
-    META_MONITOR (meta_monitor_manager_get_monitors (monitor_manager)->data);
-  g_assert_null (meta_monitor_get_edid_checksum_md5 (monitor));
-  g_assert_true (meta_monitor_supports_gamma_lut (monitor));
-
-  color_device = meta_color_manager_get_color_device (color_manager, monitor);
-  g_assert_nonnull (color_device);
-
-  while (!meta_color_device_is_ready (color_device))
-    g_main_context_iteration (NULL, TRUE);
-
-  color_profile = meta_color_device_get_device_profile (color_device);
-  g_assert_nonnull (color_profile);
-
-  /* The fallback file name is derived from the hashed device ID. */
-  device_id = meta_color_device_get_id (color_device);
-  device_id_checksum = g_compute_checksum_for_string (G_CHECKSUM_MD5,
-                                                      device_id, -1);
-  expected_file_name = g_strdup_printf ("device-%s.icc", device_id_checksum);
-  file_name =
-    g_path_get_basename (meta_color_profile_get_file_path (color_profile));
-  g_assert_cmpstr (file_name, ==, expected_file_name);
-
-  cd_icc = meta_color_profile_get_cd_icc (color_profile);
-  g_assert_nonnull (cd_icc);
-
-  /* colord relies on this metadata to auto-add the profile to its device. */
-  g_assert_cmpstr (cd_icc_get_metadata_item (cd_icc,
-                                             CD_PROFILE_METADATA_MAPPING_DEVICE_ID),
-                   ==,
-                   device_id);
-}
-
-static void
-meta_test_color_management_device_no_edid_no_gamma (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  MetaColorManager *color_manager =
-    meta_backend_get_color_manager (backend);
-  MonitorTestCaseSetup test_case_setup = base_monitor_setup;
-  MetaMonitorTestSetup *test_setup;
-  MetaMonitor *monitor;
-  MetaColorDevice *color_device;
-
-  test_case_setup.outputs[0].serial = "device_no_edid_no_gamma/serial";
-  test_case_setup.crtcs[0].disable_gamma_lut = TRUE;
-
-  test_case_setup.n_outputs = 1;
-  test_case_setup.n_crtcs = 1;
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-
-  monitor =
-    META_MONITOR (meta_monitor_manager_get_monitors (monitor_manager)->data);
-  g_assert_null (meta_monitor_get_edid_checksum_md5 (monitor));
-  g_assert_false (meta_monitor_supports_gamma_lut (monitor));
-
-  color_device = meta_color_manager_get_color_device (color_manager, monitor);
-  g_assert_nonnull (color_device);
-
-  while (!meta_color_device_is_ready (color_device))
-    g_main_context_iteration (NULL, TRUE);
-
-  /* Without gamma LUT support, no fallback profile should be created. */
-  g_assert_null (meta_color_device_get_device_profile (color_device));
 }
 
 static void
@@ -752,7 +606,7 @@ meta_test_color_management_profile_device_bogus (void)
 
   edid_info = CALTECH_MONITOR_EDID;
   /* Decoding gamma is in [1, 4] */
-  edid_info.default_gamma = 0.7;
+  edid_info.gamma = 0.7;
   test_case_setup.outputs[0].serial = "profile_device_bogus/gamma";
   test_case_setup.outputs[0].edid_info = edid_info;
   test_case_setup.outputs[0].has_edid_info = TRUE;
@@ -777,7 +631,7 @@ meta_test_color_management_profile_device_bogus (void)
   g_assert_null (color_profile);
 
   edid_info = CALTECH_MONITOR_EDID;
-  edid_info.default_color_primaries.primary[1].y = 0.0;
+  edid_info.green_y = 0.0;
   test_case_setup.outputs[0].serial = "profile_device_bogus/chromaticity";
   test_case_setup.outputs[0].edid_info = edid_info;
   test_case_setup.outputs[0].has_edid_info = TRUE;
@@ -837,7 +691,7 @@ meta_test_color_management_profile_system (void)
 
   g_assert_null (meta_color_device_get_assigned_profile (color_device));
 
-  path = g_test_get_filename (G_TEST_DIST, "icc-profiles", "sRGB.icc",
+  path = g_test_get_filename (G_TEST_DIST, "tests", "icc-profiles", "sRGB.icc",
                               NULL);
   add_colord_system_profile (srgb_profile_id, path);
   color_profiles[0] = srgb_profile_id;
@@ -913,10 +767,10 @@ meta_test_color_management_profile_efivar (void)
     meta_backend_get_color_manager (backend);
   char efivar_path[] = "/tmp/efivar-test-profile-XXXXXX";
   int fd;
-  g_autoptr (CdColorYxy) reference_red_yxy = NULL;
-  g_autoptr (CdColorYxy) reference_green_yxy = NULL;
-  g_autoptr (CdColorYxy) reference_blue_yxy = NULL;
-  g_autoptr (CdColorYxy) reference_white_yxy = NULL;
+  CdColorYxy *reference_red_yxy;
+  CdColorYxy *reference_green_yxy;
+  CdColorYxy *reference_blue_yxy;
+  CdColorYxy *reference_white_yxy;
   MetaEdidInfo edid_info;
   MonitorTestCaseSetup test_case_setup = base_monitor_setup;
   MetaMonitorTestSetup *test_setup;
@@ -1222,7 +1076,7 @@ meta_test_color_management_night_light_calibrated (void)
   set_night_light_temperature (6500);
   set_night_light_active (FALSE);
   path = g_test_get_filename (G_TEST_DIST,
-                              "icc-profiles", "vx239-calibrated.icc",
+                              "tests", "icc-profiles", "vx239-calibrated.icc",
                               NULL);
   add_colord_system_profile (profile_id, path);
   color_profiles[0] = profile_id;
@@ -1248,7 +1102,7 @@ meta_test_color_management_night_light_calibrated (void)
 
   set_night_light_temperature (temperature);
   set_night_light_active (TRUE);
-  wait_for_device_calibration_changed (color_device);
+  wait_for_device_updated (color_device);
 
   assert_gamma_array (night_light_on_red, crtc_test->gamma.red,
                       crtc_test->gamma.size);
@@ -1473,7 +1327,7 @@ meta_test_color_management_night_light_uncalibrated (void)
 
   set_night_light_temperature (6500);
   set_night_light_active (FALSE);
-  path = g_test_get_filename (G_TEST_DIST, "icc-profiles", "sRGB.icc",
+  path = g_test_get_filename (G_TEST_DIST, "tests", "icc-profiles", "sRGB.icc",
                               NULL);
   add_colord_system_profile (srgb_profile_id, path);
   color_profiles[0] = srgb_profile_id;
@@ -1499,7 +1353,7 @@ meta_test_color_management_night_light_uncalibrated (void)
 
   set_night_light_temperature (temperature);
   set_night_light_active (TRUE);
-  wait_for_device_calibration_changed (color_device);
+  wait_for_device_updated (color_device);
 
   assert_gamma_array (night_light_on_red, crtc_test->gamma.red,
                       crtc_test->gamma.size);
@@ -1507,333 +1361,6 @@ meta_test_color_management_night_light_uncalibrated (void)
                       crtc_test->gamma.size);
   assert_gamma_array (night_light_on_blue, crtc_test->gamma.blue,
                       crtc_test->gamma.size);
-}
-
-static void
-assert_ctm_scales (const MetaCtm *ctm,
-                   float          expected_r,
-                   float          expected_g,
-                   float          expected_b)
-{
-  const double scale = (double) ((uint64_t) 1 << 32);
-  double r, g, b;
-  int i;
-
-  g_assert_nonnull (ctm);
-
-  r = (double) ctm->matrix[0] / scale;
-  g = (double) ctm->matrix[4] / scale;
-  b = (double) ctm->matrix[8] / scale;
-
-  g_assert_cmpfloat_with_epsilon (r, expected_r, 0.002);
-  g_assert_cmpfloat_with_epsilon (g, expected_g, 0.002);
-  g_assert_cmpfloat_with_epsilon (b, expected_b, 0.002);
-
-  for (i = 0; i < 9; i++)
-    {
-      if (i == 0 || i == 4 || i == 8)
-        continue;
-      g_assert_cmpuint (ctm->matrix[i], ==, 0);
-    }
-}
-
-/*
- * The uncalibrated Night Light ramp is a linear ramp scaled by the blackbody
- * factors, so the last entry of each channel is 0xffff times the scale.
- */
-static void
-assert_gamma_lut_scales (MetaCrtcTest *crtc_test,
-                         float         expected_r,
-                         float         expected_g,
-                         float         expected_b)
-{
-  const double max = 0xffff;
-  size_t last;
-
-  g_assert_cmpuint (crtc_test->gamma.size, >, 0);
-  last = crtc_test->gamma.size - 1;
-
-  g_assert_cmpfloat_with_epsilon (crtc_test->gamma.red[last] / max,
-                                  expected_r, 0.002);
-  g_assert_cmpfloat_with_epsilon (crtc_test->gamma.green[last] / max,
-                                  expected_g, 0.002);
-  g_assert_cmpfloat_with_epsilon (crtc_test->gamma.blue[last] / max,
-                                  expected_b, 0.002);
-}
-
-/*
- * Applying a temperature is only observable when it differs from the one
- * currently held by the color manager, which is process wide and therefore
- * carried over between tests. Every test below picks temperatures no other
- * test leaves behind, so each change reliably triggers an update.
- *
- * Note that only the Temperature property is followed: gsd-color reports the
- * default temperature when Night Light is inactive.
- */
-static gboolean
-on_calibration_wait_timeout (gpointer user_data)
-{
-  gboolean *timed_out = user_data;
-
-  *timed_out = TRUE;
-
-  return G_SOURCE_CONTINUE;
-}
-
-static void
-apply_night_light_temperature (MetaColorDevice *color_device,
-                               unsigned int     temperature,
-                               gboolean         active)
-{
-  gboolean run = TRUE;
-  gboolean timed_out = FALSE;
-  gulong handler_id;
-  guint timeout_id;
-
-  handler_id = g_signal_connect (color_device, "calibration-changed",
-                                 G_CALLBACK (on_device_calibration_changed),
-                                 &run);
-  /*
-   * Bounded, unlike wait_for_device_calibration_changed(): these tests have no
-   * color profile assigned, so a regression that makes the white point update
-   * bail out early emits nothing at all. Waiting forever would surface that as
-   * an unexplained suite timeout instead of a failure naming the cause.
-   */
-  timeout_id = g_timeout_add_seconds (10, on_calibration_wait_timeout,
-                                      &timed_out);
-
-  set_night_light_temperature (temperature);
-  set_night_light_active (active);
-
-  while (run && !timed_out)
-    g_main_context_iteration (NULL, TRUE);
-
-  g_clear_handle_id (&timeout_id, g_source_remove);
-  g_signal_handler_disconnect (color_device, handler_id);
-
-  if (timed_out)
-    g_error ("Timed out waiting for %uK to be applied: the color device "
-             "emitted no calibration change", temperature);
-}
-
-static void
-meta_test_color_management_night_light_prefer_gamma_lut (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  MetaColorManager *color_manager =
-    meta_backend_get_color_manager (backend);
-  MonitorTestCaseSetup test_case_setup = base_monitor_setup;
-  MetaMonitorTestSetup *test_setup;
-  MetaMonitor *monitor;
-  MetaOutput *output;
-  MetaCrtc *crtc;
-  MetaCrtcTest *crtc_test;
-  MetaColorDevice *color_device;
-  float expected_r, expected_g, expected_b;
-  unsigned int temperature = 4000;
-
-  /* Hardware exposing both GAMMA_LUT and CTM must keep using the LUT. */
-  test_case_setup.crtcs[0].enable_ctm = TRUE;
-  test_case_setup.outputs[0].edid_info = CALTECH_MONITOR_EDID;
-  test_case_setup.outputs[0].has_edid_info = TRUE;
-  test_case_setup.n_outputs = 1;
-  test_case_setup.n_crtcs = 1;
-
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-
-  monitor = meta_monitor_manager_get_monitors (monitor_manager)->data;
-  g_assert_cmpuint (meta_monitor_get_gamma_lut_size (monitor), >, 0);
-  g_assert_true (meta_monitor_is_ctm_supported (monitor));
-
-  color_device = meta_color_manager_get_color_device (color_manager, monitor);
-  g_assert_nonnull (color_device);
-
-  while (!meta_color_device_is_ready (color_device))
-    g_main_context_iteration (NULL, TRUE);
-
-  output = meta_monitor_get_main_output (monitor);
-  crtc = meta_output_get_assigned_crtc (output);
-  crtc_test = META_CRTC_TEST (crtc);
-
-  /* No colord profile is assigned, so this is the uncalibrated ramp. */
-  apply_night_light_temperature (color_device, temperature, TRUE);
-
-  meta_color_get_temperature_rgb_scales (temperature,
-                                         &expected_r,
-                                         &expected_g,
-                                         &expected_b);
-  assert_gamma_lut_scales (crtc_test, expected_r, expected_g, expected_b);
-  g_assert_null (meta_crtc_test_peek_ctm (crtc_test));
-
-  /* Back to daylight; still no CTM. */
-  apply_night_light_temperature (color_device, 6500, FALSE);
-
-  meta_color_get_temperature_rgb_scales (6500,
-                                         &expected_r,
-                                         &expected_g,
-                                         &expected_b);
-  assert_gamma_lut_scales (crtc_test, expected_r, expected_g, expected_b);
-  g_assert_null (meta_crtc_test_peek_ctm (crtc_test));
-}
-
-static void
-meta_test_color_management_night_light_ctm_fallback (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  MetaColorManager *color_manager =
-    meta_backend_get_color_manager (backend);
-  MonitorTestCaseSetup test_case_setup = base_monitor_setup;
-  MetaMonitorTestSetup *test_setup;
-  MetaMonitor *monitor;
-  MetaOutput *output;
-  MetaCrtc *crtc;
-  MetaCrtcTest *crtc_test;
-  MetaColorDevice *color_device;
-  float expected_r, expected_g, expected_b;
-  unsigned int temperature = 4700;
-
-  /* No GAMMA_LUT, but CTM available. */
-  test_case_setup.crtcs[0].disable_gamma_lut = TRUE;
-  test_case_setup.crtcs[0].enable_ctm = TRUE;
-  test_case_setup.outputs[0].edid_info = CALTECH_MONITOR_EDID;
-  test_case_setup.outputs[0].has_edid_info = TRUE;
-  test_case_setup.n_outputs = 1;
-  test_case_setup.n_crtcs = 1;
-
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-
-  monitor = meta_monitor_manager_get_monitors (monitor_manager)->data;
-  g_assert_cmpuint (meta_monitor_get_gamma_lut_size (monitor), ==, 0);
-  g_assert_true (meta_monitor_is_ctm_supported (monitor));
-
-  color_device = meta_color_manager_get_color_device (color_manager, monitor);
-  g_assert_nonnull (color_device);
-
-  while (!meta_color_device_is_ready (color_device))
-    g_main_context_iteration (NULL, TRUE);
-
-  /* No profile is assigned, which is the case the fallback has to work in:
-   * requiring one used to make Night Light do nothing at all here. */
-  g_assert_null (meta_color_device_get_assigned_profile (color_device));
-
-  output = meta_monitor_get_main_output (monitor);
-  crtc = meta_output_get_assigned_crtc (output);
-  crtc_test = META_CRTC_TEST (crtc);
-
-  /* A warm temperature becomes a diagonal CTM built from the blackbody
-   * scales, without needing a color profile. */
-  apply_night_light_temperature (color_device, temperature, TRUE);
-
-  meta_color_get_temperature_rgb_scales (temperature,
-                                         &expected_r,
-                                         &expected_g,
-                                         &expected_b);
-  assert_ctm_scales (meta_crtc_test_peek_ctm (crtc_test),
-                     expected_r, expected_g, expected_b);
-
-  /* Back to daylight. */
-  apply_night_light_temperature (color_device, 6500, FALSE);
-
-  meta_color_get_temperature_rgb_scales (6500,
-                                         &expected_r,
-                                         &expected_g,
-                                         &expected_b);
-  assert_ctm_scales (meta_crtc_test_peek_ctm (crtc_test),
-                     expected_r, expected_g, expected_b);
-}
-
-/*
- * Nothing outside [0, 1] may reach the kernel, whatever the scales are, so
- * check the boundaries of the conversion directly rather than only through a
- * temperature that happens to produce sane values.
- */
-static void
-meta_test_color_management_ctm_scale_clamping (void)
-{
-  g_autoptr (MetaCtm) out_of_range = NULL;
-  g_autoptr (MetaCtm) non_finite = NULL;
-  g_autoptr (MetaCtm) boundaries = NULL;
-
-  out_of_range = meta_ctm_new_from_rgb_scales (-1.0f, 2.0f, 0.5f);
-  assert_ctm_scales (out_of_range, 0.0f, 1.0f, 0.5f);
-
-  non_finite = meta_ctm_new_from_rgb_scales (NAN, INFINITY, -INFINITY);
-  assert_ctm_scales (non_finite, 0.0f, 0.0f, 0.0f);
-
-  boundaries = meta_ctm_new_from_rgb_scales (0.0f, 1.0f, 0.0f);
-  assert_ctm_scales (boundaries, 0.0f, 1.0f, 0.0f);
-}
-
-/*
- * The generated D-Bus accessors are not exported from libmutter, so read the
- * property off the skeleton directly.
- */
-static gboolean
-get_night_light_supported (MetaMonitorManager *monitor_manager)
-{
-  gboolean supported = FALSE;
-
-  g_object_get (monitor_manager->display_config,
-                "night-light-supported", &supported,
-                NULL);
-
-  return supported;
-}
-
-/*
- * NightLightSupported must follow CTM capability, otherwise the toggle stays
- * hidden on exactly the hardware this series targets.
- */
-static void
-meta_test_color_management_night_light_supported (void)
-{
-  MetaBackend *backend = meta_context_get_backend (test_context);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (backend);
-  MetaMonitorManagerTest *monitor_manager_test =
-    META_MONITOR_MANAGER_TEST (monitor_manager);
-  MonitorTestCaseSetup test_case_setup = base_monitor_setup;
-  MetaMonitorTestSetup *test_setup;
-
-  test_case_setup.outputs[0].edid_info = CALTECH_MONITOR_EDID;
-  test_case_setup.outputs[0].has_edid_info = TRUE;
-  test_case_setup.n_outputs = 1;
-  test_case_setup.n_crtcs = 1;
-
-  /* Neither property: Night Light cannot be applied at all. */
-  test_case_setup.crtcs[0].disable_gamma_lut = TRUE;
-  test_case_setup.crtcs[0].enable_ctm = FALSE;
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-  g_assert_false (get_night_light_supported (monitor_manager));
-
-  /* CTM only: still supported, via the fallback. */
-  test_case_setup.crtcs[0].enable_ctm = TRUE;
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-  g_assert_true (get_night_light_supported (monitor_manager));
-
-  /* GAMMA_LUT only: unchanged behaviour. */
-  test_case_setup.crtcs[0].disable_gamma_lut = FALSE;
-  test_case_setup.crtcs[0].enable_ctm = FALSE;
-  test_setup = meta_create_monitor_test_setup (backend, &test_case_setup,
-                                               MONITOR_TEST_FLAG_NO_STORED);
-  meta_monitor_manager_test_emulate_hotplug (monitor_manager_test, test_setup);
-  g_assert_true (get_night_light_supported (monitor_manager));
 }
 
 static MetaMonitorTestSetup *
@@ -1884,10 +1411,6 @@ init_tests (void)
                   meta_test_color_management_device_basic);
   add_color_test ("/color-management/device/no-gamma",
                   meta_test_color_management_device_no_gamma);
-  add_color_test ("/color-management/device/no-edid",
-                  meta_test_color_management_device_no_edid);
-  add_color_test ("/color-management/device/no-edid-no-gamma",
-                  meta_test_color_management_device_no_edid_no_gamma);
   add_color_test ("/color-management/profile/device",
                   meta_test_color_management_profile_device);
   add_color_test ("/color-management/profile/device-bogus",
@@ -1900,25 +1423,25 @@ init_tests (void)
                   meta_test_color_management_night_light_calibrated);
   add_color_test ("/color-management/night-light/uncalibrated",
                   meta_test_color_management_night_light_uncalibrated);
-  add_color_test ("/color-management/night-light/prefer-gamma-lut",
-                  meta_test_color_management_night_light_prefer_gamma_lut);
-  add_color_test ("/color-management/night-light/ctm-fallback",
-                  meta_test_color_management_night_light_ctm_fallback);
-  add_color_test ("/color-management/night-light/ctm-scale-clamping",
-                  meta_test_color_management_ctm_scale_clamping);
-  add_color_test ("/color-management/night-light/supported",
-                  meta_test_color_management_night_light_supported);
 }
 
 int
 main (int argc, char **argv)
 {
   g_autoptr (MetaContext) context = NULL;
+  char *path;
 
-  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_TEST,
+  context = meta_create_test_context (META_CONTEXT_TEST_TYPE_NESTED,
                                       META_CONTEXT_TEST_FLAG_NONE);
 
-  g_assert_true (meta_context_configure (context, &argc, &argv, NULL));
+  g_assert (meta_context_configure (context, &argc, &argv, NULL));
+
+  path = g_test_build_filename (G_TEST_BUILT,
+                                "tests",
+                                "share",
+                                NULL);
+  g_setenv ("XDG_DATA_HOME", path, TRUE);
+  g_free (path);
 
   test_context = context;
 

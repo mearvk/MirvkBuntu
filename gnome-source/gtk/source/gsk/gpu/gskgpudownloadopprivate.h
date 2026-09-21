@@ -4,16 +4,19 @@
 
 G_BEGIN_DECLS
 
+typedef void            (* GskGpuDownloadFunc)                          (gpointer                        user_data,
+                                                                         GdkTexture                     *texture);
+
 void                    gsk_gpu_download_op                             (GskGpuFrame                    *frame,
                                                                          GskGpuImage                    *image,
-                                                                         GdkColorState                  *color_state,
-                                                                         GdkTexture                    **out_texture);
-void                    gsk_gpu_download_into_op                        (GskGpuFrame                    *frame,
+                                                                         gboolean                        allow_dmabuf,
+                                                                         GskGpuDownloadFunc              func,
+                                                                         gpointer                        user_data);
+
+void                    gsk_gpu_download_png_op                         (GskGpuFrame                    *frame,
                                                                          GskGpuImage                    *image,
-                                                                         GdkColorState                  *image_color_state,
-                                                                         guchar                         *data,
-                                                                         const GdkMemoryLayout          *layout,
-                                                                         GdkColorState                  *color_state);
+                                                                         const char                     *filename_format,
+                                                                         ...) G_GNUC_PRINTF(3, 4);
 
 G_END_DECLS
 

@@ -152,7 +152,7 @@ cr_simple_sel_to_string (CRSimpleSel const * a_this)
         }
 
         if (str_buf) {
-                result = (guchar *) g_string_free_and_steal (str_buf);
+                result = (guchar *) g_string_free (str_buf, FALSE);
                 str_buf = NULL;
         }
 
@@ -193,7 +193,7 @@ cr_simple_sel_one_to_string (CRSimpleSel const * a_this)
         }
 
         if (str_buf) {
-                result = (guchar *) g_string_free_and_steal (str_buf);
+                result = (guchar *) g_string_free (str_buf, FALSE);
                 str_buf = NULL;
         }
 
@@ -317,5 +317,7 @@ cr_simple_sel_destroy (CRSimpleSel * a_this)
                 cr_simple_sel_destroy (a_this->next);
         }
 
-        g_free (a_this);
+        if (a_this) {
+                g_free (a_this);
+        }
 }

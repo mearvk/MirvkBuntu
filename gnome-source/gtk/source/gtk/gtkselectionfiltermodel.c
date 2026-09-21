@@ -27,7 +27,8 @@
 /**
  * GtkSelectionFilterModel:
  *
- * A list model that presents the selection from a `GtkSelectionModel`.
+ * `GtkSelectionFilterModel` is a list model that presents the selection from
+ * a `GtkSelectionModel`.
  */
 
 enum {
@@ -241,17 +242,17 @@ gtk_selection_filter_model_class_init (GtkSelectionFilterModelClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkSelectionFilterModel:model:
+   * GtkSelectionFilterModel:model: (attributes org.gtk.Property.get=gtk_selection_filter_model_get_model org.gtk.Property.set=gtk_selection_filter_model_set_model)
    *
    * The model being filtered.
    */
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            GTK_TYPE_SELECTION_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkSelectionFilterModel:n-items:
@@ -263,7 +264,7 @@ gtk_selection_filter_model_class_init (GtkSelectionFilterModelClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -291,7 +292,7 @@ gtk_selection_filter_model_new (GtkSelectionModel *model)
 }
 
 /**
- * gtk_selection_filter_model_set_model:
+ * gtk_selection_filter_model_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkSelectionFilterModel`
  * @model: (nullable): The model to be filtered
  *
@@ -342,7 +343,7 @@ gtk_selection_filter_model_set_model (GtkSelectionFilterModel *self,
 }
 
 /**
- * gtk_selection_filter_model_get_model:
+ * gtk_selection_filter_model_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkSelectionFilterModel`
  *
  * Gets the model currently filtered or %NULL if none.

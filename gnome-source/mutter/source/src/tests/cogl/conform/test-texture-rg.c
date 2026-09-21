@@ -36,8 +36,7 @@ test_texture_rg (void)
   int fb_width, fb_height;
   int x, y;
 
-  if (!cogl_driver_has_feature (cogl_context_get_driver (test_ctx),
-                                COGL_FEATURE_ID_TEXTURE_RG))
+  if (!cogl_has_feature (test_ctx, COGL_FEATURE_ID_TEXTURE_RG))
     {
       g_test_skip ("Missing TEXTURE_RG feature");
       return;
@@ -48,7 +47,7 @@ test_texture_rg (void)
 
   tex = make_texture ();
 
-  g_assert_true (cogl_texture_get_components (tex) == COGL_TEXTURE_COMPONENTS_RG);
+  g_assert (cogl_texture_get_components (tex) == COGL_TEXTURE_COMPONENTS_RG);
 
   pipeline = cogl_pipeline_new (test_ctx);
 

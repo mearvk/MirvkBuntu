@@ -27,9 +27,8 @@
 #include <math.h>
 
 #include "backends/meta-backend-private.h"
-#include "backends/meta-logical-monitor-private.h"
+#include "backends/meta-logical-monitor.h"
 #include "backends/meta-screen-cast-window.h"
-#include "compositor/compositor-private.h"
 #include "compositor/meta-shaped-texture-private.h"
 #include "compositor/meta-window-actor-private.h"
 #include "wayland/meta-wayland-buffer.h"
@@ -49,10 +48,13 @@ G_DEFINE_TYPE (MetaSurfaceActorWayland,
                META_TYPE_SURFACE_ACTOR)
 
 static void
-meta_surface_actor_wayland_process_damage (MetaSurfaceActor   *actor,
-                                           const MtkRectangle *area)
+meta_surface_actor_wayland_process_damage (MetaSurfaceActor *actor,
+                                           int               x,
+                                           int               y,
+                                           int               width,
+                                           int               height)
 {
-  meta_surface_actor_update_area (actor, area);
+  meta_surface_actor_update_area (actor, x, y, width, height);
 }
 
 static gboolean
@@ -65,86 +67,92 @@ meta_surface_actor_wayland_is_opaque (MetaSurfaceActor *actor)
 
 #define UNOBSCURED_THRESHOLD 0.1
 
-static GList *
-calculate_effective_view_list (ClutterActor *actor)
-{
-  ClutterStage *stage;
-  GList *l;
-  GList *views = NULL;
-
-  stage = CLUTTER_STAGE (clutter_actor_get_stage (actor));
-  if (!stage)
-    return NULL;
-
-  for (l = clutter_stage_peek_stage_views (stage); l; l = l->next)
-    {
-      ClutterStageView *view = l->data;
-
-      if (clutter_actor_is_effectively_on_stage_view (actor, view))
-        views = g_list_prepend (views, view);
-    }
-
-  return views;
-}
-
 gboolean
 meta_surface_actor_wayland_is_view_primary (MetaSurfaceActor *actor,
                                             ClutterStageView *stage_view)
 {
   ClutterStageView *current_primary_view = NULL;
-  float highest_priority = 0.0f;
+  float highest_refresh_rate = 0.f;
   float biggest_unobscurred_fraction = 0.f;
   MetaWindowActor *window_actor;
-  g_autoptr (GList) effective_view_list = NULL;
   gboolean is_streaming = FALSE;
-  gboolean has_mapped_clones;
   GList *l;
 
   window_actor = meta_window_actor_from_actor (CLUTTER_ACTOR (actor));
   if (window_actor)
     is_streaming = meta_window_actor_is_streaming (window_actor);
-  has_mapped_clones = clutter_actor_has_mapped_clones (CLUTTER_ACTOR (actor));
+
+  if (clutter_actor_has_mapped_clones (CLUTTER_ACTOR (actor)) || is_streaming)
+    {
+      ClutterStage *stage;
+      ClutterStageView *fallback_view = NULL;
+      float fallback_refresh_rate = 0.0;
+
+      stage = CLUTTER_STAGE (clutter_actor_get_stage (CLUTTER_ACTOR (actor)));
+      for (l = clutter_stage_peek_stage_views (stage); l; l = l->next)
+        {
+          ClutterStageView *view = l->data;
+          float refresh_rate;
+
+          refresh_rate = clutter_stage_view_get_refresh_rate (view);
+
+          if (clutter_actor_is_effectively_on_stage_view (CLUTTER_ACTOR (actor),
+                                                          view))
+            {
+              if (refresh_rate > highest_refresh_rate)
+                {
+                  current_primary_view = view;
+                  highest_refresh_rate = refresh_rate;
+                }
+            }
+          else
+            {
+              if (refresh_rate > fallback_refresh_rate)
+                {
+                  fallback_view = view;
+                  fallback_refresh_rate = refresh_rate;
+                }
+            }
+        }
+
+      if (current_primary_view)
+        return current_primary_view == stage_view;
+      else if (is_streaming)
+        return fallback_view == stage_view;
+    }
 
   l = clutter_actor_peek_stage_views (CLUTTER_ACTOR (actor));
-  if (l && !l->next && !is_streaming && !has_mapped_clones)
+  if (!l)
+    return FALSE;
+
+  if (!l->next)
     {
       return !meta_surface_actor_is_obscured_on_stage_view (actor,
                                                             stage_view,
                                                             NULL);
     }
-  else if (!l)
-    {
-      effective_view_list =
-        calculate_effective_view_list (CLUTTER_ACTOR (actor));
-      l = effective_view_list;
-    }
-
-  if (!l)
-    return FALSE;
 
   for (; l; l = l->next)
     {
       ClutterStageView *view = l->data;
-      float priority;
-      float unobscurred_fraction = 1.0f;
+      float refresh_rate;
+      float unobscurred_fraction;
 
-      if (!has_mapped_clones &&
-          !is_streaming &&
-          meta_surface_actor_is_obscured_on_stage_view (actor,
+      if (meta_surface_actor_is_obscured_on_stage_view (actor,
                                                         view,
                                                         &unobscurred_fraction))
         continue;
 
-      priority = clutter_stage_view_get_priority (view);
+      refresh_rate = clutter_stage_view_get_refresh_rate (view);
 
-      if ((priority > highest_priority &&
+      if ((refresh_rate > highest_refresh_rate &&
            (biggest_unobscurred_fraction < UNOBSCURED_THRESHOLD ||
             unobscurred_fraction > UNOBSCURED_THRESHOLD)) ||
           (biggest_unobscurred_fraction < UNOBSCURED_THRESHOLD &&
            unobscurred_fraction > UNOBSCURED_THRESHOLD))
         {
           current_primary_view = view;
-          highest_priority = priority;
+          highest_refresh_rate = refresh_rate;
           biggest_unobscurred_fraction = unobscurred_fraction;
         }
     }
@@ -252,25 +260,6 @@ out:
   parent_class->apply_transform (actor, matrix);
 }
 
-static ClutterCursor *
-meta_surface_actor_wayland_get_cursor_for_sprite (ClutterActor  *actor,
-                                                  ClutterSprite *sprite)
-{
-  MetaSurfaceActorWayland *self = META_SURFACE_ACTOR_WAYLAND (actor);
-  MetaWaylandSurface *surface;
-  MetaWaylandCompositor *wayland_compositor = NULL;
-
-  surface = meta_surface_actor_wayland_get_surface (self);
-
-  if (surface)
-    wayland_compositor = meta_wayland_surface_get_compositor (surface);
-
-  if (wayland_compositor)
-    return meta_wayland_compositor_get_cursor (wayland_compositor, sprite);
-
-  return NULL;
-}
-
 static void
 on_surface_disposed (gpointer user_data,
                      GObject *destroyed_object)
@@ -315,8 +304,6 @@ meta_surface_actor_wayland_class_init (MetaSurfaceActorWaylandClass *klass)
   surface_actor_class->is_opaque = meta_surface_actor_wayland_is_opaque;
 
   actor_class->apply_transform = meta_surface_actor_wayland_apply_transform;
-  actor_class->get_cursor_for_sprite =
-    meta_surface_actor_wayland_get_cursor_for_sprite;
 
   object_class->dispose = meta_surface_actor_wayland_dispose;
 }
@@ -327,13 +314,11 @@ meta_surface_actor_wayland_init (MetaSurfaceActorWayland *self)
 }
 
 MetaSurfaceActor *
-meta_surface_actor_wayland_new (MetaCompositor     *compositor,
-                                MetaWaylandSurface *surface)
+meta_surface_actor_wayland_new (MetaWaylandSurface *surface)
 {
-  MetaSurfaceActorWayland *self = g_object_new (META_TYPE_SURFACE_ACTOR_WAYLAND,
-                                                "compositor", compositor,
-                                                "accessible-name", "Wayland surface",
-                                                NULL);
+  MetaSurfaceActorWayland *self = g_object_new (META_TYPE_SURFACE_ACTOR_WAYLAND, NULL);
+
+  g_assert (meta_is_wayland_compositor ());
 
   self->surface = surface;
   g_object_weak_ref (G_OBJECT (self->surface),

@@ -16,7 +16,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
  * USA
- *
+ * 
  * Author: Dodji Seketeli
  * See COPYRIGHTS file for copyright information.
  */
@@ -27,7 +27,8 @@
 #include "cr-selector.h"
 #include "cr-declaration.h"
 
-#pragma once
+#ifndef __CR_STATEMENT_H__
+#define __CR_STATEMENT_H__
 
 G_BEGIN_DECLS
 
@@ -44,8 +45,8 @@ G_BEGIN_DECLS
 struct _CRStatement ;
 
 /*
- *typedef struct _CRStatement CRStatement ;
- *this is forward declared in
+ *typedef struct _CRStatement CRStatement ; 
+ *this is forward declared in 
  *cr-declaration.h already.
  */
 
@@ -66,7 +67,7 @@ struct _CRRuleSet
 
 	/**A list of instances of #CRDeclaration*/
 	CRDeclaration *decl_list ;
-
+	
 	/**
 	 *The parent media rule, or NULL if
 	 *no parent media rule exists.
@@ -105,7 +106,7 @@ struct _CRAtImportRule
 struct _CRAtMediaRule
 {
 	GList *media_list ;
-	CRStatement *rulesets ;
+	CRStatement *rulesets ;	
 } ;
 
 
@@ -218,7 +219,7 @@ struct _CRStatement
          *applications that use libcroco.
          *libcroco itself will never modify
          *this pointer.
-         */
+         */        
         gpointer app_data ;
 
         /**
@@ -233,16 +234,19 @@ struct _CRStatement
 
 
 gboolean
-cr_statement_does_buf_parses_against_core (const guchar *a_buf) ;
+cr_statement_does_buf_parses_against_core (const guchar *a_buf,
+                                           enum CREncoding a_encoding) ;
 CRStatement *
-cr_statement_parse_from_buf (const guchar *a_buf) ;
+cr_statement_parse_from_buf (const guchar *a_buf,
+			     enum CREncoding a_encoding) ;
 CRStatement*
 cr_statement_new_ruleset (CRStyleSheet *a_sheet,
-                          CRSelector *a_sel_list,
+                          CRSelector *a_sel_list, 
 			  CRDeclaration *a_decl_list,
 			  CRStatement *a_media_rule) ;
 CRStatement *
-cr_statement_ruleset_parse_from_buf (const guchar * a_buf) ;
+cr_statement_ruleset_parse_from_buf (const guchar * a_buf,
+				     enum CREncoding a_enc) ;
 
 CRStatement*
 cr_statement_new_at_import_rule (CRStyleSheet *a_container_sheet,
@@ -251,27 +255,31 @@ cr_statement_new_at_import_rule (CRStyleSheet *a_container_sheet,
 				 CRStyleSheet *a_imported_sheet) ;
 
 CRStatement *
-cr_statement_at_import_rule_parse_from_buf (const guchar * a_buf) ;
+cr_statement_at_import_rule_parse_from_buf (const guchar * a_buf,
+                                            enum CREncoding a_encoding) ;
 
 CRStatement *
 cr_statement_new_at_media_rule (CRStyleSheet *a_sheet,
                                 CRStatement *a_ruleset,
 				GList *a_media) ;
 CRStatement *
-cr_statement_at_media_rule_parse_from_buf (const guchar *a_buf) ;
+cr_statement_at_media_rule_parse_from_buf (const guchar *a_buf,
+					   enum CREncoding a_enc) ;
 
 CRStatement *
 cr_statement_new_at_charset_rule (CRStyleSheet *a_sheet,
                                   CRString *a_charset) ;
 CRStatement *
-cr_statement_at_charset_rule_parse_from_buf (const guchar *a_buf);
+cr_statement_at_charset_rule_parse_from_buf (const guchar *a_buf,
+					     enum CREncoding a_encoding);
 
 
 CRStatement *
 cr_statement_new_at_font_face_rule (CRStyleSheet *a_sheet,
                                     CRDeclaration *a_font_decls) ;
 CRStatement *
-cr_statement_font_face_rule_parse_from_buf (const guchar *a_buf) ;
+cr_statement_font_face_rule_parse_from_buf (const guchar *a_buf,
+					    enum CREncoding a_encoding) ;
 
 CRStatement *
 cr_statement_new_at_page_rule (CRStyleSheet *a_sheet,
@@ -279,14 +287,15 @@ cr_statement_new_at_page_rule (CRStyleSheet *a_sheet,
 			       CRString *a_name,
 			       CRString *a_pseudo) ;
 CRStatement *
-cr_statement_at_page_rule_parse_from_buf (const guchar *a_buf)  ;
+cr_statement_at_page_rule_parse_from_buf (const guchar *a_buf,
+					  enum CREncoding a_encoding)  ;
 
 enum CRStatus
-cr_statement_set_parent_sheet (CRStatement *a_this,
+cr_statement_set_parent_sheet (CRStatement *a_this, 
                                CRStyleSheet *a_sheet) ;
 
 enum CRStatus
-cr_statement_get_parent_sheet (CRStatement *a_this,
+cr_statement_get_parent_sheet (CRStatement *a_this, 
                                CRStyleSheet **a_sheet) ;
 
 CRStatement *
@@ -347,6 +356,14 @@ CRStatement *
 cr_statement_at_media_get_from_list (CRStatement *a_this, int itemnr) ;
 
 enum CRStatus
+cr_statement_at_page_rule_set_sel (CRStatement *a_this,
+				   CRSelector *a_sel) ;
+
+enum CRStatus
+cr_statement_at_page_rule_get_sel (CRStatement const *a_this,
+				   CRSelector **a_sel) ;
+
+enum CRStatus
 cr_statement_at_page_rule_set_declarations (CRStatement *a_this,
 					    CRDeclaration *a_decl_list) ;
 
@@ -405,7 +422,7 @@ cr_statement_dump_media_rule (CRStatement const * a_this,
 
 void
 cr_statement_dump_import_rule (CRStatement const * a_this, FILE * a_fp,
-                               gulong a_indent) ;
+                               gulong a_indent) ; 
 void
 cr_statement_dump_charset (CRStatement const * a_this, FILE * a_fp,
                            gulong a_indent) ;
@@ -419,3 +436,5 @@ void
 cr_statement_destroy (CRStatement *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_STATEMENT_H__*/

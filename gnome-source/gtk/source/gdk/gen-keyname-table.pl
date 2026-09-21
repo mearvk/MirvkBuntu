@@ -63,8 +63,8 @@ print ";\n\n";
 
 print <<EOT;
 typedef struct {
-    unsigned int  keyval;
-    unsigned int  offset;
+    guint  keyval;
+    guint  offset;
 } gdk_key;
 
 static const gdk_key gdk_keys_by_keyval[] = {

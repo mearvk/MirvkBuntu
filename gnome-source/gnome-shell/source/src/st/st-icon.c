@@ -19,9 +19,8 @@
  */
 
 /**
- * StIcon:
- *
- * A simple styled icon actor
+ * SECTION:st-icon
+ * @short_description: a simple styled icon actor
  *
  * #StIcon is a simple styled texture actor that displays an image from
  * a stylesheet.
@@ -79,8 +78,7 @@ G_DEFINE_TYPE_WITH_PRIVATE (StIcon, st_icon, ST_TYPE_WIDGET)
 
 static void st_icon_update               (StIcon *icon);
 static gboolean st_icon_update_icon_size (StIcon *icon);
-static void st_icon_update_shadow_pipeline (StIcon              *icon,
-                                            ClutterPaintContext *paint_context);
+static void st_icon_update_shadow_pipeline (StIcon *icon);
 static void st_icon_clear_shadow_pipeline (StIcon *icon);
 
 static GIcon *default_gicon = NULL;
@@ -176,12 +174,17 @@ st_icon_dispose (GObject *gobject)
 {
   StIconPrivate *priv = ST_ICON (gobject)->priv;
 
-  g_clear_pointer (&priv->icon_texture, clutter_actor_destroy);
+  if (priv->icon_texture)
+    {
+      clutter_actor_destroy (priv->icon_texture);
+      priv->icon_texture = NULL;
+    }
 
   if (priv->pending_texture)
     {
       clutter_actor_destroy (priv->pending_texture);
-      g_clear_object (&priv->pending_texture);
+      g_object_unref (priv->pending_texture);
+      priv->pending_texture = NULL;
     }
 
   g_clear_signal_handler (&priv->icon_theme_changed_id,
@@ -197,30 +200,33 @@ st_icon_dispose (GObject *gobject)
 }
 
 static void
-st_icon_paint_node (ClutterActor        *actor,
-                    ClutterPaintNode    *node,
-                    ClutterPaintContext *paint_context)
+st_icon_paint (ClutterActor        *actor,
+               ClutterPaintContext *paint_context)
 {
   StIcon *icon = ST_ICON (actor);
   StIconPrivate *priv = icon->priv;
 
-  st_widget_paint_background (ST_WIDGET (actor), node, paint_context);
+  st_widget_paint_background (ST_WIDGET (actor), paint_context);
 
   if (priv->icon_texture)
     {
-      st_icon_update_shadow_pipeline (icon, paint_context);
+      st_icon_update_shadow_pipeline (icon);
 
       if (priv->shadow_pipeline)
         {
           ClutterActorBox allocation;
+          CoglFramebuffer *framebuffer;
 
           clutter_actor_get_allocation_box (priv->icon_texture, &allocation);
+          framebuffer = clutter_paint_context_get_framebuffer (paint_context);
           _st_paint_shadow_with_opacity (priv->shadow_spec,
-                                         node,
+                                         framebuffer,
                                          priv->shadow_pipeline,
                                          &allocation,
                                          clutter_actor_get_paint_opacity (priv->icon_texture));
         }
+
+      clutter_actor_paint (priv->icon_texture, paint_context);
     }
 }
 
@@ -294,7 +300,7 @@ st_icon_class_init (StIconClass *klass)
   object_class->set_property = st_icon_set_property;
   object_class->dispose = st_icon_dispose;
 
-  actor_class->paint_node = st_icon_paint_node;
+  actor_class->paint = st_icon_paint;
 
   widget_class->style_changed = st_icon_style_changed;
   actor_class->resource_scale_changed = st_icon_resource_scale_changed;
@@ -305,7 +311,9 @@ st_icon_class_init (StIconClass *klass)
    * The #GIcon being displayed by this #StIcon.
    */
   props[PROP_GICON] =
-    g_param_spec_object ("gicon", NULL, NULL,
+    g_param_spec_object ("gicon",
+                         "GIcon",
+                         "The GIcon shown by this icon actor",
                          G_TYPE_ICON,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -315,7 +323,9 @@ st_icon_class_init (StIconClass *klass)
    * The fallback #GIcon to display if #StIcon:gicon fails to load.
    */
   props[PROP_FALLBACK_GICON] =
-    g_param_spec_object ("fallback-gicon", NULL, NULL,
+    g_param_spec_object ("fallback-gicon",
+                         "Fallback GIcon",
+                         "The fallback GIcon shown if the normal icon fails to load",
                          G_TYPE_ICON,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -325,7 +335,9 @@ st_icon_class_init (StIconClass *klass)
    * The name of the icon if the icon being displayed is a #GThemedIcon.
    */
   props[PROP_ICON_NAME] =
-    g_param_spec_string ("icon-name", NULL, NULL,
+    g_param_spec_string ("icon-name",
+                         "Icon name",
+                         "An icon name",
                          NULL,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -336,7 +348,9 @@ st_icon_class_init (StIconClass *klass)
    * from the current style.
    */
   props[PROP_ICON_SIZE] =
-    g_param_spec_int ("icon-size", NULL, NULL,
+    g_param_spec_int ("icon-size",
+                      "Icon size",
+                      "The size if the icon, if positive. Otherwise the size will be derived from the current style",
                       -1, G_MAXINT, -1,
                       ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -347,7 +361,9 @@ st_icon_class_init (StIconClass *klass)
    * for details.
    */
   props[PROP_FALLBACK_ICON_NAME] =
-    g_param_spec_string ("fallback-icon-name", NULL, NULL,
+    g_param_spec_string ("fallback-icon-name",
+                         "Fallback icon name",
+                         "A fallback icon name",
                          NULL,
                          ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -357,7 +373,9 @@ st_icon_class_init (StIconClass *klass)
    * Whether the #StIcon is symbolic.
    */
   props[PROP_IS_SYMBOLIC] =
-    g_param_spec_boolean ("is-symbolic", NULL, NULL,
+    g_param_spec_boolean ("is-symbolic",
+                          "Is Symbolic",
+                          "Whether the icon is symbolic",
                           FALSE,
                           ST_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -401,8 +419,7 @@ st_icon_clear_shadow_pipeline (StIcon *icon)
 }
 
 static void
-st_icon_update_shadow_pipeline (StIcon              *icon,
-                                ClutterPaintContext *paint_context)
+st_icon_update_shadow_pipeline (StIcon *icon)
 {
   StIconPrivate *priv = icon->priv;
 
@@ -423,8 +440,7 @@ st_icon_update_shadow_pipeline (StIcon              *icon,
 
           priv->shadow_pipeline =
             _st_create_shadow_pipeline_from_actor (priv->shadow_spec,
-                                                   priv->icon_texture,
-                                                   paint_context);
+                                                   priv->icon_texture);
 
           if (priv->shadow_pipeline)
             graphene_size_init (&priv->shadow_size, width, height);
@@ -474,7 +490,8 @@ st_icon_finish_update (StIcon *icon)
 
   if (priv->pending_texture)
     {
-      priv->icon_texture = g_steal_pointer (&priv->pending_texture);
+      priv->icon_texture = priv->pending_texture;
+      priv->pending_texture = NULL;
       clutter_actor_set_x_align (priv->icon_texture, CLUTTER_ACTOR_ALIGN_CENTER);
       clutter_actor_set_y_align (priv->icon_texture, CLUTTER_ACTOR_ALIGN_CENTER);
       clutter_actor_add_child (CLUTTER_ACTOR (icon), priv->icon_texture);
@@ -545,7 +562,8 @@ st_icon_update (StIcon *icon)
   if (priv->pending_texture)
     {
       clutter_actor_destroy (priv->pending_texture);
-      g_clear_object (&priv->pending_texture);
+      g_object_unref (priv->pending_texture);
+      priv->pending_texture = NULL;
       priv->opacity_handler_id = 0;
     }
 
@@ -619,7 +637,8 @@ st_icon_update (StIcon *icon)
     }
   else if (priv->icon_texture)
     {
-      g_clear_pointer (&priv->icon_texture, clutter_actor_destroy);
+      clutter_actor_destroy (priv->icon_texture);
+      priv->icon_texture = NULL;
     }
 }
 

@@ -76,8 +76,8 @@ static const gchar *brightness_contrast_source =
   "cogl_color_out.rgb = ((cogl_color_out.rgb - 0.5 * cogl_color_out.a) *\n"
   "                      contrast + 0.5 * cogl_color_out.a);\n";
 
-static const CoglColor no_brightness_change = { 0x7f, 0x7f, 0x7f, 0xff };
-static const CoglColor no_contrast_change = { 0x7f, 0x7f, 0x7f, 0xff };
+static const ClutterColor no_brightness_change = { 0x7f, 0x7f, 0x7f, 0xff };
+static const ClutterColor no_contrast_change = { 0x7f, 0x7f, 0x7f, 0xff };
 static const gfloat no_change = 0.0f;
 
 enum
@@ -165,7 +165,7 @@ clutter_brightness_contrast_effect_set_property (GObject      *gobject,
     {
     case PROP_BRIGHTNESS:
       {
-        const CoglColor *color = cogl_value_get_color (value);
+        const ClutterColor *color = clutter_value_get_color (value);
         clutter_brightness_contrast_effect_set_brightness_full (effect,
                                                                 color->red / 127.0f - 1.0f,
                                                                 color->green / 127.0f - 1.0f,
@@ -175,7 +175,7 @@ clutter_brightness_contrast_effect_set_property (GObject      *gobject,
 
     case PROP_CONTRAST:
       {
-        const CoglColor *color = cogl_value_get_color (value);
+        const ClutterColor *color = clutter_value_get_color (value);
         clutter_brightness_contrast_effect_set_contrast_full (effect,
                                                               color->red / 127.0f - 1.0f,
                                                               color->green / 127.0f - 1.0f,
@@ -198,29 +198,29 @@ clutter_brightness_contrast_effect_get_property (GObject    *gobject,
   ClutterBrightnessContrastEffect *effect = CLUTTER_BRIGHTNESS_CONTRAST_EFFECT (gobject);
   ClutterBrightnessContrastEffectPrivate *priv =
     clutter_brightness_contrast_effect_get_instance_private (effect);
-  CoglColor color;
+  ClutterColor color;
 
   switch (prop_id)
     {
     case PROP_BRIGHTNESS:
       {
-        color.red = (uint8_t) ((priv->brightness_red + 1.0f) * 127.0f);
-        color.green = (uint8_t) ((priv->brightness_green + 1.0f) * 127.0f);
-        color.blue = (uint8_t) ((priv->brightness_blue + 1.0f) * 127.0f);
+        color.red = (priv->brightness_red + 1.0f) * 127.0f;
+        color.green = (priv->brightness_green + 1.0f) * 127.0f;
+        color.blue = (priv->brightness_blue + 1.0f) * 127.0f;
         color.alpha = 0xff;
 
-        cogl_value_set_color (value, &color);
+        clutter_value_set_color (value, &color);
       }
       break;
 
     case PROP_CONTRAST:
       {
-        color.red = (uint8_t) ((priv->contrast_red + 1.0f) * 127.0f);
-        color.green = (uint8_t) ((priv->contrast_green + 1.0f) * 127.0f);
-        color.blue = (uint8_t) ((priv->contrast_blue + 1.0f) * 127.0f);
+        color.red = (priv->contrast_red + 1.0f) * 127.0f;
+        color.green = (priv->contrast_green + 1.0f) * 127.0f;
+        color.blue = (priv->contrast_blue + 1.0f) * 127.0f;
         color.alpha = 0xff;
 
-        cogl_value_set_color (value, &color);
+        clutter_value_set_color (value, &color);
       }
       break;
 
@@ -251,34 +251,34 @@ clutter_brightness_contrast_effect_class_init (ClutterBrightnessContrastEffectCl
    *
    * The brightness change to apply to the effect.
    *
-   * This property uses a #CoglColor to represent the changes to each
+   * This property uses a #ClutterColor to represent the changes to each
    * color channel. The range is [ 0, 255 ], with 127 as the value used
    * to indicate no change; values smaller than 127 indicate a decrease
    * in brightness, and values larger than 127 indicate an increase in
    * brightness.
    */
   obj_props[PROP_BRIGHTNESS] =
-    cogl_param_spec_color ("brightness", NULL, NULL,
-                           &no_brightness_change,
-                           G_PARAM_READWRITE |
-                           G_PARAM_STATIC_STRINGS);
+    clutter_param_spec_color ("brightness", NULL, NULL,
+                              &no_brightness_change,
+                              G_PARAM_READWRITE |
+                              G_PARAM_STATIC_STRINGS);
 
   /**
    * ClutterBrightnessContrastEffect:contrast:
    *
    * The contrast change to apply to the effect.
    *
-   * This property uses a #CoglColor to represent the changes to each
+   * This property uses a #ClutterColor to represent the changes to each
    * color channel. The range is [ 0, 255 ], with 127 as the value used
    * to indicate no change; values smaller than 127 indicate a decrease
    * in contrast, and values larger than 127 indicate an increase in
    * contrast.
    */
   obj_props[PROP_CONTRAST] =
-    cogl_param_spec_color ("contrast", NULL, NULL,
-                           &no_contrast_change,
-                           G_PARAM_READWRITE |
-                           G_PARAM_STATIC_STRINGS);
+    clutter_param_spec_color ("contrast", NULL, NULL,
+                              &no_contrast_change,
+                              G_PARAM_READWRITE |
+                              G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, PROP_LAST, obj_props);
 }
@@ -337,9 +337,9 @@ update_uniforms (ClutterBrightnessContrastEffect *self)
   if (priv->contrast_uniform > -1)
     {
       float contrast[3] = {
-        (float) tan ((priv->contrast_red + 1) * G_PI_4),
-        (float) tan ((priv->contrast_green + 1) * G_PI_4),
-        (float) tan ((priv->contrast_blue + 1) * G_PI_4)
+        tan ((priv->contrast_red + 1) * G_PI_4),
+        tan ((priv->contrast_green + 1) * G_PI_4),
+        tan ((priv->contrast_blue + 1) * G_PI_4)
       };
 
       cogl_pipeline_set_uniform_float (priv->pipeline,
@@ -370,13 +370,10 @@ clutter_brightness_contrast_effect_init (ClutterBrightnessContrastEffect *self)
   if (G_UNLIKELY (klass->base_pipeline == NULL))
     {
       CoglSnippet *snippet;
-      ClutterContext *context = _clutter_context_get_default ();
-      ClutterBackend *backend = clutter_context_get_backend (context);
-      CoglContext *cogl_context = clutter_backend_get_cogl_context (backend);
+      CoglContext *ctx =
+        clutter_backend_get_cogl_context (clutter_get_default_backend ());
 
-      klass->base_pipeline = cogl_pipeline_new (cogl_context);
-      cogl_pipeline_set_static_name (klass->base_pipeline,
-                                     "ClutterBrightnessContrast");
+      klass->base_pipeline = cogl_pipeline_new (ctx);
 
       snippet = cogl_snippet_new (COGL_SNIPPET_HOOK_FRAGMENT,
                                   brightness_contrast_decls,

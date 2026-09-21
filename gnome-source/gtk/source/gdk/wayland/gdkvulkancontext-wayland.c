@@ -29,6 +29,7 @@
 #include "gdkwaylanddisplay.h"
 #include "gdkwaylandsurface.h"
 #include "gdksurface-wayland-private.h"
+#include "gdkprivate-wayland.h"
 
 G_DEFINE_TYPE (GdkWaylandVulkanContext, gdk_wayland_vulkan_context, GDK_TYPE_VULKAN_CONTEXT)
 
@@ -38,6 +39,13 @@ gdk_wayland_vulkan_context_create_surface (GdkVulkanContext *context,
 {
   GdkSurface *surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (context));
   GdkDisplay *display = gdk_draw_context_get_display (GDK_DRAW_CONTEXT (context));
+
+  /* This is necessary so that Vulkan sees the Surface.
+   * Usually, vkCreateXlibSurfaceKHR() will not cause a problem to happen as
+   * it just creates resources, but further calls with the resulting surface
+   * do cause issues.
+   */
+  gdk_display_sync (display);
 
   return GDK_VK_CHECK (vkCreateWaylandSurfaceKHR, gdk_vulkan_context_get_instance (context),
                                                    &(VkWaylandSurfaceCreateInfoKHR) {
@@ -53,25 +61,14 @@ gdk_wayland_vulkan_context_create_surface (GdkVulkanContext *context,
 
 static void
 gdk_vulkan_context_wayland_end_frame (GdkDrawContext *context,
-                                      gpointer        context_data,
                                       cairo_region_t *painted)
 {
   GdkSurface *surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (context));
-  GdkWaylandSurface *impl = GDK_WAYLAND_SURFACE (surface);
-  int dx = impl->pending_buffer_offset_x;
-  int dy = impl->pending_buffer_offset_y;
 
-  impl->pending_buffer_offset_x = 0;
-  impl->pending_buffer_offset_y = 0;
-
-  gdk_wayland_surface_update_content (surface);
   gdk_wayland_surface_sync (surface);
   gdk_wayland_surface_request_frame (surface);
 
-  if (wl_surface_get_version (impl->display_server.wl_surface) >= WL_SURFACE_OFFSET_SINCE_VERSION)
-    wl_surface_offset (impl->display_server.wl_surface, dx, dy);
-
-  GDK_DRAW_CONTEXT_CLASS (gdk_wayland_vulkan_context_parent_class)->end_frame (context, context_data, painted);
+  GDK_DRAW_CONTEXT_CLASS (gdk_wayland_vulkan_context_parent_class)->end_frame (context, painted);
 
   gdk_wayland_surface_notify_committed (surface);
 }
@@ -80,8 +77,16 @@ static void
 gdk_vulkan_context_wayland_empty_frame (GdkDrawContext *context)
 {
   GdkSurface *surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (context));
+  GdkWaylandSurface *impl = GDK_WAYLAND_SURFACE (surface);
 
-  gdk_wayland_surface_handle_empty_frame (surface);
+  if (!impl->has_pending_subsurface_commits)
+    return;
+
+  gdk_wayland_surface_sync (surface);
+  gdk_wayland_surface_request_frame (surface);
+
+  gdk_wayland_surface_commit (surface);
+  gdk_wayland_surface_notify_committed (surface);
 }
 
 static void
@@ -91,7 +96,6 @@ gdk_wayland_vulkan_context_class_init (GdkWaylandVulkanContextClass *klass)
   GdkDrawContextClass *draw_context_class = GDK_DRAW_CONTEXT_CLASS (klass);
 
   vulkan_context_class->create_surface = gdk_wayland_vulkan_context_create_surface;
-
   draw_context_class->end_frame = gdk_vulkan_context_wayland_end_frame;
   draw_context_class->empty_frame = gdk_vulkan_context_wayland_empty_frame;
 }

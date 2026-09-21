@@ -137,6 +137,7 @@ class TestAXUtilities:
         state_class_mock.is_expandable = test_context.Mock(return_value=False)
         state_class_mock.is_showing = test_context.Mock(return_value=True)
         state_class_mock.is_visible = test_context.Mock(return_value=True)
+        state_class_mock.is_hidden = test_context.Mock(return_value=False)
         state_class_mock.is_expanded = test_context.Mock(return_value=False)
         state_class_mock.is_focused = test_context.Mock(return_value=False)
         state_class_mock.is_editable = test_context.Mock(return_value=False)
@@ -154,7 +155,6 @@ class TestAXUtilities:
         app_class_mock = test_context.Mock()
         app_class_mock.get_application = test_context.Mock(return_value=test_context.Mock())
         app_class_mock.is_application_in_desktop = test_context.Mock(return_value=True)
-        app_class_mock.is_mutter_x11_frames = test_context.Mock(return_value=False)
         essential_modules["orca.ax_utilities_application"].AXUtilitiesApplication = app_class_mock
 
         table_class_mock = test_context.Mock()
@@ -180,98 +180,6 @@ class TestAXUtilities:
         essential_modules["orca.ax_text"].AXText = text_class_mock
 
         return essential_modules
-
-    def test_import_registers_utility_cache_namespaces(self, test_context: OrcaTestContext) -> None:
-        """Test importing AXUtilities registers its cache namespaces."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-
-        manager = ax_cache_manager.get_manager()
-        register = test_context.patch_object(
-            manager,
-            "register_cache",
-            wraps=manager.register_cache,
-        )
-
-        from orca.ax_utilities import AXUtilities
-
-        cache_calls = [
-            call for call in register.call_args_list if call.args[0] is AXUtilities._CACHE
-        ]
-        assert len(cache_calls) == 18
-        for call in cache_calls:
-            assert call.kwargs["lifetime"] is ax_cache_manager.Lifetime.PROCESS
-            assert call.kwargs["clear_on_demand"] is ax_cache_manager.ClearPolicy.CLEAR
-            assert "clear_interval_seconds" not in call.kwargs
-
-    def test_manager_clear_cache_now_clears_utility_cache(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test ordinary manager clearing removes cached utility results."""
-
-        self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-        from orca.ax_utilities import AXUtilities
-
-        mock_container = test_context.Mock(spec=Atspi.Accessible)
-        mock_obj = test_context.Mock(spec=Atspi.Accessible)
-        members = [test_context.Mock(spec=Atspi.Accessible)]
-        AXUtilities._CACHE.set_members(mock_container, members)
-        AXUtilities._CACHE.set_layout_only(mock_obj, (True, "test"))
-        AXUtilities._CACHE.set_classification(
-            AXUtilities._CACHE.IS_DOCUMENT_DESCENDANT, mock_obj, True
-        )
-
-        ax_cache_manager.get_manager().clear_cache_now("test reason")
-
-        assert AXUtilities._CACHE.get_members(mock_container) is None
-        assert AXUtilities._CACHE.get_layout_only(mock_obj) is None
-        assert (
-            AXUtilities._CACHE.get_classification(
-                AXUtilities._CACHE.IS_DOCUMENT_DESCENDANT, mock_obj
-            )
-            is None
-        )
-
-    def test_is_descendant_does_not_classify_the_matching_ancestor_as_a_descendant(
-        self, test_context: OrcaTestContext
-    ) -> None:
-        """Test that classifying a child does not make its matching parent its own descendant."""
-
-        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
-        from orca.ax_utilities import AXUtilities
-
-        embedded = test_context.Mock(spec=Atspi.Accessible)
-        section = test_context.Mock(spec=Atspi.Accessible)
-        button = test_context.Mock(spec=Atspi.Accessible)
-        parents = {button: section, section: embedded, embedded: None}
-
-        def is_embedded(obj, role=None):  # pylint: disable=unused-argument
-            return obj is embedded
-
-        def find_ancestor(obj, pred):
-            parent = parents.get(obj)
-            while parent is not None:
-                if pred(parent):
-                    return parent
-                parent = parents.get(parent)
-            return None
-
-        essential_modules["orca.ax_object"].AXObject.get_parent = test_context.Mock(
-            side_effect=parents.get
-        )
-        essential_modules["orca.ax_utilities_role"].AXUtilitiesRole.is_embedded = test_context.Mock(
-            side_effect=is_embedded
-        )
-        essential_modules[
-            "orca.ax_utilities_object"
-        ].AXUtilitiesObject.find_ancestor = test_context.Mock(side_effect=find_ancestor)
-
-        # Classifying the child of the embedded object is what caches a result for that object.
-        assert AXUtilities.is_embedded_descendant(section) is True
-        assert AXUtilities.is_embedded_descendant(button) is True
-        assert AXUtilities.is_embedded_descendant(embedded) is False
 
     def test_has_explicit_name_true(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilities.has_explicit_name with explicit name attribute."""
@@ -415,7 +323,6 @@ class TestAXUtilities:
                 "mocks_config": {
                     "ax_utilities_role.is_section": True,
                     "ax_utilities_state.is_focusable": False,
-                    "ax_utilities_role.is_code_block": False,
                 },
                 "expected": True,
             },
@@ -539,9 +446,6 @@ class TestAXUtilities:
                     essential_modules[
                         "orca.ax_utilities_object"
                     ].AXUtilitiesObject.find_ancestor = test_context.Mock(
-                        return_value=mock_combo,
-                    )
-                    essential_modules["orca.ax_object"].AXObject.get_parent = test_context.Mock(
                         return_value=mock_combo,
                     )
                 else:
@@ -1262,36 +1166,19 @@ class TestAXUtilities:
     def test_clear_all_cache_now_with_object(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilities.clear_all_cache_now with specific object."""
 
-        essential_modules = self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
+        self._setup_dependencies(test_context)
         from orca.ax_utilities import AXUtilities
 
-        essential_modules[
-            "orca.ax_utilities_role"
-        ].AXUtilitiesRole.is_table_related = test_context.Mock(return_value=True)
-        essential_modules["orca.ax_table"].AXTable.CACHE_INVALIDATION_GROUP = "table"
-        manager = test_context.Mock()
-        test_context.patch_object(ax_cache_manager, "get_manager", return_value=manager)
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         AXUtilities.clear_all_cache_now(mock_obj, "test reason")
-        manager.clear_cache_now.assert_called_once_with("test reason")
-        manager.invalidate_group.assert_called_once_with("table", "test reason")
 
     def test_clear_all_cache_now_without_object(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilities.clear_all_cache_now without specific object."""
 
-        essential_modules = self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
+        self._setup_dependencies(test_context)
         from orca.ax_utilities import AXUtilities
 
-        essential_modules[
-            "orca.ax_utilities_role"
-        ].AXUtilitiesRole.is_table_related = test_context.Mock(return_value=False)
-        manager = test_context.Mock()
-        test_context.patch_object(ax_cache_manager, "get_manager", return_value=manager)
         AXUtilities.clear_all_cache_now(None, "test reason")
-        manager.clear_cache_now.assert_called_once_with("test reason")
-        manager.invalidate_group.assert_not_called()
 
     def test_get_set_members_with_basic_set(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilities.get_set_members with basic set."""
@@ -1355,6 +1242,17 @@ class TestAXUtilities:
         result = AXUtilities.find_active_window()
         assert result is None
 
+    def test_start_cache_clearing_thread(self, test_context: OrcaTestContext) -> None:
+        """Test AXUtilities.start_cache_clearing_thread."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_utilities import AXUtilities
+
+        mock_start_thread = test_context.Mock()
+        test_context.patch_object(AXUtilities, "start_cache_clearing_thread", new=mock_start_thread)
+        mock_start_thread()
+        mock_start_thread.assert_called_once()
+
     def test_get_on_screen_objects_with_invalid_root(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilities.get_on_screen_objects with invalid root."""
 
@@ -1362,14 +1260,44 @@ class TestAXUtilities:
         essential_modules["orca.ax_object"].AXObject.is_valid = test_context.Mock(
             return_value=False,
         )
-        essential_modules[
-            "orca.ax_utilities_state"
-        ].AXUtilitiesState.is_showing_and_visible = test_context.Mock(return_value=False)
+        essential_modules["orca.ax_table"].AXTable.iter_visible_cells = test_context.Mock(
+            return_value=[],
+        )
         from orca.ax_utilities import AXUtilities
 
         mock_obj = test_context.Mock(spec=Atspi.Accessible)
         result = AXUtilities.get_on_screen_objects(mock_obj)
         assert result == []
+
+    def test_clear_all_dictionaries_with_reason(self, test_context: OrcaTestContext) -> None:
+        """Test cache clearing functionality with reason."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_utilities import AXUtilities
+
+        test_context.patch_object(AXUtilities, "SET_MEMBERS", new={"test": "data"})
+        test_context.patch_object(AXUtilities, "IS_LAYOUT_ONLY", new={"test": "data"})
+        mock_clear = test_context.Mock()
+        test_context.patch_object(AXUtilities, "_clear_all_dictionaries", new=mock_clear)
+
+        AXUtilities.clear_all_cache_now(reason="test reason")
+
+        mock_clear.assert_called()
+
+    def test_clear_all_dictionaries_without_reason(self, test_context: OrcaTestContext) -> None:
+        """Test cache clearing functionality without reason."""
+
+        self._setup_dependencies(test_context)
+        from orca.ax_utilities import AXUtilities
+
+        test_context.patch_object(AXUtilities, "SET_MEMBERS", new={"test": "data"})
+        test_context.patch_object(AXUtilities, "IS_LAYOUT_ONLY", new={"test": "data"})
+        mock_clear = test_context.Mock()
+        test_context.patch_object(AXUtilities, "_clear_all_dictionaries", new=mock_clear)
+
+        AXUtilities.clear_all_cache_now()
+
+        mock_clear.assert_called()
 
     def test_get_nesting_level_list_item(self, test_context: OrcaTestContext) -> None:
         """Test AXUtilities.get_nesting_level with list item."""
@@ -1686,6 +1614,7 @@ class TestAXUtilities:
                 "id": "showing_visible_on_screen",
                 "is_showing": True,
                 "is_visible": True,
+                "is_hidden": False,
                 "has_no_size_invalid_rect": False,
                 "object_is_off_screen": False,
                 "object_intersects_rect": True,
@@ -1693,9 +1622,10 @@ class TestAXUtilities:
                 "expected_result": True,
             },
             {
-                "id": "not_showing_not_visible",
+                "id": "hidden_object",
                 "is_showing": False,
                 "is_visible": False,
+                "is_hidden": True,
                 "has_no_size_invalid_rect": False,
                 "object_is_off_screen": False,
                 "object_intersects_rect": True,
@@ -1706,6 +1636,18 @@ class TestAXUtilities:
                 "id": "not_showing_but_visible",
                 "is_showing": False,
                 "is_visible": True,
+                "is_hidden": False,
+                "has_no_size_invalid_rect": False,
+                "object_is_off_screen": False,
+                "object_intersects_rect": True,
+                "bbox_provided": False,
+                "expected_result": False,
+            },
+            {
+                "id": "showing_visible_but_hidden",
+                "is_showing": True,
+                "is_visible": True,
+                "is_hidden": True,
                 "has_no_size_invalid_rect": False,
                 "object_is_off_screen": False,
                 "object_intersects_rect": True,
@@ -1716,6 +1658,7 @@ class TestAXUtilities:
                 "id": "no_size_or_invalid_rect",
                 "is_showing": True,
                 "is_visible": True,
+                "is_hidden": False,
                 "has_no_size_invalid_rect": True,
                 "object_is_off_screen": False,
                 "object_intersects_rect": True,
@@ -1726,6 +1669,7 @@ class TestAXUtilities:
                 "id": "object_off_screen",
                 "is_showing": True,
                 "is_visible": True,
+                "is_hidden": False,
                 "has_no_size_invalid_rect": False,
                 "object_is_off_screen": True,
                 "object_intersects_rect": True,
@@ -1736,6 +1680,7 @@ class TestAXUtilities:
                 "id": "bbox_no_intersection",
                 "is_showing": True,
                 "is_visible": True,
+                "is_hidden": False,
                 "has_no_size_invalid_rect": False,
                 "object_is_off_screen": False,
                 "object_intersects_rect": False,
@@ -1746,6 +1691,7 @@ class TestAXUtilities:
                 "id": "fully_on_screen",
                 "is_showing": True,
                 "is_visible": True,
+                "is_hidden": False,
                 "has_no_size_invalid_rect": False,
                 "object_is_off_screen": False,
                 "object_intersects_rect": True,
@@ -1763,6 +1709,7 @@ class TestAXUtilities:
         """Test AXUtilities.is_on_screen with various state combinations."""
         is_showing = case["is_showing"]
         is_visible = case["is_visible"]
+        is_hidden = case["is_hidden"]
         has_no_size_invalid_rect = case["has_no_size_invalid_rect"]
         object_is_off_screen = case["object_is_off_screen"]
         object_intersects_rect = case["object_intersects_rect"]
@@ -1778,10 +1725,8 @@ class TestAXUtilities:
         essential_modules[
             "orca.ax_utilities_state"
         ].AXUtilitiesState.is_visible = test_context.Mock(return_value=is_visible)
-        essential_modules[
-            "orca.ax_utilities_state"
-        ].AXUtilitiesState.is_showing_and_visible = test_context.Mock(
-            return_value=is_showing and is_visible
+        essential_modules["orca.ax_utilities_state"].AXUtilitiesState.is_hidden = test_context.Mock(
+            return_value=is_hidden,
         )
 
         essential_modules[

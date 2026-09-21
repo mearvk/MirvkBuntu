@@ -51,24 +51,6 @@ BLANK = _("blank")
 # Translators: This refers to font weight.
 BOLD = _("bold")
 
-# Translators: This indicates a text formatting attribute is no longer applied.
-# The string substitution is the localized attribute name (e.g. "bold", "italic").
-# See text_attribute_names.py for the localized attribute names.
-TEXT_ATTRIBUTE_OFF = _("%s off")
-
-# Translators: This is presented when the user cycles the text attribute change
-# announcement mode. In this mode, formatting changes are not announced.
-TEXT_ATTRIBUTE_CHANGES_OFF = _("Text attributes: off.")
-
-# Translators: This is presented when the user cycles the text attribute change
-# announcement mode. In this mode, formatting changes are only announced in
-# editable content.
-TEXT_ATTRIBUTE_CHANGES_EDITABLE_ONLY = _("Text attributes: editable text.")
-
-# Translators: This is presented when the user cycles the text attribute change
-# announcement mode. In this mode, formatting changes are always announced.
-TEXT_ATTRIBUTE_CHANGES_ON = _("Text attributes: on.")
-
 # Translators: Orca has a command which toggles all (other) Orca commands so that
 # the associated keystroke can by consumed by the native application. For example,
 # if there were an Orca command bound to Alt+Down, normally pressing Alt+Down
@@ -225,9 +207,9 @@ CLI_LOAD_PROFILE_ERROR = _("Profile could not be loaded: %s")
 # from some other environment than the graphical desktop.
 CLI_NO_DESKTOP_ERROR = _("Cannot start the screen reader because it cannot connect to the Desktop.")
 
+# Translators: This message is presented to the user when he/she tries to launch
+# Orca, but Orca is already running.
 CLI_OTHER_ORCAS_ERROR = _(
-    # Translators: This message is presented to the user when he/she tries to launch
-    # Orca, but Orca is already running.
     "Another screen reader process is already running for this "
     "session.\nRun “orca --replace” to replace that "
     "process with a new one.",
@@ -236,6 +218,19 @@ CLI_OTHER_ORCAS_ERROR = _(
 # Translators: This string indicates to the user what should be provided when
 # using the '-p, --profile' command line option.
 CLI_PROFILE_NAME = _("NAME")
+
+# Translators: This is the description of command line option '-i, --import-dir'
+# that allows you to specify a directory from which to import settings into dconf.
+CLI_IMPORT_SETTINGS = _(
+    "Import settings from DIR into dconf (overwrites current settings).\n"
+    "To back up first: dconf dump /org/gnome/orca/ > backup.ini\n"
+    "To restore: dconf reset -f /org/gnome/orca/ && "
+    "dconf load /org/gnome/orca/ < backup.ini",
+)
+
+# Translators: This string indicates to the user what should be provided when
+# using the '-i, --import-dir' command line option.
+CLI_IMPORT_DIR = _("DIR")
 
 # Translators: This is the description of command line option '--speech-system'
 # which allows you to specify a speech system to use. A speech system provides
@@ -283,43 +278,9 @@ CLI_DEBUG_FILE = _("Send debug output to the specified file")
 # using the '--debug-file' command line option.
 CLI_DEBUG_FILE_NAME = _("FILE")
 
-# Translators: This is the description of command line option '--approve-extension'
-# which allows the user to approve a user extension for loading.
-CLI_APPROVE_EXTENSION = _("Approve a user extension for loading")
-
-# Translators: This is the description of command line option '--revoke-extension'
-# which allows the user to revoke approval for a user extension.
-CLI_REVOKE_EXTENSION = _("Revoke approval for a user extension")
-
-# Translators: This string indicates to the user what should be provided when
-# using the '--approve-extension' or '--revoke-extension' command line options.
-CLI_EXTENSION_FILENAME = _("FILENAME")
-
-# Translators: This message is presented when the user tries to approve an
-# extension file that does not exist. The string substitution is the file path.
-CLI_EXTENSION_NOT_FOUND = _("Extension not found: %s")
-
-# Translators: This message is presented when a user extension has been approved
-# for loading. The string substitution is the extension filename.
-CLI_EXTENSION_APPROVED = _("Approved extension: %s")
-
-# Translators: This message is presented when approval for a user extension has
-# been revoked. The string substitution is the extension filename.
-CLI_EXTENSION_REVOKED = _("Revoked approval for: %s")
-
-# Translators: This message is presented when the user tries to revoke an
-# extension that was not approved. The string substitution is the filename.
-CLI_EXTENSION_NOT_APPROVED = _("Extension not approved: %s")
-
-CLI_EXTENSION_APPROVED_BUT_DISABLED = _(
-    # Translators: This warning is presented after approving an extension that is
-    # currently disabled. The string substitution is the extension's class name.
-    "Warning: %s is currently disabled and will not load until enabled."
-)
-
 # Translators: This is the description of command line option '-s, --setup'
-# that will place the user in Orca's GUI preferences window.
-CLI_GUI_SETUP = _("Show the preferences window")
+# that will place the user in Orca's GUI preferences dialog.
+CLI_GUI_SETUP = _("Set up user preferences (GUI version)")
 
 # Translators: This text is the description displayed when Orca is launched
 # from the command line and the help text is displayed.
@@ -444,16 +405,6 @@ CHAT_LIST_BOTTOM = C_("chat", "Bottom")
 # Translators: This is presented when the user tries to navigate the chat message
 # history but there are no messages.
 CHAT_NO_MESSAGES = _("No chat messages")
-
-# Translators: This phrase is spoken to inform the user that what is about to
-# be said is code or preformatted text, such as content inside an HTML 'pre'
-# or 'code' element.
-CONTENT_CODE_START = C_("content", "code start")
-
-# Translators: This phrase is spoken to inform the user that they have reached
-# the end of code or preformatted text, such as content inside an HTML 'pre'
-# or 'code' element.
-CONTENT_CODE_END = C_("content", "code end")
 
 # Translators: This phrase is spoken to inform the user that what is about to
 # be said is content marked for deletion in a document, such as content which
@@ -667,14 +618,6 @@ FLAT_REVIEW_STOP = _("Leaving flat review.")
 # let the user know that flat review is being restricted to the current
 # object of interest.
 FLAT_REVIEW_RESTRICTED = _("Flat review restricted to the current object")
-
-# Translators: the 'flat review' feature of Orca allows the blind user to
-# explore the text in a window in a 2D fashion.  That is, Orca treats all
-# the text from all objects in a window (e.g., buttons, labels, etc.) as a
-# sequence of words in a sequence of lines.  This message is presented when
-# the user asks Orca to move focus to the flat review location but neither the
-# focus nor the caret could be moved there.
-FLAT_REVIEW_LOCATION_UNCHANGED = _("Location unchanged")
 
 # Translators: the 'flat review' feature of Orca allows the blind user to
 # explore the text in a window in a 2D fashion.  That is, Orca treats all
@@ -913,20 +856,294 @@ KEY_ECHO_WORD_AND_SENTENCE_BRIEF = C_("key echo", "word and sentence")
 # echo and can cycle through the various levels quickly via a command.
 KEY_ECHO_WORD_AND_SENTENCE_FULL = _("Echo set to word and sentence.")
 
-# Translators: This brief message indicates that indentation will not be
-# spoken.
-INDENTATION_OFF_BRIEF = C_("indentation", "Disabled")
+# Translators: This phrase is spoken to inform the user of all of the MathML
+# enclosure notations associated with a given mathematical expression. For
+# instance, the expression x+y could be enclosed by a box, or enclosed by a
+# circle. It could also be enclosed by a box and a circle and long division
+# sign and have a line on the left and on the right and a vertical strike.
+# (Though let's hope not.) Given that we do not know the enclosures, their
+# order, or their combination, we'll present them as a list. The string
+# substitution is for that list of enclosure types. For more information
+# about the MathML 'menclose' element and its notation types, see:
+# http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_ENCLOSED_BY = C_("math enclosure", "Enclosed by: %s")
 
-# Translators: This detailed message indicates that indentation will not be
-# spoken.
-INDENTATION_OFF_FULL = _("Spoken indentation disabled.")
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_ACTUARIAL = C_("math enclosure", "an actuarial symbol")
 
-# Translators: This brief message indicates that indentation will be spoken.
-INDENTATION_ON_BRIEF = C_("indentation", "Enabled")
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_BOX = C_("math enclosure", "a box")
 
-# Translators: This detailed message indicates that indentation will be
-# spoken.
-INDENTATION_ON_FULL = _("Spoken indentation enabled.")
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_CIRCLE = C_("math enclosure", "a circle")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_LONGDIV = C_("math enclosure", "a long division sign")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_RADICAL = C_("math enclosure", "a radical")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_ROUNDEDBOX = C_("math enclosure", "a rounded box")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_HORIZONTALSTRIKE = C_("math enclosure", "a horizontal strike")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_VERTICALSTRIKE = C_("math enclosure", "a vertical strike")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_DOWNDIAGONALSTRIKE = C_("math enclosure", "a down diagonal strike")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_UPDIAGONALSTRIKE = C_("math enclosure", "an up diagonal strike")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_NORTHEASTARROW = C_("math enclosure", "a northeast arrow")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_BOTTOM = C_("math enclosure", "a line at the bottom")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_LEFT = C_("math enclosure", "a line on the left")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_RIGHT = C_("math enclosure", "a line on the right")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_TOP = C_("math enclosure", "a line at the top")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_PHASOR_ANGLE = C_("math enclosure", "a phasor angle")
+
+# Translators: This phrase is spoken to describe one MathML enclosure notation
+# associated with a mathematical expression. Because an expression, such as
+# x+y, can have one or many enclosure notations (box, circle, long division,
+# line on the left, vertical strike), we present them as a list of notations.
+# For more information about the MathML 'menclose' element and its notation
+# types, see: http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+# This particular string is for the "madruwb" notation type.
+MATH_ENCLOSURE_MADRUWB = C_("math enclosure", "an arabic factorial symbol")
+
+# Translators: This phrase is spoken to inform the user of all of the MathML
+# enclosure notations associated with a given mathematical expression. For
+# instance, the expression x+y could be enclosed by a box, or enclosed by a
+# circle. It could also be enclosed by a box and a circle and long division
+# sign and have a line on the left and on the right and a vertical strike.
+# (Though let's hope not.) Given that we do not know the enclosures, their
+# order, or their combination, we'll present them as a list. This string
+# will be inserted before the final item in the list if there is more than
+# one enclosure notation. For more information about the MathML 'menclose'
+# element and its notation types, see:
+# http://www.w3.org/TR/MathML3/chapter3.html#presm.menclose
+MATH_ENCLOSURE_AND = C_("math enclosure", "and")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be said is part of a mathematical fraction. For instance, given x+1/y+2, Orca
+# would say "fraction start, x+1 over y+2, fraction end."
+MATH_FRACTION_START = _("fraction start")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be said is part of a mathematical fraction whose bar is not displayed. See
+# https://en.wikipedia.org/wiki/Combination for an example. Note that the
+# comma is inserted here to cause a very brief pause in the speech. Otherwise,
+# in English, the resulting speech sounds like we have a fraction which lacks
+# the start of the bar. If this is a non-issue for your language, the comma and
+# the pause which results is not needed. You should be able to test this with
+# "spd-say <your text here>" in a terminal on a machine where speech-dispatcher
+# is installed.
+MATH_FRACTION_WITHOUT_BAR_START = _("fraction without bar, start")
+
+# Translators: This word refers to the line separating the numerator from the
+# denominator in a mathematical fraction. For instance, given x+1/y+2, Orca
+# would would say "fraction start, x+1 over y+2, fraction end."
+MATH_FRACTION_LINE = C_("math fraction", "over")
+
+# Translators: This phrase is spoken to inform the user that the last spoken
+# phrase is the end of a mathematical fraction. For instance, given x+1/y+2,
+# Orca would would say "fraction start, x+1 over y+2, fraction end."
+MATH_FRACTION_END = _("fraction end")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is a square root. For instance, for √9 Orca would say "square root
+# of 9, root end" (assuming the user settings indicate that root endings should
+# be spoken). Note that the radicand, which follows the "of", is unknown and
+# might not even be a simple string; it might be the square root of another
+# expression such as a fraction.
+MATH_SQUARE_ROOT_OF = _("square root of")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is a cube root. For instance, for the cube root of 9 Orca would
+# say "cube root of 9, root end" (assuming the user settings indicate that root
+# endings should  be spoken). Note that the radicand, which follows the "of",
+# is unknown and might not even be a simple string; it might be the cube root
+# of another expression such as a fraction.
+MATH_CUBE_ROOT_OF = _("cube root of")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is an nth root. https://en.wikipedia.org/wiki/Nth_root. For instance,
+# for the fourth root of 9, Orca would say "fourth root of 9, root end" (assuming
+# the user settings indicate that root endings should be spoken). Note that the
+# index, which precedes this string, is unknown and might not even be a simple
+# expression like "fourth"; the index might instead be a fraction.
+MATH_ROOT_OF = _("root of")
+
+# Translators: This phrase is spoken to inform the user that the last spoken
+# phrase is the end of a mathematical root (square root, cube root, nth root).
+# For instance, for the cube root of 9, Orca would say "cube root of 9, root
+# end" (assuming the user settings indicate that root endings should be spoken).
+MATH_ROOT_END = _("root end")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is subscripted text in a mathematical expression. Note that the
+# subscript might be simple text or may itself be a mathematical expression,
+# and in this instance we have no additional context through which a more user-
+# friendly word or phrase can reliably be chosen.
+MATH_SUBSCRIPT = C_("math script generic", "subscript")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is superscripted text in a mathematical expression. Note that the
+# superscript might be simple text or may itself be a mathematical expression,
+# and in this instance we have no additional context through which a more user-
+# friendly word or phrase can reliably be chosen.
+MATH_SUPERSCRIPT = C_("math script generic", "superscript")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is subscripted text which precedes the base in a mathematical
+# expression. See, for instance, the MathML mmultiscripts element:
+# http://www.w3.org/TR/MathML3/chapter3.html#presm.mmultiscripts
+# https://developer.mozilla.org/en-US/docs/Web/MathML/Element/mmultiscripts
+MATH_PRE_SUBSCRIPT = C_("math script", "pre-subscript")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is superscripted text which precedes the base in a mathematical
+# expression. See, for instance, the MathML mmultiscripts element:
+# http://www.w3.org/TR/MathML3/chapter3.html#presm.mmultiscripts
+# https://developer.mozilla.org/en-US/docs/Web/MathML/Element/mmultiscripts
+MATH_PRE_SUPERSCRIPT = C_("math script", "pre-superscript")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is underscripted text in a mathematical expression. Note that the
+# underscript might be simple text or may itself be a mathematical expression,
+# and in this instance we have no additional context through which a more user-
+# friendly word or phrase can reliably be chosen. Examples of underscripts:
+# http://www.w3.org/TR/MathML/chapter3.html#presm.munder
+# https://reference.wolfram.com/language/ref/Underscript.html
+MATH_UNDERSCRIPT = C_("math script generic", "underscript")
+
+# Translators: This phrase is spoken to inform the user that what is about to
+# be spoken is overscripted text in a mathematical expression. Note that the
+# overscript might be simple text or may itself be a mathematical expression,
+# and in this instance we have no additional context through which a more user-
+# friendly word or phrase can reliably be chosen. Examples of overscripts:
+# http://www.w3.org/TR/MathML/chapter3.html#presm.mover
+# https://reference.wolfram.com/language/ref/Overscript.html
+MATH_OVERSCRIPT = C_("math script generic", "overscript")
+
+# Translators: This phrase is spoken to inform the user that the last spoken
+# phrase is the end of a mathematical table.
+MATH_TABLE_END = C_("math table", "table end")
+
+# Translators: This phrase is spoken to inform the user that the last spoken
+# phrase is the end of a mathematical table which is nested inside another
+# mathematical table.
+MATH_NESTED_TABLE_END = C_("math table", "nested table end")
+
+# Translators: This brief message indicates that indentation and
+# justification will be spoken.
+INDENTATION_JUSTIFICATION_OFF_BRIEF = C_("indentation and justification", "Disabled")
+
+# Translators: This detailed message indicates that indentation and
+# justification will not be spoken.
+INDENTATION_JUSTIFICATION_OFF_FULL = _("Speaking of indentation and justification disabled.")
+
+# Translators: This brief message indicates that indentation and
+# justification will be spoken.
+INDENTATION_JUSTIFICATION_ON_BRIEF = C_("indentation and justification", "Enabled")
+
+# Translators: This detailed message indicates that indentation and
+# justification will be spoken.
+INDENTATION_JUSTIFICATION_ON_FULL = _("Speaking of indentation and justification enabled.")
 
 # Translators: Orca announces when a widget has an associated error, such as
 # disallowed characters in an input, or a must-check box that is not checked
@@ -944,30 +1161,22 @@ INVALID_ENTRY_FIXED = C_("error", "Entry valid.")
 # entering Learn Mode.
 LEARN_MODE_START_BRAILLE = _("Learn mode.  Press escape to exit.")
 
+# Translators: Orca has a "Learn Mode" that will allow the user to type any key
+# on the keyboard and hear what the effects of that key would be.  The effects
+# might be what Orca would do if it had a handler for the particular key
+# combination, or they might just be to echo the name of the key if Orca doesn't
+# have a handler. This message is what is spoken to the user when entering Learn
+# Mode.
 LEARN_MODE_START_SPEECH = _(
-    # Translators: Orca has a "Learn Mode" that will allow the user to type any key
-    # on the keyboard and hear what the effects of that key would be.  The effects
-    # might be what Orca would do if it had a handler for the particular key
-    # combination, or they might just be to echo the name of the key if Orca doesn't
-    # have a handler. This message is what is spoken to the user when entering Learn
-    # Mode.
     "Entering learn mode.  Press any key to hear its function.  "
     "To view the screen reader's documentation, press F1. "
     "To get a list of the screen reader's shortcuts, press F2. "
     "To exit learn mode, press the escape key.",
 )
 
-# Translators: This message is presented when a user is navigating within
-# an article and then navigates out of it.
-LEAVING_ARTICLE = C_("role", "leaving article.")
-
 # Translators: This message is presented when a user is navigating within a
 # blockquote and then navigates out of it.
 LEAVING_BLOCKQUOTE = _("leaving blockquote.")
-
-# Translators: This message is presented when a user is navigating within
-# a code block and then navigates out of it.
-LEAVING_CODE = C_("role", "leaving code.")
 
 # Translators: In web content, authors can identify an element which contains
 # detailed information about another element. For instance, for a password
@@ -979,11 +1188,6 @@ LEAVING_CODE = C_("role", "leaving code.")
 # detailed information about another object.
 # See https://w3c.github.io/aria/#aria-details
 LEAVING_DETAILS = _("leaving details.")
-
-# Translators: This message is presented when a user is navigating within a
-# document (e.g. an embedded PDF viewer or the rendered preview of a document)
-# and then navigates out of it into the surrounding page.
-LEAVING_DOCUMENT = _("leaving document.")
 
 # Translators: This message is presented when a user is navigating within
 # an object and then navigates out of it. The word or phrase that follows
@@ -1369,21 +1573,6 @@ LOCATION_NOT_FOUND_BRIEF = C_("location", "Not found")
 # for some reason Orca cannot identify/find the current location.
 LOCATION_NOT_FOUND_FULL = _("Could not find current location.")
 
-# Translators: Orca has a command which presents formatting information for the
-# current text character. Examples of this information include font family, font
-# size, bold, italic, underline, foreground color, and background color. This
-# message is presented when the current character does not expose any formatting
-# information to Orca.
-CHARACTER_FORMATTING_NOT_AVAILABLE = _("Character format unknown.")
-
-# Translators: Orca has a command which presents formatting information for the
-# current text character. Examples of this information include font family, font
-# size, bold, italic, underline, foreground color, and background color. This
-# message is presented when Orca obtains formatting information, but none of the
-# formatting attributes configured to be presented differ from their default
-# values.
-CHARACTER_FORMATTING_DEFAULT = _("Default character format.")
-
 # Translators: This string is used to present the state of a locking key, such
 # as Caps Lock. If Caps Lock is "off", then letters typed will appear in
 # lowercase; if Caps Lock is "on", they will instead appear in uppercase. This
@@ -1397,10 +1586,6 @@ LOCKING_KEY_STATE_OFF = C_("locking key state", "off")
 # string is also applied to Num Lock and potentially will be applied to similar
 # keys in the future.
 LOCKING_KEY_STATE_ON = C_("locking key state", "on")
-
-# Translators: Orca has a command to present the state of modifier keys. This message
-# is presented if the modifier key state cannot be obtained from the system.
-MODIFIER_KEYS_STATE_UNAVAILABLE = _("Modifier key state is not available.")
 
 # Translators: This is to inform the user of the presence of the red squiggly
 # line which indicates that a given word is not spelled correctly.
@@ -1561,12 +1746,6 @@ NAVIGATOR_SIMPLIFIED_DISABLED = _("Simplified navigation disabled.")
 # localized rolename if it does not.
 NO_ACTIONS_FOUND_ON = _("No actions found on: %s")
 
-# Translators: This is for navigating document content by moving from annotation
-# to annotation. Annotations include content insertions, content deletions,
-# suggestions, and highlights. This is a detailed message which will be presented to
-# the user if no more annotations can be found.
-NO_MORE_ANNOTATIONS = _("No more annotations.")
-
 # Translators: This is for navigating document content by moving from blockquote
 # to blockquote. This is a detailed message which will be presented to the user
 # if no more blockquotes can be found.
@@ -1629,12 +1808,11 @@ NO_MORE_IFRAMES = _("No more internal frames.")
 # if no more images can be found.
 NO_MORE_IMAGES = _("No more images.")
 
-# Translators: This is for navigating document content by moving from landmark
-# to landmark. ARIA role landmarks are the W3C defined HTML tag attribute 'role'
-# used to identify important parts of a webpage like banners, main content,
-# search, etc. This is a detailed message which will be presented to the user if
-# no more landmarks can be found.
-NO_MORE_LANDMARKS = _("No more landmarks.")
+# Translators: this is for navigating to the previous ARIA role landmark.
+# ARIA role landmarks are the W3C defined HTML tag attribute 'role' used to
+# identify important part of webpage like banners, main context, search etc.
+# This is an indication that one was not found.
+NO_LANDMARK_FOUND = _("No landmark found.")
 
 # Translators: This is for navigating document content by moving from link to
 # link (regardless of visited state). This is a detailed message which will be
@@ -1657,11 +1835,6 @@ NO_MORE_LIST_ITEMS = _("No more list items.")
 # will be presented to the user if no more live regions can be found. For
 # more info, see https://w3c.github.io/aria/#dfn-live-region
 NO_MORE_LIVE_REGIONS = _("No more live regions.")
-
-# Translators: This is for navigating document content by moving from math
-# expression to math expression. This is a detailed message which will be
-# presented to the user if no more math expressions can be found.
-NO_MORE_MATH = _("No more math expressions.")
 
 # Translators: This is for navigating document content by moving from paragraph
 # to paragraph. This is a detailed message which will be presented to the user
@@ -1987,12 +2160,6 @@ SPEECH_LOUDER = _("louder.")
 # Translators: This string announces speech volume change.
 SPEECH_SOFTER = _("softer.")
 
-# Translators: This string announces speech inflection (pitch range) change.
-SPEECH_MORE_INFLECTION = _("more inflection.")
-
-# Translators: This string announces speech inflection (pitch range) change.
-SPEECH_LESS_INFLECTION = _("less inflection.")
-
 # Translators: Orca's verbosity levels control how much (or how little)
 # Orca will speak when presenting objects as the user navigates within
 # applications and reads content. The two levels are "brief" and "verbose".
@@ -2109,24 +2276,6 @@ TABLE_NAVIGATION_DISABLED = _("Table navigation disabled.")
 # next cell in a given direction. This string is the message that will be
 # presented when those commands are enabled.
 TABLE_NAVIGATION_ENABLED = _("Table navigation enabled.")
-
-# Translators: Orca has a modal math navigation mode for exploring math
-# expressions via MathCAT. This string is presented when entering that mode.
-MATH_NAVIGATION_ENTERED = _("MathCAT on.")
-
-# Translators: Orca has a modal math navigation mode for exploring math
-# expressions via MathCAT. This string is presented when leaving that mode.
-MATH_NAVIGATION_EXITED = _("MathCAT off.")
-
-# Translators: Orca has a modal math navigation mode for exploring math
-# expressions via MathCAT. This is presented when the user tries to enter
-# math navigation but is not on a math element.
-MATH_NAVIGATION_NOT_IN_MATH = _("Not in math.")
-
-# Translators: Orca has a modal math navigation mode for exploring math
-# expressions via MathCAT. This hint is presented when the user reaches the
-# edge of the expression and cannot move further in the current direction.
-MATH_NAVIGATION_ESCAPE_HINT = _("Press Escape to exit.")
 
 # Translators: This is a message presented to users when the columns in a table
 # have been reordered.
@@ -2465,15 +2614,6 @@ def list_item_count(count):
     return ngettext("List with %d item", "List with %d items", count) % count
 
 
-def available_list_item_count(count):
-    """Returns a string description of the number of available items in a list."""
-
-    # Translators: This message describes the number of available items in a list which
-    # also contains unavailable items. Available items are those which the user can
-    # navigate to and interact with; unavailable items are insensitive.
-    return ngettext("List with %d available item", "List with %d available items", count) % count
-
-
 def nested_list_item_count(count):
     """Returns a string description of the number of items in a nested list."""
 
@@ -2592,10 +2732,10 @@ def pixel_count(n_pixels):
 def repeated_char_count(repeated_char, count):
     """Returns a string description of the number of repeated characters in a line."""
 
+    # Translators: Orca will tell you how many characters are repeated on a line
+    # of text. For example: "22 space characters". The %d is the number and the
+    # %s is the spoken word for the character.
     return ngettext(
-        # Translators: Orca will tell you how many characters are repeated on a line
-        # of text. For example: "22 space characters". The %d is the number and the
-        # %s is the spoken word for the character.
         "%(count)d %(repeatChar)s character",
         "%(count)d %(repeatChar)s characters",
         count,
@@ -2605,9 +2745,9 @@ def repeated_char_count(repeated_char, count):
 def selected_items_count(selected, total):
     """Returns a string description of the number of selected items in a group."""
 
+    # Translators: This message is presented to indicate the number of selected
+    # objects (e.g. icons) and the total number of those objects.
     return ngettext(
-        # Translators: This message is presented to indicate the number of selected
-        # objects (e.g. icons) and the total number of those objects.
         "%(index)d of %(total)d item selected",
         "%(index)d of %(total)d items selected",
         total,
@@ -2615,13 +2755,13 @@ def selected_items_count(selected, total):
 
 
 def shortcuts_found_orca(count):
-    """Returns a string description of the number of Orca commands found."""
+    """Returns a string description of the number of Orca shortcuts found."""
 
     # Translators: This message is presented when the user is in a list of
-    # Orca commands and their current keyboard shortcuts. It appears as the
-    # title of the dialog containing the list.
+    # shortcuts associated with Orca commands. It appears as the title of the
+    # dialog containing the list.
     return (
-        ngettext("%d Screen reader command found.", "%d Screen reader commands found.", count)
+        ngettext("%d Screen reader shortcut found.", "%d Screen reader shortcuts found.", count)
         % count
     )
 
@@ -2663,11 +2803,11 @@ def table_size(n_rows, n_columns):
             # 15 columns"). When both counts are unknown, it presents this.
             return _("table of unknown size")
 
+        # Translators: This message describes a table for which the number of
+        # rows is unknown, but the number of columns is known. This might occur
+        # in a vertically infinitely scrollable table or grid on the web.
         return (
             ngettext(
-                # Translators: This message describes a table for which the number of
-                # rows is unknown, but the number of columns is known. This might occur
-                # in a vertically infinitely scrollable table or grid on the web.
                 "table with %d column, row count unknown",
                 "table with %d columns, row count unknown",
                 n_columns,
@@ -2676,11 +2816,11 @@ def table_size(n_rows, n_columns):
         )
 
     if n_columns == -1:
+        # Translators: This message describes a table for which the number of
+        # columns is unknown, but the number of rows is known. This might occur
+        # in a horizontally infinitely scrollable table or grid on the web.
         return (
             ngettext(
-                # Translators: This message describes a table for which the number of
-                # columns is unknown, but the number of rows is known. This might occur
-                # in a horizontally infinitely scrollable table or grid on the web.
                 "table with %d row, column count unknown",
                 "table with %d rows, column count unknown",
                 n_rows,

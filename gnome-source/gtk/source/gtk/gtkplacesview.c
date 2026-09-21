@@ -270,8 +270,12 @@ server_list_add_server (GtkPlacesView *view,
 {
   GBookmarkFile *bookmarks;
   GFileInfo *info;
+  GError *error;
+  char *title;
   char *uri;
+  GDateTime *now;
 
+  error = NULL;
   bookmarks = server_list_load (view);
 
   if (!bookmarks)
@@ -283,27 +287,20 @@ server_list_add_server (GtkPlacesView *view,
                             G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
                             G_FILE_QUERY_INFO_NONE,
                             NULL,
-                            NULL);
-  if (info)
-    {
-      char *title;
-      GDateTime *now;
+                            &error);
+  title = g_file_info_get_attribute_as_string (info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
 
-      title = g_file_info_get_attribute_as_string (info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+  g_bookmark_file_set_title (bookmarks, uri, title);
+  now = g_date_time_new_now_utc ();
+  g_bookmark_file_set_visited_date_time (bookmarks, uri, now);
+  g_date_time_unref (now);
+  g_bookmark_file_add_application (bookmarks, uri, NULL, NULL);
 
-      g_bookmark_file_set_title (bookmarks, uri, title);
-      now = g_date_time_new_now_utc ();
-      g_bookmark_file_set_visited_date_time (bookmarks, uri, now);
-      g_bookmark_file_add_application (bookmarks, uri, NULL, NULL);
-
-      server_list_save (bookmarks);
-
-      g_date_time_unref (now);
-      g_free (title);
-    }
+  server_list_save (bookmarks);
 
   g_bookmark_file_free (bookmarks);
   g_clear_object (&info);
+  g_free (title);
   g_free (uri);
 }
 
@@ -593,7 +590,6 @@ populate_servers (GtkPlacesView *view)
       gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
       gtk_button_set_has_frame (GTK_BUTTON (button), FALSE);
       gtk_widget_add_css_class (button, "sidebar-button");
-      gtk_widget_set_tooltip_text (button, _("Remove server"));
       gtk_grid_attach (GTK_GRID (grid), button, 1, 0, 1, 2);
 
       gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), grid);
@@ -666,7 +662,8 @@ insert_row (GtkPlacesView *view,
   g_object_set_data (G_OBJECT (row), "is-network", GINT_TO_POINTER (is_network));
 
   controller = gtk_shortcut_controller_new ();
-  trigger = gtk_shortcut_trigger_create_for_menu ();
+  trigger = gtk_alternative_trigger_new (gtk_keyval_trigger_new (GDK_KEY_F10, GDK_SHIFT_MASK),
+                                         gtk_keyval_trigger_new (GDK_KEY_Menu, 0));
   action = gtk_callback_action_new (on_row_popup_menu, row, NULL);
   shortcut = gtk_shortcut_new (trigger, action);
   gtk_shortcut_controller_add_shortcut (GTK_SHORTCUT_CONTROLLER (controller), shortcut);
@@ -816,7 +813,7 @@ add_file (GtkPlacesView *view,
                       "volume", NULL,
                       "mount", NULL,
                       "file", file,
-                      "is-network", is_network,
+                      "is_network", is_network,
                       NULL);
 
   insert_row (view, row, is_network);
@@ -1806,8 +1803,7 @@ on_key_press_event (GtkEventController *controller,
   if (keyval == GDK_KEY_Return ||
       keyval == GDK_KEY_KP_Enter ||
       keyval == GDK_KEY_ISO_Enter ||
-      keyval == GDK_KEY_space ||
-      keyval == GDK_KEY_KP_Space)
+      keyval == GDK_KEY_space)
     {
       GtkWidget *focus_widget;
       GtkWindow *toplevel;
@@ -2063,7 +2059,7 @@ listbox_header_func (GtkListBoxRow *row,
       separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
 
       label = g_object_new (GTK_TYPE_LABEL,
-                            "use-markup", TRUE,
+                            "use_markup", TRUE,
                             "margin-start", 12,
                             "label", text,
                             "xalign", 0.0f,
@@ -2277,18 +2273,18 @@ gtk_places_view_class_init (GtkPlacesViewClass *klass)
   properties[PROP_LOADING] =
           g_param_spec_boolean ("loading", NULL, NULL,
                                 FALSE,
-                                G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                                GTK_PARAM_READABLE);
 
   properties[PROP_FETCHING_NETWORKS] =
           g_param_spec_boolean ("fetching-networks", NULL, NULL,
                                 FALSE,
-                                G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                                GTK_PARAM_READABLE);
 
   properties[PROP_OPEN_FLAGS] =
           g_param_spec_flags ("open-flags", NULL, NULL,
                               GTK_TYPE_PLACES_OPEN_FLAGS,
                               GTK_PLACES_OPEN_NORMAL,
-                              G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+                              GTK_PARAM_READWRITE);
 
   g_object_class_install_properties (object_class, LAST_PROP, properties);
 

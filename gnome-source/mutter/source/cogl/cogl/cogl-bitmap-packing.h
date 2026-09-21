@@ -420,10 +420,10 @@ G_PASTE (_cogl_unpack_rgbx_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[0]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[3] = (component_type) UNPACK_SHORT (0x3C00);
+      dst[0] = UNPACK_SHORT (src16[0]);
+      dst[1] = UNPACK_SHORT (src16[1]);
+      dst[2] = UNPACK_SHORT (src16[2]);
+      dst[3] = UNPACK_SHORT (0x3C00);
       dst += 4;
       src += 8;
     }
@@ -438,10 +438,10 @@ G_PASTE (_cogl_unpack_rgba_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[0]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[3] = (component_type) UNPACK_SHORT (src16[3]);
+      dst[0] = UNPACK_SHORT (src16[0]);
+      dst[1] = UNPACK_SHORT (src16[1]);
+      dst[2] = UNPACK_SHORT (src16[2]);
+      dst[3] = UNPACK_SHORT (src16[3]);
       dst += 4;
       src += 8;
     }
@@ -456,10 +456,10 @@ G_PASTE (_cogl_unpack_bgrx_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[0]);
-      dst[3] = (component_type) UNPACK_SHORT (0x3C00);
+      dst[0] = UNPACK_SHORT (src16[2]);
+      dst[1] = UNPACK_SHORT (src16[1]);
+      dst[2] = UNPACK_SHORT (src16[0]);
+      dst[3] = UNPACK_SHORT (0x3C00);
       dst += 4;
       src += 8;
     }
@@ -474,10 +474,10 @@ G_PASTE (_cogl_unpack_bgra_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[0]);
-      dst[3] = (component_type) UNPACK_SHORT (src16[3]);
+      dst[0] = UNPACK_SHORT (src16[2]);
+      dst[1] = UNPACK_SHORT (src16[1]);
+      dst[2] = UNPACK_SHORT (src16[0]);
+      dst[3] = UNPACK_SHORT (src16[3]);
       dst += 4;
       src += 8;
     }
@@ -492,10 +492,10 @@ G_PASTE (_cogl_unpack_xrgb_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[3]);
-      dst[3] = (component_type) UNPACK_SHORT (0x3C00);
+      dst[0] = UNPACK_SHORT (src16[1]);
+      dst[1] = UNPACK_SHORT (src16[2]);
+      dst[2] = UNPACK_SHORT (src16[3]);
+      dst[3] = UNPACK_SHORT (0x3C00);
       dst += 4;
       src += 8;
     }
@@ -510,10 +510,10 @@ G_PASTE (_cogl_unpack_argb_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[3]);
-      dst[3] = (component_type) UNPACK_SHORT (src16[0]);
+      dst[0] = UNPACK_SHORT (src16[1]);
+      dst[1] = UNPACK_SHORT (src16[2]);
+      dst[2] = UNPACK_SHORT (src16[3]);
+      dst[3] = UNPACK_SHORT (src16[0]);
       dst += 4;
       src += 8;
     }
@@ -528,10 +528,10 @@ G_PASTE (_cogl_unpack_xbgr_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[3]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[3] = (component_type) UNPACK_SHORT (0x3C00);
+      dst[0] = UNPACK_SHORT (src16[3]);
+      dst[1] = UNPACK_SHORT (src16[2]);
+      dst[2] = UNPACK_SHORT (src16[1]);
+      dst[3] = UNPACK_SHORT (0x3C00);
       dst += 4;
       src += 8;
     }
@@ -546,10 +546,10 @@ G_PASTE (_cogl_unpack_abgr_fp_16161616_, component_size) (const uint8_t *src,
     {
       const uint16_t *src16 = (const uint16_t *) src;
 
-      dst[0] = (component_type) UNPACK_SHORT (src16[3]);
-      dst[1] = (component_type) UNPACK_SHORT (src16[2]);
-      dst[2] = (component_type) UNPACK_SHORT (src16[1]);
-      dst[3] = (component_type) UNPACK_SHORT (src16[0]);
+      dst[0] = UNPACK_SHORT (src16[3]);
+      dst[1] = UNPACK_SHORT (src16[2]);
+      dst[2] = UNPACK_SHORT (src16[1]);
+      dst[3] = UNPACK_SHORT (src16[0]);
       dst += 4;
       src += 8;
     }
@@ -564,10 +564,10 @@ G_PASTE (_cogl_unpack_rgba_fp_32323232_, component_size) (const uint8_t *src,
     {
       const uint32_t *src32 = (const uint32_t *) src;
 
-      dst[0] = (component_type) UNPACK_FLOAT (src32[0]);
-      dst[1] = (component_type) UNPACK_FLOAT (src32[1]);
-      dst[2] = (component_type) UNPACK_FLOAT (src32[2]);
-      dst[3] = (component_type) UNPACK_FLOAT (src32[3]);
+      dst[0] = UNPACK_FLOAT (src32[0]);
+      dst[1] = UNPACK_FLOAT (src32[1]);
+      dst[2] = UNPACK_FLOAT (src32[2]);
+      dst[3] = UNPACK_FLOAT (src32[3]);
       dst += 4;
       src += 16;
     }
@@ -606,24 +606,6 @@ G_PASTE (_cogl_unpack_rg_1616_, component_size) (const uint8_t *src,
       dst[3] = UNPACK_BYTE (255);
       dst += 4;
       src += 4;
-    }
-}
-
-inline static void
-G_PASTE (_cogl_unpack_rgbx_16161616_, component_size) (const uint8_t  *src,
-                                                       component_type *dst,
-                                                       int             width)
-{
-  while (width-- > 0)
-    {
-      const uint16_t *v = (const uint16_t *) src;
-
-      dst[0] = UNPACK_16 (v[0]);
-      dst[1] = UNPACK_16 (v[1]);
-      dst[2] = UNPACK_16 (v[2]);
-      dst[3] = UNPACK_BYTE (255);
-      dst += 4;
-      src += 8;
     }
 }
 
@@ -766,9 +748,6 @@ G_PASTE (_cogl_unpack_, component_size) (CoglPixelFormat format,
       break;
     case COGL_PIXEL_FORMAT_RG_1616:
       G_PASTE (_cogl_unpack_rg_1616_, component_size) (src, dst, width);
-      break;
-    case COGL_PIXEL_FORMAT_RGBX_16161616:
-      G_PASTE (_cogl_unpack_rgbx_16161616_, component_size) (src, dst, width);
       break;
     case COGL_PIXEL_FORMAT_RGBA_16161616:
     case COGL_PIXEL_FORMAT_RGBA_16161616_PRE:
@@ -1344,25 +1323,6 @@ G_PASTE (_cogl_pack_rg_1616_, component_size) (const component_type *src,
 }
 
 inline static void
-G_PASTE (_cogl_pack_rgbx_16161616_, component_size) (const component_type *src,
-                                                     uint8_t              *dst,
-                                                     int                   width)
-{
-  while (width-- > 0)
-    {
-      uint16_t *v = (uint16_t *) dst;
-
-      v[0] = PACK_16 (src[0]);
-      v[1] = PACK_16 (src[1]);
-      v[2] = PACK_16 (src[2]);
-      v[3] = PACK_16 (1);
-
-      src += 4;
-      dst += 8;
-    }
-}
-
-inline static void
 G_PASTE (_cogl_pack_rgba_16161616_, component_size) (const component_type *src,
                                                      uint8_t              *dst,
                                                      int                   width)
@@ -1502,9 +1462,6 @@ G_PASTE (_cogl_pack_, component_size) (CoglPixelFormat format,
       break;
     case COGL_PIXEL_FORMAT_RG_1616:
       G_PASTE (_cogl_pack_rg_1616_, component_size) (src, dst, width);
-      break;
-    case COGL_PIXEL_FORMAT_RGBX_16161616:
-      G_PASTE (_cogl_pack_rgbx_16161616_, component_size) (src, dst, width);
       break;
     case COGL_PIXEL_FORMAT_RGBA_16161616:
     case COGL_PIXEL_FORMAT_RGBA_16161616_PRE:

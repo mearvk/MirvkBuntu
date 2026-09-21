@@ -3,47 +3,62 @@ set -euo pipefail
 
 # MirvkBuntu GNOME source acquisition orchestrator.
 #
-# Runs each GNOME module's own pull-source.sh, normalizes the layout so the
-# canonical build input is always gnome-source/<module>/source/, and verifies
-# every requested module ends with a usable source tree (a recognized build
-# file: meson.build / configure / configure.ac / CMakeLists.txt).
+# Runs each GNOME module's own pull-source.sh, then verifies every requested
+# module ends with a usable source tree at gnome-source/<module>/source/ (a
+# recognized build file: meson.build / configure / configure.ac / CMakeLists.txt
+# / setup.py). Each module's pull-source.sh writes directly into source/ and is
+# idempotent, so this orchestrator just drives them and checks the result.
 #
-# Some module pull-source.sh scripts clone the upstream tree into the MODULE
-# ROOT (glib, gdk-pixbuf, gtk, mutter, gnome-shell, pango) rather than into
-# source/. This orchestrator relocates that content into source/ so it matches
-# what build/native-build.sh (build_gnome) and gnome-source/build-module.sh
-# require. Modules that already populate source/ (cairo, glib-networking, gvfs,
-# orca, gnome-control-center, gnome-software, gnome-terminal) are left as-is.
+# Version pinning:
+#   Pins are read from gnome-source/GNOME_VERSIONS (KEY=VALUE lines, '#'
+#   comments). Each line names a module's ref env var, e.g.
+#       GLIB_REF=2.80.4
+#       GTK_REF=4.14.5
+#   Anything set in GNOME_VERSIONS is exported before the module's
+#   pull-source.sh runs, so the module fetches that exact ref. Values already
+#   present in the environment take precedence over the file. Without a pin, a
+#   module fetches its upstream default branch.
 #
 # Usage:
 #   bash gnome-source/pull-all-source.sh                 # the desktop-required set
 #   bash gnome-source/pull-all-source.sh glib gtk        # only these modules
 #   MODULES="glib gtk mutter" bash gnome-source/pull-all-source.sh
+#   FORCE=1 bash gnome-source/pull-all-source.sh gtk     # re-fetch even if present
 #
-# Network access to the GNOME/upstream source servers is required.
+# Network access to the upstream source servers is required.
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VERSIONS_FILE="${GNOME_VERSIONS_FILE:-$ROOT_DIR/GNOME_VERSIONS}"
 
 die(){ printf 'pull-all: ERROR: %s\n' "$*" >&2; exit 1; }
 log(){ printf 'pull-all: %s\n' "$*"; }
 
 command -v git >/dev/null 2>&1 || die "git is required"
-command -v curl >/dev/null 2>&1 || die "curl is required"
-command -v tar  >/dev/null 2>&1 || die "tar is required"
 
 # The modules build/native-build.sh:build_gnome() requires for a full desktop.
 DEFAULT_MODULES=(cairo glib gdk-pixbuf gtk glib-networking gvfs mutter gnome-shell gnome-control-center gnome-software gnome-terminal orca)
 
-# Modules whose pull-source.sh clones into the module ROOT and therefore need
-# their content relocated into source/ afterward.
-is_clone_to_root(){
-  case "$1" in
-    glib|gdk-pixbuf|gtk|mutter|gnome-shell|pango) return 0 ;;
-    *) return 1 ;;
-  esac
+# Load pinned refs from GNOME_VERSIONS into the environment (without clobbering
+# values already set by the caller).
+load_pins(){
+  [ -f "$VERSIONS_FILE" ] || { log "no pin file ($VERSIONS_FILE); using upstream defaults"; return 0; }
+  log "loading version pins from $VERSIONS_FILE"
+  local line key val
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"                      # strip comments
+    line="${line#"${line%%[![:space:]]*}"}" # ltrim
+    [ -z "$line" ] && continue
+    case "$line" in
+      *=*) key="${line%%=*}"; val="${line#*=}"
+           key="${key//[[:space:]]/}"; val="${val//[[:space:]]/}"
+           [ -z "$key" ] && continue
+           # Do not override an explicit environment value.
+           if [ -z "${!key:-}" ]; then export "$key=$val"; fi
+           ;;
+    esac
+  done < "$VERSIONS_FILE"
 }
 
-# Recognized build entrypoints that mark a tree as "usable".
 has_build_file(){
   local d="$1" f
   for f in meson.build configure configure.ac CMakeLists.txt setup.py pyproject.toml; do
@@ -52,31 +67,7 @@ has_build_file(){
   return 1
 }
 
-# Relocate an upstream tree that a pull script dropped in the module root into
-# source/, without disturbing MirvkBuntu's own module files (pull-source.sh,
-# README.md, build*, .git*, source/ itself).
-relocate_root_into_source(){
-  local base="$1" src="$base/source" entry name
-  # If source/ already usable, nothing to do.
-  if [ -d "$src" ] && has_build_file "$src"; then
-    return 0
-  fi
-  # Only relocate if the root actually received an upstream build tree.
-  has_build_file "$base" || return 1
-  mkdir -p "$src"
-  shopt -s dotglob
-  for entry in "$base"/*; do
-    name="$(basename "$entry")"
-    case "$name" in
-      source|build|build-local|build-aux|pull-source.sh|README.md|SOURCE-INFO.txt|UPSTREAM.md|.git|.gitkeep|.gitignore|*.sha256|*.tar.*)
-        continue ;;
-    esac
-    # Move everything else (the upstream tree) into source/.
-    mv -f "$entry" "$src/"
-  done
-  shopt -u dotglob
-  has_build_file "$src"
-}
+load_pins
 
 # Resolve the module list.
 if [ "$#" -gt 0 ]; then
@@ -99,9 +90,9 @@ for module in "${MODULES_LIST[@]}"; do
   src="$base/source"
   [ -d "$base" ] || { log "WARNING: unknown module directory: $module (skipping)"; skipped+=( "$module" ); continue; }
 
-  # Already usable? Skip the network fetch.
-  if [ -d "$src" ] && has_build_file "$src"; then
-    log "$module: source/ already usable; skipping fetch"
+  # Already usable? Skip the network fetch unless FORCE=1.
+  if [ "${FORCE:-0}" != "1" ] && [ -d "$src" ] && has_build_file "$src"; then
+    log "$module: source/ already usable; skipping fetch (FORCE=1 to re-fetch)"
     continue
   fi
 
@@ -114,17 +105,9 @@ for module in "${MODULES_LIST[@]}"; do
     continue
   fi
 
-  # Reconcile layout: clone-to-root modules need relocation into source/.
-  if is_clone_to_root "$module"; then
-    if ! relocate_root_into_source "$base"; then
-      log "WARNING: $module: could not establish a usable source/ after pull"
-      failed+=( "$module" )
-      continue
-    fi
-  fi
-
-  # Also run the shared normalizer to fold any upstream/ layout into source/.
-  if [ -x "$ROOT_DIR/normalize-source-layout.sh" ]; then
+  # Fold any transitional upstream/ layout into source/ (defensive; current
+  # module scripts already write source/ directly).
+  if [ ! -d "$src" ] && [ -x "$ROOT_DIR/normalize-source-layout.sh" ]; then
     "$ROOT_DIR/normalize-source-layout.sh" >/dev/null 2>&1 || true
   fi
 
@@ -132,7 +115,7 @@ for module in "${MODULES_LIST[@]}"; do
     log "$module: source/ ready"
     pulled+=( "$module" )
   else
-    log "WARNING: $module: source/ still not usable after pull + normalize"
+    log "WARNING: $module: source/ still not usable after pull"
     failed+=( "$module" )
   fi
 done

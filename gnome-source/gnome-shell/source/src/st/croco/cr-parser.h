@@ -21,7 +21,8 @@
  * See COPYRIGHTS file for copyrights information.
  */
 
-#pragma once
+#ifndef __CR_PARSER_H__
+#define  __CR_PARSER_H__
 
 #include <glib.h>
 #include "cr-input.h"
@@ -55,7 +56,11 @@ struct _CRParser  {
 CRParser * cr_parser_new (CRTknzr *a_tknzr) ;
 
 CRParser * cr_parser_new_from_buf (guchar *a_buf, gulong a_len,
+                        enum CREncoding a_enc, 
                         gboolean a_free_buf) ;
+
+CRParser * cr_parser_new_from_file (const guchar *a_file_uri, 
+                                    enum CREncoding a_enc) ;
 
 CRParser * cr_parser_new_from_input (CRInput *a_input) ;
 
@@ -80,9 +85,13 @@ enum CRStatus cr_parser_get_use_core_grammar (CRParser const *a_this,
                                               gboolean *a_use_core_grammar) ;
 
 enum CRStatus cr_parser_parse (CRParser *a_this) ;
+        
+enum CRStatus cr_parser_parse_file (CRParser *a_this, 
+                                    const guchar *a_file_uri, 
+                                    enum CREncoding a_enc) ;
 
-enum CRStatus cr_parser_parse_buf (CRParser *a_this, const guchar *a_buf,
-                                   gulong a_len) ;
+enum CRStatus cr_parser_parse_buf (CRParser *a_this, const guchar *a_buf, 
+                                   gulong a_len, enum CREncoding a_enc) ;
 
 enum CRStatus cr_parser_set_default_sac_handler (CRParser *a_this) ;
 
@@ -115,3 +124,5 @@ enum CRStatus cr_parser_parse_font_face (CRParser *a_this) ;
 void cr_parser_destroy (CRParser *a_this) ;
         
 G_END_DECLS
+
+#endif /*__CR_PARSER_H__*/

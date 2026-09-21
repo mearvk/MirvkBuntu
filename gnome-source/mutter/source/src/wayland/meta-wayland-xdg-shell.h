@@ -46,10 +46,3 @@ G_DECLARE_FINAL_TYPE (MetaWaylandXdgPopup,
                       MetaWaylandXdgSurface);
 
 void meta_wayland_xdg_shell_init (MetaWaylandCompositor *compositor);
-
-struct wl_resource * meta_wayland_xdg_toplevel_get_resource (MetaWaylandXdgToplevel *xdg_toplevel);
-
-void meta_wayland_xdg_toplevel_set_hint_restored (MetaWaylandXdgToplevel *xdg_toplevel);
-
-MtkRectangle
-meta_wayland_xdg_surface_get_window_geometry (MetaWaylandXdgSurface *xdg_surface);

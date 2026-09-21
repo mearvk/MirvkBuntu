@@ -27,7 +27,8 @@
 /**
  * GtkListItem:
  *
- * Used by list widgets to represent items in a [iface@Gio.ListModel].
+ * `GtkListItem` is used by list widgets to represent items in a
+ * [iface@Gio.ListModel].
  *
  * `GtkListItem` objects are managed by the list widget (with its factory)
  * and cannot be created by applications, but they need to be populated
@@ -37,10 +38,10 @@
  *
  * 1. The unbound stage where the listitem is not currently connected to
  *    an item in the list. In that case, the [property@Gtk.ListItem:item]
- *    property is set to `NULL`.
+ *    property is set to %NULL.
  *
  * 2. The bound stage where the listitem references an item from the list.
- *    The [property@Gtk.ListItem:item] property is not `NULL`.
+ *    The [property@Gtk.ListItem:item] property is not %NULL.
  */
 
 enum
@@ -186,51 +187,51 @@ gtk_list_item_class_init (GtkListItemClass *klass)
   gobject_class->set_property = gtk_list_item_set_property;
 
   /**
-   * GtkListItem:accessible-description:
+   * GtkListItem:accessible-description: (attributes org.gtk.Property.get=gtk_list_item_get_accessible_description org.gtk.Property.set=gtk_list_item_set_accessible_description)
    *
-   * The accessible description to set on the listitem.
+   * The accessible description to set on the list item.
    *
    * Since: 4.12
    */
   properties[PROP_ACCESSIBLE_DESCRIPTION] =
     g_param_spec_string ("accessible-description", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:accessible-label:
+   * GtkListItem:accessible-label: (attributes org.gtk.Property.get=gtk_list_item_get_accessible_label org.gtk.Property.set=gtk_list_item_set_accessible_label)
    *
-   * The accessible label to set on the listitem.
+   * The accessible label to set on the list item.
    *
    * Since: 4.12
    */
   properties[PROP_ACCESSIBLE_LABEL] =
     g_param_spec_string ("accessible-label", NULL, NULL,
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:activatable:
+   * GtkListItem:activatable: (attributes org.gtk.Property.get=gtk_list_item_get_activatable org.gtk.Property.set=gtk_list_item_set_activatable)
    *
    * If the item can be activated by the user.
    */
   properties[PROP_ACTIVATABLE] =
     g_param_spec_boolean ("activatable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:child:
+   * GtkListItem:child: (attributes org.gtk.Property.get=gtk_list_item_get_child org.gtk.Property.set=gtk_list_item_set_child)
    *
    * Widget used for display.
    */
   properties[PROP_CHILD] =
     g_param_spec_object ("child", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:focusable:
+   * GtkListItem:focusable: (attributes org.gtk.Property.get=gtk_list_item_get_focusable org.gtk.Property.set=gtk_list_item_set_focusable)
    *
    * If the item can be focused with the keyboard.
    *
@@ -239,47 +240,47 @@ gtk_list_item_class_init (GtkListItemClass *klass)
   properties[PROP_FOCUSABLE] =
     g_param_spec_boolean ("focusable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:item:
+   * GtkListItem:item: (attributes org.gtk.Property.get=gtk_list_item_get_item)
    *
    * Displayed item.
    */
   properties[PROP_ITEM] =
     g_param_spec_object ("item", NULL, NULL,
                          G_TYPE_OBJECT,
-                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:position:
+   * GtkListItem:position: (attributes org.gtk.Property.get=gtk_list_item_get_position)
    *
    * Position of the item.
    */
   properties[PROP_POSITION] =
     g_param_spec_uint ("position", NULL, NULL,
                        0, G_MAXUINT, GTK_INVALID_LIST_POSITION,
-                       G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:selectable:
+   * GtkListItem:selectable: (attributes org.gtk.Property.get=gtk_list_item_get_selectable org.gtk.Property.set=gtk_list_item_set_selectable)
    *
    * If the item can be selected by the user.
    */
   properties[PROP_SELECTABLE] =
     g_param_spec_boolean ("selectable", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkListItem:selected:
+   * GtkListItem:selected: (attributes org.gtk.Property.get=gtk_list_item_get_selected)
    *
    * If the item is currently selected.
    */
   properties[PROP_SELECTED] =
     g_param_spec_boolean ("selected", NULL, NULL,
                           FALSE,
-                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -315,12 +316,12 @@ gtk_list_item_do_notify (GtkListItem *list_item,
 }
 
 /**
- * gtk_list_item_get_item:
- * @self: a listitem
+ * gtk_list_item_get_item: (attributes org.gtk.Method.get_property=item)
+ * @self: a `GtkListItem`
  *
  * Gets the model item that associated with @self.
  *
- * If @self is unbound, this function returns `NULL`.
+ * If @self is unbound, this function returns %NULL.
  *
  * Returns: (nullable) (transfer none) (type GObject): The item displayed
  **/
@@ -338,11 +339,11 @@ gtk_list_item_get_item (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_get_child:
- * @self: a listitem
+ * gtk_list_item_get_child: (attributes org.gtk.Method.get_property=child)
+ * @self: a `GtkListItem`
  *
- * Gets the child previously set via [method@Gtk.ListItem.set_child]
- * or `NULL` if none was set.
+ * Gets the child previously set via gtk_list_item_set_child() or
+ * %NULL if none was set.
  *
  * Returns: (transfer none) (nullable): The child
  */
@@ -358,9 +359,9 @@ gtk_list_item_get_child (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_set_child:
- * @self: a listitem
- * @child: (nullable): The listitem's child or `NULL` to unset
+ * gtk_list_item_set_child: (attributes org.gtk.Method.set_property=child)
+ * @self: a `GtkListItem`
+ * @child: (nullable): The list item's child or %NULL to unset
  *
  * Sets the child to be used for this listitem.
  *
@@ -405,12 +406,12 @@ gtk_list_item_set_child (GtkListItem *self,
 }
 
 /**
- * gtk_list_item_get_position:
- * @self: a listitem
+ * gtk_list_item_get_position: (attributes org.gtk.Method.get_property=position)
+ * @self: a `GtkListItem`
  *
  * Gets the position in the model that @self currently displays.
  *
- * If @self is unbound, `GTK_INVALID_LIST_POSITION` is returned.
+ * If @self is unbound, %GTK_INVALID_LIST_POSITION is returned.
  *
  * Returns: The position of this item
  */
@@ -428,15 +429,15 @@ gtk_list_item_get_position (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_get_selected:
- * @self: a listitem
+ * gtk_list_item_get_selected: (attributes org.gtk.Method.get_property=selected)
+ * @self: a `GtkListItem`
  *
  * Checks if the item is displayed as selected.
  *
- * The selected state is maintained by the list widget and its model
+ * The selected state is maintained by the liste widget and its model
  * and cannot be set otherwise.
  *
- * Returns: true if the item is selected.
+ * Returns: %TRUE if the item is selected.
  */
 gboolean
 gtk_list_item_get_selected (GtkListItem *self)
@@ -452,15 +453,15 @@ gtk_list_item_get_selected (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_get_selectable:
- * @self: a listitem
+ * gtk_list_item_get_selectable: (attributes org.gtk.Method.get_property=selectable)
+ * @self: a `GtkListItem`
  *
- * Checks if a listitem has been set to be selectable via
- * [method@Gtk.ListItem.set_selectable].
+ * Checks if a list item has been set to be selectable via
+ * gtk_list_item_set_selectable().
  *
  * Do not confuse this function with [method@Gtk.ListItem.get_selected].
  *
- * Returns: true if the item is selectable
+ * Returns: %TRUE if the item is selectable
  */
 gboolean
 gtk_list_item_get_selectable (GtkListItem *self)
@@ -471,8 +472,8 @@ gtk_list_item_get_selectable (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_set_selectable:
- * @self: a listitem
+ * gtk_list_item_set_selectable: (attributes org.gtk.Method.set_property=selectable)
+ * @self: a `GtkListItem`
  * @selectable: if the item should be selectable
  *
  * Sets @self to be selectable.
@@ -485,7 +486,7 @@ gtk_list_item_get_selectable (GtkListItem *self)
  * influence on the selected state at all. A non-selectable item
  * may still be selected.
  *
- * By default, listitems are selectable. When rebinding them to
+ * By default, list items are selectable. When rebinding them to
  * a new item, they will also be reset to be selectable by GTK.
  */
 void
@@ -506,13 +507,13 @@ gtk_list_item_set_selectable (GtkListItem *self,
 }
 
 /**
- * gtk_list_item_get_activatable:
- * @self: a listitem
+ * gtk_list_item_get_activatable: (attributes org.gtk.Method.get_property=activatable)
+ * @self: a `GtkListItem`
  *
- * Checks if a listitem has been set to be activatable via
- * [method@Gtk.ListItem.set_activatable].
+ * Checks if a list item has been set to be activatable via
+ * gtk_list_item_set_activatable().
  *
- * Returns: true if the item is activatable
+ * Returns: %TRUE if the item is activatable
  */
 gboolean
 gtk_list_item_get_activatable (GtkListItem *self)
@@ -523,19 +524,19 @@ gtk_list_item_get_activatable (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_set_activatable:
- * @self: a listitem
+ * gtk_list_item_set_activatable: (attributes org.gtk.Method.set_property=activatable)
+ * @self: a `GtkListItem`
  * @activatable: if the item should be activatable
  *
  * Sets @self to be activatable.
  *
  * If an item is activatable, double-clicking on the item, using
- * the Return key or calling [method@Gtk.Widget.activate] will activate
+ * the Return key or calling gtk_widget_activate() will activate
  * the item. Activating instructs the containing view to handle
  * activation. `GtkListView` for example will be emitting the
  * [signal@Gtk.ListView::activate] signal.
  *
- * By default, listitems are activatable.
+ * By default, list items are activatable.
  */
 void
 gtk_list_item_set_activatable (GtkListItem *self,
@@ -555,13 +556,13 @@ gtk_list_item_set_activatable (GtkListItem *self,
 }
 
 /**
- * gtk_list_item_get_focusable:
- * @self: a lits item
+ * gtk_list_item_get_focusable: (attributes org.gtk.Method.get_property=focusable)
+ * @self: a `GtkListItem`
  *
- * Checks if a listitem has been set to be focusable via
- * [method@Gtk.ListItem.set_focusable].
+ * Checks if a list item has been set to be focusable via
+ * gtk_list_item_set_focusable().
  *
- * Returns: true if the item is focusable
+ * Returns: %TRUE if the item is focusable
  *
  * Since: 4.12
  */
@@ -574,8 +575,8 @@ gtk_list_item_get_focusable (GtkListItem *self)
 }
 
 /**
- * gtk_list_item_set_focusable:
- * @self: a listitem
+ * gtk_list_item_set_focusable: (attributes org.gtk.Method.set_property=focusable)
+ * @self: a `GtkListItem`
  * @focusable: if the item should be focusable
  *
  * Sets @self to be focusable.
@@ -586,7 +587,7 @@ gtk_list_item_get_focusable (GtkListItem *self)
  * Note that if items are not focusable, the keyboard cannot be used to activate
  * them and selecting only works if one of the listitem's children is focusable.
  *
- * By default, listitems are focusable.
+ * By default, list items are focusable.
  *
  * Since: 4.12
  */
@@ -611,12 +612,11 @@ gtk_list_item_set_focusable (GtkListItem *self,
 
 /**
  * gtk_list_item_set_accessible_description:
- * @self: a listitem
+ * @self: a `GtkListItem`
  * @description: the description
  *
- * Sets the accessible description for the listitem.
- *
- * The accessible description may be used by e.g. screen readers.
+ * Sets the accessible description for the list item,
+ * which may be used by e.g. screen readers.
  *
  * Since: 4.12
  */
@@ -639,7 +639,7 @@ gtk_list_item_set_accessible_description (GtkListItem *self,
 
 /**
  * gtk_list_item_get_accessible_description:
- * @self: a listitem
+ * @self: a `GtkListItem`
  *
  * Gets the accessible description of @self.
  *
@@ -657,12 +657,11 @@ gtk_list_item_get_accessible_description (GtkListItem *self)
 
 /**
  * gtk_list_item_set_accessible_label:
- * @self: a listitem
+ * @self: a `GtkListItem`
  * @label: the label
  *
- * Sets the accessible label for the listitem.
- *
- * The accessible label may be used by e.g. screen readers.
+ * Sets the accessible label for the list item,
+ * which may be used by e.g. screen readers.
  *
  * Since: 4.12
  */
@@ -685,7 +684,7 @@ gtk_list_item_set_accessible_label (GtkListItem *self,
 
 /**
  * gtk_list_item_get_accessible_label:
- * @self: a listitem
+ * @self: a `GtkListItem`
  *
  * Gets the accessible label of @self.
  *

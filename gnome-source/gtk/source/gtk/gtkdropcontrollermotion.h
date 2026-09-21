@@ -39,7 +39,7 @@ typedef struct _GtkDropControllerMotion GtkDropControllerMotion;
 typedef struct _GtkDropControllerMotionClass GtkDropControllerMotionClass;
 
 GDK_AVAILABLE_IN_ALL
-GType                   gtk_drop_controller_motion_get_type             (void);
+GType                   gtk_drop_controller_motion_get_type             (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GtkEventController *    gtk_drop_controller_motion_new                  (void);
@@ -50,8 +50,6 @@ GDK_AVAILABLE_IN_ALL
 GdkDrop *               gtk_drop_controller_motion_get_drop             (GtkDropControllerMotion        *self);
 GDK_AVAILABLE_IN_ALL
 gboolean                gtk_drop_controller_motion_is_pointer           (GtkDropControllerMotion        *self);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkDropControllerMotion, g_object_unref)
 
 G_END_DECLS
 

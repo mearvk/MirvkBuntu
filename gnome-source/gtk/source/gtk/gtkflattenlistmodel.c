@@ -27,7 +27,7 @@
 /**
  * GtkFlattenListModel:
  *
- * A list model that concatenates other list models.
+ * `GtkFlattenListModel` is a list model that concatenates other list models.
  *
  * `GtkFlattenListModel` takes a list model containing list models, and flattens
  * it into a single model. Each list model becomes a section in the single model.
@@ -454,17 +454,17 @@ gtk_flatten_list_model_class_init (GtkFlattenListModelClass *class)
   properties[PROP_ITEM_TYPE] =
     g_param_spec_gtype ("item-type", NULL, NULL,
                         G_TYPE_OBJECT,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkFlattenListModel:model:
+   * GtkFlattenListModel:model: (attributes org.gtk.Property.get=gtk_flatten_list_model_get_model org.gtk.Property.set=gtk_flatten_list_model_set_model)
    *
    * The model being flattened.
    */
   properties[PROP_MODEL] =
       g_param_spec_object ("model", NULL, NULL,
                            G_TYPE_LIST_MODEL,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkFlattenListModel:n-items:
@@ -476,7 +476,7 @@ gtk_flatten_list_model_class_init (GtkFlattenListModelClass *class)
   properties[PROP_N_ITEMS] =
     g_param_spec_uint ("n-items", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
 }
@@ -512,7 +512,7 @@ gtk_flatten_list_model_new (GListModel *model)
 }
 
 /**
- * gtk_flatten_list_model_set_model:
+ * gtk_flatten_list_model_set_model: (attributes org.gtk.Method.set_property=model)
  * @self: a `GtkFlattenListModel`
  * @model: (nullable) (transfer none): the new model
  *
@@ -557,7 +557,7 @@ gtk_flatten_list_model_set_model (GtkFlattenListModel *self,
 }
 
 /**
- * gtk_flatten_list_model_get_model:
+ * gtk_flatten_list_model_get_model: (attributes org.gtk.Method.get_property=model)
  * @self: a `GtkFlattenListModel`
  *
  * Gets the model set via gtk_flatten_list_model_set_model().

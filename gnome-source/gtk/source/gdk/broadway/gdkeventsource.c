@@ -17,7 +17,7 @@
 
 #include "config.h"
 
-#include "gdkeventsourceprivate.h"
+#include "gdkeventsource.h"
 
 #include "gdkeventsprivate.h"
 #include "gdkframeclockprivate.h"
@@ -214,8 +214,7 @@ _gdk_broadway_events_got_input (GdkDisplay *display,
                                                message->pointer.state,
                                                message->scroll.dir == 0
                                                  ? GDK_SCROLL_UP
-                                                 : GDK_SCROLL_DOWN,
-                                               GDK_SCROLL_RELATIVE_DIRECTION_UNKNOWN);
+                                                 : GDK_SCROLL_DOWN);
 
         node = _gdk_event_queue_append (display, event);
         _gdk_windowing_got_event (display, node, event, message->base.serial);
@@ -298,6 +297,9 @@ _gdk_broadway_events_got_input (GdkDisplay *display,
     break;
   case BROADWAY_EVENT_GRAB_NOTIFY:
   case BROADWAY_EVENT_UNGRAB_NOTIFY:
+    _gdk_display_device_grab_update (display,
+                                     display_broadway->core_pointer,
+                                     message->base.serial);
     break;
 
   case BROADWAY_EVENT_CONFIGURE_NOTIFY:

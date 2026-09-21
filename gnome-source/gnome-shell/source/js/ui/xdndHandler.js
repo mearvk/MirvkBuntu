@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import * as Signals from '../misc/signals.js';
 
@@ -17,7 +19,7 @@ export class XdndHandler extends Signals.EventEmitter {
         Main.uiGroup.add_child(this._dummy);
         this._dummy.hide();
 
-        const dnd = global.backend.get_dnd();
+        var dnd = global.backend.get_dnd();
         dnd.connect('dnd-enter', this._onEnter.bind(this));
         dnd.connect('dnd-position-change', this._onPositionChanged.bind(this));
         dnd.connect('dnd-leave', this._onLeave.bind(this));
@@ -26,42 +28,28 @@ export class XdndHandler extends Signals.EventEmitter {
     // Called when the user cancels the drag (i.e release the button)
     _onLeave() {
         global.window_group.disconnectObject(this);
-        Main.sessionMode.disconnectObject(this);
-
         if (this._cursorWindowClone) {
             this._cursorWindowClone.destroy();
             this._cursorWindowClone = null;
         }
-
-        global.compositor.get_feedback_group().show();
 
         this.emit('drag-end');
     }
 
     _onEnter() {
         global.window_group.connectObject('notify::visible',
-            () => this._syncCursorWindowClone(), this);
-        Main.sessionMode.connectObject('updated', () => {
-            this._syncCursorWindowClone();
-
-            const feedbackGroup = global.compositor.get_feedback_group();
-            feedbackGroup.visible = !Main.sessionMode.isLocked;
-        }, this);
+            this._onWindowGroupVisibilityChanged.bind(this), this);
 
         this.emit('drag-begin', global.get_current_time());
     }
 
-    _syncCursorWindowClone() {
-        const needsCursorClone =
-            !global.window_group.visible &&
-            !Main.sessionMode.isLocked;
-
-        if (needsCursorClone) {
+    _onWindowGroupVisibilityChanged() {
+        if (!global.window_group.visible) {
             if (this._cursorWindowClone)
                 return;
 
-            const windows = global.get_window_actors();
-            const cursorWindow = windows[windows.length - 1];
+            let windows = global.get_window_actors();
+            let cursorWindow = windows[windows.length - 1];
 
             // FIXME: more reliable way?
             if (!cursorWindow.get_meta_window().is_override_redirect())
@@ -93,7 +81,7 @@ export class XdndHandler extends Signals.EventEmitter {
         if (this._cursorWindowClone)
             Main.uiGroup.set_child_above_sibling(this._cursorWindowClone, null);
 
-        const dragEvent = {
+        let dragEvent = {
             x,
             y,
             dragActor: this._cursorWindowClone ?? this._dummy,
@@ -102,9 +90,9 @@ export class XdndHandler extends Signals.EventEmitter {
         };
 
         for (let i = 0; i < DND.dragMonitors.length; i++) {
-            const motionFunc = DND.dragMonitors[i].dragMotion;
+            let motionFunc = DND.dragMonitors[i].dragMotion;
             if (motionFunc) {
-                const result = motionFunc(dragEvent);
+                let result = motionFunc(dragEvent);
                 if (result !== DND.DragMotionResult.CONTINUE)
                     return;
             }
@@ -112,8 +100,8 @@ export class XdndHandler extends Signals.EventEmitter {
 
         while (pickedActor) {
             if (pickedActor._delegate && pickedActor._delegate.handleDragOver) {
-                const [r_, targX, targY] = pickedActor.transform_stage_point(x, y);
-                const result = pickedActor._delegate.handleDragOver(this,
+                let [r_, targX, targY] = pickedActor.transform_stage_point(x, y);
+                let result = pickedActor._delegate.handleDragOver(this,
                     dragEvent.dragActor,
                     targX,
                     targY,

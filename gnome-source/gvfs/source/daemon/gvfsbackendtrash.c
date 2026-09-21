@@ -33,8 +33,8 @@ struct OPAQUE_TYPE__GVfsBackendTrash
 {
   GVfsBackend parent_instance;
 
-  GWeakRef file_monitor;
-  GWeakRef dir_monitor;
+  GVfsMonitor *file_monitor;
+  GVfsMonitor *dir_monitor;
 
   GMainContext *worker_context;
   GMainLoop *worker_loop;
@@ -111,30 +111,13 @@ trash_backend_worker_thread_queue (GVfsBackendTrash *backend,
 }
 
 static gboolean
-sync_watch_state_func (gpointer user_data)
+watch_func (gpointer user_data)
 {
   GVfsBackendTrash *backend = G_VFS_BACKEND_TRASH (user_data);
-  GVfsMonitor *file_monitor;
-  GVfsMonitor *dir_monitor;
 
-  file_monitor = g_weak_ref_get (&backend->file_monitor);
-  dir_monitor = g_weak_ref_get (&backend->dir_monitor);
-
-  if (file_monitor != NULL || dir_monitor != NULL)
-    trash_watcher_watch (backend->watcher);
-  else
-    trash_watcher_unwatch (backend->watcher);
-
-  g_clear_object (&file_monitor);
-  g_clear_object (&dir_monitor);
+  trash_watcher_watch (backend->watcher);
 
   return G_SOURCE_REMOVE;
-}
-
-static void
-trash_backend_queue_watch_state_sync (GVfsBackendTrash *backend)
-{
-  trash_backend_worker_thread_queue (backend, sync_watch_state_func);
 }
 
 static gboolean
@@ -148,67 +131,57 @@ rescan_func (gpointer user_data)
 }
 
 static gboolean
+ready_func (gpointer user_data)
+{
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean
 is_root (const char *filename)
 {
   return (filename[0] == '/' && filename[1] == '\0');
-}
-
-static void
-trash_backend_file_monitor_destroyed (gpointer  data,
-                                      GObject  *where_the_object_was)
-{
-  GVfsBackendTrash *backend = G_VFS_BACKEND_TRASH (data);
-
-  trash_backend_queue_watch_state_sync (backend);
-}
-
-static void
-trash_backend_dir_monitor_destroyed (gpointer  data,
-                                     GObject  *where_the_object_was)
-{
-  GVfsBackendTrash *backend = G_VFS_BACKEND_TRASH (data);
-
-  trash_backend_queue_watch_state_sync (backend);
 }
 
 static GVfsMonitor *
 trash_backend_get_file_monitor (GVfsBackendTrash  *backend,
                                 gboolean           create)
 {
-  GVfsMonitor *monitor;
+  if (backend->file_monitor == NULL && create == FALSE)
+    return NULL;
 
-  monitor = g_weak_ref_get (&backend->file_monitor);
-  if (monitor != NULL || create == FALSE)
-    return monitor;
+  else if (backend->file_monitor == NULL)
+    {
+      /* 'create' is only ever set in the main thread, so we will have
+       * no possibility here for creating more than one new monitor.
+       */
+      if (backend->dir_monitor == NULL)
+        trash_backend_worker_thread_queue (backend, watch_func);
 
-  monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
-  g_weak_ref_set (&backend->file_monitor, monitor);
-  g_object_weak_ref (G_OBJECT (monitor),
-                     trash_backend_file_monitor_destroyed, backend);
+      backend->file_monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
+    }
 
-  trash_backend_queue_watch_state_sync (backend);
-
-  return monitor;
+  return g_object_ref (backend->file_monitor);
 }
 
 static GVfsMonitor *
 trash_backend_get_dir_monitor (GVfsBackendTrash *backend,
                                gboolean          create)
 {
-  GVfsMonitor *monitor;
+  if (backend->dir_monitor == NULL && create == FALSE)
+    return NULL;
 
-  monitor = g_weak_ref_get (&backend->dir_monitor);
-  if (monitor != NULL || create == FALSE)
-    return monitor;
+  else if (backend->dir_monitor == NULL)
+    {
+      /* 'create' is only ever set in the main thread, so we will have
+       * no possibility here for creating more than one new monitor.
+       */
+      if (backend->file_monitor == NULL)
+        trash_backend_worker_thread_queue (backend, watch_func);
 
-  monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
-  g_weak_ref_set (&backend->dir_monitor, monitor);
-  g_object_weak_ref (G_OBJECT (monitor),
-                     trash_backend_dir_monitor_destroyed, backend);
+      backend->dir_monitor = g_vfs_monitor_new (G_VFS_BACKEND (backend));
+    }
 
-  trash_backend_queue_watch_state_sync (backend);
-
-  return monitor;
+  return g_object_ref (backend->dir_monitor);
 }
 
 static void
@@ -829,14 +802,14 @@ trash_backend_mount (GVfsBackend  *vfs_backend,
 {
   GVfsBackendTrash *backend = G_VFS_BACKEND_TRASH (vfs_backend);
 
-  g_weak_ref_init (&backend->file_monitor, NULL);
-  g_weak_ref_init (&backend->dir_monitor, NULL);
+  backend->file_monitor = NULL;
+  backend->dir_monitor = NULL;
 
   backend->worker_context = g_main_context_new ();
   backend->worker_thread = g_thread_new ("Trash Worker Thread",
                                          thread_func,
                                          backend);
-  g_vfs_backend_set_autounmount (vfs_backend, TRUE);
+  trash_backend_worker_thread_queue_and_wait (backend, ready_func);
 
   g_vfs_job_succeeded (G_VFS_JOB (job));
 }
@@ -1003,27 +976,17 @@ static void
 trash_backend_finalize (GObject *object)
 {
   GVfsBackendTrash *backend = G_VFS_BACKEND_TRASH (object);
-  GVfsMonitor *monitor;
 
-  monitor = g_weak_ref_get (&backend->file_monitor);
-  if (monitor != NULL)
-    {
-      g_object_weak_unref (G_OBJECT (monitor),
-                           trash_backend_file_monitor_destroyed, backend);
-      g_object_unref (monitor);
-    }
-  g_weak_ref_clear (&backend->file_monitor);
+  /* get rid of these first to stop a flood of event notifications
+   * from being emitted while we're tearing down the TrashWatcher
+   */
+  if (backend->file_monitor)
+    g_object_unref (backend->file_monitor);
+  backend->file_monitor = NULL;
 
-  monitor = g_weak_ref_get (&backend->dir_monitor);
-  if (monitor != NULL)
-    {
-      g_object_weak_unref (G_OBJECT (monitor),
-                           trash_backend_dir_monitor_destroyed, backend);
-      g_object_unref (monitor);
-    }
-  g_weak_ref_clear (&backend->dir_monitor);
-
-  G_OBJECT_CLASS (g_vfs_backend_trash_parent_class)->finalize (object);
+  if (backend->dir_monitor)
+    g_object_unref (backend->dir_monitor);
+  backend->dir_monitor = NULL;
 }
 
 static void

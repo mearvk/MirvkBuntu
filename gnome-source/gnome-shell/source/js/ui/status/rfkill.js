@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -15,15 +17,15 @@ const rfkillManagerInfo = Gio.DBusInterfaceInfo.new_for_xml(RfkillManagerInterfa
 const RfkillManager = GObject.registerClass({
     Properties: {
         'airplane-mode': GObject.ParamSpec.boolean(
-            'airplane-mode', null, null,
+            'airplane-mode', '', '',
             GObject.ParamFlags.READWRITE,
             false),
         'hw-airplane-mode': GObject.ParamSpec.boolean(
-            'hw-airplane-mode', null, null,
+            'hw-airplane-mode', '', '',
             GObject.ParamFlags.READABLE,
             false),
         'show-airplane-mode': GObject.ParamSpec.boolean(
-            'show-airplane-mode', null, null,
+            'show-airplane-mode', '', '',
             GObject.ParamFlags.READABLE,
             false),
     },
@@ -43,6 +45,7 @@ const RfkillManager = GObject.registerClass({
             .catch(e => console.error(e.message));
     }
 
+    /* eslint-disable camelcase */
     get airplane_mode() {
         return this._proxy.AirplaneMode;
     }
@@ -58,6 +61,7 @@ const RfkillManager = GObject.registerClass({
     get show_airplane_mode() {
         return this._proxy.HasAirplaneMode && this._proxy.ShouldShowAirplaneMode;
     }
+    /* eslint-enable camelcase */
 
     _changed(proxy, properties) {
         for (const prop in properties.deepUnpack()) {

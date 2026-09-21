@@ -22,7 +22,8 @@
 #error "Only <st/st.h> can be included directly.h"
 #endif
 
-#pragma once
+#ifndef __ST_SCROLLABLE_H__
+#define __ST_SCROLLABLE_H__
 
 #include <glib-object.h>
 #include <st/st-adjustment.h>
@@ -54,3 +55,5 @@ void st_scrollable_get_adjustments (StScrollable  *scrollable,
                                     StAdjustment **vadjustment);
 
 G_END_DECLS
+
+#endif /* __ST_SCROLLABLE_H__ */

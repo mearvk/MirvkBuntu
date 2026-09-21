@@ -55,7 +55,7 @@
 /**
  * GtkTextMark:
  *
- * Marks a position in a `GtkTextbuffer` that is preserved
+ * A `GtkTextMark` is a position in a `GtkTextbuffer` that is preserved
  * across modifications.
  *
  * You may wish to begin by reading the
@@ -113,11 +113,8 @@ G_DEFINE_TYPE (GtkTextMark, gtk_text_mark, G_TYPE_OBJECT)
 enum {
   PROP_0,
   PROP_NAME,
-  PROP_LEFT_GRAVITY,
-  N_PROPS
+  PROP_LEFT_GRAVITY
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void
 gtk_text_mark_class_init (GtkTextMarkClass *klass)
@@ -133,9 +130,11 @@ gtk_text_mark_class_init (GtkTextMarkClass *klass)
    *
    * The name of the mark or %NULL if the mark is anonymous.
    */
-  props[PROP_NAME] = g_param_spec_string ("name", NULL, NULL,
-                                          NULL,
-                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class,
+                                   PROP_NAME,
+                                   g_param_spec_string ("name", NULL, NULL,
+                                                        NULL,
+                                                        GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   /**
    * GtkTextMark:left-gravity:
@@ -146,11 +145,11 @@ gtk_text_mark_class_init (GtkTextMarkClass *klass)
    * has left gravity it will be moved to the left of the newly-inserted
    * text, otherwise to the right.
    */
-  props[PROP_LEFT_GRAVITY] = g_param_spec_boolean ("left-gravity", NULL, NULL,
-                                                   FALSE,
-                                                   G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_LEFT_GRAVITY,
+                                   g_param_spec_boolean ("left-gravity", NULL, NULL,
+                                                         FALSE,
+                                                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 }
 
 static void
@@ -421,9 +420,9 @@ _gtk_mark_segment_set_tree (GtkTextLineSegment *mark,
   mark->body.mark.not_deleteable = FALSE;
 }
 
-static gboolean            mark_segment_delete_func  (GtkTextLineSegment *segPtr,
+static int                 mark_segment_delete_func  (GtkTextLineSegment *segPtr,
                                                       GtkTextLine        *line,
-                                                      gboolean            tree_gone);
+                                                      int                 treeGone);
 static GtkTextLineSegment *mark_segment_cleanup_func (GtkTextLineSegment *segPtr,
                                                       GtkTextLine        *line);
 static void                mark_segment_check_func   (GtkTextLineSegment *segPtr,

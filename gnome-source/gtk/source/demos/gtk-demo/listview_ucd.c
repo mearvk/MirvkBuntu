@@ -1,8 +1,7 @@
 /* Lists/Characters
  *
  * This demo shows a multi-column representation of some parts
- * of the Unicode Character Database, or UCD. It also demonstrates
- * the use of sections with headings to group items.
+ * of the Unicode Character Database, or UCD.
  *
  * The dataset used here has 33 796 items.
  */
@@ -19,23 +18,12 @@ struct _UcdItem
   GObject parent_instance;
   gunichar codepoint;
   const char *name;
-  GUnicodeScript script;
 };
 
 struct _UcdItemClass
 {
   GObjectClass parent_class;
 };
-
-enum
-{
-  PROP_CODEPOINT = 1,
-  PROP_NAME,
-  PROP_SCRIPT,
-  NUM_PROPERTIES,
-};
-
-static GParamSpec *props[NUM_PROPERTIES] = { NULL, };
 
 G_DEFINE_TYPE (UcdItem, ucd_item, G_TYPE_OBJECT)
 
@@ -45,53 +33,8 @@ ucd_item_init (UcdItem *item)
 }
 
 static void
-ucd_item_get_property (GObject    *object,
-                       guint       prop_id,
-                       GValue     *value,
-                       GParamSpec *pspec)
-{
-  UcdItem *item = UCD_ITEM (object);
-
-  switch (prop_id)
-    {
-    case PROP_CODEPOINT:
-      g_value_set_uint (value, item->codepoint);
-      break;
-
-    case PROP_NAME:
-      g_value_set_string (value, item->name);
-      break;
-
-    case PROP_SCRIPT:
-      g_value_set_uint (value, item->script);
-      break;
-
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-    }
-}
-
-static void
 ucd_item_class_init (UcdItemClass *class)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (class);
-
-  object_class->get_property = ucd_item_get_property;
-
-  props[PROP_CODEPOINT] = g_param_spec_uint ("codepoint", NULL, NULL,
-                                             0, G_MAXUINT, 0,
-                                             G_PARAM_READABLE | G_PARAM_STATIC_NAME);
-
-  props[PROP_NAME] = g_param_spec_string ("name", NULL, NULL,
-                                          NULL,
-                                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
-
-  props[PROP_SCRIPT] = g_param_spec_uint ("script", NULL, NULL,
-                                          0, G_MAXUINT, 0,
-                                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, NUM_PROPERTIES, props);
 }
 
 static UcdItem *
@@ -104,7 +47,6 @@ ucd_item_new (gunichar    codepoint,
 
   item->codepoint = codepoint;
   item->name = name;
-  item->script = g_unichar_get_script (codepoint);
 
   return item;
 }
@@ -121,12 +63,6 @@ ucd_item_get_name (UcdItem *item)
   return item->name;
 }
 
-static GUnicodeScript
-ucd_item_get_script (UcdItem *item)
-{
-  return item->script;
-}
-
 static GListModel *
 ucd_model_new (void)
 {
@@ -136,9 +72,6 @@ ucd_model_new (void)
   GListStore *store;
   guint u;
   char *name;
-  GtkExpression *expression;
-  GtkNumericSorter *sorter;
-  GtkSortListModel *sort;
 
   bytes = g_resources_lookup_data ("/listview_ucd_data/ucdnames.data", 0, NULL);
   v = g_variant_ref_sink (g_variant_new_from_bytes (G_VARIANT_TYPE ("a(us)"), bytes, TRUE));
@@ -160,20 +93,7 @@ ucd_model_new (void)
   g_variant_unref (v);
   g_bytes_unref (bytes);
 
-  expression = gtk_property_expression_new (ucd_item_get_type (),
-                                            NULL,
-                                            "codepoint");
-  sorter = gtk_numeric_sorter_new (expression);
-  sort = gtk_sort_list_model_new (G_LIST_MODEL (store), GTK_SORTER (sorter));
-
-  expression = gtk_property_expression_new (ucd_item_get_type (),
-                                            NULL,
-                                            "script");
-  sorter = gtk_numeric_sorter_new (expression);
-  gtk_sort_list_model_set_section_sorter (sort, GTK_SORTER (sorter));
-  g_object_unref (sorter);
-
-  return G_LIST_MODEL (sort);
+  return G_LIST_MODEL (store);
 }
 
 static void
@@ -181,7 +101,7 @@ setup_centered_label (GtkSignalListItemFactory *factory,
                       GObject                  *listitem)
 {
   GtkWidget *label;
-  label = gtk_inscription_new ("");
+  label = gtk_label_new ("");
   gtk_list_item_set_child (GTK_LIST_ITEM (listitem), label);
 }
 
@@ -190,8 +110,8 @@ setup_label (GtkSignalListItemFactory *factory,
              GObject                  *listitem)
 {
   GtkWidget *label;
-  label = gtk_inscription_new ("");
-  gtk_inscription_set_xalign (GTK_INSCRIPTION (label), 0);
+  label = gtk_label_new ("");
+  gtk_label_set_xalign (GTK_LABEL (label), 0);
   gtk_list_item_set_child (GTK_LIST_ITEM (listitem), label);
 }
 
@@ -200,10 +120,10 @@ setup_ellipsizing_label (GtkSignalListItemFactory *factory,
                          GObject                  *listitem)
 {
   GtkWidget *label;
-  label = gtk_inscription_new ("");
-  gtk_inscription_set_xalign (GTK_INSCRIPTION (label), 0);
-  gtk_inscription_set_text_overflow (GTK_INSCRIPTION (label), GTK_INSCRIPTION_OVERFLOW_ELLIPSIZE_END);
-  gtk_inscription_set_nat_chars (GTK_INSCRIPTION (label), 20);
+  label = gtk_label_new ("");
+  gtk_label_set_xalign (GTK_LABEL (label), 0);
+  gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
+  gtk_label_set_width_chars (GTK_LABEL (label), 20);
   gtk_list_item_set_child (GTK_LIST_ITEM (listitem), label);
 }
 
@@ -221,7 +141,7 @@ bind_codepoint (GtkSignalListItemFactory *factory,
   codepoint = ucd_item_get_codepoint (UCD_ITEM (item));
 
   g_snprintf (buffer, 10, "%#06x", codepoint);
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), buffer);
+  gtk_label_set_label (GTK_LABEL (label), buffer);
 }
 
 static void
@@ -240,7 +160,7 @@ bind_char (GtkSignalListItemFactory *factory,
   if (g_unichar_isprint (codepoint))
     g_unichar_to_utf8 (codepoint, buffer);
 
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), buffer);
+  gtk_label_set_label (GTK_LABEL (label), buffer);
 }
 
 static void
@@ -255,7 +175,7 @@ bind_name (GtkSignalListItemFactory *factory,
   item = gtk_list_item_get_item (GTK_LIST_ITEM (listitem));
   name = ucd_item_get_name (UCD_ITEM (item));
 
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), name);
+  gtk_label_set_label (GTK_LABEL (label), name);
 }
 
 static void
@@ -270,7 +190,7 @@ bind_type (GtkSignalListItemFactory *factory,
   item = gtk_list_item_get_item (GTK_LIST_ITEM (listitem));
   codepoint = ucd_item_get_codepoint (UCD_ITEM (item));
 
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), get_unicode_type_name (g_unichar_type (codepoint)));
+  gtk_label_set_label (GTK_LABEL (label), get_unicode_type_name (g_unichar_type (codepoint)));
 }
 
 static void
@@ -285,7 +205,7 @@ bind_break_type (GtkSignalListItemFactory *factory,
   item = gtk_list_item_get_item (GTK_LIST_ITEM (listitem));
   codepoint = ucd_item_get_codepoint (UCD_ITEM (item));
 
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), get_break_type_name (g_unichar_break_type (codepoint)));
+  gtk_label_set_label (GTK_LABEL (label), get_break_type_name (g_unichar_break_type (codepoint)));
 }
 
 static void
@@ -300,38 +220,24 @@ bind_combining_class (GtkSignalListItemFactory *factory,
   item = gtk_list_item_get_item (GTK_LIST_ITEM (listitem));
   codepoint = ucd_item_get_codepoint (UCD_ITEM (item));
 
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), get_combining_class_name (g_unichar_combining_class (codepoint)));
+  gtk_label_set_label (GTK_LABEL (label), get_combining_class_name (g_unichar_combining_class (codepoint)));
 }
 
 static void
-setup_header (GtkSignalListItemFactory *factory,
-              GObject                  *listitem)
-{
-  GtkWidget *label;
-
-  label = gtk_inscription_new ("");
-  gtk_widget_add_css_class (label, "heading");
-  gtk_widget_set_margin_start (label, 20);
-  gtk_widget_set_margin_end (label, 20);
-  gtk_widget_set_margin_top (label, 10);
-  gtk_widget_set_margin_bottom (label, 10);
-  gtk_inscription_set_xalign (GTK_INSCRIPTION (label), 0);
-  gtk_list_header_set_child (GTK_LIST_HEADER (listitem), label);
-}
-
-static void
-bind_header (GtkSignalListItemFactory *factory,
+bind_script (GtkSignalListItemFactory *factory,
              GObject                  *listitem)
 {
   GtkWidget *label;
   GObject *item;
+  gunichar codepoint;
   GUnicodeScript script;
 
-  label = gtk_list_header_get_child (GTK_LIST_HEADER (listitem));
-  item = gtk_list_header_get_item (GTK_LIST_HEADER (listitem));
-  script = ucd_item_get_script (UCD_ITEM (item));
+  label = gtk_list_item_get_child (GTK_LIST_ITEM (listitem));
+  item = gtk_list_item_get_item (GTK_LIST_ITEM (listitem));
+  codepoint = ucd_item_get_codepoint (UCD_ITEM (item));
+  script = g_unichar_get_script (codepoint);
 
-  gtk_inscription_set_text (GTK_INSCRIPTION (label), get_script_name (script));
+  gtk_label_set_label (GTK_LABEL (label), get_script_name (script));
 }
 
 static void
@@ -349,7 +255,7 @@ selection_changed (GObject    *object,
   if (g_unichar_isprint (codepoint))
     g_unichar_to_utf8 (codepoint, buffer);
 
-  gtk_label_set_text (GTK_LABEL (label), buffer);
+  gtk_label_set_label (GTK_LABEL (label), buffer);
 }
 
 GtkWidget *
@@ -419,10 +325,12 @@ create_ucd_view (GtkWidget *label)
   g_object_unref (column);
 
   factory = gtk_signal_list_item_factory_new ();
-  g_signal_connect (factory, "setup", G_CALLBACK (setup_header), NULL);
-  g_signal_connect (factory, "bind", G_CALLBACK (bind_header), NULL);
-  gtk_column_view_set_header_factory (GTK_COLUMN_VIEW (cv), factory);
-  g_object_unref (factory);
+  g_signal_connect (factory, "setup", G_CALLBACK (setup_label), NULL);
+  g_signal_connect (factory, "bind", G_CALLBACK (bind_script), NULL);
+  column = gtk_column_view_column_new ("Script", factory);
+  gtk_column_view_column_set_resizable (column, TRUE);
+  gtk_column_view_append_column (GTK_COLUMN_VIEW (cv), column);
+  g_object_unref (column);
 
   return cv;
 }

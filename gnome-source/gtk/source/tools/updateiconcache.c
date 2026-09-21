@@ -450,7 +450,8 @@ follow_links (const char *path)
 
   if (strcmp (path, path2) == 0)
     {
-      g_clear_pointer (&path2, g_free);
+      g_free (path2);
+      path2 = NULL;
     }
 
   return path2;
@@ -606,10 +607,7 @@ scan_directory (const char *base_path,
   dir = g_dir_open (dir_path, 0, NULL);
 
   if (!dir)
-    {
-      g_free (dir_path);
-      return directories;
-    }
+    return directories;
 
   dir_hash = g_hash_table_new (g_str_hash, g_str_equal);
 
@@ -642,17 +640,13 @@ scan_directory (const char *base_path,
 	  directories = scan_directory (base_path, subsubdir, files,
 					directories, depth + 1);
 	  g_free (subsubdir);
-	  g_free (path);
 
 	  continue;
 	}
 
       /* ignore images in the toplevel directory */
       if (subdir == NULL)
-        {
-          g_free (path);
-          continue;
-        }
+        continue;
 
       retval = g_file_test (path, G_FILE_TEST_IS_REGULAR);
       if (retval)
@@ -667,10 +661,7 @@ scan_directory (const char *base_path,
 	    flags |= HAS_ICON_FILE;
 
 	  if (flags == 0)
-	    {
-	      g_free (path);
-	      continue;
-	    }
+	    continue;
 
 	  basename = g_strdup (name);
 	  dot = strrchr (basename, '.');
@@ -709,7 +700,6 @@ scan_directory (const char *base_path,
 
   g_list_free_full (list, g_free);
   g_dir_close (dir);
-  g_free (dir_path);
 
   /* Move dir into the big file hash */
   g_hash_table_foreach_remove (dir_hash, foreach_remove_func, files);
@@ -792,7 +782,7 @@ write_string (FILE *cache, const char *n)
   l = ALIGN_VALUE (strlen (n) + 1, 4);
 
   s = g_malloc0 (l);
-  g_strlcpy (s, n, l);
+  strcpy (s, n);
 
   i = fwrite (s, l, 1, cache);
 
@@ -1718,7 +1708,6 @@ main (int argc, char **argv)
   g_option_context_add_main_entries (context, args, GETTEXT_PACKAGE);
 
   g_option_context_parse (context, &argc, &argv, NULL);
-  g_option_context_free (context);
 
   path = argv[1];
 #ifdef G_OS_WIN32

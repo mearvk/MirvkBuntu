@@ -29,24 +29,29 @@
 G_BEGIN_DECLS
 
 #define GDK_TYPE_DRAW_CONTEXT             (gdk_draw_context_get_type ())
+#define GDK_DRAW_CONTEXT(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), GDK_TYPE_DRAW_CONTEXT, GdkDrawContext))
+#define GDK_IS_DRAW_CONTEXT(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GDK_TYPE_DRAW_CONTEXT))
 
 GDK_AVAILABLE_IN_ALL
-GDK_DECLARE_INTERNAL_TYPE (GdkDrawContext, gdk_draw_context, GDK, DRAW_CONTEXT, GObject)
+GType gdk_draw_context_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 GdkDisplay *            gdk_draw_context_get_display            (GdkDrawContext         *context);
 GDK_AVAILABLE_IN_ALL
 GdkSurface *            gdk_draw_context_get_surface            (GdkDrawContext         *context);
 
-GDK_DEPRECATED_IN_4_16
+GDK_AVAILABLE_IN_ALL
 void                    gdk_draw_context_begin_frame            (GdkDrawContext         *context,
                                                                  const cairo_region_t   *region);
-GDK_DEPRECATED_IN_4_16
+GDK_AVAILABLE_IN_ALL
 void                    gdk_draw_context_end_frame              (GdkDrawContext         *context);
 
-GDK_DEPRECATED_IN_4_16
+GDK_AVAILABLE_IN_ALL
 gboolean                gdk_draw_context_is_in_frame            (GdkDrawContext         *context);
-GDK_DEPRECATED_IN_4_16
+GDK_AVAILABLE_IN_ALL
 const cairo_region_t *  gdk_draw_context_get_frame_region       (GdkDrawContext         *context);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdkDrawContext, g_object_unref)
+
 G_END_DECLS
+

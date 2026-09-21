@@ -19,7 +19,7 @@
  * Modified by the GTK+ Team and others 1997-2000.  See the AUTHORS
  * file for a list of people on the GTK+ Team.  See the ChangeLog
  * files for a list of changes.  These files are distributed with
- * GTK+ at ftp://ftp.gtk.org/pub/gtk/.
+ * GTK+ at ftp://ftp.gtk.org/pub/gtk/. 
  */
 
 /*
@@ -108,6 +108,13 @@ void _gdk_x11_surface_set_frame_still_painting (GdkSurface *surface,
 gboolean _gdk_x11_display_is_root_window (GdkDisplay *display,
                                           Window      xroot_window);
 
+void _gdk_x11_display_update_grab_info        (GdkDisplay *display,
+                                               GdkDevice  *device,
+                                               int         status);
+void _gdk_x11_display_update_grab_info_ungrab (GdkDisplay *display,
+                                               GdkDevice  *device,
+                                               guint32     time,
+                                               gulong      serial);
 void _gdk_x11_display_queue_events            (GdkDisplay *display);
 
 
@@ -121,6 +128,8 @@ int         _gdk_x11_display_text_property_to_utf8_list (GdkDisplay     *display
                                                          char         ***list);
 char *      gdk_x11_utf8_to_string_target               (const char     *utf8_str,
                                                          gboolean        return_latin1);
+
+void _gdk_x11_device_check_extension_events   (GdkDevice  *device);
 
 GdkX11DeviceManagerXI2 *_gdk_x11_device_manager_new (GdkDisplay *display);
 
@@ -155,9 +164,14 @@ void     gdk_x11_device_xi2_store_axes          (GdkX11DeviceXI2 *device,
                                                  double          *axes,
                                                  int              n_axes);
 
-Cursor     _gdk_x11_display_get_xcursor_with_scale  (GdkDisplay *display,
-                                                     GdkCursor  *cursor,
-                                                     int scale);
+gboolean   _gdk_x11_display_supports_cursor_alpha   (GdkDisplay    *display);
+gboolean   _gdk_x11_display_supports_cursor_color   (GdkDisplay    *display);
+void       _gdk_x11_display_get_default_cursor_size (GdkDisplay *display,
+                                                     guint      *width,
+                                                     guint      *height);
+void       _gdk_x11_display_get_maximal_cursor_size (GdkDisplay *display,
+                                                     guint      *width,
+                                                     guint      *height);
 
 GList *    gdk_x11_display_get_toplevel_windows     (GdkDisplay *display);
 
@@ -191,10 +205,6 @@ gdk_surface_cache_filter (const XEvent *xevent,
 GdkFilterReturn
 gdk_surface_cache_shape_filter (const XEvent *xevent,
                                 gpointer      data);
-
-void _gdk_x11_display_set_cursor_theme (GdkDisplay  *display,
-                                        const char *theme,
-                                        const int    size);
 
 void _gdk_x11_cursor_display_finalize (GdkDisplay *display);
 
@@ -248,3 +258,4 @@ extern const int         _gdk_x11_event_mask_table_size;
 #define GDK_SURFACE_XDISPLAY(win)      (GDK_X11_SCREEN (GDK_SURFACE_SCREEN (win))->xdisplay)
 #define GDK_SURFACE_XID(win)           (GDK_X11_SURFACE (win)->xid)
 #define GDK_SCREEN_XDISPLAY(screen)   (GDK_X11_SCREEN (screen)->xdisplay)
+

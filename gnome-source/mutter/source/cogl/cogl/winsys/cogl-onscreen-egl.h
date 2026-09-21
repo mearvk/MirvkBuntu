@@ -25,9 +25,8 @@
 
 #pragma once
 
-#include <EGL/egl.h>
-
 #include "cogl/cogl-onscreen.h"
+#include "cogl/winsys/cogl-winsys-egl-private.h"
 
 #define COGL_TYPE_ONSCREEN_EGL (cogl_onscreen_egl_get_type ())
 COGL_EXPORT
@@ -41,15 +40,18 @@ struct _CoglOnscreenEglClass
   CoglOnscreenClass parent_class;
 };
 
-/**
- * cogl_onscreen_egl_set_egl_surface: (skip)
- */
+COGL_EXPORT void
+cogl_onscreen_egl_maybe_create_timestamp_query (CoglOnscreen  *onscreen,
+                                                CoglFrameInfo *info);
+
 COGL_EXPORT void
 cogl_onscreen_egl_set_egl_surface (CoglOnscreenEgl *onscreen_egl,
                                    EGLSurface       egl_surface);
 
-/**
- * cogl_onscreen_egl_get_egl_surface: (skip)
- */
 COGL_EXPORT EGLSurface
 cogl_onscreen_egl_get_egl_surface (CoglOnscreenEgl *onscreen_egl);
+
+gboolean
+cogl_onscreen_egl_choose_config (CoglOnscreenEgl  *onscreen_egl,
+                                 EGLConfig        *out_egl_config,
+                                 GError          **error);

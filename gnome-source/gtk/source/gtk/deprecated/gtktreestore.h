@@ -58,7 +58,7 @@ struct _GtkTreeStoreClass
 
 
 GDK_AVAILABLE_IN_ALL
-GType         gtk_tree_store_get_type         (void);
+GType         gtk_tree_store_get_type         (void) G_GNUC_CONST;
 GDK_DEPRECATED_IN_4_10_FOR(GtkTreeListModel)
 GtkTreeStore *gtk_tree_store_new              (int           n_columns,
 					       ...);

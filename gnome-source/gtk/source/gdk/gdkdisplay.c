@@ -36,11 +36,10 @@
 #include "gdkdmabufformatsprivate.h"
 #include "gdkdmabuftextureprivate.h"
 #include "gdkeventsprivate.h"
+#include "gdkframeclockidleprivate.h"
 #include "gdkglcontextprivate.h"
 #include "gdkmonitorprivate.h"
-#include "gdkprofilerprivate.h"
 #include "gdkrectangle.h"
-#include "gdkseatprivate.h"
 #include "gdkvulkancontextprivate.h"
 
 #ifdef HAVE_EGL
@@ -57,7 +56,7 @@
 /**
  * GdkDisplay:
  *
- * A representation of a workstation.
+ * `GdkDisplay` objects are the GDK representation of a workstation.
  *
  * Their purpose are two-fold:
  *
@@ -115,8 +114,6 @@ struct _GdkDisplayPrivate {
   guint composited : 1;
   guint shadow_width: 1;
   guint input_shapes : 1;
-
-  guint prefer_vulkan : 1;
 
   GdkDebugFlags debug_flags;
 };
@@ -233,27 +230,27 @@ gdk_display_class_init (GdkDisplayClass *class)
   class->opened = gdk_display_real_opened;
 
   /**
-   * GdkDisplay:composited: (getter is_composited)
+   * GdkDisplay:composited: (attributes org.gtk.Property.get=gdk_display_is_composited)
    *
    * %TRUE if the display properly composites the alpha channel.
    */
   props[PROP_COMPOSITED] =
     g_param_spec_boolean ("composited", NULL, NULL,
                           TRUE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDisplay:rgba: (getter is_rgba)
+   * GdkDisplay:rgba: (attributes org.gtk.Property.get=gdk_display_is_rgba)
    *
    * %TRUE if the display supports an alpha channel.
    */
   props[PROP_RGBA] =
     g_param_spec_boolean ("rgba", NULL, NULL,
                           TRUE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDisplay:shadow-width: (getter supports_shadow_width)
+   * GdkDisplay:shadow-width: (attributes org.gtk.Property.get=gdk_display_supports_shadow_width)
    *
    * %TRUE if the display supports extensible frames.
    *
@@ -262,20 +259,20 @@ gdk_display_class_init (GdkDisplayClass *class)
   props[PROP_SHADOW_WIDTH] =
     g_param_spec_boolean ("shadow-width", NULL, NULL,
                           TRUE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDisplay:input-shapes: (getter supports_input_shapes)
+   * GdkDisplay:input-shapes: (attributes org.gtk.Property.get=gdk_display_supports_input_shapes)
    *
    * %TRUE if the display supports input shapes.
    */
   props[PROP_INPUT_SHAPES] =
     g_param_spec_boolean ("input-shapes", NULL, NULL,
                           TRUE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDisplay:dmabuf-formats:
+   * GdkDisplay:dmabuf-formats: (attributes org.gtk.Property.get=gdk_display_get_dmabuf_formats)
    *
    * The dma-buf formats that are supported on this display
    *
@@ -284,7 +281,7 @@ gdk_display_class_init (GdkDisplayClass *class)
   props[PROP_DMABUF_FORMATS] =
     g_param_spec_boxed ("dmabuf-formats", NULL, NULL,
                         GDK_TYPE_DMABUF_FORMATS,
-                        G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
 
@@ -375,12 +372,33 @@ free_pointer_info (GdkPointerSurfaceInfo *info)
 }
 
 static void
+free_device_grab (GdkDeviceGrabInfo *info)
+{
+  g_object_unref (info->surface);
+  g_free (info);
+}
+
+static gboolean
+free_device_grabs_foreach (gpointer key,
+                           gpointer value,
+                           gpointer user_data)
+{
+  GList *list = value;
+
+  g_list_free_full (list, (GDestroyNotify) free_device_grab);
+
+  return TRUE;
+}
+
+static void
 gdk_display_init (GdkDisplay *display)
 {
   GdkDisplayPrivate *priv = gdk_display_get_instance_private (display);
 
   display->double_click_time = 250;
   display->double_click_distance = 5;
+
+  display->device_grabs = g_hash_table_new (NULL, NULL);
 
   display->pointers_info = g_hash_table_new_full (NULL, NULL, NULL,
                                                   (GDestroyNotify) free_pointer_info);
@@ -400,17 +418,15 @@ gdk_display_dispose (GObject *object)
 {
   GdkDisplay *display = GDK_DISPLAY (object);
   GdkDisplayPrivate *priv = gdk_display_get_instance_private (display);
+  gsize i;
 
-  if (display->vk_downloader)
+  for (i = 0; i < G_N_ELEMENTS (display->dmabuf_downloaders); i++)
     {
-      gdk_dmabuf_downloader_close (display->vk_downloader);
-      g_clear_object (&display->vk_downloader);
-    }
+      if (display->dmabuf_downloaders[i] == NULL)
+        continue;
 
-  if (display->egl_downloader)
-    {
-      gdk_dmabuf_downloader_close (display->egl_downloader);
-      g_clear_object (&display->egl_downloader);
+      gdk_dmabuf_downloader_close (display->dmabuf_downloaders[i]);
+      g_clear_object (&display->dmabuf_downloaders[i]);
     }
 
   _gdk_display_manager_remove_display (gdk_display_manager_get (), display);
@@ -418,13 +434,13 @@ gdk_display_dispose (GObject *object)
   g_queue_clear (&display->queued_events);
 
   g_clear_pointer (&display->egl_dmabuf_formats, gdk_dmabuf_formats_unref);
-  g_clear_pointer (&display->egl_internal_formats, gdk_dmabuf_formats_unref);
   g_clear_pointer (&display->egl_external_formats, gdk_dmabuf_formats_unref);
 #ifdef GDK_RENDERING_VULKAN
-  if (display->vk_instance)
-    gdk_display_destroy_vulkan_instance (display);
-  g_assert (display->vk_dmabuf_formats == NULL);
-  g_clear_error (&display->vulkan_error);
+  if (display->vk_dmabuf_formats)
+    {
+      gdk_display_unref_vulkan (display);
+      g_assert (display->vk_dmabuf_formats == NULL);
+    }
 #endif
 
   g_clear_object (&priv->gl_context);
@@ -443,6 +459,11 @@ static void
 gdk_display_finalize (GObject *object)
 {
   GdkDisplay *display = GDK_DISPLAY (object);
+
+  g_hash_table_foreach_remove (display->device_grabs,
+                               free_device_grabs_foreach,
+                               NULL);
+  g_hash_table_destroy (display->device_grabs);
 
   g_hash_table_destroy (display->pointers_info);
 
@@ -534,12 +555,332 @@ gdk_display_put_event (GdkDisplay *display,
   _gdk_event_queue_append (display, gdk_event_ref ((GdkEvent *)event));
 }
 
+static void
+generate_grab_broken_event (GdkDisplay *display,
+                            GdkSurface  *surface,
+                            GdkDevice  *device,
+			    gboolean    implicit,
+			    GdkSurface  *grab_surface)
+{
+  g_return_if_fail (surface != NULL);
+
+  if (!GDK_SURFACE_DESTROYED (surface))
+    {
+      GdkEvent *event;
+
+      event = gdk_grab_broken_event_new (surface,
+                                         device,
+                                         grab_surface,
+                                         implicit);
+
+      _gdk_event_queue_append (display, event);
+    }
+}
+
+GdkDeviceGrabInfo *
+_gdk_display_get_last_device_grab (GdkDisplay *display,
+                                   GdkDevice  *device)
+{
+  GList *l;
+
+  l = g_hash_table_lookup (display->device_grabs, device);
+
+  if (l)
+    {
+      l = g_list_last (l);
+      return l->data;
+    }
+
+  return NULL;
+}
+
+GdkDeviceGrabInfo *
+_gdk_display_add_device_grab (GdkDisplay       *display,
+                              GdkDevice        *device,
+                              GdkSurface        *surface,
+                              gboolean          owner_events,
+                              GdkEventMask      event_mask,
+                              unsigned long     serial_start,
+                              guint32           time,
+                              gboolean          implicit)
+{
+  GdkDeviceGrabInfo *info, *other_info;
+  GList *grabs, *l;
+
+  info = g_new0 (GdkDeviceGrabInfo, 1);
+
+  info->surface = g_object_ref (surface);
+  info->serial_start = serial_start;
+  info->serial_end = G_MAXULONG;
+  info->owner_events = owner_events;
+  info->event_mask = event_mask;
+  info->time = time;
+  info->implicit = implicit;
+
+  grabs = g_hash_table_lookup (display->device_grabs, device);
+
+  /* Find the first grab that has a larger start time (if any) and insert
+   * before that. I.E we insert after already existing grabs with same
+   * start time */
+  for (l = grabs; l != NULL; l = l->next)
+    {
+      other_info = l->data;
+
+      if (info->serial_start < other_info->serial_start)
+	break;
+    }
+
+  grabs = g_list_insert_before (grabs, l, info);
+
+  /* Make sure the new grab end before next grab */
+  if (l)
+    {
+      other_info = l->data;
+      info->serial_end = other_info->serial_start;
+    }
+
+  /* Find any previous grab and update its end time */
+  l = g_list_find (grabs, info);
+  l = l->prev;
+  if (l)
+    {
+      other_info = l->data;
+      other_info->serial_end = serial_start;
+    }
+
+  g_hash_table_insert (display->device_grabs, device, grabs);
+
+  return info;
+}
+
+static GdkSurface *
+get_current_toplevel (GdkDisplay      *display,
+                      GdkDevice       *device,
+                      int             *x_out,
+                      int             *y_out,
+		      GdkModifierType *state_out)
+{
+  GdkSurface *pointer_surface;
+  double x, y;
+  GdkModifierType state;
+
+  pointer_surface = _gdk_device_surface_at_position (device, &x, &y, &state);
+
+  if (pointer_surface != NULL &&
+      GDK_SURFACE_DESTROYED (pointer_surface))
+    pointer_surface = NULL;
+
+  *x_out = round (x);
+  *y_out = round (y);
+  *state_out = state;
+
+  return pointer_surface;
+}
+
+static void
+switch_to_pointer_grab (GdkDisplay        *display,
+                        GdkDevice         *device,
+			GdkDeviceGrabInfo *grab,
+			GdkDeviceGrabInfo *last_grab,
+			guint32            time,
+			gulong             serial)
+{
+  GdkSurface *new_toplevel;
+  GdkPointerSurfaceInfo *info;
+  GList *old_grabs;
+  GdkModifierType state;
+  int x = 0, y = 0;
+
+  /* Temporarily unset pointer to make sure we send the crossing events below */
+  old_grabs = g_hash_table_lookup (display->device_grabs, device);
+  g_hash_table_steal (display->device_grabs, device);
+  info = _gdk_display_get_pointer_info (display, device);
+
+  if (grab)
+    {
+      /* New grab is in effect */
+      if (!grab->implicit)
+	{
+	  /* !owner_event Grabbing a surface that we're not inside, current status is
+	     now NULL (i.e. outside grabbed surface) */
+	  if (!grab->owner_events && info->surface_under_pointer != grab->surface)
+	    _gdk_display_set_surface_under_pointer (display, device, NULL);
+	}
+
+      grab->activated = TRUE;
+    }
+
+  if (last_grab)
+    {
+      new_toplevel = NULL;
+
+      if (grab == NULL /* ungrab */ ||
+	  (!last_grab->owner_events && grab->owner_events) /* switched to owner_events */ )
+	{
+          new_toplevel = get_current_toplevel (display, device, &x, &y, &state);
+
+	  if (new_toplevel)
+	    {
+	      /* w is now toplevel and x,y in toplevel coords */
+              _gdk_display_set_surface_under_pointer (display, device, new_toplevel);
+	      info->toplevel_x = x;
+	      info->toplevel_y = y;
+	      info->state = state;
+	    }
+	}
+
+      if (grab == NULL) /* Ungrabbed, send events */
+	{
+	  /* We're now ungrabbed, update the surface_under_pointer */
+	  _gdk_display_set_surface_under_pointer (display, device, new_toplevel);
+	}
+    }
+
+  g_hash_table_insert (display->device_grabs, device, old_grabs);
+}
+
 void
 _gdk_display_update_last_event (GdkDisplay     *display,
                                 GdkEvent       *event)
 {
   if (gdk_event_get_time (event) != GDK_CURRENT_TIME)
     display->last_event_time = gdk_event_get_time (event);
+}
+
+void
+_gdk_display_device_grab_update (GdkDisplay *display,
+                                 GdkDevice  *device,
+                                 gulong      current_serial)
+{
+  GdkDeviceGrabInfo *current_grab, *next_grab;
+  GList *grabs;
+  guint32 time;
+
+  time = display->last_event_time;
+  grabs = g_hash_table_lookup (display->device_grabs, device);
+
+  while (grabs != NULL)
+    {
+      current_grab = grabs->data;
+
+      if (current_grab->serial_start > current_serial)
+	return; /* Hasn't started yet */
+
+      if (current_grab->serial_end > current_serial)
+	{
+	  /* This one hasn't ended yet.
+	     its the currently active one or scheduled to be active */
+
+	  if (!current_grab->activated)
+            {
+              if (gdk_device_get_source (device) != GDK_SOURCE_KEYBOARD)
+                switch_to_pointer_grab (display, device, current_grab, NULL, time, current_serial);
+            }
+
+	  break;
+	}
+
+      next_grab = NULL;
+      if (grabs->next)
+	{
+	  /* This is the next active grab */
+	  next_grab = grabs->next->data;
+
+	  if (next_grab->serial_start > current_serial)
+	    next_grab = NULL; /* Actually its not yet active */
+	}
+
+      if ((next_grab == NULL && current_grab->implicit_ungrab) ||
+          (next_grab != NULL && current_grab->surface != next_grab->surface))
+        generate_grab_broken_event (display, GDK_SURFACE (current_grab->surface),
+                                    device,
+                                    current_grab->implicit,
+                                    next_grab? next_grab->surface : NULL);
+
+      /* Remove old grab */
+      grabs = g_list_delete_link (grabs, grabs);
+      g_hash_table_insert (display->device_grabs, device, grabs);
+
+      if (gdk_device_get_source (device) != GDK_SOURCE_KEYBOARD)
+        switch_to_pointer_grab (display, device,
+                                next_grab, current_grab,
+                                time, current_serial);
+
+      free_device_grab (current_grab);
+    }
+}
+
+static GList *
+grab_list_find (GList  *grabs,
+                gulong  serial)
+{
+  GdkDeviceGrabInfo *grab;
+
+  while (grabs)
+    {
+      grab = grabs->data;
+
+      if (serial >= grab->serial_start && serial < grab->serial_end)
+	return grabs;
+
+      grabs = grabs->next;
+    }
+
+  return NULL;
+}
+
+static GList *
+find_device_grab (GdkDisplay *display,
+                   GdkDevice  *device,
+                   gulong      serial)
+{
+  GList *l;
+
+  l = g_hash_table_lookup (display->device_grabs, device);
+  return grab_list_find (l, serial);
+}
+
+GdkDeviceGrabInfo *
+_gdk_display_has_device_grab (GdkDisplay *display,
+                              GdkDevice  *device,
+                              gulong      serial)
+{
+  GList *l;
+
+  l = find_device_grab (display, device, serial);
+  if (l)
+    return l->data;
+
+  return NULL;
+}
+
+/* Returns true if last grab was ended
+ * If if_child is non-NULL, end the grab only if the grabbed
+ * surface is the same as if_child or a descendant of it */
+gboolean
+_gdk_display_end_device_grab (GdkDisplay *display,
+                              GdkDevice  *device,
+                              gulong      serial,
+                              GdkSurface  *if_child,
+                              gboolean    implicit)
+{
+  GdkDeviceGrabInfo *grab;
+  GList *l;
+
+  l = find_device_grab (display, device, serial);
+
+  if (l == NULL)
+    return FALSE;
+
+  grab = l->data;
+  if (grab && (if_child == NULL || if_child == grab->surface))
+    {
+      grab->serial_end = serial;
+      grab->implicit_ungrab = implicit;
+      return l->next == NULL;
+    }
+
+  return FALSE;
 }
 
 GdkPointerSurfaceInfo *
@@ -590,6 +931,46 @@ _gdk_display_pointer_info_foreach (GdkDisplay                   *display,
     }
 }
 
+/*< private >
+ * gdk_device_grab_info:
+ * @display: the display for which to get the grab information
+ * @device: device to get the grab information from
+ * @grab_surface: (out) (transfer none): location to store current grab surface
+ * @owner_events: (out): location to store boolean indicating whether
+ *   the @owner_events flag to gdk_device_grab() was %TRUE.
+ *
+ * Determines information about the current keyboard grab.
+ * This is not public API and must not be used by applications.
+ *
+ * Returns: %TRUE if this application currently has the
+ *  keyboard grabbed.
+ */
+gboolean
+gdk_device_grab_info (GdkDisplay  *display,
+                      GdkDevice   *device,
+                      GdkSurface  **grab_surface,
+                      gboolean    *owner_events)
+{
+  GdkDeviceGrabInfo *info;
+
+  g_return_val_if_fail (GDK_IS_DISPLAY (display), FALSE);
+  g_return_val_if_fail (GDK_IS_DEVICE (device), FALSE);
+
+  info = _gdk_display_get_last_device_grab (display, device);
+
+  if (info)
+    {
+      if (grab_surface)
+        *grab_surface = info->surface;
+      if (owner_events)
+        *owner_events = info->owner_events;
+
+      return TRUE;
+    }
+  else
+    return FALSE;
+}
+
 /**
  * gdk_display_device_is_grabbed:
  * @display: a `GdkDisplay`
@@ -603,14 +984,17 @@ gboolean
 gdk_display_device_is_grabbed (GdkDisplay *display,
                                GdkDevice  *device)
 {
-  GdkSeat *seat;
+  GdkDeviceGrabInfo *info;
 
   g_return_val_if_fail (GDK_IS_DISPLAY (display), TRUE);
   g_return_val_if_fail (GDK_IS_DEVICE (device), TRUE);
 
-  seat = gdk_device_get_seat (device);
+  /* What we're interested in is the steady state (ie last grab),
+     because we're interested e.g. if we grabbed so that we
+     can ungrab, even if our grab is not active just yet. */
+  info = _gdk_display_get_last_device_grab (display, device);
 
-  return gdk_seat_get_topmost_grab_surface (seat) != NULL;
+  return (info && !info->implicit);
 }
 
 /**
@@ -732,7 +1116,7 @@ gdk_display_get_primary_clipboard (GdkDisplay *display)
 }
 
 /**
- * gdk_display_supports_input_shapes: (get-property input-shapes)
+ * gdk_display_supports_input_shapes: (attributes org.gtk.Method.get_property=input-shapes)
  * @display: a `GdkDisplay`
  *
  * Returns %TRUE if the display supports input shapes.
@@ -812,9 +1196,8 @@ gdk_display_get_app_launch_context (GdkDisplay *display)
 GdkDisplay *
 gdk_display_open (const char *display_name)
 {
-  gdk_ensure_initialized ();
-
-  return gdk_display_manager_open_display (gdk_display_manager_get (), display_name);
+  return gdk_display_manager_open_display (gdk_display_manager_get (),
+                                           display_name);
 }
 
 gulong
@@ -901,98 +1284,6 @@ gdk_display_get_keymap (GdkDisplay *display)
 }
 
 /*<private>
- * gdk_display_set_prefer_vulkan:
- * @self: a `GdkDisplay`
- * @prefer_vulkan: true to prefer Vulkan, false for GLES/GL
- *
- * Sets if GTK's internal code should prefer using Vulkan over OpenGL.
- *
- * By default, displays will prefer OpenGL.
- *
- * Backends should initialize this as early as possible, ideally
- * during init() or when opening the display, because current code
- * does not expect this value to change at runtime.
- *
- * It would be very confusing to debug for example when one renderer
- * was a Vulkan renderer and another one used GL.
- */
-void
-gdk_display_set_prefer_vulkan (GdkDisplay *self,
-                               gboolean    prefer_vulkan)
-{
-  GdkDisplayPrivate *priv = gdk_display_get_instance_private (self);
-
-  if (priv->prefer_vulkan == prefer_vulkan)
-    return;
-
-  priv->prefer_vulkan = prefer_vulkan;
-}
-
-/*<private>
- * gdk_display_get_prefer_vulkan:
- * @self: a `GdkDisplay`
- *
- * Checks if for this display, GTK's internal code should prefer
- * using Vulkan over using OpenGL.
- *
- * Returns: true if this display prefers Vulkan
- **/
-gboolean
-gdk_display_get_prefer_vulkan (GdkDisplay *self)
-{
-  GdkDisplayPrivate *priv = gdk_display_get_instance_private (self);
-
-  return priv->prefer_vulkan;
-}
-
-/*< private >
- * gdk_display_prepare_vulkan:
- * @self: a `GdkDisplay`
- * @error: return location for a `GError`
- *
- * Checks that Vulkan is available for @self and ensures that it is
- * properly initialized.
- *
- * When this fails, an @error will be set describing the error and this
- * function returns %FALSE.
- *
- * Note that even if this function succeeds, creating a `GdkVulkanContext`
- * may still fail.
- *
- * This function is idempotent. Calling it multiple times will just
- * return the same value or error.
- *
- * You never need to call this function, GDK will call it automatically
- * as needed.
- *
- * Returns: %TRUE if the display supports Vulkan
- */
-gboolean
-gdk_display_prepare_vulkan (GdkDisplay  *self,
-                            GError     **error)
-{
-  g_return_val_if_fail (GDK_IS_DISPLAY (self), FALSE);
-  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
-
-#ifdef GDK_RENDERING_VULKAN
-  if (!self->vk_instance && !self->vulkan_error)
-    gdk_display_create_vulkan_instance (self, &self->vulkan_error);
-
-  if (self->vk_instance == NULL)
-    {
-      if (error)
-        *error = g_error_copy (self->vulkan_error);
-    }
-
-  return self->vk_instance != NULL;
-#else
-  g_set_error (error, GDK_VULKAN_ERROR, GDK_VULKAN_ERROR_UNSUPPORTED,
-               "GTK was built without Vulkan support");
-  return FALSE;
-#endif
-}
-
-/*<private>
  * gdk_display_create_vulkan_context:
  * @self: a `GdkDisplay`
  * @surface: (nullable): the `GdkSurface` to use or %NULL for a surfaceless
@@ -1018,10 +1309,10 @@ gdk_display_create_vulkan_context (GdkDisplay  *self,
   g_return_val_if_fail (surface == NULL || GDK_IS_SURFACE (surface), NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-  if (!gdk_has_feature (GDK_FEATURE_VULKAN))
+  if (gdk_display_get_debug_flags (self) & GDK_DEBUG_VULKAN_DISABLE)
     {
       g_set_error_literal (error, GDK_VULKAN_ERROR, GDK_VULKAN_ERROR_NOT_AVAILABLE,
-                           _("Vulkan support disabled via GDK_DISABLE"));
+                           _("Vulkan support disabled via GDK_DEBUG"));
       return NULL;
     }
 
@@ -1034,15 +1325,19 @@ gdk_display_create_vulkan_context (GdkDisplay  *self,
 
   if (surface)
     {
-      return g_object_new (GDK_DISPLAY_GET_CLASS (self)->vk_context_type,
-                           "surface", surface,
-                           NULL);
+      return g_initable_new (GDK_DISPLAY_GET_CLASS (self)->vk_context_type,
+                             NULL,
+                             error,
+                             "surface", surface,
+                             NULL);
     }
   else
     {
-      return g_object_new (GDK_DISPLAY_GET_CLASS (self)->vk_context_type,
-                           "display", self,
-                           NULL);
+      return g_initable_new (GDK_DISPLAY_GET_CLASS (self)->vk_context_type,
+                             NULL,
+                             error,
+                             "display", self,
+                             NULL);
     }
 }
 
@@ -1067,11 +1362,11 @@ gdk_display_init_gl (GdkDisplay *self)
 
   before = GDK_PROFILER_CURRENT_TIME;
 
-  if (!gdk_has_feature (GDK_FEATURE_OPENGL))
+  if (gdk_display_get_debug_flags (self) & GDK_DEBUG_GL_DISABLE)
     {
       g_set_error_literal (&priv->gl_error, GDK_GL_ERROR,
                            GDK_GL_ERROR_NOT_AVAILABLE,
-                           _("OpenGL support disabled via GDK_DISABLE"));
+                           _("GL support disabled via GDK_DEBUG"));
       return;
     }
 
@@ -1182,7 +1477,7 @@ gdk_display_create_gl_context (GdkDisplay  *self,
   if (!gdk_display_prepare_gl (self, error))
     return NULL;
 
-  return gdk_gl_context_new (self, NULL, FALSE);
+  return gdk_gl_context_new (self, NULL);
 }
 
 /*< private >
@@ -1275,25 +1570,19 @@ describe_egl_config (EGLDisplay egl_display,
 }
 
 gpointer
-gdk_display_get_egl_config (GdkDisplay     *self,
-                            GdkMemoryDepth  depth)
+gdk_display_get_egl_config (GdkDisplay *self)
 {
   GdkDisplayPrivate *priv = gdk_display_get_instance_private (self);
 
-  switch (depth)
-    {
-      case GDK_MEMORY_NONE:
-      case GDK_MEMORY_U8:
-        return priv->egl_config;
+  return priv->egl_config;
+}
 
-      case GDK_MEMORY_FLOAT16:
-      case GDK_MEMORY_FLOAT32:
-        return priv->egl_config_high_depth;
+gpointer
+gdk_display_get_egl_config_high_depth (GdkDisplay *self)
+{
+  GdkDisplayPrivate *priv = gdk_display_get_instance_private (self);
 
-      case GDK_N_DEPTHS:
-      default:
-        g_return_val_if_reached (priv->egl_config);
-    }
+  return priv->egl_config_high_depth;
 }
 
 static EGLDisplay
@@ -1585,8 +1874,6 @@ gdk_display_init_egl (GdkDisplay  *self,
     epoxy_has_egl_extension (priv->egl_display, "EGL_EXT_image_dma_buf_import_modifiers");
   self->have_egl_dma_buf_export =
     epoxy_has_egl_extension (priv->egl_display, "EGL_MESA_image_dma_buf_export");
-  self->have_egl_gl_colorspace =
-    epoxy_has_egl_extension (priv->egl_display, "EGL_KHR_gl_colorspace");
 
   if (self->have_egl_no_config_context)
     priv->egl_config_high_depth = gdk_display_create_egl_config (self,
@@ -1668,14 +1955,40 @@ gdk_display_get_egl_display (GdkDisplay *self)
 #endif
 }
 
-static gboolean
-gdk_display_init_dmabuf_invoke_callback (gpointer data)
+#ifdef HAVE_DMABUF
+static void
+gdk_display_add_dmabuf_downloader (GdkDisplay          *display,
+                                   GdkDmabufDownloader *downloader)
 {
-  GdkDisplay *self = data;
+  gsize i;
+
+  if (downloader == NULL)
+    return;
+
+  /* dmabuf_downloaders is NULL-terminated */
+  for (i = 0; i < G_N_ELEMENTS (display->dmabuf_downloaders) - 1; i++)
+    {
+      if (display->dmabuf_downloaders[i] == NULL)
+        break;
+    }
+
+  g_assert (i < G_N_ELEMENTS (display->dmabuf_downloaders) - 1);
+
+  display->dmabuf_downloaders[i] = downloader;
+}
+#endif
+
+/* To support a drm format, we must be able to import it into GL
+ * using the relevant EGL extensions, and download it into a memory
+ * texture, possibly doing format conversion with shaders (in GSK).
+ */
+void
+gdk_display_init_dmabuf (GdkDisplay *self)
+{
   GdkDmabufFormatsBuilder *builder;
 
   if (self->dmabuf_formats != NULL)
-    return G_SOURCE_REMOVE;
+    return;
 
   GDK_DISPLAY_DEBUG (self, DMABUF,
                      "Beginning initialization of dmabuf support");
@@ -1683,46 +1996,26 @@ gdk_display_init_dmabuf_invoke_callback (gpointer data)
   builder = gdk_dmabuf_formats_builder_new ();
 
 #ifdef HAVE_DMABUF
-  if (gdk_has_feature (GDK_FEATURE_DMABUF))
+  if (!GDK_DISPLAY_DEBUG_CHECK (self, DMABUF_DISABLE))
     {
 #ifdef GDK_RENDERING_VULKAN
-      gdk_vulkan_init_dmabuf (self);
-      if (self->vk_dmabuf_formats)
-        gdk_dmabuf_formats_builder_add_formats (builder, self->vk_dmabuf_formats);
+      gdk_display_add_dmabuf_downloader (self, gdk_vulkan_get_dmabuf_downloader (self, builder));
 #endif
 
 #ifdef HAVE_EGL
-      gdk_dmabuf_egl_init (self);
-      if (self->egl_dmabuf_formats)
-        gdk_dmabuf_formats_builder_add_formats (builder, self->egl_dmabuf_formats);
+      gdk_display_add_dmabuf_downloader (self, gdk_dmabuf_get_egl_downloader (self, builder));
 #endif
 
-      gdk_dmabuf_formats_builder_add_formats (builder, gdk_dmabuf_get_mmap_formats ());
+      gdk_dmabuf_formats_builder_add_formats (builder,
+                                              gdk_dmabuf_get_mmap_formats ());
     }
 #endif
 
-  g_atomic_pointer_set (&self->dmabuf_formats, gdk_dmabuf_formats_builder_free_to_formats (builder));
+  self->dmabuf_formats = gdk_dmabuf_formats_builder_free_to_formats (builder);
 
   GDK_DISPLAY_DEBUG (self, DMABUF,
-                     "Initialization finished. Advertising %zu dmabuf formats",
+                     "Initialized support for %zu dmabuf formats",
                      gdk_dmabuf_formats_get_n_formats (self->dmabuf_formats));
-
-  return G_SOURCE_REMOVE;
-}
-
-void
-gdk_display_init_dmabuf (GdkDisplay *self)
-{
-  if (g_atomic_pointer_get (&self->dmabuf_formats))
-    return;
-
-  GDK_DISPLAY_DEBUG (self, DMABUF,
-                     "Invoking initialization of dmabuf support");
-
-  g_main_context_invoke (NULL, gdk_display_init_dmabuf_invoke_callback, self);
-
-  GDK_DISPLAY_DEBUG (self, DMABUF,
-                     "Initialization invoking finished");
 }
 
 /**
@@ -1738,8 +2031,6 @@ gdk_display_init_dmabuf (GdkDisplay *self)
  * buffer formats with producers such as v4l, pipewire or GStreamer.
  *
  * To learn more about dma-bufs, see [class@Gdk.DmabufTextureBuilder].
- *
- * This function is threadsafe. It can be called from any thread.
  *
  * Returns: (transfer none): a `GdkDmabufFormats` object
  *
@@ -1774,7 +2065,7 @@ gdk_display_set_debug_flags (GdkDisplay    *display,
 }
 
 /**
- * gdk_display_is_composited: (get-property composited)
+ * gdk_display_is_composited: (attributes org.gtk.Method.get_property=composited)
  * @display: a `GdkDisplay`
  *
  * Returns whether surfaces can reasonably be expected to have
@@ -1819,7 +2110,7 @@ gdk_display_set_composited (GdkDisplay *display,
 }
 
 /**
- * gdk_display_is_rgba: (get-property rgba)
+ * gdk_display_is_rgba: (attributes org.gtk.Method.get_property=rgba)
  * @display: a `GdkDisplay`
  *
  * Returns whether surfaces on this @display are created with an
@@ -1864,7 +2155,7 @@ gdk_display_set_rgba (GdkDisplay *display,
 }
 
 /**
- * gdk_display_supports_shadow_width: (get-property shadow-width)
+ * gdk_display_supports_shadow_width: (attributes org.gtk.Method.get_property=shadow-width)
  * @display: a `GdkDisplay`
  *
  * Returns whether it's possible for a surface to draw outside of the window area.
@@ -1908,7 +2199,10 @@ device_removed_cb (GdkSeat    *seat,
                    GdkDevice  *device,
                    GdkDisplay *display)
 {
+  g_hash_table_remove (display->device_grabs, device);
   g_hash_table_remove (display->pointers_info, device);
+
+  /* FIXME: change core pointer and remove from device list */
 }
 
 void
@@ -2251,20 +2545,4 @@ gdk_display_translate_key (GdkDisplay      *display,
                                               effective_group,
                                               level,
                                               consumed);
-}
-
-int
-gdk_display_guess_scale_factor (GdkDisplay *display)
-{
-  GdkMonitor *monitor;
-
-  monitor = g_list_model_get_item (gdk_display_get_monitors (display), 0);
-  if (monitor)
-    {
-      int result = gdk_monitor_get_scale_factor (monitor);
-      g_object_unref (monitor);
-      return result;
-    }
-
-  return 1;
 }

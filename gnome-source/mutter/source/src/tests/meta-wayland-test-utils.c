@@ -35,6 +35,8 @@ static char *
 get_test_client_path (const char *test_client_name)
 {
   return g_test_build_filename (G_TEST_BUILT,
+                                "src",
+                                "tests",
                                 "wayland-test-clients",
                                 test_client_name,
                                 NULL);
@@ -62,9 +64,8 @@ wayland_test_client_finished (GObject      *source_object,
 }
 
 MetaWaylandTestClient *
-meta_wayland_test_client_new_with_args (MetaContext *context,
-                                        const char  *test_client_name,
-                                        ...)
+meta_wayland_test_client_new (MetaContext *context,
+                              const char  *test_client_name)
 {
   MetaWaylandCompositor *compositor;
   const char *wayland_display_name;
@@ -73,18 +74,12 @@ meta_wayland_test_client_new_with_args (MetaContext *context,
   GSubprocess *subprocess;
   GError *error = NULL;
   MetaWaylandTestClient *wayland_test_client;
-  g_autoptr (GPtrArray) args = NULL;
-  const gchar *arg;
-  va_list ap;
-#ifdef HAVE_ASAN_TESTS
-  g_autofree char *asan_options = NULL;
-#endif
 
   compositor = meta_context_get_wayland_compositor (context);
   wayland_display_name = meta_wayland_get_wayland_display_name (compositor);
   test_client_path = get_test_client_path (test_client_name);
 
-  launcher = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_NONE);
+  launcher =  g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_NONE);
   g_subprocess_launcher_setenv (launcher,
                                 "WAYLAND_DISPLAY", wayland_display_name,
                                 TRUE);
@@ -92,24 +87,10 @@ meta_wayland_test_client_new_with_args (MetaContext *context,
                                 "G_MESSAGES_DEBUG", "all",
                                 TRUE);
 
-#ifdef HAVE_ASAN_TESTS
-  asan_options = g_strdup_printf ("detect_leaks=0:%s", getenv ("ASAN_OPTIONS"));
-  g_subprocess_launcher_setenv (launcher, "ASAN_OPTIONS", asan_options, TRUE);
-#endif
-
-  va_start (ap, test_client_name);
-  args = g_ptr_array_new ();
-  g_ptr_array_add (args, (char *) test_client_path);
-
-  while ((arg = va_arg (ap, const gchar *)))
-    g_ptr_array_add (args, (gchar *) arg);
-
-  g_ptr_array_add (args, NULL);
-  va_end (ap);
-
-  subprocess = g_subprocess_launcher_spawnv (launcher,
-                                             (const gchar * const *) args->pdata,
-                                             &error);
+  subprocess = g_subprocess_launcher_spawn (launcher,
+                                            &error,
+                                            test_client_path,
+                                            NULL);
   if (!subprocess)
     {
       g_error ("Failed to launch Wayland test client '%s': %s",
@@ -127,15 +108,6 @@ meta_wayland_test_client_new_with_args (MetaContext *context,
   return wayland_test_client;
 }
 
-MetaWaylandTestClient *
-meta_wayland_test_client_new (MetaContext *context,
-                              const char  *test_client_name)
-{
-  return meta_wayland_test_client_new_with_args (context,
-                                                 test_client_name,
-                                                 NULL);
-}
-
 static void
 wayland_test_client_destroy (MetaWaylandTestClient *wayland_test_client)
 {
@@ -151,4 +123,40 @@ meta_wayland_test_client_finish (MetaWaylandTestClient *wayland_test_client)
     g_main_context_iteration (NULL, TRUE);
 
   wayland_test_client_destroy (wayland_test_client);
+}
+
+MetaWindow *
+meta_find_client_window (MetaContext *context,
+                         const char  *title)
+{
+  MetaDisplay *display = meta_context_get_display (context);
+  g_autoptr (GSList) windows = NULL;
+  GSList *l;
+
+  windows = meta_display_list_windows (display, META_LIST_DEFAULT);
+  for (l = windows; l; l = l->next)
+    {
+      MetaWindow *window = l->data;
+
+      if (g_strcmp0 (meta_window_get_title (window), title) == 0)
+        return window;
+    }
+
+  return NULL;
+}
+
+MetaWindow *
+meta_wait_for_client_window (MetaContext *context,
+                             const char  *title)
+{
+  while (TRUE)
+    {
+      MetaWindow *window;
+
+      window = meta_find_client_window (context, title);
+      if (window)
+        return window;
+
+      g_main_context_iteration (NULL, TRUE);
+    }
 }

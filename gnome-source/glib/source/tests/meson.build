@@ -15,9 +15,7 @@ lint_scripts = [
 if have_bash
   foreach test_name : lint_scripts
     test(
-      test_name,
-      bash,
-      args : [files(test_name)],
+      test_name, files(test_name),
       env : test_env,
       suite : ['lint', 'no-valgrind'],
       protocol : 'tap',
@@ -25,15 +23,11 @@ if have_bash
   endforeach
 endif
 
-if not meson.is_subproject()
-  test(
-    'check-missing-install-tag.py',
-    python,
-    args : ['-B', files('check-missing-install-tag.py')],
-    env : test_env,
-    suite : ['lint', 'no-valgrind'],
-    protocol : 'tap',
-  )
-endif
-
-subdir('lib')
+test(
+  'check-missing-install-tag.py',
+  python,
+  args : ['-B', files('check-missing-install-tag.py')],
+  env : test_env,
+  suite : ['lint', 'no-valgrind'],
+  protocol : 'tap',
+)

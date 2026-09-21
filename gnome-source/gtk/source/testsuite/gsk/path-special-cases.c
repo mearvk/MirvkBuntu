@@ -225,57 +225,6 @@ test_rsvg_parse (void)
     { "M 10 20, M 10 20", NULL },
     { "M 10 20, M 10 20", NULL },
     { "M 10 20, ", NULL },
-
-    /* The following are not part of the rsvg tests */
-
-    // an icon that was triggering broken handling of 'm'
-    // Note that the output here is using 'M' to ensure the expected rendering
-    { "M 4 1 c -1.660156 0 -3 1.339844 -3 3 v 8 c 0 1.660156 1.339844 3 3 3 h 8 c 1.660156 0 3 -1.339844 3 -3 v -8 c 0 -1.660156 -1.339844 -3 -3 -3 z m 0 6 h 8 v 2 h -8 z m 0 0", "m 4 1 c -1.660156 0 -3 1.339844 -3 3 v 8 c 0 1.660156 1.339844 3 3 3 h 8 c 1.660156 0 3 -1.339844 3 -3 v -8 c 0 -1.660156 -1.339844 -3 -3 -3 z M 4 7 h 8 v 2 h -8 z m 0 0" },
-    // another icon that was triggering broken handling of custom contours
-    // Note that the output here is using 'M' to ensure the expected rendering
-    { "m 2 0 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "m 8 0 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "m -8 2 h 3 v 3 h -3 z "
-      "m 8 0 h 3 v 3 h -3 z "
-      "m -8 6 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "m 8 0 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "m -8 2 h 3 v 3 h -3 z "
-      "m 8 0 h 3 v 3 h -3 z",
-
-      "M 2 0 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "M 10 0 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "M 2 2 h 3 v 3 h -3 z "
-      "M 10 2 h 3 v 3 h -3 z "
-      "M 2 8 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "M 10 8 c -1.089844 0 -2 0.910156 -2 2 v 3 c 0 1.089844 0.910156 2 2 2 h 3 c 1.089844 0 2 -0.910156 2 -2 v -3 c 0 -1.089844 -0.910156 -2 -2 -2 z "
-      "M 2 10 h 3 v 3 h -3 z "
-      "M 10 10 h 3 v 3 h -3 z" },
-    // omitted commands
-    { "M 10 10 20 30 z", "M 10 10 L 20 30 z" },
-    { "M 10 10 c 1 2 3 4 5 6 4 2 1 0 2 2 z",
-      "M 10 10 c 1 2 3 4 5 6 c 4 2 1 0 2 2 z" },
-    { "M 1 2 A 1 2 3 1 16 7 1 2 3 1 16 7", "path" },
-    // unclosed subpath
-    { "M 10 10 20 30 20 10 10 10 M 40 40 50 50 50 40 Z m 20 0 h 4 v 4 h -4 z",
-      "M 10 10 20 30 20 10 10 10 M 40 40 50 50 50 40 Z M 60 40 h 4 v 4 h -4 z" },
-    // whitespace at end
-    { "M 10 10 z ", "M 10 10 z" },
-    // unexpected char
-    { "M 10 ;", NULL },
-    // If either rx or ry is 0, then this arc is treated as a straight line segment (a "lineto") joining the endpoints
-    { "M 0 0 A 5 0 0 00 10 0", "M 0 0 L 10 0" },
-    { "M 0 0 A 0 5 0 00 10 0", "M 0 0 L 10 0" },
-    { "M 0 0 A 0 0 0 00 10 0", "M 0 0 L 10 0" },
-    { "M 0 0 A 5 -0 0 00 10 0", "M 0 0 L 10 0" },
-    { "M 0 0 A -0 5 0 00 10 0", "M 0 0 L 10 0" },
-    { "M 0 0 A -0 -0 0 00 10 0", "M 0 0 L 10 0" },
-    // If either rx or ry have negative signs, these are dropped; the absolute value is used instead.
-    { "M 0 0 A -5 5 0 00 10 0", "M 0 0 A 5 5 0 0 0 10 0" },
-    { "M 0 0 A 5 -5 0 00 10 0", "M 0 0 A 5 5 0 0 0 10 0" },
-    { "M 0 0 A -5 -5 0 00 10 0", "M 0 0 A 5 5 0 0 0 10 0" },
-    // conic weights must be > 0
-    { "M 0 0 O 5 0 5 5 0", NULL },
-    { "M 0 0 O 5 0 5 5 -1", NULL },
   };
   int i;
 
@@ -354,9 +303,6 @@ test_empty_path (void)
 
   g_assert_false (gsk_path_get_closest_point (path, &GRAPHENE_POINT_INIT (0, 0), INFINITY, &point, NULL));
 
-  g_assert_false (gsk_path_get_start_point (path, &point));
-  g_assert_false (gsk_path_get_end_point (path, &point));
-
   gsk_path_unref (path);
 }
 
@@ -369,7 +315,6 @@ test_rect_path (void)
   graphene_rect_t bounds;
   GskPathPoint point;
   float distance;
-  graphene_point_t p;
 
   builder = gsk_path_builder_new ();
   gsk_path_builder_add_rect (builder, &GRAPHENE_RECT_INIT (0, 0, 200, 100));
@@ -391,12 +336,6 @@ test_rect_path (void)
   g_assert_true (gsk_path_get_closest_point (path, &GRAPHENE_POINT_INIT (200, 200), INFINITY, &point, &distance));
 
   g_assert_true (distance == 100);
-
-  g_assert_true (gsk_path_get_closest_point (path, &GRAPHENE_POINT_INIT (50, -10), INFINITY, &point, &distance));
-  gsk_path_point_get_position (&point, path, &p);
-
-  g_assert_true (distance == 10);
-  g_assert_true (graphene_point_near (&p, &GRAPHENE_POINT_INIT (50, 0), 0.1));
 
   gsk_path_unref (path);
 }
@@ -1348,57 +1287,6 @@ check_path_point (const GskPathPoint     *point,
 }
 
 static void
-test_zero_length (void)
-{
-  GskPathBuilder *builder;
-  GskPath *path;
-  char *s;
-  graphene_rect_t bounds;
-  GskPathPoint point;
-  graphene_vec2_t v1, v2;
-
-  builder = gsk_path_builder_new ();
-  gsk_path_builder_move_to (builder, 10, 10);
-  path = gsk_path_builder_free_to_path (builder);
-
-  g_assert_false (gsk_path_is_empty (path));
-  g_assert_false (gsk_path_is_closed (path));
-
-  s = gsk_path_to_string (path);
-  g_assert_cmpstr (s, ==, "M 10 10");
-  g_free (s);
-
-  g_assert_true (gsk_path_get_bounds (path, &bounds));
-  g_assert_true (graphene_rect_equal (&bounds, &GRAPHENE_RECT_INIT (10, 10, 0, 0)));
-
-  g_assert_false (gsk_path_in_fill (path, &GRAPHENE_POINT_INIT (0, 0), GSK_FILL_RULE_WINDING));
-
-  g_assert_true (gsk_path_get_closest_point (path, &GRAPHENE_POINT_INIT (0, 0), INFINITY, &point, NULL));
-
-  check_path_point (&point, path,
-                    &GRAPHENE_POINT_INIT (10, 10),
-                    graphene_vec2_init (&v1, 0, 0),
-                    graphene_vec2_init (&v2, 0, 0),
-                    0, 0);
-
-  g_assert_true (gsk_path_get_start_point (path, &point));
-  check_path_point (&point, path,
-                    &GRAPHENE_POINT_INIT (10, 10),
-                    graphene_vec2_init (&v1, 0, 0),
-                    graphene_vec2_init (&v2, 0, 0),
-                    0, 0);
-
-  g_assert_true (gsk_path_get_end_point (path, &point));
-  check_path_point (&point, path,
-                    &GRAPHENE_POINT_INIT (10, 10),
-                    graphene_vec2_init (&v1, 0, 0),
-                    graphene_vec2_init (&v2, 0, 0),
-                    0, 0);
-
-  gsk_path_unref (path);
-}
-
-static void
 test_rounded_rect_plain (void)
 {
   GskPathBuilder *builder;
@@ -1421,7 +1309,7 @@ test_rounded_rect_plain (void)
   path = gsk_path_builder_free_to_path (builder);
 
   s = gsk_path_to_string (path);
-  g_assert_cmpstr (s, ==, "M 20 10 L 100 10 O 110 10, 110 20, 0.70710676908493042 L 110 200 O 110 210, 100 210, 0.70710676908493042 L 20 210 O 10 210, 10 200, 0.70710676908493042 L 10 20 O 10 10, 20 10, 0.70710676908493042 Z");
+  g_assert_cmpstr (s, ==, "M 20 10 L 100 10 O 110 10, 110 20, 0.707106769 L 110 200 O 110 210, 100 210, 0.707106769 L 20 210 O 10 210, 10 200, 0.707106769 L 10 20 O 10 10, 20 10, 0.707106769 Z");
   g_free (s);
 
   measure = gsk_path_measure_new (path);
@@ -1565,7 +1453,7 @@ test_rounded_rect_tricky (void)
   path = gsk_path_builder_free_to_path (builder);
 
   s = gsk_path_to_string (path);
-  g_assert_cmpstr (s, ==, "M 10 10 L 110 10 L 110 110 L 110 210 L 20 210 O 10 210, 10 200, 0.70710676908493042 L 10 10 Z");
+  g_assert_cmpstr (s, ==, "M 10 10 L 110 10 L 110 110 L 110 210 L 20 210 O 10 210, 10 200, 0.707106769 L 10 10 Z");
   g_free (s);
 
   measure = gsk_path_measure_new (path);
@@ -1668,12 +1556,13 @@ test_rounded_rect_parse (void)
   path = gsk_path_builder_free_to_path (builder);
 
   s = gsk_path_to_string (path);
-  g_assert_cmpstr (s, ==, "M 12 10 L 104 10 O 110 10, 110 18, 0.70710676908493042 L 110 109 O 110 121, 100 121, 0.70710676908493042 L 24 121 O 10 121, 10 105, 0.70710676908493042 L 10 14 O 10 10, 12 10, 0.70710676908493042 Z");
+  g_assert_cmpstr (s, ==, "M 12 10 L 104 10 O 110 10, 110 18, 0.707106769 L 110 109 O 110 121, 100 121, 0.707106769 L 24 121 O 10 121, 10 105, 0.707106769 L 10 14 O 10 10, 12 10, 0.707106769 Z");
+
   path2 = gsk_path_parse (s);
   g_free (s);
 
   s = gsk_path_to_string (path2);
-  g_assert_cmpstr (s, ==, "M 12 10 L 104 10 O 110 10, 110 18, 0.70710676908493042 L 110 109 O 110 121, 100 121, 0.70710676908493042 L 24 121 O 10 121, 10 105, 0.70710676908493042 L 10 14 O 10 10, 12 10, 0.70710676908493042 Z");
+  g_assert_cmpstr (s, ==, "M 12 10 L 104 10 O 110 10, 110 18, 0.707106769 L 110 109 O 110 121, 100 121, 0.707106769 L 24 121 O 10 121, 10 105, 0.707106769 L 10 14 O 10 10, 12 10, 0.707106769 Z");
   g_free (s);
 
   gsk_path_unref (path);
@@ -1700,7 +1589,7 @@ test_circle_plain (void)
   path = gsk_path_builder_free_to_path (builder);
 
   s = gsk_path_to_string (path);
-  g_assert_cmpstr (s, ==, "M 110 100 o 0 10, -10 10, 0.70710676908493042 o -10 0, -10 -10, 0.70710676908493042 o 0 -10, 10 -10, 0.70710676908493042 o 10 0, 10 10, 0.70710676908493042 z");
+  g_assert_cmpstr (s, ==, "M 110 100 o 0 10, -10 10, 0.707106769 o -10 0, -10 -10, 0.707106769 o 0 -10, 10 -10, 0.707106769 o 10 0, 10 10, 0.707106769 z");
   g_free (s);
 
   measure = gsk_path_measure_new (path);
@@ -1753,8 +1642,8 @@ test_circle_zero (void)
   path = gsk_path_builder_free_to_path (builder);
 
   s = gsk_path_to_string (path);
-  g_assert_cmpstr (s, ==, "M 100 100 o 0 0, 0 0, 0.70710676908493042 o 0 0, 0 0, 0.70710676908493042 o 0 0, 0 0, 0.70710676908493042 o 0 0, 0 0, 0.70710676908493042 z");
- g_free (s);
+  g_assert_cmpstr (s, ==, "M 100 100 o 0 0, 0 0, 0.707106769 o 0 0, 0 0, 0.707106769 o 0 0, 0 0, 0.707106769 o 0 0, 0 0, 0.707106769 z");
+  g_free (s);
 
   measure = gsk_path_measure_new (path);
 
@@ -1777,27 +1666,6 @@ test_circle_zero (void)
     }
 
   gsk_path_measure_unref (measure);
-  gsk_path_unref (path);
-}
-
-static void
-test_large_coord_conics (void)
-{
-  GskPath *path = gsk_path_parse ("M 2 10 o 0 2, -2 2, 0.707106769 o -2 0, -2 -2, 0.707106769 o 0 -2, 2 -2, 0.707106769 o 2 0, 2 2, 0.707106769 z M 3000002 10 o 0 2, -2 2, 0.707106769 o -2 0, -2 -2, 0.707106769 o 0 -2, 2 -2, 0.70710676");
-  cairo_t *cr;
-  cairo_surface_t *surface;
-
-  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 100, 100);
-  cr = cairo_create (surface);
-
-  /* Check that this does not cause a stack overflow due to
-   * runaway recursion.
-   */
-  gsk_path_to_cairo (path, cr);
-
-  cairo_surface_destroy (surface);
-  cairo_destroy (cr);
-
   gsk_path_unref (path);
 }
 
@@ -1831,8 +1699,6 @@ main (int argc, char *argv[])
   g_test_add_func ("/path/rounded-rect/parse", test_rounded_rect_parse);
   g_test_add_func ("/path/circle/plain", test_circle_plain);
   g_test_add_func ("/path/circle/zero", test_circle_zero);
-  g_test_add_func ("/path/zero-length", test_zero_length);
-  g_test_add_func ("/path/large-coord-conics", test_large_coord_conics);
 
   return g_test_run ();
 }

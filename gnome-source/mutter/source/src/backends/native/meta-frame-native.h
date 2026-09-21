@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-kms-types.h"
 #include "clutter/clutter.h"
 #include "core/util-private.h"
@@ -37,41 +36,3 @@ MetaKmsUpdate * meta_frame_native_steal_kms_update (MetaFrameNative *frame_nativ
 
 META_EXPORT_TEST
 gboolean meta_frame_native_has_kms_update (MetaFrameNative *frame_native);
-
-void meta_frame_native_set_buffer (MetaFrameNative *frame_native,
-                                   MetaDrmBuffer   *buffer);
-
-MetaDrmBuffer * meta_frame_native_get_buffer (MetaFrameNative *frame_native);
-
-void meta_frame_native_set_scanout (MetaFrameNative *frame_native,
-                                    CoglScanout     *scanout);
-
-CoglScanout * meta_frame_native_get_scanout (MetaFrameNative *frame_native);
-
-void
-meta_frame_native_set_damage (MetaFrameNative *frame_native,
-                              const MtkRegion *damage);
-
-MtkRegion *
-meta_frame_native_get_damage (MetaFrameNative *frame_native);
-
-void
-meta_frame_native_set_sync_fd (MetaFrameNative *frame_native,
-                               int              sync_fd);
-
-int
-meta_frame_native_peek_sync_fd (MetaFrameNative *frame_native);
-
-int
-meta_frame_native_steal_sync_fd (MetaFrameNative *frame_native);
-
-void
-meta_frame_native_add_source (MetaFrameNative *frame_native,
-                              GSource         *source);
-
-void
-meta_frame_native_remove_source (MetaFrameNative *frame_native,
-                                 GSource         *source);
-
-gboolean
-meta_frame_native_is_ready (MetaFrameNative *frame_native);

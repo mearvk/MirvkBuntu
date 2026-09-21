@@ -23,6 +23,7 @@
 #include <gdk/gdkdebugprivate.h>
 #include <gdk/win32/gdksurface-win32.h>
 #include <gdk/win32/gdkwin32display.h>
+#include <gdk/win32/gdkwin32screen.h>
 #include <gdk/win32/gdkwin32keys.h>
 #include <gdk/win32/gdkdevicemanager-win32.h>
 #include <gdk/win32/gdkclipdrop-win32.h>
@@ -35,8 +36,6 @@
       if (GDK_DEBUG_CHECK (type))                         \
          { action; };                                     \
     } G_STMT_END
-
-#define GDK_WIN32_HRESULT_ERROR (gdk_win32_hresult_error_quark ())
 
 /* According to
  * http://blog.airesoft.co.uk/2009/11/wm_messages/
@@ -54,6 +53,8 @@
 #define GDK_DEBUG_EVENTS_OR_INPUT (GDK_DEBUG_EVENTS|GDK_DEBUG_INPUT)
 #define GDK_DEBUG_MISC_OR_EVENTS (GDK_DEBUG_MISC|GDK_DEBUG_EVENTS)
 
+GdkWin32Screen *GDK_SURFACE_SCREEN(GObject *win);
+
 /* Use this for hWndInsertAfter (2nd argument to SetWindowPos()) if
  * SWP_NOZORDER flag is used. Otherwise it's unobvious why a particular
  * argument is used. Using NULL is misleading, because
@@ -68,58 +69,30 @@ typedef enum
   GDK_DRAG_PROTO_OLE2,
 } GdkDragProtocol;
 
-GQuark                  gdk_win32_hresult_error_quark                   (void);
-
 gulong _gdk_win32_get_next_tick (gulong suggested_tick);
-BOOL _gdk_win32_get_cursor_pos (GdkDisplay *display,
-                                LPPOINT     lpPoint);
+BOOL _gdk_win32_get_cursor_pos (LPPOINT lpPoint);
 
-void gdk_win32_surface_enable_transparency (GdkSurface *surface);
+gboolean _gdk_win32_surface_enable_transparency (GdkSurface *window);
 
 void _gdk_win32_dnd_exit (void);
 
-void     gdk_win32_display_handle_table_insert  (GdkDisplay *display,
-                                                 HANDLE     *handle,
-                                                 gpointer    data);
-void     gdk_win32_display_handle_table_remove  (GdkDisplay *display,
-                                                 HANDLE      handle);
-gpointer      gdk_win32_display_handle_table_lookup_ (GdkDisplay *display,
-                                                      HWND        handle);
+void     gdk_win32_handle_table_insert  (HANDLE   *handle,
+                                         gpointer data);
+void     gdk_win32_handle_table_remove  (HANDLE handle);
 
 cairo_region_t *_gdk_win32_hrgn_to_region    (HRGN  hrgn,
                                               guint scale);
 
-void    _gdk_win32_adjust_client_rect   (GdkSurface *surface,
+void    _gdk_win32_adjust_client_rect   (GdkSurface *window,
                                          RECT      *RECT);
 
+void       _gdk_push_modal_window   (GdkSurface *window);
+void       _gdk_remove_modal_window (GdkSurface *window);
 GdkSurface *_gdk_modal_current       (void);
-gboolean   _gdk_modal_blocked       (GdkSurface *surface);
+gboolean   _gdk_modal_blocked       (GdkSurface *window);
 
 gboolean gdk_win32_ensure_com (void);
 gboolean gdk_win32_ensure_ole (void);
-
-/*
- * gdk_win32_com_clear:
- * @com_ptr: pointer to a COM object pointer
- * 
- * Clears a reference to a COM object.
- * 
- * `com_ptr` must not be `NULL`.
- * 
- * If the reference is `NULL` then this function does nothing.
- * Otherwise, the reference count of the object is decreased
- * and the pointer is set to NULL.
- * 
- * Think of this function like g_clear_object() but for COM objects.
- */
-#define gdk_win32_com_clear(com_ptr) \
-G_STMT_START {\
-  if (*(com_ptr)) \
-    { \
-      (*(com_ptr))->lpVtbl->Release (*(com_ptr)); \
-      *(com_ptr) = NULL; \
-    } \
-}G_STMT_END
 
 void   _gdk_win32_print_dc             (HDC          hdc);
 
@@ -156,47 +129,33 @@ void    _gdk_other_api_failed        (const char *where,
 #define GDI_CALL(api, arglist) (api arglist ? 1 : (WIN32_GDI_FAILED (#api), 0))
 #define API_CALL(api, arglist) (api arglist ? 1 : (WIN32_API_FAILED (#api), 0))
 
-/*<private>
- * hr_warn:
- * @expr: The expression to evaluate
- *
- * Evaluates the given expression. The expression must return a HRESULT.
- * It is expected that this expression will never fail unless the
- * application is in a critical state.
- *
- * If the expression does fail, instead of silently ignoring the result,
- * this macro will cause it to log a critical message using g_log().
- *
- * Think of this as equivalent to `g_warn_if_fail(SUCCEEDED (expr))`
- */
-#define hr_warn(expr) G_STMT_START {\
-  HRESULT _hr = (expr); \
-  if (G_UNLIKELY (FAILED (_hr))) \
-    { \
-      char *_msg = g_win32_error_message (_hr); \
-      g_log (G_LOG_DOMAIN, \
-             G_LOG_LEVEL_CRITICAL, \
-             "file %s: line %d (%s): %s returned %ld (%s)", \
-             __FILE__, \
-             __LINE__, \
-             G_STRFUNC, \
-             #expr, \
-             _hr, \
-             _msg); \
-      g_free (_msg); \
-    } \
-  }G_STMT_END
+#define HR_LOG(hr)
 
-gboolean                gdk_win32_check_hresult                         (HRESULT                         hr,
-                                                                         GError                        **error,
-                                                                         const char                     *format,
-                                                                         ...) G_GNUC_PRINTF(3,4);
+#define HR_CHECK_RETURN(hr) { if G_UNLIKELY (FAILED (hr)) return; }
+#define HR_CHECK_RETURN_VAL(hr, val) { if G_UNLIKELY (FAILED (hr)) return val; }
+#define HR_CHECK_GOTO(hr, label) { if G_UNLIKELY (FAILED (hr)) goto label; }
 
 extern LRESULT CALLBACK _gdk_win32_surface_procedure (HWND, UINT, WPARAM, LPARAM);
+
+extern GdkDisplay       *_gdk_display;
+
+extern GdkDeviceManagerWin32 *_gdk_device_manager;
+
+extern int               _gdk_input_ignore_core;
 
 /* These are thread specific, but GDK/win32 works OK only when invoked
  * from a single thread anyway.
  */
+extern HKL               _gdk_input_locale;
+extern gboolean          _gdk_input_locale_is_ime;
+
+extern guint             _gdk_keymap_serial;
+
+/* The singleton clipdrop object pointer */
+extern GdkWin32Clipdrop *_win32_clipdrop;
+
+/* Used to identify the main thread */
+extern GThread          *_win32_main_thread;
 
 typedef enum {
   GDK_WIN32_MODAL_OP_NONE = 0x0,
@@ -207,6 +166,14 @@ typedef enum {
 } GdkWin32ModalOpKind;
 
 #define GDK_WIN32_MODAL_OP_SIZEMOVE_MASK (GDK_WIN32_MODAL_OP_SIZE | GDK_WIN32_MODAL_OP_MOVE)
+
+/* Non-zero while a modal sizing, moving, or dnd operation is in progress */
+extern GdkWin32ModalOpKind _modal_operation_in_progress;
+
+extern HWND             _modal_move_resize_window;
+
+void  _gdk_win32_begin_modal_call (GdkWin32ModalOpKind kind);
+void  _gdk_win32_end_modal_call (GdkWin32ModalOpKind kind);
 
 void _gdk_win32_display_init_cursors (GdkWin32Display     *display);
 void _gdk_win32_display_finalize_cursors (GdkWin32Display *display);
@@ -230,7 +197,7 @@ typedef struct _Win32Cursor Win32Cursor;
 
 struct _Win32Cursor {
   GdkWin32CursorLoadType load_type;
-  wchar_t *resource_name;
+  gunichar2 *resource_name;
   int width;
   int height;
   guint load_flags;
@@ -244,15 +211,12 @@ Win32Cursor *     win32_cursor_theme_get_cursor       (Win32CursorTheme *theme,
 void              win32_cursor_theme_destroy          (Win32CursorTheme *theme);
 Win32CursorTheme *_gdk_win32_display_get_cursor_theme (GdkWin32Display  *win32_display);
 
-GdkWin32HCursor *_gdk_win32_display_get_win32hcursor_with_scale (GdkWin32Display *display,
-                                                                 GdkCursor       *cursor,
-                                                                 int              scale);
-
 HICON _gdk_win32_create_hicon_for_texture (GdkTexture *texture,
                                            gboolean    is_icon,
                                            int         x,
                                            int         y);
 
+gboolean _gdk_win32_display_has_pending (GdkDisplay *display);
 void _gdk_win32_display_queue_events (GdkDisplay *display);
 
 guint8     _gdk_win32_keymap_get_active_group    (GdkWin32Keymap *keymap);
@@ -261,64 +225,57 @@ void       _gdk_win32_keymap_set_active_layout   (GdkWin32Keymap *keymap,
                                                   HKL             hkl);
 GdkModifierType _gdk_win32_keymap_get_mod_mask   (GdkWin32Keymap *keymap);
 
-/* stray GdkSurfaceImplWin32 members */
-void _gdk_win32_surface_register_dnd (GdkSurface *surface);
-void _gdk_win32_surface_unregister_dnd (GdkSurface *surface);
+GdkKeymap *_gdk_win32_display_get_keymap (GdkDisplay *display);
 
-GdkDrag *_gdk_win32_surface_drag_begin (GdkSurface         *surface,
+/* stray GdkSurfaceImplWin32 members */
+void _gdk_win32_surface_register_dnd (GdkSurface *window);
+void _gdk_win32_surface_unregister_dnd (GdkSurface *window);
+
+GdkDrag *_gdk_win32_surface_drag_begin (GdkSurface         *window,
                                         GdkDevice          *device,
                                         GdkContentProvider *content,
                                         GdkDragAction       actions,
                                         double              x_root,
                                         double              y_root);
 
-/* miscellaneous items (property setup, language notification, keymap serial) */
-gboolean   gdk_win32_display_get_setting             (GdkDisplay *display,
-                                                      const char *name,
-                                                      GValue *value);
-void       gdk_win32_display_lang_notification_init  (GdkWin32Display *display);
-void       gdk_win32_display_lang_notification_exit  (GdkWin32Display *display);
-void       gdk_win32_display_set_input_locale        (GdkWin32Display *display,
-                                                      HKL              input_locale);
-gboolean   gdk_win32_display_input_locale_is_ime     (GdkWin32Display *display);
-GdkKeymap *gdk_win32_display_get_default_keymap      (GdkWin32Display *display);
-void       gdk_win32_display_increment_keymap_serial (GdkWin32Display *display);
-guint      gdk_win32_display_get_keymap_serial       (GdkWin32Display *display);
+/* Stray GdkWin32Screen members */
+gboolean _gdk_win32_get_setting (const char *name, GValue *value);
+void _gdk_win32_screen_on_displaychange_event (GdkWin32Screen *screen);
 
 /* Distributed display manager implementation */
 GdkDisplay *_gdk_win32_display_open (const char *display_name);
 void _gdk_win32_append_event (GdkEvent *event);
 
-gboolean gdk_win32_get_surface_hwnd_rect        (GdkSurface  *surface,
+void     _gdk_win32_surface_handle_aerosnap      (GdkSurface            *window,
+                                                  GdkWin32AeroSnapCombo combo);
+
+gboolean _gdk_win32_get_window_rect             (GdkSurface  *window,
                                                  RECT       *rect);
-void      gdk_win32_surface_do_move_resize_drag  (GdkSurface  *surface,
+void     _gdk_win32_do_emit_configure_event     (GdkSurface  *window,
+                                                 RECT        rect);
+void      gdk_win32_surface_do_move_resize_drag  (GdkSurface  *window,
                                                   int         x,
                                                   int         y);
-void      gdk_win32_surface_end_move_resize_drag (GdkSurface  *surface);
-gboolean _gdk_win32_surface_fill_min_max_info    (GdkSurface  *surface,
+void      gdk_win32_surface_end_move_resize_drag (GdkSurface  *window);
+gboolean _gdk_win32_surface_fill_min_max_info    (GdkSurface  *window,
                                                   MINMAXINFO *mmi);
 
-gboolean _gdk_win32_surface_lacks_wm_decorations (GdkSurface *surface);
+gboolean _gdk_win32_surface_lacks_wm_decorations (GdkSurface *window);
 
 void gdk_win32_surface_show (GdkSurface *surface,
                              gboolean    already_mapped);
 void gdk_win32_surface_raise (GdkSurface *surface);
+void gdk_win32_surface_set_opacity (GdkSurface *surface,
+                                    double      opacity);
 void gdk_win32_surface_resize (GdkSurface *surface,
                                int         width,
                                int         height);
 
-BOOL WINAPI GtkShowSurfaceHWND (GdkSurface *surface,
-                                int        cmd_show);
-
-/* Session management */
-void     gdk_win32_surface_set_session_callbacks (GdkSurface             *surface,
-                                                  GdkWin32SessionCallback cb_query_end,
-                                                  GdkWin32SessionCallback cb_end);
-gboolean gdk_win32_surface_inhibit_logout        (GdkSurface    *surface,
-                                                  const wchar_t *reason);
-void     gdk_win32_surface_uninhibit_logout      (GdkSurface *surface);
+BOOL WINAPI GtkShowWindow (GdkSurface *window,
+                           int        cmd_show);
 
 /* Initialization */
+void _gdk_win32_surfaceing_init (void);
 void _gdk_drag_init    (void);
 void _gdk_events_init (GdkDisplay *display);
 
@@ -333,7 +290,9 @@ gboolean _gdk_win32_check_processor (GdkWin32ProcessorCheckType check_type);
 GdkPixbuf    *gdk_win32_icon_to_pixbuf_libgtk_only (HICON hicon,
                                                     double *x_hot,
                                                     double *y_hot);
-void          gdk_win32_set_modal_dialog_libgtk_only (HWND hwnd);
+void          gdk_win32_set_modal_dialog_libgtk_only (HWND window);
+
+gpointer      gdk_win32_handle_table_lookup_       (HWND handle);
 
 extern IMAGE_DOS_HEADER __ImageBase;
 

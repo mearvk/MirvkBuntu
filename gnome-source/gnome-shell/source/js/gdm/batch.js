@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 /*
  * Copyright 2011 Red Hat, Inc
  *
@@ -84,7 +85,7 @@ export class Hold extends Task {
             return;
 
         this.acquire();
-        const signalId = hold.connect('release', () => {
+        let signalId = hold.connect('release', () => {
             hold.disconnect(signalId);
             this.release();
         });
@@ -173,7 +174,7 @@ export class Batch extends Task {
 
 export class ConcurrentBatch extends Batch {
     process() {
-        const hold = this.runTask();
+        let hold = this.runTask();
 
         if (hold)
             this.hold.acquireUntilAfter(hold);
@@ -187,12 +188,12 @@ export class ConcurrentBatch extends Batch {
 
 export class ConsecutiveBatch extends Batch {
     process() {
-        const hold = this.runTask();
+        let hold = this.runTask();
 
         if (hold && hold.isAcquired()) {
             // This task is inhibiting the batch. Wait on it
             // before processing the next one.
-            const signalId = hold.connect('release', () => {
+            let signalId = hold.connect('release', () => {
                 hold.disconnect(signalId);
                 this.nextTask();
             });

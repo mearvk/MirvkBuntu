@@ -39,6 +39,3 @@
 
 /* Define to 1 if the <elf.h> and <link.h> header file exist. */
 #mesondefine HAVE_EXE_INTROSPECTION
-
-/* Whether GNOME Shell is built with XWayland support */
-#mesondefine HAVE_XWAYLAND

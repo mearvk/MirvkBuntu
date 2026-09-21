@@ -28,9 +28,6 @@
 #include "backends/native/meta-input-thread.h"
 #include "backends/native/meta-input-settings-native.h"
 
-typedef struct libinput_config_accel MetaLibinputConfigAccel;
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaLibinputConfigAccel, libinput_config_accel_destroy)
-
 struct _MetaInputSettingsNative
 {
   MetaInputSettings parent_instance;
@@ -252,7 +249,7 @@ meta_input_settings_native_set_tap_and_drag_lock_enabled (MetaInputSettings  *se
   if (libinput_device_config_tap_get_finger_count (libinput_device) > 0)
     libinput_device_config_tap_set_drag_lock_enabled (libinput_device,
                                                       enabled ?
-                                                      LIBINPUT_CONFIG_DRAG_LOCK_ENABLED_STICKY :
+                                                      LIBINPUT_CONFIG_DRAG_LOCK_ENABLED :
                                                       LIBINPUT_CONFIG_DRAG_LOCK_DISABLED);
 }
 
@@ -273,22 +270,6 @@ meta_input_settings_native_set_disable_while_typing (MetaInputSettings  *setting
                                             enabled ?
                                             LIBINPUT_CONFIG_DWT_ENABLED :
                                             LIBINPUT_CONFIG_DWT_DISABLED);
-}
-
-static void
-meta_input_settings_native_set_disable_while_typing_timeout (MetaInputSettings  *settings,
-                                                             ClutterInputDevice *device,
-                                                             uint32_t            millis)
-{
-  struct libinput_device *libinput_device;
-
-  libinput_device = meta_input_device_native_get_libinput_device (device);
-
-  if (!libinput_device)
-    return;
-
-  if (libinput_device_config_dwt_is_available (libinput_device))
-    libinput_device_config_dwt_set_timeout (libinput_device, millis);
 }
 
 static void
@@ -502,9 +483,8 @@ meta_input_settings_native_set_keyboard_repeat (MetaInputSettings *settings,
 }
 
 static void
-set_device_accel_profile (ClutterInputDevice          *device,
-                          GDesktopPointerAccelProfile  profile,
-                          MetaCustomAccelConfig       *accel_config)
+set_device_accel_profile (ClutterInputDevice         *device,
+                          GDesktopPointerAccelProfile profile)
 {
   struct libinput_device *libinput_device;
   enum libinput_config_accel_profile libinput_profile;
@@ -519,9 +499,6 @@ set_device_accel_profile (ClutterInputDevice          *device,
       break;
     case G_DESKTOP_POINTER_ACCEL_PROFILE_ADAPTIVE:
       libinput_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
-      break;
-    case G_DESKTOP_POINTER_ACCEL_PROFILE_CUSTOM:
-      libinput_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_CUSTOM;
       break;
     default:
       g_warn_if_reached ();
@@ -538,56 +515,14 @@ set_device_accel_profile (ClutterInputDevice          *device,
         libinput_device_config_accel_get_default_profile (libinput_device);
     }
 
-  if (libinput_profile == LIBINPUT_CONFIG_ACCEL_PROFILE_CUSTOM)
-    {
-      g_autoptr (MetaLibinputConfigAccel) libinput_accel_config = NULL;
-      enum libinput_config_status status_code;
-
-      libinput_accel_config = libinput_config_accel_create (libinput_profile);
-      status_code =
-        libinput_config_accel_set_points (libinput_accel_config,
-                                          /* We don't set custom curves for
-                                           * scroll (yet), only pointer motion */
-                                          LIBINPUT_ACCEL_TYPE_MOTION,
-                                          accel_config->step,
-                                          accel_config->points_len,
-                                          /* libinput doesn't modify the data
-                                           * passed to it, so the cast here is
-                                           * safe. */
-                                          (double *) accel_config->points);
-
-      if (status_code != LIBINPUT_CONFIG_STATUS_SUCCESS)
-        {
-          g_warning ("Custom pointer acceleration configuration failed with a step of %f and %"
-                     G_GSIZE_FORMAT " points, falling back to default profile.",
-                     accel_config->step, accel_config->points_len);
-          g_warning ("Make sure your step is more than 0, and that you have more than two points.");
-          libinput_profile =
-            libinput_device_config_accel_get_default_profile (libinput_device);
-        }
-      else
-        {
-          status_code = libinput_device_config_accel_apply (libinput_device,
-                                                            libinput_accel_config);
-          if (status_code != LIBINPUT_CONFIG_STATUS_SUCCESS)
-            {
-              g_warning ("Failed to apply custom pointer acceleration configuration, "
-                         "falling back to default profile");
-              libinput_profile =
-                libinput_device_config_accel_get_default_profile (libinput_device);
-            }
-        }
-    }
-
   libinput_device_config_accel_set_profile (libinput_device,
                                             libinput_profile);
 }
 
 static void
-meta_input_settings_native_set_mouse_accel_profile (MetaInputSettings           *settings,
-                                                    ClutterInputDevice          *device,
-                                                    GDesktopPointerAccelProfile  profile,
-                                                    MetaCustomAccelConfig       *accel_config)
+meta_input_settings_native_set_mouse_accel_profile (MetaInputSettings          *settings,
+                                                    ClutterInputDevice         *device,
+                                                    GDesktopPointerAccelProfile profile)
 {
   ClutterInputCapabilities caps = clutter_input_device_get_capabilities (device);
 
@@ -599,49 +534,46 @@ meta_input_settings_native_set_mouse_accel_profile (MetaInputSettings           
         CLUTTER_INPUT_CAPABILITY_TRACKPOINT)) != 0)
     return;
 
-  set_device_accel_profile (device, profile, accel_config);
+  set_device_accel_profile (device, profile);
 }
 
 static void
 meta_input_settings_native_set_touchpad_accel_profile (MetaInputSettings           *settings,
                                                        ClutterInputDevice          *device,
-                                                       GDesktopPointerAccelProfile  profile,
-                                                       MetaCustomAccelConfig       *accel_config)
+                                                       GDesktopPointerAccelProfile  profile)
 {
   ClutterInputCapabilities caps = clutter_input_device_get_capabilities (device);
 
   if ((caps & CLUTTER_INPUT_CAPABILITY_TOUCHPAD) == 0)
     return;
 
-  set_device_accel_profile (device, profile, accel_config);
+  set_device_accel_profile (device, profile);
 }
 
 static void
-meta_input_settings_native_set_trackball_accel_profile (MetaInputSettings           *settings,
-                                                        ClutterInputDevice          *device,
-                                                        GDesktopPointerAccelProfile  profile,
-                                                        MetaCustomAccelConfig       *accel_config)
+meta_input_settings_native_set_trackball_accel_profile (MetaInputSettings          *settings,
+                                                        ClutterInputDevice         *device,
+                                                        GDesktopPointerAccelProfile profile)
 {
   ClutterInputCapabilities caps = clutter_input_device_get_capabilities (device);
 
   if ((caps & CLUTTER_INPUT_CAPABILITY_TRACKBALL) == 0)
     return;
 
-  set_device_accel_profile (device, profile, accel_config);
+  set_device_accel_profile (device, profile);
 }
 
 static void
 meta_input_settings_native_set_pointing_stick_accel_profile (MetaInputSettings           *settings,
                                                              ClutterInputDevice          *device,
-                                                             GDesktopPointerAccelProfile  profile,
-                                                             MetaCustomAccelConfig       *accel_config)
+                                                             GDesktopPointerAccelProfile  profile)
 {
   ClutterInputCapabilities caps = clutter_input_device_get_capabilities (device);
 
   if ((caps & CLUTTER_INPUT_CAPABILITY_TRACKPOINT) == 0)
     return;
 
-  set_device_accel_profile (device, profile, accel_config);
+  set_device_accel_profile (device, profile);
 }
 
 static void
@@ -739,52 +671,60 @@ meta_input_settings_native_set_tablet_area (MetaInputSettings  *settings,
                                             gdouble             padding_bottom)
 {
   struct libinput_device *libinput_device;
+  gfloat scale_x;
+  gfloat scale_y;
+  gfloat offset_x;
+  gfloat offset_y;
+
+  scale_x = 1. / (1. - (padding_left + padding_right));
+  scale_y = 1. / (1. - (padding_top + padding_bottom));
+  offset_x = -padding_left * scale_x;
+  offset_y = -padding_top * scale_y;
+
+  gfloat matrix[6] = { scale_x, 0., offset_x,
+                       0., scale_y, offset_y };
 
   libinput_device = meta_input_device_native_get_libinput_device (device);
   if (!libinput_device ||
       !libinput_device_config_calibration_has_matrix (libinput_device))
     return;
 
-  if (padding_left == 0.0 && padding_right == 0.0 &&
-      padding_top == 0.0 && padding_bottom == 0.0)
-    {
-      float matrix[6];
-      libinput_device_config_calibration_get_default_matrix (libinput_device, matrix);
-      libinput_device_config_calibration_set_matrix (libinput_device, matrix);
-    }
-  else
-    {
-      float scale_x = (float) (1.0 / (1.0 - (padding_left + padding_right)));
-      float scale_y = (float) (1.0 / (1.0 - (padding_top + padding_bottom)));
-      float offset_x = (float) (-padding_left * scale_x);
-      float offset_y = (float) (-padding_top * scale_y);
-
-      float matrix[6] = { scale_x, 0., offset_x,
-                          0., scale_y, offset_y };
-
-      libinput_device_config_calibration_set_matrix (libinput_device, matrix);
-    }
+  libinput_device_config_calibration_set_matrix (libinput_device, matrix);
 }
 
 static void
 meta_input_settings_native_set_stylus_pressure (MetaInputSettings      *settings,
                                                 ClutterInputDevice     *device,
                                                 ClutterInputDeviceTool *tool,
-                                                const gint              curve[4],
-                                                const gdouble           range[2])
+                                                const gint              curve[4])
 {
   gdouble pressure_curve[4];
-  gdouble pressure_range[2];
 
   pressure_curve[0] = (gdouble) curve[0] / 100;
   pressure_curve[1] = (gdouble) curve[1] / 100;
   pressure_curve[2] = (gdouble) curve[2] / 100;
   pressure_curve[3] = (gdouble) curve[3] / 100;
 
-  pressure_range[0] = (gdouble) range[0];
-  pressure_range[1] = (gdouble) range[1];
+  meta_input_device_tool_native_set_pressure_curve_in_impl (tool, pressure_curve);
+}
 
-  meta_input_device_tool_native_set_pressure_curve_in_impl (tool, pressure_curve, pressure_range);
+static guint
+action_to_evcode (GDesktopStylusButtonAction action)
+{
+  switch (action)
+    {
+    case G_DESKTOP_STYLUS_BUTTON_ACTION_MIDDLE:
+      return BTN_STYLUS;
+    case G_DESKTOP_STYLUS_BUTTON_ACTION_RIGHT:
+      return BTN_STYLUS2;
+    case G_DESKTOP_STYLUS_BUTTON_ACTION_BACK:
+      return BTN_BACK;
+    case G_DESKTOP_STYLUS_BUTTON_ACTION_FORWARD:
+      return BTN_FORWARD;
+    case G_DESKTOP_STYLUS_BUTTON_ACTION_DEFAULT:
+    default:
+      return 0;
+    }
 }
 
 static void
@@ -795,39 +735,12 @@ meta_input_settings_native_set_stylus_button_map (MetaInputSettings          *se
                                                   GDesktopStylusButtonAction  secondary,
                                                   GDesktopStylusButtonAction  tertiary)
 {
-  ClutterInputDeviceToolType tool_type;
-
-  tool_type = clutter_input_device_tool_get_tool_type (tool);
-
-  if (tool_type == CLUTTER_INPUT_DEVICE_TOOL_MOUSE ||
-      tool_type == CLUTTER_INPUT_DEVICE_TOOL_LENS)
-    {
-      /* Mouse/lens tools follow regular mouse mapping. Confusingly for those,
-       * the primary action maps to 'right' by default, and the secondary action
-       * to 'middle' by default, so map them to the expected button by default.
-       */
-      meta_input_device_tool_native_set_button_code_in_impl (tool, CLUTTER_BUTTON_SECONDARY, primary);
-      meta_input_device_tool_native_set_button_code_in_impl (tool, CLUTTER_BUTTON_MIDDLE, secondary);
-    }
-  else
-    {
-      meta_input_device_tool_native_set_button_code_in_impl (tool, CLUTTER_BUTTON_MIDDLE, primary);
-      meta_input_device_tool_native_set_button_code_in_impl (tool, CLUTTER_BUTTON_SECONDARY, secondary);
-      meta_input_device_tool_native_set_button_code_in_impl (tool, 8, tertiary);
-    }
-}
-
-static void
-meta_input_settings_native_set_eraser_button_action (MetaInputSettings              *settings,
-                                                     ClutterInputDevice             *device,
-                                                     ClutterInputDeviceTool         *tool,
-                                                     GDesktopStylusEraserButtonMode  mode,
-                                                     GDesktopStylusButtonAction      action)
-{
-  if (!clutter_input_device_tool_has_eraser_button (tool))
-    return;
-
-  meta_input_device_tool_native_set_eraser_button_action_in_impl (tool, mode, action);
+  meta_input_device_tool_native_set_button_code_in_impl (tool, CLUTTER_BUTTON_MIDDLE,
+                                                         action_to_evcode (primary));
+  meta_input_device_tool_native_set_button_code_in_impl (tool, CLUTTER_BUTTON_SECONDARY,
+                                                         action_to_evcode (secondary));
+  meta_input_device_tool_native_set_button_code_in_impl (tool, 8, /* Back */
+                                                         action_to_evcode (tertiary));
 }
 
 static void
@@ -917,7 +830,6 @@ meta_input_settings_native_class_init (MetaInputSettingsNativeClass *klass)
   input_settings_class->set_click_method = meta_input_settings_native_set_click_method;
   input_settings_class->set_keyboard_repeat = meta_input_settings_native_set_keyboard_repeat;
   input_settings_class->set_disable_while_typing = meta_input_settings_native_set_disable_while_typing;
-  input_settings_class->set_disable_while_typing_timeout = meta_input_settings_native_set_disable_while_typing_timeout;
 
   input_settings_class->set_tablet_mapping = meta_input_settings_native_set_tablet_mapping;
   input_settings_class->set_tablet_aspect_ratio = meta_input_settings_native_set_tablet_aspect_ratio;
@@ -931,7 +843,6 @@ meta_input_settings_native_class_init (MetaInputSettingsNativeClass *klass)
 
   input_settings_class->set_stylus_pressure = meta_input_settings_native_set_stylus_pressure;
   input_settings_class->set_stylus_button_map = meta_input_settings_native_set_stylus_button_map;
-  input_settings_class->set_eraser_button_action = meta_input_settings_native_set_eraser_button_action;
 
   input_settings_class->set_mouse_middle_click_emulation = meta_input_settings_native_set_mouse_middle_click_emulation;
   input_settings_class->set_touchpad_middle_click_emulation = meta_input_settings_native_set_touchpad_middle_click_emulation;

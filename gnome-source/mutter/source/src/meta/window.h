@@ -22,7 +22,6 @@
 #include <glib-object.h>
 
 #include "meta/boxes.h"
-#include "meta/meta-enums.h"
 #include "meta/types.h"
 
 /**
@@ -67,6 +66,19 @@ typedef enum
 } MetaWindowType;
 
 /**
+ * MetaMaximizeFlags:
+ * @META_MAXIMIZE_HORIZONTAL: Horizontal
+ * @META_MAXIMIZE_VERTICAL: Vertical
+ * @META_MAXIMIZE_BOTH: Both
+ */
+typedef enum
+{
+  META_MAXIMIZE_HORIZONTAL = 1 << 0,
+  META_MAXIMIZE_VERTICAL   = 1 << 1,
+  META_MAXIMIZE_BOTH       = (1 << 0 | 1 << 1),
+} MetaMaximizeFlags;
+
+/**
  * MetaWindowClientType:
  * @META_WINDOW_CLIENT_TYPE_WAYLAND: A Wayland based window
  * @META_WINDOW_CLIENT_TYPE_X11: An X11 based window
@@ -92,6 +104,9 @@ META_EXPORT
 GType meta_window_get_type (void);
 
 META_EXPORT
+MetaFrame *meta_window_get_frame (MetaWindow *window);
+
+META_EXPORT
 gboolean meta_window_has_focus (MetaWindow *window);
 
 META_EXPORT
@@ -110,10 +125,6 @@ void meta_window_get_buffer_rect (const MetaWindow *window,
 META_EXPORT
 void meta_window_get_frame_rect (const MetaWindow *window,
                                 MtkRectangle      *rect);
-
-META_EXPORT
-void meta_window_get_client_content_rect (MetaWindow   *window,
-                                          MtkRectangle *rect);
 
 META_EXPORT
 void meta_window_client_rect_to_frame_rect (MetaWindow   *window,
@@ -169,6 +180,9 @@ gboolean    meta_window_showing_on_its_workspace (MetaWindow *window);
 
 META_EXPORT
 const char * meta_window_get_sandboxed_app_id (MetaWindow *window);
+
+META_EXPORT
+const char * meta_window_get_gtk_theme_variant (MetaWindow *window);
 
 META_EXPORT
 const char * meta_window_get_gtk_application_id (MetaWindow *window);
@@ -248,7 +262,7 @@ void     meta_window_foreach_ancestor         (MetaWindow            *window,
                                                void                  *user_data);
 
 META_EXPORT
-gboolean          meta_window_is_maximized (MetaWindow *window);
+MetaMaximizeFlags meta_window_get_maximized (MetaWindow *window);
 
 META_EXPORT
 gboolean          meta_window_is_fullscreen (MetaWindow *window);
@@ -271,10 +285,12 @@ void meta_window_set_icon_geometry (MetaWindow   *window,
                                     MtkRectangle *rect);
 
 META_EXPORT
-void meta_window_maximize   (MetaWindow        *window);
+void meta_window_maximize   (MetaWindow        *window,
+                             MetaMaximizeFlags  directions);
 
 META_EXPORT
-void meta_window_unmaximize (MetaWindow        *window);
+void meta_window_unmaximize (MetaWindow        *window,
+                             MetaMaximizeFlags  directions);
 
 META_EXPORT
 void        meta_window_minimize           (MetaWindow  *window);
@@ -307,7 +323,7 @@ void        meta_window_delete             (MetaWindow  *window,
                                             guint32      timestamp);
 
 META_EXPORT
-guint32     meta_window_get_stable_sequence (MetaWindow *window);
+guint       meta_window_get_stable_sequence (MetaWindow *window);
 
 META_EXPORT
 guint32     meta_window_get_user_time (MetaWindow *window);
@@ -329,6 +345,9 @@ const char *meta_window_get_mutter_hints (MetaWindow *window);
 
 META_EXPORT
 MetaFrameType meta_window_get_frame_type (MetaWindow *window);
+
+META_EXPORT
+MtkRegion *meta_window_get_frame_bounds (MetaWindow *window);
 
 META_EXPORT
 MetaWindow *meta_window_get_tile_match (MetaWindow *window);
@@ -376,11 +395,12 @@ void meta_window_get_work_area_all_monitors    (MetaWindow   *window,
                                                 MtkRectangle *area);
 
 META_EXPORT
-gboolean meta_window_begin_grab_op (MetaWindow       *window,
-                                    MetaGrabOp        op,
-                                    ClutterSprite    *sprite,
-                                    guint32           timestamp,
-                                    graphene_point_t *pos_hint);
+gboolean meta_window_begin_grab_op (MetaWindow           *window,
+                                    MetaGrabOp            op,
+                                    ClutterInputDevice   *device,
+                                    ClutterEventSequence *sequence,
+                                    guint32               timestamp,
+                                    graphene_point_t     *pos_hint);
 
 META_EXPORT
 gboolean meta_window_can_maximize (MetaWindow *window);
@@ -404,6 +424,15 @@ META_EXPORT
 gboolean meta_window_allows_resize (MetaWindow *window);
 
 META_EXPORT
+gboolean meta_window_is_client_decorated (MetaWindow *window);
+
+META_EXPORT
+gboolean meta_window_titlebar_is_onscreen    (MetaWindow *window);
+
+META_EXPORT
+void     meta_window_shove_titlebar_onscreen (MetaWindow *window);
+
+META_EXPORT
 uint64_t meta_window_get_id (MetaWindow *window);
 
 META_EXPORT
@@ -411,64 +440,3 @@ MetaWindowClientType meta_window_get_client_type (MetaWindow *window);
 
 META_EXPORT
 gboolean meta_window_has_pointer (MetaWindow *window);
-
-META_EXPORT
-void meta_window_stage_to_protocol_rect (MetaWindow         *window,
-                                         const MtkRectangle *stage_rect,
-                                         MtkRectangle       *protocol_rect);
-
-META_EXPORT
-void meta_window_protocol_to_stage_rect (MetaWindow *window,
-                                         const MtkRectangle *protocol_rect,
-                                         MtkRectangle       *stage_rect);
-
-META_EXPORT
-const char * meta_window_get_tag (MetaWindow *window);
-
-META_EXPORT
-void meta_window_set_type (MetaWindow     *window,
-                           MetaWindowType  type);
-
-META_EXPORT
-void meta_window_hide_from_window_list (MetaWindow *window);
-
-META_EXPORT
-void meta_window_show_in_window_list (MetaWindow *window);
-
-META_EXPORT
-MetaMaximizeFlags meta_window_get_maximize_flags (MetaWindow *window);
-
-META_EXPORT
-void meta_window_set_maximize_flags   (MetaWindow        *window,
-                                       MetaMaximizeFlags  directions);
-
-META_EXPORT
-void meta_window_set_unmaximize_flags (MetaWindow        *window,
-                                       MetaMaximizeFlags  directions);
-
-META_EXPORT
-void meta_window_inhibit_mapped (MetaWindow *window);
-
-META_EXPORT
-void meta_window_uninhibit_mapped (MetaWindow *window);
-
-META_EXPORT
-gboolean meta_window_is_mapped_inhibited (MetaWindow *window);
-
-META_EXPORT
-void meta_window_add_external_constraint    (MetaWindow             *window,
-                                             MetaExternalConstraint *constraint);
-
-META_EXPORT
-void meta_window_remove_external_constraint (MetaWindow             *window,
-                                             MetaExternalConstraint *constraint);
-
-META_EXPORT
-gboolean meta_window_get_min_size (MetaWindow *window,
-                                   int        *width,
-                                   int        *height);
-
-META_EXPORT
-gboolean meta_window_get_max_size (MetaWindow *window,
-                                   int        *width,
-                                   int        *height);

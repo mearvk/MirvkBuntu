@@ -445,12 +445,9 @@ gtk_css_node_real_update_style (GtkCssNode                   *cssnode,
     }
   else if (static_style != style && (change & GTK_CSS_CHANGE_TIMESTAMP))
     {
-      GtkCssNode *parent = gtk_css_node_get_parent (cssnode);
       new_style = gtk_css_animated_style_new_advance (GTK_CSS_ANIMATED_STYLE (style),
                                                       static_style,
-                                                      parent ? gtk_css_node_get_style (parent) : NULL,
-                                                      timestamp,
-                                                      gtk_css_node_get_style_provider (cssnode));
+                                                      timestamp);
     }
   else
     {
@@ -579,28 +576,28 @@ gtk_css_node_class_init (GtkCssNodeClass *klass)
     g_param_spec_boxed ("classes", NULL, NULL,
                          G_TYPE_STRV,
                          G_PARAM_READWRITE
-                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   cssnode_properties[PROP_ID] =
     g_param_spec_string ("id", NULL, NULL,
                          NULL,
                          G_PARAM_READWRITE
-                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   cssnode_properties[PROP_NAME] =
     g_param_spec_string ("name", NULL, NULL,
                          NULL,
                          G_PARAM_READWRITE
-                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   cssnode_properties[PROP_STATE] =
     g_param_spec_flags ("state", NULL, NULL,
                         GTK_TYPE_STATE_FLAGS,
                         0,
                         G_PARAM_READWRITE
-                        | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                        | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   cssnode_properties[PROP_VISIBLE] =
     g_param_spec_boolean ("visible", NULL, NULL,
                           TRUE,
                           G_PARAM_READWRITE
-                          | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, cssnode_properties);
 
@@ -1203,7 +1200,7 @@ gtk_css_node_get_classes (GtkCssNode *cssnode)
   return result;
 }
 
-gboolean
+void
 gtk_css_node_add_class (GtkCssNode *cssnode,
                         GQuark      style_class)
 {
@@ -1211,13 +1208,10 @@ gtk_css_node_add_class (GtkCssNode *cssnode,
     {
       gtk_css_node_invalidate (cssnode, GTK_CSS_CHANGE_CLASS);
       g_object_notify_by_pspec (G_OBJECT (cssnode), cssnode_properties[PROP_CLASSES]);
-      return TRUE;
     }
-
-  return FALSE;
 }
 
-gboolean
+void
 gtk_css_node_remove_class (GtkCssNode *cssnode,
                            GQuark      style_class)
 {
@@ -1225,10 +1219,7 @@ gtk_css_node_remove_class (GtkCssNode *cssnode,
     {
       gtk_css_node_invalidate (cssnode, GTK_CSS_CHANGE_CLASS);
       g_object_notify_by_pspec (G_OBJECT (cssnode), cssnode_properties[PROP_CLASSES]);
-      return TRUE;
     }
-
-  return FALSE;
 }
 
 gboolean

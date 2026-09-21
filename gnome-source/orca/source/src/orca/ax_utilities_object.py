@@ -25,50 +25,30 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-import gi
-
-gi.require_version("Atspi", "2.0")
-from gi.repository import Atspi
-
 from . import debug
 from .ax_object import AXObject
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
+
+    import gi
+
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
 
 
 class AXUtilitiesObject:
     """Utilities for obtaining information about accessible objects."""
 
     @staticmethod
-    def _iter_ancestors(obj: Atspi.Accessible) -> Iterator[Atspi.Accessible]:
-        """Yields the ancestors of obj, starting with its parent."""
-
-        if not AXObject.is_valid(obj):
-            return
-
-        seen = {obj}
-        parent = AXObject.get_parent(obj)
-        while parent:
-            if parent in seen:
-                tokens = [
-                    "AXUtilitiesObject: Circular tree suspected while walking ancestors.",
-                    parent,
-                    "already seen in:",
-                    list(seen),
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                return
-
-            yield parent
-            seen.add(parent)
-            parent = AXObject.get_parent(parent)
-
-    @staticmethod
     def _get_ancestors(obj: Atspi.Accessible) -> list[Atspi.Accessible]:
         """Returns a list of the ancestors of obj, starting with its parent."""
 
-        ancestors = list(AXUtilitiesObject._iter_ancestors(obj))
+        ancestors = []
+        parent = AXObject.get_parent_checked(obj)
+        while parent:
+            ancestors.append(parent)
+            parent = AXObject.get_parent_checked(parent)
         ancestors.reverse()
         return ancestors
 
@@ -113,33 +93,34 @@ class AXUtilitiesObject:
         return AXUtilitiesObject.find_ancestor(obj, pred)
 
     @staticmethod
-    def find_outermost_ancestor_inclusive(
-        obj: Atspi.Accessible,
-        pred: Callable[[Atspi.Accessible], bool],
-    ) -> Atspi.Accessible | None:
-        """Returns the outermost object, including obj, for which pred is true."""
-
-        if not AXObject.is_valid(obj):
-            return None
-
-        for ancestor in AXUtilitiesObject._get_ancestors(obj):
-            if pred(ancestor):
-                return ancestor
-
-        return obj if pred(obj) else None
-
-    @staticmethod
     def find_ancestor(
         obj: Atspi.Accessible,
         pred: Callable[[Atspi.Accessible], bool],
     ) -> Atspi.Accessible | None:
         """Returns the ancestor of obj if the function pred is true"""
 
-        for ancestor in AXUtilitiesObject._iter_ancestors(obj):
-            if pred(ancestor):
-                return ancestor
-            if AXObject.get_role(ancestor) in (Atspi.Role.INVALID, Atspi.Role.APPLICATION):
-                break
+        if not AXObject.is_valid(obj):
+            return None
+
+        # Keep track of objects we've encountered in order to handle broken trees.
+        objects = [obj]
+        parent = AXObject.get_parent_checked(obj)
+        while parent:
+            if parent in objects:
+                tokens = [
+                    "AXUtilitiesObject: Circular tree suspected in find_ancestor. ",
+                    parent,
+                    "already in: ",
+                    objects,
+                ]
+                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                return None
+
+            if pred(parent):
+                return parent
+
+            objects.append(parent)
+            parent = AXObject.get_parent_checked(parent)
 
         return None
 
@@ -161,14 +142,6 @@ class AXUtilitiesObject:
             return True
 
         return AXUtilitiesObject.find_ancestor(obj, lambda x: x == ancestor) is not None
-
-    @staticmethod
-    def label_is_ancestor_of_labelled(
-        label: Atspi.Accessible, labelled_objects: list[Atspi.Accessible]
-    ) -> bool:
-        """Returns True if label is an ancestor of an object it is the label for."""
-
-        return any(AXUtilitiesObject.is_ancestor(labelled, label) for labelled in labelled_objects)
 
     @staticmethod
     def _find_descendant(
@@ -204,9 +177,7 @@ class AXUtilitiesObject:
         tokens = [
             "AXUtilitiesObject: find_descendant: found",
             result,
-            "in",
-            round(time.time() - start, 4),
-            "s",
+            f"in {time.time() - start:.4f}s",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
@@ -218,8 +189,7 @@ class AXUtilitiesObject:
         if not AXObject.is_valid(obj):
             return None
 
-        child_count = AXObject.get_child_count(obj)
-        last_child = AXObject.get_child(obj, child_count - 1, child_count)
+        last_child = AXObject.get_child(obj, AXObject.get_child_count(obj) - 1)
         if last_child is None:
             return obj
 
@@ -239,7 +209,7 @@ class AXUtilitiesObject:
 
         child_count = AXObject.get_child_count(obj)
         for i in range(child_count):
-            child = AXObject.get_child(obj, i, child_count)
+            child = AXObject.get_child(obj, i)
             if exclude_if and exclude_if(child):
                 continue
             if include_if and include_if(child):
@@ -257,31 +227,9 @@ class AXUtilitiesObject:
         start = time.time()
         matches: list[Atspi.Accessible] = []
         AXUtilitiesObject._find_all_descendants(root, include_if, exclude_if, matches)
-        tokens = [
-            "AXUtilitiesObject: find_all_descendants:",
-            len(matches),
-            "matches found in",
-            round(time.time() - start, 4),
-            "s",
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = (
+            f"AXUtilitiesObject: find_all_descendants: {len(matches)} "
+            f"matches found in {time.time() - start:.4f}s"
+        )
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return matches
-
-    @staticmethod
-    def path_comparison(path1: list[int], path2: list[int]) -> int:
-        """Returns -1, 0, or 1 to indicate if path1 is before, the same, or after path2."""
-
-        if path1 == path2:
-            return 0
-
-        size = max(len(path1), len(path2))
-        path1 = (path1 + [-1] * size)[:size]
-        path2 = (path2 + [-1] * size)[:size]
-
-        for x in range(min(len(path1), len(path2))):
-            if path1[x] < path2[x]:
-                return -1
-            if path1[x] > path2[x]:
-                return 1
-
-        return 0

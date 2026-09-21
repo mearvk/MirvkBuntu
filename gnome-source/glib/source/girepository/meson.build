@@ -29,10 +29,7 @@ else
   gir_dir_pc_prefix = join_paths('${prefix}', gir_dir_prefix)
 endif
 
-# This is effectively the GIR XML format major version
-gir_suffix = 'gir-1.0'
-
-glib_girdir = get_option('prefix') / gir_dir_prefix / gir_suffix
+glib_girdir = get_option('prefix') / gir_dir_prefix / 'gir-1.0'
 
 gir_includedir = glib_includedir / 'girepository'
 
@@ -84,12 +81,10 @@ install_headers(girepo_headers + girepo_ffi_headers, install_dir: gir_includedir
 gir_c_args = [
   '-DGI_COMPILATION',
   '-DG_LOG_DOMAIN="GLib-GIRepository"',
-  '-DGIR_SUFFIX="@0@"'.format(gir_suffix),
+  '-DGIR_SUFFIX="gir-1.0"',
   '-DGIR_DIR="@0@"'.format(glib_girdir),
   '-DGOBJECT_INTROSPECTION_LIBDIR="@0@"'.format(glib_libdir),
   '-DGOBJECT_INTROSPECTION_DATADIR="@0@"'.format(glib_datadir),
-  '-DGOBJECT_INTROSPECTION_RELATIVE_LIBDIR="@0@"'.format(get_option('libdir')),
-  warning_sign_conversion_args,
 ]
 
 custom_c_args = []
@@ -219,23 +214,20 @@ libgirepository_dep = declare_dependency(
     'typelibdir': meson.current_build_dir() / 'introspection',
   },
 )
-meson.override_dependency('girepository-2.0', libgirepository_dep)
 
 executable('gi-dump-types',
   sources: 'gi-dump-types.c',
   dependencies: [
     libgirepository_dep,
     libgiounix_dep,
-    libgiowin32_dep,
-    app_profile_dep,
+    libgiowin32_dep
   ],
 )
 
 pkgconfig_variables = [
   'gidatadir=${datadir}/gobject-introspection-1.0',
-  'girdir=' + gir_dir_pc_prefix / gir_suffix,
+  'girdir=' + gir_dir_pc_prefix / 'gir-1.0',
   'typelibdir=${libdir}/girepository-1.0',
-  'gi_compile_repository=' + pkgconfig_multiarch_bindir / 'gi-compile-repository'
 ]
 
 pkg.generate(libgirepository,
@@ -248,15 +240,14 @@ pkg.generate(libgirepository,
   libraries: [libglib_dep, libgobject_dep],
 )
 
-subdir('compiler')
-
 if enable_gir
   subdir('introspection')
 endif
 
-subdir('decompiler')
-subdir('inspector')
-
 if build_tests
   subdir('tests')
 endif
+
+subdir('compiler')
+subdir('decompiler')
+subdir('inspector')

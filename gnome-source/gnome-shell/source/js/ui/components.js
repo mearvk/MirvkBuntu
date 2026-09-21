@@ -13,7 +13,7 @@ export class ComponentManager {
     }
 
     async _sessionModeUpdated() {
-        const newEnabledComponents = Main.sessionMode.components;
+        let newEnabledComponents = Main.sessionMode.components;
 
         await Promise.allSettled([...newEnabledComponents
             .filter(name => !this._enabledComponents.includes(name))
@@ -27,7 +27,7 @@ export class ComponentManager {
     }
 
     async _importComponent(name) {
-        const module = await import(`./components/${name}.js`);
+        let module = await import(`./components/${name}.js`);
         return module.Component;
     }
 
@@ -39,20 +39,20 @@ export class ComponentManager {
         if (Main.sessionMode.isLocked)
             return null;
 
-        const constructor = await this._importComponent(name);
+        let constructor = await this._importComponent(name);
         component = new constructor();
         this._allComponents[name] = component;
         return component;
     }
 
     async _enableComponent(name) {
-        const component = await this._ensureComponent(name);
+        let component = await this._ensureComponent(name);
         if (component)
             component.enable();
     }
 
     _disableComponent(name) {
-        const component = this._allComponents[name];
+        let component = this._allComponents[name];
         if (component == null)
             return;
         component.disable();

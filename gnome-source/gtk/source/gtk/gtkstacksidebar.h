@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 typedef struct _GtkStackSidebar GtkStackSidebar;
 
 GDK_AVAILABLE_IN_ALL
-GType       gtk_stack_sidebar_get_type  (void);
+GType       gtk_stack_sidebar_get_type  (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget * gtk_stack_sidebar_new       (void);
 GDK_AVAILABLE_IN_ALL

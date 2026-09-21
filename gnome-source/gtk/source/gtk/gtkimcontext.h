@@ -99,17 +99,14 @@ struct _GtkIMContextClass
   gboolean (* activate_osk_with_event) (GtkIMContext *context,
                                         GdkEvent     *event);
 
-  /* another signal */
-  gboolean (*invalid_composition)  (GtkIMContext *context,
-				    const char *str);
-
   /* Padding for future expansion */
+  void (*_gtk_reserved2) (void);
   void (*_gtk_reserved3) (void);
   void (*_gtk_reserved4) (void);
 };
 
 GDK_AVAILABLE_IN_ALL
-GType    gtk_im_context_get_type            (void);
+GType    gtk_im_context_get_type            (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_ALL
 void     gtk_im_context_set_client_widget   (GtkIMContext       *context,
@@ -176,9 +173,7 @@ GDK_AVAILABLE_IN_4_14
 gboolean gtk_im_context_activate_osk (GtkIMContext *context,
                                       GdkEvent     *event);
 
-GDK_AVAILABLE_IN_4_24
-GtkWidget * gtk_im_context_get_client_widget (GtkIMContext *context);
-
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkIMContext, g_object_unref)
 
 G_END_DECLS
+

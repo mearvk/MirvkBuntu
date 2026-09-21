@@ -25,9 +25,8 @@
 G_DEFINE_INTERFACE (StScrollable, st_scrollable, G_TYPE_OBJECT)
 
 /**
- * StScrollable:
- *
- * A #ClutterActor that can be scrolled
+ * SECTION:st-scrollable
+ * @short_description: A #ClutterActor that can be scrolled
  *
  * The #StScrollable interface is exposed by actors that support scrolling.
  *
@@ -97,7 +96,7 @@ st_scrollable_default_init (StScrollableInterface *g_iface)
        *
        * JavaScript code may override this as demonstrated below:
        *
-       * ```js
+       * |[<!-- language="JavaScript" -->
        * export const MyScrollable = GObject.registerClass({
        *     Properties: {
        *         'hadjustment': GObject.ParamSpec.override(
@@ -119,10 +118,12 @@ st_scrollable_default_init (StScrollableInterface *g_iface)
        *         this.notify('hadjustment');
        *     }
        * });
-       * ```
+       * ]|
        */
       g_object_interface_install_property (g_iface,
-                                           g_param_spec_object ("hadjustment", NULL, NULL,
+                                           g_param_spec_object ("hadjustment",
+                                                                "StAdjustment",
+                                                                "Horizontal adjustment",
                                                                 ST_TYPE_ADJUSTMENT,
                                                                 ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 
@@ -138,7 +139,9 @@ st_scrollable_default_init (StScrollableInterface *g_iface)
        * property in JavaScript code.
        */
       g_object_interface_install_property (g_iface,
-                                           g_param_spec_object ("vadjustment", NULL, NULL,
+                                           g_param_spec_object ("vadjustment",
+                                                                "StAdjustment",
+                                                                "Vertical adjustment",
                                                                 ST_TYPE_ADJUSTMENT,
                                                                 ST_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY));
 

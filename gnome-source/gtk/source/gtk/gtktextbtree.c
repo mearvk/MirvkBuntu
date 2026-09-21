@@ -493,17 +493,25 @@ _gtk_text_btree_unref (GtkTextBTree *tree)
       g_signal_handler_disconnect (tree->table,
                                    tree->tag_changed_handler);
 
-      g_clear_object (&tree->table);
+      g_object_unref (tree->table);
+      tree->table = NULL;
 
       gtk_text_btree_node_destroy (tree, tree->root_node);
       tree->root_node = NULL;
 
       g_assert (g_hash_table_size (tree->mark_table) == 0);
-      g_clear_pointer (&tree->mark_table, g_hash_table_destroy);
-      g_clear_pointer (&tree->child_anchor_table, g_hash_table_destroy);
+      g_hash_table_destroy (tree->mark_table);
+      tree->mark_table = NULL;
+      if (tree->child_anchor_table != NULL)
+	{
+	  g_hash_table_destroy (tree->child_anchor_table);
+	  tree->child_anchor_table = NULL;
+	}
 
-      g_clear_object (&tree->insert_mark);
-      g_clear_object (&tree->selection_bound_mark);
+      g_object_unref (tree->insert_mark);
+      tree->insert_mark = NULL;
+      g_object_unref (tree->selection_bound_mark);
+      tree->selection_bound_mark = NULL;
       tree->chars_changed_stamp = 0;
 
       g_free (tree);
@@ -882,7 +890,8 @@ _gtk_text_btree_delete (GtkTextIter *start,
 	      next2 = prev_seg->next->next;
               _gtk_toggle_segment_free (prev_seg->next);
 	      prev_seg->next = next2;
-              g_clear_pointer (&seg, _gtk_toggle_segment_free);
+              _gtk_toggle_segment_free (seg);
+	      seg = NULL;
 	    }
 	  else
 	    {
@@ -1596,6 +1605,9 @@ _gtk_text_btree_remove_view (GtkTextBTree *tree,
   g_free (line_data);
 
   gtk_text_btree_node_remove_view (view, tree->root_node, view_id);
+
+  view->layout = (gpointer) 0xdeadbeef;
+  view->view_id = (gpointer) 0xdeadbeef;
 
   g_free (view);
 }

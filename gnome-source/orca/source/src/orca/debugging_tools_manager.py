@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import faulthandler
 import os
+import subprocess
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import gi
 
@@ -34,8 +35,9 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
 
 from . import (  # pylint: disable=no-name-in-module
+    cmdnames,
+    command_manager,
     debug,
-    debugging_tools_manager_command_definitions,
     focus_manager,
     guilabels,
     input_event,
@@ -45,29 +47,57 @@ from . import (  # pylint: disable=no-name-in-module
 )
 from .ax_object import AXObject
 from .ax_utilities import AXUtilities
-from .extension import Extension
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from .command import Command
     from .scripts import default
 
 
-class DebuggingToolsManager(Extension):
+class DebuggingToolsManager:
     """Provides debugging tools."""
 
-    GROUP_LABEL = guilabels.KB_GROUP_DEBUGGING_TOOLS
-
     def __init__(self) -> None:
+        self._initialized: bool = False
+
         if debug.debugFile and os.path.exists(debug.debugFile.name):
             faulthandler.enable(file=debug.debugFile, all_threads=True)
         else:
             faulthandler.enable(all_threads=False)
-        super().__init__()
 
-    def _get_commands(self) -> list[Command]:
-        return debugging_tools_manager_command_definitions.get_commands(self)
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
+
+        if self._initialized:
+            return
+        self._initialized = True
+
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_DEBUGGING_TOOLS
+
+        commands_data = [
+            ("cycleDebugLevelHandler", self._cycle_debug_level, cmdnames.DEBUG_CYCLE_LEVEL),
+            (
+                "clear_atspi_app_cache",
+                self._clear_atspi_app_cache,
+                cmdnames.DEBUG_CLEAR_ATSPI_CACHE_FOR_APPLICATION,
+            ),
+        ]
+
+        for name, function, description in commands_data:
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=None,
+                    laptop_keybinding=None,
+                ),
+            )
+
+        msg = "DEBUGGING TOOLS MANAGER: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _cycle_debug_level(
         self,
@@ -120,15 +150,17 @@ class DebuggingToolsManager(Extension):
         AXObject.clear_cache(app, recursive=True, reason="User request.")
         return True
 
-    def _get_running_applications_as_token_iter(
+    def _get_running_applications_as_string_iter(
         self,
         is_command_line: bool,
-    ) -> Generator[list[Any], None, None]:
-        """Generator providing tokens with basic details about the running accessible apps."""
+    ) -> Generator[str, None, None]:
+        """Generator providing strings with basic details about the running accessible apps."""
 
         applications = AXUtilities.get_all_applications(is_debug=True)
-        prefix = "" if is_command_line else "DEBUGGING TOOLS MANAGER: "
-        yield [f"{prefix}Desktop has", len(applications), "app(s):"]
+        msg = f"Desktop has {len(applications)} app(s):"
+        if not is_command_line:
+            msg = f"DEBUGGING TOOLS MANAGER: {msg}"
+        yield msg
 
         for i, app in enumerate(applications):
             pid = AXUtilities.get_process_id(app)
@@ -137,16 +169,18 @@ class DebuggingToolsManager(Extension):
             else:
                 name = AXObject.get_name(app) or "[DEAD]"
             try:
-                with open(f"/proc/{pid}/cmdline", encoding="utf-8") as f:
-                    cmdline = f.read().replace("\x00", " ")
-            except OSError as error:
+                cmdline = subprocess.getoutput(f"cat /proc/{pid}/cmdline")
+            except subprocess.SubprocessError as error:
                 cmdline = f"EXCEPTION: {error}"
+            else:
+                cmdline = cmdline.replace("\x00", " ")
             if is_command_line:
                 prefix = f"{time.strftime('%H:%M:%S', time.localtime()):<12}"
             else:
                 prefix = f"{i + 1:3}."
 
-            yield [f"{prefix} pid: {pid:<10} {name:<25}", cmdline]
+            msg = f"{prefix} pid: {pid:<10} {name:<25} {cmdline}"
+            yield msg
 
     def print_running_applications(
         self,
@@ -163,11 +197,11 @@ class DebuggingToolsManager(Extension):
         if level < debug.debugLevel and not is_command_line:
             return
 
-        for tokens in self._get_running_applications_as_token_iter(is_command_line):
+        for app_string in self._get_running_applications_as_string_iter(is_command_line):
             if is_command_line:
-                print(" ".join(str(token) for token in tokens))  # noqa: T201
+                print(app_string)  # noqa: T201
             else:
-                debug.print_tokens(level, tokens, True)
+                debug.print_message(level, app_string, True)
 
     def print_session_details(self, is_command_line: bool = False) -> None:
         """Prints basic details about the current session."""
@@ -187,8 +221,8 @@ class DebuggingToolsManager(Extension):
         if is_command_line:
             print(msg)  # noqa: T201
         else:
-            tokens = ["DEBUGGING TOOLS MANAGER:", msg]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"DEBUGGING TOOLS MANAGER: {msg}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
 
 
 _manager: DebuggingToolsManager = DebuggingToolsManager()

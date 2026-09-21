@@ -21,7 +21,7 @@
 /**
  * GtkGestureLongPress:
  *
- * Recognizes long press gestures.
+ * `GtkGestureLongPress` is a `GtkGesture` for long presses.
  *
  * This gesture is also known as “Press and Hold”.
  *
@@ -97,7 +97,7 @@ gtk_gesture_long_press_check (GtkGesture *gesture)
   return GTK_GESTURE_CLASS (gtk_gesture_long_press_parent_class)->check (gesture);
 }
 
-static void
+static gboolean
 _gtk_gesture_long_press_timeout (gpointer user_data)
 {
   GtkGestureLongPress *gesture = user_data;
@@ -112,6 +112,8 @@ _gtk_gesture_long_press_timeout (gpointer user_data)
   priv->timeout_id = 0;
   priv->triggered = TRUE;
   g_signal_emit (gesture, signals[PRESSED], 0, x, y);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -146,7 +148,7 @@ gtk_gesture_long_press_begin (GtkGesture       *gesture,
 
   gtk_gesture_get_point (gesture, sequence,
                          &priv->initial_x, &priv->initial_y);
-  priv->timeout_id = g_timeout_add_once (delay, _gtk_gesture_long_press_timeout, gesture);
+  priv->timeout_id = g_timeout_add (delay, _gtk_gesture_long_press_timeout, gesture);
   gdk_source_set_static_name_by_id (priv->timeout_id, "[gtk] _gtk_gesture_long_press_timeout");
 }
 
@@ -166,7 +168,8 @@ gtk_gesture_long_press_update (GtkGesture       *gesture,
     {
       if (priv->timeout_id)
         {
-          g_clear_handle_id (&priv->timeout_id, g_source_remove);
+          g_source_remove (priv->timeout_id);
+          priv->timeout_id = 0;
           g_signal_emit (gesture, signals[CANCELLED], 0);
         }
 
@@ -185,7 +188,8 @@ gtk_gesture_long_press_end (GtkGesture       *gesture,
 
   if (priv->timeout_id)
     {
-      g_clear_handle_id (&priv->timeout_id, g_source_remove);
+      g_source_remove (priv->timeout_id);
+      priv->timeout_id = 0;
       g_signal_emit (gesture, signals[CANCELLED], 0);
     }
 
@@ -277,14 +281,14 @@ gtk_gesture_long_press_class_init (GtkGestureLongPressClass *klass)
   gesture_class->sequence_state_changed = gtk_gesture_long_press_sequence_state_changed;
 
   /**
-   * GtkGestureLongPress:delay-factor:
+   * GtkGestureLongPress:delay-factor: (attributes org.gtk.Property.get=gtk_gesture_long_press_get_delay_factor org.gtk.Property.set=gtk_gesture_long_press_set_delay_factor)
    *
    * Factor by which to modify the default timeout.
    */
   props[PROP_DELAY_FACTOR] =
     g_param_spec_double ("delay-factor", NULL, NULL,
                          0.5, 2.0, 1.0,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, props);
 
@@ -340,7 +344,7 @@ gtk_gesture_long_press_new (void)
 }
 
 /**
- * gtk_gesture_long_press_set_delay_factor:
+ * gtk_gesture_long_press_set_delay_factor: (attributes org.gtk.Method.set_property=delay-factor)
  * @gesture: A `GtkGestureLongPress`
  * @delay_factor: The delay factor to apply
  *
@@ -368,7 +372,7 @@ gtk_gesture_long_press_set_delay_factor (GtkGestureLongPress *gesture,
 }
 
 /**
- * gtk_gesture_long_press_get_delay_factor:
+ * gtk_gesture_long_press_get_delay_factor: (attributes org.gtk.Method.get_property=delay-factor)
  * @gesture: A `GtkGestureLongPress`
  *
  * Returns the delay factor.

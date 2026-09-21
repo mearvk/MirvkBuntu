@@ -20,10 +20,8 @@
  */
 
 #include "config.h"
-
+#include "gtkcellareabox.h"
 #include "gtkcellareaboxcontextprivate.h"
-
-#include "gtkcellareaboxprivate.h"
 #include "gtkorientable.h"
 
 #include "gtkprivate.h"

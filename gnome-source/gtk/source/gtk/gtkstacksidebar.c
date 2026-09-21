@@ -38,12 +38,7 @@
 /**
  * GtkStackSidebar:
  *
- * Uses a sidebar to switch between `GtkStack` pages.
- *
- * <picture>
- *   <source srcset="sidebar-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkStackSidebar" src="sidebar.png">
- * </picture>
+ * A `GtkStackSidebar` uses a sidebar to switch between `GtkStack` pages.
  *
  * In order to use a `GtkStackSidebar`, you simply use a `GtkStack` to
  * organize your UI flow, and add the sidebar to your sidebar area. You
@@ -69,7 +64,6 @@ struct _GtkStackSidebar
   GtkListBox *list;
   GtkStack *stack;
   GtkSelectionModel *pages;
-  /* HashTable<ref GtkStackPage, GtkListBoxRow> */
   GHashTable *rows;
 };
 
@@ -168,7 +162,7 @@ gtk_stack_sidebar_init (GtkStackSidebar *self)
 
   gtk_widget_add_css_class (GTK_WIDGET (self), "sidebar");
 
-  self->rows = g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
+  self->rows = g_hash_table_new (NULL, NULL);
 }
 
 static void
@@ -245,7 +239,7 @@ add_child (guint            position,
 
   g_signal_connect (page, "notify", G_CALLBACK (on_page_updated), self);
 
-  g_hash_table_insert (self->rows, g_object_ref (page), row);
+  g_hash_table_insert (self->rows, page, row);
 
   g_object_unref (page);
 }
@@ -270,10 +264,9 @@ clear_sidebar (GtkStackSidebar *self)
   g_hash_table_iter_init (&iter, self->rows);
   while (g_hash_table_iter_next (&iter, (gpointer *)&page, (gpointer *)&row))
     {
-      g_signal_handlers_disconnect_by_func (page, on_page_updated, self);
       gtk_list_box_remove (GTK_LIST_BOX (self->list), row);
-      /* This will unref page, but it is safe now: */
       g_hash_table_iter_remove (&iter);
+      g_signal_handlers_disconnect_by_func (page, on_page_updated, self);
     }
 }
 
@@ -380,14 +373,14 @@ gtk_stack_sidebar_class_init (GtkStackSidebarClass *klass)
   object_class->get_property = gtk_stack_sidebar_get_property;
 
    /**
-   * GtkStackSidebar:stack:
+   * GtkStackSidebar:stack: (attributes org.gtk.Property.get=gtk_stack_sidebar_get_stack org.gtk.Property.set=gtk_stack_sidebar_set_stack)
    *
    * The stack.
    */
   obj_properties[PROP_STACK] =
-      g_param_spec_object ("stack", NULL, NULL,
+      g_param_spec_object (I_("stack"), NULL, NULL,
                            GTK_TYPE_STACK,
-                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, N_PROPERTIES, obj_properties);
 
@@ -409,7 +402,7 @@ gtk_stack_sidebar_new (void)
 }
 
 /**
- * gtk_stack_sidebar_set_stack:
+ * gtk_stack_sidebar_set_stack: (attributes org.gtk.Method.set_property=stack)
  * @self: a `GtkStackSidebar`
  * @stack: a `GtkStack`
  *
@@ -434,11 +427,11 @@ gtk_stack_sidebar_set_stack (GtkStackSidebar *self,
 
   gtk_widget_queue_resize (GTK_WIDGET (self));
 
-  g_object_notify_by_pspec (G_OBJECT (self), obj_properties[PROP_STACK]);
+  g_object_notify (G_OBJECT (self), "stack");
 }
 
 /**
- * gtk_stack_sidebar_get_stack:
+ * gtk_stack_sidebar_get_stack: (attributes org.gtk.Method.get_property=stack)
  * @self: a `GtkStackSidebar`
  *
  * Retrieves the stack.

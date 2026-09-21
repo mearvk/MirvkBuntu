@@ -20,7 +20,6 @@
 
 #include <atk/atk.h>
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 
 #include "cally-examples-util.h"
 
@@ -62,8 +61,8 @@ test_atk_text (ClutterActor *actor)
   unichar = atk_text_get_character_at_offset (cally_text, 5);
   buf = g_ucs4_to_utf8 (&unichar, 1, NULL, NULL, NULL);
   g_print ("atk_text_get_character_at_offset(5): '%s' vs '%c'\n", buf, text[5]);
-  g_clear_pointer (&text, g_free);
-  g_clear_pointer (&buf, g_free);
+  g_free (text); text = NULL;
+  g_free (buf); buf = NULL;
 
   text = atk_text_get_string_at_offset (cally_text,
                                         5,
@@ -71,7 +70,7 @@ test_atk_text (ClutterActor *actor)
                                         &start, &end);
   g_print ("atk_text_get_string_at_offset: %s, %i, %i\n",
            text, start, end);
-  g_clear_pointer (&text, g_free);
+  g_free (text); text = NULL;
 
   pos = atk_text_get_caret_offset (cally_text);
   g_print ("atk_text_get_caret_offset: %i\n", pos);
@@ -86,7 +85,7 @@ test_atk_text (ClutterActor *actor)
 
   text = atk_text_get_selection (cally_text, 0, &start, &end);
   g_print ("atk_text_get_selection: %s, %i, %i\n", text, start, end);
-  g_clear_pointer (&text, g_free);
+  g_free(text); text = NULL;
 
   boolean = atk_text_remove_selection (cally_text, 0);
   g_print ("atk_text_remove_selection (0): %i\n", boolean);
@@ -170,11 +169,11 @@ button_press_cb (ClutterActor *actor,
 static void
 make_ui (ClutterActor *stage)
 {
-  CoglColor color_stage = { 0x00, 0x00, 0x00, 0xff };
-  CoglColor color_text = { 0xff, 0x00, 0x00, 0xff };
-  CoglColor color_sel = { 0x00, 0xff, 0x00, 0x55 };
-  CoglColor color_rect = { 0x00, 0xff, 0xff, 0xff };
-  CoglColor color_label = { 0x00, 0x00, 0x00, 0xff };
+  ClutterColor  color_stage = { 0x00, 0x00, 0x00, 0xff };
+  ClutterColor  color_text  = { 0xff, 0x00, 0x00, 0xff };
+  ClutterColor  color_sel   = { 0x00, 0xff, 0x00, 0x55 };
+  ClutterColor  color_rect  = { 0x00, 0xff, 0xff, 0xff };
+  ClutterColor  color_label = { 0x00, 0x00, 0x00, 0xff };
   ClutterActor *button      = NULL;
   ClutterActor *rectangle   = NULL;
   ClutterActor *label       = NULL;
@@ -236,6 +235,7 @@ main (int argc, char *argv[])
   cally_util_a11y_init (&argc, &argv);
 
   stage = clutter_test_get_stage ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage), "Cally - AtkText Test");
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_test_quit), NULL);
 
   make_ui (stage);

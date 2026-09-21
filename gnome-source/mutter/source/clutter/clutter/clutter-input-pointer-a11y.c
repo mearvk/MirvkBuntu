@@ -31,46 +31,13 @@
 #include "clutter/clutter-input-pointer-a11y-private.h"
 #include "clutter/clutter-main.h"
 #include "clutter/clutter-private.h"
-#include "clutter/clutter-seat-private.h"
 #include "clutter/clutter-virtual-input-device.h"
-#include "mtk/mtk.h"
-
-typedef struct _ClutterPtrA11yData
-{
-  int n_btn_pressed;
-  float current_x;
-  float current_y;
-
-  float dwell_x;
-  float dwell_y;
-  gboolean dwell_drag_started;
-  gboolean dwell_gesture_started;
-  guint dwell_timer;
-  guint dwell_position_timer;
-
-  guint secondary_click_timer;
-  gboolean secondary_click_triggered;
-} ClutterPtrA11yData;
-
-static GQuark quark_ptr_a11y_data;
-static GQuark quark_a11y_device;
-
-static ClutterPtrA11yData *
-ptr_a11y_data_from_seat (ClutterSeat *seat)
-{
-  return g_object_get_qdata (G_OBJECT (seat), quark_ptr_a11y_data);
-}
-
-static ClutterVirtualInputDevice *
-a11y_virtual_input_device_from_seat (ClutterSeat *seat)
-{
-  return g_object_get_qdata (G_OBJECT (seat), quark_a11y_device);
-}
 
 static gboolean
-is_secondary_click_enabled (ClutterSeat *seat)
+is_secondary_click_enabled (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -78,9 +45,10 @@ is_secondary_click_enabled (ClutterSeat *seat)
 }
 
 static gboolean
-is_dwell_click_enabled (ClutterSeat *seat)
+is_dwell_click_enabled (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -88,9 +56,10 @@ is_dwell_click_enabled (ClutterSeat *seat)
 }
 
 static unsigned int
-get_secondary_click_delay (ClutterSeat *seat)
+get_secondary_click_delay (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -98,9 +67,10 @@ get_secondary_click_delay (ClutterSeat *seat)
 }
 
 static unsigned int
-get_dwell_delay (ClutterSeat *seat)
+get_dwell_delay (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -108,9 +78,10 @@ get_dwell_delay (ClutterSeat *seat)
 }
 
 static unsigned int
-get_dwell_threshold (ClutterSeat *seat)
+get_dwell_threshold (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -118,9 +89,10 @@ get_dwell_threshold (ClutterSeat *seat)
 }
 
 static ClutterPointerA11yDwellMode
-get_dwell_mode (ClutterSeat *seat)
+get_dwell_mode (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -128,9 +100,10 @@ get_dwell_mode (ClutterSeat *seat)
 }
 
 static ClutterPointerA11yDwellClickType
-get_dwell_click_type (ClutterSeat *seat)
+get_dwell_click_type (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -138,10 +111,11 @@ get_dwell_click_type (ClutterSeat *seat)
 }
 
 static ClutterPointerA11yDwellClickType
-get_dwell_click_type_for_direction (ClutterSeat                      *seat,
+get_dwell_click_type_for_direction (ClutterInputDevice               *device,
                                     ClutterPointerA11yDwellDirection  direction)
 {
   ClutterPointerA11ySettings settings;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -158,209 +132,190 @@ get_dwell_click_type_for_direction (ClutterSeat                      *seat,
 }
 
 static void
-emit_button_press (ClutterSeat *seat,
-                   gint         button)
+emit_button_press (ClutterInputDevice *device,
+                   gint                button)
 {
-  ClutterVirtualInputDevice *a11y_virtual_device =
-    a11y_virtual_input_device_from_seat (seat);
-
-  clutter_virtual_input_device_notify_button (a11y_virtual_device,
+  clutter_virtual_input_device_notify_button (device->accessibility_virtual_device,
                                               g_get_monotonic_time (),
                                               button,
                                               CLUTTER_BUTTON_STATE_PRESSED);
 }
 
 static void
-emit_button_release (ClutterSeat *seat,
-                     gint         button)
+emit_button_release (ClutterInputDevice *device,
+                     gint                button)
 {
-  ClutterVirtualInputDevice *a11y_virtual_device =
-    a11y_virtual_input_device_from_seat (seat);
-
-  clutter_virtual_input_device_notify_button (a11y_virtual_device,
+  clutter_virtual_input_device_notify_button (device->accessibility_virtual_device,
                                               g_get_monotonic_time (),
                                               button,
                                               CLUTTER_BUTTON_STATE_RELEASED);
 }
 
 static void
-emit_button_click (ClutterSeat *seat,
-                   gint         button)
+emit_button_click (ClutterInputDevice *device,
+                   gint                button)
 {
-  emit_button_press (seat, button);
-  emit_button_release (seat, button);
+  emit_button_press (device, button);
+  emit_button_release (device, button);
 }
 
 static void
-restore_dwell_position (ClutterSeat *seat)
+restore_dwell_position (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-  ClutterVirtualInputDevice *a11y_virtual_device =
-    a11y_virtual_input_device_from_seat (seat);
-
-  clutter_virtual_input_device_notify_absolute_motion (a11y_virtual_device,
+  clutter_virtual_input_device_notify_absolute_motion (device->accessibility_virtual_device,
                                                        g_get_monotonic_time (),
-                                                       ptr_a11y_data->dwell_x,
-                                                       ptr_a11y_data->dwell_y);
+                                                       device->ptr_a11y_data->dwell_x,
+                                                       device->ptr_a11y_data->dwell_y);
 }
 
-static void
+static gboolean
 trigger_secondary_click (gpointer data)
 {
-  ClutterSeat *seat = data;
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterInputDevice *device = data;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  ptr_a11y_data->secondary_click_triggered = TRUE;
-  ptr_a11y_data->secondary_click_timer = 0;
+  device->ptr_a11y_data->secondary_click_triggered = TRUE;
+  device->ptr_a11y_data->secondary_click_timer = 0;
 
   g_signal_emit_by_name (seat,
                          "ptr-a11y-timeout-stopped",
+                         device,
                          CLUTTER_A11Y_TIMEOUT_TYPE_SECONDARY_CLICK,
                          TRUE);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
-start_secondary_click_timeout (ClutterSeat *seat)
+start_secondary_click_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-  unsigned int delay = get_secondary_click_delay (seat);
+  unsigned int delay = get_secondary_click_delay (device);
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  ptr_a11y_data->secondary_click_timer =
-    mtk_timeout_add_once (delay, trigger_secondary_click, seat);
-  mtk_source_set_name_by_id (ptr_a11y_data->secondary_click_timer,
-                             "[clutter] trigger_secondary_click");
+  device->ptr_a11y_data->secondary_click_timer =
+    clutter_threads_add_timeout (delay, trigger_secondary_click, device);
 
   g_signal_emit_by_name (seat,
                          "ptr-a11y-timeout-started",
+                         device,
                          CLUTTER_A11Y_TIMEOUT_TYPE_SECONDARY_CLICK,
                          delay);
 }
 
 static void
-stop_secondary_click_timeout (ClutterSeat *seat)
+stop_secondary_click_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  if (ptr_a11y_data->secondary_click_timer)
+  if (device->ptr_a11y_data->secondary_click_timer)
     {
-      g_clear_handle_id (&ptr_a11y_data->secondary_click_timer,
-                         mtk_source_remove);
+      g_clear_handle_id (&device->ptr_a11y_data->secondary_click_timer,
+                         g_source_remove);
 
       g_signal_emit_by_name (seat,
                              "ptr-a11y-timeout-stopped",
+                             device,
                              CLUTTER_A11Y_TIMEOUT_TYPE_SECONDARY_CLICK,
                              FALSE);
     }
-  ptr_a11y_data->secondary_click_triggered = FALSE;
+  device->ptr_a11y_data->secondary_click_triggered = FALSE;
 }
 
 static gboolean
-pointer_has_moved (ClutterSeat *seat)
+pointer_has_moved (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
   float dx, dy;
   gint threshold;
 
-  dx = ptr_a11y_data->dwell_x - ptr_a11y_data->current_x;
-  dy = ptr_a11y_data->dwell_y - ptr_a11y_data->current_y;
-  threshold = get_dwell_threshold (seat);
+  dx = device->ptr_a11y_data->dwell_x - device->ptr_a11y_data->current_x;
+  dy = device->ptr_a11y_data->dwell_y - device->ptr_a11y_data->current_y;
+  threshold = get_dwell_threshold (device);
 
   /* Pythagorean theorem */
   return ((dx * dx) + (dy * dy)) > (threshold * threshold);
 }
 
 static gboolean
-is_secondary_click_pending (ClutterSeat *seat)
+is_secondary_click_pending (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  return ptr_a11y_data->secondary_click_timer != 0;
+  return device->ptr_a11y_data->secondary_click_timer != 0;
 }
 
 static gboolean
-is_secondary_click_triggered (ClutterSeat *seat)
+is_secondary_click_triggered (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  return ptr_a11y_data->secondary_click_triggered;
+  return device->ptr_a11y_data->secondary_click_triggered;
 }
 
 static gboolean
-is_dwell_click_pending (ClutterSeat *seat)
+is_dwell_click_pending (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  return ptr_a11y_data->dwell_timer != 0;
+  return device->ptr_a11y_data->dwell_timer != 0;
 }
 
 static gboolean
-is_dwell_dragging (ClutterSeat *seat)
+is_dwell_dragging (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  return ptr_a11y_data->dwell_drag_started;
+  return device->ptr_a11y_data->dwell_drag_started;
 }
 
 static gboolean
-is_dwell_gesturing (ClutterSeat *seat)
+is_dwell_gesturing (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  return ptr_a11y_data->dwell_gesture_started;
+  return device->ptr_a11y_data->dwell_gesture_started;
 }
 
 static gboolean
-has_button_pressed (ClutterSeat *seat)
+has_button_pressed (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  return ptr_a11y_data->n_btn_pressed > 0;
+  return device->ptr_a11y_data->n_btn_pressed > 0;
 }
 
 static gboolean
-should_start_secondary_click_timeout (ClutterSeat *seat)
+should_start_secondary_click_timeout (ClutterInputDevice *device)
 {
-  return !is_dwell_dragging (seat);
+  return !is_dwell_dragging (device);
 }
 
 static gboolean
-should_start_dwell (ClutterSeat *seat)
+should_start_dwell (ClutterInputDevice *device)
 {
   /* We should trigger a dwell if we've not already started one, and if
    * no button is currently pressed or we are in the middle of a dwell
    * drag action.
    */
-  return !is_dwell_click_pending (seat) &&
-         (is_dwell_dragging (seat) ||
-          !has_button_pressed (seat));
+  return !is_dwell_click_pending (device) &&
+         (is_dwell_dragging (device) ||
+          !has_button_pressed (device));
 }
 
 static gboolean
-should_stop_dwell (ClutterSeat *seat)
+should_stop_dwell (ClutterInputDevice *device)
 {
   /* We should stop a dwell if the motion exceeds the threshold, unless
    * we've started a gesture, because we want to keep the original dwell
    * location to both detect a gesture and restore the original pointer
    * location once the gesture is finished.
    */
-  return pointer_has_moved (seat) &&
-         !is_dwell_gesturing (seat);
+  return pointer_has_moved (device) &&
+         !is_dwell_gesturing (device);
 }
 
 
 static gboolean
-should_update_dwell_position (ClutterSeat *seat)
+should_update_dwell_position (ClutterInputDevice *device)
 {
-  return !is_dwell_gesturing (seat) &&
-         !is_dwell_click_pending (seat) &&
-         !is_secondary_click_pending (seat);
+  return !is_dwell_gesturing (device) &&
+         !is_dwell_click_pending (device) &&
+         !is_secondary_click_pending (device);
 }
 
 static void
-update_dwell_click_type (ClutterSeat *seat)
+update_dwell_click_type (ClutterInputDevice *device)
 {
   ClutterPointerA11ySettings settings;
   ClutterPointerA11yDwellClickType dwell_click_type;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
   clutter_seat_get_pointer_a11y_settings (seat, &settings);
 
@@ -374,7 +329,7 @@ update_dwell_click_type (ClutterSeat *seat)
       break;
 
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG:
-      if (!is_dwell_dragging (seat))
+      if (!is_dwell_dragging (device))
         dwell_click_type = CLUTTER_A11Y_DWELL_CLICK_TYPE_PRIMARY;
       break;
 
@@ -396,41 +351,39 @@ update_dwell_click_type (ClutterSeat *seat)
 }
 
 static void
-emit_dwell_click (ClutterSeat                      *seat,
+emit_dwell_click (ClutterInputDevice               *device,
                   ClutterPointerA11yDwellClickType  dwell_click_type)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
   switch (dwell_click_type)
     {
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_PRIMARY:
-      emit_button_click (seat, CLUTTER_BUTTON_PRIMARY);
+      emit_button_click (device, CLUTTER_BUTTON_PRIMARY);
       break;
 
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_DOUBLE:
-      emit_button_click (seat, CLUTTER_BUTTON_PRIMARY);
-      emit_button_click (seat, CLUTTER_BUTTON_PRIMARY);
+      emit_button_click (device, CLUTTER_BUTTON_PRIMARY);
+      emit_button_click (device, CLUTTER_BUTTON_PRIMARY);
       break;
 
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG:
-      if (is_dwell_dragging (seat))
+      if (is_dwell_dragging (device))
         {
-          emit_button_release (seat, CLUTTER_BUTTON_PRIMARY);
-          ptr_a11y_data->dwell_drag_started = FALSE;
+          emit_button_release (device, CLUTTER_BUTTON_PRIMARY);
+          device->ptr_a11y_data->dwell_drag_started = FALSE;
         }
       else
         {
-          emit_button_press (seat, CLUTTER_BUTTON_PRIMARY);
-          ptr_a11y_data->dwell_drag_started = TRUE;
+          emit_button_press (device, CLUTTER_BUTTON_PRIMARY);
+          device->ptr_a11y_data->dwell_drag_started = TRUE;
         }
       break;
 
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_SECONDARY:
-      emit_button_click (seat, CLUTTER_BUTTON_SECONDARY);
+      emit_button_click (device, CLUTTER_BUTTON_SECONDARY);
       break;
 
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_MIDDLE:
-      emit_button_click (seat, CLUTTER_BUTTON_MIDDLE);
+      emit_button_click (device, CLUTTER_BUTTON_MIDDLE);
       break;
 
     case CLUTTER_A11Y_DWELL_CLICK_TYPE_NONE:
@@ -440,19 +393,18 @@ emit_dwell_click (ClutterSeat                      *seat,
 }
 
 static ClutterPointerA11yDwellDirection
-get_dwell_direction (ClutterSeat *seat)
+get_dwell_direction (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
   float dx, dy;
 
-  dx = ABS (ptr_a11y_data->dwell_x - ptr_a11y_data->current_x);
-  dy = ABS (ptr_a11y_data->dwell_y - ptr_a11y_data->current_y);
+  dx = ABS (device->ptr_a11y_data->dwell_x - device->ptr_a11y_data->current_x);
+  dy = ABS (device->ptr_a11y_data->dwell_y - device->ptr_a11y_data->current_y);
 
   /* The pointer hasn't moved */
-  if (!pointer_has_moved (seat))
+  if (!pointer_has_moved (device))
     return CLUTTER_A11Y_DWELL_DIRECTION_NONE;
 
-  if (ptr_a11y_data->dwell_x < ptr_a11y_data->current_x)
+  if (device->ptr_a11y_data->dwell_x < device->ptr_a11y_data->current_x)
     {
       if (dx > dy)
         return CLUTTER_A11Y_DWELL_DIRECTION_LEFT;
@@ -463,331 +415,338 @@ get_dwell_direction (ClutterSeat *seat)
         return CLUTTER_A11Y_DWELL_DIRECTION_RIGHT;
     }
 
-  if (ptr_a11y_data->dwell_y < ptr_a11y_data->current_y)
+  if (device->ptr_a11y_data->dwell_y < device->ptr_a11y_data->current_y)
     return CLUTTER_A11Y_DWELL_DIRECTION_UP;
 
   return CLUTTER_A11Y_DWELL_DIRECTION_DOWN;
 }
 
-static void
+static gboolean
 trigger_clear_dwell_gesture (gpointer data)
 {
-  ClutterSeat *seat = data;
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterInputDevice *device = data;
 
-  ptr_a11y_data->dwell_timer = 0;
-  ptr_a11y_data->dwell_gesture_started = FALSE;
+  device->ptr_a11y_data->dwell_timer = 0;
+  device->ptr_a11y_data->dwell_gesture_started = FALSE;
+
+  return G_SOURCE_REMOVE;
 }
 
-static void
+static gboolean
 trigger_dwell_gesture (gpointer data)
 {
-  ClutterSeat *seat = data;
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterInputDevice *device = data;
   ClutterPointerA11yDwellDirection direction;
-  unsigned int delay = get_dwell_delay (seat);
+  unsigned int delay = get_dwell_delay (device);
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  restore_dwell_position (seat);
-  direction = get_dwell_direction (seat);
-  emit_dwell_click (seat,
-                    get_dwell_click_type_for_direction (seat,
+  restore_dwell_position (device);
+  direction = get_dwell_direction (device);
+  emit_dwell_click (device,
+                    get_dwell_click_type_for_direction (device,
                                                         direction));
 
   /* Do not clear the gesture right away, otherwise we'll start another one */
-  ptr_a11y_data->dwell_timer =
-    mtk_timeout_add_once (delay, trigger_clear_dwell_gesture, seat);
-  mtk_source_set_name_by_id (ptr_a11y_data->dwell_timer,
-                             "[clutter] trigger_clear_dwell_gesture");
+  device->ptr_a11y_data->dwell_timer =
+    clutter_threads_add_timeout (delay, trigger_clear_dwell_gesture, device);
 
   g_signal_emit_by_name (seat,
                          "ptr-a11y-timeout-stopped",
+                         device,
                          CLUTTER_A11Y_TIMEOUT_TYPE_GESTURE,
                          TRUE);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
-start_dwell_gesture_timeout (ClutterSeat *seat)
+start_dwell_gesture_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-  unsigned int delay = get_dwell_delay (seat);
+  unsigned int delay = get_dwell_delay (device);
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  ptr_a11y_data->dwell_timer =
-    mtk_timeout_add_once (delay, trigger_dwell_gesture, seat);
-  mtk_source_set_name_by_id (ptr_a11y_data->dwell_timer,
-                             "[clutter] trigger_dwell_gesture [start]");
-  ptr_a11y_data->dwell_gesture_started = TRUE;
+  device->ptr_a11y_data->dwell_timer =
+    clutter_threads_add_timeout (delay, trigger_dwell_gesture, device);
+  device->ptr_a11y_data->dwell_gesture_started = TRUE;
 
   g_signal_emit_by_name (seat,
                          "ptr-a11y-timeout-started",
+                         device,
                          CLUTTER_A11Y_TIMEOUT_TYPE_GESTURE,
                          delay);
 }
 
-static void
+static gboolean
 trigger_dwell_click (gpointer data)
 {
-  ClutterSeat *seat = data;
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterInputDevice *device = data;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  ptr_a11y_data->dwell_timer = 0;
+  device->ptr_a11y_data->dwell_timer = 0;
 
   g_signal_emit_by_name (seat,
                          "ptr-a11y-timeout-stopped",
+                         device,
                          CLUTTER_A11Y_TIMEOUT_TYPE_DWELL,
                          TRUE);
 
-  if (get_dwell_mode (seat) == CLUTTER_A11Y_DWELL_MODE_GESTURE)
+  if (get_dwell_mode (device) == CLUTTER_A11Y_DWELL_MODE_GESTURE)
     {
-      if (is_dwell_dragging (seat))
-        emit_dwell_click (seat, CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG);
+      if (is_dwell_dragging (device))
+        emit_dwell_click (device, CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG);
       else
-        start_dwell_gesture_timeout (seat);
+        start_dwell_gesture_timeout (device);
     }
   else
     {
-      emit_dwell_click (seat, get_dwell_click_type (seat));
-      update_dwell_click_type (seat);
+      emit_dwell_click (device, get_dwell_click_type (device));
+      update_dwell_click_type (device);
     }
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
-start_dwell_timeout (ClutterSeat *seat)
+start_dwell_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-  unsigned int delay = get_dwell_delay (seat);
+  unsigned int delay = get_dwell_delay (device);
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  ptr_a11y_data->dwell_timer =
-    mtk_timeout_add_once (delay, trigger_dwell_click, seat);
-  mtk_source_set_name_by_id (ptr_a11y_data->dwell_timer,
-                             "[clutter] trigger_dwell_click [timeout]");
+  device->ptr_a11y_data->dwell_timer =
+    clutter_threads_add_timeout (delay, trigger_dwell_click, device);
 
   g_signal_emit_by_name (seat,
                          "ptr-a11y-timeout-started",
+                         device,
                          CLUTTER_A11Y_TIMEOUT_TYPE_DWELL,
                          delay);
 }
 
 static void
-stop_dwell_timeout (ClutterSeat *seat)
+stop_dwell_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  if (ptr_a11y_data->dwell_timer)
+  if (device->ptr_a11y_data->dwell_timer)
     {
-      g_clear_handle_id (&ptr_a11y_data->dwell_timer, mtk_source_remove);
-      ptr_a11y_data->dwell_gesture_started = FALSE;
+      g_clear_handle_id (&device->ptr_a11y_data->dwell_timer, g_source_remove);
+      device->ptr_a11y_data->dwell_gesture_started = FALSE;
 
       g_signal_emit_by_name (seat,
                              "ptr-a11y-timeout-stopped",
+                             device,
                              CLUTTER_A11Y_TIMEOUT_TYPE_DWELL,
                              FALSE);
     }
 }
 
-static void
+static gboolean
 trigger_dwell_position_timeout (gpointer data)
 {
-  ClutterSeat *seat = data;
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  ClutterInputDevice *device = data;
 
-  ptr_a11y_data->dwell_position_timer = 0;
+  device->ptr_a11y_data->dwell_position_timer = 0;
 
-  if (is_dwell_click_enabled (seat))
+  if (is_dwell_click_enabled (device))
     {
-      if (!pointer_has_moved (seat))
-        start_dwell_timeout (seat);
+      if (!pointer_has_moved (device))
+        start_dwell_timeout (device);
     }
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
-start_dwell_position_timeout (ClutterSeat *seat)
+start_dwell_position_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  ptr_a11y_data->dwell_position_timer =
-    mtk_timeout_add_once (100, trigger_dwell_position_timeout, seat);
-  mtk_source_set_name_by_id (ptr_a11y_data->dwell_position_timer,
-                             "[clutter] trigger_dwell_position_timeout");
+  device->ptr_a11y_data->dwell_position_timer =
+    clutter_threads_add_timeout (100, trigger_dwell_position_timeout, device);
 }
 
 static void
-stop_dwell_position_timeout (ClutterSeat *seat)
+stop_dwell_position_timeout (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  g_clear_handle_id (&ptr_a11y_data->dwell_position_timer,
-                     mtk_source_remove);
+  g_clear_handle_id (&device->ptr_a11y_data->dwell_position_timer,
+                     g_source_remove);
 }
 
 static void
-update_dwell_position (ClutterSeat *seat)
+update_dwell_position (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
-
-  ptr_a11y_data->dwell_x = ptr_a11y_data->current_x;
-  ptr_a11y_data->dwell_y = ptr_a11y_data->current_y;
+  device->ptr_a11y_data->dwell_x = device->ptr_a11y_data->current_x;
+  device->ptr_a11y_data->dwell_y = device->ptr_a11y_data->current_y;
 }
 
 static void
-update_current_position (ClutterSeat *seat,
-                         float        x,
-                         float        y)
+update_current_position (ClutterInputDevice *device,
+                         float               x,
+                         float               y)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  device->ptr_a11y_data->current_x = x;
+  device->ptr_a11y_data->current_y = y;
+}
 
-  ptr_a11y_data->current_x = x;
-  ptr_a11y_data->current_y = y;
+static gboolean
+is_device_core_pointer (ClutterInputDevice *device)
+{
+  ClutterInputDevice *core_pointer;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
+
+  core_pointer = clutter_seat_get_pointer (seat);
+  if (core_pointer == NULL)
+    return FALSE;
+
+  return (core_pointer == device);
 }
 
 void
-_clutter_seat_init_a11y (ClutterSeat *seat)
+_clutter_input_pointer_a11y_add_device (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data;
-  ClutterVirtualInputDevice *a11y_virtual_device;
+  ClutterSeat *seat = clutter_input_device_get_seat (device);
 
-  quark_ptr_a11y_data = g_quark_from_static_string ("-clutter-seat-ptr-a11y-data");
-  ptr_a11y_data = g_new0 (ClutterPtrA11yData, 1);
-  g_object_set_qdata_full (G_OBJECT (seat),
-                           quark_ptr_a11y_data,
-                           ptr_a11y_data,
-                           g_free);
-
-  quark_a11y_device = g_quark_from_static_string ("-clutter-seat-a11y-device");
-  a11y_virtual_device =
-    clutter_seat_create_virtual_device (seat,
-                                        CLUTTER_POINTER_DEVICE);
-  g_object_set_qdata_full (G_OBJECT (seat),
-                           quark_a11y_device,
-                           a11y_virtual_device,
-                           g_object_unref);
-}
-
-void
-_clutter_seat_shutdown_a11y (ClutterSeat *seat)
-{
-  /* Terminate a drag if started */
-  if (is_dwell_dragging (seat))
-    emit_dwell_click (seat, CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG);
-
-  stop_dwell_position_timeout (seat);
-  stop_dwell_timeout (seat);
-  stop_secondary_click_timeout (seat);
-
-  g_object_set_qdata (G_OBJECT (seat), quark_ptr_a11y_data, NULL);
-  g_object_set_qdata (G_OBJECT (seat), quark_a11y_device, NULL);
-}
-
-void
-_clutter_seat_a11y_on_motion_event (ClutterSeat *seat,
-                                    float        x,
-                                    float        y)
-{
-  if (!_clutter_seat_is_pointer_a11y_enabled (seat))
+  if (!is_device_core_pointer (device))
     return;
 
-  update_current_position (seat, x, y);
+  device->accessibility_virtual_device =
+    clutter_seat_create_virtual_device (seat,
+                                        CLUTTER_POINTER_DEVICE);
 
-  if (is_secondary_click_enabled (seat))
-    {
-      if (pointer_has_moved (seat))
-        stop_secondary_click_timeout (seat);
-    }
-
-  if (is_dwell_click_enabled (seat))
-    {
-      stop_dwell_position_timeout (seat);
-
-      if (should_stop_dwell (seat))
-        stop_dwell_timeout (seat);
-
-      if (should_start_dwell (seat))
-        start_dwell_position_timeout (seat);
-    }
-
-  if (should_update_dwell_position (seat))
-    update_dwell_position (seat);
+  device->ptr_a11y_data = g_new0 (ClutterPtrA11yData, 1);
 }
 
 void
-_clutter_seat_a11y_on_button_event (ClutterSeat *seat,
-                                    int          button,
-                                    gboolean     pressed)
+_clutter_input_pointer_a11y_remove_device (ClutterInputDevice *device)
 {
-  ClutterPtrA11yData *ptr_a11y_data = ptr_a11y_data_from_seat (seat);
+  if (!is_device_core_pointer (device))
+    return;
 
-  if (!_clutter_seat_is_pointer_a11y_enabled (seat))
+  /* Terminate a drag if started */
+  if (is_dwell_dragging (device))
+    emit_dwell_click (device, CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG);
+
+  stop_dwell_position_timeout (device);
+  stop_dwell_timeout (device);
+  stop_secondary_click_timeout (device);
+
+  g_clear_pointer (&device->ptr_a11y_data, g_free);
+}
+
+void
+_clutter_input_pointer_a11y_on_motion_event (ClutterInputDevice *device,
+                                             float               x,
+                                             float               y)
+{
+  if (!is_device_core_pointer (device))
+    return;
+
+  if (!_clutter_is_input_pointer_a11y_enabled (device))
+    return;
+
+  update_current_position (device, x, y);
+
+  if (is_secondary_click_enabled (device))
+    {
+      if (pointer_has_moved (device))
+        stop_secondary_click_timeout (device);
+    }
+
+  if (is_dwell_click_enabled (device))
+    {
+      stop_dwell_position_timeout (device);
+
+      if (should_stop_dwell (device))
+        stop_dwell_timeout (device);
+
+      if (should_start_dwell (device))
+        start_dwell_position_timeout (device);
+    }
+
+  if (should_update_dwell_position (device))
+    update_dwell_position (device);
+}
+
+void
+_clutter_input_pointer_a11y_on_button_event (ClutterInputDevice *device,
+                                             int                 button,
+                                             gboolean            pressed)
+{
+  if (!is_device_core_pointer (device))
+    return;
+
+  if (!_clutter_is_input_pointer_a11y_enabled (device))
     return;
 
   if (pressed)
     {
-      ptr_a11y_data->n_btn_pressed++;
+      device->ptr_a11y_data->n_btn_pressed++;
 
-      stop_dwell_position_timeout (seat);
+      stop_dwell_position_timeout (device);
 
-      if (is_dwell_click_enabled (seat))
-        stop_dwell_timeout (seat);
+      if (is_dwell_click_enabled (device))
+        stop_dwell_timeout (device);
 
-      if (is_dwell_dragging (seat))
-        stop_dwell_timeout (seat);
+      if (is_dwell_dragging (device))
+        stop_dwell_timeout (device);
 
-      if (is_secondary_click_enabled (seat))
+      if (is_secondary_click_enabled (device))
         {
           if (button == CLUTTER_BUTTON_PRIMARY)
             {
-              if (should_start_secondary_click_timeout (seat))
-                start_secondary_click_timeout (seat);
+              if (should_start_secondary_click_timeout (device))
+                start_secondary_click_timeout (device);
             }
-          else if (is_secondary_click_pending (seat))
+          else if (is_secondary_click_pending (device))
             {
-              stop_secondary_click_timeout (seat);
+              stop_secondary_click_timeout (device);
             }
         }
     }
   else
     {
-      if (has_button_pressed (seat))
-        ptr_a11y_data->n_btn_pressed--;
+      if (has_button_pressed (device))
+        device->ptr_a11y_data->n_btn_pressed--;
 
-      if (is_secondary_click_triggered (seat))
+      if (is_secondary_click_triggered (device))
         {
-          emit_button_click (seat, CLUTTER_BUTTON_SECONDARY);
-          stop_secondary_click_timeout (seat);
+          emit_button_click (device, CLUTTER_BUTTON_SECONDARY);
+          stop_secondary_click_timeout (device);
         }
 
-      if (is_secondary_click_pending (seat))
-        stop_secondary_click_timeout (seat);
+      if (is_secondary_click_pending (device))
+        stop_secondary_click_timeout (device);
 
-      if (is_dwell_dragging (seat))
-        emit_dwell_click (seat, CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG);
+      if (is_dwell_dragging (device))
+        emit_dwell_click (device, CLUTTER_A11Y_DWELL_CLICK_TYPE_DRAG);
     }
 }
 
 gboolean
-_clutter_seat_is_pointer_a11y_enabled (ClutterSeat *seat)
+_clutter_is_input_pointer_a11y_enabled (ClutterInputDevice *device)
 {
-  g_return_val_if_fail (CLUTTER_IS_SEAT (seat), FALSE);
+  g_return_val_if_fail (CLUTTER_IS_INPUT_DEVICE (device), FALSE);
 
-  return (is_secondary_click_enabled (seat) || is_dwell_click_enabled (seat));
+  return (is_secondary_click_enabled (device) || is_dwell_click_enabled (device));
 }
 
 void
-clutter_seat_a11y_update (ClutterSeat        *seat,
-                          const ClutterEvent *event)
+clutter_input_pointer_a11y_update (ClutterInputDevice *device,
+                                   const ClutterEvent *event)
 {
-  ClutterContext *context;
+
+  ClutterContext *clutter_context;
   ClutterBackend *backend;
   ClutterEventType event_type;
 
-  g_return_if_fail (CLUTTER_IS_SEAT (seat));
+  g_return_if_fail (clutter_event_get_device (event) == device);
 
-  if (!_clutter_seat_is_pointer_a11y_enabled (seat))
+  if (!_clutter_is_input_pointer_a11y_enabled (device))
     return;
 
   if ((clutter_event_get_flags (event) & CLUTTER_EVENT_FLAG_SYNTHETIC) != 0)
     return;
 
-  context = clutter_seat_get_context (seat);
-  backend = context->backend;
+  clutter_context = _clutter_context_get_default ();
+  backend = clutter_context->backend;
 
   if (!clutter_backend_is_display_server (backend))
     return;
@@ -799,13 +758,13 @@ clutter_seat_a11y_update (ClutterSeat        *seat,
       float x, y;
 
       clutter_event_get_coords (event, &x, &y);
-      _clutter_seat_a11y_on_motion_event (seat, x, y);
+      _clutter_input_pointer_a11y_on_motion_event (device, x, y);
     }
   else if (event_type == CLUTTER_BUTTON_PRESS ||
            event_type == CLUTTER_BUTTON_RELEASE)
     {
-      _clutter_seat_a11y_on_button_event (seat,
-                                          clutter_event_get_button (event),
-                                          event_type == CLUTTER_BUTTON_PRESS);
+      _clutter_input_pointer_a11y_on_button_event (device,
+                                                   clutter_event_get_button (event),
+                                                   event_type == CLUTTER_BUTTON_PRESS);
     }
 }

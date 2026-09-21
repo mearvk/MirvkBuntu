@@ -23,13 +23,10 @@
 
 #include "config.h"
 
-#include <gio/gunixoutputstream.h>
-#include <glib-unix.h>
 #include <unistd.h>
 
 #include "wayland/meta-wayland-data-source.h"
 #include "wayland/meta-wayland-private.h"
-#include "wayland/meta-wayland-toplevel-drag.h"
 
 #define ALL_ACTIONS (WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY | \
                      WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE | \
@@ -47,11 +44,6 @@ typedef struct _MetaWaylandDataSourcePrivate
   enum wl_data_device_manager_dnd_action user_dnd_action;
   enum wl_data_device_manager_dnd_action current_dnd_action;
   MetaWaylandSeat *seat;
-  MetaWaylandToplevelDrag *toplevel_drag;
-
-  GIOChannel *fake_read_channel;
-  GSource *fake_read_watch;
-
   guint actions_set : 1;
   guint in_ask : 1;
   guint drop_performed : 1;
@@ -67,15 +59,6 @@ enum
 };
 
 static GParamSpec *props[N_PROPS] = { 0 };
-
-enum
-{
-  DESTROY,
-  ACTION_CHANGED,
-  LAST_SIGNAL
-};
-
-static guint signals[LAST_SIGNAL] = { 0 };
 
 G_DEFINE_TYPE_WITH_PRIVATE (MetaWaylandDataSource, meta_wayland_data_source,
                             G_TYPE_OBJECT);
@@ -166,9 +149,6 @@ meta_wayland_data_source_finalize (GObject *object)
     meta_wayland_data_source_get_instance_private (source);
   char **pos;
 
-  g_clear_pointer (&priv->fake_read_watch, g_source_destroy);
-  g_clear_pointer (&priv->fake_read_channel, g_io_channel_unref);
-
   wl_array_for_each (pos, &priv->mime_types)
     g_free (*pos);
   wl_array_release (&priv->mime_types);
@@ -251,20 +231,6 @@ meta_wayland_data_source_class_init (MetaWaylandDataSourceClass *klass)
                          G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, N_PROPS, props);
-
-  signals[DESTROY] =
-    g_signal_new ("destroy",
-                  G_TYPE_FROM_CLASS (object_class),
-                  G_SIGNAL_RUN_LAST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
-
-  signals[ACTION_CHANGED] =
-    g_signal_new ("action-changed",
-                  G_TYPE_FROM_CLASS (object_class),
-                  G_SIGNAL_RUN_LAST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
 }
 
 static void
@@ -331,8 +297,6 @@ static void
 destroy_data_source (struct wl_resource *resource)
 {
   MetaWaylandDataSource *source = wl_resource_get_user_data (resource);
-
-  g_signal_emit (source, signals[DESTROY], 0);
 
   meta_wayland_data_source_set_resource (source, NULL);
   g_object_unref (source);
@@ -537,8 +501,6 @@ meta_wayland_data_source_set_current_action (MetaWaylandDataSource              
 
   if (!meta_wayland_data_source_get_in_ask (source))
     META_WAYLAND_DATA_SOURCE_GET_CLASS (source)->action (source, action);
-
-  g_signal_emit (source, signals[ACTION_CHANGED], 0);
 }
 
 void
@@ -591,64 +553,6 @@ meta_wayland_data_source_notify_finish (MetaWaylandDataSource *source)
   META_WAYLAND_DATA_SOURCE_GET_CLASS (source)->drag_finished (source);
 }
 
-static gboolean
-on_fake_read_hup (GIOChannel   *channel,
-                  GIOCondition  condition,
-                  gpointer      user_data)
-{
-  MetaWaylandDataSource *source = META_WAYLAND_DATA_SOURCE (user_data);
-  MetaWaylandDataSourcePrivate *priv =
-    meta_wayland_data_source_get_instance_private (source);
-
-  g_clear_pointer (&priv->fake_read_watch, g_source_destroy);
-  meta_wayland_data_source_notify_finish (source);
-  g_io_channel_shutdown (channel, FALSE, NULL);
-  g_clear_pointer (&priv->fake_read_channel, g_io_channel_unref);
-
-  return G_SOURCE_REMOVE;
-}
-
-void
-meta_wayland_data_source_fake_read (MetaWaylandDataSource *source,
-                                    const char            *mimetype)
-{
-  MetaWaylandDataSourcePrivate *priv =
-    meta_wayland_data_source_get_instance_private (source);
-  g_autoptr (GMainContext) main_context = NULL;
-  GIOChannel *channel;
-  int p[2];
-
-  if (!g_unix_open_pipe (p, FD_CLOEXEC, NULL))
-    {
-      meta_wayland_data_source_notify_finish (source);
-      return;
-    }
-
-  if (!g_unix_set_fd_nonblocking (p[0], TRUE, NULL) ||
-      !g_unix_set_fd_nonblocking (p[1], TRUE, NULL))
-    {
-      meta_wayland_data_source_notify_finish (source);
-      close (p[0]);
-      close (p[1]);
-      return;
-    }
-
-  main_context = g_main_context_ref_thread_default ();
-
-  meta_wayland_data_source_send (source, mimetype, p[1]);
-  close (p[1]);
-  channel = g_io_channel_unix_new (p[0]);
-  g_io_channel_set_close_on_unref (channel, TRUE);
-  priv->fake_read_channel = channel;
-  priv->fake_read_watch =
-    g_io_create_watch (channel, G_IO_HUP);
-  g_source_set_callback (priv->fake_read_watch,
-                         (GSourceFunc) on_fake_read_hup,
-                         source, NULL);
-
-  g_source_attach (priv->fake_read_watch, main_context);
-}
-
 gboolean
 meta_wayland_data_source_add_mime_type (MetaWaylandDataSource *source,
                                         const char            *mime_type)
@@ -692,23 +596,4 @@ meta_wayland_data_source_get_compositor (MetaWaylandDataSource *source)
     meta_wayland_data_source_get_instance_private (source);
 
   return priv->compositor;
-}
-
-void
-meta_wayland_data_source_set_toplevel_drag (MetaWaylandDataSource   *source,
-                                            MetaWaylandToplevelDrag *toplevel_drag)
-{
-  MetaWaylandDataSourcePrivate *priv =
-    meta_wayland_data_source_get_instance_private (source);
-
-  priv->toplevel_drag = toplevel_drag;
-}
-
-MetaWaylandToplevelDrag *
-meta_wayland_data_source_get_toplevel_drag (MetaWaylandDataSource *source)
-{
-  MetaWaylandDataSourcePrivate *priv =
-    meta_wayland_data_source_get_instance_private (source);
-
-  return priv->toplevel_drag;
 }

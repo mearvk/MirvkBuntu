@@ -21,15 +21,13 @@
 
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-return-statements
-# pylint: disable=too-many-branches
-# pylint: disable=too-many-statements
 
 """Utilities for accessible events."""
 
 from __future__ import annotations
 
 import enum
-import re
+import threading
 import time
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
@@ -39,7 +37,7 @@ import gi
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
 
-from . import ax_cache_manager, debug, focus_manager
+from . import debug, focus_manager
 from .ax_object import AXObject
 from .ax_selection import AXSelection
 from .ax_text import AXText
@@ -49,39 +47,25 @@ from .ax_utilities_object import AXUtilitiesObject
 from .ax_utilities_relation import AXUtilitiesRelation
 from .ax_utilities_role import AXUtilitiesRole
 from .ax_utilities_state import AXUtilitiesState
-from .ax_utilities_text import AXUtilitiesText, CaretSetReason
+from .ax_utilities_text import AXUtilitiesText
 from .ax_value import AXValue
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable
+    from typing import ClassVar
 
-    from .input_event import InputEvent
     from .input_event_manager import InputEventManager
-
-    TerminalDeletionRecord = tuple[Hashable, float, str]
-    TerminalRepaintRecord = tuple[Hashable, InputEvent | None, str]
-
-
-class CheckedState(enum.Enum):
-    """The tri-state checked value of a check box."""
-
-    UNCHECKED = enum.auto()
-    CHECKED = enum.auto()
-    MIXED = enum.auto()
 
 
 class TextEventReason(enum.Enum):
     """Enum representing the reason for an object:text- event."""
 
     UNKNOWN = enum.auto()
-    AUTO_DELETION_PRESENTABLE = enum.auto()
-    AUTO_DELETION_UNPRESENTABLE = enum.auto()
+    AUTO_DELETION = enum.auto()
     AUTO_INSERTION_PRESENTABLE = enum.auto()
     AUTO_INSERTION_UNPRESENTABLE = enum.auto()
     AUTO_SELECTION = enum.auto()
     AUTO_UNSELECTION = enum.auto()
     BACKSPACE = enum.auto()
-    BRAILLE_PANNING = enum.auto()
     CHILDREN_CHANGE = enum.auto()
     CUT = enum.auto()
     DELETE = enum.auto()
@@ -111,12 +95,10 @@ class TextEventReason(enum.Enum):
     SELECTION_BY_PARAGRAPH = enum.auto()
     SELECTION_BY_PAGE = enum.auto()
     SELECTION_BY_WORD = enum.auto()
-    SELECTION_UNPRESENTABLE = enum.auto()
     SELECTION_TO_FILE_BOUNDARY = enum.auto()
     SELECTION_TO_LINE_BOUNDARY = enum.auto()
     SPIN_BUTTON_VALUE_CHANGE = enum.auto()
     SYSTEM_UPDATE = enum.auto()
-    TERMINAL_LINE_NAVIGATION_REPAINT = enum.auto()
     TYPING = enum.auto()
     TYPING_ECHOABLE = enum.auto()
     UI_UPDATE = enum.auto()
@@ -126,290 +108,25 @@ class TextEventReason(enum.Enum):
     UNSPECIFIED_SELECTION = enum.auto()
 
 
-class _AXUtilitiesEventCache:
-    """Provides event-specific access to manager-backed cached values."""
-
-    LAST_KNOWN_DESCRIPTION = "AXUtilitiesEvent.last-known-description"
-    LAST_KNOWN_NAME = "AXUtilitiesEvent.last-known-name"
-    LAST_KNOWN_CHECKED = "AXUtilitiesEvent.last-known-checked"
-    LAST_KNOWN_CHECKED_STATE = "AXUtilitiesEvent.last-known-checked-state"
-    LAST_KNOWN_EXPANDED = "AXUtilitiesEvent.last-known-expanded"
-    LAST_KNOWN_INDETERMINATE = "AXUtilitiesEvent.last-known-indeterminate"
-    LAST_KNOWN_INVALID_ENTRY = "AXUtilitiesEvent.last-known-invalid-entry"
-    LAST_KNOWN_PRESSED = "AXUtilitiesEvent.last-known-pressed"
-    LAST_KNOWN_SELECTED = "AXUtilitiesEvent.last-known-selected"
-    LAST_KNOWN_VALUE = "AXUtilitiesEvent.last-known-value"
-    LAST_KNOWN_VALUE_TEXT = "AXUtilitiesEvent.last-known-value-text"
-    IGNORE_NAME_CHANGES_FOR = "AXUtilitiesEvent.ignore-name-changes-for"
-    TEXT_EVENT_REASON = "AXUtilitiesEvent.text-event-reason"
-
-    _NAMESPACES = (
-        LAST_KNOWN_DESCRIPTION,
-        LAST_KNOWN_NAME,
-        LAST_KNOWN_CHECKED,
-        LAST_KNOWN_CHECKED_STATE,
-        LAST_KNOWN_EXPANDED,
-        LAST_KNOWN_INDETERMINATE,
-        LAST_KNOWN_INVALID_ENTRY,
-        LAST_KNOWN_PRESSED,
-        LAST_KNOWN_SELECTED,
-        LAST_KNOWN_VALUE,
-        LAST_KNOWN_VALUE_TEXT,
-        IGNORE_NAME_CHANGES_FOR,
-        TEXT_EVENT_REASON,
-    )
-
-    def __init__(self) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        for namespace in self._NAMESPACES:
-            self._manager.register_cache(
-                self,
-                namespace,
-                lifetime=ax_cache_manager.Lifetime.PROCESS,
-            )
-        self._caches = {
-            namespace: self._manager.get_cache(self, namespace) for namespace in self._NAMESPACES
-        }
-
-    def get_description(self, obj: Atspi.Accessible) -> str | None:
-        """Returns the cached description for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_DESCRIPTION)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_description(self, obj: Atspi.Accessible, description: str) -> None:
-        """Stores the description for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_DESCRIPTION)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), description)
-
-    def get_name(self, obj: Atspi.Accessible) -> str | None:
-        """Returns the cached name for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_NAME)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_name(self, obj: Atspi.Accessible, name: str) -> None:
-        """Stores the name for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_NAME)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), name)
-
-    def get_state(self, namespace: str, obj: Atspi.Accessible) -> bool | None:
-        """Returns the cached state for obj."""
-
-        cache = self._caches.get(namespace)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_state(self, namespace: str, obj: Atspi.Accessible, state: bool) -> None:
-        """Stores the state for obj."""
-
-        cache = self._caches.get(namespace)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), state)
-
-    def get_checked_state(self, obj: Atspi.Accessible) -> CheckedState | None:
-        """Returns the cached tri-state checked value for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_CHECKED_STATE)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_checked_state(self, obj: Atspi.Accessible, state: CheckedState) -> None:
-        """Stores the tri-state checked value for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_CHECKED_STATE)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), state)
-
-    def get_value(self, obj: Atspi.Accessible) -> float | None:
-        """Returns the cached value for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_VALUE)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_value(self, obj: Atspi.Accessible, value: float) -> None:
-        """Stores the value for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_VALUE)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), value)
-
-    def get_value_text(self, obj: Atspi.Accessible) -> str | None:
-        """Returns the cached value text for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_VALUE_TEXT)
-        if cache is None:
-            return None
-
-        return cache.get(ax_cache_manager.get_object_key(obj), None)
-
-    def set_value_text(self, obj: Atspi.Accessible, value_text: str) -> None:
-        """Stores the value text for obj."""
-
-        cache = self._caches.get(self.LAST_KNOWN_VALUE_TEXT)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), value_text)
-
-    def get_text_event_reason(self, event: Atspi.Event) -> TextEventReason | None:
-        """Returns the cached reason for event."""
-
-        cache = self._caches.get(self.TEXT_EVENT_REASON)
-        if cache is None:
-            return None
-
-        return cache.get(event, None)
-
-    def set_text_event_reason(self, event: Atspi.Event, reason: TextEventReason) -> None:
-        """Stores the reason for event."""
-
-        cache = self._caches.get(self.TEXT_EVENT_REASON)
-        if cache is not None:
-            cache.put(event, reason)
-
-    def is_ignoring_name_changes_for(self, obj: Atspi.Accessible) -> bool:
-        """Returns True if name changes should be ignored for obj."""
-
-        cache = self._caches.get(self.IGNORE_NAME_CHANGES_FOR)
-        if cache is None:
-            return False
-
-        return cache.get(ax_cache_manager.get_object_key(obj), False)
-
-    def ignore_name_changes_for(self, obj: Atspi.Accessible) -> None:
-        """Stores that name changes should be ignored for obj."""
-
-        cache = self._caches.get(self.IGNORE_NAME_CHANGES_FOR)
-        if cache is not None:
-            cache.put(ax_cache_manager.get_object_key(obj), True)
-
-
 class AXUtilitiesEvent:
     """Utilities for accessible events."""
 
-    # How recent a caret set must be for its resulting event to be attributed to it.
-    CARET_SET_EVENT_WINDOW_SECONDS = 1.0
-    TERMINAL_REPAINT_EVENT_WINDOW_SECONDS = 1.0
+    LAST_KNOWN_DESCRIPTION: ClassVar[dict[int, str]] = {}
+    LAST_KNOWN_NAME: ClassVar[dict[int, str]] = {}
 
-    _CACHE = _AXUtilitiesEventCache()
-    _LAST_TERMINAL_LINE_NAVIGATION_DELETION: TerminalDeletionRecord | None = None
-    _LAST_TERMINAL_LINE_NAVIGATION_REPAINT_LINE: TerminalRepaintRecord | None = None
+    LAST_KNOWN_CHECKED: ClassVar[dict[int, bool]] = {}
+    LAST_KNOWN_EXPANDED: ClassVar[dict[int, bool]] = {}
+    LAST_KNOWN_INDETERMINATE: ClassVar[dict[int, bool]] = {}
+    LAST_KNOWN_INVALID_ENTRY: ClassVar[dict[int, bool]] = {}
+    LAST_KNOWN_PRESSED: ClassVar[dict[int, bool]] = {}
+    LAST_KNOWN_SELECTED: ClassVar[dict[int, bool]] = {}
+    LAST_KNOWN_VALUE: ClassVar[dict[int, float]] = {}
 
-    @staticmethod
-    def _save_terminal_line_navigation_deletion(event: Atspi.Event) -> None:
-        AXUtilitiesEvent._LAST_TERMINAL_LINE_NAVIGATION_DELETION = (
-            ax_cache_manager.get_object_key(event.source),
-            time.monotonic(),
-            event.any_data,
-        )
-        AXUtilitiesEvent._LAST_TERMINAL_LINE_NAVIGATION_REPAINT_LINE = None
+    IGNORE_NAME_CHANGES_FOR: ClassVar[list[int]] = []
 
-    @staticmethod
-    def save_terminal_line_navigation_repaint_line(
-        event: Atspi.Event, mgr: InputEventManager
-    ) -> None:
-        AXUtilitiesEvent._LAST_TERMINAL_LINE_NAVIGATION_REPAINT_LINE = (
-            ax_cache_manager.get_object_key(event.source),
-            mgr.get_last_input_event(),
-            AXText.get_line_at_offset(event.source)[0],
-        )
+    TEXT_EVENT_REASON: ClassVar[dict[Atspi.Event, TextEventReason]] = {}
 
-    @staticmethod
-    def _get_terminal_line_navigation_repaint_line(
-        obj: Atspi.Accessible, mgr: InputEventManager
-    ) -> str | None:
-        """Returns the line this keypress's repaint of obj presented, if there was one."""
-
-        prior = AXUtilitiesEvent._LAST_TERMINAL_LINE_NAVIGATION_REPAINT_LINE
-        if prior is None:
-            return None
-
-        obj_key, saved_event, line = prior
-        if obj_key != ax_cache_manager.get_object_key(obj):
-            return None
-
-        if not mgr.last_event_equals_or_is_release_for_event(saved_event):
-            return None
-
-        return line
-
-    @staticmethod
-    def _repeats_terminal_line_navigation_repaint_line(
-        event: Atspi.Event, mgr: InputEventManager
-    ) -> bool:
-        line = AXUtilitiesEvent._get_terminal_line_navigation_repaint_line(event.source, mgr)
-        if line is None or not line.strip():
-            return False
-
-        return event.any_data.strip() == line.strip()
-
-    @staticmethod
-    def _insertion_is_within_caret_line(event: Atspi.Event) -> bool:
-        """Returns True if the inserted text falls entirely within the line the caret is on."""
-
-        _line, start, end = AXText.get_line_at_offset(event.source)
-        return start <= event.detail1 and event.detail1 + event.detail2 <= end
-
-    @staticmethod
-    def _terminal_caret_line_is_redundant(obj: Atspi.Accessible, mgr: InputEventManager) -> bool:
-        """Returns True if the caret's line in obj was already presented via a repaint."""
-
-        # A repaint shifts the contents out from under the offset _did_line_change saved.
-        repaint_line = AXUtilitiesEvent._get_terminal_line_navigation_repaint_line(obj, mgr)
-        if repaint_line == AXText.get_line_at_offset(obj)[0]:
-            return True
-
-        return not AXUtilitiesEvent._did_line_change(obj)
-
-    @staticmethod
-    def _is_terminal_line_navigation_repaint(event: Atspi.Event) -> bool:
-        prior = AXUtilitiesEvent._LAST_TERMINAL_LINE_NAVIGATION_DELETION
-        if prior is None:
-            return False
-
-        obj_key, timestamp, text = prior
-        if obj_key != ax_cache_manager.get_object_key(event.source):
-            return False
-
-        if time.monotonic() - timestamp > AXUtilitiesEvent.TERMINAL_REPAINT_EVENT_WINDOW_SECONDS:
-            return False
-
-        deleted_lines = text.split("\n")
-        inserted_lines = event.any_data.split("\n")
-        if min(len(deleted_lines), len(inserted_lines)) < 4:
-            return False
-
-        # Terminal repaint text can have clipped edge lines. Compare the deleted
-        # lines without their edges with the inserted lines shifted one row in either
-        # direction. In tiny terminals, an expiring TUI status line can be another
-        # edge row, leaving only the inner two shifted rows to compare.
-        return (
-            deleted_lines[1:-1] == inserted_lines[2:]
-            or deleted_lines[2:] == inserted_lines[1:-1]
-            or (
-                min(len(deleted_lines), len(inserted_lines)) >= 5
-                and (
-                    deleted_lines[1:-2] == inserted_lines[2:-1]
-                    or deleted_lines[2:-1] == inserted_lines[1:-2]
-                )
-            )
-        )
+    _lock = threading.Lock()
 
     @staticmethod
     def _strings_are_redundant(str1: str | None, str2: str | None, threshold: float = 0.85) -> bool:
@@ -419,19 +136,44 @@ class AXUtilitiesEvent:
             return False
 
         similarity = round(SequenceMatcher(None, str1.lower(), str2.lower()).ratio(), 2)
-        tokens = [
-            "AXUtilitiesEvent: Similarity between '",
-            str1,
-            "', '",
-            str2,
-            "':",
-            similarity,
-            "(threshold:",
-            threshold,
-            ")",
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = (
+            f"AXUtilitiesEvent: Similarity between '{str1}', '{str2}': {similarity} "
+            f"(threshold: {threshold})"
+        )
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return similarity >= threshold
+
+    @staticmethod
+    def _clear_stored_data() -> None:
+        """Clears any data we have cached for objects"""
+
+        while True:
+            time.sleep(60)
+            AXUtilitiesEvent._clear_all_dictionaries()
+
+    @staticmethod
+    def _clear_all_dictionaries(reason: str = "") -> None:
+        msg = "AXUtilitiesEvent: Clearing local cache."
+        if reason:
+            msg += f" Reason: {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION.clear()
+        AXUtilitiesEvent.LAST_KNOWN_NAME.clear()
+        AXUtilitiesEvent.LAST_KNOWN_CHECKED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE.clear()
+        AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY.clear()
+        AXUtilitiesEvent.LAST_KNOWN_PRESSED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_SELECTED.clear()
+        AXUtilitiesEvent.LAST_KNOWN_VALUE.clear()
+        AXUtilitiesEvent.TEXT_EVENT_REASON.clear()
+        AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.clear()
+
+    @staticmethod
+    def clear_cache_now(reason: str = "") -> None:
+        """Clears all cached information immediately."""
+
+        AXUtilitiesEvent._clear_all_dictionaries(reason)
 
     @staticmethod
     def save_object_info_for_events(obj: Atspi.Accessible) -> None:
@@ -440,48 +182,35 @@ class AXUtilitiesEvent:
         if obj is None:
             return
 
-        state_set = AXObject.get_state_set(obj)
-        AXUtilitiesEvent._CACHE.set_description(obj, AXObject.get_description(obj))
-        AXUtilitiesEvent._CACHE.set_name(obj, AXObject.get_name(obj))
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_CHECKED,
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(obj)] = AXObject.get_description(obj)
+        AXUtilitiesEvent.LAST_KNOWN_NAME[hash(obj)] = AXObject.get_name(obj)
+        AXUtilitiesEvent.LAST_KNOWN_CHECKED[hash(obj)] = AXUtilitiesState.is_checked(obj)
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED[hash(obj)] = AXUtilitiesState.is_expanded(obj)
+        AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE[hash(obj)] = AXUtilitiesState.is_indeterminate(
             obj,
-            AXUtilitiesState.is_checked(obj, state_set),
         )
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_EXPANDED,
-            obj,
-            AXUtilitiesState.is_expanded(obj, state_set),
-        )
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_INDETERMINATE,
-            obj,
-            AXUtilitiesState.is_indeterminate(obj, state_set),
-        )
-        if AXUtilitiesRole.is_check_box(obj):
-            AXUtilitiesEvent._CACHE.set_checked_state(obj, AXUtilitiesEvent._get_checked_state(obj))
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_PRESSED,
-            obj,
-            AXUtilitiesState.is_pressed(obj, state_set),
-        )
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_SELECTED,
-            obj,
-            AXUtilitiesState.is_selected(obj, state_set),
-        )
+        AXUtilitiesEvent.LAST_KNOWN_PRESSED[hash(obj)] = AXUtilitiesState.is_pressed(obj)
+        AXUtilitiesEvent.LAST_KNOWN_SELECTED[hash(obj)] = AXUtilitiesState.is_selected(obj)
 
         window = focus_manager.get_manager().get_active_window()
-        AXUtilitiesEvent._CACHE.set_name(window, AXObject.get_name(window))
-        AXUtilitiesEvent._CACHE.set_description(window, AXObject.get_description(window))
+        AXUtilitiesEvent.LAST_KNOWN_NAME[hash(window)] = AXObject.get_name(window)
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(window)] = AXObject.get_description(window)
+
+    @staticmethod
+    def start_cache_clearing_thread() -> None:
+        """Starts thread to periodically clear cached details."""
+
+        thread = threading.Thread(target=AXUtilitiesEvent._clear_stored_data)
+        thread.daemon = True
+        thread.start()
 
     @staticmethod
     def get_text_event_reason(event: Atspi.Event) -> TextEventReason:
         """Returns the TextEventReason for the given event."""
 
-        reason = AXUtilitiesEvent._CACHE.get_text_event_reason(event)
+        reason = AXUtilitiesEvent.TEXT_EVENT_REASON.get(event)
         if reason is not None:
-            tokens = ["AXUtilitiesEvent: Cached reason for", event, ":", reason]
+            tokens = ["AXUtilitiesEvent: Cached reason for", event, f": {reason}"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return reason
 
@@ -497,75 +226,10 @@ class AXUtilitiesEvent:
         else:
             raise ValueError(f"Unexpected event type: {event.type}")
 
-        AXUtilitiesEvent._CACHE.set_text_event_reason(event, reason)
-        tokens = ["AXUtilitiesEvent: Reason for", event, ":", reason]
+        AXUtilitiesEvent.TEXT_EVENT_REASON[event] = reason
+        tokens = ["AXUtilitiesEvent: Reason for", event, f": {reason}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return reason
-
-    @staticmethod
-    def _is_terminal_being_flat_reviewed(obj: Atspi.Accessible) -> bool:
-        """Returns True if obj is a terminal currently being flat-reviewed."""
-
-        if not AXUtilitiesRole.is_terminal(obj):
-            return False
-        mode, acc = focus_manager.get_manager().get_active_mode_and_object_of_interest()
-        return mode == focus_manager.FLAT_REVIEW and obj == acc
-
-    @staticmethod
-    def _is_terminal_escape_sequence(string: str) -> bool:
-        """Returns True if string is an escape sequence the terminal displayed as literal text."""
-
-        return bool(re.fullmatch(r"\s*ESC\[[\d;]*[A-Za-z~]?\s*", string))
-
-    @staticmethod
-    def _is_spin_button_descendant(obj: Atspi.Accessible) -> bool:
-        """Returns True if obj is a spin button or descends from one."""
-
-        if AXUtilitiesRole.is_spin_button(obj):
-            return True
-        return AXUtilitiesObject.find_ancestor(obj, AXUtilitiesRole.is_spin_button) is not None
-
-    @staticmethod
-    def _did_line_change(obj: Atspi.Accessible) -> bool:
-        """Returns True if the last known line in obj differs from the current line."""
-
-        last_obj, last_offset = focus_manager.get_manager().get_last_cursor_position()
-        if obj != last_obj:
-            return False
-
-        return not AXUtilitiesText.offset_is_on_current_line(obj, last_offset)
-
-    @staticmethod
-    def _get_obj_type_reason_or_none(
-        event: Atspi.Event,
-        mgr: InputEventManager,
-    ) -> TextEventReason | None:
-        """Returns the reason if obj-type or event-type dictates one, else None to continue."""
-
-        obj = event.source
-        if AXUtilitiesRole.is_live_region(obj):
-            return TextEventReason.LIVE_REGION_UPDATE
-        if AXObject.get_role(obj) in AXUtilitiesRole.get_text_ui_roles():
-            return TextEventReason.UI_UPDATE
-        if event.type.endswith("system"):
-            return TextEventReason.SYSTEM_UPDATE
-        if mgr.last_event_was_page_switch():
-            return TextEventReason.PAGE_SWITCH
-        return None
-
-    @staticmethod
-    def _is_children_change(event: Atspi.Event) -> bool:
-        """Returns True if the event's text is nothing but embedded object characters."""
-
-        return bool(event.any_data) and not event.any_data.replace("\ufffc", "")
-
-    @staticmethod
-    def _get_non_editable_reason(mgr: InputEventManager) -> TextEventReason:
-        """Returns the reason for an insert/delete in a non-editable, non-terminal object."""
-
-        if mgr.last_event_was_command():
-            return TextEventReason.UNSPECIFIED_COMMAND
-        return TextEventReason.UNKNOWN
 
     @staticmethod
     def _get_selection_navigation_reason(mgr: InputEventManager) -> TextEventReason:
@@ -586,26 +250,6 @@ class AXUtilitiesEvent:
         else:
             reason = TextEventReason.UNSPECIFIED_SELECTION
         return reason
-
-    @staticmethod
-    def _get_text_event_reason_for_caret_set_reason(
-        reason: CaretSetReason,
-    ) -> TextEventReason | None:
-        """Returns the text-event reason corresponding to why Orca set the caret."""
-
-        reasons = {
-            CaretSetReason.BRAILLE_PANNING: TextEventReason.BRAILLE_PANNING,
-            CaretSetReason.TEXT_SELECTION_BY_CHARACTER: TextEventReason.SELECTION_BY_CHARACTER,
-            CaretSetReason.TEXT_SELECTION_BY_LINE: TextEventReason.SELECTION_BY_LINE,
-            CaretSetReason.TEXT_SELECTION_BY_WORD: TextEventReason.SELECTION_BY_WORD,
-            CaretSetReason.TEXT_SELECTION_TO_FILE_BOUNDARY: (
-                TextEventReason.SELECTION_TO_FILE_BOUNDARY
-            ),
-            CaretSetReason.TEXT_SELECTION_TO_LINE_BOUNDARY: (
-                TextEventReason.SELECTION_TO_LINE_BOUNDARY
-            ),
-        }
-        return reasons.get(reason)
 
     @staticmethod
     def _get_caret_navigation_reason(mgr: InputEventManager) -> TextEventReason:
@@ -648,316 +292,8 @@ class AXUtilitiesEvent:
         return reason
 
     @staticmethod
-    def _get_caret_moved_event_reason(event: Atspi.Event) -> TextEventReason:
-        """Returns the TextEventReason for the given event."""
-
-        from . import input_event_manager  # pylint: disable=import-outside-toplevel
-
-        mgr = input_event_manager.get_manager()
-        obj = event.source
-        last_caret_set = AXUtilitiesText.get_last_caret_set()
-        # Some toolkits report the resulting event's offset as -1 rather than what we set.
-        if (
-            last_caret_set is not None
-            and obj == last_caret_set.obj
-            and event.detail1 in (last_caret_set.offset, -1)
-            and time.monotonic() - last_caret_set.time
-            < AXUtilitiesEvent.CARET_SET_EVENT_WINDOW_SECONDS
-        ):
-            reason = AXUtilitiesEvent._get_text_event_reason_for_caret_set_reason(
-                last_caret_set.reason
-            )
-            if reason is not None:
-                return reason
-
-        mode, focus = focus_manager.get_manager().get_active_mode_and_object_of_interest()
-        if mode == focus_manager.SAY_ALL:
-            return TextEventReason.SAY_ALL
-        if focus != obj and AXUtilitiesRole.is_text_input_search(focus):
-            if mgr.last_event_was_backspace() or mgr.last_event_was_delete():
-                return TextEventReason.SEARCH_UNPRESENTABLE
-            return TextEventReason.SEARCH_PRESENTABLE
-        is_terminal = AXUtilitiesRole.is_terminal(obj)
-        if is_terminal:
-            line, _start, _end = AXText.get_line_at_offset(obj)
-            if AXUtilitiesEvent._is_terminal_escape_sequence(line):
-                return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-        if (
-            mgr.last_event_was_up_or_down() or mgr.last_event_was_page_up_or_page_down()
-        ) and AXUtilitiesEvent._is_spin_button_descendant(obj):
-            return TextEventReason.SPIN_BUTTON_VALUE_CHANGE
-        if mgr.last_event_was_caret_selection():
-            return AXUtilitiesEvent._get_selection_navigation_reason(mgr)
-        if mgr.last_event_was_caret_navigation():
-            result = AXUtilitiesEvent._get_caret_navigation_reason(mgr)
-            # For performance purposes, the input event manager does very little sanity checking
-            # when determining whether an input event was line navigation. A terminal presents new
-            # content via the insertion event, so a caret move that is a side effect of its redraw
-            # should not be treated as navigation: paging (Less and Vim park the cursor on the
-            # status line, whose transient content would otherwise be read), or auto-inserted text
-            # at the prompt that looks like line navigation (e.g. pressing Up at the prompt).
-            if is_terminal and (
-                result == TextEventReason.NAVIGATION_BY_PAGE
-                or (
-                    result == TextEventReason.NAVIGATION_BY_LINE
-                    and AXUtilitiesEvent._terminal_caret_line_is_redundant(obj, mgr)
-                )
-            ):
-                result = TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-            return result
-        if mgr.last_event_was_select_all():
-            return TextEventReason.SELECT_ALL
-        if mgr.last_event_was_primary_click_or_release():
-            return TextEventReason.MOUSE_PRIMARY_BUTTON
-        if AXUtilitiesState.is_editable(obj) or is_terminal:
-            reason = AXUtilitiesEvent._get_editing_reason(mgr)
-            if reason != TextEventReason.UNKNOWN:
-                return reason
-            if mgr.last_event_was_page_switch():
-                return TextEventReason.PAGE_SWITCH
-            if mgr.last_event_was_command() or mgr.last_event_was_escape():
-                if focus != obj and AXUtilitiesState.is_focused(obj):
-                    return TextEventReason.FOCUS_CHANGE
-                return TextEventReason.UNSPECIFIED_COMMAND
-            if mgr.last_event_was_printable_key(unmodified=True):
-                return TextEventReason.TYPING
-            if AXUtilitiesEvent._is_terminal_being_flat_reviewed(obj):
-                return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-            return TextEventReason.UNKNOWN
-        if mgr.last_event_was_tab_navigation() and AXUtilitiesState.is_focused(obj):
-            return TextEventReason.FOCUS_CHANGE
-        if AXUtilitiesObject.find_ancestor(obj, AXUtilitiesRole.children_are_presentational):
-            return TextEventReason.UI_UPDATE
-        return TextEventReason.UNKNOWN
-
-    @staticmethod
-    def _get_text_deletion_event_reason(event: Atspi.Event) -> TextEventReason:
-        """Returns the TextEventReason for the given event."""
-
-        from . import input_event_manager  # pylint: disable=import-outside-toplevel
-
-        mgr = input_event_manager.get_manager()
-        reason = AXUtilitiesEvent._get_obj_type_reason_or_none(event, mgr)
-        if reason is not None:
-            return reason
-
-        if AXUtilitiesEvent._is_children_change(event):
-            return TextEventReason.CHILDREN_CHANGE
-
-        obj = event.source
-        if not (AXUtilitiesState.is_editable(obj) or AXUtilitiesRole.is_terminal(obj)):
-            return AXUtilitiesEvent._get_non_editable_reason(mgr)
-
-        reason = AXUtilitiesEvent._get_editing_reason(mgr)
-        if reason == TextEventReason.BACKSPACE:
-            selected_text, _start, _end = AXUtilitiesText.get_cached_selected_text(obj)
-            if event.any_data != selected_text and len(event.any_data.splitlines()) > 1:
-                msg = (
-                    "ERROR: Cannot speak what BackSpace deleted: any_data should contain "
-                    "only the deleted text."
-                )
-                debug.print_message(debug.LEVEL_INFO, msg, True)
-                return TextEventReason.AUTO_DELETION_UNPRESENTABLE
-        if reason != TextEventReason.UNKNOWN:
-            return reason
-        # Neither caret navigation nor Ctrl+Tab deletes lines. An editor which exposes only
-        # part of its document is replacing what it exposes.
-        if (
-            not AXUtilitiesRole.is_terminal(obj)
-            and "\n" in event.any_data
-            and (mgr.last_event_was_caret_navigation() or mgr.last_event_was_ctrl_tab())
-        ):
-            return TextEventReason.AUTO_DELETION_UNPRESENTABLE
-        if (
-            not AXUtilitiesRole.is_terminal(obj)
-            and "\n" in event.any_data
-            and mgr.last_event_was_not_in_current_object(within=1.0)
-        ):
-            return TextEventReason.AUTO_DELETION_UNPRESENTABLE
-        if mgr.last_event_was_command():
-            return TextEventReason.UNSPECIFIED_COMMAND
-        if mgr.last_event_was_printable_key(unmodified=True):
-            return TextEventReason.TYPING
-        if mgr.last_event_was_up_or_down() or mgr.last_event_was_page_up_or_page_down():
-            if AXUtilitiesEvent._is_spin_button_descendant(obj):
-                return TextEventReason.SPIN_BUTTON_VALUE_CHANGE
-            if (
-                AXUtilitiesRole.is_terminal(obj)
-                and mgr.last_event_was_up_or_down()
-                and mgr.last_event_was_line_navigation()
-                and len(event.any_data.split("\n")) >= 4
-            ):
-                AXUtilitiesEvent._save_terminal_line_navigation_deletion(event)
-            return TextEventReason.AUTO_DELETION_UNPRESENTABLE
-
-        selected_text, _start, _end = AXUtilitiesText.get_cached_selected_text(obj)
-        if selected_text and event.any_data.strip() == selected_text.strip():
-            return TextEventReason.SELECTED_TEXT_DELETION
-        if AXUtilitiesEvent._is_terminal_being_flat_reviewed(obj):
-            return TextEventReason.AUTO_DELETION_UNPRESENTABLE
-        return TextEventReason.UNKNOWN
-
-    @staticmethod
-    def _get_text_insertion_event_reason(event: Atspi.Event) -> TextEventReason:
-        """Returns the TextEventReason for the given event."""
-
-        from . import (
-            input_event_manager,  # pylint: disable=import-outside-toplevel
-            typing_echo_presenter,  # pylint: disable=import-outside-toplevel
-        )
-
-        mgr = input_event_manager.get_manager()
-        reason = AXUtilitiesEvent._get_obj_type_reason_or_none(event, mgr)
-        if reason is not None:
-            return reason
-
-        if AXUtilitiesEvent._is_children_change(event):
-            return TextEventReason.CHILDREN_CHANGE
-
-        obj = event.source
-        is_terminal = AXUtilitiesRole.is_terminal(obj)
-        if not (AXUtilitiesState.is_editable(obj) or is_terminal):
-            return AXUtilitiesEvent._get_non_editable_reason(mgr)
-
-        if is_terminal and AXUtilitiesEvent._is_terminal_escape_sequence(event.any_data):
-            return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-
-        selected_text, _start, _end = AXUtilitiesText.get_selected_text(obj)
-        has_selected = bool(selected_text and event.any_data == selected_text)
-
-        if mgr.last_event_was_backspace():
-            return TextEventReason.BACKSPACE
-        if mgr.last_event_was_delete():
-            return TextEventReason.DELETE
-        if mgr.last_event_was_cut():
-            return TextEventReason.CUT
-        if mgr.last_event_was_paste():
-            return TextEventReason.PASTE
-        if mgr.last_event_was_undo():
-            return (
-                TextEventReason.SELECTED_TEXT_RESTORATION if has_selected else TextEventReason.UNDO
-            )
-        if mgr.last_event_was_redo():
-            return (
-                TextEventReason.SELECTED_TEXT_RESTORATION if has_selected else TextEventReason.REDO
-            )
-        # Caret navigation does not insert text. An editor which exposes only part of its
-        # document is replacing what it exposes. We present the new location in response to
-        # the caret-moved event. Single-line objects are excluded because arrowing through
-        # an autocompletion list does insert text which should be presented. Spin buttons
-        # are excluded because Home, End, and Page Up/Down change their value.
-        is_document = (
-            not is_terminal
-            and not AXUtilitiesState.is_single_line(obj)
-            and not AXUtilitiesEvent._is_spin_button_descendant(obj)
-        )
-        if is_document and (
-            mgr.last_event_was_caret_navigation()
-            or mgr.last_event_was_not_in_current_object(within=1.0)
-        ):
-            return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-        if not is_terminal and "\n" in event.any_data and mgr.last_event_was_ctrl_tab():
-            return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-        if mgr.last_event_was_command():
-            return TextEventReason.UNSPECIFIED_COMMAND
-        if mgr.last_event_was_space() and not AXUtilitiesRole.is_password_text(obj):
-            if event.any_data == "\n":
-                return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-            return TextEventReason.TYPING
-        if mgr.last_event_was_tab() or mgr.last_event_was_return():
-            if not event.any_data.strip():
-                return TextEventReason.TYPING
-            if mgr.last_event_was_tab():
-                return TextEventReason.AUTO_INSERTION_PRESENTABLE
-            if AXUtilitiesState.is_single_line(obj):
-                return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-            # Text which Return inserts, be it a newline or an accepted completion, leaves the
-            # caret at the end of that text. A terminal is excluded: there Return runs a command
-            # rather than accepting a completion, so this caret check does not apply.
-            if not is_terminal and AXText.get_caret_offset(obj) != event.detail1 + event.detail2:
-                return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-            return TextEventReason.AUTO_INSERTION_PRESENTABLE
-        if mgr.last_event_was_printable_key(unmodified=True) or mgr.last_event_was_space():
-            if has_selected:
-                return TextEventReason.AUTO_INSERTION_PRESENTABLE
-            presenter = typing_echo_presenter.get_presenter()
-            if AXUtilitiesRole.is_password_text(obj):
-                echo = presenter.get_key_echo_enabled()
-            else:
-                echo = presenter.get_character_echo_enabled()
-            return TextEventReason.TYPING_ECHOABLE if echo else TextEventReason.TYPING
-        if mgr.last_event_was_middle_click() or mgr.last_event_was_middle_release():
-            return TextEventReason.MOUSE_MIDDLE_BUTTON
-        if mgr.last_event_was_up_or_down() or mgr.last_event_was_page_up_or_page_down():
-            if AXUtilitiesEvent._is_spin_button_descendant(obj):
-                return TextEventReason.SPIN_BUTTON_VALUE_CHANGE
-            if (
-                is_terminal
-                and mgr.last_event_was_up_or_down()
-                and mgr.last_event_was_line_navigation()
-            ):
-                if AXUtilitiesEvent._is_terminal_line_navigation_repaint(event):
-                    return TextEventReason.TERMINAL_LINE_NAVIGATION_REPAINT
-                # VTE can draw the row scrolled into view as a separate insertion after the
-                # repaint. If the repaint handling already presented exactly that line, saying
-                # it again is noise.
-                if AXUtilitiesEvent._repeats_terminal_line_navigation_repaint_line(event, mgr):
-                    return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-                # Only an insertion confined to the caret's line is content, such as a recalled
-                # shell command. Anything wider drags in the ruler and status line, and scrolling
-                # can leave the caret's offset unchanged, so present the caret's line instead.
-                if not AXUtilitiesEvent._insertion_is_within_caret_line(event):
-                    if "\n" not in event.any_data:
-                        return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-                    return TextEventReason.TERMINAL_LINE_NAVIGATION_REPAINT
-            return TextEventReason.AUTO_INSERTION_PRESENTABLE
-        if has_selected:
-            return TextEventReason.SELECTED_TEXT_INSERTION
-        if AXUtilitiesEvent._is_terminal_being_flat_reviewed(obj):
-            return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
-        return TextEventReason.UNKNOWN
-
-    @staticmethod
-    def _get_text_selection_changed_event_reason(event: Atspi.Event) -> TextEventReason:
-        """Returns the TextEventReason for the given event."""
-
-        from . import (  # pylint: disable=import-outside-toplevel
-            input_event_manager,
-            text_selection_manager,
-        )
-
-        mgr = input_event_manager.get_manager()
-        selection_manager = text_selection_manager.get_manager()
-        obj = event.source
-        focus = focus_manager.get_manager().get_locus_of_focus()
-
-        selection_command = selection_manager.get_current_selection_command(event.source)
-        if selection_command is not None and not selection_command.should_notify_user():
-            return TextEventReason.SELECTION_UNPRESENTABLE
-        if selection_command is not None:
-            last_caret_set = AXUtilitiesText.get_last_caret_set()
-            if last_caret_set is not None:
-                reason = AXUtilitiesEvent._get_text_event_reason_for_caret_set_reason(
-                    last_caret_set.reason
-                )
-                if reason is not None:
-                    return reason
-        if focus != obj and AXUtilitiesRole.is_text_input_search(focus):
-            if mgr.last_event_was_backspace() or mgr.last_event_was_delete():
-                return TextEventReason.SEARCH_UNPRESENTABLE
-            return TextEventReason.SEARCH_PRESENTABLE
-        if mgr.last_event_was_caret_selection():
-            return AXUtilitiesEvent._get_selection_navigation_reason(mgr)
-        if selection_command is not None:
-            return TextEventReason.UNSPECIFIED_SELECTION
-        if mgr.last_event_was_caret_navigation():
-            return AXUtilitiesEvent._get_caret_navigation_reason(mgr)
-        if mgr.last_event_was_select_all():
-            return TextEventReason.SELECT_ALL
-        if mgr.last_event_was_primary_click_or_release():
-            return TextEventReason.MOUSE_PRIMARY_BUTTON
-        if not (AXUtilitiesState.is_editable(obj) or AXUtilitiesRole.is_terminal(obj)):
-            return TextEventReason.UNKNOWN
+    def _get_caret_moved_editable_reason(mgr: InputEventManager) -> TextEventReason:
+        """Returns the reason for a caret-moved event in an editable or terminal."""
 
         reason = AXUtilitiesEvent._get_editing_reason(mgr)
         if reason != TextEventReason.UNKNOWN:
@@ -966,7 +302,283 @@ class AXUtilitiesEvent:
             return TextEventReason.PAGE_SWITCH
         if mgr.last_event_was_command():
             return TextEventReason.UNSPECIFIED_COMMAND
-        if mgr.last_event_was_printable_key(unmodified=True):
+        if mgr.last_event_was_printable_key():
+            return TextEventReason.TYPING
+        return TextEventReason.UNKNOWN
+
+    @staticmethod
+    def _get_caret_moved_event_reason(event: Atspi.Event) -> TextEventReason:
+        """Returns the TextEventReason for the given event."""
+
+        from . import input_event_manager  # pylint: disable=import-outside-toplevel
+
+        mgr = input_event_manager.get_manager()
+
+        obj = event.source
+        mode, focus = focus_manager.get_manager().get_active_mode_and_object_of_interest()
+        if mode == focus_manager.SAY_ALL:
+            reason = TextEventReason.SAY_ALL
+        elif focus != obj and AXUtilitiesRole.is_text_input_search(focus):
+            if mgr.last_event_was_backspace() or mgr.last_event_was_delete():
+                reason = TextEventReason.SEARCH_UNPRESENTABLE
+            else:
+                reason = TextEventReason.SEARCH_PRESENTABLE
+        elif mgr.last_event_was_caret_selection():
+            reason = AXUtilitiesEvent._get_selection_navigation_reason(mgr)
+        elif mgr.last_event_was_caret_navigation():
+            reason = AXUtilitiesEvent._get_caret_navigation_reason(mgr)
+        elif mgr.last_event_was_select_all():
+            reason = TextEventReason.SELECT_ALL
+        elif mgr.last_event_was_primary_click_or_release():
+            reason = TextEventReason.MOUSE_PRIMARY_BUTTON
+        elif AXUtilitiesState.is_editable(obj) or AXUtilitiesRole.is_terminal(obj):
+            reason = AXUtilitiesEvent._get_caret_moved_editable_reason(mgr)
+        elif mgr.last_event_was_tab_navigation():
+            reason = TextEventReason.FOCUS_CHANGE
+        elif AXUtilitiesObject.find_ancestor(obj, AXUtilitiesRole.children_are_presentational):
+            reason = TextEventReason.UI_UPDATE
+        else:
+            reason = TextEventReason.UNKNOWN
+        return reason
+
+    @staticmethod
+    def _get_deletion_editable_reason(
+        event: Atspi.Event,
+        mgr: InputEventManager,
+    ) -> TextEventReason:
+        """Returns the reason for a text-deletion event in an editable or terminal."""
+
+        reason = AXUtilitiesEvent._get_editing_reason(mgr)
+        if reason != TextEventReason.UNKNOWN:
+            return reason
+
+        obj = event.source
+        if mgr.last_event_was_command():
+            reason = TextEventReason.UNSPECIFIED_COMMAND
+        elif mgr.last_event_was_printable_key():
+            reason = TextEventReason.TYPING
+        elif mgr.last_event_was_up_or_down() or mgr.last_event_was_page_up_or_page_down():
+            if AXUtilitiesRole.is_spin_button(obj) or AXUtilitiesObject.find_ancestor(
+                obj,
+                AXUtilitiesRole.is_spin_button,
+            ):
+                reason = TextEventReason.SPIN_BUTTON_VALUE_CHANGE
+            else:
+                reason = TextEventReason.AUTO_DELETION
+        else:
+            selected_text, _start, _end = AXUtilitiesText.get_cached_selected_text(obj)
+            if selected_text and event.any_data.strip() == selected_text.strip():
+                reason = TextEventReason.SELECTED_TEXT_DELETION
+        return reason
+
+    @staticmethod
+    def _get_text_deletion_event_reason(event: Atspi.Event) -> TextEventReason:
+        """Returns the TextEventReason for the given event."""
+
+        from . import input_event_manager  # pylint: disable=import-outside-toplevel
+
+        mgr = input_event_manager.get_manager()
+
+        obj = event.source
+        if AXObject.get_role(obj) in AXUtilitiesRole.get_text_ui_roles():
+            reason = TextEventReason.UI_UPDATE
+        elif AXUtilitiesRole.is_live_region(obj):
+            reason = TextEventReason.LIVE_REGION_UPDATE
+        elif event.type.endswith("system"):
+            reason = TextEventReason.SYSTEM_UPDATE
+        elif mgr.last_event_was_page_switch():
+            reason = TextEventReason.PAGE_SWITCH
+        elif AXUtilitiesState.is_editable(obj) or AXUtilitiesRole.is_terminal(obj):
+            reason = AXUtilitiesEvent._get_deletion_editable_reason(event, mgr)
+        elif mgr.last_event_was_command():
+            reason = TextEventReason.UNSPECIFIED_COMMAND
+        elif "\ufffc" in event.any_data and not event.any_data.replace("\ufffc", ""):
+            reason = TextEventReason.CHILDREN_CHANGE
+        else:
+            reason = TextEventReason.UNKNOWN
+        return reason
+
+    @staticmethod
+    def _get_insertion_editable_reason(
+        event: Atspi.Event,
+        mgr: InputEventManager,
+    ) -> TextEventReason:
+        """Returns the reason for a text-insertion event in an editable or terminal."""
+
+        obj = event.source
+        selected_text, _start, _end = AXUtilitiesText.get_selected_text(obj)
+        has_selected = bool(selected_text and event.any_data == selected_text)
+
+        reason = AXUtilitiesEvent._get_insertion_editing_reason(mgr, has_selected)
+        if reason != TextEventReason.UNKNOWN:
+            return reason
+        reason = AXUtilitiesEvent._get_insertion_typing_reason(event, mgr, obj, has_selected)
+        if reason != TextEventReason.UNKNOWN:
+            return reason
+        if has_selected:
+            return TextEventReason.SELECTED_TEXT_INSERTION
+        return TextEventReason.UNKNOWN
+
+    @staticmethod
+    def _get_insertion_editing_reason(
+        mgr: InputEventManager,
+        has_selected: bool,
+    ) -> TextEventReason:
+        """Returns the editing-operation reason for a text insertion, if applicable."""
+
+        if mgr.last_event_was_backspace():
+            reason = TextEventReason.BACKSPACE
+        elif mgr.last_event_was_delete():
+            reason = TextEventReason.DELETE
+        elif mgr.last_event_was_cut():
+            reason = TextEventReason.CUT
+        elif mgr.last_event_was_paste():
+            reason = TextEventReason.PASTE
+        elif mgr.last_event_was_undo():
+            if has_selected:
+                reason = TextEventReason.SELECTED_TEXT_RESTORATION
+            else:
+                reason = TextEventReason.UNDO
+        elif mgr.last_event_was_redo():
+            if has_selected:
+                reason = TextEventReason.SELECTED_TEXT_RESTORATION
+            else:
+                reason = TextEventReason.REDO
+        elif mgr.last_event_was_command():
+            reason = TextEventReason.UNSPECIFIED_COMMAND
+        else:
+            reason = TextEventReason.UNKNOWN
+        return reason
+
+    @staticmethod
+    def _get_insertion_text_key_reason(
+        event: Atspi.Event,
+        mgr: InputEventManager,
+        obj: Atspi.Accessible,
+        has_selected: bool,
+    ) -> TextEventReason:
+        """Returns the reason when the last event was a text-producing key."""
+
+        if mgr.last_event_was_space() and not AXUtilitiesRole.is_password_text(obj):
+            if event.any_data == "\n":
+                reason = TextEventReason.AUTO_INSERTION_UNPRESENTABLE
+            else:
+                reason = TextEventReason.TYPING
+        elif mgr.last_event_was_tab() or mgr.last_event_was_return():
+            if not event.any_data.strip():
+                reason = TextEventReason.TYPING
+            else:
+                reason = AXUtilitiesEvent._get_insertion_fallback_reason(event, mgr)
+        elif mgr.last_event_was_printable_key() or mgr.last_event_was_space():
+            if has_selected:
+                reason = TextEventReason.AUTO_INSERTION_PRESENTABLE
+            else:
+                reason = AXUtilitiesEvent._get_typing_echo_reason(obj)
+        else:
+            reason = TextEventReason.UNKNOWN
+        return reason
+
+    @staticmethod
+    def _get_insertion_typing_reason(
+        event: Atspi.Event,
+        mgr: InputEventManager,
+        obj: Atspi.Accessible,
+        has_selected: bool,
+    ) -> TextEventReason:
+        """Returns the typing/auto-insertion reason for a text insertion."""
+
+        reason = AXUtilitiesEvent._get_insertion_text_key_reason(event, mgr, obj, has_selected)
+        if reason != TextEventReason.UNKNOWN:
+            return reason
+
+        if mgr.last_event_was_middle_click() or mgr.last_event_was_middle_release():
+            reason = TextEventReason.MOUSE_MIDDLE_BUTTON
+        elif mgr.last_event_was_up_or_down() or mgr.last_event_was_page_up_or_page_down():
+            if AXUtilitiesRole.is_spin_button(obj) or AXUtilitiesObject.find_ancestor(
+                obj,
+                AXUtilitiesRole.is_spin_button,
+            ):
+                reason = TextEventReason.SPIN_BUTTON_VALUE_CHANGE
+            else:
+                reason = TextEventReason.AUTO_INSERTION_PRESENTABLE
+        else:
+            reason = AXUtilitiesEvent._get_insertion_fallback_reason(event, mgr)
+        return reason
+
+    @staticmethod
+    def _get_typing_echo_reason(obj: Atspi.Accessible) -> TextEventReason:
+        """Returns TYPING_ECHOABLE if echo is enabled, otherwise TYPING."""
+
+        from . import typing_echo_presenter  # pylint: disable=import-outside-toplevel
+
+        presenter = typing_echo_presenter.get_presenter()
+        if AXUtilitiesRole.is_password_text(obj):
+            echo = presenter.get_key_echo_enabled()
+        else:
+            echo = presenter.get_character_echo_enabled()
+        if echo:
+            return TextEventReason.TYPING_ECHOABLE
+        return TextEventReason.TYPING
+
+    @staticmethod
+    def _get_insertion_fallback_reason(
+        event: Atspi.Event,
+        mgr: InputEventManager,
+    ) -> TextEventReason:
+        """Returns the reason for unclassified text insertions."""
+
+        if mgr.last_event_was_tab() and event.any_data != "\t":
+            return TextEventReason.AUTO_INSERTION_PRESENTABLE
+        if mgr.last_event_was_return() and event.any_data != "\n":
+            if AXUtilitiesState.is_single_line(event.source):
+                return TextEventReason.AUTO_INSERTION_UNPRESENTABLE
+            return TextEventReason.AUTO_INSERTION_PRESENTABLE
+        if len(event.any_data) == 1:
+            return TextEventReason.UNKNOWN
+        return TextEventReason.UNKNOWN
+
+    @staticmethod
+    def _get_text_insertion_event_reason(event: Atspi.Event) -> TextEventReason:
+        """Returns the TextEventReason for the given event."""
+
+        from . import input_event_manager  # pylint: disable=import-outside-toplevel
+
+        mgr = input_event_manager.get_manager()
+
+        obj = event.source
+        if AXObject.get_role(obj) in AXUtilitiesRole.get_text_ui_roles():
+            reason = TextEventReason.UI_UPDATE
+        elif AXUtilitiesRole.is_live_region(obj):
+            reason = TextEventReason.LIVE_REGION_UPDATE
+        elif event.type.endswith("system"):
+            reason = TextEventReason.SYSTEM_UPDATE
+        elif mgr.last_event_was_page_switch():
+            reason = TextEventReason.PAGE_SWITCH
+        elif AXUtilitiesState.is_editable(obj) or AXUtilitiesRole.is_terminal(obj):
+            reason = AXUtilitiesEvent._get_insertion_editable_reason(event, mgr)
+        elif mgr.last_event_was_command():
+            reason = TextEventReason.UNSPECIFIED_COMMAND
+        elif "\ufffc" in event.any_data and not event.any_data.replace("\ufffc", ""):
+            reason = TextEventReason.CHILDREN_CHANGE
+        else:
+            reason = TextEventReason.UNKNOWN
+        return reason
+
+    @staticmethod
+    def _get_selection_changed_editable_reason(
+        obj: Atspi.Accessible,
+        mgr: InputEventManager,
+    ) -> TextEventReason:
+        """Returns the reason for a text-selection-changed event in an editable or terminal."""
+
+        reason = AXUtilitiesEvent._get_editing_reason(mgr)
+        if reason != TextEventReason.UNKNOWN:
+            return reason
+        if mgr.last_event_was_page_switch():
+            return TextEventReason.PAGE_SWITCH
+        if mgr.last_event_was_command():
+            return TextEventReason.UNSPECIFIED_COMMAND
+        if mgr.last_event_was_printable_key():
             cached_text, old_start, old_end = AXUtilitiesText.get_cached_selected_text(obj)
             if not cached_text:
                 _current, new_start, new_end = AXUtilitiesText.get_selected_text(obj)
@@ -978,9 +590,41 @@ class AXUtilitiesEvent:
                     return TextEventReason.AUTO_UNSELECTION
             return TextEventReason.TYPING
         if mgr.last_event_was_up_or_down() or mgr.last_event_was_page_up_or_page_down():
-            if AXUtilitiesEvent._is_spin_button_descendant(obj):
+            if AXUtilitiesRole.is_spin_button(obj) or AXUtilitiesObject.find_ancestor(
+                obj,
+                AXUtilitiesRole.is_spin_button,
+            ):
                 return TextEventReason.SPIN_BUTTON_VALUE_CHANGE
         return TextEventReason.UNKNOWN
+
+    @staticmethod
+    def _get_text_selection_changed_event_reason(event: Atspi.Event) -> TextEventReason:
+        """Returns the TextEventReason for the given event."""
+
+        from . import input_event_manager  # pylint: disable=import-outside-toplevel
+
+        mgr = input_event_manager.get_manager()
+
+        obj = event.source
+        focus = focus_manager.get_manager().get_locus_of_focus()
+        if focus != obj and AXUtilitiesRole.is_text_input_search(focus):
+            if mgr.last_event_was_backspace() or mgr.last_event_was_delete():
+                reason = TextEventReason.SEARCH_UNPRESENTABLE
+            else:
+                reason = TextEventReason.SEARCH_PRESENTABLE
+        elif mgr.last_event_was_caret_selection():
+            reason = AXUtilitiesEvent._get_selection_navigation_reason(mgr)
+        elif mgr.last_event_was_caret_navigation():
+            reason = AXUtilitiesEvent._get_caret_navigation_reason(mgr)
+        elif mgr.last_event_was_select_all():
+            reason = TextEventReason.SELECT_ALL
+        elif mgr.last_event_was_primary_click_or_release():
+            reason = TextEventReason.MOUSE_PRIMARY_BUTTON
+        elif AXUtilitiesState.is_editable(obj) or AXUtilitiesRole.is_terminal(obj):
+            reason = AXUtilitiesEvent._get_selection_changed_editable_reason(obj, mgr)
+        else:
+            reason = TextEventReason.UNKNOWN
+        return reason
 
     @staticmethod
     def is_presentable_active_descendant_change(event: Atspi.Event) -> bool:
@@ -1014,9 +658,14 @@ class AXUtilitiesEvent:
     def is_presentable_checked_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as a checked-state change."""
 
-        if not AXUtilitiesEvent._checked_state_changed(event):
+        old_state = AXUtilitiesEvent.LAST_KNOWN_CHECKED.get(hash(event.source))
+        new_state = AXUtilitiesState.is_checked(event.source)
+        if old_state == new_state:
+            msg = "AXUtilitiesEvent: The new state matches the old state."
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
+        AXUtilitiesEvent.LAST_KNOWN_CHECKED[hash(event.source)] = new_state
         focus = focus_manager.get_manager().get_locus_of_focus()
         if event.source != focus:
             if not AXUtilitiesObject.is_ancestor(event.source, focus):
@@ -1044,47 +693,6 @@ class AXUtilitiesEvent:
         return True
 
     @staticmethod
-    def _get_checked_state(obj: Atspi.Accessible) -> CheckedState:
-        """Returns obj's current tri-state checked value."""
-
-        if AXUtilitiesState.is_indeterminate(obj):
-            return CheckedState.MIXED
-        if AXUtilitiesState.is_checked(obj):
-            return CheckedState.CHECKED
-        return CheckedState.UNCHECKED
-
-    @staticmethod
-    def _checked_state_changed(event: Atspi.Event) -> bool:
-        """Returns True if the source's checked state differs from the last known state."""
-
-        matches_msg = "AXUtilitiesEvent: The new state matches the old state."
-        if AXUtilitiesRole.is_check_box(event.source):
-            old_value = AXUtilitiesEvent._CACHE.get_checked_state(event.source)
-            AXObject.clear_cache(event.source, False, "Deriving the tri-state checked value.")
-            new_value = AXUtilitiesEvent._get_checked_state(event.source)
-            AXUtilitiesEvent._CACHE.set_checked_state(event.source, new_value)
-            if old_value == new_value:
-                debug.print_message(debug.LEVEL_INFO, matches_msg, True)
-                return False
-            return True
-
-        old_state = AXUtilitiesEvent._CACHE.get_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_CHECKED,
-            event.source,
-        )
-        new_state = AXUtilitiesState.is_checked(event.source)
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_CHECKED,
-            event.source,
-            new_state,
-        )
-        if old_state == new_state:
-            debug.print_message(debug.LEVEL_INFO, matches_msg, True)
-            return False
-
-        return True
-
-    @staticmethod
     def _is_changed_description_to_present(event: Atspi.Event) -> bool:
         """Returns True if the description data warrants further presentability checks."""
 
@@ -1093,7 +701,7 @@ class AXUtilitiesEvent:
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        old_description = AXUtilitiesEvent._CACHE.get_description(event.source)
+        old_description = AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION.get(hash(event.source))
         new_description = event.any_data
         if old_description == new_description:
             msg = "AXUtilitiesEvent: The new description matches the old description."
@@ -1101,17 +709,14 @@ class AXUtilitiesEvent:
             return False
 
         if AXUtilitiesEvent._strings_are_redundant(old_description, new_description):
-            tokens = [
-                "AXUtilitiesEvent: The new description ('",
-                new_description,
-                "') is too similar to the old description ('",
-                old_description,
-                "').",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = (
+                f"AXUtilitiesEvent: The new description ('{new_description}') "
+                f"is too similar to the old description ('{old_description}')."
+            )
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_description(event.source, new_description)
+        AXUtilitiesEvent.LAST_KNOWN_DESCRIPTION[hash(event.source)] = new_description
         if not new_description:
             msg = "AXUtilitiesEvent: The description is empty."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -1131,16 +736,9 @@ class AXUtilitiesEvent:
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        manager = focus_manager.get_manager()
-        focus = manager.get_locus_of_focus()
+        focus = focus_manager.get_manager().get_locus_of_focus()
         if event.source != focus and not AXUtilitiesObject.is_ancestor(focus, event.source):
             msg = "AXUtilitiesEvent: The event is not from the locus of focus or ancestor."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return False
-
-        window = manager.get_active_window()
-        if event.source != window and event.any_data == AXObject.get_name(window):
-            msg = "AXUtilitiesEvent: The new description matches the active window's name."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
@@ -1152,21 +750,14 @@ class AXUtilitiesEvent:
     def is_presentable_expanded_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as an expanded-state change."""
 
-        old_state = AXUtilitiesEvent._CACHE.get_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_EXPANDED,
-            event.source,
-        )
+        old_state = AXUtilitiesEvent.LAST_KNOWN_EXPANDED.get(hash(event.source))
         new_state = AXUtilitiesState.is_expanded(event.source)
         if old_state == new_state:
             msg = "AXUtilitiesEvent: The new state matches the old state."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_EXPANDED,
-            event.source,
-            new_state,
-        )
+        AXUtilitiesEvent.LAST_KNOWN_EXPANDED[hash(event.source)] = new_state
         focus = focus_manager.get_manager().get_locus_of_focus()
         if event.source == focus:
             msg = "AXUtilitiesEvent: Event is presentable, from the locus of focus."
@@ -1197,27 +788,14 @@ class AXUtilitiesEvent:
     def is_presentable_indeterminate_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as an indeterminate-state change."""
 
-        if AXUtilitiesRole.is_check_box(event.source):
-            return (
-                AXUtilitiesEvent._checked_state_changed(event)
-                and event.source == focus_manager.get_manager().get_locus_of_focus()
-            )
-
-        old_state = AXUtilitiesEvent._CACHE.get_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_INDETERMINATE,
-            event.source,
-        )
+        old_state = AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE.get(hash(event.source))
         new_state = AXUtilitiesState.is_indeterminate(event.source)
         if old_state == new_state:
             msg = "AXUtilitiesEvent: The new state matches the old state."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_INDETERMINATE,
-            event.source,
-            new_state,
-        )
+        AXUtilitiesEvent.LAST_KNOWN_INDETERMINATE[hash(event.source)] = new_state
 
         # If this state is cleared, the new state will become checked or unchecked
         # and we should get object:state-changed:checked events for those cases.
@@ -1239,21 +817,14 @@ class AXUtilitiesEvent:
     def is_presentable_invalid_entry_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as an invalid-entry-state change."""
 
-        old_state = AXUtilitiesEvent._CACHE.get_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_INVALID_ENTRY,
-            event.source,
-        )
+        old_state = AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY.get(hash(event.source))
         new_state = AXUtilitiesState.is_invalid_entry(event.source)
         if old_state == new_state:
             msg = "AXUtilitiesEvent: The new state matches the old state."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_INVALID_ENTRY,
-            event.source,
-            new_state,
-        )
+        AXUtilitiesEvent.LAST_KNOWN_INVALID_ENTRY[hash(event.source)] = new_state
         if event.source != focus_manager.get_manager().get_locus_of_focus():
             msg = "AXUtilitiesEvent: The event is not from the locus of focus."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -1283,19 +854,6 @@ class AXUtilitiesEvent:
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        if AXUtilitiesRole.is_terminal(focus):
-            text = AXText.get_line_at_offset(focus)[0].strip()
-            if AXUtilitiesEvent._strings_are_redundant(text, event.any_data):
-                tokens = [
-                    "AXUtilitiesEvent: The new name ('",
-                    event.any_data,
-                    "') is too similar to the text at offset ('",
-                    text,
-                    "').",
-                ]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return False
-
         msg = "AXUtilitiesEvent: Event is presentable."
         debug.print_message(debug.LEVEL_INFO, msg, True)
         return True
@@ -1304,7 +862,7 @@ class AXUtilitiesEvent:
     def _is_changed_name_to_present(event: Atspi.Event) -> bool:
         """Returns True if the name data warrants further presentability checks."""
 
-        if AXUtilitiesEvent._CACHE.is_ignoring_name_changes_for(event.source):
+        if hash(event.source) in AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR:
             msg = "AXUtilitiesEvent: Ignoring name change for this source."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
@@ -1314,28 +872,22 @@ class AXUtilitiesEvent:
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        old_name = AXUtilitiesEvent._CACHE.get_name(event.source)
+        old_name = AXUtilitiesEvent.LAST_KNOWN_NAME.get(hash(event.source))
         new_name = event.any_data
         if old_name == new_name:
             msg = "AXUtilitiesEvent: The new name matches the old name."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        if AXUtilitiesRole.is_combo_box(event.source):
-            msg = "AXUtilitiesEvent: The source is a combo box."
+        if AXUtilitiesEvent._strings_are_redundant(old_name, new_name):
+            msg = (
+                f"AXUtilitiesEvent: The new name ('{new_name}') "
+                f"is too similar to the old name ('{old_name}')."
+            )
             debug.print_message(debug.LEVEL_INFO, msg, True)
-        elif AXUtilitiesEvent._strings_are_redundant(old_name, new_name):
-            tokens = [
-                "AXUtilitiesEvent: The new name ('",
-                new_name,
-                "') is too similar to the old name ('",
-                old_name,
-                "').",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_name(event.source, new_name)
+        AXUtilitiesEvent.LAST_KNOWN_NAME[hash(event.source)] = new_name
         if not new_name:
             msg = "AXUtilitiesEvent: The name is empty."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -1382,7 +934,7 @@ class AXUtilitiesEvent:
             if has_progress_bar:
                 msg = "AXUtilitiesEvent: The list item contains a progress bar."
                 debug.print_message(debug.LEVEL_INFO, msg, True)
-                AXUtilitiesEvent._CACHE.ignore_name_changes_for(event.source)
+                AXUtilitiesEvent.IGNORE_NAME_CHANGES_FOR.append(hash(event.source))
                 return False
 
         msg = "AXUtilitiesEvent: Event is presentable."
@@ -1393,21 +945,14 @@ class AXUtilitiesEvent:
     def is_presentable_pressed_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as a pressed-state change."""
 
-        old_state = AXUtilitiesEvent._CACHE.get_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_PRESSED,
-            event.source,
-        )
+        old_state = AXUtilitiesEvent.LAST_KNOWN_PRESSED.get(hash(event.source))
         new_state = AXUtilitiesState.is_pressed(event.source)
         if old_state == new_state:
             msg = "AXUtilitiesEvent: The new state matches the old state."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_PRESSED,
-            event.source,
-            new_state,
-        )
+        AXUtilitiesEvent.LAST_KNOWN_PRESSED[hash(event.source)] = new_state
         if event.source != focus_manager.get_manager().get_locus_of_focus():
             msg = "AXUtilitiesEvent: The event is not from the locus of focus."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -1421,21 +966,14 @@ class AXUtilitiesEvent:
     def is_presentable_selected_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as a selected-state change."""
 
-        old_state = AXUtilitiesEvent._CACHE.get_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_SELECTED,
-            event.source,
-        )
+        old_state = AXUtilitiesEvent.LAST_KNOWN_SELECTED.get(hash(event.source))
         new_state = AXUtilitiesState.is_selected(event.source)
         if old_state == new_state:
             msg = "AXUtilitiesEvent: The new state matches the old state."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        AXUtilitiesEvent._CACHE.set_state(
-            AXUtilitiesEvent._CACHE.LAST_KNOWN_SELECTED,
-            event.source,
-            new_state,
-        )
+        AXUtilitiesEvent.LAST_KNOWN_SELECTED[hash(event.source)] = new_state
         if event.source != focus_manager.get_manager().get_locus_of_focus():
             msg = "AXUtilitiesEvent: The event is not from the locus of focus."
             debug.print_message(debug.LEVEL_INFO, msg, True)
@@ -1456,14 +994,15 @@ class AXUtilitiesEvent:
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
-        source_states = AXObject.get_state_set(event.source)
-        if AXUtilitiesState.manages_descendants(event.source, source_states):
+        if AXUtilitiesState.manages_descendants(event.source):
             msg = "AXUtilitiesEvent: Source manages descendants; handled elsewhere."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         if AXUtilitiesRole.is_menu(event.source):
-            if AXUtilitiesState.is_showing_and_visible(event.source, source_states):
+            if AXUtilitiesState.is_showing(event.source) and AXUtilitiesState.is_visible(
+                event.source
+            ):
                 msg = "AXUtilitiesEvent: Event is presentable: Source is a menu."
                 debug.print_message(debug.LEVEL_INFO, msg, True)
                 return True
@@ -1471,7 +1010,11 @@ class AXUtilitiesEvent:
             # This is a sad workaround for GTK2 menu items with submenus losing their showing state
             # when submenu children become selected.
             child = AXSelection.get_selected_child(event.source, 0)
-            if child is not None and AXUtilitiesState.is_showing_and_visible(child):
+            if (
+                child is not None
+                and AXUtilitiesState.is_showing(child)
+                and AXUtilitiesState.is_visible(child)
+            ):
                 tokens = [
                     "AXUtilitiesEvent: Event is presentable: Selected child",
                     child,
@@ -1485,7 +1028,7 @@ class AXUtilitiesEvent:
             return False
 
         if AXUtilitiesRole.is_combo_box(event.source) and not AXUtilitiesState.is_expanded(
-            event.source, source_states
+            event.source
         ):
             text_input = AXUtilitiesObject.find_descendant(
                 event.source, AXUtilitiesRole.is_text_input
@@ -1507,8 +1050,8 @@ class AXUtilitiesEvent:
                 msg = "AXUtilitiesEvent: Source is autocomplete for focused widget; not presenting."
                 debug.print_message(debug.LEVEL_INFO, msg, True)
                 return False
-        if event.source != focus and not AXUtilitiesState.is_showing_and_visible(
-            event.source, source_states
+        if event.source != focus and not (
+            AXUtilitiesState.is_showing(event.source) and AXUtilitiesState.is_visible(event.source)
         ):
             combobox = AXUtilitiesObject.find_ancestor(event.source, AXUtilitiesRole.is_combo_box)
             if combobox != focus and event.source != AXObject.get_parent(focus):
@@ -1530,15 +1073,10 @@ class AXUtilitiesEvent:
     def is_presentable_value_change(event: Atspi.Event) -> bool:
         """Returns True if this event should be presented as a value change."""
 
-        old_value = AXUtilitiesEvent._CACHE.get_value(event.source)
+        old_value = AXUtilitiesEvent.LAST_KNOWN_VALUE.get(hash(event.source))
         new_value = AXValue.get_current_value(event.source)
-        AXUtilitiesEvent._CACHE.set_value(event.source, new_value)
-
-        old_value_text = AXUtilitiesEvent._CACHE.get_value_text(event.source)
-        new_value_text = AXValue.get_current_value_text(event.source)
-        AXUtilitiesEvent._CACHE.set_value_text(event.source, new_value_text)
-
-        if old_value == new_value and old_value_text == new_value_text:
+        AXUtilitiesEvent.LAST_KNOWN_VALUE[hash(event.source)] = new_value
+        if old_value == new_value:
             msg = "AXUtilitiesEvent: The new value matches the old value."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
@@ -1561,17 +1099,15 @@ class AXUtilitiesEvent:
     def _is_presentable_text_event(event: Atspi.Event) -> bool:
         """Returns True if this text event should be presented."""
 
-        source_states = AXObject.get_state_set(event.source)
         if not (
-            AXUtilitiesState.is_editable(event.source, source_states)
-            or AXUtilitiesRole.is_terminal(event.source)
+            AXUtilitiesState.is_editable(event.source) or AXUtilitiesRole.is_terminal(event.source)
         ):
             msg = "AXUtilitiesEvent: The source is neither editable nor a terminal."
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         focus = focus_manager.get_manager().get_locus_of_focus()
-        if focus != event.source and not AXUtilitiesState.is_focused(event.source, source_states):
+        if focus != event.source and not AXUtilitiesState.is_focused(event.source):
             msg = "AXUtilitiesEvent: The source is neither focused, nor the locus of focus"
             debug.print_message(debug.LEVEL_INFO, msg, True)
 
@@ -1605,3 +1141,6 @@ class AXUtilitiesEvent:
         """Returns True if this text-insertion event should be presented."""
 
         return AXUtilitiesEvent._is_presentable_text_event(event)
+
+
+AXUtilitiesEvent.start_cache_clearing_thread()

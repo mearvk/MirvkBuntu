@@ -7,4 +7,3 @@ leak:libcairo.so
 leak:libpixman-1.so
 leak:librsvg-2.so
 leak:libxkbcommon.so
-leak:diffreg

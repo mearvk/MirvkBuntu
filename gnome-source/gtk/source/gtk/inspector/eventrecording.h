@@ -19,9 +19,7 @@
 
 #include <gdk/gdk.h>
 #include <gsk/gsk.h>
-#include "gtk/gtkenums.h"
-#include "gtk/gtkwidget.h"
-#include "gtk/gtkeventcontroller.h"
+#include "gsk/gskprofilerprivate.h"
 
 #include "inspector/recording.h"
 
@@ -37,23 +35,11 @@ G_BEGIN_DECLS
 
 typedef struct _GtkInspectorEventRecordingPrivate GtkInspectorEventRecordingPrivate;
 
-typedef struct
-{
-  GtkPropagationPhase phase;
-  GType widget_type;
-  graphene_rect_t bounds;
-  GType controller_type;
-  gboolean handled;
-} EventTrace;
-
 typedef struct _GtkInspectorEventRecording
 {
   GtkInspectorRecording parent;
 
   GdkEvent *event;
-  GType target_type;
-  graphene_rect_t bounds;
-  GArray *traces;
 } GtkInspectorEventRecording;
 
 typedef struct _GtkInspectorEventRecordingClass
@@ -69,18 +55,6 @@ GtkInspectorRecording *
 
 GdkEvent *      gtk_inspector_event_recording_get_event      (GtkInspectorEventRecording       *recording);
 
-void            gtk_inspector_event_recording_add_trace      (GtkInspectorEventRecording       *recording,
-                                                              GtkPropagationPhase               phase,
-                                                              GtkWidget                        *widget,
-                                                              GtkEventController               *controller,
-                                                              GtkWidget                        *target,
-                                                              gboolean                          handled);
-
-EventTrace *   gtk_inspector_event_recording_get_traces      (GtkInspectorEventRecording       *recording,
-                                                              gsize                            *n_traces);
-GType          gtk_inspector_event_recording_get_target_type (GtkInspectorEventRecording       *recording);
-void           gtk_inspector_event_recording_get_target_bounds (GtkInspectorEventRecording     *recording,
-                                                                graphene_rect_t                *bounds);
 
 G_END_DECLS
 

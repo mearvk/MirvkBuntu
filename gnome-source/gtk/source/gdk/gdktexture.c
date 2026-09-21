@@ -19,7 +19,7 @@
 /**
  * GdkTexture:
  *
- * Refers to pixel data in various forms.
+ * `GdkTexture` is the basic element used to refer to pixel data.
  *
  * It is primarily meant for pixel data that will not change over
  * multiple frames, and will be used for a long time.
@@ -33,44 +33,23 @@
  *
  * `GdkTexture` is an immutable object: That means you cannot change
  * anything about it other than increasing the reference count via
- * [method@GObject.Object.ref], and consequently, it is a threadsafe object.
- *
- * GDK provides a number of threadsafe texture loading functions:
- * [ctor@Gdk.Texture.new_from_resource],
- * [ctor@Gdk.Texture.new_from_bytes],
- * [ctor@Gdk.Texture.new_from_file],
- * [ctor@Gdk.Texture.new_from_filename],
- * [ctor@Gdk.Texture.new_for_pixbuf]. Note that these are meant for loading
- * icons and resources that are shipped with the toolkit or application. It
- * is recommended that you use a dedicated image loading framework such as
- * [glycin](https://lib.rs/crates/glycin), if you need to load untrusted image
- * data.
+ * [method@GObject.Object.ref], and consequently, it is a thread-safe object.
  */
 
 #include "config.h"
 
 #include "gdktextureprivate.h"
 
-#include "gdkcairoprivate.h"
-#include "gdkcolorstateprivate.h"
+#include <glib/gi18n-lib.h>
 #include "gdkmemorytextureprivate.h"
 #include "gdkpaintable.h"
 #include "gdksnapshot.h"
-#include "gdktexturedownloaderprivate.h"
 
-#include <glib/gi18n-lib.h>
 #include <graphene.h>
 #include "loaders/gdkpngprivate.h"
 #include "loaders/gdktiffprivate.h"
 #include "loaders/gdkjpegprivate.h"
 
-/**
- * gdk_texture_error_quark:
- *
- * Registers an error quark for [class@Gdk.Texture] errors.
- *
- * Returns: the error quark
- **/
 G_DEFINE_QUARK (gdk-texture-error-quark, gdk_texture_error)
 
 /* HACK: So we don't need to include any (not-yet-created) GSK or GTK headers */
@@ -83,7 +62,6 @@ enum {
   PROP_0,
   PROP_WIDTH,
   PROP_HEIGHT,
-  PROP_COLOR_STATE,
 
   N_PROPS
 };
@@ -228,7 +206,6 @@ gdk_texture_loadable_icon_load_async (GLoadableIcon       *icon,
   GTask *task;
 
   task = g_task_new (icon, cancellable, callback, user_data);
-  g_task_set_source_tag (task, gdk_texture_loadable_icon_load_async);
   g_task_run_in_thread (task, gdk_texture_loadable_icon_load_in_thread);
   g_object_unref (task);
 }
@@ -272,10 +249,10 @@ G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GdkTexture, gdk_texture, G_TYPE_OBJECT,
   g_critical ("Texture of type '%s' does not implement GdkTexture::" # method, G_OBJECT_TYPE_NAME (obj))
 
 static void
-gdk_texture_default_download (GdkTexture            *texture,
-                              guchar                *data,
-                              const GdkMemoryLayout *layout,
-                              GdkColorState         *color_state)
+gdk_texture_default_download (GdkTexture      *texture,
+                              GdkMemoryFormat  format,
+                              guchar          *data,
+                              gsize            stride)
 {
   GDK_TEXTURE_WARN_NOT_IMPLEMENTED_METHOD (texture, download);
 }
@@ -296,11 +273,6 @@ gdk_texture_set_property (GObject      *gobject,
 
     case PROP_HEIGHT:
       self->height = g_value_get_int (value);
-      break;
-
-    case PROP_COLOR_STATE:
-      self->color_state = g_value_dup_boxed (value);
-      g_assert (self->color_state);
       break;
 
     default:
@@ -325,10 +297,6 @@ gdk_texture_get_property (GObject    *gobject,
 
     case PROP_HEIGHT:
       g_value_set_int (value, self->height);
-      break;
-
-    case PROP_COLOR_STATE:
-      g_value_set_boxed (value, self->color_state);
       break;
 
     default:
@@ -373,16 +341,6 @@ gdk_texture_dispose (GObject *object)
 }
 
 static void
-gdk_texture_finalize (GObject *object)
-{
-  GdkTexture *self = GDK_TEXTURE (object);
-
-  gdk_color_state_unref (self->color_state);
-
-  G_OBJECT_CLASS (gdk_texture_parent_class)->finalize (object);
-}
-
-static void
 gdk_texture_class_init (GdkTextureClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
@@ -392,10 +350,9 @@ gdk_texture_class_init (GdkTextureClass *klass)
   gobject_class->set_property = gdk_texture_set_property;
   gobject_class->get_property = gdk_texture_get_property;
   gobject_class->dispose = gdk_texture_dispose;
-  gobject_class->finalize = gdk_texture_finalize;
 
   /**
-   * GdkTexture:width:
+   * GdkTexture:width: (attributes org.gtk.Property.get=gdk_texture_get_width)
    *
    * The width of the texture, in pixels.
    */
@@ -406,11 +363,11 @@ gdk_texture_class_init (GdkTextureClass *klass)
                       1,
                       G_PARAM_READWRITE |
                       G_PARAM_CONSTRUCT_ONLY |
-                      G_PARAM_STATIC_NAME |
+                      G_PARAM_STATIC_STRINGS |
                       G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkTexture:height:
+   * GdkTexture:height: (attributes org.gtk.Property.get=gdk_texture_get_height)
    *
    * The height of the texture, in pixels.
    */
@@ -421,23 +378,8 @@ gdk_texture_class_init (GdkTextureClass *klass)
                       1,
                       G_PARAM_READWRITE |
                       G_PARAM_CONSTRUCT_ONLY |
-                      G_PARAM_STATIC_NAME |
+                      G_PARAM_STATIC_STRINGS |
                       G_PARAM_EXPLICIT_NOTIFY);
-
-  /**
-   * GdkTexture:color-state:
-   *
-   * The color state of the texture.
-   *
-   * Since: 4.16
-   */
-  properties[PROP_COLOR_STATE] =
-    g_param_spec_boxed ("color-state", NULL, NULL,
-                        GDK_TYPE_COLOR_STATE,
-                        G_PARAM_READWRITE |
-                        G_PARAM_CONSTRUCT_ONLY |
-                        G_PARAM_STATIC_NAME |
-                        G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -445,16 +387,15 @@ gdk_texture_class_init (GdkTextureClass *klass)
 static void
 gdk_texture_init (GdkTexture *self)
 {
-  self->color_state = gdk_color_state_get_srgb ();
 }
 
-/*<private>
+/**
  * gdk_texture_new_for_surface:
  * @surface: a cairo image surface
  *
  * Creates a new texture object representing the surface.
  *
- * The @surface must be an image surface with a format supperted by GTK.
+ * The @surface must be an image surface with format `CAIRO_FORMAT_ARGB32`.
  *
  * The newly created texture will acquire a reference on the @surface.
  *
@@ -478,7 +419,7 @@ gdk_texture_new_for_surface (cairo_surface_t *surface)
 
   texture = gdk_memory_texture_new (cairo_image_surface_get_width (surface),
                                     cairo_image_surface_get_height (surface),
-                                    gdk_cairo_format_to_memory_format (cairo_image_surface_get_format (surface)),
+                                    GDK_MEMORY_DEFAULT,
                                     bytes,
                                     cairo_image_surface_get_stride (surface));
 
@@ -494,13 +435,10 @@ gdk_texture_new_for_surface (cairo_surface_t *surface)
  * Creates a new texture object representing the `GdkPixbuf`.
  *
  * This function is threadsafe, so that you can e.g. use GTask
- * and [method@Gio.Task.run_in_thread] to avoid blocking the main
- * thread while loading a big image.
+ * and [method@Gio.Task.run_in_thread] to avoid blocking the main thread
+ * while loading a big image.
  *
  * Returns: a new `GdkTexture`
- *
- * Deprecated: 4.20: Use e.g. libglycin, which can load many image
- *   formats into a `GdkTexture`
  */
 GdkTexture *
 gdk_texture_new_for_pixbuf (GdkPixbuf *pixbuf)
@@ -510,7 +448,7 @@ gdk_texture_new_for_pixbuf (GdkPixbuf *pixbuf)
 
   g_return_val_if_fail (GDK_IS_PIXBUF (pixbuf), NULL);
 
-  bytes = g_bytes_new_with_free_func (gdk_pixbuf_read_pixels (pixbuf),
+  bytes = g_bytes_new_with_free_func (gdk_pixbuf_get_pixels (pixbuf),
                                       gdk_pixbuf_get_height (pixbuf)
                                       * (gsize) gdk_pixbuf_get_rowstride (pixbuf),
                                       g_object_unref,
@@ -535,7 +473,7 @@ gdk_texture_new_for_pixbuf (GdkPixbuf *pixbuf)
  * Creates a new texture by loading an image from a resource.
  *
  * The file format is detected automatically. The supported formats
- * are PNG, JPEG and TIFF, though more formats might be available.
+ * are PNG and JPEG, though more formats might be available.
  *
  * It is a fatal error if @resource_path does not specify a valid
  * image resource and the program will abort if that happens.
@@ -582,16 +520,11 @@ gdk_texture_new_from_resource (const char *resource_path)
  * The file format is detected automatically. The supported formats
  * are PNG, JPEG and TIFF, though more formats might be available.
  *
- * If `NULL` is returned, then @error will be set.
+ * If %NULL is returned, then @error will be set.
  *
  * This function is threadsafe, so that you can e.g. use GTask
  * and [method@Gio.Task.run_in_thread] to avoid blocking the main thread
  * while loading a big image.
- *
- * ::: warning
- *     Note that this function should not be used with untrusted data.
- *     Use a proper image loading framework such as libglycin, which can
- *     load many image formats into a `GdkTexture`.
  *
  * Return value: A newly-created `GdkTexture`
  */
@@ -663,9 +596,7 @@ gdk_texture_new_from_bytes_pixbuf (GBytes  *bytes,
   if (pixbuf == NULL)
     return NULL;
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture = gdk_texture_new_for_pixbuf (pixbuf);
-G_GNUC_END_IGNORE_DEPRECATIONS
   g_object_unref (pixbuf);
 
   return texture;
@@ -682,16 +613,11 @@ G_GNUC_END_IGNORE_DEPRECATIONS
  * The file format is detected automatically. The supported formats
  * are PNG, JPEG and TIFF, though more formats might be available.
  *
- * If `NULL` is returned, then @error will be set.
+ * If %NULL is returned, then @error will be set.
  *
  * This function is threadsafe, so that you can e.g. use GTask
  * and [method@Gio.Task.run_in_thread] to avoid blocking the main thread
  * while loading a big image.
- *
- * ::: warning
- *     Note that this function should not be used with untrusted data.
- *     Use a proper image loading framework such as libglycin, which can
- *     load many image formats into a `GdkTexture`.
  *
  * Return value: A newly-created `GdkTexture`
  *
@@ -733,16 +659,11 @@ gdk_texture_new_from_bytes (GBytes  *bytes,
  * The file format is detected automatically. The supported formats
  * are PNG, JPEG and TIFF, though more formats might be available.
  *
- * If `NULL` is returned, then @error will be set.
+ * If %NULL is returned, then @error will be set.
  *
  * This function is threadsafe, so that you can e.g. use GTask
  * and [method@Gio.Task.run_in_thread] to avoid blocking the main thread
  * while loading a big image.
- *
- * ::: warning
- *     Note that this function should not be used with untrusted data.
- *     Use a proper image loading framework such as libglycin, which can
- *     load many image formats into a `GdkTexture`.
  *
  * Return value: A newly-created `GdkTexture`
  *
@@ -768,7 +689,7 @@ gdk_texture_new_from_filename (const char  *path,
 }
 
 /**
- * gdk_texture_get_width:
+ * gdk_texture_get_width: (attributes org.gtk.Method.get_property=width)
  * @texture: a `GdkTexture`
  *
  * Returns the width of @texture, in pixels.
@@ -784,7 +705,7 @@ gdk_texture_get_width (GdkTexture *texture)
 }
 
 /**
- * gdk_texture_get_height:
+ * gdk_texture_get_height: (attributes org.gtk.Method.get_property=height)
  * @texture: a `GdkTexture`
  *
  * Returns the height of the @texture, in pixels.
@@ -799,58 +720,13 @@ gdk_texture_get_height (GdkTexture *texture)
   return texture->height;
 }
 
-/**
- * gdk_texture_get_color_state:
- * @self: a `GdkTexture`
- *
- * Returns the color state associated with the texture.
- *
- * Returns: (transfer none): the color state of the `GdkTexture`
- *
- * Since: 4.16
- */
-GdkColorState *
-gdk_texture_get_color_state (GdkTexture *self)
-{
-  g_return_val_if_fail (GDK_IS_TEXTURE (self), NULL);
-
-  return self->color_state;
-}
-
 void
-gdk_texture_do_download (GdkTexture            *texture,
-                         guchar                *data,
-                         const GdkMemoryLayout *layout,
-                         GdkColorState         *color_state)
+gdk_texture_do_download (GdkTexture      *texture,
+                         GdkMemoryFormat  format,
+                         guchar          *data,
+                         gsize            stride)
 {
-  GDK_TEXTURE_GET_CLASS (texture)->download (texture, data, layout, color_state);
-}
-
-GBytes *
-gdk_texture_download_bytes (GdkTexture      *self,
-                            GdkMemoryLayout *out_layout)
-{
-  if (GDK_IS_MEMORY_TEXTURE (self))
-    {
-      GdkMemoryTexture *memtex = GDK_MEMORY_TEXTURE (self);
-
-      *out_layout = *gdk_memory_texture_get_layout (memtex);
-      return g_bytes_ref (gdk_memory_texture_get_bytes (memtex));
-    }
-  else
-    {
-      guchar *data;
-
-      gdk_memory_layout_init (out_layout,
-                              self->format,
-                              self->width,
-                              self->height,
-                              1);
-      data = g_malloc (out_layout->size);
-      
-      gdk_texture_do_download (self, data, out_layout, self->color_state);
-      return g_bytes_new_take (data, out_layout->size);
-    }
+  GDK_TEXTURE_GET_CLASS (texture)->download (texture, format, data, stride);
 }
 
 static gboolean
@@ -946,43 +822,22 @@ gdk_texture_set_diff (GdkTexture     *self,
 }
 
 cairo_surface_t *
-gdk_texture_download_surface (GdkTexture    *texture,
-                              GdkColorState *color_state)
+gdk_texture_download_surface (GdkTexture *texture)
 {
-  GdkMemoryDepth depth;
   cairo_surface_t *surface;
   cairo_status_t surface_status;
-  cairo_format_t surface_format;
-  GdkTextureDownloader downloader;
 
-  depth = gdk_texture_get_depth (texture);
-#if 0
-  /* disabled for performance reasons. Enjoy living with some banding. */
-  if (!gdk_color_state_equal (texture->color_state, color_state))
-    depth = gdk_memory_depth_merge (depth, gdk_color_state_get_depth (color_state));
-#endif
-
-  surface_format = gdk_cairo_format_for_depth (depth);
-  surface = cairo_image_surface_create (surface_format,
+  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
                                         texture->width, texture->height);
 
   surface_status = cairo_surface_status (surface);
   if (surface_status != CAIRO_STATUS_SUCCESS)
-    {
-      g_warning ("%s: surface error: %s", __FUNCTION__,
-                 cairo_status_to_string (surface_status));
-      return surface;
-    }
+    g_warning ("%s: surface error: %s", __FUNCTION__,
+               cairo_status_to_string (surface_status));
 
-  gdk_texture_downloader_init (&downloader, texture);
-  gdk_texture_downloader_set_format (&downloader,
-                                     gdk_cairo_format_to_memory_format (surface_format));
-  gdk_texture_downloader_set_color_state (&downloader, color_state);
-  gdk_texture_downloader_download_into (&downloader,
-                                        cairo_image_surface_get_data (surface),
-                                        cairo_image_surface_get_stride (surface));
-  gdk_texture_downloader_finish (&downloader);
-
+  gdk_texture_download (texture,
+                        cairo_image_surface_get_data (surface),
+                        cairo_image_surface_get_stride (surface));
   cairo_surface_mark_dirty (surface);
 
   return surface;
@@ -1028,14 +883,9 @@ gdk_texture_download (GdkTexture *texture,
   g_return_if_fail (stride >= gdk_texture_get_width (texture) * 4);
 
   gdk_texture_do_download (texture,
+                           GDK_MEMORY_DEFAULT,
                            data,
-                           &GDK_MEMORY_LAYOUT_SIMPLE (
-                              GDK_MEMORY_DEFAULT,
-                              texture->width,
-                              texture->height,
-                              stride
-                           ),
-                           GDK_COLOR_STATE_SRGB);
+                           stride);
 }
 
 /**
@@ -1064,12 +914,6 @@ gdk_texture_get_format (GdkTexture *self)
   return self->format;
 }
 
-GdkMemoryDepth
-gdk_texture_get_depth (GdkTexture *self)
-{
-  return gdk_memory_format_get_depth (self->format);
-}
-
 gboolean
 gdk_texture_set_render_data (GdkTexture     *self,
                              gpointer        key,
@@ -1086,14 +930,6 @@ gdk_texture_set_render_data (GdkTexture     *self,
   self->render_notify = notify;
 
   return TRUE;
-}
-
-void
-gdk_texture_steal_render_data (GdkTexture *self)
-{
-  self->render_key = NULL;
-  self->render_data = NULL;
-  self->render_notify = NULL;
 }
 
 void
@@ -1126,9 +962,9 @@ gdk_texture_get_render_data (GdkTexture  *self,
  *
  * This is a utility function intended for debugging and testing.
  * If you want more control over formats, proper error handling or
- * want to store to a [iface@Gio.File] or other location, you might
- * want to use [method@Gdk.Texture.save_to_png_bytes] or look into
- * the libglycin library.
+ * want to store to a [iface@Gio.File] or other location, you might want to
+ * use [method@Gdk.Texture.save_to_png_bytes] or look into the
+ * gdk-pixbuf library.
  *
  * Returns: %TRUE if saving succeeded, %FALSE on failure.
  */
@@ -1142,7 +978,7 @@ gdk_texture_save_to_png (GdkTexture *texture,
   g_return_val_if_fail (GDK_IS_TEXTURE (texture), FALSE);
   g_return_val_if_fail (filename != NULL, FALSE);
 
-  bytes = gdk_save_png (texture, NULL);
+  bytes = gdk_save_png (texture);
   result = g_file_set_contents (filename,
                                 g_bytes_get_data (bytes, NULL),
                                 g_bytes_get_size (bytes),
@@ -1165,7 +1001,7 @@ gdk_texture_save_to_png (GdkTexture *texture,
  *
  * If you need more control over the generated image, such as
  * attaching metadata, you should look into an image handling
- * library such as the libglycin library.
+ * library such as the gdk-pixbuf library.
  *
  * If you are dealing with high dynamic range float data, you
  * might also want to consider [method@Gdk.Texture.save_to_tiff_bytes]
@@ -1180,7 +1016,7 @@ gdk_texture_save_to_png_bytes (GdkTexture *texture)
 {
   g_return_val_if_fail (GDK_IS_TEXTURE (texture), NULL);
 
-  return gdk_save_png (texture, NULL);
+  return gdk_save_png (texture);
 }
 
 /**
@@ -1243,4 +1079,3 @@ gdk_texture_save_to_tiff_bytes (GdkTexture *texture)
 
   return gdk_save_tiff (texture);
 }
-

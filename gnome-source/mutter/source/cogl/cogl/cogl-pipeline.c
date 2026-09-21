@@ -41,102 +41,64 @@
 #include "cogl/cogl-texture-private.h"
 #include "cogl/cogl-blend-string.h"
 #include "cogl/cogl-journal-private.h"
-#include "cogl/cogl-color.h"
+#include "cogl/cogl-color-private.h"
 #include "cogl/cogl-util.h"
 #include "cogl/cogl-profile.h"
 #include "cogl/cogl-depth-state-private.h"
-#include "cogl/cogl-snippet-private.h"
-#include "cogl/cogl-driver-private.h"
+#include "cogl/cogl1-context.h"
 
 #include <glib.h>
 #include <glib/gprintf.h>
 #include <string.h>
 
-typedef gboolean (*CoglPipelineChildCallback) (CoglPipeline *child, void *user_data);
-
 static void recursively_free_layer_caches (CoglPipeline *pipeline);
 static gboolean _cogl_pipeline_is_weak (CoglPipeline *pipeline);
 
-G_DEFINE_FINAL_TYPE (CoglPipeline, cogl_pipeline, G_TYPE_OBJECT)
+const CoglPipelineFragend *_cogl_pipeline_fragend;
+const CoglPipelineVertend *_cogl_pipeline_vertend;
+const CoglPipelineProgend *_cogl_pipeline_progend;
 
-static void
-cogl_pipeline_unparent (CoglPipeline *pipeline)
-{
-  CoglPipeline *old_parent = pipeline->parent;
+#include "cogl/driver/gl/cogl-pipeline-fragend-glsl-private.h"
+#include "cogl/driver/gl/cogl-pipeline-vertend-glsl-private.h"
+#include "cogl/driver/gl/cogl-pipeline-progend-glsl-private.h"
 
-  if (old_parent)
-    {
-      if (old_parent->first_child == pipeline)
-        old_parent->first_child = pipeline->next_sibling;
-
-      if (old_parent->last_child == pipeline)
-        old_parent->last_child = pipeline->prev_sibling;
-
-      if (pipeline->prev_sibling)
-        pipeline->prev_sibling->next_sibling = pipeline->next_sibling;
-      if (pipeline->next_sibling)
-        pipeline->next_sibling->prev_sibling = pipeline->prev_sibling;
-    }
-
-  if (pipeline->has_parent_reference)
-    g_object_unref (old_parent);
-
-  pipeline->parent = NULL;
-  pipeline->prev_sibling = NULL;
-  pipeline->next_sibling = NULL;
-}
+G_DEFINE_FINAL_TYPE (CoglPipeline, cogl_pipeline, COGL_TYPE_NODE)
 
 static void
 _cogl_pipeline_revert_weak_ancestors (CoglPipeline *strong)
 {
-  CoglPipeline *p;
+  CoglNode *n;
 
   g_return_if_fail (!strong->is_weak);
 
   /* This reverts the effect of calling
      _cogl_pipeline_promote_weak_ancestors */
 
-  if (strong->parent == NULL)
+  if (COGL_NODE (strong)->parent == NULL)
     return;
 
-  for (p = strong->parent;
+  for (n = COGL_NODE (strong)->parent;
        /* We can assume that all weak pipelines have a parent */
-       p->is_weak;
-       p = p->parent)
-    /* 'p' is weak so we unref its parent */
-    g_object_unref (p->parent);
-}
-
-static void
-cogl_pipeline_foreach_child (CoglPipeline              *pipeline,
-                             CoglPipelineChildCallback  callback,
-                             void                      *user_data)
-{
-
-  for (CoglPipeline *child = pipeline->first_child;
-       child != NULL;)
-    {
-      CoglPipeline *next = child->next_sibling;
-
-      if (!callback (child, user_data))
-        break;
-
-      child = next;
-    }
+       COGL_PIPELINE (n)->is_weak;
+       n = n->parent)
+    /* 'n' is weak so we unref its parent */
+    g_object_unref (n->parent);
 }
 
 static gboolean
-destroy_weak_children_cb (CoglPipeline *pipeline,
-                          void         *user_data)
+destroy_weak_children_cb (CoglNode *node,
+                          void *user_data)
 {
+  CoglPipeline *pipeline = COGL_PIPELINE (node);
+
   if (_cogl_pipeline_is_weak (pipeline))
     {
-      cogl_pipeline_foreach_child (pipeline,
-                                   destroy_weak_children_cb,
-                                   NULL);
+      _cogl_pipeline_node_foreach_child (COGL_NODE (pipeline),
+                                         destroy_weak_children_cb,
+                                         NULL);
 
       pipeline->destroy_callback (pipeline, pipeline->destroy_data);
-      cogl_pipeline_unparent (pipeline);
+      _cogl_pipeline_node_unparent_real (COGL_NODE (pipeline));
     }
 
   return TRUE;
@@ -151,13 +113,17 @@ cogl_pipeline_dispose (GObject *object)
     _cogl_pipeline_revert_weak_ancestors (pipeline);
 
   /* Weak pipelines don't take a reference on their parent */
-  cogl_pipeline_foreach_child (pipeline,
-                               destroy_weak_children_cb,
-                               NULL);
+  _cogl_pipeline_node_foreach_child (COGL_NODE (pipeline),
+                                     destroy_weak_children_cb,
+                                     NULL);
 
-  g_assert (pipeline->first_child == NULL);
+  g_assert (_cogl_list_empty (&COGL_NODE (pipeline)->children));
 
-  cogl_pipeline_unparent (pipeline);
+  _cogl_pipeline_node_unparent_real (COGL_NODE (pipeline));
+
+  if (pipeline->differences & COGL_PIPELINE_STATE_USER_SHADER &&
+      pipeline->big_state->user_program)
+    g_object_unref (pipeline->big_state->user_program);
 
   if (pipeline->differences & COGL_PIPELINE_STATE_UNIFORMS)
     {
@@ -188,8 +154,6 @@ cogl_pipeline_dispose (GObject *object)
 
   recursively_free_layer_caches (pipeline);
 
-  g_clear_pointer (&pipeline->capabilities, g_array_unref);
-
   G_OBJECT_CLASS (cogl_pipeline_parent_class)->dispose (object);
 }
 
@@ -217,6 +181,7 @@ create_default_big_state (void)
   CoglPipelineCullFaceState *cull_face_state = &big_state->cull_face_state;
   CoglPipelineUniformsState *uniforms_state = &big_state->uniforms_state;
 
+  big_state->user_program = NULL;
   big_state->point_size = 0.0f;
   cogl_depth_state_init (&big_state->depth_state);
 
@@ -271,15 +236,20 @@ _cogl_pipeline_init_default_pipeline (CoglContext *context)
   pipeline->has_static_breadcrumb = TRUE;
 #endif
 
-  cogl_context_set_default_pipeline (context, pipeline);
+  context->default_pipeline = pipeline;
+
+  /* Take this opportunity to setup the backends... */
+  _cogl_pipeline_fragend = &_cogl_pipeline_glsl_fragend;
+  _cogl_pipeline_progend = &_cogl_pipeline_glsl_progend;
+  _cogl_pipeline_vertend = &_cogl_pipeline_glsl_vertend;
 }
 
 
 static gboolean
-recursively_free_layer_caches_cb (CoglPipeline *pipeline,
-                                  gpointer      user_data)
+recursively_free_layer_caches_cb (CoglNode *node,
+                                  void *user_data)
 {
-  recursively_free_layer_caches (pipeline);
+  recursively_free_layer_caches (COGL_PIPELINE (node));
   return TRUE;
 }
 
@@ -301,9 +271,9 @@ recursively_free_layer_caches (CoglPipeline *pipeline)
     g_free (pipeline->layers_cache);
   pipeline->layers_cache_dirty = TRUE;
 
-  cogl_pipeline_foreach_child (pipeline,
-                               recursively_free_layer_caches_cb,
-                               NULL);
+  _cogl_pipeline_node_foreach_child (COGL_NODE (pipeline),
+                                     recursively_free_layer_caches_cb,
+                                     NULL);
 }
 
 static void
@@ -311,34 +281,10 @@ _cogl_pipeline_set_parent (CoglPipeline *pipeline,
                            CoglPipeline *parent,
                            gboolean take_strong_reference)
 {
-  g_autoptr (CoglPipeline) owned_parent = NULL;
-
-  g_assert (COGL_IS_PIPELINE (pipeline));
-  g_assert (COGL_IS_PIPELINE (parent));
-
-  if (pipeline->parent == parent &&
-      pipeline->has_parent_reference == take_strong_reference)
-    return;
-
-  if (pipeline->parent)
-    {
-      owned_parent = g_object_ref (pipeline->parent);
-      cogl_pipeline_unparent (pipeline);
-    }
-
-  pipeline->parent = take_strong_reference ? g_object_ref (parent) : parent;
-  pipeline->has_parent_reference = take_strong_reference;
-
-  if (parent->first_child)
-    {
-      parent->first_child->prev_sibling = pipeline;
-      pipeline->next_sibling = parent->first_child;
-    }
-  else
-    {
-      parent->last_child = pipeline;
-    }
-  parent->first_child = pipeline;
+  /* Chain up */
+  _cogl_pipeline_node_set_parent_real (COGL_NODE (pipeline),
+                                       COGL_NODE (parent),
+                                       take_strong_reference);
 
   /* Since we just changed the ancestry of the pipeline its cache of
    * layers could now be invalid so free it... */
@@ -349,7 +295,7 @@ _cogl_pipeline_set_parent (CoglPipeline *pipeline,
 static void
 _cogl_pipeline_promote_weak_ancestors (CoglPipeline *strong)
 {
-  CoglPipeline *p;
+  CoglNode *n;
 
   g_return_if_fail (!strong->is_weak);
 
@@ -357,15 +303,15 @@ _cogl_pipeline_promote_weak_ancestors (CoglPipeline *strong)
      taking a reference on strong's grandparent. We don't need to take
      a reference on strong's direct parent */
 
-  if (strong->parent == NULL)
+  if (COGL_NODE (strong)->parent == NULL)
     return;
 
-  for (p = strong->parent;
+  for (n = COGL_NODE (strong)->parent;
        /* We can assume that all weak pipelines have a parent */
-       p->is_weak;
-       p = p->parent)
+       COGL_PIPELINE (n)->is_weak;
+       n = n->parent)
     /* 'n' is weak so we take a reference on its parent */
-    g_object_ref (p->parent);
+    g_object_ref (n->parent);
 }
 
 /* XXX: Always have an eye out for opportunities to lower the cost of
@@ -382,11 +328,6 @@ _cogl_pipeline_copy (CoglPipeline *src, gboolean is_weak)
   pipeline->real_blend_enable = src->real_blend_enable;
   pipeline->dirty_real_blend_enable = src->dirty_real_blend_enable;
   pipeline->unknown_color_alpha = src->unknown_color_alpha;
-
-  if (src->capabilities)
-    pipeline->capabilities = g_array_copy (src->capabilities);
-
-  pipeline->name = src->name;
 
   /* XXX:
    * consider generalizing the idea of "cached" properties. These
@@ -430,8 +371,7 @@ _cogl_pipeline_weak_copy (CoglPipeline *pipeline,
 CoglPipeline *
 cogl_pipeline_new (CoglContext *context)
 {
-  CoglPipeline *default_pipeline = cogl_context_get_default_pipeline (context);
-  CoglPipeline *new = cogl_pipeline_copy (default_pipeline);
+  CoglPipeline *new = cogl_pipeline_copy (context->default_pipeline);
 
 #ifdef COGL_ENABLE_DEBUG
   _cogl_pipeline_set_static_breadcrumb (new, "new");
@@ -581,6 +521,41 @@ _cogl_pipeline_layer_numbers_equal (CoglPipeline *pipeline0,
   return TRUE;
 }
 
+gboolean
+_cogl_pipeline_layer_and_unit_numbers_equal (CoglPipeline *pipeline0,
+                                             CoglPipeline *pipeline1)
+{
+  CoglPipeline *authority0 =
+    _cogl_pipeline_get_authority (pipeline0, COGL_PIPELINE_STATE_LAYERS);
+  CoglPipeline *authority1 =
+    _cogl_pipeline_get_authority (pipeline1, COGL_PIPELINE_STATE_LAYERS);
+  int n_layers = authority0->n_layers;
+  int i;
+
+  if (authority1->n_layers != n_layers)
+    return FALSE;
+
+  _cogl_pipeline_update_layers_cache (authority0);
+  _cogl_pipeline_update_layers_cache (authority1);
+
+  for (i = 0; i < n_layers; i++)
+    {
+      CoglPipelineLayer *layer0 = authority0->layers_cache[i];
+      CoglPipelineLayer *layer1 = authority1->layers_cache[i];
+      int unit0, unit1;
+
+      if (layer0->index != layer1->index)
+        return FALSE;
+
+      unit0 = _cogl_pipeline_layer_get_unit_index (layer0);
+      unit1 = _cogl_pipeline_layer_get_unit_index (layer1);
+      if (unit0 != unit1)
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
 typedef struct
 {
   int i;
@@ -673,6 +648,17 @@ _cogl_pipeline_change_implies_transparency (CoglPipeline *pipeline,
       CoglColor tmp;
       cogl_pipeline_get_color (pipeline, &tmp);
       if (!G_APPROX_VALUE (cogl_color_get_alpha (&tmp), 1.0, FLT_EPSILON))
+        return TRUE;
+    }
+
+  if (changes & COGL_PIPELINE_STATE_USER_SHADER)
+    {
+      /* We can't make any assumptions about the alpha channel if the user
+       * is using an unknown fragment shader.
+       *
+       * TODO: check that it isn't just a vertex shader!
+       */
+      if (cogl_pipeline_get_user_program (pipeline) != NULL)
         return TRUE;
     }
 
@@ -855,6 +841,15 @@ _cogl_pipeline_copy_differences (CoglPipeline *dest,
               sizeof (CoglPipelineBlendState));
     }
 
+  if (differences & COGL_PIPELINE_STATE_USER_SHADER)
+    {
+      if (src->big_state->user_program)
+        big_state->user_program =
+          g_object_ref (src->big_state->user_program);
+      else
+        big_state->user_program = NULL;
+    }
+
   if (differences & COGL_PIPELINE_STATE_DEPTH)
     {
       memcpy (&big_state->depth_state,
@@ -946,6 +941,7 @@ _cogl_pipeline_init_multi_property_sparse_state (CoglPipeline *pipeline,
     case COGL_PIPELINE_STATE_ALPHA_FUNC_REFERENCE:
     case COGL_PIPELINE_STATE_NON_ZERO_POINT_SIZE:
     case COGL_PIPELINE_STATE_POINT_SIZE:
+    case COGL_PIPELINE_STATE_USER_SHADER:
     case COGL_PIPELINE_STATE_PER_VERTEX_POINT_SIZE:
     case COGL_PIPELINE_STATE_REAL_BLEND_ENABLE:
       g_return_if_reached ();
@@ -998,9 +994,9 @@ _cogl_pipeline_init_multi_property_sparse_state (CoglPipeline *pipeline,
 }
 
 static gboolean
-check_if_strong_cb (CoglPipeline *pipeline,
-                    void         *user_data)
+check_if_strong_cb (CoglNode *node, void *user_data)
 {
+  CoglPipeline *pipeline = COGL_PIPELINE (node);
   gboolean *has_strong_child = user_data;
 
   if (!_cogl_pipeline_is_weak (pipeline))
@@ -1016,9 +1012,9 @@ static gboolean
 has_strong_children (CoglPipeline *pipeline)
 {
   gboolean has_strong_child = FALSE;
-  cogl_pipeline_foreach_child (pipeline,
-                               check_if_strong_cb,
-                               &has_strong_child);
+  _cogl_pipeline_node_foreach_child (COGL_NODE (pipeline),
+                                     check_if_strong_cb,
+                                     &has_strong_child);
   return has_strong_child;
 }
 
@@ -1032,9 +1028,10 @@ _cogl_pipeline_is_weak (CoglPipeline *pipeline)
 }
 
 static gboolean
-reparent_children_cb (CoglPipeline *pipeline,
-                      void         *user_data)
+reparent_children_cb (CoglNode *node,
+                      void *user_data)
 {
+  CoglPipeline *pipeline = COGL_PIPELINE (node);
   CoglPipeline *parent = user_data;
 
   _cogl_pipeline_set_parent (pipeline, parent, TRUE);
@@ -1079,7 +1076,7 @@ _cogl_pipeline_pre_change_notify (CoglPipeline     *pipeline,
           /* XXX: note we use cogl_flush() not _cogl_flush_journal() so
            * we will flush *all* known journals that might reference the
            * current pipeline. */
-          cogl_context_flush (pipeline->context);
+          cogl_flush ();
         }
     }
 
@@ -1111,11 +1108,21 @@ _cogl_pipeline_pre_change_notify (CoglPipeline     *pipeline,
    */
   if (!from_layer_change)
     {
-      CoglDriver *driver = cogl_context_get_driver (pipeline->context);
-      CoglDriverClass *klass = COGL_DRIVER_GET_CLASS (driver);
+      const CoglPipelineProgend *progend = _cogl_pipeline_progend;
+      const CoglPipelineVertend *vertend = _cogl_pipeline_vertend;
+      const CoglPipelineFragend *fragend = _cogl_pipeline_fragend;
 
-      if (klass->pipeline_pre_change_notify)
-        klass->pipeline_pre_change_notify (driver, pipeline, change, new_color);
+      if (vertend->pipeline_pre_change_notify)
+        vertend->pipeline_pre_change_notify (pipeline, change, new_color);
+
+      /* TODO: make the vertend and fragend implementation details
+       * of the progend */
+
+      if (fragend->pipeline_pre_change_notify)
+        fragend->pipeline_pre_change_notify (pipeline, change, new_color);
+
+      if (progend->pipeline_pre_change_notify)
+        progend->pipeline_pre_change_notify (pipeline, change, new_color);
     }
 
   /* There may be an arbitrary tree of descendants of this pipeline;
@@ -1132,14 +1139,14 @@ _cogl_pipeline_pre_change_notify (CoglPipeline     *pipeline,
   /* The simplest descendants to handle are weak pipelines; we simply
    * destroy them if we are modifying a pipeline they depend on. This
    * means weak pipelines never cause us to do a copy-on-write. */
-  cogl_pipeline_foreach_child (pipeline,
-                               destroy_weak_children_cb,
-                               NULL);
+  _cogl_pipeline_node_foreach_child (COGL_NODE (pipeline),
+                                     destroy_weak_children_cb,
+                                     NULL);
 
   /* If there are still children remaining though we'll need to
    * perform a copy-on-write and reparent the dependants as children
    * of the copy. */
-  if (pipeline->first_child != NULL)
+  if (!_cogl_list_empty (&COGL_NODE (pipeline)->children))
     {
       CoglPipeline *new_authority;
 
@@ -1175,9 +1182,9 @@ _cogl_pipeline_pre_change_notify (CoglPipeline     *pipeline,
 
       /* Reparent the dependants of pipeline to be children of
        * new_authority instead... */
-      cogl_pipeline_foreach_child (pipeline,
-                                   reparent_children_cb,
-                                   new_authority);
+      _cogl_pipeline_node_foreach_child (COGL_NODE (pipeline),
+                                         reparent_children_cb,
+                                         new_authority);
 
       /* The children will keep the new authority alive so drop the
        * reference we got when copying... */
@@ -1229,8 +1236,8 @@ _cogl_pipeline_pre_change_notify (CoglPipeline     *pipeline,
    * minimize redundant OpenGL calls if the same pipeline is flushed
    * again.
    */
-  if (cogl_context_get_current_pipeline (ctx) == pipeline)
-    cogl_context_add_current_pipeline_changes_since_flush (ctx, change);
+  if (ctx->current_pipeline == pipeline)
+    ctx->current_pipeline_changes_since_flush |= change;
 }
 
 
@@ -1592,14 +1599,11 @@ _cogl_pipeline_get_layer_with_flags (CoglPipeline *pipeline,
 
   unit_index = layer_info.insert_after + 1;
   if (unit_index == 0)
-    layer = _cogl_pipeline_layer_copy (cogl_context_get_default_layer_0 (ctx));
+    layer = _cogl_pipeline_layer_copy (ctx->default_layer_0);
   else
     {
-      G_GNUC_UNUSED CoglPipelineLayer *new;
-      CoglPipelineLayer *default_layer_n;
-
-      default_layer_n = cogl_context_get_default_layer_n (ctx);
-      layer = _cogl_pipeline_layer_copy (default_layer_n);
+      CoglPipelineLayer *new;
+      layer = _cogl_pipeline_layer_copy (ctx->default_layer_n);
       new = _cogl_pipeline_set_layer_unit (NULL, layer, unit_index);
       /* Since we passed a newly allocated layer we wouldn't expect
        * _set_layer_unit() to have to allocate *another* layer. */
@@ -1729,7 +1733,7 @@ fallback_layer_cb (CoglPipelineLayer *layer, void *user_data)
 
   COGL_COUNTER_INC (_cogl_uprof_context, layer_fallback_counter);
 
-  texture = cogl_context_get_default_2d_texture (ctx);
+  texture = ctx->default_gl_texture_2d_tex;
 
   if (texture == NULL)
     {
@@ -1737,7 +1741,7 @@ fallback_layer_cb (CoglPipelineLayer *layer, void *user_data)
                  "in for an invalid pipeline layer, since it was "
                  "using an unsupported texture target ");
       /* might get away with this... */
-      texture = cogl_context_get_default_2d_texture (ctx);
+      texture = ctx->default_gl_texture_2d_tex;
     }
 
   cogl_pipeline_set_layer_texture (pipeline, layer->index, texture);
@@ -2090,6 +2094,11 @@ _cogl_pipeline_equal (CoglPipeline *pipeline0,
                                                            authorities1[bit]))
             goto done;
           break;
+        case COGL_PIPELINE_STATE_USER_SHADER_INDEX:
+          if (!_cogl_pipeline_user_shader_equal (authorities0[bit],
+                                                 authorities1[bit]))
+            goto done;
+          break;
         case COGL_PIPELINE_STATE_UNIFORMS_INDEX:
           if (!_cogl_pipeline_uniforms_state_equal (authorities0[bit],
                                                     authorities1[bit]))
@@ -2194,6 +2203,14 @@ _cogl_pipeline_update_authority (CoglPipeline *pipeline,
       pipeline->differences |= state;
       _cogl_pipeline_prune_redundant_ancestry (pipeline);
     }
+}
+
+unsigned long
+_cogl_pipeline_get_age (CoglPipeline *pipeline)
+{
+  g_return_val_if_fail (COGL_IS_PIPELINE (pipeline), 0);
+
+  return pipeline->age;
 }
 
 void
@@ -2333,12 +2350,11 @@ _cogl_pipeline_init_layer_state_hash_functions (void)
     _cogl_pipeline_layer_hash_fragment_snippets_state;
 
   {
-    /* So we get a big error if we forget to update this code!
-     * Make sure to install a hash function for newly added
-     * pipeline state and update assert
-     * in _cogl_pipeline_init_state_hash_functions
-     */
-    G_STATIC_ASSERT (COGL_PIPELINE_STATE_SPARSE_COUNT == 13);
+  /* So we get a big error if we forget to update this code! */
+  _COGL_STATIC_ASSERT (COGL_PIPELINE_LAYER_STATE_SPARSE_COUNT == 9,
+                       "Don't forget to install a hash function for new "
+                       "pipeline state and update assert at end of "
+                       "_cogl_pipeline_init_state_hash_functions");
   }
 }
 
@@ -2422,6 +2438,8 @@ _cogl_pipeline_init_state_hash_functions (void)
     _cogl_pipeline_hash_alpha_func_reference_state;
   state_hash_functions[COGL_PIPELINE_STATE_BLEND_INDEX] =
     _cogl_pipeline_hash_blend_state;
+  state_hash_functions[COGL_PIPELINE_STATE_USER_SHADER_INDEX] =
+    _cogl_pipeline_hash_user_shader_state;
   state_hash_functions[COGL_PIPELINE_STATE_DEPTH_INDEX] =
     _cogl_pipeline_hash_depth_state;
   state_hash_functions[COGL_PIPELINE_STATE_CULL_FACE_INDEX] =
@@ -2440,12 +2458,11 @@ _cogl_pipeline_init_state_hash_functions (void)
     _cogl_pipeline_hash_fragment_snippets_state;
 
   {
-    /* So we get a big error if we forget to update this code!
-     * Make sure to install a hash function for newly added
-     * pipeline state and update assert
-     * in _cogl_pipeline_init_state_hash_functions
-     */
-    G_STATIC_ASSERT (COGL_PIPELINE_STATE_SPARSE_COUNT == 13);
+  /* So we get a big error if we forget to update this code! */
+  _COGL_STATIC_ASSERT (COGL_PIPELINE_STATE_SPARSE_COUNT == 14,
+                       "Make sure to install a hash function for "
+                       "newly added pipeline state and update assert "
+                       "in _cogl_pipeline_init_state_hash_functions");
   }
 }
 
@@ -2505,6 +2522,7 @@ _cogl_pipeline_hash (CoglPipeline *pipeline,
 typedef struct
 {
   CoglContext *context;
+  CoglPipeline *src_pipeline;
   CoglPipeline *dst_pipeline;
   unsigned int layer_differences;
 } DeepCopyData;
@@ -2519,8 +2537,8 @@ deep_copy_layer_cb (CoglPipelineLayer *src_layer,
 
   dst_layer = _cogl_pipeline_get_layer (data->dst_pipeline, src_layer->index);
 
-  while (src_layer != cogl_context_get_default_layer_n (data->context) &&
-         src_layer != cogl_context_get_default_layer_0 (data->context) &&
+  while (src_layer != data->context->default_layer_n &&
+         src_layer != data->context->default_layer_0 &&
          differences)
     {
       unsigned long to_copy = differences & src_layer->differences;
@@ -2531,7 +2549,7 @@ deep_copy_layer_cb (CoglPipelineLayer *src_layer,
           differences ^= to_copy;
         }
 
-      src_layer = src_layer->parent;
+      src_layer = COGL_PIPELINE_LAYER (COGL_NODE (src_layer)->parent);
     }
 
   return TRUE;
@@ -2557,8 +2575,8 @@ _cogl_pipeline_deep_copy (CoglPipeline *pipeline,
   new = cogl_pipeline_new (ctx);
 
   for (authority = pipeline;
-       authority != cogl_context_get_default_pipeline (ctx) && differences;
-       authority = authority->parent)
+       authority != ctx->default_pipeline && differences;
+       authority = COGL_PIPELINE (COGL_NODE (authority)->parent))
     {
       unsigned long to_copy = differences & authority->differences;
 
@@ -2579,6 +2597,7 @@ _cogl_pipeline_deep_copy (CoglPipeline *pipeline,
       layer_differences &= ~COGL_PIPELINE_LAYER_STATE_UNIT;
 
       data.context = ctx;
+      data.src_pipeline = pipeline;
       data.dst_pipeline = new;
       data.layer_differences = layer_differences;
 
@@ -2708,6 +2727,7 @@ CoglPipelineState
 _cogl_pipeline_get_state_for_vertex_codegen (CoglContext *context)
 {
   CoglPipelineState state = (COGL_PIPELINE_STATE_LAYERS |
+                             COGL_PIPELINE_STATE_USER_SHADER |
                              COGL_PIPELINE_STATE_PER_VERTEX_POINT_SIZE |
                              COGL_PIPELINE_STATE_VERTEX_SNIPPETS);
   state |= COGL_PIPELINE_STATE_NON_ZERO_POINT_SIZE;
@@ -2735,6 +2755,7 @@ CoglPipelineState
 _cogl_pipeline_get_state_for_fragment_codegen (CoglContext *context)
 {
   CoglPipelineState state = (COGL_PIPELINE_STATE_LAYERS |
+                             COGL_PIPELINE_STATE_USER_SHADER |
                              COGL_PIPELINE_STATE_FRAGMENT_SNIPPETS |
                              COGL_PIPELINE_STATE_ALPHA_FUNC);
 
@@ -2746,8 +2767,6 @@ cogl_pipeline_get_uniform_location (CoglPipeline *pipeline,
                                     const char *uniform_name)
 {
   CoglContext *ctx = pipeline->context;
-  int n_uniform_names = cogl_context_get_n_uniform_names (ctx);
-  GHashTable *uniform_name_hash = cogl_context_get_uniform_name_hash (ctx);
   void *location_ptr;
   char *uniform_name_copy;
 
@@ -2759,93 +2778,17 @@ cogl_pipeline_get_uniform_location (CoglPipeline *pipeline,
      be. */
 
   /* Look for an existing uniform with this name */
-  if (g_hash_table_lookup_extended (uniform_name_hash,
+  if (g_hash_table_lookup_extended (ctx->uniform_name_hash,
                                     uniform_name,
                                     NULL,
                                     &location_ptr))
     return GPOINTER_TO_INT (location_ptr);
 
   uniform_name_copy = g_strdup (uniform_name);
-  g_ptr_array_add (cogl_context_get_uniform_names (ctx), uniform_name_copy);
-  g_hash_table_insert (uniform_name_hash,
+  g_ptr_array_add (ctx->uniform_names, uniform_name_copy);
+  g_hash_table_insert (ctx->uniform_name_hash,
                        uniform_name_copy,
-                       GINT_TO_POINTER (n_uniform_names));
+                       GINT_TO_POINTER (ctx->n_uniform_names));
 
-  return cogl_context_increment_n_uniform_names (ctx);
-}
-
-typedef struct
-{
-  GQuark domain;
-  unsigned int capability;
-} CapabilityEntry;
-
-void
-cogl_pipeline_add_capability (CoglPipeline *pipeline,
-                              GQuark        domain,
-                              unsigned int  capability)
-{
-  CapabilityEntry entry = {
-    .domain = domain,
-    .capability = capability,
-  };
-
-  if (!pipeline->capabilities)
-    pipeline->capabilities = g_array_new (FALSE, FALSE, sizeof (entry));
-
-  g_array_append_val (pipeline->capabilities, entry);
-}
-
-void
-cogl_pipeline_add_capability_from_snippet (CoglPipeline *pipeline,
-                                           CoglSnippet  *snippet)
-{
-  GQuark capability_domain;
-  unsigned int capability;
-
-  if (cogl_snippet_get_capability (snippet, &capability_domain, &capability))
-    cogl_pipeline_add_capability (pipeline, capability_domain, capability);
-}
-
-gboolean
-cogl_pipeline_has_capability (CoglPipeline *pipeline,
-                              GQuark        domain,
-                              unsigned int  capability)
-{
-  int i;
-
-  if (!pipeline->capabilities)
-    return FALSE;
-
-  for (i = 0; i < pipeline->capabilities->len; i++)
-    {
-      CapabilityEntry *entry = &g_array_index (pipeline->capabilities,
-                                               CapabilityEntry,
-                                               i);
-
-      if (entry->domain == domain &&
-          entry->capability == capability)
-        return TRUE;
-    }
-
-  return FALSE;
-}
-
-void
-cogl_pipeline_set_static_name (CoglPipeline *pipeline,
-                               const char   *name)
-{
-  pipeline->name = name;
-}
-
-const char *
-cogl_pipeline_get_name (CoglPipeline *pipeline)
-{
-  return pipeline->name;
-}
-
-CoglContext *
-cogl_pipeline_get_context (CoglPipeline *pipeline)
-{
-  return pipeline->context;
+  return ctx->n_uniform_names++;
 }

@@ -62,6 +62,7 @@ typedef enum {
   G_VFS_FTP_METHOD_ANY = 0,
   G_VFS_FTP_METHOD_EPSV,
   G_VFS_FTP_METHOD_PASV,
+  G_VFS_FTP_METHOD_PASV_ADDR,
   G_VFS_FTP_METHOD_EPRT,
   G_VFS_FTP_METHOD_PORT
 } GVfsFtpMethod;
@@ -129,7 +130,7 @@ struct _GVfsBackendFtpClass
   GVfsBackendClass parent_class;
 };
 
-GType g_vfs_backend_ftp_get_type (void);
+GType g_vfs_backend_ftp_get_type (void) G_GNUC_CONST;
 
 gboolean        g_vfs_backend_ftp_has_feature           (GVfsBackendFtp *       ftp,
                                                          GVfsFtpFeature         feature);

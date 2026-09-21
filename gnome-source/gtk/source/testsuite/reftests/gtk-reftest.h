@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <glib.h>
-
 G_BEGIN_DECLS
 
 /* reftest-snapshot.c */

@@ -77,43 +77,34 @@ test_paths (void)
 {
   struct
   {
-    const char *filename;
-    const char *expected_dirname;
-    const char *expected_basename;
+    gchar *filename;
+    gchar *dirname;
   } dirname_checks[] = {
-    { "/", "/", G_DIR_SEPARATOR_S },
-    { "////", "/", G_DIR_SEPARATOR_S },
-    { ".////", ".", "." },
-    { "../", "..", ".." },
-    { "..////", "..", ".." },
-    { "a/b", "a", "b" },
-    { "a/b/", "a/b", "b" },
-    { "c///", "c", "c" },
-    { "OSTree-1.0.gir", ".", "OSTree-1.0.gir" },
-    { "/some/multi/part/path", "/some/multi/part", "path" },
+    { "/", "/" },
+    { "////", "/" },
+    { ".////", "." },
+    { "../", ".." },
+    { "..////", ".." },
+    { "a/b", "a" },
+    { "a/b/", "a/b" },
+    { "c///", "c" },
 #ifdef G_OS_WIN32
-    { "\\", "\\", "\\" },
-    { ".\\\\\\\\", ".", "." },
-    { "..\\", "..", ".." },
-    { "..\\\\\\\\", "..", ".." },
-    { "a\\b", "a", "b" },
-    { "a\\b/", "a\\b", "b" },
-    { "a/b\\", "a/b", "b" },
-    { "c\\\\/", "c", "c" },
-    { "//\\", "/", G_DIR_SEPARATOR_S },
+    { "\\", "\\" },
+    { ".\\\\\\\\", "." },
+    { "..\\", ".." },
+    { "..\\\\\\\\", ".." },
+    { "a\\b", "a" },
+    { "a\\b/", "a\\b" },
+    { "a/b\\", "a/b" },
+    { "c\\\\/", "c" },
+    { "//\\", "/" },
 #endif
 #ifdef G_WITH_CYGWIN
-    { "//server/share///x", "//server/share", "x" },
+    { "//server/share///x", "//server/share" },
 #endif
-    { ".", ".", "." },
-    { "..", ".", ".." },
-    { "", ".", "." },  /* note this is different from what the `basename` command does */
-    { G_DIR_SEPARATOR_S "foo" G_DIR_SEPARATOR_S "dir" G_DIR_SEPARATOR_S, G_DIR_SEPARATOR_S "foo" G_DIR_SEPARATOR_S "dir", "dir" },
-    { G_DIR_SEPARATOR_S "foo" G_DIR_SEPARATOR_S "file", G_DIR_SEPARATOR_S "foo", "file" },
-#ifdef G_OS_WIN32
-    { "/foo/dir/", "/foo/dir", "dir" },
-    { "/foo/file", "/foo", "file" },
-#endif
+    { ".", "." },
+    { "..", "." },
+    { "", "." },
   };
   const guint n_dirname_checks = G_N_ELEMENTS (dirname_checks);
   struct
@@ -233,19 +224,30 @@ test_paths (void)
 #endif
   };
   const guint n_canonicalize_filename_checks = G_N_ELEMENTS (canonicalize_filename_checks);
+  gchar *string;
   guint i;
+
+  string = g_path_get_basename (G_DIR_SEPARATOR_S "foo" G_DIR_SEPARATOR_S "dir" G_DIR_SEPARATOR_S);
+  g_assert_cmpstr (string, ==, "dir");
+  g_free (string);
+  string = g_path_get_basename (G_DIR_SEPARATOR_S "foo" G_DIR_SEPARATOR_S "file");
+  g_assert_cmpstr (string, ==, "file");
+  g_free (string);
+
+#ifdef G_OS_WIN32
+  string = g_path_get_basename ("/foo/dir/");
+  g_assert_cmpstr (string, ==, "dir");
+  g_free (string);
+  string = g_path_get_basename ("/foo/file");
+  g_assert_cmpstr (string, ==, "file");
+  g_free (string);
+#endif
 
   for (i = 0; i < n_dirname_checks; i++)
     {
-      gchar *dirname = NULL, *basename = NULL;
-
-      dirname = g_path_get_dirname (dirname_checks[i].filename);
-      g_assert_cmpstr (dirname, ==, dirname_checks[i].expected_dirname);
+      gchar *dirname = g_path_get_dirname (dirname_checks[i].filename);
+      g_assert_cmpstr (dirname, ==, dirname_checks[i].dirname);
       g_free (dirname);
-
-      basename = g_path_get_basename (dirname_checks[i].filename);
-      g_assert_cmpstr (basename, ==, dirname_checks[i].expected_basename);
-      g_free (basename);
     }
 
   for (i = 0; i < n_skip_root_checks; i++)
@@ -662,7 +664,7 @@ test_build_filenamev (void)
 static void
 test_mkdir_with_parents_1 (const gchar *base)
 {
-  char *p0 = g_build_filename (g_get_tmp_dir (), base, "fum", NULL);
+  char *p0 = g_build_filename (base, "fum", NULL);
   char *p1 = g_build_filename (p0, "tem", NULL);
   char *p2 = g_build_filename (p1, "zap", NULL);
   FILE *f;
@@ -703,7 +705,7 @@ test_mkdir_with_parents_1 (const gchar *base)
   if (g_file_test (p1, G_FILE_TEST_EXISTS))
     g_error ("failed, did g_rmdir(%s), but %s is still there", p1, p1);
 
-  f = g_fopen (p1, "we");
+  f = g_fopen (p1, "w");
   if (f == NULL)
     g_error ("failed, couldn't create file %s", p1);
   fclose (f);
@@ -815,18 +817,21 @@ test_mkdir_with_parents (void)
 #ifndef G_OS_WIN32
   gboolean can_override_dac = check_cap_dac_override (NULL);
 #endif
-
-  g_test_message ("Checking g_mkdir_with_parents() in subdir ./hum/");
+  if (g_test_verbose())
+    g_printerr ("checking g_mkdir_with_parents() in subdir ./hum/");
   test_mkdir_with_parents_1 ("hum");
   g_remove ("hum");
-
-  g_test_message ("Checking g_mkdir_with_parents() in subdir ./hii///haa/hee/");
+  if (g_test_verbose())
+    g_printerr ("checking g_mkdir_with_parents() in subdir ./hii///haa/hee/");
   test_mkdir_with_parents_1 ("./hii///haa/hee///");
   g_remove ("hii/haa/hee");
   g_remove ("hii/haa");
   g_remove ("hii");
-
   cwd = g_get_current_dir ();
+  if (g_test_verbose())
+    g_printerr ("checking g_mkdir_with_parents() in cwd: %s", cwd);
+  test_mkdir_with_parents_1 (cwd);
+
   new_path = g_build_filename (cwd, "new", NULL);
   g_assert_cmpint (g_mkdir_with_parents (new_path, 0), ==, 0);
   g_assert_cmpint (g_rmdir (new_path), ==, 0);
@@ -1338,7 +1343,7 @@ test_mkstemp (void)
   g_free (name);
 
   /* Test normal case */
-  name = g_build_filename (g_get_tmp_dir (), "testXXXXXXtest", NULL),
+  name = g_strdup ("testXXXXXXtest"),
   fd = g_mkstemp (name);
   g_assert_cmpint (fd, !=, -1);
   g_assert_null (strstr (name, "XXXXXX"));
@@ -1354,8 +1359,8 @@ test_mkstemp (void)
   strcpy (template, "foobarXXX");
   g_assert_cmpint (g_mkstemp (template), ==, -1);
 
-  name = g_build_filename (g_get_tmp_dir (), "fooXXXXXX", NULL);
-  fd = g_mkstemp (name);
+  strcpy (template, "fooXXXXXX");
+  fd = g_mkstemp (template);
   g_assert_cmpint (fd, !=, -1);
   result = write (fd, hello, hellolen);
   g_assert_cmpint (result, !=, -1);
@@ -1370,16 +1375,15 @@ test_mkstemp (void)
   g_assert_cmpstr (chars, ==, hello);
 
   close (fd);
-  remove (name);
-  g_free (name);
+  remove (template);
 
-  /* Check that it works for "fooXXXXXX.pdf" */
-  name = g_build_filename (g_get_tmp_dir (), "fooXXXXXX.pdf", NULL);
-  fd = g_mkstemp (name);
+  /* Check that is does not work for "fooXXXXXX.pdf" */
+  strcpy (template, "fooXXXXXX.pdf");
+  fd = g_mkstemp (template);
   g_assert_cmpint (fd, !=, -1);
+
   close (fd);
-  remove (name);
-  g_free (name);
+  remove (template);
 }
 
 static void
@@ -1387,12 +1391,12 @@ test_mkdtemp (void)
 {
   gint fd;
   gchar *ret;
-  gchar *name, *name2;
+  gchar *name;
   char template[32];
 
-  name = g_build_filename (g_get_tmp_dir (), "testXXXXXXtest", NULL),
+  name = g_strdup ("testXXXXXXtest"),
   ret = g_mkdtemp (name);
-  g_assert_true (ret == name);
+  g_assert (ret == name);
   g_assert_null (strstr (name, "XXXXXX"));
   g_rmdir (name);
   g_free (name);
@@ -1408,29 +1412,27 @@ test_mkdtemp (void)
   strcpy (template, "foodir");
   g_assert_null (g_mkdtemp (template));
 
-  name = g_build_filename (g_get_tmp_dir (), "fooXXXXXX", NULL);
-  ret = g_mkdtemp (name);
+  strcpy (template, "fooXXXXXX");
+  ret = g_mkdtemp (template);
   g_assert_nonnull (ret);
-  g_assert_true (ret == name);
-  g_assert_false (g_file_test (name, G_FILE_TEST_IS_REGULAR));
-  g_assert_true (g_file_test (name, G_FILE_TEST_IS_DIR));
+  g_assert_true (ret == template);
+  g_assert_false (g_file_test (template, G_FILE_TEST_IS_REGULAR));
+  g_assert_true (g_file_test (template, G_FILE_TEST_IS_DIR));
 
-  name2 = g_build_filename (name, "abc", NULL);
-  fd = g_open (name2, O_WRONLY | O_CREAT, 0600);
+  strcat (template, "/abc");
+  fd = g_open (template, O_WRONLY | O_CREAT, 0600);
   g_assert_cmpint (fd, !=, -1);
   close (fd);
-  g_assert_true (g_file_test (name2, G_FILE_TEST_IS_REGULAR));
-  g_assert_cmpint (g_unlink (name2), !=, -1);
-  g_free (name2);
+  g_assert_true (g_file_test (template, G_FILE_TEST_IS_REGULAR));
+  g_assert_cmpint (g_unlink (template), !=, -1);
 
-  g_assert_cmpint (g_rmdir (name), !=, -1);
-  g_free (name);
+  template[9] = '\0';
+  g_assert_cmpint (g_rmdir (template), !=, -1);
 
-  name = g_build_filename (g_get_tmp_dir (), "fooXXXXXX.dir", NULL);
-  g_assert_nonnull (g_mkdtemp (name));
-  g_assert_true (g_file_test (name, G_FILE_TEST_IS_DIR));
-  g_rmdir (name);
-  g_free (name);
+  strcpy (template, "fooXXXXXX.dir");
+  g_assert_nonnull (g_mkdtemp (template));
+  g_assert_true (g_file_test (template, G_FILE_TEST_IS_DIR));
+  g_rmdir (template);
 }
 
 static void
@@ -1441,10 +1443,10 @@ test_get_contents (void)
   gchar *contents;
   GError *error = NULL;
   const gchar *text = "abcdefghijklmnopqrstuvwxyz";
-  char *filename = g_build_filename (g_get_tmp_dir (), "file-test-get-contents", NULL);
+  const gchar *filename = "file-test-get-contents";
   gsize bytes_written;
 
-  f = g_fopen (filename, "we");
+  f = g_fopen (filename, "w");
   bytes_written = fwrite (text, 1, strlen (text), f);
   g_assert_cmpint (bytes_written, ==, strlen (text));
   fclose (f);
@@ -1470,7 +1472,6 @@ test_get_contents (void)
 
   g_free (contents);
   g_remove (filename);
-  g_free (filename);
 }
 
 static gboolean
@@ -1685,34 +1686,24 @@ test_set_contents_full (void)
           EXISTING_FILE_DIRECTORY,
         }
       existing_file;
-      /* only relevant if @existing_file is
-       * %EXISTING_FILE_NONE or %EXISTING_FILE_REGULAR */
-      int mode;
+      int new_mode;  /* only relevant if @existing_file is %EXISTING_FILE_NONE */
       gboolean use_strlen;
 
       gboolean expected_success;
       gint expected_error;
-      gboolean use_non_ascii_filename;
     }
   tests[] =
     {
-      { EXISTING_FILE_NONE, 0644, FALSE, TRUE, 0, FALSE },
-      { EXISTING_FILE_NONE, 0644, TRUE, TRUE, 0, FALSE },
-      { EXISTING_FILE_NONE, 0600, FALSE, TRUE, 0, FALSE },
-      // Assume umask is 022, ensures that we preserve perms with, eg. 077
-      { EXISTING_FILE_REGULAR, 0666, FALSE, TRUE, 0, FALSE },
-      { EXISTING_FILE_REGULAR, 0644, FALSE, TRUE, 0, FALSE },
-      { EXISTING_FILE_REGULAR, 0666, FALSE, TRUE, 0, TRUE },
-      { EXISTING_FILE_REGULAR, 0644, FALSE, TRUE, 0, TRUE },
+      { EXISTING_FILE_NONE, 0644, FALSE, TRUE, 0 },
+      { EXISTING_FILE_NONE, 0644, TRUE, TRUE, 0 },
+      { EXISTING_FILE_NONE, 0600, FALSE, TRUE, 0 },
+      { EXISTING_FILE_REGULAR, 0644, FALSE, TRUE, 0 },
 #ifndef G_OS_WIN32
-      { EXISTING_FILE_SYMLINK, 0644, FALSE, TRUE, 0, FALSE },
-      { EXISTING_FILE_DIRECTORY, 0644, FALSE, FALSE, G_FILE_ERROR_ISDIR, FALSE },
-      { EXISTING_FILE_SYMLINK, 0644, FALSE, TRUE, 0, TRUE },
-      { EXISTING_FILE_DIRECTORY, 0644, FALSE, FALSE, G_FILE_ERROR_ISDIR, TRUE },
+      { EXISTING_FILE_SYMLINK, 0644, FALSE, TRUE, 0 },
+      { EXISTING_FILE_DIRECTORY, 0644, FALSE, FALSE, G_FILE_ERROR_ISDIR },
 #else
       /* on win32, _wopen returns EACCES if path is a directory */
-      { EXISTING_FILE_DIRECTORY, 0644, FALSE, FALSE, G_FILE_ERROR_ACCES, FALSE },
-      { EXISTING_FILE_DIRECTORY, 0644, FALSE, FALSE, G_FILE_ERROR_ACCES, TRUE },
+      { EXISTING_FILE_DIRECTORY, 0644, FALSE, FALSE, G_FILE_ERROR_ACCES },
 #endif
     };
   gsize i;
@@ -1726,7 +1717,6 @@ test_set_contents_full (void)
           GError *error = NULL;
           gchar *file_name = NULL, *link_name = NULL, *dir_name = NULL;
           const gchar *set_contents_name;
-          const gchar *tmpl = NULL;
           gchar *buf = NULL;
           gsize len;
           gboolean ret;
@@ -1745,17 +1735,11 @@ test_set_contents_full (void)
               {
                 gint fd;
 
-                if (tests[i].use_non_ascii_filename)
-                  {
-                    tmpl = "ñön-äşçïï-XXXXXX";  
-                  }
-                fd = g_file_open_tmp (tmpl, &file_name, &error);
+                fd = g_file_open_tmp (NULL, &file_name, &error);
                 g_assert_no_error (error);
                 g_assert_cmpint (write (fd, original_contents, original_contents_len), ==, original_contents_len);
                 g_assert_no_errno (g_fsync (fd));
                 close (fd);
-
-                g_assert_no_errno (g_chmod (file_name, tests[i].mode));
 
 #ifndef G_OS_WIN32
                 /* Pass an existing symlink to g_file_set_contents_full() to see
@@ -1776,15 +1760,7 @@ test_set_contents_full (void)
               }
             case EXISTING_FILE_DIRECTORY:
               {
-                if (tests[i].use_non_ascii_filename)
-                  {
-                    tmpl = "glib-fileutils-set-contents-full-non-äşçïï-XXXXXX";  
-                  }
-                else 
-                  {
-                    tmpl = "glib-fileutils-set-contents-full-XXXXXX";
-                  }
-                dir_name = g_dir_make_tmp (tmpl, &error);
+                dir_name = g_dir_make_tmp ("glib-fileutils-set-contents-full-XXXXXX", &error);
                 g_assert_no_error (error);
 
                 set_contents_name = dir_name;
@@ -1808,7 +1784,7 @@ test_set_contents_full (void)
           /* Set the file contents */
           ret = g_file_set_contents_full (set_contents_name, "b",
                                           tests[i].use_strlen ? -1 : 1,
-                                          flags, tests[i].mode, &error);
+                                          flags, tests[i].new_mode, &error);
 
           if (!tests[i].expected_success)
             {
@@ -1832,10 +1808,10 @@ test_set_contents_full (void)
 
               g_assert_no_errno (g_lstat (set_contents_name, &statbuf));
 
-              if (tests[i].existing_file & (EXISTING_FILE_NONE | EXISTING_FILE_REGULAR))
+              if (tests[i].existing_file == EXISTING_FILE_NONE)
                 {
                   int mode = statbuf.st_mode & ~S_IFMT;
-                  int new_mode = tests[i].mode;
+                  int new_mode = tests[i].new_mode;
 #ifdef G_OS_WIN32
                   /* on windows, group and others perms handling is different */
                   /* only check the rwx user permissions */
@@ -2059,7 +2035,7 @@ test_read_link (void)
   g_free (newpath);
   g_free (badpath);
 
-  file = g_fopen (filename, "we");
+  file = fopen (filename, "w");
   g_assert_nonnull (file);
   fclose (file);
 
@@ -2117,7 +2093,7 @@ test_stdio_wrappers (void)
 
   g_remove ("mkdir-test/test-create");
   ret = g_rmdir ("mkdir-test");
-  g_assert_true (ret == 0 || errno == ENOENT);
+  g_assert (ret == 0 || errno == ENOENT);
 
   ret = g_stat ("mkdir-test", &buf);
   g_assert_cmpint (ret, ==, -1);
@@ -2218,7 +2194,7 @@ test_stdio_wrappers (void)
 static void
 test_fopen_modes (void)
 {
-  char        *path = g_build_filename (g_get_tmp_dir (), "temp-fopen", NULL);
+  char        *path = g_build_filename ("temp-fopen", NULL);
   gsize        i;
   const gchar *modes[] =
     {
@@ -2236,36 +2212,7 @@ test_fopen_modes (void)
       "a+b",
       "wb+",
       "rb+",
-      "ab+",
-      "we",
-      "re",
-      "ae",
-      "w+e",
-      "r+e",
-      "a+e",
-      "wbe",
-      "rbe",
-      "abe",
-      "w+be",
-      "r+be",
-      "a+be",
-      "wb+e",
-      "rb+e",
-      "ab+e",
-      "web",
-      "reb",
-      "aeb",
-      "w+eb",
-      "r+eb",
-      "a+eb",
-      "web+",
-      "reb+",
-      "aeb+",
-#ifdef G_OS_WIN32
-      /* https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/fopen-wfopen?view=msvc-170#unicode-support */
-      "w, ccs=utf-16le",
-      "we, ccs=utf-16le",
-#endif
+      "ab+"
     };
 
   g_test_bug ("https://gitlab.gnome.org/GNOME/glib/merge_requests/119");
@@ -2659,7 +2606,7 @@ test_clear_fd_ebadf (void)
   gboolean ret;
   GWin32InvalidParameterHandler handler;
 
-  /* We're going to trigger a programming error: attempting to close a
+  /* We're going to trigger a programming error: attmpting to close a
    * fd that was already closed. Make criticals non-fatal. */
   g_assert_true (g_test_undefined ());
   g_log_set_always_fatal (G_LOG_FATAL_MASK);

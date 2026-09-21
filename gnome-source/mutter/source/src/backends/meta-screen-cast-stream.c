@@ -22,16 +22,8 @@
 
 #include "backends/meta-screen-cast-stream.h"
 
-#include "backends/meta-eis.h"
-#include "backends/meta-monitor-private.h"
 #include "backends/meta-remote-desktop-session.h"
 #include "backends/meta-screen-cast-session.h"
-#include "backends/meta-stream-area.h"
-#include "backends/meta-stream-monitor.h"
-#include "backends/meta-stream-source.h"
-#include "backends/meta-stream-virtual.h"
-#include "backends/meta-stream-window.h"
-#include "backends/meta-stream.h"
 
 #include "meta-private-enum-types.h"
 
@@ -44,8 +36,9 @@ enum
 
   PROP_SESSION,
   PROP_CONNECTION,
-  PROP_STREAM,
+  PROP_CURSOR_MODE,
   PROP_FLAGS,
+  PROP_IS_CONFIGURED,
 
   N_PROPS
 };
@@ -61,11 +54,6 @@ enum
 
 static guint signals[N_SIGNALS];
 
-struct _MetaScreenCastStream
-{
-  MetaDBusScreenCastStreamSkeleton parent;
-};
-
 typedef struct _MetaScreenCastStreamPrivate
 {
   MetaScreenCastSession *session;
@@ -73,10 +61,13 @@ typedef struct _MetaScreenCastStreamPrivate
   GDBusConnection *connection;
   char *object_path;
 
-  MetaStream *stream;
-
+  MetaScreenCastCursorMode cursor_mode;
   MetaScreenCastFlag flags;
+  gboolean is_configured;
 
+  MetaScreenCastStreamSrc *src;
+
+  char *mapping_id;
 } MetaScreenCastStreamPrivate;
 
 static void
@@ -94,30 +85,44 @@ G_DEFINE_TYPE_WITH_CODE (MetaScreenCastStream,
                                                 meta_screen_cast_stream_init_initable_iface)
                          G_ADD_PRIVATE (MetaScreenCastStream))
 
-static void
-on_stream_closed (MetaStream           *stream,
-                  MetaScreenCastStream *screen_cast_stream)
+static MetaScreenCastStreamSrc *
+meta_screen_cast_stream_create_src (MetaScreenCastStream  *stream,
+                                    GError               **error)
 {
-  g_signal_emit (screen_cast_stream, signals[CLOSED], 0);
+  return META_SCREEN_CAST_STREAM_GET_CLASS (stream)->create_src (stream,
+                                                                 error);
 }
 
 static void
-on_stream_ready (MetaStream           *stream,
-                 MetaScreenCastStream *screen_cast_stream)
+meta_screen_cast_stream_set_parameters (MetaScreenCastStream *stream,
+                                        GVariantBuilder      *parameters_builder)
+{
+  META_SCREEN_CAST_STREAM_GET_CLASS (stream)->set_parameters (stream,
+                                                              parameters_builder);
+}
+
+static void
+on_stream_src_closed (MetaScreenCastStreamSrc *src,
+                      MetaScreenCastStream    *stream)
 {
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
+
+  if (priv->src)
+    meta_screen_cast_stream_close (stream);
+}
+
+static void
+on_stream_src_ready (MetaScreenCastStreamSrc *src,
+                     uint32_t                 node_id,
+                     MetaScreenCastStream    *stream)
+{
+  MetaScreenCastStreamPrivate *priv =
+    meta_screen_cast_stream_get_instance_private (stream);
   GDBusConnection *connection = priv->connection;
-  MetaStreamSource *source;
   char *peer_name;
-  uint32_t node_id;
 
   peer_name = meta_screen_cast_session_get_peer_name (priv->session);
-
-  source = meta_stream_get_source (stream);
-  g_return_if_fail (source);
-
-  node_id = meta_stream_source_get_node_id (source);
   g_dbus_connection_emit_signal (connection,
                                  peer_name,
                                  priv->object_path,
@@ -128,64 +133,125 @@ on_stream_ready (MetaStream           *stream,
 }
 
 MetaScreenCastSession *
-meta_screen_cast_stream_get_session (MetaScreenCastStream *screen_cast_stream)
+meta_screen_cast_stream_get_session (MetaScreenCastStream *stream)
 {
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
 
   return priv->session;
 }
 
 gboolean
-meta_screen_cast_stream_start (MetaScreenCastStream  *screen_cast_stream,
+meta_screen_cast_stream_start (MetaScreenCastStream  *stream,
                                GError               **error)
 {
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
+  MetaScreenCastStreamSrc *src;
 
-  if (meta_stream_is_started (priv->stream))
+  if (priv->src)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                    "Stream already started");
       return FALSE;
     }
 
-  if (!meta_stream_start (priv->stream, error))
+  src = meta_screen_cast_stream_create_src (stream, error);
+  if (!src)
     return FALSE;
 
-  g_signal_connect (priv->stream, "ready", G_CALLBACK (on_stream_ready),
-                    screen_cast_stream);
-  g_signal_connect (priv->stream, "closed", G_CALLBACK (on_stream_closed),
-                    screen_cast_stream);
+  priv->src = src;
+  g_signal_connect (src, "ready", G_CALLBACK (on_stream_src_ready), stream);
+  g_signal_connect (src, "closed", G_CALLBACK (on_stream_src_closed), stream);
 
   return TRUE;
 }
 
 void
-meta_screen_cast_stream_close (MetaScreenCastStream *screen_cast_stream)
+meta_screen_cast_stream_close (MetaScreenCastStream *stream)
 {
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
 
-  meta_stream_stop (priv->stream);
+  g_clear_object (&priv->src);
+
+  g_signal_emit (stream, signals[CLOSED], 0);
 }
 
 char *
-meta_screen_cast_stream_get_object_path (MetaScreenCastStream *screen_cast_stream)
+meta_screen_cast_stream_get_object_path (MetaScreenCastStream *stream)
 {
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
 
   return priv->object_path;
 }
 
-MetaScreenCastFlag
-meta_screen_cast_stream_get_flags (MetaScreenCastStream *screen_cast_stream)
+MetaScreenCastStreamSrc *
+meta_screen_cast_stream_get_src (MetaScreenCastStream *stream)
 {
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
+
+  return priv->src;
+}
+
+gboolean
+meta_screen_cast_stream_transform_position (MetaScreenCastStream *stream,
+                                            double                stream_x,
+                                            double                stream_y,
+                                            double               *x,
+                                            double               *y)
+{
+  MetaScreenCastStreamClass *klass = META_SCREEN_CAST_STREAM_GET_CLASS (stream);
+
+  return klass->transform_position (stream, stream_x, stream_y, x, y);
+}
+
+MetaScreenCastCursorMode
+meta_screen_cast_stream_get_cursor_mode (MetaScreenCastStream *stream)
+{
+  MetaScreenCastStreamPrivate *priv =
+    meta_screen_cast_stream_get_instance_private (stream);
+
+  return priv->cursor_mode;
+}
+
+MetaScreenCastFlag
+meta_screen_cast_stream_get_flags (MetaScreenCastStream *stream)
+{
+  MetaScreenCastStreamPrivate *priv =
+    meta_screen_cast_stream_get_instance_private (stream);
 
   return priv->flags;
+}
+
+const char *
+meta_screen_cast_stream_get_mapping_id (MetaScreenCastStream *stream)
+{
+  MetaScreenCastStreamPrivate *priv =
+    meta_screen_cast_stream_get_instance_private (stream);
+
+  return priv->mapping_id;
+}
+
+gboolean
+meta_screen_cast_stream_is_configured (MetaScreenCastStream *stream)
+{
+  MetaScreenCastStreamPrivate *priv =
+    meta_screen_cast_stream_get_instance_private (stream);
+
+  return priv->is_configured;
+}
+
+void
+meta_screen_cast_stream_notify_is_configured (MetaScreenCastStream *stream)
+{
+  MetaScreenCastStreamPrivate *priv =
+    meta_screen_cast_stream_get_instance_private (stream);
+
+  priv->is_configured = TRUE;
+  g_object_notify_by_pspec (G_OBJECT (stream), obj_props[PROP_IS_CONFIGURED]);
 }
 
 static void
@@ -194,9 +260,9 @@ meta_screen_cast_stream_set_property (GObject      *object,
                                       const GValue *value,
                                       GParamSpec   *pspec)
 {
-  MetaScreenCastStream *screen_cast_stream = META_SCREEN_CAST_STREAM (object);
+  MetaScreenCastStream *stream = META_SCREEN_CAST_STREAM (object);
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
 
   switch (prop_id)
     {
@@ -206,11 +272,14 @@ meta_screen_cast_stream_set_property (GObject      *object,
     case PROP_CONNECTION:
       priv->connection = g_value_get_object (value);
       break;
-    case PROP_STREAM:
-      priv->stream = g_value_dup_object (value);
+    case PROP_CURSOR_MODE:
+      priv->cursor_mode = g_value_get_uint (value);
       break;
     case PROP_FLAGS:
       priv->flags = g_value_get_flags (value);
+      break;
+    case PROP_IS_CONFIGURED:
+      priv->is_configured = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -223,9 +292,9 @@ meta_screen_cast_stream_get_property (GObject    *object,
                                       GValue     *value,
                                       GParamSpec *pspec)
 {
-  MetaScreenCastStream *screen_cast_stream = META_SCREEN_CAST_STREAM (object);
+  MetaScreenCastStream *stream = META_SCREEN_CAST_STREAM (object);
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
 
   switch (prop_id)
     {
@@ -235,11 +304,14 @@ meta_screen_cast_stream_get_property (GObject    *object,
     case PROP_CONNECTION:
       g_value_set_object (value, priv->connection);
       break;
-    case PROP_STREAM:
-      g_value_set_object (value, priv->stream);
+    case PROP_CURSOR_MODE:
+      g_value_set_uint (value, priv->cursor_mode);
       break;
     case PROP_FLAGS:
       g_value_set_flags (value, priv->flags);
+      break;
+    case PROP_IS_CONFIGURED:
+      g_value_set_boolean (value, priv->is_configured);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -247,19 +319,28 @@ meta_screen_cast_stream_get_property (GObject    *object,
 }
 
 static void
-meta_screen_cast_stream_dispose (GObject *object)
+meta_screen_cast_stream_finalize (GObject *object)
 {
-  MetaScreenCastStream *screen_cast_stream = META_SCREEN_CAST_STREAM (object);
+  MetaScreenCastStream *stream = META_SCREEN_CAST_STREAM (object);
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
+  MetaRemoteDesktopSession *remote_desktop_session;
 
-  if (priv->stream && meta_stream_is_started (priv->stream))
-    meta_screen_cast_stream_close (screen_cast_stream);
+  if (priv->src)
+    meta_screen_cast_stream_close (stream);
 
-  g_clear_object (&priv->stream);
+  remote_desktop_session =
+    meta_screen_cast_session_get_remote_desktop_session (priv->session);
+  if (remote_desktop_session && priv->mapping_id)
+    {
+      meta_remote_desktop_session_release_mapping_id (remote_desktop_session,
+                                                      priv->mapping_id);
+    }
+
   g_clear_pointer (&priv->object_path, g_free);
+  g_clear_pointer (&priv->mapping_id, g_free);
 
-  G_OBJECT_CLASS (meta_screen_cast_stream_parent_class)->dispose (object);
+  G_OBJECT_CLASS (meta_screen_cast_stream_parent_class)->finalize (object);
 }
 
 static gboolean
@@ -279,12 +360,12 @@ static gboolean
 handle_start (MetaDBusScreenCastStream *skeleton,
               GDBusMethodInvocation    *invocation)
 {
-  MetaScreenCastStream *screen_cast_stream = META_SCREEN_CAST_STREAM (skeleton);
+  MetaScreenCastStream *stream = META_SCREEN_CAST_STREAM (skeleton);
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
   g_autoptr (GError) error = NULL;
 
-  if (!check_permission (screen_cast_stream, invocation))
+  if (!check_permission (stream, invocation))
     {
       g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
                                              G_DBUS_ERROR_ACCESS_DENIED,
@@ -301,7 +382,7 @@ handle_start (MetaDBusScreenCastStream *skeleton,
       return TRUE;
     }
 
-  if (!meta_screen_cast_stream_start (screen_cast_stream, &error))
+  if (!meta_screen_cast_stream_start (stream, &error))
     {
       g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
                                              G_DBUS_ERROR_FAILED,
@@ -319,11 +400,11 @@ static gboolean
 handle_stop (MetaDBusScreenCastStream *skeleton,
              GDBusMethodInvocation    *invocation)
 {
-  MetaScreenCastStream *screen_cast_stream = META_SCREEN_CAST_STREAM (skeleton);
+  MetaScreenCastStream *stream = META_SCREEN_CAST_STREAM (skeleton);
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
 
-  if (!check_permission (screen_cast_stream, invocation))
+  if (!check_permission (stream, invocation))
     {
       g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
                                              G_DBUS_ERROR_ACCESS_DENIED,
@@ -331,15 +412,8 @@ handle_stop (MetaDBusScreenCastStream *skeleton,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  if (!meta_stream_is_started (priv->stream))
-    {
-      g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
-                                             G_DBUS_ERROR_ACCESS_DENIED,
-                                             "Stream not started");
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  meta_screen_cast_stream_close (screen_cast_stream);
+  if (priv->src)
+    meta_screen_cast_stream_close (stream);
 
   meta_dbus_screen_cast_stream_complete_stop (skeleton, invocation);
 
@@ -353,91 +427,35 @@ meta_screen_cast_stream_init_iface (MetaDBusScreenCastStreamIface *iface)
   iface->handle_stop = handle_stop;
 }
 
-static void
-set_stream_parameters (MetaScreenCastStream *screen_cast_stream,
-                       GVariantBuilder      *parameters_builder)
-{
-  MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
-  MetaStream *stream = priv->stream;
-
-  if (META_IS_STREAM_MONITOR (stream))
-    {
-      MtkRectangle geometry;
-      MetaMonitor *monitor;
-      const char *output_name;
-
-      meta_stream_monitor_get_geometry (META_STREAM_MONITOR (stream),
-                                        &geometry);
-      g_variant_builder_add (parameters_builder, "{sv}",
-                             "position",
-                             g_variant_new ("(ii)",
-                                            geometry.x,
-                                            geometry.y));
-      g_variant_builder_add (parameters_builder, "{sv}",
-                             "size",
-                             g_variant_new ("(ii)",
-                                            geometry.width,
-                                            geometry.height));
-
-      monitor = meta_stream_monitor_get_monitor (META_STREAM_MONITOR (stream));
-      output_name = meta_monitor_get_connector (monitor);
-      g_variant_builder_add (parameters_builder, "{sv}", "output-name",
-                             g_variant_new ("s", output_name));
-    }
-  else if (META_IS_STREAM_AREA (stream))
-    {
-      MtkRectangle area;
-
-      meta_stream_area_get_area (META_STREAM_AREA (stream), &area);
-      g_variant_builder_add (parameters_builder, "{sv}",
-                             "size",
-                             g_variant_new ("(ii)", area.width, area.height));
-    }
-  else if (META_IS_STREAM_WINDOW (stream))
-    {
-      int width, height;
-
-      width = meta_stream_window_get_width (META_STREAM_WINDOW (stream));
-      height = meta_stream_window_get_height (META_STREAM_WINDOW (stream));
-      g_variant_builder_add (parameters_builder, "{sv}",
-                             "size",
-                             g_variant_new ("(ii)", width, height));
-    }
-}
-
 static gboolean
 meta_screen_cast_stream_initable_init (GInitable     *initable,
                                        GCancellable  *cancellable,
                                        GError       **error)
 {
-  MetaScreenCastStream *screen_cast_stream = META_SCREEN_CAST_STREAM (initable);
-  MetaDBusScreenCastStream *skeleton =
-    META_DBUS_SCREEN_CAST_STREAM (screen_cast_stream);
+  MetaScreenCastStream *stream = META_SCREEN_CAST_STREAM (initable);
+  MetaDBusScreenCastStream *skeleton = META_DBUS_SCREEN_CAST_STREAM (stream);
   MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
+    meta_screen_cast_stream_get_instance_private (stream);
   MetaRemoteDesktopSession *remote_desktop_session;
   GVariantBuilder parameters_builder;
   GVariant *parameters_variant;
   static unsigned int global_stream_number = 0;
 
   g_variant_builder_init (&parameters_builder, G_VARIANT_TYPE_VARDICT);
-  set_stream_parameters (screen_cast_stream, &parameters_builder);
+  meta_screen_cast_stream_set_parameters (stream, &parameters_builder);
 
   remote_desktop_session =
     meta_screen_cast_session_get_remote_desktop_session (priv->session);
   if (remote_desktop_session)
     {
-      MetaEis *eis =
-        meta_remote_desktop_session_get_eis (remote_desktop_session);
       const char *mapping_id;
 
-      meta_stream_map_input (priv->stream, eis);
-
-      mapping_id = meta_stream_get_mapping_id (priv->stream);
+      mapping_id =
+        meta_remote_desktop_session_acquire_mapping_id (remote_desktop_session);
+      priv->mapping_id = g_strdup (mapping_id);
       g_variant_builder_add (&parameters_builder, "{sv}",
                              "mapping-id",
-                             g_variant_new ("s", mapping_id));
+                             g_variant_new ("s", priv->mapping_id));
     }
 
   parameters_variant = g_variant_builder_end (&parameters_builder);
@@ -446,7 +464,7 @@ meta_screen_cast_stream_initable_init (GInitable     *initable,
   priv->object_path =
     g_strdup_printf (META_SCREEN_CAST_STREAM_DBUS_PATH "/u%u",
                      ++global_stream_number);
-  if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (screen_cast_stream),
+  if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (stream),
                                          priv->connection,
                                          priv->object_path,
                                          error))
@@ -462,7 +480,7 @@ meta_screen_cast_stream_init_initable_iface (GInitableIface *iface)
 }
 
 static void
-meta_screen_cast_stream_init (MetaScreenCastStream *screen_cast_stream)
+meta_screen_cast_stream_init (MetaScreenCastStream *stream)
 {
 }
 
@@ -471,7 +489,7 @@ meta_screen_cast_stream_class_init (MetaScreenCastStreamClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-  object_class->dispose = meta_screen_cast_stream_dispose;
+  object_class->finalize = meta_screen_cast_stream_finalize;
   object_class->set_property = meta_screen_cast_stream_set_property;
   object_class->get_property = meta_screen_cast_stream_get_property;
 
@@ -487,12 +505,14 @@ meta_screen_cast_stream_class_init (MetaScreenCastStreamClass *klass)
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
                          G_PARAM_STATIC_STRINGS);
-  obj_props[PROP_STREAM] =
-    g_param_spec_object ("stream", NULL, NULL,
-                         META_TYPE_STREAM,
-                         G_PARAM_READWRITE |
-                         G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_STRINGS);
+  obj_props[PROP_CURSOR_MODE] =
+    g_param_spec_uint ("cursor-mode", NULL, NULL,
+                       META_SCREEN_CAST_CURSOR_MODE_HIDDEN,
+                       META_SCREEN_CAST_CURSOR_MODE_METADATA,
+                       META_SCREEN_CAST_CURSOR_MODE_HIDDEN,
+                       G_PARAM_READWRITE |
+                       G_PARAM_CONSTRUCT_ONLY |
+                       G_PARAM_STATIC_STRINGS);
   obj_props[PROP_FLAGS] =
     g_param_spec_flags ("flags", NULL, NULL,
                         META_TYPE_SCREEN_CAST_FLAG,
@@ -500,6 +520,12 @@ meta_screen_cast_stream_class_init (MetaScreenCastStreamClass *klass)
                         G_PARAM_READWRITE |
                         G_PARAM_CONSTRUCT_ONLY |
                         G_PARAM_STATIC_STRINGS);
+  obj_props[PROP_IS_CONFIGURED] =
+    g_param_spec_boolean ("is-configured", NULL, NULL,
+                          FALSE,
+                          G_PARAM_READWRITE |
+                          G_PARAM_CONSTRUCT |
+                          G_PARAM_STATIC_STRINGS);
   g_object_class_install_properties (object_class, N_PROPS, obj_props);
 
   signals[CLOSED] = g_signal_new ("closed",
@@ -508,29 +534,4 @@ meta_screen_cast_stream_class_init (MetaScreenCastStreamClass *klass)
                                   0,
                                   NULL, NULL, NULL,
                                   G_TYPE_NONE, 0);
-}
-
-MetaScreenCastStream *
-meta_screen_cast_stream_new (MetaScreenCastSession  *session,
-                             GDBusConnection        *connection,
-                             MetaStream             *stream,
-                             MetaScreenCastFlag      flags,
-                             GError                **error)
-{
-  return g_initable_new (META_TYPE_SCREEN_CAST_STREAM,
-                         NULL, error,
-                         "session", session,
-                         "connection", connection,
-                         "stream", stream,
-                         "flags", flags,
-                         NULL);
-}
-
-MetaStream *
-meta_screen_cast_stream_get_stream (MetaScreenCastStream *screen_cast_stream)
-{
-  MetaScreenCastStreamPrivate *priv =
-    meta_screen_cast_stream_get_instance_private (screen_cast_stream);
-
-  return priv->stream;
 }

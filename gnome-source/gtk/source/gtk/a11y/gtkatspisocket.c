@@ -20,14 +20,12 @@
  */
 
 /**
- * GtkAtSpiSocket:
+ * GtkAtApiSocket:
  *
- * `GtkAtSpiSocket` is an AT-SPI specific `GtkAccessible` interface for
+ * `GtkAtApiSocket` is an AT-SPI specific `GtkAccessible` interface for
  * integrating remote accessible objects. It makes the accessible tree
  * of the remote accessible object appear as part of the accessible tree
  * that it belongs to itself.
- *
- * Since: 4.14
  */
 
 #include "config.h"
@@ -63,9 +61,10 @@ enum {
   PROP_0,
   PROP_BUS_NAME,
   PROP_OBJECT_PATH,
+  N_PROPS,
+
   /* GtkAccessible */
   PROP_ACCESSIBLE_ROLE,
-  N_PROPS,
 };
 
 static GParamSpec *properties [N_PROPS];
@@ -83,7 +82,7 @@ set_accessible_role (GtkAtSpiSocket    *self,
       if (self->at_context != NULL)
         gtk_at_context_set_accessible_role (self->at_context, role);
 
-      g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ACCESSIBLE_ROLE]);
+      g_object_notify (G_OBJECT (self), "accessible-role");
     }
   else
     {
@@ -282,14 +281,13 @@ static void
 gtk_at_spi_socket_class_init (GtkAtSpiSocketClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  gpointer iface;
 
   object_class->dispose = gtk_at_spi_socket_dispose;
   object_class->get_property = gtk_at_spi_socket_get_property;
   object_class->set_property = gtk_at_spi_socket_set_property;
 
   /**
-   * GtkAtSpiSocket:bus-name:
+   * GtkAtSpiSocket:bus-name: (attributes org.gtk.Property.get=gtk_at_spi_socket_get_bus_name)
    *
    * The bus name of the remote accessible client.
    *
@@ -300,11 +298,11 @@ gtk_at_spi_socket_class_init (GtkAtSpiSocketClass *klass)
                          NULL,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkAtSpiSocket:height:
+   * GtkAtSpiSocket:height: (attributes org.gtk.Property.get=gtk_at_spi_socket_get_object_path)
    *
    * The object path of the remote accessible object that
    * the socket connects to.
@@ -316,16 +314,12 @@ gtk_at_spi_socket_class_init (GtkAtSpiSocketClass *klass)
                          NULL,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
-  /* GtkAccessible */
-  iface = g_type_default_interface_peek (GTK_TYPE_ACCESSIBLE);
-  properties[PROP_ACCESSIBLE_ROLE] =
-    g_param_spec_override ("accessible-role",
-                           g_object_interface_find_property (iface, "accessible-role"));
-
   g_object_class_install_properties (object_class, N_PROPS, properties);
+
+  g_object_class_override_property (object_class, PROP_ACCESSIBLE_ROLE, "accessible-role");
 }
 
 static void

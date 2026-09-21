@@ -54,7 +54,7 @@ on_timeout (gpointer data)
         }
       if (test_num == 1)
         {
-          static const CoglColor red = { 0xff, 0x00, 0x00, 0xff };
+          static const ClutterColor red = { 0xff, 0x00, 0x00, 0xff };
           /* Create an actor that covers the whole stage but that
              isn't visible so it shouldn't affect the picking */
           over_actor = clutter_actor_new ();
@@ -182,7 +182,7 @@ actor_pick (void)
   for (y = 0; y < ACTORS_Y; y++)
     for (x = 0; x < ACTORS_X; x++)
       {
-        CoglColor color = { x * 255 / (ACTORS_X - 1),
+        ClutterColor color = { x * 255 / (ACTORS_X - 1),
                                y * 255 / (ACTORS_Y - 1),
                                128, 255 };
         ClutterActor *rect = clutter_actor_new ();
@@ -203,7 +203,7 @@ actor_pick (void)
 
   clutter_actor_show (state.stage);
 
-  g_idle_add (on_timeout, &state);
+  clutter_threads_add_idle (on_timeout, &state);
 
   clutter_test_main ();
 
@@ -217,7 +217,7 @@ actor_pick (void)
                         state.actors[state.failed_idx]);
     }
 
-  g_assert_true (state.pass);
+  g_assert (state.pass);
 
   g_list_free_full (state.actor_list, (GDestroyNotify) clutter_actor_destroy);
 }

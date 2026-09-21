@@ -23,10 +23,9 @@
 
 #include <gbm.h>
 
+#include "backends/meta-backend-private.h"
 #include "backends/native/meta-drm-buffer-gbm.h"
 #include "backends/native/meta-drm-buffer-import.h"
-#include "backends/native/meta-render-device-private.h"
-#include "cogl/cogl.h"
 
 struct _MetaRenderDeviceGbm
 {
@@ -107,118 +106,22 @@ meta_render_device_gbm_import_dma_buf (MetaRenderDevice  *render_device,
   return META_DRM_BUFFER (buffer_import);
 }
 
-static GArray *
-meta_render_device_gbm_query_drm_modifiers (MetaRenderDevice       *render_device,
-                                            uint32_t                drm_format,
-                                            CoglDrmModifierFilter   filter,
-                                            GError                **error)
-{
-  MetaRenderDeviceGbm *render_device_gbm =
-    META_RENDER_DEVICE_GBM (render_device);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (meta_render_device_get_renderer_egl (render_device));
-  EGLint n_modifiers;
-  g_autoptr (GArray) modifiers = NULL;
-  g_autoptr (GArray) external_onlys = NULL;
-
-  if (!cogl_renderer_egl_has_extensions (renderer_egl, NULL,
-                                         "EGL_EXT_image_dma_buf_import_modifiers",
-                                         NULL))
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                   "Missing EGL extension "
-                   "'EGL_EXT_image_dma_buf_import_modifiers'");
-      return NULL;
-    }
-
-  if (!cogl_renderer_egl_query_dma_buf_modifiers (renderer_egl,
-                                                  drm_format, 0, NULL, NULL,
-                                                  &n_modifiers, error))
-    return NULL;
-
-  if (n_modifiers == 0)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "No modifiers supported for given format");
-      return NULL;
-    }
-
-  modifiers = g_array_sized_new (FALSE, FALSE, sizeof (uint64_t),
-                                 n_modifiers);
-  external_onlys = g_array_sized_new (FALSE, FALSE, sizeof (EGLBoolean),
-                                      n_modifiers);
-  if (!cogl_renderer_egl_query_dma_buf_modifiers (renderer_egl,
-                                                  drm_format, n_modifiers,
-                                                  (EGLuint64KHR *) modifiers->data,
-                                                  (EGLBoolean *) external_onlys->data,
-                                                  &n_modifiers, error))
-    return NULL;
-
-  g_array_set_size (modifiers, n_modifiers);
-  g_array_set_size (external_onlys, n_modifiers);
-
-  if (filter != COGL_DRM_MODIFIER_FILTER_NONE)
-    {
-      g_autoptr (GArray) filtered_modifiers = NULL;
-      struct gbm_device *gbm_device = render_device_gbm->gbm_device;
-      int i;
-
-      filtered_modifiers = g_array_new (FALSE, FALSE, sizeof (uint64_t));
-
-      for (i = 0; i < modifiers->len; i++)
-        {
-          uint64_t modifier = g_array_index (modifiers, uint64_t, i);
-
-          if (filter & COGL_DRM_MODIFIER_FILTER_SINGLE_PLANE)
-            {
-              if (gbm_device_get_format_modifier_plane_count (gbm_device,
-                                                              drm_format,
-                                                              modifier) != 1)
-                continue;
-            }
-
-          if (filter & COGL_DRM_MODIFIER_FILTER_NOT_EXTERNAL_ONLY)
-            {
-              EGLBoolean external_only = g_array_index (external_onlys,
-                                                        EGLBoolean, i);
-
-              if (external_only)
-                continue;
-            }
-
-          g_array_append_val (filtered_modifiers, modifier);
-        }
-
-      if (filtered_modifiers->len == 0)
-        {
-          g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-                       "No single plane modifiers found");
-          return NULL;
-        }
-
-      g_array_free (modifiers, TRUE);
-      modifiers = g_steal_pointer (&filtered_modifiers);
-    }
-
-  return g_steal_pointer (&modifiers);
-}
-
 static EGLDisplay
 meta_render_device_gbm_create_egl_display (MetaRenderDevice  *render_device,
                                            GError           **error)
 {
   MetaRenderDeviceGbm *render_device_gbm =
     META_RENDER_DEVICE_GBM (render_device);
-  CoglRendererEGL *renderer_egl =
-    COGL_RENDERER_EGL (meta_render_device_get_renderer_egl (render_device));
+  MetaBackend *backend = meta_render_device_get_backend (render_device);
+  MetaEgl *egl = meta_backend_get_egl (backend);
   EGLDisplay egl_display;
 
-  if (!cogl_renderer_egl_has_client_extensions (renderer_egl, NULL,
-                                                "EGL_MESA_platform_gbm",
-                                                NULL) &&
-      !cogl_renderer_egl_has_client_extensions (renderer_egl, NULL,
-                                                "EGL_KHR_platform_gbm",
-                                                NULL))
+  if (!meta_egl_has_extensions (egl, EGL_NO_DISPLAY, NULL,
+                                "EGL_MESA_platform_gbm",
+                                NULL) &&
+      !meta_egl_has_extensions (egl, EGL_NO_DISPLAY, NULL,
+                                "EGL_KHR_platform_gbm",
+                                NULL))
     {
       g_set_error (error, G_IO_ERROR,
                    G_IO_ERROR_FAILED,
@@ -226,16 +129,16 @@ meta_render_device_gbm_create_egl_display (MetaRenderDevice  *render_device,
       return EGL_NO_DISPLAY;
     }
 
-  egl_display = cogl_renderer_egl_get_platform_display (renderer_egl,
-                                                        EGL_PLATFORM_GBM_KHR,
-                                                        render_device_gbm->gbm_device,
-                                                        NULL, error);
+  egl_display = meta_egl_get_platform_display (egl,
+                                               EGL_PLATFORM_GBM_KHR,
+                                               render_device_gbm->gbm_device,
+                                               NULL, error);
   if (egl_display == EGL_NO_DISPLAY)
     return EGL_NO_DISPLAY;
 
-  if (!cogl_renderer_egl_initialize (renderer_egl, egl_display, error))
+  if (!meta_egl_initialize (egl, egl_display, error))
     {
-      cogl_renderer_egl_terminate (renderer_egl, egl_display, NULL);
+      meta_egl_terminate (egl, egl_display, NULL);
       return EGL_NO_DISPLAY;
     }
 
@@ -310,8 +213,6 @@ meta_render_device_gbm_class_init (MetaRenderDeviceGbmClass *klass)
     meta_render_device_gbm_allocate_dma_buf;
   render_device_class->import_dma_buf =
     meta_render_device_gbm_import_dma_buf;
-  render_device_class->query_drm_modifiers =
-    meta_render_device_gbm_query_drm_modifiers;
 }
 
 static void

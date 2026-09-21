@@ -29,6 +29,8 @@
 #include "meta/meta-monitor-manager.h"
 #include "meta/util.h"
 
+#define N_WATCH_MODES 4
+
 struct _MetaStageWatch
 {
   ClutterStageView *view;
@@ -36,32 +38,20 @@ struct _MetaStageWatch
   gpointer user_data;
 };
 
-struct _MetaStageRedrawClipFilter
-{
-  MetaStage *stage;
-  MetaStageRedrawClipFilterFunc filter_func;
-  gpointer user_data;
-  GDestroyNotify destroy_notify;
-};
-
-typedef struct _MetaOverlayViewState
-{
-  graphene_rect_t painted_rect;
-  gboolean has_painted_rect;
-  gboolean is_visible;
-} MetaOverlayViewState;
-
 struct _MetaOverlay
 {
   MetaStage *stage;
 
+  gboolean is_visible;
+
   CoglPipeline *pipeline;
   CoglTexture *texture;
 
-  graphene_matrix_t transform;
-  graphene_rect_t current_rect;
+  MetaMonitorTransform buffer_transform;
 
-  GHashTable *view_states;
+  graphene_rect_t current_rect;
+  graphene_rect_t previous_rect;
+  gboolean previous_is_valid;
 };
 
 struct _MetaStage
@@ -70,11 +60,10 @@ struct _MetaStage
 
   MetaBackend *backend;
 
-  GPtrArray *watchers[META_N_WATCH_MODES];
-
-  GList *redraw_clip_filters;
+  GPtrArray *watchers[N_WATCH_MODES];
 
   GList *overlays;
+  gboolean is_active;
 };
 
 G_DEFINE_TYPE (MetaStage, meta_stage, CLUTTER_TYPE_STAGE);
@@ -90,7 +79,6 @@ meta_overlay_new (MetaStage *stage)
   overlay = g_new0 (MetaOverlay, 1);
   overlay->stage = stage;
   overlay->pipeline = cogl_pipeline_new (ctx);
-  overlay->view_states = g_hash_table_new_full (NULL, NULL, NULL, g_free);
 
   return overlay;
 }
@@ -100,25 +88,15 @@ meta_overlay_free (MetaOverlay *overlay)
 {
   if (overlay->pipeline)
     g_object_unref (overlay->pipeline);
-  g_hash_table_unref (overlay->view_states);
 
   g_free (overlay);
 }
 
 static void
-meta_stage_redraw_clip_filter_free (MetaStageRedrawClipFilter *filter)
-{
-  if (filter->destroy_notify)
-    filter->destroy_notify (filter->user_data);
-
-  g_free (filter);
-}
-
-static void
-meta_overlay_set (MetaOverlay             *overlay,
-                  CoglTexture             *texture,
-                  const graphene_matrix_t *matrix,
-                  const graphene_rect_t   *dst_rect)
+meta_overlay_set (MetaOverlay          *overlay,
+                  CoglTexture          *texture,
+                  graphene_rect_t      *rect,
+                  MetaMonitorTransform  buffer_transform)
 {
   if (overlay->texture != texture)
     {
@@ -130,79 +108,34 @@ meta_overlay_set (MetaOverlay             *overlay,
         cogl_pipeline_set_layer_texture (overlay->pipeline, 0, NULL);
     }
 
-  if (!graphene_matrix_equal_fast (matrix, &overlay->transform))
+  if (overlay->buffer_transform != buffer_transform)
     {
-      cogl_pipeline_set_layer_matrix (overlay->pipeline, 0, matrix);
-      graphene_matrix_init_from_matrix (&overlay->transform, matrix);
+      graphene_matrix_t matrix;
+
+      graphene_matrix_init_identity (&matrix);
+      meta_monitor_transform_transform_matrix (buffer_transform,
+                                               &matrix);
+      cogl_pipeline_set_layer_matrix (overlay->pipeline, 0, &matrix);
+
+      overlay->buffer_transform = buffer_transform;
     }
 
-  overlay->current_rect = *dst_rect;
-}
-
-static MetaOverlayViewState *
-get_view_state (MetaOverlay      *overlay,
-                ClutterStageView *view)
-{
-  return g_hash_table_lookup (overlay->view_states, view);
-}
-
-static MetaOverlayViewState *
-ensure_view_state (MetaOverlay      *overlay,
-                   ClutterStageView *view)
-{
-  MetaOverlayViewState *view_state;
-
-  view_state = get_view_state (overlay, view);
-
-  if (!view_state)
-    {
-      view_state = g_new0 (MetaOverlayViewState, 1);
-      g_hash_table_insert (overlay->view_states, view, view_state);
-    }
-
-  return view_state;
-}
-
-static void
-meta_overlay_invalidate_views (MetaOverlay *overlay)
-{
-  g_hash_table_remove_all (overlay->view_states);
+  overlay->current_rect = *rect;
 }
 
 static void
 meta_overlay_paint (MetaOverlay         *overlay,
                     ClutterPaintContext *paint_context)
 {
-  ClutterStageView *view;
-  MetaOverlayViewState *view_state = NULL;
   CoglFramebuffer *framebuffer;
-  gboolean should_paint_any, should_paint;
 
-  view = clutter_paint_context_get_stage_view (paint_context);
-  if (view)
-    view_state = ensure_view_state (overlay, view);
+  if (!overlay->texture)
+    return;
 
-  should_paint_any =
-    !(clutter_paint_context_get_paint_flags (paint_context) &
-      CLUTTER_PAINT_FLAG_NO_CURSORS);
-  if (should_paint_any)
-    {
-      should_paint =
-        (overlay->texture && view_state && view_state->is_visible) ||
-        (clutter_paint_context_get_paint_flags (paint_context) &
-         CLUTTER_PAINT_FLAG_FORCE_CURSORS);
-    }
-  else
-    {
-      should_paint = FALSE;
-    }
-
-  if (!should_paint)
-    {
-      if (view_state)
-        view_state->has_painted_rect = FALSE;
-      return;
-    }
+  if (!overlay->is_visible &&
+      !(clutter_paint_context_get_paint_flags (paint_context) &
+        CLUTTER_PAINT_FLAG_FORCE_CURSORS))
+    return;
 
   framebuffer = clutter_paint_context_get_framebuffer (paint_context);
   cogl_framebuffer_draw_rectangle (framebuffer,
@@ -214,10 +147,10 @@ meta_overlay_paint (MetaOverlay         *overlay,
                                    (overlay->current_rect.origin.y +
                                     overlay->current_rect.size.height));
 
-  if (view_state)
+  if (!graphene_rect_equal (&overlay->previous_rect, &overlay->current_rect))
     {
-      view_state->painted_rect = overlay->current_rect;
-      view_state->has_painted_rect = TRUE;
+      overlay->previous_rect = overlay->current_rect;
+      overlay->previous_is_valid = TRUE;
     }
 }
 
@@ -235,11 +168,8 @@ meta_stage_finalize (GObject *object)
       l = g_list_delete_link (l, l);
     }
 
-  for (i = 0; i < META_N_WATCH_MODES; i++)
+  for (i = 0; i < N_WATCH_MODES; i++)
     g_clear_pointer (&stage->watchers[i], g_ptr_array_unref);
-
-  g_clear_list (&stage->redraw_clip_filters,
-                (GDestroyNotify) meta_stage_redraw_clip_filter_free);
 
   G_OBJECT_CLASS (meta_stage_parent_class)->finalize (object);
 }
@@ -279,19 +209,6 @@ meta_stage_before_paint (ClutterStage     *stage,
 }
 
 static void
-meta_stage_skipped_paint (ClutterStage     *stage,
-                          ClutterStageView *view,
-                          ClutterFrame     *frame)
-{
-  MetaStage *meta_stage = META_STAGE (stage);
-  g_autoptr (MtkRegion) redraw_clip = NULL;
-
-  redraw_clip = mtk_region_create ();
-  notify_watchers_for_mode (meta_stage, view, redraw_clip, frame,
-                            META_STAGE_WATCH_SKIPPED_PAINT);
-}
-
-static void
 meta_stage_paint (ClutterActor        *actor,
                   ClutterPaintContext *paint_context)
 {
@@ -311,7 +228,27 @@ meta_stage_paint (ClutterActor        *actor,
                                 META_STAGE_WATCH_AFTER_ACTOR_PAINT);
     }
 
-  g_list_foreach (stage->overlays, (GFunc) meta_overlay_paint, paint_context);
+  if ((clutter_paint_context_get_paint_flags (paint_context) &
+       CLUTTER_PAINT_FLAG_FORCE_CURSORS))
+    {
+      MetaCursorTracker *cursor_tracker =
+        meta_backend_get_cursor_tracker (stage->backend);
+
+      meta_cursor_tracker_track_position (cursor_tracker);
+    }
+
+  if (!(clutter_paint_context_get_paint_flags (paint_context) &
+        CLUTTER_PAINT_FLAG_NO_CURSORS))
+    g_list_foreach (stage->overlays, (GFunc) meta_overlay_paint, paint_context);
+
+  if ((clutter_paint_context_get_paint_flags (paint_context) &
+       CLUTTER_PAINT_FLAG_FORCE_CURSORS))
+    {
+      MetaCursorTracker *cursor_tracker =
+        meta_backend_get_cursor_tracker (stage->backend);
+
+      meta_cursor_tracker_untrack_position (cursor_tracker);
+    }
 
   if (view)
     {
@@ -337,6 +274,26 @@ meta_stage_paint_view (ClutterStage     *stage,
 }
 
 static void
+meta_stage_activate (ClutterStage *actor)
+{
+  MetaStage *stage = META_STAGE (actor);
+
+  CLUTTER_STAGE_CLASS (meta_stage_parent_class)->activate (actor);
+
+  stage->is_active = TRUE;
+}
+
+static void
+meta_stage_deactivate (ClutterStage *actor)
+{
+  MetaStage *stage = META_STAGE (actor);
+
+  CLUTTER_STAGE_CLASS (meta_stage_parent_class)->deactivate (actor);
+
+  stage->is_active = FALSE;
+}
+
+static void
 on_power_save_changed (MetaMonitorManager        *monitor_manager,
                        MetaPowerSaveChangeReason  reason,
                        MetaStage                 *stage)
@@ -357,8 +314,9 @@ meta_stage_class_init (MetaStageClass *klass)
 
   actor_class->paint = meta_stage_paint;
 
+  stage_class->activate = meta_stage_activate;
+  stage_class->deactivate = meta_stage_deactivate;
   stage_class->before_paint = meta_stage_before_paint;
-  stage_class->skipped_paint = meta_stage_skipped_paint;
   stage_class->paint_view = meta_stage_paint_view;
 }
 
@@ -369,7 +327,13 @@ key_focus_actor_changed (ClutterStage *stage,
 {
   ClutterActor *key_focus = clutter_stage_get_key_focus (stage);
 
-  clutter_stage_set_active (stage, key_focus != NULL);
+  /* If there's no explicit key focus, clutter_stage_get_key_focus()
+   * returns the stage.
+   */
+  if (key_focus == CLUTTER_ACTOR (stage))
+    key_focus = NULL;
+
+  meta_stage_set_active (META_STAGE (stage), key_focus != NULL);
 }
 
 static void
@@ -377,12 +341,15 @@ meta_stage_init (MetaStage *stage)
 {
   int i;
 
-  for (i = 0; i < META_N_WATCH_MODES; i++)
+  for (i = 0; i < N_WATCH_MODES; i++)
     stage->watchers[i] = g_ptr_array_new_with_free_func (g_free);
 
-  g_signal_connect (stage,
-                    "notify::key-focus",
-                    G_CALLBACK (key_focus_actor_changed), NULL);
+  if (meta_is_wayland_compositor ())
+    {
+      g_signal_connect (stage,
+                        "notify::key-focus",
+                        G_CALLBACK (key_focus_actor_changed), NULL);
+    }
 }
 
 ClutterActor *
@@ -391,10 +358,7 @@ meta_stage_new (MetaBackend *backend)
   MetaStage *stage;
   MetaMonitorManager *monitor_manager;
 
-  stage = g_object_new (META_TYPE_STAGE,
-                        "context", meta_backend_get_clutter_context (backend),
-                        "accessible-name", "Main stage",
-                        NULL);
+  stage = g_object_new (META_TYPE_STAGE, NULL);
   stage->backend = backend;
 
   monitor_manager = meta_backend_get_monitor_manager (backend);
@@ -406,69 +370,59 @@ meta_stage_new (MetaBackend *backend)
 }
 
 static void
-intersect_and_queue_redraw (ClutterStageView   *view,
-                            const MtkRectangle *clip)
+queue_redraw_clutter_rect (MetaStage       *stage,
+                           MetaOverlay     *overlay,
+                           graphene_rect_t *rect)
 {
-  MtkRectangle view_layout;
-  MtkRectangle view_clip;
-
-  clutter_stage_view_get_layout (view, &view_layout);
-
-  if (mtk_rectangle_intersect (clip, &view_layout, &view_clip))
-    {
-      clutter_stage_view_add_redraw_clip (view, &view_clip);
-      clutter_stage_view_schedule_update (view);
-    }
-}
-
-static void
-cursor_rect_to_clip (const graphene_rect_t *cursor_rect,
-                     MtkRectangle          *clip_rect)
-{
-  mtk_rectangle_from_graphene_rect (cursor_rect,
-                                    MTK_ROUNDING_STRATEGY_GROW,
-                                    clip_rect);
+  MtkRectangle clip = {
+    .x = floorf (rect->origin.x),
+    .y = floorf (rect->origin.y),
+    .width = ceilf (rect->size.width),
+    .height = ceilf (rect->size.height)
+  };
+  GList *l;
 
   /* Since we're flooring the coordinates, we need to enlarge the clip by the
    * difference between the actual coordinate and the floored value */
-  clip_rect->width += (int) ceilf (cursor_rect->origin.x - clip_rect->x) * 2;
-  clip_rect->height += (int) ceilf (cursor_rect->origin.y - clip_rect->y) * 2;
-}
-
-static void
-queue_redraw_for_cursor_overlay (MetaStage   *stage,
-                                 MetaOverlay *overlay)
-{
-  GList *l;
+  clip.width += ceilf (rect->origin.x - clip.x) * 2;
+  clip.height += ceilf (rect->origin.y - clip.y) * 2;
 
   for (l = clutter_stage_peek_stage_views (CLUTTER_STAGE (stage));
        l;
        l = l->next)
     {
-      ClutterStageView *view = CLUTTER_STAGE_VIEW (l->data);
-      MetaOverlayViewState *view_state;
+      ClutterStageView *view = l->data;
+      MtkRectangle view_layout;
+      MtkRectangle view_clip;
 
-      view_state = ensure_view_state (overlay, view);
-      if (view_state->has_painted_rect)
+      if (clutter_stage_view_get_default_paint_flags (view) &
+          CLUTTER_PAINT_FLAG_NO_CURSORS)
+        continue;
+
+      clutter_stage_view_get_layout (view, &view_layout);
+
+      if (mtk_rectangle_intersect (&clip, &view_layout, &view_clip))
         {
-          MtkRectangle clip;
-
-          cursor_rect_to_clip (&view_state->painted_rect, &clip);
-          intersect_and_queue_redraw (view, &clip);
-        }
-
-      if (view_state->is_visible &&
-          overlay->texture &&
-          !(clutter_stage_view_get_default_paint_flags (view) &
-            CLUTTER_PAINT_FLAG_NO_CURSORS) &&
-          !meta_stage_view_is_cursor_overlay_inhibited (META_STAGE_VIEW (view)))
-        {
-          MtkRectangle clip;
-
-          cursor_rect_to_clip (&overlay->current_rect, &clip);
-          intersect_and_queue_redraw (view, &clip);
+          clutter_stage_view_add_redraw_clip (view, &view_clip);
+          clutter_stage_view_schedule_update (view);
         }
     }
+}
+
+static void
+queue_redraw_for_overlay (MetaStage   *stage,
+                          MetaOverlay *overlay)
+{
+  /* Clear the location the overlay was at before, if we need to. */
+  if (overlay->previous_is_valid)
+    {
+      queue_redraw_clutter_rect (stage, overlay, &overlay->previous_rect);
+      overlay->previous_is_valid = FALSE;
+    }
+
+  /* Draw the overlay at the new position */
+  if (overlay->is_visible && overlay->texture)
+    queue_redraw_clutter_rect (stage, overlay, &overlay->current_rect);
 }
 
 MetaOverlay *
@@ -497,43 +451,38 @@ meta_stage_remove_cursor_overlay (MetaStage   *stage,
 }
 
 void
-meta_stage_update_cursor_overlay (MetaStage               *stage,
-                                  MetaOverlay             *overlay,
-                                  CoglTexture             *texture,
-                                  const graphene_matrix_t *matrix,
-                                  const graphene_rect_t   *dst_rect)
+meta_stage_update_cursor_overlay (MetaStage            *stage,
+                                  MetaOverlay          *overlay,
+                                  CoglTexture          *texture,
+                                  graphene_rect_t      *rect,
+                                  MetaMonitorTransform  buffer_transform)
 {
-  meta_overlay_set (overlay, texture, matrix, dst_rect);
-  queue_redraw_for_cursor_overlay (stage, overlay);
+  meta_overlay_set (overlay, texture, rect, buffer_transform);
+  queue_redraw_for_overlay (stage, overlay);
 }
 
-/**
- * meta_overlay_set_view_visible:
- *
- * Sets whether the overlay is visible on @view. Queuing the redraw is left to
- * the caller, so that a transition affecting several views costs one sweep
- * over the stage rather than one per view.
- */
 void
-meta_overlay_set_view_visible (MetaOverlay      *overlay,
-                               ClutterStageView *view,
-                               gboolean          is_visible)
+meta_overlay_set_visible (MetaOverlay *overlay,
+                          gboolean     is_visible)
 {
-  MetaOverlayViewState *view_state;
+  if (overlay->is_visible == is_visible)
+    return;
 
-  view_state = ensure_view_state (overlay, view);
-  view_state->is_visible = is_visible;
+  overlay->is_visible = is_visible;
+  queue_redraw_for_overlay (overlay->stage, overlay);
 }
 
-gboolean
-meta_overlay_get_view_visible (MetaOverlay      *overlay,
-                               ClutterStageView *view)
+void
+meta_stage_set_active (MetaStage *stage,
+                       gboolean   is_active)
 {
-  MetaOverlayViewState *view_state;
+  if (stage->is_active == is_active)
+    return;
 
-  view_state = get_view_state (overlay, view);
-
-  return view_state && view_state->is_visible;
+  if (is_active)
+    g_signal_emit_by_name (CLUTTER_STAGE (stage), "activate");
+  else
+    g_signal_emit_by_name (CLUTTER_STAGE (stage), "deactivate");
 }
 
 MetaStageWatch *
@@ -565,7 +514,7 @@ meta_stage_remove_watch (MetaStage      *stage,
   gboolean removed = FALSE;
   int i;
 
-  for (i = 0; i < META_N_WATCH_MODES; i++)
+  for (i = 0; i < N_WATCH_MODES; i++)
     {
       watchers = stage->watchers[i];
       removed = g_ptr_array_remove_fast (watchers, watch);
@@ -575,93 +524,4 @@ meta_stage_remove_watch (MetaStage      *stage,
     }
 
   g_assert (removed);
-}
-
-MetaStageRedrawClipFilter *
-meta_stage_add_redraw_clip_filter (MetaStage                     *stage,
-                                   MetaStageRedrawClipFilterFunc  filter_func,
-                                   gpointer                       user_data,
-                                   GDestroyNotify                 destroy_notify)
-{
-  MetaStageRedrawClipFilter *filter;
-
-  g_return_val_if_fail (META_IS_STAGE (stage), NULL);
-  g_return_val_if_fail (filter_func != NULL, NULL);
-
-  filter = g_new0 (MetaStageRedrawClipFilter, 1);
-  filter->stage = stage;
-  filter->filter_func = filter_func;
-  filter->user_data = user_data;
-  filter->destroy_notify = destroy_notify;
-
-  stage->redraw_clip_filters = g_list_prepend (stage->redraw_clip_filters,
-                                               filter);
-
-  return filter;
-}
-
-void
-meta_stage_remove_redraw_clip_filter (MetaStageRedrawClipFilter *filter)
-{
-  MetaStage *stage;
-  GList *link;
-
-  stage = filter->stage;
-  link = g_list_find (stage->redraw_clip_filters, filter);
-  g_return_if_fail (link != NULL);
-
-  stage->redraw_clip_filters =
-    g_list_delete_link (stage->redraw_clip_filters, link);
-
-  meta_stage_redraw_clip_filter_free (filter);
-}
-
-void
-meta_stage_apply_redraw_clip_filters (MetaStage        *stage,
-                                      ClutterStageView *stage_view,
-                                      MtkRegion        *redraw_clip)
-{
-  gboolean changed;
-
-  g_return_if_fail (META_IS_STAGE (stage));
-  g_return_if_fail (CLUTTER_IS_STAGE_VIEW (stage_view));
-
-  if (!stage->redraw_clip_filters)
-    return;
-
-  do
-    {
-      changed = FALSE;
-
-      for (GList *l = stage->redraw_clip_filters; l; l = l->next)
-        {
-          MetaStageRedrawClipFilter *filter = l->data;
-
-          changed |= filter->filter_func (stage,
-                                          stage_view,
-                                          redraw_clip,
-                                          filter->user_data);
-        }
-    }
-  while (changed);
-}
-
-void
-meta_stage_rebuild_views (MetaStage *stage)
-{
-  ClutterStageWindow *stage_window =
-    _clutter_stage_get_window (CLUTTER_STAGE (stage));
-  MetaStageImpl *stage_impl = META_STAGE_IMPL (stage_window);
-  MetaMonitorManager *monitor_manager =
-    meta_backend_get_monitor_manager (stage->backend);
-  int width, height;
-
-  meta_stage_impl_rebuild_views (stage_impl);
-
-  meta_monitor_manager_get_screen_size (monitor_manager, &width, &height);
-  clutter_actor_set_size (CLUTTER_ACTOR (stage), width, height);
-
-  g_list_foreach (stage->overlays,
-                  (GFunc) meta_overlay_invalidate_views,
-                  NULL);
 }

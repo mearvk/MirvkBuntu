@@ -209,6 +209,9 @@ META_EXPORT
 int         meta_prefs_get_cursor_size       (void);
 
 META_EXPORT
+gboolean    meta_prefs_get_compositing_manager (void);
+
+META_EXPORT
 gboolean    meta_prefs_get_force_fullscreen  (void);
 
 META_EXPORT
@@ -427,7 +430,6 @@ typedef enum _MetaKeyBindingAction
  * @META_KEY_BINDING_IGNORE_AUTOREPEAT: ignore autorepeat
  * @META_KEY_BINDING_NO_AUTO_GRAB: not grabbed automatically
  * @META_KEY_BINDING_CUSTOM_TRIGGER: uses a custom keybinding action
- * @META_KEY_BINDING_TRIGGER_RELEASE: notifies on release in addition to press
  */
 typedef enum
 {
@@ -439,23 +441,22 @@ typedef enum
   META_KEY_BINDING_IGNORE_AUTOREPEAT = 1 << 4,
   META_KEY_BINDING_NO_AUTO_GRAB = 1 << 5,
   META_KEY_BINDING_CUSTOM_TRIGGER = 1 << 6,
-  META_KEY_BINDING_TRIGGER_RELEASE = 1 << 7,
 } MetaKeyBindingFlags;
 
 /**
  * MetaKeyHandlerFunc:
  * @display: a #MetaDisplay
  * @window: a #MetaWindow
- * @event: a #ClutterEvent
+ * @event: (type gpointer): a #ClutterKeyEvent
  * @binding: a #MetaKeyBinding
  * @user_data: data passed to the function
  *
  */
-typedef void (* MetaKeyHandlerFunc) (MetaDisplay        *display,
-                                     MetaWindow         *window,
-                                     const ClutterEvent *event,
-                                     MetaKeyBinding     *binding,
-                                     gpointer            user_data);
+typedef void (* MetaKeyHandlerFunc) (MetaDisplay           *display,
+                                     MetaWindow            *window,
+                                     const ClutterKeyEvent *event,
+                                     MetaKeyBinding        *binding,
+                                     gpointer               user_data);
 
 META_EXPORT
 GType meta_key_binding_get_type    (void);

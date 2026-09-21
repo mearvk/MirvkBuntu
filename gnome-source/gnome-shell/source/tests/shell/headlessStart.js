@@ -1,3 +1,4 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
 /* eslint camelcase: ["error", { properties: "never", allow: ["^script_"] }] */
 
 import GLib from 'gi://GLib';
@@ -48,6 +49,7 @@ export function init() {
  * run:
  */
 export async function run() {
+    /* eslint-disable no-await-in-loop */
     Scripting.defineScriptEvent('overviewShowDone', 'Overview finished showing');
     Scripting.defineScriptEvent('overviewHideDone', 'Overview finished hiding');
 
@@ -60,6 +62,8 @@ export async function run() {
 
     Main.overview.show();
     await Scripting.waitLeisure();
+
+    /* eslint-enable no-await-in-loop */
 }
 
 let monitorsChanged = false;

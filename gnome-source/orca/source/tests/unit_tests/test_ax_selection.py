@@ -111,6 +111,8 @@ class TestAXSelection:
         )
         result = AXSelection.get_selected_child_count(mock_accessible)
         assert result == expected_result
+        if expects_debug_call:
+            essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "selected_count, index, expected_child",
@@ -127,7 +129,7 @@ class TestAXSelection:
         """Test AXSelection.get_selected_child."""
 
         mock_accessible = test_context.Mock(spec=Atspi.Accessible)
-        self._setup_dependencies(test_context)
+        essential_modules: dict[str, MagicMock] = self._setup_dependencies(test_context)
         from orca.ax_selection import AXSelection
 
         mock_children = {i: f"child_{i}" for i in range(selected_count)}
@@ -147,6 +149,8 @@ class TestAXSelection:
         )
         result = AXSelection.get_selected_child(mock_accessible, index)
         assert result == expected_child
+        if expected_child is not None:
+            essential_modules["orca.debug"].print_tokens.assert_called()
 
     @pytest.mark.parametrize(
         "error_scenario,expected_result,expects_debug_call",
@@ -195,3 +199,5 @@ class TestAXSelection:
         )
         result = AXSelection.get_selected_child(mock_accessible, 0)
         assert result == expected_result
+        if expects_debug_call:
+            essential_modules["orca.debug"].print_tokens.assert_called()

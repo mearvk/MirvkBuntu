@@ -2,7 +2,6 @@
 
 #include "gskgpublendopprivate.h"
 
-#include "gskgpuframeprivate.h"
 #include "gskgpuopprivate.h"
 #include "gskgpuprintprivate.h"
 
@@ -31,9 +30,6 @@ gsk_gpu_blend_op_print (GskGpuOp    *op,
   gsk_gpu_print_op (string, indent, "blend");
   switch (self->blend)
     {
-      case GSK_GPU_BLEND_NONE:
-        gsk_gpu_print_string (string, "none");
-        break;
       case GSK_GPU_BLEND_OVER:
         gsk_gpu_print_string (string, "over");
         break;
@@ -42,18 +38,6 @@ gsk_gpu_blend_op_print (GskGpuOp    *op,
         break;
       case GSK_GPU_BLEND_CLEAR:
         gsk_gpu_print_string (string, "clear");
-        break;
-      case GSK_GPU_BLEND_MASK:
-        gsk_gpu_print_string (string, "mask");
-        break;
-      case GSK_GPU_BLEND_MASK_ONE:
-        gsk_gpu_print_string (string, "mask-one");
-        break;
-      case GSK_GPU_BLEND_MASK_ALPHA:
-        gsk_gpu_print_string (string, "mask-alpha");
-        break;
-      case GSK_GPU_BLEND_MASK_INV_ALPHA:
-        gsk_gpu_print_string (string, "mask-inv-alpha");
         break;
       default:
         g_assert_not_reached ();
@@ -85,45 +69,15 @@ gsk_gpu_blend_op_gl_command (GskGpuOp          *op,
 
   switch (self->blend)
     {
-      case GSK_GPU_BLEND_NONE:
-        glDisable (GL_BLEND);
-        break;
-
       case GSK_GPU_BLEND_OVER:
-        glEnable (GL_BLEND);
         glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         break;
-
       case GSK_GPU_BLEND_ADD:
-        glEnable (GL_BLEND);
         glBlendFunc (GL_ONE, GL_ONE);
         break;
-
       case GSK_GPU_BLEND_CLEAR:
-        glEnable (GL_BLEND);
         glBlendFunc (GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
         break;
-
-      case GSK_GPU_BLEND_MASK:
-        glEnable (GL_BLEND);
-        glBlendFunc (GL_ZERO, GL_SRC_ALPHA);
-        break;
-
-      case GSK_GPU_BLEND_MASK_ONE:
-        glEnable (GL_BLEND);
-        glBlendFunc (GL_ONE, GL_SRC1_ALPHA);
-        break;
-      
-      case GSK_GPU_BLEND_MASK_ALPHA:
-        glEnable (GL_BLEND);
-        glBlendFunc (GL_DST_ALPHA, GL_SRC1_ALPHA);
-        break;
-      
-      case GSK_GPU_BLEND_MASK_INV_ALPHA:
-        glEnable (GL_BLEND);
-        glBlendFunc (GL_ONE_MINUS_DST_ALPHA, GL_SRC1_ALPHA);
-        break;
-      
       default:
         g_assert_not_reached ();
         break;
@@ -149,7 +103,7 @@ gsk_gpu_blend_op (GskGpuFrame *frame,
 {
   GskGpuBlendOp *self;
 
-  self = (GskGpuBlendOp *) gsk_gpu_frame_alloc_op (frame, &GSK_GPU_BLEND_OP_CLASS);
+  self = (GskGpuBlendOp *) gsk_gpu_op_alloc (frame, &GSK_GPU_BLEND_OP_CLASS);
 
   self->blend = blend;
 }

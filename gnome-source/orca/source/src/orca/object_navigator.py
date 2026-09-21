@@ -22,23 +22,23 @@
 
 from __future__ import annotations
 
-import functools
 from typing import TYPE_CHECKING
 
 from . import (
+    cmdnames,
+    command_manager,
     dbus_service,
     debug,
     focus_manager,
     guilabels,
     input_event,
+    keybindings,
     messages,
-    object_navigator_command_definitions,
     presentation_manager,
 )
 from .ax_event_synthesizer import AXEventSynthesizer
 from .ax_object import AXObject
 from .ax_utilities import AXUtilities
-from .extension import Extension
 
 if TYPE_CHECKING:
     import gi
@@ -46,46 +46,96 @@ if TYPE_CHECKING:
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
 
-    from .command import Command
     from .scripts import default
 
 
-class ObjectNavigator(Extension):
+class ObjectNavigator:
     """Provides ability to navigate objects hierarchically."""
-
-    GROUP_LABEL = guilabels.KB_GROUP_OBJECT_NAVIGATION
 
     def __init__(self) -> None:
         self._navigator_focus: Atspi.Accessible | None = None
         self._last_navigator_focus: Atspi.Accessible | None = None
         self._last_locus_of_focus: Atspi.Accessible | None = None
         self._simplify: bool = True
-        super().__init__()
+        self._initialized: bool = False
 
-    @staticmethod
-    def navigation_command(func):
-        """Decorator that logs the command and returns True."""
+        msg = "OBJECT NAVIGATOR: Registering D-Bus commands."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+        controller = dbus_service.get_remote_controller()
+        controller.register_decorated_module("ObjectNavigator", self)
 
-        @functools.wraps(func)
-        def wrapper(self, script, event=None, notify_user=True) -> bool:
-            tokens = [
-                "OBJECT NAVIGATOR:",
-                func,
-                "\nScript:",
-                script,
-                "\nEvent:",
-                event,
-                "\nnotify_user:",
-                notify_user,
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            func(self, script, notify_user)
-            return True
+    def set_up_commands(self) -> None:
+        """Sets up commands with CommandManager."""
 
-        return wrapper
+        if self._initialized:
+            return
+        self._initialized = True
 
-    def _get_commands(self) -> list[Command]:
-        return object_navigator_command_definitions.get_commands(self)
+        manager = command_manager.get_manager()
+        group_label = guilabels.KB_GROUP_OBJECT_NAVIGATION
+
+        # (name, function, description, keysymstring, modifiers)
+        # Same bindings on desktop and laptop
+        commands_data = [
+            (
+                "object_navigator_up",
+                self.move_to_parent,
+                cmdnames.NAVIGATOR_UP,
+                "Up",
+                keybindings.ORCA_CTRL_MODIFIER_MASK,
+            ),
+            (
+                "object_navigator_down",
+                self.move_to_first_child,
+                cmdnames.NAVIGATOR_DOWN,
+                "Down",
+                keybindings.ORCA_CTRL_MODIFIER_MASK,
+            ),
+            (
+                "object_navigator_next",
+                self.move_to_next_sibling,
+                cmdnames.NAVIGATOR_NEXT,
+                "Right",
+                keybindings.ORCA_CTRL_MODIFIER_MASK,
+            ),
+            (
+                "object_navigator_previous",
+                self.move_to_previous_sibling,
+                cmdnames.NAVIGATOR_PREVIOUS,
+                "Left",
+                keybindings.ORCA_CTRL_MODIFIER_MASK,
+            ),
+            (
+                "object_navigator_perform_action",
+                self.perform_action,
+                cmdnames.NAVIGATOR_PERFORM_ACTION,
+                "Return",
+                keybindings.ORCA_CTRL_MODIFIER_MASK,
+            ),
+            (
+                "object_navigator_toggle_simplify",
+                self.toggle_simplify,
+                cmdnames.NAVIGATOR_TOGGLE_SIMPLIFIED,
+                "s",
+                keybindings.ORCA_CTRL_MODIFIER_MASK,
+            ),
+        ]
+
+        for name, function, description, keysym, modifiers in commands_data:
+            kb = keybindings.KeyBinding(keysym, modifiers)
+            manager.add_command(
+                command_manager.KeyboardCommand(
+                    name,
+                    function,
+                    group_label,
+                    description,
+                    desktop_keybinding=kb,
+                    laptop_keybinding=kb,
+                ),
+            )
+
+        msg = "OBJECT NAVIGATOR: Commands set up."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
 
     def _include_in_simple_navigation(self, obj: Atspi.Accessible) -> bool:
         """Returns True if obj should be included in simple navigation."""
@@ -186,12 +236,26 @@ class ObjectNavigator(Extension):
             debug.print_message(debug.LEVEL_INFO, msg, True)
             return
 
-        script.present_object(self._navigator_focus, prior_obj=self._last_navigator_focus)
+        script.present_object(self._navigator_focus, priorObj=self._last_navigator_focus)
 
     @dbus_service.command
-    @navigation_command
-    def move_to_parent(self, script: default.Script, notify_user: bool = True) -> None:
+    def move_to_parent(
+        self,
+        script: default.Script,
+        event: input_event.InputEvent | None = None,
+        notify_user: bool = True,
+    ) -> bool:
         """Moves the navigator focus to the parent of the current focus."""
+
+        tokens = [
+            "OBJECT NAVIGATOR: move_to_parent. Script:",
+            script,
+            "Event:",
+            event,
+            "notify_user:",
+            notify_user,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         self._update()
         parent = self._parent(script, self._navigator_focus)
@@ -200,33 +264,63 @@ class ObjectNavigator(Extension):
             self._present(script, notify_user)
         elif notify_user:
             presentation_manager.get_manager().present_message(messages.NAVIGATOR_NO_PARENT)
+        return True
 
     @dbus_service.command
-    @navigation_command
-    def move_to_first_child(self, script: default.Script, notify_user: bool = True) -> None:
+    def move_to_first_child(
+        self,
+        script: default.Script,
+        event: input_event.InputEvent | None = None,
+        notify_user: bool = True,
+    ) -> bool:
         """Moves the navigator focus to the first child of the current focus."""
+
+        tokens = [
+            "OBJECT NAVIGATOR: move_to_first_child. Script:",
+            script,
+            "Event:",
+            event,
+            "notify_user:",
+            notify_user,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         self._update()
         children = self._children(script, self._navigator_focus)
         if not children:
             if notify_user:
                 presentation_manager.get_manager().present_message(messages.NAVIGATOR_NO_CHILDREN)
-            return
+            return True
 
         self._set_navigator_focus(children[0])
         self._present(script, notify_user)
+        return True
 
     @dbus_service.command
-    @navigation_command
-    def move_to_next_sibling(self, script: default.Script, notify_user: bool = True) -> None:
+    def move_to_next_sibling(
+        self,
+        script: default.Script,
+        event: input_event.InputEvent | None = None,
+        notify_user: bool = True,
+    ) -> bool:
         """Moves the navigator focus to the next sibling of the current focus."""
+
+        tokens = [
+            "OBJECT NAVIGATOR: move_to_next_sibling. Script:",
+            script,
+            "Event:",
+            event,
+            "notify_user:",
+            notify_user,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         self._update()
         parent = self._parent(script, self._navigator_focus)
         if parent is None:
             if notify_user:
                 presentation_manager.get_manager().present_message(messages.NAVIGATOR_NO_NEXT)
-            return
+            return True
 
         siblings = self._children(script, parent)
         if self._navigator_focus in siblings:
@@ -239,18 +333,33 @@ class ObjectNavigator(Extension):
         else:
             self._set_navigator_focus(parent)
             self._present(script, notify_user)
+        return True
 
     @dbus_service.command
-    @navigation_command
-    def move_to_previous_sibling(self, script: default.Script, notify_user: bool = True) -> None:
+    def move_to_previous_sibling(
+        self,
+        script: default.Script,
+        event: input_event.InputEvent | None = None,
+        notify_user: bool = True,
+    ) -> bool:
         """Moves the navigator focus to the previous sibling of the current focus."""
+
+        tokens = [
+            "OBJECT NAVIGATOR: move_to_previous_sibling. Script:",
+            script,
+            "Event:",
+            event,
+            "notify_user:",
+            notify_user,
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         self._update()
         parent = self._parent(script, self._navigator_focus)
         if parent is None:
             if notify_user:
                 presentation_manager.get_manager().present_message(messages.NAVIGATOR_NO_PREVIOUS)
-            return
+            return True
 
         siblings = self._children(script, parent)
         if self._navigator_focus in siblings:
@@ -263,6 +372,7 @@ class ObjectNavigator(Extension):
         else:
             self._set_navigator_focus(parent)
             self._present(script, notify_user)
+        return True
 
     @dbus_service.command
     def toggle_simplify(
@@ -313,10 +423,6 @@ class ObjectNavigator(Extension):
             notify_user,
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        self._update()
-        if self._navigator_focus is None:
-            return True
 
         if AXEventSynthesizer.try_all_clickable_actions(self._navigator_focus):
             return True

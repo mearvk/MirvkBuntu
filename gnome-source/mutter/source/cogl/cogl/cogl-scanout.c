@@ -48,6 +48,7 @@ struct _CoglScanout
 
   gboolean has_src_rect;
   graphene_rect_t src_rect;
+  gboolean has_dst_rect;
   MtkRectangle dst_rect;
 };
 
@@ -59,14 +60,16 @@ cogl_scanout_buffer_default_init (CoglScanoutBufferInterface *iface)
 }
 
 gboolean
-cogl_scanout_copy_to_framebuffer (CoglScanout      *scanout,
+cogl_scanout_blit_to_framebuffer (CoglScanout      *scanout,
                                   CoglFramebuffer  *framebuffer,
+                                  int               x,
+                                  int               y,
                                   GError          **error)
 {
   CoglScanoutBufferInterface *iface =
     COGL_SCANOUT_BUFFER_GET_IFACE (scanout->scanout_buffer);
 
-  return iface->copy_to_framebuffer (scanout, framebuffer, error);
+  return iface->blit_to_framebuffer (scanout, framebuffer, x, y, error);
 }
 
 int
@@ -101,16 +104,11 @@ cogl_scanout_notify_failed (CoglScanout  *scanout,
 }
 
 CoglScanout *
-cogl_scanout_new (CoglScanoutBuffer  *scanout_buffer,
-                  const MtkRectangle *dst_rect)
+cogl_scanout_new (CoglScanoutBuffer *scanout_buffer)
 {
-  CoglScanout *scanout;
+  CoglScanout *scanout = g_object_new (COGL_TYPE_SCANOUT, NULL);
 
-  g_return_val_if_fail (dst_rect, NULL);
-
-  scanout = g_object_new (COGL_TYPE_SCANOUT, NULL);
   scanout->scanout_buffer = scanout_buffer;
-  scanout->dst_rect = *dst_rect;
 
   return scanout;
 }
@@ -143,9 +141,28 @@ cogl_scanout_set_src_rect (CoglScanout           *scanout,
 
 void
 cogl_scanout_get_dst_rect (CoglScanout  *scanout,
-                           MtkRectangle *dst_rect)
+                           MtkRectangle *rect)
 {
-  *dst_rect = scanout->dst_rect;
+  if (scanout->has_dst_rect)
+    {
+      *rect = scanout->dst_rect;
+      return;
+    }
+
+  rect->x = 0;
+  rect->y = 0;
+  rect->width = cogl_scanout_buffer_get_width (scanout->scanout_buffer);
+  rect->height = cogl_scanout_buffer_get_height (scanout->scanout_buffer);
+}
+
+void
+cogl_scanout_set_dst_rect (CoglScanout        *scanout,
+                           const MtkRectangle *rect)
+{
+  if (rect != NULL)
+    scanout->dst_rect = *rect;
+
+  scanout->has_dst_rect = rect != NULL;
 }
 
 static void

@@ -25,277 +25,93 @@
 
 from __future__ import annotations
 
-from typing import Any
+import threading
+import time
+from typing import TYPE_CHECKING
 
 import gi
 
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, GLib
 
-from . import ax_cache_manager, debug
+from . import debug
 from .ax_object import AXObject
 from .ax_utilities_object import AXUtilitiesObject
 from .ax_utilities_role import AXUtilitiesRole
 
-
-class _AXTableCache:
-    """Provides table-specific access to manager-backed cached values."""
-
-    CAPTIONS = "AXTable.captions"
-    PHYSICAL_COLUMN_COUNT = "AXTable.physical-column-count"
-    PHYSICAL_ROW_COUNT = "AXTable.physical-row-count"
-    PHYSICAL_COORDINATES_FROM_CELL = "AXTable.physical-coordinates-from-cell"
-    PHYSICAL_COORDINATES_FROM_TABLE = "AXTable.physical-coordinates-from-table"
-    PHYSICAL_SPANS_FROM_CELL = "AXTable.physical-spans-from-cell"
-    PHYSICAL_SPANS_FROM_TABLE = "AXTable.physical-spans-from-table"
-    PRESENTABLE_COORDINATES = "AXTable.presentable-coordinates"
-    PRESENTABLE_SPANS = "AXTable.presentable-spans"
-    PRESENTABLE_COLUMN_COUNT = "AXTable.presentable-column-count"
-    PRESENTABLE_ROW_COUNT = "AXTable.presentable-row-count"
-
-    def __init__(self, invalidation_group: str) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        for namespace in (
-            self.CAPTIONS,
-            self.PHYSICAL_COLUMN_COUNT,
-            self.PHYSICAL_ROW_COUNT,
-            self.PHYSICAL_COORDINATES_FROM_CELL,
-            self.PHYSICAL_COORDINATES_FROM_TABLE,
-            self.PHYSICAL_SPANS_FROM_CELL,
-            self.PHYSICAL_SPANS_FROM_TABLE,
-            self.PRESENTABLE_COORDINATES,
-            self.PRESENTABLE_SPANS,
-            self.PRESENTABLE_COLUMN_COUNT,
-            self.PRESENTABLE_ROW_COUNT,
-        ):
-            self._manager.register_cache(
-                self,
-                namespace,
-                lifetime=ax_cache_manager.Lifetime.PROCESS,
-                clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-                invalidation_groups={invalidation_group},
-            )
-        self._captions_cache = self._manager.get_cache(self, self.CAPTIONS)
-        self._physical_column_count_cache = self._manager.get_cache(
-            self, self.PHYSICAL_COLUMN_COUNT
-        )
-        self._physical_row_count_cache = self._manager.get_cache(self, self.PHYSICAL_ROW_COUNT)
-        self._physical_coordinates_from_cell_cache = self._manager.get_cache(
-            self, self.PHYSICAL_COORDINATES_FROM_CELL
-        )
-        self._physical_coordinates_from_table_cache = self._manager.get_cache(
-            self, self.PHYSICAL_COORDINATES_FROM_TABLE
-        )
-        self._physical_spans_from_cell_cache = self._manager.get_cache(
-            self, self.PHYSICAL_SPANS_FROM_CELL
-        )
-        self._physical_spans_from_table_cache = self._manager.get_cache(
-            self, self.PHYSICAL_SPANS_FROM_TABLE
-        )
-        self._presentable_coordinates_cache = self._manager.get_cache(
-            self, self.PRESENTABLE_COORDINATES
-        )
-        self._presentable_spans_cache = self._manager.get_cache(self, self.PRESENTABLE_SPANS)
-        self._presentable_column_count_cache = self._manager.get_cache(
-            self, self.PRESENTABLE_COLUMN_COUNT
-        )
-        self._presentable_row_count_cache = self._manager.get_cache(
-            self, self.PRESENTABLE_ROW_COUNT
-        )
-
-    def get_caption(self, table: Atspi.Accessible) -> Any:
-        """Returns the cached caption result for table."""
-
-        if self._captions_cache is None:
-            return ax_cache_manager.MISSING
-
-        return self._captions_cache.get(ax_cache_manager.get_object_key(table))
-
-    def set_caption(self, table: Atspi.Accessible, caption: Atspi.Accessible | None) -> None:
-        """Stores a caption result for table."""
-
-        if self._captions_cache is not None:
-            self._captions_cache.put(ax_cache_manager.get_object_key(table), caption)
-
-    def get_physical_column_count(self, table: Atspi.Accessible) -> Any:
-        """Returns the cached physical column count for table."""
-
-        if self._physical_column_count_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(table)
-        return self._physical_column_count_cache.get(key)
-
-    def set_physical_column_count(self, table: Atspi.Accessible, count: int) -> None:
-        """Stores the physical column count for table."""
-
-        if self._physical_column_count_cache is not None:
-            self._physical_column_count_cache.put(ax_cache_manager.get_object_key(table), count)
-
-    def get_physical_row_count(self, table: Atspi.Accessible) -> Any:
-        """Returns the cached physical row count for table."""
-
-        if self._physical_row_count_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(table)
-        return self._physical_row_count_cache.get(key)
-
-    def set_physical_row_count(self, table: Atspi.Accessible, count: int) -> None:
-        """Stores the physical row count for table."""
-
-        if self._physical_row_count_cache is not None:
-            self._physical_row_count_cache.put(ax_cache_manager.get_object_key(table), count)
-
-    def get_presentable_column_count(self, table: Atspi.Accessible) -> Any:
-        """Returns the cached presentable column count for table."""
-
-        if self._presentable_column_count_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(table)
-        return self._presentable_column_count_cache.get(key)
-
-    def set_presentable_column_count(self, table: Atspi.Accessible, count: int | None) -> None:
-        """Stores the presentable column count for table."""
-
-        if self._presentable_column_count_cache is not None:
-            self._presentable_column_count_cache.put(ax_cache_manager.get_object_key(table), count)
-
-    def get_presentable_row_count(self, table: Atspi.Accessible) -> Any:
-        """Returns the cached presentable row count for table."""
-
-        if self._presentable_row_count_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(table)
-        return self._presentable_row_count_cache.get(key)
-
-    def set_presentable_row_count(self, table: Atspi.Accessible, count: int | None) -> None:
-        """Stores the presentable row count for table."""
-
-        if self._presentable_row_count_cache is not None:
-            self._presentable_row_count_cache.put(ax_cache_manager.get_object_key(table), count)
-
-    def get_presentable_spans(self, cell: Atspi.Accessible) -> Any:
-        """Returns cached presentable cell spans."""
-
-        if self._presentable_spans_cache is None:
-            return ax_cache_manager.MISSING
-
-        return self._presentable_spans_cache.get(ax_cache_manager.get_object_key(cell))
-
-    def set_presentable_spans(
-        self, cell: Atspi.Accessible, spans: tuple[str | None, str | None]
-    ) -> None:
-        """Stores presentable cell spans."""
-
-        if self._presentable_spans_cache is not None:
-            self._presentable_spans_cache.put(ax_cache_manager.get_object_key(cell), spans)
-
-    def get_physical_spans_from_table(self, cell: Atspi.Accessible) -> Any:
-        """Returns cached cell spans from the Table interface."""
-
-        if self._physical_spans_from_table_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(cell)
-        return self._physical_spans_from_table_cache.get(key)
-
-    def set_physical_spans_from_table(self, cell: Atspi.Accessible, spans: tuple[int, int]) -> None:
-        """Stores cell spans from the Table interface."""
-
-        if self._physical_spans_from_table_cache is not None:
-            self._physical_spans_from_table_cache.put(ax_cache_manager.get_object_key(cell), spans)
-
-    def get_physical_spans_from_cell(self, cell: Atspi.Accessible) -> Any:
-        """Returns cached cell spans from the TableCell interface."""
-
-        if self._physical_spans_from_cell_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(cell)
-        return self._physical_spans_from_cell_cache.get(key)
-
-    def set_physical_spans_from_cell(self, cell: Atspi.Accessible, spans: tuple[int, int]) -> None:
-        """Stores cell spans from the TableCell interface."""
-
-        if self._physical_spans_from_cell_cache is not None:
-            self._physical_spans_from_cell_cache.put(ax_cache_manager.get_object_key(cell), spans)
-
-    def get_physical_coordinates_from_table(self, cell: Atspi.Accessible) -> Any:
-        """Returns cached cell coordinates from the Table interface."""
-
-        if self._physical_coordinates_from_table_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(cell)
-        return self._physical_coordinates_from_table_cache.get(key)
-
-    def set_physical_coordinates_from_table(
-        self, cell: Atspi.Accessible, coordinates: tuple[int, int]
-    ) -> None:
-        """Stores cell coordinates from the Table interface."""
-
-        if self._physical_coordinates_from_table_cache is not None:
-            self._physical_coordinates_from_table_cache.put(
-                ax_cache_manager.get_object_key(cell), coordinates
-            )
-
-    def get_physical_coordinates_from_cell(self, cell: Atspi.Accessible) -> Any:
-        """Returns cached cell coordinates from the TableCell interface."""
-
-        if self._physical_coordinates_from_cell_cache is None:
-            return ax_cache_manager.MISSING
-
-        key = ax_cache_manager.get_object_key(cell)
-        return self._physical_coordinates_from_cell_cache.get(key)
-
-    def set_physical_coordinates_from_cell(
-        self, cell: Atspi.Accessible, coordinates: tuple[int, int]
-    ) -> None:
-        """Stores cell coordinates from the TableCell interface."""
-
-        if self._physical_coordinates_from_cell_cache is not None:
-            self._physical_coordinates_from_cell_cache.put(
-                ax_cache_manager.get_object_key(cell), coordinates
-            )
-
-    def get_presentable_coordinates(self, cell: Atspi.Accessible) -> Any:
-        """Returns cached cell coordinates exposed as attributes."""
-
-        if self._presentable_coordinates_cache is None:
-            return ax_cache_manager.MISSING
-
-        return self._presentable_coordinates_cache.get(ax_cache_manager.get_object_key(cell))
-
-    def set_presentable_coordinates(
-        self, cell: Atspi.Accessible, coordinates: tuple[str | None, str | None]
-    ) -> None:
-        """Stores cell coordinates exposed as attributes."""
-
-        if self._presentable_coordinates_cache is not None:
-            self._presentable_coordinates_cache.put(
-                ax_cache_manager.get_object_key(cell), coordinates
-            )
+if TYPE_CHECKING:
+    from typing import ClassVar
 
 
 class AXTable:
     """Wrapper for the Atspi.Table and TableCell interfaces."""
 
-    CACHE_INVALIDATION_GROUP = "table"
-    _CACHE = _AXTableCache(CACHE_INVALIDATION_GROUP)
+    CAPTIONS: ClassVar[dict[int, Atspi.Accessible]] = {}
+    PHYSICAL_COORDINATES_FROM_CELL: ClassVar[dict[int, tuple[int, int]]] = {}
+    PHYSICAL_COORDINATES_FROM_TABLE: ClassVar[dict[int, tuple[int, int]]] = {}
+    PHYSICAL_SPANS_FROM_CELL: ClassVar[dict[int, tuple[int, int]]] = {}
+    PHYSICAL_SPANS_FROM_TABLE: ClassVar[dict[int, tuple[int, int]]] = {}
+    PHYSICAL_COLUMN_COUNT: ClassVar[dict[int, int]] = {}
+    PHYSICAL_ROW_COUNT: ClassVar[dict[int, int]] = {}
+    PRESENTABLE_COORDINATES: ClassVar[dict[int, tuple[str | None, str | None]]] = {}
+    PRESENTABLE_SPANS: ClassVar[dict[int, tuple[str | None, str | None]]] = {}
+    PRESENTABLE_COLUMN_COUNT: ClassVar[dict[int, int | None]] = {}
+    PRESENTABLE_ROW_COUNT: ClassVar[dict[int, int | None]] = {}
 
-    _last_cell_row: int = -1
-    _last_cell_column: int = -1
+    _last_cell_row: ClassVar[int] = -1
+    _last_cell_column: ClassVar[int] = -1
+
+    _lock = threading.Lock()
+
+    @staticmethod
+    def start_cache_clearing_thread() -> None:
+        """Starts thread to periodically clear cached details."""
+
+        thread = threading.Thread(target=AXTable._clear_stored_data)
+        thread.daemon = True
+        thread.start()
+
+    @staticmethod
+    def _clear_stored_data() -> None:
+        """Clears any data we have cached for objects"""
+
+        while True:
+            time.sleep(60)
+            AXTable._clear_all_dictionaries()
+
+    @staticmethod
+    def _clear_all_dictionaries(reason: str = "") -> None:
+        msg = "AXTable: Clearing cache."
+        if reason:
+            msg += f" Reason: {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        with AXTable._lock:
+            AXTable.CAPTIONS.clear()
+            AXTable.PHYSICAL_COORDINATES_FROM_CELL.clear()
+            AXTable.PHYSICAL_COORDINATES_FROM_TABLE.clear()
+            AXTable.PHYSICAL_SPANS_FROM_CELL.clear()
+            AXTable.PHYSICAL_SPANS_FROM_TABLE.clear()
+            AXTable.PHYSICAL_COLUMN_COUNT.clear()
+            AXTable.PHYSICAL_ROW_COUNT.clear()
+            AXTable.PRESENTABLE_COORDINATES.clear()
+            AXTable.PRESENTABLE_SPANS.clear()
+            AXTable.PRESENTABLE_COLUMN_COUNT.clear()
+            AXTable.PRESENTABLE_ROW_COUNT.clear()
+
+    @staticmethod
+    def clear_cache_now(reason: str = "") -> None:
+        """Clears all cached information immediately."""
+
+        AXTable._clear_all_dictionaries(reason)
 
     @staticmethod
     def get_last_cell_coordinates() -> tuple[int, int]:
         """Returns the last known cell coordinates as a tuple of (row, column)."""
 
         row, column = AXTable._last_cell_row, AXTable._last_cell_column
-        tokens = ["AXTable: Last known cell coordinates: row=", row, ", column=", column]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"AXTable: Last known cell coordinates: row={row}, column={column}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return row, column
 
     @staticmethod
@@ -303,8 +119,8 @@ class AXTable:
         """Saves the cell coordinates for obj for future reference."""
 
         row, column = AXTable.get_cell_coordinates(obj, find_cell=True)
-        tokens = ["AXTable: Setting last cell coordinates to row=", row, ", column=", column]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"AXTable: Setting last cell coordinates to row={row}, column={column}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         AXTable._last_cell_row = row
         AXTable._last_cell_column = column
 
@@ -315,20 +131,19 @@ class AXTable:
         if not AXObject.supports_table(table):
             return None
 
-        cached = AXTable._CACHE.get_caption(table)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(table) in AXTable.CAPTIONS:
+            return AXTable.CAPTIONS.get(hash(table))
 
         try:
             caption = Atspi.Table.get_caption(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_caption:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_caption: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return None
 
         tokens = ["AXTable: Caption for", table, "is", caption]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_caption(table, caption)
+        AXTable.CAPTIONS[hash(table)] = caption
         return caption
 
     @staticmethod
@@ -343,49 +158,38 @@ class AXTable:
             if count is not None:
                 return count
 
-        cached = AXTable._CACHE.get_physical_column_count(table)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        count = AXTable.PHYSICAL_COLUMN_COUNT.get(hash(table))
+        if count is not None:
+            return count
 
         try:
             count = Atspi.Table.get_n_columns(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_column_count:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_column_count: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1
 
         tokens = ["AXTable: Column count for", table, "is", count]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_physical_column_count(table, count)
+        AXTable.PHYSICAL_COLUMN_COUNT[hash(table)] = count
         return count
-
-    @staticmethod
-    def _attribute_as_int(value: str | None) -> int | None:
-        """Returns value as an int, or None if it is absent or not a valid integer."""
-
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except ValueError as error:
-            tokens = ["AXTable: Exception in _attribute_as_int:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return None
 
     @staticmethod
     def _get_column_count_from_attribute(table: Atspi.Accessible) -> int | None:
         """Returns the value of the 'colcount' object attribute or None if not found."""
 
-        cached = AXTable._CACHE.get_presentable_column_count(table)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(table) in AXTable.PRESENTABLE_COLUMN_COUNT:
+            return AXTable.PRESENTABLE_COLUMN_COUNT.get(hash(table))
 
         attrs = AXObject.get_attributes_dict(table)
-        count = AXTable._attribute_as_int(attrs.get("colcount"))
+        attr = attrs.get("colcount")
+        count = None
+        if attr is not None:
+            count = int(attr)
 
         tokens = ["AXTable: Column count attribute for", table, "is", count]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_presentable_column_count(table, count)
+        AXTable.PRESENTABLE_COLUMN_COUNT[hash(table)] = count
         return count
 
     @staticmethod
@@ -400,36 +204,38 @@ class AXTable:
             if count is not None:
                 return count
 
-        cached = AXTable._CACHE.get_physical_row_count(table)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        count = AXTable.PHYSICAL_ROW_COUNT.get(hash(table))
+        if count is not None:
+            return count
 
         try:
             count = Atspi.Table.get_n_rows(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_row_count:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_row_count: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1
 
         tokens = ["AXTable: Row count for", table, "is", count]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_physical_row_count(table, count)
+        AXTable.PHYSICAL_ROW_COUNT[hash(table)] = count
         return count
 
     @staticmethod
     def _get_row_count_from_attribute(table: Atspi.Accessible) -> int | None:
         """Returns the value of the 'rowcount' object attribute or None if not found."""
 
-        cached = AXTable._CACHE.get_presentable_row_count(table)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(table) in AXTable.PRESENTABLE_ROW_COUNT:
+            return AXTable.PRESENTABLE_ROW_COUNT.get(hash(table))
 
         attrs = AXObject.get_attributes_dict(table)
-        count = AXTable._attribute_as_int(attrs.get("rowcount"))
+        attr = attrs.get("rowcount")
+        count = None
+        if attr is not None:
+            count = int(attr)
 
         tokens = ["AXTable: Row count attribute for", table, "is", count]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_presentable_row_count(table, count)
+        AXTable.PRESENTABLE_ROW_COUNT[hash(table)] = count
         return count
 
     @staticmethod
@@ -448,8 +254,8 @@ class AXTable:
                     if Atspi.Table.get_column_extent_at(table, row, col) > 1:
                         return True
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in is_non_uniform_table:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in is_non_uniform_table: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         return False
@@ -464,8 +270,8 @@ class AXTable:
         try:
             count = Atspi.Table.get_n_selected_columns(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_selected_column_count", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_selected_column_count {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return 0
 
         tokens = ["AXTable: Selected column count for", table, "is", count]
@@ -482,8 +288,8 @@ class AXTable:
         try:
             columns = Atspi.Table.get_selected_columns(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_selected_columns:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_selected_columns: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return []
 
         tokens = ["AXTable: Selected columns for", table, "are", columns]
@@ -500,8 +306,8 @@ class AXTable:
         try:
             count = Atspi.Table.get_n_selected_rows(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_selected_row_count", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_selected_row_count {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return 0
 
         tokens = ["AXTable: Selected row count for", table, "is", count]
@@ -518,8 +324,8 @@ class AXTable:
         try:
             rows = Atspi.Table.get_selected_rows(table)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_selected_rows:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_selected_rows: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return []
 
         tokens = ["AXTable: Selected rows for", table, "are", rows]
@@ -537,11 +343,7 @@ class AXTable:
             cell = Atspi.Table.get_accessible_at(table, row, column)
         except GLib.GError as error:
             tokens = [
-                "AXTable: Exception getting cell at row:",
-                row,
-                "col:",
-                column,
-                "in",
+                f"AXTable: Exception getting cell at row: {row} col: {column} in",
                 table,
                 ":",
                 error,
@@ -549,7 +351,7 @@ class AXTable:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return None
 
-        tokens = ["AXTable: Cell at row:", row, "col:", column, "in", table, "is", cell]
+        tokens = [f"AXTable: Cell at row: {row} col: {column} in", table, "is", cell]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return cell
 
@@ -586,10 +388,10 @@ class AXTable:
             return row_span, col_span
 
         rowspan_attr, colspan_attr = AXTable._get_cell_spans_from_attribute(cell)
-        if (rowspan := AXTable._attribute_as_int(rowspan_attr)) is not None:
-            row_span = rowspan
-        if (colspan := AXTable._attribute_as_int(colspan_attr)) is not None:
-            col_span = colspan
+        if rowspan_attr is not None:
+            row_span = int(rowspan_attr)
+        if colspan_attr is not None:
+            col_span = int(colspan_attr)
 
         return row_span, col_span
 
@@ -597,9 +399,8 @@ class AXTable:
     def _get_cell_spans_from_attribute(cell: Atspi.Accessible) -> tuple[str | None, str | None]:
         """Returns the row and column spans exposed via object attribute, or None, None."""
 
-        cached = AXTable._CACHE.get_presentable_spans(cell)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(cell) in AXTable.PRESENTABLE_SPANS:
+            return AXTable.PRESENTABLE_SPANS.get(hash(cell), (None, None))
 
         attrs = AXObject.get_attributes_dict(cell)
         row_span = attrs.get("rowspan", None)
@@ -607,7 +408,7 @@ class AXTable:
 
         tokens = ["AXTable: Row and col span attributes for", cell, ":", row_span, ",", col_span]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_presentable_spans(cell, (row_span, col_span))
+        AXTable.PRESENTABLE_SPANS[hash(cell)] = row_span, col_span
         return row_span, col_span
 
     @staticmethod
@@ -621,17 +422,15 @@ class AXTable:
         try:
             result = Atspi.Table.get_row_column_extents_at_index(table, index)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_cell_spans_from_table:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_cell_spans_from_table: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1, -1
 
         if result is None:
             tokens = [
                 "AXTable: get_row_column_extents_at_index failed for",
                 cell,
-                "at index",
-                index,
-                "in",
+                f"at index {index} in",
                 table,
             ]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -646,9 +445,7 @@ class AXTable:
             tokens = [
                 "AXTable: Table iface row span for",
                 cell,
-                row_span,
-                "is greater than row count:",
-                row_count,
+                f"{row_span} is greater than row count: {row_count}",
             ]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             row_span = 1
@@ -659,9 +456,7 @@ class AXTable:
             tokens = [
                 "AXTable: Table iface col span for",
                 cell,
-                col_span,
-                "is greater than col count:",
-                col_count,
+                f"{col_span} is greater than col count: {col_count}",
             ]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             col_span = 1
@@ -672,9 +467,8 @@ class AXTable:
     def get_cell_spans_from_table(cell: Atspi.Accessible) -> tuple[int, int]:
         """Returns the row and column spans of cell via the table interface."""
 
-        cached = AXTable._CACHE.get_physical_spans_from_table(cell)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(cell) in AXTable.PHYSICAL_SPANS_FROM_TABLE:
+            return AXTable.PHYSICAL_SPANS_FROM_TABLE.get(hash(cell), (-1, -1))
 
         index = AXTable._get_cell_index(cell)
         if index < 0:
@@ -693,22 +487,18 @@ class AXTable:
         tokens = [
             "AXTable: Table iface spans for",
             cell,
-            "are rowspan:",
-            row_span,
-            ", colspan:",
-            col_span,
+            f"are rowspan: {row_span}, colspan: {col_span}",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_physical_spans_from_table(cell, (row_span, col_span))
+        AXTable.PHYSICAL_SPANS_FROM_TABLE[hash(cell)] = row_span, col_span
         return row_span, col_span
 
     @staticmethod
     def _get_cell_spans_from_table_cell(cell: Atspi.Accessible) -> tuple[int, int]:
         """Returns the row and column spans of cell via the table cell interface."""
 
-        cached = AXTable._CACHE.get_physical_spans_from_cell(cell)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(cell) in AXTable.PHYSICAL_SPANS_FROM_CELL:
+            return AXTable.PHYSICAL_SPANS_FROM_CELL.get(hash(cell), (-1, -1))
 
         if not AXObject.supports_table_cell(cell):
             return -1, -1
@@ -719,20 +509,17 @@ class AXTable:
             row_span = Atspi.TableCell.get_row_span(cell)
             col_span = Atspi.TableCell.get_column_span(cell)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_cell_spans_from_table_cell:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_cell_spans_from_table_cell: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1, -1
 
         tokens = [
             "AXTable: TableCell iface spans for",
             cell,
-            "are rowspan:",
-            row_span,
-            ", colspan:",
-            col_span,
+            f"are rowspan: {row_span}, colspan: {col_span}",
         ]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_physical_spans_from_cell(cell, (row_span, col_span))
+        AXTable.PHYSICAL_SPANS_FROM_CELL[hash(cell)] = row_span, col_span
         return row_span, col_span
 
     @staticmethod
@@ -751,11 +538,11 @@ class AXTable:
         try:
             header = Atspi.Table.get_column_header(table, column)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_column_headers_from_table:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_column_headers_from_table: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return []
 
-        tokens = ["AXTable: Table iface header for column", column, "of", table, "is", header]
+        tokens = [f"AXTable: Table iface header for column {column} of", table, "is", header]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         if header is not None:
             return [header]
@@ -772,8 +559,8 @@ class AXTable:
         try:
             headers = Atspi.TableCell.get_column_header_cells(cell)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_column_headers_from_table_cell:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_column_headers_from_table_cell: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return []
 
         if headers is None:
@@ -798,11 +585,11 @@ class AXTable:
         try:
             header = Atspi.Table.get_row_header(table, row)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_row_headers_from_table:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_row_headers_from_table: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return []
 
-        tokens = ["AXTable: Table iface header for row", row, "of", table, "is", header]
+        tokens = [f"AXTable: Table iface header for row {row} of", table, "is", header]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         if header is not None:
             return [header]
@@ -819,8 +606,8 @@ class AXTable:
         try:
             headers = Atspi.TableCell.get_row_header_cells(cell)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_row_headers_from_table_cell:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_row_headers_from_table_cell: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return []
 
         if headers is None:
@@ -855,10 +642,10 @@ class AXTable:
             return row, col
 
         row_index, col_index = AXTable._get_cell_coordinates_from_attribute(cell)
-        if (row_int := AXTable._attribute_as_int(row_index)) is not None:
-            row = row_int - 1
-        if (col_int := AXTable._attribute_as_int(col_index)) is not None:
-            col = col_int - 1
+        if row_index is not None:
+            row = int(row_index) - 1
+        if col_index is not None:
+            col = int(col_index) - 1
 
         return row, col
 
@@ -866,9 +653,8 @@ class AXTable:
     def get_cell_coordinates_from_table(cell: Atspi.Accessible) -> tuple[int, int]:
         """Returns the row and column indices of cell via the table interface."""
 
-        cached = AXTable._CACHE.get_physical_coordinates_from_table(cell)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(cell) in AXTable.PHYSICAL_COORDINATES_FROM_TABLE:
+            return AXTable.PHYSICAL_COORDINATES_FROM_TABLE.get(hash(cell), (-1, -1))
 
         index = AXTable._get_cell_index(cell)
         if index < 0:
@@ -884,22 +670,21 @@ class AXTable:
             row = Atspi.Table.get_row_at_index(table, index)
             column = Atspi.Table.get_column_at_index(table, index)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_cell_coordinates_from_table:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in _get_cell_coordinates_from_table: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1, -1
 
-        tokens = ["AXTable: Table iface coords for", cell, "are row:", row, ", col:", column]
+        tokens = ["AXTable: Table iface coords for", cell, f"are row: {row}, col: {column}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_physical_coordinates_from_table(cell, (row, column))
+        AXTable.PHYSICAL_COORDINATES_FROM_TABLE[hash(cell)] = row, column
         return row, column
 
     @staticmethod
     def _get_cell_coordinates_from_table_cell(cell: Atspi.Accessible) -> tuple[int, int]:
         """Returns the row and column indices of cell via the table cell interface."""
 
-        cached = AXTable._CACHE.get_physical_coordinates_from_cell(cell)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(cell) in AXTable.PHYSICAL_COORDINATES_FROM_CELL:
+            return AXTable.PHYSICAL_COORDINATES_FROM_CELL.get(hash(cell), (-1, -1))
 
         if not AXObject.supports_table_cell(cell):
             return -1, -1
@@ -907,17 +692,17 @@ class AXTable:
         try:
             success, row, column = Atspi.TableCell.get_position(cell)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in _get_cell_coordinates_from_table_cell:", error]
+            msg = f"AXTable: Exception in _get_cell_coordinates_from_table_cell: {error}"
 
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return -1, -1
 
         if not success:
             return -1, -1
 
-        tokens = ["AXTable: TableCell iface coords for", cell, "are row:", row, ", col:", column]
+        tokens = ["AXTable: TableCell iface coords for", cell, f"are row: {row}, col: {column}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_physical_coordinates_from_cell(cell, (row, column))
+        AXTable.PHYSICAL_COORDINATES_FROM_CELL[hash(cell)] = row, column
         return row, column
 
     @staticmethod
@@ -929,9 +714,8 @@ class AXTable:
         if cell is None:
             return None, None
 
-        cached = AXTable._CACHE.get_presentable_coordinates(cell)
-        if cached is not ax_cache_manager.MISSING:
-            return cached
+        if hash(cell) in AXTable.PRESENTABLE_COORDINATES:
+            return AXTable.PRESENTABLE_COORDINATES.get(hash(cell), (None, None))
 
         attrs = AXObject.get_attributes_dict(cell)
         row_index = attrs.get("rowindex")
@@ -939,7 +723,7 @@ class AXTable:
 
         tokens = ["AXTable: Row and col index attributes for", cell, ":", row_index, ",", col_index]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_presentable_coordinates(cell, (row_index, col_index))
+        AXTable.PRESENTABLE_COORDINATES[hash(cell)] = row_index, col_index
         if row_index is not None and col_index is not None:
             return row_index, col_index
 
@@ -953,7 +737,7 @@ class AXTable:
 
         tokens = ["AXTable: Updated attributes based on", row, ":", row_index, col_index]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        AXTable._CACHE.set_presentable_coordinates(cell, (row_index, col_index))
+        AXTable.PRESENTABLE_COORDINATES[hash(cell)] = row_index, col_index
         return row_index, col_index
 
     @staticmethod
@@ -966,8 +750,8 @@ class AXTable:
         try:
             table = Atspi.TableCell.get_table(obj)
         except GLib.GError as error:
-            tokens = ["AXTable: Exception in get_table_from_table_cell:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXTable: Exception in get_table_from_table_cell: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return None
 
         if AXObject.supports_table(table):
@@ -1128,3 +912,6 @@ class AXTable:
             return False
 
         return row + 1 == AXTable.get_row_count(table, prefer_attribute=False)
+
+
+AXTable.start_cache_clearing_thread()

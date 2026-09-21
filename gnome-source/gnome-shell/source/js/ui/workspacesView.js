@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
@@ -34,7 +36,6 @@ const WorkspacesViewBase = GObject.registerClass({
             style_class: 'workspaces-view',
             x_expand: true,
             y_expand: true,
-            reactive: true,
         });
         this.connect('destroy', this._onDestroy.bind(this));
         global.focus_manager.add_group(this);
@@ -91,7 +92,7 @@ export const FitMode = {
 export const WorkspacesView = GObject.registerClass(
 class WorkspacesView extends WorkspacesViewBase {
     _init(monitorIndex, controls, scrollAdjustment, fitModeAdjustment, overviewAdjustment) {
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
 
         super._init(monitorIndex, overviewAdjustment);
 
@@ -141,7 +142,7 @@ class WorkspacesView extends WorkspacesViewBase {
         if (vertical) {
             const availableHeight = height - spacing * (nWorkspaces + 1);
             let workspaceHeight = availableHeight / nWorkspaces;
-            const [, workspaceWidth] =
+            let [, workspaceWidth] =
                 workspace.get_preferred_width(workspaceHeight);
 
             y1 = spacing;
@@ -154,7 +155,7 @@ class WorkspacesView extends WorkspacesViewBase {
         } else {
             const availableWidth = width - spacing * (nWorkspaces + 1);
             let workspaceWidth = availableWidth / nWorkspaces;
-            const [, workspaceHeight] =
+            let [, workspaceHeight] =
                 workspace.get_preferred_height(workspaceWidth);
 
             x1 = spacing;
@@ -389,8 +390,8 @@ class WorkspacesView extends WorkspacesViewBase {
     }
 
     getActiveWorkspace() {
-        const workspaceManager = global.workspace_manager;
-        const active = workspaceManager.get_active_workspace_index();
+        let workspaceManager = global.workspace_manager;
+        let active = workspaceManager.get_active_workspace_index();
         return this._workspaces[active];
     }
 
@@ -423,14 +424,14 @@ class WorkspacesView extends WorkspacesViewBase {
     }
 
     _updateVisibility() {
-        const workspaceManager = global.workspace_manager;
-        const active = workspaceManager.get_active_workspace_index();
+        let workspaceManager = global.workspace_manager;
+        let active = workspaceManager.get_active_workspace_index();
 
         const fitMode = this._fitModeAdjustment.value;
         const singleFitMode = fitMode === FitMode.SINGLE;
 
         for (let w = 0; w < this._workspaces.length; w++) {
-            const workspace = this._workspaces[w];
+            let workspace = this._workspaces[w];
 
             if (this._animating || this._gestureActive || !singleFitMode)
                 workspace.show();
@@ -445,11 +446,11 @@ class WorkspacesView extends WorkspacesViewBase {
     }
 
     _updateWorkspaces() {
-        const workspaceManager = global.workspace_manager;
-        const newNumWorkspaces = workspaceManager.n_workspaces;
+        let workspaceManager = global.workspace_manager;
+        let newNumWorkspaces = workspaceManager.n_workspaces;
 
         for (let j = 0; j < newNumWorkspaces; j++) {
-            const metaWorkspace = workspaceManager.get_workspace_by_index(j);
+            let metaWorkspace = workspaceManager.get_workspace_by_index(j);
             let workspace;
 
             if (j >= this._workspaces.length) { /* added */
@@ -514,8 +515,8 @@ class WorkspacesView extends WorkspacesViewBase {
         const allowSwitch =
             adj.get_transition('value') === null && !this._gestureActive;
 
-        const workspaceManager = global.workspace_manager;
-        const active = workspaceManager.get_active_workspace_index();
+        let workspaceManager = global.workspace_manager;
+        let active = workspaceManager.get_active_workspace_index();
         let current = Math.round(adj.value);
 
         if (allowSwitch && active !== current) {
@@ -528,7 +529,7 @@ class WorkspacesView extends WorkspacesViewBase {
                 current = this._workspaces.length - 1;
             }
 
-            const metaWorkspace = this._workspaces[current].metaWorkspace;
+            let metaWorkspace = this._workspaces[current].metaWorkspace;
             metaWorkspace.activate(global.get_current_time());
         }
 
@@ -814,36 +815,8 @@ class SecondaryMonitorDisplay extends St.Widget {
     }
 });
 
-export class WorkspacesDisplay extends St.Widget {
-    static {
-        GObject.registerClass(this);
-
-        const bindingPool = this.get_binding_pool();
-
-        bindingPool.install_closure(
-            'next', Clutter.KEY_Page_Down, 0,
-            obj => obj._nextWorkspace());
-        bindingPool.install_closure(
-            'prev', Clutter.KEY_Page_Up, 0,
-            obj => obj._prevWorkspace());
-        bindingPool.install_closure(
-            'first', Clutter.KEY_Home, 0,
-            _ => {
-                const ws = global.workspace_manager.get_workspace_by_index(0);
-                if (ws)
-                    Main.wm.actionMoveWorkspace(ws);
-            });
-        bindingPool.install_closure(
-            'last', Clutter.KEY_End, 0,
-            _ => {
-                const {workspaceManager} = global;
-                const which = workspaceManager.n_workspaces - 1;
-                const ws = workspaceManager.get_workspace_by_index(which);
-                if (ws)
-                    Main.wm.actionMoveWorkspace(ws);
-            });
-    }
-
+export const WorkspacesDisplay = GObject.registerClass(
+class WorkspacesDisplay extends St.Widget {
     _init(controls, scrollAdjustment, overviewAdjustment) {
         super._init({
             layout_manager: new Clutter.BinLayout(),
@@ -859,7 +832,7 @@ export class WorkspacesDisplay extends St.Widget {
             upper: FitMode.ALL,
         });
 
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
         this._scrollAdjustment = scrollAdjustment;
 
         global.window_manager.connectObject('switch-workspace',
@@ -869,10 +842,7 @@ export class WorkspacesDisplay extends St.Widget {
             Main.layoutManager.overviewGroup,
             Clutter.Orientation.HORIZONTAL,
             Shell.ActionMode.OVERVIEW,
-            {
-                allowDrag: false,
-                name: 'WorkspacesView swipe tracker',
-            });
+            {allowDrag: false});
         this._swipeTracker.allowLongSwipes = true;
         this._swipeTracker.connect('begin', this._switchWorkspaceBegin.bind(this));
         this._swipeTracker.connect('update', this._switchWorkspaceUpdate.bind(this));
@@ -918,7 +888,7 @@ export class WorkspacesDisplay extends St.Widget {
     }
 
     _workspacesReordered() {
-        const workspaceManager = global.workspace_manager;
+        let workspaceManager = global.workspace_manager;
 
         this._scrollAdjustment.value =
             workspaceManager.get_active_workspace_index();
@@ -961,8 +931,8 @@ export class WorkspacesDisplay extends St.Widget {
         if (this._workspacesOnlyOnPrimary && monitor !== this._primaryIndex)
             return;
 
-        const workspaceManager = global.workspace_manager;
-        const adjustment = this._scrollAdjustment;
+        let workspaceManager = global.workspace_manager;
+        let adjustment = this._scrollAdjustment;
         if (this._gestureActive)
             adjustment.remove_transition('value');
 
@@ -972,8 +942,8 @@ export class WorkspacesDisplay extends St.Widget {
         for (let i = 0; i < this._workspacesViews.length; i++)
             this._workspacesViews[i].startTouchGesture();
 
-        const progress = adjustment.value / adjustment.page_size;
-        const points = Array.from(
+        let progress = adjustment.value / adjustment.page_size;
+        let points = Array.from(
             {length: workspaceManager.n_workspaces}, (v, i) => i);
 
         tracker.confirmSwipe(distance, points, progress, Math.round(progress));
@@ -982,13 +952,13 @@ export class WorkspacesDisplay extends St.Widget {
     }
 
     _switchWorkspaceUpdate(tracker, progress) {
-        const adjustment = this._scrollAdjustment;
+        let adjustment = this._scrollAdjustment;
         adjustment.value = progress * adjustment.page_size;
     }
 
     _switchWorkspaceEnd(tracker, duration, endProgress) {
-        const workspaceManager = global.workspace_manager;
-        const newWs = workspaceManager.get_workspace_by_index(endProgress);
+        let workspaceManager = global.workspace_manager;
+        let newWs = workspaceManager.get_workspace_by_index(endProgress);
 
         this._scrollAdjustment.ease(endProgress, {
             mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
@@ -1008,9 +978,6 @@ export class WorkspacesDisplay extends St.Widget {
     }
 
     vfunc_navigate_focus(from, direction) {
-        if (from === this && direction === St.DirectionType.DOWN)
-            direction = St.DirectionType.TAB_FORWARD;
-
         return this._getPrimaryView()?.navigate_focus(from, direction, false);
     }
 
@@ -1033,6 +1000,9 @@ export class WorkspacesDisplay extends St.Widget {
         Main.overview.connectObject(
             'windows-restacked', this._onRestacked.bind(this),
             'scroll-event', this._onScrollEvent.bind(this), this);
+
+        global.stage.connectObject(
+            'key-press-event', this._onKeyPressEvent.bind(this), this);
     }
 
     prepareToLeaveOverview() {
@@ -1062,7 +1032,7 @@ export class WorkspacesDisplay extends St.Widget {
 
         this._primaryIndex = Main.layoutManager.primaryIndex;
         this._workspacesViews = [];
-        const monitors = Main.layoutManager.monitors;
+        let monitors = Main.layoutManager.monitors;
         for (let i = 0; i < monitors.length; i++) {
             let view;
             if (i === this._primaryIndex) {
@@ -1089,7 +1059,7 @@ export class WorkspacesDisplay extends St.Widget {
     }
 
     _getMonitorIndexForEvent(event) {
-        const [x, y] = event.get_coords();
+        let [x, y] = event.get_coords();
         const rect = new Mtk.Rectangle({x, y, width: 1, height: 1});
         return global.display.get_monitor_index_for_rect(rect);
     }
@@ -1126,7 +1096,7 @@ export class WorkspacesDisplay extends St.Widget {
         return Main.wm.handleWorkspaceScroll(event);
     }
 
-    _moveToWorkspace(which) {
+    _onKeyPressEvent(actor, event) {
         const {ControlsState} = OverviewControls;
         if (this._overviewAdjustment.value !== ControlsState.WINDOW_PICKER)
             return Clutter.EVENT_PROPAGATE;
@@ -1135,43 +1105,50 @@ export class WorkspacesDisplay extends St.Widget {
             return Clutter.EVENT_PROPAGATE;
 
         const {workspaceManager} = global;
-        const ws = workspaceManager.get_active_workspace().get_neighbor(which);
+        const vertical = workspaceManager.layout_rows === -1;
+        const rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
+
+        let which;
+        switch (event.get_key_symbol()) {
+        case Clutter.KEY_Page_Up:
+            if (vertical)
+                which = Meta.MotionDirection.UP;
+            else if (rtl)
+                which = Meta.MotionDirection.RIGHT;
+            else
+                which = Meta.MotionDirection.LEFT;
+            break;
+        case Clutter.KEY_Page_Down:
+            if (vertical)
+                which = Meta.MotionDirection.DOWN;
+            else if (rtl)
+                which = Meta.MotionDirection.LEFT;
+            else
+                which = Meta.MotionDirection.RIGHT;
+            break;
+        case Clutter.KEY_Home:
+            which = 0;
+            break;
+        case Clutter.KEY_End:
+            which = workspaceManager.n_workspaces - 1;
+            break;
+        default:
+            return Clutter.EVENT_PROPAGATE;
+        }
+
+        let ws;
+        if (which < 0)
+            // Negative workspace numbers are directions
+            // with respect to the current workspace
+            ws = workspaceManager.get_active_workspace().get_neighbor(which);
+        else
+            // Otherwise it is a workspace index
+            ws = workspaceManager.get_workspace_by_index(which);
+
         if (ws)
             Main.wm.actionMoveWorkspace(ws);
 
         return Clutter.EVENT_STOP;
-    }
-
-    _nextWorkspace() {
-        const {workspaceManager} = global;
-        const vertical = workspaceManager.layout_rows === -1;
-        const rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
-
-        let which;
-        if (vertical)
-            which = Meta.MotionDirection.DOWN;
-        else if (rtl)
-            which = Meta.MotionDirection.LEFT;
-        else
-            which = Meta.MotionDirection.RIGHT;
-
-        return this._moveToWorkspace(which);
-    }
-
-    _prevWorkspace() {
-        const {workspaceManager} = global;
-        const vertical = workspaceManager.layout_rows === -1;
-        const rtl = this.get_text_direction() === Clutter.TextDirection.RTL;
-
-        let which;
-        if (vertical)
-            which = Meta.MotionDirection.UP;
-        else if (rtl)
-            which = Meta.MotionDirection.RIGHT;
-        else
-            which = Meta.MotionDirection.LEFT;
-
-        return this._moveToWorkspace(which);
     }
 
     get _workspacesOnlyOnPrimary() {
@@ -1181,4 +1158,4 @@ export class WorkspacesDisplay extends St.Widget {
     get fitModeAdjustment() {
         return this._fitModeAdjustment;
     }
-};
+});

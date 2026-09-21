@@ -15,16 +15,16 @@ spec.
 The following units are supported for basic datatypes:
 
 Length
-: px, pt, em, ex, rem, pc, in, cm, mm
+: px, pt, em, ex, rem, pc, in, cm, mm, calc()
 
 Percentage
-: %
+: %, calc()
 
 Angle
-: deg, rad, grad, turn
+: deg, grad, turn, calc()
 
 Time
-: s, ms
+: s, ms, calc()
 
 Length values with the em or ex units are resolved using the font
 size value, unless they occur in setting the font-size itself, in
@@ -33,15 +33,11 @@ which case they are resolved using the inherited font size value.
 The rem unit is resolved using the initial font size value, which is
 not quite the same as the CSS definition of rem.
 
-Length values using physical units (pt, pc, in, cm, mm) are translated
-to px using the dpi value specified by the -gtk-dpi property, which is
-different from the CSS definition, which uses a fixed dpi of 96.
-
-The calc() notation adds considerable expressive power to all of these
-datatypes. There are limits on what types can be combined in such an
-expression (e.g. it does not make sense to add a number and a time).
-For the full details, see the
-[CSS Values and Units](https://www.w3.org/TR/css-values-4/) spec.
+The calc() notation adds considerable expressive power. There are limits
+on what types can be combined in such an expression (e.g. it does not make
+sense to add a number and a time). For the full details, see the
+[CSS3 Values and Units](https://www.w3.org/TR/css3-values/#calc-notation)
+spec.
 
 A common pattern among shorthand properties (called 'four sides') is one
 where one to four values can be specified, to determine a value for each
@@ -60,81 +56,38 @@ follows:
 1 value:
 : all
 
-## Custom Properties
-
-Starting with 4.16, GTK supports custom properties as defined in the
-[CSS Custom Properties for Cascading Variables](https://www.w3.org/TR/css-variables-1)
-spec.
-
-Custom properties are defined as follows:
-
-```css
---prop: red;
-```
-
-and used via the `var` keyword:
-
-```css
-color: var(--prop);
-```
-
-Custom properties can have a fallback for when the referred property is invalid:
-
-```css
-color: var(--prop, green);
-```
-
-Older GTK builds (e. g., 4.14) do not support that. As for color variables, you have to use [non-CSS color expressions](#non-css-colors). As for other variable types, there is not direct replacement.
-
 ## Colors
 
-### CSS Colors
+GTK extends the CSS syntax with several additional ways to specify colors.
 
-Colors can be expressed in numerous ways in CSS (see the
-[Color Module](https://www.w3.org/TR/css-color-5/). GTK supports
-many (but not all) of these.
-
-You can use rgb(), rgba(), hsl() with both the legacy or the modern CSS
-syntax, and calc() can be used as well in color expressions. hwb(), oklab(),
-oklch(), color(), color-mix() and relative colors are supported as well.
-
-### Non-CSS Colors
-
-GTK  extends the CSS syntax with several additional ways to specify colors.
-
-These extensions are deprecated and should be replaced by the equivalent
-standard CSS notions.
-
-The first is a reference to a color defined via a `define-color` rule in CSS.
-The syntax for `define-color` rules is as follows:
+The first is a reference to a color defined via a @define-color rule in CSS.
+The syntax for @define-color rules is as follows:
 
 ```
-@define-color name color
+@define-color Name Color
 ```
 
-To refer to the color defined by a `define-color` rule, prefix the name with @.
-
-There are standard CSS mechanisms that should be used instead of `define-color`: [custom properties](#custom-properties), `:root` selector and `var()` expression. GTK supports them since 4.16 release.
+To refer to the color defined by a @define-color rule, prefix the name with @.
 
 GTK also supports color expressions, which allow colors to be transformed to
 new ones. Color expressions can be nested, providing a rich language to
 define colors. Color expressions resemble functions, taking 1 or more colors
 and in some cases a number as arguments.
 
-`lighter(color)`
- : produces a brighter variant of `color`.
+`lighter(Color)`
+ : produces a brighter variant of Color
 
-`darker(color)`
- : produces a darker variant of `color`.
+`darker(Color)`
+ : produces a darker variant of Color
 
-`shade(color, number)`
- : changes the lightness of `color`. The `number` ranges from 0 for black to 2 for white.
+`shade(Color, Number)`
+ : changes the lightness of Color. The number ranges from 0 for black to 2 for white.
 
-`alpha(color, number)`
- : multiplies the alpha value of `color` by `number` (between 0 and 1).
+`alpha(Color, Number)`
+ : replaces the alpha value of color with number (between 0 and 1)
 
-`mix(color1, color2, number)`
- : interpolates between the two colors.
+`mix(Color1, Color2, Number)`
+ : interpolates between the two colors
 
 ## Images
 
@@ -142,12 +95,12 @@ GTK extends the CSS syntax for images and also uses it for specifying icons.
 To load a themed icon, use
 
 ```
--gtk-icontheme(name)
+-gtk-icontheme(Name)
 ```
 
 The specified icon name is used to look up a themed icon, while taking into
 account the values of the -gtk-icon-palette property. This kind of image is
-mainly used as value of the -gtk-icon-source property.
+mainly used as value of the -gtk-icon-source property. 
 
 Symbolic icons from the icon theme are recolored according to the
 -gtk-icon-palette property, which defines a list of named colors.
@@ -171,14 +124,14 @@ and the
 syntax makes this available. -gtk-recolor requires a url as first argument.
 The remaining arguments specify the color palette to use. If the palette is
 not explicitly specified, the current value of the -gtk-icon-palette property
-is used.
+is used. 
 
 GTK supports scaled rendering on hi-resolution displays. This works best if
 images can specify normal and hi-resolution variants. From CSS, this can be
 done with
 
 ```
--gtk-scaled(image1, image2)
+-gtk-scaled(Image1, Image2)
 ```
 
 ## GTK CSS Properties
@@ -187,23 +140,22 @@ done with
 |:-----------|:----------|:------|
 |color       | [CSS Color Level 3](https://www.w3.org/TR/css3-color/#foreground) | |
 |opacity     | [CSS Color Level 3](https://www.w3.org/TR/css3-color/#opacity) | |
-|filter      | [CSS Filter Effect Level 1](https://www.w3.org/TR/filter-effects-1/#typedef-filter-value-list) | |
-|font-family | [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-family-prop) | defaults to gtk-font-name setting |
-|font-size   | [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-size-prop) | defaults to gtk-font-name setting |
-|font-style  | [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-style-prop) | |
-|font-variant| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#descdef-font-variant) | only CSS2 values supported |
-|font-weight | [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-weight-prop) | |
-|font-width| [CSS Fonts Level 4](https://www.w3.org/TR/css-fonts/#font-width-prop) | |
-|font-stretch| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-stretch-prop) | |
-|font-kerning| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-kerning-prop) | |
-|font-variant-ligatures| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-variant-ligatures-prop) | |
-|font-variant-position| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-variant-position-prop) | |
-|font-variant-caps| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-variant-position-prop) | |
-|font-variant-numeric| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-variant-numeric-prop) | |
-|font-variant-alternates| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-variant-alternates-prop) | |
-|font-variant-east-asian| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-variant-east-asian-prop) | |
-|font-feature-settings| [CSS Fonts Level 3](https://www.w3.org/TR/css-fonts/#font-feature-settings-prop) | |
-|font-variation-settings| [CSS Fonts Level 4](https://www.w3.org/TR/css-fonts/#font-variation-settings-def) | |
+|filter      | [CSS Filter Effect Level 1](https://drafts.fxtf.org/filters/#FilterProperty) | |
+|font-family | [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-family-prop) | defaults to gtk-font-name setting |
+|font-size   | [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-size-prop) | defaults to gtk-font-name setting |
+|font-style  | [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-style-prop) | |
+|font-variant| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#descdef-font-variant) | only CSS2 values supported |
+|font-weight | [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-weight-prop) | |
+|font-stretch| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-stretch-prop) | |
+|font-kerning| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-kerning-prop) | |
+|font-variant-ligatures| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-ligatures-prop) | |
+|font-variant-position| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-position-prop) | |
+|font-variant-caps| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-position-prop) | |
+|font-variant-numeric| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-numeric-prop) | |
+|font-variant-alternates| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-alternates-prop) | |
+|font-variant-east-asian| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-east-asian-prop) | |
+|font-feature-settings| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-feature-settings-prop) | |
+|font-variation-settings| [CSS Fonts Level 4](https://www.w3.org/TR/css-fonts-4/#font-variation-settings-def) | |
 |-gtk-dpi|[Number](https://www.w3.org/TR/css3-values/#number-value) | defaults to screen resolution |
 |font| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-prop) | CSS allows line-height, etc |
 |font-variant| [CSS Fonts Level 3](https://www.w3.org/TR/css3-fonts/#font-variant-prop) | |
@@ -224,7 +176,6 @@ done with
 |-gtk-icon-palette| Color palette, as explained above | used to recolor symbolic icons |
 |-gtk-icon-shadow| [Shadow](https://www.w3.org/TR/css-backgrounds-3/#typedef-shadow) or `none` | applied to builtin and application-loaded icons |
 |-gtk-icon-filter| [Filter value list](https://www.w3.org/TR/filter-effects-1/#typedef-filter-value-list) or `none` | applied to builtin and application-loaded icons |
-|-gtk-icon-weight | Like [font weight](https://www.w3.org/TR/css3-fonts/#font-weight-prop) | applied to builtin and application-loaded, stroked symbolic icons |
 |transform| [CSS Transforms Level 1](https://www.w3.org/TR/css-transforms-1/#transform-property) | |
 |transform-origin| [CSS Transforms Level 1](https://www.w3.org/TR/css-transforms-1/#transform-origin-property) | CSS allows specifying a z component|
 |min-width| [CSS Box Model Level 3](https://www.w3.org/TR/css3-box/#min-width) | CSS allows percentages |
@@ -299,16 +250,3 @@ done with
 |animation-fill-mode| [CSS Animations Level 1](https://www.w3.org/TR/css3-animations/#animation-fill-mode) | |
 |animation| [CSS Animations Level 1](https://www.w3.org/TR/css3-animations/#animation) | |
 |border-spacing| [CSS Table Level 3](https://www.w3.org/TR/css-tables-3/#border-spacing-property) | respected by GtkBoxLayout, GtkGridLayout, GtkCenterLayout |
-
-## Media Queries
-
-Since GTK 4.20 [CSS Media Queries](https://www.w3.org/TR/mediaqueries-5/) are supported.
-Media queries can include `not`, `and`, and `or` expressions.
-
-GTK supports the following media features:
-
-| Media feature          | Reference | Notes |
-|:-----------------------|:----------|:------|
-| prefers-color-scheme   | [Media Queries Level 5](https://www.w3.org/TR/mediaqueries-5/#prefers-color-scheme) | `light` and `dark` mode |
-| prefers-contrast       | [Media Queries Level 5](https://www.w3.org/TR/mediaqueries-5/#prefers-contrast) | `no-preference`, `more`, and `less` |
-| prefers-reduced-motion | [Media Queries Level 5](https://www.w3.org/TR/mediaqueries-5/#prefers-reduced-motion) | `no-preference`, `reduced` |

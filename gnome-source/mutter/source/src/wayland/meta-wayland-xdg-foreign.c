@@ -61,6 +61,7 @@ struct _MetaWaylandXdgExported
 
 struct _MetaWaylandXdgImported
 {
+  MetaWaylandXdgForeign *foreign;
   struct wl_resource *resource;
   MetaWaylandResourceFunc send_destroyed_func;
 
@@ -132,7 +133,7 @@ meta_wayland_xdg_foreign_is_valid_surface (MetaWaylandSurface *surface,
                                            struct wl_resource *exporter)
 {
   if (!surface->role ||
-      !meta_wayland_surface_get_window (surface) ||
+      !meta_wayland_surface_get_window (surface) || 
       !META_IS_WAYLAND_XDG_SURFACE (surface->role))
     {
       wl_resource_post_error (exporter,
@@ -272,7 +273,6 @@ static void
 imported_parent_of_unmapped (MetaWaylandSurface     *surface,
                              MetaWaylandXdgImported *imported)
 {
-  g_clear_signal_handler (&imported->parent_of_unmapped_handler_id, surface);
   imported->parent_of = NULL;
 }
 
@@ -412,6 +412,7 @@ meta_wayland_xdg_foreign_import (MetaWaylandXdgForeign   *foreign,
     return NULL;
 
   imported = g_new0 (MetaWaylandXdgImported, 1);
+  imported->foreign = foreign;
   imported->exported = exported;
   imported->resource = resource;
   imported->send_destroyed_func = send_destroyed_func;
@@ -516,18 +517,4 @@ meta_wayland_xdg_foreign_init (MetaWaylandCompositor *compositor)
     return FALSE;
 
   return TRUE;
-}
-
-static void
-meta_wayland_xdg_foreign_free (MetaWaylandXdgForeign *foreign)
-{
-  g_rand_free (foreign->rand);
-  g_hash_table_unref (foreign->exported_surfaces);
-  g_free (foreign);
-}
-
-void
-meta_wayland_xdg_foreign_finalize (MetaWaylandCompositor *compositor)
-{
-  g_clear_pointer (&compositor->foreign, meta_wayland_xdg_foreign_free);
 }

@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -30,8 +32,8 @@ const AppIconMode = {
 };
 
 function _createWindowClone(window, size) {
-    const [width, height] = window.get_size();
-    const scale = Math.min(1.0, size / width, size / height);
+    let [width, height] = window.get_size();
+    let scale = Math.min(1.0, size / width, size / height);
     return new Clutter.Clone({
         source: window,
         width: width * scale,
@@ -52,7 +54,7 @@ function getWindows(workspace) {
     // We ignore skip-taskbar windows in switchers, but if they are attached
     // to their parent, their position in the MRU list may be more appropriate
     // than the parent; so start with the complete list ...
-    const windows = global.display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace);
+    let windows = global.display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace);
     // ... map windows to their parent where appropriate ...
     return windows.map(w => {
         return w.is_attached_dialog() ? w.get_transient_for() : w;
@@ -71,7 +73,7 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
 
         this.thumbnailsVisible = false;
 
-        const apps = Shell.AppSystem.get_default().get_running();
+        let apps = Shell.AppSystem.get_default().get_running();
 
         this._switcherList = new AppSwitcher(apps, this);
         this._items = this._switcherList.icons;
@@ -84,32 +86,32 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
         // We try to avoid overflowing the screen so we base the resulting size on
         // those calculations
         if (this._thumbnails) {
-            const childBox = this._switcherList.get_allocation_box();
-            const primary = Main.layoutManager.primaryMonitor;
+            let childBox = this._switcherList.get_allocation_box();
+            let primary = Main.layoutManager.primaryMonitor;
 
-            const leftPadding = this.get_theme_node().get_padding(St.Side.LEFT);
-            const rightPadding = this.get_theme_node().get_padding(St.Side.RIGHT);
-            const bottomPadding = this.get_theme_node().get_padding(St.Side.BOTTOM);
-            const hPadding = leftPadding + rightPadding;
+            let leftPadding = this.get_theme_node().get_padding(St.Side.LEFT);
+            let rightPadding = this.get_theme_node().get_padding(St.Side.RIGHT);
+            let bottomPadding = this.get_theme_node().get_padding(St.Side.BOTTOM);
+            let hPadding = leftPadding + rightPadding;
 
-            const icon = this._items[this._selectedIndex];
-            const [posX] = icon.get_transformed_position();
-            const thumbnailCenter = posX + icon.width / 2;
-            const [, childNaturalWidth] = this._thumbnails.get_preferred_width(-1);
+            let icon = this._items[this._selectedIndex];
+            let [posX] = icon.get_transformed_position();
+            let thumbnailCenter = posX + icon.width / 2;
+            let [, childNaturalWidth] = this._thumbnails.get_preferred_width(-1);
             childBox.x1 = Math.max(primary.x + leftPadding, Math.floor(thumbnailCenter - childNaturalWidth / 2));
             if (childBox.x1 + childNaturalWidth > primary.x + primary.width - hPadding) {
-                const offset = childBox.x1 + childNaturalWidth - primary.width + hPadding;
+                let offset = childBox.x1 + childNaturalWidth - primary.width + hPadding;
                 childBox.x1 = Math.max(primary.x + leftPadding, childBox.x1 - offset - hPadding);
             }
 
-            const spacing = this.get_theme_node().get_length('spacing');
+            let spacing = this.get_theme_node().get_length('spacing');
 
             childBox.x2 = childBox.x1 +  childNaturalWidth;
             if (childBox.x2 > primary.x + primary.width - rightPadding)
                 childBox.x2 = primary.x + primary.width - rightPadding;
             childBox.y1 = this._switcherList.allocation.y2 + spacing;
             this._thumbnails.addClones(primary.y + primary.height - bottomPadding - childBox.y1);
-            const [, childNaturalHeight] = this._thumbnails.get_preferred_height(-1);
+            let [, childNaturalHeight] = this._thumbnails.get_preferred_height(-1);
             childBox.y2 = childBox.y1 + childNaturalHeight;
             this._thumbnails.allocate(childBox);
         }
@@ -155,11 +157,11 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
     }
 
     _closeAppWindow(appIndex, windowIndex) {
-        const appIcon = this._items[appIndex];
+        let appIcon = this._items[appIndex];
         if (!appIcon)
             return;
 
-        const window = appIcon.cachedWindows[windowIndex];
+        let window = appIcon.cachedWindows[windowIndex];
         if (!window)
             return;
 
@@ -167,7 +169,7 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
     }
 
     _quitApplication(appIndex) {
-        const appIcon = this._items[appIndex];
+        let appIcon = this._items[appIndex];
         if (!appIcon)
             return;
 
@@ -221,7 +223,7 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
                 else
                     this._select(this._selectedIndex, this._previousWindow());
             } else {
-                const nwindows = this._items[this._selectedIndex].cachedWindows.length;
+                let nwindows = this._items[this._selectedIndex].cachedWindows.length;
                 if (nwindows > 1)
                     this._select(this._selectedIndex, nwindows - 1);
                 else
@@ -234,7 +236,7 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
                 else
                     this._select(this._selectedIndex, this._nextWindow());
             } else {
-                const nwindows = this._items[this._selectedIndex].cachedWindows.length;
+                let nwindows = this._items[this._selectedIndex].cachedWindows.length;
                 if (nwindows > 1)
                     this._select(this._selectedIndex, 0);
                 else
@@ -254,7 +256,7 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
     }
 
     _windowActivated(thumbnailSwitcher, n) {
-        const appIcon = this._items[this._selectedIndex];
+        let appIcon = this._items[this._selectedIndex];
         Main.activateWindow(appIcon.cachedWindows[n]);
         this.fadeAndDestroy();
     }
@@ -267,18 +269,18 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
     }
 
     _windowRemoved(thumbnailSwitcher, n) {
-        const appIcon = this._items[this._selectedIndex];
+        let appIcon = this._items[this._selectedIndex];
         if (!appIcon)
             return;
 
         if (appIcon.cachedWindows.length > 0) {
-            const newIndex = Math.min(n, appIcon.cachedWindows.length - 1);
+            let newIndex = Math.min(n, appIcon.cachedWindows.length - 1);
             this._select(this._selectedIndex, newIndex);
         }
     }
 
     _finish(timestamp) {
-        const appIcon = this._items[this._selectedIndex];
+        let appIcon = this._items[this._selectedIndex];
         if (this._currentWindow < 0)
             appIcon.app.activate_window(appIcon.cachedWindows[0], timestamp);
         else if (appIcon.cachedWindows[this._currentWindow])
@@ -292,11 +294,6 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
             GLib.source_remove(this._thumbnailTimeoutId);
 
         super._onDestroy();
-    }
-
-    _isActorOutside(actor) {
-        return super._isActorOutside(actor) &&
-               !this._thumbnails?.contains(actor);
     }
 
     /**
@@ -349,7 +346,7 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
             this._thumbnails.highlight(window, forceAppFocus);
         } else if (this._items[this._selectedIndex].cachedWindows.length > 1 &&
                    !forceAppFocus) {
-            this._thumbnailTimeoutId = GLib.timeout_add_once(
+            this._thumbnailTimeoutId = GLib.timeout_add(
                 GLib.PRIORITY_DEFAULT,
                 THUMBNAIL_POPUP_TIME,
                 this._timeoutPopupThumbnails.bind(this));
@@ -362,10 +359,11 @@ class AppSwitcherPopup extends SwitcherPopup.SwitcherPopup {
             this._createThumbnails();
         this._thumbnailTimeoutId = 0;
         this._thumbnailsFocused = false;
+        return GLib.SOURCE_REMOVE;
     }
 
     _destroyThumbnails() {
-        const thumbnailsActor = this._thumbnails;
+        let thumbnailsActor = this._thumbnails;
         this._thumbnails.ease({
             opacity: 0,
             duration: THUMBNAIL_FADE_TIME,
@@ -421,8 +419,8 @@ class CyclerHighlight extends St.Widget {
         this._highlight = new St.Widget({style_class: 'cycler-highlight'});
         this.add_child(this._highlight);
 
-        const coordinate = Clutter.BindCoordinate.ALL;
-        const constraint = new Clutter.BindConstraint({coordinate});
+        let coordinate = Clutter.BindCoordinate.ALL;
+        let constraint = new Clutter.BindConstraint({coordinate});
         this._clone.bind_property('source', constraint, 'source', 0);
 
         this.add_constraint(constraint);
@@ -511,10 +509,10 @@ const CyclerPopup = GObject.registerClass({
     }
 
     _finish() {
-        const window = this._items[this._selectedIndex];
-        const ws = window.get_workspace();
-        const workspaceManager = global.workspace_manager;
-        const activeWs = workspaceManager.get_active_workspace();
+        let window = this._items[this._selectedIndex];
+        let ws = window.get_workspace();
+        let workspaceManager = global.workspace_manager;
+        let activeWs = workspaceManager.get_active_workspace();
 
         if (window.minimized) {
             Main.wm.skipNextEffect(window.get_compositor_private());
@@ -552,7 +550,7 @@ class GroupCyclerPopup extends CyclerPopup {
     }
 
     _getWindows() {
-        const app = Shell.WindowTracker.get_default().focus_app;
+        let app = Shell.WindowTracker.get_default().focus_app;
         let appWindows = app?.get_windows() ?? [];
 
         if (this._settings.get_boolean('current-workspace-only')) {
@@ -583,9 +581,9 @@ class WindowSwitcherPopup extends SwitcherPopup.SwitcherPopup {
         super._init();
         this._settings = new Gio.Settings({schema_id: 'org.gnome.shell.window-switcher'});
 
-        const windows = this._getWindowList();
+        let windows = this._getWindowList();
 
-        const mode = this._settings.get_enum('app-icon-mode');
+        let mode = this._settings.get_enum('app-icon-mode');
         this._switcherList = new WindowSwitcher(windows, mode);
         this._items = this._switcherList.icons;
     }
@@ -594,7 +592,7 @@ class WindowSwitcherPopup extends SwitcherPopup.SwitcherPopup {
         let workspace = null;
 
         if (this._settings.get_boolean('current-workspace-only')) {
-            const workspaceManager = global.workspace_manager;
+            let workspaceManager = global.workspace_manager;
 
             workspace = workspaceManager.get_active_workspace();
         }
@@ -603,7 +601,7 @@ class WindowSwitcherPopup extends SwitcherPopup.SwitcherPopup {
     }
 
     _closeWindow(windowIndex) {
-        const windowIcon = this._items[windowIndex];
+        let windowIcon = this._items[windowIndex];
         if (!windowIcon)
             return;
 
@@ -646,7 +644,7 @@ class WindowCyclerPopup extends CyclerPopup {
         let workspace = null;
 
         if (this._settings.get_boolean('current-workspace-only')) {
-            const workspaceManager = global.workspace_manager;
+            let workspaceManager = global.workspace_manager;
 
             workspace = workspaceManager.get_active_workspace();
         }
@@ -671,7 +669,7 @@ class AppIcon extends St.BoxLayout {
     _init(app) {
         super._init({
             style_class: 'alt-tab-app',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         this.app = app;
@@ -686,6 +684,7 @@ class AppIcon extends St.BoxLayout {
         this.add_child(this.label);
     }
 
+    // eslint-disable-next-line camelcase
     set_size(size) {
         this.icon = this.app.create_icon_texture(size);
         this._iconBin.child = this.icon;
@@ -700,21 +699,21 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
         this.icons = [];
         this._arrows = [];
 
-        const windowTracker = Shell.WindowTracker.get_default();
-        const settings = new Gio.Settings({schema_id: 'org.gnome.shell.app-switcher'});
+        let windowTracker = Shell.WindowTracker.get_default();
+        let settings = new Gio.Settings({schema_id: 'org.gnome.shell.app-switcher'});
 
         let workspace = null;
         if (settings.get_boolean('current-workspace-only')) {
-            const workspaceManager = global.workspace_manager;
+            let workspaceManager = global.workspace_manager;
 
             workspace = workspaceManager.get_active_workspace();
         }
 
-        const allWindows = getWindows(workspace);
+        let allWindows = getWindows(workspace);
 
         // Construct the AppIcons, add to the popup
         for (let i = 0; i < apps.length; i++) {
-            const appIcon = new AppIcon(apps[i]);
+            let appIcon = new AppIcon(apps[i]);
             // Cache the window list now; we don't handle dynamic changes here,
             // and we don't want to be continually retrieving it
             appIcon.cachedWindows = allWindows.filter(
@@ -743,29 +742,29 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
         while (this._items.length > 1 && this._items[j].style_class !== 'item-box')
             j++;
 
-        const themeNode = this._items[j].get_theme_node();
+        let themeNode = this._items[j].get_theme_node();
         this._list.ensure_style();
 
-        const iconPadding = themeNode.get_horizontal_padding();
-        const iconBorder = themeNode.get_border_width(St.Side.LEFT) + themeNode.get_border_width(St.Side.RIGHT);
-        const [, labelNaturalHeight] = this.icons[j].label.get_preferred_height(-1);
-        const iconSpacing = labelNaturalHeight + iconPadding + iconBorder;
-        const totalSpacing = this._list.spacing * (this._items.length - 1);
+        let iconPadding = themeNode.get_horizontal_padding();
+        let iconBorder = themeNode.get_border_width(St.Side.LEFT) + themeNode.get_border_width(St.Side.RIGHT);
+        let [, labelNaturalHeight] = this.icons[j].label.get_preferred_height(-1);
+        let iconSpacing = labelNaturalHeight + iconPadding + iconBorder;
+        let totalSpacing = this._list.spacing * (this._items.length - 1);
 
         // We just assume the whole screen here due to weirdness happening with the passed width
-        const primary = Main.layoutManager.primaryMonitor;
-        const parentPadding = this.get_parent().get_theme_node().get_horizontal_padding();
-        const availWidth = primary.width - parentPadding - this.get_theme_node().get_horizontal_padding();
+        let primary = Main.layoutManager.primaryMonitor;
+        let parentPadding = this.get_parent().get_theme_node().get_horizontal_padding();
+        let availWidth = primary.width - parentPadding - this.get_theme_node().get_horizontal_padding();
 
-        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const iconSizes = baseIconSizes.map(s => s * scaleFactor);
+        let scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        let iconSizes = baseIconSizes.map(s => s * scaleFactor);
         let iconSize = baseIconSizes[0];
 
         if (this._items.length > 1) {
             for (let i =  0; i < baseIconSizes.length; i++) {
                 iconSize = baseIconSizes[i];
-                const height = iconSizes[i] + iconSpacing;
-                const w = height * this._items.length + totalSpacing;
+                let height = iconSizes[i] + iconSpacing;
+                let w = height * this._items.length + totalSpacing;
                 if (w <= availWidth)
                     break;
             }
@@ -791,15 +790,15 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
         // Allocate the main list items
         super.vfunc_allocate(box);
 
-        const contentBox = this.get_theme_node().get_content_box(box);
+        let contentBox = this.get_theme_node().get_content_box(box);
 
-        const arrowHeight = Math.floor(this.get_theme_node().get_padding(St.Side.BOTTOM) / 3);
-        const arrowWidth = arrowHeight * 2;
+        let arrowHeight = Math.floor(this.get_theme_node().get_padding(St.Side.BOTTOM) / 3);
+        let arrowWidth = arrowHeight * 2;
 
         // Now allocate each arrow underneath its item
-        const childBox = new Clutter.ActorBox();
+        let childBox = new Clutter.ActorBox();
         for (let i = 0; i < this._items.length; i++) {
-            const itemBox = this._items[i].allocation;
+            let itemBox = this._items[i].allocation;
             childBox.x1 = contentBox.x1 + Math.floor(itemBox.x1 + (itemBox.x2 - itemBox.x1 - arrowWidth) / 2);
             childBox.x2 = childBox.x1 + arrowWidth;
             childBox.y1 = contentBox.y1 + itemBox.y2 + arrowHeight;
@@ -825,13 +824,14 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
 
         if (this._altTabPopup.thumbnailsVisible) {
             this._delayedHighlighted = index;
-            this._mouseTimeOutId = GLib.timeout_add_once(
+            this._mouseTimeOutId = GLib.timeout_add(
                 GLib.PRIORITY_DEFAULT,
                 APP_ICON_HOVER_TIMEOUT,
                 () => {
                     this._enterItem(index);
                     this._delayedHighlighted = -1;
                     this._mouseTimeOutId = 0;
+                    return GLib.SOURCE_REMOVE;
                 });
             GLib.Source.set_name_by_id(this._mouseTimeOutId, '[gnome-shell] this._enterItem');
         } else {
@@ -842,8 +842,8 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
     }
 
     _enterItem(index) {
-        const [x, y] = global.get_pointer();
-        const pickedActor = global.stage.get_actor_at_pos(Clutter.PickMode.ALL, x, y);
+        let [x, y] = global.get_pointer();
+        let pickedActor = global.stage.get_actor_at_pos(Clutter.PickMode.ALL, x, y);
         if (this._items[index].contains(pickedActor))
             this._itemEntered(index);
     }
@@ -875,14 +875,14 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
 
     _addIcon(appIcon) {
         this.icons.push(appIcon);
-        const item = this.addItem(appIcon, appIcon.label);
+        let item = this.addItem(appIcon, appIcon.label);
 
         appIcon.app.connectObject('notify::state', app => {
             if (app.state !== Shell.AppState.RUNNING)
                 this._removeIcon(app);
         }, this);
 
-        const arrow = new St.DrawingArea({style_class: 'switcher-arrow'});
+        let arrow = new St.DrawingArea({style_class: 'switcher-arrow'});
         arrow.connect('repaint', () => SwitcherPopup.drawArrow(arrow, St.Side.BOTTOM));
         this.add_child(arrow);
         this._arrows.push(arrow);
@@ -894,7 +894,7 @@ class AppSwitcher extends SwitcherPopup.SwitcherList {
     }
 
     _removeIcon(app) {
-        const index = this.icons.findIndex(icon => {
+        let index = this.icons.findIndex(icon => {
             return icon.app === app;
         });
         if (index === -1)
@@ -921,10 +921,10 @@ class ThumbnailSwitcher extends SwitcherPopup.SwitcherList {
         for (let i = 0; i < windows.length; i++) {
             const box = new St.BoxLayout({
                 style_class: 'thumbnail-box',
-                orientation: Clutter.Orientation.VERTICAL,
+                vertical: true,
             });
 
-            const bin = new St.Bin({style_class: 'thumbnail'});
+            let bin = new St.Bin({style_class: 'thumbnail'});
 
             box.add_child(bin);
             this._thumbnailBins.push(bin);
@@ -949,21 +949,21 @@ class ThumbnailSwitcher extends SwitcherPopup.SwitcherList {
             return;
         let totalPadding = this._items[0].get_theme_node().get_horizontal_padding() + this._items[0].get_theme_node().get_vertical_padding();
         totalPadding += this.get_theme_node().get_horizontal_padding() + this.get_theme_node().get_vertical_padding();
-        const [, labelNaturalHeight] = this._labels[0].get_preferred_height(-1);
-        const spacing = this._items[0].child.get_theme_node().get_length('spacing');
-        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const thumbnailSize = THUMBNAIL_DEFAULT_SIZE * scaleFactor;
+        let [, labelNaturalHeight] = this._labels[0].get_preferred_height(-1);
+        let spacing = this._items[0].child.get_theme_node().get_length('spacing');
+        let scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        let thumbnailSize = THUMBNAIL_DEFAULT_SIZE * scaleFactor;
 
         availHeight = Math.min(availHeight - labelNaturalHeight - totalPadding - spacing, thumbnailSize);
         let binHeight = availHeight + this._items[0].get_theme_node().get_vertical_padding() + this.get_theme_node().get_vertical_padding() - spacing;
         binHeight = Math.min(thumbnailSize, binHeight);
 
         for (let i = 0; i < this._thumbnailBins.length; i++) {
-            const mutterWindow = this._windows[i].get_compositor_private();
+            let mutterWindow = this._windows[i].get_compositor_private();
             if (!mutterWindow)
                 continue;
 
-            const clone = _createWindowClone(mutterWindow, thumbnailSize);
+            let clone = _createWindowClone(mutterWindow, thumbnailSize);
             this._thumbnailBins[i].set_height(binHeight);
             this._thumbnailBins[i].child = clone;
 
@@ -977,7 +977,7 @@ class ThumbnailSwitcher extends SwitcherPopup.SwitcherList {
     }
 
     _removeThumbnail(source, clone) {
-        const index = this._clones.indexOf(clone);
+        let index = this._clones.indexOf(clone);
         if (index === -1)
             return;
 
@@ -1003,7 +1003,7 @@ class WindowIcon extends St.BoxLayout {
     _init(window, mode) {
         super._init({
             style_class: 'alt-tab-app',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         this.window = window;
@@ -1013,15 +1013,15 @@ class WindowIcon extends St.BoxLayout {
         this.add_child(this._icon);
         this.label = new St.Label({text: window.get_title()});
 
-        const tracker = Shell.WindowTracker.get_default();
+        let tracker = Shell.WindowTracker.get_default();
         this.app = tracker.get_window_app(window);
 
-        const mutterWindow = this.window.get_compositor_private();
+        let mutterWindow = this.window.get_compositor_private();
         let size;
 
         this._icon.destroy_all_children();
 
-        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        let scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
 
         switch (mode) {
         case AppIconMode.THUMBNAIL_ONLY:
@@ -1048,9 +1048,9 @@ class WindowIcon extends St.BoxLayout {
     }
 
     _createAppIcon(app, size) {
-        const appIcon = app
+        let appIcon = app
             ? app.create_icon_texture(size)
-            : new St.Icon({icon_name: 'application-x-executable', icon_size: size});
+            : new St.Icon({icon_name: 'icon-missing', icon_size: size});
         appIcon.x_expand = appIcon.y_expand = true;
         appIcon.x_align = appIcon.y_align = Clutter.ActorAlign.END;
 
@@ -1073,8 +1073,8 @@ class WindowSwitcher extends SwitcherPopup.SwitcherList {
         this.icons = [];
 
         for (let i = 0; i < windows.length; i++) {
-            const win = windows[i];
-            const icon = new WindowIcon(win, mode);
+            let win = windows[i];
+            let icon = new WindowIcon(win, mode);
 
             this.addItem(icon, icon.label);
             this.icons.push(icon);
@@ -1094,8 +1094,8 @@ class WindowSwitcher extends SwitcherPopup.SwitcherList {
     vfunc_get_preferred_height(forWidth) {
         let [minHeight, natHeight] = super.vfunc_get_preferred_height(forWidth);
 
-        const spacing = this.get_theme_node().get_padding(St.Side.BOTTOM);
-        const [labelMin, labelNat] = this._label.get_preferred_height(-1);
+        let spacing = this.get_theme_node().get_padding(St.Side.BOTTOM);
+        let [labelMin, labelNat] = this._label.get_preferred_height(-1);
 
         minHeight += labelMin + spacing;
         natHeight += labelNat + spacing;
@@ -1104,8 +1104,8 @@ class WindowSwitcher extends SwitcherPopup.SwitcherList {
     }
 
     vfunc_allocate(box) {
-        const themeNode = this.get_theme_node();
-        const contentBox = themeNode.get_content_box(box);
+        let themeNode = this.get_theme_node();
+        let contentBox = themeNode.get_content_box(box);
         const labelHeight = this._label.height;
         const totalLabelHeight =
             labelHeight + themeNode.get_padding(St.Side.BOTTOM);
@@ -1134,7 +1134,7 @@ class WindowSwitcher extends SwitcherPopup.SwitcherList {
     }
 
     _removeWindow(window) {
-        const index = this.icons.findIndex(icon => {
+        let index = this.icons.findIndex(icon => {
             return icon.window === window;
         });
         if (index === -1)

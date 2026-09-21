@@ -53,6 +53,12 @@
 #include <windows.h>
 #endif
 
+#ifdef G_OS_WIN32
+#define FO_CLOEXEC ""
+#else
+#define FO_CLOEXEC "e"
+#endif
+
 #include "glibintl.h"
 
 /**
@@ -613,12 +619,8 @@ g_dbus_address_connect (const gchar   *address_entry,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       /* Translators: The first placeholder is a D-Bus connection address,
-                        * the second is the literal name of an attribute in the address.
-                        */
-                       _("Error in address “%s” — the %s attribute is missing or malformed"),
-                       address_entry,
-                       "host");
+                       _("Error in address “%s” — the host attribute is missing or malformed"),
+                       address_entry);
           goto out;
         }
 
@@ -631,9 +633,8 @@ g_dbus_address_connect (const gchar   *address_entry,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Error in address “%s” — the %s attribute is missing or malformed"),
-                       address_entry,
-                       "port");
+                       _("Error in address “%s” — the port attribute is missing or malformed"),
+                       address_entry);
           goto out;
         }
 
@@ -646,9 +647,8 @@ g_dbus_address_connect (const gchar   *address_entry,
               g_set_error (error,
                            G_IO_ERROR,
                            G_IO_ERROR_INVALID_ARGUMENT,
-                           _("Error in address “%s” — the %s attribute is missing or malformed"),
-                           address_entry,
-                           "noncefile");
+                           _("Error in address “%s” — the noncefile attribute is missing or malformed"),
+                           address_entry);
               goto out;
             }
         }
@@ -714,7 +714,7 @@ g_dbus_address_connect (const gchar   *address_entry,
           int errsv;
 
           /* be careful to read only 16 bytes - we also check that the file is only 16 bytes long */
-          f = g_fopen (nonce_file, "rbe");
+          f = fopen (nonce_file, "rb" FO_CLOEXEC);
           errsv = errno;
           if (f == NULL)
             {

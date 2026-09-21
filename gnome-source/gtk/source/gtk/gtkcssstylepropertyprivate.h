@@ -59,19 +59,25 @@ struct _GtkCssStylePropertyClass
   GPtrArray *style_properties;
 };
 
-GType                   _gtk_css_style_property_get_type        (void);
+GType                   _gtk_css_style_property_get_type        (void) G_GNUC_CONST;
 
 void                    _gtk_css_style_property_init_properties (void);
 
-guint                   _gtk_css_style_property_get_n_properties(void);
+guint                   _gtk_css_style_property_get_n_properties(void) G_GNUC_CONST;
 GtkCssStyleProperty *   _gtk_css_style_property_lookup_by_id    (guint                   id);
 
 gboolean                _gtk_css_style_property_is_inherit      (GtkCssStyleProperty    *property);
 gboolean                _gtk_css_style_property_is_animated     (GtkCssStyleProperty    *property);
 GtkCssAffects           _gtk_css_style_property_get_affects     (GtkCssStyleProperty    *property);
+gboolean                _gtk_css_style_property_affects_size    (GtkCssStyleProperty    *property);
+gboolean                _gtk_css_style_property_affects_font    (GtkCssStyleProperty    *property);
 guint                   _gtk_css_style_property_get_id          (GtkCssStyleProperty    *property);
 GtkCssValue  *          _gtk_css_style_property_get_initial_value
                                                                 (GtkCssStyleProperty    *property);
+
+void                    _gtk_css_style_property_print_value     (GtkCssStyleProperty    *property,
+                                                                 GtkCssValue            *value,
+                                                                 GString                *string);
 
 /* XXX - find a better place for these */
 GtkCssValue * gtk_css_font_family_value_parse (GtkCssParser *parser);

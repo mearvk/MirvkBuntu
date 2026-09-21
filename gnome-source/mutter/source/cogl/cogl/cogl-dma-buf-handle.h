@@ -43,14 +43,11 @@
  */
 COGL_EXPORT CoglDmaBufHandle *
 cogl_dma_buf_handle_new (CoglFramebuffer *framebuffer,
+                         int              dmabuf_fd,
                          int              width,
                          int              height,
-                         uint32_t         format,
-                         uint64_t         modifier,
-                         int              n_planes,
-                         int             *fds,
-                         uint32_t        *strides,
-                         uint32_t        *offsets,
+                         int              stride,
+                         int              offset,
                          int              bpp,
                          gpointer         user_data,
                          GDestroyNotify   destroy_func);
@@ -101,8 +98,7 @@ cogl_dma_buf_handle_get_framebuffer (CoglDmaBufHandle *dmabuf_handle);
  * Returns: a valid file descriptor
  */
 COGL_EXPORT int
-cogl_dma_buf_handle_get_fd (CoglDmaBufHandle *dmabuf_handle,
-                            int               plane);
+cogl_dma_buf_handle_get_fd (CoglDmaBufHandle *dmabuf_handle);
 
 /**
  * cogl_dmabuf_handle_get_width:
@@ -126,8 +122,7 @@ cogl_dma_buf_handle_get_height (CoglDmaBufHandle *dmabuf_handle);
  * Returns: the buffer stride
  */
 COGL_EXPORT int
-cogl_dma_buf_handle_get_stride (CoglDmaBufHandle *dmabuf_handle,
-                                int               plane);
+cogl_dma_buf_handle_get_stride (CoglDmaBufHandle *dmabuf_handle);
 
 /**
  * cogl_dmabuf_handle_get_offset:
@@ -135,8 +130,7 @@ cogl_dma_buf_handle_get_stride (CoglDmaBufHandle *dmabuf_handle,
  * Returns: the buffer offset
  */
 COGL_EXPORT int
-cogl_dma_buf_handle_get_offset (CoglDmaBufHandle *dmabuf_handle,
-                                int               plane);
+cogl_dma_buf_handle_get_offset (CoglDmaBufHandle *dmabuf_handle);
 
 /**
  * cogl_dmabuf_handle_get_bpp:
@@ -145,21 +139,5 @@ cogl_dma_buf_handle_get_offset (CoglDmaBufHandle *dmabuf_handle,
  */
 COGL_EXPORT int
 cogl_dma_buf_handle_get_bpp (CoglDmaBufHandle *dmabuf_handle);
-
-/**
- * cogl_dmabuf_handle_get_n_planes: (skip)
- *
- * Returns: the number of planes
- */
-COGL_EXPORT int
-cogl_dma_buf_handle_get_n_planes (CoglDmaBufHandle *dmabuf_handle);
-
-/**
- * cogl_dmabuf_handle_get_modifier: (skip)
- *
- * Returns: the the format modifier
- */
-COGL_EXPORT uint64_t
-cogl_dma_buf_handle_get_modifier (CoglDmaBufHandle *dmabuf_handle);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglDmaBufHandle, cogl_dma_buf_handle_free)

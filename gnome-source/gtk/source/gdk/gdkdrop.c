@@ -20,11 +20,11 @@
 /**
  * GdkDrop:
  *
- * Represents the target of an ongoing DND operation.
+ * The `GdkDrop` object represents the target of an ongoing DND operation.
  *
  * Possible drop sites get informed about the status of the ongoing drag
- * operation with events of type `GDK_DRAG_ENTER`, `GDK_DRAG_LEAVE`,
- * `GDK_DRAG_MOTION` and `GDK_DROP_START`. The `GdkDrop` object can be obtained
+ * operation with events of type %GDK_DRAG_ENTER, %GDK_DRAG_LEAVE,
+ * %GDK_DRAG_MOTION and %GDK_DROP_START. The `GdkDrop` object can be obtained
  * from these [class@Gdk.Event] types using [method@Gdk.DNDEvent.get_drop].
  *
  * The actual data transfer is initiated from the target side via an async
@@ -134,7 +134,7 @@ gdk_drop_read_local_async (GdkDrop             *self,
 
   g_object_get (priv->drag, "content", &content, NULL);
   content_formats = gdk_content_provider_ref_formats (content);
-  g_object_unref (content);
+  g_object_unref (content); 
   content_formats = gdk_content_formats_union_serialize_mime_types (content_formats);
   mime_type = gdk_content_formats_match_mime_type (content_formats, formats);
 
@@ -320,7 +320,7 @@ gdk_drop_class_init (GdkDropClass *klass)
   object_class->finalize = gdk_drop_finalize;
 
   /**
-   * GdkDrop:actions:
+   * GdkDrop:actions: (attributes org.gtk.Property.get=gdk_drop_get_actions)
    *
    * The possible actions for this drop
    */
@@ -330,11 +330,11 @@ gdk_drop_class_init (GdkDropClass *klass)
                          GDK_ACTION_ALL,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrop:device:
+   * GdkDrop:device: (attributes org.gtk.Property.get=gdk_drop_get_device)
    *
    * The `GdkDevice` performing the drop
    */
@@ -343,11 +343,11 @@ gdk_drop_class_init (GdkDropClass *klass)
                          GDK_TYPE_DEVICE,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrop:display:
+   * GdkDrop:display: (attributes org.gtk.Property.get=gdk_drop_get_display)
    *
    * The `GdkDisplay` that the drop belongs to.
    */
@@ -355,11 +355,11 @@ gdk_drop_class_init (GdkDropClass *klass)
     g_param_spec_object ("display", NULL, NULL,
                          GDK_TYPE_DISPLAY,
                          G_PARAM_READABLE |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrop:drag:
+   * GdkDrop:drag: (attributes org.gtk.Property.get=gdk_drop_get_drag)
    *
    * The `GdkDrag` that initiated this drop
    */
@@ -368,11 +368,11 @@ gdk_drop_class_init (GdkDropClass *klass)
                          GDK_TYPE_DRAG,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrop:formats:
+   * GdkDrop:formats: (attributes org.gtk.Property.get=gdk_drop_get_formats)
    *
    * The possible formats that the drop can provide its data in.
    */
@@ -381,11 +381,11 @@ gdk_drop_class_init (GdkDropClass *klass)
                         GDK_TYPE_CONTENT_FORMATS,
                         G_PARAM_READWRITE |
                         G_PARAM_CONSTRUCT_ONLY |
-                        G_PARAM_STATIC_NAME |
+                        G_PARAM_STATIC_STRINGS |
                         G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GdkDrop:surface:
+   * GdkDrop:surface: (attributes org.gtk.Property.get=gdk_drop_get_surface)
    *
    * The `GdkSurface` the drop happens on
    */
@@ -394,7 +394,7 @@ gdk_drop_class_init (GdkDropClass *klass)
                          GDK_TYPE_SURFACE,
                          G_PARAM_READWRITE |
                          G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_NAME |
+                         G_PARAM_STATIC_STRINGS |
                          G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, N_PROPERTIES, properties);
@@ -406,7 +406,7 @@ gdk_drop_init (GdkDrop *self)
 }
 
 /**
- * gdk_drop_get_display:
+ * gdk_drop_get_display: (attributes org.gtk.Method.get_property=display)
  * @self: a `GdkDrop`
  *
  * Gets the `GdkDisplay` that @self was created for.
@@ -424,7 +424,7 @@ gdk_drop_get_display (GdkDrop *self)
 }
 
 /**
- * gdk_drop_get_device:
+ * gdk_drop_get_device: (attributes org.gtk.Method.get_property=device)
  * @self: a `GdkDrop`
  *
  * Returns the `GdkDevice` performing the drop.
@@ -442,7 +442,7 @@ gdk_drop_get_device (GdkDrop *self)
 }
 
 /**
- * gdk_drop_get_formats:
+ * gdk_drop_get_formats: (attributes org.gtk.Method.get_property=formats)
  * @self: a `GdkDrop`
  *
  * Returns the `GdkContentFormats` that the drop offers the data
@@ -461,7 +461,7 @@ gdk_drop_get_formats (GdkDrop *self)
 }
 
 /**
- * gdk_drop_get_surface:
+ * gdk_drop_get_surface: (attributes org.gtk.Method.get_property=surface)
  * @self: a `GdkDrop`
  *
  * Returns the `GdkSurface` performing the drop.
@@ -479,17 +479,17 @@ gdk_drop_get_surface (GdkDrop *self)
 }
 
 /**
- * gdk_drop_get_actions:
+ * gdk_drop_get_actions: (attributes org.gtk.Method.get_property=actions)
  * @self: a `GdkDrop`
  *
  * Returns the possible actions for this `GdkDrop`.
  *
  * If this value contains multiple actions - i.e.
- * [func@Gdk.DragAction.is_unique] returns false for the result -
+ * [func@Gdk.DragAction.is_unique] returns %FALSE for the result -
  * [method@Gdk.Drop.finish] must choose the action to use when
  * accepting the drop. This will only happen if you passed
- * `GDK_ACTION_ASK` as one of the possible actions in
- * [method@Gdk.Drop.status]. `GDK_ACTION_ASK` itself will not
+ * %GDK_ACTION_ASK as one of the possible actions in
+ * [method@Gdk.Drop.status]. %GDK_ACTION_ASK itself will not
  * be included in the actions returned by this function.
  *
  * This value may change over the lifetime of the [class@Gdk.Drop]
@@ -504,7 +504,7 @@ gdk_drop_get_actions (GdkDrop *self)
 {
   GdkDropPrivate *priv = gdk_drop_get_instance_private (self);
 
-  g_return_val_if_fail (GDK_IS_DROP (self), GDK_ACTION_NONE);
+  g_return_val_if_fail (GDK_IS_DROP (self), 0);
 
   return priv->actions;
 }
@@ -528,13 +528,13 @@ gdk_drop_set_actions (GdkDrop       *self,
 }
 
 /**
- * gdk_drop_get_drag:
+ * gdk_drop_get_drag: (attributes org.gtk.Method.get_property=drag)
  * @self: a `GdkDrop`
  *
  * If this is an in-app drag-and-drop operation, returns the `GdkDrag`
  * that corresponds to this drop.
  *
- * If it is not, `NULL` is returned.
+ * If it is not, %NULL is returned.
  *
  * Returns: (transfer none) (nullable): the corresponding `GdkDrag`
  */
@@ -551,8 +551,8 @@ gdk_drop_get_drag (GdkDrop *self)
 /**
  * gdk_drop_status:
  * @self: a `GdkDrop`
- * @actions: Supported actions of the destination, or `GDK_ACTION_NONE` to
- *    indicate that a drop will not be accepted
+ * @actions: Supported actions of the destination, or 0 to indicate
+ *    that a drop will not be accepted
  * @preferred: A unique action that's a member of @actions indicating the
  *    preferred action
  *
@@ -566,7 +566,7 @@ gdk_drop_get_drag (GdkDrop *self)
  * action to use when multiple actions are possible.
  *
  * This function should be called by drag destinations in response to
- * `GDK_DRAG_ENTER` or `GDK_DRAG_MOTION` events. If the destination does
+ * %GDK_DRAG_ENTER or %GDK_DRAG_MOTION events. If the destination does
  * not yet know the exact actions it supports, it should set any possible
  * actions first and then later call this function again.
  */
@@ -590,8 +590,7 @@ gdk_drop_status (GdkDrop       *self,
 /**
  * gdk_drop_finish:
  * @self: a `GdkDrop`
- * @action: the action performed by the destination or `GDK_ACTION_NONE` if the
- *   drop failed
+ * @action: the action performed by the destination or 0 if the drop failed
  *
  * Ends the drag operation after a drop.
  *
@@ -611,16 +610,6 @@ gdk_drop_finish (GdkDrop       *self,
   GDK_DROP_GET_CLASS (self)->finish (self, action);
 
   priv->state = GDK_DROP_STATE_FINISHED;
-}
-
-gboolean
-gdk_drop_is_finished (GdkDrop *self)
-{
-  GdkDropPrivate *priv = gdk_drop_get_instance_private (self);
-
-  g_return_val_if_fail (GDK_IS_DROP (self), FALSE);
-
-  return priv->state == GDK_DROP_STATE_FINISHED;
 }
 
 static void
@@ -662,9 +651,9 @@ gdk_drop_read_internal (GdkDrop             *self,
  *   pointer to an array of mime types
  * @io_priority: the I/O priority for the read operation
  * @cancellable: (nullable): optional `GCancellable` object
- * @callback: (scope async) (closure user_data): a `GAsyncReadyCallback` to call when
+ * @callback: (scope async): a `GAsyncReadyCallback` to call when
  *   the request is satisfied
- * @user_data: the data to pass to @callback
+ * @user_data: (closure): the data to pass to @callback
  *
  * Asynchronously read the dropped data from a `GdkDrop`
  * in a format that complies with one of the mime types.
@@ -761,7 +750,6 @@ gdk_drop_read_value_got_stream (GObject      *source,
   if (stream == NULL)
     {
       g_task_return_error (task, error);
-      g_object_unref (task);
       return;
     }
 
@@ -796,7 +784,7 @@ gdk_drop_read_value_internal (GdkDrop             *self,
   GdkContentFormats *formats;
   GValue *value;
   GTask *task;
-
+ 
   g_return_if_fail (priv->state != GDK_DROP_STATE_FINISHED);
 
   task = g_task_new (self, cancellable, callback, user_data);
@@ -855,11 +843,15 @@ gdk_drop_read_value_internal (GdkDrop             *self,
  * @type: a `GType` to read
  * @io_priority: the I/O priority of the request.
  * @cancellable: (nullable): optional `GCancellable` object, %NULL to ignore.
- * @callback: (scope async) (closure user_data): callback to call when the request is satisfied
- * @user_data: the data to pass to callback function
+ * @callback: (scope async): callback to call when the request is satisfied
+ * @user_data: (closure): the data to pass to callback function
  *
  * Asynchronously request the drag operation's contents converted
  * to the given @type.
+ *
+ * When the operation is finished @callback will be called. You must
+ * then call [method@Gdk.Drop.read_value_finish] to get the resulting
+ * `GValue`.
  *
  * For local drag-and-drop operations that are available in the given
  * `GType`, the value will be copied directly. Otherwise, GDK will

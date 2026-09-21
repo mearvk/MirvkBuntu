@@ -268,25 +268,6 @@ mtk_region_get_rectangle (const MtkRegion *region,
   return MTK_RECTANGLE_INIT (box->x1, box->y1, box->x2 - box->x1, box->y2 - box->y1);
 }
 
-void
-mtk_region_get_box (const MtkRegion *region,
-                    int              nth,
-                    int             *x1,
-                    int             *y1,
-                    int             *x2,
-                    int             *y2)
-{
-  pixman_box32_t *box;
-
-  g_return_if_fail (region != NULL);
-
-  box = pixman_region32_rectangles (&region->inner_region, NULL) + nth;
-  *x1 = box->x1;
-  *y1 = box->y1;
-  *x2 = box->x2;
-  *y2 = box->y2;
-}
-
 MtkRegion *
 mtk_region_create_rectangle (const MtkRectangle *rect)
 {
@@ -381,36 +362,6 @@ mtk_region_contains_rectangle (const MtkRegion    *region,
 }
 
 MtkRegion *
-mtk_region_downscale (MtkRegion *region,
-                      int        scale)
-{
-  int n_rects, i;
-  MtkRectangle *rects;
-  MtkRegion *scaled_region;
-
-  n_rects = mtk_region_num_rectangles (region);
-  if (!n_rects)
-    return mtk_region_create ();
-
-  if (scale == 1)
-    return mtk_region_copy (region);
-
-  MTK_RECTANGLE_CREATE_ARRAY_SCOPED (n_rects, rects);
-  for (i = 0; i < n_rects; i++)
-    {
-      rects[i] = mtk_region_get_rectangle (region, i);
-      rects[i].x /= scale;
-      rects[i].y /= scale;
-      rects[i].width = (rects[i].width + scale - 1) / scale;
-      rects[i].height = (rects[i].height + scale - 1) / scale;
-    }
-
-  scaled_region = mtk_region_create_rectangles (rects, n_rects);
-
-  return scaled_region;
-}
-
-MtkRegion *
 mtk_region_scale (MtkRegion *region,
                   int        scale)
 {
@@ -418,13 +369,10 @@ mtk_region_scale (MtkRegion *region,
   MtkRectangle *rects;
   MtkRegion *scaled_region;
 
-  n_rects = mtk_region_num_rectangles (region);
-  if (!n_rects)
-    return mtk_region_create ();
-
   if (scale == 1)
     return mtk_region_copy (region);
 
+  n_rects = mtk_region_num_rectangles (region);
   MTK_RECTANGLE_CREATE_ARRAY_SCOPED (n_rects, rects);
   for (i = 0; i < n_rects; i++)
     {
@@ -450,10 +398,6 @@ mtk_region_crop_and_scale (MtkRegion       *region,
   MtkRectangle *rects;
   MtkRegion *viewport_region;
 
-  n_rects = mtk_region_num_rectangles (region);
-  if (!n_rects)
-    return mtk_region_create ();
-
   if (G_APPROX_VALUE (src_rect->size.width, dst_width, FLT_EPSILON) &&
       G_APPROX_VALUE (src_rect->size.height, dst_height, FLT_EPSILON) &&
       G_APPROX_VALUE (roundf (src_rect->origin.x),
@@ -474,6 +418,7 @@ mtk_region_crop_and_scale (MtkRegion       *region,
       return viewport_region;
     }
 
+  n_rects = mtk_region_num_rectangles (region);
   MTK_RECTANGLE_CREATE_ARRAY_SCOPED (n_rects, rects);
   for (i = 0; i < n_rects; i++)
     {
@@ -499,13 +444,10 @@ mtk_region_apply_matrix_transform_expand (const MtkRegion   *region,
   MtkRectangle *rects;
   int n_rects, i;
 
-  n_rects = mtk_region_num_rectangles (region);
-  if (!n_rects)
-    return mtk_region_create ();
-
   if (graphene_matrix_is_identity (transform))
     return mtk_region_copy (region);
 
+  n_rects = mtk_region_num_rectangles (region);
   MTK_RECTANGLE_CREATE_ARRAY_SCOPED (n_rects, rects);
   for (i = 0; i < n_rects; i++)
     {

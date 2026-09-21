@@ -38,6 +38,10 @@
 #error "Only <cogl/cogl.h> can be included directly."
 #endif
 
+/* XXX: We forward declare CoglPixelBuffer here to allow for circular
+ * dependencies between some headers */
+typedef struct _CoglPixelBuffer CoglPixelBuffer;
+
 #include "cogl/cogl-types.h"
 #include "cogl/cogl-context.h"
 
@@ -57,11 +61,12 @@ G_BEGIN_DECLS
 #define COGL_PIXEL_BUFFER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  COGL_TYPE_PIXEL_BUFFER, CoglPixelBufferClass))
 
 typedef struct _CoglPixelBufferClass CoglPixelBufferClass;
+typedef struct _CoglPixelBuffer CoglPixelBuffer;
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglPixelBuffer, g_object_unref)
 
 COGL_EXPORT
-GType               cogl_pixel_buffer_get_type       (void);
+GType               cogl_pixel_buffer_get_type       (void) G_GNUC_CONST;
 
 /**
  * cogl_pixel_buffer_new:

@@ -22,7 +22,6 @@
 
 #include "gtkcssenums.h"
 #include "gtkcsstokenizerprivate.h"
-#include "gtkcssvariablevalueprivate.h"
 
 #include <gio/gio.h>
 
@@ -59,18 +58,10 @@ GtkCssParser *          gtk_css_parser_new_for_bytes            (GBytes         
                                                                  GtkCssParserErrorFunc           error_func,
                                                                  gpointer                        user_data,
                                                                  GDestroyNotify                  user_destroy);
-GtkCssParser *          gtk_css_parser_new_for_token_stream     (GtkCssVariableValue            *value,
-                                                                 GFile                          *file,
-                                                                 GtkCssVariableValue           **refs,
-                                                                 gsize                           n_refs,
-                                                                 GtkCssParserErrorFunc           error_func,
-                                                                 gpointer                        user_data,
-                                                                 GDestroyNotify                  user_destroy);
 GtkCssParser *          gtk_css_parser_ref                      (GtkCssParser                   *self);
 void                    gtk_css_parser_unref                    (GtkCssParser                   *self);
 
 GFile *                 gtk_css_parser_get_file                 (GtkCssParser                   *self) G_GNUC_PURE;
-GBytes *                gtk_css_parser_get_bytes                (GtkCssParser                   *self) G_GNUC_PURE;
 GFile *                 gtk_css_parser_resolve_url              (GtkCssParser                   *self,
                                                                  const char                     *url);
 
@@ -85,12 +76,11 @@ void                    gtk_css_parser_consume_token            (GtkCssParser   
 void                    gtk_css_parser_start_block              (GtkCssParser                   *self); 
 void                    gtk_css_parser_start_semicolon_block    (GtkCssParser                   *self,
                                                                  GtkCssTokenType                 alternative_token);
-gboolean                gtk_css_parser_end_block_prelude        (GtkCssParser                   *self);
+void                    gtk_css_parser_end_block_prelude        (GtkCssParser                   *self);
 void                    gtk_css_parser_end_block                (GtkCssParser                   *self); 
 void                    gtk_css_parser_skip                     (GtkCssParser                   *self);
 void                    gtk_css_parser_skip_until               (GtkCssParser                   *self,
                                                                  GtkCssTokenType                 token_type);
-void                    gtk_css_parser_skip_whitespace          (GtkCssParser                   *self);
 
 void                    gtk_css_parser_emit_error               (GtkCssParser                   *self,
                                                                  const GtkCssLocation           *start,
@@ -120,9 +110,6 @@ void                    gtk_css_parser_warn                     (GtkCssParser   
 void                    gtk_css_parser_warn_syntax              (GtkCssParser                   *self,
                                                                  const char                     *format,
                                                                  ...) G_GNUC_PRINTF(2, 3);
-void                    gtk_css_parser_warn_deprecated          (GtkCssParser                   *self,
-                                                                 const char                     *format,
-                                                                 ...) G_GNUC_PRINTF(2, 3);
 
 
 gboolean                gtk_css_parser_has_token                (GtkCssParser                   *self,
@@ -132,7 +119,6 @@ gboolean                gtk_css_parser_has_ident                (GtkCssParser   
 gboolean                gtk_css_parser_has_url                  (GtkCssParser                   *self);
 gboolean                gtk_css_parser_has_number               (GtkCssParser                   *self);
 gboolean                gtk_css_parser_has_integer              (GtkCssParser                   *self);
-gboolean                gtk_css_parser_has_percentage           (GtkCssParser                   *self);
 gboolean                gtk_css_parser_has_function             (GtkCssParser                   *self,
                                                                  const char                     *name);
 
@@ -154,11 +140,6 @@ gboolean                gtk_css_parser_consume_integer          (GtkCssParser   
                                                                  int                            *number);
 gboolean                gtk_css_parser_consume_percentage       (GtkCssParser                   *self,
                                                                  double                         *number);
-gboolean                gtk_css_parser_consume_number_or_percentage
-                                                                (GtkCssParser                   *parser,
-                                                                 double                          min,
-                                                                 double                          max,
-                                                                 double                         *value);
 gboolean                gtk_css_parser_consume_function         (GtkCssParser                   *self,
                                                                  guint                           min_args,
                                                                  guint                           max_args,
@@ -168,19 +149,6 @@ gsize                   gtk_css_parser_consume_any              (GtkCssParser   
                                                                  const GtkCssParseOption        *options,
                                                                  gsize                           n_options,
                                                                  gpointer                        user_data);
-
-gboolean                gtk_css_parser_has_references           (GtkCssParser                   *parser);
-
-GtkCssVariableValue *   gtk_css_parser_parse_value_into_token_stream (GtkCssParser              *parser);
-
-void                    gtk_css_parser_get_expanding_variables (GtkCssParser              *parser,
-                                                                GtkCssVariableValue     ***variables,
-                                                                char                    ***names,
-                                                                gsize                     *n_variables);
-
-
-/* We cannot include gtkdebug.h, so we must keep this in sync */
-#define GTK_CSS_PARSER_DEBUG_CSS (1 << 20)
 
 G_END_DECLS
 

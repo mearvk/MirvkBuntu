@@ -21,7 +21,8 @@
  * Look at file COPYRIGHTS for copyright information
  */
 
-#pragma once
+#ifndef __CR_DEFS_H__
+#define __CR_DEFS_H__
 
 #include <stdio.h>
 #include <glib.h>
@@ -77,6 +78,20 @@ enum CRSeekPos {
         CR_SEEK_END
 } ;
 
+/**
+ *Encoding values.
+ */
+enum CREncoding 
+{
+        CR_UCS_4 = 1/*Must be not NULL*/,
+        CR_UCS_1,
+        CR_ISO_8859_1,
+        CR_ASCII,
+        CR_UTF_8,
+        CR_UTF_16,
+        CR_AUTO/*should be the last one*/
+} ;
+
 
 
 
@@ -124,12 +139,70 @@ cr_utils_trace (G_LOG_LEVEL_DEBUG, a_msg) ;
 
 
 /****************************
- *Encoding helpers
+ *Encoding transformations and
+ *encoding helpers
  ****************************/
 
 enum CRStatus
 cr_utils_read_char_from_utf8_buf (const guchar * a_in, gulong a_in_len,
                                   guint32 *a_out, gulong *a_consumed) ;
+
+enum CRStatus
+cr_utils_ucs1_to_utf8 (const guchar *a_in, gulong *a_in_len,
+                       guchar *a_out, gulong *a_out_len) ;
+
+enum CRStatus
+cr_utils_utf8_to_ucs1 (const guchar * a_in, gulong * a_in_len,
+                       guchar *a_out, gulong *a_out_len) ;
+
+enum CRStatus
+cr_utils_ucs4_to_utf8 (const guint32 *a_in, gulong *a_in_len,
+                       guchar *a_out, gulong *a_out_len) ;
+
+enum CRStatus
+cr_utils_utf8_str_len_as_ucs4 (const guchar *a_in_start,
+                               const guchar *a_in_end,
+                               gulong *a_len) ;
+enum CRStatus
+cr_utils_ucs1_str_len_as_utf8 (const guchar *a_in_start, 
+                               const guchar *a_in_end,
+                               gulong *a_len) ;
+enum CRStatus
+cr_utils_utf8_str_len_as_ucs1 (const guchar *a_in_start,
+                               const guchar *a_in_end,
+                               gulong *a_len) ;
+enum CRStatus
+cr_utils_ucs4_str_len_as_utf8 (const guint32 *a_in_start, 
+                               const guint32 *a_in_end,
+                               gulong *a_len) ;
+
+enum CRStatus
+cr_utils_ucs1_str_to_utf8 (const guchar *a_in_start, 
+                           gulong *a_in_len,
+                           guchar **a_out, 
+                           gulong *a_len) ;
+
+enum CRStatus
+cr_utils_utf8_str_to_ucs1 (const guchar * a_in_start, 
+                           gulong * a_in_len,
+                           guchar **a_out, 
+                           gulong *a_out_len) ;
+
+enum CRStatus
+cr_utils_utf8_to_ucs4 (const guchar * a_in, 
+                       gulong * a_in_len,
+                       guint32 *a_out, gulong *a_out_len) ;
+
+enum CRStatus
+cr_utils_ucs4_str_to_utf8 (const guint32 *a_in, 
+                           gulong *a_in_len,
+                           guchar **a_out, gulong *a_out_len) ;
+
+enum CRStatus
+cr_utils_utf8_str_to_ucs4 (const guchar * a_in, 
+                           gulong *a_in_len,
+                           guint32 **a_out, 
+                           gulong *a_out_len) ;
 
 
 /*****************************************
@@ -137,10 +210,16 @@ cr_utils_read_char_from_utf8_buf (const guchar * a_in, gulong a_in_len,
  *****************************************/
 
 gboolean
+cr_utils_is_newline (guint32 a_char) ;
+
+gboolean
 cr_utils_is_white_space (guint32 a_char) ;
 
 gboolean
 cr_utils_is_nonascii (guint32 a_char) ;
+
+gboolean
+cr_utils_is_hexa_char (guint32 a_char) ;
 
 
 /**********************************
@@ -163,3 +242,5 @@ GList *
 cr_utils_dup_glist_of_cr_string (GList const * a_list_of_strings) ;
 
 G_END_DECLS
+
+#endif /*__CR_DEFS_H__*/

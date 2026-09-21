@@ -37,5 +37,6 @@ GtkCssValue *       _gtk_css_array_value_get_nth        (GtkCssValue           *
                                                          guint                  i);
 guint               _gtk_css_array_value_get_n_values   (const GtkCssValue     *value) G_GNUC_PURE;
 
+
 G_END_DECLS
 

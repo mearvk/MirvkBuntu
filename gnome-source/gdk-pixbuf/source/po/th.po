@@ -7,9 +7,9 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: gtk+\n"
-"Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gdk-pixbuf/issues/new\n"
-"POT-Creation-Date: 2024-09-03 21:05+0000\n"
-"PO-Revision-Date: 2024-10-01 11:58+0700\n"
+"Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gdk-pixbuf/issues\n"
+"POT-Creation-Date: 2022-07-11 14:00+0000\n"
+"PO-Revision-Date: 2024-02-01 00:17+0700\n"
 "Last-Translator: Theppitak Karoonboonyanan <thep@linux.thai.net>\n"
 "Language-Team: Thai <thai-l10n@googlegroups.com>\n"
 "Language: th\n"
@@ -17,15 +17,15 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.5\n"
+"X-Generator: Poedit 3.4.2\n"
 
-#: gdk-pixbuf/gdk-pixbuf-animation.c:185 gdk-pixbuf/gdk-pixbuf-io.c:1129
-#: gdk-pixbuf/gdk-pixbuf-io.c:1402
+#: gdk-pixbuf/gdk-pixbuf-animation.c:185 gdk-pixbuf/gdk-pixbuf-io.c:1130
+#: gdk-pixbuf/gdk-pixbuf-io.c:1403
 #, c-format
 msgid "Failed to open file “%s”: %s"
 msgstr "เปิดไฟล์ “%s” ไม่สำเร็จ: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-animation.c:198 gdk-pixbuf/gdk-pixbuf-io.c:990
+#: gdk-pixbuf/gdk-pixbuf-animation.c:198 gdk-pixbuf/gdk-pixbuf-io.c:991
 #, c-format
 msgid "Image file “%s” contains no data"
 msgstr "ไฟล์รูปภาพ “%s” ไม่มีข้อมูล"
@@ -35,8 +35,8 @@ msgstr "ไฟล์รูปภาพ “%s” ไม่มีข้อมู�
 msgid "Failed to load animation “%s”: reason not known, probably a corrupt animation file"
 msgstr "เปิดไฟล์ภาพเคลื่อนไหว “%s” ไม่สำเร็จ: ไม่แน่ใจว่าเพราะอะไร แต่อาจเป็นเพราะไฟล์เสียหาย"
 
-#: gdk-pixbuf/gdk-pixbuf-animation.c:304 gdk-pixbuf/gdk-pixbuf-io.c:1165
-#: gdk-pixbuf/gdk-pixbuf-io.c:1454
+#: gdk-pixbuf/gdk-pixbuf-animation.c:304 gdk-pixbuf/gdk-pixbuf-io.c:1166
+#: gdk-pixbuf/gdk-pixbuf-io.c:1455
 #, c-format
 msgid "Failed to load image “%s”: reason not known, probably a corrupt image file"
 msgstr "เปิดไฟล์รูปภาพ “%s” ไม่สำเร็จ: ไม่แน่ใจว่าเพราะอะไร แต่อาจเป็นเพราะไฟล์เสียหาย"
@@ -51,11 +51,11 @@ msgstr "จำนวนตัวอย่างต่อพิกเซล"
 
 #: gdk-pixbuf/gdk-pixbuf.c:264
 msgid "Colorspace"
-msgstr "ย่านสี"
+msgstr "ห้วงสี"
 
 #: gdk-pixbuf/gdk-pixbuf.c:265
 msgid "The colorspace in which the samples are interpreted"
-msgstr "ย่านสีที่จะมีการตีความตัวอย่าง"
+msgstr ""
 
 #: gdk-pixbuf/gdk-pixbuf.c:277
 msgid "Has Alpha"
@@ -67,11 +67,11 @@ msgstr "พิกซ์บัฟมีแชนเนลอัลฟาหรื
 
 #: gdk-pixbuf/gdk-pixbuf.c:291
 msgid "Bits per Sample"
-msgstr "บิตต่อตัวอย่าง"
+msgstr ""
 
 #: gdk-pixbuf/gdk-pixbuf.c:292
 msgid "The number of bits per sample"
-msgstr "จำนวนบิตต่อตัวอย่าง"
+msgstr ""
 
 #: gdk-pixbuf/gdk-pixbuf.c:305
 msgid "Width"
@@ -91,11 +91,11 @@ msgstr "จำนวนแถวของพิกซ์บัฟ"
 
 #: gdk-pixbuf/gdk-pixbuf.c:337
 msgid "Rowstride"
-msgstr "ระยะข้อมูลในแถว"
+msgstr ""
 
 #: gdk-pixbuf/gdk-pixbuf.c:338
 msgid "The number of bytes between the start of a row and the start of the next row"
-msgstr "จำนวนไบต์ตั้งแต่จุดเริ่มต้นของแถวแรกไปจนถึงจุดเริ่มต้นของแถวถัดไป"
+msgstr ""
 
 #: gdk-pixbuf/gdk-pixbuf.c:351
 msgid "Pixels"
@@ -103,7 +103,7 @@ msgstr "พิกเซล"
 
 #: gdk-pixbuf/gdk-pixbuf.c:352
 msgid "A pointer to the pixel data of the pixbuf"
-msgstr "ตัวชี้ไปยังข้อมูลพิกเซลของพิกซ์บัฟ"
+msgstr ""
 
 #: gdk-pixbuf/gdk-pixbuf.c:366
 msgid "Pixel Bytes"
@@ -113,82 +113,83 @@ msgstr "ไบต์ของพิกเซล"
 msgid "Readonly pixel data"
 msgstr "ข้อมูลพิกเซลที่อ่านได้อย่างเดียว"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:807
+#: gdk-pixbuf/gdk-pixbuf-io.c:808
 #, c-format
 msgid "Unable to load image-loading module: %s: %s"
 msgstr "ไม่สามารถเปิดมอดูลสำหรับโหลดรูปภาพ: %s: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:824
+#: gdk-pixbuf/gdk-pixbuf-io.c:825
 #, c-format
 msgid ""
-"Image-loading module %s does not export the proper interface; perhaps it’s from a different "
-"gdk-pixbuf version?"
-msgstr "มอดูล %s ซึ่งใช้สำหรับโหลดรูปภาพ ไม่ได้ส่งออกอินเทอร์เฟซที่ต้องการ เป็นไปได้ว่ามาจาก gdk-pixbuf ที่ต่างรุ่นกัน"
+"Image-loading module %s does not export the proper interface; perhaps it’s from a "
+"different gdk-pixbuf version?"
+msgstr ""
+"มอดูล %s ซึ่งใช้สำหรับโหลดรูปภาพ ไม่ได้ส่งออกอินเทอร์เฟซที่ต้องการ เป็นไปได้ว่ามาจาก gdk-pixbuf ที่ต่างรุ่นกัน"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:834 gdk-pixbuf/gdk-pixbuf-io.c:877
+#: gdk-pixbuf/gdk-pixbuf-io.c:835 gdk-pixbuf/gdk-pixbuf-io.c:878
 #, c-format
 msgid "Image type “%s” is not supported"
 msgstr "ไม่รองรับรูปภาพชนิด “%s”"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:962
+#: gdk-pixbuf/gdk-pixbuf-io.c:963
 #, c-format
 msgid "Couldn’t recognize the image file format for file “%s”"
 msgstr "ไม่รู้จักชนิดรูปภาพของไฟล์ “%s”"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:970
+#: gdk-pixbuf/gdk-pixbuf-io.c:971
 msgid "Unrecognized image file format"
 msgstr "ไม่รู้จักชนิดของไฟล์รูปภาพ"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:1176
+#: gdk-pixbuf/gdk-pixbuf-io.c:1177
 #, c-format
 msgid "Failed to load image “%s”: %s"
 msgstr "โหลดรูปภาพ “%s” ไม่สำเร็จ: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2244 gdk-pixbuf/io-gdip-utils.c:840
+#: gdk-pixbuf/gdk-pixbuf-io.c:2245 gdk-pixbuf/io-gdip-utils.c:840
 #, c-format
 msgid "Error writing to image file: %s"
 msgstr "เกิดข้อผิดพลาดขณะเขียนไฟล์รูปภาพ: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2286 gdk-pixbuf/gdk-pixbuf-io.c:2407
+#: gdk-pixbuf/gdk-pixbuf-io.c:2287 gdk-pixbuf/gdk-pixbuf-io.c:2408
 #, c-format
 msgid "This build of gdk-pixbuf does not support saving the image format: %s"
 msgstr "คนคอมไพล์ gdk-pixbuf ไม่ได้เลือกรองรับการบันทึกไฟล์ชนิด: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2317
+#: gdk-pixbuf/gdk-pixbuf-io.c:2318
 msgid "Insufficient memory to save image to callback"
 msgstr "หน่วยความจำไม่พอสำหรับบันทึกข้อมูลภาพผ่านฟังก์ชันเรียกกลับ"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2330
+#: gdk-pixbuf/gdk-pixbuf-io.c:2331
 msgid "Failed to open temporary file"
 msgstr "เปิดไฟล์ชั่วคราวไม่สำเร็จ"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2353
+#: gdk-pixbuf/gdk-pixbuf-io.c:2354
 msgid "Failed to read from temporary file"
 msgstr "อ่านไฟล์ชั่วคราวไม่สำเร็จ"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2575
+#: gdk-pixbuf/gdk-pixbuf-io.c:2576
 #, c-format
 msgid "Failed to open “%s” for writing: %s"
 msgstr "เปิดเขียน “%s” ไม่สำเร็จ: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2601
+#: gdk-pixbuf/gdk-pixbuf-io.c:2602
 #, c-format
 msgid "Failed to close “%s” while writing image, all data may not have been saved: %s"
 msgstr "ไม่สามารถปิดไฟล์ “%s”ขณะเขียนรูปภาพ ข้อมูลอาจจะไม่ถูกบันทึก: %s"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2835 gdk-pixbuf/gdk-pixbuf-io.c:2890
+#: gdk-pixbuf/gdk-pixbuf-io.c:2836 gdk-pixbuf/gdk-pixbuf-io.c:2891
 msgid "Insufficient memory to save image into a buffer"
 msgstr "หน่วยความจำไม่พอที่จะบันทึกรูปภาพลงในบัฟเฟอร์"
 
-#: gdk-pixbuf/gdk-pixbuf-io.c:2936
+#: gdk-pixbuf/gdk-pixbuf-io.c:2937
 msgid "Error writing to image stream"
 msgstr "เกิดข้อผิดพลาดขณะเขียนสตรีมรูปภาพ"
 
 #: gdk-pixbuf/gdk-pixbuf-loader.c:416
 #, c-format
 msgid ""
-"Internal error: Image loader module “%s” failed to complete an operation, but didn’t give a "
-"reason for the failure"
+"Internal error: Image loader module “%s” failed to complete an operation, but didn’t give "
+"a reason for the failure"
 msgstr "ข้อผิดพลาดภายใน: มอดูลโหลดรูปภาพ “%s” ดำเนินการบางอย่างไม่สำเร็จ แต่ไม่ได้ระบุสาเหตุ"
 
 #: gdk-pixbuf/gdk-pixbuf-loader.c:458
@@ -227,27 +228,25 @@ msgstr[0] "จัดสรรเนื้อที่ %u ไบต์เพื�
 msgid "Unexpected icon chunk in animation"
 msgstr "พบชิ้นไอคอนเกินมาในภาพเคลื่อนไหว"
 
-#: gdk-pixbuf/io-ani.c:303 gdk-pixbuf/io-ani.c:404 gdk-pixbuf/io-ani.c:430
-#: gdk-pixbuf/io-ani.c:449
-msgid "Malformed chunk in animation"
-msgstr "ส่วนของภาพเคลื่อนไหวเสีย"
-
-#: gdk-pixbuf/io-ani.c:311 gdk-pixbuf/io-ani.c:354 gdk-pixbuf/io-ani.c:412
-#: gdk-pixbuf/io-ani.c:438 gdk-pixbuf/io-ani.c:461 gdk-pixbuf/io-ani.c:488
-#: gdk-pixbuf/io-ani.c:575
+#: gdk-pixbuf/io-ani.c:337 gdk-pixbuf/io-ani.c:395 gdk-pixbuf/io-ani.c:421
+#: gdk-pixbuf/io-ani.c:444 gdk-pixbuf/io-ani.c:471 gdk-pixbuf/io-ani.c:558
 msgid "Invalid header in animation"
 msgstr "ข้อมูลส่วนหัวของภาพเคลื่อนไหวเสีย"
 
-#: gdk-pixbuf/io-ani.c:364 gdk-pixbuf/io-ani.c:386 gdk-pixbuf/io-ani.c:470
-#: gdk-pixbuf/io-ani.c:497 gdk-pixbuf/io-ani.c:548 gdk-pixbuf/io-ani.c:624
+#: gdk-pixbuf/io-ani.c:347 gdk-pixbuf/io-ani.c:369 gdk-pixbuf/io-ani.c:453
+#: gdk-pixbuf/io-ani.c:480 gdk-pixbuf/io-ani.c:531 gdk-pixbuf/io-ani.c:607
 msgid "Not enough memory to load animation"
 msgstr "หน่วยความจำไม่พอที่จะโหลดภาพเคลื่อนไหว"
 
-#: gdk-pixbuf/io-ani.c:646
+#: gdk-pixbuf/io-ani.c:387 gdk-pixbuf/io-ani.c:413 gdk-pixbuf/io-ani.c:432
+msgid "Malformed chunk in animation"
+msgstr "ส่วนของภาพเคลื่อนไหวเสีย"
+
+#: gdk-pixbuf/io-ani.c:629
 msgid "ANI image was truncated or incomplete."
 msgstr "รูปภาพ ANI ถูกตัดตอนหรือไม่สมบูรณ์"
 
-#: gdk-pixbuf/io-ani.c:687
+#: gdk-pixbuf/io-ani.c:670
 msgctxt "image format"
 msgid "Windows animated cursor"
 msgstr "เคอร์เซอร์ Windows แบบเคลื่อนไหว"
@@ -323,17 +322,17 @@ msgctxt "image format"
 msgid "Windows icon"
 msgstr "ไอคอน Windows"
 
-#: gdk-pixbuf/io-gdip-jpeg.c:54 gdk-pixbuf/io-jpeg.c:1394
+#: gdk-pixbuf/io-gdip-jpeg.c:54 gdk-pixbuf/io-jpeg.c:1391
 #, c-format
 msgid "JPEG quality must be a value between 0 and 100; value “%s” could not be parsed."
 msgstr "คุณภาพของรูปภาพ JPEG ต้องอยู่ระหว่าง 0 และ 100  ค่า “%s” ไม่สามารถตีความได้"
 
-#: gdk-pixbuf/io-gdip-jpeg.c:69 gdk-pixbuf/io-jpeg.c:1410
+#: gdk-pixbuf/io-gdip-jpeg.c:69 gdk-pixbuf/io-jpeg.c:1407
 #, c-format
 msgid "JPEG quality must be a value between 0 and 100; value “%d” is not allowed."
 msgstr "คุณภาพของรูปภาพ JPEG ต้องอยู่ระหว่าง 0 และ 100  ค่า “%d” ที่ตั้งใช้ไม่ได้"
 
-#: gdk-pixbuf/io-gdip-jpeg.c:147 gdk-pixbuf/io-jpeg.c:1694
+#: gdk-pixbuf/io-gdip-jpeg.c:147 gdk-pixbuf/io-jpeg.c:1691
 msgctxt "image format"
 msgid "JPEG"
 msgstr "JPEG"
@@ -348,7 +347,8 @@ msgstr "TIFF"
 msgid "Could not allocate memory: %s"
 msgstr "ไม่สามารถจองหน่วยความจำ: %s"
 
-#: gdk-pixbuf/io-gdip-utils.c:180 gdk-pixbuf/io-gdip-utils.c:294 gdk-pixbuf/io-gdip-utils.c:334
+#: gdk-pixbuf/io-gdip-utils.c:180 gdk-pixbuf/io-gdip-utils.c:294
+#: gdk-pixbuf/io-gdip-utils.c:334
 #, c-format
 msgid "Could not create stream: %s"
 msgstr "ไม่สามารถสร้างสตรีม: %s"
@@ -497,34 +497,34 @@ msgstr "หน่วยความจำไม่พอสำหรับโห
 #: gdk-pixbuf/io-jpeg.c:711 gdk-pixbuf/io-jpeg.c:956
 #, c-format
 msgid "Unsupported JPEG color space (%s)"
-msgstr "ไม่รองรับย่านสีนี้สำหรับ JPEG (%s)"
+msgstr "ไม่รองรับห้วงสีนี้สำหรับ JPEG (%s)"
 
-#: gdk-pixbuf/io-jpeg.c:834 gdk-pixbuf/io-jpeg.c:1154 gdk-pixbuf/io-jpeg.c:1501
-#: gdk-pixbuf/io-jpeg.c:1511
+#: gdk-pixbuf/io-jpeg.c:834 gdk-pixbuf/io-jpeg.c:1151 gdk-pixbuf/io-jpeg.c:1498
+#: gdk-pixbuf/io-jpeg.c:1508
 msgid "Couldn’t allocate memory for loading JPEG file"
 msgstr "ไม่สามารถจัดสรรหน่วยความจำสำหรับโหลดรูปภาพ JPEG"
 
-#: gdk-pixbuf/io-jpeg.c:1112
+#: gdk-pixbuf/io-jpeg.c:1109
 msgid "Transformed JPEG has zero width or height."
 msgstr "รูปภาพ JPEG ที่แปลงมามีความกว้างหรือความสูงเป็นศูนย์"
 
-#: gdk-pixbuf/io-jpeg.c:1138
+#: gdk-pixbuf/io-jpeg.c:1135
 #, fuzzy, c-format
 #| msgid "Unsupported JPEG color space (%s)"
 msgid "Unsupported number of color components (%d)"
 msgstr "ไม่รองรับห้วงสีนี้สำหรับ JPEG (%s)"
 
-#: gdk-pixbuf/io-jpeg.c:1431
+#: gdk-pixbuf/io-jpeg.c:1428
 #, c-format
 msgid "JPEG x-dpi must be a value between 1 and 65535; value “%s” is not allowed."
 msgstr "คุณภาพของรูปภาพ JPEG ต้องอยู่ระหว่าง 0 และ 100  ค่า “%s” ที่ตั้งใช้ไม่ได้"
 
-#: gdk-pixbuf/io-jpeg.c:1452
+#: gdk-pixbuf/io-jpeg.c:1449
 #, c-format
 msgid "JPEG y-dpi must be a value between 1 and 65535; value “%s” is not allowed."
 msgstr "คุณภาพของรูปภาพ JPEG ต้องอยู่ระหว่าง 0 และ 100  ค่า “%s” ที่ตั้งใช้ไม่ได้"
 
-#: gdk-pixbuf/io-jpeg.c:1466
+#: gdk-pixbuf/io-jpeg.c:1463
 #, c-format
 msgid "Color profile has invalid length “%u”."
 msgstr "โพรไฟล์สีมีความยาว “%u” ซึ่งไม่ถูกต้อง"
@@ -567,7 +567,8 @@ msgstr "ไม่สามารถจัดสรรหน่วยความ
 msgid ""
 "Insufficient memory to store a %lu by %lu image; try exiting some applications to reduce "
 "memory usage"
-msgstr "หน่วยความจำไม่พอที่จะเก็บรูปภาพขนาด %lux%lu กรุณาปิดแอปพลิเคชันที่ไม่ใช้แล้ว เพื่อจะได้มีหน่วยความจำว่างเพิ่มขึ้น"
+msgstr ""
+"หน่วยความจำไม่พอที่จะเก็บรูปภาพขนาด %lux%lu กรุณาปิดแอปพลิเคชันที่ไม่ใช้แล้ว เพื่อจะได้มีหน่วยความจำว่างเพิ่มขึ้น"
 
 #: gdk-pixbuf/io-png.c:791
 msgid "Fatal error reading PNG image file"
@@ -579,35 +580,39 @@ msgid "Fatal error reading PNG image file: %s"
 msgstr "มีข้อผิดพลาดร้ายแรงขณะอ่านไฟล์รูปภาพ PNG: %s"
 
 #: gdk-pixbuf/io-png.c:937
-#, c-format
+#, fuzzy, c-format
 msgid ""
 "Invalid key “%s”. Keys for PNG text chunks must have at least 1 and at most 79 characters."
-msgstr "คีย์ “%s” ไม่ถูกต้อง คีย์ของชิ้นข้อความใน PNG ต้องมีระหว่าง 1 ถึง 79 ตัวอักษร"
+msgstr "คีย์ของชิ้นข้อความใน PNG ต้องมีระหว่าง 1 ถึง 79 ตัวอักษร"
 
 #: gdk-pixbuf/io-png.c:950
-#, c-format
+#, fuzzy, c-format
 msgid "Invalid key “%s”. Keys for PNG text chunks must be ASCII characters."
-msgstr "คีย์ “%s” ไม่ถูกต้อง คีย์ของชิ้นข้อความใน PNG ต้องใช้ตัวอักษร ASCII"
+msgstr "คีย์ของชิ้นข้อความใน PNG ต้องใช้ตัวอักษร ASCII"
 
 #: gdk-pixbuf/io-png.c:980
-#, c-format
+#, fuzzy, c-format
+#| msgid "Value for PNG text chunk %s cannot be converted to ISO-8859-1 encoding."
 msgid "Value for PNG text chunk '%s' cannot be converted to ISO-8859-1 encoding."
-msgstr "แปลงค่าของชิ้นข้อความใน PNG ('%s') ไปเป็น ISO-8859-1 ไม่สำเร็จ"
+msgstr "แปลงค่าของชิ้นข้อความใน PNG (%s) ไปเป็น ISO-8859-1 ไม่สำเร็จ"
 
 #: gdk-pixbuf/io-png.c:992
-#, c-format
+#, fuzzy, c-format
+#| msgid "Color profile has invalid length %d."
 msgid "Color profile has invalid length %d"
 msgstr "โพรไฟล์สีมีความยาว %d ซึ่งไม่ถูกต้อง"
 
 #: gdk-pixbuf/io-png.c:1004
-#, c-format
+#, fuzzy, c-format
+#| msgid "PNG compression level must be a value between 0 and 9; value '%d' is not allowed."
 msgid "PNG compression level must be a value between 0 and 9; value “%s” is invalid"
-msgstr "ระดับการบีบอัดข้อมูล PNG ต้องอยู่ระหว่าง 0 ถึง 9  ค่า “%s” ที่ตั้งใช้ไม่ได้"
+msgstr "ระดับการบีบอัดข้อมูล PNG ต้องอยู่ระหว่าง 0 ถึง 9  ค่า '%d' ที่ตั้งใช้ไม่ได้"
 
 #: gdk-pixbuf/io-png.c:1018
-#, c-format
+#, fuzzy, c-format
+#| msgid "JPEG quality must be a value between 0 and 100; value '%d' is not allowed."
 msgid "PNG %s must be greater than zero; value “%s” is not allowed"
-msgstr "PNG %s ต้องมีค่ามากกว่าศูนย์  ค่า “%s” ที่ตั้งใช้ไม่ได้"
+msgstr "คุณภาพของรูปภาพ JPEG ต้องอยู่ระหว่าง 0 และ 100  ค่า '%d' ที่ตั้งใช้ไม่ได้"
 
 #: gdk-pixbuf/io-png.c:1246
 msgctxt "image format"
@@ -889,8 +894,10 @@ msgid "Cannot read XPM colormap"
 msgstr "อ่านตารางสีของ XPM ไม่สำเร็จ"
 
 #: gdk-pixbuf/io-xpm.c:610
+#, fuzzy
+#| msgid "Dimensions of TIFF image too large"
 msgid "Dimensions do not match data"
-msgstr "ขนาดกว้างยาวไม่ตรงกับข้อมูล"
+msgstr "รูปภาพ TIFF มีขนาดกว้างยาวที่ใหญ่เกินไป"
 
 #: gdk-pixbuf/io-xpm.c:806
 msgid "Failed to write to temporary file when loading XPM image"
@@ -1018,7 +1025,8 @@ msgstr "XPM"
 #~ msgstr "รูปแบบ GdkPixdata"
 
 #, c-format
-#~ msgid "PNG compression level must be a value between 0 and 9; value '%s' could not be parsed."
+#~ msgid ""
+#~ "PNG compression level must be a value between 0 and 9; value '%s' could not be parsed."
 #~ msgstr "ระดับการบีบอัดข้อมูล PNG ต้องอยู่ระหว่าง 0 ถึง 9  ค่า '%s' ที่ตั้งใช้ไม่ได้"
 
 #~ msgid "The PNG image format"

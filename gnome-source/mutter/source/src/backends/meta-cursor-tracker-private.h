@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "backends/meta-cursor.h"
 #include "backends/meta-cursor-renderer.h"
 #include "meta/meta-cursor-tracker.h"
 
@@ -28,14 +29,31 @@ struct _MetaCursorTrackerClass
 {
   GObjectClass parent_class;
 
-  ClutterCursor * (* get_sprite) (MetaCursorTracker *tracker);
+  void (* set_force_track_position) (MetaCursorTracker *tracker,
+                                     gboolean           is_enabled);
+  MetaCursorSprite * (* get_sprite) (MetaCursorTracker *tracker);
 };
 
-void meta_cursor_tracker_set_current_cursor (MetaCursorTracker *tracker,
-                                             ClutterCursor     *cursor);
+void     meta_cursor_tracker_set_window_cursor   (MetaCursorTracker *tracker,
+                                                  MetaCursorSprite  *cursor_sprite);
+void     meta_cursor_tracker_unset_window_cursor (MetaCursorTracker *tracker);
+void     meta_cursor_tracker_set_root_cursor     (MetaCursorTracker *tracker,
+                                                  MetaCursorSprite  *cursor_sprite);
 
-void meta_cursor_tracker_invalidate_position (MetaCursorTracker *tracker);
+void     meta_cursor_tracker_invalidate_position (MetaCursorTracker *tracker);
+
+void meta_cursor_tracker_track_position (MetaCursorTracker *tracker);
+
+void meta_cursor_tracker_untrack_position (MetaCursorTracker *tracker);
 
 MetaBackend * meta_cursor_tracker_get_backend (MetaCursorTracker *tracker);
 
+void meta_cursor_tracker_notify_cursor_changed (MetaCursorTracker *tracker);
+
 void meta_cursor_tracker_destroy (MetaCursorTracker *tracker);
+
+void meta_cursor_tracker_register_cursor_sprite (MetaCursorTracker *tracker,
+                                                 MetaCursorSprite  *sprite);
+
+void meta_cursor_tracker_unregister_cursor_sprite (MetaCursorTracker *tracker,
+                                                   MetaCursorSprite  *sprite);

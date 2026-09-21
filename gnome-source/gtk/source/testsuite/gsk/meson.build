@@ -1,26 +1,16 @@
 compare_render = executable('compare-render',
   ['compare-render.c', '../reftests/reftest-compare.c', 'replay-node.c'],
-  dependencies: libgtk_private_dep,
-  c_args: common_cflags + ['-DGTK_COMPILATION'],
-)
-
-node_parser = executable('node-parser', 
-  [ 'node-parser.c' ],
-  link_with: testutils_lib,
   dependencies: libgtk_dep,
   c_args: common_cflags,
 )
 
-serialize = executable('serialize',
-  [ 'serialize.c' ],
-  link_with: testutils_lib,
+node_parser = executable('node-parser', 'node-parser.c',
   dependencies: libgtk_dep,
   c_args: common_cflags,
 )
 
 compare_render_tests = [
-  'arithmetic-bounds',
-  'big-box-glyph',
+  'big-box-glyph-nocairo',
   'big-checkerboard',
   'big-checkerboard-scaled-down',
   'big-checkerboard-scaled-down-nearest',
@@ -31,23 +21,15 @@ compare_render_tests = [
   'blend-in-rotate',
   'blend-normal',
   'blurred-lines',
-  'blur-child-bounds-oversize',
+  'blur-child-bounds-oversize-nogl',
   'blur-contents-outside-of-clip',
-  'blur-huge-contents-outside-of-clip',
-  'blur-scaled',
+  'blur-huge-contents-outside-of-clip-nogl',
   'border-bottom-right',
-  'border-circle-with-non-pixel-aligned-center',
-  'border-colorstates',
   'border-one-rounded',
   'border-opacity',
   'border-zero-width-color',
   'borders-rotated',
   'borders-scaled',
-  'bug-early-exit-doesnt-clear-clip-mask',
-  'cairo-coordinates',
-  'cairo-translations',
-  'clip-all-clipped-issue-7044',
-  'clip-all-snaps',
   'clip-contained',
   'clip-coordinates-2d',
   'clip-coordinates-nocairo',
@@ -55,46 +37,22 @@ compare_render_tests = [
   'clip-in-rounded-clip2',
   'clip-in-rounded-clip3',
   'clip-in-smaller-rounded-clip',
-  'clip-intersection-background',
-  'clip-intersection-fail-opacity',
-  'clip-mask-clip',
-  'clip-mask-opacity-tracking',
-  'clip-mask-restore-failure',
-  'clip-mask-rotations',
-  'clip-mask-with-clip-mask',
-  'clip-mask-with-contained-clip',
-  'clip-mask-wrap-mode',
-  'clip-nested1',
-  'clip-translate-offscreen',
+  'clip-intersection-fail-opacity-nogl',
   'clipped-repeat',
   'clipped_rounded_clip',
+  'clip-nested1',
+  'clip-translate-offscreen',
   'color-blur0',
-  'color-dodge-nan',
   'color-matrix-identity',
   'color-matrix-merge',
   'color-matrix-parsing',
-  'color-states',
-  'composite-rotated-mask',
-  'composite-source-all-opaque-with-complex-mask',
-  'container-bilevel-opacity',
-  'copy-paste',
-  'copy-paste-transformed',
-  'copy-transform-order',
-  'component-transfer-levels',
-  'component-transfer-linear',
-  'composite-clipped-source',
-  'composite-everything',
-  'conic-gradient-premultiplied-nocairo',
   'conic-gradient-with-64-colorstops',
   'container-single-child-offscreen-for-opacity',
   'crossfade-clip-both-children',
-  'cross-fade-clipped-with-huge-children',
+  'cross-fade-clipped-with-huge-children-nogl',
   'cross-fade-in-opacity',
   'cross-fade-in-rotate',
   'css-background',
-  'dihedral',
-  'dihedral-f',
-  'dmabuf-mipmap',
   'empty-blend',
   'empty-blur',
   'empty-border',
@@ -103,16 +61,13 @@ compare_render_tests = [
   'empty-color',
   'empty-color-matrix',
   'empty-container',
-  'empty-copy',
   'empty-cross-fade',
   'empty-debug',
-  'empty-glshader',
   'empty-inset-shadow',
   'empty-linear-gradient',
   'empty-mask',
   'empty-opacity',
   'empty-outset-shadow',
-  'empty-paste',
   'empty-repeat',
   'empty-rounded-clip',
   'empty-shadow',
@@ -120,98 +75,55 @@ compare_render_tests = [
   'empty-transform',
   'fill',
   'fill2',
-  'fill-clipped',
-  'fill-fractional-translate-gradient',
-  'fill-fractional-translate',
-  'fill-huge-path',
-  'fill-node-without-path',
+  'fill-clipped-nogl',
+  'fill-fractional-translate-gradient-nogl',
+  'fill-fractional-translate-nogl',
   'fill-opacity',
-  'fill-scale-alignment-nocairo',
   'fill-scaled-up',
-  'fill-scale-up-with-bad-clip',
-  'fill-subpixel-offsets-horizontal-nocairo',
-  'fill-subpixel-offsets-vertical-nocairo',
-  'fill-subpixel-shift-nocairo',
-  'fill-tiny-3d-scale-nocairo',
-  'fill-with-3d-contents-nocairo',
-  'globals-stress',
+  'fill-with-3d-contents-nogl-nocairo',
   'glyph-cache-overflow',
   'glyph-cache-overflow-slices',
   'glyph-hinting-none',
   'glyph-hinting-slight',
-  'glyph-hinting-position-nocairo',
+  'glyph-hinting-position-nogl-nocairo',
   'glyph-subpixel-position',
   'glyph-scaling',
   'glyph-antialias',
-  'gradient-premultiply-end-values',
-  'gradient-with-lots-of-colorstops-double-clips',
   'huge-height',
-  'huge-height-hdr',
   'huge-width',
-  'huge-width-hdr',
   'inset-shadow-multiple',
-  'inter-hinting',
-  'inter-optical-scaling',
   'invalid-transform',
-  'isolation',
   'issue-3615',
-  'issue-8184',
-  'linear-gradient-averages-nocairo',
-  'linear-gradient-interpolation-nocairo',
   'linear-gradient-3d-nocairo',
-  'linear-gradient-nonorthogonal-scale',
-  'linear-gradient-pad-color',
-  'linear-gradient-premultiplied-nocairo',
-  'linear-gradient-unpremultiplied-nocairo',
+  'linear-gradient-nonorthogonal-scale-nogl',
   'linear-gradient-with-64-colorstops',
-  'lots-of-offscreens',
   'mask',
   'mask-clipped-inverted-alpha',
-  'mask-empty-mask',
-  'mask-empty-source',
-  'mask-half-pixel',
   'mask-modes',
   'mask-modes-in-opacity',
   'mask-modes-with-alpha',
   'mask-texture-color-alpha',
-  'mask-with-opacity-nondisjoint-source',
-  'memoryformats',
   'mipmap-generation-later',
   'mipmap-with-1x1',
   'nested-rounded-clips',
-  'occlusion-wrong-rect-contains',
   'offscreen-forced-downscale',
-  'offscreen-forced-downscale-all-clipped',
-  'offscreen-fractional-translate',
-  'offscreen-pixel-alignment-nocairo',
+  'offscreen-fractional-translate-nogl',
+  'offscreen-pixel-alignment-nogl-nocairo',
   'offscreen-pixel-alignment2',
-  'opacity-blocks-clear',
   'opacity_clip',
   'opacity-colormatrix-combinations',
   'opacity-overdraw',
   'opacity-overlapping-children',
-  'outset-shadow-corner-blur',
-  'outset-shadow-corner-blur-huge-nocairo',
-  'outset-shadow-corner-blur-normal',
-  'outset-shadow-corner-blur-tiny',
   'outset_shadow_offset_both',
   'outset_shadow_offset_x',
   'outset_shadow_offset_y',
   'outset_shadow_rounded_top',
   'outset-shadow-scale-offset',
   'outset_shadow_simple',
-  'paste-behind-clip',
-  'paste-no-porter-duff',
-  'paste-occluded',
-  'paste-with-depth',
-  'premul-color',
-  'radial-gradient-pad-color',
-  'radial-gradient-premultiplied-nocairo',
   'radial-gradient-with-64-colorstops',
   'repeat',
   'repeating-linear-gradient-edge-colors',
   'repeating-radial-gradient-edge-colors',
-  'repeat-color',
   'repeat-child-bounds',
   'repeat-empty-child-bounds',
   'repeat-huge-overdraw',
@@ -219,22 +131,15 @@ compare_render_tests = [
   'repeat-no-repeat',
   'repeat-node-tiling-horizontal',
   'repeat-node-tiling-vertical',
-  'repeat-none-child-bounds',
-  'repeat-noninteger-nocairo',
-  'repeat-pad-noninteger-child-bounds',
-  'repeat-reflect-pixel-alignment',
-  'repeat-repeat',
+  'repeat-noninteger-nogl-nocairo',
   'repeat-repeats',
-  'repeat-repeats-nested',
+  'repeat-repeats-nested-nogl',
   'repeat-scaling',
-  'repeat-snap',
   'repeat-texture',
-  'repeat-tiny-nocairo',
-  'repeat-unaligned-bounds',
+  'repeat-tiny-nogl-nocairo',
   'repeating-gradient-scaled',
   'reuse-of-texture-nested-in-offscreens',
-  'rounded-clip-intersection-background',
-  'rounded-clip-with-huge-bounds',
+  'rounded-clip-with-huge-bounds-nogl',
   'scale-textures-negative-ngl',
   'scale-up-down',
   'scaled-cairo',
@@ -244,90 +149,39 @@ compare_render_tests = [
   'scale0-crash',
   'shadow-behind',
   'shadow-clip-contents',
-  'shadow-dont-double-clip',
   'shadow-huge-offset',
   'shadow-in-opacity',
   'shadow-offset-clip',
   'shadow-offset-to-outside-clip',
   'shadow-opacity',
   'shadow-replay-nocairo',
-  'shadow-texture-formats',
   'shrink-rounded-border',
-  'small-cairo-node-fractional-edge-case',
   'stroke',
-  'stroke-clipped',
-  'stroke-fractional-translate-gradient',
-  'stroke-fractional-translate',
-  'stroke-huge-path',
+  'stroke-clipped-nogl',
+  'stroke-fractional-translate-gradient-nogl',
+  'stroke-fractional-translate-nogl',
   'stroke-opacity',
-  'stroke-scale-alignment-nocairo',
-  'stroke-tiny-3d-scale-nocairo',
-  'stroke-with-3d-contents-nocairo',
+  'stroke-with-3d-contents-nogl-nocairo',
   'subpixel-positioning',
-  'subpixel-positioning-hidpi-nocairo',
-  'subpixel-positioning-via-translate',
+  'subpixel-positioning-hidpi-nogl-nocairo',
   'text-color-mix',
   'text-glyph-lsb',
   'text-mixed-color-nocairo',
   'text-mixed-color-colrv1',
-  'text-tiny-3d-scale-nocairo',
-  'texture-all-snaps',
   'texture-coords',
-  'texture-offscreen-mipmap',
   'texture-scale-filters-nocairo',
   'texture-scale-magnify-10000x',
   'texture-scale-magnify-rotate',
-  'texture-scale-nearest-noninteger-scaled',
+  'texture-scale-nearest-noninteger-scaled-nogl',
   'texture-scale-nearest-vs-linear',
   'texture-scale-offset',
   'texture-scale-stripes',
   'texture-url',
-  'transform-huge-child',
-  'transform-huge-child-3d-nocairo',
+  'transform-huge-child-nogl',
+  'transform-huge-child-3d-nocairo-nogl',
   'transform-in-transform',
   'transform-in-transform-in-transform',
-  'transform-scale-too-small-nocairo',
-  'yuv-matrix-d3d12',
-  'yuv-matrix-dmabuf-nv12',
-  'yuv-matrix-dmabuf-rgba',
-  'yuv-matrix-dmabuf-yuyv',
-  'yuv-matrix-memory-nv12',
-  'yuv-matrix-memory-rgba',
-  'yuv-matrix-memory-yuyv',
   'z-transform-clipping-bounds-nocairo',
-  'zero-length-path-stroke',
-]
-
-tests_with_rounding_issues = [
-  'turbulence-basic',
-  'turbulence-clouds',
-  'turbulence-coarse',
-  'turbulence-fine',
-  'turbulence-fractal',
-  'turbulence-seed1',
-  'turbulence-turbulence',
-  'turbulence-transformed',
-]
-
-# These tests use dmabufs and fail in testrunners that have
-# dmabuf support but no access to /dev/udmabuf.
-# For that purpose we add them to the 'needs-udmabuf' suite
-# with this list
-needs_udmabuf = [
-  'yuv-matrix-dmabuf-nv12',
-  'yuv-matrix-dmabuf-rgba',
-  'yuv-matrix-dmabuf-yuyv',
-]
-
-# These tests are either slow or need lots of memory.
-# So we don't run them in parallel with other such tests to not
-# cause CI failures
-demanding_tests = [
-  'huge-height',
-  'huge-height-hdr',
-  'huge-width',
-  'huge-width-hdr',
-  'lots-of-offscreens',
 ]
 
 # these are too sensitive to differences in the renderers
@@ -341,176 +195,121 @@ informative_render_tests = [
 ]
 
 renderers = [
-  { 'name': 'cairo' },
   { 'name': 'gl' },
+  { 'name': 'broadway' },
+  { 'name': 'cairo' },
+  { 'name': 'ngl' },
+  { 'name': 'vulkan' },
 ]
-if broadway_enabled
-  renderers += [
-    { 'name': 'broadway' }
-  ]
-endif
-if have_vulkan
-  renderers += [
-    { 'name': 'vulkan' }
-  ]
-endif
+
+compare_xfails_small_texture = [
+  'big-checkerboard',
+  'big-checkerboard-scaled-down',
+  'big-checkerboard-scaled-down2',
+  'repeat-repeats', # only fails when rotated
+  'glyph-scaling',
+]
 
 variants = {
   'plain': '--plain',
-  'flip': '--flip',
-  'rotate': '--rotate',
-  'repeat': '--repeat',
-  'mask': '--mask',
-  'replay': '--replay',
-  'clip': '--clip',
-  'colorflip': '--colorflip',
-  'opaque': '--opaque',
-  'serialize': '--serialize',
+  'flipped': '--flip',
+  'rotated': '--rotate',
+  'repeated': '--repeat',
+  'masked': '--mask',
+  'replayed': '--replay',
+  'clipped': '--clip',
+  'colorflipped': '--colorflip',
 }
 
 compare_xfails = {
-  'gl': {
+  'ngl': {
+    # the gradients are prone to rounding errors which become
+    # more pronounced in small clips, it seems
+    'radial-gradient-with-64-colorstops': ['clipped', 'colorflipped'],
+    'conic-gradient-with-64-colorstops': ['clipped', 'colorflipped'],
+    'blur-child-bounds-oversize-nogl': ['clipped'], # 6450
+    'rounded-clip-with-huge-bounds-nogl': ['plain','flipped','rotated','repeated','masked','replayed','clipped','colorflipped'], # 6532
     'big-checkerboard': ['clipped'], # 6444
-    'blur-child-bounds-oversize': ['clip'], # 6450
-    'cairo-coordinates': ['serialize'],
-    'clip-mask-rotations': ['replay'], # changes transform order causing rotated offscreen
-    'rounded-clip-with-huge-bounds': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'], # 6532
-    'yuv-matrix-dmabuf-nv12': ['serialize'],
-    'yuv-matrix-dmabuf-yuyv': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
   },
   'vulkan': {
-    'big-checkerboard': ['clip'], # 6444
-    'blur-child-bounds-oversize': ['clip'], # 6450
-    'cairo-coordinates': ['serialize'],
-    'clip-mask-rotations': ['replay'], # changes transform order causing rotated offscreen
-    'repeat-repeats-nested': ['clip'], # 6522
-    'repeating-radial-gradient-edge-colors': ['colorflip'],
-    'rounded-clip-with-huge-bounds': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'], # 6532
-    'yuv-matrix-dmabuf-nv12': ['serialize'],
-    'yuv-matrix-dmabuf-yuyv': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
+    'radial-gradient-with-64-colorstops': ['clipped', 'colorflipped'],
+    'conic-gradient-with-64-colorstops': ['clipped', 'colorflipped'],
+    'blur-child-bounds-oversize-nogl': ['clipped'], # 6450
+    'repeat-repeats-nested-nogl': ['clipped'], # 6522
+    'repeating-radial-gradient-edge-colors': ['colorflipped'],
+    'rounded-clip-with-huge-bounds-nogl': ['plain','flipped','rotated','repeated','masked','replayed','clipped','colorflipped'], # 6532
+    'big-checkerboard': ['clipped'], # 6444
   },
-  'cairo': {
-    'cairo-coordinates': ['serialize'],
-    'clip-mask-rotations': ['replay'], # changes transform order causing rotated offscreen
-    'inter-hinting': ['flip', 'rotate'],
-    'inter-optical-scaling': ['flip', 'rotate'],
-    'fill-fractional-translate': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
-    'fill-fractional-translate-gradient': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
-    'stroke-fractional-translate': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
-    'stroke-fractional-translate-gradient': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
-    'yuv-matrix-dmabuf-nv12': ['serialize'],
-    'yuv-matrix-dmabuf-yuyv': ['plain','flip','rotate','repeat','mask','replay','clip','colorflip', 'serialize'],
-  }
+  'gl': {
+    # 6525
+    'container-single-child-offscreen-for-opacity': ['rotated'],
+    'cross-fade-in-opacity': ['rotated'],
+    'mask-modes-in-opacity': ['rotated'],
+    'opacity-overlapping-children': ['rotated'],
+    'scaled-texture-scale': ['rotated'],
+    'shadow-opacity': ['rotated'],
+    'texture-scale-nearest-vs-linear': ['rotated'],
+  },
 }
 
-testlists = [
-  {
-    'tests': compare_render_tests,
-    'extra_args': [],
-  },
-  {
-    'tests': tests_with_rounding_issues,
-    'extra_args': ['--tolerance=2'],
-  }
-]
+foreach renderer : renderers
+  renderer_name = renderer.get('name')
+  renderer_xfails = compare_xfails.get(renderer_name, { })
 
-foreach testlist : testlists
-  foreach renderer : renderers
-    renderer_name = renderer.get('name')
-    renderer_xfails = compare_xfails.get(renderer_name, { })
+  foreach testname : compare_render_tests
+    test_xfails = renderer_xfails.get(testname, [])
+    exclude_term = '-no' + renderer_name
 
-    foreach testname : testlist.get('tests')
-      test_xfails = renderer_xfails.get(testname, [])
-      exclude_term = '-no' + renderer_name
+    suites = [
+      'gsk',
+      'gsk-compare',
+      'gsk-' + renderer_name,
+      'gsk-compare-' + renderer_name,
+    ]
 
-      suites = [
-        'gsk',
-        'gsk-compare',
-        'gsk-' + renderer_name,
-        'gsk-compare-' + renderer_name,
-      ]
+    if compare_xfails_small_texture.contains(testname)
+      suites += 'wayland_gles2_failing'
+    endif
 
-      test_env = [
-        'GSK_RENDERER=' + renderer_name,
-        'GTK_A11Y=test',
-        'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
-        'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
-        'TEST_FONT_DIR=@0@/fonts'.format(meson.current_source_dir())
-      ]
+    test_env = [
+      'GSK_RENDERER=' + renderer_name,
+      'GTK_A11Y=test',
+      'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
+      'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
+      'TEST_FONT_DIR=@0@/fonts'.format(meson.current_source_dir())
+    ]
 
-      if ((not testname.contains(exclude_term)))
+    if ((not testname.contains(exclude_term)) and
+        (renderer_name != 'broadway' or broadway_enabled) and
+        (renderer_name != 'vulkan' or have_vulkan))
 
-        foreach variant : variants.keys()
-          extra_suites = [ 'gsk-compare-' + variant + '-' + renderer_name ]
-          if test_xfails.contains(variant) or (renderer_name == 'cairo' and variant == 'clip')
-            extra_suites += ['failing']
-          endif
-          if needs_udmabuf.contains(testname)
-            extra_suites += ['needs-udmabuf']
-          endif
-          test('compare ' + renderer_name + ' ' + testname + ' ' + variant, compare_render,
-            protocol: 'tap',
-            args: [
-              '--tap',
-              '-k',
-            ] + testlist.get('extra_args') +
-            [
-              variants.get(variant),
-              '--output', join_paths(meson.current_build_dir(), 'compare', renderer_name),
-              join_paths(meson.current_source_dir(), 'compare', testname + '.node'),
-              join_paths(meson.current_source_dir(), 'compare', testname + '.png'),
-            ],
-            env: test_env,
-            suite: suites + extra_suites,
-            is_parallel: not demanding_tests.contains (testname),
-          )
-        endforeach
-      endif
-    endforeach
+      foreach variant : variants.keys()
+        extra_suites = [ 'gsk-compare-' + variant + '-' + renderer_name ]
+        if test_xfails.contains(variant) or (renderer_name == 'cairo' and variant == 'clipped')
+          extra_suites += ['failing']
+        endif
+        test('compare ' + renderer_name + ' ' + testname + ' ' + variant, compare_render,
+          args: [
+            variants.get(variant),
+            '--output', join_paths(meson.current_build_dir(), 'compare', renderer_name),
+            join_paths(meson.current_source_dir(), 'compare', testname + '.node'),
+            join_paths(meson.current_source_dir(), 'compare', testname + '.png'),
+          ],
+          env: test_env,
+          suite: suites + extra_suites
+        )
+      endforeach
+    endif
   endforeach
 endforeach
 
-serialize_xfails = [
-  'cairo-coordinates',
-]
-
-foreach testname : compare_render_tests
-  extra_suites = []
-  if serialize_xfails.contains(testname)
-    extra_suites += ['failing']
-  endif
-  test('serialize ' + testname, serialize,
-          protocol: 'tap',
-          args: [
-            '--tap',
-            '-k',
-            join_paths(meson.current_source_dir(), 'compare', testname + '.node'),
-          ],
-          env: test_env + [
-            'GDK_DISABLE=gl,vulkan'
-          ],
-          suite: [ 'gsk', 'gsk-serialize', ] + extra_suites,
-        )
-  
-endforeach
-
 node_parser_tests = [
-  'at-rule.node',
   'blend.node',
   'blend-unknown-mode.errors',
   'blend-unknown-mode.node',
   'blend-unknown-mode.ref.node',
   'border.node',
-  'box-shadow.node',
-  'cairo.node',
   'color.node',
-  'color2.node',
-  'color3.node',
-  'color4.node',
-  'color-matrix.node',
-  'color-matrix.ref.node',
-  'component-transfer.node',
-  'component-transfer.ref.node',
   'conic-gradient.node',
   'conic-gradient.ref.node',
   'crash1.errors',
@@ -542,8 +341,6 @@ node_parser_tests = [
   'empty-color.ref.node',
   'empty-color-matrix.node',
   'empty-color-matrix.ref.node',
-  'empty-component-transfer.node',
-  'empty-component-transfer.ref.node',
   'empty-container.node',
   'empty-container.ref.node',
   'empty-cross-fade.node',
@@ -580,44 +377,24 @@ node_parser_tests = [
   'empty-texture-scale.ref.node',
   'empty-transform.node',
   'empty-transform.ref.node',
-  'empty-turbulence.node',
   'fill.node',
   'fill.ref.node',
   'fill2.node',
   'fill2.ref.node',
-  'fill3.node',
-  'fill3.ref.node',
-  'fill4.node',
-  'fill4.ref.node',
-  'fill5.node',
-  'fill5.ref.node',
-  'fill6.node',
-  'fill6.ref.node',
-  'fill-not-a-path.node',
-  'fill-not-a-path.ref.node',
-  'fill-not-a-path.errors',
   'glshader.node',
   'glshader.ref.node',
   'glshader.errors',
   'gradient-fail.node',
   'gradient-fail.ref.node',
   'gradient-fail.errors',
-  'gradients.node',
-  'gradients.ref.node',
-  'huge-angle.node',
-  'huge-angle.ref.node',
   'mask-modes.node',
   'mask-modes.ref.node',
-  'no-unnecessary-names.node',
   'node-names.node',
   'node-names-everywhere.errors',
   'node-names-everywhere.node',
   'node-names-everywhere.ref.node',
   'radial-gradient.node',
   'radial-gradient.ref.node',
-  'radial-gradient-start-end.errors',
-  'radial-gradient-start-end.node',
-  'radial-gradient-start-end.ref.node',
   'repeating-linear-gradient.node',
   'repeating-linear-gradient.ref.node',
   'repeating-radial-gradient.node',
@@ -627,7 +404,6 @@ node_parser_tests = [
   'shadow-fail.node',
   'shadow-fail.ref.node',
   'shadow-fail.errors',
-  'srgb-high-accuracy.node',
   'string-error.errors',
   'string-error.node',
   'string-error.ref.node',
@@ -662,8 +438,6 @@ node_parser_tests = [
   'transform-fail.node',
   'transform-fail.ref.node',
   'transform-fail.errors',
-  'turbulence.node',
-  'turbulence.ref.node',
   # this fails in f40 since libpng changes the pngs while reencoding
   #'widgetfactory.node',
 ]
@@ -678,8 +452,7 @@ foreach test : node_parser_tests
         'GSK_RENDERER=opengl',
         'GTK_A11Y=test',
         'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
-        'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
-        'FONTCONFIG_FILE=@0@/fonts/fonts.conf'.format(meson.current_source_dir()),
+        'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir())
       ],
       protocol: 'exitcode',
       suite: [ 'gsk', 'gsk-nodeparser' ]
@@ -689,32 +462,23 @@ endforeach
 
 # offload does not work outside of linux
 if os_linux
-  offload = executable('offload',
-    [ 'offload.c', 'gskrendernodeattach.c' ],
-    link_with: testutils_lib,
-    dependencies : libgtk_private_dep,
-    c_args: common_cflags + [ '-DGTK_COMPILATION=1' ],
+  offload = executable('offload', 'offload.c', 'gskrendernodeattach.c',
+    dependencies : libgtk_static_dep,
+    c_args: common_cflags,
   )
 
   offload_tests = [
-    'background.node',
-    'background2.node',
-    'bad-transform.node',
-    'clipped.node',
-    'complex-clip.node',
-    'composite-after.node',
-    'composite-before.node',
-    'copied-no-offload.node',
-    'copy-allows-offload.node',
+    'simple.node',
+    'transforms.node',
     'deep.node',
     'move.node',
-    'nested.node',
-    'not-clipped.node',
-    'simple.node',
-    'source.node',
     'start_offloading.node',
     'stop_offloading.node',
-    'transforms.node',
+    'source.node',
+    'nested.node',
+    'clipped.node',
+    'not-clipped.node',
+    'complex-clip.node',
   ]
 
   foreach test : offload_tests
@@ -724,69 +488,25 @@ if os_linux
           join_paths(meson.current_source_dir(), 'offload', test)
         ],
         env: [
+          'GSK_RENDERER=opengl',
           'GTK_A11Y=test',
           'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
-          'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
-          'GDK_DEBUG=force-offload:default-settings:no-portals',
+          'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir())
         ],
         protocol: 'exitcode',
         suite: ['gsk', 'offload'],
       )
     endif
   endforeach
-
-  no_color_offload_tests = [
-    'default-cs.node',
-    'yuv-variants-without-color.node',
-  ]
-
-  foreach test : no_color_offload_tests
-    test('offload ' + test, offload,
-      args: [
-        join_paths(meson.current_source_dir(), 'offload', test)
-      ],
-      env: [
-        'GTK_A11Y=test',
-        'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
-        'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
-        'GDK_DEBUG=force-offload:default-settings:no-portals',
-        'GDK_WAYLAND_DISABLE=wp_color_manager_v1,wp_color_representation_manager_v1',
-      ],
-      protocol: 'exitcode',
-      suite: ['gsk', 'offload'],
-    )
-  endforeach
-
-  color_offload_tests = [
-    'yuv-variants-with-color.node',
-  ]
-
-  foreach test : color_offload_tests
-    test('offload ' + test, offload,
-      args: [
-        join_paths(meson.current_source_dir(), 'offload', test)
-      ],
-      env: [
-        'GTK_A11Y=test',
-        'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
-        'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
-        'GDK_DEBUG=force-offload:color-mgmt:default-settings:no-portals',
-        'REQUIRE_COLOR_PROTOCOLS=1',
-      ],
-      protocol: 'exitcode',
-      suite: ['gsk', 'offload'],
-    )
-  endforeach
-
 endif
 
 tests = [
   [ 'normalize', [ 'normalize.c', '../reftests/reftest-compare.c' ] ],
+  [ 'transform' ],
   [ 'shader' ],
-  [ 'opaque' ],
   [ 'path', [ 'path-utils.c' ], [ 'flaky'] ],
   [ 'path-special-cases' ],
-  ['path-intersect'],
+  [ 'scaling' ],
 ]
 
 test_cargs = []
@@ -815,19 +535,14 @@ foreach t : tests
 endforeach
 
 internal_tests = [
-  [ 'atlasallocator', ['atlasallocator.c', '../../gsk/gpu/gskatlasallocator.c' ] ],
   [ 'boundingbox'],
   [ 'curve', [ ], [ 'flaky' ]],
   [ 'curve-special-cases' ],
-  [ 'curve-intersect' ],
+  [ 'diff' ],
   [ 'half-float' ],
-  [ 'not-diff' ],
   [ 'misc'],
   [ 'path-private' ],
-  [ 'rect'],
   [ 'rounded-rect'],
-  [ 'scaling', [ 'scaling.c', '../gdk/gdktestutils.c' ] ],
-  [ 'transform' ],
 ]
 
 foreach t : internal_tests
@@ -837,7 +552,7 @@ foreach t : internal_tests
 
   test_exe = executable(test_name,
     sources: test_srcs,
-    dependencies : libgtk_private_dep,
+    dependencies : libgtk_static_dep,
     c_args : test_cargs + common_cflags + ['-DGTK_COMPILATION'],
   )
 

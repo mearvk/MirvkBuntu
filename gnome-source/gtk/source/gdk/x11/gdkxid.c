@@ -96,8 +96,6 @@ _gdk_x11_display_remove_window (GdkDisplay *display,
  *
  * Returns: (transfer none) (type GdkX11Surface): the `GdkSurface` wrapper
  *   for the native  window
- *
- * Deprecated: 4.18
  */
 GdkSurface *
 gdk_x11_surface_lookup_for_display (GdkDisplay *display,

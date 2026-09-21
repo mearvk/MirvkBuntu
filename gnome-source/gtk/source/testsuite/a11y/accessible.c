@@ -23,8 +23,6 @@ enum {
   NUM_PROPERTIES
 };
 
-static GParamSpec *props[NUM_PROPERTIES] = { NULL, };
-
 static GtkATContext *
 test_object_accessible_get_at_context (GtkAccessible *accessible)
 {
@@ -98,10 +96,7 @@ test_object_class_init (TestObjectClass *class)
   gobject_class->set_property = test_object_set_property;
   gobject_class->get_property = test_object_get_property;
 
-  props[PROP_ACCESSIBLE_ROLE] = g_param_spec_override ("accessible-role",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACCESSIBLE), "accessible-role"));
-
-  g_object_class_install_properties (gobject_class, NUM_PROPERTIES, props);
+  g_object_class_override_property (gobject_class, PROP_ACCESSIBLE_ROLE, "accessible-role");
 }
 
 static TestObject *
@@ -654,7 +649,6 @@ main (int argc, char *argv[])
   g_test_add_data_func ("/a11y/property/value-min", GUINT_TO_POINTER (GTK_ACCESSIBLE_PROPERTY_VALUE_MIN), test_number_property);
   g_test_add_data_func ("/a11y/property/value-now", GUINT_TO_POINTER (GTK_ACCESSIBLE_PROPERTY_VALUE_NOW), test_number_property);
   g_test_add_data_func ("/a11y/property/value-text", GUINT_TO_POINTER (GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT), test_string_property);
-  g_test_add_data_func ("/a11y/property/help-text", GUINT_TO_POINTER (GTK_ACCESSIBLE_PROPERTY_HELP_TEXT), test_string_property);
 
   g_test_add_func ("/a11y/property/update-multiple", test_update_multiple_properties);
 
@@ -666,7 +660,7 @@ main (int argc, char *argv[])
   g_test_add_data_func ("/a11y/relation/controls", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_CONTROLS), test_reflist_relation);
   g_test_add_data_func ("/a11y/relation/described-by", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_DESCRIBED_BY), test_reflist_relation);
   g_test_add_data_func ("/a11y/relation/details", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_DETAILS), test_reflist_relation);
-  g_test_add_data_func ("/a11y/relation/error-message", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE), test_reflist_relation);
+  g_test_add_data_func ("/a11y/relation/error-message", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE), test_ref_relation);
   g_test_add_data_func ("/a11y/relation/flow-to", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_FLOW_TO), test_reflist_relation);
   g_test_add_data_func ("/a11y/relation/labelled-by", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_LABELLED_BY), test_reflist_relation);
   g_test_add_data_func ("/a11y/relation/owns", GUINT_TO_POINTER (GTK_ACCESSIBLE_RELATION_OWNS), test_reflist_relation);

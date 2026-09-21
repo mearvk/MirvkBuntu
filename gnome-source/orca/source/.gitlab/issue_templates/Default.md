@@ -1,47 +1,26 @@
-<!--
-This template is recommended both for bug reports and feature requests.
-
-Providing the requested information in the specified format makes it easier
-for us to understand and address your report.
--->
-
 ## Orca Version
-Note that versions prior to version 50.x are unsupported for non-critical
-issues. If you are reporting a non-critical issue for an unsupported version,
-your bug report may be closed for that reason.
+*Note that versions prior to version 49.x are unsupported for non-critical issues. If you are
+reporting a non-critical issue for an unsupported version, your bug report may be closed for
+that reason.*
 
-* Version of Orca (obtained via `orca -v`)
-* For bugs, is this a recent regression?
-* For bugs, version of Orca where the bug is not present (if known)
+* Version of Orca where the bug is present (obtained via `orca -v`)
+* If known, version of Orca where the bug is not present (is this a regression?)
 
-## Steps to Reproduce
+## Steps to Reproduce the Problem
 1. Step 1
 2. Step 2
 3. Step 3
 
 ## Expected Behavior
-Briefly describe what you expect to happen.
+Describe what you expect to happen
 
 ## Actual Behavior
-Briefly describe what actually happens.
+Describe what actually happens
 
-## Notes (Optional)
-Describe relevant details, if any. Please be concise. And please do not include
-lengthy analysis about possible causes.
+## Providing Debugging Output
+*Note: If your bug is reproducible 100% of the time using a common distro package, you may disregard
+the following request.*
 
-Examples for bug reports:
-* This happens with GTK version x, but not with GTK version y.
-* This happens in both Chromium and Firefox, but only when native caret
-  navigation is enabled.
-* This only happens with the Foo desktop environment; in the Bar desktop
-  environment things work as expected.
-
-Example for feature requests:
-* Because this feature does not exist, it takes a long time to do x and y.
-
-## Providing Orca Debugging Output (Optional)
-Note: If your bug is straightforward and reproducible 100% of the time using
-a common distro package, this is not needed.
-
-Please consider capturing full/verbose debugging output as described in
-https://orca.gnome.org/debugging.html and attaching it to this issue.
+Please consider capturing full/verbose debugging output as described in https://orca.gnome.org/debugging.html
+and attaching it to this issue. This debugging information is often extremely helpful to the developer
+who is trying to address your issue but is unable to reproduce it.

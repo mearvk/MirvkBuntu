@@ -24,7 +24,6 @@
 
 #include "gtkoverlaylayout.h"
 #include "gtkbuildable.h"
-#include "gtkbuilderprivate.h"
 #include "gtkmarshalers.h"
 #include "gtkprivate.h"
 #include "gtkscrolledwindow.h"
@@ -34,12 +33,10 @@
 /**
  * GtkOverlay
  *
- * Places “overlay” widgets on top of a single main child.
+ * `GtkOverlay` is a container which contains a single main child, on top
+ * of which it can place “overlay” widgets.
  *
- * <picture>
- *   <source srcset="overlay-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkOverlay" src="overlay.png">
- * </picture>
+ * ![An example GtkOverlay](overlay.png)
  *
  * The position of each overlay widget is determined by its
  * [property@Gtk.Widget:halign] and [property@Gtk.Widget:valign]
@@ -78,11 +75,8 @@ enum {
 static guint signals[LAST_SIGNAL] = { 0 };
 
 enum {
-  PROP_CHILD = 1,
-  N_PROPS
+  PROP_CHILD = 1
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static void gtk_overlay_buildable_init (GtkBuildableIface *iface);
 
@@ -324,15 +318,15 @@ gtk_overlay_class_init (GtkOverlayClass *klass)
   klass->get_child_position = gtk_overlay_get_child_position;
 
   /**
-   * GtkOverlay:child:
+   * GtkOverlay:child: (attributes org.gtk.Property.get=gtk_overlay_get_child org.gtk.Property.set=gtk_overlay_set_child)
    *
    * The main child widget.
    */
-  props[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
-                                           GTK_TYPE_WIDGET,
-                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_CHILD,
+                                   g_param_spec_object ("child", NULL, NULL,
+                                                        GTK_TYPE_WIDGET,
+                                                        GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
 
   /**
    * GtkOverlay::get-child-position:
@@ -393,18 +387,11 @@ gtk_overlay_buildable_add_child (GtkBuildable *buildable,
   if (GTK_IS_WIDGET (child))
     {
       if (type && strcmp (type, "overlay") == 0)
-        {
-          gtk_overlay_add_overlay (GTK_OVERLAY (buildable), GTK_WIDGET (child));
-        }
+        gtk_overlay_add_overlay (GTK_OVERLAY (buildable), GTK_WIDGET (child));
       else if (!type)
-        {
-          gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
-          gtk_overlay_set_child (GTK_OVERLAY (buildable), GTK_WIDGET (child));
-        }
+        gtk_overlay_set_child (GTK_OVERLAY (buildable), GTK_WIDGET (child));
       else
-        {
-          GTK_BUILDER_WARN_INVALID_CHILD_TYPE (buildable, type);
-        }
+        GTK_BUILDER_WARN_INVALID_CHILD_TYPE (buildable, type);
     }
   else
     {
@@ -606,7 +593,7 @@ gtk_overlay_set_child (GtkOverlay *overlay,
       gtk_widget_insert_after (child, GTK_WIDGET (overlay), NULL);
     }
 
-  g_object_notify_by_pspec (G_OBJECT (overlay), props[PROP_CHILD]);
+  g_object_notify (G_OBJECT (overlay), "child");
 }
 
 /**

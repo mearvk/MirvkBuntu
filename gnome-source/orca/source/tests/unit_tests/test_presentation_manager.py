@@ -29,7 +29,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 import pytest
@@ -50,7 +49,6 @@ class TestPresentationManager:
         additional_modules = [
             "orca.braille_presenter",
             "orca.live_region_presenter",
-            "orca.sound",
             "orca.sound_presenter",
             "orca.speech_manager",
             "orca.speech_presenter",
@@ -173,70 +171,6 @@ class TestPresentationManager:
         assert manager1 is manager2
         assert manager1.__class__.__name__ == "PresentationManager"
 
-    def test_present_object_uses_one_stable_tree_scope(self, test_context: OrcaTestContext) -> None:
-        """Test generated speech, braille, and sound share one stable-tree cache scope."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca import ax_cache_manager
-        from orca.generator import PresentationReason
-        from orca.presentation_manager import get_manager
-
-        events = []
-
-        @contextmanager
-        def scope():
-            events.append("enter")
-            try:
-                yield
-            finally:
-                events.append("exit")
-
-        test_context.patch_object(ax_cache_manager, "stable_tree_scope", side_effect=scope)
-        from orca.ax_utilities import AXUtilities
-
-        test_context.patch_object(AXUtilities, "is_editable", return_value=False)
-        test_context.patch_object(AXUtilities, "find_ancestor_inclusive", return_value=None)
-        script = test_context.Mock()
-        obj = test_context.Mock()
-        speech = essential_modules["orca.speech_presenter"].get_presenter()
-        braille = essential_modules["orca.braille_presenter"].get_presenter()
-        sound = essential_modules["orca.sound_presenter"].get_presenter()
-        speech.present_generated_speech.side_effect = lambda *args, **kwargs: events.append(
-            "speech"
-        )
-        braille.present_generated_braille.side_effect = lambda *args, **kwargs: events.append(
-            "braille"
-        )
-        sound.present_generated_sound.side_effect = lambda *args, **kwargs: events.append("sound")
-
-        get_manager().present_object(
-            script,
-            obj,
-            generate_sound=True,
-            reason=PresentationReason.FOCUS_CHANGE,
-        )
-
-        assert events == ["enter", "speech", "braille", "sound", "exit"]
-        ax_cache_manager.stable_tree_scope.assert_called_once_with()
-        speech.present_generated_speech.assert_called_once_with(
-            script,
-            obj,
-            prior_obj=None,
-            reason=PresentationReason.FOCUS_CHANGE,
-        )
-        braille.present_generated_braille.assert_called_once_with(
-            script,
-            obj,
-            prior_obj=None,
-            reason=PresentationReason.FOCUS_CHANGE,
-        )
-        sound.present_generated_sound.assert_called_once_with(
-            script,
-            obj,
-            prior_obj=None,
-            reason=PresentationReason.FOCUS_CHANGE,
-        )
-
     def test_interrupt_presentation(self, test_context: OrcaTestContext) -> None:
         """Test interrupt_presentation interrupts speech and braille."""
 
@@ -299,14 +233,13 @@ class TestPresentationManager:
 
         essential_modules = self._setup_dependencies(test_context)
         from orca.presentation_manager import get_manager
-        from orca.speechserver import VoiceType
 
         manager = get_manager()
         manager.present_message("This is a full message")
 
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
         speech_pres.speak_message.assert_called_once_with(
-            "This is a full message", VoiceType.SYSTEM
+            "This is a full message",
         )
         braille_presenter = essential_modules["orca.braille_presenter"].get_presenter()
         braille_presenter.present_message.assert_called()
@@ -316,13 +249,14 @@ class TestPresentationManager:
 
         essential_modules = self._setup_dependencies(test_context)
         from orca.presentation_manager import get_manager
-        from orca.speechserver import VoiceType
 
         manager = get_manager()
         manager.present_message("Full message", brief="Brief")
 
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
-        speech_pres.speak_message.assert_called_once_with("Full message", VoiceType.SYSTEM)
+        speech_pres.speak_message.assert_called_once_with(
+            "Full message",
+        )
 
     def test_present_message_empty_string(self, test_context: OrcaTestContext) -> None:
         """Test present_message with empty string returns early."""
@@ -361,12 +295,13 @@ class TestPresentationManager:
         speech_pres.get_messages_are_detailed.return_value = False
 
         from orca.presentation_manager import get_manager
-        from orca.speechserver import VoiceType
 
         manager = get_manager()
         manager.present_message("Full message", brief="Brief")
 
-        speech_pres.speak_message.assert_called_once_with("Brief", VoiceType.SYSTEM)
+        speech_pres.speak_message.assert_called_once_with(
+            "Brief",
+        )
 
     def test_present_message_speech_disabled(self, test_context: OrcaTestContext) -> None:
         """Test present_message skips speech when speech is disabled."""
@@ -388,7 +323,7 @@ class TestPresentationManager:
 
         essential_modules = self._setup_dependencies(test_context)
         speech_mgr = essential_modules["orca.speech_manager"].get_manager()
-        speech_mgr.get_speech_is_enabled_and_not_muted.return_value = False
+        speech_mgr.get_speech_is_muted.return_value = True
 
         from orca.presentation_manager import get_manager
 
@@ -414,82 +349,29 @@ class TestPresentationManager:
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
         speech_pres.speak_accessible_text.assert_not_called()
 
-    def test_play_sound_file(self, test_context: OrcaTestContext, tmp_path) -> None:
-        """Test play_sound_file creates an icon and plays it."""
+    def test_play_sound(self, test_context: OrcaTestContext) -> None:
+        """Test play_sound delegates to sound_presenter."""
 
         essential_modules = self._setup_dependencies(test_context)
         from orca.presentation_manager import PresentationManager
 
-        sound_file = tmp_path / "ding.ogg"
-        sound_file.write_text("")
-        icon = test_context.Mock()
-        essential_modules["orca.sound"].Icon.return_value = icon
+        mock_sound = test_context.Mock()
+        PresentationManager.play_sound(mock_sound)
 
-        result = PresentationManager.play_sound_file(str(sound_file), interrupt=False)
-
-        assert result is True
-        essential_modules["orca.sound"].Icon.assert_called_once_with(str(tmp_path), "ding.ogg")
         sound_presenter = essential_modules["orca.sound_presenter"].get_presenter()
-        sound_presenter.play.assert_called_once_with(icon, False)
+        sound_presenter.play.assert_called_once_with(mock_sound, True)
 
-    def test_play_sound_file_missing(self, test_context: OrcaTestContext, tmp_path) -> None:
-        """Test play_sound_file rejects a missing file."""
+    def test_play_sound_no_interrupt(self, test_context: OrcaTestContext) -> None:
+        """Test play_sound with interrupt=False."""
 
         essential_modules = self._setup_dependencies(test_context)
         from orca.presentation_manager import PresentationManager
 
-        result = PresentationManager.play_sound_file(str(tmp_path / "missing.ogg"))
+        mock_sound = test_context.Mock()
+        PresentationManager.play_sound(mock_sound, interrupt=False)
 
-        assert result is False
-        essential_modules["orca.sound"].Icon.assert_not_called()
         sound_presenter = essential_modules["orca.sound_presenter"].get_presenter()
-        sound_presenter.play.assert_not_called()
-
-    def test_play_tone(self, test_context: OrcaTestContext) -> None:
-        """Test play_tone creates a tone and plays it."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca.presentation_manager import PresentationManager
-
-        tone = test_context.Mock()
-        sound_mod = essential_modules["orca.sound"]
-        sound_mod.Tone.SINE_WAVE = 0
-        sound_mod.Tone.SQUARE_WAVE = 1
-        sound_mod.Tone.SAW_WAVE = 2
-        sound_mod.Tone.TRIANGLE_WAVE = 3
-        sound_mod.Tone.SILENCE = 4
-        sound_mod.Tone.WHITE_UNIFORM_NOISE = 5
-        sound_mod.Tone.PINK_NOISE = 6
-        sound_mod.Tone.return_value = tone
-
-        result = PresentationManager.play_tone(0.25, 440, 2.0, "sine", interrupt=False)
-
-        assert result is True
-        sound_mod.Tone.assert_called_once_with(0.25, 440, 1.0, 0)
-        sound_presenter = essential_modules["orca.sound_presenter"].get_presenter()
-        sound_presenter.play.assert_called_once_with(tone, False)
-
-    @pytest.mark.parametrize("duration,wave", [(0.0, "sine"), (0.25, "bogus")])
-    def test_play_tone_invalid(
-        self,
-        test_context: OrcaTestContext,
-        duration: float,
-        wave: str,
-    ) -> None:
-        """Test play_tone rejects invalid values."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca.presentation_manager import PresentationManager
-
-        sound_mod = essential_modules["orca.sound"]
-        sound_mod.Tone.SINE_WAVE = 0
-
-        result = PresentationManager.play_tone(duration, 440, 1.0, wave)
-
-        assert result is False
-        sound_mod.Tone.assert_not_called()
-        sound_presenter = essential_modules["orca.sound_presenter"].get_presenter()
-        sound_presenter.play.assert_not_called()
+        sound_presenter.play.assert_called_once_with(mock_sound, False)
 
     def test_present_braille_message(self, test_context: OrcaTestContext) -> None:
         """Test present_braille_message shows braille message."""
@@ -518,36 +400,6 @@ class TestPresentationManager:
 
         braille_presenter_instance.present_message.assert_called_once()
 
-    def test_display_message(self, test_context: OrcaTestContext) -> None:
-        """Test display_message presents plain braille text."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca.presentation_manager import PresentationManager
-
-        PresentationManager.display_message("Test braille", persistent=True)
-
-        braille_presenter = essential_modules["orca.braille_presenter"].get_presenter()
-        braille_presenter.present_message.assert_called_once_with(
-            "Test braille",
-            restore_previous=False,
-            flash_time=-1,
-        )
-
-    def test_display_message_empty_clears_braille_message(
-        self,
-        test_context: OrcaTestContext,
-    ) -> None:
-        """Test display_message with an empty string clears the braille message."""
-
-        essential_modules = self._setup_dependencies(test_context)
-        from orca.presentation_manager import PresentationManager
-
-        PresentationManager.display_message("")
-
-        braille_presenter = essential_modules["orca.braille_presenter"].get_presenter()
-        braille_presenter.kill_flash.assert_called_once_with(restore_saved=True)
-        braille_presenter.present_message.assert_not_called()
-
     def test_spell_item_delegates(self, test_context: OrcaTestContext) -> None:
         """Test spell_item delegates to speech_presenter."""
 
@@ -558,7 +410,7 @@ class TestPresentationManager:
         manager.spell_item("abc")
 
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
-        speech_pres.spell_item.assert_called_once_with("abc", None, None)
+        speech_pres.spell_item.assert_called_once_with("abc")
 
     def test_spell_phonetically_delegates(self, test_context: OrcaTestContext) -> None:
         """Test spell_phonetically delegates to speech_presenter."""
@@ -570,7 +422,7 @@ class TestPresentationManager:
         manager.spell_phonetically("ab")
 
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
-        speech_pres.spell_phonetically.assert_called_once_with("ab", None, None)
+        speech_pres.spell_phonetically.assert_called_once_with("ab")
 
     def test_speak_character_delegates(self, test_context: OrcaTestContext) -> None:
         """Test speak_character delegates to speech_presenter."""
@@ -587,8 +439,6 @@ class TestPresentationManager:
             voice_from="a",
             cap_style=None,
             obj=None,
-            language="",
-            dialect="",
         )
 
     def test_speak_message_delegates(self, test_context: OrcaTestContext) -> None:
@@ -596,7 +446,6 @@ class TestPresentationManager:
 
         essential_modules = self._setup_dependencies(test_context)
         from orca.presentation_manager import get_manager
-        from orca.speechserver import VoiceType
 
         manager = get_manager()
         manager.speak_message("Hello world")
@@ -604,7 +453,6 @@ class TestPresentationManager:
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
         speech_pres.speak_message.assert_called_once_with(
             "Hello world",
-            VoiceType.SYSTEM,
         )
 
     def test_speak_contents_delegates(self, test_context: OrcaTestContext) -> None:
@@ -618,9 +466,7 @@ class TestPresentationManager:
         manager.speak_contents(mock_contents)
 
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
-        speech_pres.speak_contents.assert_called_once_with(
-            mock_contents, reason=None, prior_obj=None
-        )
+        speech_pres.speak_contents.assert_called_once_with(mock_contents)
 
     def test_speak_contents_with_kwargs_delegates(self, test_context: OrcaTestContext) -> None:
         """Test speak_contents passes keyword arguments to speech_presenter."""
@@ -631,12 +477,10 @@ class TestPresentationManager:
         manager = get_manager()
         mock_contents = [(test_context.Mock(), 0, 10, "test text")]
         mock_prior = test_context.Mock()
-        manager.speak_contents(mock_contents, prior_obj=mock_prior)
+        manager.speak_contents(mock_contents, priorObj=mock_prior)
 
         speech_pres = essential_modules["orca.speech_presenter"].get_presenter()
-        speech_pres.speak_contents.assert_called_once_with(
-            mock_contents, reason=None, prior_obj=mock_prior
-        )
+        speech_pres.speak_contents.assert_called_once_with(mock_contents, priorObj=mock_prior)
 
     def test_display_contents(self, test_context: OrcaTestContext) -> None:
         """Test display_contents delegates to braille presenter."""

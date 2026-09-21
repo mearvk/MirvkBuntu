@@ -21,8 +21,6 @@
 
 # pylint: disable=too-many-public-methods
 # pylint: disable=too-many-lines
-# pylint: disable=too-many-locals
-# pylint: disable=too-many-branches
 
 """Utilities for accessible text."""
 
@@ -30,18 +28,12 @@ from __future__ import annotations
 
 import enum
 import re
-import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import ax_cache_manager, debug
+from . import debug
 from .ax_component import AXComponent
-from .ax_hypertext import AXHypertext
 from .ax_object import AXObject
 from .ax_text import AXText, AXTextAttribute
-from .ax_utilities_application import AXUtilitiesApplication
-from .ax_utilities_hypertext import AXUtilitiesHypertext
-from .ax_utilities_object import AXUtilitiesObject
 from .ax_utilities_role import AXUtilitiesRole
 
 if TYPE_CHECKING:
@@ -63,609 +55,23 @@ class TextUnit(enum.Enum):
     PHRASE = enum.auto()
 
 
-class CaretSetReason(enum.Enum):
-    """Enum representing the reason Orca set the caret offset."""
-
-    BRAILLE_CUT = enum.auto()
-    BRAILLE_PANNING = enum.auto()
-    BRAILLE_ROUTING = enum.auto()
-    CARET_NAVIGATION = enum.auto()
-    FLAT_REVIEW = enum.auto()
-    LINE_PRESENTATION = enum.auto()
-    LIVE_REGION_NAVIGATION = enum.auto()
-    MATH_NAVIGATION = enum.auto()
-    OBJECT_PRESENTATION = enum.auto()
-    RESULT_NAVIGATION = enum.auto()
-    SAY_ALL_COMMAND = enum.auto()
-    SCROLL_INTO_VIEW = enum.auto()
-    STRUCTURAL_NAVIGATION = enum.auto()
-    TABLE_NAVIGATION = enum.auto()
-    TEXT_SELECTION_BY_CHARACTER = enum.auto()
-    TEXT_SELECTION_BY_LINE = enum.auto()
-    TEXT_SELECTION_BY_WORD = enum.auto()
-    TEXT_SELECTION_TO_FILE_BOUNDARY = enum.auto()
-    TEXT_SELECTION_TO_LINE_BOUNDARY = enum.auto()
-
-    def is_text_selection(self) -> bool:
-        """Returns True if the caret was set while changing a text selection."""
-
-        return self in {
-            CaretSetReason.TEXT_SELECTION_BY_CHARACTER,
-            CaretSetReason.TEXT_SELECTION_BY_LINE,
-            CaretSetReason.TEXT_SELECTION_BY_WORD,
-            CaretSetReason.TEXT_SELECTION_TO_FILE_BOUNDARY,
-            CaretSetReason.TEXT_SELECTION_TO_LINE_BOUNDARY,
-        }
-
-
-@dataclass(frozen=True)
-class LastCaretSet:
-    """Records the most recent caret offset Orca set, and why."""
-
-    obj: Atspi.Accessible
-    offset: int
-    time: float
-    reason: CaretSetReason
-
-
-class _AXUtilitiesTextCache:
-    """Provides text-specific access to manager-backed cached values."""
-
-    TEXT_ATTRIBUTES = "AXUtilitiesText.text-attributes"
-    SELECTED_TEXT = "AXUtilitiesText.selected-text"
-    LAST_TEXT_UNIT_SPOKEN = "AXUtilitiesText.last-text-unit-spoken"
-
-    _TEXT_ATTRIBUTES_KEY = "text-attributes"
-    _LAST_TEXT_UNIT_SPOKEN_KEY = "last-text-unit-spoken"
-
-    def __init__(self) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        for namespace in (
-            self.TEXT_ATTRIBUTES,
-            self.SELECTED_TEXT,
-            self.LAST_TEXT_UNIT_SPOKEN,
-        ):
-            self._manager.register_cache(
-                self,
-                namespace,
-                lifetime=ax_cache_manager.Lifetime.PROCESS,
-                clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-                clear_interval_seconds=None,
-            )
-        self._text_attributes_cache = self._manager.get_cache(self, self.TEXT_ATTRIBUTES)
-        self._selected_text_cache = self._manager.get_cache(self, self.SELECTED_TEXT)
-        self._last_text_unit_spoken_cache = self._manager.get_cache(
-            self, self.LAST_TEXT_UNIT_SPOKEN
-        )
-
-    def get_last_text_unit_spoken(self) -> TextUnit | None:
-        """Returns the cached last text unit spoken."""
-
-        if self._last_text_unit_spoken_cache is None:
-            return None
-
-        return self._last_text_unit_spoken_cache.get(self._LAST_TEXT_UNIT_SPOKEN_KEY, None)
-
-    def set_last_text_unit_spoken(self, unit: TextUnit) -> None:
-        """Stores the last text unit spoken."""
-
-        if self._last_text_unit_spoken_cache is not None:
-            self._last_text_unit_spoken_cache.put(self._LAST_TEXT_UNIT_SPOKEN_KEY, unit)
-
-    def get_text_attributes(self) -> dict[str, str]:
-        """Returns the cached text attributes."""
-
-        if self._text_attributes_cache is None:
-            return {}
-
-        return self._text_attributes_cache.get(self._TEXT_ATTRIBUTES_KEY, {})
-
-    def set_text_attributes(self, attributes: dict[str, str]) -> None:
-        """Stores the current text attributes."""
-
-        if self._text_attributes_cache is not None:
-            self._text_attributes_cache.put(self._TEXT_ATTRIBUTES_KEY, attributes)
-
-    def get_selected_text(self, obj: Atspi.Accessible) -> tuple[str, int, int]:
-        """Returns the cached selected string, start, and end for obj."""
-
-        if self._selected_text_cache is None:
-            return "", 0, 0
-
-        return self._selected_text_cache.get(ax_cache_manager.get_object_key(obj), ("", 0, 0))
-
-    def set_selected_text(self, obj: Atspi.Accessible, selection: tuple[str, int, int]) -> None:
-        """Stores the selected string, start, and end for obj."""
-
-        if self._selected_text_cache is not None:
-            self._selected_text_cache.put(ax_cache_manager.get_object_key(obj), selection)
-
-
 class AXUtilitiesText:
     """Utilities for accessible text."""
 
-    @staticmethod
-    def text_selection_positions_are_equivalent(
-        obj1: Atspi.Accessible,
-        offset1: int,
-        obj2: Atspi.Accessible,
-        offset2: int,
-    ) -> bool:
-        """Returns True if both positions represent the same selection boundary."""
-
-        comparison = AXUtilitiesHypertext.compare_text_positions(obj1, offset1, obj2, offset2)
-        if comparison == 0:
-            return True
-        if obj1 == obj2:
-            start, end = sorted((offset1, offset2))
-            return AXText.get_substring(obj1, start, end) == "\n"
-
-        if comparison < 0:
-            before_obj, before_offset = obj1, offset1
-            after_obj, after_offset = obj2, offset2
-        else:
-            before_obj, before_offset = obj2, offset2
-            after_obj, after_offset = obj1, offset1
-        if before_offset != AXText.get_character_count(before_obj) or after_offset != 0:
-            return False
-        if AXUtilitiesObject.get_common_ancestor(before_obj, after_obj) is None:
-            return False
-
-        between = AXUtilitiesHypertext.expand_eocs_in_range(
-            before_obj,
-            before_offset,
-            after_obj,
-            after_offset,
-            include_start=False,
-            include_end=False,
-        )
-        return not between
-
-    @staticmethod
-    def get_selection_anchor_offset(
-        obj: Atspi.Accessible,
-        focus_offset: int,
-        selection_start: int,
-        selection_end: int,
-    ) -> int:
-        """Returns the fixed endpoint opposite focus_offset in obj's selection."""
-
-        if selection_start == selection_end:
-            return focus_offset
-        if AXUtilitiesText.text_selection_positions_are_equivalent(
-            obj, focus_offset, obj, selection_start
-        ):
-            return selection_end
-        if AXUtilitiesText.text_selection_positions_are_equivalent(
-            obj, focus_offset, obj, selection_end
-        ):
-            return selection_start
-        return focus_offset
-
-    @staticmethod
-    def get_text_selection_container(obj: Atspi.Accessible) -> Atspi.Accessible:
-        """Returns the container for the text selection at obj."""
-
-        result = obj
-        found_selection = False
-        ancestor = obj
-        while ancestor is not None:
-            ranges = AXText.get_selected_ranges(ancestor)
-            if not ranges:
-                if found_selection:
-                    break
-                ancestor = AXObject.get_parent(ancestor)
-                continue
-
-            result = ancestor
-            found_selection = True
-            start = ranges[0][0]
-            end = ranges[-1][1]
-            if start > 0 or end < AXText.get_character_count(ancestor):
-                break
-            ancestor = AXObject.get_parent(ancestor)
-
-        tokens = ["AXUtilitiesText: Text selection container for", obj, "is", result]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return result
-
-    @staticmethod
-    def _find_text_selection_endpoint(
-        root: Atspi.Accessible,
-        find_start: bool,
-    ) -> tuple[Atspi.Accessible, int] | None:
-        ranges = AXText.get_selected_ranges(root)
-        if ranges:
-            start, end = ranges[0] if find_start else ranges[-1]
-            string = AXText.get_substring(root, start, end)
-            if find_start and not string.startswith("\ufffc"):
-                return root, start
-            if not find_start and not string.endswith("\ufffc"):
-                return root, max(start, end - 1)
-
-            searched_children: set[Atspi.Accessible] = set()
-            offsets = range(start, end) if find_start else range(end - 1, start - 1, -1)
-            for offset in offsets:
-                if string[offset - start] != "\ufffc":
-                    return root, offset
-                child = AXHypertext.get_child_at_offset(root, offset)
-                if child is None or child in searched_children:
-                    continue
-                searched_children.add(child)
-                result = AXUtilitiesText._find_text_selection_endpoint(child, find_start)
-                if result is not None:
-                    return result
-                if AXUtilitiesRole.is_image_or_canvas(child):
-                    return child, 0
-
-        indices = list(range(AXObject.get_child_count(root)))
-        if not find_start:
-            indices.reverse()
-        for i in indices:
-            child = AXObject.get_child(root, i)
-            if ranges and child in searched_children:
-                continue
-            result = AXUtilitiesText._find_text_selection_endpoint(
-                child,
-                find_start,
-            )
-            if result is not None:
-                return result
-        return None
-
-    @staticmethod
-    def get_text_selection_endpoints(
-        root: Atspi.Accessible,
-    ) -> tuple[
-        tuple[Atspi.Accessible | None, int],
-        tuple[Atspi.Accessible | None, int],
-    ]:
-        """Returns the first and last selected text positions under root."""
-
-        start: tuple[Atspi.Accessible | None, int] = (None, -1)
-        end: tuple[Atspi.Accessible | None, int] = (None, -1)
-        if found_start := AXUtilitiesText._find_text_selection_endpoint(root, True):
-            start = found_start
-            end = AXUtilitiesText._find_text_selection_endpoint(root, False) or (None, -1)
-        tokens = [
-            "AXUtilitiesText: Text selection endpoints under",
-            root,
-            "are",
-            start,
-            end,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return start, end
-
-    @staticmethod
-    def get_text_selection_elements(
-        start_obj: Atspi.Accessible | None,
-        end_obj: Atspi.Accessible | None,
-    ) -> list[Atspi.Accessible]:
-        """Returns the selected elements from start_obj through end_obj."""
-
-        if not (start_obj and end_obj):
-            return []
-        if AXObject.is_dead(start_obj):
-            msg = "AXUtilitiesText: Cannot get selection elements: Start object is dead."
-            debug.print_message(debug.LEVEL_INFO, msg, True)
-            return []
-
-        def _is_selection_element(x):
-            return AXUtilitiesRole.is_web_element(x) or AXObject.supports_text(x)
-
-        def _include(x):
-            return x is not None and _is_selection_element(x)
-
-        def _exclude(x):
-            if not AXUtilitiesRole.is_static(x) or AXUtilitiesRole.is_web_element(x):
-                return False
-            return AXUtilitiesObject.find_ancestor(x, AXUtilitiesRole.is_web_element) is not None
-
-        elements = []
-        start_parent = AXObject.get_parent(start_obj)
-        for i in range(
-            AXObject.get_index_in_parent(start_obj), AXObject.get_child_count(start_parent)
-        ):
-            child = AXObject.get_child(start_parent, i)
-            if not _is_selection_element(child):
-                continue
-            elements.append(child)
-            if not AXUtilitiesRole.is_code(child):
-                elements.extend(AXUtilitiesObject.find_all_descendants(child, _include, _exclude))
-            if end_obj in elements:
-                break
-
-        if end_obj == start_obj:
-            return elements
-        if end_obj not in elements:
-            elements.append(end_obj)
-            if not AXUtilitiesRole.is_code(end_obj):
-                elements.extend(AXUtilitiesObject.find_all_descendants(end_obj, _include, _exclude))
-
-        end_parent = AXObject.get_parent(end_obj)
-        end_index = AXObject.get_index_in_parent(end_obj)
-        last_obj = AXObject.get_child(end_parent, end_index + 1) or end_obj
-        try:
-            elements_end = elements.index(last_obj)
-        except ValueError:
-            pass
-        else:
-            if last_obj == end_obj:
-                elements_end += 1
-            elements = elements[:elements_end]
-        return elements
-
-    @staticmethod
-    def get_text_selection_endpoint_for_caret_context(
-        obj: Atspi.Accessible,
-        offset: int,
-        *,
-        after_embedded_object: bool,
-    ) -> tuple[Atspi.Accessible | None, int]:
-        """Returns the text-selection endpoint for the caret context."""
-
-        if AXObject.supports_text(obj):
-            if offset > 0 and AXText.get_substring(obj, offset - 1, offset) == "\ufffc":
-                child = AXHypertext.get_child_at_offset(obj, offset - 1)
-                if child is not None and child != obj and AXObject.supports_text(child):
-                    child_offset = AXText.get_character_count(child)
-                    tokens = [
-                        "AXUtilitiesText: Using the end of embedded text child",
-                        child,
-                        "at offset",
-                        child_offset,
-                        "for position",
-                        offset,
-                        "in",
-                        obj,
-                    ]
-                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                    return AXUtilitiesText.get_text_selection_endpoint_for_caret_context(
-                        child,
-                        child_offset,
-                        after_embedded_object=after_embedded_object,
-                    )
-            return obj, offset
-
-        child = obj
-        parent = AXObject.get_parent(child)
-        while parent is not None:
-            if AXObject.supports_text(parent):
-                child_offset = AXHypertext.get_character_offset_in_parent(child)
-                if child_offset >= 0:
-                    result = child_offset + int(after_embedded_object)
-                    tokens = [
-                        "AXUtilitiesText: Using embedded object character in",
-                        parent,
-                        "at offset",
-                        result,
-                        "for",
-                        obj,
-                    ]
-                    debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-                    return parent, result
-            child = parent
-            parent = AXObject.get_parent(child)
-
-        return None, -1
-
-    @staticmethod
-    def get_caret_context_for_text_selection_endpoint(
-        obj: Atspi.Accessible,
-        offset: int,
-        *,
-        endpoint_is_start: bool,
-    ) -> tuple[Atspi.Accessible, int]:
-        """Returns the caret context represented by a text-selection endpoint."""
-
-        embedded_offset = offset if endpoint_is_start else offset - 1
-        if embedded_offset < 0:
-            return obj, offset
-        if AXText.get_substring(obj, embedded_offset, embedded_offset + 1) != "\ufffc":
-            return obj, offset
-
-        child = AXHypertext.get_child_at_offset(obj, embedded_offset)
-        if child is None or child == obj or not AXObject.supports_text(child):
-            return obj, offset
-
-        child_offset = 0 if endpoint_is_start else AXText.get_character_count(child)
-        tokens = [
-            "AXUtilitiesText: Using embedded text child",
-            child,
-            "at offset",
-            child_offset,
-            "for selection endpoint",
-            offset,
-            "in",
-            obj,
-        ]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return AXUtilitiesText.get_caret_context_for_text_selection_endpoint(
-            child,
-            child_offset,
-            endpoint_is_start=endpoint_is_start,
-        )
-
-    LAST_CARET_SET: ClassVar[LastCaretSet | None] = None
-    _CACHE = _AXUtilitiesTextCache()
-    LINK_STYLING_ATTRIBUTES: ClassVar[frozenset[AXTextAttribute]] = frozenset(
-        {
-            AXTextAttribute.FG_COLOR,
-            AXTextAttribute.UNDERLINE,
-        }
-    )
+    CACHED_TEXT_SELECTION: ClassVar[dict[int, tuple[str, int, int]]] = {}
+    LAST_TEXT_UNIT_SPOKEN: ClassVar[TextUnit | None] = None
 
     @staticmethod
     def get_last_text_unit_spoken() -> TextUnit | None:
         """Returns the last text unit spoken."""
 
-        return AXUtilitiesText._CACHE.get_last_text_unit_spoken()
+        return AXUtilitiesText.LAST_TEXT_UNIT_SPOKEN
 
     @staticmethod
     def set_last_text_unit_spoken(unit: TextUnit) -> None:
         """Sets the last text unit spoken."""
 
-        AXUtilitiesText._CACHE.set_last_text_unit_spoken(unit)
-
-    @staticmethod
-    def get_cached_text_attributes() -> dict[str, str]:
-        """Returns the cached text attributes dict."""
-
-        return AXUtilitiesText._CACHE.get_text_attributes()
-
-    @staticmethod
-    def update_cached_text_attributes(obj: Atspi.Accessible, offset: int | None = None) -> None:
-        """Updates the cached text attributes for the current position."""
-
-        AXUtilitiesText._CACHE.set_text_attributes(
-            AXText.get_text_attributes_at_offset(obj, offset)[0]
-        )
-
-    @staticmethod
-    def is_at_link_boundary(
-        obj: Atspi.Accessible,
-        run_start: int,
-        run_end: int,
-    ) -> bool:
-        """Returns True if any hyperlink boundary coincides with a boundary of the text run."""
-
-        for link in AXUtilitiesHypertext.get_all_links(obj):
-            link_start = AXHypertext.get_link_start_offset(link)
-            link_end = AXHypertext.get_link_end_offset(link)
-            if link_start in (run_start, run_end) or link_end in (run_start, run_end):
-                return True
-        return False
-
-    @staticmethod
-    def get_redundant_text_attributes(
-        obj: Atspi.Accessible,
-        run_start: int,
-        run_end: int,
-    ) -> frozenset[AXTextAttribute]:
-        """Returns text attributes that are redundant at this position."""
-
-        if AXUtilitiesText.is_at_link_boundary(obj, run_start, run_end):
-            return AXUtilitiesText.LINK_STYLING_ATTRIBUTES
-        return frozenset()
-
-    @staticmethod
-    def _get_raw_attribute_changes(
-        cached_attrs: dict[str, str],
-        current_attrs: dict[str, str],
-    ) -> dict[str, tuple[str | None, str | None]]:
-        """Returns raw attribute changes between cached and current, filtering spurious spelling."""
-
-        raw_changes: dict[str, tuple[str | None, str | None]] = {}
-        for key in set(cached_attrs) | set(current_attrs):
-            old_value = cached_attrs.get(key)
-            new_value = current_attrs.get(key)
-            if old_value != new_value:
-                raw_changes[key] = (old_value, new_value)
-
-        # Spelling/grammar keys fluctuate between absent and present without a real
-        # status change. Only treat them as changed if the error status truly differs.
-        spelling_keys = ("invalid", "text-spelling")
-        error_values = {"spelling", "misspelled", "grammar"}
-        old_errors = {cached_attrs.get(k) for k in spelling_keys} & error_values
-        new_errors = {current_attrs.get(k) for k in spelling_keys} & error_values
-        if old_errors == new_errors:
-            for key in spelling_keys:
-                raw_changes.pop(key, None)
-
-        return raw_changes
-
-    @staticmethod
-    def get_text_attribute_changes(
-        obj: Atspi.Accessible,
-        offset: int | None = None,
-    ) -> list[tuple[AXTextAttribute, str | None, str | None]]:
-        """Returns a list of (attribute, old_value, new_value) for attributes that changed."""
-
-        current_attrs, run_start, run_end = AXText.get_text_attributes_at_offset(obj, offset)
-        cached_attrs = AXUtilitiesText._CACHE.get_text_attributes()
-
-        # An empty cache means focus moved to a non-text object (e.g. the frame),
-        # so there is no baseline to diff against. Use the caret position's attributes
-        # as the baseline so the selection walk below can find the actual change.
-        if not cached_attrs:
-            cached_attrs = current_attrs
-
-        all_raw_changes: dict[str, tuple[str | None, str | None]] = {}
-
-        # When text is selected, the formatting change is in the selection, not at the
-        # caret. Walk the selection first and cache the run attrs so subsequent changes
-        # (e.g. italic after bold) are detected against the selected text's state.
-        if AXUtilitiesText.has_selected_text(obj):
-            sel_start = AXUtilitiesText.get_selection_start_offset(obj)
-            sel_end = AXUtilitiesText.get_selection_end_offset(obj)
-            for _start, _end, run_attrs in AXUtilitiesText.get_all_text_attributes(
-                obj, sel_start, sel_end
-            ):
-                all_raw_changes = AXUtilitiesText._get_raw_attribute_changes(
-                    cached_attrs, run_attrs
-                )
-                if all_raw_changes:
-                    current_attrs = run_attrs
-                    break
-
-        # Fall back to checking the caret position when there is no selection.
-        if not all_raw_changes:
-            all_raw_changes = AXUtilitiesText._get_raw_attribute_changes(
-                cached_attrs, current_attrs
-            )
-
-        if all_raw_changes:
-            tokens = ["AXText: All attribute changes for", obj, ":", all_raw_changes]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        changes: list[tuple[AXTextAttribute, str | None, str | None]] = []
-        changed_attrs: set[AXTextAttribute] = set()
-        for attr in AXTextAttribute:
-            key = attr.get_attribute_name()
-            if key in all_raw_changes:
-                old_value, new_value = all_raw_changes[key]
-                changes.append((attr, old_value, new_value))
-                changed_attrs.add(attr)
-
-        # A paragraph style change subsumes individual formatting changes.
-        if AXTextAttribute.PARAGRAPH_STYLE in changed_attrs:
-            changes = [
-                (attr, old, new)
-                for attr, old, new in changes
-                if attr == AXTextAttribute.PARAGRAPH_STYLE
-            ]
-        # Many simultaneous changes indicate a bulk operation (e.g. style re-application).
-        # Announce the current paragraph style so the user knows what was applied.
-        elif len(changes) > 3:
-            style = current_attrs.get("paragraph-style", "")
-            if style:
-                changes = [(AXTextAttribute.PARAGRAPH_STYLE, None, style)]
-            else:
-                changes = []
-        # TEXT_DECORATION is redundant when UNDERLINE or STRIKETHROUGH also changed.
-        elif AXTextAttribute.TEXT_DECORATION in changed_attrs and changed_attrs & {
-            AXTextAttribute.UNDERLINE,
-            AXTextAttribute.STRIKETHROUGH,
-        }:
-            changes = [
-                (attr, old, new)
-                for attr, old, new in changes
-                if attr != AXTextAttribute.TEXT_DECORATION
-            ]
-
-        # Link styling attributes (underline, fg-color) are redundant when the change
-        # is at a hyperlink boundary because the link role is already announced.
-        if changed_attrs & AXUtilitiesText.LINK_STYLING_ATTRIBUTES and offset is not None:
-            if AXUtilitiesText.is_at_link_boundary(obj, run_start, run_end):
-                changes = [
-                    (attr, old, new)
-                    for attr, old, new in changes
-                    if attr not in AXUtilitiesText.LINK_STYLING_ATTRIBUTES
-                ]
-
-        AXUtilitiesText._CACHE.set_text_attributes(current_attrs)
-        return changes
+        AXUtilitiesText.LAST_TEXT_UNIT_SPOKEN = unit
 
     @staticmethod
     def get_character_at_point(obj: Atspi.Accessible, x: int, y: int) -> tuple[str, int, int]:
@@ -930,37 +336,6 @@ class AXUtilitiesText:
             current_start = next_start
 
     @staticmethod
-    def offsets_are_on_same_line(
-        obj: Atspi.Accessible,
-        offset1: int,
-        offset2: int,
-    ) -> bool:
-        """Returns True if offset1 and offset2 are on the same line in obj."""
-
-        line1, start1, end1 = AXText.get_line_at_offset(obj, offset1)
-        if not line1:
-            return False
-
-        line2, start2, end2 = AXText.get_line_at_offset(obj, offset2)
-        return (line2, start2, end2) == (line1, start1, end1)
-
-    @staticmethod
-    def offset_is_on_current_line(obj: Atspi.Accessible, offset: int) -> bool:
-        """Returns True if offset is on the same line as the caret in obj."""
-
-        return AXUtilitiesText.offsets_are_on_same_line(obj, AXText.get_caret_offset(obj), offset)
-
-    @staticmethod
-    def is_whitespace_at_end_of_line(obj: Atspi.Accessible, offset: int) -> bool:
-        """Returns True if the character at offset is whitespace at the end of its line."""
-
-        if not AXText.get_character_at_offset(obj, offset)[0].isspace():
-            return False
-
-        _line, _start, end = AXText.get_line_at_offset(obj, offset)
-        return offset == end - 1
-
-    @staticmethod
     def has_sentence_ending(text: str) -> bool:
         """Check if text contains a sentence ending."""
 
@@ -1148,40 +523,21 @@ class AXUtilitiesText:
 
         string, start, end = AXText.get_paragraph_at_offset(obj, 0)
         result = string and 0 <= start < end
-        tokens = ["AXText: Paragraph iteration supported on", obj, ":", result]
+        tokens = ["AXText: Paragraph iteration supported on", obj, f": {result}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return bool(result)
 
     @staticmethod
-    def get_last_caret_set() -> LastCaretSet | None:
-        """Returns info about the most recent caret offset Orca set, or None."""
-
-        return AXUtilitiesText.LAST_CARET_SET
-
-    @staticmethod
-    def set_caret_offset_with_reason(
-        obj: Atspi.Accessible, offset: int, reason: CaretSetReason
-    ) -> bool:
-        """Sets the caret offset, recording the time and reason for later use."""
-
-        result = AXText.set_caret_offset(obj, offset)
-        AXUtilitiesText.LAST_CARET_SET = LastCaretSet(obj, offset, time.monotonic(), reason)
-        tokens = ["AXUtilitiesText: Set caret offset to", offset, "in", obj, "reason:", reason]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        return result
-
-    @staticmethod
-    def set_caret_offset_to_start(obj: Atspi.Accessible, reason: CaretSetReason) -> bool:
+    def set_caret_offset_to_start(obj: Atspi.Accessible) -> bool:
         """Returns False if we definitely failed to set the offset. True cannot be trusted."""
 
-        return AXUtilitiesText.set_caret_offset_with_reason(obj, 0, reason)
+        return AXText.set_caret_offset(obj, 0)
 
     @staticmethod
-    def set_caret_offset_to_end(obj: Atspi.Accessible, reason: CaretSetReason) -> bool:
+    def set_caret_offset_to_end(obj: Atspi.Accessible) -> bool:
         """Returns False if we definitely failed to set the offset. True cannot be trusted."""
 
-        count = AXText.get_character_count(obj)
-        return AXUtilitiesText.set_caret_offset_with_reason(obj, count, reason)
+        return AXText.set_caret_offset(obj, AXText.get_character_count(obj))
 
     @staticmethod
     def has_selected_text(obj: Atspi.Accessible) -> bool:
@@ -1207,8 +563,7 @@ class AXUtilitiesText:
     def clear_all_selected_text(obj: Atspi.Accessible) -> None:
         """Attempts to clear the selected text."""
 
-        # Remove from the end so earlier selection indices remain valid.
-        for i in reversed(range(AXText.get_n_selections(obj))):
+        for i in range(AXText.get_n_selections(obj)):
             AXText.remove_selection(obj, i)
 
     @staticmethod
@@ -1235,19 +590,9 @@ class AXUtilitiesText:
     def get_cached_selected_text(obj: Atspi.Accessible) -> tuple[str, int, int]:
         """Returns the last known selected string, start, and end for obj."""
 
-        string, start, end = AXUtilitiesText._CACHE.get_selected_text(obj)
+        string, start, end = AXUtilitiesText.CACHED_TEXT_SELECTION.get(hash(obj), ("", 0, 0))
         debug_string = string.replace("\n", "\\n")
-        tokens = [
-            "AXText: Cached selection for",
-            obj,
-            "is '",
-            debug_string,
-            "' (",
-            start,
-            ",",
-            end,
-            ")",
-        ]
+        tokens = ["AXText: Cached selection for", obj, f"is '{debug_string}' ({start}, {end})"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return string, start, end
 
@@ -1255,7 +600,7 @@ class AXUtilitiesText:
     def update_cached_selected_text(obj: Atspi.Accessible) -> None:
         """Updates the last known selected string, start, and end for obj."""
 
-        AXUtilitiesText._CACHE.set_selected_text(obj, AXUtilitiesText.get_selected_text(obj))
+        AXUtilitiesText.CACHED_TEXT_SELECTION[hash(obj)] = AXUtilitiesText.get_selected_text(obj)
 
     @staticmethod
     def get_selected_text(obj: Atspi.Accessible) -> tuple[str, int, int]:
@@ -1275,25 +620,18 @@ class AXUtilitiesText:
                 start_offset = selection[0]
 
         text = " ".join(strings)
-        if debug.debugLevel <= debug.LEVEL_INFO:
-            words = text.split()
-            if len(words) > 20:
-                debug_string = f"{' '.join(words[:5])} ... {' '.join(words[-5:])}"
-            else:
-                debug_string = text
+        words = text.split()
+        if len(words) > 20:
+            debug_string = f"{' '.join(words[:5])} ... {' '.join(words[-5:])}"
+        else:
+            debug_string = text
 
-            tokens = [
-                "AXText: Selected text of",
-                obj,
-                "'",
-                debug_string,
-                "' (",
-                start_offset,
-                "-",
-                end_offset,
-                ")",
-            ]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        tokens = [
+            "AXText: Selected text of",
+            obj,
+            f"'{debug_string}' ({start_offset}-{end_offset})",
+        ]
+        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return text, start_offset, end_offset
 
     @staticmethod
@@ -1318,25 +656,6 @@ class AXUtilitiesText:
         return result
 
     @staticmethod
-    def _build_text_maps(text: str) -> tuple[dict[int, int], list[int]]:
-        """Returns (byte_to_char, char_to_byte) UTF-8 offset maps for text.
-
-        byte_to_char[b] is the index of the character at byte offset b.
-        char_to_byte[i] is the starting byte offset of character i;
-        """
-
-        byte_to_char: dict[int, int] = {}
-        char_to_byte: list[int] = [0]
-        byte = 0
-        for i, ch in enumerate(text):
-            for _ in range(len(ch.encode("utf-8"))):
-                byte_to_char[byte] = i
-                byte += 1
-            char_to_byte.append(byte)
-        byte_to_char[byte] = len(text)
-        return byte_to_char, char_to_byte
-
-    @staticmethod
     def get_all_text_attributes(
         obj: Atspi.Accessible,
         start_offset: int = 0,
@@ -1350,60 +669,23 @@ class AXUtilitiesText:
         if end_offset == -1:
             end_offset = AXText.get_character_count(obj)
 
-        tokens = ["AXText: Getting attributes for", obj, "chars:", start_offset, "-", end_offset]
+        tokens = ["AXText: Getting attributes for", obj, f"chars: {start_offset}-{end_offset}"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-
-        # VTE (at least in GTK3 terminals) reports attribute run boundaries in UTF-8 byte offsets
-        # rather than character offsets. If the text has non-ASCII, convert start/end to byte
-        # offsets for the walk and translate the resulting runs back to characters.
-        byte_to_char: dict[int, int] | None = None
-        total_chars = 0
-        is_gtk3_terminal = (
-            AXUtilitiesRole.is_terminal(obj)
-            and AXUtilitiesApplication.get_application_toolkit_name(obj).lower() == "gtk"
-            and AXUtilitiesApplication.get_application_toolkit_version(obj).startswith("3.")
-        )
-        if is_gtk3_terminal:
-            all_text = AXText.get_all_text(obj)
-            if any(ord(ch) > 127 for ch in all_text):
-                total_chars = len(all_text)
-                byte_to_char, char_to_byte = AXUtilitiesText._build_text_maps(all_text)
-                if 0 <= start_offset <= total_chars:
-                    start_offset = char_to_byte[start_offset]
-                if 0 <= end_offset <= total_chars:
-                    end_offset = char_to_byte[end_offset]
 
         rv = []
         offset = start_offset
         while offset < end_offset:
             attrs, start, end = AXText.get_text_attributes_at_offset(obj, offset)
-            clamped_start = max(start, offset)
-            clamped_end = min(end, end_offset)
-            if clamped_start < clamped_end:
-                rv.append((clamped_start, clamped_end, attrs))
-            elif rv and clamped_start == clamped_end:
-                # Zero-length run after clamping. The character at this offset is not
-                # covered by any run. Extend the previous run to include it.
-                prev_start, _prev_end, prev_attrs = rv[-1]
-                rv[-1] = (prev_start, min(offset + 1, end_offset), prev_attrs)
+            if start <= end:
+                rv.append((max(start, offset), end, attrs))
             else:
                 # TODO - JD: We're sometimes seeing this from WebKit, e.g. in Evo gitlab messages.
-                tokens = ["AXText: Start offset", start, "> end offset", end]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                msg = f"AXText: Start offset {start} > end offset {end}"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
             offset = max(end, offset + 1)
 
-        if byte_to_char is not None:
-            rv = [
-                (
-                    byte_to_char.get(s, total_chars),
-                    byte_to_char.get(e, total_chars),
-                    attrs,
-                )
-                for s, e, attrs in rv
-            ]
-
-        tokens = ["AXText:", len(rv), "attribute ranges found."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"AXText: {len(rv)} attribute ranges found."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         return rv
 
     @staticmethod
@@ -1450,17 +732,7 @@ class AXUtilitiesText:
 
         line, start, end = AXUtilitiesText.find_first_visible_line(obj, clip_rect)
         debug_string = line.replace("\n", "\\n")
-        tokens = [
-            "AXText: First visible line in",
-            obj,
-            "is: '",
-            debug_string,
-            "' (",
-            start,
-            "-",
-            end,
-            ")",
-        ]
+        tokens = ["AXText: First visible line in", obj, f"is: '{debug_string}' ({start}-{end})"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         result = [(line, start, end)]
@@ -1473,17 +745,7 @@ class AXUtilitiesText:
 
         line, start, end = result[-1]
         debug_string = line.replace("\n", "\\n")
-        tokens = [
-            "AXText: Last visible line in",
-            obj,
-            "is: '",
-            debug_string,
-            "' (",
-            start,
-            "-",
-            end,
-            ")",
-        ]
+        tokens = ["AXText: Last visible line in", obj, f"is: '{debug_string}' ({start}-{end})"]
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
         return result
 
@@ -1577,9 +839,10 @@ class AXUtilitiesText:
         return result
 
     @staticmethod
-    def attributes_indicate_spelling_error(attributes: dict[str, str]) -> bool:
-        """Returns True if the given text attributes indicate a spelling error."""
+    def string_has_spelling_error(obj: Atspi.Accessible, offset: int | None = None) -> bool:
+        """Returns True if the text attributes indicate a spelling error."""
 
+        attributes = AXText.get_text_attributes_at_offset(obj, offset)[0]
         if attributes.get("invalid") == "spelling":
             return True
         if attributes.get("invalid") == "grammar":
@@ -1589,26 +852,13 @@ class AXUtilitiesText:
         return attributes.get("underline") in ["error", "spelling"]
 
     @staticmethod
-    def attributes_indicate_grammar_error(attributes: dict[str, str]) -> bool:
-        """Returns True if the given text attributes indicate a grammar error."""
-
-        if attributes.get("invalid") == "grammar":
-            return True
-        return attributes.get("underline") == "grammar"
-
-    @staticmethod
-    def string_has_spelling_error(obj: Atspi.Accessible, offset: int | None = None) -> bool:
-        """Returns True if the text attributes indicate a spelling error."""
-
-        attributes = AXText.get_text_attributes_at_offset(obj, offset)[0]
-        return AXUtilitiesText.attributes_indicate_spelling_error(attributes)
-
-    @staticmethod
     def string_has_grammar_error(obj: Atspi.Accessible, offset: int | None = None) -> bool:
         """Returns True if the text attributes indicate a grammar error."""
 
         attributes = AXText.get_text_attributes_at_offset(obj, offset)[0]
-        return AXUtilitiesText.attributes_indicate_grammar_error(attributes)
+        if attributes.get("invalid") == "grammar":
+            return True
+        return attributes.get("underline") == "grammar"
 
     @staticmethod
     def is_eoc(character: str) -> bool:

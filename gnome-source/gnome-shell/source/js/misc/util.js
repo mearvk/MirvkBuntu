@@ -1,10 +1,12 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import GnomeDesktop from 'gi://GnomeDesktop';
 
+import * as Main from '../ui/main.js';
 import {formatTime} from './dateUtils.js';
 
 // http://daringfireball.net/2010/07/improved_regex_for_matching_urls
@@ -20,7 +22,7 @@ const _urlRegexp = new RegExp(
             '|' +
             'www\\d{0,3}[.]' +                    // www.
             '|' +
-            '([a-z0-9\\-]+[.])+[a-z]{2,4}/' +     // foo.xx/
+            '[a-z0-9.\\-]+[.][a-z]{2,4}/' +       // foo.xx/
         ')' +
         '(?:' +                                   // one or more:
             '[^\\s()<>]+' +                       // run of non-space non-()
@@ -48,8 +50,7 @@ let _desktopSettings = null;
  * @returns {{url: string, pos: number}[]} the list of match objects, as described above
  */
 export function findUrls(str) {
-    const res = [];
-    let match;
+    let res = [], match;
     while ((match = _urlRegexp.exec(str)))
         res.push({url: match[2], pos: match.index + match[1].length});
     return res;
@@ -81,7 +82,7 @@ export function spawn(argv) {
  */
 export function spawnCommandLine(commandLine) {
     try {
-        const [success_, argv] = GLib.shell_parse_argv(commandLine);
+        let [success_, argv] = GLib.shell_parse_argv(commandLine);
         trySpawn(argv);
     } catch (err) {
         _handleSpawnError(commandLine, err);
@@ -101,7 +102,7 @@ export function spawnApp(argv) {
             null,
             Gio.AppInfoCreateFlags.SUPPORTS_STARTUP_NOTIFICATION);
 
-        const context = global.create_app_launch_context(0, -1);
+        let context = global.create_app_launch_context(0, -1);
         app.launch([], context);
     } catch (err) {
         _handleSpawnError(argv[0], err);
@@ -136,7 +137,7 @@ export function trySpawn(argv) {
             //   execute child process "foo" (No such file or directory)
             // We are only interested in the part in the parentheses. (And
             // we can't pattern match the text, since it gets localized.)
-            const message = err.message.replace(/.*\((.+)\)/, '$1');
+            let message = err.message.replace(/.*\((.+)\)/, '$1');
             throw new err.constructor({code: err.code, message});
         } else {
             throw err;
@@ -161,44 +162,23 @@ export function trySpawn(argv) {
  * fails, this will throw an error.
  */
 export function trySpawnCommandLine(commandLine) {
-    const [, argv] = GLib.shell_parse_argv(commandLine);
+    let success_, argv;
+
+    try {
+        [success_, argv] = GLib.shell_parse_argv(commandLine);
+    } catch (err) {
+        // Replace "Error invoking GLib.shell_parse_argv: " with
+        // something nicer
+        err.message = err.message.replace(/[^:]*: /, `${_('Could not parse command:')}\n`);
+        throw err;
+    }
+
     trySpawn(argv);
 }
 
 function _handleSpawnError(command, err) {
-    const title = _('Execution of “%s” failed:').format(command);
-    // Use dynamic import to not pull in UI related code in unit tests
-    import('../ui/main.js').then(
-        ({notifyError}) => notifyError(title, err.message));
-}
-
-/**
- * Fix up embedded markup so that it can be displayed correctly in
- * UI elements such as the message list. In some cases, we might want to
- * keep some of the embedded markup, so specify allowMarkup for that case
- *
- * @param {string} text containing markup to escape and parse
- * @param {boolean} allowMarkup to allow embedded markup or just escape it all
- * @returns the escaped string
- */
-export function fixMarkup(text, allowMarkup) {
-    if (allowMarkup) {
-        // Support &amp;, &quot;, &apos;, &lt; and &gt;, escape all other
-        // occurrences of '&'.
-        let _text = text.replace(/&(?!amp;|quot;|apos;|lt;|gt;)/g, '&amp;');
-
-        // Support <b>, <i>, and <u>, escape anything else
-        // so it displays as raw markup.
-        _text = _text.replace(/<(?!\/?[biu]>)/g, '&lt;');
-
-        try {
-            Pango.parse_markup(_text, -1, '');
-            return _text;
-        } catch {}
-    }
-
-    // !allowMarkup, or invalid markup
-    return GLib.markup_escape_text(text, -1);
+    let title = _('Execution of “%s” failed:').format(command);
+    Main.notifyError(title, err.message);
 }
 
 /**
@@ -213,7 +193,7 @@ export function createTimeLabel(date, params) {
     if (_desktopSettings == null)
         _desktopSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
 
-    const label = new St.Label({text: formatTime(date, params)});
+    let label = new St.Label({text: formatTime(date, params)});
     _desktopSettings.connectObject(
         'changed::clock-format', () => (label.text = formatTime(date, params)),
         label);
@@ -277,7 +257,7 @@ function lowerBound(array, val, cmp) {
  * Returns the position at which it was inserted
  */
 export function insertSorted(array, val, cmp) {
-    const pos = lowerBound(array, val, cmp);
+    let pos = lowerBound(array, val, cmp);
     array.splice(pos, 0, val);
 
     return pos;
@@ -303,7 +283,7 @@ export function lerp(start, end, progress) {
  * 'alpha' and 'beta'. Returns NaN for unhandled 'versions'.
  */
 function _GNOMEversionToNumber(version) {
-    const ret = Number(version);
+    let ret = Number(version);
     if (!isNaN(ret))
         return ret;
     if (version === 'alpha')
@@ -330,8 +310,8 @@ export function GNOMEversionCompare(version1, version2) {
     const v2Array = version2.split('.');
 
     for (let i = 0; i < Math.max(v1Array.length, v2Array.length); i++) {
-        const elemV1 = _GNOMEversionToNumber(v1Array[i] || '0');
-        const elemV2 = _GNOMEversionToNumber(v2Array[i] || '0');
+        let elemV1 = _GNOMEversionToNumber(v1Array[i] || '0');
+        let elemV2 = _GNOMEversionToNumber(v2Array[i] || '0');
         if (elemV1 < elemV2)
             return -1;
         if (elemV1 > elemV2)
@@ -449,20 +429,20 @@ export class Highlighter {
         if (!this._highlightRegex)
             return GLib.markup_escape_text(text, -1);
 
-        const escaped = [];
+        let escaped = [];
         let lastMatchEnd = 0;
         let match;
         while ((match = this._highlightRegex.exec(text))) {
             if (match.index > lastMatchEnd) {
-                const unmatched = GLib.markup_escape_text(
+                let unmatched = GLib.markup_escape_text(
                     text.slice(lastMatchEnd, match.index), -1);
                 escaped.push(unmatched);
             }
-            const matched = GLib.markup_escape_text(match[0], -1);
+            let matched = GLib.markup_escape_text(match[0], -1);
             escaped.push(`<b>${matched}</b>`);
             lastMatchEnd = match.index + match[0].length;
         }
-        const unmatched = GLib.markup_escape_text(
+        let unmatched = GLib.markup_escape_text(
             text.slice(lastMatchEnd), -1);
         escaped.push(unmatched);
 

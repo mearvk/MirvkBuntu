@@ -106,15 +106,14 @@ on_started (MetaContext       *context,
 }
 
 static void
-on_prepare_compositor_shutdown (MetaContext       *context,
-                                MetaPluginManager *plugin_mgr)
+on_prepare_shutdown (MetaContext       *context,
+                     MetaPluginManager *plugin_mgr)
 {
   plugin_mgr->state = PLUGIN_MANAGER_STATE_STOPPING;
 }
 
 MetaPluginManager *
-meta_plugin_manager_new (MetaCompositor *compositor,
-                         GVariant       *plugin_options)
+meta_plugin_manager_new (MetaCompositor *compositor)
 {
   MetaBackend *backend = meta_compositor_get_backend (compositor);
   MetaMonitorManager *monitor_manager =
@@ -124,21 +123,10 @@ meta_plugin_manager_new (MetaCompositor *compositor,
   MetaDisplay *display;
   MetaContext *context;
 
-  if (plugin_options)
-    {
-      plugin = g_object_new (plugin_type,
-                             "options", plugin_options,
-                             NULL);
-    }
-  else
-    {
-      plugin = g_object_new (plugin_type, NULL);
-    }
-
   plugin_mgr = g_new0 (MetaPluginManager, 1);
   plugin_mgr->state = PLUGIN_MANAGER_STATE_STARTING;
   plugin_mgr->compositor = compositor;
-  plugin_mgr->plugin = plugin;
+  plugin_mgr->plugin = plugin = g_object_new (plugin_type, NULL);
 
   _meta_plugin_set_compositor (plugin, compositor);
 
@@ -149,8 +137,8 @@ meta_plugin_manager_new (MetaCompositor *compositor,
   context = meta_display_get_context (display);
   g_signal_connect (context, "started",
                     G_CALLBACK (on_started), plugin_mgr);
-  g_signal_connect (context, "prepare-compositor-shutdown",
-                    G_CALLBACK (on_prepare_compositor_shutdown), plugin_mgr);
+  g_signal_connect (context, "prepare-shutdown",
+                    G_CALLBACK (on_prepare_shutdown), plugin_mgr);
 
   return plugin_mgr;
 }
@@ -343,6 +331,17 @@ meta_plugin_manager_filter_keybinding (MetaPluginManager *plugin_mgr,
   return FALSE;
 }
 
+#ifdef HAVE_X11
+gboolean
+meta_plugin_manager_xevent_filter (MetaPluginManager *plugin_mgr,
+                                   XEvent            *xev)
+{
+  MetaPlugin *plugin = plugin_mgr->plugin;
+
+  return _meta_plugin_xevent_filter (plugin, xev);
+}
+#endif
+
 void
 meta_plugin_manager_confirm_display_change (MetaPluginManager *plugin_mgr)
 {
@@ -445,10 +444,4 @@ meta_plugin_manager_locate_pointer (MetaPluginManager *plugin_mgr)
 
   if (klass->locate_pointer)
     klass->locate_pointer (plugin);
-}
-
-MetaPlugin *
-meta_plugin_manager_get_plugin (MetaPluginManager *plugin_mgr)
-{
-  return plugin_mgr->plugin;
 }

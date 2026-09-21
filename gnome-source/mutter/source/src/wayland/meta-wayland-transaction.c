@@ -45,8 +45,6 @@ struct _MetaWaylandTransaction
 
   /* Sources for buffers which are not ready yet */
   GHashTable *buf_sources;
-
-  int64_t target_presentation_time_us;
 };
 
 struct _MetaWaylandTransactionEntry
@@ -61,12 +59,6 @@ struct _MetaWaylandTransactionEntry
   int x;
   int y;
 };
-
-int64_t
-meta_wayland_transaction_get_target_presentation_time_us (const MetaWaylandTransaction *transaction)
-{
-  return transaction->target_presentation_time_us;
-}
 
 static MetaWaylandTransactionEntry *
 meta_wayland_transaction_get_entry (MetaWaylandTransaction *transaction,
@@ -248,33 +240,15 @@ has_dependencies (MetaWaylandTransaction *transaction)
 {
   GHashTableIter iter;
   MetaWaylandSurface *surface;
-  MetaWaylandTransactionEntry *entry;
-
-  if (transaction->target_presentation_time_us)
-    return TRUE;
 
   if (transaction->buf_sources &&
       g_hash_table_size (transaction->buf_sources) > 0)
     return TRUE;
 
   g_hash_table_iter_init (&iter, transaction->entries);
-  while (g_hash_table_iter_next (&iter, (gpointer *) &surface,
-                                        (gpointer *) &entry))
+  while (g_hash_table_iter_next (&iter, (gpointer *) &surface, NULL))
     {
-      MetaSurfaceActor *actor;
-
       if (surface->transaction.first_committed != transaction)
-        return TRUE;
-
-      if (!entry || !entry->state)
-        continue;
-
-      actor = meta_wayland_surface_get_actor (surface);
-      if (!actor || meta_surface_actor_is_effectively_obscured (actor) ||
-          !clutter_actor_is_mapped (CLUTTER_ACTOR (actor)))
-        continue;
-
-      if (entry->state->fifo_wait && surface->fifo_barrier)
         return TRUE;
     }
 
@@ -304,46 +278,9 @@ meta_wayland_transaction_maybe_apply (MetaWaylandTransaction *transaction)
         return;
 
       transaction = first_candidate;
-      first_candidate = g_steal_pointer (&transaction->next_candidate);
+      first_candidate = transaction->next_candidate;
+      transaction->next_candidate = NULL;
     }
-}
-
-gboolean
-meta_wayland_transaction_unblock_timed (MetaWaylandTransaction *transaction,
-                                        int64_t                 target_time_us)
-{
-  if (target_time_us < transaction->target_presentation_time_us)
-    return FALSE;
-
-  transaction->target_presentation_time_us = 0;
-
-  meta_wayland_transaction_maybe_apply (transaction);
-
-  return TRUE;
-}
-
-void
-meta_wayland_transaction_consider_surface (MetaWaylandSurface *surface)
-{
-  MetaWaylandTransaction *transaction;
-
-  transaction = surface->transaction.first_committed;
-  if (transaction)
-    meta_wayland_transaction_maybe_apply (transaction);
-}
-
-void
-meta_wayland_transaction_unblock_surface (MetaWaylandSurface *surface)
-{
-  if (!surface->fifo_barrier)
-    {
-      g_warning ("Attempting to unblock a surface with no fifo_barrier");
-      return;
-    }
-
-  surface->fifo_barrier = FALSE;
-
-  meta_wayland_transaction_consider_surface (surface);
 }
 
 static void
@@ -374,7 +311,6 @@ static gboolean
 meta_wayland_transaction_add_dma_buf_source (MetaWaylandTransaction *transaction,
                                              MetaWaylandBuffer      *buffer)
 {
-  g_autoptr (GMainContext) main_context = NULL;
   GSource *source;
 
   if (transaction->buf_sources &&
@@ -387,11 +323,10 @@ meta_wayland_transaction_add_dma_buf_source (MetaWaylandTransaction *transaction
   if (!source)
     return FALSE;
 
-  main_context = g_main_context_ref_thread_default ();
   ensure_buf_sources (transaction);
 
   g_hash_table_insert (transaction->buf_sources, buffer, source);
-  g_source_attach (source, main_context);
+  g_source_attach (source, NULL);
   g_source_unref (source);
 
   return TRUE;
@@ -402,7 +337,6 @@ meta_wayland_transaction_add_drm_syncobj_source (MetaWaylandTransaction *transac
                                                  MetaWaylandBuffer      *buffer,
                                                  MetaWaylandSyncPoint   *acquire)
 {
-  g_autoptr (GMainContext) main_context = NULL;
   GSource *source;
 
   if (transaction->buf_sources &&
@@ -417,11 +351,10 @@ meta_wayland_transaction_add_drm_syncobj_source (MetaWaylandTransaction *transac
   if (!source)
     return FALSE;
 
-  main_context = g_main_context_ref_thread_default ();
   ensure_buf_sources (transaction);
 
   g_hash_table_insert (transaction->buf_sources, buffer, source);
-  g_source_attach (source, main_context);
+  g_source_attach (source, NULL);
   g_source_unref (source);
 
   return TRUE;
@@ -456,8 +389,6 @@ meta_wayland_transaction_commit (MetaWaylandTransaction *transaction)
   g_autoptr (GPtrArray) placement_states = NULL;
   unsigned int num_placement_states = 0;
   int i;
-  gint64 max_time_us = 0;
-  MetaWaylandSurface *max_time_surface = NULL;
 
   g_hash_table_iter_init (&iter, transaction->entries);
   while (g_hash_table_iter_next (&iter,
@@ -482,13 +413,6 @@ meta_wayland_transaction_commit (MetaWaylandTransaction *transaction)
               g_ptr_array_add (placement_states, entry->state);
               num_placement_states++;
             }
-
-          if (entry->state->has_target_time &&
-              entry->state->target_time_us > max_time_us)
-            {
-              max_time_us = entry->state->target_time_us;
-              max_time_surface = surface;
-            }
         }
     }
 
@@ -501,31 +425,6 @@ meta_wayland_transaction_commit (MetaWaylandTransaction *transaction)
                                                        placement_state);
     }
 
-  /* If we have a time constraint, we always defer application until just before the
-   * appropriate frame clock tick.
-   */
-  if (max_time_us > g_get_monotonic_time ())
-    {
-      MetaSurfaceActor *actor;
-      ClutterFrameClock *frame_clock = NULL;
-
-      /* When the surface has no role assigned yet, it doesn't have an actor.
-       * Ideally we would still manage to schedule the commits, but for now we
-       * just ignore the time constraint.
-       * See: https://gitlab.gnome.org/GNOME/mutter/-/issues/4108
-       */
-      actor = meta_wayland_surface_get_actor (max_time_surface);
-      if (actor)
-        frame_clock = clutter_actor_pick_frame_clock (CLUTTER_ACTOR (actor), NULL);
-
-      if (frame_clock)
-        {
-          maybe_apply = FALSE;
-          transaction->target_presentation_time_us = max_time_us;
-          meta_wayland_compositor_add_timed_transaction (transaction->compositor, transaction);
-          clutter_frame_clock_add_future_time (frame_clock, max_time_us);
-        }
-    }
   transaction->committed_sequence = ++committed_sequence;
   transaction->node.data = transaction;
 
@@ -538,6 +437,8 @@ meta_wayland_transaction_commit (MetaWaylandTransaction *transaction)
     {
       if (surface->transaction.first_committed)
         {
+          MetaWaylandTransactionEntry *entry;
+
           entry = g_hash_table_lookup (surface->transaction.last_committed->entries,
                                        surface);
           entry->next_transaction = transaction;

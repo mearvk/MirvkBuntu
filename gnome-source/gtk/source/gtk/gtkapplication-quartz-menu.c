@@ -21,14 +21,15 @@
 #include "config.h"
 
 #include "gtkapplicationprivate.h"
+#include "gtkmenutrackerprivate.h"
 #include "gtkicontheme.h"
+#include "gtkquartz.h"
 #include "gtkprivate.h"
-#include "gtkwidgetprivate.h"
 
 #include <gdk/macos/gdkmacos.h>
 #include <gdk/macos/gdkmacoskeymap-private.h>
 
-#import "gtkapplication-quartz-private.h"
+#import <Cocoa/Cocoa.h>
 
 #define ICON_SIZE 16
 
@@ -51,6 +52,27 @@
 @interface NSMenuItem (GtkMenuTrackerItem)
 
 + (id)menuItemForTrackerItem:(GtkMenuTrackerItem *)trackerItem;
+
+@end
+
+@interface GNSMenuItem : NSMenuItem
+{
+  GtkMenuTrackerItem *trackerItem;
+  gulong trackerItemChangedHandler;
+  GCancellable *cancellable;
+  BOOL isSpecial;
+}
+
+- (id)initWithTrackerItem:(GtkMenuTrackerItem *)aTrackerItem;
+
+- (void)didChangeLabel;
+- (void)didChangeIcon;
+- (void)didChangeVisible;
+- (void)didChangeToggled;
+- (void)didChangeAccel;
+
+- (void)didSelectItem:(id)sender;
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 
 @end
 
@@ -77,7 +99,71 @@ tracker_item_changed (GObject    *object,
     }
 }
 
+#if 0
+static void
+icon_loaded (GObject      *object,
+             GAsyncResult *result,
+             gpointer      user_data)
+{
+  GtkIconPaintable *icon = GTK_ICON_PAINTABLE (object);
+  GNSMenuItem *item = user_data;
+  GError *error = NULL;
+  GdkPixbuf *pixbuf;
+  int scale = 1;
+
+#ifdef AVAILABLE_MAC_OS_X_VERSION_10_7_AND_LATER
+       /* we need a run-time check for the backingScaleFactor selector because we
+        * may be compiling on a 10.7 framework, but targeting a 10.6 one
+        */
+      if ([[NSScreen mainScreen] respondsToSelector:@selector(backingScaleFactor)])
+        scale = roundf ([[NSScreen mainScreen] backingScaleFactor]);
+#endif
+
+  pixbuf = gtk_icon_load_symbolic_finish (icon, result, NULL, &error);
+
+  if (pixbuf != NULL)
+    {
+      cairo_t *cr;
+      cairo_surface_t *surface;
+      NSImage *image;
+
+      surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                            gdk_pixbuf_get_width (pixbuf),
+                                            gdk_pixbuf_get_height (pixbuf));
+
+      cr = cairo_create (surface);
+      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+      gdk_cairo_set_source_pixbuf (cr, pixbuf, 0, 0);
+      cairo_paint (cr);
+      cairo_destroy (cr);
+      g_object_unref (pixbuf);
+
+      cairo_surface_set_device_scale (surface, scale, scale);
+      image = _gtk_quartz_create_image_from_surface (surface);
+      cairo_surface_destroy (surface);
+
+      if (image != NULL)
+        [item setImage:image];
+      else
+        [item setImage:nil];
+    }
+  else
+    {
+      /* on failure to load, clear the old icon */
+      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+        [item setImage:nil];
+
+      g_error_free (error);
+    }
+}
+#endif
+
 @implementation GNSMenuItem
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+{
+  return gtk_menu_tracker_item_get_sensitive (trackerItem) ? YES : NO;
+}
 
 - (id)initWithTrackerItem:(GtkMenuTrackerItem *)aTrackerItem
 {
@@ -87,7 +173,6 @@ tracker_item_changed (GObject    *object,
 
   if (self != nil)
     {
-      const char *action_name = gtk_menu_tracker_item_get_action_name (aTrackerItem);
       const char *special = gtk_menu_tracker_item_get_special (aTrackerItem);
 
       if (special && g_str_equal (special, "hide-this"))
@@ -111,18 +196,6 @@ tracker_item_changed (GObject    *object,
           [NSApp setServicesMenu:[self submenu]];
           [self setTarget:self];
         }
-      else if (action_name && g_str_equal (action_name, "text.undo"))
-        [self setAction:@selector(undo:)];
-      else if (action_name && g_str_equal (action_name, "text.redo"))
-        [self setAction:@selector(redo:)];
-      else if (action_name && g_str_equal (action_name, "clipboard.cut"))
-        [self setAction:@selector(cut:)];
-      else if (action_name && g_str_equal (action_name, "clipboard.copy"))
-        [self setAction:@selector(copy:)];
-      else if (action_name && g_str_equal (action_name, "clipboard.paste"))
-        [self setAction:@selector(paste:)];
-      else if (action_name && g_str_equal (action_name, "selection.select-all"))
-        [self setAction:@selector(selectAll:)];
       else
         [self setTarget:self];
 
@@ -137,14 +210,7 @@ tracker_item_changed (GObject    *object,
       [self didChangeAccel];
 
       if (gtk_menu_tracker_item_get_has_link (trackerItem, G_MENU_LINK_SUBMENU))
-        {
-          NSMenu *submenu = [[GNSMenu alloc] initWithTitle:[self title] trackerItem:trackerItem];
-
-          if (special && g_str_equal (special, "window-submenu"))
-            [NSApp setWindowsMenu:[submenu autorelease]];
-
-          [self setSubmenu:submenu];
-        }
+        [self setSubmenu:[[[GNSMenu alloc] initWithTitle:[self title] trackerItem:trackerItem] autorelease]];
     }
 
   return self;
@@ -231,12 +297,13 @@ tracker_item_changed (GObject    *object,
 
       theme = gtk_icon_theme_get_for_display (gdk_display_get_default ());
 
+#ifdef AVAILABLE_MAC_OS_X_VERSION_10_7_AND_LATER
        /* we need a run-time check for the backingScaleFactor selector because we
         * may be compiling on a 10.7 framework, but targeting a 10.6 one
         */
       if ([[NSScreen mainScreen] respondsToSelector:@selector(backingScaleFactor)])
         scale = roundf ([[NSScreen mainScreen] backingScaleFactor]);
-
+#endif
       icon = gtk_icon_theme_lookup_by_gicon (theme, icon, ICON_SIZE, scale, 0);
 
       if (icon != NULL)
@@ -301,52 +368,7 @@ tracker_item_changed (GObject    *object,
 
 - (void)didSelectItem:(id)sender
 {
-  /* Mimic macOS' behavior of traversing the reponder chain. */
-  GtkWidget *focus_widget = [self findFocusWidget];
-  const char *action_name = gtk_menu_tracker_item_get_action_name (trackerItem);
-
-  if (focus_widget != NULL && action_name != NULL)
-    {
-      GVariant *action_target = gtk_menu_tracker_item_get_action_target (trackerItem);
-      gtk_widget_activate_action_variant (focus_widget, action_name, action_target);
-      if (action_target)
-        g_variant_unref (action_target);
-    }
-  else
-    gtk_menu_tracker_item_activated (trackerItem);
-}
-
-- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
-{
-  /* Mimic macOS' behavior of traversing the reponder chain. */
-  GtkWidget *focus_widget = [self findFocusWidget];
-  if (focus_widget != NULL && gtk_widget_get_sensitive (focus_widget))
-    {
-      const char *action_name = gtk_menu_tracker_item_get_action_name (trackerItem);
-      gboolean enabled = FALSE;
-      GtkActionMuxer *muxer =  _gtk_widget_get_action_muxer (focus_widget, FALSE);
-
-      if (action_name == NULL || muxer == NULL)
-        return gtk_menu_tracker_item_get_sensitive (trackerItem) ? YES : NO;
-
-      if (gtk_action_muxer_query_action (muxer, action_name, &enabled, NULL, NULL, NULL, NULL))
-        return enabled ? YES : NO;
-    }
-  return gtk_menu_tracker_item_get_sensitive (trackerItem) ? YES : NO;
-}
-
--(GtkWidget *)findFocusWidget
-{
-  GApplication *app = g_application_get_default ();
-  GtkWindow *window;
-
-  if (!GTK_IS_APPLICATION (app))
-    return NULL;
-
-  window = gtk_application_get_active_window (GTK_APPLICATION (app));
-  if (window != NULL)
-    return gtk_window_get_focus (window);
-  return NULL;
+  gtk_menu_tracker_item_activated (trackerItem);
 }
 
 @end

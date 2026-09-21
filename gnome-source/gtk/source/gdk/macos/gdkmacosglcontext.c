@@ -24,8 +24,6 @@
 #include <OpenGL/CGLIOSurface.h>
 #include <QuartzCore/QuartzCore.h>
 
-#import "GdkMacosLayer.h"
-
 #include "gdkmacosbuffer-private.h"
 #include "gdkmacosglcontext-private.h"
 #include "gdkmacossurface-private.h"
@@ -244,7 +242,7 @@ gdk_macos_gl_context_allocate (GdkMacosGLContext *self)
     return;
 
   /* Alter to an opaque surface if necessary */
-  opaque = gdk_surface_is_opaque (surface);
+  opaque = _gdk_macos_surface_is_opaque (GDK_MACOS_SURFACE (surface));
   if (opaque != self->last_opaque)
     {
       self->last_opaque = !!opaque;
@@ -480,11 +478,9 @@ gdk_macos_gl_context_real_realize (GdkGLContext  *context,
 }
 
 static void
-gdk_macos_gl_context_begin_frame (GdkDrawContext  *context,
-                                  gpointer         context_data,
-                                  cairo_region_t  *region,
-                                  GdkColorState  **out_color_state,
-                                  GdkMemoryDepth  *out_depth)
+gdk_macos_gl_context_begin_frame (GdkDrawContext *context,
+                                  GdkMemoryDepth  depth,
+                                  cairo_region_t *region)
 {
   GdkMacosGLContext *self = (GdkMacosGLContext *)context;
   GdkMacosBuffer *buffer;
@@ -502,7 +498,7 @@ gdk_macos_gl_context_begin_frame (GdkDrawContext  *context,
   gdk_gl_context_make_current (GDK_GL_CONTEXT (self));
   gdk_macos_gl_context_allocate (self);
 
-  GDK_DRAW_CONTEXT_CLASS (gdk_macos_gl_context_parent_class)->begin_frame (context, context_data, region, out_color_state, out_depth);
+  GDK_DRAW_CONTEXT_CLASS (gdk_macos_gl_context_parent_class)->begin_frame (context, depth, region);
 
   gdk_gl_context_make_current (GDK_GL_CONTEXT (self));
   CHECK_GL (NULL, glBindFramebuffer (GL_FRAMEBUFFER, self->fbo));
@@ -510,7 +506,6 @@ gdk_macos_gl_context_begin_frame (GdkDrawContext  *context,
 
 static void
 gdk_macos_gl_context_end_frame (GdkDrawContext *context,
-                                gpointer        context_data,
                                 cairo_region_t *painted)
 {
   GdkMacosGLContext *self = GDK_MACOS_GL_CONTEXT (context);
@@ -521,7 +516,7 @@ gdk_macos_gl_context_end_frame (GdkDrawContext *context,
   g_assert (GDK_IS_MACOS_GL_CONTEXT (self));
   g_assert (self->cgl_context != nil);
 
-  GDK_DRAW_CONTEXT_CLASS (gdk_macos_gl_context_parent_class)->end_frame (context, context_data, painted);
+  GDK_DRAW_CONTEXT_CLASS (gdk_macos_gl_context_parent_class)->end_frame (context, painted);
 
   surface = gdk_draw_context_get_surface (context);
   gdk_gl_context_make_current (GDK_GL_CONTEXT (self));
@@ -551,6 +546,11 @@ gdk_macos_gl_context_end_frame (GdkDrawContext *context,
 }
 
 static void
+gdk_macos_gl_context_empty_frame (GdkDrawContext *draw_context)
+{
+}
+
+static void
 gdk_macos_gl_context_surface_resized (GdkDrawContext *draw_context)
 {
   GdkMacosGLContext *self = (GdkMacosGLContext *)draw_context;
@@ -559,24 +559,6 @@ gdk_macos_gl_context_surface_resized (GdkDrawContext *draw_context)
 
   if (self->cgl_context != NULL)
     CGLUpdateContext (self->cgl_context);
-}
-
-
-static gboolean
-gdk_macos_gl_context_surface_attach (GdkDrawContext  *context,
-                                     GError         **error)
-{
-  GdkSurface *surface = gdk_draw_context_get_surface (context);
-  NSView *view = _gdk_macos_surface_get_view (GDK_MACOS_SURFACE (surface));
-
-  if (!GDK_IS_MACOS_LAYER ([view layer]))
-    {
-      [view setLayerContentsRedrawPolicy:NSViewLayerContentsRedrawNever];
-      [view setLayer:[GdkMacosLayer layer]];
-      [view setWantsLayer:YES];
-    }
-
-  return TRUE;
 }
 
 static gboolean
@@ -690,8 +672,8 @@ gdk_macos_gl_context_class_init (GdkMacosGLContextClass *klass)
 
   draw_context_class->begin_frame = gdk_macos_gl_context_begin_frame;
   draw_context_class->end_frame = gdk_macos_gl_context_end_frame;
+  draw_context_class->empty_frame = gdk_macos_gl_context_empty_frame;
   draw_context_class->surface_resized = gdk_macos_gl_context_surface_resized;
-  draw_context_class->surface_attach = gdk_macos_gl_context_surface_attach;
 
   gl_class->get_damage = gdk_macos_gl_context_get_damage;
   gl_class->clear_current = gdk_macos_gl_context_clear_current;

@@ -1,5 +1,4 @@
 #include <clutter/clutter.h>
-#include <clutter/clutter-pango.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -190,7 +189,8 @@ check_result (CallbackData *data)
       dump_attribute_set (attrs);
     }
 
-  g_clear_pointer (&text, g_free);
+  g_free (text);
+  text = NULL;
 
   if (fail)
     {
@@ -210,7 +210,7 @@ do_tests (CallbackData *data)
   while (data)
     {
         gboolean result = check_result (data);
-        g_assert_false (result);
+        g_assert (result == FALSE);
         data = data->next;
     }
 
@@ -314,7 +314,7 @@ cally_text (void)
   data.next = &data1;
 
   clutter_actor_show (data.stage);
-  g_idle_add ((GSourceFunc) do_tests, &data);
+  clutter_threads_add_idle ((GSourceFunc) do_tests, &data);
   clutter_test_main ();
 
   clutter_actor_destroy (data.stage);
@@ -331,8 +331,8 @@ cally_text (void)
     }
   else
     {
-      g_assert_false (data.test_failed);
-      g_assert_false (data1.test_failed);
+      g_assert (data.test_failed != TRUE);
+      g_assert (data1.test_failed != TRUE);
     }
 }
 

@@ -7,8 +7,6 @@ typedef struct _GskGpuImagePrivate GskGpuImagePrivate;
 struct _GskGpuImagePrivate
 {
   GskGpuImageFlags flags;
-  GskGpuConversion conversion;
-  GdkShaderOp shader_op;
   GdkMemoryFormat format;
   gsize width;
   gsize height;
@@ -77,8 +75,6 @@ gsk_gpu_image_init (GskGpuImage *self)
 void
 gsk_gpu_image_setup (GskGpuImage      *self,
                      GskGpuImageFlags  flags,
-                     GskGpuConversion  conversion,
-                     GdkShaderOp       shader_op,
                      GdkMemoryFormat   format,
                      gsize             width,
                      gsize             height)
@@ -87,8 +83,6 @@ gsk_gpu_image_setup (GskGpuImage      *self,
 
   priv->flags = flags;
   priv->format = format;
-  priv->conversion = conversion;
-  priv->shader_op = shader_op;
   priv->width = width;
   priv->height = height;
 }
@@ -120,7 +114,7 @@ gsk_gpu_image_toggle_ref_texture (GskGpuImage *self,
   g_object_add_toggle_ref (G_OBJECT (self), gsk_gpu_image_texture_toggle_ref_cb, texture);
   g_object_unref (self);
 }
-
+                     
 GdkMemoryFormat
 gsk_gpu_image_get_format (GskGpuImage *self)
 {
@@ -153,31 +147,6 @@ gsk_gpu_image_get_flags (GskGpuImage *self)
   return priv->flags;
 }
 
-/*<private>
- * gsk_gpu_image_get_conversion:
- * @self: the image
- *
- * Returns the conversion applied by the image between the actual raw
- * image data and the way it's read in shaders/framebuffers.
- *
- * Returns: the conversion
- **/
-GskGpuConversion
-gsk_gpu_image_get_conversion (GskGpuImage *self)
-{
-  GskGpuImagePrivate *priv = gsk_gpu_image_get_instance_private (self);
-
-  return priv->conversion;
-}
-
-GdkShaderOp
-gsk_gpu_image_get_shader_op (GskGpuImage *self)
-{
-  GskGpuImagePrivate *priv = gsk_gpu_image_get_instance_private (self);
-
-  return priv->shader_op;
-}
-
 void
 gsk_gpu_image_set_flags (GskGpuImage      *self,
                          GskGpuImageFlags  flags)
@@ -193,40 +162,3 @@ gsk_gpu_image_get_projection_matrix (GskGpuImage       *self,
 {
   GSK_GPU_IMAGE_GET_CLASS (self)->get_projection_matrix (self, out_projection);
 }
-
-gboolean
-gsk_gpu_image_supports_sampler (GskGpuImage   *self,
-                                GskGpuSampler  sampler)
-{
-  GskGpuImagePrivate *priv = gsk_gpu_image_get_instance_private (self);
-
-  switch (sampler)
-    {
-      case GSK_GPU_SAMPLER_NEAREST:
-        if (priv->shader_op != GDK_SHADER_DEFAULT)
-          return FALSE;
-        return TRUE;
-
-      case GSK_GPU_SAMPLER_DEFAULT:
-      case GSK_GPU_SAMPLER_REPEAT:
-      case GSK_GPU_SAMPLER_REFLECT:
-        return (priv->flags & GSK_GPU_IMAGE_FILTERABLE) != 0; 
-
-      case GSK_GPU_SAMPLER_TRANSPARENT:
-        if (gdk_memory_format_alpha (priv->format) == GDK_MEMORY_ALPHA_OPAQUE)
-          return FALSE;
-        return (priv->flags & GSK_GPU_IMAGE_FILTERABLE) != 0; 
-
-      case GSK_GPU_SAMPLER_MIPMAP_DEFAULT:
-        /* Our mipmap algorithm can't deal with this */
-        if (priv->shader_op != GDK_SHADER_DEFAULT)
-          return FALSE;
-        return (priv->flags & (GSK_GPU_IMAGE_CAN_MIPMAP | GSK_GPU_IMAGE_FILTERABLE)) ==
-               (GSK_GPU_IMAGE_CAN_MIPMAP | GSK_GPU_IMAGE_FILTERABLE);
-
-      case GSK_GPU_SAMPLER_N_SAMPLERS:
-      default:
-        g_return_val_if_reached (FALSE);
-    }
-}
-

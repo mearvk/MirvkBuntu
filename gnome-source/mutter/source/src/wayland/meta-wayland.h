@@ -33,14 +33,23 @@ void                    meta_wayland_override_display_name (const char *display_
 
 MetaWaylandCompositor * meta_wayland_compositor_new             (MetaContext *context);
 
+void                    meta_wayland_compositor_prepare_shutdown (MetaWaylandCompositor *compositor);
+
 void                    meta_wayland_compositor_update          (MetaWaylandCompositor *compositor,
                                                                  const ClutterEvent    *event);
 
 gboolean                meta_wayland_compositor_handle_event    (MetaWaylandCompositor *compositor,
                                                                  const ClutterEvent    *event);
 
+void                    meta_wayland_compositor_update_key_state (MetaWaylandCompositor *compositor,
+                                                                 char                  *key_vector,
+                                                                  int                    key_vector_len,
+                                                                  int                    offset);
+
 void                    meta_wayland_compositor_set_input_focus (MetaWaylandCompositor *compositor,
                                                                  MetaWindow            *window);
+
+void                    meta_wayland_compositor_paint_finished  (MetaWaylandCompositor *compositor);
 
 void                    meta_wayland_compositor_add_frame_callback_surface (MetaWaylandCompositor *compositor,
                                                                             MetaWaylandSurface    *surface);
@@ -53,15 +62,6 @@ void                    meta_wayland_compositor_add_presentation_feedback_surfac
 
 void                    meta_wayland_compositor_remove_presentation_feedback_surface (MetaWaylandCompositor *compositor,
                                                                                       MetaWaylandSurface    *surface);
-
-void                    meta_wayland_compositor_add_timed_transaction (MetaWaylandCompositor  *compositor,
-                                                                       MetaWaylandTransaction *transaction);
-
-void                    meta_wayland_compositor_add_barrier_surface (MetaWaylandCompositor *compositor,
-                                                                     MetaWaylandSurface    *surface);
-
-void                    meta_wayland_compositor_remove_barrier_surface (MetaWaylandCompositor *compositor,
-                                                                        MetaWaylandSurface    *surface);
 
 GQueue                 *meta_wayland_compositor_get_committed_transactions (MetaWaylandCompositor *compositor);
 
@@ -80,6 +80,8 @@ void                    meta_wayland_compositor_restore_shortcuts      (MetaWayl
 
 gboolean                meta_wayland_compositor_is_shortcuts_inhibited (MetaWaylandCompositor *compositor,
                                                                         ClutterInputDevice    *source);
+
+void                    meta_wayland_compositor_flush_clients (MetaWaylandCompositor *compositor);
 
 void                    meta_wayland_compositor_schedule_surface_association (MetaWaylandCompositor *compositor,
                                                                               int                    id,
@@ -103,17 +105,3 @@ META_EXPORT_TEST
 MetaWaylandFilterManager * meta_wayland_compositor_get_filter_manager (MetaWaylandCompositor *compositor);
 
 void meta_wayland_compositor_sync_focus (MetaWaylandCompositor *compositor);
-
-ClutterCursor * meta_wayland_compositor_get_cursor (MetaWaylandCompositor *compositor,
-                                                    ClutterSprite         *sprite);
-
-MetaWindow * meta_wayland_compositor_get_current_window (MetaWaylandCompositor *compositor,
-                                                         ClutterSprite         *sprite,
-                                                         graphene_point_t      *rel_coords);
-
-static inline gboolean
-meta_wayland_compositor_serial_is_later (uint32_t serial1,
-                                         uint32_t serial2)
-{
-  return serial1 - serial2 < UINT32_MAX / 2;
-}

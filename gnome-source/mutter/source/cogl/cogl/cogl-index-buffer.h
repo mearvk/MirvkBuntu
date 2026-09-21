@@ -62,7 +62,7 @@ typedef struct _CoglIndexBuffer CoglIndexBuffer;
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (CoglIndexBuffer, g_object_unref)
 
 COGL_EXPORT
-GType               cogl_index_buffer_get_type       (void);
+GType               cogl_index_buffer_get_type       (void) G_GNUC_CONST;
 
 /**
  * cogl_index_buffer_new:

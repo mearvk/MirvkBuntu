@@ -27,7 +27,7 @@
 
 #include "backends/meta-color-device.h"
 #include "backends/meta-color-profile.h"
-#include "backends/meta-monitor-private.h"
+#include "backends/meta-monitor.h"
 
 struct _MetaColorStore
 {
@@ -165,10 +165,9 @@ should_ignore_store_file (GFile *file)
 {
   g_autofree char *file_name = NULL;
 
-  /* Ignore device profiles, as they will always be generated on demand. */
+  /* Ignore profiles from EDID, as they will always be generated on demand. */
   file_name = g_file_get_basename (file);
-  return g_str_has_prefix (file_name, "edid-") ||
-         g_str_has_prefix (file_name, "device-");
+  return g_str_has_prefix (file_name, "edid-");
 }
 
 static void
@@ -283,8 +282,7 @@ query_file_info_cb (GObject      *source_object,
   info = g_file_query_info_finish (file, res, &error);
   if (!info)
     {
-      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ||
-          g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
         return;
 
       g_warning ("Failed to query file info on '%s': %s",
@@ -442,8 +440,7 @@ meta_color_store_new (MetaColorManager *color_manager)
   color_store->device_profiles =
     g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
   color_store->pending_device_profiles =
-    g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
-                           (GDestroyNotify) g_ptr_array_unref);
+    g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
   color_store->pending_local_profiles =
     g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
 
@@ -467,40 +464,27 @@ on_profile_generated (GObject      *source_object,
 {
   MetaColorDevice *color_device = META_COLOR_DEVICE (source_object);
   g_autoptr (GTask) task = G_TASK (user_data);
-  EnsureDeviceProfileData *data = g_task_get_task_data (task);
-  MetaColorStore *color_store = data->color_store;
-  g_autofree char *stolen_key = NULL;
-  g_autoptr (GPtrArray) waiting_tasks = NULL;
   g_autoptr (GError) error = NULL;
-  g_autoptr (MetaColorProfile) color_profile = NULL;
-  size_t i;
-
-  if (!g_hash_table_steal_extended (color_store->pending_device_profiles,
-                                    data->key,
-                                    (gpointer *) &stolen_key,
-                                    (gpointer *) &waiting_tasks))
-    g_return_if_reached ();
+  MetaColorProfile *color_profile;
 
   color_profile = meta_color_device_generate_profile_finish (color_device,
                                                              res,
                                                              &error);
-
-  for (i = 0; i < waiting_tasks->len; i++)
+  if (!color_profile)
     {
-      GTask *waiting_task = g_ptr_array_index (waiting_tasks, i);
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+        {
+          g_task_return_error (task, g_steal_pointer (&error));
+          return;
+        }
 
-      if (!color_profile)
-        {
-          g_task_return_prefixed_error (waiting_task, g_error_copy (error),
-                                        "Failed to generate and read ICC profile: ");
-        }
-      else
-        {
-          g_task_return_pointer (waiting_task,
-                                 g_object_ref (color_profile),
-                                 g_object_unref);
-        }
+      g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_FAILED,
+                               "Failed to generate and read ICC profile: %s",
+                               error->message);
+      return;
     }
+
+  g_task_return_pointer (task, color_profile, g_object_unref);
 }
 
 gboolean
@@ -511,51 +495,28 @@ meta_color_store_ensure_device_profile (MetaColorStore      *color_store,
                                         gpointer             user_data)
 {
   MetaMonitor *monitor;
-  const char *device_id, *edid_checksum_md5;
+  const char *edid_checksum_md5;
   g_autoptr (GTask) task = NULL;
   g_autofree char *file_name = NULL;
   g_autofree char *file_path = NULL;
   EnsureDeviceProfileData *data;
   MetaColorProfile *color_profile;
-  GPtrArray *waiting_tasks;
 
   monitor = meta_color_device_get_monitor (color_device);
-  device_id = meta_color_device_get_id (color_device);
-
-  /* Use EDID if available, fall back to device ID hash */
   edid_checksum_md5 = meta_monitor_get_edid_checksum_md5 (monitor);
   if (!edid_checksum_md5)
-    {
-      /* Only create a fallback sRGB profile for non-EDID monitors if the
-       * display supports gamma LUT adjustment (e.g. for Night Light). */
-      if (!meta_monitor_supports_gamma_lut (monitor))
-        return FALSE;
-    }
+    return FALSE;
 
   task = g_task_new (G_OBJECT (color_store), cancellable, callback, user_data);
   g_task_set_source_tag (task, meta_color_store_ensure_device_profile);
 
-  if (edid_checksum_md5)
-    {
-      file_name = g_strdup_printf ("edid-%s.icc", edid_checksum_md5);
-    }
-  else
-    {
-      g_autofree char *device_id_checksum = NULL;
-
-      /* Hash the device ID to avoid special characters (e.g. apostrophes
-       * in vendor names) that can break colord's FD-based profile import */
-      device_id_checksum = g_compute_checksum_for_string (G_CHECKSUM_MD5,
-                                                          device_id, -1);
-      file_name = g_strdup_printf ("device-%s.icc", device_id_checksum);
-    }
-
+  file_name = g_strdup_printf ("edid-%s.icc", edid_checksum_md5);
   file_path = g_build_filename (g_get_user_data_dir (),
                                 "icc", file_name, NULL);
 
   data = g_new0 (EnsureDeviceProfileData, 1);
   data->color_store = color_store;
-  data->key = g_strdup (device_id);
+  data->key = g_strdup (meta_color_device_get_id (color_device));
   g_task_set_task_data (task, data,
                         (GDestroyNotify) ensure_device_profile_data_free);
 
@@ -568,25 +529,18 @@ meta_color_store_ensure_device_profile (MetaColorStore      *color_store,
       return TRUE;
     }
 
-  waiting_tasks = g_hash_table_lookup (color_store->pending_device_profiles,
-                                       data->key);
-  if (waiting_tasks)
+  if (g_hash_table_contains (color_store->pending_device_profiles, data->key))
     {
-      g_ptr_array_add (waiting_tasks, g_steal_pointer (&task));
+      g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_FAILED,
+                               "Profile generation already in progress");
       return TRUE;
     }
 
-  waiting_tasks = g_ptr_array_new_with_free_func (g_object_unref);
-  g_ptr_array_add (waiting_tasks, g_object_ref (task));
-  g_hash_table_insert (color_store->pending_device_profiles,
-                       g_strdup (data->key), g_steal_pointer (&waiting_tasks));
+  g_hash_table_add (color_store->pending_device_profiles, g_strdup (data->key));
 
-  /* Drive the generation with the store's cancellable, not the first
-   * caller's: other callers may be waiting for the result, and each
-   * waiting task is already subject to its own cancellable. */
   meta_color_device_generate_profile (color_device,
                                       file_path,
-                                      color_store->cancellable,
+                                      cancellable,
                                       on_profile_generated,
                                       g_steal_pointer (&task));
   return TRUE;
@@ -603,6 +557,8 @@ meta_color_store_ensure_device_profile_finish (MetaColorStore  *color_store,
 
   g_assert (g_task_get_source_tag (task) ==
             meta_color_store_ensure_device_profile);
+
+  g_hash_table_remove (color_store->pending_device_profiles, data->key);
 
   color_profile = g_task_propagate_pointer (task, error);
   if (!color_profile)
@@ -621,6 +577,8 @@ typedef struct
 {
   MetaColorStore *color_store;
   CdProfile *cd_profile;
+
+  MetaColorProfile *created_profile;
 } EnsureColordProfileData;
 
 static void
@@ -779,12 +737,10 @@ meta_color_store_ensure_colord_profile_finish (MetaColorStore  *color_store,
                                                GAsyncResult    *res,
                                                GError         **error)
 {
-#ifndef G_DISABLE_ASSERT
   GTask *task = G_TASK (res);
 
   g_assert (g_task_get_source_tag (task) ==
             meta_color_store_ensure_colord_profile);
-#endif
 
   return g_task_propagate_pointer (G_TASK (res), error);
 }

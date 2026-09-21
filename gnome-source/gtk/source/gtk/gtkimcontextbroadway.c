@@ -21,12 +21,10 @@
 #include "config.h"
 #include <string.h>
 
-#include "gtk/gtkimcontextbroadwayprivate.h"
+#include "gtk/gtkimcontextbroadway.h"
 #include "gtk/gtkimmoduleprivate.h"
 
 #include "gdk/broadway/gdkbroadway.h"
-
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 
 #define GTK_TYPE_IM_CONTEXT_BROADWAY (gtk_im_context_broadway_get_type ())
 #define GTK_IM_CONTEXT_BROADWAY(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GTK_TYPE_IM_CONTEXT_BROADWAY, GtkIMContextBroadway))

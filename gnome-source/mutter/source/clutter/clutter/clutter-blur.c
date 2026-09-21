@@ -135,9 +135,11 @@ struct _ClutterBlur
 };
 
 static CoglPipeline*
-create_blur_pipeline (CoglContext *ctx)
+create_blur_pipeline (void)
 {
   static CoglPipelineKey blur_pipeline_key = "clutter-blur-pipeline-private";
+  CoglContext *ctx =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
   CoglPipeline *blur_pipeline;
 
   blur_pipeline =
@@ -148,7 +150,6 @@ create_blur_pipeline (CoglContext *ctx)
       CoglSnippet *snippet;
 
       blur_pipeline = cogl_pipeline_new (ctx);
-      cogl_pipeline_set_static_name (blur_pipeline, "ClutterBlur");
       cogl_pipeline_set_layer_null_texture (blur_pipeline, 0);
       cogl_pipeline_set_layer_filters (blur_pipeline,
                                        0,
@@ -223,9 +224,10 @@ update_blur_uniforms (ClutterBlur *blur,
 
 static gboolean
 create_fbo (ClutterBlur *blur,
-            CoglContext *ctx,
             BlurPass    *pass)
 {
+  CoglContext *ctx =
+    clutter_backend_get_cogl_context (clutter_get_default_backend ());
   float scaled_height;
   float scaled_width;
   float height;
@@ -240,8 +242,8 @@ create_fbo (ClutterBlur *blur,
   scaled_height = floorf (height / blur->downscale_factor);
 
   pass->texture = cogl_texture_2d_new_with_size (ctx,
-                                                 (int) scaled_width,
-                                                 (int) scaled_height);
+                                                 scaled_width,
+                                                 scaled_height);
   if (!pass->texture)
     return FALSE;
 
@@ -267,27 +269,26 @@ setup_blur_pass (ClutterBlur *blur,
                  int          orientation,
                  CoglTexture *texture)
 {
-  CoglContext *context = cogl_texture_get_context (texture);
   pass->orientation = orientation;
-  pass->pipeline = create_blur_pipeline (context);
+  pass->pipeline = create_blur_pipeline ();
   cogl_pipeline_set_layer_texture (pass->pipeline, 0, texture);
 
-  if (!create_fbo (blur, context, pass))
+  if (!create_fbo (blur, pass))
     return FALSE;
 
   update_blur_uniforms (blur, pass);
   return TRUE;
 }
 
-float
-clutter_blur_calculate_downscale_factor (float width,
-                                         float height,
-                                         float radius)
+static float
+calculate_downscale_factor (float width,
+                            float height,
+                            float sigma)
 {
   float downscale_factor = 1.f;
   float scaled_width = width;
   float scaled_height = height;
-  float scaled_sigma = radius / 2.0f;
+  float scaled_sigma = sigma;
 
   /* This is the algorithm used by Firefox; keep downscaling until either the
    * blur radius is lower than the threshold, or the downscaled texture is too
@@ -301,7 +302,7 @@ clutter_blur_calculate_downscale_factor (float width,
 
       scaled_width = width / downscale_factor;
       scaled_height = height / downscale_factor;
-      scaled_sigma = radius / (2.0f * downscale_factor);
+      scaled_sigma = sigma / downscale_factor;
     }
 
   return downscale_factor;
@@ -353,18 +354,19 @@ clutter_blur_new (CoglTexture *texture,
   BlurPass *vpass;
 
   g_return_val_if_fail (texture != NULL, NULL);
-  g_return_val_if_fail (radius >= 0.0f, NULL);
+  g_return_val_if_fail (radius >= 0.0, NULL);
 
   width = cogl_texture_get_width (texture);
   height = cogl_texture_get_height (texture);
 
   blur = g_new0 (ClutterBlur, 1);
-  blur->sigma = radius / 2.0f;
+  blur->sigma = radius / 2.0;
   blur->source_texture = g_object_ref (texture);
-  blur->downscale_factor =
-    clutter_blur_calculate_downscale_factor (width, height, radius);
+  blur->downscale_factor = calculate_downscale_factor (width,
+                                                       height,
+                                                       blur->sigma);
 
-  if (G_APPROX_VALUE (blur->sigma, 0.0f, FLT_EPSILON))
+  if (G_APPROX_VALUE (blur->sigma, 0.0, FLT_EPSILON))
     goto out;
 
   vpass = &blur->pass[VERTICAL];

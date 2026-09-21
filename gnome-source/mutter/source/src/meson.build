@@ -13,10 +13,10 @@ mutter_lib_deps = [
 ]
 
 mutter_pkg_deps = [
+  cairo_dep,
   gio_unix_dep,
   glib_dep,
   gsettings_desktop_schemas_dep,
-  wayland_server_dep,
 ]
 
 mutter_pkg_private_deps = [
@@ -25,15 +25,19 @@ mutter_pkg_private_deps = [
   gmodule_no_export_dep,
   gnome_settings_daemon_dep,
   xkbcommon_dep,
-  xkbregistry_dep,
+  gdk_pixbuf_dep,
   libeis_dep,
-  libdisplay_info_dep,
-  libdrm_dep,
 ]
 
 if have_gnome_desktop
   mutter_pkg_private_deps += [
     gnome_desktop_dep,
+  ]
+endif
+
+if have_libdisplay_info
+  mutter_pkg_private_deps += [
+    libdisplay_info_dep,
   ]
 endif
 
@@ -61,10 +65,12 @@ if have_egl
   ]
 endif
 
-mutter_pkg_private_deps += [
-  gudev_dep,
-  libudev_dep,
-]
+if have_libgudev
+  mutter_pkg_private_deps += [
+    gudev_dep,
+    libudev_dep,
+  ]
+endif
 
 if have_startup_notification
   mutter_pkg_private_deps += [
@@ -91,7 +97,7 @@ if have_introspection
   ]
 endif
 
-if have_xwayland
+if have_x11
   mutter_pkg_deps += [
     xfixes_dep,
     xi_dep,
@@ -99,25 +105,68 @@ if have_xwayland
   ]
 
   mutter_pkg_private_deps += [
-    cairo_dep,
     xrandr_dep,
     xinerama_dep,
     xext_dep,
+    ice_dep,
     xcomposite_dep,
     xcursor_dep,
     xdamage_dep,
+    xkbfile_dep,
+    xkeyboard_config_dep,
+    xkbcommon_x11_dep,
+    xrender_dep,
     x11_xcb_dep,
+    xcb_randr_dep,
     xcb_res_dep,
     xau_dep,
+    xtst_dep,
+  ]
+
+  if have_sm
+    mutter_pkg_private_deps += [
+      sm_dep,
+    ]
+  endif
+endif
+
+if have_wayland
+  mutter_pkg_deps += [
+    wayland_server_dep,
   ]
 endif
 
-mutter_pkg_private_deps += [
-  logind_dep,
-  libinput_dep,
-  libgbm_dep,
-  xkbcommon_dep,
-]
+if have_libsystemd
+  mutter_pkg_private_deps += [
+    libsystemd_dep,
+  ]
+endif
+
+if have_native_backend
+  mutter_pkg_private_deps += [
+    libinput_dep,
+    gudev_dep,
+    libgbm_dep,
+    logind_provider_dep,
+    libudev_dep,
+    xkbcommon_dep,
+  ]
+endif
+
+if have_wayland or have_native_backend
+  mutter_pkg_private_deps += [
+    libdrm_dep,
+  ]
+endif
+
+if have_wayland_eglstream
+  mutter_lib_deps += [
+    dl_dep,
+  ]
+  mutter_pkg_private_deps += [
+    wayland_eglstream_protocols_dep,
+  ]
+endif
 
 mutter_deps = [
   mutter_pkg_deps,
@@ -140,18 +189,11 @@ endif
 mutter_sources = [
   'backends/edid.h',
   'backends/edid-parse.c',
-  'backends/meta-a11y-manager.c',
-  'backends/meta-a11y-manager.h',
+  'backends/gsm-inhibitor-flag.h',
   'backends/meta-backend.c',
   'backends/meta-backend-private.h',
-  'backends/meta-backlight.c',
-  'backends/meta-backlight-private.h',
-  'backends/meta-backlight-ref-white.c',
-  'backends/meta-backlight-ref-white-private.h',
   'backends/meta-barrier.c',
   'backends/meta-barrier-private.h',
-  'backends/meta-color-calibration-session.c',
-  'backends/meta-color-calibration-session.h',
   'backends/meta-color-device.c',
   'backends/meta-color-device.h',
   'backends/meta-color-manager.c',
@@ -161,31 +203,22 @@ mutter_sources = [
   'backends/meta-color-profile.h',
   'backends/meta-color-store.c',
   'backends/meta-color-store.h',
-  'backends/meta-clipboard-session.c',
-  'backends/meta-clipboard-session.h',
-  'backends/meta-connector.c',
-  'backends/meta-connector.h',
   'backends/meta-crtc-mode.c',
   'backends/meta-crtc-mode.h',
   'backends/meta-crtc.c',
   'backends/meta-crtc.h',
   'backends/meta-cursor.c',
+  'backends/meta-cursor.h',
   'backends/meta-cursor-renderer.c',
   'backends/meta-cursor-renderer.h',
-  'backends/meta-cursor-xcursor.c',
-  'backends/meta-cursor-xcursor.h',
-  'backends/meta-cursor-theme.c',
-  'backends/meta-cursor-theme.h',
+  'backends/meta-cursor-sprite-xcursor.c',
+  'backends/meta-cursor-sprite-xcursor.h',
   'backends/meta-cursor-tracker.c',
   'backends/meta-cursor-tracker-private.h',
-  'backends/meta-dbus-access-checker.c',
-  'backends/meta-dbus-access-checker.h',
   'backends/meta-dbus-session-manager.c',
   'backends/meta-dbus-session-manager.h',
   'backends/meta-dbus-session-watcher.c',
   'backends/meta-dbus-session-watcher.h',
-  'backends/meta-dbus-utils.c',
-  'backends/meta-dbus-utils.h',
   'backends/meta-display-config-shared.h',
   'backends/meta-dnd-private.h',
   'backends/meta-fd-source.c',
@@ -205,31 +238,34 @@ mutter_sources = [
   'backends/meta-input-mapper-private.h',
   'backends/meta-input-settings.c',
   'backends/meta-input-settings-private.h',
-  'backends/meta-keymap-description.c',
-  'backends/meta-keymap-description-private.h',
+  'backends/meta-input-settings-dummy.c',
+  'backends/meta-input-settings-dummy.h',
   'backends/meta-keymap-utils.c',
   'backends/meta-keymap-utils.h',
   'backends/meta-logical-monitor.c',
-  'backends/meta-logical-monitor-private.h',
+  'backends/meta-logical-monitor.h',
   'backends/meta-monitor.c',
   'backends/meta-monitor-config-manager.c',
   'backends/meta-monitor-config-manager.h',
+  'backends/meta-monitor-config-migration.c',
+  'backends/meta-monitor-config-migration.h',
   'backends/meta-monitor-config-store.c',
   'backends/meta-monitor-config-store.h',
-  'backends/meta-monitor-config-utils.c',
-  'backends/meta-monitor-config-utils.h',
-  'backends/meta-monitor-private.h',
+  'backends/meta-monitor.h',
   'backends/meta-monitor-manager.c',
+  'backends/meta-monitor-manager-dummy.c',
+  'backends/meta-monitor-manager-dummy.h',
   'backends/meta-monitor-manager-private.h',
+  'backends/meta-monitor-transform.c',
+  'backends/meta-monitor-transform.h',
   'backends/meta-orientation-manager.c',
+  'backends/meta-orientation-manager.h',
   'backends/meta-output.c',
   'backends/meta-output.h',
   'backends/meta-pointer-constraint.c',
   'backends/meta-pointer-constraint.h',
   'backends/meta-remote-access-controller-private.h',
   'backends/meta-remote-access-controller.c',
-  'backends/meta-renderdoc.c',
-  'backends/meta-renderdoc.h',
   'backends/meta-renderer.c',
   'backends/meta-renderer.h',
   'backends/meta-renderer-view.c',
@@ -238,7 +274,6 @@ mutter_sources = [
   'backends/meta-screen-cast-window.h',
   'backends/meta-settings.c',
   'backends/meta-settings-private.h',
-  'backends/meta-sprite.c',
   'backends/meta-stage.c',
   'backends/meta-stage-impl.c',
   'backends/meta-stage-impl-private.h',
@@ -249,12 +284,6 @@ mutter_sources = [
   'backends/meta-viewport-info.h',
   'backends/meta-virtual-monitor.c',
   'backends/meta-virtual-monitor.h',
-  'common/meta-cogl-drm-formats.c',
-  'common/meta-cogl-drm-formats.h',
-  'common/meta-drm-format-helpers.c',
-  'common/meta-drm-format-helpers.h',
-  'common/meta-drm-timeline.c',
-  'common/meta-drm-timeline.h',
   'compositor/clutter-utils.c',
   'compositor/clutter-utils.h',
   'compositor/cogl-utils.c',
@@ -266,10 +295,9 @@ mutter_sources = [
   'compositor/meta-background-actor.c',
   'compositor/meta-background-content.c',
   'compositor/meta-background-content-private.h',
-  'compositor/meta-background-effect.c',
-  'compositor/meta-background-effect.h',
   'compositor/meta-background.c',
   'compositor/meta-background-group.c',
+  'compositor/meta-background-image.c',
   'compositor/meta-background-private.h',
   'compositor/meta-compositor-server.c',
   'compositor/meta-compositor-server.h',
@@ -291,12 +319,11 @@ mutter_sources = [
   'compositor/meta-plugin.c',
   'compositor/meta-plugin-manager.c',
   'compositor/meta-plugin-manager.h',
+  'compositor/meta-shadow-factory.c',
   'compositor/meta-shaped-texture.c',
   'compositor/meta-shaped-texture-private.h',
   'compositor/meta-surface-actor.c',
   'compositor/meta-surface-actor.h',
-  'compositor/meta-surface-content.c',
-  'compositor/meta-surface-content.h',
   'compositor/meta-texture-mipmap.c',
   'compositor/meta-texture-mipmap.h',
   'compositor/meta-window-actor.c',
@@ -305,6 +332,7 @@ mutter_sources = [
   'compositor/meta-window-drag.h',
   'compositor/meta-window-group.c',
   'compositor/meta-window-group-private.h',
+  'compositor/meta-window-shape.c',
   'core/bell.c',
   'core/bell.h',
   'core/boxes.c',
@@ -316,10 +344,14 @@ mutter_sources = [
   'core/display-private.h',
   'core/events.c',
   'core/events.h',
+  'core/frame.c',
+  'core/frame.h',
   'core/keybindings.c',
   'core/keybindings-private.h',
   'core/meta-accel-parse.c',
   'core/meta-accel-parse.h',
+  'core/meta-anonymous-file.c',
+  'core/meta-anonymous-file.h',
   'core/meta-border.c',
   'core/meta-border.h',
   'core/meta-clipboard-manager.c',
@@ -330,34 +362,28 @@ mutter_sources = [
   'core/meta-context-private.h',
   'core/meta-context.c',
   'core/meta-debug-control.c',
-  'core/meta-debug-control-private.h',
-  'core/meta-external-constraint.c',
+  'core/meta-debug-control.h',
   'core/meta-fraction.c',
   'core/meta-fraction.h',
+  'core/meta-gesture-tracker.c',
+  'core/meta-gesture-tracker-private.h',
   'core/meta-inhibit-shortcuts-dialog.c',
   'core/meta-inhibit-shortcuts-dialog-default.c',
   'core/meta-inhibit-shortcuts-dialog-default-private.h',
   'core/meta-launch-context.c',
   'core/meta-pad-action-mapper.c',
   'core/meta-private-enums.h',
-  'core/meta-sealed-fd.c',
-  'core/meta-sealed-fd.h',
   'core/meta-selection.c',
   'core/meta-selection-source.c',
   'core/meta-selection-source-memory.c',
-  'core/meta-session-manager.c',
-  'core/meta-session-state.c',
   'core/meta-sound-player.c',
-  'core/meta-tablet-action-mapper.c',
-  'core/meta-tool-action-mapper.c',
-  'core/meta-window-config.c',
-  'core/meta-window-config-private.h',
   'core/meta-workspace-manager.c',
   'core/meta-workspace-manager-private.h',
   'core/place.c',
   'core/place.h',
   'core/prefs-private.h',
   'core/prefs.c',
+  'core/restart.c',
   'core/stack.c',
   'core/stack.h',
   'core/stack-tracker.c',
@@ -372,32 +398,91 @@ mutter_sources = [
   'core/workspace-private.h',
 ]
 
-if have_xwayland
+if have_x11
   mutter_sources += [
+    'backends/x11/cm/meta-backend-x11-cm.c',
+    'backends/x11/cm/meta-backend-x11-cm.h',
+    'backends/x11/cm/meta-cursor-sprite-xfixes.c',
+    'backends/x11/cm/meta-cursor-sprite-xfixes.h',
+    'backends/x11/cm/meta-renderer-x11-cm.c',
+    'backends/x11/cm/meta-renderer-x11-cm.h',
+    'backends/x11/meta-backend-x11.c',
+    'backends/x11/meta-backend-x11.h',
+    'backends/x11/meta-barrier-x11.c',
+    'backends/x11/meta-barrier-x11.h',
+    'backends/x11/meta-clutter-backend-x11.c',
+    'backends/x11/meta-clutter-backend-x11.h',
+    'backends/x11/meta-color-manager-x11.c',
+    'backends/x11/meta-color-manager-x11.h',
+    'backends/x11/meta-crtc-xrandr.c',
+    'backends/x11/meta-crtc-xrandr.h',
+    'backends/x11/meta-cursor-renderer-x11.c',
+    'backends/x11/meta-cursor-renderer-x11.h',
+    'backends/x11/meta-cursor-tracker-x11.c',
+    'backends/x11/meta-cursor-tracker-x11.h',
+    'backends/x11/meta-event-x11.c',
+    'backends/x11/meta-event-x11.h',
+    'backends/x11/meta-gpu-xrandr.c',
+    'backends/x11/meta-gpu-xrandr.h',
+    'backends/x11/meta-input-device-x11.c',
+    'backends/x11/meta-input-device-x11.h',
+    'backends/x11/meta-input-device-tool-x11.c',
+    'backends/x11/meta-input-device-tool-x11.h',
+    'backends/x11/meta-input-settings-x11.c',
+    'backends/x11/meta-input-settings-x11.h',
+    'backends/x11/meta-seat-x11.c',
+    'backends/x11/meta-seat-x11.h',
+    'backends/x11/meta-keymap-x11.c',
+    'backends/x11/meta-keymap-x11.h',
+    'backends/x11/meta-monitor-manager-xrandr.c',
+    'backends/x11/meta-monitor-manager-xrandr.h',
+    'backends/x11/meta-output-xrandr.c',
+    'backends/x11/meta-output-xrandr.h',
+    'backends/x11/meta-renderer-x11.c',
+    'backends/x11/meta-renderer-x11.h',
+    'backends/x11/meta-stage-x11.c',
+    'backends/x11/meta-stage-x11.h',
+    'backends/x11/meta-virtual-input-device-x11.c',
+    'backends/x11/meta-virtual-input-device-x11.h',
+    'backends/x11/meta-xkb-a11y-x11.c',
+    'backends/x11/meta-xkb-a11y-x11.h',
+    'backends/x11/nested/meta-backend-x11-nested.c',
+    'backends/x11/nested/meta-backend-x11-nested.h',
+    'backends/x11/nested/meta-cursor-renderer-x11-nested.c',
+    'backends/x11/nested/meta-cursor-renderer-x11-nested.h',
+    'backends/x11/nested/meta-stage-x11-nested.c',
+    'backends/x11/nested/meta-stage-x11-nested.h',
+    'backends/x11/nested/meta-renderer-x11-nested.c',
+    'backends/x11/nested/meta-renderer-x11-nested.h',
+  ]
+endif
+
+if have_x11_client
+  mutter_sources += [
+    'compositor/meta-compositor-x11.c',
+    'compositor/meta-compositor-x11.h',
+    'compositor/meta-surface-actor-x11.c',
+    'compositor/meta-surface-actor-x11.h',
+    'compositor/meta-sync-ring.c',
+    'compositor/meta-sync-ring.h',
     'compositor/meta-window-actor-x11.c',
     'compositor/meta-window-actor-x11.h',
     'x11/atomnames.h',
     'x11/events.c',
     'x11/events.h',
+    'x11/group.c',
+    'x11/group-private.h',
     'x11/group-props.c',
     'x11/group-props.h',
     'x11/meta-selection-source-x11.c',
     'x11/meta-selection-source-x11-private.h',
-    'x11/meta-shadow-factory.c',
-    'x11/meta-shadow-factory.h',
     'x11/meta-startup-notification-x11.c',
     'x11/meta-startup-notification-x11.h',
     'x11/meta-sync-counter.c',
     'x11/meta-sync-counter.h',
-    'x11/meta-window-shape.c',
-    'x11/meta-window-shape.h',
     'x11/meta-x11-display.c',
     'x11/meta-x11-display-private.h',
     'x11/meta-x11-event-source.c',
-    'x11/meta-x11-frame.c',
-    'x11/meta-x11-frame.h',
-    'x11/meta-x11-group.c',
-    'x11/meta-x11-group-private.h',
     'x11/meta-x11-selection.c',
     'x11/meta-x11-selection-private.h',
     'x11/meta-x11-selection-input-stream.c',
@@ -407,6 +492,8 @@ if have_xwayland
     'x11/meta-x11-stack.c',
     'x11/meta-x11-stack-private.h',
     'x11/mutter-Xatomtype.h',
+    'x11/session.c',
+    'x11/session.h',
     'x11/window-props.c',
     'x11/window-props.h',
     'x11/window-x11.c',
@@ -414,19 +501,30 @@ if have_xwayland
     'x11/window-x11-private.h',
     'x11/xprops.c',
     'x11/xprops.h',
-    'wayland/meta-wayland-x11-interop.c',
-    'wayland/meta-wayland-x11-interop.h',
-    'wayland/meta-window-xwayland.c',
-    'wayland/meta-window-xwayland.h',
-    'wayland/meta-xwayland-dnd-private.h',
-    'wayland/meta-xwayland-dnd.c',
-    'wayland/meta-xwayland-grab-keyboard.c',
-    'wayland/meta-xwayland-grab-keyboard.h',
-    'wayland/meta-xwayland-private.h',
-    'wayland/meta-xwayland-surface.c',
-    'wayland/meta-xwayland-surface.h',
-    'wayland/meta-xwayland.c',
-    'wayland/meta-xwayland.h',
+  ]
+endif
+
+
+if have_egl_device
+  mutter_sources += [
+    'backends/native/meta-render-device-egl-stream.c',
+    'backends/native/meta-render-device-egl-stream.h',
+  ]
+endif
+
+if have_egl
+  mutter_sources += [
+    'backends/meta-egl.c',
+    'backends/meta-egl-ext.h',
+    'backends/meta-egl.h',
+  ]
+endif
+
+if have_gles2
+  mutter_sources += [
+    'backends/meta-gles3.c',
+    'backends/meta-gles3.h',
+    'backends/meta-gles3-table.h',
   ]
 endif
 
@@ -438,373 +536,354 @@ if have_remote_desktop
     'backends/meta-eis-client.h',
     'backends/meta-eis-viewport.c',
     'backends/meta-eis-viewport.h',
-    'backends/meta-eis-monitor-viewport.c',
-    'backends/meta-eis-monitor-viewport.h',
     'backends/meta-remote-desktop.c',
     'backends/meta-remote-desktop.h',
     'backends/meta-remote-desktop-session.c',
     'backends/meta-remote-desktop-session.h',
     'backends/meta-screen-cast.c',
     'backends/meta-screen-cast.h',
+    'backends/meta-screen-cast-area-stream.c',
+    'backends/meta-screen-cast-area-stream.h',
+    'backends/meta-screen-cast-area-stream-src.c',
+    'backends/meta-screen-cast-area-stream-src.h',
+    'backends/meta-screen-cast-monitor-stream.c',
+    'backends/meta-screen-cast-monitor-stream.h',
+    'backends/meta-screen-cast-monitor-stream-src.c',
+    'backends/meta-screen-cast-monitor-stream-src.h',
+    'backends/meta-screen-cast-virtual-stream-src.c',
+    'backends/meta-screen-cast-virtual-stream-src.h',
+    'backends/meta-screen-cast-virtual-stream.c',
+    'backends/meta-screen-cast-virtual-stream.h',
+    'backends/meta-screen-cast-window-stream-src.c',
+    'backends/meta-screen-cast-window-stream-src.h',
+    'backends/meta-screen-cast-window-stream.c',
+    'backends/meta-screen-cast-window-stream.h',
     'backends/meta-screen-cast-session.c',
     'backends/meta-screen-cast-session.h',
     'backends/meta-screen-cast-stream.c',
     'backends/meta-screen-cast-stream.h',
-    'backends/meta-stream-area.c',
-    'backends/meta-stream-area.h',
-    'backends/meta-stream-monitor.c',
-    'backends/meta-stream-monitor.h',
-    'backends/meta-stream-source-area.c',
-    'backends/meta-stream-source-area.h',
-    'backends/meta-stream-source-monitor.c',
-    'backends/meta-stream-source-monitor.h',
-    'backends/meta-stream-source-virtual.c',
-    'backends/meta-stream-source-virtual.h',
-    'backends/meta-stream-source-window.c',
-    'backends/meta-stream-source-window.h',
-    'backends/meta-stream-source.c',
-    'backends/meta-stream-source.h',
-    'backends/meta-stream-virtual.c',
-    'backends/meta-stream-virtual.h',
-    'backends/meta-stream-window.c',
-    'backends/meta-stream-window.h',
-    'backends/meta-stream.c',
-    'backends/meta-stream.h',
+    'backends/meta-screen-cast-stream-src.c',
+    'backends/meta-screen-cast-stream-src.h',
     'core/meta-selection-source-remote.c',
     'core/meta-selection-source-remote.h',
   ]
 endif
 
-mutter_sources += [
-  'compositor/meta-surface-actor-wayland.c',
-  'compositor/meta-surface-actor-wayland.h',
-  'compositor/meta-window-actor-wayland.c',
-  'compositor/meta-window-actor-wayland.h',
-  'core/meta-service-channel.c',
-  'core/meta-service-channel.h',
-  'wayland/meta-cursor-wayland.c',
-  'wayland/meta-cursor-wayland.h',
-  'wayland/meta-pointer-confinement-wayland.c',
-  'wayland/meta-pointer-confinement-wayland.h',
-  'wayland/meta-pointer-lock-wayland.c',
-  'wayland/meta-pointer-lock-wayland.h',
-  'wayland/meta-selection-source-wayland.c',
-  'wayland/meta-selection-source-wayland-private.h',
-  'wayland/meta-wayland-activation.c',
-  'wayland/meta-wayland-activation.h',
-  'wayland/meta-wayland-actor-surface.c',
-  'wayland/meta-wayland-actor-surface.h',
-  'wayland/meta-wayland-background-effect.c',
-  'wayland/meta-wayland-background-effect.h',
-  'wayland/meta-wayland-buffer.c',
-  'wayland/meta-wayland-buffer.h',
-  'wayland/meta-wayland.c',
-  'wayland/meta-wayland-client.c',
-  'wayland/meta-wayland-client-private.h',
-  'wayland/meta-wayland-color-management.c',
-  'wayland/meta-wayland-color-management.h',
-  'wayland/meta-wayland-color-representation.c',
-  'wayland/meta-wayland-color-representation.h',
-  'wayland/meta-wayland-commit-timing.c',
-  'wayland/meta-wayland-cursor-shape.c',
-  'wayland/meta-wayland-cursor-shape.h',
-  'wayland/meta-wayland-fifo.c',
-  'wayland/meta-wayland-cursor-surface.c',
-  'wayland/meta-wayland-cursor-surface.h',
-  'wayland/meta-wayland-data-device.c',
-  'wayland/meta-wayland-data-device.h',
-  'wayland/meta-wayland-data-device-primary.c',
-  'wayland/meta-wayland-data-device-primary.h',
-  'wayland/meta-wayland-data-offer.c',
-  'wayland/meta-wayland-data-offer.h',
-  'wayland/meta-wayland-data-offer-primary.c',
-  'wayland/meta-wayland-data-offer-primary.h',
-  'wayland/meta-wayland-data-source.c',
-  'wayland/meta-wayland-data-source.h',
-  'wayland/meta-wayland-data-source-primary.c',
-  'wayland/meta-wayland-data-source-primary.h',
-  'wayland/meta-wayland-dma-buf.c',
-  'wayland/meta-wayland-dma-buf.h',
-  'wayland/meta-wayland-dnd-surface.c',
-  'wayland/meta-wayland-dnd-surface.h',
-  'wayland/meta-wayland-filter-manager.c',
-  'wayland/meta-wayland-filter-manager.h',
-  'wayland/meta-wayland-fixes.c',
-  'wayland/meta-wayland-fixes.h',
-  'wayland/meta-wayland-fractional-scale.c',
-  'wayland/meta-wayland-fractional-scale.h',
-  'wayland/meta-wayland-gtk-shell.c',
-  'wayland/meta-wayland-gtk-shell.h',
-  'wayland/meta-wayland.h',
-  'wayland/meta-wayland-idle-inhibit.c',
-  'wayland/meta-wayland-idle-inhibit.h',
-  'wayland/meta-wayland-inhibit-shortcuts.c',
-  'wayland/meta-wayland-inhibit-shortcuts-dialog.c',
-  'wayland/meta-wayland-inhibit-shortcuts-dialog.h',
-  'wayland/meta-wayland-inhibit-shortcuts.h',
-  'wayland/meta-wayland-input.c',
-  'wayland/meta-wayland-input.h',
-  'wayland/meta-wayland-input-device.c',
-  'wayland/meta-wayland-input-device.h',
-  'wayland/meta-wayland-keyboard.c',
-  'wayland/meta-wayland-keyboard.h',
-  'wayland/meta-wayland-legacy-xdg-foreign.c',
-  'wayland/meta-wayland-legacy-xdg-foreign.h',
-  'wayland/meta-wayland-linux-drm-syncobj.c',
-  'wayland/meta-wayland-linux-drm-syncobj.h',
-  'wayland/meta-wayland-outputs.c',
-  'wayland/meta-wayland-outputs.h',
-  'wayland/meta-wayland-pointer.c',
-  'wayland/meta-wayland-pointer-constraints.c',
-  'wayland/meta-wayland-pointer-constraints.h',
-  'wayland/meta-wayland-pointer-gesture-hold.c',
-  'wayland/meta-wayland-pointer-gesture-hold.h',
-  'wayland/meta-wayland-pointer-gesture-pinch.c',
-  'wayland/meta-wayland-pointer-gesture-pinch.h',
-  'wayland/meta-wayland-pointer-gestures.c',
-  'wayland/meta-wayland-pointer-gestures.h',
-  'wayland/meta-wayland-pointer-gesture-swipe.c',
-  'wayland/meta-wayland-pointer-gesture-swipe.h',
-  'wayland/meta-wayland-pointer.h',
-  'wayland/meta-wayland-pointer-warp.c',
-  'wayland/meta-wayland-pointer-warp.h',
-  'wayland/meta-wayland-popup.c',
-  'wayland/meta-wayland-popup.h',
-  'wayland/meta-wayland-presentation-time.c',
-  'wayland/meta-wayland-presentation-time-private.h',
-  'wayland/meta-wayland-private.h',
-  'wayland/meta-wayland-region.c',
-  'wayland/meta-wayland-region.h',
-  'wayland/meta-wayland-seat.c',
-  'wayland/meta-wayland-seat.h',
-  'wayland/meta-wayland-shell-surface.c',
-  'wayland/meta-wayland-shell-surface.h',
-  'wayland/meta-wayland-single-pixel-buffer.c',
-  'wayland/meta-wayland-single-pixel-buffer.h',
-  'wayland/meta-wayland-subsurface.c',
-  'wayland/meta-wayland-subsurface.h',
-  'wayland/meta-wayland-surface.c',
-  'wayland/meta-wayland-surface-private.h',
-  'wayland/meta-wayland-system-bell.c',
-  'wayland/meta-wayland-system-bell.h',
-  'wayland/meta-wayland-tablet.c',
-  'wayland/meta-wayland-tablet-cursor-surface.c',
-  'wayland/meta-wayland-tablet-cursor-surface.h',
-  'wayland/meta-wayland-tablet.h',
-  'wayland/meta-wayland-tablet-manager.c',
-  'wayland/meta-wayland-tablet-manager.h',
-  'wayland/meta-wayland-tablet-pad.c',
-  'wayland/meta-wayland-tablet-pad-group.c',
-  'wayland/meta-wayland-tablet-pad-group.h',
-  'wayland/meta-wayland-tablet-pad.h',
-  'wayland/meta-wayland-tablet-pad-dial.c',
-  'wayland/meta-wayland-tablet-pad-dial.h',
-  'wayland/meta-wayland-tablet-pad-ring.c',
-  'wayland/meta-wayland-tablet-pad-ring.h',
-  'wayland/meta-wayland-tablet-pad-strip.c',
-  'wayland/meta-wayland-tablet-pad-strip.h',
-  'wayland/meta-wayland-tablet-seat.c',
-  'wayland/meta-wayland-tablet-seat.h',
-  'wayland/meta-wayland-tablet-tool.c',
-  'wayland/meta-wayland-tablet-tool.h',
-  'wayland/meta-wayland-text-input.c',
-  'wayland/meta-wayland-text-input.h',
-  'wayland/meta-wayland-toplevel-drag.c',
-  'wayland/meta-wayland-toplevel-drag.h',
-  'wayland/meta-wayland-touch.c',
-  'wayland/meta-wayland-touch.h',
-  'wayland/meta-wayland-transaction.c',
-  'wayland/meta-wayland-transaction.h',
-  'wayland/meta-wayland-types.h',
-  'wayland/meta-wayland-versions.h',
-  'wayland/meta-wayland-viewporter.c',
-  'wayland/meta-wayland-viewporter.h',
-  'wayland/meta-wayland-window-configuration.c',
-  'wayland/meta-wayland-window-configuration.h',
-  'wayland/meta-wayland-xdg-foreign.c',
-  'wayland/meta-wayland-xdg-foreign.h',
-  'wayland/meta-wayland-xdg-foreign-private.h',
-  'wayland/meta-wayland-xdg-session-manager.c',
-  'wayland/meta-wayland-xdg-session-manager.h',
-  'wayland/meta-wayland-xdg-session-state.c',
-  'wayland/meta-wayland-xdg-session-state.h',
-  'wayland/meta-wayland-xdg-session.c',
-  'wayland/meta-wayland-xdg-session.h',
-  'wayland/meta-wayland-xdg-shell.c',
-  'wayland/meta-wayland-xdg-shell.h',
-  'wayland/meta-wayland-xdg-dialog.c',
-  'wayland/meta-wayland-xdg-dialog.h',
-  'wayland/meta-wayland-xdg-toplevel-tag.c',
-  'wayland/meta-wayland-xdg-toplevel-tag.h',
-  'wayland/meta-window-wayland.c',
-  'wayland/meta-window-wayland.h',
-]
-
-mutter_sources += [
-  'wayland/meta-wayland-drm-lease.c',
-  'wayland/meta-wayland-drm-lease.h',
-  'backends/native/meta-backend-native.c',
-  'backends/native/meta-backend-native.h',
-  'backends/native/meta-backend-native-private.h',
-  'backends/native/meta-backend-native-types.h',
-  'backends/native/meta-barrier-native.c',
-  'backends/native/meta-barrier-native.h',
-  'backends/native/meta-bezier.c',
-  'backends/native/meta-bezier.h',
-  'backends/native/meta-clutter-backend-native.c',
-  'backends/native/meta-clutter-backend-native.h',
-  'backends/native/meta-crtc-kms.c',
-  'backends/native/meta-crtc-kms.h',
-  'backends/native/meta-crtc-native.c',
-  'backends/native/meta-crtc-native.h',
-  'backends/native/meta-crtc-mode-kms.c',
-  'backends/native/meta-crtc-mode-kms.h',
-  'backends/native/meta-crtc-mode-virtual.c',
-  'backends/native/meta-crtc-mode-virtual.h',
-  'backends/native/meta-crtc-virtual.c',
-  'backends/native/meta-crtc-virtual.h',
-  'backends/native/meta-cursor-renderer-native.c',
-  'backends/native/meta-cursor-renderer-native.h',
-  'backends/native/meta-device-pool-private.h',
-  'backends/native/meta-device-pool.c',
-  'backends/native/meta-device-pool.h',
-  'backends/native/meta-drm-buffer-dumb.c',
-  'backends/native/meta-drm-buffer-dumb.h',
-  'backends/native/meta-drm-buffer-gbm.c',
-  'backends/native/meta-drm-buffer-gbm.h',
-  'backends/native/meta-drm-buffer-import.c',
-  'backends/native/meta-drm-buffer-import.h',
-  'backends/native/meta-drm-buffer-private.h',
-  'backends/native/meta-drm-buffer.c',
-  'backends/native/meta-drm-buffer.h',
-  'backends/native/meta-egl-gbm.c',
-  'backends/native/meta-egl-gbm.h',
-  'backends/native/meta-gpu-kms.c',
-  'backends/native/meta-gpu-kms.h',
-  'backends/native/meta-frame-native.c',
-  'backends/native/meta-frame-native.h',
-  'backends/native/meta-input-device-native.c',
-  'backends/native/meta-input-device-native.h',
-  'backends/native/meta-input-device-tool-native.c',
-  'backends/native/meta-input-device-tool-native.h',
-  'backends/native/meta-input-settings-native.c',
-  'backends/native/meta-input-settings-native.h',
-  'backends/native/meta-keyboard-a11y.c',
-  'backends/native/meta-keyboard-a11y.h',
-  'backends/native/meta-keymap-native-private.h',
-  'backends/native/meta-keymap-native.c',
-  'backends/native/meta-keymap-native.h',
-  'backends/native/meta-monitor-manager-native.c',
-  'backends/native/meta-monitor-manager-native.h',
-  'backends/native/meta-output-kms.c',
-  'backends/native/meta-output-kms.h',
-  'backends/native/meta-output-native.c',
-  'backends/native/meta-output-native.h',
-  'backends/native/meta-output-virtual.c',
-  'backends/native/meta-output-virtual.h',
-  'backends/native/meta-kms-connector-private.h',
-  'backends/native/meta-kms-connector.c',
-  'backends/native/meta-kms-connector.h',
-  'backends/native/meta-kms-crtc-private.h',
-  'backends/native/meta-kms-crtc.c',
-  'backends/native/meta-kms-crtc.h',
-  'backends/native/meta-kms-cursor-manager.c',
-  'backends/native/meta-kms-cursor-manager.h',
-  'backends/native/meta-kms-device-private.h',
-  'backends/native/meta-kms-device.c',
-  'backends/native/meta-kms-device.h',
-  'backends/native/meta-kms-impl-device-atomic.c',
-  'backends/native/meta-kms-impl-device-atomic.h',
-  'backends/native/meta-kms-impl-device-dummy.c',
-  'backends/native/meta-kms-impl-device-dummy.h',
-  'backends/native/meta-kms-impl-device-simple.c',
-  'backends/native/meta-kms-impl-device-simple.h',
-  'backends/native/meta-kms-impl-device.c',
-  'backends/native/meta-kms-impl-device.h',
-  'backends/native/meta-kms-impl.c',
-  'backends/native/meta-kms-impl.h',
-  'backends/native/meta-drm-lease.c',
-  'backends/native/meta-drm-lease.h',
-  'backends/native/meta-kms-mode.c',
-  'backends/native/meta-kms-mode.h',
-  'backends/native/meta-kms-page-flip.c',
-  'backends/native/meta-kms-page-flip-private.h',
-  'backends/native/meta-kms-plane.c',
-  'backends/native/meta-kms-plane-private.h',
-  'backends/native/meta-kms-plane.h',
-  'backends/native/meta-kms-private.h',
-  'backends/native/meta-kms-types-private.h',
-  'backends/native/meta-kms-types.h',
-  'backends/native/meta-kms-update-private.h',
-  'backends/native/meta-kms-update.c',
-  'backends/native/meta-kms-update.h',
-  'backends/native/meta-kms-utils.c',
-  'backends/native/meta-kms-utils.h',
-  'backends/native/meta-kms.c',
-  'backends/native/meta-kms.h',
-  'backends/native/meta-onscreen-native.c',
-  'backends/native/meta-onscreen-native.h',
-  'backends/native/meta-pointer-constraint-native.c',
-  'backends/native/meta-pointer-constraint-native.h',
-  'backends/native/meta-render-device-gbm.c',
-  'backends/native/meta-render-device-gbm.h',
-  'backends/native/meta-render-device-private.h',
-  'backends/native/meta-render-device-surfaceless.c',
-  'backends/native/meta-render-device-surfaceless.h',
-  'backends/native/meta-render-device.c',
-  'backends/native/meta-render-device.h',
-  'backends/native/meta-renderer-display-egl.c',
-  'backends/native/meta-renderer-display-egl-private.h',
-  'backends/native/meta-renderer-egl.c',
-  'backends/native/meta-renderer-egl.h',
-  'backends/native/meta-renderer-native-gles3.c',
-  'backends/native/meta-renderer-native-gles3.h',
-  'backends/native/meta-renderer-native-private.h',
-  'backends/native/meta-renderer-native.c',
-  'backends/native/meta-renderer-native.h',
-  'backends/native/meta-renderer-view-native.c',
-  'backends/native/meta-renderer-view-native.h',
-  'backends/native/meta-seat-impl.c',
-  'backends/native/meta-seat-impl.h',
-  'backends/native/meta-seat-native.c',
-  'backends/native/meta-seat-native.h',
-  'backends/native/meta-sprite-native.c',
-  'backends/native/meta-sprite-native.h',
-  'backends/native/meta-stage-native.c',
-  'backends/native/meta-stage-native.h',
-  'backends/native/meta-thread-impl.c',
-  'backends/native/meta-thread-impl.h',
-  'backends/native/meta-thread-private.h',
-  'backends/native/meta-thread.c',
-  'backends/native/meta-thread.h',
-  'backends/native/meta-thread-private.h',
-  'backends/native/meta-virtual-input-device-native.c',
-  'backends/native/meta-virtual-input-device-native.h',
-  'backends/native/meta-virtual-monitor-native.c',
-  'backends/native/meta-virtual-monitor-native.h',
-  'backends/native/meta-xkb-utils.c',
-  'backends/native/meta-xkb-utils.h',
-  'compositor/meta-compositor-native.c',
-  'compositor/meta-compositor-native.h',
-  'compositor/meta-compositor-view-native.c',
-  'compositor/meta-compositor-view-native.h',
-]
-
-if have_devkit
+if have_wayland
   mutter_sources += [
-    'core/meta-mdk.c',
-    'core/meta-mdk.h',
+    'compositor/meta-surface-actor-wayland.c',
+    'compositor/meta-surface-actor-wayland.h',
+    'compositor/meta-window-actor-wayland.c',
+    'compositor/meta-window-actor-wayland.h',
+    'core/meta-service-channel.c',
+    'core/meta-service-channel.h',
+    'wayland/meta-cursor-sprite-wayland.c',
+    'wayland/meta-cursor-sprite-wayland.h',
+    'wayland/meta-drm-timeline.c',
+    'wayland/meta-drm-timeline.h',
+    'wayland/meta-pointer-confinement-wayland.c',
+    'wayland/meta-pointer-confinement-wayland.h',
+    'wayland/meta-pointer-lock-wayland.c',
+    'wayland/meta-pointer-lock-wayland.h',
+    'wayland/meta-selection-source-wayland.c',
+    'wayland/meta-selection-source-wayland-private.h',
+    'wayland/meta-wayland-activation.c',
+    'wayland/meta-wayland-activation.h',
+    'wayland/meta-wayland-actor-surface.c',
+    'wayland/meta-wayland-actor-surface.h',
+    'wayland/meta-wayland-buffer.c',
+    'wayland/meta-wayland-buffer.h',
+    'wayland/meta-wayland.c',
+    'wayland/meta-wayland-client.c',
+    'wayland/meta-wayland-client-private.h',
+    'wayland/meta-wayland-cursor-surface.c',
+    'wayland/meta-wayland-cursor-surface.h',
+    'wayland/meta-wayland-data-device.c',
+    'wayland/meta-wayland-data-device.h',
+    'wayland/meta-wayland-data-device-primary.c',
+    'wayland/meta-wayland-data-device-primary.h',
+    'wayland/meta-wayland-data-offer.c',
+    'wayland/meta-wayland-data-offer.h',
+    'wayland/meta-wayland-data-offer-primary.c',
+    'wayland/meta-wayland-data-offer-primary.h',
+    'wayland/meta-wayland-data-source.c',
+    'wayland/meta-wayland-data-source.h',
+    'wayland/meta-wayland-data-source-primary.c',
+    'wayland/meta-wayland-data-source-primary.h',
+    'wayland/meta-wayland-dma-buf.c',
+    'wayland/meta-wayland-dma-buf.h',
+    'wayland/meta-wayland-dnd-surface.c',
+    'wayland/meta-wayland-dnd-surface.h',
+    'wayland/meta-wayland-filter-manager.c',
+    'wayland/meta-wayland-filter-manager.h',
+    'wayland/meta-wayland-fractional-scale.c',
+    'wayland/meta-wayland-fractional-scale.h',
+    'wayland/meta-wayland-gtk-shell.c',
+    'wayland/meta-wayland-gtk-shell.h',
+    'wayland/meta-wayland.h',
+    'wayland/meta-wayland-idle-inhibit.c',
+    'wayland/meta-wayland-idle-inhibit.h',
+    'wayland/meta-wayland-inhibit-shortcuts.c',
+    'wayland/meta-wayland-inhibit-shortcuts-dialog.c',
+    'wayland/meta-wayland-inhibit-shortcuts-dialog.h',
+    'wayland/meta-wayland-inhibit-shortcuts.h',
+    'wayland/meta-wayland-input.c',
+    'wayland/meta-wayland-input.h',
+    'wayland/meta-wayland-input-device.c',
+    'wayland/meta-wayland-input-device.h',
+    'wayland/meta-wayland-keyboard.c',
+    'wayland/meta-wayland-keyboard.h',
+    'wayland/meta-wayland-legacy-xdg-foreign.c',
+    'wayland/meta-wayland-legacy-xdg-foreign.h',
+    'wayland/meta-wayland-linux-drm-syncobj.c',
+    'wayland/meta-wayland-linux-drm-syncobj.h',
+    'wayland/meta-wayland-outputs.c',
+    'wayland/meta-wayland-outputs.h',
+    'wayland/meta-wayland-pointer.c',
+    'wayland/meta-wayland-pointer-constraints.c',
+    'wayland/meta-wayland-pointer-constraints.h',
+    'wayland/meta-wayland-pointer-gesture-hold.c',
+    'wayland/meta-wayland-pointer-gesture-hold.h',
+    'wayland/meta-wayland-pointer-gesture-pinch.c',
+    'wayland/meta-wayland-pointer-gesture-pinch.h',
+    'wayland/meta-wayland-pointer-gestures.c',
+    'wayland/meta-wayland-pointer-gestures.h',
+    'wayland/meta-wayland-pointer-gesture-swipe.c',
+    'wayland/meta-wayland-pointer-gesture-swipe.h',
+    'wayland/meta-wayland-pointer.h',
+    'wayland/meta-wayland-popup.c',
+    'wayland/meta-wayland-popup.h',
+    'wayland/meta-wayland-presentation-time.c',
+    'wayland/meta-wayland-presentation-time-private.h',
+    'wayland/meta-wayland-private.h',
+    'wayland/meta-wayland-region.c',
+    'wayland/meta-wayland-region.h',
+    'wayland/meta-wayland-seat.c',
+    'wayland/meta-wayland-seat.h',
+    'wayland/meta-wayland-shell-surface.c',
+    'wayland/meta-wayland-shell-surface.h',
+    'wayland/meta-wayland-single-pixel-buffer.c',
+    'wayland/meta-wayland-single-pixel-buffer.h',
+    'wayland/meta-wayland-subsurface.c',
+    'wayland/meta-wayland-subsurface.h',
+    'wayland/meta-wayland-surface.c',
+    'wayland/meta-wayland-surface-private.h',
+    'wayland/meta-wayland-tablet.c',
+    'wayland/meta-wayland-tablet-cursor-surface.c',
+    'wayland/meta-wayland-tablet-cursor-surface.h',
+    'wayland/meta-wayland-tablet.h',
+    'wayland/meta-wayland-tablet-manager.c',
+    'wayland/meta-wayland-tablet-manager.h',
+    'wayland/meta-wayland-tablet-pad.c',
+    'wayland/meta-wayland-tablet-pad-group.c',
+    'wayland/meta-wayland-tablet-pad-group.h',
+    'wayland/meta-wayland-tablet-pad.h',
+    'wayland/meta-wayland-tablet-pad-ring.c',
+    'wayland/meta-wayland-tablet-pad-ring.h',
+    'wayland/meta-wayland-tablet-pad-strip.c',
+    'wayland/meta-wayland-tablet-pad-strip.h',
+    'wayland/meta-wayland-tablet-seat.c',
+    'wayland/meta-wayland-tablet-seat.h',
+    'wayland/meta-wayland-tablet-tool.c',
+    'wayland/meta-wayland-tablet-tool.h',
+    'wayland/meta-wayland-text-input.c',
+    'wayland/meta-wayland-text-input.h',
+    'wayland/meta-wayland-touch.c',
+    'wayland/meta-wayland-touch.h',
+    'wayland/meta-wayland-transaction.c',
+    'wayland/meta-wayland-transaction.h',
+    'wayland/meta-wayland-types.h',
+    'wayland/meta-wayland-versions.h',
+    'wayland/meta-wayland-viewporter.c',
+    'wayland/meta-wayland-viewporter.h',
+    'wayland/meta-wayland-window-configuration.c',
+    'wayland/meta-wayland-window-configuration.h',
+    'wayland/meta-wayland-xdg-foreign.c',
+    'wayland/meta-wayland-xdg-foreign.h',
+    'wayland/meta-wayland-xdg-foreign-private.h',
+    'wayland/meta-wayland-xdg-shell.c',
+    'wayland/meta-wayland-xdg-shell.h',
+    'wayland/meta-window-wayland.c',
+    'wayland/meta-window-wayland.h',
+  ]
+
+  if have_xwayland
+    mutter_sources += [
+      'wayland/meta-wayland-x11-interop.c',
+      'wayland/meta-wayland-x11-interop.h',
+      'wayland/meta-window-xwayland.c',
+      'wayland/meta-window-xwayland.h',
+      'wayland/meta-xwayland.c',
+      'wayland/meta-xwayland-grab-keyboard.c',
+      'wayland/meta-xwayland-grab-keyboard.h',
+      'wayland/meta-xwayland.h',
+      'wayland/meta-xwayland-private.h',
+      'wayland/meta-xwayland-dnd.c',
+      'wayland/meta-xwayland-dnd-private.h',
+      'wayland/meta-xwayland-surface.c',
+      'wayland/meta-xwayland-surface.h',
+    ]
+  endif
+endif
+
+if have_native_backend
+  mutter_sources += [
+    'backends/native/dbus-utils.c',
+    'backends/native/dbus-utils.h',
+    'backends/native/meta-backend-native.c',
+    'backends/native/meta-backend-native.h',
+    'backends/native/meta-backend-native-private.h',
+    'backends/native/meta-backend-native-types.h',
+    'backends/native/meta-barrier-native.c',
+    'backends/native/meta-barrier-native.h',
+    'backends/native/meta-bezier.c',
+    'backends/native/meta-bezier.h',
+    'backends/native/meta-clutter-backend-native.c',
+    'backends/native/meta-clutter-backend-native.h',
+    'backends/native/meta-crtc-kms.c',
+    'backends/native/meta-crtc-kms.h',
+    'backends/native/meta-crtc-native.c',
+    'backends/native/meta-crtc-native.h',
+    'backends/native/meta-crtc-mode-kms.c',
+    'backends/native/meta-crtc-mode-kms.h',
+    'backends/native/meta-crtc-mode-virtual.c',
+    'backends/native/meta-crtc-mode-virtual.h',
+    'backends/native/meta-crtc-virtual.c',
+    'backends/native/meta-crtc-virtual.h',
+    'backends/native/meta-cursor-renderer-native.c',
+    'backends/native/meta-cursor-renderer-native.h',
+    'backends/native/meta-device-pool-private.h',
+    'backends/native/meta-device-pool.c',
+    'backends/native/meta-device-pool.h',
+    'backends/native/meta-drm-buffer-dumb.c',
+    'backends/native/meta-drm-buffer-dumb.h',
+    'backends/native/meta-drm-buffer-gbm.c',
+    'backends/native/meta-drm-buffer-gbm.h',
+    'backends/native/meta-drm-buffer-import.c',
+    'backends/native/meta-drm-buffer-import.h',
+    'backends/native/meta-drm-buffer-private.h',
+    'backends/native/meta-drm-buffer.c',
+    'backends/native/meta-drm-buffer.h',
+    'backends/native/meta-gpu-kms.c',
+    'backends/native/meta-gpu-kms.h',
+    'backends/native/meta-frame-native.c',
+    'backends/native/meta-frame-native.h',
+    'backends/native/meta-input-device-native.c',
+    'backends/native/meta-input-device-native.h',
+    'backends/native/meta-input-device-tool-native.c',
+    'backends/native/meta-input-device-tool-native.h',
+    'backends/native/meta-input-settings-native.c',
+    'backends/native/meta-input-settings-native.h',
+    'backends/native/meta-keymap-native.c',
+    'backends/native/meta-keymap-native.h',
+    'backends/native/meta-launcher.c',
+    'backends/native/meta-launcher.h',
+    'backends/native/meta-monitor-manager-native.c',
+    'backends/native/meta-monitor-manager-native.h',
+    'backends/native/meta-output-kms.c',
+    'backends/native/meta-output-kms.h',
+    'backends/native/meta-output-native.c',
+    'backends/native/meta-output-native.h',
+    'backends/native/meta-output-virtual.c',
+    'backends/native/meta-output-virtual.h',
+    'backends/native/meta-kms-connector-private.h',
+    'backends/native/meta-kms-connector.c',
+    'backends/native/meta-kms-connector.h',
+    'backends/native/meta-kms-crtc-private.h',
+    'backends/native/meta-kms-crtc.c',
+    'backends/native/meta-kms-crtc.h',
+    'backends/native/meta-kms-cursor-manager.c',
+    'backends/native/meta-kms-cursor-manager.h',
+    'backends/native/meta-kms-device-private.h',
+    'backends/native/meta-kms-device.c',
+    'backends/native/meta-kms-device.h',
+    'backends/native/meta-kms-impl-device-atomic.c',
+    'backends/native/meta-kms-impl-device-atomic.h',
+    'backends/native/meta-kms-impl-device-dummy.c',
+    'backends/native/meta-kms-impl-device-dummy.h',
+    'backends/native/meta-kms-impl-device-simple.c',
+    'backends/native/meta-kms-impl-device-simple.h',
+    'backends/native/meta-kms-impl-device.c',
+    'backends/native/meta-kms-impl-device.h',
+    'backends/native/meta-kms-impl.c',
+    'backends/native/meta-kms-impl.h',
+    'backends/native/meta-kms-mode.c',
+    'backends/native/meta-kms-mode.h',
+    'backends/native/meta-kms-page-flip.c',
+    'backends/native/meta-kms-page-flip-private.h',
+    'backends/native/meta-kms-plane.c',
+    'backends/native/meta-kms-plane-private.h',
+    'backends/native/meta-kms-plane.h',
+    'backends/native/meta-kms-private.h',
+    'backends/native/meta-kms-types-private.h',
+    'backends/native/meta-kms-types.h',
+    'backends/native/meta-kms-update-private.h',
+    'backends/native/meta-kms-update.c',
+    'backends/native/meta-kms-update.h',
+    'backends/native/meta-kms-utils.c',
+    'backends/native/meta-kms-utils.h',
+    'backends/native/meta-kms.c',
+    'backends/native/meta-kms.h',
+    'backends/native/meta-onscreen-native.c',
+    'backends/native/meta-onscreen-native.h',
+    'backends/native/meta-pointer-constraint-native.c',
+    'backends/native/meta-pointer-constraint-native.h',
+    'backends/native/meta-render-device-gbm.c',
+    'backends/native/meta-render-device-gbm.h',
+    'backends/native/meta-render-device-private.h',
+    'backends/native/meta-render-device-surfaceless.c',
+    'backends/native/meta-render-device-surfaceless.h',
+    'backends/native/meta-render-device.c',
+    'backends/native/meta-render-device.h',
+    'backends/native/meta-renderer-native-gles3.c',
+    'backends/native/meta-renderer-native-gles3.h',
+    'backends/native/meta-renderer-native-private.h',
+    'backends/native/meta-renderer-native.c',
+    'backends/native/meta-renderer-native.h',
+    'backends/native/meta-renderer-view-native.c',
+    'backends/native/meta-renderer-view-native.h',
+    'backends/native/meta-seat-impl.c',
+    'backends/native/meta-seat-impl.h',
+    'backends/native/meta-seat-native.c',
+    'backends/native/meta-seat-native.h',
+    'backends/native/meta-stage-native.c',
+    'backends/native/meta-stage-native.h',
+    'backends/native/meta-thread-impl.c',
+    'backends/native/meta-thread-impl.h',
+    'backends/native/meta-thread-private.h',
+    'backends/native/meta-thread.c',
+    'backends/native/meta-thread.h',
+    'backends/native/meta-thread-private.h',
+    'backends/native/meta-udev.c',
+    'backends/native/meta-udev.h',
+    'backends/native/meta-virtual-input-device-native.c',
+    'backends/native/meta-virtual-input-device-native.h',
+    'backends/native/meta-virtual-monitor-native.c',
+    'backends/native/meta-virtual-monitor-native.h',
+    'backends/native/meta-xkb-utils.c',
+    'backends/native/meta-xkb-utils.h',
+    'compositor/meta-compositor-native.c',
+    'compositor/meta-compositor-native.h',
+    'compositor/meta-compositor-view-native.c',
+    'compositor/meta-compositor-view-native.h',
   ]
 endif
 
-mutter_sources += [
-  'backends/meta-backlight-sysfs.c',
-  'backends/meta-backlight-sysfs-private.h',
-  'backends/meta-launcher.c',
-  'backends/meta-launcher.h',
-  'backends/meta-udev.c',
-  'backends/meta-udev.h',
-]
+if have_wayland or have_native_backend
+  mutter_sources += [
+    'common/meta-cogl-drm-formats.c',
+    'common/meta-cogl-drm-formats.h',
+    'common/meta-drm-format-helpers.c',
+    'common/meta-drm-format-helpers.h',
+  ]
+endif
+
+if have_wayland_eglstream
+  mutter_sources += [
+    'wayland/meta-wayland-egl-stream.c',
+    'wayland/meta-wayland-egl-stream.h',
+  ]
+endif
 
 mutter_private_enum_sources = [
   'core/window-private.h',
@@ -817,12 +896,14 @@ if have_remote_desktop
   ]
 endif
 
-mutter_private_enum_sources += [
-  'backends/native/meta-backend-native-types.h',
-  'backends/native/meta-drm-buffer.h',
-  'backends/native/meta-kms-types.h',
-  'backends/native/meta-thread.h',
-]
+if have_native_backend
+  mutter_private_enum_sources += [
+    'backends/native/meta-backend-native-types.h',
+    'backends/native/meta-drm-buffer.h',
+    'backends/native/meta-kms-types.h',
+    'backends/native/meta-thread.h',
+  ]
+endif
 
 mutter_built_sources = []
 
@@ -837,16 +918,6 @@ if mutter_private_enum_sources.length() > 0
 endif
 
 dbus_interfaces = [
-  {
-    'name': 'meta-dbus-a11y',
-    'interface': 'org.freedesktop.a11y.xml',
-    'prefix': 'org.freedesktop.a11y',
-  },
-  {
-    'name': 'meta-dbus-clipboard',
-    'interface': 'org.gnome.Mutter.Clipboard.xml',
-    'prefix': 'org.gnome.Mutter.',
-  },
   {
     'name': 'meta-dbus-display-config',
     'interface': 'org.gnome.Mutter.DisplayConfig.xml',
@@ -878,21 +949,6 @@ dbus_interfaces = [
     'interface': 'org.gnome.Mutter.DebugControl.xml',
     'prefix': 'org.gnome.Mutter',
   },
-  {
-    'name': 'meta-dbus-x11',
-    'interface': 'org.gnome.Mutter.X11.xml',
-    'prefix': 'org.gnome.Mutter',
-  },
-  {
-    'name': 'meta-dbus-color-manager',
-    'interface': 'org.gnome.Mutter.ColorManager.xml',
-    'prefix': 'org.gnome.Mutter',
-  },
-  {
-    'name': 'meta-dbus-login1',
-    'interface': 'org.freedesktop.login1.xml',
-    'prefix': 'org.freedesktop.',
-  },
 ]
 
 if have_profiler
@@ -911,14 +967,24 @@ if have_profiler
   ]
 endif
 
-cvt = find_program('cvt')
+if have_native_backend
+  cvt = find_program('cvt')
 
-gen_default_modes = find_program('backends/native/gen-default-modes.py')
-default_modes_h = custom_target('meta-default-modes',
-  output: 'meta-default-modes.h',
-  command: [gen_default_modes, '@OUTPUT@']
-)
-mutter_built_sources += default_modes_h
+  gen_default_modes = find_program('backends/native/gen-default-modes.py')
+  default_modes_h = custom_target('meta-default-modes',
+    output: 'meta-default-modes.h',
+    command: [gen_default_modes, '@OUTPUT@']
+  )
+  mutter_built_sources += default_modes_h
+
+  dbus_interfaces += [
+    {
+      'name': 'meta-dbus-login1',
+      'interface': 'org.freedesktop.login1.xml',
+      'prefix': 'org.freedesktop.',
+    },
+  ]
+endif
 
 if have_remote_desktop
   dbus_interfaces += [
@@ -930,16 +996,6 @@ if have_remote_desktop
     {
       'name': 'meta-dbus-screen-cast',
       'interface': 'org.gnome.Mutter.ScreenCast.xml',
-      'prefix': 'org.gnome.Mutter.',
-    },
-  ]
-endif
-
-if have_devkit
-  dbus_interfaces += [
-    {
-      'name': 'meta-dbus-devkit',
-      'interface': 'org.gnome.Mutter.Devkit.xml',
       'prefix': 'org.gnome.Mutter.',
     },
   ]
@@ -976,7 +1032,7 @@ foreach dbus_interface: dbus_interfaces
   endif
   interface_file = directory / interface
 
-  interface_prefix = dbus_interface['prefix']
+  prefix = dbus_interface['prefix']
 
   if dbus_interface.has_key('object_manager')
     object_manager = dbus_interface['object_manager']
@@ -985,7 +1041,7 @@ foreach dbus_interface: dbus_interfaces
   endif
 
   dbus_sources = gnome.gdbus_codegen(name, interface_file,
-    interface_prefix: interface_prefix,
+    interface_prefix: prefix,
     namespace: 'MetaDBus',
     object_manager: object_manager,
   )
@@ -999,99 +1055,124 @@ wayland_protocol_server_headers = []
 wayland_protocol_client_headers = []
 wayland_protocol_sources = []
 
-# Format:
-#  - protocol name
-#  - protocol type ('stable', 'staging', 'unstable', 'private')
-#    * 'stable', 'staging' and 'unstable' are from wayland-protocols
-#    * 'private' are shipped in this repo
-#  - protocol version (optional for 'stable', 'staging' and 'unstable')
-wayland_protocols = [
-  ['color-management', 'staging', 1, ],
-  ['color-representation', 'staging', 1, ],
-  ['commit-timing', 'staging', 1, ],
-  ['cursor-shape', 'staging', 1, ],
-  ['drm-lease', 'staging', 1, ],
-  ['ext-background-effect', 'staging', 1, ],
-  ['fractional-scale', 'staging', 1, ],
-  ['fifo', 'staging', 1, ],
-  ['gtk-shell', 'private', ],
-  ['idle-inhibit', 'unstable', 1, ],
-  ['keyboard-shortcuts-inhibit', 'unstable', 1, ],
-  ['linux-dmabuf', 'stable', 1, ],
-  ['linux-drm-syncobj', 'staging', 1, ],
-  ['pointer-constraints', 'unstable', 1, ],
-  ['pointer-gestures', 'unstable', 1, ],
-  ['pointer-warp', 'staging', 1, ],
-  ['presentation-time', 'stable', ],
-  ['primary-selection', 'unstable', 1, ],
-  ['relative-pointer', 'unstable', 1, ],
-  ['single-pixel-buffer', 'staging', 1, ],
-  ['tablet', 'stable', 2, ],
-  ['text-input', 'unstable', 3, ],
-  ['viewporter', 'stable', ],
-  ['xdg-activation', 'staging', 1, ],
-  ['xdg-dialog', 'staging', 1, ],
-  ['xdg-foreign', 'unstable', 1, ],
-  ['xdg-foreign', 'unstable', 2, ],
-  ['xdg-output', 'unstable', 1, ],
-  ['xdg-shell', 'stable', ],
-  ['xdg-system-bell', 'staging', 1, ],
-  ['xdg-toplevel-drag', 'staging', 1, ],
-  ['xdg-toplevel-tag', 'staging', 1, ],
-]
+wayland_protocol_files = {}
 
-if have_xwayland
-  wayland_protocols += [
-    ['mutter-x11-interop', 'private', ],
-    ['xwayland-keyboard-grab', 'unstable', 1, ],
+if have_wayland
+  # Format:
+  #  - protocol name
+  #  - protocol stability ('private', 'stable' or 'unstable')
+  #  - protocol version (if stability is 'unstable')
+  wayland_protocols = [
+    ['fractional-scale', 'staging', 'v1', ],
+    ['gtk-shell', 'private', ],
+    ['idle-inhibit', 'unstable', 'v1', ],
+    ['keyboard-shortcuts-inhibit', 'unstable', 'v1', ],
+    ['linux-dmabuf', 'stable', 'v1', ],
+    ['pointer-constraints', 'unstable', 'v1', ],
+    ['pointer-gestures', 'unstable', 'v1', ],
+    ['presentation-time', 'stable', ],
+    ['primary-selection', 'unstable', 'v1', ],
+    ['relative-pointer', 'unstable', 'v1', ],
+    ['single-pixel-buffer', 'staging', 'v1', ],
+    ['tablet', 'unstable', 'v2', ],
+    ['text-input', 'unstable', 'v3', ],
+    ['viewporter', 'stable', ],
+    ['xdg-activation', 'staging', 'v1', ],
+    ['xdg-foreign', 'unstable', 'v1', ],
+    ['xdg-foreign', 'unstable', 'v2', ],
+    ['xdg-output', 'unstable', 'v1', ],
+    ['xdg-shell', 'stable', ],
+    ['xwayland-keyboard-grab', 'unstable', 'v1', ],
+    ['linux-drm-syncobj-v1', 'private', ],
   ]
-endif
-
-if wayland_protocols_dep.version().version_compare('>=1.48')
-  wayland_protocols += [
-    ['xdg-session-management', 'staging', 1, ],
-  ]
-else
-  wayland_protocols += [
-    ['xdg-session-management-v1', 'private', 1, ],
-  ]
-endif
-
-protocol_xmls = files()
-
-foreach p: wayland_protocols
-  protocol_name = p.get(0)
-  protocol_type = p.get(1)
-
-  if protocol_type == 'private'
-    protocol_xmls += files(
-      'wayland/protocol/@0@.xml'.format(protocol_name)
-    )
-  else
-    if p.length() > 2
-      protocol_xmls += wl_mod.find_protocol(
-        protocol_name,
-        state: protocol_type,
-        version: p.get(2))
-    else
-      protocol_xmls += wl_mod.find_protocol(
-        protocol_name,
-        state: protocol_type)
-    endif
+  if have_wayland_eglstream
+    wayland_eglstream_protocols_dir = wayland_eglstream_protocols_dep.get_variable('pkgdatadir')
+    wayland_protocols += [
+      ['wayland-eglstream-controller', 'third-party', wayland_eglstream_protocols_dir],
+    ]
   endif
-endforeach
+  if have_xwayland
+    wayland_protocols += [
+      ['mutter-x11-interop', 'private', ],
+    ]
+  endif
 
-foreach xml: protocol_xmls
-  generated = wl_mod.scan_xml(xml,
-    client: true,
-    server: true)
+  wayland_scanner = find_program('wayland-scanner')
+  protocols_dir = wayland_protocols_dep.get_variable('pkgdatadir')
+  assert(protocols_dir != '', 'Could not get pkgdatadir from wayland-protocols.pc')
 
-  wayland_protocol_sources += generated[0]
-  wayland_protocol_client_headers += generated[1]
-  wayland_protocol_server_headers += generated[2]
-endforeach
+  foreach p: wayland_protocols
+    protocol_name = p.get(0)
+    protocol_type = p.get(1)
 
-message('Generated code for @0@ wayland protocols'.format(wayland_protocol_sources.length()))
+    if protocol_type == 'stable'
+      if p.length() == 3
+        protocol_version = p.get(2)
+        output_base = '@0@-@1@'.format(protocol_name, protocol_version)
+      else
+        output_base = protocol_name
+      endif
+      input = protocols_dir / protocol_type / protocol_name / '@0@.xml'.format(output_base)
+    elif protocol_type == 'staging'
+      protocol_version = p.get(2)
+      output_base = '@0@-@1@'.format(protocol_name, protocol_version)
+      input = protocols_dir / protocol_type / protocol_name / '@0@.xml'.format(output_base)
+    elif protocol_type == 'private'
+      output_base = protocol_name
+      input = 'wayland/protocol/@0@.xml'.format(protocol_name)
+    elif protocol_type == 'third-party'
+      output_base = protocol_name
+      protocol_dir = p.get(2)
+      input = protocol_dir / '@0@.xml'.format(protocol_name)
+    else
+      protocol_version = p.get(2)
+      output_base = '@0@-@1@-@2@'.format(protocol_name,
+                                         protocol_type,
+                                         protocol_version)
+      input = protocols_dir / protocol_type / protocol_name / '@0@.xml'.format(output_base)
+    endif
+
+    server_header = custom_target('@0@ server header'.format(output_base),
+      input: input,
+      output: '@0@-server-protocol.h'.format(output_base),
+      command: [
+        wayland_scanner,
+        'server-header',
+        '@INPUT@', '@OUTPUT@',
+      ]
+    )
+    client_header = custom_target('@0@ client header'.format(output_base),
+      input: input,
+      output: '@0@-client-protocol.h'.format(output_base),
+      command: [
+        wayland_scanner,
+        'client-header',
+        '@INPUT@', '@OUTPUT@',
+      ]
+    )
+    protocol_code = custom_target('@0@ source'.format(output_base),
+      input: input,
+      output: '@0@-protocol.c'.format(output_base),
+      command: [
+        wayland_scanner,
+        'private-code',
+        '@INPUT@', '@OUTPUT@',
+      ]
+    )
+
+    wayland_protocol_files += {
+      protocol_name: {
+        'server-header': server_header,
+        'client-header': client_header,
+        'protocol-code': protocol_code,
+      },
+    }
+
+    wayland_protocol_server_headers += server_header
+    wayland_protocol_client_headers += client_header
+    wayland_protocol_sources += protocol_code
+  endforeach
+endif
 
 mutter_built_sources += wayland_protocol_server_headers
 mutter_built_sources += wayland_protocol_sources
@@ -1107,11 +1188,7 @@ foreach built_source : mutter_built_sources
   endif
 endforeach
 
-subdir('helpers')
-
-subdir('third_party')
-
-libmutter = library(libmutter_name,
+libmutter = shared_library(libmutter_name,
   mutter_sources,
   mutter_built_sources,
   version: '0.0.0',
@@ -1126,7 +1203,6 @@ libmutter = library(libmutter_name,
     libmutter_cogl_dep,
     libmutter_clutter_dep,
     mutter_deps,
-    gvdb_dep,
   ],
   install_rpath: pkglibdir,
   install_dir: libdir,
@@ -1157,6 +1233,26 @@ mutter = executable('mutter',
   install_dir: bindir,
   install: true,
 )
+if have_x11
+  executable('mutter-restart-helper',
+    sources: [
+      files('core/restart-helper.c'),
+    ],
+    include_directories: [
+      top_includepath,
+    ],
+    c_args: [
+      mutter_c_args,
+      '-DG_LOG_DOMAIN="mutter-restart-helper"',
+    ],
+    dependencies: [
+      x11_dep,
+      xcomposite_dep,
+    ],
+    install_dir: libexecdir,
+    install: true,
+  )
+endif
 
 if have_introspection
   mutter_introspected_sources = []
@@ -1166,20 +1262,6 @@ if have_introspection
     endif
   endforeach
 
-  libmutter_gir_includes = [
-    'Gio-2.0',
-    'GObject-2.0',
-    'GDesktopEnums-3.0',
-    libmutter_cogl_gir[0],
-    libmutter_clutter_gir[0],
-    libmutter_mtk_gir[0],
-  ]
-  if have_xwayland
-    libmutter_gir_includes += [
-      'xlib-2.0',
-      'xfixes-4.0',
-    ]
-  endif
   libmutter_gir = gnome.generate_gir(libmutter,
     sources: [
       mutter_enum_types[1],
@@ -1189,7 +1271,17 @@ if have_introspection
     nsversion: libmutter_api_version,
     namespace: 'Meta',
     symbol_prefix: 'meta',
-    includes: libmutter_gir_includes,
+    includes: [
+      'Gio-2.0',
+      'GObject-2.0',
+      'GDesktopEnums-3.0',
+      'xlib-2.0',
+      'xfixes-4.0',
+      libmutter_cogl_gir[0],
+      libmutter_cogl_pango_gir[0],
+      libmutter_clutter_gir[0],
+      libmutter_mtk_gir[0],
+    ],
     dependencies: [
       libmutter_dep,
       mutter_deps,
@@ -1209,20 +1301,17 @@ pkg.generate(libmutter,
   version: meson.project_version(),
   variables: [
     'apiversion=' + libmutter_api_version,
-    'pkglibdir=' + pkglibdir,
     'girdir=${libdir}/mutter-' + libmutter_api_version,
     'typelibdir=${libdir}/mutter-' + libmutter_api_version,
-    'have_xwayland=@0@'.format(have_xwayland),
-    'have_fonts=@0@'.format(have_fonts),
   ],
   install_dir: pcdir,
 )
 
 subdir('compositor/plugins')
-if have_xwayland
+if have_x11_client
   subdir('frames')
 endif
 
-if have_tests
+if have_core_tests
   subdir('tests')
 endif

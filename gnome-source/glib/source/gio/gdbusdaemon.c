@@ -28,10 +28,31 @@
 #include <gio/gio.h>
 #include <gio/gunixsocketaddress.h>
 #include "gdbusdaemon.h"
-#include "gdbusprivate.h"
 #include "glibintl.h"
 
 #include "gdbus-daemon-generated.h"
+
+#define DBUS_SERVICE_NAME  "org.freedesktop.DBus"
+
+/* Owner flags */
+#define DBUS_NAME_FLAG_ALLOW_REPLACEMENT 0x1 /**< Allow another service to become the primary owner if requested */
+#define DBUS_NAME_FLAG_REPLACE_EXISTING  0x2 /**< Request to replace the current primary owner */
+#define DBUS_NAME_FLAG_DO_NOT_QUEUE      0x4 /**< If we can not become the primary owner do not place us in the queue */
+
+/* Replies to request for a name */
+#define DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER  1 /**< Service has become the primary owner of the requested name */
+#define DBUS_REQUEST_NAME_REPLY_IN_QUEUE       2 /**< Service could not become the primary owner and has been placed in the queue */
+#define DBUS_REQUEST_NAME_REPLY_EXISTS         3 /**< Service is already in the queue */
+#define DBUS_REQUEST_NAME_REPLY_ALREADY_OWNER  4 /**< Service is already the primary owner */
+
+/* Replies to releasing a name */
+#define DBUS_RELEASE_NAME_REPLY_RELEASED        1 /**< Service was released from the given name */
+#define DBUS_RELEASE_NAME_REPLY_NON_EXISTENT    2 /**< The given name does not exist on the bus */
+#define DBUS_RELEASE_NAME_REPLY_NOT_OWNER       3 /**< Service is not an owner of the given name */
+
+/* Replies to service starts */
+#define DBUS_START_REPLY_SUCCESS         1 /**< Service was auto started */
+#define DBUS_START_REPLY_ALREADY_RUNNING 2 /**< Service was already running */
 
 #define IDLE_TIMEOUT_MSEC 3000
 
@@ -122,7 +143,7 @@ typedef struct {
 typedef struct {
   gboolean eavesdrop;
   GDBusMessageType type;
-  size_t n_elements;
+  int n_elements;
   MatchElement *elements;
 } Match;
 
@@ -178,16 +199,6 @@ name_ref (Name *name)
 static void
 name_unref (Name *name)
 {
-  /* scan-build with clang-17 can’t follow the refcounting of `Name` structs
-   * throughout this file. Probably because there are structures like `NameOwner`
-   * which cause a ref to be added to a `Name` while they exist, but which don’t
-   * actually have a pointer to the `Name`, so the unref of the `Name` when they
-   * are freed looks like a double-unref.
-   *
-   * So, until the static analysis improves, or we find some way to restructure
-   * the code, squash the false positive use-after-free or double-unref warnings
-   * by making this function a no-op to the static analyser. */
-#if !G_ANALYZER_ANALYZING
   g_assert (name->refcount > 0);
   if (--name->refcount == 0)
     {
@@ -195,7 +206,6 @@ name_unref (Name *name)
       g_free (name->name);
       g_free (name);
     }
-#endif
 }
 
 static Name *
@@ -467,7 +477,8 @@ match_new (const char *str)
 static void
 match_free (Match *match)
 {
-  for (size_t i = 0; i < match->n_elements; i++)
+  int i;
+  for (i = 0; i < match->n_elements; i++)
     g_free (match->elements[i].value);
   g_free (match->elements);
   g_free (match);
@@ -476,13 +487,15 @@ match_free (Match *match)
 static gboolean
 match_equal (Match *a, Match *b)
 {
+  int i;
+
   if (a->eavesdrop != b->eavesdrop)
     return FALSE;
   if (a->type != b->type)
     return FALSE;
  if (a->n_elements != b->n_elements)
     return FALSE;
-  for (size_t i = 0; i < a->n_elements; i++)
+  for (i = 0; i < a->n_elements; i++)
     {
       if (a->elements[i].type != b->elements[i].type ||
 	  a->elements[i].arg != b->elements[i].arg ||
@@ -493,7 +506,7 @@ match_equal (Match *a, Match *b)
 }
 
 static const gchar *
-message_get_argN (GDBusMessage *message, size_t n, gboolean allow_path)
+message_get_argN (GDBusMessage *message, int n, gboolean allow_path)
 {
   const gchar *ret;
   GVariant *body;
@@ -530,7 +543,7 @@ match_matches (GDBusDaemon *daemon,
 {
   MatchElement *element;
   Name *name;
-  size_t len, len2;
+  int i, len, len2;
   const char *value;
   int check_type;
 
@@ -541,7 +554,7 @@ match_matches (GDBusDaemon *daemon,
       g_dbus_message_get_message_type (message) != match->type)
     return FALSE;
 
-  for (size_t i = 0; i < match->n_elements; i++)
+  for (i = 0; i < match->n_elements; i++)
     {
       element = &match->elements[i];
       check_type = CHECK_TYPE_STRING;
@@ -551,7 +564,7 @@ match_matches (GDBusDaemon *daemon,
 	  check_type = CHECK_TYPE_NAME;
 	  value = g_dbus_message_get_sender (message);
 	  if (value == NULL)
-	    value = DBUS_SERVICE_DBUS;
+	    value = DBUS_SERVICE_NAME;
 	  break;
 	case MATCH_ELEMENT_DESTINATION:
 	  check_type = CHECK_TYPE_NAME;
@@ -693,8 +706,8 @@ send_name_owner_changed (GDBusDaemon *daemon,
 {
   GDBusMessage *signal_message;
 
-  signal_message = g_dbus_message_new_signal (DBUS_PATH_DBUS,
-					      DBUS_INTERFACE_DBUS,
+  signal_message = g_dbus_message_new_signal ("/org/freedesktop/DBus",
+					      "org.freedesktop.DBus",
 					      "NameOwnerChanged");
   g_dbus_message_set_body (signal_message,
 			   g_variant_new ("(sss)",
@@ -749,8 +762,8 @@ name_replace_owner (Name *name, NameOwner *owner)
       g_assert (old_owner->client != new_client);
 
       g_dbus_connection_emit_signal (old_client->connection,
-				     NULL, DBUS_PATH_DBUS,
-				     DBUS_INTERFACE_DBUS, "NameLost",
+				     NULL, "/org/freedesktop/DBus",
+				     "org.freedesktop.DBus", "NameLost",
 				     g_variant_new ("(s)",
 						    name->name), NULL);
 
@@ -772,8 +785,8 @@ name_replace_owner (Name *name, NameOwner *owner)
       new_name = new_client->id;
 
       g_dbus_connection_emit_signal (new_client->connection,
-				     NULL, DBUS_PATH_DBUS,
-				     DBUS_INTERFACE_DBUS, "NameAcquired",
+				     NULL, "/org/freedesktop/DBus",
+				     "org.freedesktop.DBus", "NameAcquired",
 				     g_variant_new ("(s)",
 						    name->name), NULL);
     }
@@ -850,12 +863,8 @@ client_new (GDBusDaemon *daemon, GDBusConnection *connection)
   g_hash_table_insert (daemon->clients, client->id, client);
 
   g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (daemon), connection,
-				    DBUS_PATH_DBUS, &error);
-  if (error != NULL)
-    {
-      g_error ("Error exporting D-Bus interface: %s", error->message);
-      g_clear_error (&error);
-    }
+				    "/org/freedesktop/DBus", &error);
+  g_assert_no_error (error);
 
   g_signal_connect (connection, "closed", G_CALLBACK (connection_closed), client);
   g_dbus_connection_add_filter (connection,
@@ -1014,9 +1023,9 @@ handle_get_name_owner (_GFreedesktopDBus *object,
   GDBusDaemon *daemon = G_DBUS_DAEMON (object);
   Name *name;
 
-  if (strcmp (arg_name, DBUS_SERVICE_DBUS) == 0)
+  if (strcmp (arg_name, DBUS_SERVICE_NAME) == 0)
     {
-      _g_freedesktop_dbus_complete_get_name_owner (object, invocation, DBUS_SERVICE_DBUS);
+      _g_freedesktop_dbus_complete_get_name_owner (object, invocation, DBUS_SERVICE_NAME);
       return TRUE;
     }
 
@@ -1052,8 +1061,8 @@ handle_hello (_GFreedesktopDBus *object,
   _g_freedesktop_dbus_complete_hello (object, invocation, client->id);
 
   g_dbus_connection_emit_signal (client->connection,
-				 NULL, DBUS_PATH_DBUS,
-				 DBUS_INTERFACE_DBUS, "NameAcquired",
+				 NULL, "/org/freedesktop/DBus",
+				 "org.freedesktop.DBus", "NameAcquired",
 				 g_variant_new ("(s)",
 						client->id), NULL);
 
@@ -1170,11 +1179,11 @@ handle_release_name (_GFreedesktopDBus *object,
       return TRUE;
     }
 
-  if (strcmp (arg_name, DBUS_SERVICE_DBUS) == 0)
+  if (strcmp (arg_name, DBUS_SERVICE_NAME) == 0)
     {
       g_dbus_method_invocation_return_error (invocation,
 					     G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-					     "Cannot release a service named " DBUS_SERVICE_DBUS ", because that is owned by the bus");
+					     "Cannot release a service named " DBUS_SERVICE_NAME ", because that is owned by the bus");
       return TRUE;
     }
 
@@ -1284,11 +1293,11 @@ handle_request_name (_GFreedesktopDBus *object,
       return TRUE;
     }
 
-  if (strcmp (arg_name, DBUS_SERVICE_DBUS) == 0)
+  if (strcmp (arg_name, DBUS_SERVICE_NAME) == 0)
     {
       g_dbus_method_invocation_return_error (invocation,
 					     G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-					     "Cannot acquire a service named " DBUS_SERVICE_DBUS ", because that is reserved");
+					     "Cannot acquire a service named " DBUS_SERVICE_NAME ", because that is reserved");
       return TRUE;
     }
 
@@ -1404,7 +1413,7 @@ route_message (Client *source_client, GDBusMessage *message)
 
   dest_client = NULL;
   dest = g_dbus_message_get_destination (message);
-  if (dest != NULL && strcmp (dest, DBUS_SERVICE_DBUS) != 0)
+  if (dest != NULL && strcmp (dest, DBUS_SERVICE_NAME) != 0)
     {
       dest_client = g_hash_table_lookup (daemon->clients, dest);
 
@@ -1438,7 +1447,7 @@ route_message (Client *source_client, GDBusMessage *message)
   broadcast_message (daemon, message, dest_client != NULL, TRUE, dest_client);
 
   /* Swallow messages not for the bus */
-  if (dest == NULL || strcmp (dest, DBUS_SERVICE_DBUS) != 0)
+  if (dest == NULL || strcmp (dest, DBUS_SERVICE_NAME) != 0)
     {
       g_object_unref (message);
       message = NULL;
@@ -1510,7 +1519,7 @@ filter_function (GDBusConnection *connection,
         }
 
       if (g_dbus_message_get_sender (message) == NULL)
-        g_dbus_message_set_sender (message, DBUS_SERVICE_DBUS);
+        g_dbus_message_set_sender (message, DBUS_SERVICE_NAME);
       if (g_dbus_message_get_destination (message) == NULL)
         g_dbus_message_set_destination (message, client->id);
     }

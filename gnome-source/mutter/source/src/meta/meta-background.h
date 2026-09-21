@@ -44,28 +44,29 @@ G_DECLARE_FINAL_TYPE (MetaBackground,
 
 
 META_EXPORT
+void meta_background_refresh_all (void);
+
+META_EXPORT
 MetaBackground *meta_background_new (MetaDisplay *display);
 
 META_EXPORT
 void meta_background_set_color    (MetaBackground            *self,
-                                   CoglColor                 *color);
+                                   ClutterColor              *color);
 
 META_EXPORT
 void meta_background_set_gradient (MetaBackground            *self,
                                    GDesktopBackgroundShading  shading_direction,
-                                   CoglColor                 *color,
-                                   CoglColor                 *second_color);
+                                   ClutterColor              *color,
+                                   ClutterColor              *second_color);
 
 META_EXPORT
-void meta_background_set_texture (MetaBackground          *self,
-                                  CoglTexture             *texture,
-                                  GDesktopBackgroundStyle  style,
-                                  ClutterColorState       *color_state);
+void meta_background_set_file     (MetaBackground            *self,
+                                   GFile                     *file,
+                                   GDesktopBackgroundStyle    style);
 
 META_EXPORT
-void meta_background_set_blend_textures (MetaBackground          *self,
-                                         CoglTexture             *texture1,
-                                         CoglTexture             *texture2,
-                                         double                   blend_factor,
-                                         GDesktopBackgroundStyle  style,
-                                         ClutterColorState       *color_state);
+void meta_background_set_blend    (MetaBackground            *self,
+                                   GFile                     *file1,
+                                   GFile                     *file2,
+                                   double                     blend_factor,
+                                   GDesktopBackgroundStyle    style);

@@ -58,7 +58,7 @@ struct _GtkEntryCompletion
   GtkWidget *popup_window;
   GtkWidget *scrolled_window;
 
-  guint completion_timeout;
+  gulong completion_timeout;
   gulong changed_id;
 
   GSignalGroup *insert_text_signal_group;

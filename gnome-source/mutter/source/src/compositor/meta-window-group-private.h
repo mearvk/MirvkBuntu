@@ -14,4 +14,7 @@
  * cases for the undirected window, and similar.
  */
 
+
+typedef struct _MetaWindowGroupPrivate MetaWindowGroupPrivate;
+
 ClutterActor *meta_window_group_new (MetaDisplay *display);

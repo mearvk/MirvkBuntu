@@ -26,138 +26,62 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import gi
 
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, GLib
 
-from . import ax_cache_manager, debug
+from . import debug
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Hashable
-
-
-class _AXObjectCache:
-    """Provides AXObject-specific access to manager-backed cached values."""
-
-    KNOWN_DEAD = "AXObject.known-dead"
-    OBJECT_ATTRIBUTES = "AXObject.object-attributes"
-    SUPPORTED_INTERFACES = "AXObject.supported-interfaces"
-    HUNG_OBJECTS = "AXObject.hung-objects"
-    _HUNG_TIMEOUT_SECONDS = 1.0
-
-    def __init__(self) -> None:
-        self._manager = ax_cache_manager.get_manager()
-        for namespace in (
-            self.KNOWN_DEAD,
-            self.OBJECT_ATTRIBUTES,
-            self.SUPPORTED_INTERFACES,
-        ):
-            self._manager.register_cache(
-                self,
-                namespace,
-                lifetime=ax_cache_manager.Lifetime.PROCESS,
-                clear_on_demand=ax_cache_manager.ClearPolicy.CLEAR,
-            )
-        self._known_dead = self._manager.get_cache(self, self.KNOWN_DEAD)
-        self._object_attributes = self._manager.get_cache(self, self.OBJECT_ATTRIBUTES)
-        self._supported_interfaces = self._manager.get_cache(self, self.SUPPORTED_INTERFACES)
-        self._manager.register_cache(
-            self,
-            self.HUNG_OBJECTS,
-            lifetime=ax_cache_manager.Lifetime.PROCESS,
-            clear_on_demand=ax_cache_manager.ClearPolicy.PRESERVE,
-            clear_interval_seconds=None,
-        )
-        self._hung_objects = self._manager.get_cache(self, self.HUNG_OBJECTS)
-        self._latest_hung_expiry = 0.0
-
-    def get_dead_status(self, obj: Atspi.Accessible) -> bool | None:
-        """Returns the recorded result of a prior deadness probe."""
-
-        return self.get_dead_status_for_key(ax_cache_manager.get_object_key(obj))
-
-    def get_dead_status_for_key(self, key: Hashable) -> bool | None:
-        """Returns the recorded result of a prior deadness probe."""
-
-        if self._known_dead is None:
-            return None
-        return self._known_dead.get(key, None)
-
-    def set_dead_status(self, obj: Atspi.Accessible, is_dead: bool) -> None:
-        """Stores the result of a deadness probe."""
-
-        if self._known_dead is not None:
-            self._known_dead.put(ax_cache_manager.get_object_key(obj), is_dead)
-
-    def get_attributes(self, obj: Atspi.Accessible) -> Any:
-        """Returns the cached object attributes for obj."""
-
-        if self._object_attributes is None:
-            return ax_cache_manager.MISSING
-        attributes = self._object_attributes.get(ax_cache_manager.get_object_key(obj))
-        if attributes is ax_cache_manager.MISSING:
-            return attributes
-        return dict(attributes)
-
-    def set_attributes(self, obj: Atspi.Accessible, attributes: dict[str, str]) -> None:
-        """Stores object attributes."""
-
-        if self._object_attributes is not None:
-            self._object_attributes.put(ax_cache_manager.get_object_key(obj), dict(attributes))
-
-    def get_interface_support(self, obj: Atspi.Accessible, name: str) -> bool | None:
-        """Returns cached interface support, or None when absent."""
-
-        if self._supported_interfaces is None:
-            return None
-        return self._supported_interfaces.get((ax_cache_manager.get_object_key(obj), name), None)
-
-    def set_interface_support(self, obj: Atspi.Accessible, name: str, supported: bool) -> None:
-        """Stores interface support."""
-
-        if self._supported_interfaces is not None:
-            self._supported_interfaces.put((ax_cache_manager.get_object_key(obj), name), supported)
-
-    def get_hung_timestamp(self, obj: Atspi.Accessible | None) -> float | None:
-        """Returns an unexpired hung marker timestamp, or None."""
-
-        if obj is None:
-            return None
-
-        return self.get_hung_timestamp_for_key(ax_cache_manager.get_object_key(obj))
-
-    def get_hung_timestamp_for_key(self, key: Hashable) -> float | None:
-        """Returns an unexpired hung marker timestamp, or None."""
-
-        if time.monotonic() >= self._latest_hung_expiry:
-            return None
-        if self._hung_objects is None:
-            return None
-        return self._hung_objects.get(key, None)
-
-    def mark_hung(self, obj: Atspi.Accessible, timestamp: float | None = None) -> None:
-        """Marks an object hung until one second after the supplied timestamp."""
-
-        if timestamp is None:
-            timestamp = time.monotonic()
-        expires_at = timestamp + self._HUNG_TIMEOUT_SECONDS
-        self._latest_hung_expiry = max(self._latest_hung_expiry, expires_at)
-        if self._hung_objects is not None:
-            self._hung_objects.put(
-                ax_cache_manager.get_object_key(obj),
-                timestamp,
-                expires_at=expires_at,
-            )
+    from collections.abc import Callable, Generator
+    from typing import ClassVar
 
 
 class AXObject:
     """Wrapper for the Atspi.Accessible interface."""
 
-    _CACHE = _AXObjectCache()
+    KNOWN_DEAD: ClassVar[dict[int, bool]] = {}
+    OBJECT_ATTRIBUTES: ClassVar[dict[int, dict[str, str]]] = {}
+
+    _lock = threading.Lock()
+
+    @staticmethod
+    def _clear_stored_data() -> None:
+        """Clears any data we have cached for objects"""
+
+        while True:
+            time.sleep(60)
+            AXObject._clear_all_dictionaries()
+
+    @staticmethod
+    def _clear_all_dictionaries(reason: str = "") -> None:
+        msg = "AXObject: Clearing local cache."
+        if reason:
+            msg += f" Reason: {reason}"
+        debug.print_message(debug.LEVEL_INFO, msg, True)
+
+        with AXObject._lock:
+            AXObject.KNOWN_DEAD.clear()
+            AXObject.OBJECT_ATTRIBUTES.clear()
+
+    @staticmethod
+    def clear_cache_now(reason: str = "") -> None:
+        """Clears all cached information immediately."""
+
+        AXObject._clear_all_dictionaries(reason)
+
+    @staticmethod
+    def start_cache_clearing_thread() -> None:
+        """Starts thread to periodically clear cached details."""
+
+        thread = threading.Thread(target=AXObject._clear_stored_data)
+        thread.daemon = True
+        thread.start()
 
     @staticmethod
     def get_toolkit_name(obj: Atspi.Accessible) -> str:
@@ -167,7 +91,7 @@ class AXObject:
             app = Atspi.Accessible.get_application(obj)
             name = Atspi.Accessible.get_toolkit_name(app) or ""
         except GLib.GError as error:
-            tokens = ["AXObject: Exception calling _get_toolkit_name_on", app, ":", error]
+            tokens = ["AXObject: Exception calling _get_toolkit_name_on", app, f": {error}"]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return ""
 
@@ -193,18 +117,6 @@ class AXObject:
         return False
 
     @staticmethod
-    def _can_reach_application(obj: Atspi.Accessible) -> bool:
-        """Returns True if we can ascend the ancestry of obj all the way to the application."""
-
-        reached_app = False
-        parent = AXObject.get_parent(obj)
-        while parent and not reached_app:
-            reached_app = AXObject.get_role(parent) == Atspi.Role.APPLICATION
-            parent = AXObject.get_parent(parent)
-
-        return reached_app
-
-    @staticmethod
     def has_broken_ancestry(obj: Atspi.Accessible) -> bool:
         """Returns True if obj's ancestry is broken."""
 
@@ -216,7 +128,13 @@ class AXObject:
         if not toolkit_name.startswith("qt"):
             return False
 
-        if not AXObject._can_reach_application(obj):
+        reached_app = False
+        parent = AXObject.get_parent(obj)
+        while parent and not reached_app:
+            reached_app = AXObject.get_role(parent) == Atspi.Role.APPLICATION
+            parent = AXObject.get_parent(parent)
+
+        if not reached_app:
             tokens = ["AXObject:", obj, "has broken ancestry. See qt bug 130116."]
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
             return True
@@ -224,93 +142,16 @@ class AXObject:
         return False
 
     @staticmethod
-    def has_broken_popup_ancestry(obj: Atspi.Accessible) -> bool:
-        """Returns True if obj is a popup item whose ancestry is broken."""
-
-        if obj is None or AXObject.is_dead(obj):
-            return False
-
-        # TODO - JD: File a bug. The scenario is that when the omnibox popup is closed and then
-        # re-opened, we cannot ascend all the way to the frame. In addition, parents along the
-        # way claim to have 0 children.
-        if not AXObject.get_toolkit_name(obj).startswith("chromium"):
-            return False
-
-        if AXObject.get_role(obj) != Atspi.Role.LIST_ITEM:
-            return False
-
-        if not AXObject._can_reach_application(obj):
-            tokens = ["AXObject:", obj, "has broken ancestry."]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return True
-
-        return False
-
-    @staticmethod
-    def is_valid(obj: Atspi.Accessible, app: Atspi.Accessible | None = None) -> bool:
+    def is_valid(obj: Atspi.Accessible) -> bool:
         """Returns False if we know for certain this object is invalid"""
 
-        if obj is None:
-            return False
-
-        try:
-            obj_key = ax_cache_manager.get_object_key(obj)
-        except RuntimeError as error:
-            tokens = ["AXObject: Cannot create cache key for invalid object:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            return False
-        if AXObject._CACHE.get_dead_status_for_key(obj_key):
-            return False
-
-        if app is None:
-            return AXObject._CACHE.get_hung_timestamp_for_key(obj_key) is None
-
-        return not AXObject.check_hung(obj, app)
+        return not (obj is None or AXObject.object_is_known_dead(obj))
 
     @staticmethod
     def object_is_known_dead(obj: Atspi.Accessible) -> bool:
         """Returns True if we know for certain this object no longer exists"""
 
-        if not obj:
-            return False
-
-        return AXObject._CACHE.get_dead_status(obj) is True
-
-    @staticmethod
-    def revalidate_if_known_dead(obj: Atspi.Accessible) -> bool:
-        """Retries a direct role query for an object previously believed to be dead."""
-
-        if obj is None:
-            return False
-        if not AXObject.object_is_known_dead(obj):
-            return True
-
-        try:
-            role = Atspi.Accessible.get_role(obj)
-        except GLib.GError:
-            return False
-
-        if role == Atspi.Role.INVALID:
-            return False
-
-        AXObject._set_known_dead_status(obj, False)
-        return True
-
-    @staticmethod
-    def check_hung(
-        obj: Atspi.Accessible | None,
-        app: Atspi.Accessible | None = None,
-    ) -> bool:
-        """Returns True if obj or its app is hung, propagating obj-hung to app."""
-
-        obj_hung_ts = AXObject._CACHE.get_hung_timestamp(obj)
-        app_hung_ts = AXObject._CACHE.get_hung_timestamp(app)
-        if obj_hung_ts is not None and app is not None and app_hung_ts is None:
-            tokens = ["AXObject: Marking", app, "as hung due to hung source"]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            AXObject._CACHE.mark_hung(app, obj_hung_ts)
-            app_hung_ts = AXObject._CACHE.get_hung_timestamp(app)
-        return obj_hung_ts is not None or app_hung_ts is not None
+        return bool(obj and AXObject.KNOWN_DEAD.get(hash(obj))) is True
 
     @staticmethod
     def _set_known_dead_status(obj: Atspi.Accessible, is_dead: bool) -> None:
@@ -319,11 +160,11 @@ class AXObject:
         if obj is None:
             return
 
-        current_status = AXObject._CACHE.get_dead_status(obj)
+        current_status = AXObject.KNOWN_DEAD.get(hash(obj))
         if current_status == is_dead:
             return
 
-        AXObject._CACHE.set_dead_status(obj, is_dead)
+        AXObject.KNOWN_DEAD[hash(obj)] = is_dead
         if is_dead:
             msg = "AXObject: Adding to known dead objects"
             debug.print_message(debug.LEVEL_INFO, msg, True, True)
@@ -334,61 +175,38 @@ class AXObject:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
     @staticmethod
-    def handle_error(obj: Atspi.Accessible, error: Exception, tokens: list[Any]) -> None:
+    def handle_error(obj: Atspi.Accessible, error: Exception, msg: str) -> None:
         """Parses the exception and potentially updates our status for obj"""
 
-        if AXObject.object_is_known_dead(obj):
-            return
-
-        def without_the_error(replacement):
-            return [replacement if token is error else token for token in tokens]
-
         error_string = str(error)
-        if "Object does not exist at path" in error_string:
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-        elif "The application no longer exists" in error_string:
-            debug.print_tokens(debug.LEVEL_INFO, without_the_error("app no longer exists"), True)
-        elif "The process appears to be hung" in error_string:
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
-            AXObject._CACHE.mark_hung(obj)
-            return
-        elif re.search(r"accessible/\d+ does not exist", error_string):
-            debug.print_tokens(debug.LEVEL_INFO, without_the_error("object no longer exists"), True)
+        if re.search(r"accessible/\d+ does not exist", error_string):
+            msg = msg.replace(error_string, "object no longer exists")
+            debug.print_message(debug.LEVEL_INFO, msg, True)
+        elif re.search(r"The application no longer exists", error_string):
+            msg = msg.replace(error_string, "app no longer exists")
+            debug.print_message(debug.LEVEL_INFO, msg, True)
         else:
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return
 
-        if AXObject._CACHE.get_dead_status(obj) is False:
+        if AXObject.KNOWN_DEAD.get(hash(obj)) is False:
             AXObject._set_known_dead_status(obj, True)
-
-    @staticmethod
-    def _supports_interface(obj: Atspi.Accessible, getter: Callable[..., object]) -> bool:
-        """Returns True if obj supports the interface returned by getter, caching the result."""
-
-        if not AXObject.is_valid(obj):
-            return False
-
-        name = getter.__name__
-        cached = AXObject._CACHE.get_interface_support(obj, name)
-        if cached is not None:
-            return cached
-
-        try:
-            iface = getter(obj)
-        except GLib.GError as error:
-            tokens = ["AXObject: Exception calling", name, "on", obj, ":", error]
-            AXObject.handle_error(obj, error, tokens)
-            return False
-
-        result = iface is not None
-        AXObject._CACHE.set_interface_support(obj, name, result)
-        return result
 
     @staticmethod
     def supports_action(obj: Atspi.Accessible) -> bool:
         """Returns True if the action interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_action_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_action_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_action_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def _find_ancestor_with_role(
@@ -430,15 +248,15 @@ class AXObject:
         try:
             app = Atspi.Accessible.get_application(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in supports_collection:", error]
-            debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+            msg = f"AXObject: Exception in supports_collection: {error}"
+            debug.print_message(debug.LEVEL_INFO, msg, True)
             return False
 
         try:
             iface = Atspi.Accessible.get_collection_iface(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception calling get_collection_iface on", obj, ":", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception calling get_collection_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
             return False
 
         app_name = AXObject.get_name(app)
@@ -458,67 +276,176 @@ class AXObject:
     def supports_component(obj: Atspi.Accessible) -> bool:
         """Returns True if the component interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_component_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_component_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_component_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_document(obj: Atspi.Accessible) -> bool:
         """Returns True if the document interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_document_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_document_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_document_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_editable_text(obj: Atspi.Accessible) -> bool:
         """Returns True if the editable-text interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_editable_text_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_editable_text_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_editable_text_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_hyperlink(obj: Atspi.Accessible) -> bool:
         """Returns True if the hyperlink interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_hyperlink)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_hyperlink(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_hyperlink on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_hypertext(obj: Atspi.Accessible) -> bool:
         """Returns True if the hypertext interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_hypertext_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_hypertext_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_hypertext_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_image(obj: Atspi.Accessible) -> bool:
         """Returns True if the image interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_image_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_image_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_image_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_selection(obj: Atspi.Accessible) -> bool:
         """Returns True if the selection interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_selection_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_selection_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_selection_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_table(obj: Atspi.Accessible) -> bool:
         """Returns True if the table interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_table_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_table_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_table_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_table_cell(obj: Atspi.Accessible) -> bool:
         """Returns True if the table cell interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_table_cell)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_table_cell(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_table_cell on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def supports_text(obj: Atspi.Accessible) -> bool:
         """Returns True if the text interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_text_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_text_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_text_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+        return iface is not None
 
     @staticmethod
     def supports_value(obj: Atspi.Accessible) -> bool:
         """Returns True if the value interface is supported on obj"""
 
-        return AXObject._supports_interface(obj, Atspi.Accessible.get_value_iface)
+        if not AXObject.is_valid(obj):
+            return False
+
+        try:
+            iface = Atspi.Accessible.get_value_iface(obj)
+        except GLib.GError as error:
+            msg = f"AXObject: Exception calling get_value_iface on {obj}: {error}"
+            AXObject.handle_error(obj, error, msg)
+            return False
+
+        return iface is not None
 
     @staticmethod
     def get_path(obj: Atspi.Accessible) -> list[int]:
@@ -533,8 +460,8 @@ class AXObject:
             try:
                 path.append(Atspi.Accessible.get_index_in_parent(acc))
             except GLib.GError as error:
-                tokens = ["AXObject: Exception getting index in parent for", acc, ":", error]
-                AXObject.handle_error(acc, error, tokens)
+                msg = f"AXObject: Exception getting index in parent for {acc}: {error}"
+                AXObject.handle_error(acc, error, msg)
                 return []
             acc = AXObject.get_parent_checked(acc)
 
@@ -551,8 +478,8 @@ class AXObject:
         try:
             index = Atspi.Accessible.get_index_in_parent(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_index_in_parent:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_index_in_parent: {error}"
+            AXObject.handle_error(obj, error, msg)
             return -1
 
         return index
@@ -567,8 +494,8 @@ class AXObject:
         try:
             parent = Atspi.Accessible.get_parent(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_parent:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_parent: {error}"
+            AXObject.handle_error(obj, error, msg)
             return None
 
         if parent == obj:
@@ -621,19 +548,13 @@ class AXObject:
         return parent
 
     @staticmethod
-    def get_child(
-        obj: Atspi.Accessible,
-        index: int,
-        n_children: int | None = None,
-    ) -> Atspi.Accessible | None:
+    def get_child(obj: Atspi.Accessible, index: int) -> Atspi.Accessible | None:
         """Returns the nth child of obj. See also get_child_checked."""
 
         if not AXObject.is_valid(obj):
             return None
 
-        if n_children is None:
-            n_children = AXObject.get_child_count(obj)
-
+        n_children = AXObject.get_child_count(obj)
         if n_children <= 0:
             return None
 
@@ -646,8 +567,8 @@ class AXObject:
         try:
             child = Atspi.Accessible.get_child_at_index(obj, index)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_child:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_child: {error}"
+            AXObject.handle_error(obj, error, msg)
             return None
 
         if child == obj:
@@ -689,17 +610,15 @@ class AXObject:
         try:
             real_child = Atspi.Accessible.get_child_at_index(container, index)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_active_descendant_checked:", error]
-            AXObject.handle_error(container, error, tokens)
+            msg = f"AXObject: Exception in get_active_descendant_checked: {error}"
+            AXObject.handle_error(container, error, msg)
             return reported_child
 
         if real_child != reported_child:
             tokens = [
                 "AXObject: ",
                 container,
-                "'s child at",
-                index,
-                "is",
+                f"'s child at {index} is ",
                 real_child,
                 "; not reported child",
                 reported_child,
@@ -718,8 +637,8 @@ class AXObject:
         try:
             role = Atspi.Accessible.get_role(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_role:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_role: {error}"
+            AXObject.handle_error(obj, error, msg)
             return Atspi.Role.INVALID
 
         AXObject._set_known_dead_status(obj, False)
@@ -738,8 +657,8 @@ class AXObject:
             else:
                 role_name = Atspi.Accessible.get_localized_role_name(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_role_name:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_role_name: {error}"
+            AXObject.handle_error(obj, error, msg)
             return ""
 
         return role_name
@@ -767,8 +686,8 @@ class AXObject:
         try:
             result = Atspi.Accessible.get_accessible_id(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_accessible_id:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_accessible_id: {error}"
+            AXObject.handle_error(obj, error, msg)
             return ""
 
         AXObject._set_known_dead_status(obj, False)
@@ -784,8 +703,8 @@ class AXObject:
         try:
             name = Atspi.Accessible.get_name(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_name:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_name: {error}"
+            AXObject.handle_error(obj, error, msg)
             return ""
 
         AXObject._set_known_dead_status(obj, False)
@@ -811,8 +730,8 @@ class AXObject:
         try:
             description = Atspi.Accessible.get_description(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_description:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_description: {error}"
+            AXObject.handle_error(obj, error, msg)
             return ""
 
         return description
@@ -827,8 +746,8 @@ class AXObject:
         try:
             description = Atspi.Image.get_image_description(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_image_description:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_image_description: {error}"
+            AXObject.handle_error(obj, error, msg)
             return ""
 
         return description
@@ -843,8 +762,8 @@ class AXObject:
         try:
             result = Atspi.Image.get_image_size(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_image_size:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_image_size: {error}"
+            AXObject.handle_error(obj, error, msg)
             return 0, 0
 
         # The return value is an AtspiPoint, hence x and y.
@@ -876,8 +795,8 @@ class AXObject:
         try:
             count = Atspi.Accessible.get_child_count(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_child_count:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_child_count: {error}"
+            AXObject.handle_error(obj, error, msg)
             return 0
 
         return count
@@ -899,7 +818,7 @@ class AXObject:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True, True)
 
         for index in range(child_count):
-            child = AXObject.get_child(obj, index, child_count)
+            child = AXObject.get_child(obj, index)
             if child is None and not AXObject.is_valid(obj):
                 tokens = ["AXObject:", obj, "is no longer valid"]
                 debug.print_tokens(debug.LEVEL_INFO, tokens, True)
@@ -964,8 +883,8 @@ class AXObject:
         try:
             locale = Atspi.Accessible.get_object_locale(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_locale:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_locale: {error}"
+            AXObject.handle_error(obj, error, msg)
             return ""
 
         return locale or ""
@@ -980,8 +899,8 @@ class AXObject:
         try:
             state_set = Atspi.Accessible.get_state_set(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_state_set:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_state_set: {error}"
+            AXObject.handle_error(obj, error, msg)
             return Atspi.StateSet()
 
         if state_set is None:
@@ -993,15 +912,8 @@ class AXObject:
         return state_set
 
     @staticmethod
-    def has_state(
-        obj: Atspi.Accessible,
-        state: Atspi.StateType,
-        state_set: Atspi.StateSet | None = None,
-    ) -> bool:
+    def has_state(obj: Atspi.Accessible, state: Atspi.StateType) -> bool:
         """Returns true if obj has the specified state"""
-
-        if state_set is not None:
-            return state_set.contains(state)
 
         if not AXObject.is_valid(obj):
             return False
@@ -1015,24 +927,24 @@ class AXObject:
         if obj is None:
             return
 
-        tokens = ["AXObject: Clearing AT-SPI cache on", obj, "Recursive: ", recursive, "."]
+        tokens = ["AXObject: Clearing AT-SPI cache on", obj, f"Recursive: {recursive}."]
         if reason:
-            tokens.extend([" Reason:", reason])
+            tokens.append(f" Reason: {reason}")
         debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         if not recursive:
             try:
                 Atspi.Accessible.clear_cache_single(obj)
             except GLib.GError as error:
-                tokens = ["AXObject: Exception in clear_cache_single:", error]
-                debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+                msg = f"AXObject: Exception in clear_cache_single: {error}"
+                debug.print_message(debug.LEVEL_INFO, msg, True)
             return
 
         try:
             Atspi.Accessible.clear_cache(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in clear_cache:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in clear_cache: {error}"
+            AXObject.handle_error(obj, error, msg)
 
     @staticmethod
     def get_process_id(obj: Atspi.Accessible) -> int:
@@ -1044,20 +956,20 @@ class AXObject:
         try:
             pid = Atspi.Accessible.get_process_id(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_process_id:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_process_id: {error}"
+            AXObject.handle_error(obj, error, msg)
             return -1
 
         return pid
 
     @staticmethod
-    def is_dead(obj: Atspi.Accessible, app: Atspi.Accessible | None = None) -> bool:
+    def is_dead(obj: Atspi.Accessible) -> bool:
         """Returns true of obj exists but is believed to be dead."""
 
         if obj is None:
             return False
 
-        if not AXObject.is_valid(obj, app):
+        if not AXObject.is_valid(obj):
             return True
 
         try:
@@ -1065,8 +977,8 @@ class AXObject:
             # latter intentionally handles exceptions.
             Atspi.Accessible.get_name(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Accessible is dead:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Accessible is dead: {error}"
+            AXObject.handle_error(obj, error, msg)
             return True
 
         AXObject._set_known_dead_status(obj, False)
@@ -1080,21 +992,21 @@ class AXObject:
             return {}
 
         if use_cache:
-            attributes = AXObject._CACHE.get_attributes(obj)
-            if attributes is not ax_cache_manager.MISSING:
+            attributes = AXObject.OBJECT_ATTRIBUTES.get(hash(obj))
+            if attributes:
                 return attributes
 
         try:
             attributes = Atspi.Accessible.get_attributes(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in get_attributes_dict:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in get_attributes_dict: {error}"
+            AXObject.handle_error(obj, error, msg)
             return {}
 
         if attributes is None:
             return {}
 
-        AXObject._CACHE.set_attributes(obj, attributes)
+        AXObject.OBJECT_ATTRIBUTES[hash(obj)] = attributes
         return attributes
 
     @staticmethod
@@ -1117,8 +1029,8 @@ class AXObject:
         try:
             result = Atspi.Component.grab_focus(obj)
         except GLib.GError as error:
-            tokens = ["AXObject: Exception in grab_focus:", error]
-            AXObject.handle_error(obj, error, tokens)
+            msg = f"AXObject: Exception in grab_focus: {error}"
+            AXObject.handle_error(obj, error, msg)
             return False
 
         if debug.debugLevel > debug.LEVEL_INFO:
@@ -1129,3 +1041,6 @@ class AXObject:
             debug.print_tokens(debug.LEVEL_INFO, tokens, True)
 
         return result
+
+
+AXObject.start_cache_clearing_thread()

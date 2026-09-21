@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface domain="gtk40">
   <template class="GtkEmojiChooser" parent="GtkPopover">
+    <property name="height-request">410</property>
     <style>
       <class name="emoji-picker"/>
     </style>
-    <property name="child">
+    <child>
       <object class="GtkBox" id="box">
         <property name="orientation">1</property>
         <child>
@@ -17,7 +18,6 @@
                 <property name="hexpand">1</property>
                 <signal name="search-changed" handler="search_changed"/>
                 <signal name="stop-search" handler="stop_search"/>
-                <signal name="activate" handler="activate_search" object="GtkEmojiChooser" swapped="yes"/>
               </object>
             </child>
           </object>
@@ -34,12 +34,10 @@
                       <object class="GtkScrolledWindow" id="scrolled_window">
                         <property name="vexpand">1</property>
                         <property name="hscrollbar-policy">2</property>
-                        <property name="propagate-natural-height">1</property>
-                        <property name="max-content-height">320</property>
                         <style>
                           <class name="view"/>
                         </style>
-                        <property name="child">
+                        <child>
                           <object class="GtkBox" id="emoji_box">
                             <property name="orientation">1</property>
                             <property name="margin-start">6</property>
@@ -215,7 +213,7 @@
                               </object>
                             </child>
                           </object>
-                        </property>
+                        </child>
                       </object>
                     </child>
                     <child>
@@ -327,8 +325,6 @@
                 <property name="name">empty</property>
                 <property name="child">
                   <object class="GtkGrid">
-                    <property name="margin-top">18</property>
-                    <property name="margin-bottom">18</property>
                     <property name="row-spacing">12</property>
                     <property name="halign">3</property>
                     <property name="valign">3</property>
@@ -351,7 +347,10 @@
                     <child>
                       <object class="GtkLabel">
                         <property name="label" translatable="yes">No Results Found</property>
-                        <property name="attributes">0 -1 weight bold, 0 -1 scale 1.44</property>
+                        <attributes>
+                          <attribute name="weight" value="bold"></attribute>
+                          <attribute name="scale" value="1.44"></attribute>
+                        </attributes>
                         <layout>
                           <property name="column">0</property>
                           <property name="row">1</property>
@@ -377,6 +376,6 @@
           </object>
         </child>
       </object>
-    </property>
+    </child>
   </template>
 </interface>

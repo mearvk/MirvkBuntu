@@ -198,7 +198,7 @@ class SignalTracker {
  * with a tracked object.
  *
  * All handlers for a particular object can be disconnected
- * by calling disconnectObject(). If object is a destroyable type,
+ * by calling disconnectObject(). If object is a {Clutter.widget},
  * this is done automatically when the widget is destroyed.
  *
  * @param {object} thisObj - the emitter object
@@ -240,13 +240,9 @@ export function connectObject(thisObj, ...args) {
         args = rest;
     }
 
-    const [obj] = args;
-    if (!obj) {
-        const e = new Error('No object to track signals');
-        logError(e);
-    }
+    const obj = args.at(0) ?? globalThis;
     const tracker = SignalManager.getDefault().getSignalTracker(thisObj);
-    tracker.track(obj ?? globalThis, ...signalIds);
+    tracker.track(obj, ...signalIds);
 }
 
 /**
@@ -275,13 +271,4 @@ export function registerDestroyableType(gtype) {
         throw new Error(`${gtype} does not have a destroy signal`);
 
     destroyableTypes.push(gtype);
-}
-
-/**
- * A debug function that can be used to inspect signal trackers at run time
- *
- * @returns {Map<object, SignalTracker>}
- */
-export function debugGetSignalTrackers() {
-    return SignalManager.getDefault()._signalTrackers;
 }

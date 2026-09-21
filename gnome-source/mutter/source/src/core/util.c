@@ -24,8 +24,6 @@
 #include "core/display-private.h"
 #include "core/util-private.h"
 
-#include <gio/gunixinputstream.h>
-#include <glib/gstdio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -51,11 +49,14 @@ static const GDebugKey meta_debug_keys[] = {
   { "window-ops", META_DEBUG_WINDOW_OPS },
   { "geometry", META_DEBUG_GEOMETRY },
   { "placement", META_DEBUG_PLACEMENT },
-  { "display", META_DEBUG_DISPLAY },
+  { "ping", META_DEBUG_PING },
   { "keybindings", META_DEBUG_KEYBINDINGS },
   { "sync", META_DEBUG_SYNC },
   { "startup", META_DEBUG_STARTUP },
   { "prefs", META_DEBUG_PREFS },
+  { "groups", META_DEBUG_GROUPS },
+  { "resizing", META_DEBUG_RESIZING },
+  { "shapes", META_DEBUG_SHAPES },
   { "edge-resistance", META_DEBUG_EDGE_RESISTANCE },
   { "dbus", META_DEBUG_DBUS },
   { "input", META_DEBUG_INPUT },
@@ -68,28 +69,10 @@ static const GDebugKey meta_debug_keys[] = {
   { "color", META_DEBUG_COLOR },
   { "input-events", META_DEBUG_INPUT_EVENTS },
   { "eis", META_DEBUG_EIS },
-  { "kms-deadline", META_DEBUG_KMS_DEADLINE },
-  { "session-management", META_DEBUG_SESSION_MANAGEMENT },
-  { "x11", META_DEBUG_X11 },
-  { "workspaces", META_DEBUG_WORKSPACES },
 };
-
-static const GDebugKey meta_paint_debug_keys[] = {
-  { "opaque-region", META_DEBUG_PAINT_OPAQUE_REGION },
-  { "sync-cursor-primary", META_DEBUG_PAINT_SYNC_CURSOR_PRIMARY },
-  { "disable-direct-scanout", META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT },
-  { "ignore-color-state-for-direct-scanout", META_DEBUG_PAINT_IGNORE_COLOR_STATE_FOR_DIRECT_SCANOUT },
-};
-
-typedef struct _MetaReadBytesContext
-{
-  int fd;
-  uint32_t offset;
-  uint32_t length;
-  uint8_t *bytes;
-} MetaReadBytesContext;
 
 static gint verbose_topics = 0;
+static gboolean is_wayland_compositor = FALSE;
 static int debug_paint_flags = 0;
 static GLogLevelFlags mutter_log_level = G_LOG_LEVEL_MESSAGE;
 
@@ -104,21 +87,23 @@ ensure_logfile (void)
       char *filename = NULL;
       char *tmpl;
       int fd;
-      g_autoptr (GError) error = NULL;
+      GError *err;
 
       tmpl = g_strdup_printf ("mutter-%d-debug-log-XXXXXX",
                               (int) getpid ());
 
+      err = NULL;
       fd = g_file_open_tmp (tmpl,
                             &filename,
-                            &error);
+                            &err);
 
       g_free (tmpl);
 
-      if (error != NULL)
+      if (err != NULL)
         {
-          g_warning ("Failed to open debug log: %s",
-                     error->message);
+          meta_warning ("Failed to open debug log: %s",
+                        err->message);
+          g_error_free (err);
           return;
         }
 
@@ -126,8 +111,8 @@ ensure_logfile (void)
 
       if (logfile == NULL)
         {
-          g_warning ("Failed to fdopen() log file %s: %s",
-                     filename, strerror (errno));
+          meta_warning ("Failed to fdopen() log file %s: %s",
+                        filename, strerror (errno));
           close (fd);
         }
       else
@@ -226,19 +211,20 @@ meta_init_debug_utils (void)
       meta_add_verbose_topic (topics);
     }
 
-  debug_env = g_getenv ("MUTTER_DEBUG_PAINT");
-  if (debug_env)
-    {
-      MetaDebugPaintFlag flags;
-
-      flags = g_parse_debug_string (debug_env,
-                                    meta_paint_debug_keys,
-                                    G_N_ELEMENTS (meta_paint_debug_keys));
-      meta_add_debug_paint_flag (flags);
-    }
-
   if (g_test_initialized ())
     mutter_log_level = G_LOG_LEVEL_DEBUG;
+}
+
+gboolean
+meta_is_wayland_compositor (void)
+{
+  return is_wayland_compositor;
+}
+
+void
+meta_set_is_wayland_compositor (gboolean value)
+{
+  is_wayland_compositor = value;
 }
 
 char *
@@ -253,93 +239,6 @@ meta_g_utf8_strndup (const gchar *src,
     }
 
   return g_strndup (src, s - src);
-}
-
-static void
-meta_read_bytes_context_free (MetaReadBytesContext *context)
-{
-  g_clear_fd (&context->fd, NULL);
-  g_clear_pointer (&context->bytes, g_free);
-  g_free (context);
-}
-
-static void
-meta_read_bytes_in_thread (GTask        *task,
-                           gpointer      source_object,
-                           gpointer      task_data,
-                           GCancellable *cancellable)
-{
-  MetaReadBytesContext *context = task_data;
-  g_autoptr (GInputStream) input_stream = NULL;
-  g_autofree uint8_t *bytes = NULL;
-  g_autoptr (GError) error = NULL;
-  int skipped;
-
-  input_stream = G_INPUT_STREAM (g_unix_input_stream_new (context->fd, FALSE));
-
-  skipped = g_input_stream_skip (input_stream,
-                                 context->offset,
-                                 NULL,
-                                 &error);
-  if (skipped < 0)
-    {
-      g_task_return_error (task, g_steal_pointer (&error));
-      return;
-    }
-
-  bytes = g_malloc (context->length);
-  if (!g_input_stream_read_all (input_stream,
-                                bytes,
-                                context->length,
-                                NULL,
-                                NULL,
-                                &error))
-    {
-      g_task_return_error (task, g_steal_pointer (&error));
-      return;
-    }
-
-  context->bytes = g_steal_pointer (&bytes);
-
-  g_task_return_boolean (task, TRUE);
-}
-
-void
-meta_read_bytes (int                 fd,
-                 uint32_t            offset,
-                 uint32_t            length,
-                 GAsyncReadyCallback callback,
-                 gpointer            user_data)
-{
-  g_autoptr (GTask) task = NULL;
-  MetaReadBytesContext *context;
-
-  task = g_task_new (NULL, NULL, callback, user_data);
-
-  context = g_new0 (MetaReadBytesContext, 1);
-  context->fd = dup (fd);
-  context->offset = offset;
-  context->length = length;
-
-  g_task_set_task_data (task, context,
-                        (GDestroyNotify) meta_read_bytes_context_free);
-  g_task_run_in_thread (task, meta_read_bytes_in_thread);
-}
-
-gboolean
-meta_read_bytes_finish (GAsyncResult  *result,
-                        uint8_t      **bytes,
-                        uint32_t      *length,
-                        GError       **error)
-{
-  MetaReadBytesContext *context = g_task_get_task_data (G_TASK (result));
-
-  *bytes = g_steal_pointer (&context->bytes);
-
-  if (length)
-    *length = context->length;
-
-  return g_task_propagate_boolean (G_TASK (result), error);
 }
 
 static int
@@ -383,10 +282,10 @@ meta_topic_to_string (MetaDebugTopic topic)
       return "WINDOW_OPS";
     case META_DEBUG_PLACEMENT:
       return "PLACEMENT";
-    case META_DEBUG_DISPLAY:
-      return "DISPLAY";
     case META_DEBUG_GEOMETRY:
       return "GEOMETRY";
+    case META_DEBUG_PING:
+      return "PING";
     case META_DEBUG_KEYBINDINGS:
       return "KEYBINDINGS";
     case META_DEBUG_SYNC:
@@ -395,6 +294,12 @@ meta_topic_to_string (MetaDebugTopic topic)
       return "STARTUP";
     case META_DEBUG_PREFS:
       return "PREFS";
+    case META_DEBUG_GROUPS:
+      return "GROUPS";
+    case META_DEBUG_RESIZING:
+      return "RESIZING";
+    case META_DEBUG_SHAPES:
+      return "SHAPES";
     case META_DEBUG_EDGE_RESISTANCE:
       return "EDGE_RESISTANCE";
     case META_DEBUG_DBUS:
@@ -421,14 +326,6 @@ meta_topic_to_string (MetaDebugTopic topic)
       return "INPUT_EVENTS";
     case META_DEBUG_EIS:
       return "EIS";
-    case META_DEBUG_KMS_DEADLINE:
-      return "KMS_DEADLINE";
-    case META_DEBUG_SESSION_MANAGEMENT:
-      return "SESSION_MANAGEMENT";
-    case META_DEBUG_X11:
-      return "X11";
-    case META_DEBUG_WORKSPACES:
-      return "WORKSPACES";
     }
 
   return "WM";
@@ -444,14 +341,6 @@ meta_is_topic_enabled (MetaDebugTopic topic)
     return FALSE;
 
   return !!(verbose_topics & topic);
-}
-
-#else /* WITH_VERBOSE_MODE */
-
-gboolean
-meta_is_topic_enabled (MetaDebugTopic topic)
-{
-  return FALSE;
 }
 #endif /* WITH_VERBOSE_MODE */
 
@@ -484,6 +373,34 @@ meta_bug (const char *format, ...)
 
   /* stop us in a debugger */
   abort ();
+}
+
+void
+meta_warning (const char *format, ...)
+{
+  va_list args;
+  gchar *str;
+  FILE *out;
+
+  g_return_if_fail (format != NULL);
+
+  va_start (args, format);
+  str = g_strdup_vprintf (format, args);
+  va_end (args);
+
+#ifdef WITH_VERBOSE_MODE
+  out = logfile ? logfile : stderr;
+#else
+  out = stderr;
+#endif
+
+  utf8_fputs ("Window manager warning: ", out);
+  utf8_fputs (str, out);
+  utf8_fputs ("\n", out);
+
+  fflush (out);
+
+  g_free (str);
 }
 
 void
@@ -592,6 +509,21 @@ meta_external_binding_name_for_action (guint keybinding_action)
   return g_strdup_printf ("external-grab-%u", keybinding_action);
 }
 
+MetaLocaleDirection
+meta_get_locale_direction (void)
+{
+  switch (clutter_get_text_direction ())
+    {
+    case CLUTTER_TEXT_DIRECTION_LTR:
+      return META_LOCALE_DIRECTION_LTR;
+    case CLUTTER_TEXT_DIRECTION_RTL:
+      return META_LOCALE_DIRECTION_RTL;
+    default:
+      g_assert_not_reached ();
+      return 0;
+    }
+}
+
 char *
 meta_generate_random_id (GRand *rand,
                          int    length)
@@ -606,6 +538,37 @@ meta_generate_random_id (GRand *rand,
     id[i] = (char) g_rand_int_range (rand, 32, 127);
 
   return id;
+}
+
+
+void
+meta_add_clutter_debug_flags (ClutterDebugFlag     debug_flags,
+                              ClutterDrawDebugFlag draw_flags,
+                              ClutterPickDebugFlag pick_flags)
+{
+  clutter_add_debug_flags (debug_flags, draw_flags, pick_flags);
+}
+
+void
+meta_remove_clutter_debug_flags (ClutterDebugFlag     debug_flags,
+                                 ClutterDrawDebugFlag draw_flags,
+                                 ClutterPickDebugFlag pick_flags)
+{
+  clutter_remove_debug_flags (debug_flags, draw_flags, pick_flags);
+}
+
+/**
+ * meta_get_clutter_debug_flags:
+ * @debug_flags: (out) (optional): return location for debug flags
+ * @draw_flags: (out) (optional): return location for draw debug flags
+ * @pick_flags: (out) (optional): return location for pick debug flags
+ */
+void
+meta_get_clutter_debug_flags (ClutterDebugFlag     *debug_flags,
+                              ClutterDrawDebugFlag *draw_flags,
+                              ClutterPickDebugFlag *pick_flags)
+{
+  clutter_get_debug_flags (debug_flags, draw_flags, pick_flags);
 }
 
 void
@@ -634,19 +597,4 @@ meta_log (const char *format, ...)
   va_start (args, format);
   g_logv (G_LOG_DOMAIN, mutter_log_level, format, args);
   va_end (args);
-}
-
-char *
-meta_encode_hex (gpointer data,
-                 size_t   size)
-{
-  uint8_t *data_u8 = data;
-  GString *encoded;
-  size_t i;
-
-  encoded = g_string_new (NULL);
-  for (i = 0; i < size; i++)
-    g_string_append_printf (encoded, "%02x", data_u8[i]);
-
-  return g_string_free_and_steal (encoded);
 }

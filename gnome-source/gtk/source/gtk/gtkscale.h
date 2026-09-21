@@ -70,10 +70,6 @@ struct _GtkScaleClass
  * @value: The numeric value to format
  * @user_data: (closure): user data
  *
- * Function that formats the value of a scale.
- *
- * See [method@Gtk.Scale.set_format_value_func].
- *
  * Returns: (not nullable): A newly allocated string describing a textual representation
  *   of the given numerical value.
  */
@@ -83,7 +79,7 @@ typedef char * (*GtkScaleFormatValueFunc) (GtkScale *scale,
 
 
 GDK_AVAILABLE_IN_ALL
-GType             gtk_scale_get_type           (void);
+GType             gtk_scale_get_type           (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 GtkWidget       * gtk_scale_new                (GtkOrientation   orientation,
                                                 GtkAdjustment   *adjustment);

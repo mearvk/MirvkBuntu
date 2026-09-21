@@ -79,7 +79,7 @@ struct _GDBusProxyClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType            g_dbus_proxy_get_type                  (void);
+GType            g_dbus_proxy_get_type                  (void) G_GNUC_CONST;
 GIO_AVAILABLE_IN_ALL
 void             g_dbus_proxy_new                       (GDBusConnection     *connection,
                                                          GDBusProxyFlags      flags,

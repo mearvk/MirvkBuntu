@@ -21,10 +21,9 @@
 #include "backends/native/meta-render-device-private.h"
 
 #include "backends/meta-backend-private.h"
+#include "backends/meta-egl.h"
 #include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-drm-buffer-dumb.h"
-#include "backends/native/meta-renderer-egl.h"
-#include "cogl/cogl-context-private.h"
 
 enum
 {
@@ -44,7 +43,8 @@ typedef struct _MetaRenderDevicePrivate
 
   MetaDeviceFile *device_file;
 
-  MetaRendererEgl *renderer_egl;
+  EGLDisplay egl_display;
+  EGLConfig egl_config;
 
   gboolean is_hardware_rendering;
 } MetaRenderDevicePrivate;
@@ -58,25 +58,95 @@ G_DEFINE_ABSTRACT_TYPE_WITH_CODE (MetaRenderDevice, meta_render_device,
                                   G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
                                                          initable_iface_init))
 
+static EGLDisplay
+meta_render_device_create_egl_display (MetaRenderDevice  *render_device,
+                                       GError           **error)
+{
+  MetaRenderDeviceClass *klass = META_RENDER_DEVICE_GET_CLASS (render_device);
+
+  return klass->create_egl_display (render_device, error);
+}
+
+static void
+detect_hardware_rendering (MetaRenderDevice *render_device)
+{
+  MetaRenderDevicePrivate *priv =
+    meta_render_device_get_instance_private (render_device);
+  MetaEgl *egl = meta_backend_get_egl (priv->backend);
+  g_autoptr (GError) error = NULL;
+  EGLint *attributes;
+  EGLContext egl_context;
+  const char *renderer_str;
+
+  attributes = (EGLint[]) {
+    EGL_CONTEXT_CLIENT_VERSION, 2,
+    EGL_NONE
+  };
+  egl_context = meta_egl_create_context (egl,
+                                         priv->egl_display,
+                                         EGL_NO_CONFIG_KHR,
+                                         EGL_NO_CONTEXT,
+                                         attributes,
+                                         &error);
+  if (egl_context == EGL_NO_CONTEXT)
+    {
+      meta_topic (META_DEBUG_RENDER, "Failed to create EGLContext for %s: %s",
+                  meta_device_file_get_path (priv->device_file),
+                  error->message);
+      return;
+    }
+
+  if (!meta_egl_make_current (egl,
+                              priv->egl_display,
+                              EGL_NO_SURFACE,
+                              EGL_NO_SURFACE,
+                              egl_context,
+                              &error))
+    {
+      g_warning ("Failed to detect hardware rendering: eglMakeCurrent(): %s",
+                 error->message);
+      goto out_has_context;
+    }
+
+  renderer_str = (const char *) glGetString (GL_RENDERER);
+  if (g_str_has_prefix (renderer_str, "llvmpipe") ||
+      g_str_has_prefix (renderer_str, "softpipe") ||
+      g_str_has_prefix (renderer_str, "swrast"))
+    goto out_current_context;
+
+  priv->is_hardware_rendering = TRUE;
+
+out_current_context:
+  meta_egl_make_current (egl, priv->egl_display,
+                         EGL_NO_SURFACE, EGL_NO_SURFACE,
+                         EGL_NO_CONTEXT, NULL);
+
+out_has_context:
+  meta_egl_destroy_context (egl, priv->egl_display, egl_context, NULL);
+}
+
 static void
 init_egl (MetaRenderDevice *render_device)
 {
   MetaRenderDevicePrivate *priv =
     meta_render_device_get_instance_private (render_device);
+  MetaEgl *egl = meta_backend_get_egl (priv->backend);
   g_autoptr (GError) error = NULL;
-  MetaRendererEgl *renderer_egl;
+  EGLDisplay egl_display;
 
-  renderer_egl = meta_renderer_egl_new (render_device);
-  priv->renderer_egl = renderer_egl;
+  meta_egl_bind_api (egl, EGL_OPENGL_ES_API, NULL);
 
-  if (!cogl_renderer_connect (COGL_RENDERER (renderer_egl), &error))
+  egl_display = meta_render_device_create_egl_display (render_device, &error);
+  if (egl_display == EGL_NO_DISPLAY)
     {
-      meta_topic (META_DEBUG_RENDER, "Failed to connect renderer for %s: %s",
+      meta_topic (META_DEBUG_RENDER, "Failed to create EGLDisplay for %s: %s",
                   meta_device_file_get_path (priv->device_file),
                   error->message);
-      g_clear_object (&priv->renderer_egl);
       return;
     }
+
+  priv->egl_display = egl_display;
+  detect_hardware_rendering (render_device);
 }
 
 static gboolean
@@ -151,8 +221,13 @@ meta_render_device_dispose (GObject *object)
   MetaRenderDevice *render_device = META_RENDER_DEVICE (object);
   MetaRenderDevicePrivate *priv =
     meta_render_device_get_instance_private (render_device);
+  MetaEgl *egl = meta_backend_get_egl (priv->backend);
 
-  g_clear_object (&priv->renderer_egl);
+  if (priv->egl_display != EGL_NO_DISPLAY)
+    {
+      meta_egl_terminate (egl, priv->egl_display, NULL);
+      priv->egl_display = EGL_NO_DISPLAY;
+    }
 
   G_OBJECT_CLASS (meta_render_device_parent_class)->dispose (object);
 }
@@ -210,6 +285,11 @@ meta_render_device_class_init (MetaRenderDeviceClass *klass)
 static void
 meta_render_device_init (MetaRenderDevice *render_device)
 {
+  MetaRenderDevicePrivate *priv =
+    meta_render_device_get_instance_private (render_device);
+
+  priv->egl_display = EGL_NO_DISPLAY;
+  priv->egl_config = EGL_NO_CONFIG_KHR;
 }
 
 MetaBackend *
@@ -236,19 +316,7 @@ meta_render_device_get_egl_display (MetaRenderDevice *render_device)
   MetaRenderDevicePrivate *priv =
     meta_render_device_get_instance_private (render_device);
 
-  if (priv->renderer_egl)
-    return cogl_renderer_egl_get_edisplay (COGL_RENDERER_EGL (priv->renderer_egl));
-
-  return EGL_NO_DISPLAY;
-}
-
-MetaRendererEgl *
-meta_render_device_get_renderer_egl (MetaRenderDevice *render_device)
-{
-  MetaRenderDevicePrivate *priv =
-    meta_render_device_get_instance_private (render_device);
-
-  return priv->renderer_egl;
+  return priv->egl_display;
 }
 
 gboolean
@@ -257,7 +325,7 @@ meta_render_device_is_hardware_accelerated (MetaRenderDevice *render_device)
   MetaRenderDevicePrivate *priv =
     meta_render_device_get_instance_private (render_device);
 
-  return cogl_renderer_is_hardware_accelerated (COGL_RENDERER (priv->renderer_egl));
+  return priv->is_hardware_rendering;
 }
 
 const char *
@@ -270,28 +338,6 @@ meta_render_device_get_name (MetaRenderDevice *render_device)
     return meta_device_file_get_path (priv->device_file);
   else
     return "(device-less)";
-}
-
-GArray *
-meta_render_device_query_drm_modifiers (MetaRenderDevice       *render_device,
-                                        uint32_t                drm_format,
-                                        CoglDrmModifierFilter   filter,
-                                        GError                **error)
-{
-  MetaRenderDeviceClass *klass = META_RENDER_DEVICE_GET_CLASS (render_device);
-
-  if (klass->query_drm_modifiers)
-    {
-      return klass->query_drm_modifiers (render_device,
-                                         drm_format, filter,
-                                         error);
-    }
-
-  g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-               "Render device '%s' doesn't support allocating DMA buffers",
-               meta_render_device_get_name (render_device));
-
-  return NULL;
 }
 
 MetaDrmBuffer *

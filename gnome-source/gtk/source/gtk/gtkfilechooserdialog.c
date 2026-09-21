@@ -33,7 +33,7 @@
 #include "gtkheaderbar.h"
 #include "deprecated/gtkdialogprivate.h"
 #include "gtklabel.h"
-#include "gtkfilechooserentryprivate.h"
+#include "gtkfilechooserentry.h"
 #include "gtkbox.h"
 
 #include <stdarg.h>
@@ -164,7 +164,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
  * - To save a file under a different name, use %GTK_FILE_CHOOSER_ACTION_SAVE,
  *   and set the existing file with [method@Gtk.FileChooser.set_file].
  *
- * - To choose a folder instead of a file, use %GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER.
+ * - To choose a folder instead of a filem use %GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER.
  *
  * In general, you should only cause the file chooser to show a specific
  * folder when it is appropriate to use [method@Gtk.FileChooser.set_file],
@@ -474,12 +474,7 @@ setup_search (GtkFileChooserDialog *dialog)
       button = gtk_toggle_button_new ();
       gtk_widget_set_focus_on_click (button, FALSE);
       gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
-      gtk_widget_set_tooltip_text (button, _("Search"));
       gtk_button_set_icon_name (GTK_BUTTON (button), "edit-find-symbolic");
-
-      gtk_accessible_update_property (GTK_ACCESSIBLE (button),
-                                      GTK_ACCESSIBLE_PROPERTY_KEY_SHORTCUTS, "Alt+S Control+F Find",
-                                      -1);
 
       header = gtk_dialog_get_header_bar (GTK_DIALOG (dialog));
       gtk_header_bar_pack_end (GTK_HEADER_BAR (header), button);

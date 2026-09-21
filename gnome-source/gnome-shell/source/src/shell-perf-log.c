@@ -13,9 +13,8 @@ typedef union  _ShellPerfStatisticValue ShellPerfStatisticValue;
 typedef struct _ShellPerfBlock ShellPerfBlock;
 
 /**
- * ShellPerfLog:
- *
- * Event recorder for performance measurement
+ * SECTION:shell-perf-log
+ * @short_description: Event recorder for performance measurement
  *
  * ShellPerfLog provides a way for different parts of the code to
  * record information for subsequent analysis and interactive
@@ -190,7 +189,7 @@ statistics_timeout (gpointer data)
 
   shell_perf_log_collect_statistics (perf_log);
 
-  return G_SOURCE_CONTINUE;
+  return TRUE;
 }
 
 /**
@@ -782,7 +781,7 @@ escape_quotes (const char *input)
         g_string_append_c (result, *p);
     }
 
-  return g_string_free_and_steal (result);
+  return g_string_free (result, FALSE);
 }
 
 static gboolean
@@ -846,7 +845,7 @@ shell_perf_log_dump_events (ShellPerfLog   *perf_log,
 
   g_string_append (output, " ]");
 
-  return write_string (out, g_string_free_and_steal (output), error);
+  return write_string (out, g_string_free (output, FALSE), error);
 }
 
 typedef struct {

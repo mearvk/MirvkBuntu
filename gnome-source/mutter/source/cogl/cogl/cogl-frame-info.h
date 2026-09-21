@@ -38,6 +38,7 @@
 #endif
 
 #include "cogl/cogl-types.h"
+#include "cogl/cogl-output.h"
 
 #include <glib-object.h>
 #include <glib.h>
@@ -49,6 +50,8 @@ G_BEGIN_DECLS
  *
  * Frame information.
  */
+typedef struct _CoglFrameInfo CoglFrameInfo;
+
 #define COGL_TYPE_FRAME_INFO (cogl_frame_info_get_type ())
 
 COGL_EXPORT
@@ -69,17 +72,6 @@ G_DECLARE_FINAL_TYPE (CoglFrameInfo,
  */
 COGL_EXPORT
 int64_t cogl_frame_info_get_frame_counter (CoglFrameInfo *info);
-
-/**
- * cogl_frame_info_get_onscreen:
- * @info: a #CoglFrameInfo object
- *
- * Gets the #CoglOnscreen for this frame.
- *
- * Return value: (transfer none): The onscreen pointer
- */
-COGL_EXPORT
-CoglOnscreen *cogl_frame_info_get_onscreen (CoglFrameInfo *info);
 
 /**
  * cogl_frame_info_get_presentation_time_us:
@@ -121,9 +113,6 @@ COGL_EXPORT
 int64_t cogl_frame_info_get_global_frame_counter (CoglFrameInfo *info);
 
 COGL_EXPORT
-int64_t cogl_frame_info_get_view_frame_counter (CoglFrameInfo *info);
-
-COGL_EXPORT
 gboolean cogl_frame_info_get_is_symbolic (CoglFrameInfo *info);
 
 COGL_EXPORT
@@ -139,6 +128,12 @@ COGL_EXPORT
 unsigned int cogl_frame_info_get_sequence (CoglFrameInfo *info);
 
 COGL_EXPORT
-int64_t cogl_frame_info_get_kms_ready_time_us (CoglFrameInfo *info);
+gboolean cogl_frame_info_has_valid_gpu_rendering_duration (CoglFrameInfo *info);
+
+COGL_EXPORT
+int64_t cogl_frame_info_get_rendering_duration_ns (CoglFrameInfo *info);
+
+COGL_EXPORT
+int64_t cogl_frame_info_get_time_before_buffer_swap_us (CoglFrameInfo *info);
 
 G_END_DECLS

@@ -42,7 +42,6 @@
 
 #include "meta/meta-multi-texture.h"
 
-#include "compositor/meta-multi-texture-format-private.h"
 #include "meta/meta-enum-types.h"
 
 struct _MetaMultiTexture
@@ -276,7 +275,7 @@ meta_multi_texture_to_string (MetaMultiTexture *multi_texture)
   for (i = 0; i < multi_texture->n_planes; i++)
     {
       CoglTexture *plane = multi_texture->planes[i];
-      CoglPixelFormat plane_format = cogl_texture_get_format (plane);
+      CoglPixelFormat plane_format = _cogl_texture_get_format (plane);
 
       g_string_append_printf (str, "    (%p) { .format = %s },\n",
                               plane,
@@ -288,23 +287,4 @@ meta_multi_texture_to_string (MetaMultiTexture *multi_texture)
 
   ret = g_string_free (g_steal_pointer (&str), FALSE);
   return g_steal_pointer (&ret);
-}
-
-void
-meta_multi_texture_add_pipeline_sampling (MetaMultiTexture             *multi_texture,
-                                          MetaMultiTextureCoefficients  coeffs,
-                                          MetaMultiTextureAlphaMode     premult,
-                                          CoglPipeline                 *pipeline)
-{
-  g_autoptr (CoglSnippet) snippet = NULL;
-
-  g_return_if_fail (META_IS_MULTI_TEXTURE (multi_texture));
-
-  snippet =
-    meta_multi_texture_format_get_snippet (multi_texture->format,
-                                           coeffs,
-                                           premult);
-
-  if (snippet)
-    cogl_pipeline_add_snippet (pipeline, snippet);
 }

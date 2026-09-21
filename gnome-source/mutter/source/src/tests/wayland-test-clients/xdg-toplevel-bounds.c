@@ -59,7 +59,7 @@ handle_xdg_toplevel_configure (void                *data,
                                struct xdg_toplevel *xdg_toplevel,
                                int32_t              width,
                                int32_t              height,
-                               struct wl_array     *configure_state)
+                               struct wl_array     *state)
 {
 }
 
@@ -120,8 +120,8 @@ handle_xdg_surface_configure (void               *data,
     case STATE_INIT:
       g_assert_not_reached ();
     case STATE_WAIT_FOR_CONFIGURE_1:
-      g_assert_true (pending_bounds_width > 0);
-      g_assert_true (pending_bounds_height > 0);
+      g_assert (pending_bounds_width > 0);
+      g_assert (pending_bounds_height > 0);
 
       draw_main (display,
                  pending_bounds_width - 10,
@@ -147,7 +147,7 @@ static void
 on_sync_event (WaylandDisplay *display,
                uint32_t        serial)
 {
-  g_assert_cmpint (serial, ==, 0);
+  g_assert (serial == 0);
 
   exit (EXIT_SUCCESS);
 }

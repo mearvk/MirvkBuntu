@@ -16,7 +16,7 @@ G_BEGIN_DECLS
 /*** END file-production ***/
 
 /*** BEGIN value-header ***/
-COGL_EXPORT GType @enum_name@_get_type (void);
+COGL_EXPORT GType @enum_name@_get_type (void) G_GNUC_CONST;
 #define COGL_TYPE_@ENUMSHORT@ (@enum_name@_get_type())
 
 /*** END value-header ***/

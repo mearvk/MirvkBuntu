@@ -143,14 +143,26 @@ is still being populated, use the `BUILD_SKIP_*` flags for a partial build.
 ## Populating GNOME source
 
 The native path compiles the GNOME stack from `gnome-source/<module>/source/`.
-`gnome-source/pull-all-source.sh` runs each module's `pull-source.sh`, normalizes
-the layout so `source/` is the canonical build input, and verifies each required
-module. Run it once (needs network) before a native/slim build:
+`gnome-source/pull-all-source.sh` runs each module's `pull-source.sh` (each of
+which clones/extracts directly into `source/` and is idempotent) and verifies
+each required module. Run it once (needs network) before a native/slim build:
 
 ```bash
 bash gnome-source/pull-all-source.sh            # all desktop-required modules
 bash gnome-source/pull-all-source.sh glib gtk   # a subset
+FORCE=1 bash gnome-source/pull-all-source.sh    # re-fetch even if present
 ```
+
+**Version pinning.** Module versions are pinned in
+`gnome-source/GNOME_VERSIONS` (e.g. `GTK_REF=4.14.5`, `MUTTER_REF=46.4`). The
+orchestrator loads these before each fetch; an explicit environment value
+overrides the file, and each module records the resolved commit in
+`gnome-source/<module>/<module>.source-ref`. To move the stack to a newer GNOME
+release, bump the pins together and re-run with `FORCE=1`. Git-based modules
+default to shallow clones; set `GNOME_CLONE_DEPTH=0` for a full clone (needed to
+pin an arbitrary commit SHA). The tarball-capable modules (gvfs, orca) also
+accept `<MODULE>_VERSION` to fetch an official `download.gnome.org` release
+instead of a git ref.
 
 ## Building Chromium
 

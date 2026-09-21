@@ -141,10 +141,7 @@ canonical_boolean_value (MyParserData *data,
   gboolean b = FALSE;
 
   if (gtk_builder_value_from_string_type (data->builder, G_TYPE_BOOLEAN, string, &value, NULL))
-    {
-      b = g_value_get_boolean (&value);
-      g_value_unset (&value);
-    }
+    b = g_value_get_boolean (&value);
 
   return b ? "1" : "0";
 }
@@ -632,18 +629,13 @@ canonical_enum_value (MyParserData *data,
 
   if (gtk_builder_value_from_string_type (data->builder, type, string, &value, NULL))
     {
-      char *strval;
       GEnumClass *eclass = g_type_class_ref (type);
       GEnumValue *evalue = g_enum_get_value (eclass, g_value_get_enum (&value));
 
       if (evalue)
-        strval = g_strdup (evalue->value_nick);
+        return g_strdup (evalue->value_nick);
       else
-        strval = g_strdup_printf ("%d", g_value_get_enum (&value));
-
-      g_type_class_unref (eclass);
-      g_value_unset (&value);
-      return strval;
+        return g_strdup_printf ("%d", g_value_get_enum (&value));
     }
 
   return NULL;
@@ -1389,9 +1381,6 @@ rewrite_start_center_end_children (Element      *element,
     {
       Element *child = l->data;
 
-      if (!g_str_equal (child->element_name, "child"))
-        continue;
-
       if (has_attribute (child, "type", "start"))
         start_child = child;
       else if (has_attribute (child, "type", "center"))
@@ -1599,33 +1588,10 @@ write_box_prop (Element *element,
   return element;
 }
 
-static Element *
-rewrite_start_end_box_children (Element *element,
-                                const char *type,
-                                GtkOrientation orientation,
-                                GList *children)
-{
-  Element *child;
-  Element *object;
-
-  child = add_element (element, "child");
-  set_attribute_value (child, "type", type);
-
-  object = add_element (child, "object");
-  set_attribute_value (object, "class", "GtkBox");
-  if (orientation == GTK_ORIENTATION_VERTICAL)
-    write_box_prop (NULL, object, "orientation", "vertical");
-  object->children = g_list_concat (object->children, children);
-
-  return child;
-}
-
 static void
 rewrite_box (Element *element,
              MyParserData *data)
 {
-  GList *start_children = NULL, *end_children = NULL, *other_children = NULL;
-  Element *center_child = NULL;
   GList *l, *ll;
   GtkOrientation orientation = GTK_ORIENTATION_HORIZONTAL;
 
@@ -1650,10 +1616,7 @@ rewrite_box (Element *element,
                                                       child->data,
                                                       &value,
                                                       NULL))
-                {
-                  orientation = g_value_get_enum (&value);
-                  g_value_unset (&value);
-                }
+                orientation = g_value_get_enum (&value);
             }
         }
     }
@@ -1665,9 +1628,6 @@ rewrite_box (Element *element,
         {
           Element *object = NULL;
           Element *packing = NULL;
-
-          GtkPackType pack_type = GTK_PACK_START;
-          gint position = G_MAXINT;
 
           for (ll = child->children; ll; ll = ll->next)
             {
@@ -1719,10 +1679,7 @@ rewrite_box (Element *element,
                                                               elt->data,
                                                               &value,
                                                               NULL))
-                        {
-                          expand = g_value_get_boolean (&value);
-                          g_value_unset (&value);
-                        }
+                        expand = g_value_get_boolean (&value);
                     }
 
                   if (has_attribute (elt, "name", "fill"))
@@ -1734,40 +1691,7 @@ rewrite_box (Element *element,
                                                               elt->data,
                                                               &value,
                                                               NULL))
-                        {
-                          fill = g_value_get_boolean (&value);
-                          g_value_unset (&value);
-                        }
-                    }
-
-                  if (has_attribute (elt, "name", "position"))
-                    {
-                      GValue value = G_VALUE_INIT;
-
-                      if (gtk_builder_value_from_string_type (data->builder,
-                                                              G_TYPE_INT,
-                                                              elt->data,
-                                                              &value,
-                                                              NULL))
-                        {
-                          position = g_value_get_int (&value);
-                          g_value_unset (&value);
-                        }
-                    }
-
-                  if (has_attribute (elt, "name", "pack-type"))
-                    {
-                      GValue value = G_VALUE_INIT;
-
-                      if (gtk_builder_value_from_string_type (data->builder,
-                                                              GTK_TYPE_PACK_TYPE,
-                                                              elt->data,
-                                                              &value,
-                                                              NULL))
-                        {
-                          pack_type = g_value_get_enum (&value);
-                          g_value_unset (&value);
-                        }
+                        fill = g_value_get_boolean (&value);
                     }
                 }
 
@@ -1789,49 +1713,8 @@ rewrite_box (Element *element,
               child->children = g_list_remove (child->children, packing);
               free_element (packing);
             }
-
-          if (has_attribute (child, "type", "center"))
-            {
-              if (center_child != NULL)
-                g_warning (_ ("%s only accepts one center child"), get_class_name (element));
-              center_child = child;
-            }
-          else if (pack_type == GTK_PACK_START)
-            start_children = g_list_insert (start_children, child, position);
-          else
-            end_children = g_list_insert (end_children, child, position);
-        }
-      else
-        other_children = g_list_append (other_children, child);
-    }
-
-  end_children = g_list_reverse (end_children);
-
-  if (center_child || end_children)
-    {
-      set_attribute_value (element, "class", "GtkCenterBox");
-
-      l = NULL;
-      if (start_children)
-        {
-          Element *child = rewrite_start_end_box_children (element, "start", orientation, start_children);
-          l = g_list_append (l, child);
-        }
-
-      if (center_child)
-        l = g_list_append (l, center_child);
-
-      if (end_children)
-        {
-          Element *child = rewrite_start_end_box_children (element, "end", orientation, end_children);
-          l = g_list_append (l, child);
         }
     }
-  else
-    l = start_children;
-
-  g_list_free (element->children);
-  element->children = g_list_concat (other_children, l);
 }
 
 static void
@@ -1956,36 +1839,6 @@ rewrite_scale (Element      *element,
       set_attribute_value (child, "name", "draw-value");
       child->data = g_strdup ("1");
     }
-}
-
-static Element *
-write_separator_prop (Element *element,
-                      Element *parent,
-                      const char *name,
-                      const char *value)
-{
-
-  if (element)
-    g_free (element->data);
-  else
-    {
-      element = add_element (parent, "property");
-      set_attribute_value (element, "name", name);
-    }
-  element->data = g_strdup (value);
-
-  return element;
-}
-
-static void
-rewrite_separator (Element *element,
-                   MyParserData *data)
-{
-  if (g_str_equal (get_class_name (element), "GtkVSeparator"))
-    write_separator_prop (NULL, element, "orientation", "vertical");
-
-  if (!g_str_equal (get_class_name (element), "GtkSeparator"))
-    set_attribute_value (element, "class", "GtkSeparator");
 }
 
 static void
@@ -2179,18 +2032,12 @@ rewrite_fixed (Element      *element,
                   if (has_attribute (elt2, "name", "x"))
                     {
                       if (gtk_builder_value_from_string_type (data->builder, G_TYPE_INT, elt2->data, &value, NULL))
-                        {
-                          x = g_value_get_int (&value);
-                          g_value_unset (&value);
-                        }
+                        x = g_value_get_int (&value);
                     }
                   else if (has_attribute (elt2, "name", "y"))
                     {
                       if (gtk_builder_value_from_string_type (data->builder, G_TYPE_INT, elt2->data, &value, NULL))
-                        {
-                          y = g_value_get_int (&value);
-                          g_value_unset (&value);
-                        }
+                        y = g_value_get_int (&value);
                     }
                 }
 
@@ -2291,6 +2138,19 @@ rewrite_element_3to4 (Element      *element,
 {
   GList *l;
 
+  l = element->children;
+  while (l)
+    {
+      GList *next = l->next;
+      Element *child = l->data;
+      if (rewrite_element_3to4 (child, data))
+        {
+          element->children = g_list_remove (element->children, child);
+          free_element (child);
+        }
+      l = next;
+    }
+
   if (element_is_object_or_template (element) &&
       g_str_equal (get_class_name (element), "GtkStack"))
     rewrite_stack (element, data);
@@ -2346,11 +2206,6 @@ rewrite_element_3to4 (Element      *element,
       g_str_equal (get_class_name (element), "GtkScale"))
     rewrite_scale (element, data);
 
-  if (element_is_object_or_template (element) &&
-      (g_str_equal (get_class_name (element), "GtkHSeparator") ||
-       g_str_equal (get_class_name (element), "GtkVSeparator")))
-    rewrite_separator(element, data);
-
   if (g_str_equal (element->element_name, "property"))
     maybe_rename_property (element, data);
 
@@ -2360,19 +2215,6 @@ rewrite_element_3to4 (Element      *element,
 
   if (g_str_equal (element->element_name, "requires"))
     rewrite_requires (element, data);
-
-  l = element->children;
-  while (l)
-    {
-      GList *next = l->next;
-      Element *child = l->data;
-      if (rewrite_element_3to4 (child, data))
-        {
-          element->children = g_list_remove (element->children, child);
-          free_element (child);
-        }
-      l = next;
-    }
 
   return FALSE;
 }
@@ -2589,7 +2431,6 @@ simplify_file (const char *filename,
 {
   GMarkupParseContext *context;
   char *buffer;
-  gsize buffer_len;
   MyParserData data;
   GError *error = NULL;
 
@@ -2601,13 +2442,7 @@ simplify_file (const char *filename,
   if (replace)
     {
       int fd;
-      fd = g_file_open_tmp ("gtk-builder-tool-XXXXXX", &data.output_filename, &error);
-      if (fd < 0) {
-        g_printerr (_("Unable to create temporary file: %s\n"), error->message);
-        g_error_free (error);
-        return FALSE;
-      }
-
+      fd = g_file_open_tmp ("gtk-builder-tool-XXXXXX", &data.output_filename, NULL);
       data.output = fdopen (fd, "w");
     }
   else
@@ -2615,10 +2450,9 @@ simplify_file (const char *filename,
       data.output = stdout;
     }
 
-  if (!g_file_get_contents (filename, &buffer, &buffer_len, &error))
+  if (!g_file_get_contents (filename, &buffer, NULL, &error))
     {
       g_printerr (_("Can’t load “%s”: %s\n"), filename, error->message);
-      g_error_free (error);
       return FALSE;
     }
 
@@ -2627,25 +2461,18 @@ simplify_file (const char *filename,
   data.value = g_string_new ("");
 
   context = g_markup_parse_context_new (&parser, G_MARKUP_TREAT_CDATA_AS_TEXT, &data, NULL);
-  if (!g_markup_parse_context_parse (context, buffer, buffer_len, &error))
+  if (!g_markup_parse_context_parse (context, buffer, -1, &error))
     {
       g_printerr (_("Can’t parse “%s”: %s\n"), filename, error->message);
-      g_error_free (error);
-      g_free (buffer);
       return FALSE;
     }
-
-  g_free (buffer);
 
   if (!g_markup_parse_context_end_parse (context, &error))
     {
       g_printerr (_("Can’t parse “%s”: %s\n"), filename, error->message);
-      g_error_free (error);
-      g_markup_parse_context_free (context);
       return FALSE;
     }
 
-  g_markup_parse_context_free (context);
   if (data.root == NULL)
     {
       g_printerr (_("Can’t parse “%s”: %s\n"), filename, "");
@@ -2675,23 +2502,16 @@ simplify_file (const char *filename,
       if (!g_file_get_contents (data.output_filename, &content, &length, &error))
         {
           g_printerr (_("Failed to read “%s”: %s\n"), data.output_filename, error->message);
-          g_error_free (error);
           return FALSE;
         }
 
       if (!g_file_set_contents (data.input_filename, content, length, &error))
         {
           g_printerr (_("Failed to write “%s”: “%s”\n"), data.input_filename, error->message);
-          g_error_free (error);
-          g_free (content);
           return FALSE;
         }
-
-      g_free (content);
-      g_free (data.output_filename);
     }
 
-  g_string_free (data.value, TRUE);
   return TRUE;
 }
 
@@ -2721,7 +2541,6 @@ do_simplify (int          *argc,
   if (!g_option_context_parse (context, argc, (char ***)argv, &error))
     {
       g_printerr ("%s\n", error->message);
-      g_option_context_free (context);
       g_error_free (error);
       exit (1);
     }

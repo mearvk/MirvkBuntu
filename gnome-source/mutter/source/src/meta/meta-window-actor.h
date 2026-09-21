@@ -47,9 +47,8 @@ META_EXPORT
 gboolean       meta_window_actor_is_destroyed (MetaWindowActor *self);
 
 META_EXPORT
-CoglBitmap * meta_window_actor_paint_to_bitmap (MetaWindowActor *self,
-                                                MtkRectangle    *clip,
-                                                CoglPixelFormat  format);
+cairo_surface_t * meta_window_actor_get_image (MetaWindowActor *self,
+                                               MtkRectangle    *clip);
 
 META_EXPORT
 ClutterContent * meta_window_actor_paint_to_content (MetaWindowActor  *self,
@@ -57,14 +56,14 @@ ClutterContent * meta_window_actor_paint_to_content (MetaWindowActor  *self,
                                                      GError          **error);
 
 META_EXPORT
-ClutterContent * meta_window_actor_paint_to_content_full (MetaWindowActor    *self,
-                                                          MtkRectangle       *clip,
-                                                          CoglPixelFormat     format,
-                                                          ClutterColorState  *color_state,
-                                                          GError            **error);
-
-META_EXPORT
 void meta_window_actor_freeze (MetaWindowActor *self);
 
 META_EXPORT
 void meta_window_actor_thaw (MetaWindowActor *self);
+
+typedef enum
+{
+  META_SHADOW_MODE_AUTO,
+  META_SHADOW_MODE_FORCED_OFF,
+  META_SHADOW_MODE_FORCED_ON,
+} MetaShadowMode;

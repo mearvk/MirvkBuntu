@@ -22,8 +22,7 @@
 
 #include "cogl/cogl.h"
 
-CoglPipeline * meta_create_texture_pipeline (CoglContext *cogl_context,
-                                             CoglTexture *texture);
+CoglPipeline * meta_create_texture_pipeline (CoglTexture *texture);
 
 typedef enum
 {
@@ -31,9 +30,8 @@ typedef enum
   META_TEXTURE_ALLOW_SLICING = 1 << 1
 } MetaTextureFlags;
 
-CoglTexture * meta_create_texture (int                    width,
-                                   int                    height,
-                                   CoglContext           *cogl_context,
-                                   CoglTextureComponents  components,
-                                   MetaTextureFlags       flags);
+CoglTexture *meta_create_texture (int                   width,
+                                  int                   height,
+                                  CoglTextureComponents components,
+                                  MetaTextureFlags      flags);
 

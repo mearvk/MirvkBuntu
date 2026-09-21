@@ -18,7 +18,8 @@
 /**
  * GdkTextureDownloader:
  *
- * Used to download the contents of a [class@Gdk.Texture].
+ * The `GdkTextureDownloader` is used to download the contents of a
+ * [class@Gdk.Texture].
  *
  * It is intended to be created as a short-term object for a single download,
  * but can be used for multiple downloads of different textures or with different
@@ -35,7 +36,6 @@
 
 #include "gdktexturedownloaderprivate.h"
 
-#include "gdkcolorstateprivate.h"
 #include "gdkmemoryformatprivate.h"
 #include "gdkmemorytextureprivate.h"
 #include "gdktextureprivate.h"
@@ -51,14 +51,12 @@ gdk_texture_downloader_init (GdkTextureDownloader *self,
 {
   self->texture = g_object_ref (texture);
   self->format = GDK_MEMORY_DEFAULT;
-  self->color_state = gdk_color_state_ref (GDK_COLOR_STATE_SRGB);
 }
 
 void
 gdk_texture_downloader_finish (GdkTextureDownloader *self)
 {
   g_object_unref (self->texture);
-  gdk_color_state_unref (self->color_state);
 }
 
 /**
@@ -66,9 +64,6 @@ gdk_texture_downloader_finish (GdkTextureDownloader *self)
  * @texture: texture to download
  *
  * Creates a new texture downloader for @texture.
- *
- * By default, the downloader will convert the data to
- * the default memory format, and to the sRGB color state.
  *
  * Returns: A new texture downloader
  *
@@ -205,56 +200,6 @@ gdk_texture_downloader_get_format (const GdkTextureDownloader *self)
 }
 
 /**
- * gdk_texture_downloader_set_color_state:
- * @self: a texture downloader
- * @color_state: the color state to use
- *
- * Sets the color state the downloader will convert the data to.
- *
- * By default, the sRGB colorstate returned by [func@ColorState.get_srgb]
- * is used.
- *
- * Since: 4.16
- */
-void
-gdk_texture_downloader_set_color_state (GdkTextureDownloader *self,
-                                        GdkColorState        *color_state)
-{
-  if (self->color_state == color_state)
-    return;
-
-  gdk_color_state_unref (self->color_state);
-  self->color_state = gdk_color_state_ref (color_state);
-}
-
-/**
- * gdk_texture_downloader_get_color_state:
- * @self: a texture downloader
- *
- * Gets the color state that the data will be downloaded in.
- *
- * Returns: The color state of the download
- *
- * Since: 4.16
- **/
-GdkColorState *
-gdk_texture_downloader_get_color_state (const GdkTextureDownloader *self)
-{
-  return self->color_state;
-}
-
-void
-gdk_texture_downloader_download_into_layout (const GdkTextureDownloader *self,
-                                             guchar                     *data,
-                                             const GdkMemoryLayout      *layout)
-{
-  gdk_texture_do_download (self->texture,
-                           data,
-                           layout,
-                           self->color_state);
-}
-
-/**
  * gdk_texture_downloader_download_into:
  * @self: a texture downloader
  * @data: (array): pointer to enough memory to be filled with the
@@ -263,8 +208,6 @@ gdk_texture_downloader_download_into_layout (const GdkTextureDownloader *self,
  *
  * Downloads the @texture into local memory.
  *
- * This function cannot be used with a multiplanar format.
- *
  * Since: 4.10
  **/
 void
@@ -272,42 +215,11 @@ gdk_texture_downloader_download_into (const GdkTextureDownloader *self,
                                       guchar                     *data,
                                       gsize                       stride)
 {
-  GdkMemoryLayout layout;
   g_return_if_fail (self != NULL);
   g_return_if_fail (data != NULL);
-  g_return_if_fail (gdk_memory_format_get_n_planes (self->format) == 1);
-  layout = GDK_MEMORY_LAYOUT_SIMPLE (self->format,
-                                     self->texture->width,
-                                     self->texture->height,
-                                     stride);
-  gdk_memory_layout_return_if_invalid (&layout);
+  g_return_if_fail (stride >= gdk_texture_get_width (self->texture) * gdk_memory_format_bytes_per_pixel (self->format));
 
-  gdk_texture_downloader_download_into_layout (self, data, &layout);
-}
-
-GBytes *
-gdk_texture_downloader_download_bytes_layout (const GdkTextureDownloader *self,
-                                              GdkMemoryLayout            *out_layout)
-{
-  if (gdk_texture_get_format (self->texture) == self->format &&
-      gdk_color_state_equal (gdk_texture_get_color_state (self->texture), self->color_state))
-    {
-      return gdk_texture_download_bytes (self->texture, out_layout);
-    }
-  else
-    {
-      guchar *data;
-
-      gdk_memory_layout_init (out_layout,
-                              self->format,
-                              self->texture->width,
-                              self->texture->height,
-                              1);
-      data = g_malloc (out_layout->size);
-      
-      gdk_texture_do_download (self->texture, data, out_layout, self->color_state);
-      return g_bytes_new_take (data, out_layout->size);
-    }
+  gdk_texture_do_download (self->texture, self->format, data, stride);
 }
 
 /**
@@ -323,9 +235,6 @@ gdk_texture_downloader_download_bytes_layout (const GdkTextureDownloader *self,
  * memory allocation yourself and use [method@Gdk.TextureDownloader.download_into]
  * once allocation succeeded.
  *
- * This function cannot be used with a multiplanar format. Use
- * [method@Gdk.TextureDownloader.download_bytes_with_planes] for that purpose.
- *
  * Returns: The downloaded pixels
  *
  * Since: 4.10
@@ -334,72 +243,26 @@ GBytes *
 gdk_texture_downloader_download_bytes (const GdkTextureDownloader *self,
                                        gsize                      *out_stride)
 {
-  GBytes *bytes;
-  GdkMemoryLayout layout;
+  guchar *data;
+  gsize stride;
 
   g_return_val_if_fail (self != NULL, NULL);
   g_return_val_if_fail (out_stride != NULL, NULL);
-  g_return_val_if_fail (gdk_memory_format_get_n_planes (self->format) == 1, NULL);
 
-  bytes = gdk_texture_downloader_download_bytes_layout (self, &layout);
-
-  if (layout.planes[0].offset)
+  if (GDK_IS_MEMORY_TEXTURE (self->texture) &&
+      gdk_texture_get_format (self->texture) == self->format)
     {
-      GBytes *tmp = g_bytes_new_from_bytes (bytes,
-                                            layout.planes[0].offset,
-                                            g_bytes_get_size (bytes) - layout.planes[0].offset);
-      g_bytes_unref (bytes);
-      bytes = tmp;
+      GdkMemoryTexture *memtex = GDK_MEMORY_TEXTURE (self->texture);
+
+      return g_bytes_ref (gdk_memory_texture_get_bytes (memtex, out_stride));
     }
 
-  *out_stride = layout.planes[0].stride;
-  return bytes;
-}
+  stride = self->texture->width * gdk_memory_format_bytes_per_pixel (self->format);
+  data = g_malloc_n (stride, self->texture->height);
 
-/**
- * gdk_texture_downloader_download_bytes_with_planes:
- * @self: the downloader
- * @out_offsets: (out caller-allocates) (array fixed-size=4):
- *   The offsets of the resulting data planes in bytes
- * @out_strides: (out caller-allocates) (array fixed-size=4):
- *   The stride of the resulting data planes in bytes
- *
- * Downloads the given texture pixels into a `GBytes`. The offsets and
- * strides of the resulting buffer will be stored in the respective values.
- *
- * If the format does have less than 4 planes, the remaining offsets and strides will be
- * set to `0`.
- *
- * Returns: The downloaded pixels
- *
- * Since: 4.20
- **/
-GBytes *
-gdk_texture_downloader_download_bytes_with_planes (const GdkTextureDownloader *self,
-                                                   gsize                       out_offsets[4],
-                                                   gsize                       out_strides[4])
-{
-  GBytes *bytes;
-  GdkMemoryLayout layout;
-  gsize p;
+  gdk_texture_do_download (self->texture, self->format, data, stride);
 
-  g_return_val_if_fail (self != NULL, NULL);
-  g_return_val_if_fail (out_offsets != NULL, NULL);
-  g_return_val_if_fail (out_strides != NULL, NULL);
-
-  bytes = gdk_texture_downloader_download_bytes_layout (self, &layout);
-
-  for (p = 0; p < gdk_memory_format_get_n_planes (layout.format); p++)
-    {
-      out_offsets[p] = layout.planes[p].offset;
-      out_strides[p] = layout.planes[p].stride;
-    }
-  for (; p < 4; p++)
-    {
-      out_offsets[p] = 0;
-      out_strides[p] = 0;
-    }
-
-  return bytes;
+  *out_stride = stride;
+  return g_bytes_new_take (data, stride * self->texture->height);
 }
 

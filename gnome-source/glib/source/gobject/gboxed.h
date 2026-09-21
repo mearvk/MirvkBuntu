@@ -115,9 +115,9 @@ GType    g_boxed_type_register_static     (const gchar   *name,
 #define G_TYPE_VALUE (g_value_get_type ())
 
 GOBJECT_AVAILABLE_IN_ALL
-GType   g_closure_get_type         (void);
+GType   g_closure_get_type         (void) G_GNUC_CONST;
 GOBJECT_AVAILABLE_IN_ALL
-GType   g_value_get_type           (void);
+GType   g_value_get_type           (void) G_GNUC_CONST;
 
 G_END_DECLS
 

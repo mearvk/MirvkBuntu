@@ -1,22 +1,8 @@
-#ifdef GSK_PREAMBLE
-textures = 0;
-instances = 48;
-var_name = "gsk_gpu_box_shadow";
-struct_name = "GskGpuBoxShadow";
-
-graphene_rect_t bounds;
-GskRoundedRect outline;
-graphene_size_t shadow_offset;
-float shadow_spread;
-float blur_radius;
-GdkColor color;
-
-variation: gboolean inset;
-#endif /* GSK_PREAMBLE */
-
-#include "gskgpuboxshadowinstance.glsl"
+#include "common.glsl"
 
 /* blur radius (aka in_blur_direction) 0 is NOT supported and MUST be caught before */
+
+#define VARIATION_INSET ((GSK_VARIATION & 1u) == 1u)
 
 PASS(0) vec2 _pos;
 PASS_FLAT(1) RoundedRect _shadow_outline;
@@ -25,6 +11,13 @@ PASS_FLAT(7) vec4 _color;
 PASS_FLAT(8) vec2 _sigma;
 
 #ifdef GSK_VERTEX_SHADER
+
+IN(0) mat3x4 in_outline;
+IN(3) vec4 in_bounds;
+IN(4) vec4 in_color;
+IN(5) vec2 in_shadow_offset;
+IN(6) float in_shadow_spread;
+IN(7) float in_blur_radius;
 
 #define GAUSSIAN_SCALE_FACTOR ((3.0 * sqrt(2.0 * PI) / 4.0))
 
@@ -58,7 +51,7 @@ run (out vec2 pos)
 
   _pos = pos;
   _shadow_outline = outline;
-  _color = output_color_from_alt (in_color);
+  _color = in_color;
   _sigma = GSK_GLOBAL_SCALE * 0.5 * in_blur_radius;
 }
 
@@ -106,7 +99,7 @@ float
 blur_rect (Rect r,
            vec2 pos)
 {
-  return erf_range (rect_bounds (r).xz - pos.x, _sigma.x) * erf_range (rect_bounds (r).yw - pos.y, _sigma.y);
+  return erf_range (r.bounds.xz - pos.x, _sigma.x) * erf_range (r.bounds.yw - pos.y, _sigma.y);
 }
 
 float
@@ -116,37 +109,26 @@ blur_corner (vec2 p,
   if (min (r.x, r.y) <= 0.0)
     return 0.0;
 
-  p /= _sigma;
-  r /= _sigma;
-
-  if (min (p.x, p.y) <= -2.95 ||
-      max (p.x - r.x, p.y - r.y) >= 2.95)
-    return 0.0;
-
   float result = 0.0;
-  float start = max (p.y - 3.0, 0.0);
-  float end = min (p.y + 3.0, r.y);
-  float step = (end - start) / 7.0;
-  float y = start;
-  for (int i = 0; i < 8; i++)
+  float step = 1.0;
+  for (float y = 0.5 * step; y <= r.y; y += step)
     {
       float x = r.x - ellipse_x (r, r.y - y);
-      result -= gauss (p.y - y, 1.0) * erf_range (vec2 (- p.x, x - p.x), 1.0);
-      y += step;
-    }
-  return step * result;
+      result -= gauss (p.y - y, _sigma.y) * erf_range (vec2 (- p.x, x - p.x), _sigma.x);
+  }
+  return result;
 }
 
 float
 blur_rounded_rect (RoundedRect r,
                    vec2        p)
 {
-  float result = blur_rect (Rect (rounded_rect_bounds (r)), _pos);
+  float result = blur_rect (Rect (r.bounds), _pos);
 
-  result -= blur_corner (p - rounded_rect_bounds (r).xy, rounded_rect_corner (r, TOP_LEFT));
-  result -= blur_corner (vec2 (rounded_rect_bounds (r).z - p.x, p.y - rounded_rect_bounds (r).y), rounded_rect_corner (r, TOP_RIGHT));
-  result -= blur_corner (rounded_rect_bounds (r).zw - p, rounded_rect_corner (r, BOTTOM_RIGHT));
-  result -= blur_corner (vec2 (p.x - rounded_rect_bounds (r).x, rounded_rect_bounds (r).w - p.y), rounded_rect_corner (r, BOTTOM_LEFT));
+  result -= blur_corner (p - r.bounds.xy, vec2 (r.corner_widths[TOP_LEFT], r.corner_heights[TOP_LEFT]));
+  result -= blur_corner (vec2 (r.bounds.z - p.x, p.y - r.bounds.y), vec2 (r.corner_widths[TOP_RIGHT], r.corner_heights[TOP_RIGHT]));
+  result -= blur_corner (r.bounds.zw - p, vec2 (r.corner_widths[BOTTOM_RIGHT], r.corner_heights[BOTTOM_RIGHT]));
+  result -= blur_corner (vec2 (p.x - r.bounds.x, r.bounds.w - p.y), vec2 (r.corner_widths[BOTTOM_LEFT], r.corner_heights[BOTTOM_LEFT]));
 
   return result;
 }
@@ -172,7 +154,7 @@ run (out vec4 color,
   if (VARIATION_INSET)
     blur_alpha = 1.0 - blur_alpha;
 
-  color = output_color_alpha (_color, clip_alpha * blur_alpha);
+  color = clip_alpha * _color * blur_alpha;
   position = _pos;
 }
 

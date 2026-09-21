@@ -20,8 +20,7 @@ validate_more_details (GtkEntry   *entry,
   if (strlen (gtk_editable_get_text (GTK_EDITABLE (entry))) > 0 &&
       strlen (gtk_editable_get_text (GTK_EDITABLE (details))) == 0)
     {
-      gtk_entry_set_icon_from_icon_name (entry, GTK_ENTRY_ICON_SECONDARY, "dialog-error-symbolic");
-      gtk_entry_set_icon_tooltip_text (entry, GTK_ENTRY_ICON_SECONDARY, "Must have details first");
+      gtk_widget_set_tooltip_text (GTK_WIDGET (entry), "Must have details first");
       gtk_widget_add_css_class (GTK_WIDGET (entry), "error");
       gtk_accessible_update_state (GTK_ACCESSIBLE (entry),
                                    GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE,
@@ -29,7 +28,7 @@ validate_more_details (GtkEntry   *entry,
     }
   else
     {
-      gtk_entry_set_icon_from_paintable (entry, GTK_ENTRY_ICON_SECONDARY, NULL);
+      gtk_widget_set_tooltip_text (GTK_WIDGET (entry), "");
       gtk_widget_remove_css_class (GTK_WIDGET (entry), "error");
       gtk_accessible_reset_state (GTK_ACCESSIBLE (entry), GTK_ACCESSIBLE_STATE_INVALID);
     }
@@ -56,7 +55,7 @@ mode_switch_state_set (GtkSwitch *sw,
     {
       gtk_widget_set_visible (label, TRUE);
       gtk_accessible_update_relation (GTK_ACCESSIBLE (sw),
-                                      GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE, label, NULL,
+                                      GTK_ACCESSIBLE_RELATION_ERROR_MESSAGE, label,
                                       -1);
       gtk_accessible_update_state (GTK_ACCESSIBLE (sw),
                                    GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE,

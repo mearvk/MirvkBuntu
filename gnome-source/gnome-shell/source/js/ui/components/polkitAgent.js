@@ -1,3 +1,5 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import AccountsService from 'gi://AccountsService';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -21,7 +23,7 @@ const DialogMode = {
     CONFIRM: 1,
 };
 
-const DIALOG_ICON_SIZE = 96;
+const DIALOG_ICON_SIZE = 64;
 
 const DELAYED_RESET_TIMEOUT = 200;
 
@@ -41,12 +43,12 @@ const AuthenticationDialog = GObject.registerClass({
 
         this.connect('closed', this._onDialogClosed.bind(this));
 
-        const title = _('Authentication Required');
+        let title = _('Authentication Required');
 
-        const headerContent = new Dialog.MessageDialogContent({title, description});
+        let headerContent = new Dialog.MessageDialogContent({title, description});
         this.contentLayout.add_child(headerContent);
 
-        const bodyContent = new Dialog.MessageDialogContent();
+        let bodyContent = new Dialog.MessageDialogContent();
 
         if (userNames.length > 1) {
             log(`polkitAuthenticationAgent: Received ${userNames.length} ` +
@@ -62,9 +64,9 @@ const AuthenticationDialog = GObject.registerClass({
 
         this._user = AccountsService.UserManager.get_default().get_user(userName);
 
-        const userBox = new St.BoxLayout({
+        let userBox = new St.BoxLayout({
             style_class: 'polkit-dialog-user-layout',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
         bodyContent.add_child(userBox);
 
@@ -85,9 +87,9 @@ const AuthenticationDialog = GObject.registerClass({
 
         userBox.add_child(this._userLabel);
 
-        const passwordBox = new St.BoxLayout({
+        let passwordBox = new St.BoxLayout({
             style_class: 'prompt-dialog-password-layout',
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
 
         this._passwordEntry = new St.PasswordEntry({
@@ -104,9 +106,9 @@ const AuthenticationDialog = GObject.registerClass({
             GObject.BindingFlags.SYNC_CREATE);
         passwordBox.add_child(this._passwordEntry);
 
-        const warningBox = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
+        let warningBox = new St.BoxLayout({vertical: true});
 
-        const capsLockWarning = new ShellEntry.CapsLockWarning();
+        let capsLockWarning = new ShellEntry.CapsLockWarning();
         this._passwordEntry.bind_property('visible',
             capsLockWarning, 'visible',
             GObject.BindingFlags.SYNC_CREATE);
@@ -218,7 +220,7 @@ const AuthenticationDialog = GObject.registerClass({
     }
 
     _onEntryActivate() {
-        const response = this._passwordEntry.get_text();
+        let response = this._passwordEntry.get_text();
         if (response.length === 0)
             return;
 
@@ -330,19 +332,21 @@ const AuthenticationDialog = GObject.registerClass({
             this._sessionRequestTimeoutId = 0;
         }
 
-        const resetDialog = () => {
+        let resetDialog = () => {
             this._sessionRequestTimeoutId = 0;
 
             if (this.state !== ModalDialog.State.OPENED)
-                return;
+                return GLib.SOURCE_REMOVE;
 
             this._passwordEntry.hide();
             this._cancelButton.grab_key_focus();
             this._okButton.reactive = false;
+
+            return GLib.SOURCE_REMOVE;
         };
 
         if (delay) {
-            this._sessionRequestTimeoutId = GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, delay, resetDialog);
+            this._sessionRequestTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, resetDialog);
             GLib.Source.set_name_by_id(this._sessionRequestTimeoutId, '[gnome-shell] this._sessionRequestTimeoutId');
         } else {
             resetDialog();
@@ -353,8 +357,8 @@ const AuthenticationDialog = GObject.registerClass({
         if (!this._user.is_loaded)
             return;
 
-        const userName = this._user.get_user_name();
-        const realName = this._user.get_real_name();
+        let userName = this._user.get_user_name();
+        let realName = this._user.get_real_name();
 
         if (userName !== 'root')
             this._userLabel.set_text(realName);
@@ -423,7 +427,7 @@ class AuthenticationAgent extends Shell.PolkitAuthenticationAgent {
     enable() {
         try {
             this.register();
-        } catch {
+        } catch (e) {
             log('Failed to register AuthenticationAgent');
         }
     }
@@ -431,16 +435,14 @@ class AuthenticationAgent extends Shell.PolkitAuthenticationAgent {
     disable() {
         try {
             this.unregister();
-        } catch {
+        } catch (e) {
             log('Failed to unregister AuthenticationAgent');
         }
     }
 
     _onInitiate(nativeAgent, actionId, message, iconName, cookie, userNames) {
-        // Don't pop up a dialog while locked, unless it's triggered by user
-        // action from the lock screen, such as extending the session limits
-        if (Main.sessionMode.isLocked &&
-            actionId !== 'org.freedesktop.Malcontent.SessionLimits.Extend') {
+        // Don't pop up a dialog while locked
+        if (Main.sessionMode.isLocked) {
             Main.sessionMode.connectObject('updated', () => {
                 Main.sessionMode.disconnectObject(this);
 

@@ -26,6 +26,10 @@
 
 G_BEGIN_DECLS
 
+#ifndef AVAILABLE_MAC_OS_X_VERSION_10_13_AND_LATER
+typedef NSString *NSPasteboardType;
+#endif
+
 @interface GdkMacosPasteboardItemDataProvider : NSObject <NSPasteboardItemDataProvider>
 {
   GdkContentProvider *_contentProvider;
@@ -48,9 +52,6 @@ G_BEGIN_DECLS
 
 -(id)initForClipboard:(GdkClipboard *)clipboard withContentProvider:(GdkContentProvider *)contentProvider;
 -(id)initForDrag:(GdkDrag *)drag withContentProvider:(GdkContentProvider *)contentProvider;
-
-/* Somehow, macOS 26 is looking for localObject, which is part of UIKit. */
-@property (nonatomic, readonly) id localObject;
 
 @end
 

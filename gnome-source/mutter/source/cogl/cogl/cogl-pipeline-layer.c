@@ -36,46 +36,25 @@
 #include "cogl/cogl-util.h"
 #include "cogl/cogl-context-private.h"
 #include "cogl/cogl-texture-private.h"
-#include "cogl/cogl-driver-private.h"
 
 #include "cogl/cogl-pipeline.h"
 #include "cogl/cogl-pipeline-layer-private.h"
 #include "cogl/cogl-pipeline-layer-state-private.h"
 #include "cogl/cogl-pipeline-layer-state.h"
+#include "cogl/cogl-node-private.h"
+#include "cogl/cogl-context-private.h"
+#include "cogl/cogl-texture-private.h"
 
 #include <string.h>
 
-G_DEFINE_FINAL_TYPE (CoglPipelineLayer, cogl_pipeline_layer, G_TYPE_OBJECT)
-
-static void
-cogl_pipeline_layer_unparent (CoglPipelineLayer *layer)
-{
-  g_autoptr (CoglPipelineLayer) parent = g_steal_pointer (&layer->parent);
-
-  if (parent)
-    {
-      if (parent->first_child == layer)
-        parent->first_child = layer->next_sibling;
-
-      if (parent->last_child == layer)
-        parent->last_child = layer->prev_sibling;
-
-      if (layer->prev_sibling)
-        layer->prev_sibling->next_sibling = layer->next_sibling;
-      if (layer->next_sibling)
-        layer->next_sibling->prev_sibling = layer->prev_sibling;
-    }
-
-  layer->prev_sibling = NULL;
-  layer->next_sibling = NULL;
-}
+G_DEFINE_FINAL_TYPE (CoglPipelineLayer, cogl_pipeline_layer, COGL_TYPE_NODE)
 
 static void
 cogl_pipeline_layer_dispose (GObject *object)
 {
   CoglPipelineLayer *layer = COGL_PIPELINE_LAYER (object);
 
-  cogl_pipeline_layer_unparent (layer);
+  _cogl_pipeline_node_unparent_real (COGL_NODE (layer));
 
   if (layer->differences & COGL_PIPELINE_LAYER_STATE_TEXTURE_DATA &&
       layer->texture != NULL)
@@ -87,7 +66,7 @@ cogl_pipeline_layer_dispose (GObject *object)
   if (layer->differences & COGL_PIPELINE_LAYER_STATE_FRAGMENT_SNIPPETS)
     _cogl_pipeline_snippet_list_free (&layer->big_state->fragment_snippets);
 
-  if (layer->has_big_state)
+  if (layer->differences & COGL_PIPELINE_LAYER_STATE_NEEDS_BIG_STATE)
     g_free (layer->big_state);
 
   G_OBJECT_CLASS (cogl_pipeline_layer_parent_class)->dispose (object);
@@ -162,7 +141,7 @@ _cogl_pipeline_layer_has_alpha (CoglPipelineLayer *layer)
     _cogl_pipeline_layer_get_authority (layer,
                                         COGL_PIPELINE_LAYER_STATE_TEXTURE_DATA);
   if (tex_authority->texture &&
-      cogl_texture_get_format (tex_authority->texture) & COGL_A_BIT)
+      _cogl_texture_get_format (tex_authority->texture) & COGL_A_BIT)
     {
       return TRUE;
     }
@@ -392,7 +371,8 @@ _cogl_pipeline_layer_pre_change_notify (CoglPipeline *required_owner,
 {
   /* Identify the case where the layer is new with no owner or
    * dependants and so we don't need to do anything. */
-  if (layer->first_child == NULL && layer->owner == NULL)
+  if (_cogl_list_empty (&COGL_NODE (layer)->children) &&
+      layer->owner == NULL)
     goto init_layer_state;
 
   /* We only allow a NULL required_owner for new layers */
@@ -413,7 +393,8 @@ _cogl_pipeline_layer_pre_change_notify (CoglPipeline *required_owner,
    * they have dependants - either direct children, or another
    * pipeline as an owner.
    */
-  if (layer->first_child != NULL || layer->owner != required_owner)
+  if (!_cogl_list_empty (&COGL_NODE (layer)->children) ||
+      layer->owner != required_owner)
     {
       CoglPipelineLayer *new = _cogl_pipeline_layer_copy (layer);
       if (layer->owner == required_owner)
@@ -435,11 +416,16 @@ _cogl_pipeline_layer_pre_change_notify (CoglPipeline *required_owner,
    * backend that needs to be notified of the layer change...
    */
     {
-      CoglDriver *driver = cogl_context_get_driver (required_owner->context);
-      CoglDriverClass *driver_klass = COGL_DRIVER_GET_CLASS (driver);
+      const CoglPipelineProgend *progend = _cogl_pipeline_progend;
+      const CoglPipelineFragend *fragend = _cogl_pipeline_fragend;
+      const CoglPipelineVertend *vertend = _cogl_pipeline_vertend;
 
-      if (driver_klass->pipeline_layer_pre_change_notify)
-        driver_klass->pipeline_layer_pre_change_notify (driver, required_owner, layer, change);
+      if (fragend->layer_pre_change_notify)
+        fragend->layer_pre_change_notify (required_owner, layer, change);
+      if (vertend->layer_pre_change_notify)
+        vertend->layer_pre_change_notify (required_owner, layer, change);
+      if (progend->layer_pre_change_notify)
+        progend->layer_pre_change_notify (required_owner, layer, change);
     }
 
 init_layer_state:
@@ -482,32 +468,10 @@ static void
 _cogl_pipeline_layer_set_parent (CoglPipelineLayer *layer,
                                  CoglPipelineLayer *parent)
 {
-  g_autoptr (CoglPipelineLayer) owned_parent = NULL;
-
-  g_assert (COGL_IS_PIPELINE_LAYER (layer));
-  g_assert (COGL_IS_PIPELINE_LAYER (parent));
-
-  if (layer->parent == parent)
-    return;
-
-  if (layer->parent)
-    {
-      owned_parent = g_object_ref (layer->parent);
-      cogl_pipeline_layer_unparent (layer);
-    }
-
-  layer->parent = g_object_ref (parent);
-
-  if (parent->first_child)
-    {
-      parent->first_child->prev_sibling = layer;
-      layer->next_sibling = parent->first_child;
-    }
-  else
-    {
-      parent->last_child = layer;
-    }
-  parent->first_child = layer;
+  /* Chain up */
+  _cogl_pipeline_node_set_parent_real (COGL_NODE (layer),
+                                       COGL_NODE (parent),
+                                       TRUE);
 }
 
 CoglPipelineLayer *
@@ -681,9 +645,6 @@ _cogl_pipeline_layer_equal (CoglPipelineLayer *layer0,
   if (layer0 == layer1)
     return TRUE;
 
-  if (layer0->index != layer1->index)
-    return FALSE;
-
   layers_difference =
     _cogl_pipeline_layer_compare_differences (layer0, layer1);
 
@@ -757,8 +718,7 @@ _cogl_pipeline_init_default_layers (CoglContext *ctx)
   CoglPipelineLayer *layer = g_object_new (COGL_TYPE_PIPELINE_LAYER, NULL);
   CoglPipelineLayerBigState *big_state =
     g_new0 (CoglPipelineLayerBigState, 1);
-  G_GNUC_UNUSED CoglPipelineLayer *new;
-  CoglPipelineLayer *default_layer_n;
+  CoglPipelineLayer *new;
 
   layer->index = 0;
 
@@ -769,7 +729,7 @@ _cogl_pipeline_init_default_layers (CoglContext *ctx)
   layer->texture = NULL;
 
   layer->sampler_cache_entry =
-    _cogl_sampler_cache_get_default_entry (cogl_context_get_sampler_cache (ctx));
+    _cogl_sampler_cache_get_default_entry (ctx->sampler_cache);
 
   layer->big_state = big_state;
   layer->has_big_state = TRUE;
@@ -801,7 +761,7 @@ _cogl_pipeline_init_default_layers (CoglContext *ctx)
 
   graphene_matrix_init_identity (&big_state->matrix);
 
-  cogl_context_set_default_layer_0 (ctx, layer);
+  ctx->default_layer_0 = layer;
 
   /* TODO: we should make default_layer_n comprise of two
    * descendants of default_layer_0:
@@ -821,10 +781,9 @@ _cogl_pipeline_init_default_layers (CoglContext *ctx)
    * optimizations for flattening the ancestry when we make
    * the second descendant which reverts the state.
    */
-  default_layer_n = _cogl_pipeline_layer_copy (layer);
-  cogl_context_set_default_layer_n (ctx, default_layer_n);
-  new = _cogl_pipeline_set_layer_unit (NULL, default_layer_n, 1);
-  g_assert (new == default_layer_n);
+  ctx->default_layer_n = _cogl_pipeline_layer_copy (layer);
+  new = _cogl_pipeline_set_layer_unit (NULL, ctx->default_layer_n, 1);
+  g_assert (new == ctx->default_layer_n);
   /* Since we passed a newly allocated layer we don't expect that
    * _set_layer_unit() will have to allocate *another* layer. */
 
@@ -832,8 +791,8 @@ _cogl_pipeline_init_default_layers (CoglContext *ctx)
    * effectively ensures that ->default_layer_n and ->default_layer_0
    * remain immutable.
    */
-  cogl_context_set_dummy_layer_dependant (ctx,
-                                          _cogl_pipeline_layer_copy (default_layer_n));
+  ctx->dummy_layer_dependant =
+    _cogl_pipeline_layer_copy (ctx->default_layer_n);
 }
 
 void
@@ -936,3 +895,5 @@ _cogl_pipeline_layer_needs_combine_separate
 
   return FALSE;
 }
+
+

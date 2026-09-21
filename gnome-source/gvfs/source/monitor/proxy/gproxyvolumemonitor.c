@@ -435,7 +435,6 @@ drive_disconnected (GVfsRemoteVolumeMonitor *object,
       g_hash_table_remove (monitor->drives, arg_id);
       signal_emit_in_idle (d, "disconnected", NULL);
       signal_emit_in_idle (monitor, "drive-disconnected", d);
-      dispose_in_idle (d);
       g_object_unref (d);
     }
   
@@ -616,7 +615,6 @@ mount_removed (GVfsRemoteVolumeMonitor *object,
       g_hash_table_remove (monitor->mounts, arg_id);
       signal_emit_in_idle (m, "unmounted", NULL);
       signal_emit_in_idle (monitor, "mount-removed", m);
-      dispose_in_idle (m);
       g_object_unref (m);
     }
     
@@ -905,7 +903,6 @@ name_owner_vanished (GProxyVolumeMonitor *monitor)
     {
       signal_emit_in_idle (mount, "unmounted", NULL);
       signal_emit_in_idle (monitor, "mount-removed", mount);
-      dispose_in_idle (mount);
     }
   g_hash_table_remove_all (monitor->mounts);
 
@@ -914,7 +911,6 @@ name_owner_vanished (GProxyVolumeMonitor *monitor)
     {
       signal_emit_in_idle (volume, "removed", NULL);
       signal_emit_in_idle (monitor, "volume-removed", volume);
-      dispose_in_idle (volume);
     }
   g_hash_table_remove_all (monitor->volumes);
 
@@ -923,7 +919,6 @@ name_owner_vanished (GProxyVolumeMonitor *monitor)
     {
       signal_emit_in_idle (drive, "disconnected", NULL);
       signal_emit_in_idle (monitor, "drive-disconnected", drive);
-      dispose_in_idle (drive);
     }
   g_hash_table_remove_all (monitor->drives);
 

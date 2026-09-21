@@ -33,14 +33,15 @@
 #include "cogl/cogl-frame-info-private.h"
 #include "cogl/cogl-context-private.h"
 
-G_DEFINE_FINAL_TYPE (CoglFrameInfo, cogl_frame_info, G_TYPE_OBJECT);
+G_DEFINE_TYPE (CoglFrameInfo, cogl_frame_info, G_TYPE_OBJECT);
 
 static void
 cogl_frame_info_dispose (GObject *object)
 {
   CoglFrameInfo *info = COGL_FRAME_INFO (object);
 
-  g_clear_object (&info->onscreen);
+  if (info->timestamp_query)
+    cogl_context_free_timestamp_query (info->context, info->timestamp_query);
 
   G_OBJECT_CLASS (cogl_frame_info_parent_class)->dispose (object);
 }
@@ -59,16 +60,14 @@ cogl_frame_info_class_init (CoglFrameInfoClass *class)
 }
 
 CoglFrameInfo *
-cogl_frame_info_new (CoglOnscreen *onscreen,
-                     int64_t       global_frame_counter,
-                     int64_t       view_frame_counter)
+cogl_frame_info_new (CoglContext *context,
+                     int64_t      global_frame_counter)
 {
   CoglFrameInfo *info;
 
   info = g_object_new (COGL_TYPE_FRAME_INFO, NULL);
-  info->onscreen = g_object_ref (onscreen);
+  info->context = context;
   info->global_frame_counter = global_frame_counter;
-  info->view_frame_counter = view_frame_counter;
 
   return info;
 }
@@ -77,12 +76,6 @@ int64_t
 cogl_frame_info_get_frame_counter (CoglFrameInfo *info)
 {
   return info->frame_counter;
-}
-
-CoglOnscreen *
-cogl_frame_info_get_onscreen (CoglFrameInfo *info)
-{
-  return info->onscreen;
 }
 
 int64_t
@@ -105,12 +98,6 @@ int64_t
 cogl_frame_info_get_global_frame_counter (CoglFrameInfo *info)
 {
   return info->global_frame_counter;
-}
-
-int64_t
-cogl_frame_info_get_view_frame_counter (CoglFrameInfo *info)
-{
-  return info->view_frame_counter;
 }
 
 gboolean
@@ -145,8 +132,38 @@ cogl_frame_info_get_sequence (CoglFrameInfo *info)
   return info->sequence;
 }
 
-int64_t
-cogl_frame_info_get_kms_ready_time_us (CoglFrameInfo *info)
+gboolean
+cogl_frame_info_has_valid_gpu_rendering_duration (CoglFrameInfo *info)
 {
-  return info->kms_ready_time_us;
+  return info->has_valid_gpu_rendering_duration;
+}
+
+int64_t
+cogl_frame_info_get_rendering_duration_ns (CoglFrameInfo *info)
+{
+  int64_t gpu_time_rendering_done_ns;
+
+  if (!info->timestamp_query ||
+      info->gpu_time_before_buffer_swap_ns == 0)
+    return 0;
+
+  gpu_time_rendering_done_ns =
+    cogl_context_timestamp_query_get_time_ns (info->context,
+                                              info->timestamp_query);
+
+  return gpu_time_rendering_done_ns - info->gpu_time_before_buffer_swap_ns;
+}
+
+int64_t
+cogl_frame_info_get_time_before_buffer_swap_us (CoglFrameInfo *info)
+{
+  return info->cpu_time_before_buffer_swap_us;
+}
+
+void
+cogl_frame_info_set_target_presentation_time (CoglFrameInfo *info,
+                                              int64_t        presentation_time_us)
+{
+  info->has_target_presentation_time = TRUE;
+  info->target_presentation_time_us = presentation_time_us;
 }

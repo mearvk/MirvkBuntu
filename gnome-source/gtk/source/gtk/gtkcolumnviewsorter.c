@@ -48,7 +48,8 @@ free_sorter (gpointer data)
 /**
  * GtkColumnViewSorter:
  *
- * Sorts [class@Gtk.ColumnView] columns.
+ * `GtkColumnViewSorter` is a sorter implementation that
+ * is geared towards the needs of `GtkColumnView`.
  *
  * The sorter returned by [method@Gtk.ColumnView.get_sorter] is
  * a `GtkColumnViewSorter`.
@@ -213,7 +214,7 @@ gtk_column_view_sorter_class_init (GtkColumnViewSorterClass *class)
   object_class->get_property = gtk_column_view_sorter_get_property;
 
   /**
-   * GtkColumnViewSorter:primary-sort-column:
+   * GtkColumnViewSorter:primary-sort-column: (attributes org.gtk.Property.get=gtk_column_view_sorter_get_primary_sort_column)
    *
    * The primary sort column.
    *
@@ -225,10 +226,10 @@ gtk_column_view_sorter_class_init (GtkColumnViewSorterClass *class)
   properties[PROP_PRIMARY_SORT_COLUMN] =
     g_param_spec_object ("primary-sort-column", NULL, NULL,
                          GTK_TYPE_COLUMN_VIEW_COLUMN,
-                         G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                         G_PARAM_READABLE|G_PARAM_STATIC_STRINGS);
 
   /**
-   * GtkColumnViewSorter:primary-sort-order:
+   * GtkColumnViewSorter:primary-sort-order: (attributes org.gtk.Property.get=gtk_column_view_sorter_get_primary_sort_order)
    *
    * The primary sort order.
    *
@@ -242,7 +243,7 @@ gtk_column_view_sorter_class_init (GtkColumnViewSorterClass *class)
     g_param_spec_enum ("primary-sort-order", NULL, NULL,
                        GTK_TYPE_SORT_TYPE,
                        GTK_SORT_ASCENDING,
-                       G_PARAM_READABLE | G_PARAM_STATIC_NAME);
+                       G_PARAM_READABLE|G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NUM_PROPERTIES, properties);
 }
@@ -457,7 +458,7 @@ gtk_column_view_sorter_get_sort_column (GtkColumnViewSorter *self,
 
 /**
  * gtk_column_view_sorter_get_primary_sort_column:
- * @self: a columnviewsorter
+ * @self: a `GtkColumnViewSorter`
  *
  * Returns the primary sort column.
  *
@@ -487,7 +488,7 @@ gtk_column_view_sorter_get_primary_sort_column (GtkColumnViewSorter *self)
 
 /**
  * gtk_column_view_sorter_get_primary_sort_order:
- * @self: a columnviewsorter
+ * @self: a `GtkColumnViewSorter`
  *
  * Returns the primary sort order.
  *
@@ -521,7 +522,7 @@ gtk_column_view_sorter_get_primary_sort_order (GtkColumnViewSorter *self)
 
 /**
  * gtk_column_view_sorter_get_n_sort_columns:
- * @self: a columnviewsorter
+ * @self: a `GtkColumnViewSorter`
  *
  * Returns the number of columns by which the sorter sorts.
  *
@@ -546,7 +547,7 @@ gtk_column_view_sorter_get_n_sort_columns (GtkColumnViewSorter *self)
 
 /**
  * gtk_column_view_sorter_get_nth_sort_column:
- * @self: a columnviewsorter
+ * @self: a `GtkColumnViewSorter`
  * @position: the position of the sort column to retrieve (0 for the
  *     primary sort column)
  * @sort_order: (out): return location for the sort order
@@ -556,7 +557,7 @@ gtk_column_view_sorter_get_n_sort_columns (GtkColumnViewSorter *self)
  * Use the [signal@Gtk.Sorter::changed] signal to get notified
  * when sort columns change.
  *
- * Returns: (nullable) (transfer none): the sort column at the @position
+ * Returns: (nullable) (transfer none): the @positions sort column
  *
  * Since: 4.10
  */
@@ -587,4 +588,4 @@ gtk_column_view_sorter_get_nth_sort_column (GtkColumnViewSorter *self,
 
 /* }}} */
 
-/* vim:set foldmethod=marker: */
+/* vim:set foldmethod=marker expandtab: */

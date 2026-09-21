@@ -21,13 +21,24 @@ def replace_if_changed(new, old):
     os.remove(new)
 
 gl_source_shaders = []
+ngl_source_shaders = []
 vulkan_compiled_shaders = []
+gpu_vulkan_compiled_shaders = []
+vulkan_shaders = []
 
 for f in sys.argv[2:]:
   if f.endswith('.glsl'):
-    gl_source_shaders.append(f)
+    if f.find('gsk/gpu') > -1:
+      ngl_source_shaders.append(f)
+    else:
+      gl_source_shaders.append(f)
   elif f.endswith('.spv'):
-    vulkan_compiled_shaders.append(f)
+    if f.find('gsk/gpu') > -1:
+      gpu_vulkan_compiled_shaders.append(f)
+    else:
+      vulkan_compiled_shaders.append(f)
+  elif f.endswith('.frag') or f.endswith('.vert'):
+    vulkan_shaders.append(f)
   else:
     raise Exception(f"No idea what XML to generate for {f}")
 
@@ -38,12 +49,27 @@ xml = '''<?xml version='1.0' encoding='UTF-8'?>
 '''
 
 for f in gl_source_shaders:
+  xml += '    <file alias=\'gl/{0}\'>gl/resources/{0}</file>\n'.format(os.path.basename(f))
+
+xml += '\n'
+
+for f in ngl_source_shaders:
   xml += '    <file alias=\'shaders/gl/{0}\'>gpu/shaders/{0}</file>\n'.format(os.path.basename(f))
 
 xml += '\n'
 
 for f in vulkan_compiled_shaders:
+  xml += '    <file alias=\'vulkan/{0}\'>vulkan/resources/{0}</file>\n'.format(os.path.basename(f))
+
+xml += '\n'
+
+for f in gpu_vulkan_compiled_shaders:
   xml += '    <file alias=\'shaders/vulkan/{0}\'>gpu/shaders/{0}</file>\n'.format(os.path.basename(f))
+
+xml += '\n'
+
+for f in vulkan_shaders:
+  xml += '    <file alias=\'vulkan/{0}\'>vulkan/resources/{0}</file>\n'.format(os.path.basename(f))
 
 xml += '''
   </gresource>

@@ -7,16 +7,16 @@ implement volume monitors and persistent metadata storage. There is also FUSE
 support that provides limited access to the GVfs filesystems for applications
 not using GIO.
 
+For more info about GVfs, see https://wiki.gnome.org/Projects/gvfs.
+
 ## Reporting Bugs
 
 Bug reports can be found and filed at https://gitlab.gnome.org/GNOME/gvfs/issues.
 For security-related issues, please use https://security.gnome.org/.
 
+See https://wiki.gnome.org/Projects/gvfs/debugging for info about getting debug
+logs.
+
 ## Ask Questions
 
 For questions use [GNOME Discourse](https://discourse.gnome.org/).
-
-## Contributing Code
-
-Please see the [Contribution Guidelines](CONTRIBUTING.md) for information on how
-to start contributing to GVfs.

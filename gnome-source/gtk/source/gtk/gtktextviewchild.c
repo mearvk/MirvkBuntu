@@ -382,7 +382,7 @@ gtk_text_view_child_class_init (GtkTextViewChildClass *klass)
     g_param_spec_enum ("window-type", NULL, NULL,
                        GTK_TYPE_TEXT_WINDOW_TYPE,
                        GTK_TEXT_WINDOW_TEXT,
-                       G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY);
+                       GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT_ONLY|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
@@ -490,5 +490,5 @@ gtk_text_view_child_set_offset (GtkTextViewChild *self,
     }
 
   if (changed)
-    gtk_widget_queue_allocate (GTK_WIDGET (self));
+    gtk_widget_queue_draw (GTK_WIDGET (self));
 }

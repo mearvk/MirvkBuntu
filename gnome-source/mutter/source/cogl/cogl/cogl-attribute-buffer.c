@@ -53,12 +53,10 @@ CoglAttributeBuffer *
 cogl_attribute_buffer_new_with_size (CoglContext *context,
                                      size_t       bytes)
 {
-  CoglDriver *driver = cogl_context_get_driver (context);
   CoglAttributeBuffer *buffer;
 
   buffer = g_object_new (COGL_TYPE_ATTRIBUTE_BUFFER,
                          "context", context,
-                         "impl", cogl_driver_create_buffer_impl (driver),
                          "size", (uint64_t) bytes,
                          "default-target", COGL_BUFFER_BIND_TARGET_ATTRIBUTE_BUFFER,
                          "update-hint", COGL_BUFFER_UPDATE_HINT_STATIC,
@@ -88,10 +86,11 @@ cogl_attribute_buffer_new (CoglContext *context,
   /* XXX: NB: for Cogl 2.0 we don't allow NULL data here but we can't
    * break the api for 1.x and so we keep the check for now. */
   if (data)
-    cogl_buffer_set_data (COGL_BUFFER (buffer),
-                          0,
-                          data,
-                          bytes);
+    _cogl_buffer_set_data (COGL_BUFFER (buffer),
+                           0,
+                           data,
+                           bytes,
+                           NULL);
 
   return buffer;
 }

@@ -1,6 +1,9 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 
 
@@ -14,7 +17,7 @@ class OsdMonitorLabel extends St.Widget {
         this._monitor = monitor;
 
         this._box = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
+            vertical: true,
         });
         this.add_child(this._box);
 
@@ -28,14 +31,14 @@ class OsdMonitorLabel extends St.Widget {
         Main.uiGroup.set_child_above_sibling(this, null);
         this._position();
 
-        global.compositor.disable_unredirect();
+        Meta.disable_unredirect_for_display(global.display);
         this.connect('destroy', () => {
-            global.compositor.enable_unredirect();
+            Meta.enable_unredirect_for_display(global.display);
         });
     }
 
     _position() {
-        const workArea = Main.layoutManager.getWorkAreaForMonitor(this._monitor);
+        let workArea = Main.layoutManager.getWorkAreaForMonitor(this._monitor);
 
         if (Clutter.get_default_text_direction() === Clutter.TextDirection.RTL)
             this._box.x = workArea.x + (workArea.width - this._box.width);
@@ -59,12 +62,12 @@ export class OsdMonitorLabeler {
     }
 
     _reset() {
-        for (const i in this._osdLabels)
+        for (let i in this._osdLabels)
             this._osdLabels[i].destroy();
         this._osdLabels = [];
         this._monitorLabels = new Map();
-        const monitors = Main.layoutManager.monitors;
-        for (const i in monitors)
+        let monitors = Main.layoutManager.monitors;
+        for (let i in monitors)
             this._monitorLabels.set(monitors[i].index, []);
     }
 
@@ -97,14 +100,14 @@ export class OsdMonitorLabeler {
 
         this._reset();
 
-        for (const connector in params) {
-            const monitor = this._monitorManager.get_monitor_for_connector(connector);
+        for (let connector in params) {
+            let monitor = this._monitorManager.get_monitor_for_connector(connector);
             if (monitor === -1)
                 continue;
             this._monitorLabels.get(monitor).push(params[connector].deepUnpack());
         }
 
-        for (const [monitor, labels] of this._monitorLabels.entries()) {
+        for (let [monitor, labels] of this._monitorLabels.entries()) {
             labels.sort();
             this._osdLabels.push(new OsdMonitorLabel(monitor, labels.join(' ')));
         }

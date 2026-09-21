@@ -124,6 +124,12 @@ tiler_next (Tiler                 *tiler,
   return TRUE;
 }
 
+static inline CGRect
+toCGRect (const cairo_rectangle_int_t *rect)
+{
+  return CGRectMake (rect->x, rect->y, rect->width, rect->height);
+}
+
 static inline cairo_rectangle_int_t
 fromCGRect (const CGRect rect)
 {
@@ -151,6 +157,7 @@ fromCGRect (const CGRect rect)
   self->_layoutInvalid = TRUE;
 
   [self setContentsGravity:kCAGravityCenter];
+  [self setContentsScale:1.0f];
   [self setGeometryFlipped:YES];
 
   return self;
@@ -213,6 +220,7 @@ fromCGRect (const CGRect rect)
       info->tile = [GdkMacosTile layer];
 
       [info->tile setAffineTransform:transform];
+      [info->tile setContentsScale:1.0f];
       [info->tile setOpaque:info->opaque];
       [(id<CanSetContentsOpaque>)info->tile setContentsOpaque:info->opaque];
       [info->tile setFrame:info->area];
@@ -283,7 +291,7 @@ fromCGRect (const CGRect rect)
       info->tile = NULL;
       info->opaque = FALSE;
       info->cr_area = rect;
-      info->area = CGRectMake (rect.x, rect.y, rect.width, rect.height);
+      info->area = toCGRect (&info->cr_area);
     }
 
   /* Track opaque children */
@@ -298,7 +306,7 @@ fromCGRect (const CGRect rect)
       info->tile = NULL;
       info->opaque = TRUE;
       info->cr_area = rect;
-      info->area = CGRectMake (rect.x, rect.y, rect.width, rect.height);
+      info->area = toCGRect (&info->cr_area);
     }
 
   cairo_region_destroy (transparent);
@@ -357,14 +365,8 @@ fromCGRect (const CGRect rect)
       const TileInfo *info = &g_array_index (self->_tiles, TileInfo, i);
       cairo_region_overlap_t overlap;
       CGRect area;
-      cairo_rectangle_int_t cr_area_scaled = {
-        info->cr_area.x * scale,
-        info->cr_area.y * scale,
-        info->cr_area.width * scale,
-        info->cr_area.height * scale
-      };
 
-      overlap = cairo_region_contains_rectangle (damage, &cr_area_scaled);
+      overlap = cairo_region_contains_rectangle (damage, &info->cr_area);
       if (overlap == CAIRO_REGION_OVERLAP_OUT)
         continue;
 

@@ -45,8 +45,6 @@
 
 #include "gtkmountoperationprivate.h"
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-
 /* ---------------------------------------------------------------------------------------------------- */
 /* these functions are based on code from libwnck (LGPLv2) */
 
@@ -462,9 +460,7 @@ scaled_from_pixdata (guchar *pixdata,
       dest = src;
     }
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   ret = gdk_texture_new_for_pixbuf (dest);
-G_GNUC_END_IGNORE_DEPRECATIONS
 
   g_object_unref (dest);
 
@@ -766,7 +762,8 @@ pid_get_parent (GPid pid)
   ppid = kp->p_ppid;
 
 out:
-  g_free (kp);
+  if (kp)
+      g_free (kp);
   return ppid;
 }
 

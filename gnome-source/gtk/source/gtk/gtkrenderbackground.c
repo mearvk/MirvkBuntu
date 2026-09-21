@@ -36,7 +36,6 @@
 #include "gtkcsscolorvalueprivate.h"
 #include "gtkcssstyleprivate.h"
 #include "gtkcsstypesprivate.h"
-#include "gtksnapshotprivate.h"
 
 #include <math.h>
 
@@ -47,29 +46,29 @@
 static void
 gtk_theming_background_snapshot_color (GtkCssBoxes       *boxes,
                                        GtkSnapshot       *snapshot,
-                                       const GtkCssColor *bg_color,
+                                       const GdkRGBA     *bg_color,
                                        guint              n_bg_values)
 {
-  GtkCssStyle *style = boxes->style;
   const GskRoundedRect *box;
   GtkCssArea clip;
-  GdkColor color;
 
-  clip = _gtk_css_area_value_get (_gtk_css_array_value_get_nth (style->background->background_clip, n_bg_values - 1));
+  clip = _gtk_css_area_value_get (_gtk_css_array_value_get_nth (boxes->style->background->background_clip, n_bg_values - 1));
   box = gtk_css_boxes_get_box (boxes, clip);
 
-  gtk_css_color_to_color (bg_color, &color);
   if (gsk_rounded_rect_is_rectilinear (box))
     {
-      gtk_snapshot_add_color (snapshot, &color, &box->bounds);
+      gtk_snapshot_append_color (snapshot,
+                                 bg_color,
+                                 &box->bounds);
     }
   else
     {
       gtk_snapshot_push_rounded_clip (snapshot, box);
-      gtk_snapshot_add_color (snapshot, &color, &box->bounds);
+      gtk_snapshot_append_color (snapshot,
+                                 bg_color,
+                                 &box->bounds);
       gtk_snapshot_pop (snapshot);
     }
-  gdk_color_finish (&color);
 }
 
 static void
@@ -77,7 +76,7 @@ gtk_theming_background_snapshot_layer (GtkCssBoxes *bg,
                                        guint        idx,
                                        GtkSnapshot *snapshot)
 {
-  GtkCssStyle *style = bg->style;
+  GtkCssBackgroundValues *background = bg->style->background;
   GtkCssRepeatStyle hrepeat, vrepeat;
   const GtkCssValue *pos, *repeat;
   GtkCssImage *image;
@@ -86,17 +85,17 @@ gtk_theming_background_snapshot_layer (GtkCssBoxes *bg,
   double width, height;
   double x, y;
 
-  image = _gtk_css_image_value_get_image (_gtk_css_array_value_get_nth (style->used->background_image, idx));
+  image = _gtk_css_image_value_get_image (_gtk_css_array_value_get_nth (background->background_image, idx));
 
   if (image == NULL)
     return;
 
-  pos = _gtk_css_array_value_get_nth (style->background->background_position, idx);
-  repeat = _gtk_css_array_value_get_nth (style->background->background_repeat, idx);
+  pos = _gtk_css_array_value_get_nth (background->background_position, idx);
+  repeat = _gtk_css_array_value_get_nth (background->background_repeat, idx);
 
   origin = gtk_css_boxes_get_box (bg,
                                   _gtk_css_area_value_get (
-                                      _gtk_css_array_value_get_nth (style->background->background_origin, idx)));
+                                      _gtk_css_array_value_get_nth (background->background_origin, idx)));
 
   width = origin->bounds.size.width;
   height = origin->bounds.size.height;
@@ -106,9 +105,9 @@ gtk_theming_background_snapshot_layer (GtkCssBoxes *bg,
 
   clip = gtk_css_boxes_get_box (bg,
                                 _gtk_css_area_value_get (
-                                    _gtk_css_array_value_get_nth (style->background->background_clip, idx)));
+                                    _gtk_css_array_value_get_nth (background->background_clip, idx)));
 
-  _gtk_css_bg_size_value_compute_size (_gtk_css_array_value_get_nth (style->background->background_size, idx),
+  _gtk_css_bg_size_value_compute_size (_gtk_css_array_value_get_nth (background->background_size, idx),
                                        image,
                                        width,
                                        height,
@@ -246,9 +245,9 @@ void
 gtk_css_style_snapshot_background (GtkCssBoxes *boxes,
                                    GtkSnapshot *snapshot)
 {
-  GtkCssStyle *style = boxes->style;
+  const GtkCssBackgroundValues *background = boxes->style->background;
   GtkCssValue *background_image;
-  const GtkCssColor *bg_color;
+  const GdkRGBA *bg_color;
   const GtkCssValue *box_shadow;
   gboolean has_bg_color;
   gboolean has_bg_image;
@@ -256,14 +255,14 @@ gtk_css_style_snapshot_background (GtkCssBoxes *boxes,
   int idx;
   guint number_of_layers;
 
-  if (style->background->base.type == GTK_CSS_BACKGROUND_INITIAL_VALUES)
+  if (background->base.type == GTK_CSS_BACKGROUND_INITIAL_VALUES)
     return;
 
-  background_image = style->used->background_image;
-  bg_color = gtk_css_color_value_get_color (style->used->background_color);
-  box_shadow = style->used->box_shadow;
+  background_image = background->background_image;
+  bg_color = gtk_css_color_value_get_rgba (background->background_color);
+  box_shadow = background->box_shadow;
 
-  has_bg_color = !gtk_css_color_is_clear (bg_color);
+  has_bg_color = !gdk_rgba_is_clear (bg_color);
   has_bg_image = _gtk_css_image_value_get_image (_gtk_css_array_value_get_nth (background_image, 0)) != NULL;
   has_shadow = !gtk_css_shadow_value_is_none (box_shadow);
 
@@ -282,7 +281,7 @@ gtk_css_style_snapshot_background (GtkCssBoxes *boxes,
 
   if (has_bg_image)
     {
-      GtkCssValue *blend_modes = style->background->background_blend_mode;
+      GtkCssValue *blend_modes = background->background_blend_mode;
       GskBlendMode *blend_mode_values = g_alloca (sizeof (GskBlendMode) * number_of_layers);
 
       for (idx = number_of_layers - 1; idx >= 0; idx--)

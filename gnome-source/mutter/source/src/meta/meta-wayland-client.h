@@ -31,20 +31,42 @@ META_EXPORT
 G_DECLARE_FINAL_TYPE (MetaWaylandClient, meta_wayland_client, META, WAYLAND_CLIENT, GObject)
 
 META_EXPORT
-MetaWaylandClient * meta_wayland_client_new_subprocess (MetaContext          *context,
-                                                        GSubprocessLauncher  *launcher,
-                                                        const char * const   *argv,
-                                                        GError              **error);
+MetaWaylandClient *meta_wayland_client_new (MetaContext          *context,
+                                            GSubprocessLauncher  *launcher,
+                                            GError              **error);
 
 META_EXPORT
-GSubprocess * meta_wayland_client_get_subprocess (MetaWaylandClient *client);
+GSubprocess *meta_wayland_client_spawn (MetaWaylandClient  *client,
+                                        MetaDisplay        *display,
+                                        GError            **error,
+                                        const char         *argv0,
+                                        ...) G_GNUC_NULL_TERMINATED;
+
+META_EXPORT
+GSubprocess *meta_wayland_client_spawnv (MetaWaylandClient   *client,
+                                         MetaDisplay         *display,
+                                         const char * const  *argv,
+                                         GError             **error);
 
 META_EXPORT
 gboolean meta_wayland_client_owns_window (MetaWaylandClient *client,
                                           MetaWindow        *window);
 
 META_EXPORT
-pid_t meta_wayland_client_get_pid (MetaWaylandClient *client);
+void meta_wayland_client_hide_from_window_list (MetaWaylandClient *client,
+                                                MetaWindow        *window);
+
+META_EXPORT
+void meta_wayland_client_show_in_window_list (MetaWaylandClient *client,
+                                              MetaWindow        *window);
+
+META_EXPORT
+void meta_wayland_client_make_desktop (MetaWaylandClient *client,
+                                       MetaWindow        *window);
+
+META_EXPORT
+void meta_wayland_client_make_dock (MetaWaylandClient *client,
+                                    MetaWindow        *window);
 
 G_END_DECLS
 

@@ -28,18 +28,17 @@
 #include "gdkdisplay-win32.h"
 #include "gdkdevicemanager-win32.h"
 #include "gdkglcontext-win32.h"
-#include "gdkinput-dmanipulation.h"
 #include "gdksurface-win32.h"
 #include "gdkwin32display.h"
+#include "gdkwin32screen.h"
 #include "gdkwin32surface.h"
 #include "gdkmonitor-win32.h"
-#include "gdkapplaunchcontext-win32.h"
 #include "gdkwin32.h"
 #include "gdkvulkancontext-win32.h"
 
 #include <dwmapi.h>
-#include <shellscalingapi.h>
 
+#include "gdkwin32langnotification.h"
 #ifdef HAVE_EGL
 # include <epoxy/egl.h>
 #endif
@@ -47,6 +46,8 @@
 #ifndef IMAGE_FILE_MACHINE_ARM64
 # define IMAGE_FILE_MACHINE_ARM64 0xAA64
 #endif
+
+static int debug_indent = 0;
 
 /**
  * gdk_win32_display_add_filter:
@@ -189,8 +190,8 @@ _gdk_win32_display_find_matching_monitor (GdkWin32Display *win32_display,
   return NULL;
 }
 
-static void
-gdk_win32_display_init_monitors (GdkWin32Display *win32_display)
+void
+_gdk_win32_display_init_monitors (GdkWin32Display *win32_display)
 {
   GPtrArray *new_monitors;
   int i;
@@ -379,7 +380,11 @@ gdk_win32_display_set_cursor_theme (GdkDisplay  *display,
       return;
     }
 
-  g_clear_pointer (&win32_display->cursor_theme, win32_cursor_theme_destroy);
+  if (win32_display->cursor_theme)
+    {
+      win32_cursor_theme_destroy (win32_display->cursor_theme);
+      win32_display->cursor_theme = NULL;
+    }
 
   win32_display->cursor_theme = theme;
   g_free (win32_display->cursor_theme_name);
@@ -419,233 +424,11 @@ gdk_win32_display_get_next_serial (GdkDisplay *display)
 	return 0;
 }
 
-static gboolean
-gdk_win32_display_create_d3d_devices (GdkWin32Display    *self,
-                                      DXGI_ADAPTER_FLAG   required,
-                                      DXGI_ADAPTER_FLAG   disallowed,
-                                      ID3D11Device      **d3d11_device,
-                                      ID3D12Device      **d3d12_device,
-                                      GError            **error)
-{
-  IDXGIAdapter1 *adapter;
-  HRESULT hr;
-  guint i;
-
-  if (d3d11_device && !gdk_has_feature (GDK_FEATURE_D3D11))
-    {
-      g_set_error (error, GDK_WIN32_HRESULT_ERROR, DXGI_ERROR_NOT_FOUND, "D3D11 disabled via GDK_DISABLE");
-      return FALSE;
-    }
-  if (d3d12_device && !gdk_has_feature (GDK_FEATURE_D3D12))
-    {
-      g_set_error (error, GDK_WIN32_HRESULT_ERROR, DXGI_ERROR_NOT_FOUND, "D3D12 disabled via GDK_DISABLE");
-      return FALSE;
-    }
-
-  /* This function records the first error in the error variable and then
-     sets error = NULL to ignore future errors. */
-
-  for (i = 0; IDXGIFactory4_EnumAdapters1 (self->dxgi_factory, i, &adapter) != DXGI_ERROR_NOT_FOUND; i++)
-    {
-      DXGI_ADAPTER_DESC1 desc;
-
-      hr = IDXGIAdapter1_GetDesc1 (adapter, &desc);
-      if (!gdk_win32_check_hresult (hr, error, "Failed to get adapter description"))
-        {
-          error = NULL;
-          gdk_win32_com_clear (&adapter);
-          continue;
-        }
-
-      if ((desc.Flags & required) != required ||
-          (desc.Flags & disallowed) != 0)
-        {
-          gdk_win32_com_clear (&adapter);
-          continue;
-        }
-
-      if (d3d11_device != NULL)
-        {
-          hr = D3D11CreateDevice ((IDXGIAdapter *) adapter,
-                                  D3D_DRIVER_TYPE_UNKNOWN,
-                                  NULL,
-                                  D3D11_CREATE_DEVICE_BGRA_SUPPORT, /* Cairo needs this */
-                                  NULL,
-                                  0,
-                                  D3D11_SDK_VERSION,
-                                  d3d11_device,
-                                  NULL,
-                                  NULL);
-          if (!gdk_win32_check_hresult (hr, error, "Failed to create D3D11 device"))
-            {
-              error = NULL;
-              gdk_win32_com_clear (&adapter);
-              continue;
-            }
-        }
-
-      if (d3d12_device != NULL)
-        {
-          hr = D3D12CreateDevice ((IUnknown *) adapter,
-                                  D3D_FEATURE_LEVEL_12_0,
-                                  &IID_ID3D12Device,
-                                  (void **) d3d12_device);
-          if (!gdk_win32_check_hresult (hr, error, "Failed to create D3D12 device"))
-            {
-              error = NULL;
-              if (d3d11_device)
-                gdk_win32_com_clear (d3d11_device);
-              gdk_win32_com_clear (&adapter);
-              continue;
-            }
-        }
-
-      gdk_win32_com_clear (&adapter);
-      return TRUE;
-    }
-
-  g_set_error (error, GDK_WIN32_HRESULT_ERROR, DXGI_ERROR_NOT_FOUND, "No adapters available");
-  return FALSE;
-}
-
-static void
-gdk_win32_display_init_dcomp (GdkWin32Display *self)
-{
-  const GUID my_IID_IDCompositionDevice = { 0xC37EA93A,0xE7AA,0x450D, { 0xB1,0x6F,0x97,0x46,0xCB,0x04,0x07,0xF3 } };
-  IDXGIDevice *dxgi_device;
-
-  /* DComp is opt-in (GDK_DEBUG=dcomp) because it causes issues with the GL and
-   * Vulkan renderers (e.g. black borders). The Cairo renderer works fine with
-   * DComp. Re-enable DComp by default when the D3D12 renderer lands and
-   * becomes the default on Windows. */
-  if (!GDK_DISPLAY_DEBUG_CHECK (GDK_DISPLAY (self), DCOMP))
-    return;
-  
-  hr_warn (ID3D11Device_QueryInterface (self->d3d11_device, &IID_IDXGIDevice, (void **) &dxgi_device));
-
-  hr_warn (DCompositionCreateDevice (dxgi_device, &my_IID_IDCompositionDevice, (void **) &self->dcomp_device));
-
-  gdk_win32_com_clear (&dxgi_device);
-}
-
-static gboolean
-gdk_win32_display_init_d3d (GdkWin32Display  *self,
-                            GError          **error)
-{
-  GError *errors[6] = { NULL, };
-  HRESULT hr;
-  gboolean res;
-  gsize i;
-
-  hr = CreateDXGIFactory1 (&IID_IDXGIFactory4, (void **) &self->dxgi_factory);
-  if (!gdk_win32_check_hresult (hr, error, "Failed to create DXGI factory"))
-    return FALSE;
-
-  res = gdk_win32_display_create_d3d_devices (self, 0, DXGI_ADAPTER_FLAG_SOFTWARE, &self->d3d11_device, &self->d3d12_device, &errors[0]) ||
-        gdk_win32_display_create_d3d_devices (self, 0, DXGI_ADAPTER_FLAG_SOFTWARE, &self->d3d11_device, NULL, &errors[1]) ||
-        gdk_win32_display_create_d3d_devices (self, 0, DXGI_ADAPTER_FLAG_SOFTWARE, NULL, &self->d3d12_device, &errors[2]) ||
-        gdk_win32_display_create_d3d_devices (self, DXGI_ADAPTER_FLAG_SOFTWARE, 0, &self->d3d11_device, &self->d3d12_device, &errors[3]) ||
-        gdk_win32_display_create_d3d_devices (self, DXGI_ADAPTER_FLAG_SOFTWARE, 0, &self->d3d11_device, NULL, &errors[4]) ||
-        gdk_win32_display_create_d3d_devices (self, DXGI_ADAPTER_FLAG_SOFTWARE, 0, NULL, &self->d3d12_device, &errors[5]);
-
-  if (error && !res)
-    {
-      for (i = 0; i < G_N_ELEMENTS (errors); i++)
-        {
-          if (!g_error_matches (errors[i], GDK_WIN32_HRESULT_ERROR, DXGI_ERROR_NOT_FOUND))
-            {
-              *error = g_error_copy (errors[i]);
-              break;
-            }
-        }
-      
-      if (i == G_N_ELEMENTS (errors))
-        *error = g_error_copy (errors[0]);
-    }
-
-    for (i = 0; i < G_N_ELEMENTS (errors); i++)
-      g_clear_error (&errors[i]);
-
-  return res;
-}
-
-/*<private>
- * gdk_win32_display_get_dcomp_device:
- * @self: the display
- *
- * Gets the Direct Composition device used to composite
- * the UI.
- * 
- * If Direct Composition is not supported, NULL is returned.
- * 
- * Note that Wine does not support Direct Composition at this point.
- *
- * Returns: (nullable): the device
- */
-IDCompositionDevice *
-gdk_win32_display_get_dcomp_device (GdkWin32Display *self)
-{
-  return self->dcomp_device;
-}
-
-/*<private>
- * gdk_win32_display_get_dxgi_factory:
- * @self: the display
- *
- * Gets the factory used to create rendering resources.
- *
- * Returns: the factory
- */
-IDXGIFactory4 *
-gdk_win32_display_get_dxgi_factory (GdkWin32Display *self)
-{
-  return self->dxgi_factory;
-}
-
-/*<private>
- * gdk_win32_display_get_d3d11_device:
- * @self: the display
- *
- * Gets the D3D11 device used for rendering. It will be
- * created with the factory from
- * gdk_win32_display_get_dxgi_factory() and refer to the same adapter
- * as the D3D12 device.
- *
- * Returns: the D3D11 device used for rendering
- */
-ID3D11Device *
-gdk_win32_display_get_d3d11_device (GdkWin32Display *self)
-{
-  return self->d3d11_device;
-}
-
-/*<private>
- * gdk_win32_display_get_d3d12_device:
- * @self: the display
- *
- * Gets the D3D12 device used for rendering. It will be
- * created with the factory from
- * gdk_win32_display_get_dxgi_factory() and refer to the same adapter
- * as the D3D11 device.
- *
- * If D3D12 is not supported on this computer, NULL is returned.
- *
- * According to the Steam hardware survey, 5-10% of people were
- * still using Windows without D3D12 in early 2025.
- *
- * Returns: (nullable) the D3D12 device used for rendering
- */
-ID3D12Device *
-gdk_win32_display_get_d3d12_device (GdkWin32Display *self)
-{
-  return self->d3d12_device;
-}
-
 static LRESULT CALLBACK
-inner_display_change_hwnd_procedure (HWND   hwnd,
-                                     UINT   message,
-                                     WPARAM wparam,
-                                     LPARAM lparam)
+inner_display_change_window_procedure (HWND   hwnd,
+                                       UINT   message,
+                                       WPARAM wparam,
+                                       LPARAM lparam)
 {
   switch (message)
     {
@@ -654,11 +437,11 @@ inner_display_change_hwnd_procedure (HWND   hwnd,
         PostQuitMessage (0);
         return 0;
       }
-      case WM_DISPLAYCHANGE:
+    case WM_DISPLAYCHANGE:
       {
-        GdkWin32Display *win32_display = GDK_WIN32_DISPLAY (GetWindowLongPtr (hwnd, GWLP_USERDATA));
+        GdkWin32Display *win32_display = GDK_WIN32_DISPLAY (_gdk_display);
 
-        gdk_win32_display_init_monitors (win32_display);
+        _gdk_win32_screen_on_displaychange_event (GDK_WIN32_SCREEN (win32_display->screen));
         return 0;
       }
     default:
@@ -669,48 +452,27 @@ inner_display_change_hwnd_procedure (HWND   hwnd,
 }
 
 static LRESULT CALLBACK
-display_change_hwnd_procedure (HWND   hwnd,
+display_change_window_procedure (HWND   hwnd,
                                  UINT   message,
                                  WPARAM wparam,
                                  LPARAM lparam)
 {
   LRESULT retval;
-  GdkDisplay *display;
 
-  if (message == WM_NCCREATE)
-    {
-      CREATESTRUCT *cs = (CREATESTRUCT *)lparam;
-      display = (GdkDisplay *)cs->lpCreateParams;
+  GDK_NOTE (EVENTS, g_print ("%s%*s%s %p",
+			     (debug_indent > 0 ? "\n" : ""),
+			     debug_indent, "",
+			     _gdk_win32_message_to_string (message), hwnd));
+  debug_indent += 2;
+  retval = inner_display_change_window_procedure (hwnd, message, wparam, lparam);
+  debug_indent -= 2;
 
-      SetWindowLongPtr (hwnd, GWLP_USERDATA, (LONG_PTR) display);
-      retval = TRUE;
-    }
-  else
-    {
-      int debug_indent;
-
-	  display = GDK_DISPLAY ((gpointer) GetWindowLongPtr (hwnd, GWLP_USERDATA));
-
-      debug_indent = GDK_WIN32_DISPLAY (display)->event_record->debug_indent_displaychange;
-      GDK_NOTE (EVENTS, g_print ("%s%*s%s %p",
-                (debug_indent > 0 ? "\n" : ""),
-                 debug_indent, "",
-                _gdk_win32_message_to_string (message), hwnd));
-
-      GDK_WIN32_DISPLAY (display)->event_record->debug_indent_displaychange += 2;
-
-      retval = inner_display_change_hwnd_procedure (hwnd, message, wparam, lparam);
-
-      GDK_WIN32_DISPLAY (display)->event_record->debug_indent_displaychange -= 2;
-      SetWindowLongPtr (hwnd, GWLP_USERDATA, (LONG_PTR) display);
-      debug_indent = GDK_WIN32_DISPLAY (display)->event_record->debug_indent_displaychange;
-      GDK_NOTE (EVENTS, g_print (" => %" G_GINT64_FORMAT "%s", (gint64) retval, (debug_indent == 0 ? "\n" : "")));
-    }
+  GDK_NOTE (EVENTS, g_print (" => %" G_GINT64_FORMAT "%s", (gint64) retval, (debug_indent == 0 ? "\n" : "")));
 
   return retval;
 }
 
-/* Use a hidden HWND to be notified about display changes */
+/* Use a hidden window to be notified about display changes */
 static void
 register_display_change_notification (GdkDisplay *display)
 {
@@ -718,8 +480,8 @@ register_display_change_notification (GdkDisplay *display)
   WNDCLASS wclass = { 0, };
   ATOM klass;
 
-  wclass.lpszClassName = L"GdkDisplayChange";
-  wclass.lpfnWndProc = display_change_hwnd_procedure;
+  wclass.lpszClassName = "GdkDisplayChange";
+  wclass.lpfnWndProc = display_change_window_procedure;
   wclass.hInstance = this_module ();
   wclass.style = CS_OWNDC;
 
@@ -729,7 +491,7 @@ register_display_change_notification (GdkDisplay *display)
       display_win32->hwnd = CreateWindow (MAKEINTRESOURCE (klass),
                                           NULL, WS_POPUP,
                                           0, 0, 0, 0, NULL, NULL,
-                                          this_module (), display);
+                                          this_module (), NULL);
       if (!display_win32->hwnd)
         {
           UnregisterClass (MAKEINTRESOURCE (klass), this_module ());
@@ -740,69 +502,58 @@ register_display_change_notification (GdkDisplay *display)
 GdkDisplay *
 _gdk_win32_display_open (const char *display_name)
 {
-  static gsize display_inited = 0;
-  static GdkDisplay *display = NULL;
   GdkWin32Display *win32_display;
-  GError *error = NULL;
 
   GDK_NOTE (MISC, g_print ("gdk_display_open: %s\n", (display_name ? display_name : "NULL")));
 
-  if (display != NULL)
+  if (display_name == NULL ||
+      g_ascii_strcasecmp (display_name,
+			  gdk_display_get_name (_gdk_display)) == 0)
     {
-      GDK_NOTE (MISC, g_print ("... Display is already open\n"));
+      if (_gdk_display != NULL)
+	{
+	  GDK_NOTE (MISC, g_print ("... return _gdk_display\n"));
+	  return _gdk_display;
+	}
+    }
+  else
+    {
+      GDK_NOTE (MISC, g_print ("... return NULL\n"));
       return NULL;
     }
 
-  if (display_name != NULL)
-    {
-      /* we don't really support multiple GdkDisplay's on Windows at this point */
-      GDK_NOTE (MISC, g_print ("... win32 does not support named displays, but given name was \"%s\"\n", display_name));
-      return NULL;
-    }
+  _gdk_display = g_object_new (GDK_TYPE_WIN32_DISPLAY, NULL);
+  win32_display = GDK_WIN32_DISPLAY (_gdk_display);
 
-  if (g_once_init_enter (&display_inited))
-    {
-      display = g_object_new (GDK_TYPE_WIN32_DISPLAY, NULL);
+  win32_display->screen = g_object_new (GDK_TYPE_WIN32_SCREEN, NULL);
 
-      win32_display = GDK_WIN32_DISPLAY (display);
+  _gdk_events_init (_gdk_display);
 
-      gdk_win32_display_init_monitors (win32_display);
-      _gdk_events_init (display);
+  _gdk_input_ignore_core = 0;
 
-      win32_display->device_manager = g_object_new (GDK_TYPE_DEVICE_MANAGER_WIN32,
-                                                    "display", display,
-                                                    NULL);
-      gdk_dmanipulation_initialize (win32_display);
+  _gdk_device_manager = g_object_new (GDK_TYPE_DEVICE_MANAGER_WIN32,
+                                      NULL);
+  _gdk_device_manager->display = _gdk_display;
 
-      gdk_win32_display_lang_notification_init (win32_display);
-      _gdk_drag_init ();
+  _gdk_win32_lang_notification_init ();
+  _gdk_drag_init ();
 
-      display->clipboard = gdk_win32_clipboard_new (display);
-      display->primary_clipboard = gdk_clipboard_new (display);
+  _gdk_display->clipboard = gdk_win32_clipboard_new (_gdk_display);
+  _gdk_display->primary_clipboard = gdk_clipboard_new (_gdk_display);
 
-      if (!gdk_win32_display_init_d3d (win32_display, &error))
-        {
-          GDK_DEBUG (D3D12, "Failed to initialize D3D: %s", error->message);
-          g_clear_error (&error);
-        }
-      gdk_win32_display_init_dcomp (win32_display);
+  /* Precalculate display name */
+  (void) gdk_display_get_name (_gdk_display);
 
-      /* Precalculate display name */
-      gdk_display_get_name (display);
+  register_display_change_notification (_gdk_display);
 
-      register_display_change_notification (display);
+  g_signal_emit_by_name (_gdk_display, "opened");
 
-      g_signal_emit_by_name (display, "opened");
+  /* Precalculate keymap, see #6203 */
+  (void) _gdk_win32_display_get_keymap (_gdk_display);
 
-      /* Precalculate keymap, see #6203 */
-      gdk_display_get_keymap (display);
+  GDK_NOTE (MISC, g_print ("... _gdk_display now set up\n"));
 
-      GDK_NOTE (MISC, g_print ("... gdk_display now set up\n"));
-
-      g_once_init_leave (&display_inited, 1);
-    }
-
-  return display;
+  return _gdk_display;
 }
 
 G_DEFINE_TYPE (GdkWin32Display, gdk_win32_display, GDK_TYPE_DISPLAY)
@@ -810,69 +561,63 @@ G_DEFINE_TYPE (GdkWin32Display, gdk_win32_display, GDK_TYPE_DISPLAY)
 static const char *
 gdk_win32_display_get_name (GdkDisplay *display)
 {
+  HDESK hdesk = GetThreadDesktop (GetCurrentThreadId ());
+  char dummy;
+  char *desktop_name;
+  HWINSTA hwinsta = GetProcessWindowStation ();
+  char *window_station_name;
+  DWORD n;
+  DWORD session_id;
+  char *display_name;
   static const char *display_name_cache = NULL;
+  typedef BOOL (WINAPI *PFN_ProcessIdToSessionId) (DWORD, DWORD *);
+  PFN_ProcessIdToSessionId processIdToSessionId;
 
   g_return_val_if_fail (GDK_IS_DISPLAY (display), NULL);
 
-  if (g_once_init_enter (&display_name_cache))
+  if (display_name_cache != NULL)
+    return display_name_cache;
+
+  n = 0;
+  GetUserObjectInformation (hdesk, UOI_NAME, &dummy, 0, &n);
+  if (n == 0)
+    desktop_name = "Default";
+  else
     {
-      HDESK hdesk = GetThreadDesktop (GetCurrentThreadId ());
-      char dummy;
-      char dummy_dword[11];
-      wchar_t *desktop_name;
-      HWINSTA hwinsta = GetProcessWindowStation ();
-      wchar_t *window_station_name;
-      DWORD n;
-      DWORD session_id;
-      wchar_t *display_name_w;
-      char *display_name;
-      size_t wchar_size;
-      size_t display_name_len = 0;
+      n++;
+      desktop_name = g_alloca (n + 1);
+      memset (desktop_name, 0, n + 1);
 
-      n = 0;
-      GetUserObjectInformation (hdesk, UOI_NAME, &dummy, 0, &n);
-      wchar_size = sizeof (wchar_t);
-      if (n == 0)
-        desktop_name = L"Default";
-      else
-        {
-          n++;
-          desktop_name = g_alloca ((n + 1) * wchar_size);
-          memset (desktop_name, 0, (n + 1) * wchar_size);
-
-          if (!GetUserObjectInformation (hdesk, UOI_NAME, desktop_name, n, &n))
-          desktop_name = L"Default";
-        }
-
-      n = 0;
-      GetUserObjectInformation (hwinsta, UOI_NAME, &dummy, 0, &n);
-      if (n == 0)
-        window_station_name = L"WinSta0";
-      else
-        {
-          n++;
-          window_station_name = g_alloca ((n + 1) * wchar_size);
-          memset (window_station_name, 0, (n + 1) * wchar_size);
-
-          if (!GetUserObjectInformation (hwinsta, UOI_NAME, window_station_name, n, &n))
-            window_station_name = L"WinSta0";
-        }
-
-      if (!ProcessIdToSessionId (GetCurrentProcessId (), &session_id))
-        session_id = 0;
-
-      /* display_name is in the form of "%ld\\%s\\%s" */
-      display_name_len = strlen (itoa (session_id, dummy_dword, 10)) + 1 + wcslen (window_station_name) + 1 + wcslen (desktop_name);
-      display_name_w = g_alloca ((display_name_len + 1) * wchar_size);
-      memset (display_name_w, 0, (display_name_len + 1) * wchar_size);
-      swprintf_s (display_name_w, display_name_len + 1, L"%ld\\%s\\%s", session_id, window_station_name, desktop_name);
-
-      display_name = g_utf16_to_utf8 (display_name_w, -1, NULL, NULL, NULL);
-
-      GDK_NOTE (MISC, g_print ("gdk_win32_display_get_name: %s\n", display_name));
-
-      g_once_init_leave (&display_name_cache, display_name);
+      if (!GetUserObjectInformation (hdesk, UOI_NAME, desktop_name, n, &n))
+	desktop_name = "Default";
     }
+
+  n = 0;
+  GetUserObjectInformation (hwinsta, UOI_NAME, &dummy, 0, &n);
+  if (n == 0)
+    window_station_name = "WinSta0";
+  else
+    {
+      n++;
+      window_station_name = g_alloca (n + 1);
+      memset (window_station_name, 0, n + 1);
+
+      if (!GetUserObjectInformation (hwinsta, UOI_NAME, window_station_name, n, &n))
+	window_station_name = "WinSta0";
+    }
+
+  processIdToSessionId = (PFN_ProcessIdToSessionId) GetProcAddress (GetModuleHandle ("kernel32.dll"), "ProcessIdToSessionId");
+  if (!processIdToSessionId || !processIdToSessionId (GetCurrentProcessId (), &session_id))
+    session_id = 0;
+
+  display_name = g_strdup_printf ("%ld\\%s\\%s",
+				  session_id,
+				  window_station_name,
+				  desktop_name);
+
+  GDK_NOTE (MISC, g_print ("gdk_win32_display_get_name: %s\n", display_name));
+
+  display_name_cache = display_name;
 
   return display_name_cache;
 }
@@ -880,28 +625,53 @@ gdk_win32_display_get_name (GdkDisplay *display)
 static void
 gdk_win32_display_beep (GdkDisplay *display)
 {
-  MessageBeep ((UINT)-1);
+  g_return_if_fail (display == gdk_display_get_default());
+  if (!MessageBeep (-1))
+    Beep(1000, 50);
 }
 
 static void
 gdk_win32_display_flush (GdkDisplay * display)
 {
+  g_return_if_fail (display == _gdk_display);
+
+  GdiFlush ();
 }
 
 static void
 gdk_win32_display_sync (GdkDisplay * display)
 {
+  g_return_if_fail (display == _gdk_display);
+
+  GdiFlush ();
 }
 
 static void
 gdk_win32_display_dispose (GObject *object)
 {
-  GdkWin32Display *self = GDK_WIN32_DISPLAY (object);
+  GdkWin32Display *display_win32 = GDK_WIN32_DISPLAY (object);
 
-  g_clear_pointer (&self->hwnd, DestroyWindow);
+  if (display_win32->dummy_context_wgl.hglrc != NULL)
+    {
+      wglMakeCurrent (NULL, NULL);
+      wglDeleteContext (display_win32->dummy_context_wgl.hglrc);
+      display_win32->dummy_context_wgl.hglrc = NULL;
+    }
 
-  gdk_win32_com_clear (&self->d3d12_device);
-  gdk_win32_com_clear (&self->dxgi_factory);
+  if (display_win32->hwnd != NULL)
+    {
+      DestroyWindow (display_win32->hwnd);
+      display_win32->hwnd = NULL;
+    }
+
+  if (display_win32->have_at_least_win81)
+    {
+      if (display_win32->shcore_funcs.hshcore != NULL)
+        {
+          FreeLibrary (display_win32->shcore_funcs.hshcore);
+          display_win32->shcore_funcs.hshcore = NULL;
+        }
+    }
 
   G_OBJECT_CLASS (gdk_win32_display_parent_class)->dispose (object);
 }
@@ -911,22 +681,9 @@ gdk_win32_display_finalize (GObject *object)
 {
   GdkWin32Display *display_win32 = GDK_WIN32_DISPLAY (object);
 
-  g_free (display_win32->event_record);
-  if (display_win32->display_surface_record->modal_timer != 0)
-    {
-      KillTimer (NULL, display_win32->display_surface_record->modal_timer);
-	  display_win32->display_surface_record->modal_timer = 0;
-    }
-  g_slist_free_full (display_win32->display_surface_record->modal_surface_stack, g_object_unref);
-  g_hash_table_destroy (display_win32->display_surface_record->handle_ht);
-  g_free (display_win32->display_surface_record);
   _gdk_win32_display_finalize_cursors (display_win32);
-  gdk_win32_display_close_dmanip_manager (GDK_DISPLAY (display_win32));
   _gdk_win32_dnd_exit ();
-  gdk_win32_display_lang_notification_exit (display_win32);
-  g_free (display_win32->pointer_device_items);
-  g_object_unref (display_win32->cb_dnd_items->clipdrop);
-  g_free (display_win32->cb_dnd_items);
+  _gdk_win32_lang_notification_exit ();
 
   g_list_store_remove_all (G_LIST_STORE (display_win32->monitors));
   g_object_unref (display_win32->monitors);
@@ -935,21 +692,6 @@ gdk_win32_display_finalize (GObject *object)
     _gdk_win32_message_filter_unref (display_win32, display_win32->filters->data);
 
   G_OBJECT_CLASS (gdk_win32_display_parent_class)->finalize (object);
-}
-
-/* Polyfill for GetSystemMetricsForDPI */
-static int WINAPI
-get_system_metrics_for_dpi_fallback (int index, UINT dpi)
-{
-  HDC hdc;
-  int system_dpi;
-
-  /* Polyfill GetDpiForSystem () */
-  hdc = GetDC (NULL);
-  system_dpi = GetDeviceCaps (hdc, LOGPIXELSX);
-  ReleaseDC (NULL, hdc);
-
-  return MulDiv (GetSystemMetrics (index), dpi, system_dpi);
 }
 
 static void
@@ -968,86 +710,148 @@ _gdk_win32_enable_hidpi (GdkWin32Display *display)
     DPI_STATUS_FAILED
   } status = DPI_STATUS_PENDING;
 
-  if (user32 != NULL)
+  if (g_win32_check_windows_version (6, 3, 0, G_WIN32_OS_ANY))
     {
-      display->user32_dpi_funcs.setPDAC =
-        (funcSPDAC) GetProcAddress (user32, "SetProcessDpiAwarenessContext");
-      display->user32_dpi_funcs.getTDAC =
-        (funcGTDAC) GetProcAddress (user32, "GetThreadDpiAwarenessContext");
-      display->user32_dpi_funcs.areDACEqual =
-        (funcADACE) GetProcAddress (user32, "AreDpiAwarenessContextsEqual");
-      display->user32_dpi_funcs.getSysMetrics =
-        (funcGSMFD) GetProcAddress (user32, "GetSystemMetricsForDpi");
+      /* If we are on Windows 8.1 or later, cache up functions from shcore.dll, by all means */
+      display->have_at_least_win81 = TRUE;
+
+      if (user32 != NULL)
+        {
+          display->user32_dpi_funcs.setPDAC =
+            (funcSPDAC) GetProcAddress (user32, "SetProcessDpiAwarenessContext");
+          display->user32_dpi_funcs.getTDAC =
+            (funcGTDAC) GetProcAddress (user32, "GetThreadDpiAwarenessContext");
+          display->user32_dpi_funcs.areDACEqual =
+            (funcADACE) GetProcAddress (user32, "AreDpiAwarenessContextsEqual");
+        }
+
+      display->shcore_funcs.hshcore = LoadLibraryW (L"shcore.dll");
+
+      if (display->shcore_funcs.hshcore != NULL)
+        {
+          display->shcore_funcs.setDpiAwareFunc =
+            (funcSetProcessDpiAwareness) GetProcAddress (display->shcore_funcs.hshcore,
+                                                         "SetProcessDpiAwareness");
+          display->shcore_funcs.getDpiAwareFunc =
+            (funcGetProcessDpiAwareness) GetProcAddress (display->shcore_funcs.hshcore,
+                                                         "GetProcessDpiAwareness");
+
+          display->shcore_funcs.getDpiForMonitorFunc =
+            (funcGetDpiForMonitor) GetProcAddress (display->shcore_funcs.hshcore,
+                                                   "GetDpiForMonitor");
+        }
     }
-  if (!display->user32_dpi_funcs.getSysMetrics)
-    display->user32_dpi_funcs.getSysMetrics = get_system_metrics_for_dpi_fallback;
+  else
+    {
+      /* Windows Vista through 8: use functions from user32.dll directly */
+
+      display->have_at_least_win81 = FALSE;
+
+      if (user32 != NULL)
+        {
+          display->user32_dpi_funcs.setDpiAwareFunc =
+            (funcSetProcessDPIAware) GetProcAddress (user32, "SetProcessDPIAware");
+          display->user32_dpi_funcs.isDpiAwareFunc =
+            (funcIsProcessDPIAware) GetProcAddress (user32, "IsProcessDPIAware");
+        }
+    }
 
   if (g_getenv ("GDK_WIN32_DISABLE_HIDPI") == NULL)
     {
-      /* then make the GDK-using app DPI-aware */
-      if (display->user32_dpi_funcs.setPDAC != NULL)
+      /* For Windows 8.1 and later, use SetProcessDPIAwareness() */
+      if (display->have_at_least_win81)
         {
-          HANDLE hidpi_mode_ctx;
-          PROCESS_DPI_AWARENESS hidpi_mode;
+          /* then make the GDK-using app DPI-aware */
+          if (display->user32_dpi_funcs.setPDAC != NULL)
+            {
+              HANDLE hidpi_mode_ctx;
+              GdkWin32ProcessDpiAwareness hidpi_mode;
 
-          /* TODO: See how per-monitor DPI awareness is done by the Wayland backend */
-          if (g_getenv ("GDK_WIN32_PER_MONITOR_HIDPI") != NULL)
-            {
-              hidpi_mode_ctx = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2;
-              hidpi_mode = PROCESS_PER_MONITOR_DPI_AWARE;
-            }
-          else
-            {
-              hidpi_mode_ctx = DPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
-              hidpi_mode = PROCESS_SYSTEM_DPI_AWARE;
-            }
-
-          if (display->user32_dpi_funcs.setPDAC (hidpi_mode_ctx))
-            {
-              display->dpi_aware_type = hidpi_mode;
-              status = DPI_STATUS_SUCCESS;
-            }
-          else
-            {
-              DWORD err = GetLastError ();
-
-              if (err == ERROR_ACCESS_DENIED)
-                check_for_dpi_awareness = TRUE;
+              /* TODO: See how per-monitor DPI awareness is done by the Wayland backend */
+              if (g_getenv ("GDK_WIN32_PER_MONITOR_HIDPI") != NULL)
+                {
+                  hidpi_mode_ctx = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2;
+                  hidpi_mode = PROCESS_PER_MONITOR_DPI_AWARE;
+                }
               else
                 {
-                  display->dpi_aware_type = PROCESS_DPI_UNAWARE;
-                  status = DPI_STATUS_FAILED;
+                  hidpi_mode_ctx = DPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
+                  hidpi_mode = PROCESS_SYSTEM_DPI_AWARE;
                 }
+
+              if (display->user32_dpi_funcs.setPDAC (hidpi_mode_ctx))
+                {
+                  display->dpi_aware_type = hidpi_mode;
+                  status = DPI_STATUS_SUCCESS;
+                }
+              else
+                {
+                  DWORD err = GetLastError ();
+
+                  if (err == ERROR_ACCESS_DENIED)
+                    check_for_dpi_awareness = TRUE;
+                  else
+                    {
+                      display->dpi_aware_type = PROCESS_DPI_UNAWARE;
+                      status = DPI_STATUS_FAILED;
+                    }
+                }
+            }
+          else if (display->shcore_funcs.setDpiAwareFunc != NULL)
+            {
+              GdkWin32ProcessDpiAwareness hidpi_mode;
+
+              /* TODO: See how per-monitor DPI awareness is done by the Wayland backend */
+              if (g_getenv ("GDK_WIN32_PER_MONITOR_HIDPI") != NULL)
+                hidpi_mode = PROCESS_PER_MONITOR_DPI_AWARE;
+              else
+                hidpi_mode = PROCESS_SYSTEM_DPI_AWARE;
+
+              switch (display->shcore_funcs.setDpiAwareFunc (hidpi_mode))
+                {
+                  case S_OK:
+                    display->dpi_aware_type = hidpi_mode;
+                    status = DPI_STATUS_SUCCESS;
+                    break;
+                  case E_ACCESSDENIED:
+                    /* This means the app used a manifest to set DPI awareness, or a
+                       DPI compatibility setting is used.
+                       The manifest is the trump card in this game of bridge here.  The
+                       same applies if one uses the control panel or program properties to
+                       force system DPI awareness */
+                    check_for_dpi_awareness = TRUE;
+                    break;
+                  default:
+                    display->dpi_aware_type = PROCESS_DPI_UNAWARE;
+                    status = DPI_STATUS_FAILED;
+                    break;
+                }
+            }
+          else
+            {
+              check_for_dpi_awareness = TRUE;
             }
         }
       else
         {
-          PROCESS_DPI_AWARENESS hidpi_mode;
-
-          /* TODO: See how per-monitor DPI awareness is done by the Wayland backend */
-          if (g_getenv ("GDK_WIN32_PER_MONITOR_HIDPI") != NULL)
-            hidpi_mode = PROCESS_PER_MONITOR_DPI_AWARE;
-          else
-            hidpi_mode = PROCESS_SYSTEM_DPI_AWARE;
-
-          switch (SetProcessDpiAwareness (hidpi_mode))
+          /* For Windows Vista through 8, use SetProcessDPIAware() */
+          display->have_at_least_win81 = FALSE;
+          if (display->user32_dpi_funcs.setDpiAwareFunc != NULL)
             {
-              case S_OK:
-                display->dpi_aware_type = hidpi_mode;
-                status = DPI_STATUS_SUCCESS;
-                break;
-              case E_ACCESSDENIED:
-                /* This means the app used a manifest to set DPI awareness, or a
-                    DPI compatibility setting is used.
-                    The manifest is the trump card in this game of bridge here.  The
-                    same applies if one uses the control panel or program properties to
-                    force system DPI awareness */
-                check_for_dpi_awareness = TRUE;
-                break;
-              default:
-                display->dpi_aware_type = PROCESS_DPI_UNAWARE;
-                status = DPI_STATUS_FAILED;
-                break;
+              if (display->user32_dpi_funcs.setDpiAwareFunc () != 0)
+                {
+                  display->dpi_aware_type = PROCESS_SYSTEM_DPI_AWARE;
+                  status = DPI_STATUS_SUCCESS;
+                }
+              else
+                {
+                  check_for_dpi_awareness = TRUE;
+                }
+            }
+          else
+            {
+              display->dpi_aware_type = PROCESS_DPI_UNAWARE;
+              status = DPI_STATUS_FAILED;
             }
         }
     }
@@ -1062,35 +866,63 @@ _gdk_win32_enable_hidpi (GdkWin32Display *display)
 
   if (check_for_dpi_awareness)
     {
-      if (display->user32_dpi_funcs.getTDAC != NULL &&
-          display->user32_dpi_funcs.areDACEqual != NULL)
+      if (display->have_at_least_win81)
         {
-          HANDLE dpi_aware_ctx = display->user32_dpi_funcs.getTDAC ();
-          if (display->user32_dpi_funcs.areDACEqual (dpi_aware_ctx,
-                                                      DPI_AWARENESS_CONTEXT_UNAWARE))
-            /* This means the DPI awareness setting was forcefully disabled */
-            status = DPI_STATUS_DISABLED;
+          if (display->user32_dpi_funcs.getTDAC != NULL &&
+              display->user32_dpi_funcs.areDACEqual != NULL)
+            {
+              HANDLE dpi_aware_ctx = display->user32_dpi_funcs.getTDAC ();
+              if (display->user32_dpi_funcs.areDACEqual (dpi_aware_ctx,
+                                                         DPI_AWARENESS_CONTEXT_UNAWARE))
+                /* This means the DPI awareness setting was forcefully disabled */
+                status = DPI_STATUS_DISABLED;
+              else
+                {
+                  status = DPI_STATUS_SUCCESS;
+                  if (display->user32_dpi_funcs.areDACEqual (dpi_aware_ctx,
+                                                             DPI_AWARENESS_CONTEXT_SYSTEM_AWARE))
+                    display->dpi_aware_type = PROCESS_SYSTEM_DPI_AWARE;
+                  else
+                    display->dpi_aware_type = PROCESS_PER_MONITOR_DPI_AWARE_V2;
+                }
+            }
+          else if (display->shcore_funcs.getDpiAwareFunc != NULL)
+            {
+              display->shcore_funcs.getDpiAwareFunc (NULL, &display->dpi_aware_type);
+
+              if (display->dpi_aware_type != PROCESS_DPI_UNAWARE)
+                status = DPI_STATUS_SUCCESS;
+              else
+                /* This means the DPI awareness setting was forcefully disabled */
+                status = DPI_STATUS_DISABLED;
+            }
           else
             {
-              status = DPI_STATUS_SUCCESS;
-              if (display->user32_dpi_funcs.areDACEqual (dpi_aware_ctx,
-                                                          DPI_AWARENESS_CONTEXT_SYSTEM_AWARE))
-                display->dpi_aware_type = PROCESS_SYSTEM_DPI_AWARE;
-              else
-                display->dpi_aware_type = PROCESS_PER_MONITOR_DPI_AWARE;
+              display->dpi_aware_type = PROCESS_DPI_UNAWARE;
+              status = DPI_STATUS_FAILED;
             }
         }
       else
         {
-          GetProcessDpiAwareness (NULL, &display->dpi_aware_type);
+          if (display->user32_dpi_funcs.isDpiAwareFunc != NULL)
+            {
+              /* This most probably means DPI awareness is set through
+                 the manifest, or a DPI compatibility setting is used. */
+              display->dpi_aware_type = display->user32_dpi_funcs.isDpiAwareFunc () ?
+                                        PROCESS_SYSTEM_DPI_AWARE :
+                                        PROCESS_DPI_UNAWARE;
 
-          if (display->dpi_aware_type != PROCESS_DPI_UNAWARE)
-            status = DPI_STATUS_SUCCESS;
+              if (display->dpi_aware_type == PROCESS_SYSTEM_DPI_AWARE)
+                status = DPI_STATUS_SUCCESS;
+              else
+                status = DPI_STATUS_DISABLED;
+            }
           else
-            /* This means the DPI awareness setting was forcefully disabled */
-            status = DPI_STATUS_DISABLED;
+            {
+              display->dpi_aware_type = PROCESS_DPI_UNAWARE;
+              status = DPI_STATUS_FAILED;
+            }
         }
-
       if (have_hpi_disable_envvar &&
           status == DPI_STATUS_SUCCESS)
         {
@@ -1186,44 +1018,53 @@ _gdk_win32_check_processor (GdkWin32ProcessorCheckType check_type)
     }
 }
 
-static guint
-gdk_handle_hash (HANDLE *handle)
-{
-#ifdef _WIN64
-  return ((guint *) handle)[0] ^ ((guint *) handle)[1];
-#else
-  return (guint) *handle;
-#endif
-}
-
-static int
-gdk_handle_equal (HANDLE *a,
-                  HANDLE *b)
-{
-  return (*a == *b);
-}
-
 static void
 gdk_win32_display_init (GdkWin32Display *display_win32)
 {
-  display_win32->monitors = G_LIST_MODEL (g_list_store_new (GDK_TYPE_MONITOR));
-  display_win32->pointer_device_items = g_new0 (GdkWin32PointerDeviceItems, 1);
-  display_win32->cb_dnd_items = g_new0 (GdkWin32CbDnDItems, 1);
-  display_win32->cb_dnd_items->display_main_thread = g_thread_self ();
-  display_win32->cb_dnd_items->clipdrop = GDK_WIN32_CLIPDROP (g_object_new (GDK_TYPE_WIN32_CLIPDROP, NULL));
-  display_win32->display_surface_record = g_new0 (surface_records, 1);
-  display_win32->display_surface_record->handle_ht = g_hash_table_new ((GHashFunc) gdk_handle_hash,
-                                                                       (GEqualFunc) gdk_handle_equal);
+  const char *scale_str = g_getenv ("GDK_SCALE");
 
-  display_win32->event_record = g_new0 (event_records, 1);
+  display_win32->monitors = G_LIST_MODEL (g_list_store_new (GDK_TYPE_MONITOR));
+
   _gdk_win32_enable_hidpi (display_win32);
   display_win32->running_on_arm64 = _gdk_win32_check_processor (GDK_WIN32_ARM64);
 
-  display_win32->surface_scale = gdk_win32_display_get_monitor_scale_factor (display_win32, NULL, NULL);
+  /* if we have DPI awareness, set up fixed scale if set */
+  if (display_win32->dpi_aware_type != PROCESS_DPI_UNAWARE &&
+      scale_str != NULL)
+    {
+      display_win32->surface_scale = atol (scale_str);
+
+      if (display_win32->surface_scale <= 0)
+        display_win32->surface_scale = 1;
+
+      display_win32->has_fixed_scale = TRUE;
+    }
+  else
+    display_win32->surface_scale =
+      gdk_win32_display_get_monitor_scale_factor (display_win32, NULL, NULL);
 
   _gdk_win32_display_init_cursors (display_win32);
-  gdk_display_set_composited (GDK_DISPLAY (display_win32), TRUE);
-  gdk_display_set_shadow_width (GDK_DISPLAY (display_win32), TRUE);
+  gdk_win32_display_check_composited (display_win32);
+}
+
+void
+gdk_win32_display_check_composited (GdkWin32Display *display)
+{
+  gboolean composited;
+
+  /* On Windows 8 and later, DWM (composition) is always enabled */
+  if (g_win32_check_windows_version (6, 2, 0, G_WIN32_OS_ANY))
+    {
+      composited = TRUE;
+    }
+  else
+    {
+      if (DwmIsCompositionEnabled (&composited) != S_OK)
+        composited = FALSE;
+    }
+
+  gdk_display_set_composited (GDK_DISPLAY (display), composited);
+  gdk_display_set_shadow_width (GDK_DISPLAY (display), composited);
 }
 
 static void
@@ -1260,47 +1101,83 @@ gdk_win32_display_get_monitor_scale_factor (GdkWin32Display *display_win32,
                                             HMONITOR         hmonitor)
 {
   gboolean is_scale_acquired = FALSE;
+  gboolean use_dpi_for_monitor = FALSE;
   guint dpix, dpiy;
 
-  if (surface != NULL && hmonitor == NULL)
-    hmonitor = MonitorFromWindow (GDK_SURFACE_HWND (surface),
-                                  MONITOR_DEFAULTTONEAREST);
-
-  if (hmonitor != NULL)
+  if (display_win32->have_at_least_win81)
     {
-      /* Use GetDpiForMonitor() when we have a HMONITOR */
-      if (GetDpiForMonitor (hmonitor, MDT_EFFECTIVE_DPI, &dpix, &dpiy) == S_OK)
+      if (surface != NULL && hmonitor == NULL)
+        hmonitor = MonitorFromWindow (GDK_SURFACE_HWND (surface),
+                                      MONITOR_DEFAULTTONEAREST);
+      if (hmonitor != NULL &&
+          display_win32->shcore_funcs.hshcore != NULL &&
+          display_win32->shcore_funcs.getDpiForMonitorFunc != NULL)
+        use_dpi_for_monitor = TRUE;
+    }
+
+  if (use_dpi_for_monitor)
+    {
+      /* Use GetDpiForMonitor() for Windows 8.1+, when we have a HMONITOR */
+      if (display_win32->shcore_funcs.getDpiForMonitorFunc (hmonitor,
+                                                            MDT_EFFECTIVE_DPI,
+                                                           &dpix,
+                                                           &dpiy) == S_OK)
         is_scale_acquired = TRUE;
     }
   else
     {
-      /* Go back to GetDeviceCaps() when we don't have a HMONITOR nor a HWND */
+      /* Go back to GetDeviceCaps() for Windows 8 and earlier, or when we don't
+       * have a HMONITOR nor a HWND
+       */
       HDC hdc;
 
       if (surface != NULL)
-        hdc = GetDC (GDK_SURFACE_HWND (surface));
+        {
+          if (GDK_WIN32_SURFACE (surface)->hdc == NULL)
+            GDK_WIN32_SURFACE (surface)->hdc = GetDC (GDK_SURFACE_HWND (surface));
+          hdc = GDK_WIN32_SURFACE (surface)->hdc;
+        }
       else
         hdc = GetDC (NULL);
 
-      /* in case we can't get the DC for the HWND, return 1 for the scale */
+      /* in case we can't get the DC for the window, return 1 for the scale */
       if (hdc == NULL)
         return 1;
 
       dpix = GetDeviceCaps (hdc, LOGPIXELSX);
       dpiy = GetDeviceCaps (hdc, LOGPIXELSY);
 
-      if (surface != NULL)
-        ReleaseDC (GDK_SURFACE_HWND (surface), hdc);
-      else
+      /*
+       * If surface is not NULL, the HDC should not be released, since surfaces have
+       * Win32 windows created with CS_OWNDC
+       */
+      if (surface == NULL)
         ReleaseDC (NULL, hdc);
 
       is_scale_acquired = TRUE;
     }
 
   if (is_scale_acquired)
-    return dpix / USER_DEFAULT_SCREEN_DPI > 1 ? dpix / USER_DEFAULT_SCREEN_DPI : 1;
+    /* USER_DEFAULT_SCREEN_DPI = 96, in winuser.h */
+    {
+      if (display_win32->has_fixed_scale)
+        return display_win32->surface_scale;
+      else
+        return dpix / USER_DEFAULT_SCREEN_DPI > 1 ? dpix / USER_DEFAULT_SCREEN_DPI : 1;
+    }
   else
     return 1;
+}
+
+static gboolean
+gdk_win32_display_get_setting (GdkDisplay  *display,
+                               const char *name,
+                               GValue      *value)
+{
+  if (gdk_display_get_debug_flags (display) & GDK_DEBUG_DEFAULT_SETTINGS)
+    return FALSE;
+
+  return _gdk_win32_get_setting (name, value);
 }
 
 #ifndef EGL_PLATFORM_ANGLE_ANGLE
@@ -1311,10 +1188,8 @@ static GdkGLContext *
 gdk_win32_display_init_gl (GdkDisplay  *display,
                            GError     **error)
 {
-#ifdef HAVE_EGL
   GdkWin32Display *display_win32 = GDK_WIN32_DISPLAY (display);
   HDC init_gl_hdc = NULL;
-#endif
   GdkGLContext *context;
 
   /*
@@ -1327,7 +1202,7 @@ gdk_win32_display_init_gl (GdkDisplay  *display,
    * Disable defaulting to EGL as EGL is used more as a compatibility layer
    * on Windows rather than being a native citizen on Windows
    */
-  if (!gdk_has_feature (GDK_FEATURE_WGL) || !gdk_has_feature (GDK_FEATURE_GL_API))
+  if (gdk_display_get_debug_flags (display) & (GDK_DEBUG_GL_EGL|GDK_DEBUG_GL_DISABLE_GL))
     {
       init_gl_hdc = GetDC (display_win32->hwnd);
 
@@ -1390,22 +1265,6 @@ gdk_win32_display_get_egl_display (GdkDisplay *display)
   return gdk_display_get_egl_display (display);
 }
 
-GdkWin32Clipdrop *
-gdk_win32_display_get_clipdrop (GdkDisplay *display)
-{
-  GdkWin32Display *display_win32 = GDK_WIN32_DISPLAY (display);
-
-  return display_win32->cb_dnd_items->clipdrop;
-}
-
-static GdkKeymap*
-_gdk_win32_display_get_keymap (GdkDisplay *display)
-{
-  g_return_val_if_fail (display == gdk_display_get_default (), NULL);
-
-  return gdk_win32_display_get_default_keymap (GDK_WIN32_DISPLAY (display));
-}
-
 static void
 gdk_win32_display_class_init (GdkWin32DisplayClass *klass)
 {
@@ -1423,9 +1282,10 @@ gdk_win32_display_class_init (GdkWin32DisplayClass *klass)
   display_class->beep = gdk_win32_display_beep;
   display_class->sync = gdk_win32_display_sync;
   display_class->flush = gdk_win32_display_flush;
+  display_class->has_pending = _gdk_win32_display_has_pending;
   display_class->queue_events = _gdk_win32_display_queue_events;
 
-  display_class->get_app_launch_context = gdk_win32_display_get_app_launch_context;
+  //? display_class->get_app_launch_context = _gdk_win32_display_get_app_launch_context;
 
   display_class->get_next_serial = gdk_win32_display_get_next_serial;
   display_class->notify_startup_complete = gdk_win32_display_notify_startup_complete;
@@ -1442,4 +1302,6 @@ gdk_win32_display_class_init (GdkWin32DisplayClass *klass)
   display_class->get_setting = gdk_win32_display_get_setting;
   display_class->set_cursor_theme = gdk_win32_display_set_cursor_theme;
   display_class->init_gl = gdk_win32_display_init_gl;
+
+  _gdk_win32_surfaceing_init ();
 }

@@ -762,53 +762,6 @@ test_segment (void)
     }
 }
 
-static void
-test_distance (void)
-{
-  GskPath *path;
-  GskPathMeasure *measure;
-  GskPathPoint point = { .contour = 0, .idx = 1, .t = 1 };
-  float distance;
-
-  path = gsk_path_parse ("M 20 6.66666677e+30 C 20 60, 50 90, 100 60 C 150 30, 180 30, 180 60");
-  measure = gsk_path_measure_new (path);
-
-  distance = gsk_path_point_get_distance (&point, measure);
-
-  /* We just need to get here */
-  if (g_test_verbose ())
-    g_test_message ("distance is %f", distance);
-
-  gsk_path_measure_unref (measure);
-  gsk_path_unref (path);
-}
-
-static void
-test_circle_bounds (void)
-{
-  GskPathBuilder *builder;
-  GskPath *path;
-  graphene_rect_t bounds;
-  GskStroke *stroke;
-  gboolean ret;
-
-  builder = gsk_path_builder_new ();
-  gsk_path_builder_add_circle (builder, &GRAPHENE_POINT_INIT (10, 10), 5);
-  path = gsk_path_builder_free_to_path (builder);
-
-  ret = gsk_path_get_bounds (path, &bounds);
-  g_assert_true (ret);
-  g_assert_true (graphene_rect_equal (&bounds, &GRAPHENE_RECT_INIT (5, 5, 10, 10)));
-
-  stroke = gsk_stroke_new (2);
-  ret = gsk_path_get_stroke_bounds (path, stroke, &bounds);
-  g_assert_true (ret);
-  g_assert_true (graphene_rect_equal (&bounds, &GRAPHENE_RECT_INIT (4, 4, 12, 12)));
-  gsk_stroke_free (stroke);
-
-  gsk_path_unref (path);
-}
-
 int
 main (int   argc,
       char *argv[])
@@ -822,8 +775,6 @@ main (int   argc,
   g_test_add_func ("/path/measure/split", test_split);
   g_test_add_func ("/path/measure/roundtrip", test_roundtrip);
   g_test_add_func ("/path/measure/segment", test_segment);
-  g_test_add_func ("/path/measure/distance", test_distance);
-  g_test_add_func ("/path/circle/bounds", test_circle_bounds);
 
   return g_test_run ();
 }

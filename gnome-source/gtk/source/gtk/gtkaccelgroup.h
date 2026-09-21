@@ -38,7 +38,7 @@ G_BEGIN_DECLS
 /* --- Accelerators--- */
 GDK_AVAILABLE_IN_ALL
 gboolean gtk_accelerator_valid		      (guint	        keyval,
-					       GdkModifierType  modifiers);
+					       GdkModifierType  modifiers) G_GNUC_CONST;
 GDK_AVAILABLE_IN_ALL
 gboolean gtk_accelerator_parse		      (const char      *accelerator,
 					       guint	       *accelerator_key,
@@ -65,11 +65,8 @@ char *   gtk_accelerator_get_label_with_keycode (GdkDisplay      *display,
                                                  guint            accelerator_key,
                                                  guint            keycode,
                                                  GdkModifierType  accelerator_mods);
-GDK_AVAILABLE_IN_4_22
-char *   gtk_accelerator_get_accessible_label (guint           accelerator_key,
-                                               GdkModifierType accelerator_mods);
 GDK_AVAILABLE_IN_ALL
-GdkModifierType gtk_accelerator_get_default_mod_mask (void);
+GdkModifierType gtk_accelerator_get_default_mod_mask (void) G_GNUC_CONST;
 
 
 G_END_DECLS

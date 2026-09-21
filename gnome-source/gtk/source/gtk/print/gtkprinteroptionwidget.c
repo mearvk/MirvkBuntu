@@ -19,11 +19,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include <glib/gi18n-lib.h>
 
 #include "gtkprinteroptionwidgetprivate.h"
-#include "gtkstringpairprivate.h"
 
 /* This defines the max file length that the file chooser
  * button should display. The total length will be
@@ -44,7 +44,6 @@ struct GtkPrinterOptionWidgetPrivate
 {
   GtkPrinterOption *source;
   gulong source_changed_handler;
-  gulong comboentry_changed_handler_id;
 
   GtkWidget *check;
   GtkWidget *combo;
@@ -66,11 +65,8 @@ enum {
 
 enum {
   PROP_0,
-  PROP_SOURCE,
-  N_PROPS
+  PROP_SOURCE
 };
-
-static GParamSpec *props[N_PROPS] = { NULL, };
 
 static guint signals[LAST_SIGNAL] = { 0 };
 
@@ -111,11 +107,11 @@ gtk_printer_option_widget_class_init (GtkPrinterOptionWidgetClass *class)
 		  NULL,
 		  G_TYPE_NONE, 0);
 
-  props[PROP_SOURCE] = g_param_spec_object ("source", NULL, NULL,
-                                            GTK_TYPE_PRINTER_OPTION,
-                                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_NAME);
-
-  g_object_class_install_properties (object_class, N_PROPS, props);
+  g_object_class_install_property (object_class,
+                                   PROP_SOURCE,
+                                   g_param_spec_object ("source", NULL, NULL,
+							GTK_TYPE_PRINTER_OPTION,
+							G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
 
 }
 
@@ -137,7 +133,8 @@ gtk_printer_option_widget_finalize (GObject *object)
     {
       g_signal_handler_disconnect (priv->source,
 				   priv->source_changed_handler);
-      g_clear_object (&priv->source);
+      g_object_unref (priv->source);
+      priv->source = NULL;
     }
 
   G_OBJECT_CLASS (gtk_printer_option_widget_parent_class)->finalize (object);
@@ -248,7 +245,135 @@ gtk_printer_option_widget_set_source (GtkPrinterOptionWidget *widget,
   construct_widgets (widget);
   update_widgets (widget);
 
-  g_object_notify_by_pspec (G_OBJECT (widget), props[PROP_SOURCE]);
+  g_object_notify (G_OBJECT (widget), "source");
+}
+
+#define GTK_TYPE_STRING_PAIR (gtk_string_pair_get_type ())
+G_DECLARE_FINAL_TYPE (GtkStringPair, gtk_string_pair, GTK, STRING_PAIR, GObject)
+
+struct _GtkStringPair {
+  GObject parent_instance;
+  char *id;
+  char *string;
+};
+
+enum {
+  PROP_ID = 1,
+  PROP_STRING,
+  PROP_NUM_PROPERTIES
+};
+
+G_DEFINE_TYPE (GtkStringPair, gtk_string_pair, G_TYPE_OBJECT);
+
+static void
+gtk_string_pair_init (GtkStringPair *pair)
+{
+}
+
+static void
+gtk_string_pair_finalize (GObject *object)
+{
+  GtkStringPair *pair = GTK_STRING_PAIR (object);
+
+  g_free (pair->id);
+  g_free (pair->string);
+
+  G_OBJECT_CLASS (gtk_string_pair_parent_class)->finalize (object);
+}
+
+static void
+gtk_string_pair_set_property (GObject      *object,
+                              guint         property_id,
+                              const GValue *value,
+                              GParamSpec   *pspec)
+{
+  GtkStringPair *pair = GTK_STRING_PAIR (object);
+
+  switch (property_id)
+    {
+    case PROP_STRING:
+      g_free (pair->string);
+      pair->string = g_value_dup_string (value);
+      break;
+
+    case PROP_ID:
+      g_free (pair->id);
+      pair->id = g_value_dup_string (value);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void
+gtk_string_pair_get_property (GObject      *object,
+                              guint         property_id,
+                              GValue       *value,
+                              GParamSpec   *pspec)
+{
+  GtkStringPair *pair = GTK_STRING_PAIR (object);
+
+  switch (property_id)
+    {
+    case PROP_STRING:
+      g_value_set_string (value, pair->string);
+      break;
+
+    case PROP_ID:
+      g_value_set_string (value, pair->id);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void
+gtk_string_pair_class_init (GtkStringPairClass *class)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (class);
+  GParamSpec *pspec;
+
+  object_class->finalize = gtk_string_pair_finalize;
+  object_class->set_property = gtk_string_pair_set_property;
+  object_class->get_property = gtk_string_pair_get_property;
+
+  pspec = g_param_spec_string ("string", NULL, NULL,
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_property (object_class, PROP_STRING, pspec);
+
+  pspec = g_param_spec_string ("id", NULL, NULL,
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_property (object_class, PROP_ID, pspec);
+}
+
+static GtkStringPair *
+gtk_string_pair_new (const char *id,
+                     const char *string)
+{
+  return g_object_new (GTK_TYPE_STRING_PAIR,
+                       "id", id,
+                       "string", string,
+                       NULL);
+}
+
+static const char *
+gtk_string_pair_get_string (GtkStringPair *pair)
+{
+  return pair->string;
+}
+
+static const char *
+gtk_string_pair_get_id (GtkStringPair *pair)
+{
+  return pair->id;
 }
 
 static void
@@ -518,7 +643,7 @@ dialog_response_callback (GObject *source,
 
       info = g_file_query_info (new_location,
                                 "standard::display-name",
-                                G_FILE_QUERY_INFO_NONE,
+                                0,
                                 NULL,
                                 NULL);
       if (info != NULL)
@@ -610,7 +735,7 @@ filter_numeric (const char *val,
 
   for (i = 0, j = 0; i < len; i++)
     {
-      if (g_ascii_isdigit (val[i]))
+      if (isdigit (val[i]))
         {
           filtered_val[j] = val[i];
 	  j++;
@@ -640,7 +765,9 @@ filter_numeric (const char *val,
 }
 
 static void
-handle_combo_entry_change (GtkPrinterOptionWidget *widget)
+combo_changed_cb (GtkWidget              *combo,
+                  GParamSpec             *pspec,
+		  GtkPrinterOptionWidget *widget)
 {
   GtkPrinterOptionWidgetPrivate *priv = widget->priv;
   char *value;
@@ -686,21 +813,7 @@ handle_combo_entry_change (GtkPrinterOptionWidget *widget)
       if (changed)
         {
           GtkWidget *entry = gtk_widget_get_first_child (priv->combo);
-          gssize     buffer_length, filtered_buffer_length;
-          gint       position;
-
-          position = gtk_editable_get_position (GTK_EDITABLE (entry));
-          buffer_length = gtk_entry_buffer_get_length (gtk_entry_get_buffer (GTK_ENTRY (entry)));
-
-          g_signal_handler_block (entry, priv->comboentry_changed_handler_id);
           gtk_editable_set_text (GTK_EDITABLE (entry), filtered_val);
-          g_signal_handler_unblock (entry, priv->comboentry_changed_handler_id);
-
-          filtered_buffer_length = gtk_entry_buffer_get_length (gtk_entry_get_buffer (GTK_ENTRY (entry)));
-
-          /* Maintain position of the cursor with respect to the end of the buffer. */
-          if (position > 0 && filtered_buffer_length < buffer_length)
-            gtk_editable_set_position (GTK_EDITABLE (entry), position - (buffer_length - filtered_buffer_length));
         }
       value = filtered_val;
     }
@@ -710,21 +823,6 @@ handle_combo_entry_change (GtkPrinterOptionWidget *widget)
   g_free (value);
   g_signal_handler_unblock (priv->source, priv->source_changed_handler);
   emit_changed (widget);
-}
-
-static void
-combo_changed_cb (GtkWidget              *combo,
-                  GParamSpec             *pspec,
-                  GtkPrinterOptionWidget *widget)
-{
-  handle_combo_entry_change (widget);
-}
-
-static void
-comboentry_changed_cb (GtkEditable            *editable,
-                       GtkPrinterOptionWidget *widget)
-{
-  handle_combo_entry_change (widget);
 }
 
 static void
@@ -851,9 +949,6 @@ construct_widgets (GtkPrinterOptionWidget *widget)
             {
               GtkWidget *entry = gtk_widget_get_first_child (priv->combo);
               gtk_entry_set_visibility (GTK_ENTRY (entry), FALSE);
-              gtk_entry_set_input_purpose (GTK_ENTRY (entry), 
-                                          source->type == GTK_PRINTER_OPTION_TYPE_PICKONE_PASSWORD ?
-                                          GTK_INPUT_PURPOSE_PASSWORD : GTK_INPUT_PURPOSE_PIN);
             }
         }
 
@@ -863,15 +958,9 @@ construct_widgets (GtkPrinterOptionWidget *widget)
                           source->choices[i]);
       gtk_box_append (GTK_BOX (widget), priv->combo);
       if (GTK_IS_DROP_DOWN (priv->combo))
-        {
-          g_signal_connect (priv->combo, "notify::selected", G_CALLBACK (combo_changed_cb),widget);
-        }
+        g_signal_connect (priv->combo, "notify::selected", G_CALLBACK (combo_changed_cb),widget);
       else
-        {
-          g_signal_connect (gtk_widget_get_last_child (priv->combo), "notify::selected", G_CALLBACK (combo_changed_cb), widget);
-          priv->comboentry_changed_handler_id = g_signal_connect (gtk_widget_get_first_child (priv->combo), "changed", G_CALLBACK (comboentry_changed_cb), widget);
-        }
-
+        g_signal_connect (gtk_widget_get_last_child (priv->combo), "notify::selected",G_CALLBACK (combo_changed_cb), widget);
 
       text = g_strdup_printf ("%s:", source->display_text);
       priv->label = gtk_label_new_with_mnemonic (text);

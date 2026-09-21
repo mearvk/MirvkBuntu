@@ -1,8 +1,5 @@
 #include <gtk/gtk.h>
-#include "gsk/gskcontainernodeprivate.h"
-#include "gsk/gskbordernodeprivate.h"
-#include "gsk/gskgradientprivate.h"
-#include "gsk/gskradialgradientnodeprivate.h"
+#include "gsk/gskrendernodeprivate.h"
 
 #include <gobject/gvaluecollector.h>
 
@@ -152,15 +149,52 @@ test_container_disjoint (void)
   gsk_render_node_unref (nodes[1]);
 }
 
+const char shader1[] =
+"uniform float progress;\n"
+"uniform sampler2D u_texture1;\n"
+"uniform sampler2D u_texture2;\n"
+""
+"vec4 getFromColor (vec2 uv) {\n"
+"  return GskTexture(u_texture1, uv);\n"
+"}\n"
+"\n"
+"vec4 getToColor (vec2 uv) {\n"
+"  return GskTexture(u_texture2, uv);\n"
+"}\n"
+"\n"
+"// author: bobylito\n"
+"// license: MIT\n"
+"const float SQRT_2 = 1.414213562373;\n"
+"uniform float dots;// = 20.0;\n"
+"uniform vec2 center; //= vec2(0, 0);\n"
+"\n"
+"uniform int test1;\n"
+"uniform bool test2;\n"
+"uniform vec3 test3;\n"
+"uniform vec4 test4;\n"
+"\n"
+"vec4 transition(vec2 uv) {\n"
+"  bool nextImage = distance(fract(uv * dots), vec2(0.5, 0.5)) < ( progress / distance(uv, center));\n"
+"  return nextImage ? getToColor(uv) : getFromColor(uv);\n"
+"}\n"
+"\n"
+"void mainImage(out vec4 fragColor, in vec2 fragCoord, in vec2 resolution, in vec2 uv)\n"
+"{\n"
+"  fragColor = transition(uv);\n"
+"}\n";
+
 static void
 test_renderer (GskRenderer *renderer)
 {
   GdkDisplay *display;
   gboolean realized;
   GdkSurface *surface;
+  gboolean res;
   GError *error = NULL;
+  GskGLShader *shader;
+  GBytes *bytes;
 
-  g_assert_true (GSK_IS_RENDERER (renderer));
+  g_assert (GSK_IS_RENDERER (renderer));
 
   display = gdk_display_open (NULL);
 
@@ -174,30 +208,39 @@ test_renderer (GskRenderer *renderer)
 
   g_assert_null (gsk_renderer_get_surface (renderer));
 
-  surface = gdk_surface_new_toplevel (display ? display : gdk_display_get_default ());
+  surface = gdk_surface_new_toplevel (display);
 
-  if (!gsk_renderer_realize (renderer, surface, &error))
+  res = gsk_renderer_realize (renderer, surface, &error);
+
+  g_assert_true (res);
+
+  g_assert_true (gsk_renderer_is_realized (renderer));
+  g_assert_true (gsk_renderer_get_surface (renderer) == surface);
+
+  bytes = g_bytes_new_static (shader1, sizeof (shader1));
+  shader = gsk_gl_shader_new_from_bytes (bytes);
+  g_bytes_unref (bytes);
+  res = gsk_gl_shader_compile (shader, renderer, &error);
+  if (GSK_IS_GL_RENDERER (renderer))
     {
-      g_test_skip_printf ("%s not available: %s", G_OBJECT_TYPE_NAME (renderer), error->message);
+      g_assert_no_error (error);
+      g_assert_true (res);
     }
   else
     {
-      g_assert_no_error (error);
-
-      g_assert_true (gsk_renderer_is_realized (renderer));
-      g_assert_true (gsk_renderer_get_surface (renderer) == surface);
-
-      gsk_renderer_unrealize (renderer);
+      g_assert_false (res);
+      g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED);
+      g_clear_error (&error);
     }
+
+  gsk_renderer_unrealize (renderer);
 
   g_assert_false (gsk_renderer_is_realized (renderer));
   g_assert_null (gsk_renderer_get_surface (renderer));
 
   gdk_surface_destroy (surface);
 
-  if (display)
-    gdk_display_close (display);
-
+  gdk_display_close (display);
 }
 
 static void
@@ -224,105 +267,6 @@ test_gl_renderer (void)
 #endif
 }
 
-static void
-test_vulkan_renderer (void)
-{
-#ifdef GDK_RENDERING_VULKAN
-  GskRenderer *renderer;
-
-  renderer = gsk_vulkan_renderer_new ();
-  test_renderer (renderer);
-  g_clear_object (&renderer);
-#else
-  g_test_skip ("no Vulkan support");
-#endif
-}
-
-static void
-test_gradient_opaque (void)
-{
-  GskGradient *gradient;
-
-  gradient = gsk_gradient_new ();
-
-  g_assert_false (gsk_gradient_is_opaque (gradient));
-
-  gsk_gradient_add_stop (gradient, 0, 0.5, &GDK_COLOR_SRGB (0,0,0,1));
-
-  g_assert_true (gsk_gradient_is_opaque (gradient));
-  g_assert_nonnull (gsk_gradient_check_single_color (gradient));
-
-  gsk_gradient_add_stop (gradient, 0.5, 0.5, &GDK_COLOR_SRGB (1,0,1,1));
-
-  g_assert_true (gsk_gradient_is_opaque (gradient));
-  g_assert_null (gsk_gradient_check_single_color (gradient));
-
-  gsk_gradient_set_repeat (gradient, GSK_REPEAT_REPEAT);
-
-  g_assert_true (gsk_gradient_is_opaque (gradient));
-
-  gsk_gradient_set_repeat (gradient, GSK_REPEAT_NONE);
-
-  g_assert_false (gsk_gradient_is_opaque (gradient));
-
-  gsk_gradient_free (gradient);
-}
-
-static void
-test_radial_gradient_opaque (void)
-{
-  GskRenderNode *node;
-  GskGradient *gradient;
-  GskColorStop stops[] = {
-    { 0.f, (GdkRGBA) { 0, 0, 0, 1} },
-    { 1.f, (GdkRGBA) { 1, 0, 1, 1} },
-  };
-  graphene_rect_t rect;
-
-  gradient = gsk_gradient_new ();
-  gsk_gradient_add_color_stops (gradient, stops, G_N_ELEMENTS (stops));
-
-  node = gsk_radial_gradient_node_new2 (&GRAPHENE_RECT_INIT (0, 0, 50, 50),
-                                        GSK_RECT_SNAP_NONE,
-                                        &GRAPHENE_POINT_INIT (25, 25),
-                                        10,
-                                        &GRAPHENE_POINT_INIT (25, 25),
-                                        5,
-                                        1,
-                                        gradient);
-
-  g_assert_true (gsk_render_node_get_opaque_rect (node, &rect));
-  gsk_render_node_unref (node);
-
-  node = gsk_radial_gradient_node_new2 (&GRAPHENE_RECT_INIT (0, 0, 50, 50),
-                                        GSK_RECT_SNAP_NONE,
-                                        &GRAPHENE_POINT_INIT (25, 25),
-                                        10,
-                                        &GRAPHENE_POINT_INIT (35, 25),
-                                        5,
-                                        1,
-                                        gradient);
-
-  g_assert_false (gsk_render_node_get_opaque_rect (node, &rect));
-  gsk_render_node_unref (node);
-
-  gsk_gradient_set_repeat (gradient, GSK_REPEAT_NONE);
-
-  node = gsk_radial_gradient_node_new2 (&GRAPHENE_RECT_INIT (0, 0, 50, 50),
-                                        GSK_RECT_SNAP_NONE,
-                                        &GRAPHENE_POINT_INIT (25, 25),
-                                        10,
-                                        &GRAPHENE_POINT_INIT (25, 25),
-                                        5,
-                                        1,
-                                        gradient);
-
-  g_assert_false (gsk_render_node_get_opaque_rect (node, &rect));
-  gsk_render_node_unref (node);
-
-  gsk_gradient_free (gradient);
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -336,9 +280,6 @@ main (int argc, char *argv[])
   g_test_add_func ("/rendernode/container/disjoint", test_container_disjoint);
   g_test_add_func ("/renderer/cairo", test_cairo_renderer);
   g_test_add_func ("/renderer/gl", test_gl_renderer);
-  g_test_add_func ("/renderer/vulkan", test_vulkan_renderer);
-  g_test_add_func ("/gradient/opaque", test_gradient_opaque);
-  g_test_add_func ("/rendernode/radial-gradient/opaque", test_radial_gradient_opaque);
 
   return g_test_run ();
 }

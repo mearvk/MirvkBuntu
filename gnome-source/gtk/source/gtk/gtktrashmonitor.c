@@ -69,7 +69,8 @@ gtk_trash_monitor_dispose (GObject *object)
 
   if (monitor->file_monitor)
     {
-      g_clear_signal_handler (&monitor->file_monitor_changed_id, monitor->file_monitor);
+      g_signal_handler_disconnect (monitor->file_monitor, monitor->file_monitor_changed_id);
+      monitor->file_monitor_changed_id = 0;
 
       g_clear_object (&monitor->file_monitor);
     }
@@ -146,7 +147,7 @@ trash_query_info_cb (GObject *source,
 
 static void recompute_trash_state (GtkTrashMonitor *monitor);
 
-static void
+static gboolean
 recompute_trash_state_cb (gpointer data)
 {
   GtkTrashMonitor *monitor = data;
@@ -157,6 +158,8 @@ recompute_trash_state_cb (gpointer data)
       monitor->pending = FALSE;
       recompute_trash_state (monitor);
     }
+
+  return G_SOURCE_REMOVE;
 }
 
 /* Asynchronously recomputes whether there is trash or not */
@@ -181,7 +184,9 @@ recompute_trash_state (GtkTrashMonitor *monitor)
                            G_PRIORITY_DEFAULT, NULL,
                            trash_query_info_cb, g_object_ref (monitor));
 
-  monitor->timeout_id = g_timeout_add_seconds_once (UPDATE_RATE_SECONDS, recompute_trash_state_cb, monitor);
+  monitor->timeout_id = g_timeout_add_seconds (UPDATE_RATE_SECONDS,
+                                               recompute_trash_state_cb,
+                                               monitor);
   gdk_source_set_static_name_by_id (monitor->timeout_id, "[gtk] recompute_trash_state_cb");
 
   g_object_unref (file);

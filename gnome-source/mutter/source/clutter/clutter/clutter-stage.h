@@ -58,6 +58,9 @@ struct _ClutterStageClass
 
   /*< public >*/
   /* signals */
+  void (* activate)     (ClutterStage *stage);
+  void (* deactivate)   (ClutterStage *stage);
+
   void (* before_paint) (ClutterStage     *stage,
                          ClutterStageView *view,
                          ClutterFrame     *frame);
@@ -66,10 +69,6 @@ struct _ClutterStageClass
                        ClutterStageView *view,
                        const MtkRegion  *redraw_clip,
                        ClutterFrame     *frame);
-
-  void (* skipped_paint) (ClutterStage     *stage,
-                          ClutterStageView *view,
-                          ClutterFrame     *frame);
 };
 
 /**
@@ -120,8 +119,7 @@ typedef enum
  */
 struct _ClutterFrameInfo
 {
-  int64_t global_frame_counter;
-  int64_t view_frame_counter;
+  int64_t frame_counter;
   int64_t presentation_time; /* microseconds; CLOCK_MONOTONIC */
   float refresh_rate;
 
@@ -129,16 +127,27 @@ struct _ClutterFrameInfo
 
   unsigned int sequence;
 
-  int64_t kms_ready_time_us;
+  gboolean has_valid_gpu_rendering_duration;
+  int64_t gpu_rendering_duration_ns;
+  int64_t cpu_time_before_buffer_swap_us;
 };
 
 CLUTTER_EXPORT
-GType clutter_perspective_get_type (void);
+GType clutter_perspective_get_type (void) G_GNUC_CONST;
 
 CLUTTER_EXPORT
 void            clutter_stage_get_perspective                   (ClutterStage          *stage,
 			                                         ClutterPerspective    *perspective);
+CLUTTER_EXPORT
+void            clutter_stage_set_title                         (ClutterStage          *stage,
+                                                                 const gchar           *title);
+CLUTTER_EXPORT
+const gchar *   clutter_stage_get_title                         (ClutterStage          *stage);
 
+CLUTTER_EXPORT
+void            clutter_stage_set_minimum_size                  (ClutterStage          *stage,
+                                                                 guint                  width,
+                                                                 guint                  height);
 CLUTTER_EXPORT
 void            clutter_stage_set_key_focus                     (ClutterStage          *stage,
                                                                  ClutterActor          *actor);
@@ -174,20 +183,10 @@ gboolean clutter_stage_get_capture_final_size (ClutterStage *stage,
                                                float        *out_scale);
 
 CLUTTER_EXPORT
-void clutter_stage_paint_to_framebuffer_clipped (ClutterStage       *stage,
-                                                 CoglFramebuffer    *framebuffer,
-                                                 const MtkRectangle *rect,
-                                                 float               scale,
-                                                 ClutterColorState  *color_state,
-                                                 const MtkRegion    *redraw_clip,
-                                                 ClutterPaintFlag    paint_flags);
-
-CLUTTER_EXPORT
 void clutter_stage_paint_to_framebuffer (ClutterStage       *stage,
                                          CoglFramebuffer    *framebuffer,
                                          const MtkRectangle *rect,
                                          float               scale,
-                                         ClutterColorState  *color_state,
                                          ClutterPaintFlag    paint_flags);
 
 CLUTTER_EXPORT
@@ -197,7 +196,6 @@ gboolean clutter_stage_paint_to_buffer (ClutterStage        *stage,
                                         uint8_t             *data,
                                         int                  stride,
                                         CoglPixelFormat      format,
-                                        ClutterColorState   *color_state,
                                         ClutterPaintFlag     paint_flags,
                                         GError             **error);
 
@@ -205,7 +203,6 @@ CLUTTER_EXPORT
 ClutterContent * clutter_stage_paint_to_content (ClutterStage        *stage,
                                                  const MtkRectangle  *rect,
                                                  float                scale,
-                                                 ClutterColorState   *color_state,
                                                  ClutterPaintFlag     paint_flags,
                                                  GError             **error);
 
@@ -215,17 +212,16 @@ ClutterStageView * clutter_stage_get_view_at (ClutterStage *stage,
                                               float         y);
 
 CLUTTER_EXPORT
+ClutterActor * clutter_stage_get_device_actor (ClutterStage         *stage,
+                                               ClutterInputDevice   *device,
+                                               ClutterEventSequence *sequence);
+CLUTTER_EXPORT
 ClutterActor * clutter_stage_get_event_actor (ClutterStage       *stage,
                                               const ClutterEvent *event);
 
 CLUTTER_EXPORT
 ClutterGrab * clutter_stage_grab (ClutterStage *stage,
-                                  ClutterActor *actor)
-  G_GNUC_WARN_UNUSED_RESULT;
-
-CLUTTER_EXPORT
-ClutterGrab * clutter_stage_grab_inactive (ClutterStage *stage,
-                                           ClutterActor *actor);
+                                  ClutterActor *actor);
 
 CLUTTER_EXPORT
 ClutterActor * clutter_stage_get_grab_actor (ClutterStage *stage);
@@ -233,29 +229,24 @@ ClutterActor * clutter_stage_get_grab_actor (ClutterStage *stage);
 /**
  * ClutterStageInputForeachFunc:
  * @stage: the stage
- * @sprite: Active pointing focus
+ * @device: Active input device
+ * @sequence: Active sequence in @device, or %NULL
  * @user_data: Data passed to clutter_stage_active_input_foreach()
  *
  * Iterator function for active input. Active input counts as any pointing
- * pointing focus having some form of activity on the stage: Pointers
+ * device currently known to have some form of activity on the stage: Pointers
  * leaning on a widget, tablet styli in proximity, active touchpoints...
  *
  * Returns: %TRUE to keep iterating. %FALSE to stop.
  */
-typedef gboolean (*ClutterStageInputForeachFunc) (ClutterStage  *stage,
-                                                  ClutterSprite *sprite,
-                                                  gpointer       user_data);
+typedef gboolean (*ClutterStageInputForeachFunc) (ClutterStage         *stage,
+                                                  ClutterInputDevice   *device,
+                                                  ClutterEventSequence *sequence,
+                                                  gpointer              user_data);
 
 CLUTTER_EXPORT
-gboolean clutter_stage_foreach_sprite (ClutterStage                 *self,
-                                       ClutterStageInputForeachFunc  func,
-                                       gpointer                      user_data);
-
-CLUTTER_EXPORT
-gboolean clutter_stage_is_active (ClutterStage *stage);
-
-CLUTTER_EXPORT
-void clutter_stage_set_active (ClutterStage *stage,
-                               gboolean      is_active);
+gboolean clutter_stage_pointing_input_foreach (ClutterStage                 *self,
+                                               ClutterStageInputForeachFunc  func,
+                                               gpointer                      user_data);
 
 G_END_DECLS

@@ -36,18 +36,18 @@ typedef struct _GdkX11GLContext		GdkX11GLContext;
 typedef struct _GdkX11GLContextClass	GdkX11GLContextClass;
 
 GDK_AVAILABLE_IN_ALL
-GType gdk_x11_gl_context_get_type (void);
+GType gdk_x11_gl_context_get_type (void) G_GNUC_CONST;
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_ALL
 gboolean        gdk_x11_display_get_glx_version (GdkDisplay *display,
                                                  int        *major,
                                                  int        *minor);
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_4_4
 gboolean        gdk_x11_display_get_egl_version (GdkDisplay *display,
                                                  int        *major,
                                                  int        *minor);
 
-GDK_DEPRECATED_IN_4_18
+GDK_AVAILABLE_IN_4_4
 gpointer        gdk_x11_display_get_egl_display (GdkDisplay *display);
 
 G_END_DECLS

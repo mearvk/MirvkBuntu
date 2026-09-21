@@ -1,5 +1,0 @@
-copy {
-  child: paste {
-    bounds: 0 0 50 50;
-  }
-}

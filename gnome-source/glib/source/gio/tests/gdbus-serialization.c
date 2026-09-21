@@ -543,7 +543,7 @@ get_and_check_serialization (GVariant *value)
   /* First check that the serialization to the D-Bus wire format is correct - do this for both byte orders */
   for (n = 0; n < 2; n++)
     {
-      GDBusMessageByteOrder byte_order = G_DBUS_MESSAGE_BYTE_ORDER_BIG_ENDIAN;
+      GDBusMessageByteOrder byte_order;
       switch (n)
         {
         case 0:
@@ -1027,10 +1027,10 @@ test_message_serialize_header_checks (void)
   g_clear_error (&error);
   g_assert_null (blob);
   /* interface reserved value => error */
-  g_dbus_message_set_interface (message, DBUS_INTERFACE_LOCAL);
+  g_dbus_message_set_interface (message, "org.freedesktop.DBus.Local");
   blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==, "Cannot serialize message: SIGNAL message: INTERFACE header field is using the reserved value " DBUS_INTERFACE_LOCAL);
+  g_assert_cmpstr (error->message, ==, "Cannot serialize message: SIGNAL message: INTERFACE header field is using the reserved value org.freedesktop.DBus.Local");
   g_clear_error (&error);
   g_assert_null (blob);
   /* reset interface */
@@ -1044,10 +1044,10 @@ test_message_serialize_header_checks (void)
   g_clear_error (&error);
   g_assert_null (blob);
   /* path reserved value => error */
-  g_dbus_message_set_path (message, DBUS_PATH_LOCAL);
+  g_dbus_message_set_path (message, "/org/freedesktop/DBus/Local");
   blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==, "Cannot serialize message: SIGNAL message: PATH header field is using the reserved value " DBUS_PATH_LOCAL);
+  g_assert_cmpstr (error->message, ==, "Cannot serialize message: SIGNAL message: PATH header field is using the reserved value /org/freedesktop/DBus/Local");
   g_clear_error (&error);
   g_assert_null (blob);
   /* reset path */
@@ -1196,134 +1196,6 @@ test_message_serialize_header_checks_valid (void)
   g_clear_object (&message);
 }
 
-static void
-test_message_serialize_over_long_signature (void)
-{
-  GDBusMessage *message = NULL;
-  GError *error = NULL;
-  guchar *blob = NULL;
-  gsize blob_size = 0;
-  char *long_signature = NULL;
-
-  long_signature = g_strnfill (256, 'y');
-
-  message = g_dbus_message_new_signal ("/the/path", "The.Interface", "TheMember");
-  g_dbus_message_set_header (message,
-                             G_DBUS_MESSAGE_HEADER_FIELD_SIGNATURE,
-                             g_variant_new_signature (long_signature));
-  blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
-
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==,
-                   "Cannot serialize message: D-Bus signature exceeds maximum length of 255 bytes");
-  g_assert_null (blob);
-
-  g_clear_error (&error);
-  g_clear_object (&message);
-
-  message = g_dbus_message_new_signal ("/the/path", "The.Interface", "TheMember");
-  g_dbus_message_set_body (message, g_variant_new ("(g)", long_signature));
-  blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
-
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==,
-                   "D-Bus signature exceeds maximum length of 255 bytes");
-  g_assert_null (blob);
-
-  g_free (long_signature);
-  g_clear_error (&error);
-  g_clear_object (&message);
-}
-
-static void
-test_message_serialize_over_long_variant_signature (void)
-{
-  GDBusMessage *message = NULL;
-  GError *error = NULL;
-  GVariantType *long_tuple_type = NULL;
-  guchar *blob = NULL;
-  gsize blob_size = 0;
-  char *long_signature = NULL;
-  char *long_tuple_type_string = NULL;
-  guint8 *data = NULL;
-
-  long_signature = g_strnfill (256, 'y');
-  long_tuple_type_string = g_strdup_printf ("(%s)", long_signature);
-  long_tuple_type = g_variant_type_new (long_tuple_type_string);
-  data = g_malloc0 (256);
-
-  message = g_dbus_message_new_method_call (NULL, "/the/path", NULL, "TheMember");
-  g_dbus_message_set_body (message,
-                           g_variant_new ("(@v)",
-                                          g_variant_new_variant (
-                                              g_variant_new_from_data (long_tuple_type,
-                                                                       data,
-                                                                       256,
-                                                                       TRUE,
-                                                                       NULL,
-                                                                       NULL))));
-  blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
-
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==,
-                   "D-Bus signature exceeds maximum length of 255 bytes");
-  g_assert_null (blob);
-
-  g_free (data);
-  g_free (long_tuple_type_string);
-  g_free (long_signature);
-  g_clear_error (&error);
-  g_clear_object (&message);
-  g_variant_type_free (long_tuple_type);
-}
-
-static void
-test_message_serialize_body_signature_checks (void)
-{
-  GDBusMessage *message = NULL;
-  GError *error = NULL;
-  guchar *blob = NULL;
-  gsize blob_size = 0;
-
-  message = g_dbus_message_new_method_call (NULL, "/the/path", NULL, "TheMember");
-  g_dbus_message_set_body (message, g_variant_new ("(s)", "hello"));
-  g_dbus_message_set_signature (message, NULL);
-  blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
-
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==,
-                   "Message body has signature “(s)” but there is no signature header");
-  g_assert_null (blob);
-
-  g_clear_error (&error);
-  g_clear_object (&message);
-
-  message = g_dbus_message_new_method_call (NULL, "/the/path", NULL, "TheMember");
-  g_dbus_message_set_body (message, g_variant_new ("(s)", "hello"));
-  g_dbus_message_set_signature (message, "u");
-  blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
-
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==,
-                   "Message body has type signature “(s)” but signature in the header field is “(u)”");
-  g_assert_null (blob);
-
-  g_clear_error (&error);
-  g_clear_object (&message);
-
-  message = g_dbus_message_new_method_call (NULL, "/the/path", NULL, "TheMember");
-  g_dbus_message_set_signature (message, "s");
-  blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, &error);
-
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
-  g_assert_cmpstr (error->message, ==,
-                   "Message body is empty but signature in the header field is “(s)”");
-  g_assert_null (blob);
-
-  g_clear_error (&error);
-  g_clear_object (&message);
-}
-
 /* ---------------------------------------------------------------------------------------------------- */
 
 static void
@@ -1390,7 +1262,7 @@ test_message_serialize_double_array (void)
 
   g_test_bug ("https://bugzilla.gnome.org/show_bug.cgi?id=732754");
 
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("ad"));
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("ad"));
   g_variant_builder_add (&builder, "d", (gdouble)0.0);
   g_variant_builder_add (&builder, "d", (gdouble)8.0);
   g_variant_builder_add (&builder, "d", (gdouble)22.0);
@@ -1767,7 +1639,7 @@ test_message_parse_truncated (void)
   g_test_bug ("https://gitlab.gnome.org/GNOME/glib/-/issues/2528");
 
   message = g_dbus_message_new ();
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("(asbynqiuxtd)"));
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("(asbynqiuxtd)"));
   g_variant_builder_open (&builder, G_VARIANT_TYPE ("as"));
   g_variant_builder_add (&builder, "s", "fourtytwo");
   g_variant_builder_close (&builder);
@@ -1875,7 +1747,7 @@ test_message_serialize_empty_structure (void)
   g_test_bug ("https://gitlab.gnome.org/GNOME/glib/-/issues/2557");
 
   message = g_dbus_message_new ();
-  g_variant_builder_init_static (&builder, G_VARIANT_TYPE ("(a())"));
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("(a())"));
   g_variant_builder_open (&builder, G_VARIANT_TYPE ("a()"));
   g_variant_builder_add (&builder, "()");
   g_variant_builder_close (&builder);
@@ -2036,12 +1908,6 @@ main (int   argc,
                    test_message_serialize_header_checks);
   g_test_add_func ("/gdbus/message-serialize/header-checks/valid",
                    test_message_serialize_header_checks_valid);
-  g_test_add_func ("/gdbus/message-serialize/over-long-signature",
-                   test_message_serialize_over_long_signature);
-  g_test_add_func ("/gdbus/message-serialize/over-long-variant-signature",
-                   test_message_serialize_over_long_variant_signature);
-  g_test_add_func ("/gdbus/message-serialize/body-signature-checks",
-                   test_message_serialize_body_signature_checks);
   g_test_add_func ("/gdbus/message-serialize/double-array",
                    test_message_serialize_double_array);
   g_test_add_func ("/gdbus/message-serialize/empty-structure",

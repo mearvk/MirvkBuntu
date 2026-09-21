@@ -2,9 +2,7 @@
 # demo app, which means alphabetized by demo title, not filename
 demos = files([
   'application_demo.c',
-  'aspect_frame.c',
   'assistant.c',
-  'badapple.c',
   'builder.c',
   'clipboard.c',
   'combobox.c',
@@ -20,8 +18,8 @@ demos = files([
   'css_shadows.c',
   'cursors.c',
   'dialog.c',
-  'dnd.c',
   'drawingarea.c',
+  'dnd.c',
   'editable_cells.c',
   'entry_completion.c',
   'entry_undo.c',
@@ -30,20 +28,17 @@ demos = files([
   'filtermodel.c',
   'fishbowl.c',
   'fixed.c',
-  'fixed2.c',
-  'flowbox.c',
   'fontrendering.c',
-  'font_features.c',
   'frames.c',
   'gears.c',
   'gestures.c',
   'glarea.c',
+  'gltransition.c',
   'headerbar.c',
   'hypertext.c',
   'iconscroll.c',
   'iconview.c',
   'iconview_edit.c',
-  'image_filtering.c',
   'image_scaling.c',
   'images.c',
   'infobar.c',
@@ -52,6 +47,8 @@ demos = files([
   'links.c',
   'listbox.c',
   'listbox_controls.c',
+  'mask.c',
+  'flowbox.c',
   'list_store.c',
   'listview_applauncher.c',
   'listview_clocks.c',
@@ -65,7 +62,6 @@ demos = files([
   'listview_weather.c',
   'listview_words.c',
   'markup.c',
-  'mask.c',
   'overlay.c',
   'overlay_decorative.c',
   'paint.c',
@@ -73,17 +69,14 @@ demos = files([
   'paintable_animated.c',
   'paintable_emblem.c',
   'paintable_mediastream.c',
-  'paintable_svg.c',
   'paintable_symbolic.c',
   'panes.c',
   'password_entry.c',
-  'path_explorer_demo.c',
   'path_fill.c',
   'path_maze.c',
   'path_spinner.c',
-  'path_sweep.c',
-  'path_text.c',
   'path_walk.c',
+  'path_text.c',
   'peg_solitaire.c',
   'pickers.c',
   'printing.c',
@@ -92,17 +85,16 @@ demos = files([
   'rotated_text.c',
   'scale.c',
   'search_entry.c',
+  'search_entry2.c',
   'shadertoy.c',
   'shortcuts.c',
   'shortcut_triggers.c',
   'sidebar.c',
   'sizegroup.c',
   'sliding_puzzle.c',
-  'snapping.c',
   'spinbutton.c',
   'spinner.c',
   'stack.c',
-  'svg_widget.c',
   'tabs.c',
   'tagged_entry.c',
   'textmask.c',
@@ -114,47 +106,55 @@ demos = files([
   'transparent.c',
   'tree_store.c',
   'video_player.c',
+  'font_features.c',
 ])
 
-gtkdemo_deps = [ libgtk_dep, gmodule_headers_dep ]
+gtkdemo_deps = [ libgtk_dep, ]
 
 extra_demo_sources = files([
-  'demochild.c',
+  'main.c',
+  'fontify.c',
+  'gtkfishbowl.c',
+  'fontplane.c',
+  'gtkgears.c',
+  'gtkshaderbin.c',
+  'gtkshadertoy.c',
+  'gtkshaderstack.c',
+  'gskshaderpaintable.c',
+  'hsla.c',
+  'puzzlepiece.c',
+  'bluroverlay.c',
   'demoimage.c',
-  'demolayout.c',
   'demotaggedentry.c',
+  'demochild.c',
+  'demolayout.c',
   'demowidget.c',
   'demo2layout.c',
-  'demo2widget.c',
-  'demo4widget.c',
-  'filter_paintable.c',
-  'fontify.c',
-  'fontplane.c',
+  'singular_value_decomposition.c',
   'four_point_transform.c',
-  'graphwidget.c',
-  'gtkfishbowl.c',
-  'gtkshadertoy.c',
-  'gtkgears.c',
-  'hsla.c',
-  'imageview.c',
-  'language-names.c',
-  'main.c',
-  'nodewidget.c',
-  'path_explorer.c',
+  'demo2widget.c',
+  'demo3widget.c',
+  'demo4widget.c',
   'pixbufpaintable.c',
-  'puzzlepiece.c',
-  'range-editor.c',
   'script-names.c',
   'settings-key.c',
-  'singular_value_decomposition.c',
-  'suggestionentry.c',
   'unicode-names.c',
-  'component_filter.c',
-  'minigraph.c',
+  'suggestionentry.c',
+  'language-names.c',
+  'nodewidget.c',
+  'graphwidget.c',
 ])
 
 if os_unix
   demos += files('pagesetup.c')
+endif
+
+librsvg_dep = dependency('librsvg-2.0', version: '>= 2.52.0', required: false)
+
+if librsvg_dep.found()
+  demos += files('paintable_svg.c')
+  extra_demo_sources += files(['svgpaintable.c'])
+  gtkdemo_deps += [ librsvg_dep ]
 endif
 
 demos_h = custom_target('gtk4 demo header',
@@ -163,18 +163,69 @@ demos_h = custom_target('gtk4 demo header',
   command: [ find_program('geninclude.py'), '@OUTPUT@', '@INPUT@' ],
 )
 
-gtkdemo_resources = gnome.compile_resources('gtkdemo_resources',
-  'demo.gresource.xml',
-  source_dir: meson.current_source_dir()
-)
+if can_use_objcopy_for_resources
+  # Create the resource blob
+  gtkdemo_gresource = custom_target('gtkdemo.gresource',
+      input : 'demo.gresource.xml',
+      output : 'gtkdemo.gresource',
+      depfile : 'gtkdemo.gresource.d',
+      command : [glib_compile_resources,
+                 '--generate',
+                 '--internal',
+                 '--target=@OUTPUT@',
+                 '--dependency-file=@DEPFILE@',
+                 '--sourcedir=' + meson.current_source_dir(),
+                 '--sourcedir=' + meson.current_build_dir(),
+                 '@INPUT@'])
 
-test('gtk-demo-manifest-check',
-  manifest_check,
-  args: [
-    meson.current_source_dir() / 'demo.gresource.xml',
-    demos,
-  ],
-)
+  # Create resource data file
+  gtkdemo_resources_c = custom_target('gtkdemo_resources.c',
+      input : 'demo.gresource.xml',
+      output : 'gtkdemo_resources.c',
+      depfile : 'gtkdemo_resources.c.d',
+      command : [glib_compile_resources,
+                 '--generate-source',
+                 '--internal',
+                 '--target=@OUTPUT@',
+                 '--dependency-file=@DEPFILE@',
+                 '--sourcedir=' + meson.current_source_dir(),
+                 '--sourcedir=' + meson.current_build_dir(),
+                 '--external-data',
+                 '--c-name', '_g_binary_gtkdemo',
+                 '@INPUT@'])
+
+  # Create object file containing resource data
+  gtkdemo_resources_binary = custom_target('gtkdemo_resources.o',
+      input : gtkdemo_gresource,
+      output : 'gtkdemo_resources.o',
+      command : [ld,
+                 '-z', 'noexecstack',
+                 '-r',
+                 '-b','binary',
+                 '@INPUT@',
+                 '-o','@OUTPUT@'])
+
+  # Rename symbol to match the one in the C file
+  gtkdemo_resources_o = custom_target('gtkdemo_resources2.o',
+    input : gtkdemo_resources_binary,
+    output : 'gtkdemo_resources2.o',
+    command : [objcopy,
+                 '--strip-all',
+                 '--set-section-alignment', '.data=8',
+                 '--add-symbol','_g_binary_gtkdemo_resource_data=.data:0',
+                 '@INPUT@',
+                 '@OUTPUT@'])
+
+  gtkdemo_resources = [
+      gtkdemo_resources_c,
+      gtkdemo_resources_o,
+    ]
+else
+  gtkdemo_resources = gnome.compile_resources('gtkdemo_resources',
+    'demo.gresource.xml',
+    source_dir: meson.current_source_dir()
+  )
+endif
 
 # Use a subset of compiler flags
 demo_cflags = []
@@ -185,11 +236,9 @@ foreach flag: common_cflags
   endif
 endforeach
 
-demo_cflags += [ '-DGTK_COMPILATION=1' ]
-
 gtkdemo_deps += [ profile_conf_h ]
 
-gtk4_demo = executable('gtk4-demo',
+executable('gtk4-demo',
   sources: [demos, demos_h, extra_demo_sources, gtkdemo_resources],
   c_args: demo_cflags,
   dependencies: gtkdemo_deps,
@@ -197,7 +246,6 @@ gtk4_demo = executable('gtk4-demo',
   win_subsystem: 'windows',
   link_args: extra_demo_ldflags,
   install: true,
-  kwargs: demo_kwargs
 )
 
 executable('gtk4-demo-application',
@@ -231,11 +279,3 @@ configure_file(
   configuration: appdata_config,
   install_dir: gtk_appdatadir
 )
-
-if bash.found()
-  install_data([ 'completion' ],
-    rename: [ 'gtk4-demo' ],
-    install_dir: bash_comp_inst_dir,
-    install_tag: 'bin',
-  )
-endif

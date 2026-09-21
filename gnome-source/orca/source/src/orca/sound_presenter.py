@@ -28,28 +28,15 @@ import time
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from . import (
-    dbus_service,
-    debug,
-    document_presenter,
-    focus_manager,
-    gsettings_registry,
-    sound,
-)
-from .generator import GeneratorContext, PresentationReason
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
+
+from . import dbus_service, debug, gsettings_registry, guilabels, preferences_grid_base, sound
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    import gi
-
-    from .dbus_service import UInt32
-    from .scripts import default
     from .sound import Icon, Tone
-    from .sound_presenter_preferences_grid import SoundPreferencesGrid
-
-    gi.require_version("Atspi", "2.0")
-    from gi.repository import Atspi
 
 
 @gsettings_registry.get_registry().gsettings_enum(
@@ -68,6 +55,195 @@ class ProgressBarVerbosity(Enum):
         """Returns the lowercase string name for this enum value."""
 
         return self.name.lower()
+
+
+class SoundProgressBarsPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+    """GtkGrid containing the Sound Progress Bars preferences page."""
+
+    def __init__(self, presenter: SoundPresenter) -> None:
+        controls: list[preferences_grid_base.ControlType] = [
+            preferences_grid_base.BooleanPreferenceControl(
+                label=guilabels.GENERAL_BEEP_UPDATES,
+                getter=presenter.get_beep_progress_bar_updates,
+                setter=presenter.set_beep_progress_bar_updates,
+                prefs_key=SoundPresenter.KEY_BEEP_PROGRESS_BAR_UPDATES,
+            ),
+            preferences_grid_base.IntRangePreferenceControl(
+                label=guilabels.GENERAL_FREQUENCY_SECS,
+                getter=presenter.get_progress_bar_beep_interval,
+                setter=presenter.set_progress_bar_beep_interval,
+                prefs_key=SoundPresenter.KEY_PROGRESS_BAR_BEEP_INTERVAL,
+                minimum=0,
+                maximum=100,
+            ),
+            preferences_grid_base.EnumPreferenceControl(
+                label=guilabels.GENERAL_APPLIES_TO,
+                getter=presenter.get_progress_bar_beep_verbosity,
+                setter=presenter.set_progress_bar_beep_verbosity,
+                prefs_key=SoundPresenter.KEY_PROGRESS_BAR_BEEP_VERBOSITY,
+                options=[
+                    guilabels.PROGRESS_BAR_ALL,
+                    guilabels.PROGRESS_BAR_APPLICATION,
+                    guilabels.PROGRESS_BAR_WINDOW,
+                ],
+                values=[
+                    ProgressBarVerbosity.ALL.value,
+                    ProgressBarVerbosity.APPLICATION.value,
+                    ProgressBarVerbosity.WINDOW.value,
+                ],
+            ),
+        ]
+
+        super().__init__(guilabels.PROGRESS_BARS, controls)
+
+
+class SoundPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+    """GtkGrid containing the Sound preferences page with nested stack navigation."""
+
+    def __init__(
+        self,
+        presenter: SoundPresenter,
+        title_change_callback: preferences_grid_base.Callable[[str], None] | None = None,
+    ) -> None:
+        super().__init__(guilabels.SOUND)
+        self._presenter = presenter
+        self._initializing = True
+        self._title_change_callback = title_change_callback
+
+        self._progress_bars_grid = SoundProgressBarsPreferencesGrid(presenter)
+        self._volume_scale: Gtk.Scale | None = None
+        self._volume_listbox: preferences_grid_base.FocusManagedListBox | None = None
+
+        self._build()
+        self._initializing = False
+
+    def _build(self) -> None:
+        """Build the nested stack UI."""
+
+        row = 0
+
+        categories = [
+            (guilabels.PROGRESS_BARS, "progress-bars", self._progress_bars_grid),
+        ]
+
+        enable_listbox, stack, _categories_listbox = self._create_multi_page_stack(
+            enable_label=guilabels.SOUND_ENABLE_SOUND_SUPPORT,
+            enable_getter=self._presenter.get_sound_is_enabled,
+            enable_setter=self._presenter.set_sound_is_enabled,
+            categories=categories,
+            title_change_callback=self._title_change_callback,
+            main_title=guilabels.SOUND,
+        )
+
+        self.attach(enable_listbox, 0, row, 1, 1)
+        row += 1
+
+        # Volume slider on the main page
+        self._volume_listbox = preferences_grid_base.FocusManagedListBox()
+
+        volume_adj = Gtk.Adjustment(
+            value=self._presenter.get_sound_volume(),
+            lower=0.0,
+            upper=1.0,
+            step_increment=0.1,
+            page_increment=0.1,
+        )
+        volume_row, self._volume_scale, _volume_label = self._create_slider_row(
+            guilabels.SOUND_VOLUME,
+            volume_adj,
+            changed_handler=self._on_volume_changed,
+            include_top_separator=False,
+            digits=1,
+        )
+        self._volume_listbox.add_row_with_widget(volume_row, self._volume_scale)
+        self._volume_listbox.set_sensitive(self._presenter.get_sound_is_enabled())
+
+        self.attach(self._volume_listbox, 0, row, 1, 1)
+        row += 1
+
+        self.attach(stack, 0, row, 1, 1)
+
+    def _on_volume_changed(self, scale: Gtk.Scale) -> None:
+        """Handle volume slider change."""
+
+        if self._initializing:
+            return
+        value = scale.get_value()
+        self._presenter.set_sound_volume(value)
+        self._has_unsaved_changes = True
+
+    def _on_multipage_enable_toggled(
+        self,
+        switch: Gtk.Switch,
+        setter: preferences_grid_base.Callable[[bool], preferences_grid_base.Any],
+    ) -> None:
+        """Handle enable switch toggle - also controls volume slider sensitivity."""
+
+        super()._on_multipage_enable_toggled(switch, setter)
+        if self._volume_listbox is not None:
+            self._volume_listbox.set_sensitive(switch.get_active())
+
+    def _on_multipage_category_activated(self, listbox: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
+        """Handle category activation - also hide volume slider."""
+
+        super()._on_multipage_category_activated(listbox, row)
+        if self._volume_listbox is not None:
+            self._volume_listbox.hide()
+
+    def multipage_show_categories(self) -> None:
+        """Switch back to categories view - also show volume slider."""
+
+        super().multipage_show_categories()
+        if self._volume_listbox is not None:
+            self._volume_listbox.show()
+
+    def on_becoming_visible(self) -> None:
+        """Reset to the categories view when this grid becomes visible."""
+
+        self.multipage_on_becoming_visible()
+
+    def reload(self) -> None:
+        """Fetch fresh values and update UI."""
+
+        self._initializing = True
+        self._has_unsaved_changes = False
+
+        enabled = self._presenter.get_sound_is_enabled()
+        if self._volume_listbox is not None:
+            self._volume_listbox.set_sensitive(enabled)
+        if self._volume_scale is not None:
+            self._volume_scale.set_value(self._presenter.get_sound_volume())
+        self._progress_bars_grid.reload()
+
+        self._initializing = False
+
+    def save_settings(self, profile: str = "", app_name: str = "") -> dict:
+        """Persist staged values."""
+
+        result: dict[str, Any] = {}
+        result["enabled"] = self._presenter.get_sound_is_enabled()
+        result["volume"] = self._presenter.get_sound_volume()
+        result.update(self._progress_bars_grid.save_settings())
+
+        if profile:
+            skip = not app_name and profile == "default"
+            gsettings_registry.get_registry().save_schema("sound", result, profile, app_name, skip)
+
+        return result
+
+    def refresh(self) -> None:
+        """Update widgets from staged values."""
+
+        self._initializing = True
+        if self._volume_scale is not None:
+            self._volume_scale.set_value(self._presenter.get_sound_volume())
+        self._progress_bars_grid.refresh()
+        self._initializing = False
+
+    def has_changes(self) -> bool:
+        """Return True if any child grid has unsaved changes."""
+
+        return self._progress_bars_grid.has_changes() or self._has_unsaved_changes
 
 
 @gsettings_registry.get_registry().gsettings_schema("org.gnome.Orca.Sound", name="sound")
@@ -100,12 +276,9 @@ class SoundPresenter:
 
     def create_preferences_grid(
         self,
-        title_change_callback: Callable[[str], None] | None = None,
+        title_change_callback: preferences_grid_base.Callable[[str], None] | None = None,
     ) -> SoundPreferencesGrid:
         """Returns the GtkGrid containing the preferences UI."""
-
-        # pylint: disable-next=import-outside-toplevel
-        from .sound_presenter_preferences_grid import SoundPreferencesGrid
 
         return SoundPreferencesGrid(self, title_change_callback)
 
@@ -127,8 +300,8 @@ class SoundPresenter:
     def set_sound_is_enabled(self, value: bool) -> bool:
         """Sets whether sound is enabled."""
 
-        tokens = ["SOUND PRESENTER: Setting enable sound to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SOUND PRESENTER: Setting enable sound to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_ENABLED, value)
         return True
 
@@ -150,8 +323,8 @@ class SoundPresenter:
     def set_sound_volume(self, value: float) -> bool:
         """Sets the sound volume (0.0 to 1.0)."""
 
-        tokens = ["SOUND PRESENTER: Setting sound volume to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SOUND PRESENTER: Setting sound volume to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(self._SCHEMA, self.KEY_VOLUME, value)
         return True
 
@@ -173,8 +346,8 @@ class SoundPresenter:
     def set_beep_progress_bar_updates(self, value: bool) -> bool:
         """Sets whether beep progress bar updates are enabled."""
 
-        tokens = ["SOUND PRESENTER: Setting beep progress bar updates to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SOUND PRESENTER: Setting beep progress bar updates to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_BEEP_PROGRESS_BAR_UPDATES,
@@ -191,17 +364,17 @@ class SoundPresenter:
         migration_key="progressBarBeepInterval",
     )
     @dbus_service.getter
-    def get_progress_bar_beep_interval(self) -> UInt32:
+    def get_progress_bar_beep_interval(self) -> int:
         """Returns the beep progress bar update interval in seconds."""
 
         return self._get_setting(self.KEY_PROGRESS_BAR_BEEP_INTERVAL, "i", 0)
 
     @dbus_service.setter
-    def set_progress_bar_beep_interval(self, value: UInt32) -> bool:
+    def set_progress_bar_beep_interval(self, value: int) -> bool:
         """Sets the beep progress bar update interval in seconds."""
 
-        tokens = ["SOUND PRESENTER: Setting progress bar beep interval to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SOUND PRESENTER: Setting progress bar beep interval to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
             self.KEY_PROGRESS_BAR_BEEP_INTERVAL,
@@ -218,7 +391,7 @@ class SoundPresenter:
         migration_key="progressBarBeepVerbosity",
     )
     @dbus_service.getter
-    def get_progress_bar_beep_verbosity(self) -> UInt32:
+    def get_progress_bar_beep_verbosity(self) -> int:
         """Returns the beep progress bar verbosity level."""
 
         nick = gsettings_registry.get_registry().layered_lookup(
@@ -231,11 +404,11 @@ class SoundPresenter:
         return ProgressBarVerbosity[nick.upper()].value
 
     @dbus_service.setter
-    def set_progress_bar_beep_verbosity(self, value: UInt32) -> bool:
+    def set_progress_bar_beep_verbosity(self, value: int) -> bool:
         """Sets the beep progress bar verbosity level."""
 
-        tokens = ["SOUND PRESENTER: Setting progress bar beep verbosity to", value, "."]
-        debug.print_tokens(debug.LEVEL_INFO, tokens, True)
+        msg = f"SOUND PRESENTER: Setting progress bar beep verbosity to {value}."
+        debug.print_message(debug.LEVEL_INFO, msg, True)
         level = ProgressBarVerbosity(value)
         gsettings_registry.get_registry().set_runtime_value(
             self._SCHEMA,
@@ -279,52 +452,6 @@ class SoundPresenter:
             self._progress_bar_cache[id(obj)] = (time.time(), percent)
 
         return present
-
-    def _build_generator_context(
-        self,
-        reason: PresentationReason | None = None,
-        prior_obj: Atspi.Accessible | None = None,
-    ) -> GeneratorContext:
-        """Builds the settings context for sound generators."""
-
-        mgr = focus_manager.get_manager()
-        active_mode, _obj = mgr.get_active_mode_and_object_of_interest()
-
-        return GeneratorContext(
-            enabled=self.get_sound_is_enabled(),
-            verbose=False,
-            focus=mgr.get_locus_of_focus(),
-            in_focus_mode=document_presenter.get_presenter().get_in_focus_mode(),
-            active_mode=active_mode,
-            reason=reason or PresentationReason.FOCUS_CHANGE,
-            prior_obj=prior_obj,
-            offset=None,
-            leaving=False,
-            ancestor_of=None,
-            content_item=None,
-            content_position=None,
-            content_subject=None,
-            resolved_role=None,
-            role_subject=None,
-            include_context=True,
-        )
-
-    def present_generated_sound(
-        self,
-        script: default.Script,
-        obj: Atspi.Accessible,
-        *,
-        prior_obj: Atspi.Accessible | None = None,
-        reason: PresentationReason | None = None,
-    ) -> None:
-        """Generates sound for obj using the script's sound generator and plays it."""
-
-        context = self._build_generator_context(
-            reason,
-            prior_obj=prior_obj,
-        )
-        sounds = script.get_sound_generator().generate_sound(obj, context)
-        self.play(sounds)
 
     def play(self, sounds: list[Icon | Tone] | Icon | Tone, interrupt: bool = True) -> None:
         """Plays the specified sound(s)."""

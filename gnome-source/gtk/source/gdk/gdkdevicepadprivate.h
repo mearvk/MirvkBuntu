@@ -40,3 +40,4 @@ struct _GdkDevicePadInterface {
 };
 
 G_END_DECLS
+

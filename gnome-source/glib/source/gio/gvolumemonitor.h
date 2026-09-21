@@ -45,7 +45,7 @@ G_BEGIN_DECLS
  * G_VOLUME_MONITOR_EXTENSION_POINT_NAME:
  *
  * Extension point for volume monitor functionality.
- * See [Extending GIO](overview.html#extending-gio).
+ * See [Extending GIO][extending-gio].
  */
 #define G_VOLUME_MONITOR_EXTENSION_POINT_NAME "gio-volume-monitor"
 
@@ -126,7 +126,7 @@ struct _GVolumeMonitorClass
 };
 
 GIO_AVAILABLE_IN_ALL
-GType           g_volume_monitor_get_type             (void);
+GType           g_volume_monitor_get_type             (void) G_GNUC_CONST;
 
 GIO_AVAILABLE_IN_ALL
 GVolumeMonitor *g_volume_monitor_get                  (void);

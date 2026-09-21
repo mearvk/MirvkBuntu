@@ -26,12 +26,9 @@
 /**
  * GtkSwitch:
  *
- * Shows a "light switch" that has two states: on or off.
+ * `GtkSwitch` is a "light switch" that has two states: on or off.
  *
- * <picture>
- *   <source srcset="switch-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="An example GtkSwitch" src="switch.png">
- * </picture>
+ * ![An example GtkSwitch](switch.png)
  *
  * The user can control which state should be active by clicking the
  * empty area, or by dragging the slider.
@@ -42,16 +39,9 @@
  * trough color indicates the present underlying state (represented by the
  * [property@Gtk.Switch:state] property).
  *
- * <picture>
- *   <source srcset="switch-state-dark.png" media="(prefers-color-scheme: dark)">
- *   <img alt="GtkSwitch with delayed state change" src="switch-state.png">
- * </picture>
+ * ![GtkSwitch with delayed state change](switch-state.png)
  *
  * See [signal@Gtk.Switch::state-set] for details.
- *
- * # Shortcuts and Gestures
- *
- * `GtkSwitch` supports pan and drag gestures to move the slider.
  *
  * # CSS nodes
  *
@@ -68,7 +58,7 @@
  *
  * # Accessibility
  *
- * `GtkSwitch` uses the [enum@Gtk.AccessibleRole.switch] role.
+ * `GtkSwitch` uses the %GTK_ACCESSIBLE_ROLE_SWITCH role.
  */
 
 #include "config.h"
@@ -128,10 +118,9 @@ enum
   PROP_0,
   PROP_ACTIVE,
   PROP_STATE,
-  /* GtkActionable */
+  LAST_PROP,
   PROP_ACTION_NAME,
-  PROP_ACTION_TARGET,
-  LAST_PROP
+  PROP_ACTION_TARGET
 };
 
 enum
@@ -579,17 +568,17 @@ gtk_switch_class_init (GtkSwitchClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
   /**
-   * GtkSwitch:active:
+   * GtkSwitch:active: (attributes org.gtk.Property.get=gtk_switch_get_active org.gtk.Property.set=gtk_switch_set_active)
    *
    * Whether the `GtkSwitch` widget is in its on or off state.
    */
   switch_props[PROP_ACTIVE] =
     g_param_spec_boolean ("active", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   /**
-   * GtkSwitch:state:
+   * GtkSwitch:state: (attributes org.gtk.Property.get=gtk_switch_get_state org.gtk.Property.set=gtk_switch_set_state)
    *
    * The backend state that is controlled by the switch.
    *
@@ -602,12 +591,14 @@ gtk_switch_class_init (GtkSwitchClass *klass)
   switch_props[PROP_STATE] =
     g_param_spec_boolean ("state", NULL, NULL,
                           FALSE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   gobject_class->set_property = gtk_switch_set_property;
   gobject_class->get_property = gtk_switch_get_property;
   gobject_class->dispose = gtk_switch_dispose;
   gobject_class->finalize = gtk_switch_finalize;
+
+  g_object_class_install_properties (gobject_class, LAST_PROP, switch_props);
 
   widget_class->direction_changed = gtk_switch_direction_changed;
 
@@ -666,12 +657,8 @@ gtk_switch_class_init (GtkSwitchClass *klass)
                               G_TYPE_FROM_CLASS (gobject_class),
                               _gtk_marshal_BOOLEAN__BOOLEANv);
 
-  switch_props[PROP_ACTION_NAME] = g_param_spec_override ("action-name",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-name"));
-  switch_props[PROP_ACTION_TARGET] = g_param_spec_override ("action-target",
-      g_object_interface_find_property (g_type_default_interface_ref (GTK_TYPE_ACTIONABLE), "action-target"));
-
-  g_object_class_install_properties (gobject_class, LAST_PROP, switch_props);
+  g_object_class_override_property (gobject_class, PROP_ACTION_NAME, "action-name");
+  g_object_class_override_property (gobject_class, PROP_ACTION_TARGET, "action-target");
 
   gtk_widget_class_set_css_name (widget_class, I_("switch"));
 
@@ -770,7 +757,7 @@ gtk_switch_new (void)
 }
 
 /**
- * gtk_switch_set_active:
+ * gtk_switch_set_active: (attributes org.gtk.Method.set_property=active)
  * @self: a `GtkSwitch`
  * @is_active: %TRUE if @self should be active, and %FALSE otherwise
  *
@@ -810,7 +797,7 @@ gtk_switch_set_active (GtkSwitch *self,
 }
 
 /**
- * gtk_switch_get_active:
+ * gtk_switch_get_active: (attributes org.gtk.Method.get_property=active)
  * @self: a `GtkSwitch`
  *
  * Gets whether the `GtkSwitch` is in its “on” or “off” state.
@@ -826,7 +813,7 @@ gtk_switch_get_active (GtkSwitch *self)
 }
 
 /**
- * gtk_switch_set_state:
+ * gtk_switch_set_state: (attributes org.gtk.Method.set_property=state)
  * @self: a `GtkSwitch`
  * @state: the new state
  *
@@ -859,7 +846,7 @@ gtk_switch_set_state (GtkSwitch *self,
 }
 
 /**
- * gtk_switch_get_state:
+ * gtk_switch_get_state: (attributes org.gtk.Method.get_property=state)
  * @self: a `GtkSwitch`
  *
  * Gets the underlying state of the `GtkSwitch`.

@@ -25,7 +25,6 @@
 #include <graphene.h>
 
 #include "mtk/mtk-macros.h"
-#include "mtk/mtk-monitor-transform.h"
 
 #define MTK_TYPE_RECTANGLE            (mtk_rectangle_get_type ())
 
@@ -128,14 +127,6 @@ gboolean mtk_rectangle_could_fit_rect (const MtkRectangle *outer_rect,
 MTK_EXPORT
 gboolean mtk_rectangle_contains_rect (const MtkRectangle *outer_rect,
                                       const MtkRectangle *inner_rect);
-MTK_EXPORT
-gboolean mtk_rectangle_contains_point (const MtkRectangle *rect,
-                                       int                 x,
-                                       int                 y);
-MTK_EXPORT
-gboolean mtk_rectangle_contains_pointf (const MtkRectangle *rect,
-                                        float               x,
-                                        float               y);
 
 MTK_EXPORT
 graphene_rect_t mtk_rectangle_to_graphene_rect (const MtkRectangle *rect);
@@ -161,15 +152,5 @@ void mtk_rectangle_scale_double (const MtkRectangle  *rect,
 MTK_EXPORT
 gboolean mtk_rectangle_is_adjacent_to (const MtkRectangle *rect,
                                        const MtkRectangle *other);
-
-MTK_EXPORT
-gboolean mtk_rectangle_is_empty (const MtkRectangle *rect);
-
-MTK_EXPORT
-void mtk_rectangle_transform (const MtkRectangle  *rect,
-                              MtkMonitorTransform  transform,
-                              int                  width,
-                              int                  height,
-                              MtkRectangle        *dest);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MtkRectangle, mtk_rectangle_free)

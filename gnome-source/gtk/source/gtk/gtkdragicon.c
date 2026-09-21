@@ -29,7 +29,6 @@
 
 #include "gdk/gdksurfaceprivate.h"
 #include "gdk/gdkdragsurfacesize.h"
-#include "gsk/gskrendererprivate.h"
 
 /* for the drag icons */
 #include "gtkcolorswatchprivate.h"
@@ -42,13 +41,13 @@
 /**
  * GtkDragIcon:
  *
- * A `GtkRoot` implementation for drag icons.
+ * `GtkDragIcon` is a `GtkRoot` implementation for drag icons.
  *
  * A drag icon moves with the pointer during a Drag-and-Drop operation
  * and is destroyed when the drag ends.
  *
  * To set up a drag icon and associate it with an ongoing drag operation,
- * use [ctor@Gtk.DragIcon.get_for_drag] to get the icon for a drag. You can
+ * use [func@Gtk.DragIcon.get_for_drag] to get the icon for a drag. You can
  * then use it like any other widget and use [method@Gtk.DragIcon.set_child]
  * to set whatever widget should be used for the drag icon.
  *
@@ -72,10 +71,10 @@ enum {
   PROP_0,
   PROP_CHILD,
 
-  N_PROPS
+  LAST_ARG
 };
 
-static GParamSpec *properties[N_PROPS] = { NULL, };
+static GParamSpec *properties[LAST_ARG] = { NULL, };
 
 static void gtk_drag_icon_root_init   (GtkRootInterface *iface);
 static void gtk_drag_icon_native_init (GtkNativeInterface *iface);
@@ -176,6 +175,15 @@ gtk_drag_icon_native_init (GtkNativeInterface *iface)
   iface->layout = gtk_drag_icon_native_layout;
 }
 
+static gboolean
+surface_render (GdkSurface     *surface,
+                cairo_region_t *region,
+                GtkWidget      *widget)
+{
+  gtk_widget_render (widget, surface, region);
+  return TRUE;
+}
+
 static void
 surface_compute_size (GdkDragSurface     *surface,
                       GdkDragSurfaceSize *size,
@@ -195,11 +203,12 @@ gtk_drag_icon_realize (GtkWidget *widget)
 
   gdk_surface_set_widget (icon->surface, widget);
 
+  g_signal_connect (icon->surface, "render", G_CALLBACK (surface_render), widget);
   g_signal_connect (icon->surface, "compute-size", G_CALLBACK (surface_compute_size), widget);
 
   GTK_WIDGET_CLASS (gtk_drag_icon_parent_class)->realize (widget);
 
-  icon->renderer = gsk_renderer_new_for_surface_full (icon->surface, TRUE);
+  icon->renderer = gsk_renderer_new_for_surface (icon->surface);
 
   gtk_native_realize (GTK_NATIVE (icon));
 }
@@ -218,6 +227,7 @@ gtk_drag_icon_unrealize (GtkWidget *widget)
 
   if (icon->surface)
     {
+      g_signal_handlers_disconnect_by_func (icon->surface, surface_render, widget);
       g_signal_handlers_disconnect_by_func (icon->surface, surface_compute_size, widget);
       gdk_surface_set_widget (icon->surface, NULL);
     }
@@ -369,16 +379,16 @@ gtk_drag_icon_class_init (GtkDragIconClass *klass)
   widget_class->hide = gtk_drag_icon_hide;
 
   /**
-   * GtkDragIcon:child:
+   * GtkDragIcon:child: (attributes org.gtk.Property.get=gtk_drag_icon_get_child org.gtk.Property.set=gtk_drag_icon_set_child)
    *
    * The widget to display as drag icon.
    */
   properties[PROP_CHILD] =
     g_param_spec_object ("child", NULL, NULL,
                          GTK_TYPE_WIDGET,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  g_object_class_install_properties (object_class, N_PROPS, properties);
+  g_object_class_install_properties (object_class, LAST_ARG, properties);
 
   gtk_widget_class_set_css_name (widget_class, "dnd");
 }
@@ -390,7 +400,7 @@ gtk_drag_icon_init (GtkDragIcon *self)
 }
 
 /**
- * gtk_drag_icon_get_for_drag: (constructor)
+ * gtk_drag_icon_get_for_drag:
  * @drag: a `GdkDrag`
  *
  * Gets the `GtkDragIcon` in use with @drag.
@@ -459,7 +469,7 @@ gtk_drag_icon_set_from_paintable (GdkDrag      *drag,
 }
 
 /**
- * gtk_drag_icon_set_child:
+ * gtk_drag_icon_set_child: (attributes org.gtk.Method.set_property=child)
  * @self: a `GtkDragIcon`
  * @child: (nullable): a `GtkWidget`
  *
@@ -490,7 +500,7 @@ gtk_drag_icon_set_child (GtkDragIcon *self,
 }
 
 /**
- * gtk_drag_icon_get_child:
+ * gtk_drag_icon_get_child: (attributes org.gtk.Method.get_property=child)
  * @self: a `GtkDragIcon`
  *
  * Gets the widget currently used as drag icon.
@@ -557,10 +567,7 @@ gtk_drag_icon_create_widget_for_value (const GValue *value)
       GFileInfo *info;
       GtkWidget *image;
 
-      info = g_file_query_info (G_FILE (g_value_get_object (value)), "standard::icon",
-                                G_FILE_QUERY_INFO_NONE,
-                                NULL,
-                                NULL);
+      info = g_file_query_info (G_FILE (g_value_get_object (value)), "standard::icon", 0, NULL, NULL);
       if (!info)
         return NULL;
 

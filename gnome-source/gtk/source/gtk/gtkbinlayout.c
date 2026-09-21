@@ -18,7 +18,8 @@
 /**
  * GtkBinLayout:
  *
- * A layout manager for widgets with a single child.
+ * `GtkBinLayout` is a `GtkLayoutManager` subclass useful for create "bins" of
+ * widgets.
  *
  * `GtkBinLayout` will stack each child of a widget on top of each other,
  * using the [property@Gtk.Widget:hexpand], [property@Gtk.Widget:vexpand],

@@ -57,13 +57,13 @@ clutter_test_init (int    *argc,
 
   context = meta_create_test_context (META_CONTEXT_TEST_TYPE_HEADLESS,
                                       META_CONTEXT_TEST_FLAG_NO_X11);
-  g_assert_true (meta_context_configure (context, argc, argv, NULL));
-  g_assert_true (meta_context_setup (context, NULL));
+  g_assert (meta_context_configure (context, argc, argv, NULL));
+  g_assert (meta_context_setup (context, NULL));
 
   test_environ = g_new0 (ClutterTestEnvironment, 1);
   test_environ->context = context;
 
-  g_assert_true (meta_context_start (context, NULL));
+  g_assert (meta_context_start (context, NULL));
 
   clutter_test_main_loop = g_main_loop_new (NULL, FALSE);
 }
@@ -82,32 +82,6 @@ clutter_test_get_stage (void)
   MetaBackend *backend = meta_context_get_backend (context);
 
   return meta_backend_get_stage (backend);
-}
-
-ClutterContext *
-clutter_test_get_context (void)
-{
-  MetaContext *context = test_environ->context;
-  MetaBackend *backend = meta_context_get_backend (context);
-
-  return meta_backend_get_clutter_context (backend);
-}
-
-ClutterBackend *
-clutter_test_get_backend (void)
-{
-  MetaContext *context = test_environ->context;
-  MetaBackend *backend = meta_context_get_backend (context);
-
-  return meta_backend_get_clutter_backend (backend);
-}
-
-ClutterSeat *
-clutter_test_get_default_seat (void)
-{
-  ClutterBackend *backend = clutter_test_get_backend ();
-
-  return clutter_backend_get_default_seat (backend);
 }
 
 void
@@ -199,11 +173,28 @@ clutter_test_add (const char *test_path,
 }
 
 /**
+ * clutter_test_add_data: (skip)
+ * @test_path: unique path for identifying the test
+ * @test_func: function containing the test
+ * @test_data: data to pass to the test function
+ *
+ * Adds a test unit to the Clutter test environment.
+ *
+ * See also: g_test_add_data_func()
+ */
+void
+clutter_test_add_data (const char    *test_path,
+                       GTestDataFunc  test_func,
+                       gpointer       test_data)
+{
+  clutter_test_add_data_full (test_path, test_func, test_data, NULL);
+}
+
+/**
  * clutter_test_add_data_full:
  * @test_path: unique path for identifying the test
- * @test_func: (scope notified) (closure test_data): function
- *             containing the test
- * @test_data: data to pass to the test function
+ * @test_func: (scope notified): function containing the test
+ * @test_data: (closure): data to pass to the test function
  * @test_notify: function called when the test function ends
  *
  * Adds a test unit to the Clutter test environment.
@@ -221,7 +212,7 @@ clutter_test_add_data_full (const char     *test_path,
   g_return_if_fail (test_path != NULL);
   g_return_if_fail (test_func != NULL);
 
-  g_assert_nonnull (test_environ);
+  g_assert (test_environ != NULL);
 
   data = g_new (ClutterTestData, 1);
   data->test_func = test_func;
@@ -274,10 +265,10 @@ clutter_test_run (void)
   g_autoptr (GError) error = NULL;
   int res;
 
-  monitor_info = meta_virtual_monitor_info_new_simple (800, 600, 10.0,
-                                                       "MetaTestVendor",
-                                                       "ClutterTestMonitor",
-                                                       "0x123");
+  monitor_info = meta_virtual_monitor_info_new (800, 600, 10.0,
+                                                "MetaTestVendor",
+                                                "ClutterTestMonitor",
+                                                "0x123");
   virtual_monitor = meta_monitor_manager_create_virtual_monitor (monitor_manager,
                                                                  monitor_info,
                                                                  &error);
@@ -400,10 +391,10 @@ clutter_test_check_actor_at_point (ClutterActor            *stage,
 
   clutter_actor_show (stage);
 
-  clutter_threads_add_repaint_func (CLUTTER_REPAINT_FLAGS_POST_PAINT,
-                                    validate_stage,
-                                    data,
-                                    NULL);
+  clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_POST_PAINT,
+                                         validate_stage,
+                                         data,
+                                         NULL);
 
   while (!data->was_painted)
     g_main_context_iteration (NULL, TRUE);

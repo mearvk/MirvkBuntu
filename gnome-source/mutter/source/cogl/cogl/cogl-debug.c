@@ -32,8 +32,10 @@
 
 #include <stdlib.h>
 
+#include "cogl/cogl-i18n-private.h"
 #include "cogl/cogl-private.h"
 #include "cogl/cogl-debug.h"
+#include "cogl/cogl1-context.h"
 
 /* XXX: If you add a debug option, please also add an option
  * definition to cogl-debug-options.h. This will enable us - for
@@ -53,8 +55,8 @@ static const GDebugKey cogl_log_debug_keys[] = {
   { "matrices", COGL_DEBUG_MATRICES },
   { "draw", COGL_DEBUG_DRAW },
   { "opengl", COGL_DEBUG_OPENGL },
+  { "pango", COGL_DEBUG_PANGO },
   { "show-source", COGL_DEBUG_SHOW_SOURCE},
-  { "show-uniforms", COGL_DEBUG_SHOW_UNIFORMS},
   { "framebuffer", COGL_DEBUG_FRAMEBUFFER },
   { "offscreen", COGL_DEBUG_OFFSCREEN },
   { "texture-pixmap", COGL_DEBUG_TEXTURE_PIXMAP },
@@ -150,8 +152,12 @@ _cogl_parse_debug_string_for_keys (const char *value,
 
 void
 _cogl_parse_debug_string (const char *value,
-                          gboolean    enable)
+                          gboolean enable,
+                          gboolean ignore_help)
 {
+  if (ignore_help && strcmp (value, "help") == 0)
+    return;
+
   /* We don't want to let g_parse_debug_string handle "all" because
    * literally enabling all the debug options wouldn't be useful to
    * anyone; instead the all option enables all non behavioural
@@ -169,23 +175,26 @@ _cogl_parse_debug_string (const char *value,
     }
   else if (g_ascii_strcasecmp (value, "help") == 0)
     {
-      g_printerr ("\n\n%28s\n", "Supported debug values:");
+      g_printerr ("\n\n%28s\n", _("Supported debug values:"));
 #define OPT(MASK_NAME, GROUP, NAME, NAME_FORMATTED, DESCRIPTION) \
       g_printerr ("%28s %s\n", NAME ":", DESCRIPTION);
-      g_printerr ("\n%28s\n", "Special debug values:");
+#include "cogl/cogl-debug-options.h"
+      g_printerr ("\n%28s\n", _("Special debug values:"));
       OPT (IGNORED, "ignored", "all", "ignored", \
-           "Enables all non-behavioural debug options");
+           N_("Enables all non-behavioural debug options"));
       OPT (IGNORED, "ignored", "verbose", "ignored", \
-           "Enables all non-behavioural debug options");
+           N_("Enables all non-behavioural debug options"));
 #undef OPT
 
       g_printerr ("\n"
                   "%28s\n"
                   " COGL_DISABLE_GL_EXTENSIONS: %s\n"
                   "   COGL_OVERRIDE_GL_VERSION: %s\n",
-                  "Additional environment variables:",
-                  "Comma-separated list of GL extensions to pretend are disabled",
-                  "Override the GL version that Cogl will assume the driver supports");
+                  _("Additional environment variables:"),
+                  _("Comma-separated list of GL extensions to pretend are "
+                    "disabled"),
+                  _("Override the GL version that Cogl will assume the driver "
+                    "supports"));
       exit (1);
     }
   else
@@ -210,7 +219,8 @@ _cogl_debug_check_environment (void)
   if (env_string != NULL)
     {
       _cogl_parse_debug_string (env_string,
-                                TRUE /* enable the flags */);
+                                TRUE /* enable the flags */,
+                                FALSE /* don't ignore help */);
       env_string = NULL;
     }
 
@@ -218,7 +228,8 @@ _cogl_debug_check_environment (void)
   if (env_string != NULL)
     {
       _cogl_parse_debug_string (env_string,
-                                FALSE /* disable the flags */);
+                                FALSE /* disable the flags */,
+                                FALSE /* don't ignore help */);
       env_string = NULL;
     }
 }

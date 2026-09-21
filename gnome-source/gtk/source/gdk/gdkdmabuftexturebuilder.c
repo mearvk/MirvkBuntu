@@ -24,9 +24,7 @@
 #include "gdkdebugprivate.h"
 #include "gdkdisplay.h"
 #include "gdkenumtypes.h"
-#include "gdkcolorstate.h"
 #include "gdkdmabuftextureprivate.h"
-#include "gdkdmabuftexturebuilderprivate.h"
 
 #include <cairo-gobject.h>
 
@@ -42,8 +40,6 @@ struct _GdkDmabufTextureBuilder
 
   GdkDmabuf dmabuf;
 
-  GdkColorState *color_state;
-
   GdkTexture *update_texture;
   cairo_region_t *update_region;
 };
@@ -56,7 +52,8 @@ struct _GdkDmabufTextureBuilderClass
 /**
  * GdkDmabufTextureBuilder:
  *
- * Constructs [class@Gdk.Texture] objects from DMA buffers.
+ * `GdkDmabufTextureBuilder` is a builder used to construct [class@Gdk.Texture]
+ * objects from DMA buffers.
  *
  * DMA buffers are commonly called **_dma-bufs_**.
  *
@@ -79,10 +76,8 @@ struct _GdkDmabufTextureBuilderClass
  * multiple planes, by specifying offsets from the beginning of the data.
  *
  * DMA buffers are exposed to user-space as file descriptors allowing to pass them
- * between processes. If a DMA buffer has multiple planes, more than one file
- * descriptor may be present, up to the number of planes. If the number of file
- * descriptors is less than the number of planes, the remaining ones should be set to
- * -1.
+ * between processes. If a DMA buffer has multiple planes, there is one file
+ * descriptor per plane.
  *
  * The format of the data (for graphics data, essentially its colorspace) is described
  * by a 32-bit integer. These format identifiers are defined in the header file `drm_fourcc.h`
@@ -128,7 +123,6 @@ enum
   PROP_MODIFIER,
   PROP_PREMULTIPLIED,
   PROP_N_PLANES,
-  PROP_COLOR_STATE,
   PROP_UPDATE_REGION,
   PROP_UPDATE_TEXTURE,
 
@@ -146,19 +140,8 @@ gdk_dmabuf_texture_builder_dispose (GObject *object)
 
   g_clear_object (&self->update_texture);
   g_clear_pointer (&self->update_region, cairo_region_destroy);
-  g_clear_pointer (&self->color_state, gdk_color_state_unref);
 
   G_OBJECT_CLASS (gdk_dmabuf_texture_builder_parent_class)->dispose (object);
-}
-
-static void
-gdk_dmabuf_texture_builder_finalize (GObject *object)
-{
-  GdkDmabufTextureBuilder *self = GDK_DMABUF_TEXTURE_BUILDER (object);
-
-  g_object_unref (self->display);
-
-  G_OBJECT_CLASS (gdk_dmabuf_texture_builder_parent_class)->finalize (object);
 }
 
 static void
@@ -197,10 +180,6 @@ gdk_dmabuf_texture_builder_get_property (GObject    *object,
 
     case PROP_N_PLANES:
       g_value_set_uint (value, self->dmabuf.n_planes);
-      break;
-
-    case PROP_COLOR_STATE:
-      g_value_set_boxed (value, self->color_state);
       break;
 
     case PROP_UPDATE_REGION:
@@ -255,10 +234,6 @@ gdk_dmabuf_texture_builder_set_property (GObject      *object,
       gdk_dmabuf_texture_builder_set_n_planes (self, g_value_get_uint (value));
       break;
 
-    case PROP_COLOR_STATE:
-      gdk_dmabuf_texture_builder_set_color_state (self, g_value_get_boxed (value));
-      break;
-
     case PROP_UPDATE_REGION:
       gdk_dmabuf_texture_builder_set_update_region (self, g_value_get_boxed (value));
       break;
@@ -279,12 +254,11 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
   gobject_class->dispose = gdk_dmabuf_texture_builder_dispose;
-  gobject_class->finalize = gdk_dmabuf_texture_builder_finalize;
   gobject_class->get_property = gdk_dmabuf_texture_builder_get_property;
   gobject_class->set_property = gdk_dmabuf_texture_builder_set_property;
 
   /**
-   * GdkDmabufTextureBuilder:display:
+   * GdkDmabufTextureBuilder:display: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_display org.gtk.Property.set=gdk_dmabuf_texture_builder_set_display)
    *
    * The display that this texture will be used on.
    *
@@ -293,10 +267,10 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_DISPLAY] =
     g_param_spec_object ("display", NULL, NULL,
                          GDK_TYPE_DISPLAY,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDmabufTextureBuilder:width:
+   * GdkDmabufTextureBuilder:width: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_width org.gtk.Property.set=gdk_dmabuf_texture_builder_set_width)
    *
    * The width of the texture.
    *
@@ -305,10 +279,10 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_WIDTH] =
     g_param_spec_uint ("width", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDmabufTextureBuilder:height:
+   * GdkDmabufTextureBuilder:height: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_height org.gtk.Property.set=gdk_dmabuf_texture_builder_set_height)
    *
    * The height of the texture.
    *
@@ -317,10 +291,10 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_HEIGHT] =
     g_param_spec_uint ("height", NULL, NULL,
                        0, G_MAXUINT, 0,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDmabufTextureBuilder:fourcc:
+   * GdkDmabufTextureBuilder:fourcc: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_fourcc org.gtk.Property.set=gdk_dmabuf_texture_builder_set_fourcc)
    *
    * The format of the texture, as a fourcc value.
    *
@@ -329,7 +303,7 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_FOURCC] =
     g_param_spec_uint ("fourcc", NULL, NULL,
                        0, 0xffffffff, 0,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GdkDmabufTextureBuilder:modifier:
@@ -341,7 +315,7 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_MODIFIER] =
     g_param_spec_uint64 ("modifier", NULL, NULL,
                          0, G_MAXUINT, 0,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GdkDmabufTextureBuilder:premultiplied:
@@ -355,10 +329,10 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_PREMULTIPLIED] =
     g_param_spec_boolean ("premultiplied", NULL, NULL,
                           TRUE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDmabufTextureBuilder:n-planes:
+   * GdkDmabufTextureBuilder:n-planes: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_n_planes org.gtk.Property.set=gdk_dmabuf_texture_builder_set_n_planes)
    *
    * The number of planes of the texture.
    *
@@ -370,34 +344,22 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_N_PLANES] =
     g_param_spec_uint ("n-planes", NULL, NULL,
                        1, GDK_DMABUF_MAX_PLANES, 1,
-                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDmabufTextureBuilder:color-state:
+   * GdkDmabufTextureBuilder:update-region: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_update_region org.gtk.Property.set=gdk_dmabuf_texture_builder_set_update_region)
    *
-   * The color state of the texture.
-   *
-   * Since: 4.16
-   */
-  properties[PROP_COLOR_STATE] =
-    g_param_spec_boxed ("color-state", NULL, NULL,
-                        GDK_TYPE_COLOR_STATE,
-                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
-
-  /**
-   * GdkDmabufTextureBuilder:update-region:
-   *
-   * The update region for [property@Gdk.DmabufTextureBuilder:update-texture].
+   * The update region for [property@Gdk.GLTextureBuilder:update-texture].
    *
    * Since: 4.14
    */
   properties[PROP_UPDATE_REGION] =
     g_param_spec_boxed ("update-region", NULL, NULL,
                         CAIRO_GOBJECT_TYPE_REGION,
-                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
-   * GdkDmabufTextureBuilder:update-texture:
+   * GdkDmabufTextureBuilder:update-texture: (attributes org.gtk.Property.get=gdk_dmabuf_texture_builder_get_update_texture org.gtk.Property.set=gdk_dmabuf_texture_builder_set_update_texture)
    *
    * The texture [property@Gdk.DmabufTextureBuilder:update-region] is an update for.
    *
@@ -406,7 +368,7 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
   properties[PROP_UPDATE_TEXTURE] =
     g_param_spec_object ("update-texture", NULL, NULL,
                          GDK_TYPE_TEXTURE,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
 }
@@ -415,13 +377,11 @@ static void
 gdk_dmabuf_texture_builder_init (GdkDmabufTextureBuilder *self)
 {
   self->premultiplied = TRUE;
-  self->display = g_object_ref (gdk_display_get_default ());
+  self->display = gdk_display_get_default ();
   self->dmabuf.n_planes = 1;
 
   for (int i = 0; i < GDK_DMABUF_MAX_PLANES; i++)
     self->dmabuf.planes[i].fd = -1;
-
-  self->color_state = NULL;
 }
 
 /**
@@ -483,7 +443,7 @@ gdk_dmabuf_texture_builder_set_display (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_get_width:
+ * gdk_dmabuf_texture_builder_get_width: (attributes org.gtk.Method.get_property=width)
  * @self: a `GdkDmabufTextureBuilder`
  *
  * Gets the width previously set via gdk_dmabuf_texture_builder_set_width() or
@@ -502,13 +462,13 @@ gdk_dmabuf_texture_builder_get_width (GdkDmabufTextureBuilder *self)
 }
 
 /**
- * gdk_dmabuf_texture_builder_set_width:
+ * gdk_dmabuf_texture_builder_set_width: (attributes org.gtk.Method.set_property=width)
  * @self: a `GdkDmabufTextureBuilder`
  * @width: The texture's width or 0 to unset
  *
  * Sets the width of the texture.
  *
- * The width must be set before calling [method@Gdk.DmabufTextureBuilder.build].
+ * The width must be set before calling [method@Gdk.GLTextureBuilder.build].
  *
  * Since: 4.14
  */
@@ -527,7 +487,7 @@ gdk_dmabuf_texture_builder_set_width (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_get_height:
+ * gdk_dmabuf_texture_builder_get_height: (attributes org.gtk.Method.get_property=height)
  * @self: a `GdkDmabufTextureBuilder`
  *
  * Gets the height previously set via gdk_dmabuf_texture_builder_set_height() or
@@ -546,13 +506,13 @@ gdk_dmabuf_texture_builder_get_height (GdkDmabufTextureBuilder *self)
 }
 
 /**
- * gdk_dmabuf_texture_builder_set_height:
+ * gdk_dmabuf_texture_builder_set_height: (attributes org.gtk.Method.set_property=height)
  * @self: a `GdkDmabufTextureBuilder`
  * @height: the texture's height or 0 to unset
  *
  * Sets the height of the texture.
  *
- * The height must be set before calling [method@Gdk.DmabufTextureBuilder.build].
+ * The height must be set before calling [method@Gdk.GLTextureBuilder.build].
  *
  * Since: 4.14
  */
@@ -571,7 +531,7 @@ gdk_dmabuf_texture_builder_set_height (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_get_fourcc:
+ * gdk_dmabuf_texture_builder_get_fourcc: (attributes org.gtk.Method.get_property=fourcc)
  * @self: a `GdkDmabufTextureBuilder`
  *
  * Gets the format previously set via gdk_dmabuf_texture_builder_set_fourcc()
@@ -592,7 +552,7 @@ gdk_dmabuf_texture_builder_get_fourcc (GdkDmabufTextureBuilder *self)
 }
 
 /**
- * gdk_dmabuf_texture_builder_set_fourcc:
+ * gdk_dmabuf_texture_builder_set_fourcc: (attributes org.gtk.Method.set_property=fourcc)
  * @self: a `GdkDmabufTextureBuilder`
  * @fourcc: the texture's format or 0 to unset
  *
@@ -600,7 +560,7 @@ gdk_dmabuf_texture_builder_get_fourcc (GdkDmabufTextureBuilder *self)
  *
  * The format is specified as a fourcc code.
  *
- * The format must be set before calling [method@Gdk.DmabufTextureBuilder.build].
+ * The format must be set before calling [method@Gdk.GLTextureBuilder.build].
  *
  * Since: 4.14
  */
@@ -660,7 +620,7 @@ gdk_dmabuf_texture_builder_set_modifier (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_get_n_planes:
+ * gdk_dmabuf_texture_builder_get_n_planes: (attributes org.gtk.Method.get_property=n-planes)
  * @self: a `GdkDmabufTextureBuilder`
  *
  * Gets the number of planes.
@@ -722,7 +682,7 @@ gdk_dmabuf_texture_builder_set_premultiplied (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_set_n_planes:
+ * gdk_dmabuf_texture_builder_set_n_planes: (attributes org.gtk.Method.set_property=n-planes)
  * @self: a `GdkDmabufTextureBuilder`
  * @n_planes: the number of planes
  *
@@ -750,7 +710,7 @@ gdk_dmabuf_texture_builder_set_n_planes (GdkDmabufTextureBuilder *self,
  * @self: a `GdkDmabufTextureBuilder`
  * @plane: the plane to get the fd for
  *
- * Gets the file descriptor for a plane or -1 if none.
+ * Gets the file descriptor for a plane.
  *
  * Returns: the file descriptor
  *
@@ -772,7 +732,7 @@ gdk_dmabuf_texture_builder_get_fd (GdkDmabufTextureBuilder *self,
  * @plane: the plane to set the fd for
  * @fd: the file descriptor
  *
- * Sets the file descriptor for a plane or to -1 to unset it.
+ * Sets the file descriptor for a plane.
  *
  * Since: 4.14
  */
@@ -819,7 +779,7 @@ gdk_dmabuf_texture_builder_get_stride (GdkDmabufTextureBuilder *self,
  *
  * Sets the stride for a plane.
  *
- * The stride must be set for all planes before calling [method@Gdk.DmabufTextureBuilder.build].
+ * The stride must be set for all planes before calling [method@Gdk.GLTextureBuilder.build].
  *
  * Since: 4.14
  */
@@ -883,56 +843,7 @@ gdk_dmabuf_texture_builder_set_offset (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_get_color_state:
- * @self: a `GdkDmabufTextureBuilder`
- *
- * Gets the color state previously set via gdk_dmabuf_texture_builder_set_color_state().
- *
- * Returns: (nullable) (transfer none): the color state
- *
- * Since: 4.16
- */
-GdkColorState *
-gdk_dmabuf_texture_builder_get_color_state (GdkDmabufTextureBuilder *self)
-{
-  g_return_val_if_fail (GDK_IS_DMABUF_TEXTURE_BUILDER (self), NULL);
-
-  return self->color_state;
-}
-
-/**
- * gdk_dmabuf_texture_builder_set_color_state:
- * @self: a `GdkDmabufTextureBuilder`
- * @color_state: (nullable): a `GdkColorState` or `NULL` to unset the colorstate.
- *
- * Sets the color state for the texture.
- *
- * By default, the colorstate is `NULL`. In that case, GTK will choose the
- * correct colorstate based on the format.
- * If you don't know what colorstates are, this is probably the right thing.
- *
- * Since: 4.16
- */
-void
-gdk_dmabuf_texture_builder_set_color_state (GdkDmabufTextureBuilder *self,
-                                            GdkColorState           *color_state)
-{
-  g_return_if_fail (GDK_IS_DMABUF_TEXTURE_BUILDER (self));
-
-  if (self->color_state == color_state ||
-      (self->color_state != NULL && color_state != NULL && gdk_color_state_equal (self->color_state, color_state)))
-    return;
-
-  g_clear_pointer (&self->color_state, gdk_color_state_unref);
-  self->color_state = color_state;
-  if (color_state)
-    gdk_color_state_ref (color_state);
-
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_COLOR_STATE]);
-}
-
-/**
- * gdk_dmabuf_texture_builder_get_update_texture:
+ * gdk_dmabuf_texture_builder_get_update_texture: (attributes org.gtk.Method.get_property=update-texture)
  * @self: a `GdkDmabufTextureBuilder`
  *
  * Gets the texture previously set via gdk_dmabuf_texture_builder_set_update_texture() or
@@ -951,7 +862,7 @@ gdk_dmabuf_texture_builder_get_update_texture (GdkDmabufTextureBuilder *self)
 }
 
 /**
- * gdk_dmabuf_texture_builder_set_update_texture:
+ * gdk_dmabuf_texture_builder_set_update_texture: (attributes org.gtk.Method.set_property=update-texture)
  * @self: a `GdkDmabufTextureBuilder`
  * @texture: (nullable): the texture to update
  *
@@ -974,7 +885,7 @@ gdk_dmabuf_texture_builder_set_update_texture (GdkDmabufTextureBuilder *self,
 }
 
 /**
- * gdk_dmabuf_texture_builder_get_update_region:
+ * gdk_dmabuf_texture_builder_get_update_region: (attributes org.gtk.Method.get_property=update-region)
  * @self: a `GdkDmabufTextureBuilder`
  *
  * Gets the region previously set via gdk_dmabuf_texture_builder_set_update_region() or
@@ -993,7 +904,7 @@ gdk_dmabuf_texture_builder_get_update_region (GdkDmabufTextureBuilder *self)
 }
 
 /**
- * gdk_dmabuf_texture_builder_set_update_region:
+ * gdk_dmabuf_texture_builder_set_update_region: (attributes org.gtk.Method.set_property=update-region)
  * @self: a `GdkDmabufTextureBuilder`
  * @region: (nullable): the region to update
  *
@@ -1037,20 +948,22 @@ gdk_dmabuf_texture_builder_set_update_region (GdkDmabufTextureBuilder *self,
  *
  * Builds a new `GdkTexture` with the values set up in the builder.
  *
- * It is a programming error to call this function if any mandatory property has not been set.
+ * It is a programming error to call this function if any mandatory
+ * property has not been set.
  *
- * Not all formats defined in the `drm_fourcc.h` header are supported. You can use
- * [method@Gdk.Display.get_dmabuf_formats] to get a list of supported formats. If the
- * format is not supported by GTK, %NULL will be returned and @error will be set.
+ * If the dmabuf is not supported by GTK, %NULL will be returned and @error will be set.
  *
  * The `destroy` function gets called when the returned texture gets released.
+ *
+ * It is possible to call this function multiple times to create multiple textures,
+ * possibly with changing properties in between.
  *
  * It is the responsibility of the caller to keep the file descriptors for the planes
  * open until the created texture is no longer used, and close them afterwards (possibly
  * using the @destroy notify).
  *
- * It is possible to call this function multiple times to create multiple textures,
- * possibly with changing properties in between.
+ * Not all formats defined in the `drm_fourcc.h` header are supported. You can use
+ * [method@Gdk.Display.get_dmabuf_formats] to get a list of supported formats.
  *
  * Returns: (transfer full) (nullable): a newly built `GdkTexture` or `NULL`
  *   if the format is not supported
@@ -1063,20 +976,23 @@ gdk_dmabuf_texture_builder_build (GdkDmabufTextureBuilder *self,
                                   gpointer                 data,
                                   GError                 **error)
 {
+  unsigned i;
+
   g_return_val_if_fail (GDK_IS_DMABUF_TEXTURE_BUILDER (self), NULL);
   g_return_val_if_fail (destroy == NULL || data != NULL, NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
   g_return_val_if_fail (self->width > 0, NULL);
   g_return_val_if_fail (self->height > 0, NULL);
   g_return_val_if_fail (self->dmabuf.fourcc != 0, NULL);
-  g_return_val_if_fail (self->dmabuf.planes[0].fd > 0, NULL);
-  g_return_val_if_fail (self->dmabuf.planes[0].stride > 0, NULL);
 
-  if (!gdk_has_feature (GDK_FEATURE_DMABUF))
+  for (i = 0; i < self->dmabuf.n_planes; i++)
+    g_return_val_if_fail (self->dmabuf.planes[i].fd != -1, NULL);
+
+  if (GDK_DISPLAY_DEBUG_CHECK (self->display, DMABUF_DISABLE))
     {
       g_set_error_literal (error,
                            GDK_DMABUF_ERROR, GDK_DMABUF_ERROR_NOT_AVAILABLE,
-                           "dmabuf support disabled via GDK_DISABLE environment variable");
+                           "dmabuf support disabled via GDK_DEBUG environment variable");
       return NULL;
     }
 
@@ -1087,20 +1003,4 @@ const GdkDmabuf *
 gdk_dmabuf_texture_builder_get_dmabuf (GdkDmabufTextureBuilder *self)
 {
   return &self->dmabuf;
-}
-
-void
-gdk_dmabuf_texture_builder_set_dmabuf (GdkDmabufTextureBuilder *self,
-                                       const GdkDmabuf         *dmabuf)
-{
-  gdk_dmabuf_texture_builder_set_fourcc (self, dmabuf->fourcc);
-  gdk_dmabuf_texture_builder_set_modifier (self, dmabuf->modifier);
-  gdk_dmabuf_texture_builder_set_n_planes (self, dmabuf->n_planes);
-
-  for (unsigned int i = 0; i < dmabuf->n_planes; i++)
-    {
-      gdk_dmabuf_texture_builder_set_fd (self, i, dmabuf->planes[i].fd);
-      gdk_dmabuf_texture_builder_set_stride (self, i, dmabuf->planes[i].stride);
-      gdk_dmabuf_texture_builder_set_offset (self, i, dmabuf->planes[i].offset);
-    }
 }

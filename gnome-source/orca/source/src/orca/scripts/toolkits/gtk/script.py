@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from orca import debug, focus_manager, presentation_manager
+from orca import debug, focus_manager
 from orca.ax_object import AXObject
 from orca.ax_utilities import AXUtilities
 from orca.scripts import default
@@ -136,6 +136,10 @@ class Script(default.Script):
         ):
             return super()._on_selection_changed(event)
 
+        is_focused = AXUtilities.is_focused(event.source)
+        if AXUtilities.is_combo_box(event.source) and not is_focused:
+            return True
+
         if (
             AXUtilities.is_layered_pane(event.source)
             and AXUtilities.selected_child_count(event.source) > 1
@@ -157,8 +161,7 @@ class Script(default.Script):
         ):
             if AXUtilities.is_application(AXObject.get_parent(event.source)):
                 return True
-            presentation_manager.get_manager().interrupt_if_needed_for_object_presentation()
-            self.present_object(event.source)
+            self.present_object(event.source, interrupt=True)
             return True
 
         return super()._on_showing_changed(event)

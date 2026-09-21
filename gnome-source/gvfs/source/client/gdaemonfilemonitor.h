@@ -41,7 +41,7 @@ struct _GDaemonFileMonitorClass {
   GFileMonitorClass parent_class;
 };
 
-GType g_daemon_file_monitor_get_type (void);
+GType g_daemon_file_monitor_get_type (void) G_GNUC_CONST;
 
 GFileMonitor* g_daemon_file_monitor_new (const char *remote_id,
 						   const char *remote_obj_path);

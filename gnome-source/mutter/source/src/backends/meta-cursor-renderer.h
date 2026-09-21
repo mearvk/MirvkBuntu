@@ -25,6 +25,7 @@
 #include <glib-object.h>
 
 #include "backends/meta-backend-types.h"
+#include "backends/meta-cursor.h"
 #include "core/util-private.h"
 
 #define META_TYPE_HW_CURSOR_INHIBITOR (meta_hw_cursor_inhibitor_get_type ())
@@ -48,46 +49,31 @@ struct _MetaCursorRendererClass
 {
   GObjectClass parent_class;
 
-  void (* update_sprite) (MetaCursorRenderer *renderer,
-                          ClutterSprite      *sprite);
-
-  void (* update_cursor) (MetaCursorRenderer *renderer,
-                          ClutterCursor      *cursor);
-
-  gboolean (* view_has_hw_cursor) (MetaCursorRenderer *renderer,
-                                   ClutterStageView   *view);
+  gboolean (* update_cursor) (MetaCursorRenderer *renderer,
+                              MetaCursorSprite   *cursor_sprite);
 };
 
-MetaCursorRenderer * meta_cursor_renderer_new (MetaBackend *backend);
+MetaCursorRenderer * meta_cursor_renderer_new (MetaBackend        *backend,
+                                               ClutterInputDevice *device);
 
 void meta_cursor_renderer_set_cursor (MetaCursorRenderer *renderer,
-                                      ClutterCursor      *cursor);
-
-void meta_cursor_renderer_prepare_cursor (MetaCursorRenderer *renderer,
-                                          ClutterCursor      *cursor);
+                                      MetaCursorSprite   *cursor_sprite);
 
 void meta_cursor_renderer_update_position (MetaCursorRenderer *renderer);
 void meta_cursor_renderer_force_update (MetaCursorRenderer *renderer);
 
 META_EXPORT_TEST
-ClutterCursor * meta_cursor_renderer_get_cursor (MetaCursorRenderer *renderer);
+MetaCursorSprite * meta_cursor_renderer_get_cursor (MetaCursorRenderer *renderer);
 
 graphene_rect_t meta_cursor_renderer_calculate_rect (MetaCursorRenderer *renderer,
-                                                     ClutterCursor      *cursor);
+                                                     MetaCursorSprite   *cursor_sprite);
 
 void meta_cursor_renderer_emit_painted (MetaCursorRenderer *renderer,
-                                        ClutterCursor      *cursor,
-                                        ClutterStageView   *stage_view,
-                                        int64_t             view_frame_counter);
-
-ClutterSprite * meta_cursor_renderer_get_sprite (MetaCursorRenderer *renderer);
-
-void meta_cursor_renderer_set_sprite (MetaCursorRenderer *renderer,
-                                      ClutterSprite      *sprite);
+                                        MetaCursorSprite   *cursor_sprite,
+                                        ClutterStageView   *stage_view);
+ClutterInputDevice * meta_cursor_renderer_get_input_device (MetaCursorRenderer *renderer);
 
 void meta_cursor_renderer_update_stage_overlay (MetaCursorRenderer *renderer,
-                                                ClutterCursor      *cursor);
+                                                MetaCursorSprite   *cursor_sprite);
 
-META_EXPORT_TEST
-gboolean meta_cursor_renderer_needs_overlay_on_view (MetaCursorRenderer *renderer,
-                                                     ClutterStageView   *view);
+MetaBackend * meta_cursor_renderer_get_backend (MetaCursorRenderer *renderer);

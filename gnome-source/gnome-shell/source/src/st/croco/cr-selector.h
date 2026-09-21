@@ -22,7 +22,8 @@
  * See COPYRIGHTS file for copyright information.
  */
 
-#pragma once
+#ifndef __CR_SELECTOR_H__
+#define __CR_SELECTOR_H__
 
 #include <stdio.h>
 #include "cr-utils.h"
@@ -87,3 +88,5 @@ gboolean cr_selector_unref (CRSelector *a_this) ;
 void cr_selector_destroy (CRSelector *a_this) ;
 
 G_END_DECLS
+
+#endif /*__CR_SELECTOR_H__*/

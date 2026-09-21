@@ -34,7 +34,6 @@ base_url = "https://gitlab.gnome.org/GNOME/gtk/-/blob/main/"
 [extra]
 content_files = [
   "paths.md",
-  "node-format.md",
 ]
 content_images = [
   "../images/favicon.svg",
@@ -64,25 +63,6 @@ content_images = [
   "images/quad-light.png",
   "images/stroke-miter.png",
   "images/stroke-round.png",
-  "images/identity-light.png",
-  "images/identity-dark.png",
-  "images/levels-light.png",
-  "images/levels-dark.png",
-  "images/discrete-light.png",
-  "images/discrete-dark.png",
-  "images/table-light.png",
-  "images/table-dark.png",
-  "images/gamma-light.png",
-  "images/gamma-dark.png",
-  "images/linear-light.png",
-  "images/linear-dark.png",
-  "images/snap-grow.svg",
-  "images/snap-shrink.svg",
-  "images/snap-round.svg",
 ]
 content_base_url = "https://gitlab.gnome.org/GNOME/gtk/-/blob/main/docs/reference/gsk/"
 urlmap_file = "urlmap.js"
-
-[[object]]
-name = "INCLUDE_WARNING"
-hidden = true

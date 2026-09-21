@@ -16,11 +16,10 @@ else
     console: true,
     command: [
       build_linux,
-      'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git',
+      'https://anongit.freedesktop.org/git/drm/drm.git',
       '@INPUT@',
       '@OUTPUT@',
-      '--configitem', 'CONFIG_DRM_VKMS=y',
-      '--configitem', 'CONFIG_INPUT_UINPUT=y',
+      '--enable', 'CONFIG_DRM_VKMS',
     ]
   )
   kernel_image_path = kernel_image_target.full_path()
@@ -41,17 +40,6 @@ foreach test_case: privileged_tests
   endforeach
   vm_env = ' '.join(vm_env_entries)
 
-  vm_test_env_entries = []
-  if have_asan_tests
-    foreach name, value: sanitizer_variables
-      vm_test_env_entries += ['@0@=@1@'.format(name, value)]
-    endforeach
-    if test_ld_preload != []
-      vm_test_env_entries += ['LD_PRELOAD=@0@'.format(libasan_preloader.full_path())]
-    endif
-  endif
-  vm_test_env = ' '.join(vm_test_env_entries)
-
   test('kvm-' + test_case['name'], virtme_run,
     suite: ['core', 'mutter/kvm', 'mutter/kvm/' + test_case['suite']],
     depends: [
@@ -62,14 +50,13 @@ foreach test_case: privileged_tests
     args: [
       kernel_image_path,
       meta_dbus_runner.full_path(),
-      '--',
+      '--kvm',
       meson.current_build_dir(),
       vm_env,
-      vm_test_env,
       kvm_wrapper,
       test_case['executable'].full_path(),
     ],
     is_parallel: false,
-    timeout: default_test_timeout,
+    timeout: 60,
   )
 endforeach

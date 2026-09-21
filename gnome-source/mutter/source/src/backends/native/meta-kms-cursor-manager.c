@@ -34,7 +34,6 @@ typedef struct _MetaKmsCursorManagerImpl
 
   MetaKmsCursorQueryInImpl cursor_query_in_impl_func;
   gpointer cursor_query_in_impl_func_user_data;
-  GDestroyNotify cursor_query_in_impl_func_user_data_free;
 
   MetaKmsUpdateFilter *update_filter;
 } MetaKmsCursorManagerImpl;
@@ -43,17 +42,21 @@ typedef struct _CrtcStateImpl
 {
   gatomicrefcount ref_count;
 
+  MetaKmsCursorManagerImpl *cursor_manager_impl;
+
   MetaKmsCrtc *crtc;
   MetaKmsPlane *cursor_plane;
   graphene_rect_t layout;
   float scale;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   MetaDrmBuffer *buffer;
   graphene_point_t hotspot;
 
   gboolean cursor_invalidated;
+  gboolean force_update;
   gboolean has_cursor;
 
+  graphene_point_t pending_hotspot;
   MetaDrmBuffer *pending_buffer;
   MetaDrmBuffer *active_buffer;
   MetaDrmBuffer *presenting_buffer;
@@ -104,6 +107,7 @@ crtc_state_impl_new (MetaKmsCursorManagerImpl *cursor_manager_impl,
 
   crtc_state_impl = g_new0 (CrtcStateImpl, 1);
   g_atomic_ref_count_init (&crtc_state_impl->ref_count);
+  crtc_state_impl->cursor_manager_impl = cursor_manager_impl;
   crtc_state_impl->crtc = crtc;
   crtc_state_impl->cursor_plane = cursor_plane;
   crtc_state_impl->layout = layout;
@@ -264,16 +268,16 @@ calculate_cursor_rect (CrtcStateImpl          *crtc_state_impl,
   int buffer_width, buffer_height;
   graphene_rect_t cursor_rect;
 
-  crtc_x = (int) ((x - crtc_state_impl->layout.origin.x) * crtc_state_impl->scale);
-  crtc_y = (int) ((y - crtc_state_impl->layout.origin.y) * crtc_state_impl->scale);
-  crtc_width = (int) roundf (crtc_state_impl->layout.size.width *
-                             crtc_state_impl->scale);
-  crtc_height = (int) roundf (crtc_state_impl->layout.size.height *
-                              crtc_state_impl->scale);
+  crtc_x = (x - crtc_state_impl->layout.origin.x) * crtc_state_impl->scale;
+  crtc_y = (y - crtc_state_impl->layout.origin.y) * crtc_state_impl->scale;
+  crtc_width = roundf (crtc_state_impl->layout.size.width *
+                       crtc_state_impl->scale);
+  crtc_height = roundf (crtc_state_impl->layout.size.height *
+                        crtc_state_impl->scale);
 
-  mtk_monitor_transform_transform_point (crtc_state_impl->transform,
-                                         &crtc_width, &crtc_height,
-                                         &crtc_x, &crtc_y);
+  meta_monitor_transform_transform_point (crtc_state_impl->transform,
+                                          &crtc_width, &crtc_height,
+                                          &crtc_x, &crtc_y);
 
   buffer_width = meta_drm_buffer_get_width (buffer);
   buffer_height = meta_drm_buffer_get_height (buffer);
@@ -323,6 +327,9 @@ maybe_update_cursor_plane (MetaKmsCursorManagerImpl  *cursor_manager_impl,
 
   g_assert (old_buffer && !*old_buffer);
 
+  if (!get_current_cursor_position (cursor_manager_impl, &x, &y))
+    return update;
+
   crtc_state_impl = find_crtc_state (cursor_manager_impl, crtc);
   g_return_val_if_fail (crtc_state_impl, update);
 
@@ -331,9 +338,6 @@ maybe_update_cursor_plane (MetaKmsCursorManagerImpl  *cursor_manager_impl,
     return update;
 
   if (!crtc_state_impl->cursor_invalidated)
-    return update;
-
-  if (!get_current_cursor_position (cursor_manager_impl, &x, &y))
     return update;
 
   device = meta_kms_crtc_get_device (crtc_state_impl->crtc);
@@ -397,10 +401,10 @@ maybe_update_cursor_plane (MetaKmsCursorManagerImpl  *cursor_manager_impl,
         .height = meta_fixed_16_from_int (height),
       };
       dst_rect = (MtkRectangle) {
-        .x = (int) round (cursor_rect.origin.x),
-        .y = (int) round (cursor_rect.origin.y),
-        .width = (int) round (cursor_rect.size.width),
-        .height = (int) round (cursor_rect.size.height),
+        .x = round (cursor_rect.origin.x),
+        .y = round (cursor_rect.origin.y),
+        .width = round (cursor_rect.size.width),
+        .height = round (cursor_rect.size.height),
       };
 
       plane_assignment = meta_kms_update_assign_plane (update,
@@ -471,15 +475,15 @@ update_filter_cb (MetaKmsImpl       *impl,
       for (i = 0; i < crtc_states->len; i++)
         {
           CrtcStateImpl *crtc_state_impl = g_ptr_array_index (crtc_states, i);
-          MetaKmsCrtc *state_crtc = crtc_state_impl->crtc;
+          MetaKmsCrtc *crtc = crtc_state_impl->crtc;
           MetaDrmBuffer *old_buffer = NULL;
 
-          if (meta_kms_crtc_get_device (state_crtc) !=
+          if (meta_kms_crtc_get_device (crtc) !=
               meta_kms_update_get_device (update))
             continue;
 
           update = maybe_update_cursor_plane (cursor_manager_impl,
-                                              state_crtc, update, &old_buffer);
+                                              crtc, update, &old_buffer);
           if (old_buffer)
             old_buffers = g_list_prepend (old_buffers, old_buffer);
         }
@@ -487,7 +491,7 @@ update_filter_cb (MetaKmsImpl       *impl,
       if (old_buffers)
         {
           meta_thread_queue_callback (meta_thread_impl_get_thread (thread_impl),
-                                      NULL,
+                                      g_main_context_default (),
                                       NULL,
                                       old_buffers,
                                       (GDestroyNotify) free_old_buffers);
@@ -503,7 +507,7 @@ update_filter_cb (MetaKmsImpl       *impl,
       if (old_buffer)
         {
           meta_thread_queue_callback (meta_thread_impl_get_thread (thread_impl),
-                                      NULL,
+                                      g_main_context_default (),
                                       NULL,
                                       old_buffer, g_object_unref);
         }
@@ -556,14 +560,6 @@ finalize_in_impl (MetaThreadImpl  *thread_impl,
   if (cursor_manager_impl)
     {
       GPtrArray *crtc_states;
-
-      if (cursor_manager_impl->cursor_query_in_impl_func_user_data &&
-          cursor_manager_impl->cursor_query_in_impl_func_user_data_free)
-        {
-          GDestroyNotify free_func =
-            cursor_manager_impl->cursor_query_in_impl_func_user_data_free;
-          free_func (cursor_manager_impl->cursor_query_in_impl_func_user_data);
-        }
 
       meta_kms_impl_remove_update_filter (impl,
                                           cursor_manager_impl->update_filter);
@@ -622,7 +618,6 @@ typedef struct
 {
   MetaKmsCursorQueryInImpl func;
   gpointer user_data;
-  GDestroyNotify free_func;
 } SetQueryFuncData;
 
 static gpointer
@@ -634,17 +629,8 @@ set_query_func_in_impl (MetaThreadImpl  *thread_impl,
   MetaKmsCursorManagerImpl *cursor_manager_impl =
     ensure_cursor_manager_impl (META_KMS_IMPL (thread_impl));
 
-  if (cursor_manager_impl->cursor_query_in_impl_func_user_data &&
-      cursor_manager_impl->cursor_query_in_impl_func_user_data_free)
-    {
-      GDestroyNotify free_func =
-        cursor_manager_impl->cursor_query_in_impl_func_user_data_free;
-      free_func (cursor_manager_impl->cursor_query_in_impl_func_user_data);
-    }
-
   cursor_manager_impl->cursor_query_in_impl_func = data->func;
   cursor_manager_impl->cursor_query_in_impl_func_user_data = data->user_data;
-  cursor_manager_impl->cursor_query_in_impl_func_user_data_free = data->free_func;
 
   return NULL;
 }
@@ -652,15 +638,13 @@ set_query_func_in_impl (MetaThreadImpl  *thread_impl,
 void
 meta_kms_cursor_manager_set_query_func (MetaKmsCursorManager     *cursor_manager,
                                         MetaKmsCursorQueryInImpl  func,
-                                        gpointer                  user_data,
-                                        GDestroyNotify            free_func)
+                                        gpointer                  user_data)
 {
   SetQueryFuncData *data;
 
   data = g_new0 (SetQueryFuncData, 1);
   data->func = func;
   data->user_data = user_data;
-  data->free_func = free_func;
 
   meta_thread_post_impl_task (META_THREAD (cursor_manager->kms),
                               set_query_func_in_impl,
@@ -748,7 +732,7 @@ typedef struct
 {
   MetaKmsCrtc *crtc;
   MetaDrmBuffer *buffer;
-  MtkMonitorTransform transform;
+  MetaMonitorTransform transform;
   graphene_point_t hotspot;
 } UpdateSpriteData;
 
@@ -795,7 +779,7 @@ void
 meta_kms_cursor_manager_update_sprite (MetaKmsCursorManager   *cursor_manager,
                                        MetaKmsCrtc            *crtc,
                                        MetaDrmBuffer          *buffer,
-                                       MtkMonitorTransform     transform,
+                                       MetaMonitorTransform    transform,
                                        const graphene_point_t *hotspot)
 {
   UpdateSpriteData *data;
