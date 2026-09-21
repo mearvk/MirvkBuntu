@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# MirvkBuntu build prerequisites installer.
+#
+# Installs the host tooling required by the two supported build paths:
+#   * build/quick-remaster.sh  -- ISO remaster path (A)
+#   * build/build-desktop.sh   -- native live-build path (B)
+#
+# This is idempotent: already-installed packages are skipped by apt. It must be
+# run on a Debian/Ubuntu host with root privileges and network access to the
+# Ubuntu package archive.
+#
+# Usage:
+#   sudo bash build/prerequisites.sh              # install everything
+#   sudo bash build/prerequisites.sh remaster     # only the remaster path (A)
+#   sudo bash build/prerequisites.sh native       # only the native path (B)
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+die(){ printf 'prerequisites: ERROR: %s\n' "$*" >&2; exit 1; }
+log(){ printf 'prerequisites: %s\n' "$*"; }
+
+MODE="${1:-all}"
+case "$MODE" in
+  all|remaster|native) ;;
+  *) die "unknown mode: $MODE (expected: all | remaster | native)" ;;
+esac
+
+# --- host sanity checks ------------------------------------------------------
+command -v apt-get >/dev/null 2>&1 || \
+  die "apt-get not found; this installer targets Debian/Ubuntu hosts only"
+
+if [ "$(id -u)" -ne 0 ]; then
+  die "must run as root (use: sudo bash build/prerequisites.sh $MODE)"
+fi
+
+# Tooling shared by both paths.
+COMMON_PACKAGES=(
+  ca-certificates
+  curl
+  wget
+  xz-utils
+  rsync
+)
+
+# ISO remaster path (A): unpack/repack an existing Ubuntu ISO.
+REMASTER_PACKAGES=(
+  squashfs-tools      # unsquashfs / mksquashfs
+  xorriso             # ISO (re)authoring
+  isolinux            # BIOS boot records for hybrid ISOs
+  syslinux-utils      # isohybrid
+  genisoimage         # mkisofs fallback / manifest tooling
+)
+
+# Native live-build path (B): full debootstrap + live-build assembly, plus the
+# native compilation gate (kernel/GNOME/Chromium) in build/native-build.sh.
+NATIVE_PACKAGES=(
+  live-build
+  debootstrap
+  squashfs-tools
+  xorriso
+  # native compilation gate toolchain
+  build-essential
+  bc
+  bison
+  flex
+  libelf-dev
+  libssl-dev
+  dpkg-dev
+  fakeroot
+  kmod
+  cpio
+  zstd
+  meson
+  ninja-build
+  cmake
+  pkg-config
+)
+
+packages=( "${COMMON_PACKAGES[@]}" )
+case "$MODE" in
+  remaster) packages+=( "${REMASTER_PACKAGES[@]}" ) ;;
+  native)   packages+=( "${NATIVE_PACKAGES[@]}" ) ;;
+  all)      packages+=( "${REMASTER_PACKAGES[@]}" "${NATIVE_PACKAGES[@]}" ) ;;
+esac
+
+# Deduplicate while preserving order.
+declare -A seen=()
+unique_packages=()
+for pkg in "${packages[@]}"; do
+  [ -n "${seen[$pkg]:-}" ] && continue
+  seen[$pkg]=1
+  unique_packages+=( "$pkg" )
+done
+
+log "mode: $MODE"
+log "installing ${#unique_packages[@]} package(s): ${unique_packages[*]}"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends "${unique_packages[@]}"
+
+# --- verification ------------------------------------------------------------
+# Confirm the tools each selected path actually invokes are now present.
+verify_commands(){
+  local missing=() c
+  for c in "$@"; do
+    command -v "$c" >/dev/null 2>&1 || missing+=( "$c" )
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    die "expected commands still missing after install: ${missing[*]}"
+  fi
+}
+
+case "$MODE" in
+  remaster) verify_commands unsquashfs mksquashfs xorriso ;;
+  native)   verify_commands lb live-build debootstrap unsquashfs mksquashfs xorriso make gcc ;;
+  all)      verify_commands unsquashfs mksquashfs xorriso lb live-build debootstrap make gcc ;;
+esac
+
+log "all required tooling is installed and on PATH."
+case "$MODE" in
+  remaster) log "next: sudo bash ${SCRIPT_DIR}/quick-remaster.sh <ubuntu.iso>" ;;
+  native)   log "next: sudo bash ${SCRIPT_DIR}/build-desktop.sh" ;;
+  all)      log "next (quick):  sudo bash ${SCRIPT_DIR}/quick-remaster.sh <ubuntu.iso>"
+            log "next (native): sudo bash ${SCRIPT_DIR}/build-desktop.sh" ;;
+esac

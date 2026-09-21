@@ -130,6 +130,29 @@ The following environment variables adjust the reconciler's behavior:
 > archive (via `curl` + `unzip`). It predates and overlaps stage 7
 > (`07-gnome-source.sh`); prefer the `clone/` workflow for normal use.
 
+## Building an Image
+
+Two build paths are supported (both run on a Debian/Ubuntu host, as root, with
+network access). See [`build/README.md`](build/README.md) for full details.
+
+**Quick remaster (fast, no compilation)** — turn a stock Ubuntu ISO into a
+MirvkBuntu variant with the repo's package set, `ubuntu-white/` theme, and
+branding:
+
+```bash
+sudo bash build/prerequisites.sh remaster
+sudo bash build/quick-remaster.sh /path/to/ubuntu-24.04-desktop-amd64.iso
+```
+
+**Native build (full distribution from source)** — compile the kernel (and,
+where source is present, the GNOME stack and Chromium), then assemble the ISO
+with live-build:
+
+```bash
+sudo bash build/prerequisites.sh native
+sudo bash build/bootstrap-native.sh
+```
+
 ## Relationship to Ubuntu.Determinant.Beta.Restricted
 
 MirvkBuntu is the cleaner distribution-level home for the operating-system base.

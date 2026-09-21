@@ -53,12 +53,69 @@ This deliberately separates **project authority** from **image assembly**. If a 
 
 `live-build` must not be treated as an alternate MirvkBuntu source tree.
 
-## Development targets
+## Two build paths
 
-- `build-minimal.sh`: minimum bootable development image.
-- `build-desktop.sh`: desktop development image.
+There are two supported ways to produce a MirvkBuntu image. Both run on a
+Debian/Ubuntu host, as root, with network access.
+
+### Path A — quick ISO remaster (fast, no compilation)
+
+Turns a stock Ubuntu desktop ISO into a MirvkBuntu variant by unpacking it,
+installing the `packages/basic-packages.txt` set into the live filesystem,
+applying the `ubuntu-white/` theme and branding, and repacking a bootable
+hybrid ISO. No kernel or source compilation. This is the fastest route to a
+bootable variant.
+
+```bash
+sudo bash build/prerequisites.sh remaster
+sudo bash build/quick-remaster.sh /path/to/ubuntu-24.04-desktop-amd64.iso
+# -> build/output/MirvkBuntu-remaster-amd64.iso
+```
+
+Useful variables: `SKIP_PACKAGES=1` (theme/branding only, no chroot apt),
+`-o <path>` (output ISO location), `ISO_LABEL`, `THEME_DIR`.
+
+### Path B — native build from source (full distribution)
+
+Compiles MirvkBuntu's own kernel (and, when their source trees are present, the
+GNOME stack and Chromium), then assembles the ISO with `live-build`. The native
+compilation gate (`native-build.sh`) runs first and refuses to fall back to
+distribution binaries.
+
+```bash
+sudo bash build/prerequisites.sh native
+sudo bash build/bootstrap-native.sh          # fetches kernel source, then builds
+```
+
+`bootstrap-native.sh` fetches real kernel source via `kernels/git.sh` if none is
+present (default `6.12.110`; override with `MIRVKBUNTU_KERNEL_VERSIONS`), then
+runs `build-desktop.sh`.
+
+While the GNOME and Chromium source trees are still being populated, individual
+native stages can be skipped to produce a partial build. Skips are logged and
+recorded in `/etc/mirvkbuntu/native-release.env` (`MIRVKBUNTU_NATIVE_RELEASE`
+is `true` only when every stage ran):
+
+```bash
+sudo BUILD_SKIP_GNOME=1 BUILD_SKIP_CHROMIUM=1 bash build/bootstrap-native.sh
+```
+
+| Variable | Effect |
+|----------|--------|
+| `BUILD_SKIP_KERNELS=1` | skip kernel compilation |
+| `BUILD_SKIP_CHROMIUM=1` | skip Chromium compilation |
+| `BUILD_SKIP_GNOME=1` | skip the GNOME stack |
+| `BUILD_SKIP_OTHER=1` | skip other native project wrappers |
+
+## Scripts
+
+- `prerequisites.sh`: installs host build tooling. Modes: `remaster`, `native`, `all`.
+- `quick-remaster.sh`: path A — remaster a stock Ubuntu ISO (see above).
+- `bootstrap-native.sh`: path B — fetch kernel source, then run the native build.
+- `native-build.sh`: the native compilation gate (kernel/GNOME/Chromium).
+- `build-minimal.sh`: minimum bootable development image (native path).
+- `build-desktop.sh`: desktop development image (native path).
 - `build-iso.sh`: convenience entry point for the desktop ISO.
-- `prerequisites.sh`: installs the host-side ISO build prerequisites.
 
 ## Output
 
@@ -76,8 +133,21 @@ output -> build/output
 
 A completed ISO is also copied to the user's desktop.
 
-## Important limitation
+## Current source-tree status (native path)
 
-The current build **stages the MirvkBuntu source into the resulting filesystem; it does not yet compile every kernel, GNOME component, or native source tree in `sources/` as part of the ISO build**. Those source-specific build pipelines should be integrated explicitly rather than allowing `live-build` to silently replace them.
+The native compilation gate compiles whatever source is present and refuses a
+distribution fallback. As of now:
 
-That distinction is intentional: a missing MirvkBuntu-native build step must be added as a MirvkBuntu build step, not delegated implicitly to `live-build`.
+- **Kernel:** real source is fetched on demand by `kernels/git.sh` /
+  `bootstrap-native.sh` (the trees committed in `kernels/` are directory-listing
+  placeholders, not compilable source).
+- **GNOME:** several modules under `gnome-source/` still lack a `source/`
+  subtree; until they are populated, use `BUILD_SKIP_GNOME=1` for a partial
+  build.
+- **Chromium:** requires a full `chrome/` build root plus depot_tools; use
+  `BUILD_SKIP_CHROMIUM=1` if it is not yet available.
+
+That distinction is intentional: a missing MirvkBuntu-native build step must be
+added as a MirvkBuntu build step, not delegated implicitly to `live-build`. The
+quick remaster path (A) exists precisely so a bootable variant can be produced
+today without waiting on every native source tree.

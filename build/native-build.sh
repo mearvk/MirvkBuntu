@@ -192,7 +192,24 @@ verify_native_output(){
 }
 
 write_release_manifest(){
-  printf "%s\n" "MIRVKBUNTU_NATIVE_RELEASE=true" "ARCH=$ARCH" "JOBS=$JOBS" "KERNELS_COMPILED=true" "CHROMIUM_COMPILED=true" "GNOME_COMPILED=true" "SOURCE_TREE=$REPO_ROOT" > "$ARTIFACT_ROOT/release.env"
+  # Report the true state of each stage so a partial (stage-skipped) build is
+  # never mislabeled as a complete native release.
+  local kernels_compiled chromium_compiled gnome_compiled complete
+  kernels_compiled=$([ "${BUILD_SKIP_KERNELS:-0}" = "1" ] && echo false || echo true)
+  chromium_compiled=$([ "${BUILD_SKIP_CHROMIUM:-0}" = "1" ] && echo false || echo true)
+  gnome_compiled=$([ "${BUILD_SKIP_GNOME:-0}" = "1" ] && echo false || echo true)
+  if [ "$kernels_compiled" = true ] && [ "$chromium_compiled" = true ] && [ "$gnome_compiled" = true ]; then
+    complete=true
+  else
+    complete=false
+  fi
+  printf "%s\n" \
+    "MIRVKBUNTU_NATIVE_RELEASE=$complete" \
+    "ARCH=$ARCH" "JOBS=$JOBS" \
+    "KERNELS_COMPILED=$kernels_compiled" \
+    "CHROMIUM_COMPILED=$chromium_compiled" \
+    "GNOME_COMPILED=$gnome_compiled" \
+    "SOURCE_TREE=$REPO_ROOT" > "$ARTIFACT_ROOT/release.env"
   sha256sum "$ARTIFACT_ROOT"/packages/*.deb "$ARTIFACT_ROOT/rootfs.sha256" > "$ARTIFACT_ROOT/artifacts.sha256"
 }
 
@@ -204,10 +221,33 @@ create_split_bundle(){
   sha256sum "$ARTIFACT_ROOT/chunks/"* > "$ARTIFACT_ROOT/chunks/SHA256SUMS"
 }
 
-build_kernels
-build_chromium
-build_gnome
-build_other_native_projects
+# Stage selection.
+#
+# By default every native stage is mandatory: a complete distribution build must
+# compile its own kernel, GNOME stack, and Chromium. However, while the source
+# trees are still being populated it is useful to produce an ISO with the stages
+# whose source IS present. Each stage can be individually skipped by exporting
+# the matching variable to 1. Skips are logged loudly so a partial build is
+# never mistaken for a complete one.
+#
+#   BUILD_SKIP_KERNELS=1   BUILD_SKIP_CHROMIUM=1
+#   BUILD_SKIP_GNOME=1     BUILD_SKIP_OTHER=1
+#
+# verify_native_output still requires at least one executable and one .deb, so a
+# fully-empty build is still rejected.
+run_stage(){
+  local name="$1" skip_var="$2" fn="$3"
+  if [ "${!skip_var:-0}" = "1" ]; then
+    log "WARNING: skipping stage '$name' because $skip_var=1 (build will NOT be a complete native distribution)"
+    return 0
+  fi
+  "$fn"
+}
+
+run_stage kernels  BUILD_SKIP_KERNELS  build_kernels
+run_stage chromium BUILD_SKIP_CHROMIUM build_chromium
+run_stage gnome    BUILD_SKIP_GNOME    build_gnome
+run_stage other    BUILD_SKIP_OTHER    build_other_native_projects
 verify_native_output
 write_release_manifest
 create_split_bundle

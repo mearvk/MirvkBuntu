@@ -56,9 +56,13 @@ download_kernel() {
   printf 'kernel-git: verified complete Linux %s source: %s\n'     "$version" "$source_tree"
 }
 
+# Default to the current kernel.org longterm (LTS) releases. These are real,
+# downloadable versions; pass explicit versions on the command line to override.
+# (Previous defaults 6.18.27 / 6.19.14 / 7.0.4 were not published on kernel.org
+# and caused every download to 404, leaving the native build with no source.)
 versions=( "$@" )
 if [ "${#versions[@]}" -eq 0 ]; then
-  versions=(5.15.204 6.18.27 6.19.14 7.0.4)
+  versions=(6.12.110 6.6.157 5.15.204)
 fi
 
 status=0
