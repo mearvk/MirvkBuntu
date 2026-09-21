@@ -1,4 +1,4 @@
-.PHONY: all clean install uninstall install-user-bin install-user-runnables install-usr-bin install-usr-runnables install-deck-bin install-deck-runnables update-path update-front-link nxtt nxtt-install nxtt-uninstall nxtt-clean nxtt-test white-installer white-installer-static package-installer-install package-installer-uninstall
+.PHONY: all clean install uninstall install-user-bin install-user-runnables install-usr-bin install-usr-runnables install-deck-bin install-deck-runnables update-path update-front-link nxtt nxtt-install nxtt-uninstall nxtt-clean nxtt-test white-installer white-installer-static package-installer-install package-installer-uninstall mirvkbuntu-installer-static mirvkbuntu-installer-install mirvkbuntu-installer-uninstall
 
 CC ?= cc
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic
@@ -22,6 +22,15 @@ PKG_TARGET := package-installer
 PKG_SRC := package_installer.c
 PKG_HDR := package_installer.h desktop_install_probe.h
 
+# mirvkbuntu-installer: the edition-aware full disk installer. Unlike
+# white-installer (a control plane) it OWNS the slim/minimal/full install to
+# disk end to end (partition, format, copy rootfs, edition-specific config,
+# bootloader). Default run is a safe dry-run; a destructive install needs an
+# explicit --install and a real --target device.
+MI_TARGET := mirvkbuntu-installer
+MI_SRC := mirvkbuntu_installer.c
+MI_HDR := mirvkbuntu_installer.h
+
 USER_ROOT ?= /user
 USR_ROOT ?= /usr
 DECK_ROOT ?= /deck
@@ -37,7 +46,7 @@ USR_RUNNABLES := $(USR_ROOT)/runnables
 DECK_BIN := $(DECK_ROOT)/bin
 DECK_RUNNABLES := $(DECK_ROOT)/runnables
 
-all: $(TARGET) $(NXTT_TARGET) $(WIO_TARGET) $(PKG_TARGET)
+all: $(TARGET) $(NXTT_TARGET) $(WIO_TARGET) $(PKG_TARGET) $(MI_TARGET)
 
 $(TARGET): $(SRC) desktop_install_probe.h
 	$(CC) $(CFLAGS) -o $@ $(SRC)
@@ -62,6 +71,24 @@ white-installer-static: $(WIO_SRC) $(WIO_HDR) desktop_install_probe.h
 # Build package-installer (normal dynamic link, matches white-installer).
 $(PKG_TARGET): $(PKG_SRC) $(PKG_HDR)
 	$(CC) $(CFLAGS) -static-libgcc -o $@ $(PKG_SRC)
+
+# Build the edition-aware installer (normal dynamic link).
+$(MI_TARGET): $(MI_SRC) $(MI_HDR)
+	$(CC) $(CFLAGS) -static-libgcc -o $@ $(MI_SRC)
+
+# Portable/static build for the live ISO / minimal environments (same caveat as
+# white-installer-static: needs a static libc, may fail in a restricted sandbox).
+mirvkbuntu-installer-static: $(MI_SRC) $(MI_HDR)
+	$(CC) $(CFLAGS) -static -o $(MI_TARGET) $(MI_SRC)
+
+# Install mirvkbuntu-installer into the system sbin trees (root install path).
+mirvkbuntu-installer-install: $(MI_TARGET)
+	install -d $(USR_BIN)
+	install -m 0755 $(MI_TARGET) $(USR_BIN)/$(MI_TARGET)
+	@echo "Installed $(MI_TARGET) to $(USR_BIN)"
+
+mirvkbuntu-installer-uninstall:
+	rm -f $(USR_BIN)/$(MI_TARGET)
 
 # Install package-installer into BOTH the /user and /deck bin trees.
 package-installer-install: $(PKG_TARGET)
@@ -159,7 +186,7 @@ update-front-link:
 	fi
 
 clean:
-	rm -f $(TARGET) $(NXTT_TARGET) $(WIO_TARGET) $(PKG_TARGET)
+	rm -f $(TARGET) $(NXTT_TARGET) $(WIO_TARGET) $(PKG_TARGET) $(MI_TARGET)
 
 uninstall:
 	rm -f $(USER_BIN)/$(TARGET) $(USER_RUNNABLES)/$(TARGET) \
@@ -169,4 +196,5 @@ uninstall:
 	      $(USR_BIN)/$(WIO_TARGET) $(USR_RUNNABLES)/$(WIO_TARGET) \
 	      $(DECK_BIN)/$(WIO_TARGET) $(DECK_RUNNABLES)/$(WIO_TARGET) \
 	      $(USER_BIN)/$(PKG_TARGET) $(DECK_BIN)/$(PKG_TARGET) \
+	      $(USR_BIN)/$(MI_TARGET) \
 	      $(FRONT_LINK)

@@ -16,6 +16,7 @@ write_package_list "$WORK_DIR" mirvkbuntu-minimal
 stage_mirvkbuntu_source "$WORK_DIR"
 write_mirvkbuntu_manifest "$WORK_DIR"
 stage_native_outputs "$WORK_DIR"
+stage_installer "$WORK_DIR" minimal
 run_live_build "$WORK_DIR"
 ISO_SOURCE="$(find_iso "$WORK_DIR")"
 mkdir -p "$OUTPUT_ROOT"
