@@ -21,6 +21,25 @@ ARCH="${ARCH:-amd64}"
 #   MIRVKBUNTU_KERNEL=all       -> build every kernel source tree found
 MIRVKBUNTU_KERNEL="${MIRVKBUNTU_KERNEL:-5.15}"
 
+# The kernel build uses its OWN architecture names (arch/<name>), which differ
+# from Debian's ($ARCH = amd64/arm64/...). e.g. Debian "amd64" is kernel
+# "x86_64" (arch/x86). Passing the ambient ARCH=amd64 to the kernel make makes
+# it look for arch/amd64/ and fail. Translate here and pass KARCH explicitly to
+# every kernel make invocation.
+debian_to_kernel_arch(){
+  case "$1" in
+    amd64)  echo x86_64 ;;
+    i386)   echo i386   ;;
+    arm64)  echo arm64  ;;
+    armhf)  echo arm    ;;
+    ppc64el)echo powerpc ;;
+    s390x)  echo s390   ;;
+    riscv64)echo riscv  ;;
+    *)      echo "$1"   ;;
+  esac
+}
+KARCH="$(debian_to_kernel_arch "$ARCH")"
+
 die(){ printf "native-build: ERROR: %s\n" "$*" >&2; exit 1; }
 require(){ command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"; }
 for c in find sha256sum tar split make dpkg-deb; do require "$c"; done
@@ -143,7 +162,8 @@ kernel_find_archives(){
 # across kernel versions without a hand-maintained full .config.
 configure_kernel(){
   local work="$1" cfgtool="$work/scripts/config"
-  make -C "$work" olddefconfig
+  log "kernel: using kernel ARCH=$KARCH (from Debian ARCH=$ARCH)"
+  make -C "$work" ARCH="$KARCH" olddefconfig
   if [ -x "$cfgtool" ]; then
     log "kernel: applying MirvkBuntu live-ISO config options"
     # Filesystems + live/overlay boot
@@ -172,14 +192,14 @@ configure_kernel(){
       --enable E1000E --enable R8169 --enable IWLWIFI \
       --enable EFI --enable EFI_STUB --enable EFIVAR_FS || true
     # Reconcile any dependency changes the enables triggered.
-    make -C "$work" olddefconfig
+    make -C "$work" ARCH="$KARCH" olddefconfig
   else
     log "kernel: scripts/config not found; using plain olddefconfig"
   fi
   # Do not require module signing / trusted keys for a self-built kernel.
   "$cfgtool" --file "$work/.config" --disable MODULE_SIG --disable SYSTEM_TRUSTED_KEYS 2>/dev/null || true
   scripts_config_set_str "$work"
-  make -C "$work" olddefconfig
+  make -C "$work" ARCH="$KARCH" olddefconfig
 }
 
 # Clear embedded key paths that break self-builds (set to empty string).
@@ -240,7 +260,7 @@ build_kernels(){
     log "kernel: configuring source tree $name from $src"
     configure_kernel "$work"
     log "kernel: compiling source tree $name (bindeb-pkg)"
-    make -C "$work" -j"$JOBS" bindeb-pkg
+    make -C "$work" ARCH="$KARCH" -j"$JOBS" bindeb-pkg
     for deb in "$NATIVE_ROOT/kernels/"*.deb "$work/../"*.deb; do
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
@@ -273,7 +293,7 @@ build_kernels(){
     log "kernel: configuring archived source tree $name from $src"
     configure_kernel "$work"
     log "kernel: compiling archived source tree $name (bindeb-pkg)"
-    make -C "$work" -j"$JOBS" bindeb-pkg
+    make -C "$work" ARCH="$KARCH" -j"$JOBS" bindeb-pkg
     for deb in "$NATIVE_ROOT/kernels/"*.deb "$work/../"*.deb; do
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
