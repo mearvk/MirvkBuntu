@@ -42,6 +42,41 @@ kernel_find_makefiles(){
   return 0
 }
 
+# Exact test for a genuine top-level Linux kernel source tree. The kernel's
+# root Makefile declares VERSION/PATCHLEVEL/SUBLEVEL in its first lines, and the
+# tree has arch/ and init/ and a top-level Kconfig. Subtrees like Documentation/
+# (which also carry a Makefile + Kconfig + an "arch" entry) fail this test.
+is_kernel_root(){
+  local d="$1"
+  [ -f "$d/Makefile" ] && [ -d "$d/arch" ] && [ -d "$d/init" ] && [ -f "$d/Kconfig" ] || return 1
+  # The three version keys must appear as top-level Makefile assignments.
+  head -8 "$d/Makefile" 2>/dev/null | grep -qE '^VERSION[[:space:]]*=' || return 1
+  head -8 "$d/Makefile" 2>/dev/null | grep -qE '^PATCHLEVEL[[:space:]]*=' || return 1
+  head -8 "$d/Makefile" 2>/dev/null | grep -qE '^SUBLEVEL[[:space:]]*=' || return 1
+  return 0
+}
+
+# Find genuine kernel roots under a tree. Bounded depth + timeout watchdog like
+# kernel_find_makefiles, but returns DIRECTORIES that pass is_kernel_root. This
+# avoids iterating thousands of nested Makefiles and mis-identifying subtrees.
+kernel_find_roots(){
+  local root="$1" runner="" d
+  command -v timeout >/dev/null 2>&1 && runner="timeout ${KERNEL_FIND_TIMEOUT}"
+  # Kernel roots live at kernels/<name>/ or kernels/<name>/<name>/, so a shallow
+  # scan for directories containing a top-level Makefile is enough and cheap.
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    is_kernel_root "$d" && printf '%s\n' "$d"
+  done < <($runner find -P "$root" -xdev -mindepth 1 -maxdepth 4 -type d \
+             \( -name .git -o -name .svn -o -name node_modules -o -name build-local \) -prune \
+             -o -type f -name Makefile -printf '%h\n' 2>/dev/null | sort -u)
+  local rc=$?
+  if [ "$rc" -eq 124 ]; then
+    die "kernel root discovery timed out after ${KERNEL_FIND_TIMEOUT}s under $root (likely a symlink loop or huge tree)."
+  fi
+  return 0
+}
+
 # Same safe, symlink-loop-proof search for kernel source archives (tarballs).
 kernel_find_archives(){
   local root="$1" runner=""
@@ -124,27 +159,22 @@ build_kernels(){
     die "kernel source directory is not readable: $kernel_root"
   fi
 
-  log "kernel discovery: searching under $kernel_root for top-level Makefile files"
-  # IMPORTANT: do NOT use `find -L` here. Following symlinks (-L) will hang
-  # indefinitely on a symlink loop, which is exactly the "silent stall right
-  # after this line" failure mode. We search physical files only, bound the
-  # depth, stay on one filesystem (-xdev), and prune VCS/build noise. A watchdog
-  # timeout converts any pathological tree into a clean error instead of a hang.
-  makefile_count="$(kernel_find_makefiles "$kernel_root" | wc -l)"
-  log "kernel discovery: found $makefile_count Makefile file(s) under $kernel_root"
-
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    src="$(dirname "$candidate")"
-    log "kernel discovery: candidate Makefile: $candidate"
-    if [ ! -f "$src/Kconfig" ]; then
-      log "kernel discovery: rejected candidate (missing Kconfig): $src"
+  log "kernel discovery: locating genuine kernel source roots under $kernel_root"
+  # A GENUINE kernel root is identified precisely by its top-level Makefile
+  # declaring VERSION/PATCHLEVEL/SUBLEVEL, alongside arch/ and init/. Scanning
+  # every Makefile and testing Kconfig+arch is unreliable: subtrees such as
+  # Documentation/ also contain a Makefile + Kconfig + an "arch" entry and were
+  # wrongly accepted. is_kernel_root() below is exact.
+  local candidate_count=0
+  while IFS= read -r src; do
+    [ -n "$src" ] || continue
+    candidate_count=$((candidate_count + 1))
+    log "kernel discovery: candidate root: $src"
+    if ! is_kernel_root "$src"; then
+      log "kernel discovery: rejected (not a top-level kernel tree): $src"
       continue
     fi
-    if [ ! -d "$src/arch" ]; then
-      log "kernel discovery: rejected candidate (missing arch/): $src"
-      continue
-    fi
+    log "kernel discovery: accepted kernel root: $src"
     found=1
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
@@ -159,7 +189,7 @@ build_kernels(){
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(kernel_find_makefiles "$kernel_root")
+  done < <(kernel_find_roots "$kernel_root")
 
   while IFS= read -r archive; do
     [ -n "$archive" ] || continue
@@ -173,11 +203,9 @@ build_kernels(){
       *.tar.bz2) tar -xjf "$archive" -C "$extract_root" ;;
       *) continue ;;
     esac
-    candidate="$(kernel_find_makefiles "$extract_root" | head -1)"
-    [ -n "$candidate" ] || continue
-    src="$(dirname "$candidate")"
-    [ -f "$src/Kconfig" ] || continue
-    [ -d "$src/arch" ] || continue
+    src="$(kernel_find_roots "$extract_root" | head -1)"
+    [ -n "$src" ] || continue
+    is_kernel_root "$src" || continue
     found=1
     name="$(basename "$src")"
     work="$NATIVE_ROOT/kernels/$name"
