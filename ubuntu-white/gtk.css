@@ -1,8 +1,43 @@
-/* Ubuntu White — GTK-oriented baseline
- * Independent project styling inspired by open-source Ubuntu/GNOME ergonomics.
- * Do not treat this as official Ubuntu artwork or branding.
+/* MirvkBuntu — GTK theme (Ubuntu White)
+ *
+ * Binds to the OS color contract in UBUNTU.COLORS.md:
+ *   red (#D7263D) = primary accent, blue (#0057B8) = secondary accent,
+ *   white (#FFFFFF) = surfaces, black (#111111) = writing/font items.
+ *
+ * This is the "good norm" baseline: a correct, legible implementation of the
+ * binding palette meant to be refined over time. It is independent project
+ * styling and is not official Ubuntu artwork or branding.
  */
 
+/* ---- Binding palette (mirrors UBUNTU.COLORS.md tokens) -------------------- */
+@define-color mirvk_primary          #D7263D;  /* red   */
+@define-color mirvk_primary_pressed  #B01E31;
+@define-color mirvk_secondary        #0057B8;  /* blue  */
+@define-color mirvk_secondary_hover  #0069DE;
+@define-color mirvk_surface          #FFFFFF;  /* white */
+@define-color mirvk_surface_alt      #F7F7F7;
+@define-color mirvk_border           #D6D6D6;
+@define-color mirvk_text             #111111;  /* black — fonts/writing */
+@define-color mirvk_text_muted       #4A4A4A;
+@define-color mirvk_text_disabled    #8A8A8A;
+@define-color mirvk_on_accent        #FFFFFF;  /* text/icons on red or blue */
+
+/* Map common GTK named colors onto the binding palette so stock widgets pick
+ * up the theme without per-widget overrides. */
+@define-color theme_bg_color            @mirvk_surface;
+@define-color theme_base_color          @mirvk_surface;
+@define-color theme_fg_color            @mirvk_text;
+@define-color theme_text_color          @mirvk_text;
+@define-color theme_selected_bg_color   @mirvk_primary;      /* red selection */
+@define-color theme_selected_fg_color   @mirvk_on_accent;
+@define-color accent_bg_color           @mirvk_primary;
+@define-color accent_fg_color           @mirvk_on_accent;
+@define-color accent_color              @mirvk_primary;
+@define-color borders                   @mirvk_border;
+@define-color link_color                @mirvk_secondary;    /* blue links */
+@define-color link_visited_color        @mirvk_primary;
+
+/* ---- Base surfaces + text ------------------------------------------------ */
 * {
   -GtkWidget-focus-line-width: 2;
   -GtkWidget-focus-padding: 2;
@@ -11,16 +46,16 @@
 
 window,
 .background {
-  background: #ffffff;
-  color: #303030;
+  background: @mirvk_surface;
+  color: @mirvk_text;                /* black text on white */
 }
 
 headerbar,
 .titlebar,
 toolbar {
-  background: #f7f7f7;
-  color: #303030;
-  border-color: #d6d6d6;
+  background: @mirvk_surface_alt;
+  color: @mirvk_text;
+  border-color: @mirvk_border;
   box-shadow: none;
 }
 
@@ -34,9 +69,9 @@ list,
 notebook,
 menu,
 popover {
-  background: #ffffff;
-  color: #303030;
-  border-color: #d6d6d6;
+  background: @mirvk_surface;
+  color: @mirvk_text;
+  border-color: @mirvk_border;
 }
 
 button {
@@ -44,30 +79,88 @@ button {
   padding: 0 12px;
 }
 
-button:hover,
+/* ---- Accents: red primary, blue secondary -------------------------------- */
+
+/* Focus + hover lean on the blue secondary accent for a calm, informational
+ * cue; the strong red is reserved for active/selected/destructive states. */
+button:hover {
+  background: @mirvk_surface_alt;
+  border-color: @mirvk_secondary;
+}
+
 entry:focus,
-button:focus {
-  background: #f2f2f2;
-  border-color: #4a4a4a;
+button:focus,
+*:focus-visible {
+  border-color: @mirvk_secondary;
+  outline-color: @mirvk_secondary;
 }
 
+/* Active / selected = red primary with white text on the fill. */
 button:checked,
+button:active,
 row:selected,
-view:selected {
-  background: #e9e9e9;
-  color: #202020;
+view:selected,
+list row:selected,
+menuitem:hover,
+:selected {
+  background: @mirvk_primary;
+  color: @mirvk_on_accent;
 }
 
+button:checked:hover,
+row:selected:hover,
+:selected:hover {
+  background: @mirvk_primary_pressed;
+  color: @mirvk_on_accent;
+}
+
+/* Suggested / default action = red primary. */
+button.suggested-action {
+  background: @mirvk_primary;
+  color: @mirvk_on_accent;
+  border-color: @mirvk_primary_pressed;
+}
+button.suggested-action:hover { background: @mirvk_primary_pressed; }
+
+/* Destructive action also uses red (per UBUNTU.COLORS.md). */
+button.destructive-action {
+  background: @mirvk_primary;
+  color: @mirvk_on_accent;
+  border-color: @mirvk_primary_pressed;
+}
+
+/* Progress + selection highlights use the blue secondary. */
+progressbar progress,
+scale highlight,
+levelbar block.filled {
+  background: @mirvk_secondary;
+}
+
+/* Links = blue. */
+*:link,
+button.link {
+  color: @mirvk_secondary;
+}
+*:link:hover { color: @mirvk_secondary_hover; }
+
+/* ---- Text roles (always black on white for reading) ---------------------- */
 label {
-  color: #303030;
+  color: @mirvk_text;
 }
 
-.dim-label {
-  color: #626262;
+.dim-label,
+.subtitle {
+  color: @mirvk_text_muted;
+}
+
+*:disabled,
+label:disabled {
+  color: @mirvk_text_disabled;
 }
 
 scrollbar slider {
-  background: #8a8a8a;
+  background: @mirvk_text_disabled;
   min-width: 10px;
   min-height: 10px;
 }
+scrollbar slider:hover { background: @mirvk_text_muted; }

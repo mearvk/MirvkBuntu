@@ -1,0 +1,118 @@
+/* MirvkBuntu — GNOME Shell theme (Ubuntu White)
+ *
+ * Applies the OS color contract from UBUNTU.COLORS.md to GNOME Shell chrome
+ * (top panel, Activities overview, dash, search, notifications):
+ *   red (#D7263D) = primary accent, blue (#0057B8) = secondary accent,
+ *   white (#FFFFFF) = surfaces, black (#111111) = writing/font items.
+ *
+ * GNOME Shell CSS (St toolkit) does not support @define-color, so the palette
+ * values are written inline. "Good norm" baseline, meant to be refined.
+ */
+
+/* ---- Top panel ----------------------------------------------------------- */
+#panel {
+  background-color: #FFFFFF;
+  color: #111111;
+  border-bottom: 1px solid #D6D6D6;
+}
+
+#panel .panel-button {
+  color: #111111;
+}
+
+/* Hover = blue secondary; active/pressed = red primary with white text. */
+#panel .panel-button:hover {
+  color: #0057B8;
+}
+
+#panel .panel-button:active,
+#panel .panel-button:overview,
+#panel .panel-button:focus,
+#panel .panel-button:checked {
+  background-color: #D7263D;
+  color: #FFFFFF;
+}
+
+/* ---- Overview + search --------------------------------------------------- */
+#overviewGroup,
+.overview {
+  color: #111111;
+}
+
+.search-entry {
+  background-color: #FFFFFF;
+  color: #111111;
+  border: 1px solid #D6D6D6;
+}
+.search-entry:focus {
+  border-color: #0057B8;               /* blue focus */
+}
+
+/* Selected search result = red primary. */
+.search-section-content .list-search-result:selected,
+.search-section-content .list-search-result:hover {
+  background-color: #D7263D;
+  color: #FFFFFF;
+}
+
+/* ---- Dash + app grid ----------------------------------------------------- */
+#dash .app-well-app:hover .overview-icon,
+.app-well-app:hover .overview-icon {
+  background-color: rgba(0, 87, 184, 0.15);  /* blue tint on hover */
+  color: #111111;
+}
+.app-well-app:active .overview-icon,
+.app-well-app:checked .overview-icon,
+.app-well-app.running .overview-icon {
+  background-color: #D7263D;                 /* red for active/running */
+  color: #FFFFFF;
+}
+
+/* ---- Popup menus + notifications ----------------------------------------- */
+.popup-menu {
+  color: #111111;
+}
+.popup-menu-content {
+  background-color: #FFFFFF;
+  border: 1px solid #D6D6D6;
+}
+.popup-menu-item:selected,
+.popup-menu-item:active {
+  background-color: #D7263D;
+  color: #FFFFFF;
+}
+
+.message,
+.notification-banner {
+  background-color: #FFFFFF;
+  color: #111111;
+  border: 1px solid #D6D6D6;
+}
+
+/* ---- Buttons / modal dialogs --------------------------------------------- */
+.button,
+.modal-dialog-linked-button {
+  background-color: #FFFFFF;
+  color: #111111;
+  border: 1px solid #D6D6D6;
+}
+.button:hover { border-color: #0057B8; }
+.button:active,
+.button:checked {
+  background-color: #D7263D;
+  color: #FFFFFF;
+}
+
+/* Default/suggested dialog action = red primary. */
+.modal-dialog .button.default,
+.button.suggested-action {
+  background-color: #D7263D;
+  color: #FFFFFF;
+  border-color: #B01E31;
+}
+
+/* Progress + toggles use the blue secondary. */
+.toggle-switch:checked,
+.slider .highlight {
+  color: #0057B8;
+}

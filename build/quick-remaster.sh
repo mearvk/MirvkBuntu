@@ -146,13 +146,35 @@ THEME_DEST="$ROOTFS/usr/share/mirvkbuntu/ubuntu-white"
 mkdir -p "$THEME_DEST"
 rsync -a --delete "$THEME_DIR/" "$THEME_DEST/"
 
-# Install the GTK stylesheet where a system-wide GTK theme override lives.
+# Install the theme as MirvkBuntu-White. Colors bind to UBUNTU.COLORS.md.
+THEME_ROOT="$ROOTFS/usr/share/themes/MirvkBuntu-White"
+# GTK stylesheet (GTK 3 + GTK 4).
 if [ -f "$THEME_DIR/gtk.css" ]; then
-  mkdir -p "$ROOTFS/usr/share/themes/MirvkBuntu-White/gtk-3.0" \
-           "$ROOTFS/usr/share/themes/MirvkBuntu-White/gtk-4.0"
-  cp -f "$THEME_DIR/gtk.css" "$ROOTFS/usr/share/themes/MirvkBuntu-White/gtk-3.0/gtk.css"
-  cp -f "$THEME_DIR/gtk.css" "$ROOTFS/usr/share/themes/MirvkBuntu-White/gtk-4.0/gtk.css"
+  mkdir -p "$THEME_ROOT/gtk-3.0" "$THEME_ROOT/gtk-4.0"
+  cp -f "$THEME_DIR/gtk.css" "$THEME_ROOT/gtk-3.0/gtk.css"
+  cp -f "$THEME_DIR/gtk.css" "$THEME_ROOT/gtk-4.0/gtk.css"
 fi
+# GNOME Shell stylesheet.
+if [ -f "$THEME_DIR/gnome-shell.css" ]; then
+  mkdir -p "$THEME_ROOT/gnome-shell"
+  cp -f "$THEME_DIR/gnome-shell.css" "$THEME_ROOT/gnome-shell/gnome-shell.css"
+fi
+
+# Set MirvkBuntu-White as the default GTK + Shell theme for new sessions via a
+# dconf profile, so the palette is applied on first boot without user action.
+mkdir -p "$ROOTFS/etc/dconf/db/local.d" "$ROOTFS/etc/dconf/profile"
+cat > "$ROOTFS/etc/dconf/profile/user" <<'PROFILE'
+user-db:user
+system-db:local
+PROFILE
+cat > "$ROOTFS/etc/dconf/db/local.d/00-mirvkbuntu-theme" <<'DCONF'
+[org/gnome/desktop/interface]
+gtk-theme='MirvkBuntu-White'
+color-scheme='default'
+
+[org/gnome/shell/extensions/user-theme]
+name='MirvkBuntu-White'
+DCONF
 
 # Install icon sets (if present) into a MirvkBuntu icon location.
 if [ -d "$THEME_DIR/icons" ]; then

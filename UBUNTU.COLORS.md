@@ -88,9 +88,26 @@ palettes, and the display manager):
 --mirvk-color-on-accent      #FFFFFF   /* text/icons on red or blue */
 ```
 
+## Implementation
+
+This contract is implemented by the **MirvkBuntu-White** theme in
+`ubuntu-white/`:
+
+- `ubuntu-white/gtk.css` — GTK 3/4 theme; defines the tokens above as
+  `@define-color` and maps GTK's standard named colors onto them.
+- `ubuntu-white/gnome-shell.css` — GNOME Shell theme (panel, overview, dash,
+  menus) using the same palette inline.
+
+The build installs this as `/usr/share/themes/MirvkBuntu-White` and sets it as
+the default GTK + Shell theme via a system dconf database, so both the quick
+remaster (`build/quick-remaster.sh`) and the slim/native GNOME editions
+(`build/build-slim.sh`) boot with the palette applied. This is a solid baseline
+("good norm") intended to be refined over time.
+
 ## Notes
 
-- These colors are the binding contract; the `ubuntu-white/` theme assets
-  (`gtk.css`, icon sets) should be aligned to them over time.
+- These colors are the binding contract; the `ubuntu-white/` theme assets track
+  them. When adjusting the palette, change the values here and in the theme's
+  token definitions together.
 - On accent fills (red or blue), text and glyphs switch to white for legibility;
   everywhere else, writing stays black on white.

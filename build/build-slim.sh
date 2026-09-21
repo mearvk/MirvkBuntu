@@ -159,6 +159,37 @@ printf 'MIRVKBUNTU_SLIM_SESSION=gnome\n' > /etc/mirvkbuntu/slim-session.conf
 EOF
 chmod +x "$WORK_DIR/config/hooks/live/0100-mirvkbuntu-slim-session.hook.chroot"
 
+# --- Ubuntu White theme (binds to UBUNTU.COLORS.md) --------------------------
+# Install the MirvkBuntu-White GTK + GNOME Shell theme and make it the default
+# for the live GNOME session, so the OS boots with its binding palette applied.
+THEME_SRC="${THEME_DIR:-$REPO_ROOT/ubuntu-white}"
+INC="$WORK_DIR/config/includes.chroot"
+THEME_DEST="$INC/usr/share/themes/MirvkBuntu-White"
+if [ -f "$THEME_SRC/gtk.css" ]; then
+  mkdir -p "$THEME_DEST/gtk-3.0" "$THEME_DEST/gtk-4.0"
+  cp -f "$THEME_SRC/gtk.css" "$THEME_DEST/gtk-3.0/gtk.css"
+  cp -f "$THEME_SRC/gtk.css" "$THEME_DEST/gtk-4.0/gtk.css"
+fi
+if [ -f "$THEME_SRC/gnome-shell.css" ]; then
+  mkdir -p "$THEME_DEST/gnome-shell"
+  cp -f "$THEME_SRC/gnome-shell.css" "$THEME_DEST/gnome-shell/gnome-shell.css"
+fi
+if [ -d "$THEME_SRC/icons" ]; then
+  mkdir -p "$INC/usr/share/icons/MirvkBuntu-White"
+  cp -a "$THEME_SRC/icons/." "$INC/usr/share/icons/MirvkBuntu-White/"
+fi
+# Default the session to MirvkBuntu-White via a system dconf database.
+mkdir -p "$INC/etc/dconf/db/local.d" "$INC/etc/dconf/profile"
+printf 'user-db:user\nsystem-db:local\n' > "$INC/etc/dconf/profile/user"
+cat > "$INC/etc/dconf/db/local.d/00-mirvkbuntu-theme" <<'DCONF'
+[org/gnome/desktop/interface]
+gtk-theme='MirvkBuntu-White'
+color-scheme='default'
+
+[org/gnome/shell/extensions/user-theme]
+name='MirvkBuntu-White'
+DCONF
+
 # --- assemble ----------------------------------------------------------------
 run_live_build "$WORK_DIR"
 ISO_SOURCE="$(find_iso "$WORK_DIR")"
