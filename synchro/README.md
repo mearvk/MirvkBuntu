@@ -115,6 +115,16 @@ PYTHONPATH=synchro pytest synchro/tests -q
 The test suite is self-contained (no external network): it spins up the
 loopback echo server and measures genuine RTTs end to end.
 
+## Further documentation
+
+Deeper references live in [`docs/`](docs/):
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layered design and the `Sample` contract.
+- [docs/ACCURACY.md](docs/ACCURACY.md) — the measurement/precision model and the physical floor.
+- [docs/BACKENDS.md](docs/BACKENDS.md) — the backend protocol, dynamic loading, and `@synchro`.
+- [docs/HTTP2_METERED.md](docs/HTTP2_METERED.md) — the metered HTTP/2 transfer path.
+- [docs/CLI.md](docs/CLI.md) — full CLI reference and JSON output.
+
 ## Notes on HTTP/2 and "International Datasets"
 
 For cross-region ("international") dataset movement, the metered HTTP/2 client
