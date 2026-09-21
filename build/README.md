@@ -107,15 +107,49 @@ sudo BUILD_SKIP_GNOME=1 BUILD_SKIP_CHROMIUM=1 bash build/bootstrap-native.sh
 | `BUILD_SKIP_GNOME=1` | skip the GNOME stack |
 | `BUILD_SKIP_OTHER=1` | skip other native project wrappers |
 
+### Slim edition — full OS to RAM, boots to GNOME (native path)
+
+`build-slim.sh` produces the full MirvkBuntu OS (built from this repository's
+own source via the native gate) as a **live image that loads entirely into RAM**
+(`boot=live ... toram`) and **boots straight to the full GNOME desktop**. It
+provides a RAM-backed writable overlay for on-the-go work, **capped at 400 MB**
+by default, that resets on reboot.
+
+```bash
+sudo bash build/prerequisites.sh native
+bash gnome-source/pull-all-source.sh        # populate GNOME module source/
+sudo bash build/build-slim.sh
+# -> build/output/MirvkBuntu-slim-amd64.iso
+```
+
+It is not a generic live-build spin: like `build-desktop.sh` it runs
+`native-build.sh` first and feeds only the MirvkBuntu-native outputs into
+live-build. Useful variables: `SLIM_OVERLAY_SIZE` (default `400M`),
+`SLIM_LIVE_USER` (autologin user, default `mirvk`). While GNOME/Chromium source
+is still being populated, use the `BUILD_SKIP_*` flags for a partial build.
+
 ## Scripts
 
 - `prerequisites.sh`: installs host build tooling. Modes: `remaster`, `native`, `all`.
 - `quick-remaster.sh`: path A — remaster a stock Ubuntu ISO (see above).
 - `bootstrap-native.sh`: path B — fetch kernel source, then run the native build.
+- `build-slim.sh`: slim edition — full OS to RAM, boots to GNOME (native path).
 - `native-build.sh`: the native compilation gate (kernel/GNOME/Chromium).
 - `build-minimal.sh`: minimum bootable development image (native path).
 - `build-desktop.sh`: desktop development image (native path).
 - `build-iso.sh`: convenience entry point for the desktop ISO.
+
+## Populating GNOME source
+
+The native path compiles the GNOME stack from `gnome-source/<module>/source/`.
+`gnome-source/pull-all-source.sh` runs each module's `pull-source.sh`, normalizes
+the layout so `source/` is the canonical build input, and verifies each required
+module. Run it once (needs network) before a native/slim build:
+
+```bash
+bash gnome-source/pull-all-source.sh            # all desktop-required modules
+bash gnome-source/pull-all-source.sh glib gtk   # a subset
+```
 
 ## Output
 

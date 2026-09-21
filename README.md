@@ -150,7 +150,18 @@ with live-build:
 
 ```bash
 sudo bash build/prerequisites.sh native
+bash gnome-source/pull-all-source.sh     # populate GNOME module source/
 sudo bash build/bootstrap-native.sh
+```
+
+**Slim edition** — the full MirvkBuntu OS built from this repo's source,
+delivered as a live image that loads entirely into RAM and boots to the full
+GNOME desktop, with a 400 MB RAM-backed overlay for on-the-go work:
+
+```bash
+sudo bash build/prerequisites.sh native
+bash gnome-source/pull-all-source.sh
+sudo bash build/build-slim.sh            # -> build/output/MirvkBuntu-slim-amd64.iso
 ```
 
 ## Relationship to Ubuntu.Determinant.Beta.Restricted
