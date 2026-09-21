@@ -42,6 +42,20 @@ kernel_find_makefiles(){
   return 0
 }
 
+# Same safe, symlink-loop-proof search for kernel source archives (tarballs).
+kernel_find_archives(){
+  local root="$1" runner=""
+  command -v timeout >/dev/null 2>&1 && runner="timeout ${KERNEL_FIND_TIMEOUT}"
+  $runner find -P "$root" -xdev -maxdepth "$KERNEL_FIND_MAXDEPTH" \
+      \( -type d \( -name .git -o -name .svn -o -name node_modules -o -name build-local \) -prune \) \
+      -o \( -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.tar.xz" -o -name "*.tar.zst" -o -name "*.tar.bz2" \) -print \) 2>/dev/null
+  local rc=$?
+  if [ "$rc" -eq 124 ]; then
+    die "kernel archive discovery timed out after ${KERNEL_FIND_TIMEOUT}s under $root (likely a symlink loop). Set KERNEL_FIND_TIMEOUT/KERNEL_FIND_MAXDEPTH, or clean up kernels/."
+  fi
+  return 0
+}
+
 # Configure a kernel work tree for a bootable live ISO (Task C). Starts from the
 # tree's defconfig via olddefconfig, then force-enables the options a live/ISO
 # system needs (squashfs, overlayfs, loop, virtio, DRM, EFI, etc.) so the
@@ -147,7 +161,8 @@ build_kernels(){
     done
   done < <(kernel_find_makefiles "$kernel_root")
 
-  while IFS= read -r -d "" archive; do
+  while IFS= read -r archive; do
+    [ -n "$archive" ] || continue
     extract_root="$NATIVE_ROOT/kernel-archives/$(basename "$archive")"
     rm -rf "$extract_root"
     mkdir -p "$extract_root"
@@ -177,7 +192,7 @@ build_kernels(){
       [ -f "$deb" ] || continue
       cp -f "$deb" "$ARTIFACT_ROOT/packages/"
     done
-  done < <(find -L "$kernel_root" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.tar.xz" -o -name "*.tar.zst" -o -name "*.tar.bz2" \) -print0)
+  done < <(kernel_find_archives "$kernel_root")
 
   if [ "$found" -eq 0 ]; then
     log "kernel discovery diagnostics:"
