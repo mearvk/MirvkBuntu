@@ -65,11 +65,30 @@ write_package_list(){
   awk '!/^[[:space:]]*#/ && NF {print $1}' "${REPO_ROOT}/packages/basic-packages.txt" |
     sort -u > "${work_dir}/config/package-lists/${list_name}.list.chroot"
 }
+run_dependency_scout(){
+  local scout_binary="$REPO_ROOT/build/scout/mirvkbuntu-scout"
+  local scout_build="$REPO_ROOT/build/scout.sh"
+  if [ -f "$BUILD_ROOT/dependency-cache.txt" ]; then
+    printf 'build: dependency scout cache already present: %s\\n' "$BUILD_ROOT/dependency-cache.txt"
+    return 0
+  fi
+  [ -f "$scout_build" ] || die "MirvkBuntu dependency scout build script missing: $scout_build"
+  if [ ! -x "$scout_binary" ]; then
+    printf 'build: building dependency scout before compilation\\n'
+    bash "$scout_build"
+  fi
+  printf 'build: scouting package dependencies before compilation\\n'
+  "$scout_binary"
+  [ -f "$BUILD_ROOT/dependency-cache.txt" ] || die "dependency scout did not produce dependency-cache.txt"
+  cp -f "$BUILD_ROOT/dependency-cache.txt" "$BUILD_ROOT/../dependency-cache.txt" 2>/dev/null || true
+}
+
 run_native_build(){
   local native_script="$SCRIPT_DIR/native-build.sh"
   local inventory_script="$SCRIPT_DIR/component-inventory.sh"
   [ -x "$native_script" ] || die "MirvkBuntu native compilation script missing or not executable: $native_script"
   [ -f "$inventory_script" ] || die "MirvkBuntu component inventory script missing: $inventory_script"
+  run_dependency_scout
   printf "build: inventorying MirvkBuntu custom components before compilation\n"
   MIRVKBUNTU_COMPONENT_INVENTORY="$BUILD_ROOT/component-inventory.txt" bash "$inventory_script"
   printf "build: compiling MirvkBuntu native components before live-build\n"
