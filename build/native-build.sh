@@ -111,9 +111,7 @@ select_kernel_roots(){
   done
 
   if [ "${#matches[@]}" -eq 0 ]; then
-    log "kernel select: no root matches MIRVKBUNTU_KERNEL='$sel'; falling back to newest available" >&2
-    printf '%s\n' "${all_roots[@]}" | sort -t- -k2 -V | tail -1
-    return 0
+    die "kernel select: no source tree matches MIRVKBUNTU_KERNEL='$sel'; refusing distribution or unrelated-kernel fallback"
   fi
 
   # If several match a series, pick the newest by version.
