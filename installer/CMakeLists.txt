@@ -15,6 +15,7 @@ add_executable(mirvkbuntu-installer
   src/Network.cpp
   src/Payload.cpp
   src/Locale.cpp
+  src/Menu.cpp
 )
 target_include_directories(mirvkbuntu-installer PRIVATE include)
 target_compile_definitions(mirvkbuntu-installer PRIVATE MIRVKBUNTU_VERSION="${PROJECT_VERSION}")
