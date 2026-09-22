@@ -4,8 +4,8 @@ set -euo pipefail
 # MirvkBuntu build prerequisites installer.
 #
 # Installs the host tooling required by the two supported build paths:
-#   * build/quick-remaster.sh  -- ISO remaster path (A)
-#   * build/build-desktop.sh   -- native live-build path (B)
+#   * build/build-limited.sh   -- Quick Limited repository-source-driven path
+#   * build/build-desktop.sh   -- native live-build path
 #
 # This is idempotent: already-installed packages are skipped by apt. It must be
 # run on a Debian/Ubuntu host with root privileges and network access to the
@@ -44,7 +44,7 @@ COMMON_PACKAGES=(
   rsync
 )
 
-# ISO remaster path (A): unpack/repack an existing Ubuntu ISO.
+# Legacy remaster tooling: unpack/repack an existing Ubuntu ISO. This is not used by Limited/source-driven builds.
 REMASTER_PACKAGES=(
   squashfs-tools      # unsquashfs / mksquashfs
   xorriso             # ISO (re)authoring
@@ -202,8 +202,8 @@ esac
 
 log "all required tooling is installed and on PATH."
 case "$MODE" in
-  remaster) log "next: sudo bash ${SCRIPT_DIR}/quick-remaster.sh <ubuntu.iso>" ;;
-  native)   log "next: sudo bash ${SCRIPT_DIR}/build-desktop.sh" ;;
-  all)      log "next (quick):  sudo bash ${SCRIPT_DIR}/quick-remaster.sh <ubuntu.iso>"
-            log "next (native): sudo bash ${SCRIPT_DIR}/build-desktop.sh" ;;
+  remaster) log "next (legacy only): sudo bash ${SCRIPT_DIR}/quick-remaster.sh <ubuntu.iso>" ;;
+  native)   log "next (Limited): sudo bash ${SCRIPT_DIR}/build-limited.sh" ;;
+  all)      log "next (Limited): sudo bash ${SCRIPT_DIR}/build-limited.sh"
+            log "next (desktop): sudo bash ${SCRIPT_DIR}/build-desktop.sh" ;;
 esac
