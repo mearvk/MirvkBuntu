@@ -50,27 +50,6 @@ static std::string shellQuote(const std::string& s) {
     return out + "'";
 }
 
-static int runScout(const fs::path& repo) {
-    fs::path binary = repo / "build" / "scout" / "mirvkbuntu-scout";
-#ifdef _WIN32
-    binary += ".exe";
-#endif
-    if (!fs::exists(binary)) {
-        std::cout << "builder: dependency scout is not built; building it first.\\n";
-#ifdef _WIN32
-        std::string build = "cmake -S " + shellQuote((repo / "scout").string()) +
-                            " -B " + shellQuote((repo / "build" / "scout").string()) +
-                            " -DCMAKE_BUILD_TYPE=Release && cmake --build " +
-                            shellQuote((repo / "build" / "scout").string()) + " --config Release";
-#else
-        std::string build = "cd " + shellQuote(repo.string()) + " && bash build/scout.sh";
-#endif
-        int rc = run(build);
-        if (rc != 0) return rc;
-    }
-    return run(shellQuote(binary.string()));
-}
-
 static int linuxBuild(const fs::path& repo, const std::string& target, const std::string& jobs) {
     std::ostringstream cmd;
     cmd << "cd " << shellQuote(repo.string()) << " && ";
