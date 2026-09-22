@@ -1,0 +1,70 @@
+name: MirvkBuntu Installers
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "installer/**"
+      - "build/installer.sh"
+      - ".github/workflows/installer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S installer -B build/installer -DCMAKE_BUILD_TYPE=Release
+      - name: Build and package
+        run: |
+          cmake --build build/installer --config Release --parallel
+          cpack --config build/installer/CPackConfig.cmake -C Release
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: MirvkBuntu-Installer-Linux-x86_64
+          path: |
+            build/installer/*.deb
+            build/installer/*.tar.gz
+            build/installer/mirvkbuntu-installer
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S installer -B build/installer -A x64
+      - name: Build and package
+        shell: pwsh
+        run: |
+          cmake --build build/installer --config Release --parallel
+          cpack --config build/installer/CPackConfig.cmake -C Release
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: MirvkBuntu-Installer-Windows-x86_64
+          path: |
+            build/installer/*.exe
+            build/installer/*.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S installer -B build/installer -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_BUILD_TYPE=Release
+      - name: Build and package
+        run: |
+          cmake --build build/installer --config Release --parallel
+          cpack --config build/installer/CPackConfig.cmake -C Release
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: MirvkBuntu-Installer-macOS-universal
+          path: |
+            build/installer/*.pkg
+            build/installer/*.dmg
+            build/installer/mirvkbuntu-installer
