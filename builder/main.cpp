@@ -72,8 +72,6 @@ static int runScout(const fs::path& repo) {
 }
 
 static int linuxBuild(const fs::path& repo, const std::string& target, const std::string& jobs) {
-    int scout = runScout(repo);
-    if (scout != 0) return scout;
     std::ostringstream cmd;
     cmd << "cd " << shellQuote(repo.string()) << " && ";
     if (!jobs.empty()) cmd << "JOBS=" << shellQuote(jobs) << " ";
@@ -82,8 +80,6 @@ static int linuxBuild(const fs::path& repo, const std::string& target, const std
 }
 
 static int windowsBuild(const fs::path& repo, const std::string& target, const std::string& jobs) {
-    int scout = runScout(repo);
-    if (scout != 0) return scout;
     if (!commandExists("wsl.exe")) {
         std::cerr << "builder: Windows ISO creation requires WSL with a Linux distribution.\n";
         return 20;
@@ -95,8 +91,6 @@ static int windowsBuild(const fs::path& repo, const std::string& target, const s
 }
 
 static int macBuild(const fs::path& repo, const std::string& target, const std::string& jobs) {
-    int scout = runScout(repo);
-    if (scout != 0) return scout;
     std::string runtime;
     if (commandExists("docker")) runtime = "docker";
     else if (commandExists("podman")) runtime = "podman";
