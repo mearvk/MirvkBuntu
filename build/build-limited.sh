@@ -66,7 +66,35 @@ stage_mirvkbuntu_source "$WORK_DIR"
 write_mirvkbuntu_manifest "$WORK_DIR"
 stage_native_outputs "$WORK_DIR"
 
+# Apply the repository's Ubuntu White desktop treatment when its assets are
+# present. The theme is optional to the build, but the Limited edition should
+# present the intended white/dark-grey first-desktop experience.
+THEME_SRC="${THEME_DIR:-$REPO_ROOT/ubuntu-white}"
+INC="$WORK_DIR/config/includes.chroot"
+THEME_DEST="$INC/usr/share/themes/MirvkBuntu-White"
+if [ -f "$THEME_SRC/gtk.css" ]; then
+  mkdir -p "$THEME_DEST/gtk-3.0" "$THEME_DEST/gtk-4.0"
+  cp -f "$THEME_SRC/gtk.css" "$THEME_DEST/gtk-3.0/gtk.css"
+  cp -f "$THEME_SRC/gtk.css" "$THEME_DEST/gtk-4.0/gtk.css"
+fi
+if [ -f "$THEME_SRC/gnome-shell.css" ]; then
+  mkdir -p "$THEME_DEST/gnome-shell"
+  cp -f "$THEME_SRC/gnome-shell.css" "$THEME_DEST/gnome-shell/gnome-shell.css"
+fi
+if [ -d "$THEME_SRC/icons" ]; then
+  mkdir -p "$INC/usr/share/icons/MirvkBuntu-White"
+  cp -a "$THEME_SRC/icons/." "$INC/usr/share/icons/MirvkBuntu-White/"
+fi
+mkdir -p "$INC/etc/dconf/db/local.d" "$INC/etc/dconf/profile"
+printf 'user-db:user\nsystem-db:local\n' > "$INC/etc/dconf/profile/user"
+cat > "$INC/etc/dconf/db/local.d/00-mirvkbuntu-theme" <<'DCONF'
+[org/gnome/desktop/interface]
+gtk-theme='MirvkBuntu-White'
+color-scheme='default'
+DCONF
+
 mkdir -p "$WORK_DIR/config/includes.chroot/etc/mirvkbuntu"
+
 cat > "$WORK_DIR/config/includes.chroot/etc/mirvkbuntu/edition.conf" <<EOF
 MIRVKBUNTU_EDITION=limited
 MIRVKBUNTU_BUILD_MODEL=repository-source-driven
