@@ -26,6 +26,9 @@ KERNEL_VERSIONS ?=
 
 all: help
 
+installer:
+	@bash build/installer.sh
+
 help:
 	@echo "MirvkBuntu build targets:"
 	@echo ""
@@ -47,6 +50,7 @@ help:
 	@echo "  Components:"
 	@echo "    make native            Run the native compilation gate only"
 	@echo "    make chromium          Build Chromium only (DESTDIR=... to install)"
+	@echo "    make installer         Build and package the native MirvkBuntu installer"
 	@echo "    make packages          Build the compilable packages (installer)"
 	@echo ""
 	@echo "  Housekeeping:"
