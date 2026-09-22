@@ -171,7 +171,7 @@ int main(int argc, char** argv) {
     };
 
     if (target == "all") {
-        for (const auto& t : {"desktop", "slim", "minimal"}) {
+        for (const auto& t : {"limited", "desktop", "slim", "minimal"}) {
             int rc = buildOne(t);
             if (rc != 0) return rc;
         }
