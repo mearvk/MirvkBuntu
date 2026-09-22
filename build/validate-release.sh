@@ -27,7 +27,7 @@ printf '%s\n' "$FILE_TYPE" | grep -Eiq 'ISO 9660|bootable|DOS/MBR' || \
 
 TOC="$(mktemp)"
 trap 'rm -f "$TOC"' EXIT
-xorriso -indev "$ISO" -toc 2>"$TOC" >/dev/null || die "xorriso could not read the generated ISO"
+xorriso -indev "$ISO" -toc >"$TOC" 2>/dev/null || die "xorriso could not read the generated ISO"
 grep -Eiq 'ISO volume|El Torito|boot catalog' "$TOC" || die "generated ISO lacks recognizable ISO/boot catalog metadata"
 
 SOURCE_MANIFEST="$WORK/config/includes.chroot/etc/mirvkbuntu/source.sha256"
