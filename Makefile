@@ -21,7 +21,7 @@ ROOT  := $(CURDIR)
 KERNEL_VERSIONS ?=
 
 .PHONY: all help prereqs prereqs-remaster kernels gnome-source chromium installer builder scout \
-        sources native desktop slim minimal iso remaster bootstrap \
+        sources native limited desktop slim minimal iso remaster bootstrap \
         packages packages-clean clean distclean
 
 all: help
@@ -96,6 +96,9 @@ packages-clean:
 	$(MAKE) -C "$(ROOT)/packages" clean
 
 # ---- ISO builds -------------------------------------------------------------
+limited:
+	bash "$(ROOT)/build/build-limited.sh"
+
 desktop:
 	bash "$(ROOT)/build/build-desktop.sh"
 
