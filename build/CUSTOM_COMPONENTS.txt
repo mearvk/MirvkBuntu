@@ -1,0 +1,21 @@
+# MirvkBuntu Custom Component Registry
+# Add new custom software here before it becomes part of the authoritative build.
+# Format: COMPONENT | CATEGORY | SOURCE PATH | BUILD ROLE | REQUIRED
+KERNEL | kernel | kernels/ | Linux kernel selected by MIRVKBUNTU_KERNEL | yes
+FILESYSTEMS | filesystem | file-systems/ | MirvkBuntu filesystem components | yes
+CORE_SOURCES | core-source | sources/ | native source libraries/modules/scripts | yes
+PACKAGES | packages | packages/ | package manifests and native packages | yes
+USERLAND | userland | userland/ | applications and userland | yes
+USER_INTERFACE | user-interface | user-interface/ | MirvkBuntu UI components | yes
+GNOME_SOURCE | desktop-source | gnome-source/ | GNOME source used by native desktop build | yes
+DOCUMENTATION | documentation | docs/ | OS documentation and build metadata | yes
+UBUNTU_WHITE | theme | ubuntu-white/ | MirvkBuntu White edition configuration/theme | optional
+SYNCHRO | networking | synchro/ | measured low-latency networking layer | optional
+CLONE_PIPELINE | source-reconciliation | clone/ | source acquisition/reconciliation tooling | optional
+INSTALLER | installer | installer/ | MirvkBuntu OS installer | optional
+BUILDER | build-tool | builder/ | MirvkBuntu native ISO builder | optional
+BUILD_SYSTEM | build-system | build/ | native compilation and ISO assembly | yes
+CHROMIUM | application | userland/chromium/ | native Chromium build when enabled | optional
+DARLING | compatibility | userland/darling/ | compatibility component when enabled | optional
+OPENJDK | runtime | userland/openjdk/ | Java runtime/source component when enabled | optional
+BASE_PACKAGE_MANIFEST | package-manifest | packages/basic-packages.txt | distribution package inputs | yes
