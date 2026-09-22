@@ -1,65 +1,43 @@
-#include <cstdlib>
-#include <filesystem>
+#include "installer/Installer.h"
+#include "installer/Platform.h"
+#include "installer/Locale.h"
+#include "installer/Storage.h"
 #include <iostream>
 #include <string>
-
-namespace fs = std::filesystem;
 
 #ifndef MIRVKBUNTU_VERSION
 #define MIRVKBUNTU_VERSION "dev"
 #endif
 
-static void usage(const char* argv0) {
-    std::cout << "MirvkBuntu Installer " << MIRVKBUNTU_VERSION << "\n"
-              << "Usage: " << argv0 << " [--prefix PATH] [--source PATH] [--dry-run]\n";
+static void usage(const char* p) {
+ std::cout<<"MirvkBuntu Installer "<<MIRVKBUNTU_VERSION<<"\n"
+ <<"Usage: "<<p<<" [--plan] [--check] [--execute] [--confirm] [--target-disk PATH]\n"
+ <<"       [--language LOCALE] [--keyboard LAYOUT] [--timezone IANA_ZONE]\n"
+ <<"       [--prefix PATH] [--source PATH]\n";
 }
-
-static bool is_root() {
-#ifdef _WIN32
-    return true;
-#else
-    const char* user = std::getenv("USER");
-    return user == nullptr || std::string(user) == "root";
-#endif
-}
-
-int main(int argc, char** argv) {
-    fs::path prefix;
-#ifdef _WIN32
-    prefix = fs::path(std::getenv("ProgramFiles") ? std::getenv("ProgramFiles") : "C:/Program Files") / "MirvkBuntu";
-#elif __APPLE__
-    prefix = "/Applications/MirvkBuntu";
-#else
-    prefix = "/opt/mirvkbuntu";
-#endif
-
-    fs::path source = fs::current_path();
-    bool dry_run = false;
-
-    for (int i = 1; i < argc; ++i) {
-        std::string arg(argv[i]);
-        if (arg == "--help" || arg == "-h") { usage(argv[0]); return 0; }
-        else if (arg == "--dry-run") { dry_run = true; }
-        else if (arg == "--prefix" && i + 1 < argc) { prefix = argv[++i]; }
-        else if (arg == "--source" && i + 1 < argc) { source = argv[++i]; }
-        else { std::cerr << "Unknown or incomplete option: " << arg << "\n"; usage(argv[0]); return 2; }
-    }
-
-    std::cout << "MirvkBuntu Installer " << MIRVKBUNTU_VERSION << "\n";
-    std::cout << "Source: " << source << "\n";
-    std::cout << "Install prefix: " << prefix << "\n";
-
-#ifndef _WIN32
-    if (!is_root() && prefix.string().rfind("/opt/", 0) == 0) {
-        std::cerr << "Installing to " << prefix << " normally requires administrator privileges.\n";
-        std::cerr << "Use sudo or choose a writable --prefix.\n"; return 3;
-    }
-#endif
-
-    if (dry_run) { std::cout << "Dry run: no files were changed.\n"; return 0; }
-    std::error_code ec; fs::create_directories(prefix, ec);
-    if (ec) { std::cerr << "Unable to create install prefix: " << ec.message() << "\n"; return 4; }
-    std::cout << "Installer framework initialized successfully.\n";
-    std::cout << "The MirvkBuntu ISO build remains responsible for assembling the operating-system image.\n";
-    return 0;
+int main(int argc,char** argv) {
+ mirvkbuntu::installer::Options o;
+ bool check=false, plan=false, confirm=false;
+ for(int i=1;i<argc;i++){
+  std::string a=argv[i];
+  if(a=="--help"||a=="-h"){usage(argv[0]);return 0;}
+  if(a=="--dry-run") {o.dry_run=true;o.execute=false;}
+  else if(a=="--plan") plan=true;
+  else if(a=="--check") check=true;
+  else if(a=="--execute") {o.execute=true;o.dry_run=false;}
+  else if(a=="--confirm") confirm=true;
+  else if(a=="--force") o.force=true;
+  else if((a=="--target-disk"||a=="--prefix"||a=="--source"||a=="--language"||a=="--keyboard"||a=="--timezone")&&i+1<argc){
+   std::string v=argv[++i];
+   if(a=="--target-disk")o.target_disk=v; else if(a=="--prefix")o.prefix=v; else if(a=="--source"){} else if(a=="--language")o.language=v; else if(a=="--keyboard")o.keyboard=v; else o.timezone=v;
+  } else {std::cerr<<"Unknown or incomplete option: "<<a<<"\n";return 2;}
+ }
+ std::cout<<"MirvkBuntu Installer "<<MIRVKBUNTU_VERSION<<" — "<<mirvkbuntu::installer::platformName()<<"\n";
+ if(check){
+  for(const auto& c:mirvkbuntu::installer::platformChecks()) std::cout<<(c.available?"[OK] ":"[--] ")<<c.name<<" — "<<c.detail<<"\n";
+  return 0;
+ }
+ if(plan||!o.execute){mirvkbuntu::installer::printPlan(o);return 0;}
+ if(!confirm&&!o.force){std::cerr<<"Refusing disk-affecting execution without --confirm. Use --plan first.\n";return 5;}
+ return mirvkbuntu::installer::run(o);
 }
