@@ -67,7 +67,11 @@ write_package_list(){
 }
 run_native_build(){
   local native_script="$SCRIPT_DIR/native-build.sh"
+  local inventory_script="$SCRIPT_DIR/component-inventory.sh"
   [ -x "$native_script" ] || die "MirvkBuntu native compilation script missing or not executable: $native_script"
+  [ -x "$inventory_script" ] || die "MirvkBuntu component inventory script missing or not executable: $inventory_script"
+  printf "build: inventorying MirvkBuntu custom components before compilation\n"
+  MIRVKBUNTU_COMPONENT_INVENTORY="$BUILD_ROOT/component-inventory.txt" "$inventory_script"
   printf "build: compiling MirvkBuntu native components before live-build\n"
   BUILD_ROOT="$BUILD_ROOT" ARCH="$ARCH" "$native_script"
   [ -d "$BUILD_ROOT/native/rootfs" ] || die "native build completed without a rootfs staging tree"
