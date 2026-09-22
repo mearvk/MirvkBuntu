@@ -6,7 +6,7 @@ CACHE="$REPO_ROOT/build/cache/packages"
 WORK="$REPO_ROOT/build/work"
 mkdir -p "$CACHE" "$WORK"
 command -v apt-cache >/dev/null 2>&1 || { echo "scout: apt-cache is required" >&2; exit 30; }
-command -v apt-get >/dev/null 2>&1 || { echo "scout: apt-get is required" >&2; exit 30; }
+command -v apt-get >/dev/null 2>&1 || { echo "scout: apt-get is required" >&2; exit 30; }\n\n# Refresh package metadata before resolving/downloading. Set SCOUT_APT_UPDATE=0\n# when the caller has already refreshed the exact repositories it intends to use.\nif [ "${SCOUT_APT_UPDATE:-1}" = "1" ]; then\n  echo "scout: refreshing APT package metadata"\n  apt-get update\nfi
 [ -f "$REPO_ROOT/packages/basic-packages.txt" ] || { echo "scout: package manifest missing" >&2; exit 31; }
 python3 - "$REPO_ROOT/packages/basic-packages.txt" "$WORK/dependency-resolved.txt" <<'PY'
 import re, subprocess, sys
