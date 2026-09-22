@@ -20,7 +20,7 @@ ROOT  := $(CURDIR)
 # Kernel versions fetched by `make kernels` (override on the command line).
 KERNEL_VERSIONS ?=
 
-.PHONY: all help prereqs prereqs-remaster kernels gnome-source chromium \
+.PHONY: all help prereqs prereqs-remaster kernels gnome-source chromium installer \
         sources native desktop slim minimal iso remaster bootstrap \
         packages packages-clean clean distclean
 
