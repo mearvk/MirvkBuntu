@@ -1,6 +1,6 @@
 # MirvkBuntu Build System
 
-The build system treats the **MirvkBuntu repository source authored by MEARVK LLC as authoritative**. `live-build` is only the ISO/filesystem assembly mechanism. It is not the project source and it must not silently substitute its own package or source definitions for MirvkBuntu.
+The build system treats the **MirvkBuntu repository source authored by MEARVK LLC as authoritative**. Package archives are dependencies, not a replacement source tree. `live-build` is only the ISO/filesystem assembly mechanism. It is not the project source and it must not silently substitute its own package or source definitions for MirvkBuntu.
 
 ## Source authority
 
@@ -53,18 +53,14 @@ This deliberately separates **project authority** from **image assembly**. If a 
 
 `live-build` must not be treated as an alternate MirvkBuntu source tree.
 
-## Two build paths
+## Build paths
 
 There are two supported ways to produce a MirvkBuntu image. Both run on a
 Debian/Ubuntu host, as root, with network access.
 
-### Path A — quick ISO remaster (fast, no compilation)
+### Legacy Path A — quick ISO remaster (legacy only)
 
-Turns a stock Ubuntu desktop ISO into a MirvkBuntu variant by unpacking it,
-installing the `packages/basic-packages.txt` set into the live filesystem,
-applying the `ubuntu-white/` theme and branding, and repacking a bootable
-hybrid ISO. No kernel or source compilation. This is the fastest route to a
-bootable variant.
+This path consumes an existing Ubuntu ISO and is retained only as a legacy/remaster utility. It is **not** the Quick Limited release path and must not be used when the requirement is to build install media from the MirvkBuntu repository source.
 
 ```bash
 sudo bash build/prerequisites.sh remaster
@@ -75,7 +71,7 @@ sudo bash build/quick-remaster.sh /path/to/ubuntu-24.04-desktop-amd64.iso
 Useful variables: `SKIP_PACKAGES=1` (theme/branding only, no chroot apt),
 `-o <path>` (output ISO location), `ISO_LABEL`, `THEME_DIR`.
 
-### Path B — native build from source (full distribution)
+### Path B — native build from source
 
 Compiles MirvkBuntu's own kernel (and, when their source trees are present, the
 GNOME stack and Chromium), then assembles the ISO with `live-build`. The native
@@ -107,6 +103,32 @@ sudo BUILD_SKIP_GNOME=1 BUILD_SKIP_CHROMIUM=1 bash build/bootstrap-native.sh
 | `BUILD_SKIP_GNOME=1` | skip the GNOME stack |
 | `BUILD_SKIP_OTHER=1` | skip other native project wrappers |
 
+### Quick Limited Edition — repository-source-driven first desktop
+
+`build/build-limited.sh` is the quick release path for a first usable MirvkBuntu desktop image.
+
+It does **not** download, extract, remaster, or otherwise consume an existing Ubuntu ISO. The ISO is created from the checked-out MirvkBuntu repository source, followed by native artifact staging and `live-build` assembly.
+
+Standard Ubuntu/Debian `.deb` package acquisition is allowed and expected. `live-build`/APT obtains the desktop foundation from the configured Ubuntu archive (`UBUNTU_SUITE`, `noble` by default), while MirvkBuntu source and native artifacts remain authoritative.
+
+The limited path defaults to skipping heavyweight optional native GNOME and Chromium compilation so the first ISO can be produced sooner. Those values can be overridden when the source is ready.
+
+```bash
+sudo bash build/prerequisites.sh native
+./mirvkbuntu-builder --limited
+# or:
+sudo make limited
+# -> build/output/MirvkBuntu-limited-amd64.iso
+```
+
+After assembly, the release gate creates:
+
+- `MirvkBuntu-limited-amd64.iso`
+- `MirvkBuntu-limited-amd64.iso.sha256`
+- `MirvkBuntu-limited-amd64.iso.release`
+
+The completed ISO is also copied to the Desktop.
+
 ### Slim edition — full OS to RAM, boots to GNOME (native path)
 
 `build-slim.sh` produces the full MirvkBuntu OS (built from this repository's
@@ -131,7 +153,10 @@ is still being populated, use the `BUILD_SKIP_*` flags for a partial build.
 ## Scripts
 
 - `prerequisites.sh`: installs host build tooling. Modes: `remaster`, `native`, `all`.
-- `quick-remaster.sh`: path A — remaster a stock Ubuntu ISO (see above).
+- `quick-remaster.sh`: legacy remaster utility only; not used by the Limited or source-driven release paths.
+- `build-limited.sh`: Quick Limited repository-source-driven ISO path.
+- `release-manifest.sh`: writes source, dependency, edition, and ISO checksum metadata.
+- `validate-release.sh`: final ISO acceptance gate for source-driven releases.
 - `bootstrap-native.sh`: path B — fetch kernel source, then run the native build.
 - `build-slim.sh`: slim edition — full OS to RAM, boots to GNOME (native path).
 - `native-build.sh`: the native compilation gate (kernel/GNOME/Chromium).
