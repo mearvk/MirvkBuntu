@@ -20,7 +20,7 @@ ROOT  := $(CURDIR)
 # Kernel versions fetched by `make kernels` (override on the command line).
 KERNEL_VERSIONS ?=
 
-.PHONY: all help prereqs prereqs-remaster kernels gnome-source chromium installer \
+.PHONY: all help prereqs prereqs-remaster kernels gnome-source chromium installer builder \
         sources native desktop slim minimal iso remaster bootstrap \
         packages packages-clean clean distclean
 
@@ -28,6 +28,9 @@ all: help
 
 installer:
 	@bash build/installer.sh
+
+builder:
+	@bash build/builder.sh
 
 help:
 	@echo "MirvkBuntu build targets:"
@@ -50,7 +53,7 @@ help:
 	@echo "  Components:"
 	@echo "    make native            Run the native compilation gate only"
 	@echo "    make chromium          Build Chromium only (DESTDIR=... to install)"
-	@echo "    make installer         Build and package the native MirvkBuntu installer"
+	@echo "    make installer         Build and package the native MirvkBuntu installer\n\t@echo "    make builder          Build the native MirvkBuntu ISO builder""
 	@echo "    make packages          Build the compilable packages (installer)"
 	@echo ""
 	@echo "  Housekeeping:"
