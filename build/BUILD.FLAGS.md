@@ -13,8 +13,7 @@ sudo JOBS=8 BUILD_SKIP_CHROMIUM=1 bash build/build-slim.sh
 
 ## 1. Common (all native builds)
 
-Consumed by `build/common-build.sh`, shared by `build-desktop.sh`,
-`build-minimal.sh`, and `build-slim.sh`.
+Consumed by `build/common-build.sh`, shared by the native ISO build scripts including `build-limited.sh`, `build-desktop.sh`, `build-minimal.sh`, and `build-slim.sh`.
 
 | Flag | Default | Purpose |
 |------|---------|---------|
@@ -72,26 +71,24 @@ Consumed by `build/build-slim.sh` (in addition to the Common + Native flags).
 | `SLIM_LIVE_USER` | `mirvk` | Autologin user for the live GNOME session. |
 | `THEME_DIR` | `ubuntu-white` | Source of the MirvkBuntu-White theme assets. |
 
-## 5. Quick remaster (path A)
+## 5. Quick Limited Edition
 
-Consumed by `build/quick-remaster.sh` (remaster a stock Ubuntu ISO; no
-compilation).
+Consumed by `build/build-limited.sh` (repository-source-driven ISO build). The Limited path does not accept an existing ISO. Standard Ubuntu/Debian `.deb` package acquisition through APT is allowed.
 
 | Flag | Default | Purpose |
 |------|---------|---------|
-| `SKIP_PACKAGES` | `0` | Set `1` for theme/branding only (no chroot apt step). |
+| `BUILD_SKIP_GNOME` | `1` | Limited default: defer heavyweight native GNOME compilation. Set `0` when the source stack is ready. |\n| `BUILD_SKIP_CHROMIUM` | `1` | Limited default: defer Chromium compilation. Set `0` when the source is ready. |
 | `PACKAGE_MANIFEST` | `packages/basic-packages.txt` | Package list to install. |
 | `THEME_DIR` | `ubuntu-white` | Theme assets to apply. |
 | `ISO_LABEL` | `MIRVKBUNTU` | ISO volume label. |
 | `ISO_APPLICATION` | `MirvkBuntu` | ISO application id. |
 | `ISO_PUBLISHER` | `MEARVK LLC` | ISO publisher string. |
-| `BUILD_ROOT` | `build/work/remaster` | Working directory. |
+| `BUILD_ROOT` | `build/work` | Working directory. |
 | `OUTPUT_ROOT` | `build/output` | Output directory. |
 
-Command-line: `-o <path>` / `--output <path>` sets the output ISO path;
-positional argument is the source Ubuntu ISO.
+The Limited output is `build/output/MirvkBuntu-limited-amd64.iso` by default and is also copied to the Desktop.
 
-## 6. Chromium build
+## 6. Legacy Quick Remaster\n\nThe old `build/quick-remaster.sh` utility remains available for compatibility, but it consumes an existing Ubuntu ISO and is not part of the source-driven Limited release path.\n\n## 7. Chromium build
 
 Consumed by `build/chromium/build-chromium.sh` (and via `build_chromium` in the
 native gate).
