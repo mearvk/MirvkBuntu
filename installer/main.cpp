@@ -2,6 +2,7 @@
 #include "installer/Platform.h"
 #include "installer/Locale.h"
 #include "installer/Storage.h"
+#include "installer/Menu.h"
 #include <iostream>
 #include <string>
 
@@ -17,11 +18,11 @@ static void usage(const char* p) {
 }
 int main(int argc,char** argv) {
  mirvkbuntu::installer::Options o;
- bool check=false, plan=false, confirm=false;
+ bool check=false, plan=false, confirm=false, menu=false;
  for(int i=1;i<argc;i++){
   std::string a=argv[i];
   if(a=="--help"||a=="-h"){usage(argv[0]);return 0;}
-  if(a=="--dry-run") {o.dry_run=true;o.execute=false;}
+  if(a=="--dry-run") {o.dry_run=true;o.execute=false;}\n  else if(a=="--menu") menu=true;
   else if(a=="--plan") plan=true;
   else if(a=="--check") check=true;
   else if(a=="--execute") {o.execute=true;o.dry_run=false;}
