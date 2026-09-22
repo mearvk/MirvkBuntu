@@ -48,3 +48,9 @@ COMPONENT_INVENTORY="$REPO_ROOT/build/work/component-inventory.txt"
 
 printf 'release-manifest: wrote %s\n' "$OUT"
 printf '%s  %s\n' "$ISO_SHA" "$(basename "$ISO")" > "${ISO}.sha256"
+if [ -f "$COMPONENT_INVENTORY" ]; then
+  cp -f "$COMPONENT_INVENTORY" "${ISO}.components"
+fi
+if [ -f "$REPO_ROOT/build/work/dependency-resolved.txt" ]; then
+  cp -f "$REPO_ROOT/build/work/dependency-resolved.txt" "${ISO}.packages"
+fi
