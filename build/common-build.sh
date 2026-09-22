@@ -141,3 +141,22 @@ publish_iso(){
   printf 'build: ISO stored at %s\n' "$OUTPUT_ROOT/$name"
   printf 'build: ISO copied to desktop: %s\n' "$DESKTOP_OUTPUT/$name"
 }
+
+
+write_release_manifest(){
+  local iso="$1"
+  local work_dir="$2"
+  local edition="$3"
+  local script="$SCRIPT_DIR/release-manifest.sh"
+  [ -f "$script" ] || die "release manifest script missing: $script"
+  bash "$script" "$iso" "$work_dir" "$edition"
+}
+
+validate_release_iso(){
+  local iso="$1"
+  local work_dir="$2"
+  local edition="$3"
+  local script="$SCRIPT_DIR/validate-release.sh"
+  [ -f "$script" ] || die "release validation script missing: $script"
+  bash "$script" "$iso" "$work_dir" "$edition"
+}
