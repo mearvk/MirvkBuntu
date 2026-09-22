@@ -1,5 +1,7 @@
 # MirvkBuntu Install Build Method
 
+> **Quick Limited release rule:** the ISO is created from the checked-out MirvkBuntu repository. No existing Ubuntu ISO is downloaded, extracted, remastered, or used as the source of the release image. Standard Ubuntu/Debian `.deb` package downloads through APT are permitted for the initial desktop experience.
+
 ## Purpose
 
 This document describes the current MirvkBuntu method for turning a downloaded MirvkBuntu repository checkout into install media such as an ISO.
@@ -222,7 +224,7 @@ The complete current method is:
               v
     Dependency Scout
               |
-              +----> APT metadata
+              +----> APT metadata / Ubuntu-Debian .deb archives
               |
               +----> dependency resolution
               |
@@ -326,7 +328,7 @@ The intent is that an ISO can be traced back through:
 
 This document describes the build method currently implemented in the repository.
 
-The system is intentionally incremental. Additional custom software can be added to the component registry and package manifest before compilation. Future revisions can strengthen dependency locking, package signature verification, complete unregistered-component detection, and deterministic build manifests without changing the fundamental authority model described here.
+The system is intentionally incremental. Additional custom software can be added to the component registry and package manifest before compilation. The Quick Limited path deliberately permits normal Ubuntu/Debian `.deb` acquisition for the first desktop experience while keeping the MirvkBuntu repository as the custom-source authority.
 
 ## 15. Short Method
 
@@ -334,12 +336,13 @@ In practical terms:
 
     1. Obtain MirvkBuntu source.
     2. Inventory its custom components.
-    3. Scout and cache required package dependencies.
+    3. Scout and cache required Ubuntu/Debian package dependencies.
     4. Compile MirvkBuntu's native components.
     5. Verify native artifacts.
     6. Stage the compiled system.
     7. Use live-build for standard ISO assembly.
     8. Produce the MirvkBuntu install/live ISO.
-    9. Store the ISO under build/output/ and publish a Desktop copy.
+    9. Validate the generated ISO and SHA-256 metadata.
+    10. Store the ISO under build/output/ and publish a Desktop copy.
 
 This is the current MirvkBuntu Install Build Method.
