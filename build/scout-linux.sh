@@ -5,6 +5,7 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 CACHE="$REPO_ROOT/build/cache/packages"
 WORK="$REPO_ROOT/build/work"
 mkdir -p "$CACHE" "$WORK"
+MANIFEST_SHA="$(sha256sum "$REPO_ROOT/packages/basic-packages.txt" | awk '{print $1}')"
 command -v apt-cache >/dev/null 2>&1 || { echo "scout: apt-cache is required" >&2; exit 30; }
 command -v apt-get >/dev/null 2>&1 || { echo "scout: apt-get is required" >&2; exit 30; }\n\n# Refresh package metadata before resolving/downloading. Set SCOUT_APT_UPDATE=0\n# when the caller has already refreshed the exact repositories it intends to use.\nif [ "${SCOUT_APT_UPDATE:-1}" = "1" ]; then\n  echo "scout: refreshing APT package metadata"\n  apt-get update\nfi
 [ -f "$REPO_ROOT/packages/basic-packages.txt" ] || { echo "scout: package manifest missing" >&2; exit 31; }
@@ -40,5 +41,6 @@ done < "$WORK/dependency-resolved.txt"
 {
   echo "MIRVKBUNTU_DEPENDENCY_CACHE=$CACHE"
   echo "PACKAGE_COUNT=$(wc -l < "$WORK/dependency-resolved.txt")"
+  echo "PACKAGE_MANIFEST_SHA256=$MANIFEST_SHA"
 } > "$WORK/dependency-cache.txt"
 echo "scout: package cache ready: $CACHE"
