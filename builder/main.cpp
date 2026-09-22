@@ -8,10 +8,10 @@ namespace fs = std::filesystem;
 
 static void usage(const char* p) {
     std::cout
-        << "MirvkBuntu Builder 1.0.0\n"
+        << "MirvkBuntu Builder 1.1.0\n"
         << "Builds the checked-out MirvkBuntu source into install media.\n\n"
-        << "Usage: " << p << " [--desktop|--slim|--minimal|--all] [--check]\n"
-        << "       " << p << " [--desktop|--slim|--minimal] [--jobs N]\n"
+        << "Usage: " << p << " [--limited|--desktop|--slim|--minimal|--all] [--check]\n"
+        << "       " << p << " [--limited|--desktop|--slim|--minimal] [--jobs N]\n"
         << "       " << p << " --help\n\n"
         << "MirvkBuntu's repository build scripts remain the source of truth.\n";
 }
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
         std::string a = argv[i];
         if (a == "--help" || a == "-h") { usage(argv[0]); return 0; }
         if (a == "--check") { check = true; continue; }
-        if (a == "--desktop" || a == "--slim" || a == "--minimal") { target = a.substr(2); continue; }
+        if (a == "--limited" || a == "--desktop" || a == "--slim" || a == "--minimal") { target = a.substr(2); continue; }
         if (a == "--all") { target = "all"; continue; }
         if (a == "--jobs" && i + 1 < argc) { jobs = argv[++i]; continue; }
         std::cerr << "builder: unknown or incomplete option: " << a << "\n";
