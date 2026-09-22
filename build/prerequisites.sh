@@ -196,8 +196,8 @@ verify_commands(){
 
 case "$MODE" in
   remaster) verify_commands unsquashfs mksquashfs xorriso ;;
-  native)   verify_commands lb live-build debootstrap unsquashfs mksquashfs xorriso make gcc ;;
-  all)      verify_commands unsquashfs mksquashfs xorriso lb live-build debootstrap make gcc ;;
+  native)   verify_commands lb live-build debootstrap unsquashfs mksquashfs xorriso make gcc cpack ;;
+  all)      verify_commands unsquashfs mksquashfs xorriso lb live-build debootstrap make gcc cpack ;;
 esac
 
 log "all required tooling is installed and on PATH."
