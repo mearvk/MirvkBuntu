@@ -1,0 +1,2 @@
+#include "installer/Bootloader.h"
+namespace mirvkbuntu::installer { int installBootloader(const std::string& target,BootMode mode,bool execute){ if(target.empty()) return 2; (void)mode; (void)execute; return 0; } }
