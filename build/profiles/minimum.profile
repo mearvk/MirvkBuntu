@@ -1,0 +1,10 @@
+PROFILE=minimum
+DESCRIPTION=Small bootable MirvkBuntu base system
+GNOME=optional
+INSTALLER=true
+AUDIO=optional
+BLUETOOTH=optional
+PRINTING=optional
+BROWSER=optional
+DEVELOPER_TOOLS=false
+TORAM=false
