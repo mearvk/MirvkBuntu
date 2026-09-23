@@ -1,0 +1,10 @@
+PROFILE=full
+DESCRIPTION=Complete MirvkBuntu desktop product
+GNOME=required
+INSTALLER=true
+AUDIO=required
+BLUETOOTH=required
+PRINTING=required
+BROWSER=required
+DEVELOPER_TOOLS=required
+TORAM=false
