@@ -186,6 +186,113 @@ The existing MirvkBuntu target of **AESTHETIC_GRADE=EXCELLENT** and **QUALITY_TA
 
 "Excellent" therefore describes conformance to the defined framework and quality requirements, rather than asserting a universal objective ranking of aesthetics.
 
+## 12. Vertical Tier Model
+
+MirvkBuntu may represent the maturity and refinement of a design decision with a vertical tier model containing up to **44,000,000,000,000 tiers**.
+
+This is a **modeling scale**, not a claim that every possible tier must be individually authored or stored.
+
+Let:
+
+    T ∈ {1, 2, ..., 44,000,000,000,000}
+
+Each tier is evaluated against two conceptual poles:
+
+- **Model** — the design is sufficiently specified, coherent, reproducible, and useful as a working model.
+- **Perfect** — the design satisfies the defined constraints and reaches the intended refinement boundary for its specification.
+
+Perfect is therefore local to the model, its evidence, its constraints, and its evaluation procedure. It does not mean universally perfect.
+
+### Early Model Formation
+
+Tiers **1–8** are the ordinary early-development range. They are intended for:
+
+1. initial concept;
+2. first semantic mapping;
+3. first color/material relationship;
+4. first coherent theme;
+5. measured comparison;
+6. constraint correction;
+7. reproducibility;
+8. release-quality model candidate.
+
+After tier 8, refinement may become increasingly specialized. A later-stage model can be designated:
+
+- **Private** — maintained for controlled development or internal evaluation.
+- **Privately Contract** — developed under a defined private contractual specification, with the applicable requirements and evidence recorded separately.
+
+These labels describe the handling and development status of a model; they do not themselves establish legal rights or obligations.
+
+## 13. Material Grading, Logic, and Law
+
+A tier should be **materially graded** rather than judged solely by appearance. The grading record can compare at least four dimensions:
+
+    Material
+    Logic
+    Law
+    Coherence
+
+**Material** asks whether the implemented artifact actually exhibits the intended properties.
+
+**Logic** asks whether the relationships between inputs, rules, transformations, and outputs are internally consistent.
+
+**Law** means the explicit rule and constraint layer governing the model. It can include accessibility requirements, semantic invariants, configuration rules, reproducibility requirements, and project-defined formal constraints. It is not a claim that the theme itself has legal force.
+
+**Coherence** asks whether the complete system remains mutually compatible across colors, hierarchy, semantics, context, and implementation.
+
+A useful record is therefore:
+
+    G(T) = (M_t, L_t, W_t, C_t)
+
+where each component is a 0–100 achieved measure at tier t, subject to hard constraints.
+
+The system should retain the evidence behind the grade rather than reducing the tier to an unexplained number.
+
+## 14. 3D and 4D Coherence / Sort
+
+The tier model can be evaluated in the same dimensional system used by the Color Inferencer.
+
+### 3D
+
+    C_3 = (L, C, h)
+
+where L is perceptual lightness, C is chroma, and h is hue.
+
+A candidate can be sorted according to its semantic role, perceptual distance, hierarchy, contrast, and material grade.
+
+### 4D
+
+    C_4 = (L, C, h, q)
+
+where q is contextual information such as display environment, UI density, semantic emphasis, accessibility mode, or other rendering policy.
+
+q is a context coordinate, not a fourth physical color channel.
+
+The same sort can therefore consider both color geometry and context:
+
+    Sort(C_4, semantic_constraints, material_grade, logic_grade, law_grade)
+
+A candidate that looks strong in 3D but fails a required contextual or semantic constraint does not become valid merely because its aggregate aesthetic score is high.
+
+## 15. Tier Coherence Function
+
+For a candidate c at tier t, a conceptual coherence record may be written:
+
+    H(t,c) = (A_R, M_t, L_t, W_t, C_t, V_t)
+
+where:
+
+- A_R = Relative Aesthetic result;
+- M_t = material achievement;
+- L_t = logical consistency;
+- W_t = rule/constraint conformance;
+- C_t = system coherence;
+- V_t = reproducibility/version evidence.
+
+The tier is not advanced simply because one component improves. Advancement requires the defined mandatory constraints to remain satisfied and the evidence record to support the claimed refinement.
+
+This connects the earlier **Model → Perfect** concept to measurable desktop generation without claiming that an aesthetic system can be reduced to one universal scalar.
+
 ## 11. Design Principle
 
 > **The importance numbers describe what the desktop should value. The optimizer converts those priorities into exact visual parameters. The resulting measurements describe what the generated desktop actually achieved.**
