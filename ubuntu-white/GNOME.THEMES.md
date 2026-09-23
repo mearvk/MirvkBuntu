@@ -8,6 +8,15 @@ These are theme profiles, not separate desktop implementations. They use the sam
 
 A formal, deep-violet theme intended to give the desktop a more ceremonial and traditional character while retaining high-contrast writing and restrained surfaces.
 
+### Related and Synonyms
+
+**Utilitarian** and **Case-Careful** are designated related terms and synonyms for the Royal theme's design arguments. They describe the theme's emphasis on practical function, deliberate presentation, and careful treatment of capitalization, labels, and textual distinctions.
+
+- **Related:** Utilitarian
+- **Related:** Case-Careful
+- **Synonym:** Utilitarian
+- **Synonym:** Case-Careful
+
 Configuration: [ubuntu-white/themes/Royal/theme.conf](themes/Royal/theme.conf)
 
 ## Archer
