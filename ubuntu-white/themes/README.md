@@ -44,3 +44,34 @@ Theme configuration files:
 - [Capability](Capability/theme.conf)
 
 The existing [MirvkBuntu-White](../GNOME.COLOR.CONFIG.md) configuration remains the baseline desktop profile.
+
+## Broad Color Pairings
+
+Theme colors can be composed in broad historical-semantic pairings rather than selected independently. Marriage, family alliance, wealth, titles, and institutions have repeatedly appeared together in material culture; for example, elite Japanese wedding objects connected marriage with rank, political alliance, family crests, and gold decoration. ([The Met: Japanese Weddings in the Edo Period](https://www.metmuseum.org/zh/essays/japanese-weddings-in-the-edo-period))
+
+MirvkBuntu uses this as a design grammar:
+
+| Pairing | Theme meaning |
+|---|---|
+| White / ivory + gold + purple | title, rank, authority, ceremonial institution |
+| White + gold + blue | agreement, administration, established office |
+| White + gold + green | household continuity, growth, productive life |
+| White + gold + red | declaration, obligation, consequential action |
+| White + blue | neutral record becoming an institutional assertion |
+| White + purple | title or authority emerging from neutrality |
+
+## TitleWork and Neutrality
+
+**TitleWork** is the theme layer used when color participates in title hierarchy. Purple, indigo, and deep blue can establish title distinction; gold/amber can provide a restrained value or ceremonial accent; white/ivory provides the formal field; dark neutral text protects readability. Historical heraldry similarly used a structured vocabulary of metals and tinctures and relied on contrast for legibility. ([The Met: Medieval Art: A Resource for Educators](https://resources.metmuseum.org/resources/metpublications/pdf/Medieval_Art_A_Resource_for_Educators.pdf))
+
+The **White + White + White** model is the family's neutral mathematical reference. It represents three closely related white roles—surface, structure, and neutral field—before a semantic color departs from that baseline. The farther a controlled accent moves perceptually from that neutral field, the more categorical information it can carry, subject to contrast, accessibility, hierarchy, and restraint constraints.
+
+Thus the theme family uses a connected grammar:
+
+**Neutrality → Distinction → Title → Institution → Value → Authority**
+
+and a parallel continuity grammar:
+
+**Neutrality → Life → Growth → Household → Institution → Continuity**
+
+These are configurable MirvkBuntu design relationships, not universal claims about color psychology.
