@@ -1,10 +1,9 @@
 # MirvkBuntu — top-level custom build orchestrator
-
 SHELL := /bin/bash
 ROOT  := $(CURDIR)
 KERNEL_VERSIONS ?=
 
-.PHONY: all help health prereqs prereqs-remaster kernels gnome-source chromium installer builder scout         sources native limited desktop full slim minimal iso all-profiles remaster bootstrap         packages packages-clean clean distclean
+.PHONY: all help health health-strict prereqs prereqs-remaster kernels gnome-source chromium installer builder scout sources native limited desktop full slim minimal iso all-profiles remaster bootstrap packages packages-clean clean distclean
 
 all: full
 
@@ -12,6 +11,7 @@ help:
 	@echo "MirvkBuntu custom source build"
 	@echo ""
 	@echo "  make health          Preflight source/profile/build health"
+	@echo "  make health-strict   Completed native-stage health gate"
 	@echo "  make prereqs         Install native build host tooling"
 	@echo "  make sources         Fetch kernel + GNOME source"
 	@echo "  make slim            Build Slim ISO"
@@ -23,7 +23,10 @@ help:
 	@echo "The Slim/Minimum/Full pipeline never consumes an existing Ubuntu ISO."
 
 health:
-	bash "$(ROOT)/build/build-health.sh"
+	bash "$(ROOT)/build/build-health.sh" preflight
+
+health-strict:
+	bash "$(ROOT)/build/build-health.sh" strict
 
 prereqs:
 	bash "$(ROOT)/build/prerequisites.sh" native

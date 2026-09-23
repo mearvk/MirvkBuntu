@@ -5,22 +5,25 @@ ROOT := $(abspath $(HERE)/..)
 ARCH ?= amd64
 OUTPUT_DIR := $(HERE)/output
 
-.PHONY: all help health prereqs prereqs-remaster sources kernels gnome-source native chromium         desktop full slim minimal iso all-profiles bootstrap remaster clean distclean
-
+.PHONY: all help health health-strict prereqs prereqs-remaster sources kernels gnome-source native chromium desktop full slim minimal iso all-profiles bootstrap remaster clean distclean
 .DEFAULT_GOAL := full
 
 all: full
 
 help:
 	@echo "MirvkBuntu build/"
-	@echo "  make health       source/profile preflight"
-	@echo "  make slim         Slim ISO"
-	@echo "  make minimal      Minimum ISO"
-	@echo "  make full         Full desktop ISO"
-	@echo "  make all-profiles all three profiles"
+	@echo "  make health        source/profile preflight"
+	@echo "  make health-strict completed native-stage health gate"
+	@echo "  make slim           Slim ISO"
+	@echo "  make minimal        Minimum ISO"
+	@echo "  make full           Full desktop ISO"
+	@echo "  make all-profiles   all three profiles"
 
 health:
-	bash "$(HERE)/build-health.sh"
+	bash "$(HERE)/build-health.sh" preflight
+
+health-strict:
+	bash "$(HERE)/build-health.sh" strict
 
 prereqs:
 	bash "$(HERE)/prerequisites.sh" native
