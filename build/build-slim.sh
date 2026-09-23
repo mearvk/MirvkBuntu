@@ -92,6 +92,7 @@ EOF
 stage_mirvkbuntu_source "$WORK_DIR"
 write_mirvkbuntu_manifest "$WORK_DIR"
 stage_native_outputs "$WORK_DIR"
+stage_color_inference "$WORK_DIR"
 
 # --- slim live-session configuration (hooks + includes) ----------------------
 mkdir -p "$WORK_DIR/config/includes.chroot/etc/mirvkbuntu"
