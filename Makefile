@@ -24,6 +24,8 @@ help:
 
 health:
 	bash "$(ROOT)/build/build-health.sh" preflight
+	bash "$(ROOT)/build/component-inventory.sh"
+	@echo "MirvkBuntu health: profile definitions and component inventory READY"
 
 health-strict:
 	bash "$(ROOT)/build/build-health.sh" strict
