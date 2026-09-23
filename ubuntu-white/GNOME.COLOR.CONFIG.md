@@ -4,6 +4,10 @@
 
 This document defines configurable GNOME/Desktop settings derived from the MirvkBuntu Color-Dependent Theorem.
 
+**Configuration file:** [ubuntu-white/color-inferencer.conf](https://github.com/mearvk/MirvkBuntu/blob/main/ubuntu-white/color-inferencer.conf)
+
+The configuration file is the machine-readable source for the desktop color-inference parameters described below.
+
 ## Semantic roles
 
 | Token | Default | Role |
