@@ -48,6 +48,38 @@ stage_mirvkbuntu_source(){
     "MIRVKBUNTU_BUILD_ARCH=${ARCH}" \
     > "${work_dir}/config/includes.chroot/etc/mirvkbuntu/source.conf"
 }
+stage_color_inference(){
+  local work_dir="$1"
+  local include_root="$work_dir/config/includes.chroot"
+  local theme_src="$REPO_ROOT/ubuntu-white"
+  mkdir -p "$include_root/etc/mirvkbuntu" "$include_root/usr/share/themes/MirvkBuntu-White/gtk-3.0" "$include_root/usr/share/themes/MirvkBuntu-White/gtk-4.0" "$include_root/usr/share/themes/MirvkBuntu-White/gnome-shell"
+  [ -f "$theme_src/color-inferencer.conf" ] || die "MirvkBuntu color inferencer profile missing"
+  cp -f "$theme_src/color-inferencer.conf" "$include_root/etc/mirvkbuntu/color-inferencer.conf"
+  cp -f "$theme_src/gtk.css" "$include_root/usr/share/themes/MirvkBuntu-White/gtk-3.0/gtk.css"
+  cp -f "$theme_src/gtk.css" "$include_root/usr/share/themes/MirvkBuntu-White/gtk-4.0/gtk.css"
+  cp -f "$theme_src/gnome-shell.css" "$include_root/usr/share/themes/MirvkBuntu-White/gnome-shell/gnome-shell.css"
+  mkdir -p "$include_root/etc/dconf/db/local.d" "$include_root/etc/dconf/profile"
+  printf 'user-db:user\nsystem-db:local\n' > "$include_root/etc/dconf/profile/user"
+  cat > "$include_root/etc/dconf/db/local.d/00-mirvkbuntu-color" <<'DCONF'
+[org/gnome/desktop/interface]
+gtk-theme='MirvkBuntu-White'
+color-scheme='default'
+font-name='Noto Sans 11'
+document-font-name='Noto Sans 11'
+monospace-font-name='Noto Sans Mono 11'
+DCONF
+  mkdir -p "$work_dir/config/hooks/live"
+  cat > "$work_dir/config/hooks/live/0120-mirvkbuntu-color-inference.hook.chroot" <<'HOOK'
+#!/bin/sh
+set -e
+if command -v dconf >/dev/null 2>&1; then
+  dconf update || true
+fi
+mkdir -p /etc/mirvkbuntu
+printf 'COLOR_INFERENCE=3D\nCOLOR_CONTEXT_MODE=OPTIONAL_4D\nAESTHETIC_GRADE=EXCELLENT\nQUALITY_TARGET=VERY_HIGH\n' > /etc/mirvkbuntu/color-policy.conf
+HOOK
+  chmod +x "$work_dir/config/hooks/live/0120-mirvkbuntu-color-inference.hook.chroot"
+}
 write_mirvkbuntu_manifest(){
   local work_dir="$1"
   mkdir -p "${work_dir}/config/includes.chroot/etc/mirvkbuntu"
