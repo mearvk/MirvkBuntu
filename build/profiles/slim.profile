@@ -1,0 +1,10 @@
+PROFILE=slim
+DESCRIPTION=Full graphical live environment with RAM-backed live operation
+GNOME=required
+INSTALLER=false
+AUDIO=optional
+BLUETOOTH=optional
+PRINTING=optional
+BROWSER=optional
+DEVELOPER_TOOLS=false
+TORAM=true
