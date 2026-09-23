@@ -8,6 +8,10 @@ scripts in [`clone/`](clone/) rather than vendored into this repository, which
 keeps the Git history practical while retaining reproducible, verifiable source
 references.
 
+## Relative Aesthetic Design
+
+MirvkBuntu uses a provisional **Relative Aesthetic** framework for desktop color and visual optimization. It assigns configurable 0–100 importance values to clarity, contrast, hierarchy, harmony, balance, semantic consistency, restraint, accessibility, and context stability before exact colors are generated. The optimizer then measures the resulting configuration against those priorities. See [`ubuntu-white/RELATIVE.AESTHETIC.VIEW.md`](ubuntu-white/RELATIVE.AESTHETIC.VIEW.md) for the design model and [`ubuntu-white/RELATIVE.AESTHETIC.FRAMEWORK.md`](ubuntu-white/RELATIVE.AESTHETIC.FRAMEWORK.md) for its mathematical definition.
+
 ## Repository Layout
 
 ```text
