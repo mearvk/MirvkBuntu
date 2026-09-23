@@ -2,12 +2,14 @@
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
-BUILD_ROOT="${BUILD_ROOT:-${REPO_ROOT}/build/work}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO_ROOT}/build/output}"
-DESKTOP_OUTPUT="${DESKTOP_OUTPUT:-${HOME}/Desktop}"
-ISO_LABEL="${ISO_LABEL:-MIRVKBUNTU}"
-UBUNTU_SUITE="${UBUNTU_SUITE:-noble}"
-ARCH="${ARCH:-amd64}"
+SOURCE_BASE_CONFIG="${SCRIPT_DIR}/base-config.sh"
+source "$SOURCE_BASE_CONFIG"
+BUILD_ROOT="${BUILD_ROOT:-${MIRVKBUNTU_BUILD_ROOT}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${MIRVKBUNTU_OUTPUT_ROOT}}"
+DESKTOP_OUTPUT="${DESKTOP_OUTPUT:-${MIRVKBUNTU_DESKTOP_OUTPUT}}"
+ISO_LABEL="${ISO_LABEL:-${MIRVKBUNTU_ISO_LABEL}}"
+UBUNTU_SUITE="${UBUNTU_SUITE:-${MIRVKBUNTU_UBUNTU_SUITE}}"
+ARCH="${ARCH:-${MIRVKBUNTU_ARCH}}"
 
 die(){ printf 'build: ERROR: %s\n' "$*" >&2; exit 1; }
 require_commands(){ local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "required command not found: $c"; done; }
