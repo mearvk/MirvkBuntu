@@ -1,6 +1,7 @@
 # MirvkBuntu — top-level custom build orchestrator
 SHELL := /bin/bash
 ROOT  := $(CURDIR)
+include $(ROOT)/build/base-config.mk
 KERNEL_VERSIONS ?=
 
 .PHONY: all help health health-strict prereqs prereqs-remaster kernels gnome-source chromium installer builder scout sources native limited desktop full slim minimal iso all-profiles remaster bootstrap packages packages-clean clean distclean
@@ -18,6 +19,8 @@ help:
 	@echo "  make minimal         Build Minimum ISO"
 	@echo "  make full            Build Full desktop ISO"
 	@echo "  make all-profiles    Build Slim, Minimum, then Full"
+	@echo "  make installer       Build installer binary/packages"
+	@echo "  make builder         Build native builder"
 	@echo "  make native          Run native compilation gate"
 	@echo ""
 	@echo "The Slim/Minimum/Full pipeline never consumes an existing Ubuntu ISO."
@@ -80,9 +83,11 @@ bootstrap:
 
 installer:
 	bash "$(ROOT)/build/installer.sh"
+	@echo "Installer binary/package outputs: $(MIRVKBUNTU_INSTALLER_OUTPUT_ROOT)"
 
 builder:
 	bash "$(ROOT)/build/builder.sh"
+	@echo "Builder output directory: $(MIRVKBUNTU_BUILDER_OUTPUT_ROOT)"
 
 scout:
 	bash "$(ROOT)/build/scout.sh"
