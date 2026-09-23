@@ -76,21 +76,68 @@ INSTALLED
 
 The health/preflight stage must fail rather than silently substitute a distribution binary when an authoritative MirvkBuntu component is required.
 
-## Artifact layout
+## Artifact and installer output contract
 
-The canonical artifact directory is `build/output/`. Existing ISO names remain:
+The canonical output configuration is defined in both `build/base-config.sh` (shell build/installer consumers) and `build/base-config.mk` (Make consumers). These files are the authoritative path contract.
+
+Build work trees are separate from release artifacts:
 
 ```text
-MirvkBuntu-slim-amd64.iso
-MirvkBuntu-minimal-amd64.iso
-MirvkBuntu-desktop-amd64.iso
+build/work/       temporary build/staging/work files
+build/installer/  CMake installer build tree
+build/builder/    native builder build tree
+build/output/     canonical release artifacts
+output -> build/output
 ```
 
-Every completed release should have an ISO, `.sha256`, `.release`, component/source metadata when available, and resolved package metadata when available.
+The ISO outputs are explicitly:
+
+```text
+build/output/MirvkBuntu-slim-amd64.iso
+build/output/MirvkBuntu-minimal-amd64.iso
+build/output/MirvkBuntu-desktop-amd64.iso
+```
+
+The same ISO files are copied to `$HOME/Desktop/` by the publishing stage.
+
+The installer has a separate, explicit release location:
+
+```text
+build/output/installer/mirvkbuntu-installer
+build/output/installer/mirvkbuntu-installer.exe
+build/output/installer/packages/MirvkBuntu-Installer-*
+```
+
+Only the platform-appropriate installer binary is produced by a given host build; CPack packages are retained under the installer `packages/` directory.
+
+The native builder output is similarly isolated:
+
+```text
+build/output/builder/mirvkbuntu-builder
+build/output/builder/mirvkbuntu-builder.exe
+```
+
+The Make targets map directly to these locations:
+
+```text
+make health        -> validation only
+make slim          -> build/output/MirvkBuntu-slim-amd64.iso
+make minimal       -> build/output/MirvkBuntu-minimal-amd64.iso
+make full          -> build/output/MirvkBuntu-desktop-amd64.iso
+make all-profiles  -> all three ISO outputs
+make installer     -> build/output/installer/*
+make builder       -> build/output/builder/*
+```
+
+Every completed ISO release should have an ISO, `.sha256`, `.release`, component/source metadata when available, and resolved package metadata when available.
 
 ## Acceptance checks
 
 A profile is build-ready only when required source directories exist; component inventory succeeds; package dependency resolution succeeds; required native compilation succeeds; native artifacts are staged; the profile definition exists; `live-build` completes; the resulting file is a bootable ISO; the source SHA-256 manifest is present; the ISO SHA-256 sidecar matches; the release manifest exists; and no existing ISO was consumed as source.
+
+## Base configuration
+
+`build/base-config.sh` and `build/base-config.mk` define the canonical build, ISO, installer, builder, desktop-copy, and symlink output locations. Override the corresponding variables only when a non-default artifact location is intentionally required.
 
 ## Commands
 
